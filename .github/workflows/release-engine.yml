@@ -1,0 +1,275 @@
+name: release-engine
+
+# Reusable single-channel build → sign → release → Chrome Web Store publish.
+# Called by beta.yml (push-to-main, continuous beta) and release.yml
+# (manual prod promotion). The security-critical steps (CRX signing, key
+# shredding, CWS OAuth) are identical to the previous combined workflow;
+# only the channel, version, and release mode are parameterized.
+
+on:
+  workflow_call:
+    inputs:
+      channel:
+        description: 'beta-only | prod-only'
+        required: true
+        type: string
+      version:
+        description: 'Version string. Beta: bare dotted ints (27.3.0.42). Prod: vX.Y.Z.'
+        required: true
+        type: string
+      release_mode:
+        description: 'tagged (prod GH release at vX.Y.Z) | rolling (single "beta" prerelease) | none (dry run, artifact only)'
+        required: false
+        type: string
+        default: tagged
+
+env:
+  DO_NOT_TRACK: 1
+  CRX3_VERSION: 1.1.3
+  # Chrome Web Store extension IDs (derived from each pubkey).
+  CWS_PROD_ITEM_ID: oojfeopgoeapfgcfhmlpfgabcbhkglck
+  CWS_BETA_ITEM_ID: ppgbkpjgpggkibdojjocgndbbhiempjf
+
+jobs:
+  build:
+    name: ${{ inputs.channel }} ${{ inputs.version }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install crx3
+        run: npm install -g "crx3@${CRX3_VERSION}"
+
+      - name: Resolve channel
+        id: c
+        run: |
+          set -eu
+          case "${{ inputs.channel }}" in
+            beta-only)
+              {
+                echo "chan=beta"
+                echo "dist=beta-dist"
+                echo "webpack=webpack.beta-config.ts"
+                echo "item=${CWS_BETA_ITEM_ID}"
+              } >> "$GITHUB_OUTPUT" ;;
+            prod-only)
+              {
+                echo "chan=prod"
+                echo "dist=dist"
+                echo "webpack=webpack.prod-config.ts"
+                echo "item=${CWS_PROD_ITEM_ID}"
+              } >> "$GITHUB_OUTPUT" ;;
+            *)
+              echo "::error::unknown channel '${{ inputs.channel }}'"; exit 1 ;;
+          esac
+
+      - name: Build extension (${{ steps.c.outputs.chan }})
+        working-directory: apps/extension
+        env:
+          # Build-time injection for the 1Click partner JWT (see
+          # webpack.config.ts DefinePlugin `process.env.NEAR_1CLICK_JWT`).
+          NEAR_1CLICK_JWT: ${{ secrets.NEAR_1CLICK_JWT }}
+        run: NODE_OPTIONS="--max-old-space-size=8192 --import=tsx" npx webpack --config ${{ steps.c.outputs.webpack }}
+
+      # Stamp the resolved version and strip the dev-only `key` field. CWS
+      # rejects manifests carrying `key`; it also needs a pure dotted-int
+      # version, so a leading `v` (prod tags) is trimmed here. Beta versions
+      # are already `<base>.<run_number>` and pass through unchanged.
+      - name: Stamp version + strip `key`
+        working-directory: apps/extension
+        env:
+          VER: ${{ inputs.version }}
+          DIST: ${{ steps.c.outputs.dist }}
+        run: |
+          set -eu
+          m="$DIST/manifest.json"
+          mv="${VER#v}"
+          jq --arg v "$mv" 'del(.key) | .version = $v' "$m" > "$m.tmp" && mv "$m.tmp" "$m"
+          echo "--- $m ---"
+          jq '{name, version, description_len: (.description|length), has_key: has("key")}' "$m"
+
+      - name: Stage CRX signing key
+        id: crxkey
+        env:
+          CRX_PROD_KEY: ${{ secrets.CRX_PROD_KEY }}
+          CRX_BETA_KEY: ${{ secrets.CRX_BETA_KEY }}
+          CHAN: ${{ steps.c.outputs.chan }}
+        run: |
+          set -eu
+          if [ "$CHAN" = "prod" ]; then KEYVAL="${CRX_PROD_KEY:-}"; else KEYVAL="${CRX_BETA_KEY:-}"; fi
+          if [ -z "$KEYVAL" ]; then
+            echo "::error::CRX signing key for $CHAN is not set"; exit 1
+          fi
+          keydir="$(mktemp -d)"
+          umask 077
+          key="$keydir/zafu-$CHAN.pem"
+          printf '%s\n' "$KEYVAL" > "$key"
+          chmod 0600 "$key"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+          echo "keydir=$keydir" >> "$GITHUB_OUTPUT"
+
+      - name: Pack + sign CRX
+        env:
+          KEY: ${{ steps.crxkey.outputs.key }}
+          VER: ${{ inputs.version }}
+          CHAN: ${{ steps.c.outputs.chan }}
+          DIST: ${{ steps.c.outputs.dist }}
+        run: |
+          set -eu
+          cd "apps/extension/$DIST"
+          zip -qr "$GITHUB_WORKSPACE/zafu-$CHAN-${VER}.zip" .
+          cd "$GITHUB_WORKSPACE"
+          crx3 --keyPath "$KEY" \
+               --crxPath "zafu-$CHAN-${VER}.crx" \
+               "apps/extension/$DIST/manifest.json"
+
+      - name: Remove CRX signing key
+        if: always()
+        env:
+          KEYDIR: ${{ steps.crxkey.outputs.keydir }}
+        run: |
+          if [ -n "${KEYDIR:-}" ] && [ -d "$KEYDIR" ]; then
+            find "$KEYDIR" -type f -exec shred -u {} \; 2>/dev/null || true
+            rm -rf "$KEYDIR"
+          fi
+
+      - name: Generate checksums
+        env:
+          VER: ${{ inputs.version }}
+          CHAN: ${{ steps.c.outputs.chan }}
+        run: |
+          set -eu
+          sha256sum \
+            "zafu-$CHAN-${VER}.zip" \
+            "zafu-$CHAN-${VER}.crx" \
+            > sha256sums.txt
+          cat sha256sums.txt
+
+      # Prod: a tagged GitHub release at vX.Y.Z (what the README's
+      # releases/latest points at). Beta: a single rolling "beta"
+      # prerelease, clobbered each push, so continuous beta does not
+      # spam one tag+release per commit.
+      - name: Publish GitHub release
+        if: inputs.release_mode != 'none'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VER: ${{ inputs.version }}
+          CHAN: ${{ steps.c.outputs.chan }}
+          MODE: ${{ inputs.release_mode }}
+        run: |
+          set -eu
+          assets="zafu-$CHAN-${VER}.zip zafu-$CHAN-${VER}.crx sha256sums.txt"
+          if [ "$MODE" = "rolling" ]; then
+            # Single rolling "beta" release: delete + recreate so the tag and
+            # release always land on the current commit with fresh assets
+            # (gh release edit --target does not reliably move an existing tag).
+            gh release delete beta --yes --cleanup-tag 2>/dev/null || true
+            gh release create beta $assets \
+              --prerelease --title "zafu beta (${VER})" \
+              --target "$GITHUB_SHA" \
+              --notes "Rolling beta build. Follows main; version auto-stamped \`<base>.<run_number>\` per build."
+          else
+            gh release create "$VER" $assets \
+              --title "zafu $VER" --generate-notes
+          fi
+
+      # ─── Chrome Web Store — upload + submit for review ───
+      # Auth uses OAuth user credentials (installed-application flow), not a
+      # service account: the CWS v1.1 API requires an OAuth user added as a
+      # publisher on the listing. CWS_PUBLISHER_JSON holds {clientId,
+      # clientSecret, refreshToken}, produced once via
+      # `npx chrome-webstore-upload-keys`. Kept non-fatal — a CWS hiccup must
+      # never fail the GitHub release.
+      - name: Publish to Chrome Web Store
+        if: inputs.release_mode != 'none'
+        continue-on-error: true
+        env:
+          CWS_PUBLISHER_JSON: ${{ secrets.CWS_PUBLISHER_JSON }}
+          VER: ${{ inputs.version }}
+          CHAN: ${{ steps.c.outputs.chan }}
+          ITEM_ID: ${{ steps.c.outputs.item }}
+        run: |
+          set -eu
+          if [ -z "${CWS_PUBLISHER_JSON:-}" ]; then
+            echo "CWS_PUBLISHER_JSON not set — skipping CWS publish."; exit 0
+          fi
+          pip install --quiet google-auth requests
+          TOKEN="$(python3 - <<'PY'
+          import json, os
+          from google.oauth2.credentials import Credentials
+          from google.auth.transport.requests import Request
+          j = json.loads(os.environ['CWS_PUBLISHER_JSON'])
+          client_id = j.get('clientId') or j['client_id']
+          client_secret = j.get('clientSecret') or j['client_secret']
+          refresh_token = j.get('refreshToken') or j['refresh_token']
+          creds = Credentials(
+              token=None,
+              refresh_token=refresh_token,
+              client_id=client_id,
+              client_secret=client_secret,
+              token_uri='https://oauth2.googleapis.com/token',
+              scopes=['https://www.googleapis.com/auth/chromewebstore'],
+          )
+          creds.refresh(Request())
+          print(creds.token)
+          PY
+          )"
+          zip="zafu-${CHAN}-${VER}.zip"
+          echo "─── ${CHAN} (${ITEM_ID}) ───"
+          upload_resp="$(curl -sS --fail-with-body \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "x-goog-api-version: 2" \
+            -X PUT -T "$zip" \
+            "https://www.googleapis.com/upload/chromewebstore/v1.1/items/${ITEM_ID}")"
+          echo "upload: $upload_resp"
+          state="$(echo "$upload_resp" | python3 -c "import json,sys; print(json.load(sys.stdin).get('uploadState',''))")"
+          if [ "$state" != "SUCCESS" ] && [ "$state" != "IN_PROGRESS" ]; then
+            echo "::error::${CHAN} upload failed, state=$state"; exit 1
+          fi
+          publish_resp="$(curl -sS --fail-with-body \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "x-goog-api-version: 2" \
+            -H "Content-Length: 0" \
+            -X POST \
+            "https://www.googleapis.com/chromewebstore/v1.1/items/${ITEM_ID}/publish")"
+          echo "publish: $publish_resp"
+
+      # Dry run (release_mode=none): expose the signed artifacts as a
+      # workflow download so a build can be sanity-checked without releasing.
+      - name: Upload artifacts (dry run)
+        if: inputs.release_mode == 'none'
+        uses: actions/upload-artifact@v4
+        with:
+          name: zafu-${{ steps.c.outputs.chan }}-${{ inputs.version }}
+          path: |
+            zafu-${{ steps.c.outputs.chan }}-${{ inputs.version }}.zip
+            zafu-${{ steps.c.outputs.chan }}-${{ inputs.version }}.crx
+            sha256sums.txt
+          if-no-files-found: error
