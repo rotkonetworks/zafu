@@ -26,20 +26,28 @@ export interface RayonIsolationInputs {
 }
 
 export interface RayonIsolationResult {
-  /** true when rayon's shared-memory prerequisites are present. */
+  /** true when rayon's shared-memory prerequisite is present. */
   ok: boolean;
-  /** human-readable cause when degraded; absent when ok. */
+  /** human-readable cause when degraded (ok=false); absent when ok. */
   reason?: string;
+  /** informational note when ok but worth logging (e.g. no cross-origin isolation). */
+  note?: string;
 }
 
 /**
- * Assess whether rayon's shared-memory prerequisites hold.
+ * Assess whether rayon's shared-memory prerequisite holds.
  *
- * Both conditions must be true for a real (multi-thread) rayon pool:
- *  - `crossOriginIsolated` - the context is cross-origin isolated
- *  - `SharedArrayBuffer` is defined - shared memory can back the pool
+ * The ONLY hard requirement for a real (multi-thread) rayon pool is that
+ * `SharedArrayBuffer` is defined - it backs the shared memory the pool needs.
+ * `crossOriginIsolated` is NOT required in a Chrome extension worker/offscreen
+ * context: Chrome grants `SharedArrayBuffer` there without any COOP/COEP wiring,
+ * so `crossOriginIsolated` is normally `false` while `initThreadPool` still
+ * builds a full pool (the scan worker logs "rayon: N threads" right after).
  *
- * Either missing means rayon will silently degrade to a single thread.
+ * Treating `!crossOriginIsolated` as degraded (the old behavior) cried wolf on
+ * every run, then the worker immediately spun up 31 threads and disproved it.
+ * Now it only degrades when `SharedArrayBuffer` is actually gone - the real
+ * regression signal - and merely NOTES a missing isolation flag.
  */
 export const assessRayonIsolation = (inputs: RayonIsolationInputs): RayonIsolationResult => {
   const { crossOriginIsolated, hasSharedArrayBuffer } = inputs;
@@ -52,16 +60,16 @@ export const assessRayonIsolation = (inputs: RayonIsolationInputs): RayonIsolati
   }
   if (!crossOriginIsolated) {
     return {
-      ok: false,
-      reason: 'crossOriginIsolated is false',
+      ok: true,
+      note: 'crossOriginIsolated is false (SharedArrayBuffer still granted - rayon pool is real)',
     };
   }
   return { ok: true };
 };
 
-/** Loud, side-effecting version for the runtime init sites. */
+/** Loud, side-effecting version for the runtime init sites - real degradation only. */
 export const RAYON_ISOLATION_WARNING =
-  '[perf] cross-origin isolation unavailable - rayon disabled, proving will be ~5x slower';
+  '[perf] SharedArrayBuffer unavailable - rayon disabled, proving will be ~5x slower';
 
 /**
  * Read the ambient isolation state from the current realm and assess it.

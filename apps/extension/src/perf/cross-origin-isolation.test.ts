@@ -11,13 +11,16 @@ describe('assessRayonIsolation', () => {
     expect(result.reason).toBeUndefined();
   });
 
-  it('reports degraded when crossOriginIsolated is false', () => {
+  it('stays ok (with a note) when crossOriginIsolated is false but SharedArrayBuffer is present', () => {
+    // Chrome extension workers get SharedArrayBuffer without cross-origin
+    // isolation; rayon still builds a real pool, so this is NOT degraded.
     const result = assessRayonIsolation({
       crossOriginIsolated: false,
       hasSharedArrayBuffer: true,
     });
-    expect(result.ok).toBe(false);
-    expect(result.reason).toMatch(/crossOriginIsolated/);
+    expect(result.ok).toBe(true);
+    expect(result.reason).toBeUndefined();
+    expect(result.note).toMatch(/crossOriginIsolated/);
   });
 
   it('reports degraded when SharedArrayBuffer is undefined', () => {

@@ -1822,13 +1822,19 @@ const initWasm = once(async (): Promise<void> => {
     const isolation = assessAmbientRayonIsolation();
     if (!isolation.ok) {
       console.error(`${RAYON_ISOLATION_WARNING} (zcash scan worker: ${isolation.reason})`);
+    } else if (isolation.note) {
+      // ok, but worth a quiet note (e.g. no cross-origin isolation - normal in
+      // an extension worker; the pool below is still real).
+      console.debug(`[perf] zcash scan worker: ${isolation.note}`);
     }
     // leave a core for the UI thread; scanning runs while the popup renders
     const numThreads = Math.max(1, (navigator.hardwareConcurrency || 4) - 1);
     await wasm.initThreadPool(numThreads);
+    // ok covers the SharedArrayBuffer-present case (real multi-thread pool)
+    // whether or not cross-origin isolation is set.
     scanParallelism = isolation.ok
       ? { threads: numThreads }
-      : { threads: numThreads, reason: `cross-origin isolation lost: ${isolation.reason}` };
+      : { threads: numThreads, reason: `SharedArrayBuffer unavailable: ${isolation.reason}` };
     console.log(`[zcash-worker] rayon: ${numThreads} threads`);
   } catch (e) {
     // error, not warn: this is a several-fold slowdown, not a curiosity, and
