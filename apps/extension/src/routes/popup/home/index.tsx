@@ -1996,6 +1996,10 @@ function TxRow({ tx, network }: { tx: ParsedTransaction; network: NetworkType })
   // transparent move, shown neutrally like a shield
   const isIn = tx.type === 'receive' || tx.type === 'deposit';
   const isSh = tx.type === 'shield' || tx.type === 'unshield';
+  // DEX liquidity activity (open/close/withdraw/reward) is neither a directional
+  // transfer nor a shield - it gets its own neutral swap-style glyph so it does
+  // not read as a plain send.
+  const isLp = tx.type === 'liquidity';
   const isPending = tx.status === 'pending';
   const isFailed = tx.status === 'failed';
   // a known recipient can be saved to contacts on click - the first brick of
@@ -2042,6 +2046,8 @@ function TxRow({ tx, network }: { tx: ParsedTransaction; network: NetworkType })
             <span className='i-ph-x h-4 w-4 text-hanko' />
           ) : isSh ? (
             <span className='i-ph-shield h-4 w-4 text-fg-muted' />
+          ) : isLp ? (
+            <span className='i-ph-arrows-left-right h-4 w-4 text-fg-muted' />
           ) : isIn ? (
             <span className='i-ph-arrow-down h-4 w-4 text-fg-high' />
           ) : (

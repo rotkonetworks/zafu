@@ -20,6 +20,7 @@ export type PenumbraTxType =
   | 'unshield'
   | 'deposit'
   | 'swap'
+  | 'liquidity'
   | 'delegate'
   | 'undelegate'
   | 'unknown';
@@ -33,6 +34,15 @@ const CLASSIFICATION_TO_TYPE: Partial<Record<TransactionClassification, Penumbra
   ibcRelayAction: 'deposit',
   swap: 'swap',
   swapClaim: 'swap',
+  // DEX liquidity-provision lifecycle - opening, closing, withdrawing, and
+  // claiming rewards on a concentrated-liquidity position. Grouped under one
+  // display type so LP activity reads as a first-class category in history
+  // (previously all four fell through to 'unknown').
+  positionOpen: 'liquidity',
+  positionOpenView: 'liquidity',
+  positionClose: 'liquidity',
+  positionWithdraw: 'liquidity',
+  positionRewardClaim: 'liquidity',
   delegate: 'delegate',
   undelegate: 'undelegate',
   undelegateClaim: 'undelegate',
