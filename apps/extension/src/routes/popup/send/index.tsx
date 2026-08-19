@@ -1389,6 +1389,21 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
     },
   });
 
+  // Default the destination to Noble - the transparent USDC off-ramp is the
+  // overwhelmingly common unshield target, so preselecting it saves a dropdown
+  // trip every time. Only fills the empty state: an explicit pick (persisted in
+  // the ibcWithdraw slice) is never overridden, and matching on addressPrefix
+  // keeps this correct if more IBC chains go live later.
+  useEffect(() => {
+    if (ibcState.chain) {
+      return;
+    }
+    const noble = chains.find(c => c.addressPrefix === 'noble');
+    if (noble) {
+      ibcState.setChain(noble);
+    }
+  }, [chains, ibcState.chain, ibcState.setChain]);
+
   // filter to withdrawable assets for selected chain
   const withdrawableAssets = useMemo(
     () => filterWithdrawableAssets(allBalances, ibcState.chain?.channelId),
