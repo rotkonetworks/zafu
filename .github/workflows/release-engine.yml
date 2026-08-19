@@ -18,7 +18,7 @@ on:
         required: true
         type: string
       release_mode:
-        description: 'tagged (prod GH release at vX.Y.Z) | rolling (single "beta" prerelease) | none (dry run, artifact only)'
+        description: 'tagged (prod GH release at vX.Y.Z) | rolling (single "beta" latest release) | none (dry run, artifact only)'
         required: false
         type: string
         default: tagged
@@ -172,10 +172,10 @@ jobs:
             > sha256sums.txt
           cat sha256sums.txt
 
-      # Prod: a tagged GitHub release at vX.Y.Z (what the README's
-      # releases/latest points at). Beta: a single rolling "beta"
-      # prerelease, clobbered each push, so continuous beta does not
-      # spam one tag+release per commit.
+      # Prod: a tagged GitHub release at vX.Y.Z. Beta: a single rolling
+      # "beta" release marked --latest (so releases/latest points at the
+      # current build during the beta-only phase), clobbered each push so
+      # continuous beta does not spam one tag+release per commit.
       - name: Publish GitHub release
         if: inputs.release_mode != 'none'
         env:
@@ -192,7 +192,7 @@ jobs:
             # (gh release edit --target does not reliably move an existing tag).
             gh release delete beta --yes --cleanup-tag 2>/dev/null || true
             gh release create beta $assets \
-              --prerelease --title "${VER}" \
+              --latest --title "${VER}" \
               --target "$GITHUB_SHA" \
               --notes "Rolling beta build. Follows main; version auto-stamped \`<base>.<run_number>\` per build."
           else
