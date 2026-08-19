@@ -18,6 +18,7 @@
  * sides compute the same direction independently.
  */
 
+import { bytesToHex } from '@noble/hashes/utils';
 import { presenceEpoch, rendezvousTag } from './contact-discovery';
 import {
   sealPresence,
@@ -129,3 +130,34 @@ export const createPresenceService = (
     return out;
   },
 });
+
+/** the minimum an app receives per present contact: the caller's handle, the
+ *  peer's EPHEMERAL session pubkey (to connect to), and capability bits. Never
+ *  the pairwise root secret, the contact card, or anything about non-present
+ *  contacts. */
+export interface DiscoveredContact {
+  id: string;
+  sessionPubHex: string;
+  caps: number;
+}
+
+/**
+ * App-facing contact discovery — the response contract for the
+ * `zafu_discover_contacts` external primitive.
+ *
+ * Given the set of the user's contacts (already resolved to pairwise root
+ * secrets by the extension), return ONLY the ones present in this app scope this
+ * epoch, each reduced to the minimum an app needs to connect. A web app learns
+ * nothing about contacts who are absent — the full social graph never crosses
+ * the boundary, only the present intersection.
+ */
+export const discoverContacts = async (
+  service: PresenceService,
+  peers: readonly DiscoveryPeer[],
+  epoch?: number,
+): Promise<DiscoveredContact[]> =>
+  (await service.findPresent(peers, epoch)).map(p => ({
+    id: p.id,
+    sessionPubHex: bytesToHex(p.record.sessionPub),
+    caps: p.record.caps,
+  }));

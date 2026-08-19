@@ -80,8 +80,13 @@ export type {
   PublishOutcome,
 } from './contact-relay';
 
-export { createPresenceService } from './presence-service';
-export type { PresenceService, DiscoveryPeer, PresentPeer } from './presence-service';
+export { createPresenceService, discoverContacts } from './presence-service';
+export type {
+  PresenceService,
+  DiscoveryPeer,
+  PresentPeer,
+  DiscoveredContact,
+} from './presence-service';
 
 export { createPresenceScheduler } from './presence-scheduler';
 export type { PresenceScheduler, PresenceSchedulerDeps, PublishArgs } from './presence-scheduler';
