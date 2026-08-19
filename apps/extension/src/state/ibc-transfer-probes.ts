@@ -20,9 +20,41 @@ import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
 import { getAmount as getAmountFromView } from '@penumbra-zone/getters/value-view';
 import { joinLoHiAmount } from '@rotko/penumbra-types/amount';
-import { getAllBalances } from '@repo/wallet/networks/cosmos/client';
-import { parseAmountToBaseUnits } from '@repo/wallet/networks/cosmos/signer';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+
+/**
+ * Read a cosmos address's balances over plain REST - NOT via
+ * `@repo/wallet cosmos/client` `getAllBalances`, which uses `@cosmjs/stargate`
+ * and pulls `@cosmjs/crypto` -> Node `crypto` into the SERVICE-WORKER bundle
+ * (which is not crypto-polyfilled, unlike the popup) and breaks the webpack
+ * build. This probe only reads a balance, so a bare `fetch` to the bank REST
+ * endpoint is both worker-safe and lighter. Returns the same shape
+ * `matchCosmosBalance` expects.
+ */
+const fetchCosmosBalancesRest = async (
+  chainId: CosmosChainId,
+  address: string,
+): Promise<{ denom: string; amount: bigint }[]> => {
+  const base = COSMOS_CHAINS[chainId].restEndpoint.replace(/\/+$/, '');
+  const res = await fetch(`${base}/cosmos/bank/v1beta1/balances/${address}`);
+  if (!res.ok) {
+    throw new Error(`cosmos balance query failed: ${res.status}`);
+  }
+  const data = (await res.json()) as { balances?: { denom: string; amount: string }[] };
+  return (data.balances ?? []).map(b => ({ denom: b.denom, amount: BigInt(b.amount) }));
+};
+
+/**
+ * Decimal amount string -> base-unit string. Inlined (identical to the helper in
+ * @repo/wallet cosmos/signer) so this probe never imports the cosmos SIGNER
+ * module, which pulls in @cosmjs/crypto -> Node `crypto` and breaks the webpack
+ * browser bundle. This probe only reads balances; it must not drag in signing.
+ */
+const parseAmountToBaseUnits = (amount: string, decimals: number): string => {
+  const [whole = '0', frac = ''] = amount.split('.');
+  const padded = frac.slice(0, decimals).padEnd(decimals, '0');
+  return BigInt(whole + padded).toString();
+};
 import { viewClient } from '../clients';
 import {
   track,
@@ -108,7 +140,7 @@ export const makeIbcProbe =
     if (!t.destChainId || !t.destAddress) {
       return undefined;
     }
-    const balances = await getAllBalances(t.destChainId as CosmosChainId, t.destAddress);
+    const balances = await fetchCosmosBalancesRest(t.destChainId as CosmosChainId, t.destAddress);
     return matchCosmosBalance(balances, t.destDenom);
   };
 
