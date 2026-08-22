@@ -12,7 +12,14 @@
  */
 
 import { describe, expect, test } from 'vitest';
-import { deriveZidCrossSite, deriveZidForSite, DEFAULT_IDENTITY } from './identity';
+import { bytesToHex } from '@noble/hashes/utils';
+import {
+  deriveZidCrossSite,
+  deriveZidForSite,
+  deriveZidContactCardKey,
+  zidContactRootSecret,
+  DEFAULT_IDENTITY,
+} from './identity';
 
 const TEST_PHRASE =
   'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
@@ -52,5 +59,49 @@ describe('ZID v2 cross-repo compat', () => {
     const zid = deriveZidCrossSite(TEST_PHRASE, DEFAULT_IDENTITY);
     expect(zid.address).toBe('zidc19e35c5735667f9');
     expect(zid.address.length).toBe(19); // "zid" + 16
+  });
+});
+
+describe('contact key-agreement (contact discovery)', () => {
+  const PHRASE_B = 'zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong';
+
+  test('contact card key is deterministic and versioned', () => {
+    const a1 = deriveZidContactCardKey(TEST_PHRASE, DEFAULT_IDENTITY);
+    const a2 = deriveZidContactCardKey(TEST_PHRASE, DEFAULT_IDENTITY);
+    expect(a1).toEqual(a2);
+    expect(a1.suite).toBe('x25519-v1');
+    expect(a1.publicKey).toMatch(/^[0-9a-f]{64}$/); // 32-byte x25519 pub
+  });
+
+  test('the pairwise root secret is symmetric (both sides derive the same)', () => {
+    // A's and B's cards
+    const aCard = deriveZidContactCardKey(TEST_PHRASE, DEFAULT_IDENTITY);
+    const bCard = deriveZidContactCardKey(PHRASE_B, DEFAULT_IDENTITY);
+    // A computes DH with B's card; B computes DH with A's card
+    const sAB = zidContactRootSecret(TEST_PHRASE, DEFAULT_IDENTITY, bCard);
+    const sBA = zidContactRootSecret(PHRASE_B, DEFAULT_IDENTITY, aCard);
+    expect(bytesToHex(sAB)).toBe(bytesToHex(sBA));
+    expect(sAB.length).toBe(32);
+  });
+
+  test('different contacts yield different root secrets', () => {
+    const bCard = deriveZidContactCardKey(PHRASE_B, DEFAULT_IDENTITY);
+    const cCard = deriveZidContactCardKey(
+      'legal winner thank year wave sausage worth useful legal winner thank yellow',
+      DEFAULT_IDENTITY,
+    );
+    const sAB = zidContactRootSecret(TEST_PHRASE, DEFAULT_IDENTITY, bCard);
+    const sAC = zidContactRootSecret(TEST_PHRASE, DEFAULT_IDENTITY, cCard);
+    expect(bytesToHex(sAB)).not.toBe(bytesToHex(sAC));
+  });
+
+  test('unsupported suite is rejected (fail-closed for future suites)', () => {
+    expect(() =>
+      zidContactRootSecret(TEST_PHRASE, DEFAULT_IDENTITY, {
+        // @ts-expect-error deliberately an unknown suite
+        suite: 'xwing-v1',
+        publicKey: '00'.repeat(32),
+      }),
+    ).toThrow(/unsupported contact suite/);
   });
 });

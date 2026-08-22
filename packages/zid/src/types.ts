@@ -52,6 +52,41 @@ export interface ContactRef {
   displayName: string;
 }
 
+/**
+ * The public half of a contact's key-agreement key, as it travels on the
+ * contact card. Used to establish the pairwise root secret for private,
+ * non-interactive contact discovery (see `establishContactSecret`).
+ *
+ * `suite` is intentionally a WIDE `string`, not a narrow union: an unknown
+ * FUTURE suite (e.g. a post-quantum hybrid) must ROUND-TRIP through storage
+ * untouched and fail CLOSED only when someone tries to establish a secret with
+ * it — never on load. The extension-side establisher (identity.ts
+ * `zidContactRootSecret`) owns the narrow `ContactSuite` union and throws on an
+ * unrecognized suite. Structurally compatible with identity.ts `ContactCardKey`,
+ * but declared locally so this DApp-shipped SDK never imports extension state
+ * (the mnemonic never crosses that boundary).
+ */
+export interface ContactCardKey {
+  /** KA suite id, e.g. 'x25519-v1'. Round-tripped verbatim; validated at establish. */
+  suite: string;
+  /** hex public key. X25519 pubkey for 'x25519-v1'; a KEM encapsulation key for a hybrid. */
+  publicKey: string;
+}
+
+/**
+ * What you hand a peer (or import from the wallet) so they can add you: your
+ * session pubkey, a display name, and — for discovery — your contact card key.
+ * `card` is optional so legacy exchanges (pre-discovery) still parse.
+ */
+export interface ContactShare {
+  /** session pubkey of the contact */
+  pubkey: string;
+  /** display name */
+  name: string;
+  /** contact-card key-agreement key (absent on legacy contacts) */
+  card?: ContactCardKey;
+}
+
 /** options for pickContacts() */
 export interface PickContactsOptions {
   /** shown in picker: "poker.zk.bot wants to invite a friend" */
