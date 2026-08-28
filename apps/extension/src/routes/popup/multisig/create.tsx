@@ -20,6 +20,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { RelayKeyExchange } from './relay-key-exchange';
+import {
+  RendezvousHost,
+  useRendezvousAvailable,
+  type HostRendezvous,
+} from './rendezvous-exchange';
 import { useSearchParams } from 'react-router-dom';
 import { useStore } from '../../../state';
 import {
@@ -83,6 +88,13 @@ const MultisigCreateZafu = () => {
   // relay keys must be in hand before the session exists.
   const [myRelayKey, setMyRelayKey] = useState('');
   const [peerKeys, setPeerKeys] = useState<string[]>([]);
+  // default: room-code discovery via the relay's rendezvous; the manual
+  // key-exchange + session-id flow is the opt-in (and the fallback when the
+  // relay has none)
+  const [manualKeys, setManualKeys] = useState(false);
+  const rdvAvailable = useRendezvousAvailable(relayUrl || DEFAULT_RELAY_URL);
+  const rendezvous = rdvAvailable === true && !manualKeys;
+  const rdvRef = useRef<HostRendezvous | null>(null);
   const goBack = useBackNav(PopupPath.MULTISIG);
 
   const startDkg = useStore(s => s.frostSession.startDkg);
@@ -102,6 +114,11 @@ const MultisigCreateZafu = () => {
       const url = relayUrl || DEFAULT_RELAY_URL;
       const code = await startDkg(url, threshold, maxSigners, peerKeys);
       setRoomCode(code);
+      // in rendezvous mode the joiners poll the session id out of the room;
+      // nobody has to be sent a uuid
+      if (rdvRef.current) {
+        await rdvRef.current.announce(code);
+      }
       setStep('waiting');
       setParticipantCount(1);
 
@@ -284,13 +301,39 @@ const MultisigCreateZafu = () => {
             transaction
           </p>
           <RelayTransportField value={relayUrl} onChange={setRelayUrl} />
-          <RelayKeyExchange
-            maxSigners={maxSigners}
-            myKey={myRelayKey}
-            onPrepare={prepareRelayIdentity}
-            onMyKey={setMyRelayKey}
-            onPeerKeys={setPeerKeys}
-          />
+          {rendezvous ? (
+            <RendezvousHost
+              key={relayUrl || DEFAULT_RELAY_URL}
+              relayUrl={relayUrl || DEFAULT_RELAY_URL}
+              maxSigners={maxSigners}
+              prepare={prepareRelayIdentity}
+              onState={s => {
+                rdvRef.current = s;
+                setPeerKeys(s.peerKeys);
+              }}
+            />
+          ) : (
+            <RelayKeyExchange
+              maxSigners={maxSigners}
+              myKey={myRelayKey}
+              onPrepare={prepareRelayIdentity}
+              onMyKey={setMyRelayKey}
+              onPeerKeys={setPeerKeys}
+            />
+          )}
+          {rdvAvailable === true && (
+            <button
+              type='button'
+              className='self-start text-label text-fg-muted underline'
+              onClick={() => {
+                setManualKeys(m => !m);
+                setPeerKeys([]);
+                rdvRef.current = null;
+              }}
+            >
+              {manualKeys ? 'use a room code instead' : 'enter relay keys manually'}
+            </button>
+          )}
           <button
             className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-40'
             disabled={peerKeys.length !== maxSigners - 1}
@@ -306,16 +349,19 @@ const MultisigCreateZafu = () => {
       {step === 'waiting' && (
         <div className='flex flex-col items-center gap-4'>
           <p className='text-xs text-fg-muted'>
-            share this session id with your co-signers - they pick "join" and enter it, along with
-            the relay keys you already swapped
+            {rdvRef.current
+              ? 'your co-signers are picked up automatically - they already have the room code'
+              : 'share this session id with your co-signers - they pick "join" and enter it, along with the relay keys you already swapped'}
           </p>
 
           <div className='flex items-center gap-2 rounded-lg border border-border-soft bg-elev-1 px-6 py-4'>
             {/* a session id is a uuid, not three short words - it needs to wrap
                 rather than run off the popup */}
-            <span className='break-all font-mono text-xs'>{roomCode}</span>
+            <span className='break-all font-mono text-xs'>{rdvRef.current?.code ?? roomCode}</span>
             <button
-              onClick={() => void navigator.clipboard.writeText(roomCode)}
+              onClick={() =>
+                void navigator.clipboard.writeText(rdvRef.current?.code ?? roomCode)
+              }
               className='p-1 text-fg-muted hover:text-fg-high transition-colors'
             >
               <span className='i-ph-copy size-4' />
@@ -324,7 +370,7 @@ const MultisigCreateZafu = () => {
 
           <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
             <QrDisplay
-              data={Array.from(new TextEncoder().encode(roomCode))
+              data={Array.from(new TextEncoder().encode(rdvRef.current?.code ?? roomCode))
                 .map(b => b.toString(16).padStart(2, '0'))
                 .join('')}
               size={160}
@@ -483,6 +529,10 @@ const MultisigCreateZigner = () => {
   const [participantCount, setParticipantCount] = useState(1);
   const [myRelayKey, setMyRelayKey] = useState('');
   const [peerKeys, setPeerKeys] = useState<string[]>([]);
+  const [manualKeys, setManualKeys] = useState(false);
+  const rdvAvailable = useRendezvousAvailable(relayUrl || DEFAULT_RELAY_URL);
+  const rendezvous = rdvAvailable === true && !manualKeys;
+  const rdvRef = useRef<HostRendezvous | null>(null);
   const [publicKeyPackage, setPublicKeyPackage] = useState('');
   const [walletId, setWalletId] = useState('');
   const [, setOrchardFvk] = useState('');
@@ -547,6 +597,9 @@ const MultisigCreateZigner = () => {
 
       const code = await startDkg(url, threshold, maxSigners, peerKeys);
       setRoomCode(code);
+      if (rdvRef.current) {
+        await rdvRef.current.announce(code);
+      }
 
       const relay = useStore.getState().frostSession.relay;
       if (!relay) {
@@ -857,13 +910,39 @@ const MultisigCreateZigner = () => {
             </label>
           </div>
           <RelayTransportField value={relayUrl} onChange={setRelayUrl} />
-          <RelayKeyExchange
-            maxSigners={maxSigners}
-            myKey={myRelayKey}
-            onPrepare={prepareRelayIdentity}
-            onMyKey={setMyRelayKey}
-            onPeerKeys={setPeerKeys}
-          />
+          {rendezvous ? (
+            <RendezvousHost
+              key={relayUrl || DEFAULT_RELAY_URL}
+              relayUrl={relayUrl || DEFAULT_RELAY_URL}
+              maxSigners={maxSigners}
+              prepare={prepareRelayIdentity}
+              onState={s => {
+                rdvRef.current = s;
+                setPeerKeys(s.peerKeys);
+              }}
+            />
+          ) : (
+            <RelayKeyExchange
+              maxSigners={maxSigners}
+              myKey={myRelayKey}
+              onPrepare={prepareRelayIdentity}
+              onMyKey={setMyRelayKey}
+              onPeerKeys={setPeerKeys}
+            />
+          )}
+          {rdvAvailable === true && (
+            <button
+              type='button'
+              className='self-start text-label text-fg-muted underline'
+              onClick={() => {
+                setManualKeys(m => !m);
+                setPeerKeys([]);
+                rdvRef.current = null;
+              }}
+            >
+              {manualKeys ? 'use a room code instead' : 'enter relay keys manually'}
+            </button>
+          )}
           <button
             className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-40'
             disabled={peerKeys.length !== maxSigners - 1}
@@ -878,8 +957,12 @@ const MultisigCreateZigner = () => {
 
       {step === 'waiting-room' && (
         <div className='flex flex-col items-center gap-4'>
-          <p className='text-xs text-fg-muted'>share this session id with your co-signers</p>
-          <div className='break-all px-4 font-mono text-xs'>{roomCode}</div>
+          <p className='text-xs text-fg-muted'>
+            {rdvRef.current
+              ? 'your co-signers are picked up automatically - they already have the room code'
+              : 'share this session id with your co-signers'}
+          </p>
+          <div className='break-all px-4 font-mono text-xs'>{rdvRef.current?.code ?? roomCode}</div>
           <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
             <span className='i-ph-users size-3.5 text-fg-muted' />
             <span className='text-xs'>
