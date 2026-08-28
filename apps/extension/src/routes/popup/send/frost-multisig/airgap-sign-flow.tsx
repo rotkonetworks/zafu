@@ -247,7 +247,9 @@ export function FrostAirgapSignFlow({
           <SignStepProgress current={1} />
           <p className='text-sm text-fg-high'>show this QR to zigner</p>
           {trigger1 && <AnimatedQrDisplay data={trigger1} urType='zafu-frost-sign' size={220} />}
-          {sessionRef.current && <RoomCodeChip code={sessionRef.current.roomCode} />}
+          {sessionRef.current && (
+            <RoomCodeChip code={sessionRef.current.friendlyCode ?? sessionRef.current.roomCode} />
+          )}
           <div className='w-full rounded bg-elev-2 p-2 text-body text-fg-muted space-y-0.5'>
             <p>
               {ms.threshold}-of-{ms.maxSigners} threshold
@@ -301,7 +303,9 @@ export function FrostAirgapSignFlow({
             <span className='i-ph-circle-notch size-3.5 animate-spin' />
             exchanging commitments...
           </div>
-          {sessionRef.current && <RoomCodeChip code={sessionRef.current.roomCode} />}
+          {sessionRef.current && (
+            <RoomCodeChip code={sessionRef.current.friendlyCode ?? sessionRef.current.roomCode} />
+          )}
           <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
             <span className='i-ph-users size-3.5 text-fg-muted' />
             <span className='text-xs'>
@@ -366,7 +370,9 @@ export function FrostAirgapSignFlow({
             <span className='i-ph-circle-notch size-3.5 animate-spin' />
             {progress || 'finalizing...'}
           </div>
-          {sessionRef.current && <RoomCodeChip code={sessionRef.current.roomCode} />}
+          {sessionRef.current && (
+            <RoomCodeChip code={sessionRef.current.friendlyCode ?? sessionRef.current.roomCode} />
+          )}
           <p className='text-label text-fg-muted/70 leading-snug pt-1 text-center'>
             publishing shares, waiting on peer shares, aggregating signatures, broadcasting tx.
           </p>

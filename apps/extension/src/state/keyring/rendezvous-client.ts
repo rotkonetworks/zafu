@@ -95,6 +95,63 @@ export async function pollRoom(relayUrl: string, roomId: string): Promise<RoomVi
   return { entries: body.entries, sessionId: body.session_id };
 }
 
+/**
+ * Signing-flow convenience: open a fresh room, announce `sessionId` into it,
+ * and return the code to show the co-signers. Null when the relay has no
+ * rendezvous or the offer fails for any reason — the caller falls back to
+ * showing the uuid, which always works.
+ *
+ * No key collection here: a signing group's relay keys are already on file,
+ * so the room exists purely to carry the session id.
+ */
+export async function offerRoomCode(
+  relayUrl: string,
+  myPubkey: string,
+  sessionId: string,
+): Promise<string | null> {
+  try {
+    if (!(await hasRendezvous(relayUrl))) {
+      return null;
+    }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const code = generateRoomCode();
+      const roomId = await roomIdFromCode(code);
+      const token = await publishKey(relayUrl, roomId, myPubkey);
+      if (token !== null) {
+        await announceSession(relayUrl, roomId, token, sessionId);
+        return code;
+      }
+      // no token: the code collided with a live room someone else owns
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Joiner side of `offerRoomCode`: turn a room code into the session uuid,
+ * waiting for the announce if the coordinator is a step behind.
+ */
+export async function resolveRoomCode(
+  relayUrl: string,
+  code: string,
+  timeoutMs = 60_000,
+): Promise<string> {
+  const roomId = await roomIdFromCode(code);
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const view = await pollRoom(relayUrl, roomId);
+    if (view.sessionId !== null) {
+      return view.sessionId;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error('no signing session behind that room code - check it with the coordinator');
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+}
+
 /** Coordinator only: point the room's joiners at the created frostd session. */
 export async function announceSession(
   relayUrl: string,

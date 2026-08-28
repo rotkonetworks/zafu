@@ -67,7 +67,7 @@ export async function runMnemonicFrostSign({
     ms.publicKeyPackage,
     ms.relayPeerKeys ?? [],
   );
-  setRoomCode(session.roomCode);
+  setRoomCode(session.friendlyCode ?? session.roomCode);
   setFrostAbort(session.abort);
 
   setProgress('round 1: generating commitments...');
