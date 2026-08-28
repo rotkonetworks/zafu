@@ -115,9 +115,15 @@ const MultisigCreateZafu = () => {
       const code = await startDkg(url, threshold, maxSigners, peerKeys);
       setRoomCode(code);
       // in rendezvous mode the joiners poll the session id out of the room;
-      // nobody has to be sent a uuid
+      // nobody has to be sent a uuid. If the announce fails (room expired,
+      // relay busy) the frostd session is already live and must not be
+      // killed - drop to showing the uuid, which always works.
       if (rdvRef.current) {
-        await rdvRef.current.announce(code);
+        try {
+          await rdvRef.current.announce(code);
+        } catch {
+          rdvRef.current = null;
+        }
       }
       setStep('waiting');
       setParticipantCount(1);
@@ -597,8 +603,13 @@ const MultisigCreateZigner = () => {
 
       const code = await startDkg(url, threshold, maxSigners, peerKeys);
       setRoomCode(code);
+      // failed announce must not kill the live session - fall back to uuid
       if (rdvRef.current) {
-        await rdvRef.current.announce(code);
+        try {
+          await rdvRef.current.announce(code);
+        } catch {
+          rdvRef.current = null;
+        }
       }
 
       const relay = useStore.getState().frostSession.relay;
