@@ -49,10 +49,12 @@ export class FrostdClient {
   async login(pubkeyHex: string, sign: ChallengeSigner): Promise<void> {
     const { challenge } = await this.post<{ challenge: string }>('challenge', {});
     const signature = await sign(challenge);
+    // hex string - frostd 0.1.0 rejects the byte-array form outright
+    // ("invalid type: sequence, expected a string")
     const { access_token } = await this.post<{ access_token: string }>('login', {
       challenge,
       pubkey: pubkeyHex,
-      signature: Array.from(signature),
+      signature: Array.from(signature, b => b.toString(16).padStart(2, '0')).join(''),
     });
     this.accessToken = access_token;
   }

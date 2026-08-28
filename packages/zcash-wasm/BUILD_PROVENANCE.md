@@ -94,6 +94,23 @@ Reproduce by checking out the zcli rev below and running the commands.
 Verify: rebuild from the rev, sha256sum the outputs,
 diff against the values above. A mismatch means the vendored blob is stale.
 
+## 2026-08-29 rebuild - frostd challenge signed over raw uuid bytes
+
+- source repo: zcli, branch `master`, rev: fix(wasm) frostd challenge signature
+  over raw uuid bytes (frost.rs frost_relay_sign_challenge) on top of dc8b752.
+- why: frostd verifies the login signature over the challenge uuid's 16 RAW
+  bytes (`Uuid::as_bytes`), not the 36-char string; the old signer made every
+  extension frostd login fail Unauthorized. Paired with frostd-client.ts now
+  sending the signature as a hex string (frostd 0.1.0 rejects the array form).
+- toolchain: wasm-bindgen 0.2.126, wasm-opt (binaryen) 130, nightly
+  `cargo wasm-parallel` per the recipe above; shared imported memory
+  `(memory 50 32768 shared)` confirmed post-bindgen.
+- parallel size after -Oz: 8745501 bytes.
+- sha256(parallel zafu_wasm_bg.wasm) =
+  980a08f019d07ea2cfea4ccb1d470f6ee8147999dc9cb273154c3d06d40a7646
+- snippets/ (workerHelpers.js local patch) kept from the previous bundle -
+  identical snippet hash dir, patch still applies.
+
 ## 2026-08-19 rebuild - single-part UR decode (compact sign response)
 
 - source repo: zcli, branch `master`, rev `50f7a6c` (fix(ur): decode single-part
