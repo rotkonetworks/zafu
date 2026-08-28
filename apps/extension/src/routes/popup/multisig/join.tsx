@@ -85,6 +85,8 @@ const MultisigJoinZafu = () => {
   // zigner join flow below.
   const abortRef = useRef<AbortController | null>(null);
   const relayRef = useRef<FrostdRelayClient | null>(null);
+  // once per session: the rendezvous announce auto-starts the DKG
+  const autoJoinedRef = useRef(false);
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
@@ -96,8 +98,12 @@ const MultisigJoinZafu = () => {
     step === 'joining' || step === 'dkg' || step === 'fvk-echo' ? deadline : null,
   );
 
-  const handleJoin = async () => {
-    if (!roomCode.trim()) {
+  // roomArg/peersArg let the rendezvous auto-start the DKG the moment the
+  // coordinator announces, without waiting for a state-update round-trip
+  const handleJoin = async (roomArg?: string, peersArg?: string[]) => {
+    const room = (roomArg ?? roomCode).trim();
+    const keys = peersArg ?? peerKeys;
+    if (!room) {
       return;
     }
 
@@ -109,15 +115,15 @@ const MultisigJoinZafu = () => {
       const url = relayUrl || DEFAULT_RELAY_URL;
       setStep('joining');
 
-      if (peerKeys.length === 0) {
+      if (keys.length === 0) {
         throw new Error('enter every co-signer relay key before joining');
       }
       // the identity the peers were given is the ceremony-scoped one from
       // prepareRelayIdentity (both the rendezvous and RelayKeyExchange use
       // it) - logging in with any other key would be rejected as unlisted
-      const ceremonyId = useStore.getState().frostSession.relayCeremonyId ?? roomCode.trim();
+      const ceremonyId = useStore.getState().frostSession.relayCeremonyId ?? room;
       const stored = await getOrCreateRelayIdentity(ceremonyId);
-      const relay = new FrostdRelayClient(url, await buildRelayIdentity(stored, peerKeys));
+      const relay = new FrostdRelayClient(url, await buildRelayIdentity(stored, keys));
       relayRef.current = relay;
       const participantId = new Uint8Array(32);
       crypto.getRandomValues(participantId);
@@ -133,7 +139,7 @@ const MultisigJoinZafu = () => {
       setProgress('waiting for the wallet creator...');
 
       void relay.joinRoom(
-        roomCode.trim(),
+        room,
         participantId,
         event => {
           if (event.type === 'joined') {
@@ -184,7 +190,7 @@ const MultisigJoinZafu = () => {
         looksHex: /^[0-9a-f]+$/i.test(round1.broadcast),
       });
       await relay.sendMessage(
-        roomCode.trim(),
+        room,
         participantId,
         new TextEncoder().encode(`R1:${round1.broadcast}`),
       );
@@ -196,7 +202,7 @@ const MultisigJoinZafu = () => {
       const round2 = await frostDkgPart2InWorker(round1.secret, peerBroadcasts);
       for (const pkg of round2.peer_packages) {
         await relay.sendMessage(
-          roomCode.trim(),
+          room,
           participantId,
           new TextEncoder().encode(`R2:${pkg}`),
         );
@@ -218,7 +224,7 @@ const MultisigJoinZafu = () => {
       setStep('fvk-echo');
       setProgress('double-checking everyone sees the same wallet...');
       await relay.sendMessage(
-        roomCode.trim(),
+        room,
         participantId,
         new TextEncoder().encode(`FVK:${orchardFvk}`),
       );
@@ -288,10 +294,12 @@ const MultisigJoinZafu = () => {
               prepare={prepareRelayIdentity}
               onState={s => {
                 setPeerKeys(s.peerKeys);
-                // the announced frostd session uuid IS the room code the rest
-                // of the flow runs on; everything downstream stays unchanged
-                if (s.sessionId !== null) {
+                // wormhole UX: typing the code was the one action - the DKG
+                // starts by itself the moment the coordinator announces
+                if (s.sessionId !== null && !autoJoinedRef.current) {
+                  autoJoinedRef.current = true;
                   setRoomCode(s.sessionId);
+                  void handleJoin(s.sessionId, s.peerKeys);
                 }
               }}
             />
@@ -312,18 +320,21 @@ const MultisigJoinZafu = () => {
                 setManualKeys(m => !m);
                 setPeerKeys([]);
                 setRoomCode('');
+                autoJoinedRef.current = false;
               }}
             >
               {manualKeys ? 'use a room code instead' : 'enter relay keys + session id manually'}
             </button>
           )}
-          <button
-            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
-            onClick={() => void handleJoin()}
-            disabled={!roomCode.trim() || peerKeys.length === 0}
-          >
-            {rendezvous && !roomCode.trim() ? 'waiting for the coordinator…' : 'join'}
-          </button>
+          {!rendezvous && (
+            <button
+              className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
+              onClick={() => void handleJoin()}
+              disabled={!roomCode.trim() || peerKeys.length === 0}
+            >
+              join
+            </button>
+          )}
         </div>
       )}
 
@@ -380,6 +391,7 @@ const MultisigJoinZafu = () => {
             onClick={() => {
               setStep('input');
               setError('');
+              autoJoinedRef.current = false;
             }}
             className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >
@@ -446,6 +458,8 @@ const MultisigJoinZigner = () => {
   const peerFvksRef = useRef<string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const relayRef = useRef<FrostdRelayClient | null>(null);
+  // once per session: the rendezvous announce auto-starts the DKG
+  const autoJoinedRef = useRef(false);
 
   const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
 
@@ -480,8 +494,10 @@ const MultisigJoinZigner = () => {
     mainnet: true,
   });
 
-  const handleJoin = async () => {
-    if (!roomCode.trim()) {
+  const handleJoin = async (roomArg?: string, peersArg?: string[]) => {
+    const room = (roomArg ?? roomCode).trim();
+    const keys = peersArg ?? peerKeys;
+    if (!room) {
       return;
     }
     try {
@@ -489,13 +505,13 @@ const MultisigJoinZigner = () => {
       const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
       setDeadline(sessionDeadline);
 
-      if (peerKeys.length === 0) {
+      if (keys.length === 0) {
         throw new Error('enter every co-signer relay key before joining');
       }
       // same identity the peers were given - see the zafu join flow above
-      const ceremonyId = useStore.getState().frostSession.relayCeremonyId ?? roomCode.trim();
+      const ceremonyId = useStore.getState().frostSession.relayCeremonyId ?? room;
       const stored = await getOrCreateRelayIdentity(ceremonyId);
-      const relay = new FrostdRelayClient(url, await buildRelayIdentity(stored, peerKeys));
+      const relay = new FrostdRelayClient(url, await buildRelayIdentity(stored, keys));
       relayRef.current = relay;
 
       const pid = new Uint8Array(32);
@@ -505,7 +521,7 @@ const MultisigJoinZigner = () => {
       abortRef.current = new AbortController();
 
       void relay.joinRoom(
-        roomCode.trim(),
+        room,
         pid,
         event => {
           if (event.type === 'joined') {
@@ -821,8 +837,11 @@ const MultisigJoinZigner = () => {
               prepare={prepareRelayIdentity}
               onState={s => {
                 setPeerKeys(s.peerKeys);
-                if (s.sessionId !== null) {
+                // wormhole UX: the DKG starts by itself on the announce
+                if (s.sessionId !== null && !autoJoinedRef.current) {
+                  autoJoinedRef.current = true;
                   setRoomCode(s.sessionId);
+                  void handleJoin(s.sessionId, s.peerKeys);
                 }
               }}
             />
@@ -843,18 +862,21 @@ const MultisigJoinZigner = () => {
                 setManualKeys(m => !m);
                 setPeerKeys([]);
                 setRoomCode('');
+                autoJoinedRef.current = false;
               }}
             >
               {manualKeys ? 'use a room code instead' : 'enter relay keys + session id manually'}
             </button>
           )}
-          <button
-            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
-            onClick={() => void handleJoin()}
-            disabled={!roomCode.trim() || peerKeys.length === 0}
-          >
-            {rendezvous && !roomCode.trim() ? 'waiting for the coordinator…' : 'join'}
-          </button>
+          {!rendezvous && (
+            <button
+              className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
+              onClick={() => void handleJoin()}
+              disabled={!roomCode.trim() || peerKeys.length === 0}
+            >
+              join
+            </button>
+          )}
         </div>
       )}
 
@@ -977,6 +999,7 @@ const MultisigJoinZigner = () => {
             onClick={() => {
               setStep('input');
               setError('');
+              autoJoinedRef.current = false;
             }}
             className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >

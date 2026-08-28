@@ -271,7 +271,7 @@ export function RendezvousJoin({ relayUrl, prepare, onState }: JoinProps): React
             disabled={code.trim() === '' || connected}
             onClick={() => void connect()}
           >
-            connect
+            join
           </button>
         </div>
       </label>
