@@ -18,7 +18,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { RelayKeyExchange } from './relay-key-exchange';
-import { RendezvousJoin, useRendezvousAvailable } from './rendezvous-exchange';
+import { RelayProbing, RendezvousJoin, useRendezvousAvailable } from './rendezvous-exchange';
 import { useSearchParams } from 'react-router-dom';
 import { useStore } from '../../../state';
 import {
@@ -274,7 +274,7 @@ const MultisigJoinZafu = () => {
       />
       {step === 'input' && (
         <div className='flex flex-col gap-4'>
-          {!rendezvous && (
+          {rdvAvailable !== null && !rendezvous && (
             <label className='text-xs text-fg-muted'>
               session id from the wallet creator
               <input
@@ -287,7 +287,9 @@ const MultisigJoinZafu = () => {
             </label>
           )}
           <RelayTransportField value={relayUrl} onChange={setRelayUrl} />
-          {rendezvous ? (
+          {rdvAvailable === null ? (
+            <RelayProbing />
+          ) : rendezvous ? (
             <RendezvousJoin
               key={relayUrl || DEFAULT_RELAY_URL}
               relayUrl={relayUrl || DEFAULT_RELAY_URL}
@@ -323,10 +325,10 @@ const MultisigJoinZafu = () => {
                 autoJoinedRef.current = false;
               }}
             >
-              {manualKeys ? 'use a room code instead' : 'enter relay keys + session id manually'}
+              {manualKeys ? 'use a room code instead' : 'advanced: join by session id'}
             </button>
           )}
-          {!rendezvous && (
+          {rdvAvailable !== null && !rendezvous && (
             <button
               className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
               onClick={() => void handleJoin()}
@@ -817,7 +819,7 @@ const MultisigJoinZigner = () => {
             cold-multisig: your signing key is generated and stored on zigner only. zafu keeps only
             the public keys needed to watch the wallet.
           </div>
-          {!rendezvous && (
+          {rdvAvailable !== null && !rendezvous && (
             <label className='text-xs text-fg-muted'>
               session id from the wallet creator
               <input
@@ -830,7 +832,9 @@ const MultisigJoinZigner = () => {
             </label>
           )}
           <RelayTransportField value={relayUrl} onChange={setRelayUrl} />
-          {rendezvous ? (
+          {rdvAvailable === null ? (
+            <RelayProbing />
+          ) : rendezvous ? (
             <RendezvousJoin
               key={relayUrl || DEFAULT_RELAY_URL}
               relayUrl={relayUrl || DEFAULT_RELAY_URL}
@@ -865,10 +869,10 @@ const MultisigJoinZigner = () => {
                 autoJoinedRef.current = false;
               }}
             >
-              {manualKeys ? 'use a room code instead' : 'enter relay keys + session id manually'}
+              {manualKeys ? 'use a room code instead' : 'advanced: join by session id'}
             </button>
           )}
-          {!rendezvous && (
+          {rdvAvailable !== null && !rendezvous && (
             <button
               className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
               onClick={() => void handleJoin()}

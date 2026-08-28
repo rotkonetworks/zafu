@@ -21,6 +21,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { RelayKeyExchange } from './relay-key-exchange';
 import {
+  RelayProbing,
   RendezvousHost,
   useRendezvousAvailable,
   type HostRendezvous,
@@ -307,7 +308,9 @@ const MultisigCreateZafu = () => {
             transaction
           </p>
           <RelayTransportField value={relayUrl} onChange={setRelayUrl} />
-          {rendezvous ? (
+          {rdvAvailable === null ? (
+            <RelayProbing />
+          ) : rendezvous ? (
             <RendezvousHost
               key={relayUrl || DEFAULT_RELAY_URL}
               relayUrl={relayUrl || DEFAULT_RELAY_URL}
@@ -337,7 +340,7 @@ const MultisigCreateZafu = () => {
                 rdvRef.current = null;
               }}
             >
-              {manualKeys ? 'use a room code instead' : 'enter relay keys manually'}
+              {manualKeys ? 'use a room code instead' : 'advanced: manual key exchange'}
             </button>
           )}
           <button
@@ -921,7 +924,9 @@ const MultisigCreateZigner = () => {
             </label>
           </div>
           <RelayTransportField value={relayUrl} onChange={setRelayUrl} />
-          {rendezvous ? (
+          {rdvAvailable === null ? (
+            <RelayProbing />
+          ) : rendezvous ? (
             <RendezvousHost
               key={relayUrl || DEFAULT_RELAY_URL}
               relayUrl={relayUrl || DEFAULT_RELAY_URL}
@@ -951,7 +956,7 @@ const MultisigCreateZigner = () => {
                 rdvRef.current = null;
               }}
             >
-              {manualKeys ? 'use a room code instead' : 'enter relay keys manually'}
+              {manualKeys ? 'use a room code instead' : 'advanced: manual key exchange'}
             </button>
           )}
           <button

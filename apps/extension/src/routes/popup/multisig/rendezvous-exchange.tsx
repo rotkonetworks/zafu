@@ -26,6 +26,19 @@ import {
 const POLL_MS = 1000;
 
 /**
+ * Shown while the relay probe is in flight, so the screen opens in (or
+ * settles into) the room-code flow without first flashing the manual one.
+ */
+export function RelayProbing(): React.JSX.Element {
+  return (
+    <div className='flex items-center gap-2 rounded-lg border border-border-soft bg-elev-1 p-3 text-xs text-fg-muted'>
+      <span className='i-ph-circle-notch size-3.5 animate-spin' />
+      checking the relay…
+    </div>
+  );
+}
+
+/**
  * null while probing, then whether the relay serves /rendezvous/*.
  * Stock frostd relays don't; the UI falls back to the manual flow.
  */
