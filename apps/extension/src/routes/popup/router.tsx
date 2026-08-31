@@ -312,8 +312,4 @@ export const popupRoutes: RouteObject[] = [
   },
 ];
 
-export const popupRouter = createHashRouter(popupRoutes, {
-  future: {
-    v7_relativeSplatPath: true,
-  } as { v7_relativeSplatPath: boolean },
-});
+export const popupRouter = createHashRouter(popupRoutes);

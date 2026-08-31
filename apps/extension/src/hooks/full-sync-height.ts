@@ -20,7 +20,7 @@ const tryGetMax = (a?: number, b?: number): number | undefined => {
 // There is a slight delay with Zustand loading up the last block synced.
 // To prevent the screen flicker, we use a loader to read it from chrome.storage.local.
 const useFullSyncHeight = (): number | undefined => {
-  const { fullSyncHeight: localHeight } = useLoaderData() as PopupLoaderData;
+  const { fullSyncHeight: localHeight }: PopupLoaderData = useLoaderData();
   const memoryHeight = useStore(selectFullSyncHeight);
 
   return tryGetMax(localHeight, memoryHeight);
