@@ -55,7 +55,7 @@
     "navigator.locks": "^0.8.8",
     "playwright": "^1.62.1",
     "prettier": "^3.8.1",
-    "syncpack": "^13.0.4",
+    "syncpack": "^15.3.3",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.12",
     "turbo": "^2.10.11",
