@@ -44,7 +44,7 @@
     "@repo/tsconfig": "workspace:*",
     "@storybook/react-vite": "8.2.9",
     "@turbo/gen": "^2.10.11",
-    "@types/node": "^25.9.5",
+    "@types/node": "^26.4.0",
     "@unocss/postcss": "^66.8.1",
     "@unocss/preset-icons": "^66.8.1",
     "@unocss/webpack": "^66.8.1",

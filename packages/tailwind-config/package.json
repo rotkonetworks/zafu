@@ -5,6 +5,6 @@
   "license": "MIT",
   "main": "index.ts",
   "devDependencies": {
-    "@types/node": "^25.9.5"
+    "@types/node": "^26.4.0"
   }
 }
