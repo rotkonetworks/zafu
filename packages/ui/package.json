@@ -52,7 +52,7 @@
     "@radix-ui/react-tooltip": "^1.2.16",
     "@rotko/penumbra-types": "37.0.0",
     "@rotko/penumbra-wasm": "55.0.2",
-    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/jest-dom": "^7.0.1",
     "@textea/json-viewer": "^4.0.1",
     "bignumber.js": "^11.1.5",
     "class-variance-authority": "^0.7.1",
