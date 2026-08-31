@@ -70,8 +70,8 @@
     "zustand": "^4.5.7"
   },
   "devDependencies": {
-    "@babel/core": "^7.29.7",
-    "@babel/preset-typescript": "^7.29.7",
+    "@babel/core": "^8.0.1",
+    "@babel/preset-typescript": "^8.0.1",
     "@iconify-json/lucide": "^1.2.124",
     "@iconify-json/ph": "^1.2.2",
     "@tailwindcss/postcss": "^4.3.3",
