@@ -51,7 +51,7 @@
     "@vitest/browser": "~1.6.1",
     "@zxing/browser": "^0.1.5",
     "@zxing/library": "^0.21.3",
-    "jsdom": "^25.0.1",
+    "jsdom": "^30.0.1",
     "navigator.locks": "^0.8.8",
     "playwright": "^1.62.1",
     "prettier": "^3.8.1",
