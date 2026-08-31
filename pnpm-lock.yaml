@@ -602,8 +602,8 @@ importers:
         specifier: 1.1.1
         version: 1.1.1(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       djb2a:
-        specifier: ^2.0.0
-        version: 2.0.0
+        specifier: ^3.0.0
+        version: 3.0.0
       framer-motion:
         specifier: ^12.43.0
         version: 12.43.0(@emotion/is-prop-valid@1.4.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -5177,9 +5177,9 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  djb2a@2.0.0:
-    resolution: {integrity: sha512-mSkCTNSJRGjNUADzWx1ubTGxJh2IVY9uoc/WGozUIu0mgBUEvIyBn9uTs9jqFBbJxQthJMF3uDx0cnpdlAUo4Q==}
-    engines: {node: '>=12'}
+  djb2a@3.0.0:
+    resolution: {integrity: sha512-jshrXsoimTmhSWbTzAZoLWb8dvCzvB6FZPW25XVofkt2GuZ0A4nPDSsMZGXBVL+aRoxFjJn8ORgrZCNO7DmPQw==}
+    engines: {node: '>=20'}
 
   doctrine@2.1.0:
     resolution: {integrity: sha512-35mSku4ZXK0vfCuHEDAwt55dg2jNajHZ1odvF+8SSr82EsZY4QmXfuWso8oEd8zRhVObSN18aM0CjSdoBX7zIw==}
@@ -13948,7 +13948,7 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  djb2a@2.0.0: {}
+  djb2a@3.0.0: {}
 
   doctrine@2.1.0:
     dependencies:
