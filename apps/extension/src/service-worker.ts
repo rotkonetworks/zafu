@@ -131,6 +131,7 @@ void loadCustomChainspecsIfEnabled();
 let walletServicesResult: Promise<{
   services: Services;
   wallet: import('@repo/wallet').WalletJson;
+  reason?: string;
 }>;
 let walletServices: Promise<Services>;
 let currentWalletIndex: number | undefined;
@@ -161,8 +162,8 @@ const reinitializeServices = async () => {
   currentSyncAbort = new AbortController();
   walletServicesResult = startWalletServices(currentSyncAbort.signal);
   walletServices = walletServicesResult.then(r => r.services);
-  const { services, wallet } = await walletServicesResult;
-  setCachedWallet(wallet);
+  const { services, wallet, reason } = await walletServicesResult;
+  setCachedWallet(wallet, reason);
   const ws = await services.getWalletServices();
   void ws.blockProcessor.sync().catch((e: unknown) => {
     // terminal rejection after an intentional stop is expected teardown;
@@ -232,7 +233,7 @@ const initHandler = async () => {
   walletServicesResult = startWalletServices(currentSyncAbort.signal);
   walletServices = walletServicesResult.then(r => r.services);
   // cache decrypted wallet as soon as it's available — unblocks RPC context getters
-  void walletServicesResult.then(({ wallet }) => setCachedWallet(wallet));
+  void walletServicesResult.then(({ wallet, reason }) => setCachedWallet(wallet, reason));
   const rpcImpls = await getRpcImpls();
 
   let custodyClient: Client<typeof CustodyService> | undefined;
