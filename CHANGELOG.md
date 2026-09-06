@@ -6,6 +6,17 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 27.3.2
+
+### Fixes
+
+- Penumbra RPC: when Penumbra is disabled or not the active network, dapp
+  requests failed with an opaque `Cannot read properties of undefined
+  (reading 'fullViewingKey')`. The service worker was caching the
+  `wallet: undefined` stub from `startWalletServices` as the "ready"
+  wallet. The wallet cache now rejects with the stub's reason instead, so
+  dapps see `penumbra network not active` / `penumbra network not enabled`.
+
 ## 26.0.0
 
 Covers everything shipped since v25.0.0, including the undocumented

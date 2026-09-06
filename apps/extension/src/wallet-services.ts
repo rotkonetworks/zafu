@@ -52,7 +52,7 @@ const getPenumbraEndpoint = async (): Promise<string> => {
 
 export const startWalletServices = async (
   signal?: AbortSignal,
-): Promise<{ services: Services; wallet: WalletJson }> => {
+): Promise<{ services: Services; wallet: WalletJson; reason?: string }> => {
   // Stub services object that throws on access - returned whenever penumbra
   // must not sync.
   const stubServices = (reason: string) => ({
@@ -60,6 +60,7 @@ export const startWalletServices = async (
       getWalletServices: () => Promise.reject(new Error(reason)),
     } as Services,
     wallet: undefined as unknown as WalletJson,
+    reason,
   });
 
   // privacy gate: check if penumbra is enabled before making network connections

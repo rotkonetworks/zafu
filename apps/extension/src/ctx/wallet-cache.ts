@@ -11,20 +11,33 @@
 import type { WalletJson } from '@repo/wallet';
 
 let resolve: (w: WalletJson) => void;
-let walletReady = new Promise<WalletJson>(r => {
-  resolve = r;
-});
+let reject: (e: Error) => void;
+const fresh = () => {
+  const p = new Promise<WalletJson>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  // a failed cache is a normal state (wrong network, penumbra disabled);
+  // don't surface it as an unhandled rejection - RPC getters observe it.
+  p.catch(() => undefined);
+  return p;
+};
+let walletReady = fresh();
 
 /** Set the cached wallet  - unblocks all waiting RPC context getters. */
-export const setCachedWallet = (wallet: WalletJson) => {
+export const setCachedWallet = (wallet: WalletJson | undefined, reason?: string) => {
+  if (!wallet) {
+    // Never cache `undefined`: getters would throw an opaque
+    // "reading 'fullViewingKey' of undefined" to dapps. Fail with the reason.
+    reject(new Error(reason ?? 'penumbra wallet not available'));
+    return;
+  }
   resolve(wallet);
 };
 
 /** Reset the cache (wallet switch / reinit). New RPC calls block until setCachedWallet. */
 export const resetWalletCache = () => {
-  walletReady = new Promise<WalletJson>(r => {
-    resolve = r;
-  });
+  walletReady = fresh();
 };
 
 /** Await the decrypted wallet. Used by context getters. */
