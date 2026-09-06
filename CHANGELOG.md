@@ -11,8 +11,8 @@ bumps for the workspace package.
 ### Fixes
 
 - Penumbra RPC: when Penumbra is disabled or not the active network, dapp
-  requests failed with an opaque `Cannot read properties of undefined
-  (reading 'fullViewingKey')`. The service worker was caching the
+  requests failed with an opaque "Cannot read properties of undefined
+  (reading 'fullViewingKey')" error. The service worker was caching the
   `wallet: undefined` stub from `startWalletServices` as the "ready"
   wallet. The wallet cache now rejects with the stub's reason instead, so
   dapps see `penumbra network not active` / `penumbra network not enabled`.
