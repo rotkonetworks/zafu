@@ -32,6 +32,7 @@ import { createLicenseSlice, LicenseSlice } from './license';
 import { createRingVrfSlice, RingVrfSlice } from './ring-vrf';
 import { createOtaSlice, type OtaSlice } from './ota';
 import { createLedgerSessionSlice, LedgerSessionSlice } from './ledger-session';
+import { createGroupChatSlice, GroupChatSlice } from './group-chat';
 
 export interface AllSlices {
   wallets: WalletsSlice;
@@ -61,6 +62,7 @@ export interface AllSlices {
   ringVrf: RingVrfSlice;
   ota: OtaSlice;
   ledgerSession: LedgerSessionSlice;
+  groupChat: GroupChatSlice;
 }
 
 export type SliceCreator<SliceInterface> = StateCreator<
@@ -106,6 +108,7 @@ export const initializeStore = (
     ringVrf: createRingVrfSlice()(setState, getState, store),
     ota: createOtaSlice(setState, getState, store),
     ledgerSession: createLedgerSessionSlice(setState, getState, store),
+    groupChat: createGroupChatSlice(local)(setState, getState, store),
   }));
 };
 

@@ -19,6 +19,7 @@ import { x25519 } from '@noble/curves/ed25519';
 import { hkdf } from '@noble/hashes/hkdf';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
+import { aesGcmEncrypt, aesGcmDecrypt } from '../../crypto/aes-gcm';
 import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
 import { hasCapability, isDenied } from '@repo/storage-chrome/capabilities';
 
@@ -163,47 +164,6 @@ const deriveAesKey = (
 ): Uint8Array => {
   const info = buildInfo(ephemeralPub, recipientX25519Pub);
   return hkdf(sha256, sharedSecret, undefined, info, 32);
-};
-
-/**
- * AES-256-GCM encrypt. returns nonce (12 bytes) || ciphertext || tag.
- */
-const aesGcmEncrypt = async (key: Uint8Array, plaintext: Uint8Array): Promise<Uint8Array> => {
-  const nonce = randomBytes(12);
-  const cryptoKey = await crypto.subtle.importKey('raw', key as BufferSource, 'AES-GCM', false, [
-    'encrypt',
-  ]);
-  const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: nonce as BufferSource },
-    cryptoKey,
-    plaintext as BufferSource,
-  );
-  // nonce || ciphertext+tag
-  const result = new Uint8Array(12 + encrypted.byteLength);
-  result.set(nonce, 0);
-  result.set(new Uint8Array(encrypted), 12);
-  return result;
-};
-
-/**
- * AES-256-GCM decrypt. input is nonce (12 bytes) || ciphertext || tag.
- */
-const aesGcmDecrypt = async (key: Uint8Array, data: Uint8Array): Promise<Uint8Array> => {
-  if (data.length < 12 + 16) {
-    // minimum: 12-byte nonce + 16-byte GCM tag (empty plaintext)
-    throw new Error('ciphertext too short');
-  }
-  const nonce = data.slice(0, 12);
-  const ciphertext = data.slice(12);
-  const cryptoKey = await crypto.subtle.importKey('raw', key as BufferSource, 'AES-GCM', false, [
-    'decrypt',
-  ]);
-  const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: nonce as BufferSource },
-    cryptoKey,
-    ciphertext as BufferSource,
-  );
-  return new Uint8Array(decrypted);
 };
 
 /**
