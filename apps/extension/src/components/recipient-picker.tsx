@@ -12,14 +12,23 @@ import { contactsSelector, type ContactNetwork } from '../state/contacts';
 import { recentAddressesSelector, type AddressNetwork } from '../state/recent-addresses';
 import { selectKeyInfos, selectEffectiveKeyInfo } from '../state/keyring';
 import { selectZcashWallets } from '../state/wallets';
+import { useZcashMe } from '../services/zcashme/config';
+import { directoryProfileByAddress, searchDirectory } from '../services/zcashme/directory';
+import { parseZcashMeHandle } from '../services/zcashme/api';
+import { zcashMeLabel } from '../services/zcashme/label';
+import { ZcashMeOptIn } from './zcashme-opt-in';
 import { cn } from '@repo/ui/lib/utils';
 
 const MAX_RESULTS = 8;
+/** directory matches shown under the local entries */
+const MAX_DIRECTORY_RESULTS = 5;
 
 interface PickerEntry {
   label: string;
   address: string;
-  category: 'wallet' | 'recent' | 'contact';
+  category: 'wallet' | 'recent' | 'contact' | 'zcashme';
+  /** zcash.me entries only: false means the name never proved the address */
+  verified?: boolean;
 }
 
 interface RecipientPickerProps {
@@ -39,6 +48,12 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
   const keyInfos = useStore(selectKeyInfos);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const zcashWallets = useStore(selectZcashWallets);
+  // local zcash.me directory snapshot (zcash only). Search is a pure map
+  // scan over the snapshot: it never leaves the wallet. Live per-name
+  // lookups are deliberately NOT wired into autocomplete - see the
+  // ZcashMeRecipientResolver on the recipient field for the explicit path.
+  const { config: zcashMe, index: directory } = useZcashMe();
+  const directoryOn = network === 'zcash' && !!zcashMe && zcashMe.mode !== 'off' && !!directory;
 
   // build flat entry list from all sources
   const allEntries = useMemo(() => {
@@ -62,10 +77,14 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
         continue;
       }
       const contact = findByAddress(r.address);
+      const directoryName = directoryOn
+        ? zcashMeLabel(directoryProfileByAddress(r.address))
+        : undefined;
       entries.push({
-        label: contact
-          ? contact.contact.name
-          : `${r.address.slice(0, 10)}...${r.address.slice(-6)}`,
+        label:
+          contact?.contact.name ??
+          directoryName ??
+          `${r.address.slice(0, 10)}...${r.address.slice(-6)}`,
         address: r.address,
         category: 'recent',
       });
@@ -85,18 +104,48 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
     }
 
     return entries;
-  }, [network, zcashWallets, selectedKeyInfo?.id, keyInfos, getRecent, contacts, findByAddress]);
+  }, [
+    network,
+    zcashWallets,
+    selectedKeyInfo?.id,
+    keyInfos,
+    getRecent,
+    contacts,
+    findByAddress,
+    directoryOn,
+    directory,
+  ]);
 
-  // filter by query
+  // filter by query; directory hits (local snapshot) are appended after
+  // the user's own entries so a stranger never outranks a saved contact
   const filtered = useMemo(() => {
     if (!query.trim()) {
       return allEntries.slice(0, MAX_RESULTS);
     }
     const q = query.toLowerCase();
-    return allEntries
+    const local = allEntries
       .filter(e => e.label.toLowerCase().includes(q) || e.address.toLowerCase().includes(q))
       .slice(0, MAX_RESULTS);
-  }, [allEntries, query]);
+    if (!directoryOn || !directory) {
+      return local;
+    }
+    // "/alice" searches the directory by name only; a bare word searches both
+    const term = parseZcashMeHandle(query) ?? query;
+    const seen = new Set(local.map(e => e.address));
+    const hits: PickerEntry[] = [];
+    for (const p of searchDirectory(directory, term, MAX_DIRECTORY_RESULTS + seen.size)) {
+      if (seen.has(p.address) || hits.length >= MAX_DIRECTORY_RESULTS) {
+        continue;
+      }
+      hits.push({
+        label: zcashMeLabel(p) ?? p.username,
+        address: p.address,
+        category: 'zcashme',
+        verified: p.addressVerified,
+      });
+    }
+    return [...local, ...hits];
+  }, [allEntries, query, directoryOn, directory]);
 
   // close on outside click
   useEffect(() => {
@@ -109,7 +158,8 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  if (!show || allEntries.length === 0) {
+  // with a directory loaded the picker is useful even on a fresh wallet
+  if (!show || (allEntries.length === 0 && !directoryOn)) {
     return null;
   }
 
@@ -117,7 +167,17 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
     wallet: 'i-ph-wallet',
     recent: 'i-ph-clock',
     contact: 'i-ph-user',
+    zcashme: 'i-ph-address-book',
   };
+  const categoryLabel: Record<string, string> = {
+    wallet: 'my wallets',
+    recent: 'recent',
+    contact: 'contact',
+    zcashme: 'zcash.me directory',
+  };
+  const placeholder = directoryOn
+    ? `search ${allEntries.length} address${allEntries.length === 1 ? '' : 'es'} + zcash.me...`
+    : `search ${allEntries.length} address${allEntries.length === 1 ? '' : 'es'}...`;
 
   return (
     <div ref={wrapperRef} className='relative mt-2'>
@@ -133,13 +193,13 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
-          placeholder={`search ${allEntries.length} address${allEntries.length === 1 ? '' : 'es'}...`}
+          placeholder={placeholder}
           className='w-full rounded-lg border border-border-soft bg-input pl-8 pr-3 py-1.5 text-xs focus:border-primary/50 focus:outline-none'
         />
       </div>
 
       {/* dropdown */}
-      {open && filtered.length > 0 && (
+      {open && (filtered.length > 0 || (query.trim() && zcashMe?.mode === 'off')) && (
         <div className='absolute z-20 left-0 right-0 mt-1 max-h-[240px] overflow-y-auto rounded-lg border border-border-soft bg-elev-1 shadow-lg'>
           {filtered.map((entry, i) => {
             const prevCategory = i > 0 ? filtered[i - 1]!.category : null;
@@ -151,7 +211,7 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
                   <div className='flex items-center gap-1.5 px-3 pt-2 pb-1'>
                     <span className={cn(categoryIcon[entry.category], 'h-3 w-3 text-fg-muted')} />
                     <span className='text-label text-fg-muted uppercase tracking-wider'>
-                      {entry.category === 'wallet' ? 'my wallets' : entry.category}
+                      {categoryLabel[entry.category]}
                     </span>
                   </div>
                 )}
@@ -163,7 +223,23 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
                   }}
                   className='flex w-full flex-col px-3 py-1.5 text-left hover:bg-elev-1 transition-colors'
                 >
-                  <span className='text-xs truncate'>{entry.label}</span>
+                  <span className='flex items-center gap-1 text-xs truncate'>
+                    {entry.category === 'zcashme' && (
+                      <span
+                        className={cn(
+                          'h-3 w-3 shrink-0',
+                          entry.verified
+                            ? 'i-ph-seal-check text-network-accent'
+                            : 'i-ph-warning text-amber-400',
+                        )}
+                        title={entry.verified ? 'verified address' : 'unverified address'}
+                      />
+                    )}
+                    {entry.label}
+                    {entry.category === 'zcashme' && !entry.verified && (
+                      <span className='text-label text-amber-400'>unverified</span>
+                    )}
+                  </span>
                   <span className='text-label font-mono text-fg-muted truncate'>
                     {entry.address.slice(0, 16)}...{entry.address.slice(-8)}
                   </span>
@@ -173,6 +249,9 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
           })}
           {query && filtered.length === 0 && (
             <p className='px-3 py-2 text-xs text-fg-muted'>no matches</p>
+          )}
+          {query.trim() && network === 'zcash' && zcashMe?.mode === 'off' && (
+            <ZcashMeOptIn reason='find people by username' className='m-2' />
           )}
         </div>
       )}

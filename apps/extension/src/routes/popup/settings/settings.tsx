@@ -95,6 +95,12 @@ const groups: SettingsGroup[] = [
         networks: ['zcash'],
       },
       {
+        title: 'zcash.me directory',
+        icon: 'i-ph-address-book',
+        href: PopupPath.SETTINGS_ZCASHME,
+        networks: ['zcash'],
+      },
+      {
         title: 'zigner',
         icon: 'i-ph-qr-code',
         href: PopupPath.SETTINGS_ZIGNER,

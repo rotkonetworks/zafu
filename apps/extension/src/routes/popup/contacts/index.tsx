@@ -27,6 +27,7 @@ import {
   setDiversifiedAddresses,
 } from '../../../state/diversified-addresses';
 import { selectActiveZcashWallet, selectMyWalletsAsContacts } from '../../../state/wallets';
+import { ZcashMeOptIn } from '../../../components/zcashme-opt-in';
 
 const NETWORK_LABELS: Record<ContactNetwork, string> = {
   penumbra: 'penumbra',
@@ -734,6 +735,8 @@ export function ContactsPage() {
           </button>
         </div>
       </div>
+
+      <ZcashMeOptIn reason='find people and name addresses you paid' className='mx-4 mt-2' />
 
       {/* import status toast */}
       {importStatus && (

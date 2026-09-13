@@ -68,6 +68,12 @@ export interface Contact {
    * ZID later. Foundation for the wallet-held social graph (see zafu#28).
    */
   zid?: string;
+  /**
+   * zcash.me username this contact was saved from (or linked to). A
+   * directory handle, not an identity anchor - it says where the address
+   * came from so the UI can show the profile link and verification state.
+   */
+  zcashme?: string;
   /** general notes about the contact */
   notes?: string;
   favorite?: boolean;
@@ -90,7 +96,12 @@ export interface ContactsSlice {
   contacts: Contact[];
 
   /** add a new contact */
-  addContact: (data: { name: string; notes?: string; zid?: string }) => Promise<Contact>;
+  addContact: (data: {
+    name: string;
+    notes?: string;
+    zid?: string;
+    zcashme?: string;
+  }) => Promise<Contact>;
 
   /** update contact info (name, notes, favorite) */
   updateContact: (id: string, updates: { name?: string; notes?: string }) => Promise<void>;
@@ -183,6 +194,7 @@ export const createContactsSlice =
           id: generateId(),
           name: data.name.trim(),
           zid: data.zid?.trim() || undefined,
+          zcashme: data.zcashme?.trim() || undefined,
           notes: data.notes?.trim() || undefined,
           createdAt: Date.now(),
           addresses: [],
@@ -379,6 +391,7 @@ export const createContactsSlice =
             name: c.name,
             notes: c.notes,
             favorite: c.favorite,
+            zcashme: c.zcashme,
             addresses: c.addresses.map(a => ({
               network: a.network,
               address: a.address,
@@ -419,6 +432,7 @@ export const createContactsSlice =
           name: string;
           notes?: string;
           favorite?: boolean;
+          zcashme?: string;
           addresses: {
             network: ContactNetwork;
             address: string;
@@ -436,6 +450,7 @@ export const createContactsSlice =
             name: c.name,
             notes: c.notes,
             favorite: c.favorite,
+            zcashme: c.zcashme,
             createdAt: Date.now(),
             addresses: c.addresses.map(a => ({
               id: generateId(),
@@ -473,6 +488,7 @@ export const createContactsSlice =
           name: c.name,
           notes: c.notes,
           favorite: c.favorite,
+          zcashme: c.zcashme,
           addresses: c.addresses.map(a => ({
             network: a.network,
             address: a.address,
@@ -513,6 +529,7 @@ export const createContactsSlice =
             name: string;
             notes?: string;
             favorite?: boolean;
+            zcashme?: string;
             addresses: {
               network: ContactNetwork;
               address: string;
@@ -532,6 +549,7 @@ export const createContactsSlice =
             name: c.name,
             notes: c.notes,
             favorite: c.favorite,
+            zcashme: c.zcashme,
             createdAt: Date.now(),
             addresses: c.addresses.map(a => ({
               id: generateId(),

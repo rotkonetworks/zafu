@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../../state';
 import { privacySelector } from '../../../state/privacy';
 import { contactsSelector, type ContactNetwork } from '../../../state/contacts';
+import { useZcashMeDirectoryLookup } from '../../../services/zcashme/config';
+import { zcashMeLabel } from '../../../services/zcashme/label';
 import { SaveContactModal } from '../../../components/save-contact-modal';
 import { useTxNote } from '../../../hooks/use-tx-note';
 import {
@@ -2017,6 +2019,11 @@ function TxRow({ tx, network }: { tx: ParsedTransaction; network: NetworkType })
   const { findByAddress } = useStore(contactsSelector);
   const [showSave, setShowSave] = useState(false);
   const contactMatch = tx.recipient ? findByAddress(tx.recipient) : undefined;
+  // no contact yet: fall back to the local zcash.me directory snapshot (a
+  // pure map lookup - nothing leaves the wallet)
+  const directoryLookup = useZcashMeDirectoryLookup();
+  const directoryProfile = contactMatch ? undefined : directoryLookup(tx.recipient);
+  const directoryName = zcashMeLabel(directoryProfile);
   // local "from" note for received txs - the chain never reveals the sender of
   // a shielded note, so the user labels it themselves. Stored in chrome.storage
   // (survives resync), keyed by txid.
@@ -2154,12 +2161,18 @@ function TxRow({ tx, network }: { tx: ParsedTransaction; network: NetworkType })
                 title='save to contacts'
               >
                 <span className='i-ph-user-plus h-3 w-3 shrink-0' /> to{' '}
-                <span className='font-mono'>
-                  {tx.recipient.length > 20
-                    ? `${tx.recipient.slice(0, 10)}…${tx.recipient.slice(-6)}`
-                    : tx.recipient}
+                {directoryName ? (
+                  <span>{directoryName}</span>
+                ) : (
+                  <span className='font-mono'>
+                    {tx.recipient.length > 20
+                      ? `${tx.recipient.slice(0, 10)}…${tx.recipient.slice(-6)}`
+                      : tx.recipient}
+                  </span>
+                )}
+                <span className='text-fg-dim'>
+                  {directoryName ? ' · zcash.me · save' : ' · name'}
                 </span>
-                <span className='text-fg-dim'> · name</span>
               </button>
             ))}
           {showSave && tx.recipient && (
@@ -2167,6 +2180,7 @@ function TxRow({ tx, network }: { tx: ParsedTransaction; network: NetworkType })
               <SaveContactModal
                 address={tx.recipient}
                 network={contactNet}
+                zcashme={directoryProfile}
                 onDone={() => setShowSave(false)}
                 onCancel={() => setShowSave(false)}
               />
