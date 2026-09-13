@@ -390,7 +390,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
               zigner
             </a>
             <a
-              href='https://dex.rotko.net'
+              href='https://penumbra.fi'
               target='_blank'
               rel='noopener noreferrer'
               className='flex items-center gap-1 transition-colors hover:text-fg-high'

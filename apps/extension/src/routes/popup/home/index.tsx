@@ -617,9 +617,9 @@ const PenumbraContent = ({
           action. Opens in a new tab, same as the apps grid. */}
       <HintRow
         icon='i-ph-chart-line-up'
-        title='trade on rotko dex'
+        title='trade on penumbra'
         hint='shielded swaps & liquidity positions'
-        onClick={() => window.open('https://dex.rotko.net', '_blank')}
+        onClick={() => window.open('https://penumbra.fi', '_blank')}
       />
 
       {/* single message slot for penumbra: only the backup nudge competes */}
