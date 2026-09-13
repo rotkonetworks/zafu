@@ -144,6 +144,13 @@ export interface FrostMultisigParams {
    * Optional so wallets created before the frostd migration still load.
    */
   relayPeerKeys?: string[];
+  /**
+   * This device's relay-identity pointer (the `frostRelayIdentities` key
+   * used at DKG). Persisted so signing rebuilds the SAME transport identity
+   * the co-signers whitelisted; without it a fresh wallet keys signing off
+   * `publicKeyPackage`, a different keypair, and the relay rejects it.
+   */
+  relayCeremonyId?: string;
   /** secret share location. defaults to 'self' (encrypted on zafu).
    * 'airgapSigner' = share lives on zigner only; keyPackage / ephemeralSeed must be omitted. */
   custody?: FrostCustody;
@@ -184,6 +191,8 @@ export const buildFrostVault = (
     relayUrl: params.relayUrl,
     address: params.address,
     supportedNetworks: ['zcash'],
+    ...(params.relayPeerKeys ? { relayPeerKeys: params.relayPeerKeys } : {}),
+    ...(params.relayCeremonyId ? { relayCeremonyId: params.relayCeremonyId } : {}),
     ...(params.custody === 'airgapSigner' ? { custody: 'airgapSigner' as const } : {}),
     ...(params.hidden ? { hidden: true as const } : {}),
     ...(params.createdByOrigin ? { createdByOrigin: params.createdByOrigin } : {}),
@@ -208,6 +217,8 @@ export const buildFrostZcashWallet = (
     threshold: params.threshold,
     maxSigners: params.maxSigners,
     relayUrl: params.relayUrl,
+    ...(params.relayPeerKeys ? { relayPeerKeys: params.relayPeerKeys } : {}),
+    ...(params.relayCeremonyId ? { relayCeremonyId: params.relayCeremonyId } : {}),
     ...(params.custody === 'airgapSigner'
       ? {
           custody: 'airgapSigner' as const,

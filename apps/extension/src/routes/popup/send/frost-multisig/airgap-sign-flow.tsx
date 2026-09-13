@@ -35,6 +35,8 @@ export interface AirgapMultisig {
    * participant list at creation.
    */
   relayPeerKeys?: string[];
+  /** this device's relay-identity pointer from DKG (see mnemonic-sign) */
+  relayCeremonyId?: string;
 }
 
 interface Props {
@@ -83,7 +85,7 @@ export function FrostAirgapSignFlow({
           ms.threshold,
           ms.maxSigners,
           600,
-          ms.publicKeyPackage,
+          ms.relayCeremonyId ?? ms.publicKeyPackage,
           ms.relayPeerKeys ?? [],
         );
         if (cancelled) {

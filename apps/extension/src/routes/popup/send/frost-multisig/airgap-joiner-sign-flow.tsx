@@ -38,6 +38,8 @@ export interface JoinerMultisig {
    * participant list at creation.
    */
   relayPeerKeys?: string[];
+  /** this device's relay-identity pointer from DKG (see mnemonic-sign) */
+  relayCeremonyId?: string;
 }
 interface Props {
   ms: JoinerMultisig;
@@ -101,7 +103,7 @@ export function FrostAirgapJoinerSignFlow({
         const s = await openJoinerSession(
           ms.relayUrl || DEFAULT_RELAY_URL,
           roomCode,
-          ms.publicKeyPackage,
+          ms.relayCeremonyId ?? ms.publicKeyPackage,
           ms.relayPeerKeys ?? [],
         );
         sessionRef.current = s;

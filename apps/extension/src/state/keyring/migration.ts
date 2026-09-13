@@ -114,6 +114,12 @@ export const deriveMirrorFromFrostVault = (vault: EncryptedVault): ZcashWalletJs
       threshold: (ins['threshold'] as number | undefined) ?? 0,
       maxSigners: (ins['maxSigners'] as number | undefined) ?? 0,
       relayUrl: (ins['relayUrl'] as string | undefined) ?? '',
+      ...(Array.isArray(ins['relayPeerKeys'])
+        ? { relayPeerKeys: ins['relayPeerKeys'] as string[] }
+        : {}),
+      ...(ins['relayCeremonyId']
+        ? { relayCeremonyId: ins['relayCeremonyId'] as string }
+        : {}),
       ...(custody ? { custody } : {}),
       ...(ins['zignerWalletId'] ? { zignerWalletId: ins['zignerWalletId'] as string } : {}),
       ...(ins['hidden'] === true ? { hidden: true as const } : {}),

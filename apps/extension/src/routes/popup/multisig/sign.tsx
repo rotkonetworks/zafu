@@ -112,9 +112,11 @@ export const MultisigSign = () => {
 
     try {
       const relayUrl = (typeof ms.relayUrl === 'string' ? ms.relayUrl : '') || DEFAULT_RELAY_URL;
-      // ceremony id is the group's public key package: stable for this
-      // group, and unrelated to any other, so a relay operator cannot link
-      // a user's groups to one another
+      // relay identity is this device's DKG relay-identity pointer, reused at
+      // signing so the transport key the co-signers whitelisted at DKG matches.
+      // Falls back to the group public key package for pre-frostd wallets (which
+      // need a key re-exchange before they can sign anyway). Either way the id
+      // is scoped to this group, so a relay operator cannot link a user's groups.
       const peerKeys = (ms as { relayPeerKeys?: string[] }).relayPeerKeys ?? [];
       if (peerKeys.length === 0) {
         throw new Error(
@@ -128,7 +130,11 @@ export const MultisigSign = () => {
         setProgress('finding the signing session…');
         room = await resolveRoomCode(relayUrl, room);
       }
-      const stored = await getOrCreateRelayIdentity(String(ms.publicKeyPackage));
+      const stored = await getOrCreateRelayIdentity(
+        String(
+          (ms as { relayCeremonyId?: string }).relayCeremonyId ?? ms.publicKeyPackage,
+        ),
+      );
       const relay = new FrostdRelayClient(relayUrl, await buildRelayIdentity(stored, peerKeys));
       const participantId = new Uint8Array(32);
       crypto.getRandomValues(participantId);

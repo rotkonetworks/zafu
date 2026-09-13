@@ -2,7 +2,7 @@
  * rendezvous-exchange — the human-code alternative to pasting relay keys.
  *
  * Default flow on relays that serve /rendezvous/* (zidecar does): the
- * coordinator shows a four-word code, co-signers type it in, and the key
+ * coordinator shows a short room code (a number + two words), co-signers type
  * exchange plus session-id handoff happens through the rendezvous room.
  * The coordinator still sees every joined key and nothing enters the frostd
  * session without their explicit "create" — the code is discovery, not
@@ -63,7 +63,7 @@ export function useRendezvousAvailable(relayUrl: string): boolean | null {
 const fingerprint = (pubkey: string) => pubkey.slice(0, 8);
 
 export interface HostRendezvous {
-  /** the four words to send your co-signers */
+  /** the room code (number + two words) to send your co-signers */
   code: string;
   /** co-signer relay keys seen in the room, ours excluded */
   peerKeys: string[];
@@ -189,8 +189,8 @@ export function RendezvousHost({
         ))}
         {peers.length >= maxSigners - 1 && (
           <p className='text-xs text-fg-muted'>
-            check the fingerprints with your co-signers before you create — whoever holds these
-            keys becomes a signer
+            check the fingerprints with your co-signers before you create — whoever holds these keys
+            becomes a signer
           </p>
         )}
       </div>
@@ -274,7 +274,7 @@ export function RendezvousJoin({ relayUrl, prepare, onState }: JoinProps): React
             className='flex-1 rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-sm focus:border-primary/50 focus:outline-none'
             value={code}
             onChange={e => setCode(e.target.value)}
-            placeholder='four-words-like-these'
+            placeholder='7-word-word'
             disabled={connected}
             autoFocus
           />
@@ -296,8 +296,7 @@ export function RendezvousJoin({ relayUrl, prepare, onState }: JoinProps): React
           ) : (
             <>
               <span className='i-ph-circle-notch size-3.5 animate-spin' />
-              in the room with {peerCount} other signer(s) — waiting for the coordinator to
-              start…
+              in the room with {peerCount} other signer(s) — waiting for the coordinator to start…
             </>
           )}
         </div>

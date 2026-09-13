@@ -195,3 +195,35 @@ describe('runMnemonicFrostSign relay wiring', () => {
     expect(relay.sendSignPrefix).not.toHaveBeenCalled();
   });
 });
+
+describe('runMnemonicFrostSign relay identity selection', () => {
+  const alphas = [ALPHA_0, ALPHA_1];
+
+  const runWithMs = async (ms: Record<string, unknown>) => {
+    const base = ctx(unsignedWith(alphas));
+    await runMnemonicFrostSign({ ...base, ms: { ...base.ms, ...ms } } as never);
+    // openRelayRoom(relayUrl, threshold, maxSigners, ttl, ceremonyId, peerKeys)
+    return relay.openRelayRoom.mock.calls[0]!;
+  };
+
+  it('keys the relay identity by relayCeremonyId when present', async () => {
+    const [, , , , ceremonyId, peerKeys] = await runWithMs({
+      relayCeremonyId: 'DKG-CEREMONY',
+      relayPeerKeys: ['peerA', 'peerB'],
+    });
+    // NOT publicKeyPackage: signing must reuse the DKG-time transport identity
+    // the co-signers whitelisted, or frostd rejects the participant.
+    expect(ceremonyId).toBe('DKG-CEREMONY');
+    expect(peerKeys).toEqual(['peerA', 'peerB']);
+  });
+
+  it('falls back to publicKeyPackage for pre-frostd wallets without a ceremony id', async () => {
+    const [, , , , ceremonyId] = await runWithMs({ relayPeerKeys: ['peerA'] });
+    expect(ceremonyId).toBe('PKP');
+  });
+
+  it('passes an empty peer set through unchanged (relay layer rejects it)', async () => {
+    const [, , , , , peerKeys] = await runWithMs({});
+    expect(peerKeys).toEqual([]);
+  });
+});

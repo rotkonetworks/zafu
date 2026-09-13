@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { generateRoomCode, roomIdFromCode } from './rendezvous-client';
 
 describe('generateRoomCode', () => {
-  it('is four bip39 words', () => {
+  it('is a number and two bip39 words (wormhole-style)', () => {
     const code = generateRoomCode();
-    expect(code.split('-')).toHaveLength(4);
-    expect(code).toMatch(/^[a-z]+-[a-z]+-[a-z]+-[a-z]+$/);
+    expect(code.split('-')).toHaveLength(3);
+    // e.g. 7-crossover-clockwork; matches zcli + poker-escrow so codes resolve
+    // across all three clients
+    expect(code).toMatch(/^[1-9][0-9]*-[a-z]+-[a-z]+$/);
   });
 
   it('does not repeat', () => {

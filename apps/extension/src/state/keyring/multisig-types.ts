@@ -49,6 +49,8 @@ export interface MultisigWallet {
    * than failing inside the relay with a membership error.
    */
   relayPeerKeys?: string[];
+  /** this device's relay-identity pointer (see FrostMultisigParams) */
+  relayCeremonyId?: string;
   /** links to parent vault */
   vaultId: string;
 }
@@ -71,6 +73,10 @@ export interface MultisigZcashWallet {
     keyPackageHex: string;
     ephemeralSeedHex: string;
     participants: string[];
+    /** co-signers' relay transport pubkeys (hex); needed to open a session */
+    relayPeerKeys?: string[];
+    /** this device's relay-identity pointer (see FrostMultisigParams) */
+    relayCeremonyId?: string;
   };
 }
 

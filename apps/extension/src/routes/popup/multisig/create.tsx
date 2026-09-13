@@ -247,6 +247,8 @@ const MultisigCreateZafu = () => {
         threshold,
         maxSigners,
         relayUrl: url,
+        relayPeerKeys: peerKeys,
+        relayCeremonyId: useStore.getState().frostSession.relayCeremonyId ?? undefined,
       });
 
       setStep('complete');
@@ -845,7 +847,10 @@ const MultisigCreateZigner = () => {
           relayUrl: relayUrl || DEFAULT_RELAY_URL,
           zignerWalletId: walletId,
           custody: 'airgapSigner',
+          relayPeerKeys: peerKeys,
+          relayCeremonyId: useStore.getState().frostSession.relayCeremonyId ?? undefined,
         });
+        resetDkg();
 
         setOrchardFvk(ufvk);
         setAddress(addr);

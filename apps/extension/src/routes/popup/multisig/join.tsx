@@ -78,6 +78,7 @@ const MultisigJoinZafu = () => {
   const rendezvous = rdvAvailable === true && !manualKeys;
   const goBack = useBackNav(PopupPath.MULTISIG);
   const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
+  const resetDkg = useStore(s => s.frostSession.resetDkg);
 
   // Session teardown, hoisted to refs so leaving mid-DKG (the CancelSessionModal
   // "leave anyway" and unmount) aborts the controller and disconnects the relay -
@@ -248,7 +249,10 @@ const MultisigJoinZafu = () => {
         threshold,
         maxSigners: maxSignersLocal,
         relayUrl: url,
+        relayPeerKeys: keys,
+        relayCeremonyId: ceremonyId,
       });
+      resetDkg();
 
       setStep('complete');
     } catch (e) {
@@ -458,12 +462,16 @@ const MultisigJoinZigner = () => {
   const zignerDerivedAddrRef = useRef('');
   const peerR2Ref = useRef<string[]>([]);
   const peerFvksRef = useRef<string[]>([]);
+  // relay identity + peers actually used to join, lifted out of handleJoin so
+  // the fvk-echo effect can persist them onto the vault at completion
+  const relayCtxRef = useRef<{ keys: string[]; ceremonyId: string }>({ keys: [], ceremonyId: '' });
   const abortRef = useRef<AbortController | null>(null);
   const relayRef = useRef<FrostdRelayClient | null>(null);
   // once per session: the rendezvous announce auto-starts the DKG
   const autoJoinedRef = useRef(false);
 
   const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
+  const resetDkg = useStore(s => s.frostSession.resetDkg);
 
   const countdown = useDeadlineCountdown(
     step === 'waiting-host-r1' ||
@@ -512,6 +520,7 @@ const MultisigJoinZigner = () => {
       }
       // same identity the peers were given - see the zafu join flow above
       const ceremonyId = useStore.getState().frostSession.relayCeremonyId ?? room;
+      relayCtxRef.current = { keys, ceremonyId };
       const stored = await getOrCreateRelayIdentity(ceremonyId);
       const relay = new FrostdRelayClient(url, await buildRelayIdentity(stored, keys));
       relayRef.current = relay;
@@ -765,7 +774,10 @@ const MultisigJoinZigner = () => {
           relayUrl: relayUrl || DEFAULT_RELAY_URL,
           custody: 'airgapSigner',
           zignerWalletId: walletId,
+          relayPeerKeys: relayCtxRef.current.keys,
+          relayCeremonyId: relayCtxRef.current.ceremonyId,
         });
+        resetDkg();
 
         setOrchardFvk(ufvk);
         setAddress(addr);

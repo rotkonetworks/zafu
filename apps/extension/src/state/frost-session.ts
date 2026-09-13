@@ -247,8 +247,17 @@ export const createFrostSessionSlice = (): SliceCreator<FrostSessionSlice> => (s
   },
 
   resetDkg: () => {
+    // Also clear the relay identity so the NEXT group mints a fresh one.
+    // prepareRelayIdentity memoises on relayPublicKey, and the ceremony id is
+    // now persisted onto the vault - leaving it set would make a second group
+    // created in the same session reuse the first's transport identity and
+    // permanently link the two on the relay. The keypair itself survives in
+    // frostRelayIdentities (keyed by the id we stored), so signing still works.
     set(state => {
       state.frostSession.dkg = null;
+      state.frostSession.relay = null;
+      state.frostSession.relayCeremonyId = null;
+      state.frostSession.relayPublicKey = null;
     });
   },
 
