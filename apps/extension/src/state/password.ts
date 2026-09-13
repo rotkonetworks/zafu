@@ -19,7 +19,7 @@ export const createPasswordSlice =
     session: ExtensionStorage<SessionStorageState>,
     local: ExtensionStorage<LocalStorageState>,
   ): SliceCreator<PasswordSlice> =>
-  (set, get) => {
+  (set, _get) => {
     return {
       setPassword: async password => {
         const { key, keyPrint } = await Key.create(password);
@@ -48,18 +48,12 @@ export const createPasswordSlice =
           state.keyRing.status = 'unlocked';
         });
 
-        // refresh pro license from server on unlock
-        void (async () => {
-          try {
-            const keyInfo = get().keyRing.selectedKeyInfo;
-            const zidPubkey = keyInfo?.insensitive?.['zid'] as string | undefined;
-            if (zidPubkey) {
-              await get().license.fetchLicense(zidPubkey);
-            }
-          } catch {
-            /* server unreachable — treat as free */
-          }
-        })();
+        // NOTE: automatic pro-license refresh on unlock is disabled for now.
+        // It pinged license.zafu.pro on every unlock (an ip + "uses zafu" leak
+        // on the critical path) for a feature that is still unfinished. The
+        // license is fetched only on the explicit subscribe action instead
+        // (routes/popup/settings/subscribe.tsx). Re-enable here once the pro
+        // flow ships behind an anonymous (ring-VRF) check.
       },
       clearSessionPassword: () => {
         void session.remove('passwordKey');

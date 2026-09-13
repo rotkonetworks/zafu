@@ -216,20 +216,9 @@ export const createKeyRingSlice =
           state.wallets.activeIndex = syncedWalletIndex;
         });
 
-        // check pro license after auto-unlock
-        if (sessionKey) {
-          void (async () => {
-            try {
-              const selected = keyInfos.find(k => k.isSelected);
-              const zidPubkey = selected?.insensitive?.['zid'] as string | undefined;
-              if (zidPubkey) {
-                await get().license.fetchLicense(zidPubkey);
-              }
-            } catch {
-              /* server unreachable — no-op */
-            }
-          })();
-        }
+        // pro-license auto-check on auto-unlock disabled for now - it phoned
+        // license.zafu.pro on every unlock for an unfinished feature. License
+        // is fetched only on the explicit subscribe action (settings/subscribe).
       },
 
       // ── password / unlock / lock ──
@@ -291,18 +280,8 @@ export const createKeyRingSlice =
           state.keyRing.status = 'unlocked';
         });
 
-        // check pro license status after unlock
-        void (async () => {
-          try {
-            const keyInfo = get().keyRing.selectedKeyInfo;
-            const zidPubkey = keyInfo?.insensitive?.['zid'] as string | undefined;
-            if (zidPubkey) {
-              await get().license.fetchLicense(zidPubkey);
-            }
-          } catch {
-            /* server unreachable — treat as free */
-          }
-        })();
+        // pro-license auto-check on unlock disabled for now (see note above and
+        // in state/password.ts) - fetched only on the explicit subscribe action.
 
         return true;
       },
