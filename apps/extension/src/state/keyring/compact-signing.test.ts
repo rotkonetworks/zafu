@@ -416,7 +416,10 @@ describe('compact-signing', () => {
       const result = await mergeContributions(original, parsed, mockWasm);
 
       expect(mockWasm).toHaveBeenCalledTimes(1);
-      expect(mockWasm).toHaveBeenCalledWith('aabbccdd', expect.stringContaining('"contributions"'));
+      // Wasm contract: a BARE array of {pool, action_index, signature_hex}.
+      expect(mockWasm).toHaveBeenCalledWith('aabbccdd', expect.stringContaining('"signature_hex"'));
+      const [, json] = mockWasm.mock.calls[0]!;
+      expect(Array.isArray(JSON.parse(json as string))).toBe(true);
       expect(result).toEqual(['eeff00ff']);
     });
 
@@ -555,11 +558,21 @@ describe('compact-signing', () => {
 
       await mergeContributions(original, parsed, mockWasm);
 
+      // The wasm export parses a BARE ARRAY of
+      //   { pool: "orchard"|"ironwood", action_index, signature_hex }
+      // (crates/zcash-wasm/src/lib.rs apply_signature_contributions). Assert
+      // that exact shape - a wrapper object / numeric pool / byte-array
+      // signature is what silently broke compact sends before.
       const parsed_json = JSON.parse(capturedJson);
-      expect(parsed_json.contributions).toHaveLength(1);
-      expect(parsed_json.contributions[0]!.pool).toBe(POOL_IRONWOOD);
-      expect(parsed_json.contributions[0]!.action_index).toBe(42);
-      expect(parsed_json.contributions[0]!.signature).toEqual(Array.from(sig));
+      expect(Array.isArray(parsed_json)).toBe(true);
+      expect(parsed_json).toHaveLength(1);
+      expect(parsed_json[0]!.pool).toBe('ironwood');
+      expect(parsed_json[0]!.action_index).toBe(42);
+      expect(parsed_json[0]!.signature_hex).toBe(
+        Array.from(sig)
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join(''),
+      );
     });
 
     it('throws on an id mismatch when the caller supplied expected ids', async () => {

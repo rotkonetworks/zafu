@@ -1514,6 +1514,45 @@ const resolveAnchorHeight = async (walletId: string, tipHeight: number): Promise
   return frontierHeight > 0 ? frontierHeight : tipHeight;
 };
 
+/**
+ * Append the anchor block's own Unix timestamp to a note-sync CBOR bundle as
+ * map key 7 (uint). The block header time is objective chain truth — unlike the
+ * device clock the zigner stamps at import (`synced_at`), which can drift — so
+ * the cold device can render "as of block N" toggleable with that block's real
+ * date without any network access it doesn't have.
+ *
+ * Done in JS rather than the wasm encoder deliberately: it's purely additive and
+ * the zigner decoder already accepts `map(4+)` and skips unknown keys, so this
+ * ships without a wasm rebuild and an older zigner ignores it harmlessly.
+ *
+ * The bundle's outer map header is a single byte (`0xa0 | len`, len ≤ 7), so we
+ * bump it by one and append `07 1a <u32 BE>` (CBOR uint key 7 + 4-byte uint —
+ * unix seconds fit u32 until 2106).
+ */
+const appendCborAnchorTime = (cbor: Uint8Array, unixSeconds: number): Uint8Array => {
+  const t = Math.max(0, Math.floor(unixSeconds));
+  if (t === 0 || cbor.length === 0) {
+    return cbor;
+  }
+  const header = cbor[0]!;
+  // only handle the definite-length single-byte map header we emit; bail safe
+  // (return unchanged) if the shape is ever unexpected rather than corrupt it.
+  if ((header & 0xe0) !== 0xa0 || (header & 0x1f) >= 0x17) {
+    return cbor;
+  }
+  const out = new Uint8Array(cbor.length + 6);
+  out.set(cbor, 0);
+  out[0] = header + 1; // one more map entry
+  const n = cbor.length;
+  out[n] = 0x07; // key: uint 7
+  out[n + 1] = 0x1a; // value: uint, 4-byte big-endian follows
+  out[n + 2] = (t >>> 24) & 0xff;
+  out[n + 3] = (t >>> 16) & 0xff;
+  out[n + 4] = (t >>> 8) & 0xff;
+  out[n + 5] = t & 0xff;
+  return out;
+};
+
 /** periodic frontier snapshots for privacy-safe witness building.
  *  stored as array of {height, frontier} in IDB, one per SNAPSHOT_INTERVAL blocks. */
 const FRONTIER_SNAPSHOT_INTERVAL = 5_000;
@@ -2131,7 +2170,9 @@ const WITNESS_BATCH_SIZE = 1000;
 const WITNESS_FETCH_CONCURRENCY = 12;
 
 interface WitnessClient {
-  getTreeState(h: number): Promise<{ height: number; orchardTree: string; ironwoodTree?: string }>;
+  getTreeState(
+    h: number,
+  ): Promise<{ height: number; orchardTree: string; ironwoodTree?: string; time: number }>;
   getCompactBlocks(
     start: number,
     end: number,
@@ -5138,8 +5179,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           serverUrl: string;
         };
         const syncState = await loadState(walletId);
-        const unspent = syncState.notes.filter(n => !syncState.spentNullifiers.has(n.nullifier));
-        if (unspent.length === 0) {
+        const allUnspent = syncState.notes.filter(n => !syncState.spentNullifiers.has(n.nullifier));
+        if (allUnspent.length === 0) {
           workerSelf.postMessage({
             type: 'note-sync-encoded',
             id,
@@ -5150,18 +5191,56 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           return;
         }
 
-        // anchor where the witnesses are rooted (cached frontier), not at the
-        // newest note's height — otherwise the cross-check root won't match.
-        const anchorHeight = await resolveAnchorHeight(
-          walletId,
-          Math.max(...unspent.map(n => n.height)),
-        );
+        // NU6.3 keeps orchard and ironwood in SEPARATE commitment trees, but the
+        // note-sync CBOR bundle carries a single tree + anchor. A note's
+        // `position` indexes its OWN pool's tree, so replaying an ironwood note
+        // against the orchard tree fails ("note at position N not found in tree
+        // replay"). Split by pool and export one pool per bundle; when both hold
+        // value (mid-migration), export the larger and disclose the remainder
+        // rather than silently dropping it (a single-anchor bundle cannot verify
+        // two trees — dual-pool export needs a v2 bundle format).
+        const orchardNotes = allUnspent.filter(n => poolOf(n) === 'orchard');
+        const ironwoodNotes = allUnspent.filter(n => poolOf(n) === 'ironwood');
+        const sumBalance = (ns: DecryptedNote[]) =>
+          ns.reduce((acc, n) => acc + BigInt(n.value), 0n);
+        const orchardBalance = sumBalance(orchardNotes);
+        const ironwoodBalance = sumBalance(ironwoodNotes);
+
+        const exportPool: NotePool =
+          ironwoodNotes.length === 0
+            ? 'orchard'
+            : orchardNotes.length === 0
+              ? 'ironwood'
+              : ironwoodBalance >= orchardBalance
+                ? 'ironwood'
+                : 'orchard';
+        const unspent = exportPool === 'ironwood' ? ironwoodNotes : orchardNotes;
+        const excludedNotes = exportPool === 'ironwood' ? orchardNotes : ironwoodNotes;
+        const excludedPool: NotePool = exportPool === 'ironwood' ? 'orchard' : 'ironwood';
+        const excludedBalance = exportPool === 'ironwood' ? orchardBalance : ironwoodBalance;
+
+        // anchor where the witnesses are rooted (that pool's cached frontier),
+        // not the newest note's height — otherwise the cross-check root won't
+        // match. Each pool has its own frontier meta; the ironwood anchor MUST
+        // come from the ironwood frontier or the ironwood tree-state fetch /
+        // drift-check downstream will fail.
+        const newestSelectedHeight = Math.max(...unspent.map(n => n.height));
+        const anchorHeight =
+          exportPool === 'ironwood'
+            ? (await getIronwoodTreeFrontierHeight(walletId)) || newestSelectedHeight
+            : await resolveAnchorHeight(walletId, newestSelectedHeight);
 
         // build merkle witnesses — use the backend-aware client (zidecar/
         // lightwalletd) instead of a hardcoded zidecar REST shape, so export
         // works on any backend the wallet synced against.
         const client = await makeZcashClient(syncServerUrl);
-        const witnessResult = await buildWitnesses(client, walletId, unspent, anchorHeight);
+        const witnessResult = await buildWitnesses(
+          client,
+          walletId,
+          unspent,
+          anchorHeight,
+          exportPool,
+        );
 
         // prepare notes JSON for WASM encoder
         const notesJson = JSON.stringify(
@@ -5186,8 +5265,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // disabled we emit an unattested bundle (still imports on non-FROST
         // devices). The anchor was already cross-checked against zidecar's
         // tree-state during witness building, so it isn't arbitrary.
+        // Attestation is orchard-only for now: zidecar's SignAnchor verifies the
+        // anchor against its orchard tree-state, so an ironwood anchor would not
+        // match and returns unavailable. Ironwood bundles ship unattested — fine
+        // for the non-FROST devices this flow targets. (A FROST device syncing
+        // ironwood notes would need a zidecar ironwood-tree verifier — future.)
         let attestationHex: string | null = null;
-        if (lookupBackend(syncServerUrl) === 'zidecar') {
+        if (exportPool === 'orchard' && lookupBackend(syncServerUrl) === 'zidecar') {
           try {
             const { ZidecarClient } = await import(
               /* webpackMode: "eager" */ '../state/keyring/zidecar-client'
@@ -5213,13 +5297,25 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
 
         // encode to CBOR via WASM
-        const cborBytes = wasmModule.encode_notes_bundle(
+        const cborBundle = wasmModule.encode_notes_bundle(
           notesJson,
           merkleJson,
           anchorHeight,
           isMainnet,
           attestationHex,
         );
+
+        // stamp the anchor block's own header time into the bundle (chain truth,
+        // not the device clock) so the cold device can show the anchor as a real
+        // date toggleable with its height. getTreeState carries `time`; on the
+        // odd chance the fetch fails we ship without it (older behavior).
+        let anchorTime = 0;
+        try {
+          anchorTime = (await client.getTreeState(anchorHeight)).time;
+        } catch (e) {
+          console.warn('[zcash-worker] anchor block time unavailable; bundle omits it:', e);
+        }
+        const cborBytes = appendCborAnchorTime(cborBundle, anchorTime);
 
         // encode to QR frames via zoda transport (verified erasure coding).
         // auto-size k/n to the payload so each hex-encoded `zt:` frame fits a
@@ -5231,11 +5327,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const framesJson = wasmModule.zt_encode_frames_auto(cborBytes, 'zcash-notes', 300, 30);
         const urFrames = JSON.parse(framesJson) as string[];
 
-        // compute balance
-        let balance = 0n;
-        for (const n of unspent) {
-          balance += BigInt(n.value);
-        }
+        // balance of the exported pool (what the zigner will verify)
+        const balance = sumBalance(unspent);
 
         workerSelf.postMessage({
           type: 'note-sync-encoded',
@@ -5247,6 +5340,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             noteCount: unspent.length,
             balance: balance.toString(),
             cborBytes: cborBytes.length,
+            pool: exportPool,
+            // when the wallet straddles both pools, the zigner bundle can only
+            // carry one — tell the UI what was left out so it doesn't imply the
+            // synced balance is the wallet's whole spendable balance.
+            excludedPool: excludedNotes.length > 0 ? excludedPool : undefined,
+            excludedNoteCount: excludedNotes.length,
+            excludedBalance: excludedBalance.toString(),
           },
         });
         return;
@@ -6725,7 +6825,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             clearInterval(iwProvingTicker);
           }
           const iwParsed = iwBuilt as {
+            /** REDACTED-for-signer copy: what goes to the cold device. */
             pczt_hex: string;
+            /**
+             * UNREDACTED base (WITH the fvk): the wallet's retained copy. The
+             * compact-signing merge re-applies the device's signatures into THIS
+             * copy - its `verify_nullifier` needs the fvk, so a redacted copy
+             * fails with IronwoodVerify(MissingFullViewingKey). Never sent to the
+             * device (the request below is built from the redacted `pczt_hex`).
+             */
+            retained_pczt_hex: string;
             summary: unknown;
             action_count: number;
             /** ZIP-244 sighash the FROST signers commit to. */
@@ -6737,7 +6846,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           };
 
           // Ironwood-AWARE transport: zigner prelude envelope [0x53][0x04][0x03]
-          // (single PCZT), NOT the ironwood-blind ur:zcash-pczt CBOR wrap.
+          // (single PCZT), NOT the ironwood-blind ur:zcash-pczt CBOR wrap. Built
+          // from the REDACTED copy - the fvk never leaves the wallet.
           const { envelope: iwEnvelope, compact: iwRequestCompact } = buildSignRequestEnvelope(
             wasmModule,
             iwParsed.pczt_hex,
@@ -6776,7 +6886,12 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             network: 'zcash',
             walletId,
             payload: {
-              pcztHex: iwParsed.pczt_hex,
+              // The wallet RETAINS the UNREDACTED base (with the fvk), not the
+              // redacted device copy: the compact-signing merge re-applies the
+              // device's signatures into this copy and its `verify_nullifier`
+              // needs the fvk. The device only ever sees `urFrames` (built from
+              // the redacted `pczt_hex`), so the fvk never leaves the wallet.
+              pcztHex: iwParsed.retained_pczt_hex,
               // `summary` is a display string here (SendTxPcztUnsignedResult /
               // the zigner-signing store type it as `string`, and the UI renders
               // it as a React child). The authoritative per-output confirmation

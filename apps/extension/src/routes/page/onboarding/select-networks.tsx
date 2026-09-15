@@ -38,7 +38,9 @@ const NETWORK_DESCRIPTIONS: Record<string, { description: string; icon: string }
 };
 
 const NETWORK_OPTIONS: NetworkOption[] = (Object.keys(NETWORKS) as NetworkType[])
-  .filter(id => isLaunched(id))
+  // top-level launched networks only - subnetworks (e.g. Noble) ride under
+  // their parent (Penumbra) and are surfaced there, not as their own card.
+  .filter(id => isLaunched(id) && !NETWORKS[id].parent)
   .map(id => ({
     id,
     name: NETWORKS[id].name,
@@ -100,16 +102,31 @@ export const SelectNetworks = () => {
   };
 
   const handleContinue = async () => {
-    // sync selected networks to store
-    for (const network of NETWORK_OPTIONS) {
-      const isSelected = selected.has(network.id);
-      const wasEnabled = enabledNetworks.includes(network.id);
-      if (isSelected !== wasEnabled) {
-        await toggleNetwork(network.id);
+    // Subnetworks (e.g. Noble) are not shown as their own card; they ride with
+    // their parent. Enabling Penumbra enables Noble; disabling it disables Noble.
+    const effective = new Set(selected);
+    const allLaunched = (Object.keys(NETWORKS) as NetworkType[]).filter(isLaunched);
+    for (const id of allLaunched) {
+      const parent = NETWORKS[id].parent;
+      if (parent) {
+        if (effective.has(parent)) {
+          effective.add(id);
+        } else {
+          effective.delete(id);
+        }
       }
     }
 
-    // set activeNetwork to the first selected network
+    // sync enabled networks to store (parents and their subnetworks)
+    for (const id of allLaunched) {
+      const isSelected = effective.has(id);
+      const wasEnabled = enabledNetworks.includes(id);
+      if (isSelected !== wasEnabled) {
+        await toggleNetwork(id);
+      }
+    }
+
+    // set activeNetwork to the first selected top-level network
     const firstSelected = NETWORK_OPTIONS.find(n => selected.has(n.id));
     if (firstSelected) {
       await setActiveNetwork(firstSelected.id);
@@ -190,25 +207,15 @@ export const SelectNetworks = () => {
                   {network.icon}
                 </div>
                 <div className='flex-1'>
-                  <div className='font-medium flex items-center gap-2'>
-                    {network.name}
-                    {NETWORKS[network.id]?.transparent && (
-                      <span className='text-label px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>
-                        public
-                      </span>
-                    )}
-                  </div>
+                  <div className='font-medium'>{network.name}</div>
                   <div className='text-sm text-fg-muted'>{network.description}</div>
                   {/* Noble is not its own network - it rides under Penumbra as
-                      the transparent USDC off-ramp. Surface that explicitly so
-                      enabling Penumbra is also informed consent to Noble. */}
+                      the USDC off-ramp. Surface it here calmly (no alarm badge)
+                      so enabling Penumbra is also informed consent to Noble. */}
                   {network.id === 'penumbra' && (
                     <div className='mt-1 flex items-center gap-1.5 text-label text-fg-muted lowercase'>
                       <span className='i-ph-arrow-elbow-down-right h-3 w-3 shrink-0 opacity-60' />
-                      includes Noble USDC off-ramp
-                      <span className='rounded bg-red-500/15 px-1 py-0.5 leading-none text-red-500'>
-                        transparent
-                      </span>
+                      includes Noble USDC off-ramp (transparent)
                     </div>
                   )}
                 </div>

@@ -34,7 +34,7 @@ export const PenumbraSendWatcher = () => {
   const { addMessage } = useStore(messagesSelector);
   const [toast, setToast] = useState<Toast | undefined>();
   const handled = useRef(new Set<string>());
-  const dismissTimer = useRef<ReturnType<typeof setTimeout>>();
+  const dismissTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     const showToast = (t: Toast) => {

@@ -94,22 +94,40 @@ Reproduce by checking out the zcli rev below and running the commands.
 Verify: rebuild from the rev, sha256sum the outputs,
 diff against the values above. A mismatch means the vendored blob is stale.
 
-## 2026-08-29 rebuild - frostd challenge signed over raw uuid bytes
+## 2026-08-19 rebuild (2) - retain UNREDACTED ironwood pczt (compact-sign FVK fix)
 
-- source repo: zcli, branch `master`, rev: fix(wasm) frostd challenge signature
-  over raw uuid bytes (frost.rs frost_relay_sign_challenge) on top of dc8b752.
-- why: frostd verifies the login signature over the challenge uuid's 16 RAW
-  bytes (`Uuid::as_bytes`), not the 36-char string; the old signer made every
-  extension frostd login fail Unauthorized. Paired with frostd-client.ts now
-  sending the signature as a hex string (frostd 0.1.0 rejects the array form).
-- toolchain: wasm-bindgen 0.2.126, wasm-opt (binaryen) 130, nightly
-  `cargo wasm-parallel` per the recipe above; shared imported memory
-  `(memory 50 32768 shared)` confirmed post-bindgen.
-- parallel size after -Oz: 8745501 bytes.
+- source repo: zcli, branch `master`, rev `c111a06`
+  (fix(ironwood): retain the UNREDACTED pczt so compact-sign merge keeps the fvk).
+- toolchain: wasm-bindgen 0.2.126, wasm-opt (binaryen) **130**
+  (/nix/store/azhmf1il8da9pps80bk2f4l6ql6bgfg7-binaryen-130).
+- parallel build: `env -u RUSTFLAGS RUSTUP_TOOLCHAIN=nightly cargo wasm-parallel`;
+  `wasm-bindgen --out-dir pkg-parallel --target web`; `wasm-opt -Oz` with the
+  standard flag set. Shared imported memory `(memory 50 32768 shared)` verified
+  post-bindgen.
 - sha256(parallel zafu_wasm_bg.wasm) =
-  980a08f019d07ea2cfea4ccb1d470f6ee8147999dc9cb273154c3d06d40a7646
-- snippets/ (workerHelpers.js local patch) kept from the previous bundle -
-  identical snippet hash dir, patch still applies.
+  d6244ea92d2e59360d24ea3adb8fa761b5cf6e0b6628031989bf884b9d45f075
+- Fixes the compact (0x05 -> 0x07 signatures-only) ironwood cold send, which
+  died at merge time with `IronwoodVerify(MissingFullViewingKey)` (surfaced in
+  the extension as a bare "failed to build transaction"). `build_ironwood_send_pczt`
+  returned only the `redact_pczt_for_signer` copy (fvk/witness/note-plaintext
+  stripped); the wallet retained THAT and re-applied the device's signatures into
+  it, but pczt's `apply_ironwood_signature` runs `verify_nullifier`, which needs
+  the fvk. Now `build_ironwood_send_pczt` ALSO returns `retained_pczt_hex` (the
+  UNREDACTED base, WITH the fvk) for the wallet to keep + merge into; `pczt_hex`
+  stays the redacted device copy. The fvk NEVER leaves the wallet (the request is
+  still built from `pczt_hex`). Full 0x03 sends were unaffected (they extract the
+  device's signed pczt, no merge). Mirrors vizor keeping the unredacted base.
+- Reproduced + guarded natively: zcli `crates/zcash-wasm/tests/fvk_repro.rs`
+  drives the real `apply_signature_contributions` merge - redacted retained ->
+  `MissingFullViewingKey`; unredacted -> passes `verify_nullifier`. The
+  zigner-side `ironwood_send_fixture` harness could not catch it: it merges via
+  zigner's `pczt_signing`, not this zcli export.
+- Internals-only: `zafu_wasm.js` / `.d.ts` BYTE-IDENTICAL to the previous blob
+  (`retained_pczt_hex` is an added field on an already-`JsValue` return;
+  `apply_signature_contributions_inner` is a plain fn, not a `#[wasm_bindgen]`
+  export). Only `zafu_wasm_bg.wasm` changed. Both trees (`packages/zcash-wasm/`,
+  `apps/extension/public/zafu-wasm/`) updated byte-identical; worker rayon patch
+  (`wbgRayonBase`) preserved (only bg.wasm swapped, snippets untouched).
 
 ## 2026-08-19 rebuild - single-part UR decode (compact sign response)
 

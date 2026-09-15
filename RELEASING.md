@@ -17,52 +17,48 @@ protecting that, so CI must never be able to produce it alone.
 
 ---
 
-## Lane 1: Extension (beta -> prod)
+## Lane 1: Extension (continuous beta -> manual prod)
 
-Beta **leads and soaks**; prod **promotes the exact soaked commit**. They are
-separate CWS listings (prod `oojfeopgoeapfgcfhmlpfgabcbhkglck`, beta
-`ppgbkpjgpggkibdojjocgndbbhiempjf`) with separate signing keys.
+Beta is **continuous and follows `main`**; prod is a **manual, deliberate
+promotion**. Separate CWS listings (prod `oojfeopgoeapfgcfhmlpfgabcbhkglck`,
+beta `ppgbkpjgpggkibdojjocgndbbhiempjf`) with separate signing keys. Two
+workflows share one reusable engine (`release-engine.yml`):
 
 ```
-main (dev)
-  └─ tag  vX.Y.Z-beta.N  at a pinned, reviewed SHA   → CI: beta-only  → Beta listing  [SOAK]
-        │  smoke test on beta: zigner send, voting cast, address derive, console clean
-        │  bug? fix on main → -beta.(N+1) → re-soak
-        ▼  (green)
-     tag  vX.Y.Z  at the SAME commit the beta passed → CI: prod-only  → Prod listing  [PROMOTE]
+push to main ─► Beta (follows main)  → beta CWS + rolling "beta" GH prerelease   [SOAK, every push]
+  (beta.yml)    version auto-stamped  27.3.0.<run_number>
+                smoke test: zigner send, voting cast, address derive, console clean
+                       │  bug? just push the fix to main → the next beta ships automatically
+                       ▼  (soaked, confident it is stable)
+Actions ▸ "Release (prod, manual)" ─► prod CWS + tagged vX.Y.Z GH release        [PROMOTE, by hand]
+  (release.yml)  type the version to confirm; it must match the committed manifest
 ```
 
-Two properties this gives you that "tag once, publish both" does not:
+Why this shape:
 
-1. **Decoupled in time** - beta ships first and soaks; prod never fires simultaneously.
-2. **Prod = the proven artifact** - the clean tag points at the exact commit beta
-   validated. You do not rebuild a newer, untested `main`.
+1. **Beta is free and constant.** Every meaningful push to `main` ships a beta,
+   auto-versioned so the CWS never sees a duplicate. No tags to remember. While
+   we soak toward a stable release, we mostly just let beta run.
+2. **Prod cannot fire by accident.** It is `workflow_dispatch` only, gated by a
+   type-the-version interlock, and it ships the committed manifest version at the
+   commit you run it from - never a newer, untested `main`.
 
-### How to trigger (`release.yml`)
+### How to trigger
 
-- **Tag push:** `git push origin vX.Y.Z-beta.1` (beta) then, after soak,
-  `git push origin vX.Y.Z` at the same commit (prod).
-- **Manual dispatch** (Actions -> "Release"): `tag_name` cuts + pushes the tag at
-  the current commit; empty `tag_name` = dry-run (build only). `channel` overrides
-  `auto`/`beta-only`/`prod-only`/`both`/`skip`. Dispatch is the cleaner promotion
-  path - pick the channel explicitly.
+- **Beta:** merge/push to `main`. That is it. (Docs- and CI-only pushes are
+  ignored via `paths-ignore`.) Or run **Actions ▸ "Beta (follows main)"** manually.
+- **Prod:** **Actions ▸ "Release (prod, manual)"** → Run workflow, type
+  `confirm_version` (e.g. `v27.3.0`) - it must equal the version in
+  `apps/extension/public/manifest.json`. `dry_run: true` builds + signs without
+  releasing or touching the CWS.
 
-### Channel routing (auto)
+### Version discipline (CWS gotcha, now automated)
 
-- prerelease tag (`alpha|beta|rc`) -> `beta-only`
-- clean tag (`vX.Y.Z`) -> `prod-only` _(promotion; beta already shipped from -beta.N)_
-
-### Version discipline (CWS gotcha)
-
-CWS rejects re-uploading the same version to a listing. So each `-beta.N` needs a
-**distinct** manifest version on the beta listing (e.g. `26.0.0.1`, `26.0.0.2`);
-the clean tag ships `26.0.0` to prod. TODO: stamp the manifest version from the
-tag in CI so `beta.2` cannot collide with `beta.1`.
-
-### RC freeze (optional, for big releases)
-
-`vX.Y.Z-rc.N` routes beta-only for free (the `rc` regex). Convention: after
-`-rc.1`, feature-freeze; bug-fixes only until the clean tag.
+CWS rejects re-uploading the same version to a listing. Beta solves this in CI:
+the beta manifest version is stamped `<committed base>.<github.run_number>` per
+build, so betas are always monotonic and never collide - no hand-bumping. Prod
+ships the plain committed `X.Y.Z`; bump `package.json` + both manifests before
+promoting.
 
 ---
 

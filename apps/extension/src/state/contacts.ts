@@ -74,6 +74,12 @@ export interface Contact {
    * came from so the UI can show the profile link and verification state.
    */
   zcashme?: string;
+  /**
+   * a website / social link for this contact — the address book is a social
+   * graph, not just a list of wallet addresses. A person is a name, a ZID, and
+   * where to find them, of which their chain addresses are only one part.
+   */
+  website?: string;
   /** general notes about the contact */
   notes?: string;
   favorite?: boolean;
@@ -101,10 +107,14 @@ export interface ContactsSlice {
     notes?: string;
     zid?: string;
     zcashme?: string;
+    website?: string;
   }) => Promise<Contact>;
 
-  /** update contact info (name, notes, favorite) */
-  updateContact: (id: string, updates: { name?: string; notes?: string }) => Promise<void>;
+  /** update contact info (name, notes, zid, website) */
+  updateContact: (
+    id: string,
+    updates: { name?: string; notes?: string; zid?: string; website?: string },
+  ) => Promise<void>;
 
   /** remove a contact */
   removeContact: (id: string) => Promise<void>;
@@ -195,6 +205,7 @@ export const createContactsSlice =
           name: data.name.trim(),
           zid: data.zid?.trim() || undefined,
           zcashme: data.zcashme?.trim() || undefined,
+          website: data.website?.trim() || undefined,
           notes: data.notes?.trim() || undefined,
           createdAt: Date.now(),
           addresses: [],
@@ -222,6 +233,12 @@ export const createContactsSlice =
             }
             if (updates.notes !== undefined) {
               contact.notes = updates.notes.trim() || undefined;
+            }
+            if (updates.zid !== undefined) {
+              contact.zid = updates.zid.trim() || undefined;
+            }
+            if (updates.website !== undefined) {
+              contact.website = updates.website.trim() || undefined;
             }
           }
         });
@@ -389,6 +406,8 @@ export const createContactsSlice =
         const plaintext = JSON.stringify(
           allContacts.map(c => ({
             name: c.name,
+            zid: c.zid,
+            website: c.website,
             notes: c.notes,
             favorite: c.favorite,
             zcashme: c.zcashme,
@@ -430,6 +449,8 @@ export const createContactsSlice =
 
         const imported = JSON.parse(plaintext) as {
           name: string;
+          zid?: string;
+          website?: string;
           notes?: string;
           favorite?: boolean;
           zcashme?: string;
@@ -448,6 +469,8 @@ export const createContactsSlice =
           .map(c => ({
             id: generateId(),
             name: c.name,
+            zid: c.zid,
+            website: c.website,
             notes: c.notes,
             favorite: c.favorite,
             zcashme: c.zcashme,
@@ -486,6 +509,8 @@ export const createContactsSlice =
       exportPersonalData: async (password: string) => {
         const contacts = safeContacts().map(c => ({
           name: c.name,
+          zid: c.zid,
+          website: c.website,
           notes: c.notes,
           favorite: c.favorite,
           zcashme: c.zcashme,
@@ -527,6 +552,8 @@ export const createContactsSlice =
         const parsed = JSON.parse(plaintext) as {
           contacts: {
             name: string;
+            zid?: string;
+            website?: string;
             notes?: string;
             favorite?: boolean;
             zcashme?: string;
@@ -547,6 +574,8 @@ export const createContactsSlice =
           .map(c => ({
             id: generateId(),
             name: c.name,
+            zid: c.zid,
+            website: c.website,
             notes: c.notes,
             favorite: c.favorite,
             zcashme: c.zcashme,

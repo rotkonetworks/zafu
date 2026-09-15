@@ -1,339 +1,57 @@
-name: Release
+name: Release (prod, manual)
+
+# Production promotion. Deliberate and rare: never triggered by a push. You
+# run this by hand once a beta has soaked and you're confident it's stable.
+# It ships the committed manifest version (vX.Y.Z) to the prod Chrome Web
+# Store listing and cuts the tagged GitHub release the README points at.
+#
+# Safety interlock: you must type the exact version to publish, and it must
+# match the version committed in apps/extension/public/manifest.json — so a
+# prod release can't fire against a stale or mismatched manifest.
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
   workflow_dispatch:
     inputs:
-      tag_name:
-        description: 'Tag to cut (e.g. v22.0.0-beta.3 or v22.0.0). Leave empty for dry-run.'
-        required: false
+      confirm_version:
+        description: 'Type the version to publish to PROD, e.g. v27.3.0 (must match the committed manifest).'
+        required: true
         type: string
-      channel:
-        description: 'Which CWS channel to publish. `auto` infers from tag (prerelease → beta-only, clean → prod-only promotion).'
+      dry_run:
+        description: 'Build + sign only. No GitHub release, no Chrome Web Store upload.'
         required: false
-        default: auto
-        type: choice
-        options: [auto, beta-only, prod-only, both, skip]
-
-env:
-  DO_NOT_TRACK: 1
-  CRX3_VERSION: 1.1.3
-  # Chrome Web Store extension IDs (derived from each pubkey).
-  CWS_PROD_ITEM_ID: oojfeopgoeapfgcfhmlpfgabcbhkglck
-  CWS_BETA_ITEM_ID: ppgbkpjgpggkibdojjocgndbbhiempjf
+        default: false
+        type: boolean
 
 jobs:
-  release:
-    name: Build and release
+  version:
+    name: Verify prod version
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write # required for google-github-actions/auth
-
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      release_mode: ${{ steps.v.outputs.release_mode }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-
-      - name: Cache node_modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            node_modules
-            apps/*/node_modules
-            packages/*/node_modules
-          key: ${{ runner.os }}-node-modules-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-node-modules-
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install crx3
-        run: npm install -g "crx3@${CRX3_VERSION}"
-
-      - name: Resolve version + release mode
-        id: vars
+      - uses: actions/checkout@v4
+      - id: v
         env:
-          GH_TOKEN: ${{ github.token }}
-          INPUT_TAG: ${{ inputs.tag_name }}
-          INPUT_CHANNEL: ${{ inputs.channel }}
+          WANT: ${{ inputs.confirm_version }}
+          DRY: ${{ inputs.dry_run }}
         run: |
           set -eu
-          event="${{ github.event_name }}"
-
-          if [ "$event" = "push" ]; then
-            ref="${GITHUB_REF_NAME}"                  # e.g. v22.0.0-beta.1
-            release="true"
-          elif [ -n "${INPUT_TAG:-}" ]; then
-            ref="$INPUT_TAG"
-            # Create + push the tag at the current commit so the rest of
-            # the steps (release notes, asset naming) see a real ref.
-            git tag "$ref"
-            git push origin "$ref"
-            release="true"
-          else
-            # Dispatch with no tag = dry-run: just build artifacts.
-            ref="$(git describe --tags --always --dirty)"
-            release="false"
-          fi
-          echo "version=$ref" >> "$GITHUB_OUTPUT"
-          echo "release=$release" >> "$GITHUB_OUTPUT"
-
-          # Channel resolution (beta LEADS, prod PROMOTES - see RELEASING.md)
-          # - `auto` → prerelease tags (alpha|beta|rc) publish beta-only;
-          #            a clean tag PROMOTES to prod-only (beta already shipped
-          #            from the earlier -beta.N at this same commit).
-          # - `skip` → no CWS publish at all
-          # - explicit beta-only/prod-only/both honored as-is
-          channel="${INPUT_CHANNEL:-auto}"
-          if [ "$release" != "true" ]; then
-            channel="skip"
-          elif [ "$channel" = "auto" ]; then
-            if echo "$ref" | grep -qE '(alpha|beta|rc)'; then
-              channel="beta-only"
-            else
-              channel="prod-only"
-            fi
-          fi
-          echo "channel=$channel" >> "$GITHUB_OUTPUT"
-          echo "Resolved: version=$ref release=$release channel=$channel"
-
-      - name: Build extension (production)
-        working-directory: apps/extension
-        env:
-          # Build-time injection for the 1Click partner JWT (see
-          # webpack.config.ts DefinePlugin `process.env.NEAR_1CLICK_JWT`).
-          NEAR_1CLICK_JWT: ${{ secrets.NEAR_1CLICK_JWT }}
-        run: NODE_OPTIONS="--max-old-space-size=8192 --import=tsx" npx webpack --config webpack.prod-config.ts
-
-      - name: Build extension (beta)
-        working-directory: apps/extension
-        env:
-          NEAR_1CLICK_JWT: ${{ secrets.NEAR_1CLICK_JWT }}
-        run: NODE_OPTIONS="--max-old-space-size=8192 --import=tsx" npx webpack --config webpack.beta-config.ts
-
-      # CWS rejects manifests that carry the `key` field (it's a dev-only
-      # aid for "load unpacked" stability). Strip it from the dist manifests
-      # before zipping or CRX-packing — the pubkey still lives in the CRX
-      # header for self-hosted installs, and the CWS assigns its own.
-      - name: Strip `key` from dist manifests
-        working-directory: apps/extension
-        run: |
-          for m in dist/manifest.json beta-dist/manifest.json; do
-            jq 'del(.key)' "$m" > "$m.tmp" && mv "$m.tmp" "$m"
-            echo "--- $m ---"
-            jq '{name, version, description_len: (.description|length), has_key: has("key")}' "$m"
-          done
-
-      - name: Stage CRX signing keys
-        id: crxkeys
-        env:
-          CRX_PROD_KEY: ${{ secrets.CRX_PROD_KEY }}
-          CRX_BETA_KEY: ${{ secrets.CRX_BETA_KEY }}
-        run: |
-          if [ -z "${CRX_PROD_KEY:-}" ]; then
-            echo "::error::CRX_PROD_KEY secret is not set"
+          base="$(jq -r .version apps/extension/public/manifest.json)"
+          if [ "${WANT#v}" != "$base" ]; then
+            echo "::error::confirm_version '${WANT}' does not match committed manifest version '${base}'. Bump the manifest first, or type the right version."
             exit 1
           fi
-          if [ -z "${CRX_BETA_KEY:-}" ]; then
-            echo "::error::CRX_BETA_KEY secret is not set"
-            exit 1
-          fi
-          keydir="$(mktemp -d)"
-          umask 077
-          prod="$keydir/zafu-prod.pem"
-          beta="$keydir/zafu-beta.pem"
-          printf '%s\n' "$CRX_PROD_KEY" > "$prod"
-          printf '%s\n' "$CRX_BETA_KEY" > "$beta"
-          chmod 0600 "$prod" "$beta"
-          echo "prod=$prod" >> "$GITHUB_OUTPUT"
-          echo "beta=$beta" >> "$GITHUB_OUTPUT"
-          echo "keydir=$keydir" >> "$GITHUB_OUTPUT"
+          if [ "$DRY" = "true" ]; then mode="none"; else mode="tagged"; fi
+          echo "version=v${base}" >> "$GITHUB_OUTPUT"
+          echo "release_mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "Prod release: v${base} (mode=$mode)"
 
-      - name: Pack + sign prod CRX
-        env:
-          KEY: ${{ steps.crxkeys.outputs.prod }}
-          VER: ${{ steps.vars.outputs.version }}
-        run: |
-          # resolve beta-dist output dir (matches webpack.beta-config.ts defaults)
-          cd apps/extension/dist
-          zip -qr "$GITHUB_WORKSPACE/zafu-prod-${VER}.zip" .
-          cd "$GITHUB_WORKSPACE"
-          crx3 --keyPath "$KEY" \
-               --crxPath "zafu-prod-${VER}.crx" \
-               apps/extension/dist/manifest.json
-
-      - name: Pack + sign beta CRX
-        env:
-          KEY: ${{ steps.crxkeys.outputs.beta }}
-          VER: ${{ steps.vars.outputs.version }}
-        run: |
-          cd apps/extension/beta-dist
-          zip -qr "$GITHUB_WORKSPACE/zafu-beta-${VER}.zip" .
-          cd "$GITHUB_WORKSPACE"
-          crx3 --keyPath "$KEY" \
-               --crxPath "zafu-beta-${VER}.crx" \
-               apps/extension/beta-dist/manifest.json
-
-      - name: Remove CRX signing keys
-        if: always()
-        env:
-          KEYDIR: ${{ steps.crxkeys.outputs.keydir }}
-        run: |
-          if [ -n "${KEYDIR:-}" ] && [ -d "$KEYDIR" ]; then
-            find "$KEYDIR" -type f -exec shred -u {} \; 2>/dev/null || true
-            rm -rf "$KEYDIR"
-          fi
-
-      - name: Generate checksums
-        env:
-          VER: ${{ steps.vars.outputs.version }}
-        run: |
-          sha256sum \
-            "zafu-prod-${VER}.zip" \
-            "zafu-prod-${VER}.crx" \
-            "zafu-beta-${VER}.zip" \
-            "zafu-beta-${VER}.crx" \
-            > sha256sums.txt
-          cat sha256sums.txt
-
-      - name: Create GitHub Release
-        if: steps.vars.outputs.release == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VER: ${{ steps.vars.outputs.version }}
-          CHANNEL: ${{ steps.vars.outputs.channel }}
-        run: |
-          is_prerelease=""
-          if [ "$CHANNEL" = "beta-only" ]; then
-            is_prerelease="--prerelease"
-          fi
-          gh release create "$VER" \
-            "zafu-prod-${VER}.zip" \
-            "zafu-prod-${VER}.crx" \
-            "zafu-beta-${VER}.zip" \
-            "zafu-beta-${VER}.crx" \
-            "sha256sums.txt" \
-            --title "zafu $VER" \
-            $is_prerelease \
-            --generate-notes
-
-      # ─── Chrome Web Store — upload + submit for review ───
-      # Both prod and beta get uploaded as new drafts and submitted for
-      # review automatically. Google's review humans still have to approve,
-      # but nothing on our side is manual after `git tag`.
-      #
-      # Auth uses OAuth user credentials (installed-application flow), not
-      # a service account. The Chrome Web Store v1.1 API does not accept
-      # service-account auth — it requires an OAuth user that has been
-      # added as a publisher on each listing. The CWS_PUBLISHER_JSON
-      # secret therefore holds {clientId, clientSecret, refreshToken},
-      # produced once via `npx chrome-webstore-upload-keys` against a
-      # Google account that owns the listings. The Python step exchanges
-      # the refresh token for a short-lived access token at
-      # oauth2.googleapis.com/token.
-      - name: Publish to Chrome Web Store
-        if: steps.vars.outputs.channel != 'skip'
-        # CWS OAuth (CWS_PUBLISHER_JSON) publishing is done manually for now —
-        # keep the attempt but never let it fail the GitHub release.
-        continue-on-error: true
-        env:
-          CWS_PUBLISHER_JSON: ${{ secrets.CWS_PUBLISHER_JSON }}
-          VER: ${{ steps.vars.outputs.version }}
-          CHANNEL: ${{ steps.vars.outputs.channel }}
-        run: |
-          set -eu
-          pip install --quiet google-auth requests
-          TOKEN="$(python3 - <<'PY'
-          import json, os
-          from google.oauth2.credentials import Credentials
-          from google.auth.transport.requests import Request
-          j = json.loads(os.environ['CWS_PUBLISHER_JSON'])
-          # Accept both camelCase (chrome-webstore-upload-keys output) and
-          # snake_case (manual JSON) keys for forward compat.
-          client_id = j.get('clientId') or j['client_id']
-          client_secret = j.get('clientSecret') or j['client_secret']
-          refresh_token = j.get('refreshToken') or j['refresh_token']
-          creds = Credentials(
-              token=None,
-              refresh_token=refresh_token,
-              client_id=client_id,
-              client_secret=client_secret,
-              token_uri='https://oauth2.googleapis.com/token',
-              scopes=['https://www.googleapis.com/auth/chromewebstore'],
-          )
-          creds.refresh(Request())
-          print(creds.token)
-          PY
-          )"
-          upload_and_publish() {
-            local tag="$1"      # "prod" or "beta"
-            local item_id="$2"
-            local zip="zafu-${tag}-${VER}.zip"
-            echo "─── $tag ($item_id) ───"
-            upload_resp="$(curl -sS --fail-with-body \
-              -H "Authorization: Bearer ${TOKEN}" \
-              -H "x-goog-api-version: 2" \
-              -X PUT -T "$zip" \
-              "https://www.googleapis.com/upload/chromewebstore/v1.1/items/${item_id}")"
-            echo "upload: $upload_resp"
-            state="$(echo "$upload_resp" | python3 -c "import json,sys; print(json.load(sys.stdin).get('uploadState',''))")"
-            if [ "$state" != "SUCCESS" ] && [ "$state" != "IN_PROGRESS" ]; then
-              echo "::error::$tag upload failed, state=$state"
-              exit 1
-            fi
-            publish_resp="$(curl -sS --fail-with-body \
-              -H "Authorization: Bearer ${TOKEN}" \
-              -H "x-goog-api-version: 2" \
-              -H "Content-Length: 0" \
-              -X POST \
-              "https://www.googleapis.com/chromewebstore/v1.1/items/${item_id}/publish")"
-            echo "publish: $publish_resp"
-          }
-          case "$CHANNEL" in
-            both)
-              upload_and_publish beta "${CWS_BETA_ITEM_ID}"
-              upload_and_publish prod "${CWS_PROD_ITEM_ID}"
-              ;;
-            prod-only)
-              # promotion: beta already shipped from the -beta.N at this commit
-              upload_and_publish prod "${CWS_PROD_ITEM_ID}"
-              ;;
-            beta-only)
-              upload_and_publish beta "${CWS_BETA_ITEM_ID}"
-              echo "Skipping prod — channel=beta-only."
-              ;;
-            prod-only)
-              upload_and_publish prod "${CWS_PROD_ITEM_ID}"
-              echo "Skipping beta — channel=prod-only."
-              ;;
-            *)
-              echo "::error::unexpected channel: $CHANNEL"; exit 1 ;;
-          esac
-
-      # Dry-run (dispatch with no tag_name): expose artifacts as
-      # workflow-scoped downloads so you can sanity-check a build
-      # without creating a release.
-      - name: Upload artifacts (dry run)
-        if: steps.vars.outputs.release == 'false'
-        uses: actions/upload-artifact@v4
-        with:
-          name: zafu-${{ steps.vars.outputs.version }}
-          path: |
-            zafu-prod-${{ steps.vars.outputs.version }}.zip
-            zafu-prod-${{ steps.vars.outputs.version }}.crx
-            zafu-beta-${{ steps.vars.outputs.version }}.zip
-            zafu-beta-${{ steps.vars.outputs.version }}.crx
-            sha256sums.txt
-          if-no-files-found: error
+  publish:
+    needs: version
+    uses: ./.github/workflows/release-engine.yml
+    with:
+      channel: prod-only
+      version: ${{ needs.version.outputs.version }}
+      release_mode: ${{ needs.version.outputs.release_mode }}
+    secrets: inherit

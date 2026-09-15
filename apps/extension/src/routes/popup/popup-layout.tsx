@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type JSX } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { usePopupReady } from '../../hooks/popup-ready';
 import { useZcashAutoSync } from '../../hooks/zcash-auto-sync';

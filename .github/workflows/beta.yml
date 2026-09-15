@@ -1,0 +1,48 @@
+name: Beta (follows main)
+
+# Continuous beta: every meaningful push to main builds, signs, and ships a
+# beta. This is the everyday release path while we soak toward a stable prod.
+# The manifest version is auto-stamped `<base>.<run_number>` so the Chrome
+# Web Store never sees a duplicate version (it rejects re-uploads of the
+# same version). Prod is a separate, manual workflow (release.yml).
+
+on:
+  push:
+    branches: [main]
+    # Skip pure docs/CI churn — no need to cut a signed beta for a README typo.
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/**'
+      - 'LICENSE'
+  workflow_dispatch: {}
+
+concurrency:
+  # One beta at a time; a newer push supersedes an in-flight build.
+  group: beta-release
+  cancel-in-progress: true
+
+jobs:
+  version:
+    name: Compute beta version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          set -eu
+          base="$(jq -r .version apps/extension/public/beta-manifest.json)"
+          ver="${base}.${{ github.run_number }}"
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "Beta version: $ver (base $base, run ${{ github.run_number }})"
+
+  publish:
+    needs: version
+    uses: ./.github/workflows/release-engine.yml
+    with:
+      channel: beta-only
+      version: ${{ needs.version.outputs.version }}
+      release_mode: rolling
+    secrets: inherit

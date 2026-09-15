@@ -324,9 +324,37 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
 
   if (error || !balances.length) {
     return (
-      <div className='flex flex-col items-center justify-center py-12 text-center'>
-        <span className='text-sm text-fg-muted'>no assets yet</span>
-        <span className='text-xs text-fg-muted/70'>receive funds to get started</span>
+      <div className='flex flex-col items-center gap-4 px-4 py-10 text-center'>
+        <div className='flex flex-col items-center gap-1'>
+          <span className='i-ph-shield-check h-6 w-6 text-network-accent/60' />
+          <span className='text-sm text-fg-muted'>no assets yet</span>
+          <span className='text-xs text-fg-muted/70'>fund your shielded wallet with USDC</span>
+        </div>
+        <ol className='flex w-full max-w-[16rem] flex-col gap-2 text-left'>
+          {[
+            'get USDC onto the Noble network (a Cosmos on-ramp like Kado sends it there directly)',
+            'it arrives on Penumbra over IBC - shield to go private',
+          ].map((step, i) => (
+            <li key={i} className='flex items-start gap-2 text-xs text-fg-muted'>
+              <span className='mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-elev-2 text-label text-fg-dim'>
+                {i + 1}
+              </span>
+              {step}
+            </li>
+          ))}
+        </ol>
+        <p className='max-w-[16rem] text-label leading-snug text-fg-dim'>
+          heads up: Coinbase disabled direct USDC withdrawals over Noble (Aug 2026). USDC sent to
+          Noble straight from Coinbase is unrecoverable - use a Noble-native on-ramp instead.
+        </p>
+        <button
+          type='button'
+          onClick={() => window.open('https://app.kado.money', '_blank')}
+          className='inline-flex items-center gap-1.5 rounded-lg border border-border-soft px-3 py-1.5 text-xs text-fg-high transition-colors hover:border-network-accent/50'
+        >
+          on-ramp USDC to Noble
+          <span className='i-ph-arrow-up-right h-3 w-3 opacity-70' />
+        </button>
       </div>
     );
   }
