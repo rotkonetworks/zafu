@@ -67,7 +67,10 @@ export function SaveContactModal({
     setSaving(true);
     const contact = await addContact({
       name: newName.trim(),
-      zcashme: zcashme?.username,
+      // only bind the zcash.me identity to this contact when it proved control
+      // of the address - an unverified profile is a name the user chose, not a
+      // verified identity link, so we keep the name/notes but not the binding
+      zcashme: zcashme?.addressVerified ? zcashme.username : undefined,
       notes: zcashme ? notesFromProfile(zcashme) : undefined,
     });
     await addAddress(contact.id, { network, address });

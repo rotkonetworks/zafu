@@ -11,7 +11,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useStore } from '../../../state';
-import { groupChatSelector, type GroupChatMessage } from '../../../state/group-chat';
+import {
+  groupChatSelector,
+  MAX_CHAT_CHARS,
+  type GroupChatMessage,
+} from '../../../state/group-chat';
 import { selectMultisigWallets } from '../../../state/wallets';
 import { PopupPath } from '../paths';
 
@@ -113,6 +117,7 @@ export function GroupChatThread() {
             }
           }}
           rows={1}
+          maxLength={MAX_CHAT_CHARS}
           placeholder='message the group…'
           className='max-h-24 flex-1 resize-none rounded-lg border border-border-soft bg-canvas px-3 py-2 text-sm text-fg-high placeholder:text-fg-dim focus:outline-none'
         />

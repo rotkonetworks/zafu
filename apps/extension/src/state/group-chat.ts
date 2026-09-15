@@ -57,6 +57,31 @@ const runtimes = new Map<string, Runtime>();
 /** groups whose open() is mid-flight, to stop a second open racing a channel. */
 const opening = new Set<string>();
 
+/**
+ * Serialise every read-modify-write of the single `groupChats` key. Message
+ * persistence and the session-id cache write both mutate one storage key from
+ * separate async paths; without a queue a poll batch persisting concurrently
+ * with the cache write would clobber one of them (last full-object write wins).
+ */
+let writeChain: Promise<void> = Promise.resolve();
+const updateGroupChats = (
+  local: ExtensionStorage<LocalStorageState>,
+  mutate: (all: Record<string, { chatSessionId?: string; messages: GroupChatMessage[] }>) => void,
+): Promise<void> => {
+  writeChain = writeChain.then(async () => {
+    const all = ((await local.get('groupChats')) ?? {}) as Record<
+      string,
+      { chatSessionId?: string; messages: GroupChatMessage[] }
+    >;
+    mutate(all);
+    await local.set('groupChats', all);
+  });
+  return writeChain;
+};
+
+/** hard cap on a chat message, well under frostd's 64KB sealed-frame limit. */
+export const MAX_CHAT_CHARS = 4000;
+
 export interface GroupChatSlice {
   /** thread state by group (multisig wallet) id */
   threads: Record<string, ThreadState>;
@@ -94,16 +119,17 @@ export const createGroupChatSlice =
       await persist(walletId);
     };
 
-    /** write a group's message log (and cached session id) to encrypted storage. */
+    /** write a group's message log to encrypted storage, preserving the cached
+     *  session id. Serialised so a concurrent session-id write is not lost. */
     const persist = async (walletId: string): Promise<void> => {
       const thread = get().groupChat.threads[walletId];
       if (!thread) {
         return;
       }
-      const all = (await local.get('groupChats')) ?? {};
-      const prev = all[walletId];
-      all[walletId] = { chatSessionId: prev?.chatSessionId, messages: thread.messages };
-      await local.set('groupChats', all);
+      const messages = thread.messages;
+      await updateGroupChats(local, all => {
+        all[walletId] = { chatSessionId: all[walletId]?.chatSessionId, messages };
+      });
     };
 
     const setStatus = (walletId: string, status: ThreadStatus, error?: string): void =>
@@ -198,27 +224,44 @@ export const createGroupChatSlice =
           const cachedId = all[walletId]?.chatSessionId;
           const sessionId = await channel.resolveSession(cachedId);
 
-          // cache the resolved session id
+          // cache the resolved session id (serialised, so a poll batch
+          // persisting concurrently does not clobber it or lose its messages)
           if (sessionId !== cachedId) {
-            const next = (await local.get('groupChats')) ?? {};
-            next[walletId] = {
-              chatSessionId: sessionId,
-              messages: next[walletId]?.messages ?? [],
-            };
-            await local.set('groupChats', next);
+            await updateGroupChats(local, next => {
+              next[walletId] = {
+                chatSessionId: sessionId,
+                messages: next[walletId]?.messages ?? [],
+              };
+            });
           }
 
           const abort = new AbortController();
           runtimes.set(walletId, { channel, abort });
           setStatus(walletId, 'live');
 
-          void channel.poll(frames => {
-            void handleFrames(
-              walletId,
-              identity.publicKey,
-              frames.map(f => ({ senderPub: f.senderPub, payload: f.payload })),
-            );
-          }, abort.signal);
+          // surface a thread that keeps failing to reach the relay rather than
+          // leaving it stuck on "live"; recover to live on the next good poll
+          let consecutiveFails = 0;
+          void channel.poll(
+            frames => {
+              void handleFrames(
+                walletId,
+                identity.publicKey,
+                frames.map(f => ({ senderPub: f.senderPub, payload: f.payload })),
+              );
+            },
+            abort.signal,
+            ok => {
+              if (ok) {
+                consecutiveFails = 0;
+                if (get().groupChat.threads[walletId]?.status === 'error') {
+                  setStatus(walletId, 'live');
+                }
+              } else if (++consecutiveFails >= 3) {
+                setStatus(walletId, 'error', 'cannot reach the relay - retrying');
+              }
+            },
+          );
         } catch (e) {
           setStatus(walletId, 'error', e instanceof Error ? e.message : String(e));
         } finally {
@@ -230,6 +273,9 @@ export const createGroupChatSlice =
         const text = body.trim();
         if (!text) {
           return;
+        }
+        if (text.length > MAX_CHAT_CHARS) {
+          throw new Error(`message too long (max ${MAX_CHAT_CHARS} characters)`);
         }
         const rt = runtimes.get(walletId);
         if (!rt) {

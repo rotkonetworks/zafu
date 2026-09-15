@@ -65,11 +65,14 @@ export function ZcashMeRecipientResolver({ input, onResolve }: Props) {
   const [pending, setPending] = useState(false);
   const [live, setLive] = useState<{ handle: string; profile: ZcashMeProfile } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // set when cover is on but no decoys are available, gating an uncovered lookup
+  const [needBareConfirm, setNeedBareConfirm] = useState(false);
 
   // a new handle invalidates the previous live answer
   useEffect(() => {
     setLive(null);
     setError(null);
+    setNeedBareConfirm(false);
   }, [handle]);
 
   if (!handle || !config) {
@@ -125,12 +128,22 @@ export function ZcashMeRecipientResolver({ input, onResolve }: Props) {
   }
 
   // live mode
-  const lookup = async () => {
-    setPending(true);
+  const lookup = async (forceBare = false) => {
     setError(null);
-    // draw real decoys from the snapshot when cover is enabled and a
-    // snapshot is loaded; otherwise fall back to a bare lookup
-    const decoyNames = config.decoys > 0 && index ? pickDecoys(index, handle, config.decoys) : [];
+    const coverExpected = config.decoys > 0;
+    // draw real decoys from the snapshot when cover is enabled and a snapshot
+    // is loaded
+    const decoyNames = coverExpected && index ? pickDecoys(index, handle, config.decoys) : [];
+    // cover was asked for but none can be drawn (no snapshot, or one too small
+    // for even a single decoy). Do NOT silently send the bare name - that would
+    // hand zcash.me exactly the name the user turned cover on to hide. Make the
+    // user opt into the uncovered lookup instead.
+    if (coverExpected && decoyNames.length === 0 && !forceBare) {
+      setNeedBareConfirm(true);
+      return;
+    }
+    setNeedBareConfirm(false);
+    setPending(true);
     const res =
       decoyNames.length > 0
         ? await lookupZcashMeWithDecoys(handle, decoyNames, { spacingMs: 120 })
@@ -170,6 +183,24 @@ export function ZcashMeRecipientResolver({ input, onResolve }: Props) {
           your ip is exposed to zcash.me. decoys hide the name, not your ip - turn on the proxy in
           privacy settings to hide it.
         </p>
+      )}
+      {needBareConfirm && (
+        <div className='mt-1 rounded border border-amber-400/40 bg-amber-400/10 p-2'>
+          <p className='flex items-start gap-1 text-label text-amber-400'>
+            <span className='i-ph-warning mt-0.5 h-3 w-3 shrink-0' />
+            decoy cover is on, but there is no directory snapshot to draw decoys from, so this
+            lookup would send /{handle} to zcash.me with no cover. download the directory in
+            settings for cover, or look it up without cover.
+          </p>
+          <button
+            type='button'
+            disabled={pending}
+            onClick={() => void lookup(true)}
+            className='mt-1.5 rounded border border-border-soft px-2 py-1 text-label text-fg-muted hover:text-fg-high disabled:opacity-50'
+          >
+            look up without cover
+          </button>
+        </div>
       )}
       {error && <p className='mt-1 text-label text-red-400'>{error}</p>}
     </div>

@@ -30,10 +30,22 @@ const snap = (profiles: ZcashMeProfile[]): DirectorySnapshot => ({
 
 describe('buildDirectoryIndex', () => {
   test('keys names case-insensitively and addresses exactly', () => {
-    const idx = buildDirectoryIndex(snap([p({ username: 'Alice', address: 'u1a' })]));
+    const idx = buildDirectoryIndex(
+      snap([p({ username: 'Alice', address: 'u1a', addressVerified: true })]),
+    );
     expect(idx.byName.get('alice')?.address).toBe('u1a');
     expect(idx.byName.get('Alice')).toBeUndefined();
     expect(idx.byAddress.get('u1a')?.username).toBe('Alice');
+  });
+
+  test('reverse index is verified-only: an unverified profile never labels an address', () => {
+    // an unverified profile can claim any address without proving control, so
+    // it must not be usable to reverse-label that address (spoofing guard)
+    const idx = buildDirectoryIndex(snap([p({ username: 'squatter', address: 'u1x' })]));
+    // still findable forward by the name the user typed...
+    expect(idx.byName.get('squatter')?.address).toBe('u1x');
+    // ...but never used to name that address in reverse
+    expect(idx.byAddress.get('u1x')).toBeUndefined();
   });
 
   test('a verified claim beats an unverified one for the same address', () => {

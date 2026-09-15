@@ -193,18 +193,24 @@ export class GroupChatChannel {
   async poll(
     onFrames: (frames: IncomingChatFrame[]) => void,
     signal: AbortSignal,
+    onPoll?: (ok: boolean) => void,
   ): Promise<void> {
     this.polling = true;
     while (this.polling && !signal.aborted) {
       let frames: IncomingChatFrame[] = [];
+      let ok = true;
       try {
         frames = await this.drain();
       } catch {
-        // a transient relay error should not kill the thread; back off and retry
+        // a transient relay error should not kill the thread; back off and
+        // retry. onPoll lets the caller surface a persistently failing thread
+        // rather than leaving it silently stuck on "live".
+        ok = false;
       }
       if (frames.length > 0) {
         onFrames(frames);
       }
+      onPoll?.(ok);
       if (signal.aborted) {
         break;
       }

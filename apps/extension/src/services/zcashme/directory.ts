@@ -74,9 +74,19 @@ export const parseDirectorySnapshot = (raw: unknown, source: string): DirectoryS
 };
 
 /**
- * Build the lookup maps. When two profiles claim one name or address a
- * verified one wins over an unverified one; among equals the first stays,
- * which matches the server's own "lowest id wins" rule for lookup.
+ * Build the lookup maps.
+ *
+ * byName (forward: "pay /alice") keeps unverified profiles - the user typed
+ * the name and the UI warns when the match is unverified. When two profiles
+ * claim one name a verified one wins; among equals the first stays, matching
+ * the server's "lowest id wins" rule.
+ *
+ * byAddress (reverse: label an address we already hold) is VERIFIED-ONLY.
+ * An unverified profile can claim any address without proving control, so
+ * reverse-labelling from one would let an attacker register a profile naming a
+ * victim's address and make the wallet display the attacker's handle on it.
+ * Reverse-labelling must therefore only ever come from a profile that proved
+ * it controls the address.
  */
 export const buildDirectoryIndex = (snapshot: DirectorySnapshot): DirectoryIndex => {
   const byName = new Map<string, ZcashMeProfile>();
@@ -89,7 +99,11 @@ export const buildDirectoryIndex = (snapshot: DirectorySnapshot): DirectoryIndex
   };
   for (const p of snapshot.profiles) {
     put(byName, usernameKey(p.username), p);
-    put(byAddress, p.address, p);
+    // reverse-labelling is a trust assertion about an address, so it is gated
+    // on the profile having proven control of that address
+    if (p.addressVerified) {
+      put(byAddress, p.address, p);
+    }
   }
   return { snapshot, byName, byAddress };
 };
