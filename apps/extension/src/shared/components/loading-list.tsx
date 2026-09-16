@@ -27,7 +27,7 @@ export const LoadingList = ({ isLoading }: { isLoading: boolean }) => {
         </AnimatePresence>
       </div>
       <a
-        href='https://github.com/prax-wallet/registry/tree/main/registry'
+        href='https://github.com/penumbrafi/registry/tree/main/registry'
         target='_blank'
         rel='noreferrer'
         className='text-xs text-fg-muted'
