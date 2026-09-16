@@ -134,7 +134,15 @@ function IbcDepositSection({
   const { data: registryChains = [], isLoading: chainsLoading } = useIbcChains();
   // Cosmos Hub deposits aren't working right now (no live channel), so don't
   // offer it as a source - only Noble is currently depositable.
-  const ibcChains = mergeIbcChains([...registryChains]).filter(c => c.chainId !== 'cosmoshub-4');
+  //
+  // Depositing also needs a wallet we can derive on the SOURCE chain, so the
+  // list is restricted to chains that map to one of our CosmosChainIds.
+  // Injective is withdraw-only: its accounts are ethsecp256k1 on coin type 60,
+  // so we hold no keys for it. Without this it would show up here and render
+  // Noble's balances, because the balance query falls back to 'noble'.
+  const ibcChains = mergeIbcChains([...registryChains]).filter(
+    c => c.chainId !== 'cosmoshub-4' && ibcChainToCosmosId(c),
+  );
   const [selectedIbcChain, setSelectedIbcChain] = useState<IbcChain | undefined>();
 
   // preselect the chain the burner lives on so the user lands ready to shield
