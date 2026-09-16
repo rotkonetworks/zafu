@@ -44,6 +44,21 @@ export interface CosmosChainConfig {
   penumbraChannel?: string;
   /** IBC channel on penumbra pointing to this chain (for IBC withdrawals) */
   penumbraSourceChannel?: string;
+  /**
+   * Set when the chain (or its only supported asset) is being wound down, so
+   * the UI can warn holders to move funds out before they are stranded. Dates
+   * are ISO (YYYY-MM-DD).
+   */
+  deprecation?: {
+    /** one-line reason, e.g. who is deprecating what */
+    reason: string;
+    /** date the usual way out (bridge) stops working - move funds by here */
+    moveOutBy: string;
+    /** date assets are effectively frozen on-chain (hard cutoff) */
+    frozenBy: string;
+    /** what the holder should do */
+    guidance: string;
+  };
 }
 
 export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
@@ -65,6 +80,17 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
     gasPrice: '0.1uusdc',
     penumbraChannel: 'channel-89', // noble -> penumbra
     penumbraSourceChannel: 'channel-2', // penumbra -> noble
+    // Circle is winding down USDC + CCTP on Noble (announced 2026-09-10): new
+    // minting stops 2026-10-13, the CCTP V1 bridge halts 2026-12-01, and the
+    // Noble USDC contract pauses entirely on 2027-01-12 (manual redemption only
+    // after). Noble is USDC-only here, so this deprecates our Noble support.
+    deprecation: {
+      reason: 'Circle is ending USDC and CCTP support on Noble.',
+      moveOutBy: '2026-12-01',
+      frozenBy: '2027-01-12',
+      guidance:
+        'Move your USDC off Noble - bridge it out and sell or hold it elsewhere - before the bridge halts on Dec 1, 2026. After the contract pauses on Jan 12, 2027, only Circle’s manual redemption portal remains.',
+    },
   },
   cosmoshub: {
     id: 'cosmoshub',
