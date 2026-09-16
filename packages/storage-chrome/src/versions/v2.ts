@@ -66,6 +66,11 @@ type LOCAL = {
    *  backupReminderSeen, whose values were poisoned by a self-dismissing
    *  effect that never rendered a reminder. */
   seedPhraseBackedUp?: boolean;
+  /** Opt-in Keplr compatibility. When true, zafu injects a Keplr-compatible
+   *  window.keplr for cosmos dapps; default (unset/false) leaves the slot alone
+   *  so a user's real Keplr is never clobbered. Read by the ISOLATED content
+   *  script, so it is deliberately plaintext (no session key at inject time). */
+  keplrCompat?: boolean;
   /** integer */
   compactFrontierBlockHeight?: number;
   /** url string */

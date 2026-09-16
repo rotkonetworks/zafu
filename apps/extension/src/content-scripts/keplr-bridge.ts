@@ -53,3 +53,18 @@ window.addEventListener('message', (ev: MessageEvent) => {
       respond({ ok: false, error: err instanceof Error ? err.message : 'request failed' }),
     );
 });
+
+// Keplr compatibility is opt-in. Only when the user has turned it on do we tell
+// the MAIN-world provider to install window.keplr; otherwise zafu leaves the
+// slot alone so a real Keplr keeps working. Read once at document_start; a
+// toggle change applies on the next page load.
+if (chrome.runtime?.id && chrome.runtime.id !== 'invalid') {
+  chrome.storage.local
+    .get('keplrCompat')
+    .then(({ keplrCompat }) => {
+      if (keplrCompat === true) {
+        window.postMessage({ channel: CHANNEL, direction: 'enable' }, window.origin);
+      }
+    })
+    .catch(() => undefined);
+}
