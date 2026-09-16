@@ -33,7 +33,8 @@ export const useIbcChains = () => {
       const registry = await registryClient.remote.get(chainId);
       // Gate to chains with a live channel/client. The registry lists every
       // configured connection regardless of whether its channel is currently
-      // open; only offer the ones we have verified active (Noble right now).
+      // open; only offer the ones we have verified active (Noble and Injective
+      // right now).
       const active = new Set(getActiveIbcChainIds('penumbra'));
       return registry.ibcConnections
         .filter(chain => active.has(chain.chainId))
