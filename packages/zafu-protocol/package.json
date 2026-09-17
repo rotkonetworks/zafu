@@ -1,0 +1,17 @@
+{
+  "name": "@zafu/protocol",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "versioned, transport-agnostic contract for the zafu_* wallet<->dapp API",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint \"**/*.ts*\"",
+    "test": "vitest run --passWithNoTests"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./version": "./src/version.ts",
+    "./methods": "./src/methods.ts",
+    "./transport": "./src/transport.ts"
+  }
+}

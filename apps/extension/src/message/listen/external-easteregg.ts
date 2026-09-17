@@ -34,6 +34,12 @@ import {
 } from '@repo/storage-chrome/capabilities';
 import { isPro } from '../../state/license';
 import { isValidExternalSender } from '../../senders/external';
+import { ZAFU_PROTOCOL_VERSION } from '@zafu/protocol';
+
+// The v1 methods this listener routes to a real handler here (vs delegating to
+// sign-request.ts / external-encryption.ts) are enumerated as EASTEREGG_V1_METHODS
+// in the zafu-method-names leaf. Keep the switch below in sync with that list;
+// the protocol contract test fails on drift.
 
 /**
  * WebAuthn rpId must be the caller origin's host or a registrable domain
@@ -171,7 +177,11 @@ export const externalMessageListener = (
 
   switch (type) {
     case 'ping':
-      sendResponse({ zafu: true, version: chrome.runtime.getManifest().version });
+      sendResponse({
+        zafu: true,
+        version: chrome.runtime.getManifest().version,
+        protocolVersion: ZAFU_PROTOCOL_VERSION,
+      });
       return true;
 
     case 'send': {

@@ -22,20 +22,18 @@ import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
 import { aesGcmEncrypt, aesGcmDecrypt } from '../../crypto/aes-gcm';
 import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
 import { hasCapability, isDenied } from '@repo/storage-chrome/capabilities';
+import type {
+  ZafuEncryptRequest,
+  ZafuEncryptResponse,
+  ZafuDecryptRequest,
+  ZafuDecryptResponse,
+  ZafuZidPubkeyResponse,
+} from '@zafu/protocol';
+import { ENCRYPTION_PUBLIC_METHODS, ENCRYPTION_INTERNAL_METHODS } from './zafu-method-names';
 
 // -- types --
-
-interface EncryptRequest {
-  type: 'zafu_encrypt';
-  recipient: string; // hex ed25519 pubkey (64 hex chars = 32 bytes)
-  plaintext: string; // base64-encoded
-}
-
-interface DecryptRequest {
-  type: 'zafu_decrypt';
-  ciphertext: string; // base64-encoded (includes 12-byte nonce prefix)
-  ephemeral_pubkey: string; // hex x25519 pubkey
-}
+// the request/response shapes are the shared @zafu/protocol contract, imported
+// here so a field that drifts from the wallet<->dapp wire is a compile error.
 
 // -- rate limiting --
 
@@ -182,7 +180,7 @@ const validateEd25519Pubkey = (pubkeyBytes: Uint8Array): boolean => {
 
 // -- handlers --
 
-const handleEncrypt = async (msg: EncryptRequest): Promise<unknown> => {
+const handleEncrypt = async (msg: ZafuEncryptRequest): Promise<ZafuEncryptResponse> => {
   // validate recipient pubkey
   if (!isValidHexPubkey(msg.recipient, 32)) {
     return { error: 'invalid recipient: expected 64 hex chars (32-byte ed25519 pubkey)' };
@@ -227,7 +225,10 @@ const handleEncrypt = async (msg: EncryptRequest): Promise<unknown> => {
   }
 };
 
-const handleDecrypt = async (msg: DecryptRequest, origin: string): Promise<unknown> => {
+const handleDecrypt = async (
+  msg: ZafuDecryptRequest,
+  origin: string,
+): Promise<ZafuDecryptResponse> => {
   // identity feature gate: if the user has disabled the zid layer,
   // decryption is unavailable (it'd derive their site-keypair which
   // is exactly the surface they turned off).
@@ -287,7 +288,7 @@ const handleDecrypt = async (msg: DecryptRequest, origin: string): Promise<unkno
   }
 };
 
-const handleZidPubkey = async (origin: string): Promise<unknown> => {
+const handleZidPubkey = async (origin: string): Promise<ZafuZidPubkeyResponse> => {
   try {
     const { isIdentityEnabledFromStorage } = await import('../../state/privacy');
     if (!(await isIdentityEnabledFromStorage())) {
@@ -312,11 +313,15 @@ const handleZidPubkey = async (origin: string): Promise<unknown> => {
 
 // -- main listener --
 
-const ENCRYPTION_TYPES = new Set([
-  'zafu_encrypt',
-  'zafu_decrypt',
-  'zafu_zid_pubkey',
-  'zafu_encryption_approval_result',
+/**
+ * The message `type`s this listener owns: the public @zafu/protocol methods
+ * plus internal popup->worker callbacks. Names are sourced from the
+ * dependency-free zafu-method-names leaf so the protocol contract test can read
+ * the same runtime values the dispatch uses.
+ */
+export const ENCRYPTION_TYPES = new Set<string>([
+  ...ENCRYPTION_PUBLIC_METHODS,
+  ...ENCRYPTION_INTERNAL_METHODS,
 ]);
 
 export const encryptionMessageListener = (
@@ -370,10 +375,10 @@ export const encryptionMessageListener = (
 
     switch (type) {
       case 'zafu_encrypt':
-        sendResponse(await handleEncrypt(msg as unknown as EncryptRequest));
+        sendResponse(await handleEncrypt(msg as unknown as ZafuEncryptRequest));
         break;
       case 'zafu_decrypt':
-        sendResponse(await handleDecrypt(msg as unknown as DecryptRequest, origin));
+        sendResponse(await handleDecrypt(msg as unknown as ZafuDecryptRequest, origin));
         break;
       case 'zafu_zid_pubkey':
         sendResponse(await handleZidPubkey(origin));

@@ -21,25 +21,21 @@ import { isValidExternalSender } from '../../senders/external';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import type { EncryptedVault } from '../../state/keyring/types';
 import type { ZidShareRecord } from '../../state/identity';
+import type { ZafuSignRequest, ZafuSignResponse } from '@zafu/protocol';
+import { SIGN_REQUEST_TYPE } from './zafu-method-names';
 
-interface SignRequestMessage {
-  type: 'zafu_sign';
-  challengeHex: string;
-  statement?: string;
-}
-
-export interface SignResponse {
-  success: boolean;
-  signature?: string;
-  publicKey?: string;
-  error?: string;
-}
+// request/response shapes come from the shared @zafu/protocol contract, so any
+// drift from the wallet<->dapp wire (and from the @zafu/zid SDK that builds
+// these messages) is a compile error. SignResponse is re-exported under its
+// historical name for the popups that import it from here.
+type SignRequestMessage = ZafuSignRequest;
+export type SignResponse = ZafuSignResponse;
 
 const isSignRequest = (req: unknown): req is SignRequestMessage =>
   typeof req === 'object' &&
   req !== null &&
   'type' in req &&
-  (req as { type: unknown }).type === 'zafu_sign' &&
+  (req as { type: unknown }).type === SIGN_REQUEST_TYPE &&
   'challengeHex' in req &&
   typeof (req as { challengeHex: unknown }).challengeHex === 'string';
 

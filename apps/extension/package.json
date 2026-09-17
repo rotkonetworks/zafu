@@ -48,6 +48,7 @@
     "@repo/ui": "workspace:*",
     "@repo/wallet": "workspace:*",
     "@repo/zcash-wasm": "workspace:*",
+    "@zafu/protocol": "workspace:*",
     "@rotko/penumbra-services": "70.0.0",
     "@rotko/penumbra-types": "37.0.0",
     "@rotko/penumbra-wasm": "55.0.2",
