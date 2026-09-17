@@ -100,6 +100,35 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     parent: 'penumbra',
     features: { stake: true, swap: false, vote: false, inbox: false, multisig: false },
   },
+  osmosis: {
+    name: 'Osmosis',
+    color: 'bg-purple-400',
+    focusColor: 'focus:border-purple-400',
+    transparent: true,
+    // Penumbra subnetwork: standard cosmos chain (secp256k1, coin type 118).
+    // launched:false until the osmosis<->penumbra channel client is confirmed
+    // Active (registry has channel-4/channel-17; verify before flipping).
+    launched: false,
+    parent: 'penumbra',
+    ibcChainId: 'osmosis-1',
+    features: { stake: false, swap: false, vote: false, inbox: false, multisig: false },
+  },
+  injective: {
+    name: 'Injective',
+    color: 'bg-cyan-400',
+    focusColor: 'focus:border-cyan-400',
+    transparent: true,
+    // Penumbra subnetwork: the native-USDC (USDC.inj) receive+shield ramp that
+    // replaces the sunsetting Noble path. Ethermint (eth_secp256k1/coin-type-60)
+    // so it derives+signs via packages/wallet/src/networks/injective, NOT the
+    // shared cosmos secp256k1 path. NOT launched: the inj<->penumbra channel is
+    // still the dead channel-15/434 (client Expired); stays off until ct1101
+    // gives the live channel AND the #34 testnet round-trip returns code:0.
+    launched: false,
+    parent: 'penumbra',
+    ibcChainId: 'injective-1',
+    features: { stake: false, swap: false, vote: false, inbox: false, multisig: false },
+  },
   ethereum: {
     name: 'Ethereum',
     color: 'bg-blue-500',

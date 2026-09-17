@@ -58,11 +58,20 @@ function CopyButton({ text, className }: { text: string; className?: string }) {
   );
 }
 
-/** map IBC chain registry chainId to our CosmosChainId */
+/**
+ * map IBC chain registry chainId to our CosmosChainId, for the STANDARD cosmos
+ * shield path (secp256k1 / coin type 118, via useCosmosIbcTransfer).
+ *
+ * Injective ('injective-1') is deliberately NOT here: it is Ethermint
+ * (eth_secp256k1 / coin type 60) and MUST shield through the injective conduit
+ * (packages/wallet/src/networks/injective) - routing it through this coin-118
+ * path would derive the wrong inj address and produce invalid signatures.
+ */
 function ibcChainToCosmosId(ibcChain: IbcChain): CosmosChainId | undefined {
   const map: Record<string, CosmosChainId> = {
     'noble-1': 'noble',
     'cosmoshub-4': 'cosmoshub',
+    'osmosis-1': 'osmosis',
   };
   return map[ibcChain.chainId];
 }

@@ -115,6 +115,8 @@ type LOCAL = {
     | 'kusama'
     | 'noble'
     | 'cosmoshub'
+    | 'osmosis'
+    | 'injective'
     | 'ethereum'
     | 'bitcoin';
   /** Zcash-specific wallets */
@@ -197,6 +199,8 @@ type LOCAL = {
     | 'zcash'
     | 'noble'
     | 'cosmoshub'
+    | 'osmosis'
+    | 'injective'
     | 'polkadot'
     | 'kusama'
     | 'ethereum'
