@@ -37,7 +37,6 @@ export type OnboardingStepId =
   | 'import'
   | 'import-zigner'
   | 'set-password'
-  | 'select-networks'
   | 'success';
 
 interface OnboardingStep {
@@ -57,7 +56,6 @@ const STEPS_CREATE: readonly OnboardingStep[] = [
   { id: 'welcome', label: 'welcome', matches: [PagePath.WELCOME] },
   { id: 'generate', label: 'secret phrase', matches: [PagePath.GENERATE_SEED_PHRASE] },
   { id: 'set-password', label: 'password', matches: [PagePath.SET_PASSWORD] },
-  { id: 'select-networks', label: 'networks', matches: [PagePath.SELECT_NETWORKS] },
   { id: 'success', label: 'done', matches: [PagePath.ONBOARDING_SUCCESS] },
 ];
 
@@ -65,7 +63,6 @@ const STEPS_IMPORT: readonly OnboardingStep[] = [
   { id: 'welcome', label: 'welcome', matches: [PagePath.WELCOME] },
   { id: 'import', label: 'recovery phrase', matches: [PagePath.IMPORT_SEED_PHRASE] },
   { id: 'set-password', label: 'password', matches: [PagePath.SET_PASSWORD] },
-  { id: 'select-networks', label: 'networks', matches: [PagePath.SELECT_NETWORKS] },
   { id: 'success', label: 'done', matches: [PagePath.ONBOARDING_SUCCESS] },
 ];
 
@@ -73,7 +70,6 @@ const STEPS_ZIGNER: readonly OnboardingStep[] = [
   { id: 'welcome', label: 'welcome', matches: [PagePath.WELCOME] },
   { id: 'import-zigner', label: 'connect zigner', matches: [PagePath.IMPORT_ZIGNER] },
   { id: 'set-password', label: 'password', matches: [PagePath.SET_PASSWORD] },
-  { id: 'select-networks', label: 'networks', matches: [PagePath.SELECT_NETWORKS] },
   { id: 'success', label: 'done', matches: [PagePath.ONBOARDING_SUCCESS] },
 ];
 

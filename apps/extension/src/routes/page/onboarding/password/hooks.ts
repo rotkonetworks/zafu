@@ -9,7 +9,9 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { setOnboardingValuesInStorage, setFreshWalletBlockHeights } from '../persist-parameters';
 import { useStore } from '../../../../state';
 import { keyRingSelector } from '../../../../state/keyring';
+import { networksSelector } from '../../../../state/networks';
 import { zignerConnectSelector } from '../../../../state/zigner';
+import { ZCASH_MAINNET_ENDPOINTS, defaultZcashEndpoint } from '../../../../config/zcash-endpoints';
 import type { ZignerZafuImport } from '../../../../state/keyring/types';
 
 export const useFinalizeOnboarding = () => {
@@ -18,7 +20,9 @@ export const useFinalizeOnboarding = () => {
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(false);
   const location = useLocation();
-  const { setPassword, newZignerZafuKey } = useStore(keyRingSelector);
+  const { setPassword, newZignerZafuKey, toggleNetwork, setActiveNetwork, enabledNetworks } =
+    useStore(keyRingSelector);
+  const { setNetworkEndpoint } = useStore(networksSelector);
   const {
     walletImport,
     zcashWalletImport,
@@ -90,7 +94,23 @@ export const useFinalizeOnboarding = () => {
 
           clearZignerState();
         } else {
-          // standard mnemonic flow
+          // standard mnemonic flow. Onboarding no longer has a network-select
+          // screen (minimize first-run confusion): default a fresh wallet to
+          // Zcash only, on the rotko zidecar. More networks (Penumbra, etc.) are
+          // enabled later in Settings > Networks. All of this must run BEFORE
+          // addWallet so the zcash key is derived as part of wallet creation -
+          // toggleNetwork/setActiveNetwork/setNetworkEndpoint just record the
+          // choice here (no wallet exists yet), exactly as the old select-
+          // networks screen did before navigating to this step.
+          if (!enabledNetworks.includes('zcash')) {
+            await toggleNetwork('zcash');
+          }
+          await setActiveNetwork('zcash');
+          const preset = ZCASH_MAINNET_ENDPOINTS.find(p => p.id === defaultZcashEndpoint().id);
+          if (preset) {
+            await setNetworkEndpoint('zcash', preset.url);
+          }
+
           // For fresh wallets, set block heights BEFORE creating wallet to avoid race condition
           if (origin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED) {
             await setFreshWalletBlockHeights();
@@ -123,7 +143,17 @@ export const useFinalizeOnboarding = () => {
         setLoading(false);
       }
     },
-    [walletImport, zcashWalletImport, parsedPolkadotExport, parsedCosmosExport, walletLabel],
+    [
+      walletImport,
+      zcashWalletImport,
+      parsedPolkadotExport,
+      parsedCosmosExport,
+      walletLabel,
+      enabledNetworks,
+      toggleNetwork,
+      setActiveNetwork,
+      setNetworkEndpoint,
+    ],
   );
 
   return { handleSubmit, error, loading };
