@@ -29,7 +29,11 @@ export const useSyncProgress = (
     const timeElapsedMs = now - lastUpdateTimeRef.current;
     const blocksSynced = Number(fullSyncHeight - lastSyncedRef.current);
 
-    if (timeElapsedMs > 0 && blocksSynced >= 0) {
+    // blocksSynced MUST be strictly > 0: `>= 0` re-fires on every tick even
+    // when no new block arrived (0 blocks), and since setSyncUpdates bumps a
+    // dep of this effect that is an infinite render loop. Only real progress
+    // (which also changes fullSyncHeight) should count.
+    if (timeElapsedMs > 0 && blocksSynced > 0) {
       const instantSpeed = (blocksSynced / timeElapsedMs) * 1000; // Calculate speed in blocks per second
       ewmaSpeedRef.current.insert(instantSpeed);
       setSpeed(ewmaSpeedRef.current.value());

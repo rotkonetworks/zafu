@@ -12,7 +12,7 @@
  * Presentation only - no protocol logic lives here.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { cn } from '@repo/ui/lib/utils';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
@@ -167,7 +167,10 @@ export const ScreenWithTriggerQr = ({
   nextLabel,
   onNext,
 }: TriggerProps) => {
-  const bytes = new TextEncoder().encode(triggerJson);
+  // memoize on the JSON: a fresh Uint8Array every render would rebuild
+  // AnimatedQrDisplay's frames and reset its interval on each parent tick
+  // (e.g. a 1s deadline countdown), stuttering the airgap DKG QR animation.
+  const bytes = useMemo(() => new TextEncoder().encode(triggerJson), [triggerJson]);
   return (
     <div className='flex flex-col items-center gap-3'>
       <p className='text-xs text-fg-muted'>{headline}</p>

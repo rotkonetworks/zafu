@@ -96,6 +96,11 @@ const MultisigCreateZafu = () => {
   const rdvAvailable = useRendezvousAvailable(relayUrl || DEFAULT_RELAY_URL);
   const rendezvous = rdvAvailable === true && !manualKeys;
   const rdvRef = useRef<HostRendezvous | null>(null);
+  // hold the DKG relay abort in a ref so leaving mid-ceremony (route change /
+  // back) tears down the joinRoom subscription instead of leaking the relay
+  // WebSocket and firing setState after unmount. Mirrors the zigner-create and
+  // join flows.
+  const abortRef = useRef<AbortController | null>(null);
   const goBack = useBackNav(PopupPath.MULTISIG);
 
   const startDkg = useStore(s => s.frostSession.startDkg);
@@ -107,8 +112,12 @@ const MultisigCreateZafu = () => {
     step === 'waiting' || step.startsWith('dkg-round') || step === 'fvk-echo' ? deadline : null,
   );
 
+  // abort the live DKG relay if this screen unmounts mid-ceremony
+  useEffect(() => () => abortRef.current?.abort(), []);
+
   const handleCreate = async () => {
-    const abortController = new AbortController();
+    abortRef.current = new AbortController();
+    const abortController = abortRef.current;
     const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
     setDeadline(sessionDeadline);
     try {

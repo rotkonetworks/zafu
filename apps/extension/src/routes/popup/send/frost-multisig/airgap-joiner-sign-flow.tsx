@@ -95,6 +95,13 @@ export function FrostAirgapJoinerSignFlow({
   // raw C:/S: payloads; per-action bucketing happens after numActions is known.
   useEffect(() => {
     let signSeen = false;
+    // Guards the async open against unmount / StrictMode double-invoke: if the
+    // effect is cleaned up while openJoinerSession is still awaiting, the
+    // resolved session must abort instead of joining the room. Without this a
+    // stale first session also joins and pushes duplicate peer C: commitments
+    // into the shared peerCommitsRawRef, letting the threshold be satisfied
+    // with dupes. Mirrors airgap-sign-flow.tsx.
+    let cancelled = false;
     // openJoinerSession is async now - building the Noise sessions needs the
     // wasm - so the body moves into an IIFE rather than the effect returning
     // a promise, which React would ignore.
@@ -106,6 +113,10 @@ export function FrostAirgapJoinerSignFlow({
           ms.relayCeremonyId ?? ms.publicKeyPackage,
           ms.relayPeerKeys ?? [],
         );
+        if (cancelled) {
+          s.abort.abort();
+          return;
+        }
         sessionRef.current = s;
         void s.relay.joinRoom(
           s.roomCode,
@@ -194,13 +205,16 @@ export function FrostAirgapJoinerSignFlow({
           s.abort.signal,
         );
       } catch (err) {
-        onError(err instanceof Error ? err.message : 'failed to join room');
+        if (!cancelled) {
+          onError(err instanceof Error ? err.message : 'failed to join room');
+        }
       }
     })();
     // Cleanup stays on the effect itself, not inside the IIFE: React needs it
     // synchronously, and an aborted session must tear down even if the join
     // above is still in flight.
     return () => {
+      cancelled = true;
       sessionRef.current?.abort.abort();
       sessionRef.current = null;
     };

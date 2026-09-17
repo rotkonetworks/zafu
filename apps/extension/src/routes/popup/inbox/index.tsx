@@ -872,7 +872,12 @@ export function InboxPage() {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
 
-  const [selectedConvo, setSelectedConvo] = useState<Conversation | undefined>();
+  // Track the OPEN thread by its stable diversifierIndex, not a Conversation
+  // snapshot. selectConversations() returns fresh Conversation objects whenever
+  // messages change; deriving selectedConvo from the live list means a thread
+  // that is open re-renders when new messages arrive (and its unread flag
+  // updates so markRead fires) instead of showing a frozen snapshot.
+  const [selectedDiversifierIndex, setSelectedDiversifierIndex] = useState<number | undefined>();
   const [showCompose, setShowCompose] = useState(false);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<'conversations' | 'all'>('conversations');
@@ -880,6 +885,15 @@ export function InboxPage() {
     address: string;
     network: 'zcash' | 'penumbra';
   } | null>(null);
+
+  // live conversation for the open thread, derived from the store-backed list
+  const selectedConvo = useMemo(
+    () =>
+      selectedDiversifierIndex === undefined
+        ? undefined
+        : conversations.find(c => c.diversifierIndex === selectedDiversifierIndex),
+    [conversations, selectedDiversifierIndex],
+  );
 
   const walletId = selectedKeyInfo?.id ?? '';
 
@@ -966,7 +980,7 @@ export function InboxPage() {
     return (
       <ConversationThread
         conversation={selectedConvo}
-        onClose={() => setSelectedConvo(undefined)}
+        onClose={() => setSelectedDiversifierIndex(undefined)}
         referral={selectedReferral}
       />
     );
@@ -1132,7 +1146,7 @@ export function InboxPage() {
                       ? undefined // we don't know the address from inbox state alone
                       : undefined,
                   )}
-                  onClick={() => setSelectedConvo(convo)}
+                  onClick={() => setSelectedDiversifierIndex(convo.diversifierIndex)}
                 />
               ))}
             </div>
@@ -1160,7 +1174,7 @@ export function InboxPage() {
                     c.messages.some(m => m.txids.includes(msg.txId)),
                   );
                   if (convo) {
-                    setSelectedConvo(convo);
+                    setSelectedDiversifierIndex(convo.diversifierIndex);
                   }
                 }}
               />
