@@ -121,10 +121,11 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     // Penumbra subnetwork: the native-USDC (USDC.inj) receive+shield ramp that
     // replaces the sunsetting Noble path. Ethermint (eth_secp256k1/coin-type-60)
     // so it derives+signs via packages/wallet/src/networks/injective, NOT the
-    // shared cosmos secp256k1 path. NOT launched: the inj<->penumbra channel is
-    // still the dead channel-15/434 (client Expired); stays off until ct1101
-    // gives the live channel AND the #34 testnet round-trip returns code:0.
-    launched: false,
+    // shared cosmos secp256k1 path. LAUNCHED: the live inj<->penumbra channel
+    // (494/18) is wired + verified Active on-chain, and the #34 round-trip
+    // passed on mainnet (tx 5699D4FC..., code 0, height 183397211) - a live node
+    // accepted the eth_secp256k1 signature.
+    launched: true,
     parent: 'penumbra',
     ibcChainId: 'injective-1',
     features: { stake: false, swap: false, vote: false, inbox: false, multisig: false },
