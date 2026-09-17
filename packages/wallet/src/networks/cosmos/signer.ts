@@ -74,9 +74,19 @@ export async function deriveCosmosWallet(
  * GitHub #34; until then every CosmosChainId here is a coin-type-118 chain.
  */
 export function deriveChainAddress(address: string, chainId: CosmosChainId): string {
+  const config = COSMOS_CHAINS[chainId];
+  // Fund-safety guard: an Ethermint chain (Injective) uses a keccak256 address,
+  // so re-encoding these ripemd160 bytes under `inj` would produce a wrong,
+  // unrecoverable address. Refuse rather than mis-derive; such a chain must be
+  // derived from the mnemonic via networks/injective.
+  if (config.keyAlgo === 'eth_secp256k1') {
+    throw new Error(
+      `deriveChainAddress cannot prefix-swap to ${chainId}: it is an Ethermint ` +
+        `chain (eth_secp256k1/keccak address). Derive it via networks/injective instead.`,
+    );
+  }
   const { data } = fromBech32(address);
-  const prefix = COSMOS_CHAINS[chainId].bech32Prefix;
-  return toBech32(prefix, data);
+  return toBech32(config.bech32Prefix, data);
 }
 
 /** derive addresses for all chains from one address */
@@ -85,6 +95,11 @@ export function deriveAllChainAddresses(address: string): Record<CosmosChainId, 
   const addresses: Record<string, string> = {};
 
   for (const [chainId, config] of Object.entries(COSMOS_CHAINS)) {
+    // skip Ethermint chains - their keccak address is not a prefix-swap of
+    // these ripemd160 bytes (see deriveChainAddress); derive via injective.
+    if (config.keyAlgo === 'eth_secp256k1') {
+      continue;
+    }
     addresses[chainId] = toBech32(config.bech32Prefix, data);
   }
 

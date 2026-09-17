@@ -59,6 +59,16 @@ export interface CosmosChainConfig {
     /** what the holder should do */
     guidance: string;
   };
+  /**
+   * Key algorithm for derivation/signing. Undefined = standard cosmos:
+   * secp256k1, coin type 118, ripemd160(sha256(pubkey)) address. 'eth_secp256k1'
+   * marks an Ethermint chain (Injective): coin type 60, keccak256 address,
+   * keccak-digest signatures - which the shared cosmos signer/prefix-swap MUST
+   * NOT handle (see networks/injective). Guarded in deriveChainAddress.
+   */
+  keyAlgo?: 'secp256k1' | 'eth_secp256k1';
+  /** BIP44 coin type; defaults to 118 (cosmos). Injective is 60. */
+  coinType?: number;
 }
 
 export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
