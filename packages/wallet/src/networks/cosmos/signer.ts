@@ -62,7 +62,17 @@ export async function deriveCosmosWallet(
   };
 }
 
-/** derive address for specific chain from existing address */
+/**
+ * derive address for specific chain from existing address
+ *
+ * NOTE: this re-encodes the SAME 20 address bytes under a new bech32 prefix. It
+ * is only correct across chains that share the same key derivation and address
+ * hashing (coin type 118, secp256k1, ripemd160(sha256(pubkey))). It must NOT be
+ * used for an Ethermint chain like Injective (coin type 60, eth_secp256k1,
+ * keccak256 address) - swapping the prefix would produce a valid-looking but
+ * WRONG inj1... address and strand funds. Adding such a chain is blocked on
+ * GitHub #34; until then every CosmosChainId here is a coin-type-118 chain.
+ */
 export function deriveChainAddress(address: string, chainId: CosmosChainId): string {
   const { data } = fromBech32(address);
   const prefix = COSMOS_CHAINS[chainId].bech32Prefix;
