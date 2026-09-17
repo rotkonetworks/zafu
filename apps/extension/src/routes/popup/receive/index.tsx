@@ -12,6 +12,8 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Sensitive } from '../../../components/sensitive';
 import { ToggleSwitch } from '../../../components/toggle-switch';
 import { NobleReceivePanel } from '../home/cosmos-subwallets';
+import { InjectivePanel } from './injective-panel';
+import { isLaunched } from '../../../config/networks';
 import { useBackNav } from '../../../utils/navigate';
 import { useLocation } from 'react-router-dom';
 import { PopupPath } from '../paths';
@@ -1108,6 +1110,10 @@ export function ReceivePage() {
           <ReceiveTab address={address} loading={loading} activeNetwork={activeNetwork} />
         ) : (
           <div className='flex flex-col gap-6 overflow-y-auto'>
+            {/* Injective USDC ramp - the Noble replacement. Hidden until
+                isLaunched('injective') (flag flips only after the #34 testnet
+                round-trip passes). */}
+            {isLaunched('injective') && <InjectivePanel />}
             <NobleReceivePanel />
             <IbcDepositSection
               selectedKeyInfo={selectedKeyInfo}
