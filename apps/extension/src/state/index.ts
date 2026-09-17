@@ -1,4 +1,6 @@
-import { create, StateCreator } from 'zustand';
+import { StateCreator } from 'zustand';
+import { createWithEqualityFn } from 'zustand/traditional';
+import { shallow } from 'zustand/shallow';
 import { createWalletsSlice, WalletsSlice } from './wallets';
 import { immer } from 'zustand/middleware/immer';
 import { customPersist } from './persist';
@@ -113,8 +115,19 @@ export const initializeStore = (
 };
 
 // Wrap in logger() middleware if wanting to see store changes in console
-export const useStore = create<AllSlices>()(
+//
+// We use `createWithEqualityFn` (not plain `create`) with a `shallow` default
+// equality function. zustand v5's plain `useStore(selector)` dropped the v4
+// `useSyncExternalStoreWithSelector` memoization: it re-runs the selector on
+// every getSnapshot with no caching, so any selector that returns a fresh
+// object/array literal (most of ours) triggers React #185 "Maximum update
+// depth exceeded" - an infinite render loop. `createWithEqualityFn` restores
+// the memoized with-selector path and applies `shallow` by default, so
+// stable-field object selectors compare equal and stop looping. Per-site
+// `useShallow` still works and is now redundant-but-harmless.
+export const useStore = createWithEqualityFn<AllSlices>()(
   customPersist(initializeStore(sessionExtStorage, localExtStorage)),
+  shallow,
 );
 
 /** store type for use in test mocks — includes immer middleware signature */
