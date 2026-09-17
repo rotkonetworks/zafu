@@ -31,6 +31,15 @@ export interface NetworkConfig {
    * and must be reopened; set/unset this (with `launched`) as they come back.
    */
   ibcChainId?: string;
+  /**
+   * Conduit-only subnetwork: reached through a dedicated derive+sign path
+   * (e.g. Injective's eth_secp256k1 conduit), NOT the shared cosmos secp256k1 /
+   * coin-118 IBC machinery. Excluded from getActiveIbcChainIds /
+   * getActiveIbcSubnetworks (which drive the standard cosmos deposit UI) and
+   * from network-loader adapter loading, so `launched:true` can't route it
+   * through the wrong (fund-losing) path. Its own UI gates on isLaunched.
+   */
+  conduitOnly?: boolean;
   features: {
     stake: boolean;
     swap: boolean;
@@ -128,6 +137,8 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     launched: true,
     parent: 'penumbra',
     ibcChainId: 'injective-1',
+    // eth_secp256k1 conduit, not the shared cosmos coin-118 path
+    conduitOnly: true,
     features: { stake: false, swap: false, vote: false, inbox: false, multisig: false },
   },
   ethereum: {
@@ -183,13 +194,23 @@ export const getSubnetworks = (parent: NetworkType): NetworkType[] =>
  */
 export const getActiveIbcChainIds = (parent: NetworkType): string[] =>
   (Object.keys(NETWORKS) as NetworkType[])
-    .filter(n => NETWORKS[n].launched && NETWORKS[n].parent === parent && NETWORKS[n].ibcChainId)
+    .filter(
+      n =>
+        NETWORKS[n].launched &&
+        NETWORKS[n].parent === parent &&
+        NETWORKS[n].ibcChainId &&
+        !NETWORKS[n].conduitOnly,
+    )
     .map(n => NETWORKS[n].ibcChainId!);
 
 /** As above but returns the network KEYS (e.g. 'noble'), for gating by activeNetwork. */
 export const getActiveIbcSubnetworks = (parent: NetworkType): NetworkType[] =>
   (Object.keys(NETWORKS) as NetworkType[]).filter(
-    n => NETWORKS[n].launched && NETWORKS[n].parent === parent && NETWORKS[n].ibcChainId,
+    n =>
+      NETWORKS[n].launched &&
+      NETWORKS[n].parent === parent &&
+      NETWORKS[n].ibcChainId &&
+      !NETWORKS[n].conduitOnly,
   );
 
 /** true if this cosmos subnetwork currently has a live IBC channel (deposit/send ok) */
