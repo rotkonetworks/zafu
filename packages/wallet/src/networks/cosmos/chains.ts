@@ -12,7 +12,7 @@
  * all use same key derivation (m/44'/118'/0'/0/0) with different bech32 prefix
  */
 
-export type CosmosChainId = 'noble' | 'cosmoshub' | 'injective';
+export type CosmosChainId = 'noble' | 'cosmoshub' | 'injective' | 'osmosis';
 
 export interface CosmosChainConfig {
   id: CosmosChainId;
@@ -145,6 +145,23 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
     // channel (15/434) is dead (client expired). The live channel is on ct1101
     // and must be filled here, with a passing testnet round-trip, before this
     // chain is launched in the UI.
+  },
+  osmosis: {
+    id: 'osmosis',
+    name: 'Osmosis',
+    chainId: 'osmosis-1',
+    bech32Prefix: 'osmo',
+    symbol: 'OSMO',
+    denom: 'uosmo',
+    decimals: 6,
+    rpcEndpoint: 'https://osmosis-rpc.polkachu.com',
+    restEndpoint: 'https://osmosis-api.polkachu.com',
+    gasPrice: '0.025uosmo',
+    // standard cosmos: secp256k1, coin type 118 (keyAlgo/coinType left default),
+    // so the shared cosmos adapter + coin-118 deriveChainAddress path handle it.
+    // penumbraChannel intentionally UNSET: both declared Osmosis<->Penumbra
+    // channels (4/79703 and 17/110473) have Expired penumbra clients - dead until
+    // re-relayed. Keep launched:false until one is live.
   },
 };
 
