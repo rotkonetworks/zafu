@@ -65,6 +65,7 @@
     "vitest": "~1.6.1"
   },
   "overrides": {
+    "@penumbra-labs/registry": "github:penumbrafi/registry#rotko-release",
     "@bufbuild/protobuf": "^1.10.0",
     "@penumbra-zone/types": "npm:@rotko/penumbra-types@37.0.0",
     "@penumbra-zone/wasm": "npm:@rotko/penumbra-wasm@55.0.2",

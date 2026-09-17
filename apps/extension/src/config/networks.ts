@@ -146,15 +146,32 @@ export const getSubnetworks = (parent: NetworkType): NetworkType[] =>
   );
 
 /**
- * IBC chain ids reachable from `parent` right now: launched cosmos subnetworks
- * that carry an `ibcChainId` (i.e. have a live channel + client). IBC
- * deposit/withdraw is gated to these. Only Noble at the moment; other channels
- * closed on network upgrades and re-open by setting `ibcChainId` + `launched`.
+ * IBC chain ids with a live channel to `parent` that are NOT modelled as a zafu
+ * subnetwork - we never hold keys or derive an address for them, we only route
+ * an IBC transfer to an address the user supplies.
+ *
+ * Injective lives here rather than in NETWORKS because its accounts are
+ * ethsecp256k1 on coin type 60, not the cosmos secp256k1/118 derivation every
+ * NETWORKS entry shares: a subwallet for it would show a wrong `inj1` address.
+ * Its channel re-opened as penumbra channel-18 / injective channel-494.
  */
-export const getActiveIbcChainIds = (parent: NetworkType): string[] =>
-  (Object.keys(NETWORKS) as NetworkType[])
+const EXTERNAL_IBC_CHAIN_IDS: Partial<Record<NetworkType, string[]>> = {
+  penumbra: ['injective-1'],
+};
+
+/**
+ * IBC chain ids reachable from `parent` right now: launched cosmos subnetworks
+ * that carry an `ibcChainId` (i.e. have a live channel + client), plus the
+ * external chains above. IBC deposit/withdraw is gated to these. Channels close
+ * on network upgrades and re-open by setting `ibcChainId` + `launched` (for a
+ * subnetwork) or by listing the chain id in EXTERNAL_IBC_CHAIN_IDS.
+ */
+export const getActiveIbcChainIds = (parent: NetworkType): string[] => [
+  ...(Object.keys(NETWORKS) as NetworkType[])
     .filter(n => NETWORKS[n].launched && NETWORKS[n].parent === parent && NETWORKS[n].ibcChainId)
-    .map(n => NETWORKS[n].ibcChainId!);
+    .map(n => NETWORKS[n].ibcChainId!),
+  ...(EXTERNAL_IBC_CHAIN_IDS[parent] ?? []),
+];
 
 /** As above but returns the network KEYS (e.g. 'noble'), for gating by activeNetwork. */
 export const getActiveIbcSubnetworks = (parent: NetworkType): NetworkType[] =>

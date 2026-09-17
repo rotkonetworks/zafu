@@ -22,6 +22,8 @@ const TEN_MINS_MS = 10 * 60 * 1000;
 const CHAIN_REST_ENDPOINTS: Record<string, string> = {
   'noble-1': 'https://noble-api.polkachu.com',
   'cosmoshub-4': 'https://cosmos-api.polkachu.com',
+  // Injective has no polkachu LCD; this is the public sentry endpoint.
+  'injective-1': 'https://sentry.lcd.injective.network',
 };
 
 /** query the latest block height on a counterparty cosmos chain */
