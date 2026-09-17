@@ -38,7 +38,7 @@ function slip10DeriveEd25519(
   path: string,
 ): { privateKey: Uint8Array; chainCode: Uint8Array } {
   // master key
-  const I = hmac(sha512, 'ed25519 seed', seed);
+  const I = hmac(sha512, new TextEncoder().encode('ed25519 seed'), seed);
   let privateKey = I.slice(0, 32);
   let chainCode = I.slice(32);
 
@@ -148,7 +148,7 @@ export async function derivePolkadotWallet(
   accountIndex = 0,
 ): Promise<PolkadotWallet> {
   // convert mnemonic to seed
-  const seed = mnemonicToSeedSync(mnemonic);
+  const seed = Uint8Array.from(mnemonicToSeedSync(mnemonic));
 
   // derivation path based on network
   // polkadot: m/44'/354'/account'/0'/0'

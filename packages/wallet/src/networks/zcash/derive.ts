@@ -90,7 +90,7 @@ function bip32DeriveSecp256k1(
   path: string,
 ): { privateKey: Uint8Array; chainCode: Uint8Array } {
   // master key from seed
-  const I = hmac(sha512, 'Bitcoin seed', seed);
+  const I = hmac(sha512, new TextEncoder().encode('Bitcoin seed'), seed);
   let privateKey: Uint8Array = I.slice(0, 32);
   let chainCode: Uint8Array = I.slice(32);
 
@@ -173,7 +173,7 @@ export function deriveZcashTransparentAddress(
   index: number,
   mainnet = true,
 ): string {
-  const seed = mnemonicToSeedSync(mnemonic);
+  const seed = Uint8Array.from(mnemonicToSeedSync(mnemonic));
   const path = `m/44'/133'/${account}'/0/${index}`;
   const { privateKey } = bip32DeriveSecp256k1(seed, path);
   const pubkey = compressedPubkey(privateKey);
