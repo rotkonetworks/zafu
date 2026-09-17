@@ -1,13 +1,22 @@
 /**
- * #34 testnet round-trip - the one gate that needs a funded key.
+ * #34 round-trip gate - the one gate that needs a funded key.
  *
- * Run 1: prints a fresh inj address (persisted to a temp file). Fund it with
- * testnet INJ at https://testnet.faucet.injective.network/ (one captcha).
+ * Defaults to MAINNET (injective-1): the signer already signs with chainId
+ * injective-1, and the Penumbra channel is mainnet, so proving signature
+ * acceptance on mainnet is what actually matters. The proof is a SELF-SEND, so
+ * only gas is spent (~0.002 INJ, a few cents) - the transferred amount returns
+ * to the same address.
+ *
+ * Run 1: prints a fresh inj address (persisted to a temp file). Fund it with a
+ * little mainnet INJ (~0.005 INJ covers the fee).
  * Run 2: signs a self-send with our eth_secp256k1 signer and broadcasts to the
- * live Injective testnet. code === 0 means a real node ACCEPTED the signature -
- * the gate passes and the Injective ramp can be enabled.
+ * live Injective node. code === 0 means the node ACCEPTED the signature - the
+ * gate passes and the Injective ramp can be enabled (flip launched:true).
  *
  *   cd packages/wallet && npx tsx scripts/inj-testnet-roundtrip.mts
+ *
+ * (Testnet is still possible via INJ_LCD + a matching testnet chainId, but the
+ * conduit signs injective-1 by default, so mainnet is the supported path here.)
  */
 import { generateMnemonic } from 'bip39';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -15,8 +24,8 @@ import { deriveInjectiveWallet } from '../src/networks/injective/derive';
 import { queryInjectiveAccount } from '../src/networks/injective/client';
 import { withdrawToExchange } from '../src/networks/injective/conduit';
 
-const LCD = process.env.INJ_LCD ?? 'https://testnet.sentry.lcd.injective.network';
-const KEYFILE = process.env.INJ_KEYFILE ?? '/tmp/inj-testnet-mnemonic.txt';
+const LCD = process.env.INJ_LCD ?? 'https://lcd.injective.network';
+const KEYFILE = process.env.INJ_KEYFILE ?? '/tmp/inj-mainnet-roundtrip-mnemonic.txt';
 
 const mnemonic = existsSync(KEYFILE)
   ? readFileSync(KEYFILE, 'utf8').trim()
@@ -28,7 +37,7 @@ const mnemonic = existsSync(KEYFILE)
 
 const w = await deriveInjectiveWallet(mnemonic);
 console.log('inj address :', w.address);
-console.log('testnet LCD :', LCD);
+console.log('LCD         :', LCD);
 
 try {
   const acct = await queryInjectiveAccount(LCD, w.address);
@@ -49,5 +58,5 @@ try {
   );
 } catch (e) {
   console.log(`\nnot funded yet: ${e instanceof Error ? e.message : String(e)}`);
-  console.log(`fund the address above at https://testnet.faucet.injective.network/ then re-run.`);
+  console.log(`fund the address above with ~0.005 mainnet INJ, then re-run this script.`);
 }
