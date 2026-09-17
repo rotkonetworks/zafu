@@ -14,6 +14,7 @@
  */
 
 export { zid } from './zid';
+export { createExtensionTransport, type ZafuHandle } from './transport';
 export { createNoiseChannel } from './noise-channel';
 export {
   upsertContact,

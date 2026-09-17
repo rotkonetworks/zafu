@@ -11,7 +11,7 @@
  * - transport.ts - the pluggable ZafuTransport seam
  */
 
-export { ZAFU_PROTOCOL_VERSION } from './version';
+export { ZAFU_PROTOCOL_VERSION, ZAFU_SUPPORTED_PROTOCOL_VERSIONS } from './version';
 
 export {
   ZAFU_V1_METHODS,

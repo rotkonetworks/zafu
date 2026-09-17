@@ -38,8 +38,19 @@ export interface ZafuPingResponse {
   zafu: true;
   /** the wallet's own release version (chrome.runtime manifest version). */
   version: string;
-  /** the wire-protocol major the wallet speaks - see ZAFU_PROTOCOL_VERSION. */
+  /**
+   * The wire-protocol major the wallet speaks - see ZAFU_PROTOCOL_VERSION. The
+   * highest major it supports; kept for simple clients that only read a scalar.
+   */
   protocolVersion: number;
+  /**
+   * Every wire-protocol major the wallet supports, highest first (QUIC-style
+   * version negotiation). Additive over `protocolVersion`: a client that speaks
+   * more than one major picks the highest it shares with the wallet. Optional so
+   * a client can fall back to the `protocolVersion` scalar; a wallet SHOULD send
+   * it. Reserved now so a future major negotiates without a breaking change.
+   */
+  protocolVersions?: number[];
 }
 
 // -- identity ----------------------------------------------------------------

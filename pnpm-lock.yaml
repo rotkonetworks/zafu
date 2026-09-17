@@ -775,6 +775,9 @@ importers:
       '@noble/hashes':
         specifier: ^1.8.0
         version: 1.8.0
+      '@zafu/protocol':
+        specifier: workspace:*
+        version: link:../zafu-protocol
 
 packages:
 

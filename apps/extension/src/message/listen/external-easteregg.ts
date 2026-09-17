@@ -34,7 +34,7 @@ import {
 } from '@repo/storage-chrome/capabilities';
 import { isPro } from '../../state/license';
 import { isValidExternalSender } from '../../senders/external';
-import { ZAFU_PROTOCOL_VERSION } from '@zafu/protocol';
+import { ZAFU_PROTOCOL_VERSION, ZAFU_SUPPORTED_PROTOCOL_VERSIONS } from '@zafu/protocol';
 
 // The v1 methods this listener routes to a real handler here (vs delegating to
 // sign-request.ts / external-encryption.ts) are enumerated as EASTEREGG_V1_METHODS
@@ -181,6 +181,7 @@ export const externalMessageListener = (
         zafu: true,
         version: chrome.runtime.getManifest().version,
         protocolVersion: ZAFU_PROTOCOL_VERSION,
+        protocolVersions: [...ZAFU_SUPPORTED_PROTOCOL_VERSIONS],
       });
       return true;
 

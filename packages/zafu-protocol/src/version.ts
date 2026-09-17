@@ -14,3 +14,12 @@
  * does not understand.
  */
 export const ZAFU_PROTOCOL_VERSION = 1;
+
+/**
+ * Every wire-protocol major this wallet build supports, highest first, for
+ * QUIC-style version negotiation over the ping handshake. Today just [1]; when
+ * a v2 lands that can still serve v1 clients, this becomes [2, 1] while
+ * ZAFU_PROTOCOL_VERSION (the highest) becomes 2. A client picks the highest
+ * major it shares with this list.
+ */
+export const ZAFU_SUPPORTED_PROTOCOL_VERSIONS: readonly number[] = [ZAFU_PROTOCOL_VERSION];
