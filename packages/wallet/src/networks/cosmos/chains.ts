@@ -12,7 +12,7 @@
  * all use same key derivation (m/44'/118'/0'/0/0) with different bech32 prefix
  */
 
-export type CosmosChainId = 'noble' | 'cosmoshub';
+export type CosmosChainId = 'noble' | 'cosmoshub' | 'injective';
 
 export interface CosmosChainConfig {
   id: CosmosChainId;
@@ -69,6 +69,13 @@ export interface CosmosChainConfig {
   keyAlgo?: 'secp256k1' | 'eth_secp256k1';
   /** BIP44 coin type; defaults to 118 (cosmos). Injective is 60. */
   coinType?: number;
+  /**
+   * Fee/gas token when it differs from the ramp asset (`symbol`/`denom`/
+   * `decimals`). On Injective the ramp asset is USDC but gas is paid in INJ
+   * (18 dec), so a fresh burner that only holds USDC cannot move it - the UI
+   * must surface this. Undefined = gas is paid in the chain's own `denom`.
+   */
+  gasAsset?: { symbol: string; denom: string; decimals: number };
 }
 
 export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
@@ -115,6 +122,29 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
     gasPrice: '0.025uatom',
     penumbraChannel: 'channel-940', // cosmoshub -> penumbra
     penumbraSourceChannel: 'channel-0', // penumbra -> cosmoshub
+  },
+  injective: {
+    id: 'injective',
+    name: 'Injective',
+    chainId: 'injective-1',
+    bech32Prefix: 'inj',
+    // ramp asset = Circle-native USDC on Injective (USDC.inj), NOT peggy. Gas is
+    // a separate token (INJ, see gasAsset).
+    symbol: 'USDC.inj',
+    denom: 'erc20:0xa00C59fF5a080D2b954d0c75e46E22a0c371235a',
+    decimals: 6,
+    rpcEndpoint: 'https://sentry.tm.injective.network:443',
+    restEndpoint: 'https://sentry.lcd.injective.network',
+    gasPrice: '160000000inj', // INJ, 18 dec
+    // Ethermint: coin type 60 / eth_secp256k1 - derive+sign via networks/injective,
+    // NEVER the shared cosmos secp256k1 path (guarded in deriveChainAddress).
+    keyAlgo: 'eth_secp256k1',
+    coinType: 60,
+    gasAsset: { symbol: 'INJ', denom: 'inj', decimals: 18 },
+    // penumbraChannel intentionally UNSET: the only declared Injective<->Penumbra
+    // channel (15/434) is dead (client expired). The live channel is on ct1101
+    // and must be filled here, with a passing testnet round-trip, before this
+    // chain is launched in the UI.
   },
 };
 

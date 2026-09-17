@@ -57,7 +57,7 @@ export function buildSignedInjectiveTx(p: BuildInjectiveTxParams): Uint8Array {
     SignMode.SIGN_MODE_DIRECT,
   );
 
-  const signDoc = makeSignDoc(bodyBytes, authInfoBytes, p.chainId, p.accountNumber);
+  const signDoc = makeSignDoc(bodyBytes, authInfoBytes, p.chainId, Number(p.accountNumber));
   const signBytes = SignDoc.encode(signDoc).finish();
   const signature = signEthSecp256k1(p.privKey, signBytes);
 

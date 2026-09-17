@@ -53,9 +53,9 @@ describe('injective client', () => {
       fetchFn as never,
     );
     expect(res).toEqual({ txhash: 'ABC123', code: 0, rawLog: '' });
-    const call = fetchFn.mock.calls[0]!;
+    const call = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
     expect(call[0]).toBe('https://lcd.example/cosmos/tx/v1beta1/txs');
-    const body = JSON.parse((call[1] as RequestInit).body as string) as {
+    const body = JSON.parse(call[1].body as string) as {
       tx_bytes: string;
       mode: string;
     };
