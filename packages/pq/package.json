@@ -1,0 +1,18 @@
+{
+  "name": "@zafu/pq",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "hybrid post-quantum key agreement (X25519 + ML-KEM-768) for zafu - HNDL-resistant confidentiality",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint \"**/*.ts*\"",
+    "test": "vitest run"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@noble/post-quantum": "^0.7.1",
+    "@noble/hashes": "^1.8.0"
+  }
+}
