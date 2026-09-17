@@ -8,7 +8,7 @@
  */
 
 import { getTransparentHistoryInWorker } from '../../../state/keyring/network-worker';
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Sensitive } from '../../../components/sensitive';
 import { ToggleSwitch } from '../../../components/toggle-switch';
 import { NobleReceivePanel } from '../home/cosmos-subwallets';
@@ -133,8 +133,12 @@ function IbcDepositSection({
   const penumbraAccount = useStore(selectPenumbraAccount);
   const { data: registryChains = [], isLoading: chainsLoading } = useIbcChains();
   // Cosmos Hub deposits aren't working right now (no live channel), so don't
-  // offer it as a source - only Noble is currently depositable.
-  const ibcChains = mergeIbcChains([...registryChains]).filter(c => c.chainId !== 'cosmoshub-4');
+  // offer it as a source - only Noble is currently depositable. Memoized so the
+  // preselect effect below doesn't re-run every render on a fresh array ref.
+  const ibcChains = useMemo(
+    () => mergeIbcChains([...registryChains]).filter(c => c.chainId !== 'cosmoshub-4'),
+    [registryChains],
+  );
   const [selectedIbcChain, setSelectedIbcChain] = useState<IbcChain | undefined>();
 
   // preselect the chain the burner lives on so the user lands ready to shield
@@ -1038,7 +1042,7 @@ function ReceiveTab({
   );
 }
 
-type ReceiveMode = 'receive' | 'noble' | 'shield';
+type ReceiveMode = 'receive' | 'shield';
 
 export function ReceivePage() {
   const activeNetwork = useStore(selectActiveNetwork);
@@ -1068,10 +1072,15 @@ export function ReceivePage() {
       </div>
 
       <div className='flex flex-1 flex-col p-4'>
-        {/* tabs - Penumbra only */}
+        {/* tabs - Penumbra only. Two tabs: the plain shielded-address
+              receive, and a combined "shield USDC" view that holds the Noble
+              receive address plus the IBC-shield form. Noble is being retired
+              (see the deprecation notice inside NobleReceivePanel); the
+              Injective USDC ramp will replace it once eth_secp256k1 support
+              lands. */}
         {isPenumbra && (
           <div className='mb-4 flex rounded-lg bg-elev-2 p-1'>
-            {(['receive', 'noble', 'shield'] as const).map(m => (
+            {(['receive', 'shield'] as const).map(m => (
               <button
                 key={m}
                 onClick={() => setMode(m)}
@@ -1079,7 +1088,7 @@ export function ReceivePage() {
                   mode === m ? 'bg-canvas text-fg shadow-sm' : 'text-fg-muted hover:text-fg-high'
                 }`}
               >
-                {m === 'shield' ? 'ibc shield' : m}
+                {m === 'shield' ? 'shield USDC' : m}
               </button>
             ))}
           </div>
@@ -1088,16 +1097,17 @@ export function ReceivePage() {
         {/* content */}
         {!isPenumbra || mode === 'receive' ? (
           <ReceiveTab address={address} loading={loading} activeNetwork={activeNetwork} />
-        ) : mode === 'noble' ? (
-          <NobleReceivePanel />
         ) : (
-          <IbcDepositSection
-            selectedKeyInfo={selectedKeyInfo}
-            keyRing={keyRing}
-            penumbraWallet={penumbraWallet}
-            accountIndex={navState?.cosmosAccountIndex ?? 0}
-            preselectCosmosChain={navState?.cosmosChain}
-          />
+          <div className='flex flex-col gap-6 overflow-y-auto'>
+            <NobleReceivePanel />
+            <IbcDepositSection
+              selectedKeyInfo={selectedKeyInfo}
+              keyRing={keyRing}
+              penumbraWallet={penumbraWallet}
+              accountIndex={navState?.cosmosAccountIndex ?? 0}
+              preselectCosmosChain={navState?.cosmosChain}
+            />
+          </div>
         )}
       </div>
     </div>
