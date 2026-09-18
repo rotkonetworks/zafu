@@ -1,15 +1,24 @@
 /**
- * listen for identity sign requests from approved origins.
+ * listen for identity sign requests from web origins ("login with zafu").
  *
  * flow:
  * 1. dApp sends { type: 'zafu_sign', challengeHex, statement? } via chrome.runtime.sendMessage
- * 2. we check if origin is already approved (via knownSites)
- * 3. if not approved, deny immediately (must connect first)
- * 4. if approved, open SignRequest popup for user confirmation
- * 5. popup signs with ed25519 identity key, returns { signature, publicKey }
+ * 2. validate the challenge (hex, even length, 1-1024 bytes)
+ * 3. open the SignRequest popup for explicit per-request user confirmation
+ *    (the popup shows the calling origin + the challenge / statement)
+ * 4. on approval the popup signs with the SITE-SCOPED ZID ed25519 key and
+ *    returns { signature, publicKey }; sign_identity is auto-granted afterwards
+ *    so the site shows up on the identity page
  *
- * dApps must first be approved via the standard connect flow (OriginApproval).
- * sign requests from unapproved origins are silently denied.
+ * Gate: requests must come from a valid top-level page (isValidExternalSender
+ * rejects sub-frames and malformed senders), but there is NO connect-first
+ * requirement - any such origin may prompt, and the user's per-request approval
+ * in the popup IS the consent. This is safe because the signing key is derived
+ * PER ORIGIN: a signature obtained by one site is under that site's ZID key and
+ * cannot be replayed at another, so an unapproved origin can at most prompt the
+ * user, never obtain a cross-site-usable signature. Relying parties must still
+ * bind their origin + a fresh nonce into the challenge (SIWE-style) - the wallet
+ * signs exactly the challenge bytes it is given.
  */
 
 import { getOriginPermissions, grantCapability } from '@repo/storage-chrome/origin';
