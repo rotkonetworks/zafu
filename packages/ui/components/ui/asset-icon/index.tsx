@@ -14,8 +14,10 @@ export const AssetIcon = ({
   metadata?: Metadata;
   size?: 'xs' | 'sm' | 'lg';
 }) => {
-  // a registry image URL can 404 or be blocked; fall back to a monogram tile
-  const [imgFailed, setImgFailed] = useState(false);
+  // a registry image URL can 404 or be blocked; fall back to a monogram tile.
+  // Track the failed URL rather than a boolean, so switching to a different
+  // asset (this component instance is reused across selections) re-attempts.
+  const [failedSrc, setFailedSrc] = useState<string>();
   // Image default is "" and thus cannot do nullish-coalescing
   // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
   const icon = metadata?.images[0]?.png || metadata?.images[0]?.svg;
@@ -31,12 +33,12 @@ export const AssetIcon = ({
 
   return (
     <>
-      {icon && !imgFailed ? (
+      {icon && failedSrc !== icon ? (
         <img
           className={className}
           src={icon}
           alt='Asset icon'
-          onError={() => setImgFailed(true)}
+          onError={() => setFailedSrc(icon)}
         />
       ) : isDelegationToken ? (
         <DelegationTokenIcon displayDenom={display} className={className} />
