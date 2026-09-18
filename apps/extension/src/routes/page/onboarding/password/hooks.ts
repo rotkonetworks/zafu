@@ -7,6 +7,7 @@ import { SEED_PHRASE_ORIGIN } from './types';
 import { PagePath } from '../../paths';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { setOnboardingValuesInStorage, setFreshWalletBlockHeights } from '../persist-parameters';
+import { PENDING_ZCASH_BIRTHDAY_KEY } from '../constants';
 import { useStore } from '../../../../state';
 import { keyRingSelector } from '../../../../state/keyring';
 import { networksSelector } from '../../../../state/networks';
@@ -120,9 +121,13 @@ export const useFinalizeOnboarding = () => {
 
         await setOnboardingValuesInStorage(origin);
 
-        // apply zcash birthday from onboarding (stored in sessionStorage)
-        const pendingBirthday = sessionStorage.getItem('pendingZcashBirthday');
-        if (pendingBirthday) {
+        // apply zcash birthday from onboarding (stored in sessionStorage by the
+        // birthday step). Only imported wallets have one - a fresh wallet syncs
+        // from the tip - so gate on origin so a stale value left behind by an
+        // abandoned import (import -> back -> create) can never leak into a new
+        // wallet. Always clear the key regardless.
+        const pendingBirthday = sessionStorage.getItem(PENDING_ZCASH_BIRTHDAY_KEY);
+        if (pendingBirthday && origin === SEED_PHRASE_ORIGIN.IMPORTED) {
           const vaults = (await localExtStorage.get('vaults')) as { id: string }[] | null;
           const vaultId = vaults?.[0]?.id;
           if (vaultId) {
@@ -130,10 +135,10 @@ export const useFinalizeOnboarding = () => {
               [`zcashBirthday_${vaultId}`]: parseInt(pendingBirthday, 10),
             });
           }
-          sessionStorage.removeItem('pendingZcashBirthday');
         }
+        sessionStorage.removeItem(PENDING_ZCASH_BIRTHDAY_KEY);
 
-        navigate(PagePath.ONBOARDING_SUCCESS);
+        navigate(PagePath.ONBOARDING_SUCCESS, { state: { origin } });
       } catch (e) {
         setError(String(e));
         // roll back on failure

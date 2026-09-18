@@ -14,8 +14,6 @@ import { useStore } from '../../../state';
 import { importSelector } from '../../../state/seed-phrase/import';
 import { usePageNav } from '../../../utils/navigate';
 import { ImportForm } from '../../../shared/containers/import-form';
-import { navigateToPasswordPage } from './password/utils';
-import { SEED_PHRASE_ORIGIN } from './password/types';
 import { PagePath } from '../paths';
 
 export const ImportSeedPhrase = () => {
@@ -30,7 +28,9 @@ export const ImportSeedPhrase = () => {
     if (!valid) {
       return;
     }
-    navigateToPasswordPage(navigate, SEED_PHRASE_ORIGIN.IMPORTED);
+    // Recovery phrase -> review -> birthday -> password. The origin is set
+    // when we finally land on the password step.
+    navigate(PagePath.IMPORT_REVIEW);
   };
 
   const submitLabel = !allFilled

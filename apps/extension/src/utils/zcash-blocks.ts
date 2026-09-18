@@ -71,11 +71,31 @@ export const describeZcashHeight = (block: number, tip?: number): { ok: boolean;
   if (block < ZCASH_ORCHARD_ACTIVATION) {
     return {
       ok: false,
-      text: `before orchard activation (${ZCASH_ORCHARD_ACTIVATION.toLocaleString()}) — nothing to scan`,
+      text: `before orchard activation (${ZCASH_ORCHARD_ACTIVATION.toLocaleString()}) - nothing to scan`,
     };
   }
   if (tip && block > tip) {
     return { ok: false, text: `ahead of the zcash tip (${tip.toLocaleString()})` };
   }
   return { ok: true, text: `≈ ${formatBlockMonth(block)}` };
+};
+
+/**
+ * The birthday height to actually store when the user picked a date.
+ *
+ * A date->block estimate can drift a few thousand blocks ahead of the real
+ * birthday (75s blocks are only an approximation, and the user's memory of
+ * "when did I create this" is coarser still). Starting the scan even one
+ * block AFTER the real birthday silently drops every note minted before it,
+ * so we bias hard toward starting early: round down to the nearest 10k, drop
+ * one more 10k for margin, then clamp to Orchard activation - the earliest
+ * height that can hold a note this wallet cares about. Being early only costs
+ * scan time; being late costs coins.
+ */
+export const safeBirthdayFloor = (height: number): number => {
+  if (!Number.isFinite(height)) {
+    return ZCASH_ORCHARD_ACTIVATION;
+  }
+  const rounded = Math.floor(height / 10_000) * 10_000 - 10_000;
+  return Math.max(rounded, ZCASH_ORCHARD_ACTIVATION);
 };
