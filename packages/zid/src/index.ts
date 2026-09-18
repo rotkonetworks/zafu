@@ -15,6 +15,15 @@
 
 export { zid } from './zid';
 export { createExtensionTransport, type ZafuHandle } from './transport';
+export {
+  detect,
+  zidPubkey,
+  encryptFor,
+  decryptFrom,
+  type ZafuDetection,
+  type ZidRecipient,
+} from './messaging';
+export { ZafuError, type ZafuErrorCode } from './errors';
 export { createNoiseChannel } from './noise-channel';
 export {
   upsertContact,
