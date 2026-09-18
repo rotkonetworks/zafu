@@ -37,6 +37,7 @@ export type OnboardingStepId =
   | 'choose-path'
   | 'generate'
   | 'import'
+  | 'import-review'
   | 'import-birthday'
   | 'import-zigner'
   | 'set-password'
@@ -65,6 +66,7 @@ const STEPS_CREATE: readonly OnboardingStep[] = [
 const STEPS_IMPORT: readonly OnboardingStep[] = [
   { id: 'welcome', label: 'welcome', matches: [PagePath.WELCOME] },
   { id: 'import', label: 'recovery phrase', matches: [PagePath.IMPORT_SEED_PHRASE] },
+  { id: 'import-review', label: 'review', matches: [PagePath.IMPORT_REVIEW] },
   { id: 'import-birthday', label: 'birthday', matches: [PagePath.IMPORT_BIRTHDAY] },
   { id: 'set-password', label: 'password', matches: [PagePath.SET_PASSWORD] },
   { id: 'success', label: 'done', matches: [PagePath.ONBOARDING_SUCCESS] },

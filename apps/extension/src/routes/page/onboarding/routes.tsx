@@ -10,6 +10,9 @@ const GenerateSeedPhrase = lazy(() =>
 const ImportSeedPhrase = lazy(() =>
   import('./import').then(m => ({ default: m.ImportSeedPhrase })),
 );
+const ImportReview = lazy(() =>
+  import('./import-review').then(m => ({ default: m.ImportReview })),
+);
 const ImportBirthday = lazy(() =>
   import('./import-birthday').then(m => ({ default: m.ImportBirthday })),
 );
@@ -56,6 +59,10 @@ export const onboardingRoutes = [
   {
     path: PagePath.IMPORT_SEED_PHRASE,
     element: withSuspense(ImportSeedPhrase),
+  },
+  {
+    path: PagePath.IMPORT_REVIEW,
+    element: withSuspense(ImportReview),
   },
   {
     path: PagePath.IMPORT_BIRTHDAY,

@@ -30,7 +30,7 @@ export const ImportSeedPhrase = () => {
     }
     // Recovery phrase -> review -> birthday -> password. The origin is set
     // when we finally land on the password step.
-    navigate(PagePath.IMPORT_BIRTHDAY);
+    navigate(PagePath.IMPORT_REVIEW);
   };
 
   const submitLabel = !allFilled
