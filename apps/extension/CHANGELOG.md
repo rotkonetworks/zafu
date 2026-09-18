@@ -1,5 +1,31 @@
 # chrome-extension
 
+## 28.0.3
+
+_2026-09-18_
+
+Service-worker reliability - message-channel races closed and a disabled
+FROST entry point made truly inert.
+
+### Reliability
+
+- The external and internal service-worker listeners now respond on both the
+  success and error paths of every async handler, and send an explicit cancel
+  response when an approval popup closes without a verdict. Dapps and the
+  extension UI no longer see the "message channel closed before a response"
+  hang that could leave a session waiting on a reply that never came.
+- `ZCASH_ENSURE_OFFSCREEN` gained a 3 second timeout, so a hung offscreen
+  document surfaces as a fast error instead of a silent stall.
+
+### Security
+
+- Removed `zafu_frost_sign_disabled_unreachable` - a switch arm that was named
+  unreachable but any origin holding the `frost` capability could send the type
+  and open the FROST-sign approval popup, the same blind-sign surface
+  `zafu_frost_sign` was disabled to close. The type now falls through to the
+  default case and cannot open a popup. `zafu_frost_sign_orchard` remains the
+  only supported (and gated) FROST-signing entry point.
+
 ## 27.1.0
 
 Multisig you can actually use, social discovery, and connection fixes.
