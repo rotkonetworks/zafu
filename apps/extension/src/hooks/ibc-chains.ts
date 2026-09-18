@@ -19,7 +19,8 @@ export interface IbcChain {
   images: { svg?: string; png?: string }[];
 }
 
-const registryClient = new ChainRegistryClient();
+/** shared penumbra chain-registry client - reused for asset metadata lookups */
+export const registryClient = new ChainRegistryClient();
 
 export const useIbcChains = () => {
   const { chainId } = useChainIdQuery();

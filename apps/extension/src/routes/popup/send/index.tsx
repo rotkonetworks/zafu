@@ -21,7 +21,6 @@ import { selectPenumbraSend } from '../../../state/penumbra-send';
 import { useIbcChains, isValidIbcAddress, type IbcChain } from '../../../hooks/ibc-chains';
 import { viewClient } from '../../../clients';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
-import { getDisplayDenomFromView } from '@penumbra-zone/getters/value-view';
 import { fromValueView } from '@rotko/penumbra-types/amount';
 import { assetPatterns } from '@rotko/penumbra-types/assets';
 import { useSkipRoute, useSkipChains } from '../../../hooks/skip-route';
@@ -43,6 +42,8 @@ import {
 } from '@repo/wallet/networks/cosmos/chains';
 import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
+import { AssetIcon } from '@repo/ui/components/ui/asset-icon';
+import { symbolFromMetadata } from '../../../utils/asset-display';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { isDedicatedWindow } from '../../../utils/popup-detection';
 import { openInDedicatedWindow } from '../../../utils/navigate';
@@ -1059,7 +1060,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
     if (!selectedAsset?.balanceView) {
       return 'asset';
     }
-    return getDisplayDenomFromView(selectedAsset.balanceView) || 'asset';
+    return symbolFromMetadata(getMetadataFromBalancesResponse.optional(selectedAsset));
   }, [selectedAsset]);
 
   const selectedBalance = useMemo(() => {
@@ -1130,7 +1131,13 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
             {balancesLoading ? (
               <span className='text-fg-muted'>loading...</span>
             ) : selectedAsset ? (
-              <span>{selectedSymbol}</span>
+              <span className='flex items-center gap-1.5'>
+                <AssetIcon
+                  metadata={getMetadataFromBalancesResponse.optional(selectedAsset)}
+                  size='xs'
+                />
+                {selectedSymbol}
+              </span>
             ) : (
               <span className='text-fg-muted'>select asset</span>
             )}
@@ -1148,7 +1155,8 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
                 if (!balance.balanceView) {
                   return null;
                 }
-                const symbol = getDisplayDenomFromView(balance.balanceView) || 'Unknown';
+                const meta = getMetadataFromBalancesResponse.optional(balance);
+                const symbol = symbolFromMetadata(meta);
                 const amt = fromValueView(balance.balanceView);
                 const amountStr = typeof amt === 'string' ? amt : amt.toString();
                 return (
@@ -1163,7 +1171,10 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
                       selectedAsset === balance && 'bg-elev-2',
                     )}
                   >
-                    <span>{symbol}</span>
+                    <span className='flex items-center gap-1.5'>
+                      <AssetIcon metadata={meta} size='xs' />
+                      {symbol}
+                    </span>
                     <span className='text-fg-muted'>{amountStr}</span>
                   </button>
                 );
@@ -1659,20 +1670,25 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
               <button
                 onClick={() => setAssetOpen(!assetOpen)}
                 disabled={txStatus !== 'idle'}
-                className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg text-left disabled:opacity-50'
+                className='flex w-full items-center gap-1.5 rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg text-left disabled:opacity-50'
               >
-                {selectedAsset
-                  ? (getMetadataFromBalancesResponse.optional(selectedAsset)?.symbol ??
-                    getMetadataFromBalancesResponse.optional(selectedAsset)?.display ??
-                    ibcState.denom)
-                  : 'select asset'}
+                {selectedAsset ? (
+                  <>
+                    <AssetIcon
+                      metadata={getMetadataFromBalancesResponse.optional(selectedAsset)}
+                      size='xs'
+                    />
+                    {symbolFromMetadata(getMetadataFromBalancesResponse.optional(selectedAsset))}
+                  </>
+                ) : (
+                  'select asset'
+                )}
               </button>
               {assetOpen && (
                 <div className='absolute z-10 mt-1 w-full rounded-lg border border-border-soft bg-canvas shadow-lg max-h-48 overflow-y-auto'>
                   {withdrawableAssets.map((b, i) => {
                     const meta = getMetadataFromBalancesResponse.optional(b);
-                    const display = meta?.symbol ?? meta?.display ?? meta?.base ?? 'unknown';
-                    const amount = getDisplayDenomFromView(b.balanceView);
+                    const display = symbolFromMetadata(meta);
                     return (
                       <button
                         key={i}
@@ -1685,8 +1701,10 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
                         }}
                         className='w-full px-3 py-2 text-left text-sm hover:bg-elev-1 flex justify-between items-center'
                       >
-                        <span>{display}</span>
-                        <span className='text-xs text-fg-muted'>{amount}</span>
+                        <span className='flex items-center gap-1.5'>
+                          <AssetIcon metadata={meta} size='xs' />
+                          {display}
+                        </span>
                       </button>
                     );
                   })}
