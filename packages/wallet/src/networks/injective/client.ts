@@ -56,6 +56,94 @@ export async function queryInjectiveAccount(
   return { accountNumber: BigInt(base.account_number), sequence: Number(base.sequence) };
 }
 
+export interface InjectiveBalances {
+  /** USDC.inj (erc20 denom) balance in base units (6-dec). */
+  usdc: bigint;
+  /** INJ gas-token balance in base units (18-dec). */
+  inj: bigint;
+}
+
+/**
+ * Read the USDC.inj (erc20 denom) and INJ (gas) balances for an `inj1…`
+ * address over the LCD bank endpoint.
+ *
+ * We hit the all-balances endpoint and filter locally rather than
+ * `.../by_denom?denom=…`: the erc20 denom is `erc20:0x…` and the colon+hex
+ * would need URL-encoding, an easy place to silently get a 0. Unlike the auth
+ * endpoint (queryInjectiveAccount), this returns 200 with an empty list for a
+ * never-funded address, so both balances default to 0n - exactly the
+ * "watch funds arrive" behaviour the receive panel wants.
+ *
+ * On-chain denoms are case-sensitive; the canonical USDC.inj denom is the
+ * EIP-55 mixed-case checksummed form (verified live: the lowercase variant has
+ * zero supply). We match case-insensitively anyway so a differently-cased LCD
+ * response can never read as an empty balance.
+ */
+export async function queryInjectiveBalances(
+  restUrl: string,
+  address: string,
+  usdcDenom: string,
+  fetchFn: FetchFn = fetch,
+): Promise<InjectiveBalances> {
+  const res = await fetchFn(`${trimUrl(restUrl)}/cosmos/bank/v1beta1/balances/${address}`);
+  if (!res.ok) {
+    throw new Error(`injective balance query failed: ${res.status}`);
+  }
+  const json = (await res.json()) as { balances?: { denom?: string; amount?: string }[] };
+  const wantUsdc = usdcDenom.toLowerCase();
+  let usdc = 0n;
+  let inj = 0n;
+  for (const b of json.balances ?? []) {
+    if (!b.denom || b.amount == null) {
+      continue;
+    }
+    const denom = b.denom.toLowerCase();
+    if (denom === wantUsdc) {
+      usdc = BigInt(b.amount);
+    } else if (denom === 'inj') {
+      inj = BigInt(b.amount);
+    }
+  }
+  return { usdc, inj };
+}
+
+export interface InjectiveTxStatus {
+  /** false while the tx is still pending (LCD returns 404 until included). */
+  found: boolean;
+  /** 0 = included and succeeded; non-zero = included but failed. */
+  code?: number;
+  height?: string;
+  rawLog?: string;
+}
+
+/**
+ * Poll a tx hash on the LCD. A BROADCAST_MODE_SYNC broadcast (see
+ * broadcastInjectiveTx) with code 0 only means "accepted into the mempool", not
+ * "included in a block" - the tx endpoint 404s until inclusion. This lets the
+ * UI move an honest submitted -> done only once the tx is actually on-chain.
+ */
+export async function queryInjectiveTx(
+  restUrl: string,
+  hash: string,
+  fetchFn: FetchFn = fetch,
+): Promise<InjectiveTxStatus> {
+  const res = await fetchFn(`${trimUrl(restUrl)}/cosmos/tx/v1beta1/txs/${hash}`);
+  if (res.status === 404) {
+    return { found: false };
+  }
+  if (!res.ok) {
+    throw new Error(`injective tx query failed: ${res.status}`);
+  }
+  const json = (await res.json()) as {
+    tx_response?: { code?: number; height?: string; raw_log?: string };
+  };
+  const r = json.tx_response;
+  if (!r || r.height == null || r.height === '0' || r.height === '') {
+    return { found: false };
+  }
+  return { found: true, code: r.code ?? 0, height: r.height, rawLog: r.raw_log ?? '' };
+}
+
 export interface BroadcastResult {
   txhash: string;
   /** 0 = accepted into mempool; non-zero = rejected (see rawLog) */

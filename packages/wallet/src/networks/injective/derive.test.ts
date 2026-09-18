@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { fromBech32 } from '@cosmjs/encoding';
-import { deriveInjectiveWallet, deriveInjectiveAddress } from './derive';
+import {
+  deriveInjectiveWallet,
+  deriveInjectiveAddress,
+  isValidInjectiveAddress,
+} from './derive';
 
 const toHex = (b: Uint8Array) =>
   Array.from(b)
@@ -43,5 +47,36 @@ describe('injective derivation', () => {
     const w = await deriveInjectiveWallet(KEPLR_MNEMONIC, 0);
     expect(w.addressBytes).toHaveLength(20);
     expect(w.publicKey).toHaveLength(33); // compressed secp256k1
+  });
+
+  describe('isValidInjectiveAddress', () => {
+    it('accepts a real derived inj address', async () => {
+      const addr = await deriveInjectiveAddress(KEPLR_MNEMONIC, 0);
+      expect(isValidInjectiveAddress(addr)).toBe(true);
+      expect(isValidInjectiveAddress(`  ${addr}  `)).toBe(true); // trims
+    });
+
+    it('rejects a checksum-broken address that startsWith("inj1") would pass', async () => {
+      const addr = await deriveInjectiveAddress(KEPLR_MNEMONIC, 0);
+      // flip one character in the data section - keeps the inj1 prefix but
+      // breaks the bech32 checksum
+      const i = addr.length - 5;
+      const bad = addr.slice(0, i) + (addr[i] === 'q' ? 'p' : 'q') + addr.slice(i + 1);
+      expect(bad.startsWith('inj1')).toBe(true);
+      expect(isValidInjectiveAddress(bad)).toBe(false);
+    });
+
+    it('rejects a valid bech32 address with the wrong prefix', () => {
+      // a well-formed cosmos1 address (valid checksum, wrong hrp)
+      expect(
+        isValidInjectiveAddress('cosmos1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqxr8dwp'),
+      ).toBe(false);
+    });
+
+    it('rejects empty / junk input', () => {
+      expect(isValidInjectiveAddress('')).toBe(false);
+      expect(isValidInjectiveAddress('inj1')).toBe(false);
+      expect(isValidInjectiveAddress('not an address')).toBe(false);
+    });
   });
 });
