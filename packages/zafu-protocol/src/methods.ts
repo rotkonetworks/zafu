@@ -88,7 +88,21 @@ export interface ZafuSignResponse {
 export interface ZafuZidPubkeyRequest {
   type: 'zafu_zid_pubkey';
 }
-export type ZafuZidPubkeyResponse = { pubkey: Hex } | ZafuError;
+export type ZafuZidPubkeyResponse =
+  | {
+      /** the site-scoped ZID ed25519 public key, hex (classical sealed box). */
+      pubkey: Hex;
+      /**
+       * the site's post-quantum sealed-box public key, hex, when the wallet
+       * supports it. Pass this back as `recipient_pq` on zafu_encrypt to get a
+       * harvest-now-decrypt-later-resistant message. Additive: a wallet that
+       * predates PQ omits it and callers fall back to the classical `pubkey`.
+       */
+      pq_pubkey?: Hex;
+      /** the suite of `pq_pubkey` (e.g. 'xwing-v1'), present iff pq_pubkey is. */
+      pq_suite?: string;
+    }
+  | ZafuError;
 
 // -- capabilities ------------------------------------------------------------
 
@@ -111,19 +125,34 @@ export type ZafuRequestCapabilityResponse =
 
 // -- encryption (sealed box: x25519 DH -> HKDF-SHA256 -> AES-256-GCM) ---------
 
-/** encrypt `plaintext` to a recipient's ZID ed25519 pubkey (sealed box). */
+/** encrypt `plaintext` to a recipient (sealed box). */
 export interface ZafuEncryptRequest {
   type: 'zafu_encrypt';
-  /** recipient ZID ed25519 pubkey, 64 hex chars (32 bytes). */
+  /** recipient ZID ed25519 pubkey, 64 hex chars (32 bytes) - classical path. */
   recipient: Hex;
+  /**
+   * recipient post-quantum sealed-box public key (the `pq_pubkey` from
+   * zafu_zid_pubkey), hex. When present the wallet seals with the hybrid X-Wing
+   * suite (X25519 + ML-KEM-768) so recorded traffic stays confidential against a
+   * future quantum attacker. Additive: omit it for the classical path.
+   */
+  recipient_pq?: Hex;
   /** message to seal, base64. */
   plaintext: Base64;
 }
 export type ZafuEncryptResponse =
   | {
-      /** sealed ciphertext, base64 (includes the 12-byte GCM nonce prefix). */
+      /**
+       * sealed ciphertext, base64. Classical: 12-byte GCM nonce prefix + AEAD.
+       * Hybrid: a suite-tagged, self-contained blob (the X-Wing ciphertext is
+       * inside), and `ephemeral_pubkey` is empty.
+       */
       ciphertext: Base64;
-      /** the ephemeral x25519 public key, hex - the recipient needs it to open. */
+      /**
+       * the ephemeral x25519 public key, hex, for the classical path - the
+       * recipient needs it to open. Empty string for the hybrid path (the
+       * ephemeral is carried inside the ciphertext).
+       */
       ephemeral_pubkey: Hex;
     }
   | ZafuError;

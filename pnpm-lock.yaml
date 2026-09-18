@@ -209,6 +209,9 @@ importers:
       '@tanstack/react-query':
         specifier: 5.95.2
         version: 5.95.2(react@19.2.8)
+      '@zafu/pq':
+        specifier: workspace:*
+        version: link:../../packages/pq
       '@zafu/protocol':
         specifier: workspace:*
         version: link:../../packages/zafu-protocol
@@ -439,6 +442,9 @@ importers:
 
   packages/pq:
     dependencies:
+      '@noble/ciphers':
+        specifier: ^2.3.0
+        version: 2.4.0
       '@noble/hashes':
         specifier: ^1.8.0
         version: 1.8.0

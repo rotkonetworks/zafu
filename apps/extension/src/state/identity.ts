@@ -133,6 +133,7 @@ import { sha512 } from '@noble/hashes/sha512';
 import { hmac } from '@noble/hashes/hmac';
 import { hkdf } from '@noble/hashes/hkdf';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
+import { xwingPublicKeyFromSeed, XWING_LENGTHS } from '@zafu/pq';
 
 /**
  * ZID domain separator - v2 uses two-stage KDF.
@@ -238,6 +239,25 @@ const deriveSeedForContact = (identity: Uint8Array, contactId: string): Uint8Arr
  */
 const deriveSeedForContactKa = (identity: Uint8Array): Uint8Array =>
   deriveSeed(identity, enc.encode('contact-ka-v1'));
+
+/**
+ * derive the site-scoped X-Wing (X25519 + ML-KEM-768) seed. Domain-separated
+ * from the ed25519 site key (tag 'xwing-site:' vs 'site:') so the two algorithms
+ * never share key material. This is the recipient's post-quantum sealed-box key:
+ * its public half is advertised (zafu_zid_pubkey.pq_pubkey), the 32-byte seed IS
+ * the decapsulation secret and is recoverable from the mnemonic.
+ */
+const deriveSeedForSiteXWing = (
+  identity: Uint8Array,
+  origin: string,
+  rotation = 0,
+): Uint8Array => {
+  const tag =
+    rotation === 0
+      ? enc.encode('xwing-site:' + origin)
+      : enc.encode('xwing-site:' + origin + ':' + rotation);
+  return deriveSeed(identity, tag);
+};
 
 /** derive ring VRF seed for anonymous pro membership (never rotates). */
 const deriveSeedForRingVrf = (identity: Uint8Array): Uint8Array =>
@@ -345,6 +365,42 @@ export const deriveZidForSite = (
     const hex = bytesToHex(publicKey);
     return { publicKey: hex, address: formatZid(hex) };
   });
+
+/** the post-quantum sealed-box suite advertised alongside a site's ZID pubkey. */
+export const ZID_PQ_SUITE = 'xwing-v1';
+
+/**
+ * derive the site-scoped X-Wing PUBLIC key (hex, 1216 bytes) for an origin.
+ * A dapp fetches this (zafu_zid_pubkey.pq_pubkey) and encapsulates to it so the
+ * message is post-quantum confidential (harvest-now-decrypt-later).
+ */
+export const deriveZidPqPublicKey = (
+  mnemonic: string,
+  identity: string,
+  origin: string,
+  rotation = 0,
+): string =>
+  withIdentity(mnemonic, identity, id => {
+    const seed = deriveSeedForSiteXWing(id, origin, rotation).slice(0, XWING_LENGTHS.seed);
+    const pub = xwingPublicKeyFromSeed(seed);
+    seed.fill(0);
+    return bytesToHex(pub);
+  });
+
+/**
+ * derive the site-scoped X-Wing SEED (32 bytes = the decapsulation secret) for an
+ * origin. Used to OPEN a hybrid sealed box addressed to this site. The caller
+ * MUST zeroize the returned seed after use.
+ */
+export const deriveZidPqSeed = (
+  mnemonic: string,
+  identity: string,
+  origin: string,
+  rotation = 0,
+): Uint8Array =>
+  withIdentity(mnemonic, identity, id =>
+    deriveSeedForSiteXWing(id, origin, rotation).slice(0, XWING_LENGTHS.seed),
+  );
 
 /**
  * derive the cross-site zid for an identity. OPT-IN ONLY.

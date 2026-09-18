@@ -12,6 +12,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@noble/ciphers": "^2.3.0",
     "@noble/post-quantum": "^0.7.1",
     "@noble/hashes": "^1.8.0"
   }

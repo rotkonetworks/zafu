@@ -30,6 +30,7 @@ import type {
   ZafuZidPubkeyResponse,
 } from '@zafu/protocol';
 import { ENCRYPTION_PUBLIC_METHODS, ENCRYPTION_INTERNAL_METHODS } from './zafu-method-names';
+import { sealXWing, openXWing, XWING_LENGTHS } from '@zafu/pq';
 
 // -- types --
 // the request/response shapes are the shared @zafu/protocol contract, imported
@@ -181,13 +182,31 @@ const validateEd25519Pubkey = (pubkeyBytes: Uint8Array): boolean => {
 // -- handlers --
 
 const handleEncrypt = async (msg: ZafuEncryptRequest): Promise<ZafuEncryptResponse> => {
-  // validate recipient pubkey
-  if (!isValidHexPubkey(msg.recipient, 32)) {
-    return { error: 'invalid recipient: expected 64 hex chars (32-byte ed25519 pubkey)' };
-  }
-
   if (!isValidBase64(msg.plaintext)) {
     return { error: 'invalid plaintext: expected non-empty base64 string' };
+  }
+
+  // hybrid post-quantum path: the recipient advertised an X-Wing key
+  // (zafu_zid_pubkey.pq_pubkey). Seal with X-Wing so a recorder cannot decrypt
+  // it even with a future quantum computer. The ephemeral is inside the wire, so
+  // ephemeral_pubkey is empty.
+  if (msg.recipient_pq !== undefined) {
+    if (!isValidHexPubkey(msg.recipient_pq, XWING_LENGTHS.publicKey)) {
+      return {
+        error: `invalid recipient_pq: expected ${XWING_LENGTHS.publicKey * 2} hex chars (X-Wing public key)`,
+      };
+    }
+    try {
+      const wire = sealXWing(hexToBytes(msg.recipient_pq), base64ToBytes(msg.plaintext));
+      return { ciphertext: bytesToBase64(wire), ephemeral_pubkey: '' };
+    } catch (e) {
+      return { error: 'encryption failed: ' + String(e) };
+    }
+  }
+
+  // classical x25519 path
+  if (!isValidHexPubkey(msg.recipient, 32)) {
+    return { error: 'invalid recipient: expected 64 hex chars (32-byte ed25519 pubkey)' };
   }
 
   const recipientEd25519 = hexToBytes(msg.recipient);
@@ -236,13 +255,16 @@ const handleDecrypt = async (
   if (!(await isIdentityEnabledFromStorage())) {
     return { error: 'identity disabled in zafu settings' };
   }
-  // validate inputs
-  if (!isValidHexPubkey(msg.ephemeral_pubkey, 32)) {
-    return { error: 'invalid ephemeral_pubkey: expected 64 hex chars (32-byte x25519 pubkey)' };
-  }
 
   if (!isValidBase64(msg.ciphertext)) {
     return { error: 'invalid ciphertext: expected non-empty base64 string' };
+  }
+
+  // An empty ephemeral_pubkey marks a hybrid (X-Wing) sealed box - its ephemeral
+  // is inside the ciphertext. A non-empty one is the classical x25519 path.
+  const hybrid = !msg.ephemeral_pubkey || msg.ephemeral_pubkey.length === 0;
+  if (!hybrid && !isValidHexPubkey(msg.ephemeral_pubkey, 32)) {
+    return { error: 'invalid ephemeral_pubkey: expected 64 hex chars (32-byte x25519 pubkey)' };
   }
 
   try {
@@ -254,11 +276,26 @@ const handleDecrypt = async (
     }
 
     const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
+    const { currentIdentityName } = await import('../../state/identity');
+    const identityName = await currentIdentityName();
 
-    const { deriveZidKeypairForSite, currentIdentityName } = await import('../../state/identity');
+    // hybrid: open the X-Wing sealed box with the site's post-quantum secret seed
+    if (hybrid) {
+      const { deriveZidPqSeed } = await import('../../state/identity');
+      const seed = deriveZidPqSeed(mnemonic, identityName, origin);
+      try {
+        const plaintext = openXWing(seed, base64ToBytes(msg.ciphertext));
+        return { plaintext: bytesToBase64(plaintext) };
+      } finally {
+        seed.fill(0);
+      }
+    }
+
+    // classical: derive user's ed25519 keypair for this origin
+    const { deriveZidKeypairForSite } = await import('../../state/identity');
     const { privateKey: ed25519Priv, publicKey: ed25519Pub } = deriveZidKeypairForSite(
       mnemonic,
-      await currentIdentityName(),
+      identityName,
       origin,
     );
 
@@ -302,10 +339,15 @@ const handleZidPubkey = async (origin: string): Promise<ZafuZidPubkeyResponse> =
 
     const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
 
-    const { deriveZidForSite, currentIdentityName } = await import('../../state/identity');
-    const zid = deriveZidForSite(mnemonic, await currentIdentityName(), origin);
+    const { deriveZidForSite, deriveZidPqPublicKey, ZID_PQ_SUITE, currentIdentityName } =
+      await import('../../state/identity');
+    const identityName = await currentIdentityName();
+    const zid = deriveZidForSite(mnemonic, identityName, origin);
+    // advertise the hybrid post-quantum sealed-box key too, so dapps can seal
+    // messages that stay confidential against a future quantum attacker.
+    const pq_pubkey = deriveZidPqPublicKey(mnemonic, identityName, origin);
 
-    return { pubkey: zid.publicKey };
+    return { pubkey: zid.publicKey, pq_pubkey, pq_suite: ZID_PQ_SUITE };
   } catch (e) {
     return { error: 'failed to derive pubkey: ' + String(e) };
   }

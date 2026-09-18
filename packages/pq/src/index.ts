@@ -34,3 +34,5 @@ export {
   type MlKem768Keypair,
   type MlKem768Encapsulation,
 } from './mlkem';
+
+export { SEAL_SUITE_XWING, sealXWing, openXWing } from './sealed';
