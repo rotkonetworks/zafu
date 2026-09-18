@@ -6,6 +6,47 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## Unreleased
+
+Covers everything since 28.0.0.
+
+### Injective USDC ramp (replaces the sunsetting Noble path)
+
+- Receive Circle-native USDC (USDC.inj) on Injective and shield it into Penumbra
+  over the live IBC channel, or withdraw it back to an exchange - a dedicated
+  in-wallet panel. Injective is Ethermint (eth_secp256k1 / coin type 60), so it
+  derives and signs on its own path, never the shared cosmos one.
+- The old "on-ramp USDC to Noble" copy is gone; Noble shows a deprecation notice.
+
+### Onboarding, simplified
+
+- First run defaults to Zcash-only and drops the network-select screen; enable
+  more networks later in Settings. The Zcash birthday folds into set-password.
+
+### Post-quantum encryption (harvest-now-decrypt-later)
+
+- The encrypted messaging channel and the app-facing sealed box are now hybrid
+  X25519 + ML-KEM-768: traffic recorded today stays confidential against a
+  future quantum computer. Message content is protected end to end; signatures
+  and identity stay classical (no harvest-now exposure there).
+
+### Developer SDK (new npm packages)
+
+- `@zafu/zid` (plus `@zafu/protocol` and `@zafu/pq`): let a website offer
+  "log in with zafu", sign, and send post-quantum-encrypted messages without
+  ever handling a private key.
+
+### Reliability and security
+
+- Fixed a startup render-loop crash and several teardown leaks introduced by the
+  React 19 / router 7 / zustand 5 framework upgrades, and an HD key-derivation
+  regression from @noble/hashes 1.8.
+- Pre-merge security hardening: authenticate the peer on the encrypted-channel
+  responder; enforce the Keplr-compatibility opt-out on the request path (not
+  just install); guard the dapp API against third-party-iframe approval spoofing,
+  stale capability grants after revocation, and oversized messages; and keep
+  Ethermint chains (Injective) off the coin-118 derivation path everywhere.
+
 ## 28.0.0
 
 Covers everything since 27.3.2. Major bump: the address book is now a
