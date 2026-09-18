@@ -32,6 +32,29 @@ export interface EncodeObject {
  */
 const cosmosHdPath = (accountIndex: number) => makeCosmoshubPath(accountIndex);
 
+/**
+ * FUND SAFETY: refuse to build a coin-118 (m/44'/118', secp256k1, ripemd160)
+ * wallet for an Ethermint chain. Injective etc. use eth_secp256k1 / coin type 60
+ * / keccak addresses; the coin-118 path would yield a plausible-looking but WRONG
+ * (unspendable) address and signatures the chain rejects. `deriveChainAddress`
+ * already guards the prefix-swap path; this guards every wallet-construction site
+ * (deriveCosmosWallet, createSigningClient, deriveKeplrWireKey, signKeplr*) so no
+ * caller can reach the coin-118 path for an Ethermint prefix/chain id.
+ */
+function assertCoin118(prefixOrChainId: string): void {
+  for (const config of Object.values(COSMOS_CHAINS)) {
+    if (
+      (config.bech32Prefix === prefixOrChainId || config.chainId === prefixOrChainId) &&
+      config.keyAlgo === 'eth_secp256k1'
+    ) {
+      throw new Error(
+        `coin-118 derivation refused for '${prefixOrChainId}': it is an Ethermint ` +
+          `chain (eth_secp256k1). Derive it via networks/injective instead.`,
+      );
+    }
+  }
+}
+
 /** derived cosmos wallet */
 export interface CosmosWallet {
   address: string;
@@ -45,6 +68,7 @@ export async function deriveCosmosWallet(
   accountIndex = 0,
   prefix = 'osmo',
 ): Promise<CosmosWallet> {
+  assertCoin118(prefix);
   const signer = await Secp256k1HdWallet.fromMnemonic(mnemonic, {
     prefix,
     hdPaths: [cosmosHdPath(accountIndex)],
@@ -142,6 +166,7 @@ export async function createSigningClient(
   accountIndex = 0,
 ): Promise<{ client: SigningStargateClient; address: string }> {
   const config = COSMOS_CHAINS[chainId];
+  assertCoin118(config.bech32Prefix);
 
   const signer = await Secp256k1HdWallet.fromMnemonic(mnemonic, {
     prefix: config.bech32Prefix,
@@ -473,6 +498,7 @@ export async function deriveKeplrWireKey(
   name: string,
   accountIndex = 0,
 ): Promise<KeplrWireKeyRaw> {
+  assertCoin118(prefix);
   const wallet = await Secp256k1HdWallet.fromMnemonic(mnemonic, {
     prefix,
     hdPaths: [cosmosHdPath(accountIndex)],
@@ -504,6 +530,7 @@ export async function signKeplrAmino(
   signDoc: StdSignDoc,
   accountIndex = 0,
 ): Promise<KeplrAminoResult> {
+  assertCoin118(prefix);
   const wallet = await Secp256k1HdWallet.fromMnemonic(mnemonic, {
     prefix,
     hdPaths: [cosmosHdPath(accountIndex)],
@@ -540,6 +567,7 @@ export async function signKeplrDirect(
   doc: KeplrDirectWireDoc,
   accountIndex = 0,
 ): Promise<KeplrDirectResult> {
+  assertCoin118(prefix);
   const wallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, {
     prefix,
     hdPaths: [cosmosHdPath(accountIndex)],
