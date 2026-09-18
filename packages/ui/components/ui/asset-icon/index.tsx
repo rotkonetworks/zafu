@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Metadata } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { Identicon } from '../identicon';
 import { cn } from '../../../lib/utils';
@@ -13,6 +14,8 @@ export const AssetIcon = ({
   metadata?: Metadata;
   size?: 'xs' | 'sm' | 'lg';
 }) => {
+  // a registry image URL can 404 or be blocked; fall back to a monogram tile
+  const [imgFailed, setImgFailed] = useState(false);
   // Image default is "" and thus cannot do nullish-coalescing
   // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
   const icon = metadata?.images[0]?.png || metadata?.images[0]?.svg;
@@ -28,8 +31,13 @@ export const AssetIcon = ({
 
   return (
     <>
-      {icon ? (
-        <img className={className} src={icon} alt='Asset icon' />
+      {icon && !imgFailed ? (
+        <img
+          className={className}
+          src={icon}
+          alt='Asset icon'
+          onError={() => setImgFailed(true)}
+        />
       ) : isDelegationToken ? (
         <DelegationTokenIcon displayDenom={display} className={className} />
       ) : isUnbondingToken ? (
