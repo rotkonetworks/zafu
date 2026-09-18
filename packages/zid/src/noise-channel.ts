@@ -308,7 +308,12 @@ export function initiatorHandshake(
     // split into transport cipher states
     const [k1, k2] = split(rck);
 
-    // zeroize handshake secrets
+    // zeroize handshake secrets. finish() is the success path (cleanup() only
+    // runs on error), so zeroize the ORIGINAL ephemeral secrets here too - not
+    // just their saved copies - or the initiator's ephemeral x25519 and ML-KEM
+    // decapsulation keys would linger in memory after a successful handshake.
+    zeroize(ePriv);
+    zeroize(mlKem.secretKey);
     zeroize(savedCk);
     zeroize(savedH);
     zeroize(savedEPriv);
