@@ -138,7 +138,7 @@ export async function queryInjectiveTx(
     tx_response?: { code?: number; height?: string; raw_log?: string };
   };
   const r = json.tx_response;
-  if (!r || r.height == null || r.height === '0' || r.height === '') {
+  if (r?.height == null || r.height === '0' || r.height === '') {
     return { found: false };
   }
   return { found: true, code: r.code ?? 0, height: r.height, rawLog: r.raw_log ?? '' };

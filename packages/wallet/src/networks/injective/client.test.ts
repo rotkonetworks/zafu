@@ -12,8 +12,8 @@ import {
 
 const USDC_DENOM = 'erc20:0xa00C59fF5a080D2b954d0c75e46E22a0c371235a';
 
-const jsonRes = (body: unknown, ok = true, status = 200) =>
-  ({ ok, status, json: async () => body }) as Response;
+const jsonRes = (body: unknown, ok = true, status = 200): Promise<Response> =>
+  Promise.resolve({ ok, status, json: () => Promise.resolve(body) } as Response);
 
 describe('injective client', () => {
   it('parses a real on-chain EthAccount shape', async () => {
@@ -31,7 +31,7 @@ describe('injective client', () => {
         code_hash: '0x...',
       },
     };
-    const fetchFn = vi.fn(async () => jsonRes(realShape));
+    const fetchFn = vi.fn(() => jsonRes(realShape));
     const acct = await queryInjectiveAccount('https://lcd.example', 'inj1x', fetchFn as never);
     expect(acct.accountNumber).toBe(22594n);
     expect(acct.sequence).toBe(0);
@@ -41,7 +41,7 @@ describe('injective client', () => {
   });
 
   it('throws on an unfunded account', async () => {
-    const fetchFn = vi.fn(async () => jsonRes({ account: {} }));
+    const fetchFn = vi.fn(() => jsonRes({ account: {} }));
     await expect(
       queryInjectiveAccount('https://lcd.example', 'inj1x', fetchFn as never),
     ).rejects.toThrow(/unfunded|not found/);
@@ -56,7 +56,7 @@ describe('injective client', () => {
       ],
       pagination: { next_key: null, total: '3' },
     };
-    const fetchFn = vi.fn(async () => jsonRes(body));
+    const fetchFn = vi.fn(() => jsonRes(body));
     const bal = await queryInjectiveBalances(
       'https://lcd.example',
       'inj1x',
@@ -71,7 +71,7 @@ describe('injective client', () => {
   });
 
   it('matches the USDC denom case-insensitively and defaults missing coins to 0', async () => {
-    const fetchFn = vi.fn(async () =>
+    const fetchFn = vi.fn(() =>
       jsonRes({ balances: [{ denom: USDC_DENOM.toLowerCase(), amount: '7' }] }),
     );
     const bal = await queryInjectiveBalances(
@@ -85,7 +85,7 @@ describe('injective client', () => {
   });
 
   it('returns zero balances for a never-funded (empty) account', async () => {
-    const fetchFn = vi.fn(async () => jsonRes({ balances: [] }));
+    const fetchFn = vi.fn(() => jsonRes({ balances: [] }));
     const bal = await queryInjectiveBalances(
       'https://lcd.example',
       'inj1x',
@@ -96,19 +96,19 @@ describe('injective client', () => {
   });
 
   it('reports a tx as pending (not found) on a 404', async () => {
-    const fetchFn = vi.fn(async () => jsonRes({}, false, 404));
+    const fetchFn = vi.fn(() => jsonRes({}, false, 404));
     const st = await queryInjectiveTx('https://lcd.example', 'HASH', fetchFn as never);
     expect(st.found).toBe(false);
   });
 
   it('reports a tx as pending while it has no block height yet', async () => {
-    const fetchFn = vi.fn(async () => jsonRes({ tx_response: { code: 0, height: '0' } }));
+    const fetchFn = vi.fn(() => jsonRes({ tx_response: { code: 0, height: '0' } }));
     const st = await queryInjectiveTx('https://lcd.example', 'HASH', fetchFn as never);
     expect(st.found).toBe(false);
   });
 
   it('reports an included tx with its code and height', async () => {
-    const fetchFn = vi.fn(async () =>
+    const fetchFn = vi.fn(() =>
       jsonRes({ tx_response: { code: 0, height: '12345', raw_log: '' } }),
     );
     const st = await queryInjectiveTx('https://lcd.example', 'HASH', fetchFn as never);
@@ -116,7 +116,7 @@ describe('injective client', () => {
   });
 
   it('surfaces an included-but-failed tx (non-zero code)', async () => {
-    const fetchFn = vi.fn(async () =>
+    const fetchFn = vi.fn(() =>
       jsonRes({ tx_response: { code: 11, height: '99', raw_log: 'out of gas' } }),
     );
     const st = await queryInjectiveTx('https://lcd.example', 'HASH', fetchFn as never);
@@ -126,7 +126,7 @@ describe('injective client', () => {
   });
 
   it('broadcasts a TxRaw as base64 and reports the result', async () => {
-    const fetchFn = vi.fn(async () =>
+    const fetchFn = vi.fn(() =>
       jsonRes({ tx_response: { txhash: 'ABC123', code: 0, raw_log: '' } }),
     );
     const res = await broadcastInjectiveTx(
@@ -146,7 +146,7 @@ describe('injective client', () => {
   });
 
   it('surfaces a non-zero code (rejected tx) rather than throwing', async () => {
-    const fetchFn = vi.fn(async () =>
+    const fetchFn = vi.fn(() =>
       jsonRes({ tx_response: { txhash: 'DEAD', code: 5, raw_log: 'insufficient funds' } }),
     );
     const res = await broadcastInjectiveTx('https://lcd.example', new Uint8Array([0]), fetchFn as never);
