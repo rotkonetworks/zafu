@@ -143,7 +143,13 @@ async function requireCapability(
     if (elapsed < REJECT_FLOOR_MS) {
       await new Promise<void>(r => setTimeout(r, REJECT_FLOOR_MS - elapsed));
     }
-    sendResponse({ success: false, error: 'denied', code: 'denied' });
+    // NOTE: deliberately NO `code` field here. This is the uniform rejection
+    // shape for the high-risk FROST/multisig gate (gh #18): every rejection -
+    // whatever the cause - must be byte-identical so a caller cannot distinguish
+    // which stage refused (that would leak, e.g., a label-length hint). Adding a
+    // structured code belongs only on the dapp-facing encryption surface
+    // (external-encryption.ts), which has no such uniformity requirement.
+    sendResponse({ success: false, error: 'denied' });
     return null;
   };
 
