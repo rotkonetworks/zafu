@@ -21,6 +21,7 @@ import { selectEffectiveKeyInfo, selectPenumbraAccount, keyRingSelector } from '
 import { derivePenumbraEphemeralFromMnemonic } from '../../../hooks/use-address';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
+import { parseAmountToBaseUnits } from '@repo/wallet/networks/cosmos/signer';
 import { deriveInjectiveAddress } from '@repo/wallet/networks/injective/derive';
 import { shieldInToPenumbra, withdrawToExchange } from '@repo/wallet/networks/injective/conduit';
 
@@ -36,13 +37,19 @@ function injectiveFee() {
   };
 }
 
-/** USDC.inj is 6-dec; convert a human amount to integer base units. */
+/**
+ * USDC.inj is 6-dec; convert a human amount to integer base units WITHOUT float
+ * math (Math.round(n * 1e6) loses precision and Number() accepts scientific
+ * notation / trailing junk). Reuse the integer-only helper; reject anything that
+ * is not a plain decimal, and treat zero as invalid.
+ */
 function toBaseUnits(human: string): string | undefined {
-  const n = Number(human);
-  if (!human || isNaN(n) || n <= 0) {
+  const trimmed = human.trim();
+  if (!/^\d+(\.\d+)?$/.test(trimmed)) {
     return undefined;
   }
-  return BigInt(Math.round(n * 10 ** CFG.decimals)).toString();
+  const base = parseAmountToBaseUnits(trimmed, CFG.decimals);
+  return base === '0' ? undefined : base;
 }
 
 interface TxState {

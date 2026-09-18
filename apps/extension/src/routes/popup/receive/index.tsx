@@ -84,7 +84,10 @@ function ibcChainToCosmosId(ibcChain: IbcChain): CosmosChainId | undefined {
  */
 function getKnownIbcChains(): IbcChain[] {
   return Object.values(COSMOS_CHAINS)
-    .filter(c => c.penumbraChannel) // only chains with known penumbra channel
+    // only chains with a known penumbra channel, and NOT Ethermint - Injective
+    // (eth_secp256k1) is a conduit-only ramp with its own panel and must never
+    // appear in the shared coin-118 IBC-deposit source list.
+    .filter(c => c.penumbraChannel && c.keyAlgo !== 'eth_secp256k1')
     .map(c => ({
       displayName: c.name,
       chainId: c.chainId,
