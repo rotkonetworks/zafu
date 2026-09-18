@@ -181,6 +181,32 @@ export const externalMessageListener = (
   const msg = req as Record<string, unknown>;
   const type = msg['type'] as string;
 
+  // INTERNAL popup->worker result callbacks: accept ONLY from the extension
+  // itself, never a web page (a page that guessed a requestId could otherwise
+  // self-deliver a forged approval / picked contacts).
+  const INTERNAL_RESULT_TYPES = new Set([
+    'zafu_pick_contacts_result',
+    'zafu_frost_result',
+    'zafu_capability_result',
+    'zafu_zcash_send_result',
+  ]);
+  if (INTERNAL_RESULT_TYPES.has(type)) {
+    if (sender.id !== chrome.runtime.id) {
+      return false;
+    }
+  } else if (
+    // Public methods that open a popup or act on the user's behalf require a
+    // valid top-frame https sender. Without this a third-party IFRAME could raise
+    // a picker/approval/send popup wearing the host tab's identity (provenance
+    // spoof). The frost/passkey entries already gate via requireCapability /
+    // isValidExternalSender; ping is a harmless discovery response.
+    (type === 'send' || type === 'zafu_pick_contacts' || type === 'zafu_request_capability') &&
+    !isValidExternalSender(sender)
+  ) {
+    sendResponse({ success: false, error: 'denied', code: 'denied' });
+    return true;
+  }
+
   switch (type) {
     case 'ping':
       sendResponse({

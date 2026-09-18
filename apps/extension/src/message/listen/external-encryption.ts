@@ -31,6 +31,7 @@ import type {
 } from '@zafu/protocol';
 import { ENCRYPTION_PUBLIC_METHODS, ENCRYPTION_INTERNAL_METHODS } from './zafu-method-names';
 import { sealXWing, openXWing, XWING_LENGTHS } from '@zafu/pq';
+import { isValidExternalSender } from '../../senders/external';
 
 // -- types --
 // the request/response shapes are the shared @zafu/protocol contract, imported
@@ -62,29 +63,25 @@ const isRateLimited = (origin: string): boolean => {
 
 // -- permission tracking --
 
-/** origins approved for encryption in this session */
-const approvedOrigins = new Set<string>();
-
 /** pending approval callbacks: requestId -> resolve */
 const pendingApprovals = new Map<string, (r: unknown) => void>();
 
 /**
  * check if origin has encryption permission, or prompt for approval.
  * returns true if approved, false if denied.
+ *
+ * The persistent capability in storage is re-read on EVERY call (no in-memory
+ * approved-origins cache): a cache would keep granting access after the user
+ * revokes the capability in Settings until the service worker restarted. This
+ * matches the FROST path's per-call re-check.
  */
 const ensureApproved = async (
   origin: string,
   sender: chrome.runtime.MessageSender,
 ): Promise<boolean> => {
-  // already approved this session
-  if (approvedOrigins.has(origin)) {
-    return true;
-  }
-
-  // check persistent capability
+  // check persistent capability (authoritative; reflects revocation immediately)
   const perms = await getOriginPermissions(origin);
   if (hasCapability(perms, 'encrypt')) {
-    approvedOrigins.add(origin);
     return true;
   }
   if (isDenied(perms, 'encrypt')) {
@@ -110,7 +107,6 @@ const ensureApproved = async (
   const result = (await resultPromise) as { approved?: boolean };
   if (result?.approved) {
     await grantCapability(origin, 'encrypt');
-    approvedOrigins.add(origin);
     return true;
   } else {
     await denyCapability(origin, 'encrypt');
@@ -125,12 +121,15 @@ const HEX_RE = /^[0-9a-fA-F]+$/;
 const isValidHexPubkey = (hex: unknown, expectedBytes: number): hex is string =>
   typeof hex === 'string' && hex.length === expectedBytes * 2 && HEX_RE.test(hex);
 
+/** upper bound on a single message (base64 chars); ~256 KiB of plaintext. Bounds
+ *  service-worker CPU/memory from a hostile dapp and keeps sizes sane. */
+const MAX_B64_LEN = 350_000;
+
 const isValidBase64 = (s: unknown): s is string => {
-  if (typeof s !== 'string' || s.length === 0) {
+  if (typeof s !== 'string' || s.length === 0 || s.length > MAX_B64_LEN) {
     return false;
   }
   try {
-    // round-trip check: decode then re-encode must match
     const decoded = Uint8Array.from(atob(s), c => c.charCodeAt(0));
     return decoded.length > 0;
   } catch {
@@ -140,7 +139,16 @@ const isValidBase64 = (s: unknown): s is string => {
 
 const base64ToBytes = (s: string): Uint8Array => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
-const bytesToBase64 = (b: Uint8Array): string => btoa(String.fromCharCode(...b));
+// chunked so a large buffer does not blow the argument limit of
+// String.fromCharCode(...b) (that spread throws RangeError on ~100k+ bytes).
+const bytesToBase64 = (b: Uint8Array): string => {
+  let s = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < b.length; i += CHUNK) {
+    s += String.fromCharCode(...b.subarray(i, i + CHUNK));
+  }
+  return btoa(s);
+};
 
 // -- crypto primitives --
 
@@ -383,8 +391,14 @@ export const encryptionMessageListener = (
     return false;
   }
 
-  // handle approval result from popup (internal message routed externally)
+  // handle approval result from the popup. This is an INTERNAL message from the
+  // extension's own popup - accept it ONLY from the extension itself, never from
+  // a web page (which could otherwise self-deliver {approved:true} if it learned
+  // a requestId).
   if (type === 'zafu_encryption_approval_result') {
+    if (sender.id !== chrome.runtime.id) {
+      return false;
+    }
     const requestId = String(msg['requestId'] || '');
     const callback = pendingApprovals.get(requestId);
     if (callback) {
@@ -392,6 +406,15 @@ export const encryptionMessageListener = (
       pendingApprovals.delete(requestId);
     }
     sendResponse({ ok: true });
+    return true;
+  }
+
+  // Public dapp methods: require a valid top-frame https sender. Without this a
+  // third-party IFRAME could raise an approval prompt for its own origin while
+  // the popup shows the host tab's favicon/title (provenance spoof), and could
+  // request encryption from an embedded context the user never intended.
+  if (!isValidExternalSender(sender)) {
+    sendResponse({ error: 'permission denied', code: 'denied' });
     return true;
   }
 
