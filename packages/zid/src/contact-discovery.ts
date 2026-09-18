@@ -96,7 +96,7 @@ export const RENDEZVOUS_TAG_BYTES = 16;
  * ratchets forward). This is accepted for presence metadata. The bounded
  * mitigation (fast-follow) is PERIODIC CONTACT-KA KEY ROTATION with old-key
  * deletion (like the per-site ZID rotation index), which caps exposure to the
- * window since the last rotation. See docs/zid-contact-discovery.md.
+ * window since the last rotation. See the discovery design in issue #38.
  */
 export const rendezvousTag = (
   rootSecret: Uint8Array,
