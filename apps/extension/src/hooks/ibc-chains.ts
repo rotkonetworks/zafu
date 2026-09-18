@@ -3,7 +3,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { ChainRegistryClient } from '@penumbra-labs/registry';
+import { ChainRegistryClient } from '@penumbrafi/registry';
 import { useChainIdQuery } from './chain-id';
 import { getActiveIbcChainIds } from '../config/networks';
 

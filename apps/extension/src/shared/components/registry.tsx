@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ChainRegistryClient } from '@penumbra-labs/registry';
+import { ChainRegistryClient } from '@penumbrafi/registry';
 
 /**
  * prefetch all icon URLs from the registry into browser cache.

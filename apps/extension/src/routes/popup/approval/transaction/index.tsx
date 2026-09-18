@@ -13,7 +13,7 @@ import { ApproveDeny } from '../approve-deny';
 import { UserChoice } from '@repo/storage-chrome/records';
 import type { Jsonified } from '@rotko/penumbra-types/jsonified';
 import { TransactionViewTab } from './types';
-import { ChainRegistryClient } from '@penumbra-labs/registry';
+import { ChainRegistryClient } from '@penumbrafi/registry';
 import { viewClient } from '../../../../clients';
 import { TransactionView } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
 import { ConnectError } from '@connectrpc/connect';

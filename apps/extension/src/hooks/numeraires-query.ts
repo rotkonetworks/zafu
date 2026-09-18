@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ChainRegistryClient } from '@penumbra-labs/registry';
+import { ChainRegistryClient } from '@penumbrafi/registry';
 import { useMemo } from 'react';
 
 /** prefetch all asset icon URLs to prevent portfolio timing leak */

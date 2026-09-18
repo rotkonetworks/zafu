@@ -1,4 +1,4 @@
-import { ChainRegistryClient } from '@penumbra-labs/registry';
+import { ChainRegistryClient } from '@penumbrafi/registry';
 
 export const MAINNET = 'penumbra-1';
 export const REGISTRY = new ChainRegistryClient().bundled.globals();
