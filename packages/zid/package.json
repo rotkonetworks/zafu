@@ -37,8 +37,8 @@
     "@noble/ciphers": "^2.3.0",
     "@noble/curves": "^1.9.7",
     "@noble/hashes": "^1.8.0",
-    "@zafu/pq": "workspace:^",
-    "@zafu/protocol": "workspace:^"
+    "@zafu/pq": "workspace:*",
+    "@zafu/protocol": "workspace:*"
   },
   "devDependencies": {
     "tsup": "^8.5.0"

@@ -799,10 +799,10 @@ importers:
         specifier: ^1.8.0
         version: 1.8.0
       '@zafu/pq':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../pq
       '@zafu/protocol':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../zafu-protocol
     devDependencies:
       tsup:
