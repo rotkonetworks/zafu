@@ -6,6 +6,34 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 28.0.4
+
+Covers everything since 28.0.3. Focus: assets show their real names and icons
+(Injective funds included), plus smoother Zcash onboarding and Injective flows.
+
+### Assets show real names and icons
+
+- Balances, send, swap and receive now render each asset's registry symbol and
+  icon instead of a raw denom path, with a clean monogram fallback when no icon
+  is known. A raw `passet1…` / `transfer/channel-…` path is never shown to the
+  user as an asset name.
+- The chain/asset registry now comes from the maintained `@penumbrafi/registry`
+  (the former `@penumbra-labs/registry` is unmaintained). This carries the full
+  Injective (channel-18) asset set, so USDC.inj, INJ and the other Injective
+  denoms resolve to proper names instead of "Unknown asset".
+
+### Injective panel, more honest and usable
+
+- Live balance with periodic refresh, max-amount buttons, an INJ gas-fee gate,
+  a truthful submitted -> confirmed status flow (only advances once the tx is
+  actually on-chain), block-explorer links, and bech32 address validation.
+
+### Zcash onboarding, smoother
+
+- Guided import flow - recovery phrase, review, birthday, password - with a
+  reused date picker for the birthday and a safe birthday floor (unknown
+  birthdays fall back to Orchard activation rather than a from-tip scan).
+
 ## 28.0.1
 
 Covers everything since 28.0.0.
