@@ -120,9 +120,13 @@ export const useFinalizeOnboarding = () => {
 
         await setOnboardingValuesInStorage(origin);
 
-        // apply zcash birthday from onboarding (stored in sessionStorage)
+        // apply zcash birthday from onboarding (stored in sessionStorage by the
+        // birthday step). Only imported wallets have one - a fresh wallet syncs
+        // from the tip - so gate on origin so a stale value left behind by an
+        // abandoned import (import -> back -> create) can never leak into a new
+        // wallet. Always clear the key regardless.
         const pendingBirthday = sessionStorage.getItem('pendingZcashBirthday');
-        if (pendingBirthday) {
+        if (pendingBirthday && origin === SEED_PHRASE_ORIGIN.IMPORTED) {
           const vaults = (await localExtStorage.get('vaults')) as { id: string }[] | null;
           const vaultId = vaults?.[0]?.id;
           if (vaultId) {
@@ -130,10 +134,10 @@ export const useFinalizeOnboarding = () => {
               [`zcashBirthday_${vaultId}`]: parseInt(pendingBirthday, 10),
             });
           }
-          sessionStorage.removeItem('pendingZcashBirthday');
         }
+        sessionStorage.removeItem('pendingZcashBirthday');
 
-        navigate(PagePath.ONBOARDING_SUCCESS);
+        navigate(PagePath.ONBOARDING_SUCCESS, { state: { origin } });
       } catch (e) {
         setError(String(e));
         // roll back on failure

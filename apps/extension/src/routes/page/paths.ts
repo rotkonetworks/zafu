@@ -3,6 +3,8 @@ export enum PagePath {
   WELCOME = '/welcome',
   GENERATE_SEED_PHRASE = '/welcome/generate',
   IMPORT_SEED_PHRASE = '/welcome/import',
+  /** Import: guided wallet-birthday (sync start) step. */
+  IMPORT_BIRTHDAY = '/welcome/import/birthday',
   IMPORT_ZIGNER = '/welcome/import-zigner',
   CONNECT_LEDGER = '/welcome/connect-ledger',
   ONBOARDING_SUCCESS = '/welcome/success',

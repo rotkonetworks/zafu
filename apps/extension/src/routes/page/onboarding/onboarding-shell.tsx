@@ -29,12 +29,15 @@
 import { cn } from '@repo/ui/lib/utils';
 import { useLocation } from 'react-router-dom';
 import { PagePath } from '../paths';
+import { getSeedPhraseOrigin } from './password/utils';
+import { SEED_PHRASE_ORIGIN } from './password/types';
 
 export type OnboardingStepId =
   | 'welcome'
   | 'choose-path'
   | 'generate'
   | 'import'
+  | 'import-birthday'
   | 'import-zigner'
   | 'set-password'
   | 'success';
@@ -62,6 +65,7 @@ const STEPS_CREATE: readonly OnboardingStep[] = [
 const STEPS_IMPORT: readonly OnboardingStep[] = [
   { id: 'welcome', label: 'welcome', matches: [PagePath.WELCOME] },
   { id: 'import', label: 'recovery phrase', matches: [PagePath.IMPORT_SEED_PHRASE] },
+  { id: 'import-birthday', label: 'birthday', matches: [PagePath.IMPORT_BIRTHDAY] },
   { id: 'set-password', label: 'password', matches: [PagePath.SET_PASSWORD] },
   { id: 'success', label: 'done', matches: [PagePath.ONBOARDING_SUCCESS] },
 ];
@@ -73,16 +77,29 @@ const STEPS_ZIGNER: readonly OnboardingStep[] = [
   { id: 'success', label: 'done', matches: [PagePath.ONBOARDING_SUCCESS] },
 ];
 
-function resolveSteps(pathname: string): readonly OnboardingStep[] {
+function resolveSteps(pathname: string, origin: SEED_PHRASE_ORIGIN): readonly OnboardingStep[] {
   if (pathname.startsWith(PagePath.IMPORT_ZIGNER)) {
     return STEPS_ZIGNER;
   }
+  // import flow + its sub-steps (review, birthday) share the /welcome/import
+  // prefix. Checked after zigner so /welcome/import-zigner never falls here.
   if (pathname.startsWith(PagePath.IMPORT_SEED_PHRASE)) {
     return STEPS_IMPORT;
   }
-  // default to create — the welcome/password/networks/success steps are
-  // identical, so users who haven't chosen a path yet still see a sensible
-  // stepper.
+  // set-password and success are shared by every path and can't be told apart
+  // by pathname alone. The navigation that reaches them carries the origin in
+  // router state, so use that to pick the right track (import now has more
+  // steps than create - guessing wrong would show the wrong count).
+  if (pathname === PagePath.SET_PASSWORD || pathname === PagePath.ONBOARDING_SUCCESS) {
+    if (origin === SEED_PHRASE_ORIGIN.ZIGNER) {
+      return STEPS_ZIGNER;
+    }
+    if (origin === SEED_PHRASE_ORIGIN.IMPORTED) {
+      return STEPS_IMPORT;
+    }
+    return STEPS_CREATE;
+  }
+  // default to create — the welcome/generate steps live here.
   return STEPS_CREATE;
 }
 
@@ -100,8 +117,9 @@ interface OnboardingShellProps {
 }
 
 export function OnboardingShell({ children, title, subtitle }: OnboardingShellProps) {
-  const { pathname } = useLocation();
-  const steps = resolveSteps(pathname);
+  const location = useLocation();
+  const { pathname } = location;
+  const steps = resolveSteps(pathname, getSeedPhraseOrigin(location));
   const activeIdx = resolveActiveStepIndex(steps, pathname);
 
   return (

@@ -10,6 +10,9 @@ const GenerateSeedPhrase = lazy(() =>
 const ImportSeedPhrase = lazy(() =>
   import('./import').then(m => ({ default: m.ImportSeedPhrase })),
 );
+const ImportBirthday = lazy(() =>
+  import('./import-birthday').then(m => ({ default: m.ImportBirthday })),
+);
 const ImportZigner = lazy(() => import('./import-zigner').then(m => ({ default: m.ImportZigner })));
 const ConnectLedger = lazy(() =>
   import('./connect-ledger').then(m => ({ default: m.ConnectLedger })),
@@ -53,6 +56,10 @@ export const onboardingRoutes = [
   {
     path: PagePath.IMPORT_SEED_PHRASE,
     element: withSuspense(ImportSeedPhrase),
+  },
+  {
+    path: PagePath.IMPORT_BIRTHDAY,
+    element: withSuspense(ImportBirthday),
   },
   {
     path: PagePath.IMPORT_ZIGNER,
