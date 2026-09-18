@@ -108,18 +108,23 @@ export const internalServiceListener = (
   if (isClearCacheRequest(req)) {
     const { network, soft } = req as ClearCacheRequest & { soft?: boolean };
     void (async () => {
-      if (network === 'penumbra') {
-        await clearPenumbraCache(walletServices);
-      } else {
-        await clearZcashCache();
-      }
-    })()
-      .then(() => respond())
-      .finally(() => {
+      try {
+        if (network === 'penumbra') {
+          await clearPenumbraCache(walletServices);
+        } else {
+          await clearZcashCache();
+        }
+        respond();
+      } catch (e) {
+        respond({ error: e instanceof Error ? e.message : String(e) });
+      } finally {
+        // yield so respond() reaches the port before the SW dies
+        await new Promise(r => setTimeout(r, 0));
         if (!soft) {
           chrome.runtime.reload();
         }
-      });
+      }
+    })();
     return true;
   }
 
@@ -130,21 +135,36 @@ export const internalServiceListener = (
   switch (ServicesMessage[req as keyof typeof ServicesMessage]) {
     // legacy unscoped clear cache — clear penumbra (backwards compat)
     case ServicesMessage.ClearCache:
-      void clearPenumbraCache(walletServices)
-        .then(() => respond())
-        .finally(() => chrome.runtime.reload());
-      break;
+      void (async () => {
+        try {
+          await clearPenumbraCache(walletServices);
+          respond();
+        } catch (e) {
+          respond({ error: e instanceof Error ? e.message : String(e) });
+        } finally {
+          // yield so respond() reaches the port before the SW dies
+          await new Promise(r => setTimeout(r, 0));
+          chrome.runtime.reload();
+        }
+      })();
+      return true;
     case ServicesMessage.ChangeNumeraires:
       void (async () => {
-        const { blockProcessor, indexedDb } = await walletServices.then(ws =>
-          ws.getWalletServices(),
-        );
-        const newNumeraires = await localExtStorage.get('numeraires');
-        blockProcessor.setNumeraires(newNumeraires.map(n => AssetId.fromJsonString(n)));
-        await indexedDb.clearSwapBasedPrices();
-      })().then(() => respond());
-      break;
+        try {
+          const { blockProcessor, indexedDb } = await walletServices.then(ws =>
+            ws.getWalletServices(),
+          );
+          const newNumeraires = await localExtStorage.get('numeraires');
+          blockProcessor.setNumeraires(newNumeraires.map(n => AssetId.fromJsonString(n)));
+          await indexedDb.clearSwapBasedPrices();
+          respond();
+        } catch (e) {
+          respond({ error: e instanceof Error ? e.message : String(e) });
+        }
+      })();
+      return true;
+    default:
+      respond({ error: 'unknown services message: ' + String(req) });
+      return true;
   }
-
-  return true;
 };
