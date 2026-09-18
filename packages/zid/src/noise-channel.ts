@@ -68,6 +68,14 @@ const MLKEM_CT_LEN = MLKEM768_LENGTHS.cipherText; // 1088
 const EMPTY = new Uint8Array(0);
 const TAG_LEN = 16;
 
+// Minimum well-formed message lengths, for an up-front guard (defense in depth -
+// a malformed message would already fail closed via the @zafu/pq length asserts
+// and the AEAD, but an explicit check gives a clean error at the boundary):
+//   init: 0x01 + e(32) + mlkem_ek(1184) + encStatic(32+tag) + encPayload(tag)
+const NOISE_INIT_MIN_LEN = 1 + 32 + MLKEM_EK_LEN + (32 + TAG_LEN) + TAG_LEN; // 1281
+//   resp: 0x02 + e(32) + mlkem_ct(1088) + encPayload(tag)
+const NOISE_RESP_MIN_LEN = 1 + 32 + MLKEM_CT_LEN + TAG_LEN; // 1137
+
 // -- types --
 
 export type SessionKey = {
@@ -257,7 +265,13 @@ export function initiatorHandshake(
   [ck, k] = mixKey(ck, dh(localXPriv, remoteXPub));
   n = 0n;
 
-  // encrypt empty payload
+  // encrypt empty payload.
+  // NOTE: the init payload is necessarily CLASSICAL-only - no shared ML-KEM
+  // secret exists yet at this point in the flow (the responder has not
+  // encapsulated). The TRANSPORT keys are fully hybrid (the ML-KEM secret is
+  // mixed in before split). If this init payload ever carries data, treat its
+  // confidentiality as classical-only; put anything needing PQ into transport
+  // messages after the handshake instead.
   const encPayload = encryptAndHash(k, n, h, EMPTY);
   h = encPayload.h;
 
@@ -278,6 +292,9 @@ export function initiatorHandshake(
 
   function finish(resp: Uint8Array): { sendCS: CipherState; recvCS: CipherState } {
     if (resp[0] !== NOISE_RESP) throw new Error('noise: expected resp message (0x02)');
+    if (resp.length < NOISE_RESP_MIN_LEN) {
+      throw new Error(`noise: resp message too short (${resp.length} < ${NOISE_RESP_MIN_LEN})`);
+    }
     const re = resp.slice(1, 33);
     const mlCt = resp.slice(33, 33 + MLKEM_CT_LEN);
     const respCt = resp.slice(33 + MLKEM_CT_LEN);
@@ -350,6 +367,9 @@ export function responderHandshake(
   remoteXPub: Uint8Array;
 } {
   if (initMsg[0] !== NOISE_INIT) throw new Error('noise: expected init message (0x01)');
+  if (initMsg.length < NOISE_INIT_MIN_LEN) {
+    throw new Error(`noise: init message too short (${initMsg.length} < ${NOISE_INIT_MIN_LEN})`);
+  }
 
   let { ck, h } = initSymmetric();
 

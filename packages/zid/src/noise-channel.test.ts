@@ -84,6 +84,22 @@ describe('hybrid PQ Noise IK handshake (X25519 + ML-KEM-768)', () => {
     expect(() => hs.finish(tampered)).toThrow();
   });
 
+  it('rejects a truncated init message up front (clean length guard)', () => {
+    const bob = staticKeypair();
+    const short = new Uint8Array(100);
+    short[0] = 0x01;
+    expect(() => responderHandshake(bob.priv, bob.pub, short)).toThrow(/too short/);
+  });
+
+  it('rejects a truncated resp message up front (clean length guard)', () => {
+    const alice = staticKeypair();
+    const bob = staticKeypair();
+    const hs = initiatorHandshake(alice.priv, alice.pub, bob.pub);
+    const short = new Uint8Array(100);
+    short[0] = 0x02;
+    expect(() => hs.finish(short)).toThrow(/too short/);
+  });
+
   it('a classical-only responder cannot complete (fails closed, no downgrade)', () => {
     // a message missing the ML-KEM ek is the wrong length -> responder rejects
     const alice = staticKeypair();
