@@ -496,40 +496,6 @@ export const externalMessageListener = (
       return true;
     }
 
-    case 'zafu_frost_sign_disabled_unreachable': {
-      void (async () => {
-        const gate = await requireCapability(sender, 'frost', sendResponse);
-        if (!gate) {
-          return;
-        }
-        const roomCode = String(msg['roomCode'] || '');
-        const sighashHex = String(msg['sighashHex'] || '');
-        if (!roomCode || !sighashHex) {
-          sendResponse({ success: false, error: 'denied' });
-          return;
-        }
-        const relayUrl = String(msg['relayUrl'] || 'wss://zcash.rotko.net/ws');
-        const requestId = crypto.randomUUID();
-
-        const params = new URLSearchParams({
-          app: gate.origin,
-          action: 'frost-sign',
-          roomCode,
-          sighashHex,
-          relayUrl,
-          requestId,
-        });
-        const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
-        pendingPicks.set(requestId, sendResponse);
-        if (!(await openApprovalPopup(gate.origin, url, { width: 400, height: 520 }, requestId))) {
-          pendingPicks.delete(requestId);
-          sendResponse({ success: false, error: 'denied' });
-          return;
-        }
-      })();
-      return true;
-    }
-
     case 'zafu_frost_sign_orchard': {
       if (!ENABLE_FROST_SIGN_ORCHARD) {
         sendResponse({
