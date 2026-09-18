@@ -33,7 +33,9 @@ import {
   deriveZcashTransparentFromUfvk,
 } from '../../../hooks/use-address';
 import { useIbcChains, type IbcChain } from '../../../hooks/ibc-chains';
+import { useRegistryAssetMetadata, resolveAssetMetadata } from '../../../hooks/asset-metadata';
 import { useCosmosAssets, type CosmosAsset } from '../../../hooks/cosmos-balance';
+import { AssetIcon } from '@repo/ui/components/ui/asset-icon';
 import { useCosmosIbcTransfer } from '../../../hooks/cosmos-signer';
 import { type CosmosChainId, COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { usePasswordGate } from '../../../hooks/password-gate';
@@ -192,6 +194,8 @@ function IbcDepositSection({
     cosmosChainId ?? 'noble',
     accountIndex,
   );
+  // registry metadata (symbol + icon) keyed by cosmos base denom
+  const { data: assetMeta } = useRegistryAssetMetadata();
   const chainBtnRef = useRef<HTMLButtonElement>(null);
   const assetBtnRef = useRef<HTMLButtonElement>(null);
   const cosmosIbc = useCosmosIbcTransfer();
@@ -429,17 +433,23 @@ function IbcDepositSection({
               </div>
             ) : (
               <div className='rounded-lg border border-border-soft bg-elev-2/10'>
-                {assetsData?.assets.map(asset => (
-                  <div
-                    key={asset.denom}
-                    className='flex items-center justify-between px-3 py-2 text-xs border-b border-border-soft last:border-0'
-                  >
-                    <span className='text-fg-muted truncate max-w-[60%]'>{asset.symbol}</span>
-                    <span className='font-mono'>
-                      <Sensitive>{asset.formatted}</Sensitive>
-                    </span>
-                  </div>
-                ))}
+                {assetsData?.assets.map(asset => {
+                  const meta = resolveAssetMetadata(assetMeta, asset.denom, asset.symbol);
+                  return (
+                    <div
+                      key={asset.denom}
+                      className='flex items-center justify-between px-3 py-2 text-xs border-b border-border-soft last:border-0'
+                    >
+                      <span className='flex items-center gap-1.5 text-fg-muted truncate max-w-[60%]'>
+                        <AssetIcon metadata={meta} size='xs' />
+                        {meta.symbol}
+                      </span>
+                      <span className='font-mono'>
+                        <Sensitive>{asset.formatted}</Sensitive>
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -456,7 +466,23 @@ function IbcDepositSection({
                   disabled={!assetsData?.assets.length}
                   className='flex w-full items-center justify-between rounded-lg border border-border-soft bg-input px-3 py-2.5 text-xs disabled:opacity-50'
                 >
-                  <span>{selectedAsset?.symbol ?? 'select asset'}</span>
+                  {selectedAsset ? (
+                    (() => {
+                      const meta = resolveAssetMetadata(
+                        assetMeta,
+                        selectedAsset.denom,
+                        selectedAsset.symbol,
+                      );
+                      return (
+                        <span className='flex items-center gap-1.5'>
+                          <AssetIcon metadata={meta} size='xs' />
+                          {meta.symbol}
+                        </span>
+                      );
+                    })()
+                  ) : (
+                    <span>select asset</span>
+                  )}
                   <span className='i-ph-caret-down h-3 w-3 text-fg-muted' />
                 </button>
                 {showAssetDropdown &&
@@ -469,21 +495,27 @@ function IbcDepositSection({
                         className='fixed z-50 rounded-lg border border-border-soft bg-canvas shadow-lg'
                         style={{ top: rect.bottom + 4, left: rect.left, width: rect.width }}
                       >
-                        {assetsData.assets.map(asset => (
-                          <button
-                            key={asset.denom}
-                            onClick={() => {
-                              setSelectedAsset(asset);
-                              setShowAssetDropdown(false);
-                            }}
-                            className='flex w-full items-center justify-between px-3 py-2 text-xs hover:bg-elev-1 first:rounded-t-lg last:rounded-b-lg'
-                          >
-                            <span>{asset.symbol}</span>
-                            <span className='text-fg-muted'>
-                              <Sensitive>{asset.formatted}</Sensitive>
-                            </span>
-                          </button>
-                        ))}
+                        {assetsData.assets.map(asset => {
+                          const meta = resolveAssetMetadata(assetMeta, asset.denom, asset.symbol);
+                          return (
+                            <button
+                              key={asset.denom}
+                              onClick={() => {
+                                setSelectedAsset(asset);
+                                setShowAssetDropdown(false);
+                              }}
+                              className='flex w-full items-center justify-between px-3 py-2 text-xs hover:bg-elev-1 first:rounded-t-lg last:rounded-b-lg'
+                            >
+                              <span className='flex items-center gap-1.5'>
+                                <AssetIcon metadata={meta} size='xs' />
+                                {meta.symbol}
+                              </span>
+                              <span className='text-fg-muted'>
+                                <Sensitive>{asset.formatted}</Sensitive>
+                              </span>
+                            </button>
+                          );
+                        })}
                       </div>
                     );
                   })()}

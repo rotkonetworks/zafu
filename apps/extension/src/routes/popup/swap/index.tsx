@@ -21,13 +21,14 @@ import {
 import { contactsSelector, type ContactNetwork } from '../../../state/contacts';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
-import { Value } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
+import { Value, Metadata } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
 import {
-  getDisplayDenomFromView,
   getAssetIdFromValueView,
   getDisplayDenomExponentFromValueView,
 } from '@penumbra-zone/getters/value-view';
+import { AssetIcon } from '@repo/ui/components/ui/asset-icon';
+import { symbolFromMetadata } from '../../../utils/asset-display';
 import { fromValueView } from '@rotko/penumbra-types/amount';
 import { assetPatterns } from '@rotko/penumbra-types/assets';
 import { cn } from '@repo/ui/lib/utils';
@@ -73,6 +74,7 @@ interface InputAsset {
   amount: string;
   assetId: Uint8Array | undefined;
   exponent: number;
+  metadata?: Metadata;
 }
 
 /** output asset from assets list */
@@ -81,6 +83,7 @@ interface OutputAsset {
   symbol: string;
   assetId: Uint8Array | undefined;
   exponent: number;
+  metadata?: Metadata;
 }
 
 export const SwapPage = () => {
@@ -1100,24 +1103,23 @@ const PenumbraSwap = () => {
 
   const inputAssets: InputAsset[] = useMemo(() => {
     return balances.map(b => {
-      const symbol = b.balanceView
-        ? getDisplayDenomFromView(b.balanceView) || 'Unknown'
-        : 'Unknown';
+      const metadata = getMetadataFromBalancesResponse.optional(b);
+      const symbol = symbolFromMetadata(metadata);
       const amt = b.balanceView ? fromValueView(b.balanceView) : 0;
       const amount = typeof amt === 'string' ? amt : amt.toString();
       const assetId = b.balanceView ? getAssetIdFromValueView(b.balanceView)?.inner : undefined;
       const exponent = b.balanceView ? getDisplayDenomExponentFromValueView(b.balanceView) : 6;
-      return { balance: b, symbol, amount, assetId, exponent };
+      return { balance: b, symbol, amount, assetId, exponent, metadata };
     });
   }, [balances]);
 
   const outputAssets: OutputAsset[] = useMemo(() => {
     return allAssets.map(resp => {
       const meta = resp.denomMetadata;
-      const symbol = meta?.symbol || meta?.display || meta?.base || 'Unknown';
+      const symbol = symbolFromMetadata(meta);
       const assetId = meta?.penumbraAssetId?.inner;
       const exponent = meta?.denomUnits?.find(u => u.denom === meta?.display)?.exponent ?? 6;
-      return { response: resp, symbol, assetId, exponent };
+      return { response: resp, symbol, assetId, exponent, metadata: meta };
     });
   }, [allAssets]);
 
@@ -1323,7 +1325,10 @@ const PenumbraSwap = () => {
             {balancesLoading ? (
               <span className='text-fg-muted'>loading...</span>
             ) : selectedIn ? (
-              <span className='font-medium'>{selectedIn.symbol}</span>
+              <span className='flex items-center gap-1.5 font-medium'>
+                <AssetIcon metadata={selectedIn.metadata} size='xs' />
+                {selectedIn.symbol}
+              </span>
             ) : (
               <span className='text-fg-muted'>select</span>
             )}
@@ -1349,7 +1354,10 @@ const PenumbraSwap = () => {
                     selectedIn === item && 'bg-elev-2',
                   )}
                 >
-                  <span>{item.symbol}</span>
+                  <span className='flex items-center gap-1.5'>
+                    <AssetIcon metadata={item.metadata} size='xs' />
+                    {item.symbol}
+                  </span>
                   <span className='text-fg-muted'>{item.amount}</span>
                 </button>
               ))}
@@ -1397,7 +1405,10 @@ const PenumbraSwap = () => {
             {assetsLoading ? (
               <span className='text-fg-muted'>loading...</span>
             ) : selectedOut ? (
-              <span className='font-medium'>{selectedOut.symbol}</span>
+              <span className='flex items-center gap-1.5 font-medium'>
+                <AssetIcon metadata={selectedOut.metadata} size='xs' />
+                {selectedOut.symbol}
+              </span>
             ) : (
               <span className='text-fg-muted'>select</span>
             )}
@@ -1433,7 +1444,10 @@ const PenumbraSwap = () => {
                       selectedOut?.symbol === item.symbol && 'bg-elev-2',
                     )}
                   >
-                    <span>{item.symbol}</span>
+                    <span className='flex items-center gap-1.5'>
+                      <AssetIcon metadata={item.metadata} size='xs' />
+                      {item.symbol}
+                    </span>
                   </button>
                 ))}
               {outputAssets.length === 0 && (
