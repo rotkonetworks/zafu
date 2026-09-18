@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { detect, requireWallet, zidPubkey, encryptFor, decryptFrom } from './messaging';
+import { detect, requireWallet, sign, signBytes, zidPubkey, encryptFor, decryptFrom } from './messaging';
 import { ZafuError } from './errors';
 
 // mock the transport + detection so we can drive wallet responses directly.
@@ -120,6 +120,37 @@ describe('structured error code (prefer code over string-matching)', () => {
   it('falls back to string-matching for older wallets with no code', async () => {
     request.mockResolvedValue({ error: 'rate limited: max 100 calls per minute' });
     await expect(zidPubkey(handle)).rejects.toMatchObject({ code: 'rate_limited' });
+  });
+});
+
+describe('sign()', () => {
+  it('returns the signature + signing pubkey on success', async () => {
+    request.mockResolvedValue({ success: true, signature: 'sighex', publicKey: 'edpub' });
+    const out = await sign(handle, 'deadbeef', 'Login to example.com');
+    expect(out).toEqual({ signature: 'sighex', publicKey: 'edpub' });
+    expect(request).toHaveBeenCalledWith(
+      'zafu_sign',
+      expect.objectContaining({ type: 'zafu_sign', challengeHex: 'deadbeef' }),
+    );
+  });
+
+  it('throws a typed denied error when the user declines', async () => {
+    request.mockResolvedValue({ success: false, error: 'user denied' });
+    await expect(sign(handle, 'ab')).rejects.toMatchObject({ code: 'denied' });
+  });
+
+  it('throws wallet_error when the response is missing the signature', async () => {
+    request.mockResolvedValue({ success: true, publicKey: 'edpub' });
+    await expect(sign(handle, 'ab')).rejects.toMatchObject({ code: 'wallet_error' });
+  });
+
+  it('signBytes hex-encodes the message', async () => {
+    request.mockResolvedValue({ success: true, signature: 's', publicKey: 'p' });
+    await signBytes(handle, new Uint8Array([0x00, 0x0f, 0xff]));
+    expect(request).toHaveBeenCalledWith(
+      'zafu_sign',
+      expect.objectContaining({ challengeHex: '000fff' }),
+    );
   });
 });
 

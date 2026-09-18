@@ -101,6 +101,8 @@ export interface ZafuSignResponse {
   /** the site-scoped ZID ed25519 public key, hex. present when success. */
   publicKey?: Hex;
   error?: string;
+  /** machine-readable cause when success is false; prefer it over `error`. Optional (additive). */
+  code?: ZafuWireErrorCode;
 }
 
 /** fetch the caller's site-scoped ZID ed25519 public key without signing. */

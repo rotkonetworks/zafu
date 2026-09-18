@@ -62,7 +62,7 @@ const handleSignRequest = async (
 ): Promise<SignResponse> => {
   // validate challenge
   if (!req.challengeHex || req.challengeHex.length < 2 || req.challengeHex.length > 2048) {
-    return { success: false, error: 'invalid challenge: must be 1-1024 bytes hex-encoded' };
+    return { success: false, error: 'invalid challenge: must be 1-1024 bytes hex-encoded', code: 'invalid_request' };
   }
 
   try {
@@ -86,7 +86,7 @@ const handleSignRequest = async (
     });
 
     if (popupResponse?.choice !== UserChoice.Approved) {
-      return { success: false, error: 'user denied' };
+      return { success: false, error: 'user denied', code: 'denied' };
     }
 
     const { signature, publicKey } = popupResponse;
@@ -121,6 +121,6 @@ const handleSignRequest = async (
     };
   } catch (e) {
     console.error('sign request failed:', e);
-    return { success: false, error: 'signing failed' };
+    return { success: false, error: 'signing failed', code: 'internal_error' };
   }
 };

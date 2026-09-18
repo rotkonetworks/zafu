@@ -18,11 +18,14 @@ export { createExtensionTransport, type ZafuHandle } from './transport';
 export {
   detect,
   requireWallet,
+  sign,
+  signBytes,
   zidPubkey,
   encryptFor,
   decryptFrom,
   type ZafuDetection,
   type ZidRecipient,
+  type ZidSignature,
 } from './messaging';
 export { ZafuError, type ZafuErrorCode } from './errors';
 export { createNoiseChannel } from './noise-channel';

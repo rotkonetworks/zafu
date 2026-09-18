@@ -24,6 +24,10 @@ import { ZafuError, classifyWalletError } from './errors';
 const b64encode = (b: Uint8Array): string => btoa(String.fromCharCode(...b));
 const b64decode = (s: string): Uint8Array => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
+// -- hex (lowercase, no 0x; matches @zafu/protocol Hex) --
+const hexencode = (b: Uint8Array): string =>
+  Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+
 /** what a wallet-detection probe found. */
 export interface ZafuDetection {
   /** a zafu wallet is reachable. */
@@ -119,6 +123,50 @@ export async function requireWallet(zafu?: ZafuHandle | null): Promise<ZafuHandl
     );
   }
   return handle;
+}
+
+/** an ed25519 signature from the caller's site-scoped ZID key. */
+export interface ZidSignature {
+  /** ed25519 signature over the challenge, hex. */
+  signature: string;
+  /** the site-scoped ZID ed25519 public key that signed, hex. */
+  publicKey: string;
+}
+
+/**
+ * Sign a challenge with the site-scoped ZID ed25519 key - the "login with zafu"
+ * primitive. Classical ed25519 by design: a signature has no
+ * harvest-now-decrypt-later exposure (you cannot retroactively forge one that
+ * already verified), so it needs no post-quantum treatment and interoperates
+ * with any ed25519 verifier. Throws a typed ZafuError (`denied`, `locked`, ...)
+ * instead of returning null.
+ *
+ * SECURITY: the signature covers ONLY `challengeHex`. The wallet shows the
+ * calling origin but does NOT bind it into the signed bytes, so a relying party
+ * MUST make the challenge unforgeable and non-replayable itself - sign a fresh
+ * server-issued nonce that also commits to the origin/audience (SIWE-style),
+ * never a static string. A signature over challenge C is valid at any site that
+ * presents the same C.
+ */
+export async function sign(
+  zafu: ZafuHandle,
+  challengeHex: string,
+  statement?: string,
+): Promise<ZidSignature> {
+  const resp = await call(zafu, 'zafu_sign', { type: 'zafu_sign', challengeHex, statement });
+  if (!resp.signature || !resp.publicKey) {
+    throw new ZafuError('wallet_error', 'sign: wallet returned no signature');
+  }
+  return { signature: resp.signature, publicKey: resp.publicKey };
+}
+
+/** As `sign`, but hex-encodes raw message bytes for you. */
+export async function signBytes(
+  zafu: ZafuHandle,
+  message: Uint8Array,
+  statement?: string,
+): Promise<ZidSignature> {
+  return sign(zafu, hexencode(message), statement);
 }
 
 /** fetch a recipient's advertised keys (the site-scoped ZID pubkeys). */
