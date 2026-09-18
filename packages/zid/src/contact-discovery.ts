@@ -1,5 +1,5 @@
 /**
- * Private, non-interactive contact discovery — the rendezvous-tag layer.
+ * Private, non-interactive contact discovery - the rendezvous-tag layer.
  *
  * Two friends who hold each other's contact-card key can each compute a shared
  * pairwise ROOT SECRET (identity.ts `zidContactRootSecret`) and, from it, a
@@ -9,9 +9,9 @@
  *
  * This module is deliberately SUITE-BLIND: `rootSecret` is opaque bytes. Whether
  * it came from X25519 DH (today) or an X-Wing / ML-KEM hybrid (later) never
- * reaches here — the PQ migration is localized to establishment in identity.ts.
+ * reaches here - the PQ migration is localized to establishment in identity.ts.
  *
- * Epoch clock is JAM time (wall-clock, chain-independent) — see below.
+ * Epoch clock is JAM time (wall-clock, chain-independent) - see below.
  */
 
 import { hkdf } from '@noble/hashes/hkdf';
@@ -24,7 +24,7 @@ import { hexToBytes } from '@noble/hashes/utils';
 // Canonical source of these constants: the `jamtime` package
 // (rotkonetworks/jamtime v1.1.0, `JAMTime.JAM_COMMON_ERA` / `.SLOT_DURATION`).
 // Inlined to avoid a runtime dependency; the values are a drop-in for it.
-// JAM time is a fixed-genesis wall-clock slot counter — NOT chain height — so it
+// JAM time is a fixed-genesis wall-clock slot counter - NOT chain height - so it
 // keeps a fixed cadence and needs no chain sync (required by the traffic-analysis
 // mitigation and by users not syncing any particular chain).
 
@@ -79,7 +79,7 @@ export const RENDEZVOUS_TAG_BYTES = 16;
  * secret, with zero communication.
  *
  * Direction is encoded by WHOSE contact-card pubkey is in the tag (the
- * publisher's), not an ordering convention — so to FIND friend j you compute the
+ * publisher's), not an ordering convention - so to FIND friend j you compute the
  * tag with j's pubkey; to ANNOUNCE yourself you publish under your own.
  *
  * Domain separation is unambiguous: every field is hashed/encoded to a fixed
@@ -90,7 +90,7 @@ export const RENDEZVOUS_TAG_BYTES = 16;
  * cross-epoch UNLINKABILITY but NOT forward secrecy, and there is no cheap
  * ratchet that would add it here. The `rootSecret` is a STATIC NIKE output
  * (X25519 DH of two long-term contact-KA keys), so it is deterministically
- * recomputable from those keys — a future compromise of the contact-KA key (or
+ * recomputable from those keys - a future compromise of the contact-KA key (or
  * mnemonic) plus logged relay transcripts recovers every past epoch's tags/blobs
  * regardless of any hash-ratchet (the attacker just re-derives the base and
  * ratchets forward). This is accepted for presence metadata. The bounded

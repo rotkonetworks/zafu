@@ -1,5 +1,5 @@
 /**
- * Presence-blob AEAD — the payload layer that rides under a rendezvous tag.
+ * Presence-blob AEAD - the payload layer that rides under a rendezvous tag.
  *
  * Contact discovery has two layers:
  *   - WHERE to look: the rendezvous TAG (see `contact-discovery.ts`), a public
@@ -10,7 +10,7 @@
  * Both derive from the SAME opaque pairwise `rootSecret`, but under DISTINCT
  * HKDF domains, so the tag (which is published in the clear) is never usable as
  * the encryption key. The tag uses label `'zid-rvz-v1'`; the AEAD key uses
- * `'zid-presence-v1'` — different `info`, different HKDF output, full key
+ * `'zid-presence-v1'` - different `info`, different HKDF output, full key
  * separation.
  *
  * Suite-blind, exactly like the tag layer: `rootSecret` is opaque bytes and
@@ -28,7 +28,7 @@ const enc = new TextEncoder();
 
 /**
  * HKDF domain label for the AEAD key. MUST differ from the rendezvous tag's
- * `'zid-rvz-v1'` — this difference IS the key-separation guarantee: the same
+ * `'zid-rvz-v1'` - this difference IS the key-separation guarantee: the same
  * `rootSecret` never yields both the public tag and the secret key.
  */
 const PRESENCE_KDF_LABEL = 'zid-presence-v1';
@@ -53,7 +53,7 @@ const MIN_BLOB_BYTES = 1 + NONCE_BYTES + TAG_BYTES;
  * streams; each uses a DISTINCT AEAD key so one direction's blob can never be
  * opened (or replayed) as the other's.
  *
- * Convention — pin this so both peers agree: `dir` names the PUBLISHER by the
+ * Convention - pin this so both peers agree: `dir` names the PUBLISHER by the
  * lexicographic order of the two contact-card pubkeys. `'a2b'` = the party with
  * the smaller pubkey announcing to the larger; `'b2a'` = the reverse. To open a
  * peer's beacon, pass the same `dir` they sealed under.
@@ -107,7 +107,7 @@ const asArrayBuffer = (u: Uint8Array): Uint8Array<ArrayBuffer> => {
 /**
  * Additional authenticated data. Binds the epoch (anti-replay), app origin, and
  * direction into the GCM tag. Because the relay cannot forge this tag, it cannot
- * lift a previous epoch's blob into the current epoch's tag slot — the epoch in
+ * lift a previous epoch's blob into the current epoch's tag slot - the epoch in
  * the AAD will not match and `open` returns null. Every field is fixed-length,
  * so the concatenation is unambiguous.
  */
@@ -151,7 +151,7 @@ const deriveAeadKey = async (
 /**
  * Seal a presence record for `(appOrigin, epoch, dir)` under the pairwise
  * `rootSecret`. Output layout: `version(1) ‖ nonce(12) ‖ ciphertext+tag`. The
- * 12-byte GCM nonce is random per call and prepended in the clear (safe — GCM
+ * 12-byte GCM nonce is random per call and prepended in the clear (safe - GCM
  * only needs nonce uniqueness, not secrecy).
  */
 export const sealPresence = async (
@@ -174,7 +174,7 @@ export const sealPresence = async (
 };
 
 /**
- * Open a presence blob. Returns the plaintext, or `null` on ANY failure —
+ * Open a presence blob. Returns the plaintext, or `null` on ANY failure -
  * malformed length, unknown version, or a failed GCM tag (tampering, wrong
  * epoch/app/dir, or a replayed cross-epoch blob). Never throws: garbage from an
  * untrusted relay is dropped silently client-side, so callers can treat a slot
@@ -210,7 +210,7 @@ export const openPresence = async (
 };
 
 // ---------------------------------------------------------------------------
-// presence record — the small, versioned plaintext payload
+// presence record - the small, versioned plaintext payload
 // ---------------------------------------------------------------------------
 
 /** presence-record wire-format version. */

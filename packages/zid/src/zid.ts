@@ -1,11 +1,11 @@
 /**
- * zid — the simplest possible identity SDK
+ * zid - the simplest possible identity SDK
  *
  * detects zafu wallet → requests session → signs actions → opens e2ee channels
  * falls back to ephemeral browser keys if no wallet
  *
  * contacts live in zid (localStorage), not in the wallet.
- * zafu provides richer contacts — zid uses them when available, works without.
+ * zafu provides richer contacts - zid uses them when available, works without.
  */
 
 import type {
@@ -79,7 +79,7 @@ export const zid = {
               if (pubkey) {
                 const ch = await createChannel(session, pubkey, opts.relayUrl);
                 ch.send(JSON.stringify({ type: 'zid:invite', payload, from: name, appOrigin }));
-                // don't close channel immediately — recipient needs time to receive
+                // don't close channel immediately - recipient needs time to receive
                 setTimeout(() => ch.close(), 30_000);
                 return { sent: true };
               }
@@ -99,7 +99,7 @@ export const zid = {
       }
     }
 
-    // ephemeral mode — no wallet, zid-only contacts
+    // ephemeral mode - no wallet, zid-only contacts
     const ephAppKey = opts.appName ? `zid_name:${opts.appName}` : 'zid_name';
     const name =
       localStorage.getItem(ephAppKey) ||
@@ -132,7 +132,7 @@ export const zid = {
     };
   },
 
-  /** set display name — per-app to prevent cross-app correlation */
+  /** set display name - per-app to prevent cross-app correlation */
   setName(name: string, appName?: string) {
     const key = appName ? `zid_name:${appName}` : 'zid_name';
     localStorage.setItem(key, name);
@@ -144,7 +144,7 @@ export const zid = {
     return localStorage.getItem(key);
   },
 
-  /** add a contact (call when you interact with someone — auto-builds social graph) */
+  /** add a contact (call when you interact with someone - auto-builds social graph) */
   addContact: upsertContact,
 
   /** get contacts for this app */

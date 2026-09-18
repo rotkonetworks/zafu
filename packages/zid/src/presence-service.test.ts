@@ -49,7 +49,7 @@ const record = (caps: number): PresenceRecord => ({
   caps,
 });
 
-describe('PresenceService — end-to-end publish + discover', () => {
+describe('PresenceService - end-to-end publish + discover', () => {
   it('B finds A present and decrypts A’s presence record', async () => {
     const t = new MemRelay();
     await svcA(t).publishSelf(record(7), [peerB], EPOCH);

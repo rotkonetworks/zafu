@@ -1,5 +1,5 @@
 /**
- * @zafu/zid — zafu identity SDK
+ * @zafu/zid - zafu identity SDK
  *
  * one-line wallet connection, session signing, e2ee channels.
  *

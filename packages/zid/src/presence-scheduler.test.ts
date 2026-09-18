@@ -34,7 +34,7 @@ const clock = (startUnix: number) => {
   return { nowSeconds: () => t, advance: (secs: number) => (t += secs) };
 };
 
-describe('PresenceScheduler — fixed cadence', () => {
+describe('PresenceScheduler - fixed cadence', () => {
   it('publishes at most once per epoch (idempotent tick)', async () => {
     const { service, calls } = spyService();
     const c = clock(JAM_COMMON_ERA); // epoch 0

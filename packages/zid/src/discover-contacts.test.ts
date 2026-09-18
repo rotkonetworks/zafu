@@ -16,7 +16,7 @@ const serviceReturning = (present: PresentPeer[]): PresenceService => ({
   },
 });
 
-describe('discoverContacts — app response contract', () => {
+describe('discoverContacts - app response contract', () => {
   it('returns ONLY present contacts, reduced to id/sessionPubHex/caps', async () => {
     const sessionPub = new Uint8Array(32).fill(9);
     const service = serviceReturning([{ id: 'a', record: { sessionPub, caps: 3 } }]);
@@ -25,7 +25,7 @@ describe('discoverContacts — app response contract', () => {
     const out = await discoverContacts(service, [peer('a'), peer('b'), peer('c')]);
 
     expect(out).toEqual([{ id: 'a', sessionPubHex: bytesToHex(sessionPub), caps: 3 }]);
-    // the absent contacts (b, c) never appear — full graph does not cross the boundary
+    // the absent contacts (b, c) never appear - full graph does not cross the boundary
     expect(out.map(c => c.id)).not.toContain('b');
     expect(out.map(c => c.id)).not.toContain('c');
   });

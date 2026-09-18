@@ -1,9 +1,9 @@
 /**
- * Fixed-cadence presence scheduler — enforces the traffic-analysis invariant.
+ * Fixed-cadence presence scheduler - enforces the traffic-analysis invariant.
  *
  * The blind relay hides your friend count only if writes are BOTH padded (see
  * ContactRelay) AND on a fixed cadence: exactly one publish per presence epoch,
- * UNCONDITIONALLY — even when you are idle or have zero present friends (that
+ * UNCONDITIONALLY - even when you are idle or have zero present friends (that
  * still writes an all-dummy, constant-shape bucket). If publishes tracked user
  * activity instead, the relay operator would recover your online-timing pattern,
  * half-defeating the padding.

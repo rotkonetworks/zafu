@@ -1,5 +1,5 @@
 /**
- * PresenceService — the composition that turns the ZID contact-discovery
+ * PresenceService - the composition that turns the ZID contact-discovery
  * primitives into a usable "publish my presence / find present friends" service.
  *
  * It ties together, for one app scope:
@@ -10,11 +10,11 @@
  * It is deliberately decoupled from the extension: callers pass each peer with
  * its already-resolved pairwise `rootSecret` (established + cached in
  * contacts.ts via an extension-injected derive-fn), so the mnemonic never
- * crosses into this SDK. Suite-blind throughout — the secret is opaque bytes.
+ * crosses into this SDK. Suite-blind throughout - the secret is opaque bytes.
  *
  * Direction: to announce MYSELF to peer j I publish under a tag derived with MY
  * pubkey (that is the direction `rendezvousTag` encodes), and seal the blob in
- * the `a2b`/`b2a` direction fixed by the lexicographic order of the pair — both
+ * the `a2b`/`b2a` direction fixed by the lexicographic order of the pair - both
  * sides compute the same direction independently.
  */
 
@@ -54,7 +54,7 @@ const pairDir = (publisherPubHex: string, recipientPubHex: string): PresenceDir 
 export interface PresenceService {
   /**
    * Publish MY presence to each peer for this epoch. One padded, fixed-cadence
-   * relay write (the relay can't tell how many friends I have — see ContactRelay).
+   * relay write (the relay can't tell how many friends I have - see ContactRelay).
    * The relay MUST be configured with `blobBytes` equal to the sealed blob size
    * for a PresenceRecord (else publish fails loudly).
    */
@@ -125,7 +125,7 @@ export const createPresenceService = (
       );
       if (bytes) {
         // decode can still reject a malformed / wrong-version record even after
-        // the AEAD opened — drop those rather than surfacing a bogus peer.
+        // the AEAD opened - drop those rather than surfacing a bogus peer.
         const record = decodePresenceRecord(bytes);
         if (record) {
           out.push({ id: f.id, record });
@@ -147,13 +147,13 @@ export interface DiscoveredContact {
 }
 
 /**
- * App-facing contact discovery — the response contract for the
+ * App-facing contact discovery - the response contract for the
  * `zafu_discover_contacts` external primitive.
  *
  * Given the set of the user's contacts (already resolved to pairwise root
  * secrets by the extension), return ONLY the ones present in this app scope this
  * epoch, each reduced to the minimum an app needs to connect. A web app learns
- * nothing about contacts who are absent — the full social graph never crosses
+ * nothing about contacts who are absent - the full social graph never crosses
  * the boundary, only the present intersection.
  */
 export const discoverContacts = async (

@@ -44,7 +44,7 @@ export interface ZidChannel {
 // Contact picker (social graph never crosses the trust boundary)
 // ---------------------------------------------------------------------------
 
-/** opaque contact reference — app-scoped, unlinkable across apps */
+/** opaque contact reference - app-scoped, unlinkable across apps */
 export interface ContactRef {
   /** app-scoped opaque handle (hex, 32 bytes). deterministic per contact+app */
   handle: string;
@@ -60,7 +60,7 @@ export interface ContactRef {
  * `suite` is intentionally a WIDE `string`, not a narrow union: an unknown
  * FUTURE suite (e.g. a post-quantum hybrid) must ROUND-TRIP through storage
  * untouched and fail CLOSED only when someone tries to establish a secret with
- * it — never on load. The extension-side establisher (identity.ts
+ * it - never on load. The extension-side establisher (identity.ts
  * `zidContactRootSecret`) owns the narrow `ContactSuite` union and throws on an
  * unrecognized suite. Structurally compatible with identity.ts `ContactCardKey`,
  * but declared locally so this DApp-shipped SDK never imports extension state
@@ -75,7 +75,7 @@ export interface ContactCardKey {
 
 /**
  * What you hand a peer (or import from the wallet) so they can add you: your
- * session pubkey, a display name, and — for discovery — your contact card key.
+ * session pubkey, a display name, and - for discovery - your contact card key.
  * `card` is optional so legacy exchanges (pre-discovery) still parse.
  */
 export interface ContactShare {

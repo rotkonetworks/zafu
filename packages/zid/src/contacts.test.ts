@@ -72,7 +72,7 @@ describe('contact-card storage + establish-once-cache', () => {
     expect(s1!.length).toBe(32);
     expect(Array.from(s1!)).toEqual(Array.from(s2!));
     expect(derive).toHaveBeenCalledTimes(1); // "establish once"
-    // returned bytes are a caller-owned copy — mutating them doesn't poison the cache
+    // returned bytes are a caller-owned copy - mutating them doesn't poison the cache
     s1!.fill(0);
     const s3 = getContactRootSecret('p3');
     expect(s3!.every(b => b === 9)).toBe(true);

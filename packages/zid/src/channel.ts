@@ -70,7 +70,7 @@ export async function createChannel(
           peerDhBytes,
         );
         if (!sigValid) {
-          console.error('zid: DH signature verification failed — possible MitM');
+          console.error('zid: DH signature verification failed - possible MitM');
           return;
         }
 
@@ -89,7 +89,7 @@ export async function createChannel(
             256,
           ),
         );
-        // derive AES key — info binds to both session pubkeys to prevent unknown-key-share
+        // derive AES key - info binds to both session pubkeys to prevent unknown-key-share
         const sortedPubkeys = [session.pubkey, peerPubkey].sort().join(':');
         const info = new TextEncoder().encode(`zid-e2ee:${sortedPubkeys}`);
         const keyMaterial = await crypto.subtle.importKey('raw', sharedBits, 'HKDF', false, [

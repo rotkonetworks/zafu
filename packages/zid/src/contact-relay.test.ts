@@ -52,7 +52,7 @@ const pub = (h: string) => h.repeat(32);
 const relay = (t: MemRelay) =>
   new ContactRelay(t, { appOrigin: APP, padTo: PAD, blobBytes: BLOB, randomBytes: counterRng() });
 
-describe('ContactRelay — padding (invariant 2: hide friend count)', () => {
+describe('ContactRelay - padding (invariant 2: hide friend count)', () => {
   it('always writes exactly padTo entries regardless of real count', async () => {
     for (const realN of [0, 1, 3]) {
       const t = new MemRelay();
@@ -101,7 +101,7 @@ describe('ContactRelay — padding (invariant 2: hide friend count)', () => {
   });
 });
 
-describe('ContactRelay — discovery (invariant 1: whole-bucket local match)', () => {
+describe('ContactRelay - discovery (invariant 1: whole-bucket local match)', () => {
   it('finds a present friend and returns their blob', async () => {
     const t = new MemRelay();
     const s = secret(5);

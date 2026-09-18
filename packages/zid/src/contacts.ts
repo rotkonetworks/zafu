@@ -1,10 +1,10 @@
 /**
- * zid contacts — local contact store with app-scoped handles
+ * zid contacts - local contact store with app-scoped handles
  *
  * contacts live in localStorage, managed by zid independently.
  * when zafu is connected, contacts can be imported from the wallet.
  * handles are BLAKE2b(contact_pubkey || app_origin || "zid:contact:v1")
- * — deterministic per contact+app, unlinkable across apps.
+ * - deterministic per contact+app, unlinkable across apps.
  */
 
 import type { ContactCardKey, ContactRef, ContactShare } from './types';
@@ -26,7 +26,7 @@ interface StoredContact {
   /**
    * peer's contact-card key-agreement key, for private contact discovery.
    *
-   * OPTIONAL by design — this IS the legacy-contact migration. Contacts added
+   * OPTIONAL by design - this IS the legacy-contact migration. Contacts added
    * before discovery existed simply have no `card`; they load unchanged and
    * discovery is silently unavailable for them (see `establishContactSecret`),
    * no crash. They gain it only when the relationship is re-exchanged.
@@ -45,7 +45,7 @@ interface StoredContact {
 // The pairwise root secret must be ESTABLISHED ONCE and CACHED: a future KEM
 // suite is not a non-interactive DH, so it can't be recomputed on demand.
 //
-// STORAGE CHOICE — deliberately IN-MEMORY (module scope), NOT localStorage.
+// STORAGE CHOICE - deliberately IN-MEMORY (module scope), NOT localStorage.
 // The contact records above live in localStorage as plaintext, but they hold
 // only PUBLIC material (pubkeys, cards, handles). The root secret is a
 // long-term shared secret; persisting it as plaintext would be a real
@@ -53,7 +53,7 @@ interface StoredContact {
 // secrets are derived on demand and zeroized, never written to disk.
 //
 // LIFETIME: the current JS context / session. On the next session the secret
-// is re-established from the persisted peer `card` — deterministic and cheap
+// is re-established from the persisted peer `card` - deterministic and cheap
 // for the 'x25519-v1' (static-static DH) suite.
 //
 // MIGRATION CAVEAT (future PQ suites): a KEM suite CANNOT be re-established
@@ -146,7 +146,7 @@ export function removeContact(pubkey: string) {
  *
  * `deriveRootSecret` is INJECTED by the extension side (the only place that holds
  * the mnemonic): compose it as `card => zidContactRootSecret(mnemonic, identity,
- * card)`. This SDK stays suite-blind and never imports extension state — the
+ * card)`. This SDK stays suite-blind and never imports extension state - the
  * mnemonic never crosses into DApp-shipped code.
  *
  * Semantics:
@@ -170,9 +170,9 @@ export function establishContactSecret(
   }
   const contact = loadContacts().find(c => c.pubkey === pubkey);
   if (!contact?.card) {
-    return null; // legacy or unknown contact — discovery unavailable, fail soft
+    return null; // legacy or unknown contact - discovery unavailable, fail soft
   }
-  // may throw on an unknown/unsupported suite — fail closed, cache nothing.
+  // may throw on an unknown/unsupported suite - fail closed, cache nothing.
   const secret = deriveRootSecret(contact.card);
   rootSecretCache.set(pubkey, secret); // cache owns these bytes for the session
   return copyBytes(secret);
@@ -241,7 +241,7 @@ export async function pickFromLocal(
 /**
  * import contacts from the zafu wallet (if connected).
  *
- * Each entry is a `ContactShare` — pubkey, name, and (for discovery) the peer's
+ * Each entry is a `ContactShare` - pubkey, name, and (for discovery) the peer's
  * `card`. This is also the shape a peer uses to add YOU: the wallet builds its
  * own share as `{ pubkey, name, card: deriveZidContactCardKey(...) }` so a peer
  * who imports it can establish the pairwise secret and find you. `card` stays
