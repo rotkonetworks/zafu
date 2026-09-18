@@ -10,7 +10,7 @@
  * actual concrete thing the password does.
  */
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { cn } from '@repo/ui/lib/utils';
@@ -20,6 +20,7 @@ import { useFinalizeOnboarding } from './hooks';
 import { PagePath } from '../../paths';
 import { SEED_PHRASE_ORIGIN } from './types';
 import { getSeedPhraseOrigin } from './utils';
+import { PENDING_ZCASH_BIRTHDAY_KEY } from '../constants';
 
 export const SetPassword = () => {
   const navigate = usePageNav();
@@ -34,6 +35,22 @@ export const SetPassword = () => {
   // step before this one - it stashes the chosen height into sessionStorage,
   // and useFinalizeOnboarding applies it after the wallet exists. This screen
   // is back to being just the password for every path.
+  //
+  // Enforce that an import can never reach this screen without a birthday: the
+  // birthday step clears the stash on entry, so a back-then-forward (or a
+  // direct URL) could otherwise land here with none, and finalize would import
+  // with no birthday - the very footgun the birthday step exists to close.
+  // Bounce back to the birthday step; the normal forward path always has the
+  // stash set right before navigating here.
+  useEffect(() => {
+    if (
+      origin === SEED_PHRASE_ORIGIN.IMPORTED &&
+      !sessionStorage.getItem(PENDING_ZCASH_BIRTHDAY_KEY)
+    ) {
+      navigate(PagePath.IMPORT_BIRTHDAY);
+    }
+  }, [origin, navigate]);
+
   const handleFormSubmit = (e: FormEvent) => {
     void handleSubmit(e, password);
   };

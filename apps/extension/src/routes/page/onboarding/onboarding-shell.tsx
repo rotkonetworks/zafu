@@ -101,7 +101,7 @@ function resolveSteps(pathname: string, origin: SEED_PHRASE_ORIGIN): readonly On
     }
     return STEPS_CREATE;
   }
-  // default to create — the welcome/generate steps live here.
+  // default to create - the welcome/generate steps live here.
   return STEPS_CREATE;
 }
 

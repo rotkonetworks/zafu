@@ -29,8 +29,7 @@ import { PagePath } from '../paths';
 import { ZcashBirthdayField } from '../../../shared/components/zcash-birthday-field';
 import { safeBirthdayFloor, formatBlockMonth } from '../../../utils/zcash-blocks';
 import { ZCASH_ORCHARD_ACTIVATION } from '../../../config/networks';
-
-const PENDING_BIRTHDAY_KEY = 'pendingZcashBirthday';
+import { PENDING_ZCASH_BIRTHDAY_KEY } from './constants';
 
 export const ImportBirthday = () => {
   const navigate = usePageNav();
@@ -50,7 +49,7 @@ export const ImportBirthday = () => {
   // Clear any birthday stashed by a previous pass so a stale value can never
   // leak into a different wallet (import -> back -> create).
   useEffect(() => {
-    sessionStorage.removeItem(PENDING_BIRTHDAY_KEY);
+    sessionStorage.removeItem(PENDING_ZCASH_BIRTHDAY_KEY);
   }, []);
 
   if (!valid) {
@@ -58,7 +57,7 @@ export const ImportBirthday = () => {
   }
 
   const proceed = (rawHeight: number) => {
-    sessionStorage.setItem(PENDING_BIRTHDAY_KEY, String(safeBirthdayFloor(rawHeight)));
+    sessionStorage.setItem(PENDING_ZCASH_BIRTHDAY_KEY, String(safeBirthdayFloor(rawHeight)));
     navigateToPasswordPage(navigate, SEED_PHRASE_ORIGIN.IMPORTED);
   };
 
@@ -83,8 +82,9 @@ export const ImportBirthday = () => {
             around when did you create this wallet?
           </h2>
           <p className='text-xs text-fg-muted lowercase leading-snug'>
-            an estimate is enough. this only sets how far back sync scans - how fast the first sync
-            is, never whether your funds are safe.
+            an estimate is enough - this only sets how far back sync scans (how fast the first sync
+            is), not whether your funds are safe. if unsure, pick an earlier date: too early only
+            costs scan time, too late can hide older notes until a rescan.
           </p>
         </header>
 
