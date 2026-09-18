@@ -22,6 +22,7 @@ import {
   type CosmosChainId,
 } from '@repo/wallet/networks/cosmos/chains';
 import { getNobleRpcPool } from './noble-rpc';
+import { shortSymbol } from '../utils/asset-display';
 
 /** hook to get balance for a specific cosmos chain */
 export const useCosmosBalance = (chainId: CosmosChainId, accountIndex = 0) => {
@@ -398,23 +399,16 @@ const KNOWN_IBC_DENOMS: Record<string, string> = {
   'ibc/955A03D0BC92B11738A1E4B0C9F2AAF05B79929703F907D2D7AF5A0D405AE8C1': 'UM',
 };
 
-/** derive display symbol from denom */
+/**
+ * derive a display symbol from a raw cosmos denom.
+ *
+ * This is only the last-resort fallback for the raw balance data - the receive
+ * UI resolves proper registry symbols + icons at render via useRegistryAssetMetadata.
+ * We keep a couple of hardcoded IBC hashes we ship, then defer to the shared
+ * sanitizer so we never surface a raw path or full hash to the user.
+ */
 function denomToSymbol(denom: string): string {
-  // native denoms like 'uosmo' -> 'OSMO'
-  if (denom.startsWith('u')) {
-    return denom.slice(1).toUpperCase();
-  }
-  // IBC denoms like 'ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2'
-  if (denom.startsWith('ibc/')) {
-    // resolve known ones to their symbol; otherwise truncate the hash
-    return KNOWN_IBC_DENOMS[denom] ?? `IBC/${denom.slice(4, 10)}`;
-  }
-  // factory denoms
-  if (denom.startsWith('factory/')) {
-    const parts = denom.split('/');
-    return parts[parts.length - 1]?.toUpperCase() ?? denom;
-  }
-  return denom.toUpperCase();
+  return KNOWN_IBC_DENOMS[denom] ?? shortSymbol(denom);
 }
 
 /** format balance with decimals */
