@@ -29,7 +29,7 @@
     "@ledgerhq/hw-transport-webhid": "6.36.0",
     "@noble/curves": "^1.9.7",
     "@noble/hashes": "^1.8.0",
-    "@penumbra-labs/registry": "^12.8.0",
+    "@penumbra-labs/registry": "github:penumbrafi/registry#rotko-release",
     "@penumbra-zone/bech32m": "18.0.0",
     "@penumbra-zone/client": "29.0.0",
     "@penumbra-zone/getters": "28.0.0",

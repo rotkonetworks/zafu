@@ -147,10 +147,17 @@ function IbcDepositSection({
   const penumbraAccount = useStore(selectPenumbraAccount);
   const { data: registryChains = [], isLoading: chainsLoading } = useIbcChains();
   // Cosmos Hub deposits aren't working right now (no live channel), so don't
-  // offer it as a source - only Noble is currently depositable. Memoized so the
-  // preselect effect below doesn't re-run every render on a fresh array ref.
+  // offer it as a source - only Noble is currently depositable. Also restrict to
+  // chains we can derive a SOURCE wallet for (ibcChainToCosmosId truthy):
+  // Injective has its own full conduit panel (eth_secp256k1 / coin type 60, no
+  // coin-118 key), so it must not appear in this shared coin-118 deposit list -
+  // it would otherwise render Noble's balances via the 'noble' fallback.
+  // Memoized so the preselect effect below doesn't re-run on a fresh array ref.
   const ibcChains = useMemo(
-    () => mergeIbcChains([...registryChains]).filter(c => c.chainId !== 'cosmoshub-4'),
+    () =>
+      mergeIbcChains([...registryChains]).filter(
+        c => c.chainId !== 'cosmoshub-4' && ibcChainToCosmosId(c),
+      ),
     [registryChains],
   );
   const [selectedIbcChain, setSelectedIbcChain] = useState<IbcChain | undefined>();

@@ -187,20 +187,21 @@ export const getSubnetworks = (parent: NetworkType): NetworkType[] =>
   );
 
 /**
- * IBC chain ids reachable from `parent` right now: launched cosmos subnetworks
- * that carry an `ibcChainId` (i.e. have a live channel + client). IBC
- * deposit/withdraw is gated to these. Only Noble at the moment; other channels
- * closed on network upgrades and re-open by setting `ibcChainId` + `launched`.
+ * IBC chain ids reachable from `parent` right now: launched subnetworks that
+ * carry an `ibcChainId` (a live channel + client), INCLUDING conduit-only ramps
+ * like Injective, so they are valid IBC deposit/withdraw destinations. Channels
+ * close on network upgrades and re-open by setting `ibcChainId` + `launched`.
+ *
+ * Injective IS included here (it is a valid unshield/withdraw destination - the
+ * user supplies the inj1 address) even though it is `conduitOnly`. Fund safety
+ * holds because the shared coin-118 deposit UI is gated by getActiveIbcSubnetworks
+ * (below), which EXCLUDES conduitOnly - so Injective never reaches a coin-118
+ * derivation; its own conduit panel (eth_secp256k1) handles the inj side, and the
+ * standard deposit list drops it via ibcChainToCosmosId.
  */
 export const getActiveIbcChainIds = (parent: NetworkType): string[] =>
   (Object.keys(NETWORKS) as NetworkType[])
-    .filter(
-      n =>
-        NETWORKS[n].launched &&
-        NETWORKS[n].parent === parent &&
-        NETWORKS[n].ibcChainId &&
-        !NETWORKS[n].conduitOnly,
-    )
+    .filter(n => NETWORKS[n].launched && NETWORKS[n].parent === parent && NETWORKS[n].ibcChainId)
     .map(n => NETWORKS[n].ibcChainId!);
 
 /** As above but returns the network KEYS (e.g. 'noble'), for gating by activeNetwork. */

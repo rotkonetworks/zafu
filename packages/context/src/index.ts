@@ -104,7 +104,6 @@ export class Services implements ServicesInterface {
           fullViewingKey,
           getStoredTree: () => indexedDb.getStateCommitmentTree(),
 
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- indexedDb.constants() resolves as error-typed under eslint's project service; tsc accepts it
           idbConstants: indexedDb.constants(),
           compact_frontier,
         });
@@ -114,7 +113,6 @@ export class Services implements ServicesInterface {
           fullViewingKey,
           getStoredTree: () => indexedDb.getStateCommitmentTree(),
 
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- indexedDb.constants() resolves as error-typed under eslint's project service; tsc accepts it
           idbConstants: indexedDb.constants(),
         });
       }
@@ -123,7 +121,6 @@ export class Services implements ServicesInterface {
       viewServer = await ViewServer.initialize({
         fullViewingKey,
         getStoredTree: () => indexedDb.getStateCommitmentTree(),
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- indexedDb.constants() resolves as error-typed under eslint's project service; tsc accepts it
         idbConstants: indexedDb.constants(),
       });
     }
