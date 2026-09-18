@@ -784,6 +784,9 @@ importers:
       '@noble/hashes':
         specifier: ^1.8.0
         version: 1.8.0
+      '@zafu/pq':
+        specifier: workspace:*
+        version: link:../pq
       '@zafu/protocol':
         specifier: workspace:*
         version: link:../zafu-protocol
