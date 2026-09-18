@@ -15,7 +15,7 @@ import type { ZafuTransport, ZafuMethod, ZafuRequest, ZafuResponse } from '@zafu
 /** a detected wallet: its extension origin plus the injected penumbra provider. */
 export interface ZafuHandle {
   origin: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the injected penumbra provider is an untyped external object
   provider: any;
 }
 
@@ -25,7 +25,7 @@ const extIdFromOrigin = (origin: string): string =>
 
 // zid has no @types/chrome; reach the runtime through globalThis so this stays
 // dependency-light and does not assume the ambient chrome namespace.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- chrome.runtime is untyped here (no @types/chrome)
 const chromeRuntime = (): any => (globalThis as { chrome?: { runtime?: unknown } }).chrome?.runtime;
 
 /**
@@ -50,7 +50,7 @@ export function createExtensionTransport(handle: ZafuHandle): ZafuTransport {
           return;
         }
         try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- chrome sendMessage callback arg is untyped
           rt.sendMessage(extId, req, (r: any) => {
             if (rt.lastError) {
               reject(new Error(rt.lastError.message || 'transport error'));

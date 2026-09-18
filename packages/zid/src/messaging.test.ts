@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { detect, requireWallet, zidPubkey, encryptFor, decryptFrom } from './messaging';
+import { ZafuError } from './errors';
+
 // mock the transport + detection so we can drive wallet responses directly.
 // vi.hoisted: these are referenced by the hoisted vi.mock factories.
 const { request, detectZafu } = vi.hoisted(() => ({ request: vi.fn(), detectZafu: vi.fn() }));
@@ -7,9 +10,6 @@ vi.mock('./transport', () => ({
   createExtensionTransport: () => ({ request, isAvailable: async () => true }),
 }));
 vi.mock('./provider', () => ({ detectZafu }));
-
-import { detect, requireWallet, zidPubkey, encryptFor, decryptFrom } from './messaging';
-import { ZafuError } from './errors';
 
 const handle = { origin: 'chrome-extension://abc/', provider: {} };
 

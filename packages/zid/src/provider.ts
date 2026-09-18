@@ -8,7 +8,6 @@
  */
 
 import type { ZidOptions } from './types';
-import type { ZafuSignResponse, ZafuPickContactsResponse } from '@zafu/protocol';
 import { createExtensionTransport, type ZafuHandle } from './transport';
 
 /** ed25519 session keypair via Web Crypto */
@@ -38,11 +37,11 @@ export async function createSessionKey() {
 /** detect zafu/penumbra wallet extension */
 export async function detectZafu(): Promise<ZafuHandle | null> {
   const providers = (globalThis as any)[Symbol.for('penumbra')];
-  if (!providers) return null;
+  if (!providers) {return null;}
   const entries = Object.entries(providers);
-  if (!entries.length) return null;
+  if (!entries.length) {return null;}
   const [origin, provider] = entries[0] as [string, any];
-  if (!provider) return null;
+  if (!provider) {return null;}
   return { origin, provider };
 }
 
@@ -56,7 +55,9 @@ export async function requestDelegation(
     // connect with timeout
     await Promise.race([
       zafu.provider.connect(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000)),
+      new Promise((_, rej) => {
+        setTimeout(() => rej(new Error('timeout')), 3000);
+      }),
     ]);
 
     const appName = opts.appName || globalThis.location?.hostname || 'zid-app';
@@ -76,7 +77,7 @@ export async function requestDelegation(
       type: 'zafu_sign',
       challengeHex,
       statement: `Authorize ${appName}\nSession: ${sessionPubkey.slice(0, 16)}...`,
-    })) as ZafuSignResponse;
+    }));
 
     if (resp.success && resp.publicKey && resp.signature) {
       return {
@@ -105,7 +106,7 @@ export async function pickContacts(
       type: 'zafu_pick_contacts',
       purpose: opts.purpose || `${opts.appName || 'App'} wants to pick contacts`,
       max: opts.max || 1,
-    })) as ZafuPickContactsResponse;
+    }));
 
     if ('success' in resp && resp.success && Array.isArray(resp.contacts)) {
       return resp.contacts; // [{ handle, displayName }] - handles are app-scoped BLAKE2b
@@ -151,16 +152,18 @@ export function listenInvites(
   // reach chrome.runtime via globalThis - zid ships to plain web pages and
   // carries no @types/chrome; this call is a no-op where the extension bus is
   // absent (returns an unsubscribe that does nothing).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- chrome.runtime is untyped here (no @types/chrome)
   const rt = (globalThis as { chrome?: { runtime?: any } }).chrome?.runtime;
   if (!rt?.onMessage) {
-    return () => {};
+    return () => {
+      /* no wallet message bus present: nothing to unsubscribe */
+    };
   }
   const extId = zafu.origin.replace('chrome-extension://', '').replace(/\/$/, '');
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- chrome message + sender args are untyped
   const listener = (msg: any, sender: any) => {
-    if (sender.id !== extId) return;
-    if (msg?.type !== 'zafu_incoming_invite') return;
+    if (sender.id !== extId) {return;}
+    if (msg?.type !== 'zafu_incoming_invite') {return;}
     handler({
       appOrigin: msg.appOrigin,
       type: msg.inviteType,
@@ -186,6 +189,6 @@ function hex(bytes: Uint8Array): string {
 }
 function unhex(h: string): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(h.length / 2);
-  for (let i = 0; i < h.length; i += 2) bytes[i / 2] = parseInt(h.slice(i, i + 2), 16);
+  for (let i = 0; i < h.length; i += 2) {bytes[i / 2] = parseInt(h.slice(i, i + 2), 16);}
   return bytes;
 }

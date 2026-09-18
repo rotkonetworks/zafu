@@ -7,10 +7,10 @@
 
 import type { ZidChannel } from './types';
 
-type SessionKey = {
+interface SessionKey {
   pubkey: string;
   sign: (data: Uint8Array) => Promise<string>;
-};
+}
 
 /** create an e2ee channel to a peer via relay WebSocket */
 export async function createChannel(
@@ -110,7 +110,7 @@ export async function createChannel(
         const plain = new Uint8Array(
           await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, sharedKey, ct),
         );
-        for (const h of handlers) h(plain);
+        for (const h of handlers) {h(plain);}
       }
     } catch (e) {
       console.error('zid channel error:', e);
@@ -120,8 +120,9 @@ export async function createChannel(
   return {
     peer: peerPubkey,
 
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises -- send is fire-and-forget by the ZidChannel contract (void); the async body is for WebCrypto AES-GCM
     send: async (data: string | Uint8Array) => {
-      if (!sharedKey || !ws) return;
+      if (!sharedKey || !ws) {return;}
       const plain =
         typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data);
       const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -140,7 +141,7 @@ export async function createChannel(
     },
 
     on: (event: 'message', handler: (data: Uint8Array) => void) => {
-      if (event === 'message') handlers.push(handler);
+      if (event === 'message') {handlers.push(handler);}
     },
 
     close: () => {
@@ -158,6 +159,6 @@ function hex(bytes: Uint8Array): string {
 }
 function unhex(h: string): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(h.length / 2);
-  for (let i = 0; i < h.length; i += 2) bytes[i / 2] = parseInt(h.slice(i, i + 2), 16);
+  for (let i = 0; i < h.length; i += 2) {bytes[i / 2] = parseInt(h.slice(i, i + 2), 16);}
   return bytes;
 }

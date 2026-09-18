@@ -34,7 +34,7 @@ const counterRng = (): RandomBytes => {
   let c = 1;
   return (n: number) => {
     const b = new Uint8Array(n);
-    for (let i = 0; i < n; i++) b[i] = (c + i) & 0xff;
+    for (let i = 0; i < n; i++) {b[i] = (c + i) & 0xff;}
     c += n + 7;
     return b;
   };

@@ -9,14 +9,12 @@
  * typed ZafuError instead of returning null, so a caller can branch on why.
  */
 
-import { ZAFU_PROTOCOL_VERSION, isZafuError } from '@zafu/protocol';
-import type {
-  ZafuMethod,
-  ZafuRequest,
-  ZafuResponse,
-  ZafuZidPubkeyResponse,
-  ZafuEncryptResponse,
-  ZafuDecryptResponse,
+import {
+  ZAFU_PROTOCOL_VERSION,
+  isZafuError,
+  type ZafuMethod,
+  type ZafuRequest,
+  type ZafuResponse,
 } from '@zafu/protocol';
 import { detectZafu } from './provider';
 import { createExtensionTransport, type ZafuHandle } from './transport';
@@ -66,7 +64,7 @@ async function call<M extends ZafuMethod>(
     throw classifyWalletError(resp.error, (resp as { code?: string }).code);
   }
   // some methods answer { success: false, error } instead of { error }
-  if (typeof resp === 'object' && resp !== null && 'success' in resp && resp.success === false) {
+  if (typeof resp === 'object' && resp !== null && 'success' in resp && !resp.success) {
     const r = resp as { error?: string; code?: string };
     throw classifyWalletError(r.error, r.code);
   }
@@ -127,7 +125,7 @@ export async function requireWallet(zafu?: ZafuHandle | null): Promise<ZafuHandl
 export async function zidPubkey(zafu: ZafuHandle): Promise<ZidRecipient> {
   const resp = (await call(zafu, 'zafu_zid_pubkey', {
     type: 'zafu_zid_pubkey',
-  })) as Exclude<ZafuZidPubkeyResponse, { error: string }>;
+  }));
   return { pubkey: resp.pubkey, pq_pubkey: resp.pq_pubkey, pq_suite: resp.pq_suite };
 }
 
@@ -152,10 +150,7 @@ export async function encryptFor(
         plaintext: pt,
       })
     : ({ type: 'zafu_encrypt' as const, recipient: recipient.pubkey, plaintext: pt });
-  const resp = (await call(zafu, 'zafu_encrypt', req)) as Exclude<
-    ZafuEncryptResponse,
-    { error: string }
-  >;
+  const resp = (await call(zafu, 'zafu_encrypt', req));
   return {
     ciphertext: resp.ciphertext,
     ephemeral_pubkey: resp.ephemeral_pubkey,
@@ -176,6 +171,6 @@ export async function decryptFrom(
     type: 'zafu_decrypt',
     ciphertext: sealed.ciphertext,
     ephemeral_pubkey: sealed.ephemeral_pubkey,
-  })) as Exclude<ZafuDecryptResponse, { error: string }>;
+  }));
   return b64decode(resp.plaintext);
 }

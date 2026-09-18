@@ -35,8 +35,8 @@
  */
 
 import { chacha20poly1305 } from '@noble/ciphers/chacha.js';
-import { x25519, edwardsToMontgomeryPub, edwardsToMontgomeryPriv } from '@noble/curves/ed25519';
-import { sha256 } from '@noble/hashes/sha256';
+import { x25519, ed25519 } from '@noble/curves/ed25519';
+import { sha256 } from '@noble/hashes/sha2';
 import { extract, expand } from '@noble/hashes/hkdf';
 import {
   mlkem768KeygenEphemeral,
@@ -78,11 +78,11 @@ const NOISE_RESP_MIN_LEN = 1 + 32 + MLKEM_CT_LEN + TAG_LEN; // 1137
 
 // -- types --
 
-export type SessionKey = {
+export interface SessionKey {
   pubkey: string; // hex ed25519 public key
   privkey: Uint8Array; // ed25519 seed (32 bytes) - required for x25519 DH
   sign: (data: Uint8Array) => Promise<string>; // returns hex signature
-};
+}
 
 export interface CipherState {
   k: Uint8Array; // 32-byte symmetric key
@@ -107,7 +107,7 @@ function noiseHKDF(ck: Uint8Array, ikm: Uint8Array, outputs: 2 | 3): Uint8Array[
   const prk = extract(sha256, ikm, ck);
   const okm = expand(sha256, prk, undefined, 32 * outputs);
   const result: Uint8Array[] = [];
-  for (let i = 0; i < outputs; i++) result.push(okm.slice(i * 32, (i + 1) * 32));
+  for (let i = 0; i < outputs; i++) {result.push(okm.slice(i * 32, (i + 1) * 32));}
   return result;
 }
 
@@ -195,19 +195,19 @@ function zeroize(buf: Uint8Array): void {
 
 function unhex(h: string): Uint8Array {
   const bytes = new Uint8Array(h.length / 2);
-  for (let i = 0; i < h.length; i += 2) bytes[i / 2] = parseInt(h.slice(i, i + 2), 16);
+  for (let i = 0; i < h.length; i += 2) {bytes[i / 2] = parseInt(h.slice(i, i + 2), 16);}
   return bytes;
 }
 
 // -- ed25519 to x25519 conversion --
 
 function edPubToX(edPub: Uint8Array): Uint8Array {
-  return edwardsToMontgomeryPub(edPub);
+  return ed25519.utils.toMontgomery(edPub);
 }
 
 function edPrivToX(edPriv: Uint8Array): Uint8Array {
   const seed = edPriv.length === 64 ? edPriv.slice(0, 32) : edPriv;
-  return edwardsToMontgomeryPriv(seed);
+  return ed25519.utils.toMontgomerySecret(seed);
 }
 
 // -- Noise symmetric state initialization --
@@ -241,7 +241,7 @@ export function initiatorHandshake(
   h = mixHash(h, remoteXPub);
 
   // -> e: generate ephemeral x25519, mix pubkey into h
-  const ePriv = x25519.utils.randomPrivateKey();
+  const ePriv = x25519.utils.randomSecretKey();
   const ePub = x25519.getPublicKey(ePriv);
   h = mixHash(h, ePub);
 
@@ -291,7 +291,7 @@ export function initiatorHandshake(
   const savedMlSk = mlKem.secretKey.slice();
 
   function finish(resp: Uint8Array): { sendCS: CipherState; recvCS: CipherState } {
-    if (resp[0] !== NOISE_RESP) throw new Error('noise: expected resp message (0x02)');
+    if (resp[0] !== NOISE_RESP) {throw new Error('noise: expected resp message (0x02)');}
     if (resp.length < NOISE_RESP_MIN_LEN) {
       throw new Error(`noise: resp message too short (${resp.length} < ${NOISE_RESP_MIN_LEN})`);
     }
@@ -308,8 +308,8 @@ export function initiatorHandshake(
     [rck] = mixKey(rck, dh(savedEPriv, re));
 
     // <- se: DH(s, re) - initiator static with responder ephemeral
-    let rk: Uint8Array;
-    [rck, rk] = mixKey(rck, dh(localXPriv, re));
+    const [seRck, rk] = mixKey(rck, dh(localXPriv, re));
+    rck = seRck;
 
     // decrypt responder payload (empty)
     const dec = decryptAndHash(rk, 0n, rh, respCt);
@@ -366,7 +366,7 @@ export function responderHandshake(
   recvCS: CipherState;
   remoteXPub: Uint8Array;
 } {
-  if (initMsg[0] !== NOISE_INIT) throw new Error('noise: expected init message (0x01)');
+  if (initMsg[0] !== NOISE_INIT) {throw new Error('noise: expected init message (0x01)');}
   if (initMsg.length < NOISE_INIT_MIN_LEN) {
     throw new Error(`noise: init message too short (${initMsg.length} < ${NOISE_INIT_MIN_LEN})`);
   }
@@ -408,7 +408,7 @@ export function responderHandshake(
   h = decPayload.h;
 
   // <- e: generate responder ephemeral
-  const ePriv = x25519.utils.randomPrivateKey();
+  const ePriv = x25519.utils.randomSecretKey();
   const ePub = x25519.getPublicKey(ePriv);
   h = mixHash(h, ePub);
 
@@ -462,7 +462,7 @@ export function encryptTransport(cs: CipherState, plaintext: Uint8Array): Uint8A
 }
 
 export function decryptTransport(cs: CipherState, msg: Uint8Array): Uint8Array {
-  if (msg[0] !== NOISE_TRANSPORT) throw new Error('noise: expected transport message (0x03)');
+  if (msg[0] !== NOISE_TRANSPORT) {throw new Error('noise: expected transport message (0x03)');}
   const wireN = new DataView(msg.buffer, msg.byteOffset + 1, 8).getBigUint64(0, false);
   if (wireN !== cs.n) {
     throw new Error(`noise: counter mismatch (expected ${cs.n}, got ${wireN})`);
@@ -501,12 +501,12 @@ export async function createNoiseChannel(
     ws.binaryType = 'arraybuffer';
 
     function transportHandler(ev: MessageEvent): void {
-      if (typeof ev.data === 'string') return;
+      if (typeof ev.data === 'string') {return;}
       try {
         const data = new Uint8Array(ev.data as ArrayBuffer);
         if (data[0] === NOISE_TRANSPORT && recvCS) {
           const pt = decryptTransport(recvCS, data);
-          for (const h of handlers) h(pt);
+          for (const h of handlers) {h(pt);}
         }
       } catch (e) {
         console.error('noise: transport decrypt error', e);
@@ -522,7 +522,7 @@ export async function createNoiseChannel(
         ws?.send(hs.message);
 
         ws!.onmessage = ev => {
-          if (typeof ev.data === 'string') return;
+          if (typeof ev.data === 'string') {return;}
           try {
             const data = new Uint8Array(ev.data as ArrayBuffer);
             if (data[0] === NOISE_RESP) {
@@ -535,7 +535,7 @@ export async function createNoiseChannel(
             }
           } catch (e) {
             hs.cleanup();
-            reject(e);
+            reject(e instanceof Error ? e : new Error(String(e)));
           }
         };
       }
@@ -543,7 +543,7 @@ export async function createNoiseChannel(
 
     // responder path - listen for init before we get promoted to initiator handler
     ws.onmessage = ev => {
-      if (typeof ev.data === 'string') return;
+      if (typeof ev.data === 'string') {return;}
       const data = new Uint8Array(ev.data as ArrayBuffer);
       if (data[0] === NOISE_INIT && !isInitiator) {
         try {
@@ -555,14 +555,14 @@ export async function createNoiseChannel(
           zeroize(localXPriv);
           resolve();
         } catch (e) {
-          reject(e);
+          reject(e instanceof Error ? e : new Error(String(e)));
         }
       }
     };
 
     ws.onerror = () => reject(new Error('noise: WebSocket error'));
     ws.onclose = () => {
-      if (!sendCS) reject(new Error('noise: connection closed during handshake'));
+      if (!sendCS) {reject(new Error('noise: connection closed during handshake'));}
     };
   });
 
@@ -572,13 +572,13 @@ export async function createNoiseChannel(
     peer: peerPubkey,
 
     send(data: string | Uint8Array): void {
-      if (!sendCS || !ws) return;
+      if (!sendCS || !ws) {return;}
       const plain = typeof data === 'string' ? new TextEncoder().encode(data) : data;
       ws.send(encryptTransport(sendCS, plain));
     },
 
     on(event: 'message', handler: (data: Uint8Array) => void): void {
-      if (event === 'message') handlers.push(handler);
+      if (event === 'message') {handlers.push(handler);}
     },
 
     close(): void {

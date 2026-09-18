@@ -10,7 +10,7 @@ import {
 
 /** an x25519 static keypair (the handshake works on x25519 keys directly). */
 function staticKeypair() {
-  const priv = x25519.utils.randomPrivateKey();
+  const priv = x25519.utils.randomSecretKey();
   return { priv, pub: x25519.getPublicKey(priv) };
 }
 
