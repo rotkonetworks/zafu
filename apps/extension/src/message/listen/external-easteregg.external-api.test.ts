@@ -70,6 +70,27 @@ describe('gh #19 — same-origin approval-popup dedup', () => {
   });
 });
 
+describe('zafu_frost_sign_disabled_unreachable — arm removed, no popup', () => {
+  it('does not open a popup and responds inertly for the disabled type', async () => {
+    // Even with the frost capability granted and a well-formed payload, the
+    // removed arm must NOT open an approval popup. The dispatch falls through
+    // to the default case, which returns a plain unknown-type error.
+    const origin = 'https://frost-disabled.example';
+    await grantCapability(origin, 'frost');
+    const res = await call(
+      {
+        type: 'zafu_frost_sign_disabled_unreachable',
+        roomCode: 'r1',
+        sighashHex: 'a'.repeat(64),
+      },
+      validSender(origin),
+    );
+    await flush();
+    expect(createMock).not.toHaveBeenCalled();
+    expect(res).toEqual({ error: 'unknown message type' });
+  });
+});
+
 describe('gh #18 — zafu_delete_multisig uniform rejection', () => {
   it('rejects a too-short label with the uniform denied shape (granted origin)', async () => {
     const origin = 'https://del-short.example';
