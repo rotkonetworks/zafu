@@ -288,6 +288,13 @@ export const externalMessageListener = (
       // signing (zafu_frost_sign) remain available to free users so they
       // can participate in vaults / poker games hosted by Pro creators.
       void (async () => {
+        // Gate on the 'frost' capability FIRST (uniform 'denied', constant-time
+        // floor) so an origin that was never granted frost can't probe the user's
+        // Pro status by observing "pro subscription required" vs a popup.
+        const gate = await requireCapability(sender, 'frost', sendResponse);
+        if (!gate) {
+          return;
+        }
         const { useStore } = await import('../../state');
         if (!useStore.getState().license.license || !isPro(useStore.getState())) {
           sendResponse({ error: 'pro subscription required to create multisig vaults / games' });

@@ -180,6 +180,11 @@ export const AnimatedQrScanner = ({
       return;
     }
 
+    // clear the completion latch so "retry" works after a hard abort (e.g. the
+    // MAX_UR_PARTS cap set completedRef and every scan/worker callback then
+    // dropped input, making the retry button inert).
+    completedRef.current = false;
+
     // supersede any prior in-flight start and mark this generation
     const gen = ++startGenRef.current;
     // this start is stale if superseded (retry/stop) or the component unmounted
