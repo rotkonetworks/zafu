@@ -67,6 +67,31 @@ const isRateLimited = (origin: string): boolean => {
 const pendingApprovals = new Map<string, (r: unknown) => void>();
 
 /**
+ * Track popup windowId -> approval requestId so a user closing the popup
+ * without deciding resolves the pending approval instead of leaving the
+ * caller's message channel open until the runtime times it out.
+ *
+ * Optional-chained: chrome.windows is absent in unit-test mocks, and this
+ * runs at module load, so guard it rather than crash the import.
+ */
+const popupWindowToRequestId = new Map<number, string>();
+chrome.windows?.onRemoved?.addListener(windowId => {
+  const requestId = popupWindowToRequestId.get(windowId);
+  if (requestId === undefined) {
+    return;
+  }
+  popupWindowToRequestId.delete(windowId);
+  const resolve = pendingApprovals.get(requestId);
+  if (resolve) {
+    pendingApprovals.delete(requestId);
+    // `cancelled` marks a "user closed the popup without deciding" outcome so
+    // ensureApproved returns false WITHOUT persisting a permanent denial - a
+    // deny the user never made would be a semantics change.
+    resolve({ approved: false, cancelled: true });
+  }
+});
+
+/**
  * check if origin has encryption permission, or prompt for approval.
  * returns true if approved, false if denied.
  *
@@ -102,16 +127,42 @@ const ensureApproved = async (
     title: sender.tab?.title || '',
   });
   const url = chrome.runtime.getURL(`popup.html#/approval/capability?${params.toString()}`);
-  void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+  // pendingApprovals was already registered above, so a create-failure resolves
+  // it with the same "cancelled" shape onRemoved uses; the caller sees a
+  // non-persisting denial rather than a hung message channel.
+  chrome.windows
+    .create({ url, type: 'popup', width: 400, height: 520 })
+    .then(win => {
+      if (win?.id !== undefined) {
+        popupWindowToRequestId.set(win.id, requestId);
+      } else {
+        const r = pendingApprovals.get(requestId);
+        if (r) {
+          pendingApprovals.delete(requestId);
+          r({ approved: false, cancelled: true });
+        }
+      }
+    })
+    .catch(() => {
+      const r = pendingApprovals.get(requestId);
+      if (r) {
+        pendingApprovals.delete(requestId);
+        r({ approved: false, cancelled: true });
+      }
+    });
 
-  const result = (await resultPromise) as { approved?: boolean };
+  const result = (await resultPromise) as { approved?: boolean; cancelled?: boolean };
   if (result?.approved) {
     await grantCapability(origin, 'encrypt');
     return true;
-  } else {
-    await denyCapability(origin, 'encrypt');
+  }
+  if (result?.cancelled) {
+    // popup never got a user decision (closed or failed to open) - do not
+    // persist a denial the user did not make; caller can re-request.
     return false;
   }
+  await denyCapability(origin, 'encrypt');
+  return false;
 };
 
 // -- input validation --
@@ -430,27 +481,34 @@ export const encryptionMessageListener = (
     return true;
   }
 
-  // dispatch
+  // dispatch. Top-level try/catch mirrors the internal-services fix: unhandled
+  // rejections from getOriginPermissions / dynamic imports / grant|denyCapability
+  // must NOT leave the sender's message channel open until the runtime times it
+  // out with "channel closed before response received".
   void (async () => {
-    // check permission (may open approval popup)
-    const approved = await ensureApproved(origin, sender);
-    if (!approved) {
-      sendResponse({ error: 'permission denied', code: 'denied' });
-      return;
-    }
+    try {
+      // check permission (may open approval popup)
+      const approved = await ensureApproved(origin, sender);
+      if (!approved) {
+        sendResponse({ error: 'permission denied', code: 'denied' });
+        return;
+      }
 
-    switch (type) {
-      case 'zafu_encrypt':
-        sendResponse(await handleEncrypt(msg as unknown as ZafuEncryptRequest));
-        break;
-      case 'zafu_decrypt':
-        sendResponse(await handleDecrypt(msg as unknown as ZafuDecryptRequest, origin));
-        break;
-      case 'zafu_zid_pubkey':
-        sendResponse(await handleZidPubkey(origin));
-        break;
-      default:
-        sendResponse({ error: 'unknown encryption message type', code: 'invalid_request' });
+      switch (type) {
+        case 'zafu_encrypt':
+          sendResponse(await handleEncrypt(msg as unknown as ZafuEncryptRequest));
+          break;
+        case 'zafu_decrypt':
+          sendResponse(await handleDecrypt(msg as unknown as ZafuDecryptRequest, origin));
+          break;
+        case 'zafu_zid_pubkey':
+          sendResponse(await handleZidPubkey(origin));
+          break;
+        default:
+          sendResponse({ error: 'unknown encryption message type', code: 'invalid_request' });
+      }
+    } catch {
+      sendResponse({ error: 'internal error', code: 'internal_error' });
     }
   })();
 
