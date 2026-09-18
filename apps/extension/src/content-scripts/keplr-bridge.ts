@@ -25,6 +25,13 @@ const isKeplrRequest = (d: unknown): d is KeplrWireRequest =>
   (d as { direction?: unknown }).direction === 'request' &&
   typeof (d as { id?: unknown }).id === 'string';
 
+// Keplr compatibility is OPT-IN and enforced HERE, on the request path - not
+// just at install. The MAIN-world provider is reachable by forged postMessages,
+// so gating only the install is cosmetic; the ISOLATED-world bridge (the only
+// side with chrome.storage) is the trustworthy enforcement point. Track the flag
+// live so a mid-session toggle applies, and fail closed (drop) until it's read.
+let keplrEnabled = false;
+
 window.addEventListener('message', (ev: MessageEvent) => {
   if (ev.source !== window || !isKeplrRequest(ev.data)) {
     return;
@@ -33,6 +40,12 @@ window.addEventListener('message', (ev: MessageEvent) => {
 
   const respond = (payload: { ok: boolean; result?: unknown; error?: string }) =>
     window.postMessage({ channel: CHANNEL, direction: 'response', id, ...payload }, window.origin);
+
+  // opt-out gate: refuse every keplr method unless the user enabled compatibility
+  if (!keplrEnabled) {
+    respond({ ok: false, error: 'keplr compatibility is disabled in zafu settings' });
+    return;
+  }
 
   // orphaned content script (extension reloaded in an open tab) - fail cleanly
   if (!chrome.runtime?.id || chrome.runtime.id === 'invalid') {
@@ -54,17 +67,26 @@ window.addEventListener('message', (ev: MessageEvent) => {
     );
 });
 
-// Keplr compatibility is opt-in. Only when the user has turned it on do we tell
-// the MAIN-world provider to install window.keplr; otherwise zafu leaves the
-// slot alone so a real Keplr keeps working. Read once at document_start; a
-// toggle change applies on the next page load.
+// Read the opt-in flag and, only when on, tell the MAIN-world provider to install
+// window.keplr (a real Keplr otherwise keeps the slot). This drives BOTH the
+// install and the request-path gate above (keplrEnabled). Kept live via
+// storage.onChanged so a toggle applies without a page reload.
+const applyKeplrCompat = (on: boolean): void => {
+  keplrEnabled = on;
+  if (on) {
+    window.postMessage({ channel: CHANNEL, direction: 'enable' }, window.origin);
+  }
+};
+
 if (chrome.runtime?.id && chrome.runtime.id !== 'invalid') {
   chrome.storage.local
     .get('keplrCompat')
-    .then(({ keplrCompat }) => {
-      if (keplrCompat === true) {
-        window.postMessage({ channel: CHANNEL, direction: 'enable' }, window.origin);
-      }
-    })
+    .then(({ keplrCompat }) => applyKeplrCompat(keplrCompat === true))
     .catch(() => undefined);
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && 'keplrCompat' in changes) {
+      applyKeplrCompat(changes['keplrCompat']?.newValue === true);
+    }
+  });
 }

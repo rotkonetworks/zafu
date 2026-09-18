@@ -264,6 +264,13 @@ window.addEventListener('message', (ev: MessageEvent) => {
   }
   const d = ev.data as { channel?: string; direction?: string } | undefined;
   if (d?.channel === CHANNEL && d.direction === 'enable') {
+    // NOTE: a page could forge this 'enable' (MAIN world can't authenticate the
+    // ISOLATED-world bridge across postMessage). That only installs an INERT
+    // window.keplr: enforcement of the opt-in lives on the request path in
+    // keplr-bridge.ts, which drops every method call unless keplrCompat is on. So
+    // a forged enable yields a provider object that answers "disabled" to
+    // everything - a minor fingerprint, not a functional bypass. install is
+    // idempotent and never clobbers a real Keplr.
     installKeplr();
   }
 });
