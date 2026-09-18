@@ -93,6 +93,32 @@ describe('encryptFor()', () => {
       encryptFor(handle, { pubkey: 'ed' }, new Uint8Array([1])),
     ).rejects.toBeInstanceOf(ZafuError);
   });
+
+  it('reports postQuantum from the OUTCOME, not intent', async () => {
+    // recipient advertises a PQ key, but the wallet returned a classical
+    // ephemeral -> the PQ path was NOT used, so postQuantum must be false.
+    request.mockResolvedValue({ ciphertext: 'c', ephemeral_pubkey: 'nonempty' });
+    const out = await encryptFor(handle, { pubkey: 'ed', pq_pubkey: 'xw' }, new Uint8Array([1]));
+    expect(out.postQuantum).toBe(false);
+  });
+
+  it('requirePq fails closed when the PQ path was not used', async () => {
+    request.mockResolvedValue({ ciphertext: 'c', ephemeral_pubkey: 'nonempty' });
+    await expect(
+      encryptFor(handle, { pubkey: 'ed', pq_pubkey: 'xw' }, new Uint8Array([1]), { requirePq: true }),
+    ).rejects.toMatchObject({ code: 'not_available' });
+  });
+
+  it('requirePq passes when the PQ path was used', async () => {
+    request.mockResolvedValue({ ciphertext: 'c', ephemeral_pubkey: '' });
+    const out = await encryptFor(
+      handle,
+      { pubkey: 'ed', pq_pubkey: 'xw' },
+      new Uint8Array([1]),
+      { requirePq: true },
+    );
+    expect(out.postQuantum).toBe(true);
+  });
 });
 
 describe('decryptFrom()', () => {

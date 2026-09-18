@@ -34,15 +34,39 @@ export async function createSessionKey() {
   };
 }
 
-/** detect zafu/penumbra wallet extension */
+/**
+ * Detect the zafu wallet among the injected penumbra providers.
+ *
+ * There can be several (e.g. Prax installed alongside zafu), so we ping each and
+ * return the one that answers the zafu handshake (`{ zafu: true }`). Picking
+ * `entries[0]` blindly - as this did before - silently fails detection whenever
+ * another penumbra wallet happens to be listed first.
+ */
 export async function detectZafu(): Promise<ZafuHandle | null> {
-  const providers = (globalThis as any)[Symbol.for('penumbra')];
-  if (!providers) {return null;}
-  const entries = Object.entries(providers);
-  if (!entries.length) {return null;}
-  const [origin, provider] = entries[0] as [string, any];
-  if (!provider) {return null;}
-  return { origin, provider };
+  const providers = (globalThis as Record<symbol, unknown>)[Symbol.for('penumbra')];
+  if (!providers || typeof providers !== 'object') {
+    return null;
+  }
+  for (const [origin, provider] of Object.entries(providers as Record<string, unknown>)) {
+    if (!provider) {
+      continue;
+    }
+    const handle: ZafuHandle = { origin, provider };
+    try {
+      const pong = await createExtensionTransport(handle).request('ping', { type: 'ping' });
+      if (
+        pong &&
+        typeof pong === 'object' &&
+        'zafu' in pong &&
+        (pong as { zafu?: unknown }).zafu === true
+      ) {
+        return handle;
+      }
+    } catch {
+      // unreachable or non-zafu provider - try the next entry
+    }
+  }
+  return null;
 }
 
 /** request delegation from zafu wallet */

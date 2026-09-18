@@ -72,6 +72,17 @@ async function call<M extends ZafuMethod>(
     const r = resp as { error?: string; code?: string };
     throw classifyWalletError(r.error, r.code);
   }
+  // zafu_request_capability answers { granted: false, capability } - a refusal,
+  // not a success. Treat it as a denied error rather than returning it as a value.
+  if (
+    typeof resp === 'object' &&
+    resp !== null &&
+    'granted' in resp &&
+    (resp as { granted?: unknown }).granted !== true
+  ) {
+    const cap = (resp as { capability?: string }).capability;
+    throw new ZafuError('denied', `capability not granted${cap ? `: ${cap}` : ''}`);
+  }
   return resp as Exclude<ZafuResponse<M>, { error: string }>;
 }
 
@@ -112,8 +123,13 @@ export async function detect(zafu?: ZafuHandle | null): Promise<ZafuDetection> {
  */
 export async function requireWallet(zafu?: ZafuHandle | null): Promise<ZafuHandle> {
   const handle = zafu ?? (await detectZafu());
+  // resolve the handle first so we don't probe twice (detect(null) would re-run
+  // detectZafu). Once we have a handle, detect() confirms it and reads the version.
+  if (!handle) {
+    throw new ZafuError('unavailable', 'no zafu wallet reachable');
+  }
   const d = await detect(handle);
-  if (!d.installed || !handle) {
+  if (!d.installed) {
     throw new ZafuError('unavailable', 'no zafu wallet reachable');
   }
   if (d.compatible === false) {
@@ -183,11 +199,17 @@ export async function zidPubkey(zafu: ZafuHandle): Promise<ZidRecipient> {
  * falling back to the classical sealed box otherwise. Returns the sealed
  * ciphertext plus the ephemeral pubkey the recipient needs to open it (empty for
  * the post-quantum path, where the ephemeral is inside the ciphertext).
+ *
+ * Pass `{ requirePq: true }` to fail closed when the post-quantum path was NOT
+ * used (recipient has no PQ key, or the sender's wallet predates it) instead of
+ * silently sending classical - for callers that must not emit
+ * harvest-now-decrypt-later-vulnerable ciphertext.
  */
 export async function encryptFor(
   zafu: ZafuHandle,
   recipient: ZidRecipient,
   plaintext: Uint8Array,
+  opts?: { requirePq?: boolean },
 ): Promise<{ ciphertext: string; ephemeral_pubkey: string; postQuantum: boolean }> {
   const pt = b64encode(plaintext);
   const req = recipient.pq_pubkey
@@ -198,11 +220,23 @@ export async function encryptFor(
         plaintext: pt,
       })
     : ({ type: 'zafu_encrypt' as const, recipient: recipient.pubkey, plaintext: pt });
-  const resp = (await call(zafu, 'zafu_encrypt', req));
+  const resp = await call(zafu, 'zafu_encrypt', req);
+  // postQuantum reflects the ACTUAL outcome, not the intent: the hybrid path
+  // carries its ephemeral inside the ciphertext and returns an empty
+  // ephemeral_pubkey; the classical path returns the sender's ephemeral pubkey.
+  // (Boolean(recipient.pq_pubkey) would report a false positive when the sender's
+  // own wallet is too old to honour the PQ path.)
+  const postQuantum = resp.ephemeral_pubkey === '';
+  if (opts?.requirePq && !postQuantum) {
+    throw new ZafuError(
+      'not_available',
+      'requirePq: the wallet did not use the post-quantum path (recipient has no PQ key, or the wallet predates it)',
+    );
+  }
   return {
     ciphertext: resp.ciphertext,
     ephemeral_pubkey: resp.ephemeral_pubkey,
-    postQuantum: Boolean(recipient.pq_pubkey),
+    postQuantum,
   };
 }
 

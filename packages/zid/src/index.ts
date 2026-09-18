@@ -14,6 +14,7 @@
  */
 
 export { zid } from './zid';
+export { detectZafu } from './provider';
 export { createExtensionTransport, type ZafuHandle } from './transport';
 export {
   detect,

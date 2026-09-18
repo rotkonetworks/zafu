@@ -60,9 +60,21 @@ const handleSignRequest = async (
   req: SignRequestMessage,
   sender: { origin: string; tab: chrome.tabs.Tab },
 ): Promise<SignResponse> => {
-  // validate challenge
-  if (!req.challengeHex || req.challengeHex.length < 2 || req.challengeHex.length > 2048) {
-    return { success: false, error: 'invalid challenge: must be 1-1024 bytes hex-encoded', code: 'invalid_request' };
+  // validate challenge up front: 1-1024 bytes, hex, even length. Rejecting
+  // malformed input here (invalid_request) avoids showing the user a sign popup
+  // for a challenge that would only fail post-crypto with a generic error.
+  if (
+    !req.challengeHex ||
+    req.challengeHex.length < 2 ||
+    req.challengeHex.length > 2048 ||
+    req.challengeHex.length % 2 !== 0 ||
+    !/^[0-9a-fA-F]+$/.test(req.challengeHex)
+  ) {
+    return {
+      success: false,
+      error: 'invalid challenge: must be 1-1024 bytes hex-encoded',
+      code: 'invalid_request',
+    };
   }
 
   try {
