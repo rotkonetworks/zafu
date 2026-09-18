@@ -17,6 +17,7 @@ export { zid } from './zid';
 export { createExtensionTransport, type ZafuHandle } from './transport';
 export {
   detect,
+  requireWallet,
   zidPubkey,
   encryptFor,
   decryptFrom,

@@ -23,9 +23,28 @@ export type Hex = string;
 /** standard base64 (btoa/atob alphabet). */
 export type Base64 = string;
 
+/**
+ * Machine-readable error codes a wallet MAY set on a ZafuError so a client can
+ * branch on the cause without parsing the human-readable `error` string. Open
+ * (`string & {}`) so a new code never forces a version bump, and additive: a
+ * wallet that predates it omits `code` and the client falls back to the string.
+ * These are the WIRE codes the wallet emits; an SDK's own taxonomy (which also
+ * has client-side codes like `unavailable`/`transport_error`) is a superset.
+ */
+export type ZafuWireErrorCode =
+  | 'locked' // wallet is locked; the user must unlock
+  | 'denied' // the user declined the request
+  | 'rate_limited' // the origin exceeded the wallet's rate limit
+  | 'not_available' // the feature is turned off in wallet settings
+  | 'invalid_request' // the request was malformed
+  | 'internal_error' // the wallet failed unexpectedly
+  | (string & {});
+
 /** the uniform error shape a handler returns when a call is refused or fails. */
 export interface ZafuError {
   error: string;
+  /** machine-readable cause; prefer it over parsing `error`. Optional (additive). */
+  code?: ZafuWireErrorCode;
 }
 
 // -- discovery ---------------------------------------------------------------

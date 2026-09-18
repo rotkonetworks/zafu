@@ -8,7 +8,7 @@ vi.mock('./transport', () => ({
 }));
 vi.mock('./provider', () => ({ detectZafu }));
 
-import { detect, zidPubkey, encryptFor, decryptFrom } from './messaging';
+import { detect, requireWallet, zidPubkey, encryptFor, decryptFrom } from './messaging';
 import { ZafuError } from './errors';
 
 const handle = { origin: 'chrome-extension://abc/', provider: {} };
@@ -100,5 +100,42 @@ describe('decryptFrom()', () => {
     request.mockResolvedValue({ plaintext: btoa(String.fromCharCode(7, 8, 9)) });
     const out = await decryptFrom(handle, { ciphertext: 'c', ephemeral_pubkey: '' });
     expect([...out]).toEqual([7, 8, 9]);
+  });
+});
+
+describe('structured error code (prefer code over string-matching)', () => {
+  it('uses the wallet code even when the message string would not match', async () => {
+    // an opaque/localised message the string matcher would miss, plus a real code.
+    request.mockResolvedValue({ error: 'no puedes hacer eso', code: 'rate_limited' });
+    await expect(zidPubkey(handle)).rejects.toMatchObject({ code: 'rate_limited' });
+  });
+
+  it('reads the code from a { success:false } shape too', async () => {
+    request.mockResolvedValue({ success: false, error: 'x', code: 'locked' });
+    await expect(
+      encryptFor(handle, { pubkey: 'ed' }, new Uint8Array([1])),
+    ).rejects.toMatchObject({ code: 'locked' });
+  });
+
+  it('falls back to string-matching for older wallets with no code', async () => {
+    request.mockResolvedValue({ error: 'rate limited: max 100 calls per minute' });
+    await expect(zidPubkey(handle)).rejects.toMatchObject({ code: 'rate_limited' });
+  });
+});
+
+describe('requireWallet()', () => {
+  it('throws unavailable when no wallet is reachable', async () => {
+    detectZafu.mockResolvedValue(null);
+    await expect(requireWallet()).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('throws incompatible when the wallet shares no protocol major', async () => {
+    request.mockResolvedValue({ zafu: true, version: '99', protocolVersion: 2, protocolVersions: [2] });
+    await expect(requireWallet(handle)).rejects.toMatchObject({ code: 'incompatible' });
+  });
+
+  it('returns the handle when a compatible wallet is present', async () => {
+    request.mockResolvedValue({ zafu: true, version: '28.1.0', protocolVersion: 1, protocolVersions: [1] });
+    expect(await requireWallet(handle)).toBe(handle);
   });
 });

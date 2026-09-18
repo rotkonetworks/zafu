@@ -183,7 +183,7 @@ const validateEd25519Pubkey = (pubkeyBytes: Uint8Array): boolean => {
 
 const handleEncrypt = async (msg: ZafuEncryptRequest): Promise<ZafuEncryptResponse> => {
   if (!isValidBase64(msg.plaintext)) {
-    return { error: 'invalid plaintext: expected non-empty base64 string' };
+    return { error: 'invalid plaintext: expected non-empty base64 string', code: 'invalid_request' };
   }
 
   // hybrid post-quantum path: the recipient advertised an X-Wing key
@@ -194,24 +194,25 @@ const handleEncrypt = async (msg: ZafuEncryptRequest): Promise<ZafuEncryptRespon
     if (!isValidHexPubkey(msg.recipient_pq, XWING_LENGTHS.publicKey)) {
       return {
         error: `invalid recipient_pq: expected ${XWING_LENGTHS.publicKey * 2} hex chars (X-Wing public key)`,
+        code: 'invalid_request',
       };
     }
     try {
       const wire = sealXWing(hexToBytes(msg.recipient_pq), base64ToBytes(msg.plaintext));
       return { ciphertext: bytesToBase64(wire), ephemeral_pubkey: '' };
     } catch (e) {
-      return { error: 'encryption failed: ' + String(e) };
+      return { error: 'encryption failed: ' + String(e), code: 'internal_error' };
     }
   }
 
   // classical x25519 path
   if (!isValidHexPubkey(msg.recipient, 32)) {
-    return { error: 'invalid recipient: expected 64 hex chars (32-byte ed25519 pubkey)' };
+    return { error: 'invalid recipient: expected 64 hex chars (32-byte ed25519 pubkey)', code: 'invalid_request' };
   }
 
   const recipientEd25519 = hexToBytes(msg.recipient);
   if (!validateEd25519Pubkey(recipientEd25519)) {
-    return { error: 'invalid recipient: not a valid ed25519 public key' };
+    return { error: 'invalid recipient: not a valid ed25519 public key', code: 'invalid_request' };
   }
 
   try {
@@ -240,7 +241,7 @@ const handleEncrypt = async (msg: ZafuEncryptRequest): Promise<ZafuEncryptRespon
       ephemeral_pubkey: bytesToHex(ephemeralPub),
     };
   } catch (e) {
-    return { error: 'encryption failed: ' + String(e) };
+    return { error: 'encryption failed: ' + String(e), code: 'internal_error' };
   }
 };
 
@@ -253,18 +254,18 @@ const handleDecrypt = async (
   // is exactly the surface they turned off).
   const { isIdentityEnabledFromStorage } = await import('../../state/privacy');
   if (!(await isIdentityEnabledFromStorage())) {
-    return { error: 'identity disabled in zafu settings' };
+    return { error: 'identity disabled in zafu settings', code: 'not_available' };
   }
 
   if (!isValidBase64(msg.ciphertext)) {
-    return { error: 'invalid ciphertext: expected non-empty base64 string' };
+    return { error: 'invalid ciphertext: expected non-empty base64 string', code: 'invalid_request' };
   }
 
   // An empty ephemeral_pubkey marks a hybrid (X-Wing) sealed box - its ephemeral
   // is inside the ciphertext. A non-empty one is the classical x25519 path.
   const hybrid = !msg.ephemeral_pubkey || msg.ephemeral_pubkey.length === 0;
   if (!hybrid && !isValidHexPubkey(msg.ephemeral_pubkey, 32)) {
-    return { error: 'invalid ephemeral_pubkey: expected 64 hex chars (32-byte x25519 pubkey)' };
+    return { error: 'invalid ephemeral_pubkey: expected 64 hex chars (32-byte x25519 pubkey)', code: 'invalid_request' };
   }
 
   try {
@@ -272,7 +273,7 @@ const handleDecrypt = async (
     const { useStore } = await import('../../state');
     const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
     if (!keyInfo) {
-      return { error: 'wallet locked' };
+      return { error: 'wallet locked', code: 'locked' };
     }
 
     const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
@@ -321,7 +322,7 @@ const handleDecrypt = async (
 
     return { plaintext: bytesToBase64(plaintext) };
   } catch (e) {
-    return { error: 'decryption failed' };
+    return { error: 'decryption failed', code: 'internal_error' };
   }
 };
 
@@ -329,12 +330,12 @@ const handleZidPubkey = async (origin: string): Promise<ZafuZidPubkeyResponse> =
   try {
     const { isIdentityEnabledFromStorage } = await import('../../state/privacy');
     if (!(await isIdentityEnabledFromStorage())) {
-      return { error: 'identity disabled in zafu settings' };
+      return { error: 'identity disabled in zafu settings', code: 'not_available' };
     }
     const { useStore } = await import('../../state');
     const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
     if (!keyInfo) {
-      return { error: 'wallet locked' };
+      return { error: 'wallet locked', code: 'locked' };
     }
 
     const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
@@ -349,7 +350,7 @@ const handleZidPubkey = async (origin: string): Promise<ZafuZidPubkeyResponse> =
 
     return { pubkey: zid.publicKey, pq_pubkey, pq_suite: ZID_PQ_SUITE };
   } catch (e) {
-    return { error: 'failed to derive pubkey: ' + String(e) };
+    return { error: 'failed to derive pubkey: ' + String(e), code: 'internal_error' };
   }
 };
 
@@ -396,13 +397,13 @@ export const encryptionMessageListener = (
 
   const origin = sender.origin || sender.url;
   if (!origin) {
-    sendResponse({ error: 'unknown origin' });
+    sendResponse({ error: 'unknown origin', code: 'invalid_request' });
     return true;
   }
 
   // rate limit check
   if (isRateLimited(origin)) {
-    sendResponse({ error: 'rate limited: max 100 calls per minute' });
+    sendResponse({ error: 'rate limited: max 100 calls per minute', code: 'rate_limited' });
     return true;
   }
 
@@ -411,7 +412,7 @@ export const encryptionMessageListener = (
     // check permission (may open approval popup)
     const approved = await ensureApproved(origin, sender);
     if (!approved) {
-      sendResponse({ error: 'permission denied' });
+      sendResponse({ error: 'permission denied', code: 'denied' });
       return;
     }
 
@@ -426,7 +427,7 @@ export const encryptionMessageListener = (
         sendResponse(await handleZidPubkey(origin));
         break;
       default:
-        sendResponse({ error: 'unknown encryption message type' });
+        sendResponse({ error: 'unknown encryption message type', code: 'invalid_request' });
     }
   })();
 

@@ -21,10 +21,24 @@ export type ZafuErrorCode =
   | 'rate_limited'
   /** the feature is turned off in wallet settings (e.g. the identity layer). */
   | 'not_available'
+  /** the request was malformed (a client bug). */
+  | 'invalid_request'
+  /** the wallet failed unexpectedly. */
+  | 'internal_error'
   /** the wallet returned an error that does not map to a more specific code. */
   | 'wallet_error'
   /** the message could not be delivered to the wallet (timeout, disconnect). */
   | 'transport_error';
+
+/** the wire codes a wallet can set on a response (a subset of ZafuErrorCode). */
+const WIRE_CODES: readonly ZafuErrorCode[] = [
+  'locked',
+  'denied',
+  'rate_limited',
+  'not_available',
+  'invalid_request',
+  'internal_error',
+];
 
 export class ZafuError extends Error {
   readonly code: ZafuErrorCode;
@@ -36,10 +50,15 @@ export class ZafuError extends Error {
 }
 
 /**
- * Map a wallet error string to a typed code. The wallet's strings are not a
- * stable contract, so match loosely and fall back to `wallet_error`.
+ * Turn a wallet error into a typed ZafuError. Prefer the structured `code` the
+ * wallet now sets (@zafu/protocol ZafuWireErrorCode); only fall back to loose
+ * string-matching for older wallets that predate the code field (their strings
+ * are not a stable contract, hence the fallback to `wallet_error`).
  */
-export function classifyWalletError(msg: string | undefined): ZafuError {
+export function classifyWalletError(msg: string | undefined, code?: string): ZafuError {
+  if (code && (WIRE_CODES as readonly string[]).includes(code)) {
+    return new ZafuError(code as ZafuErrorCode, msg);
+  }
   const m = (msg ?? '').toLowerCase();
   if (m.includes('locked')) {
     return new ZafuError('locked', msg);

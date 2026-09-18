@@ -143,7 +143,7 @@ async function requireCapability(
     if (elapsed < REJECT_FLOOR_MS) {
       await new Promise<void>(r => setTimeout(r, REJECT_FLOOR_MS - elapsed));
     }
-    sendResponse({ success: false, error: 'denied' });
+    sendResponse({ success: false, error: 'denied', code: 'denied' });
     return null;
   };
 

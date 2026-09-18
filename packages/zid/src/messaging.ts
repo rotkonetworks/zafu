@@ -63,11 +63,12 @@ async function call<M extends ZafuMethod>(
     throw new ZafuError('transport_error', e instanceof Error ? e.message : String(e));
   }
   if (isZafuError(resp)) {
-    throw classifyWalletError(resp.error);
+    throw classifyWalletError(resp.error, (resp as { code?: string }).code);
   }
   // some methods answer { success: false, error } instead of { error }
   if (typeof resp === 'object' && resp !== null && 'success' in resp && resp.success === false) {
-    throw classifyWalletError((resp as { error?: string }).error);
+    const r = resp as { error?: string; code?: string };
+    throw classifyWalletError(r.error, r.code);
   }
   return resp as Exclude<ZafuResponse<M>, { error: string }>;
 }
@@ -98,6 +99,28 @@ export async function detect(zafu?: ZafuHandle | null): Promise<ZafuDetection> {
   } catch {
     return { installed: false };
   }
+}
+
+/**
+ * Resolve a reachable, protocol-compatible wallet handle, or throw a typed
+ * ZafuError explaining why not: `unavailable` (no wallet), or `incompatible`
+ * (a wallet is present but speaks no protocol major this SDK understands). Use
+ * it before the messaging helpers when you want that distinction surfaced as an
+ * error rather than reading the `detect()` struct yourself.
+ */
+export async function requireWallet(zafu?: ZafuHandle | null): Promise<ZafuHandle> {
+  const handle = zafu ?? (await detectZafu());
+  const d = await detect(handle);
+  if (!d.installed || !handle) {
+    throw new ZafuError('unavailable', 'no zafu wallet reachable');
+  }
+  if (d.compatible === false) {
+    throw new ZafuError(
+      'incompatible',
+      `wallet speaks protocol ${(d.protocolVersions ?? []).join(', ') || '?'}, this SDK speaks ${ZAFU_PROTOCOL_VERSION}`,
+    );
+  }
+  return handle;
 }
 
 /** fetch a recipient's advertised keys (the site-scoped ZID pubkeys). */

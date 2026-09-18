@@ -21,6 +21,7 @@ export {
   type ZafuRequest,
   type ZafuResponse,
   type ZafuError,
+  type ZafuWireErrorCode,
   type Hex,
   type Base64,
   type ZafuPingRequest,
