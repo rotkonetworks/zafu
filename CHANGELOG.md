@@ -6,7 +6,7 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
-## Unreleased
+## 28.0.1
 
 Covers everything since 28.0.0.
 
