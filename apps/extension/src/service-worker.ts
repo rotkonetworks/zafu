@@ -519,25 +519,41 @@ chrome.alarms.onAlarm.addListener(async alarm => {
 // Only the service worker can call chrome.offscreen.createDocument().
 const OFFSCREEN_PATH = '/offscreen.html';
 
+const withTimeout = <T>(p: Promise<T>, ms: number, label: string): Promise<T> =>
+  Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms),
+    ),
+  ]);
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type !== 'ZCASH_ENSURE_OFFSCREEN') {
     return false;
   }
   void (async () => {
     try {
-      const contexts = await chrome.runtime.getContexts({
-        contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
-      });
+      const contexts = await withTimeout(
+        chrome.runtime.getContexts({
+          contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
+        }),
+        3000,
+        'getContexts',
+      );
       if (!contexts.length) {
-        await chrome.offscreen
-          .createDocument({
-            url: chrome.runtime.getURL(OFFSCREEN_PATH),
-            reasons: [chrome.offscreen.Reason.WORKERS],
-            justification: 'Zcash Halo 2 parallel proving via rayon thread pool',
-          })
-          .catch(() => {
-            /* already exists */
-          });
+        await withTimeout(
+          chrome.offscreen
+            .createDocument({
+              url: chrome.runtime.getURL(OFFSCREEN_PATH),
+              reasons: [chrome.offscreen.Reason.WORKERS],
+              justification: 'Zcash Halo 2 parallel proving via rayon thread pool',
+            })
+            .catch(() => {
+              /* already exists */
+            }),
+          3000,
+          'createDocument',
+        );
       }
       sendResponse({ ok: true });
     } catch (e) {
