@@ -2,20 +2,45 @@
   "name": "@zafu/zid",
   "version": "0.1.0",
   "license": "MIT",
-  "description": "zafu identity SDK — connect wallet, sign actions, e2ee channels",
+  "description": "zafu identity SDK - connect wallet, sign actions, post-quantum e2ee channels and messaging",
   "type": "module",
+  "keywords": ["zafu", "zid", "identity", "sdk", "login", "e2ee", "post-quantum", "wallet", "zcash", "penumbra"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rotkonetworks/zafu.git",
+    "directory": "packages/zid"
+  },
+  "homepage": "https://github.com/rotkonetworks/zafu/tree/main/packages/zid#readme",
+  "sideEffects": false,
+  "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
     "lint": "eslint \"**/*.ts*\"",
     "test": "vitest run --passWithNoTests"
   },
   "exports": {
     ".": "./src/index.ts"
   },
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  },
   "dependencies": {
     "@noble/ciphers": "^2.3.0",
     "@noble/curves": "^1.9.7",
     "@noble/hashes": "^1.8.0",
-    "@zafu/pq": "workspace:*",
-    "@zafu/protocol": "workspace:*"
+    "@zafu/pq": "workspace:^",
+    "@zafu/protocol": "workspace:^"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.0"
   }
 }

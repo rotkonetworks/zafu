@@ -2,18 +2,43 @@
   "name": "@zafu/pq",
   "version": "0.1.0",
   "license": "MIT",
-  "description": "hybrid post-quantum key agreement (X25519 + ML-KEM-768) for zafu - HNDL-resistant confidentiality",
+  "description": "Hybrid post-quantum key agreement (X25519 + ML-KEM-768 / X-Wing) - harvest-now-decrypt-later-resistant confidentiality",
   "type": "module",
+  "keywords": ["post-quantum", "ml-kem", "kyber", "x-wing", "xwing", "hybrid", "kem", "sealed-box", "zafu", "zcash"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rotkonetworks/zafu.git",
+    "directory": "packages/pq"
+  },
+  "homepage": "https://github.com/rotkonetworks/zafu/tree/main/packages/pq#readme",
+  "sideEffects": false,
+  "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
     "lint": "eslint \"**/*.ts*\"",
     "test": "vitest run"
   },
   "exports": {
     ".": "./src/index.ts"
   },
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  },
   "dependencies": {
     "@noble/ciphers": "^2.3.0",
     "@noble/post-quantum": "^0.7.1",
     "@noble/hashes": "^1.8.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.0"
   }
 }

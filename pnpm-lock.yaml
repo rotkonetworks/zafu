@@ -451,6 +451,10 @@ importers:
       '@noble/post-quantum':
         specifier: ^0.7.1
         version: 0.7.1
+    devDependencies:
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.0(jiti@2.7.0)(postcss@8.5.26)(tsx@4.23.12)(typescript@5.9.3)(yaml@2.9.0)
 
   packages/query:
     dependencies:
@@ -757,7 +761,7 @@ importers:
         version: 0.9.0
       polkadot-api:
         specifier: ^1.23.3
-        version: 1.23.3(jiti@2.7.0)(postcss@8.5.26)(rxjs@7.8.2)(tsx@4.23.12)(yaml@2.9.0)
+        version: 1.23.3(jiti@2.7.0)(postcss@8.5.26)(rxjs@7.8.2)(tsx@4.23.12)
       qrcode:
         specifier: ^1.5.4
         version: 1.5.4
@@ -775,7 +779,11 @@ importers:
         specifier: ^1.5.6
         version: 1.5.6
 
-  packages/zafu-protocol: {}
+  packages/zafu-protocol:
+    devDependencies:
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.0(jiti@2.7.0)(postcss@8.5.26)(tsx@4.23.12)(typescript@5.9.3)(yaml@2.9.0)
 
   packages/zcash-wasm: {}
 
@@ -791,11 +799,15 @@ importers:
         specifier: ^1.8.0
         version: 1.8.0
       '@zafu/pq':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../pq
       '@zafu/protocol':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../zafu-protocol
+    devDependencies:
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.0(jiti@2.7.0)(postcss@8.5.26)(tsx@4.23.12)(typescript@5.9.3)(yaml@2.9.0)
 
 packages:
 
@@ -10767,7 +10779,7 @@ snapshots:
 
   '@polka/url@1.0.0-next.29': {}
 
-  '@polkadot-api/cli@0.18.1(jiti@2.7.0)(postcss@8.5.26)(tsx@4.23.12)(yaml@2.9.0)':
+  '@polkadot-api/cli@0.18.1(jiti@2.7.0)(postcss@8.5.26)(tsx@4.23.12)':
     dependencies:
       '@commander-js/extra-typings': 14.0.0(commander@14.0.3)
       '@polkadot-api/codegen': 0.21.2
@@ -16260,9 +16272,9 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.29.7
 
-  polkadot-api@1.23.3(jiti@2.7.0)(postcss@8.5.26)(rxjs@7.8.2)(tsx@4.23.12)(yaml@2.9.0):
+  polkadot-api@1.23.3(jiti@2.7.0)(postcss@8.5.26)(rxjs@7.8.2)(tsx@4.23.12):
     dependencies:
-      '@polkadot-api/cli': 0.18.1(jiti@2.7.0)(postcss@8.5.26)(tsx@4.23.12)(yaml@2.9.0)
+      '@polkadot-api/cli': 0.18.1(jiti@2.7.0)(postcss@8.5.26)(tsx@4.23.12)
       '@polkadot-api/ink-contracts': 0.4.6
       '@polkadot-api/json-rpc-provider': 0.0.4
       '@polkadot-api/known-chains': 0.9.18

@@ -2,9 +2,19 @@
   "name": "@zafu/protocol",
   "version": "0.1.0",
   "license": "MIT",
-  "description": "versioned, transport-agnostic contract for the zafu_* wallet<->dapp API",
+  "description": "Versioned, transport-agnostic contract for the zafu_* wallet<->dapp API",
   "type": "module",
+  "keywords": ["zafu", "zid", "wallet", "dapp", "sdk", "protocol", "zcash", "penumbra"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rotkonetworks/zafu.git",
+    "directory": "packages/zafu-protocol"
+  },
+  "homepage": "https://github.com/rotkonetworks/zafu/tree/main/packages/zafu-protocol#readme",
+  "sideEffects": false,
+  "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
     "lint": "eslint \"**/*.ts*\"",
     "test": "vitest run --passWithNoTests"
   },
@@ -13,5 +23,20 @@
     "./version": "./src/version.ts",
     "./methods": "./src/methods.ts",
     "./transport": "./src/transport.ts"
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  },
+  "devDependencies": {
+    "tsup": "^8.5.0"
   }
 }

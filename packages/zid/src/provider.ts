@@ -148,7 +148,16 @@ export function listenInvites(
     decline: () => void;
   }) => void,
 ): () => void {
+  // reach chrome.runtime via globalThis - zid ships to plain web pages and
+  // carries no @types/chrome; this call is a no-op where the extension bus is
+  // absent (returns an unsubscribe that does nothing).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rt = (globalThis as { chrome?: { runtime?: any } }).chrome?.runtime;
+  if (!rt?.onMessage) {
+    return () => {};
+  }
   const extId = zafu.origin.replace('chrome-extension://', '').replace(/\/$/, '');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const listener = (msg: any, sender: any) => {
     if (sender.id !== extId) return;
     if (msg?.type !== 'zafu_incoming_invite') return;
@@ -158,23 +167,15 @@ export function listenInvites(
       data: msg.data,
       fromName: msg.fromName,
       accept: () => {
-        chrome.runtime.sendMessage(extId, {
-          type: 'zafu_invite_response',
-          id: msg.inviteId,
-          accepted: true,
-        });
+        rt.sendMessage(extId, { type: 'zafu_invite_response', id: msg.inviteId, accepted: true });
       },
       decline: () => {
-        chrome.runtime.sendMessage(extId, {
-          type: 'zafu_invite_response',
-          id: msg.inviteId,
-          accepted: false,
-        });
+        rt.sendMessage(extId, { type: 'zafu_invite_response', id: msg.inviteId, accepted: false });
       },
     });
   };
-  chrome.runtime.onMessage.addListener(listener);
-  return () => chrome.runtime.onMessage.removeListener(listener);
+  rt.onMessage.addListener(listener);
+  return () => rt.onMessage.removeListener(listener);
 }
 
 // hex helpers
