@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import QRCode from 'qrcode';
 import { Button } from '@repo/ui/components/ui/button';
 import { useStore } from '../../../state';
@@ -22,19 +23,57 @@ import { derivePenumbraEphemeralFromMnemonic } from '../../../hooks/use-address'
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { parseAmountToBaseUnits } from '@repo/wallet/networks/cosmos/signer';
-import { deriveInjectiveAddress } from '@repo/wallet/networks/injective/derive';
+import { deriveInjectiveAddress, isValidInjectiveAddress } from '@repo/wallet/networks/injective/derive';
+import { queryInjectiveBalances, queryInjectiveTx } from '@repo/wallet/networks/injective/client';
 import { shieldInToPenumbra, withdrawToExchange } from '@repo/wallet/networks/injective/conduit';
 
 const CFG = COSMOS_CHAINS.injective;
+const GAS_ASSET = CFG.gasAsset ?? { symbol: 'INJ', denom: 'inj', decimals: 18 };
 
-/** fee is paid in the gas asset (INJ, 18-dec), NOT the ramp asset (USDC.inj). */
-function injectiveFee() {
-  const gas = '400000';
+/** transaction explorer for a broadcast hash on injective-1. */
+const EXPLORER_TX = (hash: string) => `https://explorer.injective.network/transaction/${hash}`;
+
+/** gas is a fixed limit; the whole fee is paid in INJ (18-dec), NOT USDC. */
+const GAS_LIMIT = '400000';
+
+/** the INJ (gas-asset) fee for one conduit tx, in INJ base units. */
+function gasFeeInjBaseUnits(): bigint {
   const perGas = BigInt(/^\d+/.exec(CFG.gasPrice)?.[0] ?? '160000000');
+  return perGas * BigInt(GAS_LIMIT);
+}
+
+function injectiveFee() {
   return {
-    amount: [{ denom: CFG.gasAsset?.denom ?? 'inj', amount: (perGas * BigInt(gas)).toString() }],
-    gas,
+    amount: [{ denom: GAS_ASSET.denom, amount: gasFeeInjBaseUnits().toString() }],
+    gas: GAS_LIMIT,
   };
+}
+
+/**
+ * Base units -> human string for DISPLAY (no float math). Trims trailing zeros
+ * and caps the shown fraction at maxFrac; used for balances and the gas fee.
+ */
+function formatBaseUnits(amount: bigint, decimals: number, maxFrac = decimals): string {
+  const divisor = 10n ** BigInt(decimals);
+  const whole = amount / divisor;
+  const frac = (amount % divisor)
+    .toString()
+    .padStart(decimals, '0')
+    .slice(0, maxFrac)
+    .replace(/0+$/, '');
+  return frac ? `${whole}.${frac}` : `${whole}`;
+}
+
+/**
+ * Base units -> a full-precision decimal string for the Max button. The value it
+ * fills must round-trip back through parseAmountToBaseUnits to the exact same
+ * base units, so it keeps all `decimals` (only trailing zeros trimmed).
+ */
+function fullDecimalString(amount: bigint, decimals: number): string {
+  const divisor = 10n ** BigInt(decimals);
+  const whole = amount / divisor;
+  const frac = (amount % divisor).toString().padStart(decimals, '0').replace(/0+$/, '');
+  return frac ? `${whole}.${frac}` : `${whole}`;
 }
 
 /**
@@ -52,10 +91,75 @@ function toBaseUnits(human: string): string | undefined {
   return base === '0' ? undefined : base;
 }
 
+/**
+ * Honest status flow for a conduit tx:
+ *   idle -> signing (query+sign+broadcast) -> submitted (in mempool, code 0)
+ *        -> done (included on-chain) | error
+ * A BROADCAST_MODE_SYNC code 0 only means "accepted", so `submitted` polls the
+ * LCD for block inclusion before it promotes to `done`.
+ */
+type TxStatus = 'idle' | 'signing' | 'submitted' | 'done' | 'error';
 interface TxState {
-  status: 'idle' | 'signing' | 'success' | 'error';
+  status: TxStatus;
   hash?: string;
   error?: string;
+}
+
+const isBusy = (s: TxStatus) => s === 'signing' || s === 'submitted';
+
+/**
+ * Once a tx is `submitted`, poll the LCD for on-chain inclusion and promote it
+ * to `done` (or `error` if it landed with a non-zero code). Caps polling so a
+ * packet that never lands is left honestly at `submitted`. StrictMode-safe: the
+ * cleanup cancels in-flight work and clears the interval.
+ */
+function useInjectiveInclusion(
+  tx: TxState,
+  setTx: (t: TxState) => void,
+  onSettled: () => void,
+) {
+  const { status, hash } = tx;
+  useEffect(() => {
+    if (status !== 'submitted' || !hash) {
+      return;
+    }
+    let cancelled = false;
+    const started = Date.now();
+    const tick = async (): Promise<boolean> => {
+      try {
+        const st = await queryInjectiveTx(CFG.restEndpoint, hash);
+        if (cancelled) {
+          return true;
+        }
+        if (st.found) {
+          if (st.code === 0) {
+            setTx({ status: 'done', hash });
+          } else {
+            setTx({ status: 'error', hash, error: st.rawLog || `tx failed (code ${st.code})` });
+          }
+          onSettled();
+          return true;
+        }
+      } catch {
+        // transient LCD/network error - keep polling until the cap
+      }
+      return false;
+    };
+    const timer = setInterval(() => {
+      void tick().then(settled => {
+        if (cancelled) {
+          return;
+        }
+        if (settled || Date.now() - started > 90_000) {
+          clearInterval(timer);
+        }
+      });
+    }, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [status, hash, setTx, onSettled]);
 }
 
 export const InjectivePanel = () => {
@@ -104,6 +208,36 @@ export const InjectivePanel = () => {
     };
   }, [isMnemonic, selectedKeyInfo, getMnemonic]);
 
+  // live balances on the derived inj address: USDC.inj (ramp asset) + INJ (gas).
+  // Read-only LCD bank query, refreshed periodically so funds arriving from an
+  // exchange show up without a manual reload.
+  const balancesQuery = useQuery({
+    queryKey: ['injective-balances', injAddress],
+    enabled: !!injAddress,
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+    queryFn: () => queryInjectiveBalances(CFG.restEndpoint, injAddress, CFG.denom),
+  });
+  const usdcBal = balancesQuery.data?.usdc ?? 0n;
+  const injBal = balancesQuery.data?.inj ?? 0n;
+
+  const refetchBalances = useCallback(() => {
+    void balancesQuery.refetch();
+  }, [balancesQuery]);
+
+  useInjectiveInclusion(shieldTx, setShieldTx, refetchBalances);
+  useInjectiveInclusion(withdrawTx, setWithdrawTx, refetchBalances);
+
+  const feeInj = gasFeeInjBaseUnits();
+  const feeDisplay = `${formatBaseUnits(feeInj, GAS_ASSET.decimals, 6)} ${GAS_ASSET.symbol}`;
+  const gasOk = injBal >= feeInj;
+
+  const shieldBase = toBaseUnits(shieldAmount);
+  const shieldExceeds = !!shieldBase && BigInt(shieldBase) > usdcBal;
+  const withdrawBase = toBaseUnits(withdrawAmount);
+  const withdrawExceeds = !!withdrawBase && BigInt(withdrawBase) > usdcBal;
+  const withdrawAddrOk = isValidInjectiveAddress(withdrawAddr);
+
   const copy = useCallback(() => {
     if (!injAddress) {
       return;
@@ -142,16 +276,17 @@ export const InjectivePanel = () => {
       if (res.code !== 0) {
         throw new Error(res.rawLog || `broadcast failed (code ${res.code})`);
       }
-      setShieldTx({ status: 'success', hash: res.txhash });
+      setShieldTx({ status: 'submitted', hash: res.txhash });
       setShieldAmount('');
+      refetchBalances();
     } catch (err) {
       setShieldTx({ status: 'error', error: err instanceof Error ? err.message : 'shield failed' });
     }
-  }, [shieldAmount, selectedKeyInfo, requestAuth, getMnemonic, penumbraAccount]);
+  }, [shieldAmount, selectedKeyInfo, requestAuth, getMnemonic, penumbraAccount, refetchBalances]);
 
   const handleWithdraw = useCallback(async () => {
     const base = toBaseUnits(withdrawAmount);
-    if (!base || !withdrawAddr.startsWith('inj1') || !selectedKeyInfo) {
+    if (!base || !isValidInjectiveAddress(withdrawAddr) || !selectedKeyInfo) {
       return;
     }
     if (!(await requestAuth())) {
@@ -166,22 +301,23 @@ export const InjectivePanel = () => {
       const res = await withdrawToExchange({
         mnemonic,
         restUrl: CFG.restEndpoint,
-        toAddress: withdrawAddr,
+        toAddress: withdrawAddr.trim(),
         amount: { denom: CFG.denom, amount: base },
         fee: injectiveFee(),
       });
       if (res.code !== 0) {
         throw new Error(res.rawLog || `broadcast failed (code ${res.code})`);
       }
-      setWithdrawTx({ status: 'success', hash: res.txhash });
+      setWithdrawTx({ status: 'submitted', hash: res.txhash });
       setWithdrawAmount('');
+      refetchBalances();
     } catch (err) {
       setWithdrawTx({
         status: 'error',
         error: err instanceof Error ? err.message : 'withdraw failed',
       });
     }
-  }, [withdrawAmount, withdrawAddr, selectedKeyInfo, requestAuth, getMnemonic]);
+  }, [withdrawAmount, withdrawAddr, selectedKeyInfo, requestAuth, getMnemonic, refetchBalances]);
 
   if (!isMnemonic) {
     return (
@@ -201,7 +337,7 @@ export const InjectivePanel = () => {
           Penumbra below. gas is paid in INJ - keep a little INJ here to move USDC.
         </p>
         {qr && <img src={qr} alt='inj address QR' className='mb-3 h-40 w-40 rounded bg-white p-1' />}
-        <div className='flex items-center gap-2'>
+        <div className='mb-3 flex items-center gap-2'>
           <span className='truncate font-mono text-xs' title={injAddress}>
             {injAddress || 'deriving...'}
           </span>
@@ -213,30 +349,116 @@ export const InjectivePanel = () => {
             {copied ? 'copied' : 'copy'}
           </button>
         </div>
+
+        {/* live balances */}
+        <div className='rounded-md border border-border-soft bg-elev-1 p-3'>
+          <div className='flex items-center justify-between'>
+            <span className='text-label text-fg-muted lowercase'>balance</span>
+            <button
+              type='button'
+              onClick={refetchBalances}
+              disabled={!injAddress || balancesQuery.isFetching}
+              className='flex items-center gap-1 text-label text-fg-muted hover:text-fg-high disabled:opacity-50'
+              title='refresh balance'
+            >
+              <span
+                className={`i-lucide-refresh-cw h-3 w-3 ${balancesQuery.isFetching ? 'animate-spin' : ''}`}
+              />
+              refresh
+            </button>
+          </div>
+          {balancesQuery.isError ? (
+            <p className='mt-1 text-label text-red-400 lowercase'>couldn't load balance - retrying</p>
+          ) : (
+            <div className='mt-1 flex items-baseline justify-between'>
+              <span className='font-mono text-lg'>
+                {formatBaseUnits(usdcBal, CFG.decimals, 4)}{' '}
+                <span className='text-xs text-fg-muted'>{CFG.symbol}</span>
+              </span>
+              <span className='font-mono text-xs text-fg-muted'>
+                {formatBaseUnits(injBal, GAS_ASSET.decimals, 6)} {GAS_ASSET.symbol} (gas)
+              </span>
+            </div>
+          )}
+          {!gasOk && (
+            <p className='mt-2 text-label text-amber-400/90 lowercase'>
+              not enough INJ for gas - send a little INJ here to move USDC (fee ~{feeDisplay}).
+            </p>
+          )}
+        </div>
       </div>
 
       {/* shield in */}
       <div className='rounded-lg border border-border-soft p-4'>
         <div className='mb-2 text-xs font-medium lowercase'>shield into Penumbra</div>
-        <input
-          type='number'
-          min='0'
-          step='0.01'
-          value={shieldAmount}
-          onChange={e => setShieldAmount(e.target.value)}
-          placeholder='USDC amount'
-          className='mb-2 w-full rounded-lg border border-border-soft bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none'
-        />
+        <div className='relative mb-2'>
+          <input
+            type='number'
+            min='0'
+            step='any'
+            value={shieldAmount}
+            onChange={e => setShieldAmount(e.target.value)}
+            placeholder='USDC amount'
+            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2 pr-14 text-sm focus:border-zigner-gold focus:outline-none'
+          />
+          <button
+            type='button'
+            onClick={() => setShieldAmount(fullDecimalString(usdcBal, CFG.decimals))}
+            disabled={usdcBal === 0n}
+            className='absolute right-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-label font-medium text-zigner-gold hover:bg-elev-1 disabled:opacity-40'
+          >
+            max
+          </button>
+        </div>
+        <p className='mb-2 text-label text-fg-muted lowercase'>
+          network fee ~{feeDisplay} - paid in INJ, not USDC.
+        </p>
+        {shieldExceeds && (
+          <p className='mb-2 text-label text-amber-400/90 lowercase'>
+            amount is more than your USDC.inj balance.
+          </p>
+        )}
         <Button
           variant='gradient'
           className='w-full'
-          disabled={!toBaseUnits(shieldAmount) || shieldTx.status === 'signing'}
+          disabled={!shieldBase || shieldExceeds || !gasOk || isBusy(shieldTx.status)}
           onClick={() => void handleShield()}
         >
-          {shieldTx.status === 'signing' ? 'shielding...' : 'shield USDC to Penumbra'}
+          {shieldTx.status === 'signing'
+            ? 'shielding...'
+            : shieldTx.status === 'submitted'
+              ? 'confirming...'
+              : 'shield USDC to Penumbra'}
         </Button>
-        {shieldTx.status === 'success' && (
-          <p className='mt-2 text-label text-green-400'>shielded - tx {shieldTx.hash?.slice(0, 12)}...</p>
+        {shieldTx.status === 'submitted' && (
+          <p className='mt-2 text-label text-fg-muted lowercase'>
+            submitted - included soon, then IBC-delivered to Penumbra.{' '}
+            {shieldTx.hash && (
+              <a
+                href={EXPLORER_TX(shieldTx.hash)}
+                target='_blank'
+                rel='noreferrer'
+                className='text-zigner-gold hover:underline'
+              >
+                view tx
+              </a>
+            )}
+          </p>
+        )}
+        {shieldTx.status === 'done' && (
+          <p className='mt-2 text-label text-green-400 lowercase'>
+            included on Injective - IBC delivery to Penumbra is in flight.{' '}
+            {shieldTx.hash && (
+              <a
+                href={EXPLORER_TX(shieldTx.hash)}
+                target='_blank'
+                rel='noreferrer'
+                className='text-zigner-gold hover:underline'
+              >
+                view tx
+              </a>
+            )}
+          </p>
         )}
         {shieldTx.status === 'error' && (
           <p className='mt-2 text-label text-red-400'>{shieldTx.error}</p>
@@ -253,33 +475,87 @@ export const InjectivePanel = () => {
           placeholder='inj1... exchange deposit address'
           className='mb-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-xs focus:border-zigner-gold focus:outline-none'
         />
+        {withdrawAddr && !withdrawAddrOk && (
+          <p className='mb-1 text-label text-red-400 lowercase'>
+            not a valid Injective (inj1...) address.
+          </p>
+        )}
         <p className='mb-2 text-label leading-snug text-amber-400/90 lowercase'>
           must be an Injective-network deposit address (inj1...) that the exchange issued for USDC on
           Injective. sending to an Ethereum or other-network USDC address loses the funds.
         </p>
-        <input
-          type='number'
-          min='0'
-          step='0.01'
-          value={withdrawAmount}
-          onChange={e => setWithdrawAmount(e.target.value)}
-          placeholder='USDC amount'
-          className='mb-2 w-full rounded-lg border border-border-soft bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none'
-        />
+        <div className='relative mb-2'>
+          <input
+            type='number'
+            min='0'
+            step='any'
+            value={withdrawAmount}
+            onChange={e => setWithdrawAmount(e.target.value)}
+            placeholder='USDC amount'
+            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2 pr-14 text-sm focus:border-zigner-gold focus:outline-none'
+          />
+          <button
+            type='button'
+            onClick={() => setWithdrawAmount(fullDecimalString(usdcBal, CFG.decimals))}
+            disabled={usdcBal === 0n}
+            className='absolute right-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-label font-medium text-zigner-gold hover:bg-elev-1 disabled:opacity-40'
+          >
+            max
+          </button>
+        </div>
+        <p className='mb-2 text-label text-fg-muted lowercase'>
+          network fee ~{feeDisplay} - paid in INJ, not USDC.
+        </p>
+        {withdrawExceeds && (
+          <p className='mb-2 text-label text-amber-400/90 lowercase'>
+            amount is more than your USDC.inj balance.
+          </p>
+        )}
         <Button
           className='w-full'
           disabled={
-            !toBaseUnits(withdrawAmount) ||
-            !withdrawAddr.startsWith('inj1') ||
-            withdrawTx.status === 'signing'
+            !withdrawBase ||
+            withdrawExceeds ||
+            !withdrawAddrOk ||
+            !gasOk ||
+            isBusy(withdrawTx.status)
           }
           onClick={() => void handleWithdraw()}
         >
-          {withdrawTx.status === 'signing' ? 'sending...' : 'withdraw USDC'}
+          {withdrawTx.status === 'signing'
+            ? 'sending...'
+            : withdrawTx.status === 'submitted'
+              ? 'confirming...'
+              : 'withdraw USDC'}
         </Button>
-        {withdrawTx.status === 'success' && (
-          <p className='mt-2 text-label text-green-400'>
-            sent - tx {withdrawTx.hash?.slice(0, 12)}...
+        {withdrawTx.status === 'submitted' && (
+          <p className='mt-2 text-label text-fg-muted lowercase'>
+            submitted - waiting for inclusion.{' '}
+            {withdrawTx.hash && (
+              <a
+                href={EXPLORER_TX(withdrawTx.hash)}
+                target='_blank'
+                rel='noreferrer'
+                className='text-zigner-gold hover:underline'
+              >
+                view tx
+              </a>
+            )}
+          </p>
+        )}
+        {withdrawTx.status === 'done' && (
+          <p className='mt-2 text-label text-green-400 lowercase'>
+            sent - included on Injective.{' '}
+            {withdrawTx.hash && (
+              <a
+                href={EXPLORER_TX(withdrawTx.hash)}
+                target='_blank'
+                rel='noreferrer'
+                className='text-zigner-gold hover:underline'
+              >
+                view tx
+              </a>
+            )}
           </p>
         )}
         {withdrawTx.status === 'error' && (
