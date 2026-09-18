@@ -4,7 +4,7 @@ import { IndexedDb } from '@penumbra-zone/storage/indexed-db';
 import { ViewServer } from '@rotko/penumbra-wasm/view-server';
 import { ServicesInterface, WalletServices } from '@rotko/penumbra-types/services';
 import { FullViewingKey, WalletId } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
-import { ChainRegistryClient } from '@penumbra-labs/registry';
+import { ChainRegistryClient } from '@penumbrafi/registry';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { CompactBlock } from '@penumbra-zone/protobuf/penumbra/core/component/compact_block/v1/compact_block_pb';
 import { SctFrontierRequest } from '@penumbra-zone/protobuf/penumbra/core/component/sct/v1/sct_pb';

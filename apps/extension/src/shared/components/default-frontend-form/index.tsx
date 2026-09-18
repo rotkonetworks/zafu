@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import type { EntityMetadata } from '@penumbra-labs/registry';
+import type { EntityMetadata } from '@penumbrafi/registry';
 import { SelectList } from '@repo/ui/components/ui/select';
 import { Button } from '@repo/ui/components/ui/button';
 import { AllSlices } from '../../../state';
