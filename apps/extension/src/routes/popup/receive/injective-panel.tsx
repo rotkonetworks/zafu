@@ -30,8 +30,12 @@ import { shieldInToPenumbra, withdrawToExchange } from '@repo/wallet/networks/in
 const CFG = COSMOS_CHAINS.injective;
 const GAS_ASSET = CFG.gasAsset ?? { symbol: 'INJ', denom: 'inj', decimals: 18 };
 
-/** transaction explorer for a broadcast hash on injective-1. */
-const EXPLORER_TX = (hash: string) => `https://explorer.injective.network/transaction/${hash}`;
+/**
+ * transaction explorer for a broadcast hash on injective-1. injscan.com is the
+ * current Injective explorer; the old explorer.injective.network host 301s here,
+ * so we link it directly to avoid a cross-host redirect.
+ */
+const EXPLORER_TX = (hash: string) => `https://injscan.com/transaction/${hash}`;
 
 /** gas is a fixed limit; the whole fee is paid in INJ (18-dec), NOT USDC. */
 const GAS_LIMIT = '400000';
@@ -150,8 +154,18 @@ function useInjectiveInclusion(
         if (cancelled) {
           return;
         }
-        if (settled || Date.now() - started > 90_000) {
+        if (settled) {
           clearInterval(timer);
+        } else if (Date.now() - started > 90_000) {
+          // give up polling but don't strand the UI in a busy state: surface it
+          // as an error the user can follow on the explorer (the tx may still
+          // land - inclusion just outran our window).
+          clearInterval(timer);
+          setTx({
+            status: 'error',
+            hash,
+            error: 'not confirmed within 90s - check the explorer; it may still land',
+          });
         }
       });
     }, 4000);
@@ -220,23 +234,33 @@ export const InjectivePanel = () => {
   });
   const usdcBal = balancesQuery.data?.usdc ?? 0n;
   const injBal = balancesQuery.data?.inj ?? 0n;
+  const balancesReady = balancesQuery.data !== undefined;
 
+  // `refetch` is bound once by the QueryObserver and is identity-stable, unlike
+  // `balancesQuery` (a fresh tracked object every render). Depending on the
+  // latter would restart the inclusion poller on every render and defeat its cap.
+  const { refetch: refetchQuery, isFetching } = balancesQuery;
   const refetchBalances = useCallback(() => {
-    void balancesQuery.refetch();
-  }, [balancesQuery]);
+    void refetchQuery();
+  }, [refetchQuery]);
 
   useInjectiveInclusion(shieldTx, setShieldTx, refetchBalances);
   useInjectiveInclusion(withdrawTx, setWithdrawTx, refetchBalances);
 
   const feeInj = gasFeeInjBaseUnits();
   const feeDisplay = `${formatBaseUnits(feeInj, GAS_ASSET.decimals, 6)} ${GAS_ASSET.symbol}`;
-  const gasOk = injBal >= feeInj;
+  // don't block on a not-yet-loaded balance (defaults to 0n): only gate once we
+  // actually know the INJ balance can't cover gas.
+  const gasOk = !balancesReady || injBal >= feeInj;
 
   const shieldBase = toBaseUnits(shieldAmount);
-  const shieldExceeds = !!shieldBase && BigInt(shieldBase) > usdcBal;
+  const shieldExceeds = balancesReady && !!shieldBase && BigInt(shieldBase) > usdcBal;
   const withdrawBase = toBaseUnits(withdrawAmount);
-  const withdrawExceeds = !!withdrawBase && BigInt(withdrawBase) > usdcBal;
+  const withdrawExceeds = balancesReady && !!withdrawBase && BigInt(withdrawBase) > usdcBal;
   const withdrawAddrOk = isValidInjectiveAddress(withdrawAddr);
+  // one send at a time: both legs sign from the same account, so an overlapping
+  // shield + withdraw would collide on the sequence number.
+  const anyBusy = isBusy(shieldTx.status) || isBusy(withdrawTx.status);
 
   const copy = useCallback(() => {
     if (!injAddress) {
@@ -357,12 +381,12 @@ export const InjectivePanel = () => {
             <button
               type='button'
               onClick={refetchBalances}
-              disabled={!injAddress || balancesQuery.isFetching}
+              disabled={!injAddress || isFetching}
               className='flex items-center gap-1 text-label text-fg-muted hover:text-fg-high disabled:opacity-50'
               title='refresh balance'
             >
               <span
-                className={`i-lucide-refresh-cw h-3 w-3 ${balancesQuery.isFetching ? 'animate-spin' : ''}`}
+                className={`i-lucide-refresh-cw h-3 w-3 ${isFetching ? 'animate-spin' : ''}`}
               />
               refresh
             </button>
@@ -421,7 +445,7 @@ export const InjectivePanel = () => {
         <Button
           variant='gradient'
           className='w-full'
-          disabled={!shieldBase || shieldExceeds || !gasOk || isBusy(shieldTx.status)}
+          disabled={!shieldBase || shieldExceeds || !gasOk || anyBusy}
           onClick={() => void handleShield()}
         >
           {shieldTx.status === 'signing'
@@ -518,7 +542,7 @@ export const InjectivePanel = () => {
             withdrawExceeds ||
             !withdrawAddrOk ||
             !gasOk ||
-            isBusy(withdrawTx.status)
+            anyBusy
           }
           onClick={() => void handleWithdraw()}
         >
