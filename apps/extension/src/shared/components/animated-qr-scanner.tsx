@@ -46,6 +46,13 @@ export const AnimatedQrScanner = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<{ stop: () => void } | null>(null);
   const mountedRef = useRef(true);
+  // Per-start generation token. startScanning acquires the camera + decoder
+  // across several awaits before storing them in refs; if the component
+  // unmounts (or a retry starts a new scan) mid-await, the in-flight start must
+  // abort and stop the resources it just got, or it leaks a live camera. Every
+  // startScanning bumps this; stopScanning bumps it too, so any older in-flight
+  // start sees a mismatch after its next await and tears down.
+  const startGenRef = useRef(0);
   const completedRef = useRef(false);
 
   // collected frames: index -> base64 chunk (legacy P-format)
@@ -96,6 +103,8 @@ export const AnimatedQrScanner = ({
   onErrorRef.current = onError;
 
   const stopScanning = useCallback(() => {
+    // invalidate any in-flight startScanning so it aborts after its next await
+    startGenRef.current++;
     if (controlsRef.current) {
       controlsRef.current.stop();
       controlsRef.current = null;
@@ -171,6 +180,16 @@ export const AnimatedQrScanner = ({
       return;
     }
 
+    // clear the completion latch so "retry" works after a hard abort (e.g. the
+    // MAX_UR_PARTS cap set completedRef and every scan/worker callback then
+    // dropped input, making the retry button inert).
+    completedRef.current = false;
+
+    // supersede any prior in-flight start and mark this generation
+    const gen = ++startGenRef.current;
+    // this start is stale if superseded (retry/stop) or the component unmounted
+    const isStale = () => gen !== startGenRef.current || !mountedRef.current;
+
     try {
       setError(null);
       // TRY_HARDER + QR_CODE-only + tight cadence — animated UR cycles at
@@ -204,6 +223,12 @@ export const AnimatedQrScanner = ({
       Object.assign(videoConstraints, { focusMode: { ideal: 'continuous' } });
 
       const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
+      // unmounted/superseded during the getUserMedia await: stop this stream
+      // now (nothing holds a reference to it yet) rather than leak the camera.
+      if (isStale() || !videoRef.current) {
+        stream.getTracks().forEach(t => t.stop());
+        return;
+      }
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
 
@@ -349,6 +374,16 @@ export const AnimatedQrScanner = ({
         }
       });
 
+      // unmounted/superseded while decodeFromVideoDevice was awaiting: tear the
+      // decoder + camera stream down instead of leaving them running detached.
+      if (isStale()) {
+        controls.stop();
+        if (videoRef.current?.srcObject) {
+          videoRef.current.srcObject.getTracks().forEach(t => t.stop());
+          videoRef.current.srcObject = null;
+        }
+        return;
+      }
       controlsRef.current = controls;
       if (mountedRef.current) {
         setIsScanning(true);
@@ -364,7 +399,7 @@ export const AnimatedQrScanner = ({
       }
       onErrorRef.current?.(msg);
     }
-  }, [stopScanning]);
+  }, [stopScanning, urTypeFilter]);
 
   useEffect(() => {
     mountedRef.current = true;

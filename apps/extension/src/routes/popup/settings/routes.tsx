@@ -44,6 +44,9 @@ const SettingsOta = lazy(() => import('./settings-ota').then(m => ({ default: m.
 const SettingsVoting = lazy(() =>
   import('./settings-voting').then(m => ({ default: m.SettingsVoting })),
 );
+const SettingsZcashMe = lazy(() =>
+  import('./settings-zcashme').then(m => ({ default: m.SettingsZcashMe })),
+);
 const SubscribePage = lazy(() => import('./subscribe').then(m => ({ default: m.SubscribePage })));
 
 const LazyFallback = () => (
@@ -129,5 +132,9 @@ export const settingsRoutes = [
   {
     path: PopupPath.SETTINGS_VOTING,
     element: withSuspense(SettingsVoting),
+  },
+  {
+    path: PopupPath.SETTINGS_ZCASHME,
+    element: withSuspense(SettingsZcashMe),
   },
 ];

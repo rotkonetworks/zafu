@@ -8,10 +8,12 @@
  */
 
 import { getTransparentHistoryInWorker } from '../../../state/keyring/network-worker';
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Sensitive } from '../../../components/sensitive';
 import { ToggleSwitch } from '../../../components/toggle-switch';
 import { NobleReceivePanel } from '../home/cosmos-subwallets';
+import { InjectivePanel } from './injective-panel';
+import { isLaunched } from '../../../config/networks';
 import { useBackNav } from '../../../utils/navigate';
 import { useLocation } from 'react-router-dom';
 import { PopupPath } from '../paths';
@@ -58,11 +60,20 @@ function CopyButton({ text, className }: { text: string; className?: string }) {
   );
 }
 
-/** map IBC chain registry chainId to our CosmosChainId */
+/**
+ * map IBC chain registry chainId to our CosmosChainId, for the STANDARD cosmos
+ * shield path (secp256k1 / coin type 118, via useCosmosIbcTransfer).
+ *
+ * Injective ('injective-1') is deliberately NOT here: it is Ethermint
+ * (eth_secp256k1 / coin type 60) and MUST shield through the injective conduit
+ * (packages/wallet/src/networks/injective) - routing it through this coin-118
+ * path would derive the wrong inj address and produce invalid signatures.
+ */
 function ibcChainToCosmosId(ibcChain: IbcChain): CosmosChainId | undefined {
   const map: Record<string, CosmosChainId> = {
     'noble-1': 'noble',
     'cosmoshub-4': 'cosmoshub',
+    'osmosis-1': 'osmosis',
   };
   return map[ibcChain.chainId];
 }
@@ -73,7 +84,10 @@ function ibcChainToCosmosId(ibcChain: IbcChain): CosmosChainId | undefined {
  */
 function getKnownIbcChains(): IbcChain[] {
   return Object.values(COSMOS_CHAINS)
-    .filter(c => c.penumbraChannel) // only chains with known penumbra channel
+    // only chains with a known penumbra channel, and NOT Ethermint - Injective
+    // (eth_secp256k1) is a conduit-only ramp with its own panel and must never
+    // appear in the shared coin-118 IBC-deposit source list.
+    .filter(c => c.penumbraChannel && c.keyAlgo !== 'eth_secp256k1')
     .map(c => ({
       displayName: c.name,
       chainId: c.chainId,
@@ -133,15 +147,18 @@ function IbcDepositSection({
   const penumbraAccount = useStore(selectPenumbraAccount);
   const { data: registryChains = [], isLoading: chainsLoading } = useIbcChains();
   // Cosmos Hub deposits aren't working right now (no live channel), so don't
-  // offer it as a source - only Noble is currently depositable.
-  //
-  // Depositing also needs a wallet we can derive on the SOURCE chain, so the
-  // list is restricted to chains that map to one of our CosmosChainIds.
-  // Injective is withdraw-only: its accounts are ethsecp256k1 on coin type 60,
-  // so we hold no keys for it. Without this it would show up here and render
-  // Noble's balances, because the balance query falls back to 'noble'.
-  const ibcChains = mergeIbcChains([...registryChains]).filter(
-    c => c.chainId !== 'cosmoshub-4' && ibcChainToCosmosId(c),
+  // offer it as a source - only Noble is currently depositable. Also restrict to
+  // chains we can derive a SOURCE wallet for (ibcChainToCosmosId truthy):
+  // Injective has its own full conduit panel (eth_secp256k1 / coin type 60, no
+  // coin-118 key), so it must not appear in this shared coin-118 deposit list -
+  // it would otherwise render Noble's balances via the 'noble' fallback.
+  // Memoized so the preselect effect below doesn't re-run on a fresh array ref.
+  const ibcChains = useMemo(
+    () =>
+      mergeIbcChains([...registryChains]).filter(
+        c => c.chainId !== 'cosmoshub-4' && ibcChainToCosmosId(c),
+      ),
+    [registryChains],
   );
   const [selectedIbcChain, setSelectedIbcChain] = useState<IbcChain | undefined>();
 
@@ -1046,7 +1063,7 @@ function ReceiveTab({
   );
 }
 
-type ReceiveMode = 'receive' | 'noble' | 'shield';
+type ReceiveMode = 'receive' | 'shield';
 
 export function ReceivePage() {
   const activeNetwork = useStore(selectActiveNetwork);
@@ -1076,10 +1093,15 @@ export function ReceivePage() {
       </div>
 
       <div className='flex flex-1 flex-col p-4'>
-        {/* tabs - Penumbra only */}
+        {/* tabs - Penumbra only. Two tabs: the plain shielded-address
+              receive, and a combined "shield USDC" view that holds the Noble
+              receive address plus the IBC-shield form. Noble is being retired
+              (see the deprecation notice inside NobleReceivePanel); the
+              Injective USDC ramp will replace it once eth_secp256k1 support
+              lands. */}
         {isPenumbra && (
           <div className='mb-4 flex rounded-lg bg-elev-2 p-1'>
-            {(['receive', 'noble', 'shield'] as const).map(m => (
+            {(['receive', 'shield'] as const).map(m => (
               <button
                 key={m}
                 onClick={() => setMode(m)}
@@ -1087,7 +1109,7 @@ export function ReceivePage() {
                   mode === m ? 'bg-canvas text-fg shadow-sm' : 'text-fg-muted hover:text-fg-high'
                 }`}
               >
-                {m === 'shield' ? 'ibc shield' : m}
+                {m === 'shield' ? 'shield USDC' : m}
               </button>
             ))}
           </div>
@@ -1096,16 +1118,21 @@ export function ReceivePage() {
         {/* content */}
         {!isPenumbra || mode === 'receive' ? (
           <ReceiveTab address={address} loading={loading} activeNetwork={activeNetwork} />
-        ) : mode === 'noble' ? (
-          <NobleReceivePanel />
         ) : (
-          <IbcDepositSection
-            selectedKeyInfo={selectedKeyInfo}
-            keyRing={keyRing}
-            penumbraWallet={penumbraWallet}
-            accountIndex={navState?.cosmosAccountIndex ?? 0}
-            preselectCosmosChain={navState?.cosmosChain}
-          />
+          <div className='flex flex-col gap-6 overflow-y-auto'>
+            {/* Injective USDC ramp - the Noble replacement. Hidden until
+                isLaunched('injective') (flag flips only after the #34 testnet
+                round-trip passes). */}
+            {isLaunched('injective') && <InjectivePanel />}
+            <NobleReceivePanel />
+            <IbcDepositSection
+              selectedKeyInfo={selectedKeyInfo}
+              keyRing={keyRing}
+              penumbraWallet={penumbraWallet}
+              accountIndex={navState?.cosmosAccountIndex ?? 0}
+              preselectCosmosChain={navState?.cosmosChain}
+            />
+          </div>
         )}
       </div>
     </div>

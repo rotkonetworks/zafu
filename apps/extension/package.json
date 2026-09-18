@@ -1,6 +1,6 @@
 {
   "name": "zafu",
-  "version": "27.3.2",
+  "version": "28.0.1",
   "private": true,
   "license": "MIT",
   "description": "multi-chain privacy wallet for penumbra, zcash, and more",
@@ -48,6 +48,8 @@
     "@repo/ui": "workspace:*",
     "@repo/wallet": "workspace:*",
     "@repo/zcash-wasm": "workspace:*",
+    "@zafu/pq": "workspace:*",
+    "@zafu/protocol": "workspace:*",
     "@rotko/penumbra-services": "70.0.0",
     "@rotko/penumbra-types": "37.0.0",
     "@rotko/penumbra-wasm": "55.0.2",

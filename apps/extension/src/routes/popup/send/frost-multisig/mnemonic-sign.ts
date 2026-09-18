@@ -34,6 +34,9 @@ export interface MnemonicFrostMultisig {
    * participant list at creation.
    */
   relayPeerKeys?: string[];
+  /** this device's relay-identity pointer from DKG; falls back to
+   *  publicKeyPackage for pre-frostd wallets (which need re-exchange anyway) */
+  relayCeremonyId?: string;
 }
 
 export interface RunMnemonicFrostSignArgs {
@@ -64,10 +67,10 @@ export async function runMnemonicFrostSign({
     ms.threshold,
     ms.maxSigners,
     300,
-    ms.publicKeyPackage,
+    ms.relayCeremonyId ?? ms.publicKeyPackage,
     ms.relayPeerKeys ?? [],
   );
-  setRoomCode(session.roomCode);
+  setRoomCode(session.friendlyCode ?? session.roomCode);
   setFrostAbort(session.abort);
 
   setProgress('round 1: generating commitments...');

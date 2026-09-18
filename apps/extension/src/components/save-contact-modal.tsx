@@ -9,18 +9,42 @@
 import { useState } from 'react';
 import { useStore } from '../state';
 import { contactsSelector, type ContactNetwork } from '../state/contacts';
+import type { ZcashMeProfile } from '../services/zcashme/api';
+import { zcashMeLabel, zcashMeUsername } from '../services/zcashme/label';
 
 interface SaveContactModalProps {
   address: string;
   network: ContactNetwork;
   onDone: () => void;
   onCancel: () => void;
+  /**
+   * when the address was resolved from a zcash.me profile: prefill the
+   * name, remember the handle on the contact, and keep the verified links
+   * in notes so the social context survives without a network round trip.
+   */
+  zcashme?: ZcashMeProfile;
 }
 
-export function SaveContactModal({ address, network, onDone, onCancel }: SaveContactModalProps) {
+const notesFromProfile = (p: ZcashMeProfile): string | undefined => {
+  const lines = [
+    `zcash.me/${zcashMeUsername(p)}${p.addressVerified ? '' : ' (unverified address)'}`,
+  ];
+  for (const l of p.links) {
+    lines.push(`${l.platform}: ${l.url}`);
+  }
+  return lines.join('\n');
+};
+
+export function SaveContactModal({
+  address,
+  network,
+  onDone,
+  onCancel,
+  zcashme,
+}: SaveContactModalProps) {
   const { contacts, addContact, addAddress } = useStore(contactsSelector);
-  const [mode, setMode] = useState<'choose' | 'new'>('choose');
-  const [newName, setNewName] = useState('');
+  const [mode, setMode] = useState<'choose' | 'new'>(zcashme ? 'new' : 'choose');
+  const [newName, setNewName] = useState(zcashme ? (zcashMeLabel(zcashme) ?? '') : '');
   const [selectedContactId, setSelectedContactId] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -41,7 +65,14 @@ export function SaveContactModal({ address, network, onDone, onCancel }: SaveCon
       return;
     }
     setSaving(true);
-    const contact = await addContact({ name: newName.trim() });
+    const contact = await addContact({
+      name: newName.trim(),
+      // only bind the zcash.me identity to this contact when it proved control
+      // of the address - an unverified profile is a name the user chose, not a
+      // verified identity link, so we keep the name/notes but not the binding
+      zcashme: zcashme?.addressVerified ? zcashme.username : undefined,
+      notes: zcashme ? notesFromProfile(zcashme) : undefined,
+    });
     await addAddress(contact.id, { network, address });
     setSaving(false);
     onDone();

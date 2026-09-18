@@ -124,6 +124,7 @@ const ENCRYPTED_KEYS = new Set<string>([
   'dismissedContactSuggestions',
   'messages',
   'diversifiedAddresses',
+  'groupChats',
 ]);
 
 /** should this storage key be encrypted? */

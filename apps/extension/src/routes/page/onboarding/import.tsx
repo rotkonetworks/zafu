@@ -14,7 +14,7 @@ import { useStore } from '../../../state';
 import { importSelector } from '../../../state/seed-phrase/import';
 import { usePageNav } from '../../../utils/navigate';
 import { ImportForm } from '../../../shared/containers/import-form';
-import { navigateToNetworkSelection } from './password/utils';
+import { navigateToPasswordPage } from './password/utils';
 import { SEED_PHRASE_ORIGIN } from './password/types';
 import { PagePath } from '../paths';
 
@@ -30,7 +30,7 @@ export const ImportSeedPhrase = () => {
     if (!valid) {
       return;
     }
-    navigateToNetworkSelection(navigate, SEED_PHRASE_ORIGIN.IMPORTED);
+    navigateToPasswordPage(navigate, SEED_PHRASE_ORIGIN.IMPORTED);
   };
 
   const submitLabel = !allFilled

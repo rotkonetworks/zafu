@@ -1,15 +1,24 @@
 /**
- * listen for identity sign requests from approved origins.
+ * listen for identity sign requests from web origins ("login with zafu").
  *
  * flow:
  * 1. dApp sends { type: 'zafu_sign', challengeHex, statement? } via chrome.runtime.sendMessage
- * 2. we check if origin is already approved (via knownSites)
- * 3. if not approved, deny immediately (must connect first)
- * 4. if approved, open SignRequest popup for user confirmation
- * 5. popup signs with ed25519 identity key, returns { signature, publicKey }
+ * 2. validate the challenge (hex, even length, 1-1024 bytes)
+ * 3. open the SignRequest popup for explicit per-request user confirmation
+ *    (the popup shows the calling origin + the challenge / statement)
+ * 4. on approval the popup signs with the SITE-SCOPED ZID ed25519 key and
+ *    returns { signature, publicKey }; sign_identity is auto-granted afterwards
+ *    so the site shows up on the identity page
  *
- * dApps must first be approved via the standard connect flow (OriginApproval).
- * sign requests from unapproved origins are silently denied.
+ * Gate: requests must come from a valid top-level page (isValidExternalSender
+ * rejects sub-frames and malformed senders), but there is NO connect-first
+ * requirement - any such origin may prompt, and the user's per-request approval
+ * in the popup IS the consent. This is safe because the signing key is derived
+ * PER ORIGIN: a signature obtained by one site is under that site's ZID key and
+ * cannot be replayed at another, so an unapproved origin can at most prompt the
+ * user, never obtain a cross-site-usable signature. Relying parties must still
+ * bind their origin + a fresh nonce into the challenge (SIWE-style) - the wallet
+ * signs exactly the challenge bytes it is given.
  */
 
 import { getOriginPermissions, grantCapability } from '@repo/storage-chrome/origin';
@@ -21,25 +30,21 @@ import { isValidExternalSender } from '../../senders/external';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import type { EncryptedVault } from '../../state/keyring/types';
 import type { ZidShareRecord } from '../../state/identity';
+import type { ZafuSignRequest, ZafuSignResponse } from '@zafu/protocol';
+import { SIGN_REQUEST_TYPE } from './zafu-method-names';
 
-interface SignRequestMessage {
-  type: 'zafu_sign';
-  challengeHex: string;
-  statement?: string;
-}
-
-export interface SignResponse {
-  success: boolean;
-  signature?: string;
-  publicKey?: string;
-  error?: string;
-}
+// request/response shapes come from the shared @zafu/protocol contract, so any
+// drift from the wallet<->dapp wire (and from the @zafu/zid SDK that builds
+// these messages) is a compile error. SignResponse is re-exported under its
+// historical name for the popups that import it from here.
+type SignRequestMessage = ZafuSignRequest;
+export type SignResponse = ZafuSignResponse;
 
 const isSignRequest = (req: unknown): req is SignRequestMessage =>
   typeof req === 'object' &&
   req !== null &&
   'type' in req &&
-  (req as { type: unknown }).type === 'zafu_sign' &&
+  (req as { type: unknown }).type === SIGN_REQUEST_TYPE &&
   'challengeHex' in req &&
   typeof (req as { challengeHex: unknown }).challengeHex === 'string';
 
@@ -64,9 +69,21 @@ const handleSignRequest = async (
   req: SignRequestMessage,
   sender: { origin: string; tab: chrome.tabs.Tab },
 ): Promise<SignResponse> => {
-  // validate challenge
-  if (!req.challengeHex || req.challengeHex.length < 2 || req.challengeHex.length > 2048) {
-    return { success: false, error: 'invalid challenge: must be 1-1024 bytes hex-encoded' };
+  // validate challenge up front: 1-1024 bytes, hex, even length. Rejecting
+  // malformed input here (invalid_request) avoids showing the user a sign popup
+  // for a challenge that would only fail post-crypto with a generic error.
+  if (
+    !req.challengeHex ||
+    req.challengeHex.length < 2 ||
+    req.challengeHex.length > 2048 ||
+    req.challengeHex.length % 2 !== 0 ||
+    !/^[0-9a-fA-F]+$/.test(req.challengeHex)
+  ) {
+    return {
+      success: false,
+      error: 'invalid challenge: must be 1-1024 bytes hex-encoded',
+      code: 'invalid_request',
+    };
   }
 
   try {
@@ -90,7 +107,7 @@ const handleSignRequest = async (
     });
 
     if (popupResponse?.choice !== UserChoice.Approved) {
-      return { success: false, error: 'user denied' };
+      return { success: false, error: 'user denied', code: 'denied' };
     }
 
     const { signature, publicKey } = popupResponse;
@@ -125,6 +142,6 @@ const handleSignRequest = async (
     };
   } catch (e) {
     console.error('sign request failed:', e);
-    return { success: false, error: 'signing failed' };
+    return { success: false, error: 'signing failed', code: 'internal_error' };
   }
 };

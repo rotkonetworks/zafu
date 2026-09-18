@@ -14,9 +14,6 @@ const ImportZigner = lazy(() => import('./import-zigner').then(m => ({ default: 
 const ConnectLedger = lazy(() =>
   import('./connect-ledger').then(m => ({ default: m.ConnectLedger })),
 );
-const SelectNetworks = lazy(() =>
-  import('./select-networks').then(m => ({ default: m.SelectNetworks })),
-);
 const SetPassword = lazy(() => import('./password').then(m => ({ default: m.SetPassword })));
 const OnboardingSuccess = lazy(() =>
   import('./success').then(m => ({ default: m.OnboardingSuccess })),
@@ -68,10 +65,6 @@ export const onboardingRoutes = [
     // other flagged surfaces (subscribe, password-generator) keep their routes.
     path: PagePath.CONNECT_LEDGER,
     element: withSuspense(ConnectLedger),
-  },
-  {
-    path: PagePath.SELECT_NETWORKS,
-    element: withSuspense(SelectNetworks),
   },
   {
     path: PagePath.SET_PASSWORD,

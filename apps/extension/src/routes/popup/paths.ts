@@ -5,6 +5,8 @@ export enum PopupPath {
   SWAP = '/swap',
   VOTE = '/vote',
   INBOX = '/inbox',
+  /** multisig group coordination chat, one thread per group (wallet id param) */
+  INBOX_GROUP = '/inbox/group/:walletId',
   CONTACTS = '/contacts',
   SETTINGS = '/settings',
 
@@ -77,4 +79,5 @@ export enum PopupPath {
   SETTINGS_ABOUT = '/settings/about',
   SETTINGS_OTA = '/settings/ota',
   SETTINGS_VOTING = '/settings/voting',
+  SETTINGS_ZCASHME = '/settings/zcashme',
 }

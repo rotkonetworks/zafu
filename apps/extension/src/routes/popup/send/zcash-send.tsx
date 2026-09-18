@@ -46,6 +46,12 @@ import { FrostAirgapSignFlow } from './frost-multisig';
 import { DontQuitIcon } from './frost-multisig/helpers';
 import { RecipientPicker } from '../../../components/recipient-picker';
 import { SaveContactModal } from '../../../components/save-contact-modal';
+import {
+  ProfileBadge,
+  ZcashMeRecipientResolver,
+} from '../../../components/zcashme-recipient-resolver';
+import { parseZcashMeHandle, type ZcashMeProfile } from '../../../services/zcashme/api';
+import { directoryProfileByAddress } from '../../../services/zcashme/directory';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { HARDWARE_WALLET_ENABLED, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
 import { connectLedgerBtc, zcashTransparentPath } from '../../../ledger/hw-btc-signer';
@@ -280,6 +286,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const zignerFailRef = useRef<((err: unknown) => boolean) | null>(null);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
+  // profile the recipient was resolved from (zcash.me handle -> address).
+  // Only meaningful while its address is still the recipient; feeds the
+  // save-contact prefill after a successful send.
+  const [resolvedProfile, setResolvedProfile] = useState<ZcashMeProfile | null>(null);
   const [fee, setFee] = useState('0.0001');
   const [, setShowContacts] = useState(false);
   const [showQrScanner, setShowQrScanner] = useState(false);
@@ -460,6 +470,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       return false;
     }
     const r = recipient.trim();
+    if (parseZcashMeHandle(r)) {
+      setFormError('resolve the zcash.me username to an address first');
+      return false;
+    }
     const validPrefix =
       r.startsWith('u1') || r.startsWith('utest1') || r.startsWith('t1') || r.startsWith('t3');
     if (!validPrefix) {
@@ -1255,6 +1269,18 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     <span className='i-ph-scan h-4 w-4' />
                   </button>
                 </div>
+                <ZcashMeRecipientResolver
+                  input={recipient}
+                  onResolve={p => {
+                    setResolvedProfile(p);
+                    setRecipient(p.address);
+                  }}
+                />
+                {resolvedProfile && resolvedProfile.address === recipient.trim() && (
+                  <div className='mt-1.5 flex items-center gap-1.5 text-label text-fg-muted'>
+                    <ProfileBadge profile={resolvedProfile} />
+                  </div>
+                )}
                 {showQrScanner && (
                   <QrScanner
                     onScan={data => {
@@ -1767,6 +1793,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               <SaveContactModal
                 address={recipient}
                 network='zcash'
+                zcashme={
+                  resolvedProfile?.address === recipient.trim()
+                    ? resolvedProfile
+                    : directoryProfileByAddress(recipient.trim())
+                }
                 onDone={() => {
                   setShowContactModal(false);
                   setShowSavePrompt(false);

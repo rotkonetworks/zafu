@@ -32,6 +32,29 @@ export interface EncodeObject {
  */
 const cosmosHdPath = (accountIndex: number) => makeCosmoshubPath(accountIndex);
 
+/**
+ * FUND SAFETY: refuse to build a coin-118 (m/44'/118', secp256k1, ripemd160)
+ * wallet for an Ethermint chain. Injective etc. use eth_secp256k1 / coin type 60
+ * / keccak addresses; the coin-118 path would yield a plausible-looking but WRONG
+ * (unspendable) address and signatures the chain rejects. `deriveChainAddress`
+ * already guards the prefix-swap path; this guards every wallet-construction site
+ * (deriveCosmosWallet, createSigningClient, deriveKeplrWireKey, signKeplr*) so no
+ * caller can reach the coin-118 path for an Ethermint prefix/chain id.
+ */
+function assertCoin118(prefixOrChainId: string): void {
+  for (const config of Object.values(COSMOS_CHAINS)) {
+    if (
+      (config.bech32Prefix === prefixOrChainId || config.chainId === prefixOrChainId) &&
+      config.keyAlgo === 'eth_secp256k1'
+    ) {
+      throw new Error(
+        `coin-118 derivation refused for '${prefixOrChainId}': it is an Ethermint ` +
+          `chain (eth_secp256k1). Derive it via networks/injective instead.`,
+      );
+    }
+  }
+}
+
 /** derived cosmos wallet */
 export interface CosmosWallet {
   address: string;
@@ -45,6 +68,7 @@ export async function deriveCosmosWallet(
   accountIndex = 0,
   prefix = 'osmo',
 ): Promise<CosmosWallet> {
+  assertCoin118(prefix);
   const signer = await Secp256k1HdWallet.fromMnemonic(mnemonic, {
     prefix,
     hdPaths: [cosmosHdPath(accountIndex)],
@@ -62,11 +86,31 @@ export async function deriveCosmosWallet(
   };
 }
 
-/** derive address for specific chain from existing address */
+/**
+ * derive address for specific chain from existing address
+ *
+ * NOTE: this re-encodes the SAME 20 address bytes under a new bech32 prefix. It
+ * is only correct across chains that share the same key derivation and address
+ * hashing (coin type 118, secp256k1, ripemd160(sha256(pubkey))). It must NOT be
+ * used for an Ethermint chain like Injective (coin type 60, eth_secp256k1,
+ * keccak256 address) - swapping the prefix would produce a valid-looking but
+ * WRONG inj1... address and strand funds. Adding such a chain is blocked on
+ * GitHub #34; until then every CosmosChainId here is a coin-type-118 chain.
+ */
 export function deriveChainAddress(address: string, chainId: CosmosChainId): string {
+  const config = COSMOS_CHAINS[chainId];
+  // Fund-safety guard: an Ethermint chain (Injective) uses a keccak256 address,
+  // so re-encoding these ripemd160 bytes under `inj` would produce a wrong,
+  // unrecoverable address. Refuse rather than mis-derive; such a chain must be
+  // derived from the mnemonic via networks/injective.
+  if (config.keyAlgo === 'eth_secp256k1') {
+    throw new Error(
+      `deriveChainAddress cannot prefix-swap to ${chainId}: it is an Ethermint ` +
+        `chain (eth_secp256k1/keccak address). Derive it via networks/injective instead.`,
+    );
+  }
   const { data } = fromBech32(address);
-  const prefix = COSMOS_CHAINS[chainId].bech32Prefix;
-  return toBech32(prefix, data);
+  return toBech32(config.bech32Prefix, data);
 }
 
 /** derive addresses for all chains from one address */
@@ -75,6 +119,11 @@ export function deriveAllChainAddresses(address: string): Record<CosmosChainId, 
   const addresses: Record<string, string> = {};
 
   for (const [chainId, config] of Object.entries(COSMOS_CHAINS)) {
+    // skip Ethermint chains - their keccak address is not a prefix-swap of
+    // these ripemd160 bytes (see deriveChainAddress); derive via injective.
+    if (config.keyAlgo === 'eth_secp256k1') {
+      continue;
+    }
     addresses[chainId] = toBech32(config.bech32Prefix, data);
   }
 
@@ -117,6 +166,7 @@ export async function createSigningClient(
   accountIndex = 0,
 ): Promise<{ client: SigningStargateClient; address: string }> {
   const config = COSMOS_CHAINS[chainId];
+  assertCoin118(config.bech32Prefix);
 
   const signer = await Secp256k1HdWallet.fromMnemonic(mnemonic, {
     prefix: config.bech32Prefix,
@@ -448,6 +498,7 @@ export async function deriveKeplrWireKey(
   name: string,
   accountIndex = 0,
 ): Promise<KeplrWireKeyRaw> {
+  assertCoin118(prefix);
   const wallet = await Secp256k1HdWallet.fromMnemonic(mnemonic, {
     prefix,
     hdPaths: [cosmosHdPath(accountIndex)],
@@ -479,6 +530,7 @@ export async function signKeplrAmino(
   signDoc: StdSignDoc,
   accountIndex = 0,
 ): Promise<KeplrAminoResult> {
+  assertCoin118(prefix);
   const wallet = await Secp256k1HdWallet.fromMnemonic(mnemonic, {
     prefix,
     hdPaths: [cosmosHdPath(accountIndex)],
@@ -515,6 +567,7 @@ export async function signKeplrDirect(
   doc: KeplrDirectWireDoc,
   accountIndex = 0,
 ): Promise<KeplrDirectResult> {
+  assertCoin118(prefix);
   const wallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, {
     prefix,
     hdPaths: [cosmosHdPath(accountIndex)],

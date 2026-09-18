@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../../../state';
 import {
   privacySelector,
@@ -230,6 +231,40 @@ function SigningSecuritySection() {
   );
 }
 
+/**
+ * Keplr compatibility is opt-in and lives in plaintext local storage (the
+ * content script must read it without a session key), so it is a standalone
+ * toggle rather than a privacy-slice row.
+ */
+function KeplrCompatSection() {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    void localExtStorage.get('keplrCompat').then(v => setEnabled(v === true));
+  }, []);
+
+  const toggle = (v: boolean): void => {
+    setEnabled(v);
+    void localExtStorage.set('keplrCompat', v);
+  };
+
+  if (enabled === null) {
+    return null;
+  }
+  return (
+    <Row
+      label='act as keplr'
+      stateLabel={
+        enabled
+          ? 'cosmos dapps see zafu as keplr - applies on next page load'
+          : 'off - a real keplr extension is left untouched'
+      }
+      checked={enabled}
+      onChange={toggle}
+    />
+  );
+}
+
 export function SettingsPrivacy() {
   const { settings, setSetting } = useStore(privacySelector);
   const activeNetwork = useStore(selectActiveNetwork);
@@ -250,6 +285,9 @@ export function SettingsPrivacy() {
         ))}
         <SigningSecuritySection />
         <ProxySection />
+        {/* Keplr is a cosmos-family concern; hide it on networks (e.g. zcash)
+            where it would only confuse. */}
+        {(isIbcNetwork(activeNetwork) || activeNetwork === 'penumbra') && <KeplrCompatSection />}
         {visibleRows.length === 0 && (
           <p className='py-8 text-center text-sm text-fg-muted'>
             no privacy settings for this network

@@ -18,9 +18,11 @@
  *    - zcash: orchard shielded pool
  *    - penumbra: shielded dex
  *
- * 2. ibc/cosmos chains - same key derivation, different bech32 prefix
- *    - noble, cosmoshub
- *    - the only IBC channels currently relayed to/from Penumbra
+ * 2. ibc/cosmos chains - subnetworks reached over IBC from Penumbra
+ *    - noble, cosmoshub: standard cosmos secp256k1, coin type 118
+ *    - injective: Ethermint (eth_secp256k1, coin type 60) - a receive+shield
+ *      USDC ramp only; derives/signs via networks/injective, NOT the shared
+ *      cosmos path. Not launched yet (see NETWORKS.injective, launched:false)
  *
  * 3. substrate networks - polkadot/kusama umbrella for all parachains
  *    - same adapter, different ss58 prefixes per chain
@@ -31,7 +33,7 @@
  */
 
 export type PrivacyNetwork = 'zcash' | 'penumbra';
-export type IbcNetwork = 'noble' | 'cosmoshub';
+export type IbcNetwork = 'noble' | 'cosmoshub' | 'osmosis' | 'injective';
 export type TransparentNetwork = 'polkadot' | 'kusama' | 'ethereum' | 'bitcoin';
 export type NetworkType = PrivacyNetwork | IbcNetwork | TransparentNetwork;
 
@@ -76,6 +78,10 @@ export const NETWORK_DEFAULT_ENCRYPTION: Record<NetworkType, EncryptionType> = {
   // ibc/cosmos - all use same cosmos encryption
   noble: 'cosmos',
   cosmoshub: 'cosmos',
+  osmosis: 'cosmos',
+  // injective is Ethermint: eth_secp256k1 (ethereum curve + keccak), not the
+  // cosmos secp256k1 path - so its encryption type is ethereum.
+  injective: 'ethereum',
   // substrate - default sr25519 (but ed25519/ecdsa also supported)
   polkadot: 'sr25519',
   kusama: 'sr25519',
@@ -154,6 +160,29 @@ export const NETWORK_CONFIGS: Record<NetworkType, NetworkConfig> = {
     bech32Prefix: 'cosmos',
     denom: 'uatom',
     derivationPath: "m/44'/118'/0'/0/0",
+  },
+  osmosis: {
+    id: 'osmosis',
+    name: 'Osmosis',
+    symbol: 'OSMO',
+    decimals: 6,
+    type: 'ibc',
+    bech32Prefix: 'osmo',
+    denom: 'uosmo',
+    derivationPath: "m/44'/118'/0'/0/0",
+  },
+  injective: {
+    id: 'injective',
+    name: 'Injective',
+    // ramp asset is Circle-native USDC on Injective (USDC.inj), 6-dec. Gas is a
+    // separate token (INJ, 18-dec) - see COSMOS_CHAINS.injective.gasAsset.
+    symbol: 'USDC.inj',
+    decimals: 6,
+    type: 'ibc',
+    bech32Prefix: 'inj',
+    denom: 'erc20:0xa00C59fF5a080D2b954d0c75e46E22a0c371235a',
+    // Ethermint: coin type 60 (NOT 118). Derives/signs via networks/injective.
+    derivationPath: "m/44'/60'/0'/0/0",
   },
 
   // other transparent networks

@@ -25,6 +25,9 @@ const StakePage = lazy(() => import('./stake').then(m => ({ default: m.StakePage
 const SwapPage = lazy(() => import('./swap').then(m => ({ default: m.SwapPage })));
 const VotePage = lazy(() => import('./vote').then(m => ({ default: m.VotePage })));
 const InboxPage = lazy(() => import('./inbox').then(m => ({ default: m.InboxPage })));
+const GroupChatThread = lazy(() =>
+  import('./inbox/group-chat-thread').then(m => ({ default: m.GroupChatThread })),
+);
 const ContactsPage = lazy(() => import('./contacts').then(m => ({ default: m.ContactsPage })));
 const SendPage = lazy(() => import('./send').then(m => ({ default: m.SendPage })));
 const ReceivePage = lazy(() => import('./receive').then(m => ({ default: m.ReceivePage })));
@@ -110,6 +113,14 @@ export const popupRoutes: RouteObject[] = [
         element: (
           <Suspense fallback={<LazyFallback />}>
             <InboxPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: PopupPath.INBOX_GROUP,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <GroupChatThread />
           </Suspense>
         ),
       },

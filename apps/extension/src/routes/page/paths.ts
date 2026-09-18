@@ -5,7 +5,6 @@ export enum PagePath {
   IMPORT_SEED_PHRASE = '/welcome/import',
   IMPORT_ZIGNER = '/welcome/import-zigner',
   CONNECT_LEDGER = '/welcome/connect-ledger',
-  SELECT_NETWORKS = '/welcome/select-networks',
   ONBOARDING_SUCCESS = '/welcome/success',
   SET_PASSWORD = '/welcome/set-password',
   /** Grant camera permission page - opened from popup, tells user to return */

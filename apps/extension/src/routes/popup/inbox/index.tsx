@@ -9,7 +9,8 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
-import { useStore } from '../../../state';
+import { useStore, type AllSlices } from '../../../state';
+import { selectVisibleMultisigWallets } from '../../../state/wallets';
 import {
   inboxSelector,
   selectConversations,
@@ -19,6 +20,8 @@ import {
 } from '../../../state/inbox';
 import { messagesSelector, type Message } from '../../../state/messages';
 import { contactsSelector } from '../../../state/contacts';
+import { useZcashMeDirectoryLookup } from '../../../services/zcashme/config';
+import { zcashMeLabel } from '../../../services/zcashme/label';
 import {
   selectActiveNetwork,
   selectPenumbraAccount,
@@ -857,6 +860,11 @@ export function InboxPage() {
   // objects mean the page only re-renders when conversations actually
   // change. Cascading down: ConversationRow + FlatMessageRow stay stable.
   const conversations = useStore(useShallow(selectConversations));
+  const groupWallets = useStore(
+    useShallow((s: AllSlices) =>
+      selectVisibleMultisigWallets(s).filter(w => (w.multisig?.relayPeerKeys?.length ?? 0) > 0),
+    ),
+  );
   const unreadCount = useStore(selectUnreadCount);
   const messages = useStore(messagesSelector);
   const contacts = useStore(contactsSelector);
@@ -864,7 +872,12 @@ export function InboxPage() {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
 
-  const [selectedConvo, setSelectedConvo] = useState<Conversation | undefined>();
+  // Track the OPEN thread by its stable diversifierIndex, not a Conversation
+  // snapshot. selectConversations() returns fresh Conversation objects whenever
+  // messages change; deriving selectedConvo from the live list means a thread
+  // that is open re-renders when new messages arrive (and its unread flag
+  // updates so markRead fires) instead of showing a frozen snapshot.
+  const [selectedDiversifierIndex, setSelectedDiversifierIndex] = useState<number | undefined>();
   const [showCompose, setShowCompose] = useState(false);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<'conversations' | 'all'>('conversations');
@@ -872,6 +885,15 @@ export function InboxPage() {
     address: string;
     network: 'zcash' | 'penumbra';
   } | null>(null);
+
+  // live conversation for the open thread, derived from the store-backed list
+  const selectedConvo = useMemo(
+    () =>
+      selectedDiversifierIndex === undefined
+        ? undefined
+        : conversations.find(c => c.diversifierIndex === selectedDiversifierIndex),
+    [conversations, selectedDiversifierIndex],
+  );
 
   const walletId = selectedKeyInfo?.id ?? '';
 
@@ -932,14 +954,17 @@ export function InboxPage() {
     );
   }, [messages, tab, search, activeNetwork]);
 
+  const directoryLookup = useZcashMeDirectoryLookup();
   const getContactName = useCallback(
     (address: string | undefined) => {
       if (!address) {
         return undefined;
       }
-      return contacts.findByAddress(address)?.contact.name;
+      return (
+        contacts.findByAddress(address)?.contact.name ?? zcashMeLabel(directoryLookup(address))
+      );
     },
-    [contacts],
+    [contacts, directoryLookup],
   );
 
   // referral for selected conversation
@@ -955,7 +980,7 @@ export function InboxPage() {
     return (
       <ConversationThread
         conversation={selectedConvo}
-        onClose={() => setSelectedConvo(undefined)}
+        onClose={() => setSelectedDiversifierIndex(undefined)}
         referral={selectedReferral}
       />
     );
@@ -1045,6 +1070,34 @@ export function InboxPage() {
         </button>
       </div>
 
+      {/* multisig group chats — coordination threads over the relay, distinct
+          from the on-chain-memo conversations below. only groups whose
+          co-signer relay keys are on file can chat. */}
+      {groupWallets.length > 0 && (
+        <div className='border-b border-border-soft px-3 py-2'>
+          <p className='mb-1.5 flex items-center gap-1 text-label text-fg-dim'>
+            <span className='i-ph-users-three h-3.5 w-3.5' />
+            group chats
+          </p>
+          <div className='flex flex-col gap-1'>
+            {groupWallets.map(w => (
+              <button
+                key={w.id}
+                type='button'
+                onClick={() => navigate(`/inbox/group/${w.id}`)}
+                className='flex items-center gap-2 rounded-lg bg-elev-1 px-2.5 py-2 text-left hover:bg-elev-2 transition-colors'
+              >
+                <span className='i-ph-chat-circle h-4 w-4 shrink-0 text-network-accent' />
+                <span className='truncate text-sm text-fg-high lowercase'>{w.label}</span>
+                <span className='ml-auto text-label text-fg-dim'>
+                  {(w.multisig?.threshold ?? 0)}-of-{(w.multisig?.maxSigners ?? 0)}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* search — hidden when the underlying collection is empty.
           A new user with zero conversations shouldn't see a
           'search conversations...' bar inviting them to search
@@ -1093,7 +1146,7 @@ export function InboxPage() {
                       ? undefined // we don't know the address from inbox state alone
                       : undefined,
                   )}
-                  onClick={() => setSelectedConvo(convo)}
+                  onClick={() => setSelectedDiversifierIndex(convo.diversifierIndex)}
                 />
               ))}
             </div>
@@ -1121,7 +1174,7 @@ export function InboxPage() {
                     c.messages.some(m => m.txids.includes(msg.txId)),
                   );
                   if (convo) {
-                    setSelectedConvo(convo);
+                    setSelectedDiversifierIndex(convo.diversifierIndex);
                   }
                 }}
               />

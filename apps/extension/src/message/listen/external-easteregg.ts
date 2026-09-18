@@ -34,6 +34,12 @@ import {
 } from '@repo/storage-chrome/capabilities';
 import { isPro } from '../../state/license';
 import { isValidExternalSender } from '../../senders/external';
+import { ZAFU_PROTOCOL_VERSION, ZAFU_SUPPORTED_PROTOCOL_VERSIONS } from '@zafu/protocol';
+
+// The v1 methods this listener routes to a real handler here (vs delegating to
+// sign-request.ts / external-encryption.ts) are enumerated as EASTEREGG_V1_METHODS
+// in the zafu-method-names leaf. Keep the switch below in sync with that list;
+// the protocol contract test fails on drift.
 
 /**
  * WebAuthn rpId must be the caller origin's host or a registrable domain
@@ -137,6 +143,12 @@ async function requireCapability(
     if (elapsed < REJECT_FLOOR_MS) {
       await new Promise<void>(r => setTimeout(r, REJECT_FLOOR_MS - elapsed));
     }
+    // NOTE: deliberately NO `code` field here. This is the uniform rejection
+    // shape for the high-risk FROST/multisig gate (gh #18): every rejection -
+    // whatever the cause - must be byte-identical so a caller cannot distinguish
+    // which stage refused (that would leak, e.g., a label-length hint). Adding a
+    // structured code belongs only on the dapp-facing encryption surface
+    // (external-encryption.ts), which has no such uniformity requirement.
     sendResponse({ success: false, error: 'denied' });
     return null;
   };
@@ -169,9 +181,40 @@ export const externalMessageListener = (
   const msg = req as Record<string, unknown>;
   const type = msg['type'] as string;
 
+  // INTERNAL popup->worker result callbacks: accept ONLY from the extension
+  // itself, never a web page (a page that guessed a requestId could otherwise
+  // self-deliver a forged approval / picked contacts).
+  const INTERNAL_RESULT_TYPES = new Set([
+    'zafu_pick_contacts_result',
+    'zafu_frost_result',
+    'zafu_capability_result',
+    'zafu_zcash_send_result',
+  ]);
+  if (INTERNAL_RESULT_TYPES.has(type)) {
+    if (sender.id !== chrome.runtime.id) {
+      return false;
+    }
+  } else if (
+    // Public methods that open a popup or act on the user's behalf require a
+    // valid top-frame https sender. Without this a third-party IFRAME could raise
+    // a picker/approval/send popup wearing the host tab's identity (provenance
+    // spoof). The frost/passkey entries already gate via requireCapability /
+    // isValidExternalSender; ping is a harmless discovery response.
+    (type === 'send' || type === 'zafu_pick_contacts' || type === 'zafu_request_capability') &&
+    !isValidExternalSender(sender)
+  ) {
+    sendResponse({ success: false, error: 'denied', code: 'denied' });
+    return true;
+  }
+
   switch (type) {
     case 'ping':
-      sendResponse({ zafu: true, version: chrome.runtime.getManifest().version });
+      sendResponse({
+        zafu: true,
+        version: chrome.runtime.getManifest().version,
+        protocolVersion: ZAFU_PROTOCOL_VERSION,
+        protocolVersions: [...ZAFU_SUPPORTED_PROTOCOL_VERSIONS],
+      });
       return true;
 
     case 'send': {
@@ -245,6 +288,13 @@ export const externalMessageListener = (
       // signing (zafu_frost_sign) remain available to free users so they
       // can participate in vaults / poker games hosted by Pro creators.
       void (async () => {
+        // Gate on the 'frost' capability FIRST (uniform 'denied', constant-time
+        // floor) so an origin that was never granted frost can't probe the user's
+        // Pro status by observing "pro subscription required" vs a popup.
+        const gate = await requireCapability(sender, 'frost', sendResponse);
+        if (!gate) {
+          return;
+        }
         const { useStore } = await import('../../state');
         if (!useStore.getState().license.license || !isPro(useStore.getState())) {
           sendResponse({ error: 'pro subscription required to create multisig vaults / games' });

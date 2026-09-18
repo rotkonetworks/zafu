@@ -18,6 +18,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { RelayKeyExchange } from './relay-key-exchange';
+import { RelayProbing, RendezvousJoin, useRendezvousAvailable } from './rendezvous-exchange';
 import { useSearchParams } from 'react-router-dom';
 import { useStore } from '../../../state';
 import {
@@ -62,6 +63,7 @@ const MultisigJoinZafu = () => {
   // every co-signer's relay key before it can join anything
   const [myRelayKey, setMyRelayKey] = useState('');
   const [peerKeys, setPeerKeys] = useState<string[]>([]);
+  const [manualKeys, setManualKeys] = useState(false);
   const [step, setStep] = useState<JoinStep>('input');
   const [error, setError] = useState('');
   const [address, setAddress] = useState('');
@@ -72,8 +74,11 @@ const MultisigJoinZafu = () => {
   const [maxSigners, setMaxSignersDisplay] = useState(0);
   const [deadline, setDeadline] = useState<number | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const rdvAvailable = useRendezvousAvailable(relayUrl || DEFAULT_RELAY_URL);
+  const rendezvous = rdvAvailable === true && !manualKeys;
   const goBack = useBackNav(PopupPath.MULTISIG);
   const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
+  const resetDkg = useStore(s => s.frostSession.resetDkg);
 
   // Session teardown, hoisted to refs so leaving mid-DKG (the CancelSessionModal
   // "leave anyway" and unmount) aborts the controller and disconnects the relay -
@@ -81,6 +86,8 @@ const MultisigJoinZafu = () => {
   // zigner join flow below.
   const abortRef = useRef<AbortController | null>(null);
   const relayRef = useRef<FrostdRelayClient | null>(null);
+  // once per session: the rendezvous announce auto-starts the DKG
+  const autoJoinedRef = useRef(false);
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
@@ -92,8 +99,12 @@ const MultisigJoinZafu = () => {
     step === 'joining' || step === 'dkg' || step === 'fvk-echo' ? deadline : null,
   );
 
-  const handleJoin = async () => {
-    if (!roomCode.trim()) {
+  // roomArg/peersArg let the rendezvous auto-start the DKG the moment the
+  // coordinator announces, without waiting for a state-update round-trip
+  const handleJoin = async (roomArg?: string, peersArg?: string[]) => {
+    const room = (roomArg ?? roomCode).trim();
+    const keys = peersArg ?? peerKeys;
+    if (!room) {
       return;
     }
 
@@ -105,12 +116,15 @@ const MultisigJoinZafu = () => {
       const url = relayUrl || DEFAULT_RELAY_URL;
       setStep('joining');
 
-      if (peerKeys.length === 0) {
+      if (keys.length === 0) {
         throw new Error('enter every co-signer relay key before joining');
       }
-      // the session id doubles as this ceremony's identity scope
-      const stored = await getOrCreateRelayIdentity(roomCode.trim());
-      const relay = new FrostdRelayClient(url, await buildRelayIdentity(stored, peerKeys));
+      // the identity the peers were given is the ceremony-scoped one from
+      // prepareRelayIdentity (both the rendezvous and RelayKeyExchange use
+      // it) - logging in with any other key would be rejected as unlisted
+      const ceremonyId = useStore.getState().frostSession.relayCeremonyId ?? room;
+      const stored = await getOrCreateRelayIdentity(ceremonyId);
+      const relay = new FrostdRelayClient(url, await buildRelayIdentity(stored, keys));
       relayRef.current = relay;
       const participantId = new Uint8Array(32);
       crypto.getRandomValues(participantId);
@@ -126,7 +140,7 @@ const MultisigJoinZafu = () => {
       setProgress('waiting for the wallet creator...');
 
       void relay.joinRoom(
-        roomCode.trim(),
+        room,
         participantId,
         event => {
           if (event.type === 'joined') {
@@ -177,7 +191,7 @@ const MultisigJoinZafu = () => {
         looksHex: /^[0-9a-f]+$/i.test(round1.broadcast),
       });
       await relay.sendMessage(
-        roomCode.trim(),
+        room,
         participantId,
         new TextEncoder().encode(`R1:${round1.broadcast}`),
       );
@@ -189,7 +203,7 @@ const MultisigJoinZafu = () => {
       const round2 = await frostDkgPart2InWorker(round1.secret, peerBroadcasts);
       for (const pkg of round2.peer_packages) {
         await relay.sendMessage(
-          roomCode.trim(),
+          room,
           participantId,
           new TextEncoder().encode(`R2:${pkg}`),
         );
@@ -211,7 +225,7 @@ const MultisigJoinZafu = () => {
       setStep('fvk-echo');
       setProgress('double-checking everyone sees the same wallet...');
       await relay.sendMessage(
-        roomCode.trim(),
+        room,
         participantId,
         new TextEncoder().encode(`FVK:${orchardFvk}`),
       );
@@ -235,7 +249,10 @@ const MultisigJoinZafu = () => {
         threshold,
         maxSigners: maxSignersLocal,
         relayUrl: url,
+        relayPeerKeys: keys,
+        relayCeremonyId: ceremonyId,
       });
+      resetDkg();
 
       setStep('complete');
     } catch (e) {
@@ -261,31 +278,69 @@ const MultisigJoinZafu = () => {
       />
       {step === 'input' && (
         <div className='flex flex-col gap-4'>
-          <label className='text-xs text-fg-muted'>
-            session id from the wallet creator
-            <input
-              className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
-              value={roomCode}
-              onChange={e => setRoomCode(e.target.value)}
-              placeholder='00000000-0000-0000-0000-000000000000'
-              autoFocus
-            />
-          </label>
+          {rdvAvailable !== null && !rendezvous && (
+            <label className='text-xs text-fg-muted'>
+              session id from the wallet creator
+              <input
+                className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
+                value={roomCode}
+                onChange={e => setRoomCode(e.target.value)}
+                placeholder='00000000-0000-0000-0000-000000000000'
+                autoFocus
+              />
+            </label>
+          )}
           <RelayTransportField value={relayUrl} onChange={setRelayUrl} />
-          <RelayKeyExchange
-            maxSigners={maxSigners}
-            myKey={myRelayKey}
-            onPrepare={prepareRelayIdentity}
-            onMyKey={setMyRelayKey}
-            onPeerKeys={setPeerKeys}
-          />
-          <button
-            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
-            onClick={() => void handleJoin()}
-            disabled={!roomCode.trim()}
-          >
-            join
-          </button>
+          {rdvAvailable === null ? (
+            <RelayProbing />
+          ) : rendezvous ? (
+            <RendezvousJoin
+              key={relayUrl || DEFAULT_RELAY_URL}
+              relayUrl={relayUrl || DEFAULT_RELAY_URL}
+              prepare={prepareRelayIdentity}
+              onState={s => {
+                setPeerKeys(s.peerKeys);
+                // wormhole UX: typing the code was the one action - the DKG
+                // starts by itself the moment the coordinator announces
+                if (s.sessionId !== null && !autoJoinedRef.current) {
+                  autoJoinedRef.current = true;
+                  setRoomCode(s.sessionId);
+                  void handleJoin(s.sessionId, s.peerKeys);
+                }
+              }}
+            />
+          ) : (
+            <RelayKeyExchange
+              maxSigners={maxSigners}
+              myKey={myRelayKey}
+              onPrepare={prepareRelayIdentity}
+              onMyKey={setMyRelayKey}
+              onPeerKeys={setPeerKeys}
+            />
+          )}
+          {rdvAvailable === true && (
+            <button
+              type='button'
+              className='self-start text-label text-fg-muted underline'
+              onClick={() => {
+                setManualKeys(m => !m);
+                setPeerKeys([]);
+                setRoomCode('');
+                autoJoinedRef.current = false;
+              }}
+            >
+              {manualKeys ? 'use a room code instead' : 'advanced: join by session id'}
+            </button>
+          )}
+          {rdvAvailable !== null && !rendezvous && (
+            <button
+              className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
+              onClick={() => void handleJoin()}
+              disabled={!roomCode.trim() || peerKeys.length === 0}
+            >
+              join
+            </button>
+          )}
         </div>
       )}
 
@@ -342,6 +397,7 @@ const MultisigJoinZafu = () => {
             onClick={() => {
               setStep('input');
               setError('');
+              autoJoinedRef.current = false;
             }}
             className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >
@@ -381,6 +437,9 @@ const MultisigJoinZigner = () => {
   // every co-signer's relay key before it can join anything
   const [myRelayKey, setMyRelayKey] = useState('');
   const [peerKeys, setPeerKeys] = useState<string[]>([]);
+  const [manualKeys, setManualKeys] = useState(false);
+  const rdvAvailable = useRendezvousAvailable(relayUrl || DEFAULT_RELAY_URL);
+  const rendezvous = rdvAvailable === true && !manualKeys;
   const [step, setStep] = useState<ZignerJoinStep>('input');
   const [error, setError] = useState('');
   const [participantCount, setParticipantCount] = useState(0);
@@ -403,10 +462,16 @@ const MultisigJoinZigner = () => {
   const zignerDerivedAddrRef = useRef('');
   const peerR2Ref = useRef<string[]>([]);
   const peerFvksRef = useRef<string[]>([]);
+  // relay identity + peers actually used to join, lifted out of handleJoin so
+  // the fvk-echo effect can persist them onto the vault at completion
+  const relayCtxRef = useRef<{ keys: string[]; ceremonyId: string }>({ keys: [], ceremonyId: '' });
   const abortRef = useRef<AbortController | null>(null);
   const relayRef = useRef<FrostdRelayClient | null>(null);
+  // once per session: the rendezvous announce auto-starts the DKG
+  const autoJoinedRef = useRef(false);
 
   const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
+  const resetDkg = useStore(s => s.frostSession.resetDkg);
 
   const countdown = useDeadlineCountdown(
     step === 'waiting-host-r1' ||
@@ -439,8 +504,10 @@ const MultisigJoinZigner = () => {
     mainnet: true,
   });
 
-  const handleJoin = async () => {
-    if (!roomCode.trim()) {
+  const handleJoin = async (roomArg?: string, peersArg?: string[]) => {
+    const room = (roomArg ?? roomCode).trim();
+    const keys = peersArg ?? peerKeys;
+    if (!room) {
       return;
     }
     try {
@@ -448,12 +515,14 @@ const MultisigJoinZigner = () => {
       const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
       setDeadline(sessionDeadline);
 
-      if (peerKeys.length === 0) {
+      if (keys.length === 0) {
         throw new Error('enter every co-signer relay key before joining');
       }
-      // the session id doubles as this ceremony's identity scope
-      const stored = await getOrCreateRelayIdentity(roomCode.trim());
-      const relay = new FrostdRelayClient(url, await buildRelayIdentity(stored, peerKeys));
+      // same identity the peers were given - see the zafu join flow above
+      const ceremonyId = useStore.getState().frostSession.relayCeremonyId ?? room;
+      relayCtxRef.current = { keys, ceremonyId };
+      const stored = await getOrCreateRelayIdentity(ceremonyId);
+      const relay = new FrostdRelayClient(url, await buildRelayIdentity(stored, keys));
       relayRef.current = relay;
 
       const pid = new Uint8Array(32);
@@ -463,7 +532,7 @@ const MultisigJoinZigner = () => {
       abortRef.current = new AbortController();
 
       void relay.joinRoom(
-        roomCode.trim(),
+        room,
         pid,
         event => {
           if (event.type === 'joined') {
@@ -705,7 +774,10 @@ const MultisigJoinZigner = () => {
           relayUrl: relayUrl || DEFAULT_RELAY_URL,
           custody: 'airgapSigner',
           zignerWalletId: walletId,
+          relayPeerKeys: relayCtxRef.current.keys,
+          relayCeremonyId: relayCtxRef.current.ceremonyId,
         });
+        resetDkg();
 
         setOrchardFvk(ufvk);
         setAddress(addr);
@@ -759,31 +831,68 @@ const MultisigJoinZigner = () => {
             cold-multisig: your signing key is generated and stored on zigner only. zafu keeps only
             the public keys needed to watch the wallet.
           </div>
-          <label className='text-xs text-fg-muted'>
-            session id from the wallet creator
-            <input
-              className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
-              value={roomCode}
-              onChange={e => setRoomCode(e.target.value)}
-              placeholder='00000000-0000-0000-0000-000000000000'
-              autoFocus
-            />
-          </label>
+          {rdvAvailable !== null && !rendezvous && (
+            <label className='text-xs text-fg-muted'>
+              session id from the wallet creator
+              <input
+                className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
+                value={roomCode}
+                onChange={e => setRoomCode(e.target.value)}
+                placeholder='00000000-0000-0000-0000-000000000000'
+                autoFocus
+              />
+            </label>
+          )}
           <RelayTransportField value={relayUrl} onChange={setRelayUrl} />
-          <RelayKeyExchange
-            maxSigners={maxSigners}
-            myKey={myRelayKey}
-            onPrepare={prepareRelayIdentity}
-            onMyKey={setMyRelayKey}
-            onPeerKeys={setPeerKeys}
-          />
-          <button
-            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
-            onClick={() => void handleJoin()}
-            disabled={!roomCode.trim()}
-          >
-            join
-          </button>
+          {rdvAvailable === null ? (
+            <RelayProbing />
+          ) : rendezvous ? (
+            <RendezvousJoin
+              key={relayUrl || DEFAULT_RELAY_URL}
+              relayUrl={relayUrl || DEFAULT_RELAY_URL}
+              prepare={prepareRelayIdentity}
+              onState={s => {
+                setPeerKeys(s.peerKeys);
+                // wormhole UX: the DKG starts by itself on the announce
+                if (s.sessionId !== null && !autoJoinedRef.current) {
+                  autoJoinedRef.current = true;
+                  setRoomCode(s.sessionId);
+                  void handleJoin(s.sessionId, s.peerKeys);
+                }
+              }}
+            />
+          ) : (
+            <RelayKeyExchange
+              maxSigners={maxSigners}
+              myKey={myRelayKey}
+              onPrepare={prepareRelayIdentity}
+              onMyKey={setMyRelayKey}
+              onPeerKeys={setPeerKeys}
+            />
+          )}
+          {rdvAvailable === true && (
+            <button
+              type='button'
+              className='self-start text-label text-fg-muted underline'
+              onClick={() => {
+                setManualKeys(m => !m);
+                setPeerKeys([]);
+                setRoomCode('');
+                autoJoinedRef.current = false;
+              }}
+            >
+              {manualKeys ? 'use a room code instead' : 'advanced: join by session id'}
+            </button>
+          )}
+          {rdvAvailable !== null && !rendezvous && (
+            <button
+              className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
+              onClick={() => void handleJoin()}
+              disabled={!roomCode.trim() || peerKeys.length === 0}
+            >
+              join
+            </button>
+          )}
         </div>
       )}
 
@@ -906,6 +1015,7 @@ const MultisigJoinZigner = () => {
             onClick={() => {
               setStep('input');
               setError('');
+              autoJoinedRef.current = false;
             }}
             className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >

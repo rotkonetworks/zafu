@@ -25,8 +25,9 @@ function bip32DeriveSecp256k1(
   seed: Uint8Array,
   path: string,
 ): { privateKey: Uint8Array; chainCode: Uint8Array } {
-  // master key from seed
-  const I = hmac(sha512, 'Bitcoin seed', seed);
+  // master key from seed. The BIP32 HMAC key is the ASCII bytes of
+  // "Bitcoin seed"; @noble/hashes >=1.8 rejects a string key, so encode it.
+  const I = hmac(sha512, new TextEncoder().encode('Bitcoin seed'), seed);
   let privateKey = I.slice(0, 32);
   let chainCode = I.slice(32);
 
@@ -116,7 +117,9 @@ function toChecksumAddress(address: string): string {
  * BIP-44 path: m/44'/60'/0'/0/{accountIndex}
  */
 export async function deriveEthWallet(mnemonic: string, accountIndex = 0): Promise<EthWallet> {
-  const seed = mnemonicToSeedSync(mnemonic);
+  // bip39 returns a Buffer; @noble/hashes >=1.8 rejects it (wants a real
+  // Uint8Array), so normalize before it reaches the HMAC.
+  const seed = Uint8Array.from(mnemonicToSeedSync(mnemonic));
   const path = `m/44'/60'/0'/0/${accountIndex}`;
 
   const { privateKey } = bip32DeriveSecp256k1(seed, path);

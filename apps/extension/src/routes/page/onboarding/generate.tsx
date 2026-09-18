@@ -20,7 +20,7 @@ import { useStore } from '../../../state';
 import { generateSelector } from '../../../state/seed-phrase/generate';
 import { usePageNav } from '../../../utils/navigate';
 import { SEED_PHRASE_ORIGIN } from './password/types';
-import { navigateToNetworkSelection } from './password/utils';
+import { navigateToPasswordPage } from './password/utils';
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { cn } from '@repo/ui/lib/utils';
@@ -113,7 +113,7 @@ export const GenerateSeedPhrase = () => {
                 disabled={!confirmed}
                 onClick={() => {
                   void localExtStorage.set('seedPhraseBackedUp', true);
-                  navigateToNetworkSelection(navigate, SEED_PHRASE_ORIGIN.NEWLY_GENERATED);
+                  navigateToPasswordPage(navigate, SEED_PHRASE_ORIGIN.NEWLY_GENERATED);
                 }}
                 className={cn(
                   'inline-flex items-center justify-center gap-2 px-6 py-3 text-sm lowercase',

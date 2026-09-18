@@ -13,6 +13,8 @@ export type NetworkId =
   | 'penumbra'
   | 'noble'
   | 'cosmoshub'
+  | 'osmosis'
+  | 'injective'
   | 'polkadot'
   | 'kusama'
   | 'ethereum'
@@ -23,6 +25,16 @@ const loadedAdapters = new Map<NetworkId, NetworkAdapter>();
 
 /** Network loading status */
 const loadingPromises = new Map<NetworkId, Promise<NetworkAdapter>>();
+
+/**
+ * Conduit-only networks have NO synced NetworkAdapter - they derive+sign on
+ * demand from their own UI (e.g. Injective's eth_secp256k1 receive+shield
+ * conduit). They can be "enabled" (recorded in enabledNetworks) but must be
+ * skipped by every adapter-load path, or loadAdapter's guard throw would reject
+ * enable/startup once the network is launched. loadAdapter itself keeps the
+ * throw as a defensive backstop.
+ */
+const ADAPTERLESS_NETWORKS: readonly NetworkId[] = ['injective'];
 
 /**
  * Load a network adapter dynamically
@@ -76,9 +88,10 @@ async function loadAdapter(network: NetworkId): Promise<NetworkAdapter> {
         adapter = new PolkadotAdapter();
         break;
       }
-      // IBC chains use a shared cosmos adapter
+      // IBC chains use a shared cosmos adapter (standard secp256k1 / coin 118)
       case 'noble':
-      case 'cosmoshub': {
+      case 'cosmoshub':
+      case 'osmosis': {
         const { CosmosAdapter } = await import(
           /* webpackChunkName: "adapter-cosmos" */
           '@repo/wallet/networks/cosmos/adapter'
@@ -86,6 +99,13 @@ async function loadAdapter(network: NetworkId): Promise<NetworkAdapter> {
         adapter = new CosmosAdapter();
         break;
       }
+      case 'injective':
+        // Ethermint (eth_secp256k1 / coin 60) - the shared CosmosAdapter would
+        // derive the WRONG address via the coin-118 path. Injective is a
+        // receive+shield conduit (packages/wallet/src/networks/injective),
+        // driven directly from the UI, not through a synced NetworkAdapter, and
+        // is launched:false until the #34 gates pass. Fail closed here.
+        throw new Error('injective has no network adapter (receive+shield conduit only)');
       case 'ethereum':
       case 'bitcoin':
         // Not yet implemented
@@ -182,16 +202,20 @@ export async function initializeEnabledNetworks(): Promise<void> {
       })
       .filter((n, i, arr) => arr.indexOf(n) === i);
 
-    // Load the auto-detected networks
-    await Promise.all(networksToEnable.map(loadAdapter));
+    // Load the auto-detected networks (skip conduit-only: no adapter)
+    await Promise.all(
+      networksToEnable.filter(n => !ADAPTERLESS_NETWORKS.includes(n)).map(loadAdapter),
+    );
 
     // Persist the enabled networks
     if (networksToEnable.length > 0) {
       await localExtStorage.set('enabledNetworks', networksToEnable);
     }
   } else {
-    // Load explicitly enabled networks
-    await Promise.all(enabledNetworks.map(loadAdapter));
+    // Load explicitly enabled networks (skip conduit-only: no adapter)
+    await Promise.all(
+      enabledNetworks.filter(n => !ADAPTERLESS_NETWORKS.includes(n)).map(loadAdapter),
+    );
   }
 }
 
@@ -199,7 +223,11 @@ export async function initializeEnabledNetworks(): Promise<void> {
  * Enable a network (load its adapter)
  */
 export async function enableNetwork(network: NetworkId): Promise<void> {
-  await loadAdapter(network);
+  // conduit-only networks (injective) have no adapter to load - recording them
+  // as enabled is enough; their UI derives/signs on demand via the conduit.
+  if (!ADAPTERLESS_NETWORKS.includes(network)) {
+    await loadAdapter(network);
+  }
 
   // Update stored enabled networks
   const current = (await localExtStorage.get('enabledNetworks')) || [];
@@ -231,8 +259,10 @@ export function setupNetworkStorageListener(): void {
       const oldNetworks = changes.enabledNetworks.oldValue || [];
       const newNetworks = changes.enabledNetworks.newValue || [];
 
-      // Find networks to load
-      const toLoad = newNetworks.filter((n: NetworkId) => !oldNetworks.includes(n));
+      // Find networks to load (conduit-only networks have no adapter)
+      const toLoad = newNetworks.filter(
+        (n: NetworkId) => !oldNetworks.includes(n) && !ADAPTERLESS_NETWORKS.includes(n),
+      );
       // Find networks to unload
       const toUnload = oldNetworks.filter((n: NetworkId) => !newNetworks.includes(n));
 

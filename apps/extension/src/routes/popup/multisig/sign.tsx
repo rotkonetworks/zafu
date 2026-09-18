@@ -28,6 +28,7 @@ import {
   buildRelayIdentity,
   getOrCreateRelayIdentity,
 } from '../../../state/keyring/relay-identity';
+import { resolveRoomCode } from '../../../state/keyring/rendezvous-client';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
 import { usePasswordGate } from '../../../hooks/password-gate';
@@ -111,16 +112,29 @@ export const MultisigSign = () => {
 
     try {
       const relayUrl = (typeof ms.relayUrl === 'string' ? ms.relayUrl : '') || DEFAULT_RELAY_URL;
-      // ceremony id is the group's public key package: stable for this
-      // group, and unrelated to any other, so a relay operator cannot link
-      // a user's groups to one another
+      // relay identity is this device's DKG relay-identity pointer, reused at
+      // signing so the transport key the co-signers whitelisted at DKG matches.
+      // Falls back to the group public key package for pre-frostd wallets (which
+      // need a key re-exchange before they can sign anyway). Either way the id
+      // is scoped to this group, so a relay operator cannot link a user's groups.
       const peerKeys = (ms as { relayPeerKeys?: string[] }).relayPeerKeys ?? [];
       if (peerKeys.length === 0) {
         throw new Error(
           'this wallet has no co-signer relay keys on file - exchange them before signing',
         );
       }
-      const stored = await getOrCreateRelayIdentity(String(ms.publicKeyPackage));
+      // four words instead of a uuid: resolve them through the relay's
+      // rendezvous; a pasted session uuid still works as-is
+      let room = roomCode.trim();
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(room)) {
+        setProgress('finding the signing session…');
+        room = await resolveRoomCode(relayUrl, room);
+      }
+      const stored = await getOrCreateRelayIdentity(
+        String(
+          (ms as { relayCeremonyId?: string }).relayCeremonyId ?? ms.publicKeyPackage,
+        ),
+      );
       const relay = new FrostdRelayClient(relayUrl, await buildRelayIdentity(stored, peerKeys));
       const participantId = new Uint8Array(32);
       crypto.getRandomValues(participantId);
@@ -135,7 +149,7 @@ export const MultisigSign = () => {
       let lastSignText = '';
 
       void relay.joinRoom(
-        roomCode.trim(),
+        room,
         participantId,
         event => {
           if (event.type !== 'message') {
@@ -436,12 +450,12 @@ export const MultisigSign = () => {
       {step === 'input' && (
         <div className='flex flex-col gap-4'>
           <label className='text-xs text-fg-muted'>
-            session id
+            room code (or session id) from the coordinator
             <input
               className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
               value={roomCode}
               onChange={e => setRoomCode(e.target.value)}
-              placeholder='00000000-0000-0000-0000-000000000000'
+              placeholder='four-words-like-these'
               autoFocus
             />
           </label>
@@ -747,18 +761,32 @@ const AirgapJoinerWrapper = ({
       <WalletCard />
       <div className='flex flex-col gap-4'>
         <label className='text-xs text-fg-muted'>
-          session id
+          room code (or session id) from the coordinator
           <input
             className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
             value={room}
             onChange={e => setRoom(e.target.value)}
-            placeholder='00000000-0000-0000-0000-000000000000'
+            placeholder='four-words-like-these'
             autoFocus
           />
         </label>
         <button
           className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
-          onClick={() => setPhase('active')}
+          onClick={() => {
+            void (async () => {
+              try {
+                let code = room.trim();
+                if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code)) {
+                  code = await resolveRoomCode(ms.relayUrl || DEFAULT_RELAY_URL, code);
+                  setRoom(code);
+                }
+                setPhase('active');
+              } catch (e) {
+                setError(e instanceof Error ? e.message : String(e));
+                setPhase('active');
+              }
+            })();
+          }}
           disabled={!room.trim()}
         >
           join

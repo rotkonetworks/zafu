@@ -102,19 +102,37 @@ export async function getHeight(chainId: CosmosChainId): Promise<number> {
   return client.getHeight();
 }
 
-/** convert address between chains (same pubkey, different prefix) */
+/**
+ * convert address between chains (same pubkey, different prefix).
+ * FUND SAFETY: refuses Ethermint targets - a coin-118 address is NOT a
+ * prefix-swap of an Injective (keccak/eth_secp256k1) address, so the result
+ * would be a valid-looking but wrong, unspendable address.
+ */
 export function convertAddress(address: string, targetChain: CosmosChainId): string {
+  if (COSMOS_CHAINS[targetChain].keyAlgo === 'eth_secp256k1') {
+    throw new Error(
+      `convertAddress cannot prefix-swap to ${targetChain}: Ethermint chain (eth_secp256k1)`,
+    );
+  }
   const { data } = fromBech32(address);
   const targetPrefix = COSMOS_CHAINS[targetChain].bech32Prefix;
   return toBech32(targetPrefix, data);
 }
 
-/** derive addresses for all chains from one address */
+/**
+ * derive addresses for all chains from one address.
+ * FUND SAFETY: SKIPS Ethermint chains (Injective) - their keccak address is not
+ * a coin-118 prefix-swap, so emitting one here would be a wrong, unspendable
+ * address. Mirrors deriveAllChainAddresses in signer.ts.
+ */
 export function deriveAllAddresses(sourceAddress: string): Record<CosmosChainId, string> {
   const { data } = fromBech32(sourceAddress);
 
   const addresses: Record<string, string> = {};
   for (const [chainId, config] of Object.entries(COSMOS_CHAINS)) {
+    if (config.keyAlgo === 'eth_secp256k1') {
+      continue; // Ethermint: not a prefix-swap; excluded from the coin-118 map
+    }
     addresses[chainId] = toBech32(config.bech32Prefix, data);
   }
 

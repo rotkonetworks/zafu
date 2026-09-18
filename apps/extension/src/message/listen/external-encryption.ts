@@ -19,22 +19,23 @@ import { x25519 } from '@noble/curves/ed25519';
 import { hkdf } from '@noble/hashes/hkdf';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
+import { aesGcmEncrypt, aesGcmDecrypt } from '../../crypto/aes-gcm';
 import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
 import { hasCapability, isDenied } from '@repo/storage-chrome/capabilities';
+import type {
+  ZafuEncryptRequest,
+  ZafuEncryptResponse,
+  ZafuDecryptRequest,
+  ZafuDecryptResponse,
+  ZafuZidPubkeyResponse,
+} from '@zafu/protocol';
+import { ENCRYPTION_PUBLIC_METHODS, ENCRYPTION_INTERNAL_METHODS } from './zafu-method-names';
+import { sealXWing, openXWing, XWING_LENGTHS } from '@zafu/pq';
+import { isValidExternalSender } from '../../senders/external';
 
 // -- types --
-
-interface EncryptRequest {
-  type: 'zafu_encrypt';
-  recipient: string; // hex ed25519 pubkey (64 hex chars = 32 bytes)
-  plaintext: string; // base64-encoded
-}
-
-interface DecryptRequest {
-  type: 'zafu_decrypt';
-  ciphertext: string; // base64-encoded (includes 12-byte nonce prefix)
-  ephemeral_pubkey: string; // hex x25519 pubkey
-}
+// the request/response shapes are the shared @zafu/protocol contract, imported
+// here so a field that drifts from the wallet<->dapp wire is a compile error.
 
 // -- rate limiting --
 
@@ -62,29 +63,25 @@ const isRateLimited = (origin: string): boolean => {
 
 // -- permission tracking --
 
-/** origins approved for encryption in this session */
-const approvedOrigins = new Set<string>();
-
 /** pending approval callbacks: requestId -> resolve */
 const pendingApprovals = new Map<string, (r: unknown) => void>();
 
 /**
  * check if origin has encryption permission, or prompt for approval.
  * returns true if approved, false if denied.
+ *
+ * The persistent capability in storage is re-read on EVERY call (no in-memory
+ * approved-origins cache): a cache would keep granting access after the user
+ * revokes the capability in Settings until the service worker restarted. This
+ * matches the FROST path's per-call re-check.
  */
 const ensureApproved = async (
   origin: string,
   sender: chrome.runtime.MessageSender,
 ): Promise<boolean> => {
-  // already approved this session
-  if (approvedOrigins.has(origin)) {
-    return true;
-  }
-
-  // check persistent capability
+  // check persistent capability (authoritative; reflects revocation immediately)
   const perms = await getOriginPermissions(origin);
   if (hasCapability(perms, 'encrypt')) {
-    approvedOrigins.add(origin);
     return true;
   }
   if (isDenied(perms, 'encrypt')) {
@@ -110,7 +107,6 @@ const ensureApproved = async (
   const result = (await resultPromise) as { approved?: boolean };
   if (result?.approved) {
     await grantCapability(origin, 'encrypt');
-    approvedOrigins.add(origin);
     return true;
   } else {
     await denyCapability(origin, 'encrypt');
@@ -125,12 +121,15 @@ const HEX_RE = /^[0-9a-fA-F]+$/;
 const isValidHexPubkey = (hex: unknown, expectedBytes: number): hex is string =>
   typeof hex === 'string' && hex.length === expectedBytes * 2 && HEX_RE.test(hex);
 
+/** upper bound on a single message (base64 chars); ~256 KiB of plaintext. Bounds
+ *  service-worker CPU/memory from a hostile dapp and keeps sizes sane. */
+const MAX_B64_LEN = 350_000;
+
 const isValidBase64 = (s: unknown): s is string => {
-  if (typeof s !== 'string' || s.length === 0) {
+  if (typeof s !== 'string' || s.length === 0 || s.length > MAX_B64_LEN) {
     return false;
   }
   try {
-    // round-trip check: decode then re-encode must match
     const decoded = Uint8Array.from(atob(s), c => c.charCodeAt(0));
     return decoded.length > 0;
   } catch {
@@ -140,7 +139,16 @@ const isValidBase64 = (s: unknown): s is string => {
 
 const base64ToBytes = (s: string): Uint8Array => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
-const bytesToBase64 = (b: Uint8Array): string => btoa(String.fromCharCode(...b));
+// chunked so a large buffer does not blow the argument limit of
+// String.fromCharCode(...b) (that spread throws RangeError on ~100k+ bytes).
+const bytesToBase64 = (b: Uint8Array): string => {
+  let s = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < b.length; i += CHUNK) {
+    s += String.fromCharCode(...b.subarray(i, i + CHUNK));
+  }
+  return btoa(s);
+};
 
 // -- crypto primitives --
 
@@ -166,47 +174,6 @@ const deriveAesKey = (
 };
 
 /**
- * AES-256-GCM encrypt. returns nonce (12 bytes) || ciphertext || tag.
- */
-const aesGcmEncrypt = async (key: Uint8Array, plaintext: Uint8Array): Promise<Uint8Array> => {
-  const nonce = randomBytes(12);
-  const cryptoKey = await crypto.subtle.importKey('raw', key as BufferSource, 'AES-GCM', false, [
-    'encrypt',
-  ]);
-  const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: nonce as BufferSource },
-    cryptoKey,
-    plaintext as BufferSource,
-  );
-  // nonce || ciphertext+tag
-  const result = new Uint8Array(12 + encrypted.byteLength);
-  result.set(nonce, 0);
-  result.set(new Uint8Array(encrypted), 12);
-  return result;
-};
-
-/**
- * AES-256-GCM decrypt. input is nonce (12 bytes) || ciphertext || tag.
- */
-const aesGcmDecrypt = async (key: Uint8Array, data: Uint8Array): Promise<Uint8Array> => {
-  if (data.length < 12 + 16) {
-    // minimum: 12-byte nonce + 16-byte GCM tag (empty plaintext)
-    throw new Error('ciphertext too short');
-  }
-  const nonce = data.slice(0, 12);
-  const ciphertext = data.slice(12);
-  const cryptoKey = await crypto.subtle.importKey('raw', key as BufferSource, 'AES-GCM', false, [
-    'decrypt',
-  ]);
-  const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: nonce as BufferSource },
-    cryptoKey,
-    ciphertext as BufferSource,
-  );
-  return new Uint8Array(decrypted);
-};
-
-/**
  * validate an ed25519 public key by checking it's on the curve.
  * rejects low-order points, identity point, and malformed encodings.
  */
@@ -222,19 +189,38 @@ const validateEd25519Pubkey = (pubkeyBytes: Uint8Array): boolean => {
 
 // -- handlers --
 
-const handleEncrypt = async (msg: EncryptRequest): Promise<unknown> => {
-  // validate recipient pubkey
-  if (!isValidHexPubkey(msg.recipient, 32)) {
-    return { error: 'invalid recipient: expected 64 hex chars (32-byte ed25519 pubkey)' };
+const handleEncrypt = async (msg: ZafuEncryptRequest): Promise<ZafuEncryptResponse> => {
+  if (!isValidBase64(msg.plaintext)) {
+    return { error: 'invalid plaintext: expected non-empty base64 string', code: 'invalid_request' };
   }
 
-  if (!isValidBase64(msg.plaintext)) {
-    return { error: 'invalid plaintext: expected non-empty base64 string' };
+  // hybrid post-quantum path: the recipient advertised an X-Wing key
+  // (zafu_zid_pubkey.pq_pubkey). Seal with X-Wing so a recorder cannot decrypt
+  // it even with a future quantum computer. The ephemeral is inside the wire, so
+  // ephemeral_pubkey is empty.
+  if (msg.recipient_pq !== undefined) {
+    if (!isValidHexPubkey(msg.recipient_pq, XWING_LENGTHS.publicKey)) {
+      return {
+        error: `invalid recipient_pq: expected ${XWING_LENGTHS.publicKey * 2} hex chars (X-Wing public key)`,
+        code: 'invalid_request',
+      };
+    }
+    try {
+      const wire = sealXWing(hexToBytes(msg.recipient_pq), base64ToBytes(msg.plaintext));
+      return { ciphertext: bytesToBase64(wire), ephemeral_pubkey: '' };
+    } catch (e) {
+      return { error: 'encryption failed: ' + String(e), code: 'internal_error' };
+    }
+  }
+
+  // classical x25519 path
+  if (!isValidHexPubkey(msg.recipient, 32)) {
+    return { error: 'invalid recipient: expected 64 hex chars (32-byte ed25519 pubkey)', code: 'invalid_request' };
   }
 
   const recipientEd25519 = hexToBytes(msg.recipient);
   if (!validateEd25519Pubkey(recipientEd25519)) {
-    return { error: 'invalid recipient: not a valid ed25519 public key' };
+    return { error: 'invalid recipient: not a valid ed25519 public key', code: 'invalid_request' };
   }
 
   try {
@@ -263,25 +249,31 @@ const handleEncrypt = async (msg: EncryptRequest): Promise<unknown> => {
       ephemeral_pubkey: bytesToHex(ephemeralPub),
     };
   } catch (e) {
-    return { error: 'encryption failed: ' + String(e) };
+    return { error: 'encryption failed: ' + String(e), code: 'internal_error' };
   }
 };
 
-const handleDecrypt = async (msg: DecryptRequest, origin: string): Promise<unknown> => {
+const handleDecrypt = async (
+  msg: ZafuDecryptRequest,
+  origin: string,
+): Promise<ZafuDecryptResponse> => {
   // identity feature gate: if the user has disabled the zid layer,
   // decryption is unavailable (it'd derive their site-keypair which
   // is exactly the surface they turned off).
   const { isIdentityEnabledFromStorage } = await import('../../state/privacy');
   if (!(await isIdentityEnabledFromStorage())) {
-    return { error: 'identity disabled in zafu settings' };
-  }
-  // validate inputs
-  if (!isValidHexPubkey(msg.ephemeral_pubkey, 32)) {
-    return { error: 'invalid ephemeral_pubkey: expected 64 hex chars (32-byte x25519 pubkey)' };
+    return { error: 'identity disabled in zafu settings', code: 'not_available' };
   }
 
   if (!isValidBase64(msg.ciphertext)) {
-    return { error: 'invalid ciphertext: expected non-empty base64 string' };
+    return { error: 'invalid ciphertext: expected non-empty base64 string', code: 'invalid_request' };
+  }
+
+  // An empty ephemeral_pubkey marks a hybrid (X-Wing) sealed box - its ephemeral
+  // is inside the ciphertext. A non-empty one is the classical x25519 path.
+  const hybrid = !msg.ephemeral_pubkey || msg.ephemeral_pubkey.length === 0;
+  if (!hybrid && !isValidHexPubkey(msg.ephemeral_pubkey, 32)) {
+    return { error: 'invalid ephemeral_pubkey: expected 64 hex chars (32-byte x25519 pubkey)', code: 'invalid_request' };
   }
 
   try {
@@ -289,15 +281,30 @@ const handleDecrypt = async (msg: DecryptRequest, origin: string): Promise<unkno
     const { useStore } = await import('../../state');
     const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
     if (!keyInfo) {
-      return { error: 'wallet locked' };
+      return { error: 'wallet locked', code: 'locked' };
     }
 
     const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
+    const { currentIdentityName } = await import('../../state/identity');
+    const identityName = await currentIdentityName();
 
-    const { deriveZidKeypairForSite, currentIdentityName } = await import('../../state/identity');
+    // hybrid: open the X-Wing sealed box with the site's post-quantum secret seed
+    if (hybrid) {
+      const { deriveZidPqSeed } = await import('../../state/identity');
+      const seed = deriveZidPqSeed(mnemonic, identityName, origin);
+      try {
+        const plaintext = openXWing(seed, base64ToBytes(msg.ciphertext));
+        return { plaintext: bytesToBase64(plaintext) };
+      } finally {
+        seed.fill(0);
+      }
+    }
+
+    // classical: derive user's ed25519 keypair for this origin
+    const { deriveZidKeypairForSite } = await import('../../state/identity');
     const { privateKey: ed25519Priv, publicKey: ed25519Pub } = deriveZidKeypairForSite(
       mnemonic,
-      await currentIdentityName(),
+      identityName,
       origin,
     );
 
@@ -323,40 +330,49 @@ const handleDecrypt = async (msg: DecryptRequest, origin: string): Promise<unkno
 
     return { plaintext: bytesToBase64(plaintext) };
   } catch (e) {
-    return { error: 'decryption failed' };
+    return { error: 'decryption failed', code: 'internal_error' };
   }
 };
 
-const handleZidPubkey = async (origin: string): Promise<unknown> => {
+const handleZidPubkey = async (origin: string): Promise<ZafuZidPubkeyResponse> => {
   try {
     const { isIdentityEnabledFromStorage } = await import('../../state/privacy');
     if (!(await isIdentityEnabledFromStorage())) {
-      return { error: 'identity disabled in zafu settings' };
+      return { error: 'identity disabled in zafu settings', code: 'not_available' };
     }
     const { useStore } = await import('../../state');
     const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
     if (!keyInfo) {
-      return { error: 'wallet locked' };
+      return { error: 'wallet locked', code: 'locked' };
     }
 
     const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
 
-    const { deriveZidForSite, currentIdentityName } = await import('../../state/identity');
-    const zid = deriveZidForSite(mnemonic, await currentIdentityName(), origin);
+    const { deriveZidForSite, deriveZidPqPublicKey, ZID_PQ_SUITE, currentIdentityName } =
+      await import('../../state/identity');
+    const identityName = await currentIdentityName();
+    const zid = deriveZidForSite(mnemonic, identityName, origin);
+    // advertise the hybrid post-quantum sealed-box key too, so dapps can seal
+    // messages that stay confidential against a future quantum attacker.
+    const pq_pubkey = deriveZidPqPublicKey(mnemonic, identityName, origin);
 
-    return { pubkey: zid.publicKey };
+    return { pubkey: zid.publicKey, pq_pubkey, pq_suite: ZID_PQ_SUITE };
   } catch (e) {
-    return { error: 'failed to derive pubkey: ' + String(e) };
+    return { error: 'failed to derive pubkey: ' + String(e), code: 'internal_error' };
   }
 };
 
 // -- main listener --
 
-const ENCRYPTION_TYPES = new Set([
-  'zafu_encrypt',
-  'zafu_decrypt',
-  'zafu_zid_pubkey',
-  'zafu_encryption_approval_result',
+/**
+ * The message `type`s this listener owns: the public @zafu/protocol methods
+ * plus internal popup->worker callbacks. Names are sourced from the
+ * dependency-free zafu-method-names leaf so the protocol contract test can read
+ * the same runtime values the dispatch uses.
+ */
+export const ENCRYPTION_TYPES = new Set<string>([
+  ...ENCRYPTION_PUBLIC_METHODS,
+  ...ENCRYPTION_INTERNAL_METHODS,
 ]);
 
 export const encryptionMessageListener = (
@@ -375,8 +391,14 @@ export const encryptionMessageListener = (
     return false;
   }
 
-  // handle approval result from popup (internal message routed externally)
+  // handle approval result from the popup. This is an INTERNAL message from the
+  // extension's own popup - accept it ONLY from the extension itself, never from
+  // a web page (which could otherwise self-deliver {approved:true} if it learned
+  // a requestId).
   if (type === 'zafu_encryption_approval_result') {
+    if (sender.id !== chrome.runtime.id) {
+      return false;
+    }
     const requestId = String(msg['requestId'] || '');
     const callback = pendingApprovals.get(requestId);
     if (callback) {
@@ -387,15 +409,24 @@ export const encryptionMessageListener = (
     return true;
   }
 
+  // Public dapp methods: require a valid top-frame https sender. Without this a
+  // third-party IFRAME could raise an approval prompt for its own origin while
+  // the popup shows the host tab's favicon/title (provenance spoof), and could
+  // request encryption from an embedded context the user never intended.
+  if (!isValidExternalSender(sender)) {
+    sendResponse({ error: 'permission denied', code: 'denied' });
+    return true;
+  }
+
   const origin = sender.origin || sender.url;
   if (!origin) {
-    sendResponse({ error: 'unknown origin' });
+    sendResponse({ error: 'unknown origin', code: 'invalid_request' });
     return true;
   }
 
   // rate limit check
   if (isRateLimited(origin)) {
-    sendResponse({ error: 'rate limited: max 100 calls per minute' });
+    sendResponse({ error: 'rate limited: max 100 calls per minute', code: 'rate_limited' });
     return true;
   }
 
@@ -404,22 +435,22 @@ export const encryptionMessageListener = (
     // check permission (may open approval popup)
     const approved = await ensureApproved(origin, sender);
     if (!approved) {
-      sendResponse({ error: 'permission denied' });
+      sendResponse({ error: 'permission denied', code: 'denied' });
       return;
     }
 
     switch (type) {
       case 'zafu_encrypt':
-        sendResponse(await handleEncrypt(msg as unknown as EncryptRequest));
+        sendResponse(await handleEncrypt(msg as unknown as ZafuEncryptRequest));
         break;
       case 'zafu_decrypt':
-        sendResponse(await handleDecrypt(msg as unknown as DecryptRequest, origin));
+        sendResponse(await handleDecrypt(msg as unknown as ZafuDecryptRequest, origin));
         break;
       case 'zafu_zid_pubkey':
         sendResponse(await handleZidPubkey(origin));
         break;
       default:
-        sendResponse({ error: 'unknown encryption message type' });
+        sendResponse({ error: 'unknown encryption message type', code: 'invalid_request' });
     }
   })();
 

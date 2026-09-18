@@ -148,6 +148,7 @@ const ZcashCrosschainSwap = () => {
   const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
   const [destinationAddress, setDestinationAddress] = useState('');
   const [showContacts, setShowContacts] = useState(false);
+  const [riskAcknowledged, setRiskAcknowledged] = useState(false);
   const [quote, setQuote] = useState<SwapQuoteResponse | undefined>();
   const [swapStatus, setSwapStatus] = useState<SwapStatus | null>(null);
   const [error, setError] = useState<string | undefined>();
@@ -711,9 +712,52 @@ const ZcashCrosschainSwap = () => {
 
           {error && <p className='text-xs text-red-400'>{error}</p>}
 
+          {/* third-party custody risk warning - shown before any funds are committed */}
+          <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3'>
+            <div className='flex items-start gap-2'>
+              <span className='i-ph-warning mt-0.5 h-4 w-4 shrink-0 text-yellow-400' />
+              <div className='flex flex-col gap-1.5 text-xs text-yellow-400'>
+                <p className='font-medium'>third-party service - not operated by us</p>
+                <p className='text-fg-muted'>
+                  This swap routes through NEAR Intents (Defuse / 1Click), a third-party service we
+                  do not operate or control. We provide no guarantees.
+                </p>
+                <p className='text-fg-muted'>
+                  Funds sent to the deposit address may be delayed, held, frozen, or subject to the
+                  service's own compliance / AML review - potentially for a long time - and we
+                  cannot recover or guarantee them.
+                </p>
+                <p className='text-fg-muted'>
+                  The deposit address may be a custodial address controlled by the service, not a
+                  trustless bridge.
+                </p>
+                <a
+                  href='https://docs.near-intents.org/near-intents/integration/distribution-channels/1click-terms-of-service'
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  className='inline-flex items-center gap-1 text-yellow-400 underline underline-offset-2 hover:text-yellow-300'
+                >
+                  NEAR Intents 1Click terms of service
+                  <span className='i-ph-arrow-square-out h-3 w-3' />
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <label className='flex cursor-pointer items-start gap-2.5 text-xs text-fg'>
+            <input
+              type='checkbox'
+              checked={riskAcknowledged}
+              onChange={e => setRiskAcknowledged(e.target.checked)}
+              className='mt-0.5 h-4 w-4 shrink-0 accent-[var(--zigner-gold)]'
+            />
+            I understand this is a third-party, potentially custodial service and accept these
+            risks.
+          </label>
+
           <button
             onClick={() => void handleRequestQuote()}
-            disabled={!canQuote}
+            disabled={!canQuote || !riskAcknowledged}
             className={cn(
               'w-full bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground',
               'transition-colors hover:bg-primary/90',
@@ -724,7 +768,7 @@ const ZcashCrosschainSwap = () => {
           </button>
 
           <p className='text-center text-label text-fg-dim'>
-            via NEAR 1Click — swap details shared with third-party API
+            via NEAR 1Click - swap details shared with third-party API
           </p>
         </>
       )}

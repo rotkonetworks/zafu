@@ -25,10 +25,17 @@ import {
   buildRelayIdentity,
   getOrCreateRelayIdentity,
 } from '../../../../state/keyring/relay-identity';
+import { offerRoomCode } from '../../../../state/keyring/rendezvous-client';
 
 export interface RelaySession {
   relay: FrostdRelayClient;
   roomCode: string;
+  /**
+   * The human room code announced via the relay's rendezvous, when it has
+   * one — the thing to show co-signers instead of the uuid. Null on stock
+   * frostd relays; show `roomCode` then.
+   */
+  friendlyCode: string | null;
   participantId: Uint8Array;
   abort: AbortController;
 }
@@ -67,7 +74,17 @@ export async function openRelayRoom(
   const room = await relay.createRoom(threshold, maxSigners, ttlSec);
   const participantId = new Uint8Array(32);
   crypto.getRandomValues(participantId);
-  return { relay, roomCode: room.roomCode, participantId, abort: new AbortController() };
+  // hand the session id over as a human code where the relay supports it;
+  // the uuid keeps working regardless
+  const stored = await getOrCreateRelayIdentity(ceremonyId);
+  const friendlyCode = await offerRoomCode(relayUrl, stored.publicKey, room.roomCode);
+  return {
+    relay,
+    roomCode: room.roomCode,
+    friendlyCode,
+    participantId,
+    abort: new AbortController(),
+  };
 }
 
 /** joiner variant — connects to an existing session by id (no createRoom). */
@@ -80,7 +97,7 @@ export async function openJoinerSession(
   const relay = await clientFor(relayUrl, ceremonyId, peerKeys);
   const participantId = new Uint8Array(32);
   crypto.getRandomValues(participantId);
-  return { relay, roomCode, participantId, abort: new AbortController() };
+  return { relay, roomCode, friendlyCode: null, participantId, abort: new AbortController() };
 }
 
 export interface PeerBuckets {

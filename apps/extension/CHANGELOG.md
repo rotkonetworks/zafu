@@ -1,6 +1,35 @@
 # chrome-extension
 
-## 27.0.0
+## 27.1.0
+
+Multisig you can actually use, social discovery, and connection fixes.
+
+### Multisig (money-critical)
+
+- Freshly created 2-of-3 wallets can now open a signing session. The transport
+  identity co-signers whitelist at key generation is now persisted and reused at
+  signing, instead of a different key the relay rejected.
+- Share a wormhole-style room code - a number and two words (e.g. 7-fern-dusk) -
+  instead of a long session id. The session id stays available as an advanced
+  option, and codes work across the wallet, zcli, and poker.
+- Coordinate a signing right in the inbox: multisig groups now have a group chat
+  (encrypted, over the relay), so co-signers can agree on a transaction before
+  signing it.
+
+### Social / discovery
+
+- Optional zcash.me directory: pay a /username and put names to addresses you have
+  paid. Off by default; when you turn it on the wallet explains exactly what
+  zcash.me learns, and a directory mode keeps all lookups local (with live lookups
+  adding decoy cover). Only public lookups are ever used.
+
+### Fixes
+
+- Keplr: connecting to a dapp no longer hangs after you approve - the result is
+  now delivered before the approval popup closes.
+- Removed the unfinished license check that fired a request on every unlock
+  (timing out and leaking usage) for no user benefit yet.
+
 
 Zcash reliability, ironwood completion, and personal-data durability.
 

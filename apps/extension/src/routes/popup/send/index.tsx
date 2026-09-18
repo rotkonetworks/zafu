@@ -357,8 +357,9 @@ function CosmosSend({
     refetch: refetchAssets,
   } = useCosmosAssets(sourceChainId, accountIndex);
 
-  // auto-select native asset when data loads
-  useMemo(() => {
+  // auto-select native asset when data loads. Must be an effect, not useMemo:
+  // setState belongs in a commit-phase effect, not render.
+  useEffect(() => {
     if (assetsData?.nativeAsset && !selectedAsset) {
       setSelectedAsset(assetsData.nativeAsset);
     }

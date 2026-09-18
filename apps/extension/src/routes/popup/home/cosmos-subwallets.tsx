@@ -19,6 +19,7 @@ import {
   COSMOS_CHAINS,
   rpcEndpointPool,
   type CosmosChainId,
+  type CosmosChainConfig,
 } from '@repo/wallet/networks/cosmos/chains';
 import { useNobleRpcPool } from '../../../hooks/noble-rpc';
 import { getActiveIbcSubnetworks } from '../../../config/networks';
@@ -92,6 +93,45 @@ const ReceiveCard = ({
     </div>
   </div>
 );
+
+const fmtDate = (iso: string): string =>
+  new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+
+/**
+ * Wind-down warning for a deprecating chain. Shown where a holder can act on it
+ * (home when they hold a balance, and the Noble receive tab), so funds are not
+ * stranded past the freeze date.
+ */
+const DeprecationNotice = ({ config }: { config: CosmosChainConfig }) => {
+  const dep = config.deprecation;
+  if (!dep) {
+    return null;
+  }
+  return (
+    <div className='rounded-md border border-amber-400/40 bg-amber-400/10 px-3 py-2'>
+      <div className='flex items-start gap-1.5'>
+        <span className='i-ph-warning mt-0.5 h-4 w-4 shrink-0 text-amber-400' />
+        <div className='flex flex-col gap-1'>
+          <p className='text-xs font-medium text-amber-300 lowercase'>
+            {config.name} is being deprecated
+          </p>
+          <p className='text-label text-fg-muted'>
+            {dep.reason} {dep.guidance}
+          </p>
+          <p className='text-label text-fg-dim'>
+            move out by <span className='text-fg-high'>{fmtDate(dep.moveOutBy)}</span> · frozen{' '}
+            <span className='text-fg-high'>{fmtDate(dep.frozenBy)}</span>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const DepositRow = memo(
   ({
@@ -231,6 +271,7 @@ const ChainDeposits = ({ chainId, view }: { chainId: CosmosChainId; view: 'home'
     }
     return (
       <div className='flex flex-col gap-2'>
+        <DeprecationNotice config={config} />
         {staleNote}
         {funded.map(row)}
       </div>
@@ -240,6 +281,7 @@ const ChainDeposits = ({ chainId, view }: { chainId: CosmosChainId; view: 'home'
   // receive view
   return (
     <div className='flex flex-col gap-2'>
+      <DeprecationNotice config={config} />
       <ReceiveCard
         chainName={config.name}
         address={receive.address}

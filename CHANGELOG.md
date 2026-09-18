@@ -6,6 +6,113 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 28.0.1
+
+Covers everything since 28.0.0.
+
+### Injective USDC ramp (replaces the sunsetting Noble path)
+
+- Receive Circle-native USDC (USDC.inj) on Injective and shield it into Penumbra
+  over the live IBC channel, or withdraw it back to an exchange - a dedicated
+  in-wallet panel. Injective is Ethermint (eth_secp256k1 / coin type 60), so it
+  derives and signs on its own path, never the shared cosmos one.
+- The old "on-ramp USDC to Noble" copy is gone; Noble shows a deprecation notice.
+
+### Onboarding, simplified
+
+- First run defaults to Zcash-only and drops the network-select screen; enable
+  more networks later in Settings. The Zcash birthday folds into set-password.
+
+### Post-quantum encryption (harvest-now-decrypt-later)
+
+- The encrypted messaging channel and the app-facing sealed box are now hybrid
+  X25519 + ML-KEM-768: traffic recorded today stays confidential against a
+  future quantum computer. Message content is protected end to end; signatures
+  and identity stay classical (no harvest-now exposure there).
+
+### Developer SDK (new npm packages)
+
+- `@zafu/zid` (plus `@zafu/protocol` and `@zafu/pq`): let a website offer
+  "log in with zafu", sign, and send post-quantum-encrypted messages without
+  ever handling a private key.
+
+### Reliability and security
+
+- Fixed a startup render-loop crash and several teardown leaks introduced by the
+  React 19 / router 7 / zustand 5 framework upgrades, and an HD key-derivation
+  regression from @noble/hashes 1.8.
+- Pre-merge security hardening: authenticate the peer on the encrypted-channel
+  responder; enforce the Keplr-compatibility opt-out on the request path (not
+  just install); guard the dapp API against third-party-iframe approval spoofing,
+  stale capability grants after revocation, and oversized messages; and keep
+  Ethermint chains (Injective) off the coin-118 derivation path everywhere.
+
+## 28.0.0
+
+Covers everything since 27.3.2. Major bump: the address book is now a
+wallet-held social graph with private contact discovery and in-wallet
+messaging, and the release rides breaking framework upgrades.
+
+### Headline: private contact discovery and in-wallet messaging
+
+- Contacts are anchored to ZIDs (identities), not just addresses - a person
+  is a name, an identity, and where to find them, of which their chain
+  addresses are one part. Address-only contacts still work and can be linked
+  to a ZID later.
+- Private contact discovery over a blind relay: two people who already know
+  each other compute a per-epoch rendezvous tag with zero communication and
+  find each other's presence without handing the relay the metadata to
+  rebuild a social graph. Reads fetch a whole bucket (never a per-friend
+  query) and publishes are fixed-size padded batches, so neither who you look
+  up nor how many friends you have is observable.
+- Multisig group chat: every multisig group gets a coordination thread in the
+  inbox, carried over a dedicated frostd session with end-to-end sealed
+  frames. Messages queue for an offline co-signer and are readable when they
+  return.
+
+### zcash.me directory (opt-in, default off)
+
+- Look up and pay `/username`, and label addresses from the public zcash.me
+  directory. Off by default; both directory-snapshot and live-lookup modes
+  explain exactly what zcash.me learns before you enable them.
+- Live lookups can be covered by decoy names so zcash.me cannot tell which
+  name you wanted; cover no longer degrades silently when unavailable.
+- Reverse-labelling an address is verified-only: an unverified profile can
+  claim any address, so it is never used to name one (anti-spoofing).
+
+### Multisig
+
+- frostd relay transport with number-plus-two-word room codes for DKG and
+  signing, replacing the bespoke relay; relay traffic is sealed end to end.
+- Fresh 2-of-3 wallets can sign: the co-signers' relay keys and the DKG
+  transport identity are now persisted, so signing reuses the whitelisted
+  identity instead of a mismatched one.
+
+### Fixes
+
+- Keplr: the approval popup now delivers its result before closing, so
+  connecting no longer hangs after you accept.
+- Keplr compatibility is now opt-in (a new "act as keplr" toggle in privacy
+  settings, off by default). Previously zafu injected `window.keplr`
+  unconditionally and could clobber a user's real Keplr; now it never touches
+  the slot unless you turn compatibility on, and even then defers to a real
+  Keplr if one is present.
+- Noble: a warning now tells holders that Circle is winding down USDC and CCTP
+  on Noble - the bridge halts Dec 1, 2026 and the Noble USDC contract pauses on
+  Jan 12, 2027 - and to move their USDC off Noble (and sell or hold it
+  elsewhere) before then.
+
+### Removed
+
+- License checks. The unfinished pro-license feature pinged an external
+  server on every unlock (an IP and "uses zafu" leak on the critical path)
+  for no user benefit yet; removed until it ships behind an anonymous check.
+
+### Under the hood
+
+- React 18 to 19, react-router 6 to 7, zustand 4 to 5, and other major
+  dependency upgrades.
+
 ## 27.3.2
 
 ### Fixes

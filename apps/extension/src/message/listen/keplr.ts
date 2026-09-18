@@ -104,6 +104,27 @@ async function handleMethod(
 ): Promise<unknown> {
   const meta = { favIconUrl: sender.tab?.favIconUrl ?? '', title: sender.tab?.title ?? '' };
 
+  // FUND SAFETY: Ethermint chains (eth_secp256k1 / coin type 60, e.g. Injective)
+  // must NEVER be served over the Keplr provider. Keplr derivation goes through
+  // the shared cosmos coin-118 path, which produces a plausible-looking but WRONG
+  // (unspendable) inj1 address and cosmos-style signatures the chain rejects.
+  // Fail closed for every chain-bearing method (checking ALL requested chainIds);
+  // the real Injective flow is the dedicated in-wallet conduit UI.
+  const requestedChains: string[] =
+    method === 'enable'
+      ? ((params['chainIds'] as string[] | undefined) ?? [])
+      : params['chainId'] !== undefined
+        ? [String(params['chainId'])]
+        : [];
+  for (const cid of requestedChains) {
+    const resolved = cosmosChainIdFromKeplr(cid);
+    if (resolved && COSMOS_CHAINS[resolved].keyAlgo === 'eth_secp256k1') {
+      throw new Error(
+        `unsupported chain ${cid}: Ethermint chains are not served over Keplr; use the in-wallet flow`,
+      );
+    }
+  }
+
   switch (method) {
     case 'enable': {
       const chainIds = (params['chainIds'] as string[]) ?? [];

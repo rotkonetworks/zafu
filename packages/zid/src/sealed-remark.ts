@@ -16,14 +16,12 @@
  * noise-init-memo.ts, starting with "zNI\x01").
  */
 
-import { x25519 } from '@noble/curves/ed25519';
-import { edwardsToMontgomeryPub, edwardsToMontgomeryPriv } from '@noble/curves/ed25519';
+import { x25519 , ed25519 } from '@noble/curves/ed25519';
 import { hkdf } from '@noble/hashes/hkdf';
-import { sha256 } from '@noble/hashes/sha256';
+import { sha256 } from '@noble/hashes/sha2';
 import { gcm } from '@noble/ciphers/aes.js';
 import { randomBytes } from '@noble/ciphers/utils.js';
-import { decodeNoiseInitMemo } from './noise-init-memo';
-import type { NoiseInitPayload } from './noise-init-memo';
+import { decodeNoiseInitMemo ,type  NoiseInitPayload } from './noise-init-memo';
 
 /** magic bytes: "zSR" + version 0x01 */
 const MAGIC = new Uint8Array([0x7a, 0x53, 0x52, 0x01]);
@@ -38,7 +36,7 @@ const HKDF_INFO = new TextEncoder().encode('zafu-sealed-remark-v1');
  * check if raw bytes begin with the sealed remark magic.
  */
 export function isSealedRemark(remarkBytes: Uint8Array): boolean {
-  if (remarkBytes.length < OVERHEAD) return false;
+  if (remarkBytes.length < OVERHEAD) {return false;}
   return (
     remarkBytes[0] === MAGIC[0] &&
     remarkBytes[1] === MAGIC[1] &&
@@ -62,12 +60,12 @@ export function encodeSealedRemark(
   recipientEd25519Pub: Uint8Array,
   noiseInitPayload: Uint8Array,
 ): Uint8Array | null {
-  if (recipientEd25519Pub.length !== 32) return null;
-  if (noiseInitPayload.length === 0) return null;
+  if (recipientEd25519Pub.length !== 32) {return null;}
+  if (noiseInitPayload.length === 0) {return null;}
 
   try {
     // convert recipient ed25519 pubkey to x25519
-    const recipientX25519Pub = edwardsToMontgomeryPub(recipientEd25519Pub);
+    const recipientX25519Pub = ed25519.utils.toMontgomery(recipientEd25519Pub);
 
     // generate ephemeral x25519 keypair
     const ephemeralPriv = randomBytes(32);
@@ -123,8 +121,8 @@ export function decodeSealedRemark(
   myEd25519Priv: Uint8Array,
   remarkBytes: Uint8Array,
 ): NoiseInitPayload | null {
-  if (!isSealedRemark(remarkBytes)) return null;
-  if (myEd25519Priv.length !== 32) return null;
+  if (!isSealedRemark(remarkBytes)) {return null;}
+  if (myEd25519Priv.length !== 32) {return null;}
 
   try {
     let offset = 4; // skip magic
@@ -139,10 +137,10 @@ export function decodeSealedRemark(
 
     // remaining is ciphertext + GCM tag
     const ciphertext = remarkBytes.subarray(offset);
-    if (ciphertext.length < 16) return null; // at least the GCM tag
+    if (ciphertext.length < 16) {return null;} // at least the GCM tag
 
     // convert our ed25519 private key to x25519
-    const myX25519Priv = edwardsToMontgomeryPriv(myEd25519Priv);
+    const myX25519Priv = ed25519.utils.toMontgomerySecret(myEd25519Priv);
 
     // DH: my x25519 priv * ephemeral pub
     const sharedSecret = x25519.getSharedSecret(myX25519Priv, ephemeralPub);

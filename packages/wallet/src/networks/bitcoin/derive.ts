@@ -26,7 +26,7 @@ function bip32DeriveSecp256k1(
   seed: Uint8Array,
   path: string,
 ): { privateKey: Uint8Array; chainCode: Uint8Array } {
-  const I = hmac(sha512, 'Bitcoin seed', seed);
+  const I = hmac(sha512, new TextEncoder().encode('Bitcoin seed'), seed);
   let privateKey = I.slice(0, 32);
   let chainCode = I.slice(32);
 
@@ -190,7 +190,7 @@ function encodeBech32Address(
  * produces bc1... (P2WPKH) addresses
  */
 export async function deriveBtcWallet(mnemonic: string, accountIndex = 0): Promise<BitcoinWallet> {
-  const seed = mnemonicToSeedSync(mnemonic);
+  const seed = Uint8Array.from(mnemonicToSeedSync(mnemonic));
   const path = `m/84'/0'/0'/0/${accountIndex}`;
 
   const { privateKey } = bip32DeriveSecp256k1(seed, path);

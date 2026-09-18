@@ -67,12 +67,21 @@ export const KeplrApproval = () => {
     return list ?? (req ? [req.chainId] : []);
   }, [req]);
 
-  const respond = (result: unknown) => {
-    void chrome.runtime.sendMessage({ type: 'zafu_keplr_result', requestId, result });
+  const respond = async (result: unknown) => {
+    // await delivery before closing: window.close() tears down this popup's
+    // context, and a still-in-flight sendMessage is dropped with it, leaving
+    // the service worker's pending resolver (and the dapp's promise) hung.
+    // The result listener acks with { ok: true }, so the await also confirms
+    // the worker received it.
+    try {
+      await chrome.runtime.sendMessage({ type: 'zafu_keplr_result', requestId, result });
+    } catch {
+      // worker already gone - nothing more we can do; still close the popup
+    }
     window.close();
   };
 
-  const deny = () => respond({ approved: false, error: 'rejected' });
+  const deny = () => void respond({ approved: false, error: 'rejected' });
 
   const approve = async () => {
     if (!req || !keyInfo) {
@@ -87,7 +96,7 @@ export const KeplrApproval = () => {
         for (const cid of chainIds) {
           keys[cid] = await deriveKeplrWireKey(mnemonic, prefixFor(cid), keyInfo.name ?? 'zafu');
         }
-        respond({ approved: true, payload: { keys } });
+        await respond({ approved: true, payload: { keys } });
         return;
       }
 
@@ -100,7 +109,7 @@ export const KeplrApproval = () => {
           req.signerAddress ?? '',
           req.signDoc as Parameters<typeof signKeplrAmino>[3],
         );
-        respond({ approved: true, payload });
+        await respond({ approved: true, payload });
         return;
       }
 
@@ -111,9 +120,12 @@ export const KeplrApproval = () => {
         req.signerAddress ?? '',
         req.signDoc as KeplrDirectWireDoc,
       );
-      respond({ approved: true, payload });
+      await respond({ approved: true, payload });
     } catch (err) {
-      respond({ approved: false, error: err instanceof Error ? err.message : 'signing failed' });
+      await respond({
+        approved: false,
+        error: err instanceof Error ? err.message : 'signing failed',
+      });
     } finally {
       setBusy(false);
     }

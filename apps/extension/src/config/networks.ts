@@ -31,6 +31,15 @@ export interface NetworkConfig {
    * and must be reopened; set/unset this (with `launched`) as they come back.
    */
   ibcChainId?: string;
+  /**
+   * Conduit-only subnetwork: reached through a dedicated derive+sign path
+   * (e.g. Injective's eth_secp256k1 conduit), NOT the shared cosmos secp256k1 /
+   * coin-118 IBC machinery. Excluded from getActiveIbcChainIds /
+   * getActiveIbcSubnetworks (which drive the standard cosmos deposit UI) and
+   * from network-loader adapter loading, so `launched:true` can't route it
+   * through the wrong (fund-losing) path. Its own UI gates on isLaunched.
+   */
+  conduitOnly?: boolean;
   features: {
     stake: boolean;
     swap: boolean;
@@ -100,6 +109,38 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     parent: 'penumbra',
     features: { stake: true, swap: false, vote: false, inbox: false, multisig: false },
   },
+  osmosis: {
+    name: 'Osmosis',
+    color: 'bg-purple-400',
+    focusColor: 'focus:border-purple-400',
+    transparent: true,
+    // Penumbra subnetwork: standard cosmos chain (secp256k1, coin type 118).
+    // launched:false until the osmosis<->penumbra channel client is confirmed
+    // Active (registry has channel-4/channel-17; verify before flipping).
+    launched: false,
+    parent: 'penumbra',
+    ibcChainId: 'osmosis-1',
+    features: { stake: false, swap: false, vote: false, inbox: false, multisig: false },
+  },
+  injective: {
+    name: 'Injective',
+    color: 'bg-cyan-400',
+    focusColor: 'focus:border-cyan-400',
+    transparent: true,
+    // Penumbra subnetwork: the native-USDC (USDC.inj) receive+shield ramp that
+    // replaces the sunsetting Noble path. Ethermint (eth_secp256k1/coin-type-60)
+    // so it derives+signs via packages/wallet/src/networks/injective, NOT the
+    // shared cosmos secp256k1 path. LAUNCHED: the live inj<->penumbra channel
+    // (494/18) is wired + verified Active on-chain, and the #34 round-trip
+    // passed on mainnet (tx 5699D4FC..., code 0, height 183397211) - a live node
+    // accepted the eth_secp256k1 signature.
+    launched: true,
+    parent: 'penumbra',
+    ibcChainId: 'injective-1',
+    // eth_secp256k1 conduit, not the shared cosmos coin-118 path
+    conduitOnly: true,
+    features: { stake: false, swap: false, vote: false, inbox: false, multisig: false },
+  },
   ethereum: {
     name: 'Ethereum',
     color: 'bg-blue-500',
@@ -146,37 +187,31 @@ export const getSubnetworks = (parent: NetworkType): NetworkType[] =>
   );
 
 /**
- * IBC chain ids with a live channel to `parent` that are NOT modelled as a zafu
- * subnetwork - we never hold keys or derive an address for them, we only route
- * an IBC transfer to an address the user supplies.
+ * IBC chain ids reachable from `parent` right now: launched subnetworks that
+ * carry an `ibcChainId` (a live channel + client), INCLUDING conduit-only ramps
+ * like Injective, so they are valid IBC deposit/withdraw destinations. Channels
+ * close on network upgrades and re-open by setting `ibcChainId` + `launched`.
  *
- * Injective lives here rather than in NETWORKS because its accounts are
- * ethsecp256k1 on coin type 60, not the cosmos secp256k1/118 derivation every
- * NETWORKS entry shares: a subwallet for it would show a wrong `inj1` address.
- * Its channel re-opened as penumbra channel-18 / injective channel-494.
+ * Injective IS included here (it is a valid unshield/withdraw destination - the
+ * user supplies the inj1 address) even though it is `conduitOnly`. Fund safety
+ * holds because the shared coin-118 deposit UI is gated by getActiveIbcSubnetworks
+ * (below), which EXCLUDES conduitOnly - so Injective never reaches a coin-118
+ * derivation; its own conduit panel (eth_secp256k1) handles the inj side, and the
+ * standard deposit list drops it via ibcChainToCosmosId.
  */
-const EXTERNAL_IBC_CHAIN_IDS: Partial<Record<NetworkType, string[]>> = {
-  penumbra: ['injective-1'],
-};
-
-/**
- * IBC chain ids reachable from `parent` right now: launched cosmos subnetworks
- * that carry an `ibcChainId` (i.e. have a live channel + client), plus the
- * external chains above. IBC deposit/withdraw is gated to these. Channels close
- * on network upgrades and re-open by setting `ibcChainId` + `launched` (for a
- * subnetwork) or by listing the chain id in EXTERNAL_IBC_CHAIN_IDS.
- */
-export const getActiveIbcChainIds = (parent: NetworkType): string[] => [
-  ...(Object.keys(NETWORKS) as NetworkType[])
+export const getActiveIbcChainIds = (parent: NetworkType): string[] =>
+  (Object.keys(NETWORKS) as NetworkType[])
     .filter(n => NETWORKS[n].launched && NETWORKS[n].parent === parent && NETWORKS[n].ibcChainId)
-    .map(n => NETWORKS[n].ibcChainId!),
-  ...(EXTERNAL_IBC_CHAIN_IDS[parent] ?? []),
-];
+    .map(n => NETWORKS[n].ibcChainId!);
 
 /** As above but returns the network KEYS (e.g. 'noble'), for gating by activeNetwork. */
 export const getActiveIbcSubnetworks = (parent: NetworkType): NetworkType[] =>
   (Object.keys(NETWORKS) as NetworkType[]).filter(
-    n => NETWORKS[n].launched && NETWORKS[n].parent === parent && NETWORKS[n].ibcChainId,
+    n =>
+      NETWORKS[n].launched &&
+      NETWORKS[n].parent === parent &&
+      NETWORKS[n].ibcChainId &&
+      !NETWORKS[n].conduitOnly,
   );
 
 /** true if this cosmos subnetwork currently has a live IBC channel (deposit/send ok) */

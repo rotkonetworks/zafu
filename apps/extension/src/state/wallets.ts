@@ -44,6 +44,13 @@ export interface ZcashWalletJson {
     /** zigner-side wallet_id from frost_store_wallet (airgapSigner only).
      *  enables O(1) lookup at sign time vs scanning all FROST wallets. */
     zignerWalletId?: string;
+    /** co-signers' relay transport pubkeys (hex); a signing session cannot be
+     *  opened without them - frostd fixes participants at session creation. */
+    relayPeerKeys?: string[];
+    /** this device's relay-identity pointer (the frostRelayIdentities key used
+     *  at DKG); signing rebuilds the SAME transport identity the co-signers
+     *  whitelisted, instead of keying off publicKeyPackage (a different key). */
+    relayCeremonyId?: string;
     /** hide from main wallet UI (app-driven multisigs e.g. poker); sign-time lookup still works */
     hidden?: boolean;
   };

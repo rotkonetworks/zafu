@@ -1,5 +1,5 @@
 /**
- * @zafu/zid — zafu identity SDK
+ * @zafu/zid - zafu identity SDK
  *
  * one-line wallet connection, session signing, e2ee channels.
  *
@@ -14,6 +14,21 @@
  */
 
 export { zid } from './zid';
+export { detectZafu } from './provider';
+export { createExtensionTransport, type ZafuHandle } from './transport';
+export {
+  detect,
+  requireWallet,
+  sign,
+  signBytes,
+  zidPubkey,
+  encryptFor,
+  decryptFrom,
+  type ZafuDetection,
+  type ZidRecipient,
+  type ZidSignature,
+} from './messaging';
+export { ZafuError, type ZafuErrorCode } from './errors';
 export { createNoiseChannel } from './noise-channel';
 export {
   upsertContact,
@@ -21,12 +36,17 @@ export {
   getContactRefs,
   resolveHandle,
   contactCount,
+  importFromWallet,
+  establishContactSecret,
+  getContactRootSecret,
 } from './contacts';
 export type {
   ZidIdentity,
   ZidChannel,
   ZidOptions,
   ContactRef,
+  ContactCardKey,
+  ContactShare,
   PickContactsOptions,
   InvitePayload,
   InviteResult,
@@ -37,3 +57,51 @@ export { encodeNoiseInitMemo, decodeNoiseInitMemo, isNoiseInitMemo } from './noi
 export type { NoiseInitPayload } from './noise-init-memo';
 
 export { encodeSealedRemark, decodeSealedRemark, isSealedRemark } from './sealed-remark';
+
+export {
+  jamTimeslot,
+  presenceEpoch,
+  rendezvousTag,
+  JAM_COMMON_ERA,
+  JAM_SLOT_DURATION,
+  PRESENCE_EPOCH_SLOTS,
+  RENDEZVOUS_TAG_BYTES,
+} from './contact-discovery';
+
+export {
+  sealPresence,
+  openPresence,
+  encodePresenceRecord,
+  decodePresenceRecord,
+  PRESENCE_BLOB_VERSION,
+  PRESENCE_RECORD_VERSION,
+} from './presence-blob';
+export type { PresenceDir, PresenceRecord } from './presence-blob';
+
+export {
+  expectedFriendTags,
+  matchBucket,
+  ContactRelay,
+  PRESENCE_PAD_TO,
+  PRESENCE_BLOB_BYTES,
+} from './contact-relay';
+export type {
+  PresenceEntry,
+  RelayTransport,
+  RandomBytes,
+  ContactRelayOptions,
+  PresentFriend,
+  FriendPresenceQuery,
+  PublishOutcome,
+} from './contact-relay';
+
+export { createPresenceService, discoverContacts } from './presence-service';
+export type {
+  PresenceService,
+  DiscoveryPeer,
+  PresentPeer,
+  DiscoveredContact,
+} from './presence-service';
+
+export { createPresenceScheduler } from './presence-scheduler';
+export type { PresenceScheduler, PresenceSchedulerDeps, PublishArgs } from './presence-scheduler';

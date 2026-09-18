@@ -111,6 +111,7 @@ export const FrostApprove = () => {
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
 
   const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
+  const resetDkg = useStore(s => s.frostSession.resetDkg);
   const getMultisigSecrets = useStore(s => s.keyRing.getMultisigSecrets);
   const keyInfos = useStore(s => s.keyRing.keyInfos);
   const zcashWallets = useStore(s => s.wallets.zcashWallets);
@@ -270,6 +271,7 @@ export const FrostApprove = () => {
     const round3 = await frostDkgPart3InWorker(round2.secret, peerBroadcasts, peerRound2);
     const addr = await frostDeriveAddressInWorker(round3.public_key_package, 0);
 
+    const ceremonyId = roomCode !== '' ? roomCode : sighashHex;
     await newFrostMultisigKey({
       label: `${threshold}-of-${maxSigners} (${app})`,
       address: addr,
@@ -283,7 +285,10 @@ export const FrostApprove = () => {
       maxSigners,
       relayUrl,
       createdByOrigin: app,
+      relayPeerKeys,
+      relayCeremonyId: ceremonyId,
     });
+    resetDkg();
 
     abort.abort();
     const res = {

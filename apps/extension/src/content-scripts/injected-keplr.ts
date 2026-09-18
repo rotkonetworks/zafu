@@ -223,9 +223,19 @@ const keplr = {
   },
 };
 
-// only inject if nothing already claims window.keplr, and expose the offline
-// signer helpers cosmos-kit also probes at the window root
-if (!('keplr' in window)) {
+// Keplr compatibility is OPT-IN (default off). Injecting window.keplr
+// unconditionally clobbered a user's real Keplr: with `writable: false`,
+// whichever extension won the document_start race locked the slot and shut the
+// other out. So we do not touch window.keplr until the ISOLATED bridge, which
+// alone can read the setting, tells us the user turned compatibility on - and
+// even then only if nothing already claims the slot, so a real Keplr always
+// wins. `configurable: true` keeps us from permanently locking it either way.
+let installed = false;
+const installKeplr = (): void => {
+  if (installed || 'keplr' in window) {
+    return; // already ours, or a real Keplr is present - never clobber it
+  }
+  installed = true;
   Object.defineProperty(window, 'keplr', { value: keplr, writable: false, configurable: true });
   Object.defineProperty(window, 'getOfflineSigner', {
     value: (chainId: string) => keplr.getOfflineSigner(chainId),
@@ -242,5 +252,25 @@ if (!('keplr' in window)) {
     writable: false,
     configurable: true,
   });
+  // let dapps that already probed re-detect the newly present provider
   window.dispatchEvent(new Event('keplr_keystorechange'));
-}
+};
+
+// the ISOLATED bridge reads the opt-in flag (it has chrome.storage access) and
+// posts this once, only when the user has enabled Keplr compatibility
+window.addEventListener('message', (ev: MessageEvent) => {
+  if (ev.source !== window) {
+    return;
+  }
+  const d = ev.data as { channel?: string; direction?: string } | undefined;
+  if (d?.channel === CHANNEL && d.direction === 'enable') {
+    // NOTE: a page could forge this 'enable' (MAIN world can't authenticate the
+    // ISOLATED-world bridge across postMessage). That only installs an INERT
+    // window.keplr: enforcement of the opt-in lives on the request path in
+    // keplr-bridge.ts, which drops every method call unless keplrCompat is on. So
+    // a forged enable yields a provider object that answers "disabled" to
+    // everything - a minor fingerprint, not a functional bypass. install is
+    // idempotent and never clobbers a real Keplr.
+    installKeplr();
+  }
+});

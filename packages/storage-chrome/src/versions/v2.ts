@@ -32,6 +32,31 @@ type LOCAL = {
    *  A record under one key rather than a key per group, because the storage
    *  schema is typed and dynamic top-level keys do not typecheck. */
   frostRelayIdentities?: Record<string, { privateKey: string; publicKey: string }>;
+  /** Multisig group chat: message history and the cached frostd chat-session
+   *  id, keyed by group id (the multisig wallet id). Encrypted at rest, since
+   *  message bodies are content. A record under one key rather than a key per
+   *  group, for the same typing reason as frostRelayIdentities. The session id
+   *  is a rebuildable, non-secret cache - if it is stale, discovery re-finds or
+   *  recreates the session. */
+  groupChats?: Record<
+    string,
+    {
+      chatSessionId?: string;
+      messages: {
+        /** dedup key: a random id the sender puts in the frame */
+        id: string;
+        /** author's relay pubkey, proven by successful decrypt (not the relay's word) */
+        senderPub: string;
+        body: string;
+        /** sender's clock (untrusted, for display only) */
+        ts: number;
+        /** local send/receive time (trusted, used for ordering) */
+        recvTs: number;
+        /** true if this device authored it */
+        mine: boolean;
+      }[];
+    }
+  >;
   /** Index of the active wallet (default 0) */
   activeWalletIndex?: number;
   backupReminderSeen?: boolean;
@@ -41,6 +66,11 @@ type LOCAL = {
    *  backupReminderSeen, whose values were poisoned by a self-dismissing
    *  effect that never rendered a reminder. */
   seedPhraseBackedUp?: boolean;
+  /** Opt-in Keplr compatibility. When true, zafu injects a Keplr-compatible
+   *  window.keplr for cosmos dapps; default (unset/false) leaves the slot alone
+   *  so a user's real Keplr is never clobbered. Read by the ISOLATED content
+   *  script, so it is deliberately plaintext (no session key at inject time). */
+  keplrCompat?: boolean;
   /** integer */
   compactFrontierBlockHeight?: number;
   /** url string */
@@ -85,6 +115,8 @@ type LOCAL = {
     | 'kusama'
     | 'noble'
     | 'cosmoshub'
+    | 'osmosis'
+    | 'injective'
     | 'ethereum'
     | 'bitcoin';
   /** Zcash-specific wallets */
@@ -167,6 +199,8 @@ type LOCAL = {
     | 'zcash'
     | 'noble'
     | 'cosmoshub'
+    | 'osmosis'
+    | 'injective'
     | 'polkadot'
     | 'kusama'
     | 'ethereum'
@@ -224,6 +258,41 @@ type LOCAL = {
     enabled: boolean;
     url: string;
     sha256: string | null;
+  };
+
+  /**
+   * zcash.me directory integration. Default off. See
+   * apps/extension/src/services/zcashme/config.ts for the mode semantics
+   * and why the api key (the user's own) lives in plain local storage.
+   */
+  zcashMeConfig?: {
+    mode: 'off' | 'directory' | 'live';
+    mirrorUrl: string;
+    apiKey: string;
+    promptDismissed?: boolean;
+    decoys?: number;
+  };
+
+  /**
+   * Local copy of the zcash.me public directory (username -> address plus
+   * verified social links). Public data, identical for every user, so it
+   * is NOT encrypted - it says nothing about who this user knows. The
+   * contacts store is the encrypted one.
+   */
+  zcashMeDirectory?: {
+    version: 1;
+    fetchedAt: number;
+    source: string;
+    profiles: {
+      username: string;
+      displayName: string | null;
+      address: string;
+      addressVerified: boolean;
+      bio: string | null;
+      location: string | null;
+      profileImageUrl: string | null;
+      links: { platform: string; label: string; url: string }[];
+    }[];
   };
 
   /** keyring vaults (keplr-style multi-account) */
