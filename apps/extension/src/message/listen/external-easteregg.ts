@@ -76,6 +76,15 @@ const pendingPicks = new Map<string, (r: unknown) => void>();
 const originsWithOpenPopup = new Set<string>();
 const popupWindowToOrigin = new Map<number, string>();
 
+// Tracks popup windowId -> pending pendingPicks requestId so a user closing
+// the popup without deciding fires the pending callback with a cancelled shape
+// rather than leaving the caller's message channel open until the runtime
+// times it out ("channel closed before response received"). Registered right
+// after chrome.windows.create resolves so pendingPicks is set FIRST at the
+// callsite; that ordering removes the race where the window closes between
+// windowId registration and pendingPicks.set.
+const popupWindowToRequestId = new Map<number, string>();
+
 // optional-chained: chrome.windows is absent in unit-test mocks, and this
 // runs at module load, so guard it rather than crash the import.
 chrome.windows?.onRemoved?.addListener(windowId => {
@@ -83,6 +92,21 @@ chrome.windows?.onRemoved?.addListener(windowId => {
   if (origin !== undefined) {
     popupWindowToOrigin.delete(windowId);
     originsWithOpenPopup.delete(origin);
+  }
+  const requestId = popupWindowToRequestId.get(windowId);
+  if (requestId !== undefined) {
+    popupWindowToRequestId.delete(windowId);
+    const cb = pendingPicks.get(requestId);
+    if (cb) {
+      pendingPicks.delete(requestId);
+      // Shape doubles for two callback flavours:
+      //  - FROST / pick_contacts / zcash_send sendResponse: they read `success`
+      //    and treat this as a cancelled/denied outcome.
+      //  - zafu_request_capability's resolve(): reads `cancelled` and skips
+      //    denyCapability (a persistent deny the user never made would be a
+      //    semantics change).
+      cb({ success: false, error: 'cancelled', cancelled: true });
+    }
   }
 });
 
@@ -96,6 +120,7 @@ async function openApprovalPopup(
   origin: string,
   url: string,
   size: { width: number; height: number },
+  requestId?: string,
 ): Promise<boolean> {
   if (originsWithOpenPopup.has(origin)) {
     return false;
@@ -105,13 +130,20 @@ async function openApprovalPopup(
     const win = await chrome.windows.create({ url, type: 'popup', ...size });
     if (win?.id !== undefined) {
       popupWindowToOrigin.set(win.id, origin);
-    } else {
-      originsWithOpenPopup.delete(origin);
+      if (requestId !== undefined) {
+        popupWindowToRequestId.set(win.id, requestId);
+      }
+      return true;
     }
+    // No trackable windowId: the onRemoved sweep can never fire, so the
+    // caller would hang forever. Treat as failure - the callsite emits its
+    // denied shape and releases the pending entry.
+    originsWithOpenPopup.delete(origin);
+    return false;
   } catch {
     originsWithOpenPopup.delete(origin);
+    return false;
   }
-  return true;
 }
 
 /**
@@ -259,7 +291,25 @@ export const externalMessageListener = (
         requestId,
       });
       const url = chrome.runtime.getURL(`popup.html#/pick-contacts?${params.toString()}`);
-      void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+      // Track windowId -> requestId so the onRemoved sweep can fire the
+      // pending callback if the user closes the popup; on create-failure /
+      // untrackable id, respond with the denied shape rather than hang.
+      chrome.windows
+        .create({ url, type: 'popup', width: 400, height: 520 })
+        .then(win => {
+          if (win?.id !== undefined) {
+            popupWindowToRequestId.set(win.id, requestId);
+            return;
+          }
+          if (pendingPicks.delete(requestId)) {
+            sendResponse({ success: false, error: 'denied' });
+          }
+        })
+        .catch(() => {
+          if (pendingPicks.delete(requestId)) {
+            sendResponse({ success: false, error: 'denied' });
+          }
+        });
 
       // return true = async response (sendResponse called later from picker)
       return true;
@@ -288,38 +338,48 @@ export const externalMessageListener = (
       // signing (zafu_frost_sign) remain available to free users so they
       // can participate in vaults / poker games hosted by Pro creators.
       void (async () => {
-        // Gate on the 'frost' capability FIRST (uniform 'denied', constant-time
-        // floor) so an origin that was never granted frost can't probe the user's
-        // Pro status by observing "pro subscription required" vs a popup.
-        const gate = await requireCapability(sender, 'frost', sendResponse);
-        if (!gate) {
-          return;
-        }
-        const { useStore } = await import('../../state');
-        if (!useStore.getState().license.license || !isPro(useStore.getState())) {
-          sendResponse({ error: 'pro subscription required to create multisig vaults / games' });
-          return;
-        }
-        const threshold = Number(msg['threshold']) || 2;
-        const maxSigners = Number(msg['maxSigners']) || 3;
-        const relayUrl = String(msg['relayUrl'] || 'wss://zcash.rotko.net/ws');
-        const appOrigin = sender.origin || sender.url || 'unknown';
-        const requestId = crypto.randomUUID();
+        try {
+          // Gate on the 'frost' capability FIRST (uniform 'denied', constant-time
+          // floor) so an origin that was never granted frost can't probe the user's
+          // Pro status by observing "pro subscription required" vs a popup.
+          const gate = await requireCapability(sender, 'frost', sendResponse);
+          if (!gate) {
+            return;
+          }
+          const { useStore } = await import('../../state');
+          if (!useStore.getState().license.license || !isPro(useStore.getState())) {
+            sendResponse({ error: 'pro subscription required to create multisig vaults / games' });
+            return;
+          }
+          const threshold = Number(msg['threshold']) || 2;
+          const maxSigners = Number(msg['maxSigners']) || 3;
+          const relayUrl = String(msg['relayUrl'] || 'wss://zcash.rotko.net/ws');
+          const appOrigin = sender.origin || sender.url || 'unknown';
+          const requestId = crypto.randomUUID();
 
-        const params = new URLSearchParams({
-          app: appOrigin,
-          action: 'frost-create',
-          threshold: String(threshold),
-          maxSigners: String(maxSigners),
-          relayUrl,
-          requestId,
-        });
-        const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
-        if (!(await openApprovalPopup(appOrigin, url, { width: 400, height: 520 }))) {
+          const params = new URLSearchParams({
+            app: appOrigin,
+            action: 'frost-create',
+            threshold: String(threshold),
+            maxSigners: String(maxSigners),
+            relayUrl,
+            requestId,
+          });
+          const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
+          // Register the pending callback BEFORE opening the popup so the
+          // onRemoved sweep can find it if the window closes fast; clear it if
+          // openApprovalPopup rejects the request.
+          pendingPicks.set(requestId, sendResponse);
+          if (!(await openApprovalPopup(appOrigin, url, { width: 400, height: 520 }, requestId))) {
+            pendingPicks.delete(requestId);
+            sendResponse({ success: false, error: 'denied' });
+            return;
+          }
+        } catch {
+          // dynamic import / state read can throw; fall back to the uniform
+          // denied shape so the message channel closes cleanly.
           sendResponse({ success: false, error: 'denied' });
-          return;
         }
-        pendingPicks.set(requestId, sendResponse);
       })();
       return true;
     }
@@ -350,11 +410,12 @@ export const externalMessageListener = (
           requestId,
         });
         const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
-        if (!(await openApprovalPopup(gate.origin, url, { width: 400, height: 520 }))) {
+        pendingPicks.set(requestId, sendResponse);
+        if (!(await openApprovalPopup(gate.origin, url, { width: 400, height: 520 }, requestId))) {
+          pendingPicks.delete(requestId);
           sendResponse({ success: false, error: 'denied' });
           return;
         }
-        pendingPicks.set(requestId, sendResponse);
       })();
       return true;
     }
@@ -400,11 +461,12 @@ export const externalMessageListener = (
           params.set('hide', '1');
         }
         const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
-        if (!(await openApprovalPopup(gate.origin, url, { width: 400, height: 520 }))) {
+        pendingPicks.set(requestId, sendResponse);
+        if (!(await openApprovalPopup(gate.origin, url, { width: 400, height: 520 }, requestId))) {
+          pendingPicks.delete(requestId);
           sendResponse({ error: 'denied' });
           return;
         }
-        pendingPicks.set(requestId, sendResponse);
       })();
       return true;
     }
@@ -458,11 +520,12 @@ export const externalMessageListener = (
           requestId,
         });
         const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
-        if (!(await openApprovalPopup(gate.origin, url, { width: 400, height: 520 }))) {
+        pendingPicks.set(requestId, sendResponse);
+        if (!(await openApprovalPopup(gate.origin, url, { width: 400, height: 520 }, requestId))) {
+          pendingPicks.delete(requestId);
           sendResponse({ success: false, error: 'denied' });
           return;
         }
-        pendingPicks.set(requestId, sendResponse);
       })();
       return true;
     }
@@ -511,11 +574,12 @@ export const externalMessageListener = (
           params.set('multisigLabel', multisigLabel);
         }
         const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
-        if (!(await openApprovalPopup(gate.origin, url, { width: 400, height: 560 }))) {
+        pendingPicks.set(requestId, sendResponse);
+        if (!(await openApprovalPopup(gate.origin, url, { width: 400, height: 560 }, requestId))) {
+          pendingPicks.delete(requestId);
           sendResponse({ error: 'denied' });
           return;
         }
-        pendingPicks.set(requestId, sendResponse);
       })();
       return true;
     }
@@ -588,43 +652,76 @@ export const externalMessageListener = (
       }
 
       void (async () => {
-        const perms = await getOriginPermissions(origin);
+        try {
+          const perms = await getOriginPermissions(origin);
 
-        // already granted
-        if (hasCapability(perms, cap)) {
-          sendResponse({ granted: true, capability: cap });
-          return;
-        }
+          // already granted
+          if (hasCapability(perms, cap)) {
+            sendResponse({ granted: true, capability: cap });
+            return;
+          }
 
-        // previously denied
-        if (isDenied(perms, cap)) {
-          sendResponse({ granted: false, denied: true, capability: cap });
-          return;
-        }
+          // previously denied
+          if (isDenied(perms, cap)) {
+            sendResponse({ granted: false, denied: true, capability: cap });
+            return;
+          }
 
-        // open approval popup for this capability
-        const requestId = crypto.randomUUID();
-        const resultPromise = new Promise<unknown>(resolve => {
-          pendingPicks.set(requestId, resolve);
-        });
+          // open approval popup for this capability
+          const requestId = crypto.randomUUID();
+          const resultPromise = new Promise<unknown>(resolve => {
+            pendingPicks.set(requestId, resolve);
+          });
 
-        const params = new URLSearchParams({
-          app: origin,
-          capability: cap,
-          requestId,
-          favIconUrl: sender.tab?.favIconUrl || '',
-          title: sender.tab?.title || '',
-        });
-        const url = chrome.runtime.getURL(`popup.html#/approval/capability?${params.toString()}`);
-        void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+          const params = new URLSearchParams({
+            app: origin,
+            capability: cap,
+            requestId,
+            favIconUrl: sender.tab?.favIconUrl || '',
+            title: sender.tab?.title || '',
+          });
+          const url = chrome.runtime.getURL(`popup.html#/approval/capability?${params.toString()}`);
+          // Track windowId so the onRemoved sweep can resolve the pending
+          // approval on close; create-failure resolves the promise with the
+          // cancelled shape so the outer awaiter does NOT persist a denial
+          // the user never made.
+          chrome.windows
+            .create({ url, type: 'popup', width: 400, height: 520 })
+            .then(win => {
+              if (win?.id !== undefined) {
+                popupWindowToRequestId.set(win.id, requestId);
+                return;
+              }
+              const r = pendingPicks.get(requestId);
+              if (r) {
+                pendingPicks.delete(requestId);
+                r({ success: false, error: 'cancelled', cancelled: true });
+              }
+            })
+            .catch(() => {
+              const r = pendingPicks.get(requestId);
+              if (r) {
+                pendingPicks.delete(requestId);
+                r({ success: false, error: 'cancelled', cancelled: true });
+              }
+            });
 
-        const result = (await resultPromise) as { approved?: boolean };
-        if (result?.approved) {
-          await grantCapability(origin, cap);
-          sendResponse({ granted: true, capability: cap });
-        } else {
-          await denyCapability(origin, cap);
-          sendResponse({ granted: false, denied: true, capability: cap });
+          const result = (await resultPromise) as { approved?: boolean; cancelled?: boolean };
+          if (result?.approved) {
+            await grantCapability(origin, cap);
+            sendResponse({ granted: true, capability: cap });
+          } else if (result?.cancelled) {
+            // Popup never got a user decision (closed or failed to open).
+            // Do NOT persist a denial the user did not make; caller can retry.
+            sendResponse({ granted: false, capability: cap });
+          } else {
+            await denyCapability(origin, cap);
+            sendResponse({ granted: false, denied: true, capability: cap });
+          }
+        } catch {
+          // getOriginPermissions / grant|denyCapability can throw on storage
+          // failure; respond so the message channel doesn't hang.
+          sendResponse({ error: 'internal error' });
         }
       })();
 
@@ -676,7 +773,24 @@ export const externalMessageListener = (
         favIconUrl: sender.tab?.favIconUrl || '',
       });
       const url = chrome.runtime.getURL(`popup.html#/approval/zcash-send?${params.toString()}`);
-      void chrome.windows.create({ url, type: 'popup', width: 400, height: 628 });
+      // Track windowId -> requestId for the onRemoved sweep; on create-failure
+      // / untrackable id, respond with the denied shape rather than hang.
+      chrome.windows
+        .create({ url, type: 'popup', width: 400, height: 628 })
+        .then(win => {
+          if (win?.id !== undefined) {
+            popupWindowToRequestId.set(win.id, requestId);
+            return;
+          }
+          if (pendingPicks.delete(requestId)) {
+            sendResponse({ success: false, error: 'denied' });
+          }
+        })
+        .catch(() => {
+          if (pendingPicks.delete(requestId)) {
+            sendResponse({ success: false, error: 'denied' });
+          }
+        });
       return true;
     }
 
