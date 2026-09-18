@@ -252,10 +252,10 @@ const deriveSeedForSiteXWing = (
   origin: string,
   rotation = 0,
 ): Uint8Array => {
-  const tag =
-    rotation === 0
-      ? enc.encode('xwing-site:' + origin)
-      : enc.encode('xwing-site:' + origin + ':' + rotation);
+  // NUL-delimited so an origin containing ':' (e.g. a port) can't collide with
+  // the rotation field: 'a.com:7' at rotation 0 must differ from 'a.com' at
+  // rotation 7. Rotation is always encoded. (Safe to shape now - unshipped.)
+  const tag = enc.encode('xwing-site\0' + origin + '\0' + rotation);
   return deriveSeed(identity, tag);
 };
 
@@ -381,7 +381,9 @@ export const deriveZidPqPublicKey = (
   rotation = 0,
 ): string =>
   withIdentity(mnemonic, identity, id => {
-    const seed = deriveSeedForSiteXWing(id, origin, rotation).slice(0, XWING_LENGTHS.seed);
+    const full = deriveSeedForSiteXWing(id, origin, rotation);
+    const seed = full.slice(0, XWING_LENGTHS.seed);
+    full.fill(0); // zeroize the full 64-byte HMAC output, not just the 32-byte copy
     const pub = xwingPublicKeyFromSeed(seed);
     seed.fill(0);
     return bytesToHex(pub);
@@ -398,9 +400,12 @@ export const deriveZidPqSeed = (
   origin: string,
   rotation = 0,
 ): Uint8Array =>
-  withIdentity(mnemonic, identity, id =>
-    deriveSeedForSiteXWing(id, origin, rotation).slice(0, XWING_LENGTHS.seed),
-  );
+  withIdentity(mnemonic, identity, id => {
+    const full = deriveSeedForSiteXWing(id, origin, rotation);
+    const seed = full.slice(0, XWING_LENGTHS.seed);
+    full.fill(0); // zeroize the full 64-byte HMAC output; caller zeroizes `seed`
+    return seed;
+  });
 
 /**
  * derive the cross-site zid for an identity. OPT-IN ONLY.

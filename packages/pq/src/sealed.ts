@@ -77,6 +77,7 @@ export function openXWing(recipientSeed: Uint8Array, wire: Uint8Array): Uint8Arr
 
   const kp = xwingKeypairFromSeed(recipientSeed);
   const sharedSecret = xwingDecapsulate(cipherText, kp.secretKey);
+  kp.secretKey.fill(0); // no longer needed after decapsulation
   const key = deriveKey(sharedSecret);
   sharedSecret.fill(0);
   try {

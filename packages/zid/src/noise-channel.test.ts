@@ -6,6 +6,7 @@ import {
   responderHandshake,
   encryptTransport,
   decryptTransport,
+  ctEqual,
 } from './noise-channel';
 
 /** an x25519 static keypair (the handshake works on x25519 keys directly). */
@@ -98,6 +99,26 @@ describe('hybrid PQ Noise IK handshake (X25519 + ML-KEM-768)', () => {
     const short = new Uint8Array(100);
     short[0] = 0x02;
     expect(() => hs.finish(short)).toThrow(/too short/);
+  });
+
+  it('C1: responder can detect an unexpected initiator (peer authentication)', () => {
+    // Bob (responder) expects to talk to Alice, but Mallory - an active party on
+    // the untrusted relay - sends a well-formed init with HER own static key.
+    const bob = staticKeypair();
+    const alice = staticKeypair(); // the peer Bob expects
+    const mallory = staticKeypair(); // active attacker
+    const evilInit = initiatorHandshake(mallory.priv, mallory.pub, bob.pub).message;
+    const result = responderHandshake(bob.priv, bob.pub, evilInit);
+    // responderHandshake itself completes - authenticating the peer is the
+    // caller's (createNoiseChannel's) job, which compares the decrypted initiator
+    // static against the expected peer with ctEqual and rejects on mismatch:
+    expect(bytesToHex(result.remoteXPub)).toBe(bytesToHex(mallory.pub));
+    expect(ctEqual(result.remoteXPub, alice.pub)).toBe(false); // != expected -> channel rejects
+    expect(ctEqual(result.remoteXPub, mallory.pub)).toBe(true);
+    // and the genuine peer passes:
+    const goodInit = initiatorHandshake(alice.priv, alice.pub, bob.pub).message;
+    const good = responderHandshake(bob.priv, bob.pub, goodInit);
+    expect(ctEqual(good.remoteXPub, alice.pub)).toBe(true);
   });
 
   it('a classical-only responder cannot complete (fails closed, no downgrade)', () => {

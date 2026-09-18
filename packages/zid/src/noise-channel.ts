@@ -193,6 +193,18 @@ function zeroize(buf: Uint8Array): void {
   buf.fill(0);
 }
 
+/** constant-time equality for two byte arrays (peer-key authentication). */
+export function ctEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
+  }
+  return diff === 0;
+}
+
 function unhex(h: string): Uint8Array {
   const bytes = new Uint8Array(h.length / 2);
   for (let i = 0; i < h.length; i += 2) {bytes[i / 2] = parseInt(h.slice(i, i + 2), 16);}
@@ -548,6 +560,18 @@ export async function createNoiseChannel(
       if (data[0] === NOISE_INIT && !isInitiator) {
         try {
           const result = responderHandshake(localXPriv, localXPub, data);
+          // AUTHENTICATE THE PEER: the responder must verify the initiator's
+          // static key is the peer we expect. Without this, an active party on
+          // the untrusted relay can send a well-formed init and complete a fully
+          // encrypted, "authenticated" channel with their OWN key while we
+          // believe .peer is peerPubkey - impersonation. Reject + zeroize on
+          // mismatch (constant-time compare).
+          if (!ctEqual(result.remoteXPub, remoteXPub)) {
+            zeroize(result.sendCS.k);
+            zeroize(result.recvCS.k);
+            zeroize(localXPriv);
+            throw new Error('noise: unexpected initiator (peer key mismatch)');
+          }
           sendCS = result.sendCS;
           recvCS = result.recvCS;
           ws?.send(result.message);
@@ -566,7 +590,14 @@ export async function createNoiseChannel(
     };
   });
 
-  await handshakeComplete;
+  try {
+    await handshakeComplete;
+  } catch (e) {
+    // any handshake failure path (bad resp, peer mismatch, ws error/close):
+    // zeroize the converted static private key that success would have wiped.
+    zeroize(localXPriv);
+    throw e;
+  }
 
   return {
     peer: peerPubkey,
