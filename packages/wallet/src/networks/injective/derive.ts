@@ -20,11 +20,29 @@
  * the signer with an eth_secp256k1 (keccak-digest) signature.
  */
 
-import { toBech32 } from '@cosmjs/encoding';
+import { toBech32, fromBech32 } from '@cosmjs/encoding';
 import { deriveEthWallet } from '../ethereum/derive';
 
 /** Injective bech32 human-readable prefix. */
 export const INJECTIVE_PREFIX = 'inj';
+
+/**
+ * Real bech32-checksum validation for an Injective address, for the withdraw
+ * destination. fromBech32 rejects a bad checksum or malformed bech32 (a mistyped
+ * or truncated address a `startsWith('inj1')` check would wave through); we then
+ * require the `inj` prefix and a 20-byte payload (the Ethermint account id
+ * width). This does NOT prove the address is an exchange USDC-on-Injective
+ * deposit address - only that it is a well-formed inj address; the panel keeps
+ * the amber network-mismatch warning alongside it.
+ */
+export function isValidInjectiveAddress(address: string): boolean {
+  try {
+    const { prefix, data } = fromBech32(address.trim());
+    return prefix === INJECTIVE_PREFIX && data.length === 20;
+  } catch {
+    return false;
+  }
+}
 
 export interface InjectiveWallet {
   /** bech32 `inj1...` address */
