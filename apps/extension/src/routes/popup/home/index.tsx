@@ -1207,7 +1207,16 @@ const ZcashContent = ({
   // would double-count it.
   const inFlightZat = pendingSends
     .filter(t => t.status === 'pending')
-    .reduce((sum, t) => sum + BigInt(t.amount), 0n);
+    .reduce((sum, t) => {
+      // BigInt() throws on a malformed/decimal amount string (older or badly
+      // serialized pending-send record); skip it rather than crash the home
+      // screen (Zcash is the default network, so this is a first screen).
+      try {
+        return sum + BigInt(t.amount);
+      } catch {
+        return sum;
+      }
+    }, 0n);
   const failedSends = pendingSends.filter(t => t.status === 'failed');
 
   // NU6.3 turnstile: eligible once the flag is on, activation has passed,
@@ -1879,6 +1888,89 @@ const HintRow = ({
   </button>
 );
 
+/**
+ * Best-effort amount + asset + destination for a penumbra recent-activity row.
+ *
+ * Penumbra's privacy model bounds what is recoverable after the fact, so this is
+ * deliberately conservative about money display:
+ *   - our OWN spend and change notes are visible to us, so the net amount that
+ *     left (send / unshield) or arrived (receive / deposit / shield) in each
+ *     asset is exact: sum(visible spends) - sum(visible outputs). This equals
+ *     what moved through our wallet, fee included, matching the zcash row's
+ *     `amount` semantics (amount = recipientAmount + fee).
+ *   - a shielded recipient's output note is opaque to us, so the recipient
+ *     address of a shielded send is NOT chain-recoverable and stays undefined.
+ *   - an ics20 withdrawal (unshield) carries the transparent destination address
+ *     in the clear, so "to where" is shown for those.
+ *   - swaps net across two assets; we leave their amount to the "swap" label
+ *     rather than pick a misleading single figure.
+ */
+function penumbraTxValue(
+  txInfo: TransactionInfo,
+  type: PenumbraTxType,
+): { amount?: string; asset?: string; recipient?: string } {
+  if (type === 'swap') {
+    return {};
+  }
+
+  // per display-denom net balance = spends - outputs (positive = left our wallet)
+  const net = new Map<string, ReturnType<typeof fromValueView>>();
+  const addNote = (note: unknown, sign: 1 | -1) => {
+    const value = (note as { value?: Parameters<typeof fromValueView>[0] } | undefined)?.value;
+    if (!value?.valueView?.case) {
+      return;
+    }
+    let denom: string;
+    let amt: ReturnType<typeof fromValueView>;
+    try {
+      denom = getDisplayDenomFromView(value);
+      amt = fromValueView(value);
+    } catch {
+      return;
+    }
+    if (!denom) {
+      return;
+    }
+    const signed = amt.times(sign);
+    const prev = net.get(denom);
+    net.set(denom, prev ? prev.plus(signed) : signed);
+  };
+
+  let recipient: string | undefined;
+
+  for (const action of txInfo.view?.bodyView?.actionViews ?? []) {
+    const av = action.actionView;
+    if (av.case === 'spend' && av.value.spendView?.case === 'visible') {
+      addNote(av.value.spendView.value.note, 1);
+    } else if (av.case === 'output' && av.value.outputView?.case === 'visible') {
+      addNote(av.value.outputView.value.note, -1);
+    } else if (av.case === 'ics20Withdrawal') {
+      const dest = av.value.destinationChainAddress;
+      if (dest) {
+        recipient = dest;
+      }
+    }
+  }
+
+  // dominant denom by absolute net movement
+  let bestDenom: string | undefined;
+  let bestAbs: ReturnType<typeof fromValueView> | undefined;
+  for (const [denom, v] of net) {
+    const a = v.abs();
+    if (!bestAbs || a.isGreaterThan(bestAbs)) {
+      bestAbs = a;
+      bestDenom = denom;
+    }
+  }
+
+  if (!bestDenom || !bestAbs) {
+    return { recipient };
+  }
+  // asset is known even when the net rounds to ~0 (e.g. an internal transfer)
+  const amount = bestAbs.isZero() ? undefined : bestAbs.decimalPlaces(6).toString();
+  return { amount, asset: bestDenom, recipient };
+}
+
 function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
   const id = txInfo.id?.inner
     ? Array.from(txInfo.id.inner)
@@ -1903,7 +1995,10 @@ function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
     }
   }
 
-  return { id, height, timestamp: null, type, description, memo, accountIndices };
+  // amount / asset / destination from the visible actions (privacy-bounded)
+  const { amount, asset, recipient } = penumbraTxValue(txInfo, type);
+
+  return { id, height, timestamp: null, type, description, memo, accountIndices, amount, asset, recipient };
 }
 
 /** format ZEC with meaningful digits only — no trailing zeros, min 2 decimals */
@@ -2000,6 +2095,7 @@ const txExplorerUrl = (network: NetworkType, txid: string): string | undefined =
 function TxRow({ tx, network }: { tx: ParsedTransaction; network: NetworkType }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [addrCopied, setAddrCopied] = useState(false);
   const navigate = useNavigate();
   // explorer links leak your IP + the looked-up txid to a third party, so they
   // are opt-in; copying the txid never leaves the wallet and is always offered.
@@ -2177,31 +2273,57 @@ function TxRow({ tx, network }: { tx: ParsedTransaction; network: NetworkType })
                 <span className='i-ph-caret-right h-3 w-3 shrink-0 text-fg-dim' />
               </button>
             ) : (
-              // no contact yet: show the actual destination address (truncated)
-              // so the user sees who they paid, and one click names/saves it.
-              <button
-                type='button'
-                onClick={e => {
-                  e.stopPropagation();
-                  setShowSave(true);
-                }}
-                className='flex items-center gap-1 text-left text-label text-network-accent transition-colors hover:text-fg-high'
-                title='save to contacts'
-              >
-                <span className='i-ph-user-plus h-3 w-3 shrink-0' /> to{' '}
-                {directoryName ? (
-                  <span>{directoryName}</span>
-                ) : (
-                  <span className='font-mono'>
-                    {tx.recipient.length > 20
-                      ? `${tx.recipient.slice(0, 10)}…${tx.recipient.slice(-6)}`
-                      : tx.recipient}
+              // no contact yet: same idiom as the txid line below - the address
+              // text copies the FULL string on click (the truncated form can't
+              // be selected), and the trailing icon is the one action, save to
+              // contacts. A zcash.me match shows the resolved name in place of
+              // the raw address; the copy still lifts the address.
+              <div className='flex items-center gap-1.5'>
+                <span className='shrink-0 text-label text-fg-dim'>to</span>
+                <button
+                  type='button'
+                  onClick={e => {
+                    e.stopPropagation();
+                    if (!tx.recipient) {
+                      return;
+                    }
+                    void navigator.clipboard.writeText(tx.recipient);
+                    setAddrCopied(true);
+                    setTimeout(() => setAddrCopied(false), 1500);
+                  }}
+                  title={addrCopied ? 'copied' : 'click to copy address'}
+                  className='group flex min-w-0 flex-1 items-center gap-1 text-left'
+                >
+                  <span className='min-w-0 flex-1 truncate font-mono text-label text-fg-muted transition-colors group-hover:text-fg-high'>
+                    {directoryName ??
+                      (tx.recipient.length > 20
+                        ? `${tx.recipient.slice(0, 10)}…${tx.recipient.slice(-6)}`
+                        : tx.recipient)}
                   </span>
-                )}
-                <span className='text-fg-dim'>
-                  {directoryName ? ' · zcash.me · save' : ' · name'}
-                </span>
-              </button>
+                  {directoryName && (
+                    <span className='shrink-0 text-label text-fg-dim'>zcash.me</span>
+                  )}
+                  <span
+                    className={cn(
+                      'h-3.5 w-3.5 shrink-0 transition-colors',
+                      addrCopied
+                        ? 'i-ph-check text-network-accent'
+                        : 'i-ph-copy text-fg-muted group-hover:text-fg-high',
+                    )}
+                  />
+                </button>
+                <button
+                  type='button'
+                  onClick={e => {
+                    e.stopPropagation();
+                    setShowSave(true);
+                  }}
+                  className='shrink-0 text-fg-muted transition-colors hover:text-network-accent'
+                  title='save to contacts'
+                >
+                  <span className='i-ph-user-plus h-3.5 w-3.5' />
+                </button>
+              </div>
             ))}
           {showSave && tx.recipient && (
             <div onClick={e => e.stopPropagation()}>
