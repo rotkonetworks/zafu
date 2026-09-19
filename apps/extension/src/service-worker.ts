@@ -68,7 +68,6 @@ import { installGracefulNetworkErrorHandler } from './utils/graceful-network-err
 import { backOff } from 'exponential-backoff';
 
 import { localExtStorage } from '@repo/storage-chrome/local';
-import { localMigrations } from '@repo/storage-chrome/migrations';
 import { networkAllowsBackgroundSync } from './state/privacy';
 
 // count open side panels so approval routing can target the panel only when it
@@ -81,7 +80,9 @@ trackSidePanelPresence();
 // services start, and must be synchronous at initial worker evaluation.
 installGracefulNetworkErrorHandler();
 
-localExtStorage.enableMigration(localMigrations);
+// Migrations are now attached at localExtStorage construction (see
+// storage-chrome/local.ts) so every realm - SW, popup, options page - has them,
+// not just this worker. No explicit enableMigration call needed here.
 
 /**
  * Load polkadot custom chainspecs - but ONLY when polkadot/kusama is actually
