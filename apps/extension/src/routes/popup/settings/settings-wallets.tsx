@@ -1,7 +1,12 @@
 import { useState, useRef, useEffect, useCallback, type KeyboardEvent } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useStore } from '../../../state';
-import { keyRingSelector, type KeyInfo, type ZignerZafuImport } from '../../../state/keyring';
+import {
+  keyRingSelector,
+  selectEnabledNetworks,
+  type KeyInfo,
+  type ZignerZafuImport,
+} from '../../../state/keyring';
 import { walletsSelector } from '../../../state/wallets';
 import { zignerConnectSelector } from '../../../state/zigner';
 import { passwordSelector } from '../../../state/password';
@@ -54,6 +59,7 @@ export const SettingsWallets = () => {
     useStore(keyRingSelector);
   const { isPassword } = useStore(passwordSelector);
   const { all: penumbraWallets, zcashWallets, updateMultisigWallet } = useStore(walletsSelector);
+  const enabledNetworks = useStore(selectEnabledNetworks);
   const {
     scanState,
     walletLabel,
@@ -328,6 +334,21 @@ export const SettingsWallets = () => {
                   networks.push('zcash');
                 }
 
+                // A seed derives keys for every network, but the tags should
+                // reflect what the user has actually enabled (Settings >
+                // Networks) - otherwise a Zcash-only wallet still shows a
+                // penumbra tag. Only gate the top-level networks the user
+                // toggles; leave cosmos/polkadot (already isLaunched-gated).
+                // Guard against an empty list so tags never all vanish.
+                const shownNetworks =
+                  enabledNetworks.length === 0
+                    ? networks
+                    : networks.filter(n =>
+                        n === 'penumbra' || n === 'zcash'
+                          ? (enabledNetworks as string[]).includes(n)
+                          : true,
+                      );
+
                 // multisig detail link
                 const multisigWallet =
                   v.type === 'frost-multisig'
@@ -338,7 +359,7 @@ export const SettingsWallets = () => {
                   <VaultRow
                     key={v.id}
                     vault={v}
-                    networks={networks}
+                    networks={shownNetworks}
                     multisigWallet={multisigWallet}
                     onRemove={() => startRemoval(v)}
                     onRename={name => handleRename(v.id, name)}
@@ -756,10 +777,12 @@ const VaultRow = ({
           </div>
 
           {!birthdayValid && (
-            <p className='text-label text-hanko mt-1 flex items-center gap-1'>
-              <span className='i-ph-warning size-3.5 shrink-0' />
-              not set — syncs from near the tip. set this if the wallet is older.
-            </p>
+            // Unset is a fine default, not an error - so no warning colour or
+            // icon. "auto" is the same word the advanced block input uses for
+            // this state, so the two read as one idea. The nudge stays because
+            // an OLD imported seed left on auto misses its early notes, but it
+            // is a calm aside, not an alarm.
+            <p className='text-label text-fg-dim mt-1'>auto · scans recent blocks, set a date if older</p>
           )}
 
           {showAdvanced && (
