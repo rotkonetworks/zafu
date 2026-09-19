@@ -1129,24 +1129,16 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
   }, [selectedAsset]);
 
   const handleMax = useCallback(() => {
-    // Penumbra autoFee (feeTier 1) is roughly 0.0005 UM per plain send.
-    // Reserve 0.01 UM (~20x typical) when maxing the fee asset so memos
-    // and small batches don't push the tx over the balance and fail
-    // build-time with "insufficient funds. Required amount: 0.0005 penumbra".
-    // Non-UM assets pay their fee out of the separate UM balance, so they
-    // can safely max the full amount.
-    const UM_FEE_RESERVE = 0.01;
-    const meta = getMetadataFromBalancesResponse.optional(selectedAsset);
-    const symbol = meta ? symbolFromMetadata(meta) : '';
-    const isFeeAsset = symbol === 'UM' || symbol === 'penumbra' || symbol === 'upenumbra';
-    if (!isFeeAsset) {
-      sendState.setAmount(selectedBalance);
-      return;
-    }
-    const full = Number(selectedBalance);
-    const spendable = Number.isFinite(full) ? Math.max(0, full - UM_FEE_RESERVE) : 0;
-    sendState.setAmount(String(spendable));
-  }, [selectedAsset, selectedBalance, sendState]);
+    // Set the visible amount to the full balance and flip maxMode on.
+    // The submit path in penumbra-send state's buildPlanRequest then
+    // takes the spend-all branch (dry-run autoFee, reissue manualFee)
+    // so the output lands at balance - fee for same-asset fees, or at
+    // balance for cross-asset (fee comes out of separate UM balance).
+    // No change note is created either way — no dust left behind.
+    // sendState.setAmount clears maxMode on any subsequent keystroke.
+    sendState.setAmount(selectedBalance);
+    sendState.setMaxMode(true);
+  }, [selectedBalance, sendState]);
 
   const canSubmit =
     addressValid &&
