@@ -82,6 +82,9 @@ export interface VotingRound {
   proposals: VotingProposal[];
   /** present in the pinned dynamic config's rounds map (basic endorsement) */
   inConfig: boolean;
+  /** operator dry-run round (title prefixed "[TEST]"); hidden unless the user
+      opts to show them. */
+  isTest: boolean;
 }
 
 export interface OptionTally {

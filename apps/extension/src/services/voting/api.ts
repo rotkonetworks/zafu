@@ -218,20 +218,20 @@ const toRound = (dto: ChainRoundDto, configRoundIds: ReadonlySet<string>): Votin
       forumUrl: p.forum_url ?? undefined,
     })),
     inConfig: configRoundIds.has(id),
+    isTest: isTestRound(dto.title ?? ''),
   };
 };
 
 /**
  * A round the ceremony operator titled `[TEST]` (case-insensitive, leading
  * token). These are dry-run rounds that share the same vote server as the real
- * coinholder votes; on the wallet they only bury the live vote under a wall of
- * duplicates ("[TEST] NU7 Scope" next to the real "NU7 Scope"), so we drop them
- * rather than tag them. Nothing else distinguishes them at the wire level - the
- * `[TEST]` prefix is the operator's own marker.
+ * coinholder votes; the `[TEST]` prefix is the operator's own marker, the only
+ * thing that distinguishes them at the wire level. They are tagged (not
+ * dropped) so the UI can hide them by default but offer a toggle to reveal.
  */
 const isTestRound = (title: string): boolean => /^\s*\[test\]/i.test(title);
 
-/** Fetch all rounds from the first reachable vote server. */
+/** Fetch all rounds from the first reachable vote server (test rounds tagged). */
 export const fetchRounds = async (config: VotingServiceConfig): Promise<VotingRound[]> => {
   const configRoundIds = new Set(Object.keys(config.rounds ?? {}).map(k => k.toLowerCase()));
   const resp = await firstReachable(
@@ -239,7 +239,6 @@ export const fetchRounds = async (config: VotingServiceConfig): Promise<VotingRo
     base => getJson<{ rounds?: ChainRoundDto[] }>(`${base}${ROUNDS_PATH}`),
   );
   return (resp.rounds ?? [])
-    .filter(dto => !isTestRound(dto.title ?? ''))
     .map(dto => toRound(dto, configRoundIds))
     .sort((a, b) => b.votingEnd - a.votingEnd);
 };

@@ -47,6 +47,13 @@ const formatEnd = (round: VotingRound): string => {
 
 export const ZcashVotePage = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // active vs past, same split the penumbra governance screen uses so the two
+  // networks read identically. "active" is the one round taking votes; "past"
+  // is everything settled or cancelled.
+  const [filter, setFilter] = useState<'active' | 'past'>('active');
+  // operator [TEST] rounds are hidden by default (they bury the real vote) but
+  // can be revealed - only offered when some exist.
+  const [showTest, setShowTest] = useState(false);
 
   const votingQ = useQuery({
     queryKey: ['zcash-vote', 'rounds'],
@@ -54,14 +61,46 @@ export const ZcashVotePage = () => {
     queryFn: () => resolveVotingConfigSource().then(loadVoting),
   });
 
-  const rounds = votingQ.data?.rounds ?? [];
-  const activeCount = rounds.filter(r => r.status === 'active').length;
+  const allRounds = votingQ.data?.rounds ?? [];
+  const activeCount = allRounds.filter(r => r.status === 'active' && !r.isTest).length;
+  const hasTest = allRounds.some(r => r.isTest);
+  const rounds = allRounds.filter(r => {
+    if (r.isTest && !showTest) {
+      return false;
+    }
+    return filter === 'active' ? r.status === 'active' : r.status !== 'active';
+  });
+
+  const tabClass = (on: boolean) =>
+    cn(
+      'text-xs px-2 py-1 rounded-md transition-colors',
+      on ? 'text-fg bg-elev-2' : 'text-fg-muted hover:text-fg-high',
+    );
 
   return (
     <div className='flex flex-col gap-3 p-4'>
       <div className='flex items-center justify-between'>
         <h2 className='text-title text-fg-high lowercase'>coinholder vote</h2>
         {activeCount > 0 && <span className='text-label text-fg-high'>{activeCount} active</span>}
+      </div>
+
+      {/* active / past tabs (+ test reveal), matching the penumbra screen */}
+      <div className='flex items-center gap-2'>
+        <button onClick={() => setFilter('active')} className={tabClass(filter === 'active')}>
+          active
+        </button>
+        <button onClick={() => setFilter('past')} className={tabClass(filter === 'past')}>
+          past
+        </button>
+        {hasTest && (
+          <button
+            onClick={() => setShowTest(v => !v)}
+            className={cn('ml-auto', tabClass(showTest))}
+            title='operator dry-run rounds, not real coinholder votes'
+          >
+            {showTest ? 'hide test' : 'show test'}
+          </button>
+        )}
       </div>
 
       {votingQ.isLoading && (
@@ -87,9 +126,13 @@ export const ZcashVotePage = () => {
 
       {!votingQ.isLoading && !votingQ.error && rounds.length === 0 && (
         <div className='py-12 text-center'>
-          <p className='text-body text-fg-muted'>no voting rounds right now</p>
+          <p className='text-body text-fg-muted'>
+            {filter === 'active' ? 'no active rounds' : 'no past rounds'}
+          </p>
           <p className='mt-1 text-label text-fg-dim'>
-            coinholder polls appear here when a round opens.
+            {filter === 'active'
+              ? 'coinholder polls appear here when a round opens.'
+              : 'settled rounds and their tallies show here.'}
           </p>
         </div>
       )}
