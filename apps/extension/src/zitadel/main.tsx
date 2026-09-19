@@ -16,6 +16,8 @@ import { createNoiseChannel, type ZidChannel } from '../../../../packages/zid/sr
 import type { SessionKey } from '../../../../packages/zid/src/noise-channel';
 // eslint-disable-next-line import/no-relative-packages -- see above
 import { isLicenseValid, type License } from '../../../../packages/wallet/src/license';
+import { createCallUi, MEDIA_SIGNAL_TAG, type CallUi } from './call-ui';
+import { createLockedPreview } from './locked-preview';
 
 // ─── zid-auth-v1: signed nick claims ────────────────────────────────────
 //
@@ -304,8 +306,14 @@ async function isProUser(): Promise<boolean> {
 /** Default relay. Users can switch via `/server <url>` (persisted in
  * chrome.storage.local under RELAY_URL_KEY). The DM transport is
  * derived by appending `/zid` to the chat URL's path - relays that
- * implement zitadel are expected to expose both at adjacent paths. */
-export const DEFAULT_RELAY_WS = 'wss://zcash.rotko.net/ws';
+ * implement zitadel are expected to expose both at adjacent paths.
+ *
+ * The relay is the `relay` binary (zcli/bin/relay) deployed at
+ * zrelay.rotko.net (haproxy zrelay-backend -> :50053). zcash.rotko.net is
+ * the zidecar gRPC/lightwalletd endpoint on the same host and does NOT
+ * serve `/ws` (it answers grpc-status:12), so the chat host is distinct.
+ * Public rooms (`/ws`) are live; the `/ws/zid` DM route is not served yet. */
+export const DEFAULT_RELAY_WS = 'wss://zrelay.rotko.net/ws';
 const RELAY_URL_KEY = 'zitadelRelayUrl';
 /** Per-ZID persisted nickname. Stored under `zidNick:<pubkey>` in
  * chrome.storage.local so the same identity gets the same nick across
@@ -755,6 +763,9 @@ function boot() {
   const DM_PREFIX = 'dm:';
   // track which DM we're viewing (null = room view)
   let activeDm: string | null = null;
+  // Active voice/video call panel (one at a time), mounted above msgArea. The
+  // call rides the peer's DM Noise channel; see call-ui.ts.
+  let activeCall: CallUi | null = null;
 
   function roomMessages(): Msg[] {
     const key = activeDm ? DM_PREFIX + activeDm : currentRoom || initialRoom;
@@ -1128,6 +1139,12 @@ function boot() {
         const ch = await createNoiseChannel(session, peerPubkey, deriveZidWsUrl(relayUrl));
 
         ch.on('message', (data: Uint8Array) => {
+          // Media SDP/ICE frames (tagged) ride the same channel as chat but are
+          // consumed by the call's own handler - never as chat text. The tag is
+          // in the UTF-8 continuation range so it can't be a real chat message.
+          if (data[0] === MEDIA_SIGNAL_TAG) {
+            return;
+          }
           try {
             const text = new TextDecoder().decode(data);
             const peerNick = pubkeyToNick.get(peerPubkey) || shortPub(peerPubkey);
@@ -2079,6 +2096,8 @@ function boot() {
     '/msg': '/msg <target> <text>  DM (nick or pubkey)',
     '/channels': '/channels           list open DM channels',
     '/close': '/close [pubkey]     close a DM channel',
+    '/call': '/call               voice/video call the current DM peer',
+    '/hangup': '/hangup             end the active call',
     '/whois': '/whois              show ZID identity + status',
     '/share': '/share [nick|pub]   copy a zid pubkey to clipboard',
     '/ignore': '/ignore <nick|pub>  silence a pubkey (persists)',
@@ -2239,6 +2258,7 @@ function boot() {
           addMsg('zitadel', '  channels:  /j /part /channels /clear', true);
           addMsg('zitadel', '  messages:  /me <text>   (action)', true);
           addMsg('zitadel', '  DMs:       /msg <nick|pub> <text>   /close', true);
+          addMsg('zitadel', '  calls:     /call (in a DM)   /hangup', true);
           addMsg(
             'zitadel',
             '  identity:  /login   /rotate   /nick <name>   /whois [nick|pub]   /share [nick|pub]',
@@ -2308,6 +2328,54 @@ function boot() {
             switchRoom(args[0]);
           } else {
             addMsg('zitadel', 'usage: /j <room>', true);
+          }
+          break;
+
+        case 'call': {
+          // Voice/video call with the current DM peer, over their e2ee (hybrid-
+          // PQ) Noise channel. Both peers run /call to connect (perfect
+          // negotiation handles the glare). Media is direct P2P - the panel's
+          // opt-in makes the IP-exposure tradeoff explicit before any camera/mic.
+          if (!activeDm) {
+            addMsg('zitadel', 'open a DM first (click a peer nick), then /call', true);
+            break;
+          }
+          if (activeCall) {
+            addMsg('zitadel', 'already in a call - /hangup to end it first', true);
+            break;
+          }
+          if (!zidPubkey) {
+            addMsg('zitadel', 'calls need your zid - unlock zafu first', true);
+            break;
+          }
+          const peer = activeDm;
+          const peerNick = pubkeyToNick.get(peer) || shortPub(peer);
+          addMsg('zitadel', `opening call with ${peerNick}...`, true, DM_PREFIX + peer);
+          void (async () => {
+            const ch = await openDmChannel(peer);
+            if (!ch || !zidPubkey) {
+              addMsg('zitadel', 'call failed: could not open e2ee channel', true);
+              return;
+            }
+            activeCall = createCallUi({
+              channel: ch,
+              localPubkey: zidPubkey,
+              peerPubkey: peer,
+              peerNick,
+            });
+            main.insertBefore(activeCall.el, msgArea);
+            addMsg('zitadel', `call panel open - ask ${peerNick} to /call you too`, true);
+          })();
+          break;
+        }
+
+        case 'hangup':
+          if (activeCall) {
+            activeCall.destroy();
+            activeCall = null;
+            addMsg('zitadel', 'call ended', true);
+          } else {
+            addMsg('zitadel', 'no active call', true);
           }
           break;
 
@@ -2778,10 +2846,30 @@ function boot() {
     /* not in extension context */
   }
 
+  // Forced preview: `zitadel.html?preview` (or `#locked`) always renders the
+  // locked-preview teaser, regardless of wallet state. Lets you eyeball the
+  // no-ZID landing without a wallet-less profile, and doubles as a shareable
+  // link to the teaser for the download funnel.
+  if (new URLSearchParams(location.search).has('preview') || location.hash === '#locked') {
+    sidebar.style.display = 'none';
+    main.replaceChildren(createLockedPreview().el);
+    return;
+  }
+
   // init
   resolveZidIdentity().then(async zid => {
     zidPubkey = zid.pubkey;
     zidPrivkey = zid.privkey;
+
+    // No zafu identity (no wallet / not in extension): show the locked-preview
+    // teaser and STOP - don't connect to a relay. The curiosity gap ("the
+    // citadel is encrypted, get zafu to unlock") is the download hook. This is
+    // the surface the standalone web build will land no-ZID visitors on too.
+    if (!zid.loggedIn) {
+      sidebar.style.display = 'none';
+      main.replaceChildren(createLockedPreview().el);
+      return;
+    }
 
     if (zid.pubkey) {
       // default to derived shortPub; overridden below if we have a
