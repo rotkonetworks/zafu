@@ -29,6 +29,7 @@
     "@ledgerhq/hw-transport-webhid": "6.36.0",
     "@noble/curves": "^1.9.7",
     "@noble/hashes": "^1.8.0",
+    "@penumbra-labs/registry": "npm:@penumbrafi/registry@^13.0.0",
     "@penumbrafi/registry": "^13.0.0",
     "@penumbra-zone/bech32m": "18.0.0",
     "@penumbra-zone/client": "29.0.0",
