@@ -155,7 +155,7 @@ interface ChainRoundDto {
     id: number;
     title?: string;
     description?: string;
-    options?: { id: number; label?: string }[];
+    options?: { id?: number; label?: string }[];
     zip_number?: string | null;
     forum_url?: string | null;
   }[];
@@ -187,21 +187,49 @@ const toRound = (dto: ChainRoundDto, configRoundIds: ReadonlySet<string>): Votin
     title: dto.title ?? '',
     description: dto.description ?? '',
     discussionUrl: dto.discussion_url ?? undefined,
-    snapshotHeight: dto.snapshot_height,
-    votingStart: dto.ceremony_phase_start ?? 0,
-    votingEnd: dto.vote_end_time,
+    // Coalesce numeric fields to finite numbers - the server may omit or send
+    // them non-numeric, and the render path feeds them to Date/.toLocaleString
+    // which throw on NaN/undefined.
+    snapshotHeight: Number.isFinite(dto.snapshot_height) ? dto.snapshot_height : 0,
+    votingStart:
+      typeof dto.ceremony_phase_start === 'number' && Number.isFinite(dto.ceremony_phase_start)
+        ? dto.ceremony_phase_start
+        : 0,
+    votingEnd: Number.isFinite(dto.vote_end_time) ? dto.vote_end_time : 0,
     status: STATUS_BY_CODE[dto.status ?? 1] ?? 'cancelled',
     proposals: (dto.proposals ?? []).map(p => ({
       id: p.id,
       title: p.title ?? '',
       description: p.description ?? '',
-      options: (p.options ?? []).map(o => ({ id: o.id, label: o.label ?? `option ${o.id}` })),
+      // The server ships option rows with a label but NO id (the whole options
+      // array is positional), while the tally keys each weight by
+      // `vote_decision` - a 0-based index into that same array (index 0 arrives
+      // omitted on the wire, coalesced back to 0 in fetchTally). So the option
+      // id MUST be its position, or the tally-to-option match in the UI finds
+      // nothing and every bar renders 0%. Honour an explicit id if a future
+      // server build sends one, else fall back to the index. Casting is
+      // view-only today (phase 2), so nothing spends this id yet - it is a
+      // render key only.
+      options: (p.options ?? []).map((o, i) => ({
+        id: o.id ?? i,
+        label: o.label ?? `option ${o.id ?? i}`,
+      })),
       zipNumber: p.zip_number ?? undefined,
       forumUrl: p.forum_url ?? undefined,
     })),
     inConfig: configRoundIds.has(id),
   };
 };
+
+/**
+ * A round the ceremony operator titled `[TEST]` (case-insensitive, leading
+ * token). These are dry-run rounds that share the same vote server as the real
+ * coinholder votes; on the wallet they only bury the live vote under a wall of
+ * duplicates ("[TEST] NU7 Scope" next to the real "NU7 Scope"), so we drop them
+ * rather than tag them. Nothing else distinguishes them at the wire level - the
+ * `[TEST]` prefix is the operator's own marker.
+ */
+const isTestRound = (title: string): boolean => /^\s*\[test\]/i.test(title);
 
 /** Fetch all rounds from the first reachable vote server. */
 export const fetchRounds = async (config: VotingServiceConfig): Promise<VotingRound[]> => {
@@ -211,6 +239,7 @@ export const fetchRounds = async (config: VotingServiceConfig): Promise<VotingRo
     base => getJson<{ rounds?: ChainRoundDto[] }>(`${base}${ROUNDS_PATH}`),
   );
   return (resp.rounds ?? [])
+    .filter(dto => !isTestRound(dto.title ?? ''))
     .map(dto => toRound(dto, configRoundIds))
     .sort((a, b) => b.votingEnd - a.votingEnd);
 };
