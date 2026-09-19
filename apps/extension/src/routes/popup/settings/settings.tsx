@@ -21,7 +21,17 @@ interface SettingsGroup {
   /** lowercase kicker header for the group */
   label: string;
   links: SettingsLink[];
+  /** when set, this group holds one network's own settings - render a
+      network-coloured dot on the kicker so the separation is unmistakable. */
+  network?: string;
 }
+
+// dot colours mirror the wallet-panel network tags so a network reads the same
+// everywhere in the app.
+const NETWORK_DOT: Record<string, string> = {
+  zcash: 'bg-yellow-400',
+  penumbra: 'bg-teal-300',
+};
 
 // Grouped by intent: what protects funds first (security & backup, with
 // auto-lock rendered inline in that group), then privacy, then wallet
@@ -179,12 +189,36 @@ export const Settings = () => {
     void localExtStorage.set('autoLockMinutes', next.value);
   };
 
-  const visibleGroups = groups
-    .map(g => ({
-      ...g,
-      links: g.links.filter(l => !l.networks || l.networks.includes(activeNetwork)),
-    }))
+  // Generic settings keep their intent groups; anything network-specific is
+  // pulled OUT of them and shown under its own group, headed by the network it
+  // belongs to (with a network-coloured dot). This makes "these are zcash's
+  // settings" explicit, instead of zcash rows silently appearing inside
+  // security & backup / wallet and vanishing when you switch to penumbra.
+  const genericGroups = groups
+    .map(g => ({ ...g, links: g.links.filter(l => !l.networks) }))
     .filter(g => g.links.length > 0);
+
+  const networkLinks = groups
+    .flatMap(g => g.links)
+    .filter(l => l.networks?.includes(activeNetwork));
+
+  const networkGroup: SettingsGroup | null =
+    networkLinks.length > 0
+      ? { label: `${activeNetwork} settings`, links: networkLinks, network: activeNetwork }
+      : null;
+
+  // order: security & backup, privacy, <active network>, wallet, about - the
+  // network section sits right above the generic wallet plumbing.
+  const visibleGroups: SettingsGroup[] = [];
+  for (const g of genericGroups) {
+    if (g.label === 'wallet' && networkGroup) {
+      visibleGroups.push(networkGroup);
+    }
+    visibleGroups.push(g);
+  }
+  if (networkGroup && !visibleGroups.includes(networkGroup)) {
+    visibleGroups.push(networkGroup);
+  }
 
   const autoLockLabel = AUTO_LOCK_OPTIONS.find(o => o.value === autoLock)?.label ?? '15 min';
 
@@ -194,7 +228,17 @@ export const Settings = () => {
         <div className='flex flex-col gap-4'>
           {visibleGroups.map(group => (
             <div key={group.label}>
-              <p className='kicker px-4 pb-1'>{group.label}</p>
+              <p className='kicker px-4 pb-1 flex items-center gap-1.5'>
+                {group.network && (
+                  <span
+                    className={cn(
+                      'inline-block size-2 rounded-full',
+                      NETWORK_DOT[group.network] ?? 'bg-fg-dim',
+                    )}
+                  />
+                )}
+                {group.label}
+              </p>
               <div className='flex flex-col divide-y divide-border-soft/40'>
                 {group.links.map(l => (
                   <Fragment key={l.href}>
