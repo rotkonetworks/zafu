@@ -7,6 +7,20 @@
  * reflects the phrase back as static numbered words so the user confirms what
  * will actually be imported, then continues to the birthday step. Cheap
  * insurance against importing the wrong wallet.
+ *
+ * It also carries the POOL NOTICE. zafu is orchard + ironwood only, but a
+ * recovery phrase is pool-agnostic: the same ZIP-32 seed backs sapling and
+ * transparent accounts too, and the librustzcash wallets people are importing
+ * FROM (WebZjs / the MetaMask snap, Zashi, YWallet) derive a full
+ * UnifiedSpendingKey and routinely hold sapling. Without this, such a user
+ * imports, syncs, sees zero, and reasonably concludes the wallet they just
+ * installed lost their money. One paragraph before the import removes that.
+ *
+ * Phrased as "zafu cannot see or spend them" rather than "move them with
+ * another wallet first": post-NU6.3 orchard outputs are consensus-disabled and
+ * the corresponding rule for sapling is not settled here, so any promise of an
+ * escape route could become false at activation. That the funds sit untouched
+ * on-chain is true either way.
  */
 
 import { useEffect } from 'react';
@@ -65,6 +79,18 @@ export const ImportReview = () => {
             </li>
           ))}
         </ol>
+
+        <div className='flex flex-col gap-2 rounded-lg border border-border-soft p-3.5'>
+          <span className='inline-flex items-center gap-2 text-sm text-fg-high lowercase'>
+            <span className='i-ph-info h-4 w-4 text-rust shrink-0' />
+            zafu holds orchard and ironwood
+          </span>
+          <p className='text-xs text-fg-muted lowercase leading-snug'>
+            if this phrase also has sapling funds from another wallet, they will not show up here
+            and cannot be spent from zafu. they stay on-chain and untouched — zafu simply cannot
+            see them.
+          </p>
+        </div>
 
         <div className='mt-auto flex flex-col gap-3 pt-4'>
           <button
