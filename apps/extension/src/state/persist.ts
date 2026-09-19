@@ -8,6 +8,7 @@ import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { OriginRecord, UserChoice } from '@repo/storage-chrome/records';
 import { readEncrypted, writeEncrypted, markHydrated } from './encrypted-storage';
 import { backfillMissingMultisigMirrors } from './keyring/migration';
+import { DEFAULT_PRIVACY_SETTINGS } from './privacy';
 import type { WalletJson } from '@repo/wallet';
 import type { EncryptedVault } from './keyring/types';
 import type { ZcashWalletJson } from './wallets';
@@ -48,7 +49,13 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         state.numeraires.selectedNumeraires = numeraires;
         state.zigner.cameraEnabled = zignerCameraEnabled ?? false;
         if (privacySettings) {
-          state.privacy.settings = privacySettings as AllSlices['privacy']['settings'];
+          // Merge onto defaults - a settings object persisted before a field
+          // was added (e.g. `proxy`) would otherwise leave it undefined and
+          // crash the privacy screen (proxy.host on undefined).
+          state.privacy.settings = {
+            ...DEFAULT_PRIVACY_SETTINGS,
+            ...(privacySettings as Partial<AllSlices['privacy']['settings']>),
+          };
         }
       }),
     );
@@ -311,7 +318,10 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         if (stored) {
           set(
             produce((state: AllSlices) => {
-              state.privacy.settings = stored as AllSlices['privacy']['settings'];
+              state.privacy.settings = {
+                ...DEFAULT_PRIVACY_SETTINGS,
+                ...(stored as Partial<AllSlices['privacy']['settings']>),
+              };
             }),
           );
         }

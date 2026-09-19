@@ -180,7 +180,7 @@ export interface PrivacySlice {
 // defaults - maximum privacy for transparent networks
 // ============================================================================
 
-const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
+export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   enableTransparentBalances: false,
   enableTransactionHistory: false,
   enableBackgroundSync: false,

@@ -98,7 +98,9 @@ function Row({
 function ProxySection() {
   const { settings, setProxy } = useStore(privacySelector);
   const pro = useStore(isPro);
-  const proxy = settings.proxy;
+  // Defensive: settings persisted before the proxy field existed have no
+  // proxy key. persist.ts now merges defaults on hydration, but guard here too.
+  const proxy = settings.proxy ?? { enabled: false, host: '', port: 1080 };
   const [host, setHost] = useState(proxy.host);
   const [port, setPort] = useState(String(proxy.port));
 
