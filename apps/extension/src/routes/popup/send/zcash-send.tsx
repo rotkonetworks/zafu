@@ -474,8 +474,13 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       setFormError('resolve the zcash.me username to an address first');
       return false;
     }
-    const validPrefix =
-      r.startsWith('u1') || r.startsWith('utest1') || r.startsWith('t1') || r.startsWith('t3');
+    // `tm`/`t2` are the TESTNET transparent prefixes (P2PKH / P2SH). They have
+    // to be here: the fee quote three lines down already treats them as
+    // transparent via /^(t1|t3|tm|t2)/, and `utest1` is accepted, so without
+    // them the form takes a testnet UNIFIED address but rejects a testnet
+    // TRANSPARENT one — t-sends are simply impossible on testnet. zcli accepts
+    // t1 and tm for the same reason.
+    const validPrefix = /^(u1|utest1|t1|t3|tm|t2)/.test(r);
     if (!validPrefix) {
       setFormError(
         'invalid zcash address - expected unified (u1) or transparent (t1/t3). sapling (zs) is not supported.',
@@ -1253,9 +1258,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               <div>
                 <label className='mb-1 block text-xs text-fg-muted'>recipient address</label>
                 <div className='flex gap-1'>
+                  {/* No `zs...` in the placeholder: sapling is not a supported
+                      recipient and the validator rejects it, so advertising it
+                      here invited an address the form then refuses. */}
                   <input
                     type='text'
-                    placeholder='u1... / zs... / t1...'
+                    placeholder='u1... / t1...'
                     value={recipient}
                     onChange={e => setRecipient(e.target.value)}
                     className='flex-1 rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none'
