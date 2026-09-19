@@ -298,6 +298,11 @@ function SaveContactPrompt({
   );
 }
 
+// Penumbra's Skip/registry chain id. Shielding USDC INTO penumbra is a direct
+// single-hop IBC MsgTransfer over our own relayed channel, NOT a Skip route -
+// so this id is special-cased throughout the cosmos send flow below.
+const PENUMBRA_CHAIN_ID = 'penumbra-1';
+
 /** cosmos send form with skip routing */
 function CosmosSend({
   sourceChainId,
@@ -338,20 +343,27 @@ function CosmosSend({
 
   const { data: skipChains = [], isLoading: chainsLoading } = useSkipChains();
 
-  // In IBC mode default the destination to Osmosis - the hub most off-ramps
-  // route through. Same-chain mode has no destination chain (it stays put).
+  // In IBC mode default the destination to Penumbra - shielding USDC in is the
+  // primary ramp (the Noble off-ramp is deprecating). Only when the source
+  // chain actually has a penumbra channel (osmosis intentionally does not);
+  // otherwise fall back to Osmosis, the hub most off-ramps route through.
+  // Same-chain mode has no destination chain (it stays put).
   useEffect(() => {
     if (sendMode !== 'ibc') {
       setDestChainId(undefined);
       return;
     }
-    if (destChainId || sourceChain.chainId === 'osmosis-1') {
+    if (destChainId || sourceChain.chainId === PENUMBRA_CHAIN_ID) {
       return;
     }
-    if (skipChains.some(c => c.chainId === 'osmosis-1')) {
+    if (sourceChain.penumbraChannel && skipChains.some(c => c.chainId === PENUMBRA_CHAIN_ID)) {
+      setDestChainId(PENUMBRA_CHAIN_ID);
+      return;
+    }
+    if (sourceChain.chainId !== 'osmosis-1' && skipChains.some(c => c.chainId === 'osmosis-1')) {
       setDestChainId('osmosis-1');
     }
-  }, [sendMode, skipChains, destChainId, sourceChain.chainId]);
+  }, [sendMode, skipChains, destChainId, sourceChain.chainId, sourceChain.penumbraChannel]);
 
   // assets hook - uses accountIndex
   const {
@@ -404,7 +416,14 @@ function CosmosSend({
         : (selectedAsset?.denom ?? sourceChain.denom)
       : (selectedAsset?.denom ?? sourceChain.denom),
     amount: amountInBase,
-    enabled: !!destChainId && parseFloat(amount) > 0 && !!selectedAsset,
+    // Penumbra dest never goes through Skip (direct IBC below); querying it
+    // asks Skip for the wrong dest denom ("upenumbra" = UM, not USDC) and
+    // always returns "no routes found".
+    enabled:
+      !!destChainId &&
+      destChainId !== PENUMBRA_CHAIN_ID &&
+      parseFloat(amount) > 0 &&
+      !!selectedAsset,
   });
 
   // auto-detect destination chain from address
@@ -415,22 +434,6 @@ function CosmosSend({
     return getChainFromAddress(recipient);
   }, [recipient]);
 
-  // validate recipient
-  const recipientValid = useMemo(() => {
-    if (!recipient) {
-      return false;
-    }
-    if (destChainId) {
-      const destPrefix = skipChains.find(c => c.chainId === destChainId)?.bech32Prefix;
-      if (destPrefix) {
-        return recipient.startsWith(`${destPrefix}1`);
-      }
-    }
-    return isValidCosmosAddress(recipient);
-  }, [recipient, destChainId, skipChains]);
-
-  const canSubmit =
-    recipient && recipientValid && parseFloat(amount) > 0 && selectedAsset && txStatus === 'idle';
   // effective destination: manual selection > auto-detect > same chain
   // same-chain mode always stays on the source chain, regardless of what the
   // pasted address might auto-detect as - that is the whole point of the tab
@@ -439,6 +442,30 @@ function CosmosSend({
       ? sourceChain.chainId
       : destChainId || detectedChain?.chainId || sourceChain.chainId;
   const isSameChain = effectiveDestChainId === sourceChain.chainId;
+  // Shielding INTO penumbra: bypass Skip, use our own relayed channel directly.
+  const isPenumbraDest = effectiveDestChainId === PENUMBRA_CHAIN_ID;
+
+  // validate recipient
+  const recipientValid = useMemo(() => {
+    if (!recipient) {
+      return false;
+    }
+    // penumbra addresses are bech32m and much longer than a cosmos address, so
+    // isValidCosmosAddress would reject them - match the prefix directly.
+    if (isPenumbraDest) {
+      return recipient.startsWith('penumbra1');
+    }
+    if (destChainId) {
+      const destPrefix = skipChains.find(c => c.chainId === destChainId)?.bech32Prefix;
+      if (destPrefix) {
+        return recipient.startsWith(`${destPrefix}1`);
+      }
+    }
+    return isValidCosmosAddress(recipient);
+  }, [recipient, destChainId, isPenumbraDest, skipChains]);
+
+  const canSubmit =
+    recipient && recipientValid && parseFloat(amount) > 0 && selectedAsset && txStatus === 'idle';
 
   // Listen for cosmos sign result from dedicated window
   useEffect(() => {
@@ -482,7 +509,11 @@ function CosmosSend({
         gas: '150000',
       });
     } else {
-      const channel = route?.operations.find(op => op.transfer)?.transfer?.channel;
+      // penumbra shield-in uses our direct relayed channel; everything else
+      // takes the channel Skip resolved.
+      const channel = isPenumbraDest
+        ? sourceChain.penumbraChannel
+        : route?.operations.find(op => op.transfer)?.transfer?.channel;
       setTxPreview({
         type: 'cosmos-sdk/MsgTransfer',
         chain_id: sourceChain.chainId,
@@ -502,6 +533,7 @@ function CosmosSend({
     sourceChainId,
     sourceChain,
     isSameChain,
+    isPenumbraDest,
     recipient,
     assetsData,
     route,
@@ -534,9 +566,17 @@ function CosmosSend({
           accountIndex,
         });
       } else {
-        const channel = route?.operations.find(op => op.transfer)?.transfer?.channel;
+        // penumbra shield-in: direct single-hop MsgTransfer over our relayed
+        // channel (verified STATE_OPEN, client Active). Skip is bypassed.
+        const channel = isPenumbraDest
+          ? sourceChain.penumbraChannel
+          : route?.operations.find(op => op.transfer)?.transfer?.channel;
         if (!channel) {
-          throw new Error('no ibc route found');
+          throw new Error(
+            isPenumbraDest
+              ? `no penumbra channel configured for ${sourceChain.name}`
+              : 'no ibc route found',
+          );
         }
 
         result = await cosmosIbcTransfer.mutateAsync({
@@ -579,6 +619,8 @@ function CosmosSend({
     }
   }, [
     isSameChain,
+    isPenumbraDest,
+    sourceChain,
     sourceChainId,
     effectiveDestChainId,
     recipient,
@@ -697,7 +739,9 @@ function CosmosSend({
           )}
         />
         {recipient && !recipientValid && (
-          <p className='mt-1 text-xs text-red-400'>invalid cosmos address</p>
+          <p className='mt-1 text-xs text-red-400'>
+            {isPenumbraDest ? 'invalid penumbra address' : 'invalid cosmos address'}
+          </p>
         )}
         {sendMode === 'ibc' && detectedChain && !destChainId && (
           <p className='mt-1 text-xs text-fg-muted'>detected: {detectedChain.name}</p>
@@ -766,7 +810,18 @@ function CosmosSend({
           )}
         </div>
       )}
-      {routeError && <p className='text-xs text-red-400'>{routeError.message}</p>}
+      {routeError && !isPenumbraDest && (
+        <p className='text-xs text-red-400'>{routeError.message}</p>
+      )}
+      {sendMode === 'ibc' && isPenumbraDest && (
+        <div className='flex items-start gap-2 rounded-lg border border-border-soft bg-elev-2/20 p-3 text-xs text-fg-muted'>
+          <span className='i-ph-shield h-3.5 w-3.5 shrink-0 text-penumbra-purple' />
+          <span>
+            direct shielded deposit into penumbra over {sourceChain.name} {sourceChain.penumbraChannel}
+            {' '}- funds arrive shielded, not routed through Skip
+          </span>
+        </div>
+      )}
 
       {/* transaction status */}
       {txStatus === 'success' && txHash && (
@@ -1074,8 +1129,24 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
   }, [selectedAsset]);
 
   const handleMax = useCallback(() => {
-    sendState.setAmount(selectedBalance);
-  }, [selectedBalance, sendState]);
+    // Penumbra autoFee (feeTier 1) is roughly 0.0005 UM per plain send.
+    // Reserve 0.01 UM (~20x typical) when maxing the fee asset so memos
+    // and small batches don't push the tx over the balance and fail
+    // build-time with "insufficient funds. Required amount: 0.0005 penumbra".
+    // Non-UM assets pay their fee out of the separate UM balance, so they
+    // can safely max the full amount.
+    const UM_FEE_RESERVE = 0.01;
+    const meta = getMetadataFromBalancesResponse.optional(selectedAsset);
+    const symbol = meta ? symbolFromMetadata(meta) : '';
+    const isFeeAsset = symbol === 'UM' || symbol === 'penumbra' || symbol === 'upenumbra';
+    if (!isFeeAsset) {
+      sendState.setAmount(selectedBalance);
+      return;
+    }
+    const full = Number(selectedBalance);
+    const spendable = Number.isFinite(full) ? Math.max(0, full - UM_FEE_RESERVE) : 0;
+    sendState.setAmount(String(spendable));
+  }, [selectedAsset, selectedBalance, sendState]);
 
   const canSubmit =
     addressValid &&
