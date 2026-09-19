@@ -73,9 +73,13 @@
     "@penumbra-zone/services": "npm:@rotko/penumbra-services@70.0.0"
   },
   "pnpm": {
+    "overrides": {
+      "@penumbra-labs/registry": "npm:@penumbrafi/registry@^13.0.0"
+    },
     "peerDependencyRules": {
       "allowAny": [
-        "@rotko/penumbra-wasm"
+        "@rotko/penumbra-wasm",
+        "@penumbra-labs/registry"
       ]
     }
   },

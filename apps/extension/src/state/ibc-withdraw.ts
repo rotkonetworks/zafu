@@ -11,47 +11,15 @@ import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view
 import { AddressIndex } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import { Height } from '@penumbra-zone/protobuf/ibc/core/client/v1/client_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
+import { splitLoHi } from '@rotko/penumbra-types/lo-hi';
 import { viewClient } from '../clients';
+import { toBaseUnits } from './ibc-withdraw-amount';
+import { getCounterpartyHeight, timeoutBlocksForChain } from './ibc-withdraw-timeout';
 
 /** two days in milliseconds */
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
 /** ten minutes in milliseconds */
 const TEN_MINS_MS = 10 * 60 * 1000;
-
-/** REST endpoints for counterparty chains (for querying latest block height) */
-const CHAIN_REST_ENDPOINTS: Record<string, string> = {
-  'noble-1': 'https://noble-api.polkachu.com',
-  'cosmoshub-4': 'https://cosmos-api.polkachu.com',
-  // Injective has no polkachu LCD; this is the public sentry endpoint.
-  'injective-1': 'https://sentry.lcd.injective.network',
-};
-
-/** query the latest block height on a counterparty cosmos chain */
-const getCounterpartyHeight = async (
-  chainId: string,
-): Promise<{ height: bigint; revisionNumber: bigint }> => {
-  const restEndpoint = CHAIN_REST_ENDPOINTS[chainId];
-  if (!restEndpoint) {
-    throw new Error(`no REST endpoint for chain ${chainId}`);
-  }
-
-  const res = await fetch(`${restEndpoint}/cosmos/base/tendermint/v1beta1/blocks/latest`);
-  if (!res.ok) {
-    throw new Error(`failed to query ${chainId} latest block: ${res.status}`);
-  }
-
-  const data = await res.json();
-  const latestHeight = BigInt(data.block?.header?.height ?? data.sdk_block?.header?.height ?? '0');
-  if (latestHeight === 0n) {
-    throw new Error(`could not parse latest height for ${chainId}`);
-  }
-
-  // revision number from chain ID (e.g. "noble-1" -> 1, "osmosis-1" -> 1)
-  const revMatch = /-(\d+)$/.exec(chainId);
-  const revisionNumber = revMatch?.[1] ? BigInt(revMatch[1]) : 0n;
-
-  return { height: latestHeight, revisionNumber };
-};
 
 export interface IbcWithdrawSlice {
   /** selected destination chain */
@@ -62,6 +30,13 @@ export interface IbcWithdrawSlice {
   amount: string;
   /** selected asset denom */
   denom: string;
+  /**
+   * Decimal exponent of the selected asset's DISPLAY denom (the `denomUnits`
+   * entry matching `display` in the registry Metadata): 6 for UM and the
+   * stablecoins, 18 for INJ. Set together with `denom`; `undefined` means we
+   * have no metadata and must refuse to guess.
+   */
+  exponent: number | undefined;
   /** loading state */
   loading: boolean;
   /** error message */
@@ -70,7 +45,7 @@ export interface IbcWithdrawSlice {
   setChain: (chain: IbcChain | undefined) => void;
   setDestinationAddress: (address: string) => void;
   setAmount: (amount: string) => void;
-  setDenom: (denom: string) => void;
+  setDenom: (denom: string, exponent: number | undefined) => void;
   reset: () => void;
 
   /** build the transaction planner request */
@@ -90,6 +65,7 @@ const initialState = {
   destinationAddress: '',
   amount: '',
   denom: '',
+  exponent: undefined as number | undefined,
   loading: false,
   error: undefined as string | undefined,
 };
@@ -109,9 +85,10 @@ export const createIbcWithdrawSlice: SliceCreator<IbcWithdrawSlice> = (set, get)
     set(state => {
       state.ibcWithdraw.amount = amount;
     }),
-  setDenom: denom =>
+  setDenom: (denom, exponent) =>
     set(state => {
       state.ibcWithdraw.denom = denom;
+      state.ibcWithdraw.exponent = exponent;
     }),
 
   reset: () =>
@@ -120,12 +97,13 @@ export const createIbcWithdrawSlice: SliceCreator<IbcWithdrawSlice> = (set, get)
       state.ibcWithdraw.destinationAddress = initialState.destinationAddress;
       state.ibcWithdraw.amount = initialState.amount;
       state.ibcWithdraw.denom = initialState.denom;
+      state.ibcWithdraw.exponent = initialState.exponent;
       state.ibcWithdraw.loading = initialState.loading;
       state.ibcWithdraw.error = initialState.error;
     }),
 
   buildPlanRequest: async () => {
-    const { chain, destinationAddress, amount, denom } = get().ibcWithdraw;
+    const { chain, destinationAddress, amount, denom, exponent } = get().ibcWithdraw;
     const sourceIndex = get().keyRing.penumbraAccount;
 
     if (!chain) {
@@ -140,6 +118,10 @@ export const createIbcWithdrawSlice: SliceCreator<IbcWithdrawSlice> = (set, get)
     if (!denom) {
       throw new Error('no denom specified');
     }
+    // No silent fallback: guessing 6 here is what sent 1e-12 INJ.
+    if (exponent === undefined) {
+      throw new Error('no asset metadata for selected denom - cannot determine decimals');
+    }
 
     set(state => {
       state.ibcWithdraw.loading = true;
@@ -147,15 +129,18 @@ export const createIbcWithdrawSlice: SliceCreator<IbcWithdrawSlice> = (set, get)
     });
 
     try {
-      // parse amount (assuming 6 decimals for now - should come from asset metadata)
-      const amountBigInt = BigInt(Math.floor(parseFloat(amount) * 1_000_000));
+      // scale the typed decimal string by the asset's own exponent, as integers
+      const amountBigInt = toBaseUnits(amount, exponent);
+      if (amountBigInt <= 0n) {
+        throw new Error('amount is zero');
+      }
 
       const timeoutTime = calculateTimeout(Date.now());
 
       // query counterparty chain's latest height and add buffer for timeout
       const counterparty = await getCounterpartyHeight(chain.chainId);
       const timeoutHeight = new Height({
-        revisionHeight: counterparty.height + 1000n,
+        revisionHeight: counterparty.height + timeoutBlocksForChain(chain.chainId),
         revisionNumber: counterparty.revisionNumber,
       });
 
@@ -170,7 +155,9 @@ export const createIbcWithdrawSlice: SliceCreator<IbcWithdrawSlice> = (set, get)
       const planRequest = new TransactionPlannerRequest({
         ics20Withdrawals: [
           {
-            amount: new Amount({ lo: amountBigInt, hi: 0n }),
+            // 18-decimal assets overflow a u64 above ~18.4 whole units, so the
+            // amount has to be split across lo/hi rather than stuffed into lo.
+            amount: new Amount(splitLoHi(amountBigInt)),
             denom: { denom },
             destinationChainAddress: destinationAddress,
             returnAddress: ephemeralResponse.address,
@@ -202,3 +189,4 @@ export const selectIbcWithdraw = (state: AllSlices) => state.ibcWithdraw;
 export const selectIbcChain = (state: AllSlices) => state.ibcWithdraw.chain;
 export const selectIbcDestination = (state: AllSlices) => state.ibcWithdraw.destinationAddress;
 export const selectIbcAmount = (state: AllSlices) => state.ibcWithdraw.amount;
+export const selectIbcExponent = (state: AllSlices) => state.ibcWithdraw.exponent;

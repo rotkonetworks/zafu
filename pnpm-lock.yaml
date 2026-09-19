@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@penumbra-labs/registry': npm:@penumbrafi/registry@^13.0.0
+
 pnpmfileChecksum: bwtiqgusdylthorgowhneampme
 
 importers:
@@ -140,6 +143,9 @@ importers:
       '@noble/hashes':
         specifier: ^1.8.0
         version: 1.8.0
+      '@penumbra-labs/registry':
+        specifier: npm:@penumbrafi/registry@^13.0.0
+        version: '@penumbrafi/registry@13.0.0'
       '@penumbra-zone/bech32m':
         specifier: 18.0.0
         version: 18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1))
@@ -163,7 +169,7 @@ importers:
         version: link:../../packages/query
       '@penumbra-zone/storage':
         specifier: 62.0.0
-        version: 62.0.0(fkiu7yshwsme6vao53uzvamfi4)
+        version: 62.0.0(4fdcl4rdrorpni2s3xzh2udkim)
       '@penumbra-zone/transport-chrome':
         specifier: 9.0.1
         version: 9.0.1(@bufbuild/protobuf@1.10.1)(@connectrpc/connect@1.7.0(@bufbuild/protobuf@1.10.1))(@penumbra-zone/transport-dom@7.5.2)
@@ -199,7 +205,7 @@ importers:
         version: link:../../packages/zcash-wasm
       '@rotko/penumbra-services':
         specifier: 70.0.0
-        version: 70.0.0(nplcalme35nfcw5ipfh63rlfpe)
+        version: 70.0.0(wnormmncnjkflx5xycxn426b6y)
       '@rotko/penumbra-types':
         specifier: 37.0.0
         version: 37.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/getters@28.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1))
@@ -369,6 +375,9 @@ importers:
       '@bufbuild/protobuf':
         specifier: ^1.10.0
         version: 1.10.1
+      '@penumbra-labs/registry':
+        specifier: npm:@penumbrafi/registry@^13.0.0
+        version: '@penumbrafi/registry@13.0.0'
       '@penumbra-zone/bech32m':
         specifier: 18.0.0
         version: 18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1))
@@ -389,7 +398,7 @@ importers:
         version: link:../query
       '@penumbra-zone/storage':
         specifier: 62.0.0
-        version: 62.0.0(fkiu7yshwsme6vao53uzvamfi4)
+        version: 62.0.0(4fdcl4rdrorpni2s3xzh2udkim)
       '@penumbra-zone/transport-chrome':
         specifier: 9.0.1
         version: 9.0.1(@bufbuild/protobuf@1.10.1)(@connectrpc/connect@1.7.0(@bufbuild/protobuf@1.10.1))(@penumbra-zone/transport-dom@7.5.2)
@@ -401,7 +410,7 @@ importers:
         version: 13.0.0
       '@rotko/penumbra-services':
         specifier: 70.0.0
-        version: 70.0.0(nplcalme35nfcw5ipfh63rlfpe)
+        version: 70.0.0(wnormmncnjkflx5xycxn426b6y)
       '@rotko/penumbra-types':
         specifier: 37.0.0
         version: 37.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/getters@28.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1))
@@ -2392,10 +2401,6 @@ packages:
   '@oxc-project/types@0.131.0':
     resolution: {integrity: sha512-PgnWDfV0h+b16XNKbXU7Daib/BFSt/J2mEzfYIBu6JB/wNdlU+kVYXCkGA1A9fWkTbOgbjh4e6NhPeQOYvFhEA==}
 
-  '@penumbra-labs/registry@https://codeload.github.com/penumbrafi/registry/tar.gz/4a2320dd8cf790a3c9d105fac6acbf146dd92f62':
-    resolution: {tarball: https://codeload.github.com/penumbrafi/registry/tar.gz/4a2320dd8cf790a3c9d105fac6acbf146dd92f62}
-    version: 12.9.0
-
   '@penumbra-zone/bech32m@18.0.0':
     resolution: {integrity: sha512-hCY5tHoHWSUPZwIiRI+aLxA/N3OKe6qSvcqG4WOQ1pbqyj9N+PJtNMlw1UCdocspJGCnE8N6/y5p3hwXoHreIQ==}
     peerDependencies:
@@ -2444,7 +2449,7 @@ packages:
     resolution: {integrity: sha512-4aDODz6ySP07Zwy/iGVtTL/rvpys53ywzmhgdIgMWX5G+NAq1Qhc7oom+ErUORuyXodl1cHbIFVowDCnMdcVmQ==}
     peerDependencies:
       '@bufbuild/protobuf': ^1.10.0
-      '@penumbra-labs/registry': ^12.8.0
+      '@penumbra-labs/registry': npm:@penumbrafi/registry@^13.0.0
       '@penumbra-zone/bech32m': 18.0.0
       '@penumbra-zone/getters': 28.0.0
       '@penumbra-zone/protobuf': 11.0.0
@@ -10647,8 +10652,6 @@ snapshots:
 
   '@oxc-project/types@0.131.0': {}
 
-  '@penumbra-labs/registry@https://codeload.github.com/penumbrafi/registry/tar.gz/4a2320dd8cf790a3c9d105fac6acbf146dd92f62': {}
-
   '@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1))':
     dependencies:
       '@penumbra-zone/protobuf': 11.0.0(@bufbuild/protobuf@1.10.1)
@@ -10720,10 +10723,10 @@ snapshots:
     dependencies:
       '@bufbuild/protobuf': 1.10.1
 
-  '@penumbra-zone/storage@62.0.0(fkiu7yshwsme6vao53uzvamfi4)':
+  '@penumbra-zone/storage@62.0.0(4fdcl4rdrorpni2s3xzh2udkim)':
     dependencies:
       '@bufbuild/protobuf': 1.10.1
-      '@penumbra-labs/registry': https://codeload.github.com/penumbrafi/registry/tar.gz/4a2320dd8cf790a3c9d105fac6acbf146dd92f62
+      '@penumbra-labs/registry': '@penumbrafi/registry@13.0.0'
       '@penumbra-zone/bech32m': 18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1))
       '@penumbra-zone/getters': 28.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1))
       '@penumbra-zone/protobuf': 11.0.0(@bufbuild/protobuf@1.10.1)
@@ -11666,7 +11669,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.62.5':
     optional: true
 
-  '@rotko/penumbra-services@70.0.0(nplcalme35nfcw5ipfh63rlfpe)':
+  '@rotko/penumbra-services@70.0.0(wnormmncnjkflx5xycxn426b6y)':
     dependencies:
       '@bufbuild/protobuf': 1.10.1
       '@connectrpc/connect': 1.7.0(@bufbuild/protobuf@1.10.1)
@@ -11674,7 +11677,7 @@ snapshots:
       '@penumbra-zone/crypto-web': 48.0.0(@penumbra-zone/types@36.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/getters@28.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))
       '@penumbra-zone/getters': 28.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1))
       '@penumbra-zone/protobuf': 11.0.0(@bufbuild/protobuf@1.10.1)
-      '@penumbra-zone/storage': 62.0.0(fkiu7yshwsme6vao53uzvamfi4)
+      '@penumbra-zone/storage': 62.0.0(4fdcl4rdrorpni2s3xzh2udkim)
       '@penumbra-zone/transport-dom': 7.5.2
       '@penumbra-zone/types': 36.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/getters@28.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1))
       '@penumbra-zone/wasm': 53.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1))(@penumbra-zone/types@36.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/getters@28.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))

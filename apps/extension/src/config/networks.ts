@@ -32,6 +32,15 @@ export interface NetworkConfig {
    */
   ibcChainId?: string;
   /**
+   * Average block interval of this chain, in milliseconds. Only meaningful
+   * alongside `ibcChainId`: an ICS-20 packet carries a timeout expressed as a
+   * block HEIGHT on the destination chain, so turning "keep this packet live
+   * for roughly N hours" into a height offset needs the destination's own block
+   * rate. Chains differ by an order of magnitude (Injective ~0.7s vs Noble
+   * ~5.5s), so a single constant silently gives Injective a 12-minute window.
+   */
+  ibcBlockTimeMs?: number;
+  /**
    * Conduit-only subnetwork: reached through a dedicated derive+sign path
    * (e.g. Injective's eth_secp256k1 conduit), NOT the shared cosmos secp256k1 /
    * coin-118 IBC machinery. Excluded from getActiveIbcChainIds /
@@ -97,6 +106,8 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     launched: true,
     parent: 'penumbra',
     ibcChainId: 'noble-1',
+    // Noble targets ~5s; observed intervals sit just above it.
+    ibcBlockTimeMs: 5_500,
     features: { stake: false, swap: false, vote: false, inbox: false, multisig: false },
   },
   cosmoshub: {
@@ -120,6 +131,7 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     launched: false,
     parent: 'penumbra',
     ibcChainId: 'osmosis-1',
+    ibcBlockTimeMs: 2_500,
     features: { stake: false, swap: false, vote: false, inbox: false, multisig: false },
   },
   injective: {
@@ -139,6 +151,8 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     launched: false,
     parent: 'penumbra',
     ibcChainId: 'injective-1',
+    // Injective runs sub-second blocks (~0.65-0.8s).
+    ibcBlockTimeMs: 700,
     // eth_secp256k1 conduit, not the shared cosmos coin-118 path
     conduitOnly: true,
     features: { stake: false, swap: false, vote: false, inbox: false, multisig: false },
@@ -215,6 +229,22 @@ export const getActiveIbcSubnetworks = (parent: NetworkType): NetworkType[] =>
       NETWORKS[n].ibcChainId &&
       !NETWORKS[n].conduitOnly,
   );
+
+/**
+ * Fallback block interval for an IBC destination we have no measured rate for.
+ * ~6s is the classic cosmos-sdk default, and erring slow means erring towards a
+ * SMALLER height offset, i.e. an earlier (safe) refund rather than a packet that
+ * outlives its usefulness.
+ */
+export const DEFAULT_IBC_BLOCK_TIME_MS = 6_000;
+
+/** average block interval (ms) for an IBC chain id, e.g. 'injective-1' -> 700 */
+export const getIbcBlockTimeMs = (chainId: string): number => {
+  const network = (Object.keys(NETWORKS) as NetworkType[]).find(
+    n => NETWORKS[n].ibcChainId === chainId,
+  );
+  return (network && NETWORKS[network].ibcBlockTimeMs) || DEFAULT_IBC_BLOCK_TIME_MS;
+};
 
 /** true if this cosmos subnetwork currently has a live IBC channel (deposit/send ok) */
 export const isActiveIbcChain = (network: NetworkType): boolean =>

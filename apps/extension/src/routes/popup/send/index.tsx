@@ -15,12 +15,14 @@ import { selectActiveNetwork, selectPenumbraAccount } from '../../../state/keyri
 import { recentAddressesSelector, type AddressNetwork } from '../../../state/recent-addresses';
 import { contactsSelector } from '../../../state/contacts';
 import { selectIbcWithdraw } from '../../../state/ibc-withdraw';
+import { isValidWithdrawAmount } from '../../../state/ibc-withdraw-amount';
 import { isActiveIbcChain, getNetwork } from '../../../config/networks';
 import type { NetworkType } from '../../../state/keyring';
 import { selectPenumbraSend } from '../../../state/penumbra-send';
 import { useIbcChains, isValidIbcAddress, type IbcChain } from '../../../hooks/ibc-chains';
 import { viewClient } from '../../../clients';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
+import { getDisplayDenomExponent } from '@penumbra-zone/getters/metadata';
 import { fromValueView } from '@rotko/penumbra-types/amount';
 import { assetPatterns } from '@rotko/penumbra-types/assets';
 import { useSkipRoute, useSkipChains } from '../../../hooks/skip-route';
@@ -1434,11 +1436,11 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
       const meta = getMetadataFromBalancesResponse.optional(withdrawableAssets[0]);
       setSelectedAsset(withdrawableAssets[0]);
       if (meta?.base) {
-        ibcState.setDenom(meta.base);
+        ibcState.setDenom(meta.base, getDisplayDenomExponent.optional(meta));
       }
     } else {
       setSelectedAsset(undefined);
-      ibcState.setDenom('');
+      ibcState.setDenom('', undefined);
     }
   }, [ibcState.chain?.channelId, withdrawableAssets.length]);
 
@@ -1483,13 +1485,14 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   const belowNobleMin =
     isNobleUsdc && !!ibcState.amount && parseFloat(ibcState.amount) < MIN_NOBLE_USDC_UNSHIELD;
 
+  // Amount must be expressible in the asset's own base units: more fractional
+  // digits than the exponent allows is a user error we surface up front rather
+  // than silently truncating at plan time.
+  const amountValid =
+    ibcState.exponent !== undefined && isValidWithdrawAmount(ibcState.amount, ibcState.exponent);
+
   const canSubmit =
-    ibcState.chain &&
-    addressValid &&
-    ibcState.amount &&
-    parseFloat(ibcState.amount) > 0 &&
-    !belowNobleMin &&
-    txStatus === 'idle';
+    ibcState.chain && addressValid && amountValid && !belowNobleMin && txStatus === 'idle';
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit) {
@@ -1695,7 +1698,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
                         onClick={() => {
                           setSelectedAsset(b);
                           if (meta?.base) {
-                            ibcState.setDenom(meta.base);
+                            ibcState.setDenom(meta.base, getDisplayDenomExponent.optional(meta));
                           }
                           setAssetOpen(false);
                         }}
@@ -1730,6 +1733,13 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
           <p className='mt-1 text-xs text-red-400'>
             minimum {MIN_NOBLE_USDC_UNSHIELD} USDC - Noble's ~0.16 USDC fee would otherwise strand
             the balance
+          </p>
+        )}
+        {!belowNobleMin && !!ibcState.amount && !amountValid && (
+          <p className='mt-1 text-xs text-red-400'>
+            {ibcState.exponent === undefined
+              ? 'no decimals known for this asset - pick it again'
+              : `enter a positive amount with at most ${ibcState.exponent} decimal places`}
           </p>
         )}
       </div>
