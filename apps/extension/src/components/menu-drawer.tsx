@@ -134,12 +134,12 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
     return null;
   }
 
-  // Destinations demoted from the bottom-tabs rail (which now shows
-  // only Home + Inbox). Each is gated by the active network's feature
-  // set so we never offer a destination the network can't fulfill.
-  const onMultisigWallet = keyInfo?.type === 'frost-multisig';
-  const showMultisig = activeNetwork === 'zcash' && (onMultisigWallet || pro);
-
+  // Destinations that are NOT in the bottom-tabs rail. Each is gated by the
+  // active network's feature set so we never offer a destination the network
+  // can't fulfill. Multisig is deliberately NOT here: it lives in the bottom
+  // tabs (feature-gated per network, same as vote/stake/inbox), and a second
+  // entry in the drawer was the "two doors to one room" that made the menu
+  // read as confusing.
   interface MenuItem {
     icon: string;
     label: string;
@@ -156,17 +156,9 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
         onClose();
       },
     },
-    // vote lives in the bottom tabs (feature-gated) - no drawer duplicate.
-    // pool notes has no drawer entry either: the home balance card links
-    // straight into the per-pool notes view.
-    showMultisig && {
-      icon: 'i-ph-shield',
-      label: 'multisig',
-      onClick: () => {
-        navigate(PopupPath.MULTISIG);
-        onClose();
-      },
-    },
+    // vote and multisig live in the bottom tabs (feature-gated) - no drawer
+    // duplicate. pool notes has no drawer entry either: the home balance card
+    // links straight into the per-pool notes view.
   ].filter(Boolean) as MenuItem[];
 
   // Grouped so the drawer reads top→bottom as:
