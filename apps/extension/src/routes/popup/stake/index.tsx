@@ -175,11 +175,13 @@ export const StakePage = () => {
           const state = getValidatorState(info);
           result.push({ info, name, identity, votingPower, commission, state });
         }
-        // rotko.net always first; the rest ranked by a blended "small + cheap"
-        // score so decentralization-friendly picks (low stake, low commission)
-        // surface first rather than the whales. Each factor is normalized to
-        // [0,1] across the set so stake (a huge raw number) and commission (a
-        // single-digit percent) carry comparable weight; lower score = better.
+        // Rank by a blended "small + cheap" score so decentralization-friendly
+        // picks (low stake, low commission) surface first rather than the
+        // whales. Deliberately vendor-neutral - we do NOT pin rotko.net (or any
+        // operator) to the top; ranking is purely on stake + commission. Each
+        // factor is normalized to [0,1] across the set so stake (a huge raw
+        // number) and commission (a single-digit percent) carry comparable
+        // weight; lower score = better.
         const maxVotingPower = Math.max(1, ...result.map(v => v.votingPower));
         const maxCommission = Math.max(0.0001, ...result.map(v => v.commission));
         // weights sum to 1 - tune to favour stake vs commission
@@ -188,14 +190,7 @@ export const StakePage = () => {
         const score = (v: ValidatorRow) =>
           STAKE_WEIGHT * (v.votingPower / maxVotingPower) +
           COMMISSION_WEIGHT * (v.commission / maxCommission);
-        result.sort((a, b) => {
-          const aRotko = a.name.toLowerCase().includes('rotko') ? 1 : 0;
-          const bRotko = b.name.toLowerCase().includes('rotko') ? 1 : 0;
-          if (aRotko !== bRotko) {
-            return bRotko - aRotko;
-          }
-          return score(a) - score(b);
-        });
+        result.sort((a, b) => score(a) - score(b));
       } catch (err) {
         console.error('failed to fetch validators:', err);
       }
@@ -260,6 +255,12 @@ export const StakePage = () => {
   const totalVotingPower = useMemo(() => {
     return validators.reduce((sum, v) => sum + v.votingPower, 0);
   }, [validators]);
+
+  // The delegate dropdown only offers active validators. The <select> value and
+  // onChange MUST index this same filtered list - indexing the unfiltered
+  // `validators` array with a filtered position selects (and then delegates to)
+  // the wrong validator.
+  const activeValidators = useMemo(() => validators.filter(v => v.state === 'active'), [validators]);
 
   // handle delegate
   const handleDelegate = useCallback(async () => {
@@ -412,18 +413,19 @@ export const StakePage = () => {
           <div>
             <label className='mb-1 block text-xs text-fg-muted'>validator</label>
             <select
-              value={selectedValidator ? validators.indexOf(selectedValidator) : ''}
-              onChange={e => setSelectedValidator(validators[parseInt(e.target.value, 10)])}
+              value={selectedValidator ? activeValidators.indexOf(selectedValidator) : ''}
+              onChange={e => setSelectedValidator(activeValidators[parseInt(e.target.value, 10)])}
               className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg'
             >
               <option value=''>select validator...</option>
-              {validators
-                .filter(v => v.state === 'active')
-                .map((v, i) => (
+              {activeValidators.map((v, i) => {
+                const pct = totalVotingPower > 0 ? (v.votingPower / totalVotingPower) * 100 : 0;
+                return (
                   <option key={i} value={i}>
-                    {v.name} ({((v.votingPower / totalVotingPower) * 100).toFixed(2)}%)
+                    {v.name} ({pct.toFixed(2)}%)
                   </option>
-                ))}
+                );
+              })}
             </select>
           </div>
         ) : (
