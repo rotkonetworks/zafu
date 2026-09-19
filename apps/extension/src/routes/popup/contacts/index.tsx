@@ -311,10 +311,10 @@ function AddressRow({
         <span
           className={cn(
             'shrink-0 rounded-md px-1.5 py-0.5 text-label font-medium',
-            NETWORK_COLORS[address.network],
+            NETWORK_COLORS[address.network] ?? 'bg-elev-2 text-fg-muted',
           )}
         >
-          {NETWORK_LABELS[address.network]}
+          {NETWORK_LABELS[address.network] ?? address.network}
           {address.chainId && ` / ${address.chainId}`}
         </span>
         <span className='font-mono text-xs text-fg-muted truncate'>{address.address}</span>
@@ -585,6 +585,9 @@ export function ContactsPage() {
       flags: 0,
       zid: contactZid,
     });
+    if (!memos.length) {
+      return;
+    }
     const hex = bytesToHex(memos[0]!);
     navigate(PopupPath.SEND, {
       state: { prefillMemo: hex, network: 'zcash' },

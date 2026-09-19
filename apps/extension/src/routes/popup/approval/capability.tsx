@@ -36,6 +36,18 @@ const riskStyles: Record<RiskLevel, { border: string; bg: string; text: string; 
     },
   };
 
+// `new URL()` throws on a malformed string; the `app` query param is only
+// truthiness-checked, so parse defensively and fall back to the raw text.
+const SafeOriginURL = ({ origin }: { origin: string }) => {
+  let url: URL | undefined;
+  try {
+    url = new URL(origin);
+  } catch {
+    url = undefined;
+  }
+  return url ? <DisplayOriginURL url={url} /> : <span className='break-all'>{origin}</span>;
+};
+
 export const CapabilityApproval = () => {
   const [params] = useSearchParams();
   const origin = params.get('app') || '';
@@ -84,7 +96,7 @@ export const CapabilityApproval = () => {
               {title && <span className='text-sm truncate'>{title}</span>}
               {origin && (
                 <span className='text-xs text-fg-muted truncate'>
-                  <DisplayOriginURL url={new URL(origin)} />
+                  <SafeOriginURL origin={origin} />
                 </span>
               )}
             </div>

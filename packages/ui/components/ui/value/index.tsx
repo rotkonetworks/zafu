@@ -29,6 +29,12 @@ export const ValueViewComponent = ({
     return null;
   }
 
+  // getFormattedAmtFromValueView throws when the ValueView oneof is unset (a
+  // partial/default-constructed view, e.g. mid-sync). Guard before calling it.
+  if (!view.valueView.case) {
+    return null;
+  }
+
   const formattedAmount = getFormattedAmtFromValueView(view, true);
 
   if (view.valueView.case === 'knownAssetId' && view.valueView.value.metadata) {

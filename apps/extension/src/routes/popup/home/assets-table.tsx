@@ -332,7 +332,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
         </div>
         <ol className='flex w-full max-w-[16rem] flex-col gap-2 text-left'>
           {[
-            'already hold USDC on Noble? send it to your wallet Noble address',
+            'withdraw USDC from Binance or Kraken to your wallet Injective address',
             'the wallet IBCs it to Penumbra - shield to go private',
           ].map((step, i) => (
             <li key={i} className='flex items-start gap-2 text-xs text-fg-muted'>
@@ -344,9 +344,9 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
           ))}
         </ol>
         <p className='max-w-[16rem] text-label leading-snug text-fg-dim'>
-          heads up: Noble USDC is being retired - the bridge halts Dec 1, 2026. don't on-ramp fresh
-          USDC to Noble; move any USDC you already hold there over and shield it. an Injective USDC
-          ramp (withdraw from Binance or Kraken) is coming to replace it.
+          holding USDC on Noble? that path is winding down - the bridge halts Dec 1, 2026. send what
+          you have there to your wallet Noble address and shield it, but don't on-ramp fresh USDC to
+          Noble.
         </p>
       </div>
     );

@@ -25,6 +25,12 @@ const STATUS_STYLE: Record<RoundStatus, string> = {
 };
 
 const formatEnd = (round: VotingRound): string => {
+  // votingEnd comes from an unvalidated vote-server DTO; a missing/non-numeric
+  // value would make `new Date(NaN).toISOString()` throw and crash the whole
+  // round list (this runs per card). Guard before any date math.
+  if (!Number.isFinite(round.votingEnd)) {
+    return 'end unknown';
+  }
   const now = Date.now() / 1000;
   const dt = round.votingEnd - now;
   if (round.status === 'active' && dt > 0) {
@@ -165,7 +171,7 @@ const RoundCard = ({
           )}
 
           <div className='flex items-center gap-3 text-label text-fg-dim tabular'>
-            <span>snapshot {round.snapshotHeight.toLocaleString()}</span>
+            <span>snapshot {(round.snapshotHeight ?? 0).toLocaleString()}</span>
             {round.discussionUrl && (
               <a
                 href={round.discussionUrl}

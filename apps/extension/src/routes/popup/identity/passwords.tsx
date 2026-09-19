@@ -41,7 +41,7 @@ export const PasswordsPage = () => {
       setPassword(null);
     }
     setGenerating(false);
-  }, [origin, username, length, keyInfo, getMnemonic]);
+  }, [origin, username, length, index, keyInfo, getMnemonic]);
 
   const copy = () => {
     if (!password) {

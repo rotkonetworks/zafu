@@ -40,6 +40,12 @@ const riskStyles: Record<RiskLevel, { border: string; bg: string; text: string; 
 
 const CapabilityItem = ({ cap }: { cap: Capability }) => {
   const meta = CAPABILITY_META[cap];
+  // Defensive: an unknown/renamed capability string (dapp-controlled input, or
+  // a cap removed between versions) has no meta - render nothing rather than
+  // dereferencing undefined.risk and crashing the whole connect prompt.
+  if (!meta) {
+    return null;
+  }
   const style = riskStyles[meta.risk];
 
   return (
@@ -99,12 +105,25 @@ export const OriginApproval = () => {
     return null;
   }
 
+  // Only render/score capabilities we actually know. requestedCapabilities is
+  // dapp-controlled (state/origin-approval.ts only checks Array.isArray), so an
+  // unknown or renamed cap string would otherwise crash the reduce/map below.
+  const knownCapabilities = requestedCapabilities.filter(cap => cap in CAPABILITY_META);
+
   // determine highest risk level for banner
-  const maxRisk = requestedCapabilities.reduce<RiskLevel>((max, cap) => {
+  const maxRisk = knownCapabilities.reduce<RiskLevel>((max, cap) => {
     const levels: RiskLevel[] = ['low', 'medium', 'high', 'critical'];
     const capRisk = CAPABILITY_META[cap].risk;
     return levels.indexOf(capRisk) > levels.indexOf(max) ? capRisk : max;
   }, 'low');
+
+  // A malformed sender origin should not white-screen the prompt either.
+  let originUrl: URL | undefined;
+  try {
+    originUrl = new URL(requestOrigin);
+  } catch {
+    originUrl = undefined;
+  }
 
   return (
     <ApprovalScreen
@@ -162,7 +181,11 @@ export const OriginApproval = () => {
               </div>
               <div className='z-30 flex min-h-11 w-full items-center overflow-x-auto rounded-lg bg-canvas p-2 text-fg-muted'>
                 <div className='mx-auto items-center p-2 text-center leading-[0.8em]'>
-                  <DisplayOriginURL url={new URL(requestOrigin)} />
+                  {originUrl ? (
+                    <DisplayOriginURL url={originUrl} />
+                  ) : (
+                    <span className='text-fg-muted break-all'>{requestOrigin}</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -173,7 +196,7 @@ export const OriginApproval = () => {
             <p className='text-sm text-fg-muted'>
               this site is requesting the following permissions:
             </p>
-            {requestedCapabilities.map(cap => (
+            {knownCapabilities.map(cap => (
               <CapabilityItem key={cap} cap={cap} />
             ))}
           </div>

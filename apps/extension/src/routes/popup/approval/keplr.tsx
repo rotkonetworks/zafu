@@ -139,10 +139,13 @@ export const KeplrApproval = () => {
   }
 
   const isSign = req.method === 'signAmino' || req.method === 'signDirect';
+  // A stored request missing origin (partial/forward-incompatible write) would
+  // otherwise throw on .replace during render.
+  const originHost = (req.origin ?? '').replace(/^https?:\/\//, '');
   return (
     <div className='flex h-full flex-col'>
       <header className='flex flex-col items-center justify-center border-b border-border-soft py-4'>
-        <span className='kicker mb-1'>keplr · {req.origin.replace(/^https?:\/\//, '')}</span>
+        <span className='kicker mb-1'>keplr · {originHost}</span>
         <h1 className='text-title text-fg-high lowercase'>
           {isSign ? 'approve transaction' : 'connect wallet'}
         </h1>
@@ -153,7 +156,7 @@ export const KeplrApproval = () => {
           {!!req.favIconUrl && <img src={req.favIconUrl} alt='' className='size-8 rounded-full' />}
           <div className='flex flex-col overflow-hidden'>
             {req.title && <span className='truncate text-sm'>{req.title}</span>}
-            <span className='truncate text-xs text-fg-muted'>{req.origin}</span>
+            <span className='truncate text-xs text-fg-muted'>{req.origin ?? ''}</span>
           </div>
         </div>
 
@@ -161,7 +164,7 @@ export const KeplrApproval = () => {
           {isSign ? (
             <>
               <p className='text-fg'>
-                {req.origin.replace(/^https?:\/\//, '')} wants you to sign a{' '}
+                {originHost} wants you to sign a{' '}
                 {req.method === 'signDirect' ? 'transaction (direct)' : 'transaction (amino)'} on{' '}
                 <span className='font-mono'>{req.chainId}</span>.
               </p>

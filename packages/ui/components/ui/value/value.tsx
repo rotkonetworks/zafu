@@ -161,7 +161,9 @@ export const ValueComponent = ({
               symbol.startsWith('delUM') ? 'max-w-[40px]' : 'max-w-[80px]',
               'truncate font-mono text-xs text-fg-muted',
             )}
-            title={symbol}
+            // hover reveals the underlying denom / IBC channel path (e.g.
+            // transfer/channel-18/usdc) so an unnamed asset is still identifiable
+            title={metadata?.display || metadata?.base || symbol}
           >
             {symbol}
           </span>

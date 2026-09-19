@@ -1275,7 +1275,10 @@ function OutgoingStatusBadge({
     // "you need to check" colour, which is exactly the ask.
     interrupted: { bg: 'bg-amber-500/10', fg: 'text-amber-400', label: 'outcome unknown' },
   };
-  const s = styles[status];
+  // Fall back for a status persisted by an older/newer build (or a partial
+  // write) that is not in the map - reading .bg off undefined would white-screen
+  // the whole inbox.
+  const s = styles[status] ?? styles.pending;
   return (
     <span
       className={cn(

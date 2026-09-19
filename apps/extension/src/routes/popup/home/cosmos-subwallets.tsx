@@ -107,7 +107,13 @@ const fmtDate = (iso: string): string =>
  * (home when they hold a balance, and the Noble receive tab), so funds are not
  * stranded past the freeze date.
  */
-const DeprecationNotice = ({ config }: { config: CosmosChainConfig }) => {
+const DeprecationNotice = ({
+  config,
+  onMoveOut,
+}: {
+  config: CosmosChainConfig;
+  onMoveOut?: () => void;
+}) => {
   const dep = config.deprecation;
   if (!dep) {
     return null;
@@ -127,6 +133,16 @@ const DeprecationNotice = ({ config }: { config: CosmosChainConfig }) => {
             move out by <span className='text-fg-high'>{fmtDate(dep.moveOutBy)}</span> · frozen{' '}
             <span className='text-fg-high'>{fmtDate(dep.frozenBy)}</span>
           </p>
+          {onMoveOut && (
+            <button
+              type='button'
+              onClick={onMoveOut}
+              className='mt-1 inline-flex w-fit items-center gap-1 rounded border border-amber-400/50 bg-amber-400/10 px-2 py-1 text-label font-medium text-amber-200 transition-colors hover:bg-amber-400/20'
+            >
+              <span className='i-ph-arrow-square-out h-3 w-3' />
+              move {config.symbol} out
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -148,6 +164,12 @@ const DepositRow = memo(
     onShield: () => void;
   }) => {
     const config = COSMOS_CHAINS[chainId];
+    // Guard against config drift - a launched penumbra IBC subnetwork not (yet)
+    // present in COSMOS_CHAINS would make config undefined and crash on
+    // config.symbol below.
+    if (!config) {
+      return null;
+    }
     // an address used before but since drained: shown for reference (copy), but
     // there's nothing to send or shield.
     const hasBalance = wallet.balance > 0n;
@@ -222,7 +244,9 @@ const ChainDeposits = ({ chainId, view }: { chainId: CosmosChainId; view: 'home'
   const endpointFor = (index: number): string | undefined =>
     pool.length ? pool[index % pool.length] : undefined;
 
-  if (!data?.receive) {
+  // config guard placed here (after all hooks) to respect rules-of-hooks; see
+  // DepositRow for the config-drift rationale.
+  if (!data?.receive || !config) {
     return null;
   }
   const { receive, funded, used, rpcError } = data;
@@ -271,7 +295,10 @@ const ChainDeposits = ({ chainId, view }: { chainId: CosmosChainId; view: 'home'
     }
     return (
       <div className='flex flex-col gap-2'>
-        <DeprecationNotice config={config} />
+        <DeprecationNotice
+          config={config}
+          onMoveOut={funded[0] ? () => openSend(funded[0]!.index) : undefined}
+        />
         {staleNote}
         {funded.map(row)}
       </div>
@@ -281,7 +308,7 @@ const ChainDeposits = ({ chainId, view }: { chainId: CosmosChainId; view: 'home'
   // receive view
   return (
     <div className='flex flex-col gap-2'>
-      <DeprecationNotice config={config} />
+      <DeprecationNotice config={config} onMoveOut={() => openSend(receive.index)} />
       <ReceiveCard
         chainName={config.name}
         address={receive.address}

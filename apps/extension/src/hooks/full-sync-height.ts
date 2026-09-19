@@ -20,7 +20,10 @@ const tryGetMax = (a?: number, b?: number): number | undefined => {
 // There is a slight delay with Zustand loading up the last block synced.
 // To prevent the screen flicker, we use a loader to read it from chrome.storage.local.
 const useFullSyncHeight = (): number | undefined => {
-  const { fullSyncHeight: localHeight }: PopupLoaderData = useLoaderData();
+  // Default to {} so this never throws if the hook is ever rendered under a
+  // route without popupIndexLoader (useLoaderData returns undefined there).
+  const loaderData: PopupLoaderData | undefined = useLoaderData();
+  const { fullSyncHeight: localHeight } = loaderData ?? {};
   const memoryHeight = useStore(selectFullSyncHeight);
 
   return tryGetMax(localHeight, memoryHeight);
