@@ -6157,8 +6157,24 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         emitProgress('notes selected', `${selected.length} ${sendActivePool} notes, fee=${fee}`);
 
         // build merkle witnesses in the active pool (ironwood delegates to the
-        // ironwood witness/anchor path inside buildWitnesses)
-        const anchorHeight = await resolveAnchorHeight(walletId, sendTip.height);
+        // ironwood witness/anchor path inside buildWitnesses).
+        //
+        // Anchor at the SPENDING POOL's own maintained frontier height, where
+        // the per-note witnesses already sit, so the witness build fast-forwards
+        // over an empty gap instead of a scanned->tip replay. resolveAnchorHeight
+        // only knows the orchard frontier and falls back to the live tip, so for
+        // an ironwood spend it could anchor at a height the ironwood witnesses
+        // don't cover - forcing the slow replay. Mirrors the export path
+        // (getIronwoodTreeFrontierHeight with a newest-note fallback) and its
+        // comment: the ironwood anchor MUST come from the ironwood frontier or
+        // the downstream tree-state fetch / drift-check won't align. The
+        // drift-check still validates the built root against the server tree at
+        // this anchor, so a stale anchor fails safe to the slow replay - never a
+        // bad spend.
+        const anchorHeight =
+          sendActivePool === 'ironwood'
+            ? (await getIronwoodTreeFrontierHeight(walletId)) || sendTip.height
+            : await resolveAnchorHeight(walletId, sendTip.height);
         emitProgress('building merkle witnesses', `anchor=${anchorHeight} (tip=${sendTip.height})`);
         const witnessStart = performance.now();
 
