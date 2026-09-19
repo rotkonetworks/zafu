@@ -38,9 +38,11 @@ export const DEFAULT_ZAPPS: Zapp[] = [
   {
     id: 'chat',
     name: 'chat',
-    description: 'zitadel messaging',
-    icon: 'i-ph-chat-circle',
-    url: '__zitadel__',
+    description: 'community discord',
+    icon: 'i-ph-discord-logo',
+    // resolves per active network to the matching community Discord - see
+    // resolveDiscordUrl. (The packaged zitadel chat is parked for now.)
+    url: '__discord__',
     category: 'social',
     builtin: true,
   },
@@ -59,6 +61,14 @@ export const DEFAULT_ZAPPS: Zapp[] = [
     description: 'trade shielded assets on penumbra',
     icon: 'i-ph-arrows-left-right',
     url: 'https://penumbra.fi',
+    category: 'finance',
+  },
+  {
+    id: 'zec-os',
+    name: 'zec-os',
+    description: 'zcash defi',
+    icon: 'i-ph-coins',
+    url: 'https://zec-os.com',
     category: 'finance',
   },
   {
@@ -179,11 +189,25 @@ export const DEFAULT_ZAPPS: Zapp[] = [
   },
 ];
 
+/**
+ * Community Discord servers the packaged `chat` zapp points at, chosen by the
+ * active network. TODO: confirm these are the canonical invite links before
+ * shipping - a stale invite sends users to a dead server.
+ */
+export const DISCORD_BY_NETWORK: Record<string, string> = {
+  zcash: 'https://discord.gg/zcash',
+  penumbra: 'https://discord.gg/penumbra',
+};
+
+/** Fall back to the Zcash server when the network has no mapping. */
+export const resolveDiscordUrl = (network: string | undefined): string =>
+  (network && DISCORD_BY_NETWORK[network]) || DISCORD_BY_NETWORK['zcash']!;
+
 /** resolve special URLs to actual chrome-extension:// URLs */
 export const resolveZappUrl = (url: string): string | null => {
-  if (url === '__sidepanel__') {
+  if (url === '__sidepanel__' || url === '__discord__') {
     return null;
-  } // handled specially
+  } // handled specially in the click handler (need active network / side panel)
   if (url === '__zitadel__') {
     return chrome.runtime.getURL('zitadel.html');
   }

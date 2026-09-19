@@ -99,7 +99,7 @@ export const Login = () => {
             need help?{' '}
             <a
               className='cursor-pointer text-teal hover:underline transition-colors'
-              href={chrome.runtime.getURL('zitadel.html?room=support')}
+              href='https://discord.gg/zcash'
               target='_blank'
               rel='noreferrer'
             >

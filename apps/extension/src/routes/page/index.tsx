@@ -8,6 +8,7 @@ import {
   CATEGORY_LABELS,
   categoryOrder,
   resolveZappUrl,
+  resolveDiscordUrl,
   type Zapp,
   type ZappCategory,
 } from './zapps';
@@ -42,12 +43,17 @@ export const PageIndex = () => {
   const [customZapps, setCustomZapps] = useState<Zapp[]>([]);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState({ name: '', url: '', description: '' });
+  // active network drives which community Discord the chat zapp opens
+  const [activeNetwork, setActiveNetwork] = useState<string | undefined>();
 
-  // load custom zapps from storage
+  // load custom zapps + active network from storage
   useEffect(() => {
-    chrome.storage.local.get(STORAGE_KEY, r => {
+    chrome.storage.local.get([STORAGE_KEY, 'activeNetwork'], r => {
       if (Array.isArray(r[STORAGE_KEY])) {
         setCustomZapps(r[STORAGE_KEY]);
+      }
+      if (typeof r['activeNetwork'] === 'string') {
+        setActiveNetwork(r['activeNetwork']);
       }
     });
   }, []);
@@ -92,6 +98,10 @@ export const PageIndex = () => {
   const handleClick = (zapp: Zapp) => {
     if (zapp.url === '__sidepanel__') {
       void openSidePanel();
+      return;
+    }
+    if (zapp.url === '__discord__') {
+      window.open(resolveDiscordUrl(activeNetwork), '_blank');
       return;
     }
     const resolved = resolveZappUrl(zapp.url);
