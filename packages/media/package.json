@@ -1,0 +1,48 @@
+{
+  "name": "@zafu/media",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "Framework-agnostic P2P media primitives - opt-in WebRTC voice/video with perfect negotiation, local background blur, and pluggable (ZID-encrypted) signaling",
+  "type": "module",
+  "keywords": ["webrtc", "p2p", "voice", "video", "background-blur", "mediapipe", "zid", "zafu", "primitives"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rotkonetworks/zafu.git",
+    "directory": "packages/media"
+  },
+  "homepage": "https://github.com/rotkonetworks/zafu/tree/main/packages/media#readme",
+  "sideEffects": false,
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
+    "lint": "eslint \"**/*.ts*\"",
+    "test": "vitest run"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  },
+  "peerDependencies": {
+    "@mediapipe/tasks-vision": "^0.10.22"
+  },
+  "peerDependenciesMeta": {
+    "@mediapipe/tasks-vision": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@mediapipe/tasks-vision": "^0.10.22",
+    "tsup": "^8.5.0"
+  }
+}

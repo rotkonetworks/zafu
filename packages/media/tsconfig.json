@@ -1,0 +1,7 @@
+{
+  "extends": "@repo/tsconfig/base.json",
+  "include": ["src"],
+  "compilerOptions": {
+    "lib": ["DOM", "DOM.Iterable", "ESNext"]
+  }
+}
