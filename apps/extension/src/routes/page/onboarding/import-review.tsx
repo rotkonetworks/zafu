@@ -9,17 +9,42 @@
  * insurance against importing the wrong wallet.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { cn } from '@repo/ui/lib/utils';
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { useStore } from '../../../state';
 import { importSelector } from '../../../state/seed-phrase/import';
 import { usePageNav } from '../../../utils/navigate';
 import { PagePath } from '../paths';
+import { navigateToPasswordPage } from './password/utils';
+import { SEED_PHRASE_ORIGIN } from './password/types';
+import { PENDING_IMPORT_NETWORKS_KEY } from './constants';
+
+type ImportNet = 'zcash' | 'penumbra';
 
 export const ImportReview = () => {
   const navigate = usePageNav();
   const { phrase, phraseIsValid } = useStore(importSelector);
+
+  // Which networks this phrase is being recovered onto. Both derive from the
+  // same seed, so both default on - but the user recovering only a Penumbra (or
+  // only a Zcash) wallet shouldn't be forced through the other network's setup
+  // (the zcash birthday, most visibly). At least one must stay selected.
+  const [nets, setNets] = useState<Record<ImportNet, boolean>>({ zcash: true, penumbra: true });
+  const anySelected = nets.zcash || nets.penumbra;
+  const toggleNet = (n: ImportNet) => setNets(s => ({ ...s, [n]: !s[n] }));
+
+  const onContinue = () => {
+    const selected = (['zcash', 'penumbra'] as const).filter(n => nets[n]);
+    sessionStorage.setItem(PENDING_IMPORT_NETWORKS_KEY, selected.join(','));
+    // the zcash birthday step is only relevant when recovering zcash; skip
+    // straight to the password otherwise.
+    if (nets.zcash) {
+      navigate(PagePath.IMPORT_BIRTHDAY);
+    } else {
+      navigateToPasswordPage(navigate, SEED_PHRASE_ORIGIN.IMPORTED);
+    }
+  };
 
   const valid = phrase.length > 0 && phrase.every(w => w.length > 0) && phraseIsValid();
 
@@ -66,18 +91,56 @@ export const ImportReview = () => {
           ))}
         </ol>
 
+        <div className='flex flex-col gap-2'>
+          <span className='text-xs text-fg-muted lowercase'>recover on</span>
+          <div className='flex gap-2'>
+            {(['zcash', 'penumbra'] as const).map(n => (
+              <button
+                key={n}
+                type='button'
+                onClick={() => toggleNet(n)}
+                aria-pressed={nets[n]}
+                className={cn(
+                  'flex flex-1 items-center justify-center gap-2 px-3 py-2 text-sm lowercase',
+                  '[border-radius:10px] border transition-colors',
+                  nets[n]
+                    ? 'border-zigner-gold/40 bg-zigner-gold/10 text-fg-high'
+                    : 'border-border-soft text-fg-muted hover:text-fg-high',
+                )}
+              >
+                <span
+                  className={cn(
+                    'inline-block size-2 rounded-full',
+                    nets[n] ? 'bg-zigner-gold' : 'border border-fg-dim',
+                  )}
+                />
+                {n}
+              </button>
+            ))}
+          </div>
+          <p className='text-label text-fg-dim lowercase leading-snug'>
+            same phrase, one wallet - pick which networks to set up now. you can enable the other
+            later in settings.
+          </p>
+        </div>
+
         <div className='mt-auto flex flex-col gap-3 pt-4'>
           <button
             type='button'
-            onClick={() => navigate(PagePath.IMPORT_BIRTHDAY)}
+            disabled={!anySelected}
+            onClick={onContinue}
             className={cn(
               'group inline-flex items-center justify-center gap-2 px-5 py-3 text-sm lowercase',
-              '[border-radius:14px] border transition-[transform,background-color] duration-200',
-              'border-zigner-gold/30 bg-zigner-gold/10 text-zigner-gold hover:-translate-y-[1px] hover:bg-zigner-gold/15',
+              '[border-radius:14px] border transition-[transform,opacity,background-color] duration-200',
+              anySelected
+                ? 'border-zigner-gold/30 bg-zigner-gold/10 text-zigner-gold hover:-translate-y-[1px] hover:bg-zigner-gold/15'
+                : 'cursor-not-allowed border-border-soft/60 bg-elev-2/30 text-fg-muted',
             )}
           >
             looks right, continue
-            <span className='i-ph-arrow-right h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5' />
+            {anySelected && (
+              <span className='i-ph-arrow-right h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5' />
+            )}
           </button>
           <button
             type='button'

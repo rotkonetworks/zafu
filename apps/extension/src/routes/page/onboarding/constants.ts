@@ -18,3 +18,10 @@ export const DEFAULT_LANDING_PAGE = 'https://zigner.zafu.pro';
 // One literal shared by the writer, the reader, and the set-password guard so
 // they can never drift.
 export const PENDING_ZCASH_BIRTHDAY_KEY = 'pendingZcashBirthday';
+
+// sessionStorage key holding which networks an IMPORT is being recovered onto,
+// as a comma-separated list (e.g. "zcash,penumbra"). Chosen on the import
+// review step and read by the birthday-step gate, the set-password guard, and
+// finalize - so all four agree on which networks to set up (and whether a
+// zcash birthday is even relevant) instead of the flow hardcoding zcash.
+export const PENDING_IMPORT_NETWORKS_KEY = 'pendingImportNetworks';

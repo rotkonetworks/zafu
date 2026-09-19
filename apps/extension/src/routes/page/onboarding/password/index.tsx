@@ -20,7 +20,7 @@ import { useFinalizeOnboarding } from './hooks';
 import { PagePath } from '../../paths';
 import { SEED_PHRASE_ORIGIN } from './types';
 import { getSeedPhraseOrigin } from './utils';
-import { PENDING_ZCASH_BIRTHDAY_KEY } from '../constants';
+import { PENDING_ZCASH_BIRTHDAY_KEY, PENDING_IMPORT_NETWORKS_KEY } from '../constants';
 
 export const SetPassword = () => {
   const navigate = usePageNav();
@@ -43,8 +43,14 @@ export const SetPassword = () => {
   // Bounce back to the birthday step; the normal forward path always has the
   // stash set right before navigating here.
   useEffect(() => {
+    // Only enforce the birthday when the import actually includes zcash - a
+    // penumbra-only recovery has no birthday step, so requiring one would bounce
+    // it back to a screen it never visited (the loop the user hit).
+    const importNets = (sessionStorage.getItem(PENDING_IMPORT_NETWORKS_KEY) ?? '').split(',');
+    const needsBirthday = importNets.includes('zcash');
     if (
       origin === SEED_PHRASE_ORIGIN.IMPORTED &&
+      needsBirthday &&
       !sessionStorage.getItem(PENDING_ZCASH_BIRTHDAY_KEY)
     ) {
       navigate(PagePath.IMPORT_BIRTHDAY);
