@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { createHashRouter, RouteObject } from 'react-router-dom';
+import { RouteErrorScreen } from '../../components/error-boundary';
 import { PopupIndex, popupIndexLoader } from './home';
 import { Login, popupLoginLoader } from './login';
 import { PopupPath } from './paths';
@@ -77,247 +78,262 @@ const LazyFallback = () => (
 export const popupRoutes: RouteObject[] = [
   {
     element: <PopupLayout />,
+    // Root-level fallback shown while initial-hydration loaders (the INDEX and
+    // LOGIN loaders below) resolve. Without it React Router 7 warns "No
+    // HydrateFallback element provided to render during initial hydration".
+    HydrateFallback: LazyFallback,
+    // Catches throws from PopupLayout's own hooks (auto-sync, swap-claim, ...)
+    // and replaces the whole view with a recoverable error screen.
+    ErrorBoundary: RouteErrorScreen,
     children: [
-      // Main tabs
+      // Second tier: page/loader throws render INSIDE the layout Outlet, so the
+      // tab chrome stays live and "go home" is one tap. Root boundary above
+      // still covers layout-hook throws.
       {
-        path: PopupPath.INDEX,
-        element: <PopupIndex />,
-        loader: popupIndexLoader,
-      },
-      {
-        path: PopupPath.STAKE,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <StakePage />
-          </Suspense>
-        ),
-      },
-      {
-        path: PopupPath.SWAP,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <SwapPage />
-          </Suspense>
-        ),
-      },
-      {
-        path: PopupPath.VOTE,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <VotePage />
-          </Suspense>
-        ),
-      },
-      {
-        path: PopupPath.INBOX,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <InboxPage />
-          </Suspense>
-        ),
-      },
-      {
-        path: PopupPath.INBOX_GROUP,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <GroupChatThread />
-          </Suspense>
-        ),
-      },
-      {
-        path: PopupPath.CONTACTS,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <ContactsPage />
-          </Suspense>
-        ),
-      },
-      {
-        path: PopupPath.SETTINGS,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <Settings />
-          </Suspense>
-        ),
-        children: settingsRoutes,
-      },
+        ErrorBoundary: RouteErrorScreen,
+        children: [
+          // Main tabs
+          {
+            path: PopupPath.INDEX,
+            element: <PopupIndex />,
+            loader: popupIndexLoader,
+          },
+          {
+            path: PopupPath.STAKE,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <StakePage />
+              </Suspense>
+            ),
+          },
+          {
+            path: PopupPath.SWAP,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <SwapPage />
+              </Suspense>
+            ),
+          },
+          {
+            path: PopupPath.VOTE,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <VotePage />
+              </Suspense>
+            ),
+          },
+          {
+            path: PopupPath.INBOX,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <InboxPage />
+              </Suspense>
+            ),
+          },
+          {
+            path: PopupPath.INBOX_GROUP,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <GroupChatThread />
+              </Suspense>
+            ),
+          },
+          {
+            path: PopupPath.CONTACTS,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <ContactsPage />
+              </Suspense>
+            ),
+          },
+          {
+            path: PopupPath.SETTINGS,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <Settings />
+              </Suspense>
+            ),
+            children: settingsRoutes,
+          },
 
-      // Identity
-      {
-        path: PopupPath.IDENTITY,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <IdentityPage />
-          </Suspense>
-        ),
-      },
-      {
-        path: PopupPath.PASSWORDS,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <PasswordsPage />
-          </Suspense>
-        ),
-      },
+          // Identity
+          {
+            path: PopupPath.IDENTITY,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <IdentityPage />
+              </Suspense>
+            ),
+          },
+          {
+            path: PopupPath.PASSWORDS,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <PasswordsPage />
+              </Suspense>
+            ),
+          },
 
-      // Send/Receive
-      {
-        path: PopupPath.SEND,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <SendPage />
-          </Suspense>
-        ),
-      },
-      {
-        path: PopupPath.RECEIVE,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <ReceivePage />
-          </Suspense>
-        ),
-      },
+          // Send/Receive
+          {
+            path: PopupPath.SEND,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <SendPage />
+              </Suspense>
+            ),
+          },
+          {
+            path: PopupPath.RECEIVE,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <ReceivePage />
+              </Suspense>
+            ),
+          },
 
-      // Cosmos airgap signing (dedicated window)
-      {
-        path: PopupPath.COSMOS_SIGN,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <CosmosSign />
-          </Suspense>
-        ),
-      },
+          // Cosmos airgap signing (dedicated window)
+          {
+            path: PopupPath.COSMOS_SIGN,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <CosmosSign />
+              </Suspense>
+            ),
+          },
 
-      // Multisig
-      {
-        path: PopupPath.MULTISIG,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <MultisigSessions />
-          </Suspense>
-        ),
-      },
-      {
-        path: PopupPath.MULTISIG_CREATE,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <MultisigCreate />
-          </Suspense>
-        ),
-      },
-      {
-        path: PopupPath.MULTISIG_JOIN,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <MultisigJoin />
-          </Suspense>
-        ),
-      },
-      {
-        path: PopupPath.MULTISIG_SIGN,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <MultisigSign />
-          </Suspense>
-        ),
-      },
-      {
-        path: PopupPath.NOTE_SYNC,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <NoteSyncPage />
-          </Suspense>
-        ),
-      },
+          // Multisig
+          {
+            path: PopupPath.MULTISIG,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <MultisigSessions />
+              </Suspense>
+            ),
+          },
+          {
+            path: PopupPath.MULTISIG_CREATE,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <MultisigCreate />
+              </Suspense>
+            ),
+          },
+          {
+            path: PopupPath.MULTISIG_JOIN,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <MultisigJoin />
+              </Suspense>
+            ),
+          },
+          {
+            path: PopupPath.MULTISIG_SIGN,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <MultisigSign />
+              </Suspense>
+            ),
+          },
+          {
+            path: PopupPath.NOTE_SYNC,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <NoteSyncPage />
+              </Suspense>
+            ),
+          },
 
-      // Per-pool notes (orchard legacy vs ironwood). Registered only when the
-      // IRONWOOD_MIGRATION flag is ON - the dual-pool UI is dormant otherwise.
-      ...(IRONWOOD_MIGRATION
-        ? [
-            {
-              path: PopupPath.POOL_NOTES,
-              element: (
-                <Suspense fallback={<LazyFallback />}>
-                  <PoolNotesPage />
-                </Suspense>
-              ),
-            },
-          ]
-        : []),
+          // Per-pool notes (orchard legacy vs ironwood). Registered only when the
+          // IRONWOOD_MIGRATION flag is ON - the dual-pool UI is dormant otherwise.
+          ...(IRONWOOD_MIGRATION
+            ? [
+                {
+                  path: PopupPath.POOL_NOTES,
+                  element: (
+                    <Suspense fallback={<LazyFallback />}>
+                      <PoolNotesPage />
+                    </Suspense>
+                  ),
+                },
+              ]
+            : []),
 
-      // zid contact picker (external app requests)
-      {
-        path: PopupPath.CONTACT_PICKER,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <ContactPicker />
-          </Suspense>
-        ),
-      },
-      {
-        path: PopupPath.FROST_APPROVE,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <FrostApprove />
-          </Suspense>
-        ),
-      },
+          // zid contact picker (external app requests)
+          {
+            path: PopupPath.CONTACT_PICKER,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <ContactPicker />
+              </Suspense>
+            ),
+          },
+          {
+            path: PopupPath.FROST_APPROVE,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <FrostApprove />
+              </Suspense>
+            ),
+          },
 
-      // Auth
-      {
-        path: PopupPath.LOGIN,
-        element: <Login />,
-        loader: popupLoginLoader,
-      },
+          // Auth
+          {
+            path: PopupPath.LOGIN,
+            element: <Login />,
+            loader: popupLoginLoader,
+          },
 
-      // Approvals
-      {
-        path: PopupPath.TRANSACTION_APPROVAL,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <TransactionApproval />
-          </Suspense>
-        ),
-      },
-      {
-        path: PopupPath.ORIGIN_APPROVAL,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <OriginApproval />
-          </Suspense>
-        ),
-      },
-      {
-        path: PopupPath.SIGN_APPROVAL,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <SignApproval />
-          </Suspense>
-        ),
-      },
-      {
-        path: PopupPath.CAPABILITY_APPROVAL,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <CapabilityApproval />
-          </Suspense>
-        ),
-      },
-      {
-        path: PopupPath.ZCASH_SEND_APPROVAL,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <ZcashSendApproval />
-          </Suspense>
-        ),
-      },
-      {
-        path: PopupPath.KEPLR_APPROVAL,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <KeplrApproval />
-          </Suspense>
-        ),
+          // Approvals
+          {
+            path: PopupPath.TRANSACTION_APPROVAL,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <TransactionApproval />
+              </Suspense>
+            ),
+          },
+          {
+            path: PopupPath.ORIGIN_APPROVAL,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <OriginApproval />
+              </Suspense>
+            ),
+          },
+          {
+            path: PopupPath.SIGN_APPROVAL,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <SignApproval />
+              </Suspense>
+            ),
+          },
+          {
+            path: PopupPath.CAPABILITY_APPROVAL,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <CapabilityApproval />
+              </Suspense>
+            ),
+          },
+          {
+            path: PopupPath.ZCASH_SEND_APPROVAL,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <ZcashSendApproval />
+              </Suspense>
+            ),
+          },
+          {
+            path: PopupPath.KEPLR_APPROVAL,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <KeplrApproval />
+              </Suspense>
+            ),
+          },
+        ],
       },
     ],
   },

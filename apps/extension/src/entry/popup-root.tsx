@@ -7,6 +7,7 @@ import { isSidePanel } from '../utils/popup-detection';
 import { announceSidePanelPresence } from '../side-panel-presence';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
+import { AppErrorBoundary, reportRenderError } from '../components/error-boundary';
 
 import '@repo/ui/styles/globals.css';
 import '@repo/ui/styles/icons.css';
@@ -89,4 +90,11 @@ void localExtStorage.get('zafuFont').then(v => {
   }
 });
 
-createRoot(rootElement).render(<MainPopup />);
+createRoot(rootElement, {
+  onCaughtError: (error, info) => reportRenderError(error, info),
+  onUncaughtError: (error, info) => reportRenderError(error, info),
+}).render(
+  <AppErrorBoundary>
+    <MainPopup />
+  </AppErrorBoundary>,
+);

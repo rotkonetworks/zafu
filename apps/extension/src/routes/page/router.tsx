@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { createHashRouter, Outlet, RouteObject } from 'react-router-dom';
+import { RouteErrorScreen } from '../../components/error-boundary';
 import { PageIndex, pageIndexLoader } from '.';
 import { onboardingRoutes } from './onboarding/routes';
 import { PagePath } from './paths';
@@ -18,6 +19,12 @@ const LazyFallback = () => (
 export const pageRoutes: RouteObject[] = [
   {
     element: <Outlet />,
+    // Fallback while the initial-hydration INDEX loader resolves - avoids RR7's
+    // "No HydrateFallback element provided to render during initial hydration".
+    HydrateFallback: LazyFallback,
+    // Recoverable error screen for loader/render throws (incl. lazy-chunk 404s
+    // after an MV3 auto-update) instead of React Router's bare default screen.
+    ErrorBoundary: RouteErrorScreen,
     children: [
       {
         path: PagePath.INDEX,
