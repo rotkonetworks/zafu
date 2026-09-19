@@ -36,6 +36,13 @@ export const useFinalizeOnboarding = () => {
   const handleSubmit = useCallback(
     async (event: FormEvent, password: string) => {
       event.preventDefault();
+      // Snapshot the wallets that already exist BEFORE this import writes
+      // anything, so a failure rolls back to exactly this state. The old
+      // rollback did remove('vaults'), which deleted every wallet on the
+      // profile - a failed import must never take out the user's other wallets.
+      const vaultsSnapshot = (await localExtStorage.get('vaults')) ?? [];
+      const penumbraSnapshot = (await localExtStorage.get('penumbraWallets')) ?? [];
+
       try {
         setLoading(true);
         setError(undefined);
@@ -141,9 +148,11 @@ export const useFinalizeOnboarding = () => {
         navigate(PagePath.ONBOARDING_SUCCESS, { state: { origin } });
       } catch (e) {
         setError(String(e));
-        // roll back on failure
-        await localExtStorage.remove('penumbraWallets');
-        await localExtStorage.remove('vaults');
+        // roll back to the pre-import snapshot - restore what was there rather
+        // than wiping everything, so a failed import leaves the user's existing
+        // wallets untouched.
+        await localExtStorage.set('vaults', vaultsSnapshot);
+        await localExtStorage.set('penumbraWallets', penumbraSnapshot);
       } finally {
         setLoading(false);
       }
