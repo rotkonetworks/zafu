@@ -61,14 +61,25 @@ export interface SwapQuoteResponse {
   timestamp: string;
   quoteRequest: SwapQuoteRequest;
   quote: {
+    // present on a real quote; a dry (estimate) quote returns "" here since no
+    // deposit address is issued. Callers must only read it on real quotes.
     depositAddress: string;
     amountIn: string;
     amountInFormatted: string;
     amountInUsd: string;
+    minAmountIn?: string;
     amountOut: string;
     amountOutFormatted: string;
     amountOutUsd: string;
-    deadline: string;
+    // guaranteed floor after slippage - what the recipient is assured to get
+    minAmountOut?: string;
+    // seconds the route is expected to take end-to-end
+    timeEstimate?: number;
+    // destination-chain withdrawal (network) fee, in destination base units
+    withdrawFee?: string;
+    // fee charged only if the swap has to refund, in origin base units
+    refundFee?: string;
+    deadline?: string;
   };
 }
 
@@ -141,11 +152,16 @@ export async function requestQuote(params: {
   recipient: string;
   refundTo: string;
   slippageTolerance?: number; // percentage * 100, default 200 (2%)
+  // dry: price/fee estimate only - no deposit address is issued, so no funds
+  // can move. Used to quote before the user has entered a real address. A
+  // VALID destination-chain recipient is still required (the API validates it
+  // even when dry), so callers pass a placeholder for the estimate.
+  dry?: boolean;
 }): Promise<SwapQuoteResponse> {
   const deadline = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 
   const request: SwapQuoteRequest = {
-    dry: false,
+    dry: params.dry ?? false,
     swapType: params.swapType,
     slippageTolerance: params.slippageTolerance ?? 200,
     originAsset: params.originAsset,
@@ -192,8 +208,37 @@ export function findZecAssetId(tokens: NearToken[]): string | undefined {
 }
 
 /** Filter tokens to only those swappable with ZEC (exclude ZEC variants). */
+/**
+ * Reduce the raw NEAR token list (which lists every symbol once per chain -
+ * e.g. BTC on btc/near/aptos, ZEC on zec/sol/aptos/...) to ONE canonical entry
+ * per symbol. Without this the picker shows confusing duplicates and defaults
+ * can land on a wrapped variant ("BTC on aptos"). Preference order:
+ *   1. the asset's native chain (blockchain === symbol, e.g. BTC->btc, ETH->eth)
+ *   2. a popularity list of well-supported chains
+ *   3. whatever came first
+ * ZEC is dropped (it is always the local side of the swap, not a pick).
+ * Multi-chain selection can return later behind the provider abstraction.
+ */
+const CHAIN_PREFERENCE = ['btc', 'eth', 'sol', 'near', 'arbitrum', 'base', 'polygon'];
 export function filterSwappableTokens(tokens: NearToken[]): NearToken[] {
-  return tokens.filter(t => t.symbol !== 'ZEC');
+  const chainRank = (t: NearToken): number => {
+    if (t.blockchain === t.symbol.toLowerCase()) {
+      return -1; // native chain wins
+    }
+    const i = CHAIN_PREFERENCE.indexOf(t.blockchain);
+    return i >= 0 ? i : CHAIN_PREFERENCE.length;
+  };
+  const bySymbol = new Map<string, NearToken>();
+  for (const t of tokens) {
+    if (t.symbol === 'ZEC') {
+      continue;
+    }
+    const cur = bySymbol.get(t.symbol);
+    if (!cur || chainRank(t) < chainRank(cur)) {
+      bySymbol.set(t.symbol, t);
+    }
+  }
+  return [...bySymbol.values()];
 }
 
 /** Format amount from base units to display (e.g. zatoshis → ZEC). */

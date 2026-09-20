@@ -648,7 +648,10 @@ function boot() {
   let encState: EncState = 'public';
   const messagesPerRoom = new Map<string, Msg[]>();
   const joinedRooms = new Set<string>();
-  const DEFAULT_CHANNELS = ['zitadel', 'support', 'dev'];
+  // Well-known public channels. Kept in sync with the relay's seeded
+  // channels (zcli/bin/relay --default-channels): the relay pre-creates
+  // these as persistent rooms so a non-pro visitor can join them.
+  const DEFAULT_CHANNELS = ['zitadel', 'dev', 'support'];
   const history: string[] = [];
   let histIdx = -1;
 
@@ -1726,9 +1729,13 @@ function boot() {
         const msg = JSON.parse(ev.data);
         switch (msg.t) {
           case 'msg': {
-            if (msg.nick === nick) {
-              break;
-            }
+            // NB: self-echo dedup is NOT done here on nick. The relay packs
+            // its own stale per-connection nick (set at join, never updated
+            // by /nick - the protocol has no NICK command), so `msg.nick`
+            // can differ from our current `nick` after a rename and the old
+            // nick-equality skip would double-render our own lines. We dedup
+            // below on verified pubkey (rename-proof), falling back to nick
+            // only for unsigned messages.
             // nick -> pubkey bindings are intentionally NOT taken from
             // unverified relay-side fields. they come only from
             // verified zid-auth-v1 announces or zid-msg-v1 envelopes
@@ -1754,6 +1761,11 @@ function boot() {
             let visibleText: string = msg.text;
             let senderPubkey: string | undefined;
             let msgVerified = false;
+            // Display nick: default to the relay-packed nick, but prefer the
+            // verified proof.nick once we validate a zid-msg-v1 envelope - the
+            // relay's copy is stale after a /nick rename, the signed one is
+            // authoritative and safe to trust (it's inside the signature).
+            let displayNick: string = msg.nick;
             if (typeof msg.text === 'string' && msg.text.startsWith('{')) {
               try {
                 const obj = JSON.parse(msg.text);
@@ -1793,6 +1805,7 @@ function boot() {
                   rebindIdentity(proof.nick, proof.pubkey);
                   visibleText = proof.text;
                   senderPubkey = proof.pubkey;
+                  displayNick = proof.nick;
                   msgVerified = true;
                 }
               } catch {
@@ -1808,13 +1821,23 @@ function boot() {
             if (senderPub && ignoredPubkeys.has(senderPub.toLowerCase())) {
               break;
             }
+            // self-echo dedup: we already rendered our own line locally on
+            // send. Match on verified identity (our pubkey) so a /nick rename
+            // can't defeat it; fall back to nick only for unsigned messages.
+            if (senderPubkey && zidPubkey) {
+              if (senderPubkey.toLowerCase() === zidPubkey.toLowerCase()) {
+                break;
+              }
+            } else if (!senderPubkey && msg.nick === nick) {
+              break;
+            }
             // detect IRC-style /me action via CTCP marker. for signed
             // messages, the marker travels inside the signature so it
             // can't be added or stripped without invalidating the proof.
             const isAction = isActionText(visibleText);
             const renderText = isAction ? stripAction(visibleText) : visibleText;
             addMsg(
-              msg.nick,
+              displayNick,
               renderText,
               false,
               msg.room || currentRoom || undefined,

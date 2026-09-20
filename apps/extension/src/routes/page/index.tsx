@@ -116,12 +116,16 @@ export const PageIndex = () => {
 
   return (
     <FadeTransition>
-      <div className='flex flex-col gap-6 max-w-2xl mx-auto pt-8 px-4'>
-        <div className='flex items-center justify-between'>
-          <h1 className='text-xl font-medium'>zafu</h1>
+      <div className='mx-auto flex max-w-2xl flex-col gap-9 px-4 pb-12 pt-10'>
+        <div className='flex items-end justify-between border-b border-border-soft/50 pb-6'>
+          <div className='flex flex-col gap-2'>
+            <h1 className='text-3xl font-semibold lowercase tracking-tight text-fg-high'>zafu</h1>
+            <div className='h-px w-8 bg-zigner-gold/70' />
+            <p className='text-label lowercase tracking-wide text-fg-muted'>apps &amp; integrations</p>
+          </div>
           <button
             onClick={() => setAdding(!adding)}
-            className='flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg-high transition-colors'
+            className='flex items-center gap-1.5 rounded-full border border-border-soft bg-elev-1 px-3.5 py-1.5 text-xs text-fg-muted transition-colors hover:border-zigner-gold/40 hover:text-fg-high'
           >
             <span className='i-ph-plus h-3.5 w-3.5' />
             add zapp
@@ -167,25 +171,38 @@ export const PageIndex = () => {
         )}
 
         {grouped.map(([category, zapps]) => (
-          <div key={category}>
-            <h2 className='text-label font-medium text-fg-muted uppercase tracking-wider mb-2'>
-              {CATEGORY_LABELS[category]}
-            </h2>
-            <div className='grid grid-cols-3 gap-3'>
+          <div key={category} className='flex flex-col gap-3'>
+            <div className='flex items-center gap-3'>
+              <h2 className='text-label font-semibold uppercase tracking-wider text-fg-muted'>
+                {CATEGORY_LABELS[category]}
+              </h2>
+              <div className='h-px flex-1 bg-border-soft/60' />
+            </div>
+            <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
               {zapps.map(zapp => (
                 <div key={zapp.id} className='group relative'>
                   <button
                     onClick={() => handleClick(zapp)}
-                    className='w-full flex flex-col items-center gap-2 rounded-lg border border-border-soft bg-elev-1 p-4 hover:bg-elev-1 transition-colors'
+                    className='flex w-full items-center gap-3 rounded-xl border border-border-soft bg-elev-1 p-3 text-left transition-all duration-150 hover:-translate-y-0.5 hover:border-zigner-gold/40 hover:bg-elev-2 hover:shadow-lg hover:shadow-black/20'
                   >
-                    <span className={`${zapp.icon} h-6 w-6 text-fg-muted`} />
-                    <span className='text-xs font-medium'>{zapp.name}</span>
-                    <span className='text-label text-fg-dim'>{zapp.description}</span>
+                    <span className='flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-elev-2 transition-colors group-hover:bg-zigner-gold/10'>
+                      <span
+                        className={`${zapp.icon} h-5 w-5 text-fg-muted transition-colors group-hover:text-zigner-gold`}
+                      />
+                    </span>
+                    <span className='flex min-w-0 flex-col'>
+                      <span className='truncate text-sm font-medium text-fg-high'>{zapp.name}</span>
+                      <span className='truncate text-label text-fg-muted' title={zapp.description}>
+                        {zapp.description}
+                      </span>
+                    </span>
+                    <span className='i-ph-arrow-up-right ml-auto h-4 w-4 shrink-0 text-fg-dim opacity-0 transition-opacity group-hover:opacity-100' />
                   </button>
                   {!zapp.builtin && (
                     <button
                       onClick={() => handleRemove(zapp.id)}
-                      className='absolute -top-1 -right-1 hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground text-xs'
+                      className='absolute -right-1.5 -top-1.5 hidden h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm group-hover:flex'
+                      title='remove zapp'
                     >
                       <span className='i-ph-x h-3 w-3' />
                     </button>
@@ -196,7 +213,7 @@ export const PageIndex = () => {
           </div>
         ))}
 
-        <div className='text-label text-fg-muted/40 text-center pb-4'>MIT - rotko networks</div>
+        <div className='pt-2 text-center text-label text-fg-muted/40'>MIT - rotko networks</div>
       </div>
     </FadeTransition>
   );

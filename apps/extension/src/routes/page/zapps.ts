@@ -36,13 +36,31 @@ export const DEFAULT_ZAPPS: Zapp[] = [
     builtin: true,
   },
   {
-    id: 'chat',
-    name: 'chat',
-    description: 'community discord',
+    id: 'zitadel',
+    name: 'zitadel',
+    description: 'zafu chat - support & community',
+    icon: 'i-ph-chat-circle',
+    // packaged in-extension chat over the zafu relay (zrelay.rotko.net).
+    // resolves to zitadel.html via resolveZappUrl('__zitadel__').
+    url: '__zitadel__',
+    category: 'social',
+    builtin: true,
+  },
+  {
+    id: 'discord-zcash',
+    name: 'zcash discord',
+    description: 'zcash community',
     icon: 'i-ph-discord-logo',
-    // resolves per active network to the matching community Discord - see
-    // resolveDiscordUrl. (The packaged zitadel chat is parked for now.)
-    url: '__discord__',
+    url: 'https://discord.gg/zcash',
+    category: 'social',
+    builtin: true,
+  },
+  {
+    id: 'discord-penumbra',
+    name: 'penumbra discord',
+    description: 'penumbra community',
+    icon: 'i-ph-discord-logo',
+    url: 'https://discord.gg/penumbra',
     category: 'social',
     builtin: true,
   },
@@ -76,7 +94,7 @@ export const DEFAULT_ZAPPS: Zapp[] = [
     name: 'poker',
     description: 'play with zcash',
     icon: 'i-ph-spade',
-    url: 'https://poker.zafu.pro',
+    url: 'https://zkbtc.org',
     category: 'games',
   },
   {
