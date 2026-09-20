@@ -1,10 +1,20 @@
 {
   "name": "@zafu/media",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "MIT",
   "description": "Framework-agnostic P2P media primitives - opt-in WebRTC voice/video with perfect negotiation, local background blur, and pluggable (ZID-encrypted) signaling",
   "type": "module",
-  "keywords": ["webrtc", "p2p", "voice", "video", "background-blur", "mediapipe", "zid", "zafu", "primitives"],
+  "keywords": [
+    "webrtc",
+    "p2p",
+    "voice",
+    "video",
+    "background-blur",
+    "mediapipe",
+    "zid",
+    "zafu",
+    "primitives"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rotkonetworks/zafu.git",
@@ -12,7 +22,11 @@
   },
   "homepage": "https://github.com/rotkonetworks/zafu/tree/main/packages/media#readme",
   "sideEffects": false,
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
     "lint": "eslint \"**/*.ts*\"",
