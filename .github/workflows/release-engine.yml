@@ -205,11 +205,14 @@ jobs:
       # service account: the CWS v1.1 API requires an OAuth user added as a
       # publisher on the listing. CWS_PUBLISHER_JSON holds {clientId,
       # clientSecret, refreshToken}, produced once via
-      # `npx chrome-webstore-upload-keys`. Kept non-fatal — a CWS hiccup must
-      # never fail the GitHub release.
+      # `npx chrome-webstore-upload-keys`.
+      #
+      # This runs AFTER the GitHub release is cut, so a failure here cannot
+      # un-cut it - but it must not pass silently either, or the store keeps
+      # serving the previous version while the tag says otherwise. No
+      # continue-on-error: the run goes red, and re-running it is safe.
       - name: Publish to Chrome Web Store
         if: inputs.release_mode != 'none'
-        continue-on-error: true
         env:
           CWS_PUBLISHER_JSON: ${{ secrets.CWS_PUBLISHER_JSON }}
           VER: ${{ inputs.version }}

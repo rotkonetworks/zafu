@@ -25,8 +25,7 @@
     "pretest": "playwright install",
     "test": "turbo test",
     "test:rust": "turbo test:rust",
-    "watch-and-repack": "./scripts/watch-and-repack.sh",
-    "zip": "pnpm tsx apps/extension/src/utils/zip-extension.ts"
+    "watch-and-repack": "./scripts/watch-and-repack.sh"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^1.10.0",

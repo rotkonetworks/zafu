@@ -22,6 +22,12 @@ on:
         default: false
         type: boolean
 
+# Two prod dispatches must never race: the CWS API rejects a second upload for a
+# version already in review, and both runs would fight over the same tag.
+concurrency:
+  group: release-prod
+  cancel-in-progress: false
+
 jobs:
   version:
     name: Verify prod version
