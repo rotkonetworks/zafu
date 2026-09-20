@@ -1,9 +1,9 @@
 name: Publish @zafu SDK (npm, OIDC)
 
-# Publishes the @zafu SDK trio (@zafu/protocol, @zafu/pq, @zafu/zid) to npm
-# using Trusted Publishing (OIDC) - no long-lived token, no 2FA prompt, and
-# automatic provenance. This is the durable path once npm removes token-based
-# 2FA bypass (announced for 2027).
+# Publishes the @zafu npm packages (@zafu/protocol, @zafu/pq, @zafu/zid,
+# @zafu/media) using Trusted Publishing (OIDC) - no long-lived token, no 2FA
+# prompt, and automatic provenance. This is the durable path once npm removes
+# token-based 2FA bypass (announced for 2027).
 #
 # PREREQUISITES (one-time, on npmjs.com, per package):
 #   1. The package must already EXIST (the very first publish of a brand-new
@@ -13,14 +13,14 @@ name: Publish @zafu SDK (npm, OIDC)
 #        Organization/owner : rotkonetworks
 #        Repository         : zafu
 #        Workflow filename  : publish-zafu-sdk.yml
-#      Do this for all three: @zafu/protocol, @zafu/pq, @zafu/zid.
+#      Do this for all four: @zafu/protocol, @zafu/pq, @zafu/zid, @zafu/media.
 #   3. After OIDC is proven, flip each package to
 #      "Require two-factor authentication and disallow tokens" and revoke the
 #      bootstrap automation token.
 #
 # Deliberately manual (workflow_dispatch): a release is a decision, never a
-# side effect of a push. Bump all three versions together in their
-# package.json files, commit, then run this.
+# side effect of a push. Bump the versions together in their package.json
+# files, commit, then run this.
 
 on:
   workflow_dispatch:
@@ -63,24 +63,30 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Build SDK packages
-        run: pnpm --filter @zafu/protocol --filter @zafu/pq --filter @zafu/zid build
+      - name: Build packages
+        run: pnpm --filter @zafu/protocol --filter @zafu/pq --filter @zafu/zid --filter @zafu/media build
 
       - name: Pack tarballs (applies publishConfig dist override)
         run: |
           mkdir -p "$GITHUB_WORKSPACE/tarballs"
-          pnpm --filter @zafu/protocol pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
-          pnpm --filter @zafu/pq       pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
-          pnpm --filter @zafu/zid      pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
+          # `pnpm --filter <pkg> pack` is NOT a valid invocation: --filter implies
+          # recursive mode and `pack` rejects it ("Unknown option: 'recursive'"),
+          # so the whole step aborts before anything is published. Run pack via
+          # exec, which cds into each package directory first.
+          pnpm --filter @zafu/protocol exec pnpm pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
+          pnpm --filter @zafu/pq       exec pnpm pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
+          pnpm --filter @zafu/zid      exec pnpm pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
+          pnpm --filter @zafu/media    exec pnpm pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
           ls -la "$GITHUB_WORKSPACE/tarballs"
 
-      # Publish in dependency order (protocol + pq first, zid depends on both).
+      # Publish in dependency order (protocol + pq first, zid depends on both;
+      # media depends on neither and goes last).
       # No NODE_AUTH_TOKEN: OIDC supplies short-lived, per-run credentials.
       - name: Publish to npm (OIDC + provenance)
         if: ${{ !inputs.dry_run }}
         run: |
           set -euo pipefail
-          for pkg in protocol pq zid; do
+          for pkg in protocol pq zid media; do
             tgz=$(ls "$GITHUB_WORKSPACE"/tarballs/zafu-${pkg}-*.tgz)
             echo "publishing $tgz"
             npm publish "$tgz" --access public --provenance
