@@ -12,8 +12,8 @@ analytics, no tracking.
 
 **your keys, your device.** spending keys never leave your device. the
 extension proves transactions locally using WASM (halo2 for zcash,
-groth16/plonk for penumbra). with zigner, spending keys stay on a
-separate air-gapped device.
+groth16 for penumbra). with zigner, spending keys stay on a separate
+air-gapped device.
 
 **minimal trust.** the extension connects to light client endpoints for
 chain data (compact blocks). it does not trust the server with any
@@ -26,21 +26,31 @@ communication.
 
 ## features
 
-- zcash shielded transactions (orchard)
+- zcash shielded transactions (orchard, NU6.3 / ironwood)
 - penumbra shielded transactions
+- penumbra staking and in-wallet private DEX swaps
+- governance voting for penumbra and zcash
+- cross-chain ZEC swaps via a third-party service (NEAR 1Click)
 - FROST threshold multisig for zcash
 - zigner air-gapped signing via QR codes
 - zid cross-network identity
-- contact cards via shielded memos
+- encrypted inbox and contact cards via shielded memos
 - encrypted wallet storage (AES-256-GCM)
+- optional SOCKS5 proxy for all extension traffic
 - side panel and popup modes
 
 ## networks
 
-| network  | send | receive | sync | swap | stake |
-| -------- | ---- | ------- | ---- | ---- | ----- |
-| penumbra | yes  | yes     | yes  | yes  | yes   |
-| zcash    | yes  | yes     | yes  | -    | -     |
+| network  | send | receive | sync | swap  | stake |
+| -------- | ---- | ------- | ---- | ----- | ----- |
+| penumbra | yes  | yes     | yes  | yes   | yes   |
+| zcash    | yes  | yes     | yes  | yes\* | -     |
+
+\* zcash swap is a cross-chain swap through a third-party, potentially
+custodial service (NEAR 1Click / Defuse), not a shielded on-chain swap.
+
+noble (native USDC) is also launched as a penumbra IBC subnetwork for
+unshielding and off-ramp flows. see [networks](guide/networks.md).
 
 ## source
 

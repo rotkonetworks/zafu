@@ -143,13 +143,14 @@ parsers must skip unknown tags by reading the length and advancing.
 
     tag    length   description
     ---    ------   -----------
-    0x01   32       ed25519 zid public key (signals DH messaging capability)
-    0x02   var      post-quantum public key (reserved, format TBD)
+    0x01   32       ed25519 zid public key (per-contact sender identity)
+    0x02   var      post-quantum public key (reserved, not yet emitted)
 
-the presence of tag 0x01 indicates the sender supports zid-authenticated
-encrypted messaging (type 0x06). the key in the value is the sender's
-per-contact zid, unique to this relationship. see
-[encrypted messaging](encrypted-messaging.md) for details.
+the presence of tag 0x01 carries the sender's per-contact zid, unique to
+this relationship - it authenticates the sender and can be converted to
+x25519 for key agreement. tag 0x02 is reserved for a post-quantum key
+and is not yet emitted. see [encrypted messaging](encrypted-messaging.md)
+for how encryption is actually done.
 
 ### size budget
 
@@ -157,7 +158,10 @@ per-contact zid, unique to this relationship. see
     typical UA:           ~300 bytes
     zid extension:        35 bytes (3 header + 32 pubkey)
     typical total:        ~360 bytes (fits single memo)
-    with PQ extension:    ~1,260 bytes (requires fragmentation)
+
+a reserved PQ extension (tag 0x02) would carry a large key - an X-Wing
+public key is 1,216 bytes - pushing the card past one memo into
+fragmentation. it is not yet emitted.
 
 name length is capped at u8 (255 bytes). address length is u16be (up to
 65,535 bytes) because zcash unified addresses with multiple receiver
@@ -165,30 +169,17 @@ types (orchard + sapling + transparent) can exceed 255 bytes.
 
 ## 0x06 - encryptedmessage
 
-zid-authenticated encrypted payload providing sender authentication and
-viewing-key resistance on top of zcash's shielded encryption. see
-[encrypted messaging](encrypted-messaging.md) for the full
-specification.
+RESERVED and not yet implemented. the type is defined and the inbox
+renders received 0x06 memos as "encrypted message (decryption not yet
+supported)", but the wallet has no encoder or decoder for it - no
+encrypted memo is produced or read.
 
-### wire format (payload after zafu header)
-
-    offset  size    field
-    0       32      sender zid public key (ed25519)
-    32      32      ephemeral public key (x25519)
-    64      12      nonce
-    76      var     ciphertext + GCM tag (16 bytes)
-
-    overhead: 76 + 16 = 92 bytes
-    plaintext capacity (single memo): 508 - 92 = 416 bytes
-    plaintext capacity (fragmented): up to 7,288 bytes
-
-the inner plaintext is a typed payload:
-
-    byte 0:    inner MemoType
-    bytes 1-N: inner payload
-
-any message type can be encrypted, including Text, ContactCard, and
-Data.
+the eventual design wraps a typed inner plaintext (byte 0 = inner
+MemoType) to add sender authentication and viewing-key resistance, but
+the exact construction is not fixed. end-to-end encryption in zafu today
+runs off the memo path entirely - see
+[encrypted messaging](encrypted-messaging.md) for the sealed-box and
+Noise mechanisms actually in use.
 
 ## 0x07 - data
 

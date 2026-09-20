@@ -11,20 +11,23 @@ or full-page tab.
 - `manifest_version: 3`
 - minimum chrome 119
 - permissions: `storage`, `unlimitedStorage`, `offscreen`, `alarms`, `sidePanel`,
-  `contextMenus`
+  `contextMenus`, `proxy` (`proxy` backs the transport-privacy proxy feature)
 - `host_permissions: <all_urls>` - needed for grpc-web requests to arbitrary
   endpoints and content script injection
 - `externally_connectable` matches `https://*/*` plus localhost variants, allowing
   dapps to send messages directly via `chrome.runtime.sendMessage`
 - csp allows `wasm-unsafe-eval` for penumbra and zcash wasm modules
 
-two content scripts are declared, both injected at `document_start` on all https
+five content scripts are declared, all injected at `document_start` on all https
 pages and localhost:
 
-| script                        | world    | purpose                            |
-| ----------------------------- | -------- | ---------------------------------- |
-| `injected-session.js`         | ISOLATED | relay messages between page and sw |
-| `injected-penumbra-global.js` | MAIN     | inject `PenumbraSymbol` provider   |
+| script                        | world    | purpose                                     |
+| ----------------------------- | -------- | ------------------------------------------- |
+| `injected-session.js`         | ISOLATED | relay penumbra messages between page and sw |
+| `keplr-bridge.js`             | ISOLATED | relay keplr messages between page and sw    |
+| `injected-penumbra-global.js` | MAIN     | inject the `PenumbraSymbol` provider        |
+| `injected-keplr.js`           | MAIN     | inject a `window.keplr` provider for cosmos |
+| `passkey-intercept.js`        | MAIN     | wrap `navigator.credentials` (webauthn)     |
 
 ## service worker lifecycle
 
@@ -118,11 +121,24 @@ the service worker listens for `chrome.storage.local` changes to react to:
   services are initialized
 - **custom chainspecs** - polkadot custom chainspecs are reloaded
 
-### background sync
+### alarms and background sync
 
-a chrome alarm fires every 30 minutes to trigger background block sync. this is
-gated by a user privacy setting (`enableBackgroundSync`). when disabled, no
-network requests are made in the background.
+the service worker registers three `chrome.alarms`:
+
+- `blockSync` - fires every 30 minutes to trigger background block sync. only
+  transparent networks honor the `enableBackgroundSync` privacy setting; shielded
+  (penumbra, zcash) and light-client (polkadot) networks always sync, since trial
+  decryption and p2p never leak addresses and those networks expose no toggle
+- `idleCheck` - fires every minute to drive the idle auto-lock
+- `ibcTransferPoll` - fires every minute to poll pending ibc transfers for arrival
+  or timeout
+
+### idle auto-lock
+
+the worker tracks a `lastActivityMs` timestamp. only messages that originate from
+the ui (popup, side panel, page) or from dapp interactions (external messages)
+reset the timer - background service messages (sync, alarms) deliberately do not.
+`idleCheck` locks the keyring once the idle window elapses.
 
 ### offscreen document
 
@@ -205,10 +221,46 @@ interfere.
 
 ## external messages
 
-the extension also handles `chrome.runtime.onMessageExternal` for:
+the extension handles `chrome.runtime.onMessageExternal` with three listeners:
 
-- **sign requests** - approved origins can request ed25519 identity signatures
-- **easter egg messages** - external message handler for misc interactions
+- `signRequestListener` - approved origins can request ed25519 identity signatures
+- `externalMessageListener` - the general `zafu_*` protocol (contact picking, frost
+  ceremonies, capability grants, zcash send, etc.)
+- `encryptionMessageListener` - the external sealed-box encrypt/decrypt api and zid
+  public key lookup
+
+popup results are sent back over the internal `chrome.runtime.sendMessage`
+(`onMessage`) channel, but a small bridge routes a known set of internal result
+types (`zafu_pick_contacts_result`, `zafu_frost_result`, `zafu_capability_result`,
+`zafu_zcash_send_result`, `zafu_encryption_approval_result`) into the external
+listeners that own their handlers.
+
+a separate `keplr` listener on `chrome.runtime.onMessage` serves the injected
+`window.keplr` provider for cosmos dapps.
+
+## routing and error handling
+
+the ui bundles have three entry points in `apps/extension/src/entry/`:
+
+- `popup-root.tsx` - renders `popup.html` and `sidepanel.html` (both use the same
+  bundle and popup router)
+- `page-root.tsx` - renders the full-page `page.html` (options / onboarding)
+- `offscreen-handler.ts` - the offscreen document that runs parallel zcash proving
+
+both routers are `createHashRouter` instances (react-router-dom 7). because every
+route is `lazy()`-loaded, a chrome auto-update while a popup or the long-lived side
+panel is open can 404 the old chunk urls and throw a `ChunkLoadError` on `import()`.
+`src/components/error-boundary.tsx` handles this:
+
+- `RouteErrorScreen` is wired as each router's `ErrorBoundary` - it catches loader,
+  action, and render throws (including lazy-chunk failures) inside the router
+- `AppErrorBoundary` is a class boundary wrapping `RouterProvider` in each entry,
+  for throws above the router that a route handler can never see
+
+a stale-chunk error triggers a single guarded `window.location.reload()`
+(a `sessionStorage` guard prevents a reload loop); the fresh load pulls the new
+chunks. approval-popup paths offer a "close" action instead of "go home" so a
+pending dapp request is not silently abandoned.
 
 ## side panel and context menu
 

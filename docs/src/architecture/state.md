@@ -11,12 +11,20 @@ the store is defined in `apps/extension/src/state/index.ts`. it combines all
 slices into a single `AllSlices` interface:
 
 ```typescript
-export const useStore = create<AllSlices>()(
+export const useStore = createWithEqualityFn<AllSlices>()(
   customPersist(initializeStore(sessionExtStorage, localExtStorage)),
+  shallow,
 );
 ```
 
 the middleware stack is: `customPersist` -> `immer` -> slice creators.
+
+it uses `createWithEqualityFn` with a default `shallow` equality function rather
+than plain `create`. zustand v5's plain `useStore(selector)` re-runs the selector
+on every snapshot with no memoization, so a selector returning a fresh object or
+array literal loops on react's "maximum update depth exceeded". `createWithEqualityFn`
+restores the memoized with-selector path so stable-field object selectors compare
+equal and stop looping.
 
 ### slices
 
@@ -45,11 +53,18 @@ the middleware stack is: `customPersist` -> `immer` -> slice creators.
 | `signApproval`    | pending sign request approval                     |
 | `frostSession`    | frost multisig dkg/signing session state          |
 | `inbox`           | encrypted inbox for memo-capable chains           |
+| `license`         | zafu pro license state                            |
+| `ringVrf`         | anonymous pro membership (ring-vrf) proofs        |
+| `ota`             | zigner firmware ota (check-for-update) state      |
+| `ledgerSession`   | active ledger hardware-wallet session state       |
+| `groupChat`       | multisig group-chat threads (encrypted at rest)   |
 
 each slice creator receives the storage backends it needs. slices that persist
-data get `local` (chrome.storage.local) and/or `session` (chrome.storage.session).
-ephemeral slices (like `seedPhrase`, `txApproval`) receive no storage and reset
-when the popup closes.
+data get `local` (chrome.storage.local) and/or `session` (chrome.storage.session):
+for example `wallets` and `keyRing` take both, `network` and `groupChat` take
+`local`, and `contacts` / `recentAddresses` take `(local, session)`. ephemeral
+slices (like `seedPhrase`, `originApproval`, `signApproval`, `frostSession`,
+`inbox`) receive no storage and reset when the popup closes.
 
 ### slice creator pattern
 
@@ -75,6 +90,25 @@ export const createExampleSlice =
 which gives every slice access to the full store via `get()` and immer-powered
 mutations via `set()`.
 
+## storage backends
+
+persistence goes through `@repo/storage-chrome` (`packages/storage-chrome`), which
+wraps `chrome.storage.local` and `chrome.storage.session` in a typed, versioned
+`ExtensionStorage`. `localExtStorage` is constructed at version `2` with
+`localMigrations` attached at construction:
+
+> Migrations MUST be attached here (at construction) rather than only in the
+> service-worker realm. The popup and options-page bundles import their own
+> localExtStorage instance in a separate JS realm; if migrations were enabled
+> only in the SW, a pre-v2 -> v2 upgrade would throw "Failed to migrate storage"
+> in whichever realm won the storage lock first (the loaders run before the
+> ephemeral MV3 worker is guaranteed to). Migration runs under a shared
+> navigator.locks exclusive lock, so enabling it in every realm is safe - the
+> realm that loses the lock just sees version 2 and no-ops.
+
+so every realm (popup, options page, service worker) runs the same migrations
+under one exclusive lock rather than depending on the ephemeral mv3 worker.
+
 ## encrypted storage
 
 `apps/extension/src/state/encrypted-storage.ts` provides transparent encryption
@@ -90,6 +124,8 @@ the following storage keys are encrypted at rest:
 - `recentAddresses` - recently used addresses
 - `dismissedContactSuggestions` - dismissed suggestions
 - `messages` - message history
+- `diversifiedAddresses` - per-contact diversified addresses (payment-referral graph)
+- `groupChats` - group chat metadata
 
 `knownSites` (origin approval records) is explicitly not encrypted because it
 contains no private data (just origin, choice, date) and needs to be readable by
@@ -167,6 +203,16 @@ these are set into the store via `produce()` (immer).
 - `messages` (via `readEncrypted`)
 - `knownSites` (plaintext, loaded directly)
 
+while decrypting `zcashWallets` it also runs `backfillMissingMultisigMirrors`:
+a frost-multisig vault whose zcash wallet mirror is missing is still fully
+functional for signing (secrets are read vault-first) but invisible to the
+multisig manager, which reads only the mirror. the backfill rebuilds missing
+mirrors from vault metadata and persists them so every real multisig surfaces.
+
+hydration is write-gated by `markHydrated()`: persisted writes stay blocked until
+data is actually decrypted (or the keyring status is `empty` on a fresh install),
+so `persist()` can never wipe encrypted storage with empty arrays while locked.
+
 this function runs:
 
 1. immediately on startup (succeeds if already unlocked or auto-unlocked)
@@ -181,7 +227,8 @@ the middleware subscribes to `localExtStorage.addListener()` to sync storage
 changes back into the zustand store. this handles changes from other extension
 contexts (service worker, other tabs). monitored keys include:
 
-- encrypted data keys - triggers `hydrateEncryptedData()`
+- `penumbraWallets`, `zcashWallets`, `contacts`, `messages` - trigger
+  `hydrateEncryptedData()`
 - `knownSites` - hydrated directly from change event
 - `fullSyncHeight`, `grpcEndpoint`, `frontendUrl`, `numeraires`, `params`,
   `zignerCameraEnabled`, `activeZcashIndex`, `activeWalletIndex`,
@@ -210,9 +257,14 @@ the keyring state machine has four states:
 | `mnemonic`       | bip39 seed phrase, can derive for all networks |
 | `zigner-zafu`    | viewing keys from zigner air-gap device        |
 | `frost-multisig` | frost dkg key package + ephemeral seed         |
-| `ledger`         | hardware wallet reference (planned)            |
-| `trezor`         | hardware wallet reference (planned)            |
-| `keystone`       | hardware wallet reference (planned)            |
+| `ledger`         | ledger hardware-wallet reference               |
+| `trezor`         | trezor hardware-wallet reference (planned)     |
+| `keystone`       | keystone hardware-wallet reference             |
+
+in practice, keystone and ledger cold-signer imports reuse the watch-only
+`zigner-zafu` machinery: the zcash wallet record carries a `coldSignerType`
+(`'zigner' | 'keystone' | 'ledger'`, defaulting to `'zigner'`) that selects the
+signing path, and a `ledgerSession` slice drives live ledger sessions.
 
 each vault is stored as an `EncryptedVault`:
 

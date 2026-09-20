@@ -15,7 +15,14 @@ zafu supports two wallet types:
   communication with the phone. this is a cold wallet.
 
 the zigner model is the same for all supported networks: penumbra, zcash,
-polkadot, and cosmos.
+polkadot, and cosmos. the `zigner-zafu` vault type is also reused for keystone
+and ledger cold signers (`coldSignerType`); this page describes the zigner QR
+flow.
+
+viewing-key import is wired for all four networks. the QR transaction-signing
+round-trip below is exercised by zcash sends (a PCZT, in the send flow) and by
+penumbra transactions (a transaction plan, in the dapp approval flow). polkadot
+and cosmos are watch-only today.
 
 ## what stays on the phone
 
@@ -77,16 +84,18 @@ the extension accepts multiple QR formats:
 
 ## signing flow
 
-sending a transaction with a zigner wallet:
+sending a zcash transaction with a zigner wallet:
 
-1. the extension builds an unsigned transaction
-2. the extension encodes the sign request as a QR code and displays it
+1. the extension builds an unsigned PCZT (partially created zcash transaction)
+2. the extension encodes the sign request as an animated QR code and displays it
+   (the PCZT rides a `ur:zcash-pczt` CBOR wrap)
 3. the user scans the QR code with the zigner device
 4. the zigner device displays the transaction details for review
 5. the user approves on the zigner device
-6. the zigner device signs and displays a QR code containing the signature
+6. the zigner device signs and displays a QR code containing the signed PCZT
+   (returned under the same `ur:zcash-pczt` type)
 7. the user scans the signature QR code with the extension
-8. the extension attaches the signature to the transaction and broadcasts it
+8. the extension attaches the signatures to the PCZT and broadcasts it
 
 the signing state machine tracks these steps:
 

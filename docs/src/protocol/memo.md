@@ -11,8 +11,11 @@ Authors: rotko networks
 This document specifies the binary wire format for structured messages
 carried inside Zcash shielded memo fields (ZIP-302). The protocol
 enables wallet-to-wallet communication including text messaging,
-contact card exchange, FROST multisig coordination, and authenticated
-encrypted messaging using ed25519-derived identities (zid).
+contact card exchange (with ed25519-derived zid extensions), FROST
+multisig coordination, and generic machine-to-machine data. An
+end-to-end encrypted memo type (0x06) is reserved but not yet
+implemented; see [encrypted messaging](encrypted-messaging.md) for the
+mechanisms zafu uses today.
 
 ## 1. Conventions
 
@@ -93,6 +96,11 @@ Messages that fit in a single memo use a 4-byte header:
 
 Byte 3 is 0x00, indicating a standalone (non-fragmented) message.
 Maximum payload: 512 - 4 = 508 bytes.
+
+A standalone message has no explicit Message ID field. When one is
+needed internally (Section 5.1), the first 16 bytes of the payload are
+used as a deterministic ID, so decoding the same memo twice yields the
+same ID.
 
 ## 5. Fragmented Messages
 
@@ -219,12 +227,13 @@ Defined tags:
     Tag    Length   Description
     ---    ------   -----------
     0x01   32       ed25519 zid public key (Section 7)
-    0x02   var      Post-quantum public key (reserved, format TBD)
+    0x02   var      Post-quantum public key (reserved, not yet emitted)
 
 The presence of tag 0x01 indicates the sender supports
-zid-authenticated messaging (Section 8). The specific key in the
-value is the sender's per-contact zid, unique to this relationship
-(Section 7.2).
+zid-authenticated messaging. The specific key in the value is the
+sender's per-contact zid, unique to this relationship (Section 7.2).
+Tag 0x02 is reserved for a post-quantum public key; the wallet does
+not yet emit it.
 
 ### 6.4. Size Budget
 
@@ -234,7 +243,9 @@ value is the sender's per-contact zid, unique to this relationship
     zid extension:        35 bytes (3 TLV header + 32 pubkey)
     Total:                ~360 bytes (fits single memo)
 
-    With PQ extension:    ~1,260 bytes (requires fragmentation)
+    With a PQ extension (reserved): an X-Wing public key is 1,216 bytes,
+    which pushes the card past a single memo and would require
+    fragmentation. Tag 0x02 is not yet emitted.
 
 ### 6.5. Design Rationale
 
@@ -250,8 +261,8 @@ value is the sender's per-contact zid, unique to this relationship
     Q: Why no encryption on top?
     A: Zcash shielded memos are already encrypted to the recipient's
        incoming viewing key. Redundant encryption wastes bytes.
-       When sender authentication is needed, use EncryptedMessage
-       (Section 8).
+       Sender authentication is provided by the per-contact zid (tag
+       0x01); a fully encrypted memo type is reserved (Section 9).
 
     Q: Why no checksum?
     A: The Zcash note commitment scheme provides authenticated
@@ -268,31 +279,35 @@ value is the sender's per-contact zid, unique to this relationship
 ### 7.1. Derivation
 
 A zid is a cross-network ed25519 identity derived deterministically
-from the wallet's mnemonic seed phrase. All derivations use
-HMAC-SHA512.
+from the wallet's mnemonic seed phrase. Derivation is a v2 two-stage
+KDF that shares no intermediate material with the BIP39 spending seed:
 
-    root = HMAC-SHA512("zid-v1", encode_utf8(mnemonic))
+    mnemonic_hash = SHA-256(mnemonic_string)
+    zid_seed      = HKDF-SHA256(mnemonic_hash,
+                                salt="zafu-zid-v2",
+                                info="identity-root", 64)
+    identity      = HMAC-SHA512(zid_seed, "identity:" + name)
 
-    Global zid (index 0):
-        seed = HMAC-SHA512(root, 0x00000000)
-        private_key = seed[0:32]
-        public_key = ed25519_public_key(private_key)
+Keys are then derived under a named identity subtree with tags:
 
     Per-site zid:
-        seed = HMAC-SHA512(root, encode_utf8("site:" + origin))
-        (same derivation as above)
+        seed = HMAC-SHA512(identity, encode_utf8("site:" + origin))
+        private_key = seed[0:32]
+        public_key  = ed25519_public_key(private_key)
 
     Per-site rotated zid:
-        seed = HMAC-SHA512(root, encode_utf8("site:" + origin + ":" + N))
+        seed = HMAC-SHA512(identity, encode_utf8("site:" + origin + ":" + N))
         N is the rotation counter (decimal string)
 
     Per-contact zid:
-        seed = HMAC-SHA512(root, encode_utf8("contact:" + contact_id))
-        contact_id is the counterparty's zid public key (hex) or
-        any stable unique identifier for the contact.
+        seed = HMAC-SHA512(identity, encode_utf8("contact:" + contact_id))
+        contact_id is any stable unique identifier for the contact
+        (in zafu, the contact's internal id).
 
-All intermediate values (root, seed, private_key) MUST be zeroized
-after use.
+The shipped wallet uses the identity name "default"; personas are
+exposed as reversible generations of that identity (the name becomes
+"default-vN" at rotation index N). All intermediate values (zid_seed,
+identity, seed, private_key) MUST be zeroized after use.
 
 ### 7.2. Per-Contact Identity and Leak Detection
 
@@ -387,130 +402,65 @@ pay-for-service in a single atomic transaction:
 
 ### 8.5. Combining with Encryption
 
-Data messages can be wrapped inside EncryptedMessage (Type 0x06)
-for sender authentication and viewing-key resistance. The inner
-plaintext of an EncryptedMessage has byte 0 = inner MemoType,
-which can be 0x07 (Data).
+The reserved EncryptedMessage type (0x06, Section 9) is designed so a
+Data payload could be wrapped for sender authentication and viewing-key
+resistance (its inner plaintext byte 0 = inner MemoType = 0x07). This is
+not yet implemented; today the sealed-box and Noise mechanisms in
+[encrypted messaging](encrypted-messaging.md) cover authenticated
+delivery, off the memo path.
 
-## 9. Encrypted Messages (Type 0x06) - Future
+## 9. Encrypted Messages (Type 0x06) - Reserved
 
-### 8.1. Motivation
+Type 0x06 is RESERVED for a future zid-authenticated encrypted memo.
+The value is defined in the type table and the inbox renders it as
+"encrypted message (decryption not yet supported)", but the wallet
+has no encoder for it: no encrypted memo is produced or decrypted
+today.
 
-Zcash shielded memos provide confidentiality but not sender
-authentication. A compromised viewing key reveals all memo
-history. zid-encrypted messages add:
+The intent is a memo whose inner plaintext is itself a typed payload
+(byte 0 = inner MemoType), adding sender authentication and viewing-key
+resistance on top of the note's own encryption. The exact construction
+is not yet fixed and MUST NOT be assumed from earlier drafts.
 
-    - Sender authentication (DH with sender's zid)
-    - Viewing key resistance (double encryption)
-    - Partial forward secrecy (sender-side only; see Section 10.3)
+End-to-end encryption in zafu today does NOT ride this memo type. It is
+provided by two other mechanisms documented in
+[encrypted messaging](encrypted-messaging.md):
 
-### 8.2. Construction
-
-    sender_zid: ed25519 keypair (from seed)
-    recipient_zid: ed25519 public key (from contact card)
-
-    // Convert to x25519 for Diffie-Hellman
-    x_s = ed25519_to_x25519_private(sender_zid)
-    X_r = ed25519_to_x25519_public(recipient_zid)
-
-    // Ephemeral keypair for forward secrecy
-    e = random_x25519_scalar()
-    E = x25519_basepoint(e)
-
-    // Two shared secrets
-    ss1 = x25519(e, X_r)         // forward-secret
-    ss2 = x25519(x_s, X_r)       // sender-authenticated
-
-    // Key derivation
-    key = HKDF-SHA256("zid-msg-v1", ss1 || ss2, 32)
-
-    // Encryption
-    nonce = random(12)
-    ciphertext = AES-256-GCM(key, nonce, plaintext)
-
-### 8.3. Wire Format
-
-    Bytes 0-3:    Zafu header (0xFF 0x5A 0x06 0x00)
-    Bytes 4-35:   Sender zid public key (ed25519, 32 bytes)
-    Bytes 36-67:  Ephemeral public key (x25519, 32 bytes)
-    Bytes 68-79:  Nonce (12 bytes)
-    Bytes 80-N:   Ciphertext + GCM tag (16 bytes)
-
-    Overhead: 80 + 16 = 96 bytes
-    Plaintext capacity: 508 - 96 = 416 bytes (single memo)
-    With fragmentation: up to 7,284 bytes
-
-The inner plaintext is a typed payload:
-
-    Byte 0:    Inner MemoType
-    Bytes 1-N: Inner payload
-
-Any message type can be encrypted, including ContactCard and Text.
-
-### 8.4. Negotiation
-
-Encrypted messaging is available when both parties have exchanged
-contact cards containing tag 0x01 (zid public key). No explicit
-capability negotiation is needed - the presence of the key IS the
-capability signal.
-
-When sending to a contact with a known zid, wallets SHOULD default
-to EncryptedMessage. Wallets MAY fall back to plaintext for
-contacts without a zid.
+    - sealed box: zafu_encrypt / zafu_decrypt (classical x25519 or the
+      hybrid X-Wing suite), addressed to a site-scoped zid key
+    - a hybrid Noise IK channel over a relay WebSocket (the chat DM
+      transport), NOT over memos
 
 ## 10. Security Considerations
 
-### 9.1. Memo Privacy
+### 10.1. Memo Privacy
 
 Zcash shielded memos are encrypted to the recipient's incoming
 viewing key. An attacker without the viewing key learns nothing.
-An attacker WITH the viewing key can read plaintext memos but
-NOT zid-encrypted memos (Section 8).
+An attacker WITH the viewing key can read plaintext memos - zafu
+structured memos (contact cards, text, FROST) are NOT additionally
+encrypted at the memo layer.
 
-### 9.2. Sender Anonymity
+### 10.2. Sender Anonymity
 
-Plain memos do not identify the sender. zid-encrypted memos
-reveal the sender's zid public key to the recipient (intentional
-for authentication). The sender's zid is NOT visible to network
-observers (it's inside the encrypted note).
+Plain memos do not identify the sender. A contact card's per-contact
+zid (tag 0x01) reveals the sender's zid to the recipient (intentional
+for authentication) but is not visible to network observers - it is
+inside the shielded note.
 
-### 10.3. Forward Secrecy - Limitations
+### 10.3. Fragment Integrity
 
-EncryptedMessage uses an ephemeral x25519 key per message. This
-provides forward secrecy against SENDER key compromise only:
-if the sender's zid is compromised after sending, the ephemeral
-private key has been zeroized and past messages remain secure.
+Each fragment is carried in a separate Zcash shielded note. The note
+commitment scheme provides authenticated encryption per fragment;
+tampering with any fragment invalidates its note.
 
-However, compromise of the RECIPIENT's long-term zid reveals all
-past messages to that recipient. The ephemeral public key E is
-stored in the memo; an attacker with the recipient's private key
-can compute both DH shared secrets (ss1 = x25519(priv_r, E),
-ss2 = x25519(priv_r, pub_s)) and derive the message key.
+### 10.4. Per-Contact Zid Correlation
 
-This is a fundamental limitation of unidirectional channels.
-Full forward secrecy requires both parties to contribute ephemeral
-keys (as in Signal's Double Ratchet), which requires a
-bidirectional exchange before each message.
-
-Future work: once both parties have exchanged at least one message
-each (establishing a bidirectional channel), a ratcheting protocol
-can be layered on top to achieve full forward secrecy for
-subsequent messages.
-
-### 9.4. Fragment Integrity
-
-Each fragment is carried in a separate Zcash shielded note.
-The note commitment scheme provides authenticated encryption per
-fragment. Tampering with any fragment invalidates its note.
-
-### 9.5. Per-Contact Zid Correlation
-
-Per-contact zids prevent cross-contact linkability. However, if
-an attacker obtains two contact cards from the same sender (e.g.,
-the card sent to Alice and the card sent to Bob), the attacker
-cannot determine they come from the same wallet - the per-contact
-zids are cryptographically independent (derived via HMAC with
-different inputs).
+Per-contact zids prevent cross-contact linkability. An attacker who
+obtains two contact cards from the same sender (the card sent to
+Alice and the card sent to Bob) cannot determine they come from the
+same wallet - the per-contact zids are cryptographically independent
+(HMAC with different inputs).
 
 ## 11. References
 

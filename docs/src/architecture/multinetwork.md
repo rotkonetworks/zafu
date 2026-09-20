@@ -20,15 +20,35 @@ encrypted and must be trial-decrypted against the user's viewing keys.
 
 ### ibc/cosmos chains
 
-transparent chains using BIP44 secp256k1 with bech32 address encoding. primarily
-used for deposits into and withdrawals from penumbra via ibc. only chains with
-an active relay channel against penumbra are listed here.
+transparent chains using BIP44 secp256k1 with bech32 address encoding. they are
+modeled as **subnetworks of penumbra** (a `parent: 'penumbra'` config) rather than
+top-level networks - they exist to move value into and out of the penumbra
+shielded pool over ibc, and to reach off-ramp exchanges. the design rationale is
+recorded in `docs/adrs/cosmos-as-penumbra-subwallets.md`.
 
-- **noble** - bech32 prefix `noble`, denom `uusdc`
-- **cosmoshub** - bech32 prefix `cosmos`, denom `uatom`
+`IbcNetwork` = `noble | cosmoshub | osmosis | injective`:
 
-all ibc chains use the same coin type 118 and derivation path `m/44'/118'/0'/0/0`,
-differing only in bech32 prefix.
+- **noble** - bech32 prefix `noble`, denom `uusdc`, chain id `noble-1`. the
+  usdc/cctp gateway and default unshield destination. launched.
+- **cosmoshub** - bech32 prefix `cosmos`, denom `uatom`. not launched (no live
+  channel in the current veil config).
+- **osmosis** - bech32 prefix `osmo`, denom `uosmo`, chain id `osmosis-1`. not
+  launched until the channel client is confirmed active.
+- **injective** - special case, see below. not launched.
+
+the standard cosmos chains use coin type 118 and derivation path
+`m/44'/118'/0'/0/0`, differing only in bech32 prefix.
+
+#### injective (ethermint special case)
+
+injective is a native-usdc (`USDC.inj`) receive-and-shield ramp. it is ethermint,
+so it uses `eth_secp256k1` on coin type 60 (`m/44'/60'/0'/0/0`) with
+`NETWORK_DEFAULT_ENCRYPTION.injective = 'ethereum'` - not the shared cosmos
+secp256k1 / coin-118 path. it derives and signs through
+`packages/wallet/src/networks/injective` (a dedicated conduit) and is flagged
+`conduitOnly: true` in `networks.ts`. that flag keeps it out of the shared
+coin-118 deposit machinery so a future `launched: true` can never route it through
+a fund-losing derivation. it is held `launched: false`.
 
 ### transparent networks
 
@@ -56,14 +76,36 @@ display and feature flags:
 interface NetworkConfig {
   name: string;
   color: string;
+  focusColor: string; // tailwind focus-border class
   transparent: boolean;
   launched: boolean;
-  features: { stake; swap; vote; inbox };
+  parent?: NetworkType; // set on subnetworks (e.g. cosmos chains under penumbra)
+  ibcChainId?: string; // set when a subnetwork has a live ibc channel + client
+  conduitOnly?: boolean; // dedicated derive/sign path, not the shared cosmos one
+  features: { stake; swap; vote; inbox; multisig };
 }
 ```
 
 the `launched` flag controls which networks appear in the ui. currently launched:
-zcash and penumbra. other networks are defined but gated behind `launched: false`.
+**zcash**, **penumbra**, and **noble** (noble being a penumbra subnetwork, not a
+top-level network). every other network is defined but gated behind
+`launched: false`.
+
+helpers derive the ui lists from these flags:
+
+- `getTopLevelNetworks()` - launched networks with no `parent` (the main network
+  picker): zcash and penumbra
+- `getSubnetworks(parent)` - launched subnetworks of a parent (noble under penumbra)
+- `getActiveIbcChainIds(parent)` - launched subnetworks that carry an `ibcChainId`
+  (a live channel), including conduit-only ramps - valid ibc deposit/withdraw
+  destinations
+- `getActiveIbcSubnetworks(parent)` - as above but excludes `conduitOnly` chains,
+  so the shared coin-118 cosmos deposit ui never reaches a conduit-only network
+  like injective (the fund-safety gate)
+
+feature flags per network include `multisig` (frost threshold wallets), currently
+true only for zcash. zcash also has `vote: true` (governance voting, backed by the
+lazy-loaded voting wasm in `state/voting-wasm.ts`).
 
 `NETWORK_CONFIGS` in `network-types.ts` holds the technical config (symbol,
 decimals, derivation paths, ss58 prefixes, bech32 prefixes, chain ids).
@@ -80,6 +122,8 @@ derive keys for every supported network using standard derivation paths:
 | zcash     | 133       | `m/44'/133'/0'/0/0`   |
 | noble     | 118       | `m/44'/118'/0'/0/0`   |
 | cosmoshub | 118       | `m/44'/118'/0'/0/0`   |
+| osmosis   | 118       | `m/44'/118'/0'/0/0`   |
+| injective | 60        | `m/44'/60'/0'/0/0`    |
 | polkadot  | 354       | `m/44'/354'/0'/0'/0'` |
 | kusama    | 434       | `m/44'/434'/0'/0'/0'` |
 | ethereum  | 60        | `m/44'/60'/0'/0/0`    |
@@ -136,6 +180,13 @@ currently supported worker urls:
 
 - zcash: `/workers/zcash-worker.js`
 - penumbra: `/workers/penumbra-worker.js`
+
+`getWorkerUrl` maps both networks, but in practice only the zcash worker is
+actually built (`webpack.config.ts` bundles `workers/zcash-worker` and
+`workers/ur-decode-worker`) and spawned. penumbra does not use a dedicated web
+worker - its sync runs inside the service worker via the `Services` class (see
+[penumbra services](#penumbra-services) below); the penumbra url entry is
+vestigial.
 
 the worker posts a `ready` message once its wasm is initialized. the spawn
 function polls for this and times out after 30 seconds.
@@ -270,6 +321,7 @@ polkadot and kusama act as umbrella networks for their parachains.
 ss58 prefixes, para ids, and rpc endpoints.
 
 the service worker also supports custom chainspecs loaded from storage. on
-startup and when `customChainspecs` changes in storage, `loadCustomChainspecs()`
-registers/unregisters chains with the polkadot light client via
+startup and when `customChainspecs` changes in storage,
+`loadCustomChainspecsIfEnabled()` registers/unregisters chains with the polkadot
+light client via
 `registerCustomChainspec()` / `unregisterCustomChainspec()`.

@@ -8,20 +8,29 @@ with a key derived from the user's password via PBKDF2.
 the following storage keys are encrypted at rest:
 
 - `penumbraWallets` - penumbra full viewing keys and custody data
-- `zcashWallets` - zcash orchard full viewing keys and addresses
+- `zcashWallets` - zcash orchard full viewing keys and addresses. this record
+  also carries FROST multisig wallets (their `keyPackageHex` secret share), so
+  those are sealed by the same scheme.
 - `contacts` - user contact entries
 - `recentAddresses` - recently used addresses
 - `dismissedContactSuggestions` - dismissed contact suggestion records
 - `messages` - zcash memo messages
+- `diversifiedAddresses` - derived diversified receiving addresses
+- `groupChats` - multisig group chat state
 
-viewing keys (FVK) reveal full transaction history. no viewing key data is
-stored in plaintext - ever.
+these are the keys in the `ENCRYPTED_KEYS` set. viewing keys (FVK) reveal full
+transaction history. no viewing key data is stored in plaintext - ever.
 
 the following are not encrypted:
 
 - `knownSites` - origin approval records (origin, choice, date). these contain
   no private data and are read by the origin storage package which does not have
   access to the session key.
+- `passwordKeyPrint` - the salt and verification hash used to check the password
+  on unlock (see [key print](#key-print)). it is a verifier, not secret data.
+- `frostRelayIdentities` - per-group relay transport keypairs (see
+  [frost](frost.md)). the private key is not a wallet key; leaking it allows
+  relay impersonation only, never spending.
 - `grpcEndpoint`, `frontendUrl`, `numeraires`, `activeWalletIndex`,
   `activeZcashIndex` - non-sensitive configuration values.
 
@@ -54,8 +63,11 @@ each encryption operation:
 the `Box` class holds `(nonce: Uint8Array, cipherText: Uint8Array)`. decryption
 requires the same nonce and key.
 
-all cryptographic operations use the Web Crypto API (`crypto.subtle`). no
-third-party cryptography libraries are involved.
+the at-rest encryption layer uses only the Web Crypto API (`crypto.subtle`). no
+third-party cryptography libraries are involved in sealing storage. (other
+layers - the zid messaging channel and the [post-quantum](threat-model.md) KEM - do
+bundle third-party libraries (`@noble/*`); this note is scoped to
+storage-at-rest.)
 
 ## storage format
 

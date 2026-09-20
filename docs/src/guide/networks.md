@@ -3,9 +3,10 @@
 zafu organizes networks into three categories based on their privacy
 properties: privacy networks, IBC/cosmos chains, and transparent networks.
 
-only zcash and penumbra are currently launched and available for selection
-during onboarding. the remaining networks are defined in the codebase but
-not yet enabled in the UI.
+zcash, penumbra, and noble (a penumbra USDC subnetwork) are currently
+launched. the remaining networks are defined in the codebase but not yet
+enabled in the UI. onboarding no longer has a network-select screen - a fresh
+wallet starts on zcash and more networks are enabled in settings > networks.
 
 ## privacy networks
 
@@ -17,16 +18,18 @@ never learns which addresses or notes belong to the user.
 
 - symbol: ZEC
 - decimals: 8
-- pool: orchard (shielded)
+- pool: orchard (shielded), NU6.3 / ironwood
 - sync model: zidecar trustless sync - header chain proven via Ligerito
   polynomial commitments, nullifier set verified by NOMT merkle proofs.
   compact blocks are trial-decrypted locally.
-- default endpoint: `https://zcash.rotko.net`
+- default endpoint: `https://zcash.rotko.net` (rotko zidecar)
 - orchard activation height: 1,687,104 - scanning never starts before this
 - key derivation: ZIP-32 shielded derivation
-- features: encrypted inbox (shielded memos)
+- features: encrypted inbox (shielded memos), FROST multisig, governance
+  voting
 - staking: no
-- swaps: no
+- swaps: cross-chain only, via a third-party service (NEAR 1Click) - see
+  below
 
 zcash sync downloads compact blocks from the orchard activation height (or
 the wallet birthday height for imported wallets). each action in a compact
@@ -41,6 +44,12 @@ rayon support for parallel proving.
 FROST threshold multisig is supported for zcash. coordination happens via
 shielded memos with no coordinator server.
 
+zcash swaps are cross-chain: ZEC is swapped to or from assets on other chains
+through NEAR Intents (Defuse / 1Click), a third-party service that zafu does
+not operate. the deposit address may be custodial and funds may be delayed or
+held under the service's own compliance review, so the swap screen shows a
+custody-risk warning that must be acknowledged before any funds move.
+
 ### penumbra
 
 - symbol: UM
@@ -52,8 +61,7 @@ shielded memos with no coordinator server.
 - chain ID: penumbra-1
 - bech32 prefix: penumbra
 - key derivation: penumbra-specific derivation
-- features: staking, governance voting, encrypted inbox
-- swaps: no (in zafu - the penumbra DEX is accessed via frontend dapps)
+- features: staking, governance voting, encrypted inbox, in-wallet DEX swaps
 
 penumbra is a shielded DEX chain. all assets on penumbra are shielded by
 default. zafu syncs by downloading all compact blocks and trial-decrypting
@@ -61,8 +69,9 @@ locally with the full viewing key. the RPC node never learns which notes
 belong to the user.
 
 penumbra supports staking (delegation to validators) and on-chain governance
-voting directly from the wallet. asset swaps are performed through connected
-frontend dapps like the penumbra DEX rather than built into zafu itself.
+voting directly from the wallet. asset swaps run in-wallet as private penumbra
+DEX swaps (routed through the simulation service); external frontends like
+penumbra.fi can also be used.
 
 for fresh wallets, zafu fetches the compact frontier snapshot to bootstrap
 the state commitment tree without downloading full chain history.
@@ -77,8 +86,9 @@ addresses.
 all cosmos chains use BIP44 secp256k1 key derivation with path
 `m/44'/118'/0'/0/0` and chain-specific bech32 prefixes.
 
-these networks are not yet launched in the UI. only chains with an active
-relay channel against penumbra are tracked here.
+only chains with an active relay channel against penumbra are launched. noble
+is currently launched; cosmoshub, osmosis, and injective are defined as
+penumbra subnetworks but not yet enabled.
 
 ### noble
 
@@ -89,9 +99,14 @@ relay channel against penumbra are tracked here.
 - bech32 prefix: noble
 - default RPC: `https://noble-rpc.polkachu.com`
 - default LCD: `https://noble-api.polkachu.com`
-- features: none (transfer only)
+- features: transfer only (the USDC/CCTP gateway and default off-ramp path)
 - role: native USDC issuance chain. IBC channel to penumbra: noble-side
   `channel-89`, penumbra-side `channel-2`.
+
+noble support is being wound down: Circle is ending USDC and CCTP support on
+noble. the bridge halts on 2026-12-01 and the noble USDC contract pauses on
+2027-01-12 (manual redemption only after). the wallet shows a deprecation
+warning with a "move out" action so USDC is not stranded past the freeze date.
 
 ### cosmoshub
 
@@ -103,13 +118,13 @@ relay channel against penumbra are tracked here.
 - default RPC: `https://cosmos-rpc.polkachu.com`
 - default LCD: `https://cosmos-api.polkachu.com`
 - features: staking
-- role: cosmos hub - the original IBC router. IBC channel to penumbra:
-  cosmoshub-side `channel-940`, penumbra-side `channel-0`.
+- status: not launched (no live IBC channel enabled). IBC channels to
+  penumbra: cosmoshub-side `channel-940`, penumbra-side `channel-0`.
 
 ## transparent networks
 
 fully public ledgers. all balances and transactions are visible on-chain.
-these networks are not yet launched in the UI.
+these networks are defined but not yet launched in the UI.
 
 ### polkadot
 
@@ -128,10 +143,6 @@ default for hot wallets. ledger_ed25519 uses SLIP-10/BIP32-Ed25519
 derivation matching the Ledger hardware wallet app, so users can add their
 Ledger wallet to zigner and use it with zafu.
 
-substrate parachains are supported under the polkadot umbrella with the same
-key derivation but different SS58 prefixes and RPC endpoints. defined
-parachains: hydration, acala, moonbeam, astar.
-
 ### kusama
 
 - symbol: KSM
@@ -141,8 +152,6 @@ parachains: hydration, acala, moonbeam, astar.
 - key derivation: sr25519 (default), ed25519, ledger_ed25519, ecdsa
 - features: staking
 - sync model: same as polkadot (smoldot light client)
-
-kusama parachains: karura, moonriver.
 
 ### ethereum
 
@@ -164,9 +173,13 @@ kusama parachains: karura, moonriver.
 ## custom endpoints
 
 all network endpoints can be changed in the settings. custom endpoints are
-persisted in local storage independently of the default configuration.
+persisted in local storage independently of the default configuration. zcash
+ships a set of regional presets: the rotko zidecar (trustless, the shipped
+default) plus public lightwalletd fallbacks (stardust, zec.rocks, and others).
 
 ## network selection in settings
 
-networks can be enabled or disabled after onboarding through the settings
-page. disabling a network that still has associated wallets is not permitted.
+networks can be enabled or disabled after onboarding through the settings >
+networks page. enabling a network also activates it. enabling an IBC/cosmos
+chain additionally turns on transparent balance queries so its balances can be
+displayed (see [privacy](privacy.md)).
