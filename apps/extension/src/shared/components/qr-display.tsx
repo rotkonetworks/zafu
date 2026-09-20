@@ -97,8 +97,8 @@ export function QrDisplay({
     <div className='flex flex-col items-center gap-3'>
       {title && <h3 className='text-lg font-medium text-fg'>{title}</h3>}
 
-      <div className='bg-white p-3 rounded-lg'>
-        <canvas ref={canvasRef} />
+      <div className='max-w-full bg-white p-3 rounded-lg'>
+        <canvas ref={canvasRef} className='max-w-full h-auto' />
       </div>
 
       {description && <p className='text-sm text-fg-muted text-center max-w-xs'>{description}</p>}

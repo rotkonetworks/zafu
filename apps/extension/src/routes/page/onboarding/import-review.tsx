@@ -147,8 +147,9 @@ export const ImportReview = () => {
             ))}
           </div>
           <p className='text-label text-fg-dim lowercase leading-snug'>
-            same phrase, one wallet - pick which networks to set up now. you can enable the other
-            later in settings.
+            {anySelected
+              ? 'same phrase, one wallet - pick which networks to set up now. you can enable the other later in settings.'
+              : 'pick at least one network to continue - the phrase has to be recovered onto something.'}
           </p>
         </div>
 

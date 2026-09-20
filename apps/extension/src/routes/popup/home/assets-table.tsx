@@ -170,16 +170,16 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
     data: rawBalances,
     isLoading,
     error,
+    refetch,
   } = useQuery({
     queryKey: ['balances', account],
     staleTime: 5_000,
-    queryFn: async () => {
-      try {
-        return await Array.fromAsync(viewClient.balances({ accountFilter: { account } }));
-      } catch {
-        return [];
-      }
-    },
+    // Deliberately no try/catch here. Swallowing the failure made an
+    // unreachable view service indistinguishable from an empty wallet, so a
+    // user who simply lost their connection was shown "no assets yet" and the
+    // funding on-ramp - the one thing a wallet must never say, because it reads
+    // as "your money is gone". Let the error reach the render below.
+    queryFn: async () => Array.fromAsync(viewClient.balances({ accountFilter: { account } })),
   });
 
   // refetch balances when sync height advances (live update, no flicker)
@@ -322,7 +322,27 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
     );
   }
 
-  if (error || !balances.length) {
+  if (error) {
+    return (
+      <div className='flex flex-col items-center gap-3 px-4 py-10 text-center'>
+        <span className='i-ph-warning-circle h-6 w-6 text-rust' />
+        <span className='text-sm text-fg-muted'>couldn't load your balances</span>
+        <span className='max-w-[18rem] text-xs leading-snug text-fg-muted/70'>
+          the penumbra view service didn't answer - this is a connection problem, not an empty
+          wallet.
+        </span>
+        <button
+          type='button'
+          onClick={() => void refetch()}
+          className='text-xs text-zigner-gold hover:underline'
+        >
+          retry
+        </button>
+      </div>
+    );
+  }
+
+  if (!balances.length) {
     return (
       <div className='flex flex-col items-center gap-4 px-4 py-10 text-center'>
         <div className='flex flex-col items-center gap-1'>

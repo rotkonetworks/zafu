@@ -80,6 +80,7 @@ export const DEFAULT_ZAPPS: Zapp[] = [
     icon: 'i-ph-arrows-left-right',
     url: 'https://penumbra.fi',
     category: 'finance',
+    builtin: true,
   },
   {
     id: 'zec-os',
@@ -88,6 +89,7 @@ export const DEFAULT_ZAPPS: Zapp[] = [
     icon: 'i-ph-coins',
     url: 'https://zec-os.com',
     category: 'finance',
+    builtin: true,
   },
   {
     id: 'poker',
@@ -96,6 +98,7 @@ export const DEFAULT_ZAPPS: Zapp[] = [
     icon: 'i-ph-spade',
     url: 'https://zkbtc.org',
     category: 'games',
+    builtin: true,
   },
   {
     id: 'sonotxt',
@@ -104,6 +107,7 @@ export const DEFAULT_ZAPPS: Zapp[] = [
     icon: 'i-ph-waveform',
     url: 'https://sonotxt.com',
     category: 'tools',
+    builtin: true,
   },
   {
     id: 'zigner',
@@ -112,6 +116,7 @@ export const DEFAULT_ZAPPS: Zapp[] = [
     icon: 'i-ph-device-mobile',
     url: 'https://zafu.pro/zigner',
     category: 'tools',
+    builtin: true,
   },
   {
     id: 'source',
@@ -120,6 +125,7 @@ export const DEFAULT_ZAPPS: Zapp[] = [
     icon: 'i-ph-code',
     url: 'https://github.com/rotkonetworks/zafu',
     category: 'tools',
+    builtin: true,
   },
   // learn - zcash
   {
