@@ -8,10 +8,14 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { isSidePanelOpen } from './side-panel-presence';
 
 const POPUP_READY_TIMEOUT = 60_000;
-// How long to wait for the side panel to render an approval before deciding it
-// is closed and falling back to a popup window. Short: an open panel renders
-// almost instantly (same bundle); a closed one never signals ready.
-const SIDE_PANEL_READY_TIMEOUT = 1_500;
+// How long to wait for the side panel to render an approval. Presence is now
+// confirmed authoritatively (getContexts) BEFORE we route here, so this no
+// longer guesses "open vs closed" - it only guards an actual render failure.
+// That lets it be generous: routing reloads the panel document, and the ready
+// ping only fires after Penumbra WASM re-initialises, which routinely exceeds
+// a second on a cold load. 1500ms lost that race and fell back to a window
+// even though the panel was open; 6s covers the wasm warm-up.
+const SIDE_PANEL_READY_TIMEOUT = 6_000;
 const SIDE_PANEL_DEFAULT_PATH = 'sidepanel.html';
 const POPUP_PATHS = {
   [PopupType.TxApproval]: PopupPath.TRANSACTION_APPROVAL,
@@ -120,9 +124,16 @@ const popupUrl = (popupType?: PopupType, id?: string): URL => {
   return pop;
 };
 
-/** Relative path (from the extension root) to an approval in the popup app. */
+/**
+ * Relative path (from the extension root) to an approval, served as the SIDE
+ * PANEL document. Uses sidepanel.html (same bundle/entry as popup.html) rather
+ * than popup.html so the reloaded panel keeps a pathname that isSidePanel()
+ * recognises - otherwise the panel loses its own identity after routing and
+ * stops re-announcing presence. Only the side-panel delivery uses this; the
+ * detached-window fallback still opens popup.html (see popupUrl).
+ */
 const relativePopupPath = (popupType: PopupType, id: string): string =>
-  `popup.html?id=${id}#${POPUP_PATHS[popupType]}`;
+  `sidepanel.html?id=${id}#${POPUP_PATHS[popupType]}`;
 
 /** Point the side panel back at the wallet home after an approval is done. */
 const restoreSidePanel = (): Promise<void> =>
@@ -168,7 +179,7 @@ const spawnDetachedPopup = async (
   // Only an explicit `false` (user picked "popup window") opts out. Safe because
   // the send itself now runs in the service worker (see penumbra-send), so it
   // completes even though delivering the approval reloads the panel.
-  if (isSidePanelOpen() && (await localExtStorage.get('approvalsInSidePanel')) !== false) {
+  if ((await isSidePanelOpen()) && (await localExtStorage.get('approvalsInSidePanel')) !== false) {
     const shown = await deliverToSidePanel(relativePopupPath(popupType, popupId), popupId).catch(
       () => false,
     );

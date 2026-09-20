@@ -28,8 +28,33 @@ export const trackSidePanelPresence = (): void => {
   });
 };
 
-/** Service-worker side. True if at least one side panel is open right now. */
-export const isSidePanelOpen = (): boolean => openCount > 0;
+/**
+ * Service-worker side. True if a side panel is open right now.
+ *
+ * Queries the browser authoritatively via `chrome.runtime.getContexts` rather
+ * than trusting the port counter. The counter (below) had three failure modes
+ * that all made approvals wrongly fall back to a detached popup window while the
+ * panel was visibly open:
+ *   - transient zero: navigating the panel (setOptions/restore) unloads the old
+ *     document, dropping its port, so a chained second request checked presence
+ *     in the gap before the reloaded doc re-announced;
+ *   - service-worker respawn (update/crash) reset the module-level count to 0;
+ *   - the isSidePanel() innerHeight heuristic mis-announced (the 420x760 popup
+ *     window looked like a panel; a short-display panel looked like neither).
+ * The SIDE_PANEL context survives a document navigation and is a real browser
+ * fact, so it sidesteps all three. The port counter stays as the fallback for
+ * a browser too old for getContexts (Chrome < 116).
+ */
+export const isSidePanelOpen = async (): Promise<boolean> => {
+  try {
+    const ctxs = await chrome.runtime.getContexts({
+      contextTypes: [chrome.runtime.ContextType.SIDE_PANEL],
+    });
+    return ctxs.length > 0;
+  } catch {
+    return openCount > 0;
+  }
+};
 
 /**
  * Panel-document side. Announce presence for the lifetime of the document; the
