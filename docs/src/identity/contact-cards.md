@@ -74,8 +74,9 @@ carries the encoded card.
 
 > **note:** only the first encoded memo is prefilled into the send flow.
 > a card is expected to fit a single 508-byte memo (a typical UA + name
-> + zid is ~360 bytes). a card large enough to fragment would currently
-> be truncated on send.
+>
+> - zid is ~360 bytes). a card large enough to fragment would currently
+>   be truncated on send.
 
 ## receiving a card
 

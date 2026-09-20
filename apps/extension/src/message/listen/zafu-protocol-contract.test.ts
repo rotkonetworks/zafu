@@ -46,8 +46,6 @@ describe('zafu_* wallet handlers vs @zafu/protocol v1', () => {
 
   it('the split across the three listeners is disjoint (no double-owned method)', () => {
     const all = [...encryptionPublicMethods, SIGN_REQUEST_TYPE, ...EASTEREGG_V1_METHODS];
-    expect(all.length, 'a method is owned by more than one listener').toBe(
-      new Set(all).size,
-    );
+    expect(all.length, 'a method is owned by more than one listener').toBe(new Set(all).size);
   });
 });

@@ -22,13 +22,7 @@
  */
 
 export { createCall } from './call';
-export type {
-  Call,
-  CallOptions,
-  MediaError,
-  MediaErrorKind,
-  MediaErrorStep,
-} from './call';
+export type { Call, CallOptions, MediaError, MediaErrorKind, MediaErrorStep } from './call';
 
 export { createVideoBlur } from './blur';
 export type { BlurMode, VideoBlur, VideoBlurOptions } from './blur';

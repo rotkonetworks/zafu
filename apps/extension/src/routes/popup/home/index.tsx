@@ -1998,7 +1998,18 @@ function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
   // amount / asset / destination from the visible actions (privacy-bounded)
   const { amount, asset, recipient } = penumbraTxValue(txInfo, type);
 
-  return { id, height, timestamp: null, type, description, memo, accountIndices, amount, asset, recipient };
+  return {
+    id,
+    height,
+    timestamp: null,
+    type,
+    description,
+    memo,
+    accountIndices,
+    amount,
+    asset,
+    recipient,
+  };
 }
 
 /** format ZEC with meaningful digits only — no trailing zeros, min 2 decimals */

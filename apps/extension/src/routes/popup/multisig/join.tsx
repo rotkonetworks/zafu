@@ -202,11 +202,7 @@ const MultisigJoinZafu = () => {
       setProgress('step 2 of 3: exchanging keys...');
       const round2 = await frostDkgPart2InWorker(round1.secret, peerBroadcasts);
       for (const pkg of round2.peer_packages) {
-        await relay.sendMessage(
-          room,
-          participantId,
-          new TextEncoder().encode(`R2:${pkg}`),
-        );
+        await relay.sendMessage(room, participantId, new TextEncoder().encode(`R2:${pkg}`));
       }
 
       const expectedR2 = (maxSignersLocal - 1) ** 2;
@@ -224,11 +220,7 @@ const MultisigJoinZafu = () => {
 
       setStep('fvk-echo');
       setProgress('double-checking everyone sees the same wallet...');
-      await relay.sendMessage(
-        room,
-        participantId,
-        new TextEncoder().encode(`FVK:${orchardFvk}`),
-      );
+      await relay.sendMessage(room, participantId, new TextEncoder().encode(`FVK:${orchardFvk}`));
       await waitForUntil(() => peerFvks.length >= maxSignersLocal - 1, sessionDeadline);
       for (const peerFvk of peerFvks) {
         if (peerFvk !== orchardFvk) {

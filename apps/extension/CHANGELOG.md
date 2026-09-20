@@ -56,7 +56,6 @@ Multisig you can actually use, social discovery, and connection fixes.
 - Removed the unfinished license check that fired a request on every unlock
   (timing out and leaking usage) for no user benefit yet.
 
-
 Zcash reliability, ironwood completion, and personal-data durability.
 
 ### Zcash (money-critical)

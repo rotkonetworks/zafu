@@ -21,7 +21,12 @@ const seed64 = (fill: number): Uint8Array => new Uint8Array(64).fill(fill);
 describe('X-Wing hybrid KEM (X25519 + ML-KEM-768)', () => {
   it('has the X-Wing draft sizes (proves it is the hybrid, not ML-KEM alone)', () => {
     // pk = ml-kem-768 ek 1184 + x25519 32; ct = ml-kem-768 ct 1088 + x25519 32.
-    expect(XWING_LENGTHS).toEqual({ seed: 32, publicKey: 1216, cipherText: 1120, sharedSecret: 32 });
+    expect(XWING_LENGTHS).toEqual({
+      seed: 32,
+      publicKey: 1216,
+      cipherText: 1120,
+      sharedSecret: 32,
+    });
     const kp = xwingKeypairFromSeed(seed32(1));
     expect(kp.publicKey.length).toBe(1216);
     expect(kp.secretKey.length).toBe(32); // seed-sized secret => mnemonic-recoverable
@@ -73,9 +78,9 @@ describe('X-Wing hybrid KEM (X25519 + ML-KEM-768)', () => {
   it('rejects malformed inputs by length', () => {
     expect(() => xwingKeypairFromSeed(new Uint8Array(31))).toThrow(/seed must be 32/);
     expect(() => xwingEncapsulate(new Uint8Array(1215))).toThrow(/publicKey must be 1216/);
-    expect(() => xwingDecapsulate(new Uint8Array(1119), xwingKeypairFromSeed(seed32(9)).secretKey)).toThrow(
-      /cipherText must be 1120/,
-    );
+    expect(() =>
+      xwingDecapsulate(new Uint8Array(1119), xwingKeypairFromSeed(seed32(9)).secretKey),
+    ).toThrow(/cipherText must be 1120/);
   });
 
   it('the suite id is xwing-v1', () => {

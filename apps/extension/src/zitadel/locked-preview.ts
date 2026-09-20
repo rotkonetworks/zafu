@@ -95,7 +95,8 @@ export function createLockedPreview(): LockedPreview {
   const p = document.createElement('div');
   p.textContent =
     'messages here are end-to-end encrypted between ZIDs. get zafu to create your ZID and unlock the channels.';
-  p.style.cssText = 'color:#9a9a9a;font-size:13px;max-width:340px;line-height:1.5;margin-bottom:18px';
+  p.style.cssText =
+    'color:#9a9a9a;font-size:13px;max-width:340px;line-height:1.5;margin-bottom:18px';
   gate.appendChild(p);
 
   const cta = document.createElement('a');

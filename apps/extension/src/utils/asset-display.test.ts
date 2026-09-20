@@ -13,14 +13,16 @@ describe('shortSymbol - never leaks a raw denom path', () => {
   });
 
   it('collapses a bare ibc hash denom to a short tag', () => {
-    expect(shortSymbol('ibc/955A03D0BC92B11738A1E4B0C9F2AAF05B79929703F907D2D7AF5A0D405AE8C1')).toBe(
-      'IBC-955A',
-    );
+    expect(
+      shortSymbol('ibc/955A03D0BC92B11738A1E4B0C9F2AAF05B79929703F907D2D7AF5A0D405AE8C1'),
+    ).toBe('IBC-955A');
   });
 
   it('collapses a path ending in an opaque hash', () => {
     expect(
-      shortSymbol('transfer/channel-0/955A03D0BC92B11738A1E4B0C9F2AAF05B79929703F907D2D7AF5A0D405AE8C1'),
+      shortSymbol(
+        'transfer/channel-0/955A03D0BC92B11738A1E4B0C9F2AAF05B79929703F907D2D7AF5A0D405AE8C1',
+      ),
     ).toBe('IBC-955A');
   });
 
@@ -40,9 +42,9 @@ describe('shortSymbol - never leaks a raw denom path', () => {
 
 describe('symbolFromMetadata - prefers registry symbol', () => {
   it('uses the metadata symbol when present', () => {
-    expect(symbolFromMetadata(new Metadata({ symbol: 'USDC', display: 'transfer/channel-2/uusdc' }))).toBe(
-      'USDC',
-    );
+    expect(
+      symbolFromMetadata(new Metadata({ symbol: 'USDC', display: 'transfer/channel-2/uusdc' })),
+    ).toBe('USDC');
   });
 
   it('sanitizes the display denom when no symbol', () => {

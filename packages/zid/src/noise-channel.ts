@@ -107,7 +107,9 @@ function noiseHKDF(ck: Uint8Array, ikm: Uint8Array, outputs: 2 | 3): Uint8Array[
   const prk = extract(sha256, ikm, ck);
   const okm = expand(sha256, prk, undefined, 32 * outputs);
   const result: Uint8Array[] = [];
-  for (let i = 0; i < outputs; i++) {result.push(okm.slice(i * 32, (i + 1) * 32));}
+  for (let i = 0; i < outputs; i++) {
+    result.push(okm.slice(i * 32, (i + 1) * 32));
+  }
   return result;
 }
 
@@ -207,7 +209,9 @@ export function ctEqual(a: Uint8Array, b: Uint8Array): boolean {
 
 function unhex(h: string): Uint8Array {
   const bytes = new Uint8Array(h.length / 2);
-  for (let i = 0; i < h.length; i += 2) {bytes[i / 2] = parseInt(h.slice(i, i + 2), 16);}
+  for (let i = 0; i < h.length; i += 2) {
+    bytes[i / 2] = parseInt(h.slice(i, i + 2), 16);
+  }
   return bytes;
 }
 
@@ -303,7 +307,9 @@ export function initiatorHandshake(
   const savedMlSk = mlKem.secretKey.slice();
 
   function finish(resp: Uint8Array): { sendCS: CipherState; recvCS: CipherState } {
-    if (resp[0] !== NOISE_RESP) {throw new Error('noise: expected resp message (0x02)');}
+    if (resp[0] !== NOISE_RESP) {
+      throw new Error('noise: expected resp message (0x02)');
+    }
     if (resp.length < NOISE_RESP_MIN_LEN) {
       throw new Error(`noise: resp message too short (${resp.length} < ${NOISE_RESP_MIN_LEN})`);
     }
@@ -378,7 +384,9 @@ export function responderHandshake(
   recvCS: CipherState;
   remoteXPub: Uint8Array;
 } {
-  if (initMsg[0] !== NOISE_INIT) {throw new Error('noise: expected init message (0x01)');}
+  if (initMsg[0] !== NOISE_INIT) {
+    throw new Error('noise: expected init message (0x01)');
+  }
   if (initMsg.length < NOISE_INIT_MIN_LEN) {
     throw new Error(`noise: init message too short (${initMsg.length} < ${NOISE_INIT_MIN_LEN})`);
   }
@@ -474,7 +482,9 @@ export function encryptTransport(cs: CipherState, plaintext: Uint8Array): Uint8A
 }
 
 export function decryptTransport(cs: CipherState, msg: Uint8Array): Uint8Array {
-  if (msg[0] !== NOISE_TRANSPORT) {throw new Error('noise: expected transport message (0x03)');}
+  if (msg[0] !== NOISE_TRANSPORT) {
+    throw new Error('noise: expected transport message (0x03)');
+  }
   const wireN = new DataView(msg.buffer, msg.byteOffset + 1, 8).getBigUint64(0, false);
   if (wireN !== cs.n) {
     throw new Error(`noise: counter mismatch (expected ${cs.n}, got ${wireN})`);
@@ -513,12 +523,16 @@ export async function createNoiseChannel(
     ws.binaryType = 'arraybuffer';
 
     function transportHandler(ev: MessageEvent): void {
-      if (typeof ev.data === 'string') {return;}
+      if (typeof ev.data === 'string') {
+        return;
+      }
       try {
         const data = new Uint8Array(ev.data as ArrayBuffer);
         if (data[0] === NOISE_TRANSPORT && recvCS) {
           const pt = decryptTransport(recvCS, data);
-          for (const h of handlers) {h(pt);}
+          for (const h of handlers) {
+            h(pt);
+          }
         }
       } catch (e) {
         console.error('noise: transport decrypt error', e);
@@ -534,7 +548,9 @@ export async function createNoiseChannel(
         ws?.send(hs.message);
 
         ws!.onmessage = ev => {
-          if (typeof ev.data === 'string') {return;}
+          if (typeof ev.data === 'string') {
+            return;
+          }
           try {
             const data = new Uint8Array(ev.data as ArrayBuffer);
             if (data[0] === NOISE_RESP) {
@@ -555,7 +571,9 @@ export async function createNoiseChannel(
 
     // responder path - listen for init before we get promoted to initiator handler
     ws.onmessage = ev => {
-      if (typeof ev.data === 'string') {return;}
+      if (typeof ev.data === 'string') {
+        return;
+      }
       const data = new Uint8Array(ev.data as ArrayBuffer);
       if (data[0] === NOISE_INIT && !isInitiator) {
         try {
@@ -586,7 +604,9 @@ export async function createNoiseChannel(
 
     ws.onerror = () => reject(new Error('noise: WebSocket error'));
     ws.onclose = () => {
-      if (!sendCS) {reject(new Error('noise: connection closed during handshake'));}
+      if (!sendCS) {
+        reject(new Error('noise: connection closed during handshake'));
+      }
     };
   });
 
@@ -603,13 +623,17 @@ export async function createNoiseChannel(
     peer: peerPubkey,
 
     send(data: string | Uint8Array): void {
-      if (!sendCS || !ws) {return;}
+      if (!sendCS || !ws) {
+        return;
+      }
       const plain = typeof data === 'string' ? new TextEncoder().encode(data) : data;
       ws.send(encryptTransport(sendCS, plain));
     },
 
     on(event: 'message', handler: (data: Uint8Array) => void): void {
-      if (event === 'message') {handlers.push(handler);}
+      if (event === 'message') {
+        handlers.push(handler);
+      }
     },
 
     close(): void {

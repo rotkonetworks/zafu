@@ -18,12 +18,7 @@ import { gcm } from '@noble/ciphers/aes.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { randomBytes } from '@noble/hashes/utils.js';
-import {
-  xwingEncapsulate,
-  xwingDecapsulate,
-  xwingKeypairFromSeed,
-  XWING_LENGTHS,
-} from './xwing';
+import { xwingEncapsulate, xwingDecapsulate, xwingKeypairFromSeed, XWING_LENGTHS } from './xwing';
 
 /** suite byte identifying an X-Wing hybrid sealed box on the wire. */
 export const SEAL_SUITE_XWING = 0x01;

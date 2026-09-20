@@ -77,16 +77,16 @@ long-term decryption exposure.
 
 ## encryption at rest
 
-| data                        | storage                | encrypted            |
-| --------------------------- | ---------------------- | -------------------- |
-| penumbra wallets (FVK)      | chrome.storage.local   | yes (AES-256-GCM)    |
-| zcash wallets (UFVK)        | chrome.storage.local   | yes                  |
-| frost multisig key packages | chrome.storage.local   | yes (in zcashWallets)|
-| contacts                    | chrome.storage.local   | yes                  |
-| messages                    | chrome.storage.local   | yes                  |
-| group chats                 | chrome.storage.local   | yes                  |
-| recent / diversified addrs  | chrome.storage.local   | yes                  |
-| connected sites             | chrome.storage.local   | no (no private data) |
-| frost relay identities      | chrome.storage.local   | no (not a spend key) |
-| password key                | chrome.storage.session | session only         |
-| vaults (encrypted mnemonic) | chrome.storage.local   | yes (separate key)   |
+| data                        | storage                | encrypted             |
+| --------------------------- | ---------------------- | --------------------- |
+| penumbra wallets (FVK)      | chrome.storage.local   | yes (AES-256-GCM)     |
+| zcash wallets (UFVK)        | chrome.storage.local   | yes                   |
+| frost multisig key packages | chrome.storage.local   | yes (in zcashWallets) |
+| contacts                    | chrome.storage.local   | yes                   |
+| messages                    | chrome.storage.local   | yes                   |
+| group chats                 | chrome.storage.local   | yes                   |
+| recent / diversified addrs  | chrome.storage.local   | yes                   |
+| connected sites             | chrome.storage.local   | no (no private data)  |
+| frost relay identities      | chrome.storage.local   | no (not a spend key)  |
+| password key                | chrome.storage.session | session only          |
+| vaults (encrypted mnemonic) | chrome.storage.local   | yes (separate key)    |

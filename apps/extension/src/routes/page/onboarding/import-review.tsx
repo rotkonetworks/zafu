@@ -99,7 +99,9 @@ export const ImportReview = () => {
               key={i}
               className='flex items-baseline gap-2 border border-border-soft/40 bg-canvas/60 px-2.5 py-1.5 [border-radius:8px]'
             >
-              <span className='w-5 shrink-0 text-right text-label tabular text-fg-dim'>{i + 1}</span>
+              <span className='w-5 shrink-0 text-right text-label tabular text-fg-dim'>
+                {i + 1}
+              </span>
               <span className='text-data text-fg-high'>{word}</span>
             </li>
           ))}
@@ -112,8 +114,8 @@ export const ImportReview = () => {
           </span>
           <p className='text-xs text-fg-muted lowercase leading-snug'>
             if this phrase also has sapling funds from another wallet, they will not show up here
-            and cannot be spent from zafu. they stay on-chain and untouched — zafu simply cannot
-            see them.
+            and cannot be spent from zafu. they stay on-chain and untouched — zafu simply cannot see
+            them.
           </p>
         </div>
 

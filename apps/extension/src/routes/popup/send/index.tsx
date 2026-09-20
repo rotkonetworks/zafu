@@ -817,8 +817,8 @@ function CosmosSend({
         <div className='flex items-start gap-2 rounded-lg border border-border-soft bg-elev-2/20 p-3 text-xs text-fg-muted'>
           <span className='i-ph-shield h-3.5 w-3.5 shrink-0 text-penumbra-purple' />
           <span>
-            direct shielded deposit into penumbra over {sourceChain.name} {sourceChain.penumbraChannel}
-            {' '}- funds arrive shielded, not routed through Skip
+            direct shielded deposit into penumbra over {sourceChain.name}{' '}
+            {sourceChain.penumbraChannel} - funds arrive shielded, not routed through Skip
           </span>
         </div>
       )}

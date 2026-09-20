@@ -4,7 +4,7 @@ Hybrid post-quantum key agreement for [zafu](https://zafu.pro) - **X25519 + ML-K
 
 ## Why
 
-An adversary who records encrypted traffic **today** can decrypt it once a quantum computer exists (*harvest-now, decrypt-later*). Mixing ML-KEM-768 into key agreement keeps that recorded traffic confidential against a future quantum attacker - **now, while the data still matters**. It's always **hybrid**: X25519 stays in the mix, so a flaw in the (young) ML-KEM never lowers today's classical security. Both halves must break.
+An adversary who records encrypted traffic **today** can decrypt it once a quantum computer exists (_harvest-now, decrypt-later_). Mixing ML-KEM-768 into key agreement keeps that recorded traffic confidential against a future quantum attacker - **now, while the data still matters**. It's always **hybrid**: X25519 stays in the mix, so a flaw in the (young) ML-KEM never lowers today's classical security. Both halves must break.
 
 This is **confidentiality only** - KEMs for key agreement. Signatures stay classical (a verified signature has no harvest-now exposure).
 

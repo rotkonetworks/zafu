@@ -131,9 +131,7 @@ export const MultisigSign = () => {
         room = await resolveRoomCode(relayUrl, room);
       }
       const stored = await getOrCreateRelayIdentity(
-        String(
-          (ms as { relayCeremonyId?: string }).relayCeremonyId ?? ms.publicKeyPackage,
-        ),
+        String((ms as { relayCeremonyId?: string }).relayCeremonyId ?? ms.publicKeyPackage),
       );
       const relay = new FrostdRelayClient(relayUrl, await buildRelayIdentity(stored, peerKeys));
       const participantId = new Uint8Array(32);

@@ -16,7 +16,7 @@ function mockNode(captured: { tx?: Uint8Array }) {
       return jsonRes({ account: { base_account: { account_number: '5', sequence: '3' } } });
     }
     // broadcast
-    const body = JSON.parse((init!.body as string) as string) as { tx_bytes: string };
+    const body = JSON.parse(init!.body as string as string) as { tx_bytes: string };
     captured.tx = Uint8Array.from(atob(body.tx_bytes), c => c.charCodeAt(0));
     return jsonRes({ tx_response: { txhash: 'HASH', code: 0, raw_log: '' } });
   });

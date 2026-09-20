@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fromBech32 } from '@cosmjs/encoding';
-import {
-  deriveInjectiveWallet,
-  deriveInjectiveAddress,
-  isValidInjectiveAddress,
-} from './derive';
+import { deriveInjectiveWallet, deriveInjectiveAddress, isValidInjectiveAddress } from './derive';
 
 const toHex = (b: Uint8Array) =>
   Array.from(b)
@@ -68,9 +64,7 @@ describe('injective derivation', () => {
 
     it('rejects a valid bech32 address with the wrong prefix', () => {
       // a well-formed cosmos1 address (valid checksum, wrong hrp)
-      expect(
-        isValidInjectiveAddress('cosmos1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqxr8dwp'),
-      ).toBe(false);
+      expect(isValidInjectiveAddress('cosmos1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqxr8dwp')).toBe(false);
     });
 
     it('rejects empty / junk input', () => {

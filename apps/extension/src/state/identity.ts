@@ -247,11 +247,7 @@ const deriveSeedForContactKa = (identity: Uint8Array): Uint8Array =>
  * its public half is advertised (zafu_zid_pubkey.pq_pubkey), the 32-byte seed IS
  * the decapsulation secret and is recoverable from the mnemonic.
  */
-const deriveSeedForSiteXWing = (
-  identity: Uint8Array,
-  origin: string,
-  rotation = 0,
-): Uint8Array => {
+const deriveSeedForSiteXWing = (identity: Uint8Array, origin: string, rotation = 0): Uint8Array => {
   // NUL-delimited so an origin containing ':' (e.g. a port) can't collide with
   // the rotation field: 'a.com:7' at rotation 0 must differ from 'a.com' at
   // rotation 7. Rotation is always encoded. (Safe to shape now - unshipped.)

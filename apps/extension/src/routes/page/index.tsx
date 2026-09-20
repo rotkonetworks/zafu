@@ -121,7 +121,9 @@ export const PageIndex = () => {
           <div className='flex flex-col gap-2'>
             <h1 className='text-3xl font-semibold lowercase tracking-tight text-fg-high'>zafu</h1>
             <div className='h-px w-8 bg-zigner-gold/70' />
-            <p className='text-label lowercase tracking-wide text-fg-muted'>apps &amp; integrations</p>
+            <p className='text-label lowercase tracking-wide text-fg-muted'>
+              apps &amp; integrations
+            </p>
           </div>
           <button
             onClick={() => setAdding(!adding)}

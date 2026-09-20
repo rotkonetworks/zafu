@@ -187,9 +187,9 @@ export async function signBytes(
 
 /** fetch a recipient's advertised keys (the site-scoped ZID pubkeys). */
 export async function zidPubkey(zafu: ZafuHandle): Promise<ZidRecipient> {
-  const resp = (await call(zafu, 'zafu_zid_pubkey', {
+  const resp = await call(zafu, 'zafu_zid_pubkey', {
     type: 'zafu_zid_pubkey',
-  }));
+  });
   return { pubkey: resp.pubkey, pq_pubkey: resp.pq_pubkey, pq_suite: resp.pq_suite };
 }
 
@@ -213,13 +213,13 @@ export async function encryptFor(
 ): Promise<{ ciphertext: string; ephemeral_pubkey: string; postQuantum: boolean }> {
   const pt = b64encode(plaintext);
   const req = recipient.pq_pubkey
-    ? ({
+    ? {
         type: 'zafu_encrypt' as const,
         recipient: recipient.pubkey,
         recipient_pq: recipient.pq_pubkey,
         plaintext: pt,
-      })
-    : ({ type: 'zafu_encrypt' as const, recipient: recipient.pubkey, plaintext: pt });
+      }
+    : { type: 'zafu_encrypt' as const, recipient: recipient.pubkey, plaintext: pt };
   const resp = await call(zafu, 'zafu_encrypt', req);
   // postQuantum reflects the ACTUAL outcome, not the intent: the hybrid path
   // carries its ephemeral inside the ciphertext and returns an empty
@@ -249,10 +249,10 @@ export async function decryptFrom(
   zafu: ZafuHandle,
   sealed: { ciphertext: string; ephemeral_pubkey: string },
 ): Promise<Uint8Array> {
-  const resp = (await call(zafu, 'zafu_decrypt', {
+  const resp = await call(zafu, 'zafu_decrypt', {
     type: 'zafu_decrypt',
     ciphertext: sealed.ciphertext,
     ephemeral_pubkey: sealed.ephemeral_pubkey,
-  }));
+  });
   return b64decode(resp.plaintext);
 }

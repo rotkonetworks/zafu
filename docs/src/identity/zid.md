@@ -30,13 +30,13 @@ a zid can:
 
 zafu uses distinct mechanisms for distinct purposes:
 
-| layer               | mechanism                       | purpose                             |
-| ------------------- | ------------------------------- | ----------------------------------- |
-| diversified address | zcash FVK diversifier           | payment routing + referral tracking |
-| per-site zid        | ed25519 per origin              | website authentication              |
-| per-site pq key     | X-Wing (X25519 + ML-KEM-768)    | sealed-box encryption to a site     |
-| per-contact zid     | ed25519 per contact             | sender auth + e2ee (x25519 DH)      |
-| contact ka key      | x25519 (one per identity)       | non-interactive contact discovery   |
+| layer               | mechanism                    | purpose                             |
+| ------------------- | ---------------------------- | ----------------------------------- |
+| diversified address | zcash FVK diversifier        | payment routing + referral tracking |
+| per-site zid        | ed25519 per origin           | website authentication              |
+| per-site pq key     | X-Wing (X25519 + ML-KEM-768) | sealed-box encryption to a site     |
+| per-contact zid     | ed25519 per contact          | sender auth + e2ee (x25519 DH)      |
+| contact ka key      | x25519 (one per identity)    | non-interactive contact discovery   |
 
 referral tracking ("via alice") is handled by diversified zcash
 addresses at the transport layer. see
@@ -156,7 +156,7 @@ contract (wire major `ZAFU_PROTOCOL_VERSION = 1`), usually via the
 | `ping`                    | detect wallet + negotiate protocol version      |
 | `zafu_sign`               | sign a challenge with the site-scoped zid       |
 | `zafu_zid_pubkey`         | fetch the site's ed25519 + pq public keys       |
-| `zafu_request_capability` | request a named capability                       |
+| `zafu_request_capability` | request a named capability                      |
 | `zafu_encrypt`            | seal a message to a recipient (classical or pq) |
 | `zafu_decrypt`            | open a sealed box addressed to this site        |
 | `zafu_pick_contacts`      | open the wallet's contact picker                |
@@ -200,15 +200,15 @@ of its sibling generations, with rotate up/down and pin controls.
 zid preferences and logs live in local extension storage. secrets are
 never stored - all private keys are re-derived from the seed on demand.
 
-| data                 | encrypted | purpose                                             |
-| -------------------- | --------- | --------------------------------------------------- |
-| zidPreferences       | yes       | per-origin identity choice + mode + rotation counter|
-| zidShareLog          | yes       | site authentication records                         |
-| zidSiteLabels        | yes       | user labels for connected sites                     |
-| diversifiedAddresses | yes       | per-contact zcash address mapping (referral graph)  |
-| zidIndex             | no        | global generation counter (non-secret)              |
-| zidPins              | no        | bookmarked generations + labels (non-secret)        |
-| zidGenKeys           | no        | cached public keys per generation (non-secret)      |
+| data                 | encrypted | purpose                                              |
+| -------------------- | --------- | ---------------------------------------------------- |
+| zidPreferences       | yes       | per-origin identity choice + mode + rotation counter |
+| zidShareLog          | yes       | site authentication records                          |
+| zidSiteLabels        | yes       | user labels for connected sites                      |
+| diversifiedAddresses | yes       | per-contact zcash address mapping (referral graph)   |
+| zidIndex             | no        | global generation counter (non-secret)               |
+| zidPins              | no        | bookmarked generations + labels (non-secret)         |
+| zidGenKeys           | no        | cached public keys per generation (non-secret)       |
 
 the generation-0 zid **public** key is also stored in the vault's
 insensitive metadata so pages like the chat client can read it without

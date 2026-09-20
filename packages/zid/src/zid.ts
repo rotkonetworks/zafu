@@ -63,7 +63,9 @@ export const zid = {
                 ...pickOpts,
                 appName: opts.appName,
               });
-              if (result && result.length > 0) {return result;}
+              if (result && result.length > 0) {
+                return result;
+              }
               // fallback to zid local contacts
               return getContactRefs(appOrigin);
             },
@@ -73,7 +75,9 @@ export const zid = {
                 appName: opts.appName,
                 relayUrl: opts.relayUrl,
               });
-              if (result.sent) {return result;}
+              if (result.sent) {
+                return result;
+              }
               // fallback: resolve handle locally and send via zid channel
               const pubkey = resolveHandle(handle, appOrigin);
               if (pubkey) {

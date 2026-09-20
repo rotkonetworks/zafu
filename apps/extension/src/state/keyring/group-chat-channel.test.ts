@@ -61,8 +61,7 @@ describe('GroupChatChannel.resolveSession', () => {
   const alice = idHex();
   const bob = idHex();
   const members = [alice.pub, bob.pub];
-  const chan = () =>
-    new GroupChatChannel(HOST, relayIdentity(alice.pub, [bob.pub]), alice.priv);
+  const chan = () => new GroupChatChannel(HOST, relayIdentity(alice.pub, [bob.pub]), alice.priv);
 
   it('creates a chat session when the group has none', async () => {
     const calls = mockFetch({
@@ -116,7 +115,11 @@ describe('GroupChatChannel.resolveSession', () => {
     const calls = mockFetch({
       ...loginOk,
       get_session_info: () => ({
-        json: { message_count: CHAT_MESSAGE_COUNT, pubkeys: members, coordinator_pubkey: alice.pub },
+        json: {
+          message_count: CHAT_MESSAGE_COUNT,
+          pubkeys: members,
+          coordinator_pubkey: alice.pub,
+        },
       }),
     });
 
@@ -129,7 +132,8 @@ describe('GroupChatChannel.resolveSession', () => {
     const calls = mockFetch({
       ...loginOk,
       // first list_sessions 401s (token expired), second succeeds
-      list_sessions: (_b, n) => (n === 1 ? { status: 401, json: {} } : { json: { session_ids: [] } }),
+      list_sessions: (_b, n) =>
+        n === 1 ? { status: 401, json: {} } : { json: { session_ids: [] } },
       create_new_session: () => ({ json: { session_id: 'after-relogin' } }),
     });
 
@@ -156,7 +160,11 @@ describe('GroupChatChannel send/drain round-trip', () => {
     mockFetch({
       ...loginOk,
       get_session_info: () => ({
-        json: { message_count: CHAT_MESSAGE_COUNT, pubkeys: members, coordinator_pubkey: alice.pub },
+        json: {
+          message_count: CHAT_MESSAGE_COUNT,
+          pubkeys: members,
+          coordinator_pubkey: alice.pub,
+        },
       }),
       send: body => {
         for (const r of body.recipients as string[]) {

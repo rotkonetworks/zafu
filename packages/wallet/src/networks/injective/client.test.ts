@@ -35,9 +35,7 @@ describe('injective client', () => {
     const acct = await queryInjectiveAccount('https://lcd.example', 'inj1x', fetchFn as never);
     expect(acct.accountNumber).toBe(22594n);
     expect(acct.sequence).toBe(0);
-    expect(fetchFn).toHaveBeenCalledWith(
-      'https://lcd.example/cosmos/auth/v1beta1/accounts/inj1x',
-    );
+    expect(fetchFn).toHaveBeenCalledWith('https://lcd.example/cosmos/auth/v1beta1/accounts/inj1x');
   });
 
   it('throws on an unfunded account', async () => {
@@ -65,9 +63,7 @@ describe('injective client', () => {
     );
     expect(bal.usdc).toBe(12500000n);
     expect(bal.inj).toBe(5000000000000000n);
-    expect(fetchFn).toHaveBeenCalledWith(
-      'https://lcd.example/cosmos/bank/v1beta1/balances/inj1x',
-    );
+    expect(fetchFn).toHaveBeenCalledWith('https://lcd.example/cosmos/bank/v1beta1/balances/inj1x');
   });
 
   it('matches the USDC denom case-insensitively and defaults missing coins to 0', async () => {
@@ -149,7 +145,11 @@ describe('injective client', () => {
     const fetchFn = vi.fn(() =>
       jsonRes({ tx_response: { txhash: 'DEAD', code: 5, raw_log: 'insufficient funds' } }),
     );
-    const res = await broadcastInjectiveTx('https://lcd.example', new Uint8Array([0]), fetchFn as never);
+    const res = await broadcastInjectiveTx(
+      'https://lcd.example',
+      new Uint8Array([0]),
+      fetchFn as never,
+    );
     expect(res.code).toBe(5);
     expect(res.rawLog).toContain('insufficient funds');
   });

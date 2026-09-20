@@ -85,19 +85,21 @@ function ibcChainToCosmosId(ibcChain: IbcChain): CosmosChainId | undefined {
  * Used as fallback when the penumbra registry doesn't list these chains.
  */
 function getKnownIbcChains(): IbcChain[] {
-  return Object.values(COSMOS_CHAINS)
-    // only chains with a known penumbra channel, and NOT Ethermint - Injective
-    // (eth_secp256k1) is a conduit-only ramp with its own panel and must never
-    // appear in the shared coin-118 IBC-deposit source list.
-    .filter(c => c.penumbraChannel && c.keyAlgo !== 'eth_secp256k1')
-    .map(c => ({
-      displayName: c.name,
-      chainId: c.chainId,
-      channelId: '', // penumbra-side channel (not needed for deposit)
-      counterpartyChannelId: c.penumbraChannel!, // cosmos-side channel to penumbra
-      addressPrefix: c.bech32Prefix,
-      images: [],
-    }));
+  return (
+    Object.values(COSMOS_CHAINS)
+      // only chains with a known penumbra channel, and NOT Ethermint - Injective
+      // (eth_secp256k1) is a conduit-only ramp with its own panel and must never
+      // appear in the shared coin-118 IBC-deposit source list.
+      .filter(c => c.penumbraChannel && c.keyAlgo !== 'eth_secp256k1')
+      .map(c => ({
+        displayName: c.name,
+        chainId: c.chainId,
+        channelId: '', // penumbra-side channel (not needed for deposit)
+        counterpartyChannelId: c.penumbraChannel!, // cosmos-side channel to penumbra
+        addressPrefix: c.bech32Prefix,
+        images: [],
+      }))
+  );
 }
 
 /** merge registry chains with our known chains — registry data is authoritative for channels */

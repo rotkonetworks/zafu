@@ -51,7 +51,6 @@ export const ZcashBirthdayField = ({
     if (draftNum !== current && !(isNaN(draftNum) && value == null)) {
       setBlockDraft(value == null ? '' : String(value));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
   const valid = value != null && value >= ZCASH_ORCHARD_ACTIVATION;

@@ -4,7 +4,18 @@
   "license": "MIT",
   "description": "zafu identity SDK - connect wallet, sign actions, post-quantum e2ee channels and messaging",
   "type": "module",
-  "keywords": ["zafu", "zid", "identity", "sdk", "login", "e2ee", "post-quantum", "wallet", "zcash", "penumbra"],
+  "keywords": [
+    "zafu",
+    "zid",
+    "identity",
+    "sdk",
+    "login",
+    "e2ee",
+    "post-quantum",
+    "wallet",
+    "zcash",
+    "penumbra"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rotkonetworks/zafu.git",
@@ -12,7 +23,11 @@
   },
   "homepage": "https://github.com/rotkonetworks/zafu/tree/main/packages/zid#readme",
   "sideEffects": false,
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
     "lint": "eslint \"**/*.ts*\"",

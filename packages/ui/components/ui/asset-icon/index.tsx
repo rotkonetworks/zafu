@@ -34,12 +34,7 @@ export const AssetIcon = ({
   return (
     <>
       {icon && failedSrc !== icon ? (
-        <img
-          className={className}
-          src={icon}
-          alt='Asset icon'
-          onError={() => setFailedSrc(icon)}
-        />
+        <img className={className} src={icon} alt='Asset icon' onError={() => setFailedSrc(icon)} />
       ) : isDelegationToken ? (
         <DelegationTokenIcon displayDenom={display} className={className} />
       ) : isUnbondingToken ? (

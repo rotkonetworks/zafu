@@ -242,7 +242,10 @@ const validateEd25519Pubkey = (pubkeyBytes: Uint8Array): boolean => {
 
 const handleEncrypt = async (msg: ZafuEncryptRequest): Promise<ZafuEncryptResponse> => {
   if (!isValidBase64(msg.plaintext)) {
-    return { error: 'invalid plaintext: expected non-empty base64 string', code: 'invalid_request' };
+    return {
+      error: 'invalid plaintext: expected non-empty base64 string',
+      code: 'invalid_request',
+    };
   }
 
   // hybrid post-quantum path: the recipient advertised an X-Wing key
@@ -266,7 +269,10 @@ const handleEncrypt = async (msg: ZafuEncryptRequest): Promise<ZafuEncryptRespon
 
   // classical x25519 path
   if (!isValidHexPubkey(msg.recipient, 32)) {
-    return { error: 'invalid recipient: expected 64 hex chars (32-byte ed25519 pubkey)', code: 'invalid_request' };
+    return {
+      error: 'invalid recipient: expected 64 hex chars (32-byte ed25519 pubkey)',
+      code: 'invalid_request',
+    };
   }
 
   const recipientEd25519 = hexToBytes(msg.recipient);
@@ -317,14 +323,20 @@ const handleDecrypt = async (
   }
 
   if (!isValidBase64(msg.ciphertext)) {
-    return { error: 'invalid ciphertext: expected non-empty base64 string', code: 'invalid_request' };
+    return {
+      error: 'invalid ciphertext: expected non-empty base64 string',
+      code: 'invalid_request',
+    };
   }
 
   // An empty ephemeral_pubkey marks a hybrid (X-Wing) sealed box - its ephemeral
   // is inside the ciphertext. A non-empty one is the classical x25519 path.
   const hybrid = !msg.ephemeral_pubkey || msg.ephemeral_pubkey.length === 0;
   if (!hybrid && !isValidHexPubkey(msg.ephemeral_pubkey, 32)) {
-    return { error: 'invalid ephemeral_pubkey: expected 64 hex chars (32-byte x25519 pubkey)', code: 'invalid_request' };
+    return {
+      error: 'invalid ephemeral_pubkey: expected 64 hex chars (32-byte x25519 pubkey)',
+      code: 'invalid_request',
+    };
   }
 
   try {

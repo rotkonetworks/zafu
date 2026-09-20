@@ -44,7 +44,9 @@ export function signEthSecp256k1(privKey: Uint8Array, signBytes: Uint8Array): Ui
  */
 export function encodeEthSecp256k1PubKey(compressedPubKey: Uint8Array): Uint8Array {
   if (compressedPubKey.length !== 33) {
-    throw new Error(`expected a 33-byte compressed secp256k1 pubkey, got ${compressedPubKey.length}`);
+    throw new Error(
+      `expected a 33-byte compressed secp256k1 pubkey, got ${compressedPubKey.length}`,
+    );
   }
   const out = new Uint8Array(2 + compressedPubKey.length);
   out[0] = 0x0a; // field 1, wire type 2 (length-delimited)

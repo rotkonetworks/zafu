@@ -379,9 +379,7 @@ const MultisigCreateZafu = () => {
                 rather than run off the popup */}
             <span className='break-all font-mono text-xs'>{rdvRef.current?.code ?? roomCode}</span>
             <button
-              onClick={() =>
-                void navigator.clipboard.writeText(rdvRef.current?.code ?? roomCode)
-              }
+              onClick={() => void navigator.clipboard.writeText(rdvRef.current?.code ?? roomCode)}
               className='p-1 text-fg-muted hover:text-fg-high transition-colors'
             >
               <span className='i-ph-copy size-4' />

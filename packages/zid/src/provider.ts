@@ -97,11 +97,11 @@ export async function requestDelegation(
     // app name into the signed bytes; a server verifying this delegation must
     // also pin a fresh nonce + its own origin to stop cross-site replay.
     const transport = createExtensionTransport(zafu);
-    const resp = (await transport.request('zafu_sign', {
+    const resp = await transport.request('zafu_sign', {
       type: 'zafu_sign',
       challengeHex,
       statement: `Authorize ${appName}\nSession: ${sessionPubkey.slice(0, 16)}...`,
-    }));
+    });
 
     if (resp.success && resp.publicKey && resp.signature) {
       return {
@@ -126,11 +126,11 @@ export async function pickContacts(
     // no appOrigin on the wire: the wallet uses the browser-attested
     // sender.origin, never a caller-supplied origin (privacy + anti-spoof).
     const transport = createExtensionTransport(zafu);
-    const resp = (await transport.request('zafu_pick_contacts', {
+    const resp = await transport.request('zafu_pick_contacts', {
       type: 'zafu_pick_contacts',
       purpose: opts.purpose || `${opts.appName || 'App'} wants to pick contacts`,
       max: opts.max || 1,
-    }));
+    });
 
     if ('success' in resp && resp.success && Array.isArray(resp.contacts)) {
       return resp.contacts; // [{ handle, displayName }] - handles are app-scoped BLAKE2b
@@ -186,8 +186,12 @@ export function listenInvites(
   const extId = zafu.origin.replace('chrome-extension://', '').replace(/\/$/, '');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- chrome message + sender args are untyped
   const listener = (msg: any, sender: any) => {
-    if (sender.id !== extId) {return;}
-    if (msg?.type !== 'zafu_incoming_invite') {return;}
+    if (sender.id !== extId) {
+      return;
+    }
+    if (msg?.type !== 'zafu_incoming_invite') {
+      return;
+    }
     handler({
       appOrigin: msg.appOrigin,
       type: msg.inviteType,
@@ -213,6 +217,8 @@ function hex(bytes: Uint8Array): string {
 }
 function unhex(h: string): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(h.length / 2);
-  for (let i = 0; i < h.length; i += 2) {bytes[i / 2] = parseInt(h.slice(i, i + 2), 16);}
+  for (let i = 0; i < h.length; i += 2) {
+    bytes[i / 2] = parseInt(h.slice(i, i + 2), 16);
+  }
   return bytes;
 }

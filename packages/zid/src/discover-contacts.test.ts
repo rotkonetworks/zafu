@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { bytesToHex } from '@noble/hashes/utils';
-import { discoverContacts ,type  PresenceService,type  DiscoveryPeer,type  PresentPeer } from './presence-service';
+import {
+  discoverContacts,
+  type PresenceService,
+  type DiscoveryPeer,
+  type PresentPeer,
+} from './presence-service';
 
 const peer = (id: string): DiscoveryPeer => ({
   id,

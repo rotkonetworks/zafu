@@ -14,7 +14,7 @@ npm install @zafu/protocol
 
 - **`ZAFU_PROTOCOL_VERSION`** / `ZAFU_SUPPORTED_PROTOCOL_VERSIONS` - the wire-protocol major(s), negotiated over the `ping` handshake.
 - **Method types** - typed request/response shapes for the v1 surface: `ping`, `zafu_sign`, `zafu_zid_pubkey`, `zafu_request_capability`, `zafu_encrypt`, `zafu_decrypt`, `zafu_pick_contacts`. `ZAFU_V1_METHODS` lists them; `ZafuRequest<M>` / `ZafuResponse<M>` map a method to its shapes.
-- **`ZafuTransport`** - the pluggable transport interface. The message shapes say *what* crosses the wire; a transport says *how* it gets there (an extension bridge today; a relay or native host tomorrow).
+- **`ZafuTransport`** - the pluggable transport interface. The message shapes say _what_ crosses the wire; a transport says _how_ it gets there (an extension bridge today; a relay or native host tomorrow).
 
 ```ts
 import {

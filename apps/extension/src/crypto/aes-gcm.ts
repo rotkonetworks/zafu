@@ -11,7 +11,10 @@
 import { randomBytes } from '@noble/hashes/utils';
 
 /** AES-256-GCM encrypt. Returns nonce (12 bytes) || ciphertext || tag. */
-export const aesGcmEncrypt = async (key: Uint8Array, plaintext: Uint8Array): Promise<Uint8Array> => {
+export const aesGcmEncrypt = async (
+  key: Uint8Array,
+  plaintext: Uint8Array,
+): Promise<Uint8Array> => {
   const nonce = randomBytes(12);
   const cryptoKey = await crypto.subtle.importKey('raw', key as BufferSource, 'AES-GCM', false, [
     'encrypt',

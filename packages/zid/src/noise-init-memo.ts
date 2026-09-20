@@ -43,7 +43,9 @@ export interface NoiseInitPayload {
  * fast check - no allocation, no parsing.
  */
 export function isNoiseInitMemo(memoBytes: Uint8Array): boolean {
-  if (memoBytes.length < HEADER_SIZE) {return false;}
+  if (memoBytes.length < HEADER_SIZE) {
+    return false;
+  }
   return (
     memoBytes[0] === MAGIC[0] &&
     memoBytes[1] === MAGIC[1] &&
@@ -62,14 +64,22 @@ export function encodeNoiseInitMemo(
   relayUrl: string,
   appPayload?: Uint8Array,
 ): Uint8Array | null {
-  if (initiatorPubkey.length !== 32) {return null;}
-  if (ephemeralX25519Pub.length !== 32) {return null;}
+  if (initiatorPubkey.length !== 32) {
+    return null;
+  }
+  if (ephemeralX25519Pub.length !== 32) {
+    return null;
+  }
 
   const urlBytes = new TextEncoder().encode(relayUrl);
-  if (urlBytes.length > MAX_RELAY_URL_LEN) {return null;}
+  if (urlBytes.length > MAX_RELAY_URL_LEN) {
+    return null;
+  }
 
   const totalSize = HEADER_SIZE + urlBytes.length + (appPayload?.length ?? 0);
-  if (totalSize > MEMO_MAX) {return null;}
+  if (totalSize > MEMO_MAX) {
+    return null;
+  }
 
   const out = new Uint8Array(totalSize);
   let offset = 0;
@@ -108,14 +118,20 @@ export function encodeNoiseInitMemo(
  * or does not have the correct magic bytes.
  */
 export function decodeNoiseInitMemo(memoBytes: Uint8Array): NoiseInitPayload | null {
-  if (!isNoiseInitMemo(memoBytes)) {return null;}
+  if (!isNoiseInitMemo(memoBytes)) {
+    return null;
+  }
 
   // strip trailing zero padding (Zcash pads memos to 512 bytes)
   let end = memoBytes.length;
-  while (end > HEADER_SIZE && memoBytes[end - 1] === 0) {end--;}
+  while (end > HEADER_SIZE && memoBytes[end - 1] === 0) {
+    end--;
+  }
   const trimmed = memoBytes.subarray(0, end);
 
-  if (trimmed.length < HEADER_SIZE) {return null;}
+  if (trimmed.length < HEADER_SIZE) {
+    return null;
+  }
 
   let offset = 4; // skip magic
 
@@ -129,8 +145,12 @@ export function decodeNoiseInitMemo(memoBytes: Uint8Array): NoiseInitPayload | n
   offset += 2;
 
   // validate relay URL length
-  if (urlLen > MAX_RELAY_URL_LEN) {return null;}
-  if (offset + urlLen > trimmed.length) {return null;}
+  if (urlLen > MAX_RELAY_URL_LEN) {
+    return null;
+  }
+  if (offset + urlLen > trimmed.length) {
+    return null;
+  }
 
   let relayUrl: string;
   try {

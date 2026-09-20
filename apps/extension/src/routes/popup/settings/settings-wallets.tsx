@@ -782,7 +782,9 @@ const VaultRow = ({
             // this state, so the two read as one idea. The nudge stays because
             // an OLD imported seed left on auto misses its early notes, but it
             // is a calm aside, not an alarm.
-            <p className='text-label text-fg-dim mt-1'>auto · scans recent blocks, set a date if older</p>
+            <p className='text-label text-fg-dim mt-1'>
+              auto · scans recent blocks, set a date if older
+            </p>
           )}
 
           {showAdvanced && (

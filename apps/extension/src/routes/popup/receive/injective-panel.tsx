@@ -18,12 +18,19 @@ import { useQuery } from '@tanstack/react-query';
 import QRCode from 'qrcode';
 import { Button } from '@repo/ui/components/ui/button';
 import { useStore } from '../../../state';
-import { selectEffectiveKeyInfo, selectPenumbraAccount, keyRingSelector } from '../../../state/keyring';
+import {
+  selectEffectiveKeyInfo,
+  selectPenumbraAccount,
+  keyRingSelector,
+} from '../../../state/keyring';
 import { derivePenumbraEphemeralFromMnemonic } from '../../../hooks/use-address';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { parseAmountToBaseUnits } from '@repo/wallet/networks/cosmos/signer';
-import { deriveInjectiveAddress, isValidInjectiveAddress } from '@repo/wallet/networks/injective/derive';
+import {
+  deriveInjectiveAddress,
+  isValidInjectiveAddress,
+} from '@repo/wallet/networks/injective/derive';
 import { queryInjectiveBalances, queryInjectiveTx } from '@repo/wallet/networks/injective/client';
 import { shieldInToPenumbra, withdrawToExchange } from '@repo/wallet/networks/injective/conduit';
 
@@ -117,11 +124,7 @@ const isBusy = (s: TxStatus) => s === 'signing' || s === 'submitted';
  * packet that never lands is left honestly at `submitted`. StrictMode-safe: the
  * cleanup cancels in-flight work and clears the interval.
  */
-function useInjectiveInclusion(
-  tx: TxState,
-  setTx: (t: TxState) => void,
-  onSettled: () => void,
-) {
+function useInjectiveInclusion(tx: TxState, setTx: (t: TxState) => void, onSettled: () => void) {
   const { status, hash } = tx;
   useEffect(() => {
     if (status !== 'submitted' || !hash) {
@@ -360,7 +363,9 @@ export const InjectivePanel = () => {
           withdraw USDC on Injective from Binance or Kraken to this address, then shield it into
           Penumbra below. gas is paid in INJ - keep a little INJ here to move USDC.
         </p>
-        {qr && <img src={qr} alt='inj address QR' className='mb-3 h-40 w-40 rounded bg-white p-1' />}
+        {qr && (
+          <img src={qr} alt='inj address QR' className='mb-3 h-40 w-40 rounded bg-white p-1' />
+        )}
         <div className='mb-3 flex items-center gap-2'>
           <span className='truncate font-mono text-xs' title={injAddress}>
             {injAddress || 'deriving...'}
@@ -385,14 +390,14 @@ export const InjectivePanel = () => {
               className='flex items-center gap-1 text-label text-fg-muted hover:text-fg-high disabled:opacity-50'
               title='refresh balance'
             >
-              <span
-                className={`i-lucide-refresh-cw h-3 w-3 ${isFetching ? 'animate-spin' : ''}`}
-              />
+              <span className={`i-lucide-refresh-cw h-3 w-3 ${isFetching ? 'animate-spin' : ''}`} />
               refresh
             </button>
           </div>
           {balancesQuery.isError ? (
-            <p className='mt-1 text-label text-red-400 lowercase'>couldn't load balance - retrying</p>
+            <p className='mt-1 text-label text-red-400 lowercase'>
+              couldn't load balance - retrying
+            </p>
           ) : (
             <div className='mt-1 flex items-baseline justify-between'>
               <span className='font-mono text-lg'>
@@ -505,8 +510,8 @@ export const InjectivePanel = () => {
           </p>
         )}
         <p className='mb-2 text-label leading-snug text-amber-400/90 lowercase'>
-          must be an Injective-network deposit address (inj1...) that the exchange issued for USDC on
-          Injective. sending to an Ethereum or other-network USDC address loses the funds.
+          must be an Injective-network deposit address (inj1...) that the exchange issued for USDC
+          on Injective. sending to an Ethereum or other-network USDC address loses the funds.
         </p>
         <div className='relative mb-2'>
           <input
@@ -537,13 +542,7 @@ export const InjectivePanel = () => {
         )}
         <Button
           className='w-full'
-          disabled={
-            !withdrawBase ||
-            withdrawExceeds ||
-            !withdrawAddrOk ||
-            !gasOk ||
-            anyBusy
-          }
+          disabled={!withdrawBase || withdrawExceeds || !withdrawAddrOk || !gasOk || anyBusy}
           onClick={() => void handleWithdraw()}
         >
           {withdrawTx.status === 'signing'

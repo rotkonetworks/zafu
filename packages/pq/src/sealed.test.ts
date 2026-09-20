@@ -34,7 +34,10 @@ describe('hybrid PQ sealed box (X-Wing + AES-256-GCM)', () => {
     const s = seed(5);
     const { publicKey } = xwingKeypairFromSeed(s);
     const wire = sealXWing(publicKey, utf8('secret'));
-    { const i = wire.length - 1; wire[i] = (wire[i] ?? 0) === 0 ? 1 : 0; } // flip a GCM tag byte
+    {
+      const i = wire.length - 1;
+      wire[i] = (wire[i] ?? 0) === 0 ? 1 : 0;
+    } // flip a GCM tag byte
     expect(() => openXWing(s, wire)).toThrow();
   });
 

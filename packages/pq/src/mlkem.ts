@@ -51,7 +51,9 @@ export function mlkem768KeygenEphemeral(): MlKem768Keypair {
  */
 export function mlkem768KeypairFromSeed(seed64: Uint8Array): MlKem768Keypair {
   if (seed64.length !== MLKEM768_LENGTHS.seed) {
-    throw new Error(`ml-kem-768: seed must be ${MLKEM768_LENGTHS.seed} bytes, got ${seed64.length}`);
+    throw new Error(
+      `ml-kem-768: seed must be ${MLKEM768_LENGTHS.seed} bytes, got ${seed64.length}`,
+    );
   }
   const kp = ml_kem768.keygen(seed64);
   return { secretKey: kp.secretKey, publicKey: kp.publicKey };

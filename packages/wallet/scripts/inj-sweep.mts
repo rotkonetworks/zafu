@@ -35,7 +35,8 @@ console.log('to   :', DEST);
 
 // current balance
 const res = await fetch(`${LCD}/cosmos/bank/v1beta1/balances/${w.address}`);
-const bal = ((await res.json()) as { balances?: { denom: string; amount: string }[] }).balances ?? [];
+const bal =
+  ((await res.json()) as { balances?: { denom: string; amount: string }[] }).balances ?? [];
 const inj = bal.find(b => b.denom === 'inj');
 if (!inj) {
   console.error('no INJ balance to sweep');

@@ -63,7 +63,8 @@ export function createCallUi(opts: {
   el.appendChild(title);
 
   const videos = document.createElement('div');
-  videos.style.cssText = 'position:relative;display:flex;justify-content:center;background:#000;border-radius:6px;min-height:120px;overflow:hidden';
+  videos.style.cssText =
+    'position:relative;display:flex;justify-content:center;background:#000;border-radius:6px;min-height:120px;overflow:hidden';
   const remoteVideo = document.createElement('video');
   remoteVideo.autoplay = true;
   remoteVideo.playsInline = true;

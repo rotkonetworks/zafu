@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { detect, requireWallet, sign, signBytes, zidPubkey, encryptFor, decryptFrom } from './messaging';
+import {
+  detect,
+  requireWallet,
+  sign,
+  signBytes,
+  zidPubkey,
+  encryptFor,
+  decryptFrom,
+} from './messaging';
 import { ZafuError } from './errors';
 
 // mock the transport + detection so we can drive wallet responses directly.
@@ -25,7 +33,12 @@ describe('detect()', () => {
   });
 
   it('negotiates the protocol version from ping', async () => {
-    request.mockResolvedValue({ zafu: true, version: '28.1.0', protocolVersion: 1, protocolVersions: [1] });
+    request.mockResolvedValue({
+      zafu: true,
+      version: '28.1.0',
+      protocolVersion: 1,
+      protocolVersions: [1],
+    });
     const d = await detect(handle);
     expect(d.installed).toBe(true);
     expect(d.walletVersion).toBe('28.1.0');
@@ -33,7 +46,12 @@ describe('detect()', () => {
   });
 
   it('marks incompatible when the wallet shares no protocol major', async () => {
-    request.mockResolvedValue({ zafu: true, version: '99', protocolVersion: 2, protocolVersions: [2] });
+    request.mockResolvedValue({
+      zafu: true,
+      version: '99',
+      protocolVersion: 2,
+      protocolVersions: [2],
+    });
     const d = await detect(handle);
     expect(d.installed).toBe(true);
     expect(d.compatible).toBe(false);
@@ -47,7 +65,11 @@ describe('detect()', () => {
 
 describe('zidPubkey()', () => {
   it('returns classical + post-quantum keys', async () => {
-    request.mockResolvedValue({ pubkey: 'ed25519hex', pq_pubkey: 'xwinghex', pq_suite: 'xwing-v1' });
+    request.mockResolvedValue({
+      pubkey: 'ed25519hex',
+      pq_pubkey: 'xwinghex',
+      pq_suite: 'xwing-v1',
+    });
     expect(await zidPubkey(handle)).toEqual({
       pubkey: 'ed25519hex',
       pq_pubkey: 'xwinghex',
@@ -64,7 +86,11 @@ describe('zidPubkey()', () => {
 describe('encryptFor()', () => {
   it('uses the post-quantum path when the recipient advertises pq_pubkey', async () => {
     request.mockResolvedValue({ ciphertext: 'c', ephemeral_pubkey: '' });
-    const out = await encryptFor(handle, { pubkey: 'ed', pq_pubkey: 'xw' }, new Uint8Array([1, 2, 3]));
+    const out = await encryptFor(
+      handle,
+      { pubkey: 'ed', pq_pubkey: 'xw' },
+      new Uint8Array([1, 2, 3]),
+    );
     expect(out.postQuantum).toBe(true);
     expect(request).toHaveBeenCalledWith(
       'zafu_encrypt',
@@ -82,16 +108,16 @@ describe('encryptFor()', () => {
 
   it('throws typed on a denied response', async () => {
     request.mockResolvedValue({ error: 'permission denied' });
-    await expect(
-      encryptFor(handle, { pubkey: 'ed' }, new Uint8Array([1])),
-    ).rejects.toMatchObject({ code: 'denied' });
+    await expect(encryptFor(handle, { pubkey: 'ed' }, new Uint8Array([1]))).rejects.toMatchObject({
+      code: 'denied',
+    });
   });
 
   it('throws transport_error when the wallet is unreachable', async () => {
     request.mockRejectedValue(new Error('no wallet'));
-    await expect(
-      encryptFor(handle, { pubkey: 'ed' }, new Uint8Array([1])),
-    ).rejects.toBeInstanceOf(ZafuError);
+    await expect(encryptFor(handle, { pubkey: 'ed' }, new Uint8Array([1]))).rejects.toBeInstanceOf(
+      ZafuError,
+    );
   });
 
   it('reports postQuantum from the OUTCOME, not intent', async () => {
@@ -105,18 +131,17 @@ describe('encryptFor()', () => {
   it('requirePq fails closed when the PQ path was not used', async () => {
     request.mockResolvedValue({ ciphertext: 'c', ephemeral_pubkey: 'nonempty' });
     await expect(
-      encryptFor(handle, { pubkey: 'ed', pq_pubkey: 'xw' }, new Uint8Array([1]), { requirePq: true }),
+      encryptFor(handle, { pubkey: 'ed', pq_pubkey: 'xw' }, new Uint8Array([1]), {
+        requirePq: true,
+      }),
     ).rejects.toMatchObject({ code: 'not_available' });
   });
 
   it('requirePq passes when the PQ path was used', async () => {
     request.mockResolvedValue({ ciphertext: 'c', ephemeral_pubkey: '' });
-    const out = await encryptFor(
-      handle,
-      { pubkey: 'ed', pq_pubkey: 'xw' },
-      new Uint8Array([1]),
-      { requirePq: true },
-    );
+    const out = await encryptFor(handle, { pubkey: 'ed', pq_pubkey: 'xw' }, new Uint8Array([1]), {
+      requirePq: true,
+    });
     expect(out.postQuantum).toBe(true);
   });
 });
@@ -138,9 +163,9 @@ describe('structured error code (prefer code over string-matching)', () => {
 
   it('reads the code from a { success:false } shape too', async () => {
     request.mockResolvedValue({ success: false, error: 'x', code: 'locked' });
-    await expect(
-      encryptFor(handle, { pubkey: 'ed' }, new Uint8Array([1])),
-    ).rejects.toMatchObject({ code: 'locked' });
+    await expect(encryptFor(handle, { pubkey: 'ed' }, new Uint8Array([1]))).rejects.toMatchObject({
+      code: 'locked',
+    });
   });
 
   it('falls back to string-matching for older wallets with no code', async () => {
@@ -187,12 +212,22 @@ describe('requireWallet()', () => {
   });
 
   it('throws incompatible when the wallet shares no protocol major', async () => {
-    request.mockResolvedValue({ zafu: true, version: '99', protocolVersion: 2, protocolVersions: [2] });
+    request.mockResolvedValue({
+      zafu: true,
+      version: '99',
+      protocolVersion: 2,
+      protocolVersions: [2],
+    });
     await expect(requireWallet(handle)).rejects.toMatchObject({ code: 'incompatible' });
   });
 
   it('returns the handle when a compatible wallet is present', async () => {
-    request.mockResolvedValue({ zafu: true, version: '28.1.0', protocolVersion: 1, protocolVersions: [1] });
+    request.mockResolvedValue({
+      zafu: true,
+      version: '28.1.0',
+      protocolVersion: 1,
+      protocolVersions: [1],
+    });
     expect(await requireWallet(handle)).toBe(handle);
   });
 });

@@ -146,13 +146,13 @@ them to. there is no room-level encryption. instead, every line is
 authenticated:
 
 - **zid-auth-v1** - a signed announce binding `(server, nick, pubkey,
-  ts)`. canonical bytes: `"zafu-zid-auth-v1" 0x00 server 0x00 nick 0x00
-  pubkey_hex 0x00 ts`. receivers check version, 60s freshness, that the
+ts)`. canonical bytes: `"zafu-zid-auth-v1" 0x00 server 0x00 nick 0x00
+pubkey_hex 0x00 ts`. receivers check version, 60s freshness, that the
   server matches the active relay, the ed25519 signature, and
   first-claim-wins for a nick.
 - **zid-msg-v1** - a per-line signature carried alongside the text.
   canonical bytes: `"zafu-zid-msg-v1" 0x00 server 0x00 room 0x00 nick
-  0x00 pubkey 0x00 ts 0x00 text`. it doubles as an implicit announce, so
+0x00 pubkey 0x00 ts 0x00 text`. it doubles as an implicit announce, so
   every line carries its own authentication and a nick-spoofed unsigned
   line never inherits a verified mark.
 

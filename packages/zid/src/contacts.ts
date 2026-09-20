@@ -206,7 +206,9 @@ export async function getContactRefs(appOrigin: string): Promise<ContactRef[]> {
 export function resolveHandle(handle: string, appOrigin: string): string | null {
   const contacts = loadContacts();
   for (const c of contacts) {
-    if (c.handles[appOrigin] === handle) {return c.pubkey;}
+    if (c.handles[appOrigin] === handle) {
+      return c.pubkey;
+    }
   }
   return null;
 }
@@ -232,7 +234,9 @@ export async function pickFromLocal(
   opts: { purpose?: string; max?: number } = {},
 ): Promise<ContactRef[]> {
   const all = await getContactRefs(appOrigin);
-  if (all.length === 0) {return [];}
+  if (all.length === 0) {
+    return [];
+  }
   // in a real implementation this would open a modal/popup
   // for now, return all contacts (the app's UI handles selection)
   return all.slice(0, opts.max || 1);

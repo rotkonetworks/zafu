@@ -260,7 +260,10 @@ export const StakePage = () => {
   // onChange MUST index this same filtered list - indexing the unfiltered
   // `validators` array with a filtered position selects (and then delegates to)
   // the wrong validator.
-  const activeValidators = useMemo(() => validators.filter(v => v.state === 'active'), [validators]);
+  const activeValidators = useMemo(
+    () => validators.filter(v => v.state === 'active'),
+    [validators],
+  );
 
   // handle delegate
   const handleDelegate = useCallback(async () => {

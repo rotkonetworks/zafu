@@ -1090,7 +1090,7 @@ export function InboxPage() {
                 <span className='i-ph-chat-circle h-4 w-4 shrink-0 text-network-accent' />
                 <span className='truncate text-sm text-fg-high lowercase'>{w.label}</span>
                 <span className='ml-auto text-label text-fg-dim'>
-                  {(w.multisig?.threshold ?? 0)}-of-{(w.multisig?.maxSigners ?? 0)}
+                  {w.multisig?.threshold ?? 0}-of-{w.multisig?.maxSigners ?? 0}
                 </span>
               </button>
             ))}
