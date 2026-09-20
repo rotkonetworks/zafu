@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import { MetadataFetchFn, TransactionViewComponent } from '@repo/ui/components/ui/tx';
+import { isSidePanel } from '../../../../utils/popup-detection';
+import { usePopupNav } from '../../../../utils/navigate';
+import { PopupPath } from '../../paths';
 import { Sensitive } from '../../../../components/sensitive';
 import { useStore } from '../../../../state';
 import { txApprovalSelector } from '../../../../state/tx-approval';
@@ -75,6 +78,7 @@ export const TransactionApproval = () => {
     useTransactionViewSwitcher();
 
   const txSigningSecurity = useStore(selectTxSigningSecurity);
+  const navigate = usePopupNav();
 
   const [airgapStep, setAirgapStep] = useState<AirgapStep>('review');
   const [qrHex, setQrHex] = useState('');
@@ -85,16 +89,28 @@ export const TransactionApproval = () => {
     return null;
   }
 
+  // After responding, a toolbar popup or dedicated window should close, but the
+  // side panel must NOT - closing it tears down the panel the user deliberately
+  // pinned open (the reported "sidebar closes after a penumbra tx like a popup
+  // did"). In the side panel, return to the wallet home instead.
+  const finish = () => {
+    if (isSidePanel()) {
+      navigate(PopupPath.INDEX);
+    } else {
+      window.close();
+    }
+  };
+
   const approve = () => {
     setChoice(UserChoice.Approved);
     sendResponse();
-    window.close();
+    finish();
   };
 
   const deny = () => {
     setChoice(UserChoice.Denied);
     sendResponse();
-    window.close();
+    finish();
   };
 
   // Decide whether the per-tx password gate is required based on the signing
@@ -152,7 +168,7 @@ export const TransactionApproval = () => {
       setAuthorizationData(authData.toJson());
       setChoice(UserChoice.Approved);
       sendResponse();
-      window.close();
+      finish();
     } catch (e) {
       setScanError(e instanceof Error ? e.message : 'Failed to parse QR code');
     }
