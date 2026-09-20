@@ -1,7 +1,7 @@
 # CHANGELOG
 
 full release history lives in the git tags and github releases. the current
-version is **28.0.5**. a few recent highlights (from `git log`):
+version is **28.1.0**. a few recent highlights (from `git log`):
 
 - **zcash voting** - active/past tabs on the zcash vote screen; test rounds hidden
 - **error recovery** - route error boundary plus a guarded one-shot auto-reload for
