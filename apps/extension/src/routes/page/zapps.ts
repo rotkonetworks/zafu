@@ -60,7 +60,7 @@ export const DEFAULT_ZAPPS: Zapp[] = [
     name: 'penumbra discord',
     description: 'penumbra community',
     icon: 'i-ph-discord-logo',
-    url: 'https://discord.gg/penumbra',
+    url: 'https://discord.gg/hKvkrqa3zC',
     category: 'social',
     builtin: true,
   },
@@ -209,12 +209,18 @@ export const DEFAULT_ZAPPS: Zapp[] = [
 
 /**
  * Community Discord servers the packaged `chat` zapp points at, chosen by the
- * active network. TODO: confirm these are the canonical invite links before
- * shipping - a stale invite sends users to a dead server.
+ * active network.
+ *
+ * Both invites were verified live 2026-09-21 against Discord's own endpoint
+ * (`GET https://discord.com/api/v10/invites/<code>`): zcash -> guild "Zcash",
+ * penumbra -> guild "Penumbra", neither expiring. The tile previously pointed
+ * at `discord.gg/penumbra`, which answers "Unknown Invite" (code 10006) - a
+ * dead invite sends users to nowhere. Re-check with that endpoint before
+ * changing either string.
  */
 export const DISCORD_BY_NETWORK: Record<string, string> = {
   zcash: 'https://discord.gg/zcash',
-  penumbra: 'https://discord.gg/penumbra',
+  penumbra: 'https://discord.gg/hKvkrqa3zC',
 };
 
 /** Fall back to the Zcash server when the network has no mapping. */
