@@ -11,7 +11,7 @@ import {
 } from './messaging';
 import { ZafuError } from './errors';
 import { ed25519 } from '@noble/curves/ed25519';
-import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
+import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 import { pqKeyAuthMessage } from '@zafu/pq';
 
 // Build a recipient whose pq_pubkey carries a VALID identity-key signature, the
