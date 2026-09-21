@@ -10,6 +10,25 @@ import {
   decryptFrom,
 } from './messaging';
 import { ZafuError } from './errors';
+import { ed25519 } from '@noble/curves/ed25519';
+import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
+import { pqKeyAuthMessage } from '@zafu/pq';
+
+// Build a recipient whose pq_pubkey carries a VALID identity-key signature, the
+// way the wallet now advertises it (P1). encryptFor must accept only these.
+const validPqRecipient = () => {
+  const priv = ed25519.utils.randomPrivateKey();
+  const pubkey = bytesToHex(ed25519.getPublicKey(priv));
+  const pqBytes = randomBytes(1216);
+  const pq_pubkey = bytesToHex(pqBytes);
+  const pq_suite = 'xwing-v1';
+  const pq_epoch = 7;
+  const origin = 'https://app.example.com';
+  const pq_sig = bytesToHex(
+    ed25519.sign(pqKeyAuthMessage(pq_suite, origin, pq_epoch, pqBytes), priv),
+  );
+  return { pubkey, pq_pubkey, pq_suite, pq_epoch, origin, pq_sig };
+};
 
 // mock the transport + detection so we can drive wallet responses directly.
 // vi.hoisted: these are referenced by the hoisted vi.mock factories.
@@ -84,18 +103,35 @@ describe('zidPubkey()', () => {
 });
 
 describe('encryptFor()', () => {
-  it('uses the post-quantum path when the recipient advertises pq_pubkey', async () => {
+  it('uses the post-quantum path when the recipient advertises an AUTHENTICATED pq_pubkey', async () => {
     request.mockResolvedValue({ ciphertext: 'c', ephemeral_pubkey: '' });
-    const out = await encryptFor(
-      handle,
-      { pubkey: 'ed', pq_pubkey: 'xw' },
-      new Uint8Array([1, 2, 3]),
-    );
+    const r = validPqRecipient();
+    const out = await encryptFor(handle, r, new Uint8Array([1, 2, 3]));
     expect(out.postQuantum).toBe(true);
+    expect(out.pq_epoch).toBe(r.pq_epoch);
     expect(request).toHaveBeenCalledWith(
       'zafu_encrypt',
-      expect.objectContaining({ recipient_pq: 'xw' }),
+      expect.objectContaining({ recipient_pq: r.pq_pubkey }),
     );
+  });
+
+  it('REFUSES a pq_pubkey with no signature (no silent classical downgrade)', async () => {
+    request.mockResolvedValue({ ciphertext: 'c', ephemeral_pubkey: '' });
+    await expect(
+      encryptFor(handle, { pubkey: 'ed', pq_pubkey: 'xw' }, new Uint8Array([1])),
+    ).rejects.toMatchObject({ code: 'invalid_request' });
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('REFUSES a pq_pubkey whose signature does not verify', async () => {
+    request.mockResolvedValue({ ciphertext: 'c', ephemeral_pubkey: '' });
+    const r = validPqRecipient();
+    // tamper the advertised key while keeping the (now-stale) signature
+    r.pq_pubkey = bytesToHex(randomBytes(1216));
+    await expect(encryptFor(handle, r, new Uint8Array([1]))).rejects.toMatchObject({
+      code: 'invalid_request',
+    });
+    expect(request).not.toHaveBeenCalled();
   });
 
   it('falls back to the classical path without a pq_pubkey', async () => {
@@ -124,14 +160,14 @@ describe('encryptFor()', () => {
     // recipient advertises a PQ key, but the wallet returned a classical
     // ephemeral -> the PQ path was NOT used, so postQuantum must be false.
     request.mockResolvedValue({ ciphertext: 'c', ephemeral_pubkey: 'nonempty' });
-    const out = await encryptFor(handle, { pubkey: 'ed', pq_pubkey: 'xw' }, new Uint8Array([1]));
+    const out = await encryptFor(handle, validPqRecipient(), new Uint8Array([1]));
     expect(out.postQuantum).toBe(false);
   });
 
   it('requirePq fails closed when the PQ path was not used', async () => {
     request.mockResolvedValue({ ciphertext: 'c', ephemeral_pubkey: 'nonempty' });
     await expect(
-      encryptFor(handle, { pubkey: 'ed', pq_pubkey: 'xw' }, new Uint8Array([1]), {
+      encryptFor(handle, validPqRecipient(), new Uint8Array([1]), {
         requirePq: true,
       }),
     ).rejects.toMatchObject({ code: 'not_available' });
@@ -139,7 +175,7 @@ describe('encryptFor()', () => {
 
   it('requirePq passes when the PQ path was used', async () => {
     request.mockResolvedValue({ ciphertext: 'c', ephemeral_pubkey: '' });
-    const out = await encryptFor(handle, { pubkey: 'ed', pq_pubkey: 'xw' }, new Uint8Array([1]), {
+    const out = await encryptFor(handle, validPqRecipient(), new Uint8Array([1]), {
       requirePq: true,
     });
     expect(out.postQuantum).toBe(true);

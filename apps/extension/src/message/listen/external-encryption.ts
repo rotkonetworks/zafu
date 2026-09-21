@@ -30,8 +30,16 @@ import type {
   ZafuZidPubkeyResponse,
 } from '@zafu/protocol';
 import { ENCRYPTION_PUBLIC_METHODS, ENCRYPTION_INTERNAL_METHODS } from './zafu-method-names';
-import { sealXWing, openXWing, XWING_LENGTHS } from '@zafu/pq';
+import { sealXWing, openXWing, XWING_LENGTHS, pqKeyAuthMessage } from '@zafu/pq';
 import { isValidExternalSender } from '../../senders/external';
+
+// PQ prekey rotation epoch: a coarse 1-week time bucket that indexes the site's
+// X-Wing seed (P2 - coarse recipient forward secrecy). Advertised alongside the
+// key and echoed back on decrypt so the recipient derives the same epoch's seed.
+// The seed stays mnemonic-derivable, so this is COARSE FS (a leak of one epoch's
+// seed does not expose other epochs), NOT discard-after-use FS.
+const PQ_EPOCH_MS = 7 * 24 * 60 * 60 * 1000;
+const pqEpoch = (): number => Math.floor(Date.now() / PQ_EPOCH_MS);
 
 // -- types --
 // the request/response shapes are the shared @zafu/protocol contract, imported
@@ -354,7 +362,9 @@ const handleDecrypt = async (
     // hybrid: open the X-Wing sealed box with the site's post-quantum secret seed
     if (hybrid) {
       const { deriveZidPqSeed } = await import('../../state/identity');
-      const seed = deriveZidPqSeed(mnemonic, identityName, origin);
+      // Use the rotation epoch the ciphertext was sealed at (P2). Absent =>
+      // epoch 0, so legacy boxes (sealed before rotation existed) still open.
+      const seed = deriveZidPqSeed(mnemonic, identityName, origin, msg.pq_epoch ?? 0);
       try {
         const plaintext = openXWing(seed, base64ToBytes(msg.ciphertext));
         return { plaintext: bytesToBase64(plaintext) };
@@ -411,15 +421,37 @@ const handleZidPubkey = async (origin: string): Promise<ZafuZidPubkeyResponse> =
 
     const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
 
-    const { deriveZidForSite, deriveZidPqPublicKey, ZID_PQ_SUITE, currentIdentityName } =
-      await import('../../state/identity');
+    const {
+      deriveZidForSite,
+      deriveZidPqPublicKey,
+      deriveZidKeypairForSite,
+      ZID_PQ_SUITE,
+      currentIdentityName,
+    } = await import('../../state/identity');
     const identityName = await currentIdentityName();
     const zid = deriveZidForSite(mnemonic, identityName, origin);
-    // advertise the hybrid post-quantum sealed-box key too, so dapps can seal
-    // messages that stay confidential against a future quantum attacker.
-    const pq_pubkey = deriveZidPqPublicKey(mnemonic, identityName, origin);
 
-    return { pubkey: zid.publicKey, pq_pubkey, pq_suite: ZID_PQ_SUITE };
+    // advertise the hybrid post-quantum sealed-box key too, so dapps can seal
+    // messages that stay confidential against a future quantum attacker. Derive
+    // it at the CURRENT rotation epoch (P2 coarse recipient FS).
+    const pq_epoch = pqEpoch();
+    const pq_pubkey = deriveZidPqPublicKey(mnemonic, identityName, origin, pq_epoch);
+
+    // AUTHENTICATE the prekey (P1): sign (suite || origin || epoch || pq_pubkey)
+    // with the SAME site ed25519 identity that `pubkey` is, so a dapp can verify
+    // the pq_pubkey genuinely came from this ZID and REFUSE a substituted key
+    // rather than silently seal to an attacker's key. The signing key is the
+    // stable site identity (rotation 0, == `pubkey`); only the PQ prekey rotates.
+    const { privateKey } = deriveZidKeypairForSite(mnemonic, identityName, origin);
+    const pq_sig = bytesToHex(
+      ed25519.sign(
+        pqKeyAuthMessage(ZID_PQ_SUITE, origin, pq_epoch, hexToBytes(pq_pubkey)),
+        privateKey,
+      ),
+    );
+    privateKey.fill(0);
+
+    return { pubkey: zid.publicKey, pq_pubkey, pq_suite: ZID_PQ_SUITE, pq_sig, pq_epoch, origin };
   } catch (e) {
     return { error: 'failed to derive pubkey: ' + String(e), code: 'internal_error' };
   }

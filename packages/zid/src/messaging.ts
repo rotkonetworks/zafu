@@ -16,6 +16,9 @@ import {
   type ZafuRequest,
   type ZafuResponse,
 } from '@zafu/protocol';
+import { ed25519 } from '@noble/curves/ed25519';
+import { hexToBytes } from '@noble/hashes/utils';
+import { pqKeyAuthMessage } from '@zafu/pq';
 import { detectZafu } from './provider';
 import { createExtensionTransport, type ZafuHandle } from './transport';
 import { ZafuError, classifyWalletError } from './errors';
@@ -50,6 +53,17 @@ export interface ZidRecipient {
   pq_pubkey?: string;
   /** the suite of pq_pubkey (e.g. 'xwing-v1'). */
   pq_suite?: string;
+  /**
+   * ed25519 signature (hex) by `pubkey` authenticating pq_pubkey. `encryptFor`
+   * verifies it before using the PQ path and refuses a key that fails. When a
+   * recipient is relayed from a peer, carry this (and `pq_epoch` + `origin`)
+   * alongside pq_pubkey.
+   */
+  pq_sig?: string;
+  /** rotation epoch pq_pubkey was derived at; pass to `decryptFrom` to open. */
+  pq_epoch?: number;
+  /** the origin pq_pubkey was signed for; needed to verify pq_sig. */
+  origin?: string;
 }
 
 /** unwrap a wallet response: throw a typed error, or return the success value. */
@@ -190,7 +204,14 @@ export async function zidPubkey(zafu: ZafuHandle): Promise<ZidRecipient> {
   const resp = await call(zafu, 'zafu_zid_pubkey', {
     type: 'zafu_zid_pubkey',
   });
-  return { pubkey: resp.pubkey, pq_pubkey: resp.pq_pubkey, pq_suite: resp.pq_suite };
+  return {
+    pubkey: resp.pubkey,
+    pq_pubkey: resp.pq_pubkey,
+    pq_suite: resp.pq_suite,
+    pq_sig: resp.pq_sig,
+    pq_epoch: resp.pq_epoch,
+    origin: resp.origin,
+  };
 }
 
 /**
@@ -210,9 +231,42 @@ export async function encryptFor(
   recipient: ZidRecipient,
   plaintext: Uint8Array,
   opts?: { requirePq?: boolean },
-): Promise<{ ciphertext: string; ephemeral_pubkey: string; postQuantum: boolean }> {
+): Promise<{
+  ciphertext: string;
+  ephemeral_pubkey: string;
+  postQuantum: boolean;
+  pq_epoch?: number;
+}> {
   const pt = b64encode(plaintext);
-  const req = recipient.pq_pubkey
+
+  // AUTHENTICATE the PQ prekey before trusting it (P1). A recipient that
+  // advertises pq_pubkey MUST also carry a valid pq_sig by `pubkey` over
+  // (suite || origin || epoch || pq_pubkey). If it is missing or fails, the key
+  // was tampered with in the distribution channel - we REFUSE it and never fall
+  // back to classical (a silent downgrade is exactly the attacker's goal). Only
+  // a recipient that advertises NO pq_pubkey at all takes the classical path.
+  let usePq = false;
+  if (recipient.pq_pubkey) {
+    const suite = recipient.pq_suite ?? 'xwing-v1';
+    const epoch = recipient.pq_epoch ?? 0;
+    const ok =
+      !!recipient.pq_sig &&
+      !!recipient.origin &&
+      ed25519.verify(
+        hexToBytes(recipient.pq_sig),
+        pqKeyAuthMessage(suite, recipient.origin, epoch, hexToBytes(recipient.pq_pubkey)),
+        hexToBytes(recipient.pubkey),
+      );
+    if (!ok) {
+      throw new ZafuError(
+        'invalid_request',
+        'recipient pq_pubkey failed identity-key authentication (missing/invalid pq_sig or origin); refusing to encrypt to an unauthenticated post-quantum key',
+      );
+    }
+    usePq = true;
+  }
+
+  const req = usePq
     ? {
         type: 'zafu_encrypt' as const,
         recipient: recipient.pubkey,
@@ -237,6 +291,9 @@ export async function encryptFor(
     ciphertext: resp.ciphertext,
     ephemeral_pubkey: resp.ephemeral_pubkey,
     postQuantum,
+    // the epoch the recipient's key was at - the sender relays this to the
+    // recipient so decryptFrom can derive the matching seed (P2).
+    pq_epoch: usePq ? (recipient.pq_epoch ?? 0) : undefined,
   };
 }
 
@@ -247,12 +304,15 @@ export async function encryptFor(
  */
 export async function decryptFrom(
   zafu: ZafuHandle,
-  sealed: { ciphertext: string; ephemeral_pubkey: string },
+  sealed: { ciphertext: string; ephemeral_pubkey: string; pq_epoch?: number },
 ): Promise<Uint8Array> {
   const resp = await call(zafu, 'zafu_decrypt', {
     type: 'zafu_decrypt',
     ciphertext: sealed.ciphertext,
     ephemeral_pubkey: sealed.ephemeral_pubkey,
+    // carry the rotation epoch the box was sealed at so the wallet derives the
+    // matching seed (P2). Omitted/0 opens classical and legacy epoch-0 boxes.
+    ...(sealed.pq_epoch !== undefined ? { pq_epoch: sealed.pq_epoch } : {}),
   });
   return b64decode(resp.plaintext);
 }

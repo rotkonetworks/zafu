@@ -36,3 +36,5 @@ export {
 } from './mlkem';
 
 export { SEAL_SUITE_XWING, sealXWing, openXWing } from './sealed';
+
+export { PQ_KEY_AUTH_DOMAIN, pqKeyAuthMessage } from './pq-key-auth';

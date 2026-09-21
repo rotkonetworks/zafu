@@ -122,6 +122,28 @@ export type ZafuZidPubkeyResponse =
       pq_pubkey?: Hex;
       /** the suite of `pq_pubkey` (e.g. 'xwing-v1'), present iff pq_pubkey is. */
       pq_suite?: string;
+      /**
+       * ed25519 signature (hex) by `pubkey` over the domain-separated tuple
+       * (suite || origin || pq_epoch || pq_pubkey), using @zafu/pq's
+       * `pqKeyAuthMessage`. Present iff pq_pubkey is. A caller MUST verify this
+       * against `pubkey` before sealing to `pq_pubkey`, and MUST NOT fall back
+       * to the classical path when it fails - a bad signature means the PQ key
+       * was tampered with, not that PQ is unavailable.
+       */
+      pq_sig?: Hex;
+      /**
+       * the rotation epoch `pq_pubkey` was derived at (P2 coarse recipient FS).
+       * Carry it back as `pq_epoch` on zafu_decrypt so the recipient derives the
+       * matching seed. Present iff pq_pubkey is.
+       */
+      pq_epoch?: number;
+      /**
+       * the origin the keys were derived and signed for (the requesting dapp's
+       * origin). A relying party verifying `pq_sig` MUST rebuild the signed
+       * message with THIS origin. Echoed so the (pubkey, pq_sig, origin) bundle
+       * is self-contained when relayed to a peer. Present iff pq_pubkey is.
+       */
+      origin?: string;
     }
   | ZafuError;
 
@@ -185,6 +207,13 @@ export interface ZafuDecryptRequest {
   ciphertext: Base64;
   /** the sender's ephemeral x25519 public key, hex. */
   ephemeral_pubkey: Hex;
+  /**
+   * for a hybrid (X-Wing) box: the rotation epoch the recipient's pq_pubkey was
+   * advertised at (the `pq_epoch` from zafu_zid_pubkey). The wallet derives the
+   * matching seed to open it. Omit (or 0) for the classical path and for legacy
+   * hybrid boxes sealed before rotation existed. Additive.
+   */
+  pq_epoch?: number;
 }
 export type ZafuDecryptResponse = { plaintext: Base64 } | ZafuError;
 
