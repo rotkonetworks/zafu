@@ -172,14 +172,27 @@ const spawnDetachedPopup = async (
 ): Promise<{ popupId: string; viaSidePanel: boolean }> => {
   const popupId = crypto.randomUUID();
 
-  // Only route into the side panel when it is actually open (real presence,
-  // not a render-timeout guess) - otherwise we would setOptions/restore a closed
-  // panel and could race a slow render against the fallback window.
+  // Presence MUST be scoped to the window the user is actually looking at.
+  // getContexts is global, so a panel open in another window (or a stale/
+  // enabled-but-not-visible one) read as "open" - we then setOptions an invisible
+  // panel, its ready ping timed out (~6s, wasm warm-up), and we fell back to a
+  // popup WINDOW anyway. With many penumbra approvals that is the reported "still
+  // pushes a lot of popups even in side-panel mode". Scoping means: panel visible
+  // in THIS window -> deliver there (and it works); not here -> skip straight to
+  // the window with no wasted 6s race.
+  const winId = await chrome.windows
+    .getLastFocused({ windowTypes: ['normal'] })
+    .then(w => w.id)
+    .catch(() => undefined);
+
   // default ON: side panel is the default approval surface when it is open.
   // Only an explicit `false` (user picked "popup window") opts out. Safe because
   // the send itself now runs in the service worker (see penumbra-send), so it
   // completes even though delivering the approval reloads the panel.
-  if ((await isSidePanelOpen()) && (await localExtStorage.get('approvalsInSidePanel')) !== false) {
+  if (
+    (await isSidePanelOpen(winId)) &&
+    (await localExtStorage.get('approvalsInSidePanel')) !== false
+  ) {
     const shown = await deliverToSidePanel(relativePopupPath(popupType, popupId), popupId).catch(
       () => false,
     );
