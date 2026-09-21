@@ -25,3 +25,21 @@ export const isSidePanelDeliver = (m: unknown): m is SidePanelDeliverMessage =>
   (m as { type?: unknown }).type === SIDE_PANEL_DELIVER &&
   typeof (m as { popupId?: unknown }).popupId === 'string' &&
   typeof (m as { route?: unknown }).route === 'string';
+
+/**
+ * Plain client-side navigation of the open panel, with NO request wiring - used
+ * for the unlock screen, which has no popup request, just "show login and let the
+ * worker poll for the session key". Same no-reload idea as SIDE_PANEL_DELIVER.
+ */
+export const SIDE_PANEL_NAVIGATE = 'zafu-sidepanel-navigate' as const;
+
+export interface SidePanelNavigateMessage {
+  type: typeof SIDE_PANEL_NAVIGATE;
+  route: string;
+}
+
+export const isSidePanelNavigate = (m: unknown): m is SidePanelNavigateMessage =>
+  typeof m === 'object' &&
+  m !== null &&
+  (m as { type?: unknown }).type === SIDE_PANEL_NAVIGATE &&
+  typeof (m as { route?: unknown }).route === 'string';

@@ -3,7 +3,7 @@ import { usePopupNav } from '../utils/navigate';
 import type { PopupPath } from '../routes/popup/paths';
 import { isSidePanel } from '../utils/popup-detection';
 import { isValidInternalSender } from '../senders/internal';
-import { isSidePanelDeliver } from '../message/side-panel-delivery';
+import { isSidePanelDeliver, isSidePanelNavigate } from '../message/side-panel-delivery';
 import { wirePopupDelivery } from './popup-ready';
 
 /**
@@ -31,16 +31,26 @@ export const useSidePanelDelivery = (): void => {
       sender: chrome.runtime.MessageSender,
       respond: (response: unknown) => void,
     ): boolean => {
-      if (!isValidInternalSender(sender) || !isSidePanelDeliver(msg)) {
+      if (!isValidInternalSender(sender)) {
         return false;
       }
-      // Listener BEFORE navigate/ready (wirePopupDelivery pings ready): the
-      // worker sends the request the moment it sees ready, so the request
-      // listener must already be attached.
-      wirePopupDelivery(msg.popupId);
-      navigate(msg.route as PopupPath);
-      respond(true);
-      return true;
+      // Approval: wire the request listener BEFORE navigate (wirePopupDelivery
+      // pings ready, and the worker sends the request the instant it sees ready,
+      // so the listener must already be attached), then navigate to it.
+      if (isSidePanelDeliver(msg)) {
+        wirePopupDelivery(msg.popupId);
+        navigate(msg.route as PopupPath);
+        respond(true);
+        return true;
+      }
+      // Unlock: no request to wire, just show the login screen; the worker polls
+      // the session key. The following approval delivery navigates away from it.
+      if (isSidePanelNavigate(msg)) {
+        navigate(msg.route as PopupPath);
+        respond(true);
+        return true;
+      }
+      return false;
     };
     chrome.runtime.onMessage.addListener(onMessage);
     return () => chrome.runtime.onMessage.removeListener(onMessage);
