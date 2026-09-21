@@ -45,10 +45,16 @@ export const trackSidePanelPresence = (): void => {
  * fact, so it sidesteps all three. The port counter stays as the fallback for
  * a browser too old for getContexts (Chrome < 116).
  */
-export const isSidePanelOpen = async (): Promise<boolean> => {
+export const isSidePanelOpen = async (windowId?: number): Promise<boolean> => {
   try {
     const ctxs = await chrome.runtime.getContexts({
       contextTypes: [chrome.runtime.ContextType.SIDE_PANEL],
+      // getContexts is GLOBAL by default: a panel open in another browser window
+      // counts as "open" here. When a caller knows which window the user is
+      // actually looking at, scope to it - otherwise login routing targets a
+      // panel the user cannot see and appears to hang. windowIds is Chrome 116+;
+      // an older browser ignores it (falls back to global, the prior behavior).
+      ...(windowId != null ? { windowIds: [windowId] } : {}),
     });
     return ctxs.length > 0;
   } catch {
