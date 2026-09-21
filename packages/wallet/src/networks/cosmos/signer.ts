@@ -7,14 +7,24 @@
  * - transaction broadcast
  */
 
-import { Secp256k1HdWallet, makeCosmoshubPath } from '@cosmjs/amino';
-import { makeSignDoc as makeAminoSignDoc, serializeSignDoc } from '@cosmjs/amino';
-import type { AminoMsg, StdSignDoc } from '@cosmjs/amino';
-import { SigningStargateClient, StargateClient, GasPrice } from '@cosmjs/stargate';
+import {
+  Secp256k1HdWallet,
+  makeCosmoshubPath,
+  makeSignDoc as makeAminoSignDoc,
+  serializeSignDoc,
+  type AminoMsg,
+  type StdSignDoc,
+  type Coin,
+  type StdFee,
+} from '@cosmjs/amino';
+import {
+  SigningStargateClient,
+  StargateClient,
+  GasPrice,
+  type DeliverTxResponse,
+} from '@cosmjs/stargate';
 import { fromBech32, toBech32, toBase64, fromBase64 } from '@cosmjs/encoding';
 import { encodePubkey, makeAuthInfoBytes, DirectSecp256k1HdWallet } from '@cosmjs/proto-signing';
-import type { Coin, StdFee } from '@cosmjs/amino';
-import type { DeliverTxResponse } from '@cosmjs/stargate';
 import { COSMOS_CHAINS, type CosmosChainId } from './chains';
 
 /** encode object for cosmos messages */
@@ -131,7 +141,7 @@ export function deriveAllChainAddresses(address: string): Record<CosmosChainId, 
 }
 
 /** cached signing clients */
-const signingClients: Map<string, SigningStargateClient> = new Map();
+const signingClients = new Map<string, SigningStargateClient>();
 
 /** get or create signing client for chain */
 export async function getSigningClient(
@@ -140,7 +150,9 @@ export async function getSigningClient(
 ): Promise<SigningStargateClient> {
   const cacheKey = `${chainId}-${(await signer.getAccounts())[0]?.address}`;
   let client = signingClients.get(cacheKey);
-  if (client) return client;
+  if (client) {
+    return client;
+  }
 
   const config = COSMOS_CHAINS[chainId];
   client = await SigningStargateClient.connectWithSigner(config.rpcEndpoint, signer, {
@@ -282,7 +294,9 @@ export function estimateGas(
   // simple estimation based on message type
   // real estimation would need simulation
   const gasPerMsg = messages.map(m => {
-    if (m.typeUrl === '/ibc.applications.transfer.v1.MsgTransfer') return 200000;
+    if (m.typeUrl === '/ibc.applications.transfer.v1.MsgTransfer') {
+      return 200000;
+    }
     return 150000; // MsgSend and others
   });
   return gasPerMsg.reduce((sum, g) => sum + g, 0);
@@ -291,7 +305,7 @@ export function estimateGas(
 /** calculate fee from gas */
 export function calculateFee(chainId: CosmosChainId, gas: number): StdFee {
   const config = COSMOS_CHAINS[chainId];
-  const gasPriceMatch = config.gasPrice.match(/^([\d.]+)(.+)$/);
+  const gasPriceMatch = /^([\d.]+)(.+)$/.exec(config.gasPrice);
 
   if (!gasPriceMatch) {
     throw new Error(`invalid gas price: ${config.gasPrice}`);

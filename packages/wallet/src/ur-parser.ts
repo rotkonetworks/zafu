@@ -58,8 +58,10 @@ export function isUrString(text: string): boolean {
  * Get the UR type from a UR string
  */
 export function getUrType(text: string): string | null {
-  if (!isUrString(text)) return null;
-  const match = text.match(/^ur:([^/]+)\//i);
+  if (!isUrString(text)) {
+    return null;
+  }
+  const match = /^ur:([^/]+)\//i.exec(text);
   return match ? match[1]!.toLowerCase() : null;
 }
 
@@ -666,8 +668,8 @@ function decodeBytewords(encoded: string): Uint8Array {
  */
 function crc32(data: Uint8Array): number {
   let crc = 0xffffffff;
-  for (let i = 0; i < data.length; i++) {
-    crc ^= data[i]!;
+  for (const byte of data) {
+    crc ^= byte;
     for (let j = 0; j < 8; j++) {
       crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
     }
@@ -680,7 +682,7 @@ function crc32(data: Uint8Array): number {
  */
 function decodeUr(urString: string): Uint8Array {
   // Format: ur:type/bytewords
-  const match = urString.match(/^ur:([^/]+)\/(.+)$/i);
+  const match = /^ur:([^/]+)\/(.+)$/i.exec(urString);
   if (!match) {
     throw new Error('invalid ur format');
   }
@@ -959,16 +961,28 @@ export function parseZcashUr(urString: string): ZcashUrExport {
  * xpub, etc.). Real-world UFVKs are 250+ chars.
  */
 export function isStructurallyValidUfvk(s: unknown): s is string {
-  if (typeof s !== 'string') return false;
-  if (s.length < 100) return false;
-  if (s.length > 4096) return false;
+  if (typeof s !== 'string') {
+    return false;
+  }
+  if (s.length < 100) {
+    return false;
+  }
+  if (s.length > 4096) {
+    return false;
+  }
   const BECH32 = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
   let hrpEnd: number;
-  if (s.startsWith('uview1')) hrpEnd = 5;
-  else if (s.startsWith('uviewtest1')) hrpEnd = 9;
-  else return false;
+  if (s.startsWith('uview1')) {
+    hrpEnd = 5;
+  } else if (s.startsWith('uviewtest1')) {
+    hrpEnd = 9;
+  } else {
+    return false;
+  }
   for (let i = hrpEnd + 1; i < s.length; i++) {
-    if (BECH32.indexOf(s[i]!) === -1) return false;
+    if (!BECH32.includes(s[i]!)) {
+      return false;
+    }
   }
   return true;
 }
@@ -1097,13 +1111,13 @@ export function parseZignerBackupUr(urString: string): ZignerBackupExport {
   let parsed: {
     v?: number;
     name?: string;
-    accounts?: Array<{
+    accounts?: {
       path?: string;
       genesis_hash?: string;
       network?: string;
       encryption?: string;
       base58prefix?: number;
-    }>;
+    }[];
   };
 
   try {

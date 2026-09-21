@@ -90,7 +90,7 @@ export class PolkadotAdapter implements NetworkAdapter {
     const chainInfo = CHAIN_INFO[chain];
 
     try {
-      const client = await getLightClient(chain);
+      const client = getLightClient(chain);
       const balance = await client.getBalance(polkadotKeys);
 
       return {
@@ -149,7 +149,7 @@ export class PolkadotAdapter implements NetworkAdapter {
     console.log(`[polkadot] sending on ${chain} (relay: ${this.relay})`);
 
     // Build the unsigned transfer transaction
-    const client = await getLightClient(chain);
+    const client = getLightClient(chain);
     const callData = await client.buildTransfer(polkadotKeys, params.recipient, params.amount);
 
     // Format for display
@@ -219,7 +219,7 @@ export class PolkadotAdapter implements NetworkAdapter {
     const chain = (polkadotKeys.chain || 'polkadot') as SupportedChain;
 
     try {
-      await getLightClient(chain);
+      getLightClient(chain);
       onProgress?.(100);
     } catch (error) {
       console.error('[polkadot] sync failed:', error);

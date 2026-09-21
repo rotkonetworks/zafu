@@ -33,7 +33,7 @@ export type FieldType =
   | { type: 'identityKey' }
   | { type: 'bytes' }
   | { type: 'message'; typeName: string }
-  | { type: 'enum'; variants: Array<{ value: number; name: string }> };
+  | { type: 'enum'; variants: { value: number; name: string }[] };
 
 // =============================================================================
 // Schema Definitions

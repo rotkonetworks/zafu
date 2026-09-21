@@ -25,11 +25,11 @@ const ReturnAddressDisplay = ({
   returnAddress: Address;
   useTransparentAddress: boolean;
 }) => {
-  const [displayAddress, setDisplayAddress] = useState<string>('...');
+  const [displayAddress, setDisplayAddress] = useState('...');
 
   useEffect(() => {
     if (useTransparentAddress) {
-      getTransmissionKeyByAddress(returnAddress).then(inner => {
+      void getTransmissionKeyByAddress(returnAddress).then(inner => {
         setDisplayAddress(bech32TransparentAddress({ inner }));
       });
     } else {

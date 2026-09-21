@@ -21,8 +21,11 @@ const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvw
 function base58Encode(bytes: Uint8Array): string {
   let leadingZeros = 0;
   for (const b of bytes) {
-    if (b === 0) leadingZeros++;
-    else break;
+    if (b === 0) {
+      leadingZeros++;
+    } else {
+      break;
+    }
   }
 
   let num = BigInt(0);

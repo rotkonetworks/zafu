@@ -62,7 +62,7 @@ const getLabelForActionCase = (actionCase: ActionView['actionView']['case']): st
     return label;
   }
 
-  return String(actionCase);
+  return actionCase;
 };
 
 export const ActionViewComponent = ({

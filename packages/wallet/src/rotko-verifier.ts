@@ -47,7 +47,9 @@ export async function verifyAttestation(
   height: number,
   mainnet: boolean,
 ): Promise<boolean> {
-  if (signature.length !== 64) return false;
+  if (signature.length !== 64) {
+    return false;
+  }
 
   const pubkeyBytes = hexToBytes(ROTKO_ZCASH_VERIFIER);
   const digest = await attestationDigest(pubkeyBytes, anchor, height, mainnet);

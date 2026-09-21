@@ -105,7 +105,7 @@ export interface ParsedAction {
   /** Human-readable description */
   description: string;
   /** Key-value fields to display */
-  fields: Array<{ label: string; value: string }>;
+  fields: { label: string; value: string }[];
   /** Whether action was recognized by schema */
   recognized: boolean;
 }

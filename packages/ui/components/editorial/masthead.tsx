@@ -39,11 +39,15 @@ export const Masthead = ({ kicker, title, meta, className }: MastheadProps) => (
 );
 
 /** Thin separator between title fragments. Use as a child of the <Masthead> title. */
-Masthead.Sep = ({ children = '·' }: { children?: ReactNode }) => (
+const MastheadSep = ({ children = '·' }: { children?: ReactNode }) => (
   <span className='text-fg-dim mx-2.5'>{children}</span>
 );
+MastheadSep.displayName = 'Masthead.Sep';
+Masthead.Sep = MastheadSep;
 
 /** Gold-accented title fragment (typically the network / brand word). */
-Masthead.Accent = ({ children }: { children: ReactNode }) => (
+const MastheadAccent = ({ children }: { children: ReactNode }) => (
   <span className='text-zigner-gold'>{children}</span>
 );
+MastheadAccent.displayName = 'Masthead.Accent';
+Masthead.Accent = MastheadAccent;

@@ -164,9 +164,15 @@ export function encodeFragmented(type: MemoType, payload: Uint8Array): Uint8Arra
  * (plain text, empty, or no-memo markers).
  */
 export function decodeMemo(memo: Uint8Array): ParsedMemo | null {
-  if (memo.length !== MEMO_SIZE) return null;
-  if (memo[0] !== ARBITRARY_DATA) return null;
-  if (memo[1] !== ZAFU_MAGIC) return null;
+  if (memo.length !== MEMO_SIZE) {
+    return null;
+  }
+  if (memo[0] !== ARBITRARY_DATA) {
+    return null;
+  }
+  if (memo[1] !== ZAFU_MAGIC) {
+    return null;
+  }
 
   const type = memo[2]! as MemoType;
   const seq = memo[3]!;
@@ -176,7 +182,9 @@ export function decodeMemo(memo: Uint8Array): ParsedMemo | null {
     // (so decoding the same memo twice produces the same ID)
     let end = MEMO_SIZE;
     if (type === MemoType.Text) {
-      while (end > 4 && memo[end - 1] === 0) end--;
+      while (end > 4 && memo[end - 1] === 0) {
+        end--;
+      }
     }
     return {
       type,
@@ -195,7 +203,9 @@ export function decodeMemo(memo: Uint8Array): ParsedMemo | null {
   let end = MEMO_SIZE;
   if (type === MemoType.Text && part === total) {
     // last text fragment: strip trailing zeros
-    while (end > 20 && memo[end - 1] === 0) end--;
+    while (end > 20 && memo[end - 1] === 0) {
+      end--;
+    }
   }
 
   return {
@@ -215,21 +225,29 @@ export function decodeMemo(memo: Uint8Array): ParsedMemo | null {
  * returns null if incomplete.
  */
 export function reassemble(fragments: ParsedMemo[]): Uint8Array | null {
-  if (fragments.length === 0) return null;
+  if (fragments.length === 0) {
+    return null;
+  }
 
   const total = fragments[0]!.total;
   const expectedType = fragments[0]!.type;
-  if (fragments.length < total) return null;
+  if (fragments.length < total) {
+    return null;
+  }
 
   // all fragments must have the same type
-  if (!fragments.every(f => f.type === expectedType)) return null;
+  if (!fragments.every(f => f.type === expectedType)) {
+    return null;
+  }
 
   // sort by part number
   const sorted = [...fragments].sort((a, b) => a.part - b.part);
 
   // verify completeness
   for (let i = 0; i < total; i++) {
-    if (sorted[i]!.part !== i + 1) return null;
+    if (sorted[i]!.part !== i + 1) {
+      return null;
+    }
   }
 
   // concatenate payloads
@@ -289,13 +307,17 @@ export function encodeAddress(address: string): Uint8Array {
 
 function hexToBytes(hex: string): Uint8Array {
   const out = new Uint8Array(hex.length >> 1);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+  }
   return out;
 }
 
 export function bytesToHex(bytes: Uint8Array): string {
   let s = '';
-  for (let i = 0; i < bytes.length; i++) s += bytes[i]!.toString(16).padStart(2, '0');
+  for (const byte of bytes) {
+    s += byte.toString(16).padStart(2, '0');
+  }
   return s;
 }
 
@@ -462,27 +484,37 @@ export function encodeContactCard(card: Omit<ContactCard, 'version'>): Uint8Arra
 }
 
 export function decodeContactCard(payload: Uint8Array): ContactCard | null {
-  if (payload.length < 5) return null; // minimum: ver + flags + name_len(0) + addr_len(0)
+  if (payload.length < 5) {
+    return null;
+  } // minimum: ver + flags + name_len(0) + addr_len(0)
 
   let offset = 0;
 
   const version = payload[offset++]!;
-  if (version !== CONTACT_CARD_VERSION) return null; // unknown version
+  if (version !== CONTACT_CARD_VERSION) {
+    return null;
+  } // unknown version
 
   const flags = payload[offset++]!;
 
   const nameLen = payload[offset++]!;
-  if (offset + nameLen + 2 > payload.length) return null;
+  if (offset + nameLen + 2 > payload.length) {
+    return null;
+  }
   const name = new TextDecoder().decode(payload.slice(offset, offset + nameLen));
   offset += nameLen;
 
   const addrLen = (payload[offset]! << 8) | payload[offset + 1]!;
   offset += 2;
-  if (offset + addrLen > payload.length) return null;
+  if (offset + addrLen > payload.length) {
+    return null;
+  }
   const address = new TextDecoder().decode(payload.slice(offset, offset + addrLen));
   offset += addrLen;
 
-  if (!address) return null; // address is required
+  if (!address) {
+    return null;
+  } // address is required
 
   // parse TLV extensions
   let zid: string | undefined;
@@ -490,7 +522,9 @@ export function decodeContactCard(payload: Uint8Array): ContactCard | null {
     const tag = payload[offset]!;
     const len = (payload[offset + 1]! << 8) | payload[offset + 2]!;
     offset += 3;
-    if (offset + len > payload.length) break; // truncated — stop
+    if (offset + len > payload.length) {
+      break;
+    } // truncated — stop
     if (tag === 0x01 && len === 32) {
       zid = bytesToHex(payload.slice(offset, offset + 32));
     }
@@ -529,10 +563,12 @@ export const enum DataContentType {
 }
 
 export const enum DataFlag {
+  // bit flags (literal members required by prefer-literal-enum-member):
+  // HasCorrelation = bit 0 (1), HasReplyTo = bit 1 (2).
   /** payload includes a 16-byte correlation ID for request/response linking */
-  HasCorrelation = 1 << 0,
+  HasCorrelation = 1,
   /** payload includes a reply-to address */
-  HasReplyTo = 1 << 1,
+  HasReplyTo = 2,
 }
 
 export interface DataMemo {
@@ -544,8 +580,12 @@ export interface DataMemo {
 
 export function encodeDataMemo(msg: DataMemo): Uint8Array[] {
   let flags = 0;
-  if (msg.correlationId) flags |= DataFlag.HasCorrelation;
-  if (msg.replyTo) flags |= DataFlag.HasReplyTo;
+  if (msg.correlationId) {
+    flags |= DataFlag.HasCorrelation;
+  }
+  if (msg.replyTo) {
+    flags |= DataFlag.HasReplyTo;
+  }
 
   const replyToBytes = msg.replyTo ? new TextEncoder().encode(msg.replyTo) : null;
   const headerSize =
@@ -577,7 +617,9 @@ export function encodeDataMemo(msg: DataMemo): Uint8Array[] {
 }
 
 export function decodeDataMemo(payload: Uint8Array): DataMemo | null {
-  if (payload.length < 2) return null;
+  if (payload.length < 2) {
+    return null;
+  }
 
   let offset = 0;
   const contentType = payload[offset++]! as DataContentType;
@@ -585,17 +627,23 @@ export function decodeDataMemo(payload: Uint8Array): DataMemo | null {
 
   let correlationId: Uint8Array | undefined;
   if (flags & DataFlag.HasCorrelation) {
-    if (offset + 16 > payload.length) return null;
+    if (offset + 16 > payload.length) {
+      return null;
+    }
     correlationId = payload.slice(offset, offset + 16);
     offset += 16;
   }
 
   let replyTo: string | undefined;
   if (flags & DataFlag.HasReplyTo) {
-    if (offset + 2 > payload.length) return null;
+    if (offset + 2 > payload.length) {
+      return null;
+    }
     const len = (payload[offset]! << 8) | payload[offset + 1]!;
     offset += 2;
-    if (offset + len > payload.length) return null;
+    if (offset + len > payload.length) {
+      return null;
+    }
     replyTo = new TextDecoder().decode(payload.slice(offset, offset + len));
     offset += len;
   }

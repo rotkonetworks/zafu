@@ -29,10 +29,14 @@ interface UnbondingInfo {
 
 const parseUnbondingToken = (metadata?: Metadata): UnbondingInfo | null => {
   const display = metadata?.display;
-  if (!display) return null;
+  if (!display) {
+    return null;
+  }
 
   const captured = assetPatterns.unbondingToken.capture(display);
-  if (!captured) return null;
+  if (!captured) {
+    return null;
+  }
 
   const startAt = parseInt(captured.startAt, 10);
   return {
@@ -163,7 +167,7 @@ export const ValueComponent = ({
             )}
             // hover reveals the underlying denom / IBC channel path (e.g.
             // transfer/channel-18/usdc) so an unnamed asset is still identifiable
-            title={metadata?.display || metadata?.base || symbol}
+            title={metadata?.display ?? metadata?.base ?? symbol}
           >
             {symbol}
           </span>

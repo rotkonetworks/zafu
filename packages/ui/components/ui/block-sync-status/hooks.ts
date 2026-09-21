@@ -18,11 +18,11 @@ export const useSyncProgress = (
 ) => {
   const ewmaSpeedRef = useRef(new EWMA());
 
-  const [speed, setSpeed] = useState<number>(0);
+  const [speed, setSpeed] = useState(0);
   const lastSyncedRef = useRef(fullSyncHeight);
-  const lastUpdateTimeRef = useRef<number>(Date.now());
-  const [confident, setConfident] = useState<boolean>(false); // Tracks confidence in the speed calculation
-  const [syncUpdates, setSyncUpdates] = useState<number>(0); // Tracks the number of synchronization updates
+  const lastUpdateTimeRef = useRef(Date.now());
+  const [confident, setConfident] = useState(false); // Tracks confidence in the speed calculation
+  const [syncUpdates, setSyncUpdates] = useState(0); // Tracks the number of synchronization updates
 
   useEffect(() => {
     const now = Date.now();

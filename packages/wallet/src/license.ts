@@ -70,10 +70,14 @@ export function licensePayload(zid: string, plan: Plan, expires: number): Uint8A
  * verify a license signature against rotko's public key.
  */
 export function verifyLicense(license: License): boolean {
-  if (!license.zid || !license.signature || !license.expires) return false;
+  if (!license.zid || !license.signature || !license.expires) {
+    return false;
+  }
 
   const verifierKey = hexToBytes(ROTKO_ZCASH_VERIFIER);
-  if (verifierKey.every(b => b === 0)) return false; // placeholder key
+  if (verifierKey.every(b => b === 0)) {
+    return false;
+  } // placeholder key
 
   const payload = licensePayload(license.zid, license.plan, license.expires);
   const sig = hexToBytes(license.signature);
@@ -89,8 +93,12 @@ export function verifyLicense(license: License): boolean {
  * check if a license is valid (signature + not expired).
  */
 export function isLicenseValid(license: License | null | undefined): boolean {
-  if (!license) return false;
-  if (!verifyLicense(license)) return false;
+  if (!license) {
+    return false;
+  }
+  if (!verifyLicense(license)) {
+    return false;
+  }
   return license.expires > Date.now() / 1000;
 }
 
@@ -98,7 +106,9 @@ export function isLicenseValid(license: License | null | undefined): boolean {
  * check if a specific pro feature is available.
  */
 export function hasProFeature(license: License | null | undefined, _feature: ProFeature): boolean {
-  if (!isLicenseValid(license)) return false;
+  if (!isLicenseValid(license)) {
+    return false;
+  }
   return license!.plan === 'pro';
 }
 
@@ -133,7 +143,9 @@ export function parseLicense(json: string): License | null {
  * days remaining on license (0 if expired).
  */
 export function daysRemaining(license: License | null | undefined): number {
-  if (!license) return 0;
+  if (!license) {
+    return 0;
+  }
   const secs = license.expires - Date.now() / 1000;
   return Math.max(0, Math.ceil(secs / 86400));
 }

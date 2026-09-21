@@ -57,8 +57,8 @@ export const HankoSeal = React.forwardRef<HTMLDivElement, HankoSealProps>(
 );
 HankoSeal.displayName = 'HankoSeal';
 
-/** deterministic seal glyph for a zid nick — first grapheme, uppercased */
+/** deterministic seal glyph for a zid nick - first grapheme, uppercased */
 export function zidSealGlyph(nick: string): string {
-  const first = [...nick.trim()][0];
+  const first = Array.from(nick.trim())[0];
   return (first ?? '?').toUpperCase();
 }

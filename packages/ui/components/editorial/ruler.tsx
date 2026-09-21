@@ -19,9 +19,9 @@ export interface RulerScaleProps {
   /** Total reach of the ruler in px (default 300, matching the preview). */
   max?: number;
   /** Tick values to render. Major ticks are highlighted in gold. */
-  ticks?: Array<{ v: number; major?: boolean; label?: ReactNode }>;
+  ticks?: { v: number; major?: boolean; label?: ReactNode }[];
   /** Named segments drawn below the rule. */
-  segments?: Array<{ from: number; to: number; label: ReactNode }>;
+  segments?: { from: number; to: number; label: ReactNode }[];
   className?: string;
 }
 

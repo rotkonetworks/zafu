@@ -104,7 +104,7 @@ export class CosmosAdapter implements NetworkAdapter {
         try {
           const balance = await getBalance(
             chainId as CosmosChainId,
-            addresses[chainId as CosmosChainId]!,
+            addresses[chainId as CosmosChainId],
           );
           balances[chainId] = {
             total: balance.amount,
@@ -236,7 +236,7 @@ export class CosmosAdapter implements NetworkAdapter {
     // just verify we can connect
     try {
       const addresses = deriveAllAddresses(cosmosKeys.address);
-      await getBalance(this.defaultChain, addresses[this.defaultChain]!);
+      await getBalance(this.defaultChain, addresses[this.defaultChain]);
       onProgress?.(100);
     } catch (error) {
       console.error('[cosmos] sync failed:', error);

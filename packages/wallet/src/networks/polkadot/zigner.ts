@@ -8,8 +8,7 @@
  * full runtime metadata - making updates unnecessary and QR codes smaller.
  */
 
-import type { PolkadotNetworkKeys } from '../common/types';
-import { CHAIN_IDS, QR_TYPES } from '../common/types';
+import { type PolkadotNetworkKeys, CHAIN_IDS, QR_TYPES } from '../common/types';
 import { hexToBytes, bytesToHex } from '../common/qr';
 import { getLightClient, CHAIN_INFO, type SupportedChain } from './light-client';
 import {

@@ -22,7 +22,7 @@ export interface SelectAccountProps {
  * account index. Also allows the user to view a one-time IBC deposit address.
  */
 export const SelectAccount = ({ getAddrByIndex, index, setIndex }: SelectAccountProps) => {
-  const [ephemeral, setEphemeral] = useState<boolean>(false);
+  const [ephemeral, setEphemeral] = useState(false);
   const [address, setAddress] = useState<Address>();
 
   useEffect(() => {

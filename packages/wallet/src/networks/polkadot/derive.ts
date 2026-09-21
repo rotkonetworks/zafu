@@ -115,8 +115,11 @@ function base58Encode(bytes: Uint8Array): string {
   // count leading zeros
   let leadingZeros = 0;
   for (const b of bytes) {
-    if (b === 0) leadingZeros++;
-    else break;
+    if (b === 0) {
+      leadingZeros++;
+    } else {
+      break;
+    }
   }
 
   // convert to bigint

@@ -7,13 +7,12 @@
 
 import { StargateClient } from '@cosmjs/stargate';
 import { fromBech32, toBech32 } from '@cosmjs/encoding';
-import type { CosmosChainId } from './chains';
-import { COSMOS_CHAINS } from './chains';
+import { type CosmosChainId, COSMOS_CHAINS } from './chains';
 
 /** cached clients per chain */
 // keyed by endpoint URL so a chain can hold several connections (one per RPC in
 // the rotation pool) without clobbering each other
-const clients: Map<string, StargateClient> = new Map();
+const clients = new Map<string, StargateClient>();
 
 /**
  * get or create client for a chain. Pass `endpoint` to use a specific RPC from
@@ -25,7 +24,9 @@ export async function getClient(
 ): Promise<StargateClient> {
   const url = endpoint ?? COSMOS_CHAINS[chainId].rpcEndpoint;
   let client = clients.get(url);
-  if (client) return client;
+  if (client) {
+    return client;
+  }
 
   client = await StargateClient.connect(url);
   clients.set(url, client);
@@ -88,7 +89,9 @@ export async function getAccount(
   const client = await getClient(chainId);
   const account = await client.getAccount(address);
 
-  if (!account) return null;
+  if (!account) {
+    return null;
+  }
 
   return {
     accountNumber: account.accountNumber,
@@ -177,7 +180,7 @@ export async function buildUnsignedSend(
   const gasLimit = '100000';
 
   // parse gas price
-  const gasPriceMatch = config.gasPrice.match(/^([\d.]+)(.+)$/);
+  const gasPriceMatch = /^([\d.]+)(.+)$/.exec(config.gasPrice);
   if (!gasPriceMatch) {
     throw new Error(`invalid gas price format: ${config.gasPrice}`);
   }

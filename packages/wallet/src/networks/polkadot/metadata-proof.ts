@@ -8,11 +8,10 @@
  */
 
 import { merkleizeMetadata } from '@polkadot-api/merkleize-metadata';
-import type { SupportedChain } from './light-client';
-import { CHAIN_INFO } from './light-client';
+import { type SupportedChain, CHAIN_INFO } from './light-client';
 
 /** cached merkleized metadata per chain */
-const metadataCache: Map<string, ReturnType<typeof merkleizeMetadata>> = new Map();
+const metadataCache = new Map<string, ReturnType<typeof merkleizeMetadata>>();
 
 /** cache key includes spec version to invalidate on runtime upgrade */
 function cacheKey(chain: SupportedChain, specVersion: number): string {
@@ -31,7 +30,9 @@ export async function getMerkleizedMetadata(
 ): Promise<ReturnType<typeof merkleizeMetadata>> {
   const key = cacheKey(chain, specVersion);
   const cached = metadataCache.get(key);
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
 
   const info = CHAIN_INFO[chain];
 

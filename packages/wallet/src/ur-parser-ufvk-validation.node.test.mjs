@@ -10,7 +10,7 @@
 // near-zero cost. Heavy decoding stays in the wasm signing path where it
 // belongs.
 
-import test from 'node:test';
+import test from 'vitest';
 import assert from 'node:assert/strict';
 
 // ── Inline copy of validation logic so the test is self-contained.
@@ -18,18 +18,30 @@ import assert from 'node:assert/strict';
 const BECH32_ALPHABET = new Set('qpzry9x8gf2tvdw0s3jn54khce6mua7l');
 
 function isStructurallyValidUfvk(s) {
-  if (typeof s !== 'string') return false;
+  if (typeof s !== 'string') {
+    return false;
+  }
   // ZIP-316 unified FVK: bech32m with HRP `uview` (mainnet) or
   // `uviewtest` (testnet). Real UFVKs are 250+ chars.
-  if (s.length < 100) return false;
-  if (s.length > 4096) return false;
+  if (s.length < 100) {
+    return false;
+  }
+  if (s.length > 4096) {
+    return false;
+  }
   let hrpEnd;
-  if (s.startsWith('uview1')) hrpEnd = 5;
-  else if (s.startsWith('uviewtest1')) hrpEnd = 9;
-  else return false;
+  if (s.startsWith('uview1')) {
+    hrpEnd = 5;
+  } else if (s.startsWith('uviewtest1')) {
+    hrpEnd = 9;
+  } else {
+    return false;
+  }
   // Everything after the `1` separator must be bech32m alphabet.
   for (let i = hrpEnd + 1; i < s.length; i++) {
-    if (!BECH32_ALPHABET.has(s[i])) return false;
+    if (!BECH32_ALPHABET.has(s[i])) {
+      return false;
+    }
   }
   return true;
 }

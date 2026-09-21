@@ -227,9 +227,13 @@ export function estimateQRCodeCount(bytes: number): number {
 }
 
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
+  if (a.length !== b.length) {
+    return false;
+  }
   for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
+    if (a[i] !== b[i]) {
+      return false;
+    }
   }
   return true;
 }
@@ -242,7 +246,7 @@ function extractSpendRandomizers(plan: TransactionPlan): Uint8Array[] {
   for (const action of plan.actions) {
     if (action.action?.case === 'spend') {
       const r = action.action.value.randomizer;
-      if (r && r.length === 32) {
+      if (r?.length === 32) {
         randomizers.push(r);
       }
     }
@@ -258,7 +262,7 @@ function extractVoteRandomizers(plan: TransactionPlan): Uint8Array[] {
   for (const action of plan.actions) {
     if (action.action?.case === 'delegatorVote') {
       const r = action.action.value.randomizer;
-      if (r && r.length === 32) {
+      if (r?.length === 32) {
         randomizers.push(r);
       }
     }

@@ -25,7 +25,9 @@ function bech32mPolymod(values: number[]): number {
     const b = chk >>> 25;
     chk = ((chk & 0x1ffffff) << 5) ^ v;
     for (let i = 0; i < 5; i++) {
-      if ((b >>> i) & 1) chk ^= GEN[i]!;
+      if ((b >>> i) & 1) {
+        chk ^= GEN[i]!;
+      }
     }
   }
   return chk;
@@ -33,9 +35,13 @@ function bech32mPolymod(values: number[]): number {
 
 function bech32mHrpExpand(hrp: string): number[] {
   const ret: number[] = [];
-  for (let i = 0; i < hrp.length; i++) ret.push(hrp.charCodeAt(i) >>> 5);
+  for (let i = 0; i < hrp.length; i++) {
+    ret.push(hrp.charCodeAt(i) >>> 5);
+  }
   ret.push(0);
-  for (let i = 0; i < hrp.length; i++) ret.push(hrp.charCodeAt(i) & 31);
+  for (let i = 0; i < hrp.length; i++) {
+    ret.push(hrp.charCodeAt(i) & 31);
+  }
   return ret;
 }
 
@@ -43,7 +49,9 @@ function bech32mCreateChecksum(hrp: string, data: number[]): number[] {
   const values = bech32mHrpExpand(hrp).concat(data).concat([0, 0, 0, 0, 0, 0]);
   const polymod = bech32mPolymod(values) ^ BECH32M_CONST;
   const ret: number[] = [];
-  for (let i = 0; i < 6; i++) ret.push((polymod >>> (5 * (5 - i))) & 31);
+  for (let i = 0; i < 6; i++) {
+    ret.push((polymod >>> (5 * (5 - i))) & 31);
+  }
   return ret;
 }
 
@@ -52,8 +60,8 @@ function convertBits(data: Uint8Array, fromBits: number, toBits: number, pad: bo
   let bits = 0;
   const maxv = (1 << toBits) - 1;
   const result: number[] = [];
-  for (let i = 0; i < data.length; i++) {
-    acc = (acc << fromBits) | data[i]!;
+  for (const byte of data) {
+    acc = (acc << fromBits) | byte;
     bits += fromBits;
     while (bits >= toBits) {
       bits -= toBits;
@@ -61,7 +69,9 @@ function convertBits(data: Uint8Array, fromBits: number, toBits: number, pad: bo
     }
   }
   if (pad) {
-    if (bits > 0) result.push((acc << (toBits - bits)) & maxv);
+    if (bits > 0) {
+      result.push((acc << (toBits - bits)) & maxv);
+    }
   }
   return result;
 }
@@ -70,9 +80,12 @@ function bech32mEncode(hrp: string, data: Uint8Array, limit = 1023): string {
   const words = convertBits(data, 8, 5, true);
   const checksum = bech32mCreateChecksum(hrp, words);
   let result = hrp + '1';
-  for (const w of words.concat(checksum)) result += CHARSET[w]!;
-  if (result.length > limit)
+  for (const w of words.concat(checksum)) {
+    result += CHARSET[w]!;
+  }
+  if (result.length > limit) {
     throw new Error(`bech32m result exceeds limit: ${result.length} > ${limit}`);
+  }
   return result;
 }
 
@@ -90,7 +103,9 @@ const hPers = (round: number): Uint8Array => {
   // [85,65,95,70,52,74,117,109,98,108,101,95,72, round, 0, 0]
   const p = new Uint8Array(16);
   const tag = 'UA_F4Jumble_H';
-  for (let i = 0; i < tag.length; i++) p[i] = tag.charCodeAt(i);
+  for (let i = 0; i < tag.length; i++) {
+    p[i] = tag.charCodeAt(i);
+  }
   p[13] = round;
   // bytes 14-15 remain 0
   return p;
@@ -104,7 +119,9 @@ const gPers = (round: number, chunkJ: number): Uint8Array => {
   // [85,65,95,70,52,74,117,109,98,108,101,95,71, round, j_lo, j_hi]
   const p = new Uint8Array(16);
   const tag = 'UA_F4Jumble_G';
-  for (let i = 0; i < tag.length; i++) p[i] = tag.charCodeAt(i);
+  for (let i = 0; i < tag.length; i++) {
+    p[i] = tag.charCodeAt(i);
+  }
   p[13] = round;
   p[14] = chunkJ & 0xff;
   p[15] = (chunkJ >>> 8) & 0xff;
@@ -134,7 +151,9 @@ function gRound(round: number, input: Uint8Array, outputLen: number): Uint8Array
   while (offset < outputLen) {
     const chunk = blake2b(input, { dkLen: OUTBYTES, personalization: gPers(round, j) });
     const take = Math.min(OUTBYTES, outputLen - offset);
-    for (let k = 0; k < take; k++) result[offset + k] = chunk[k]!;
+    for (let k = 0; k < take; k++) {
+      result[offset + k] = chunk[k]!;
+    }
     offset += take;
     j++;
   }
@@ -143,7 +162,9 @@ function gRound(round: number, input: Uint8Array, outputLen: number): Uint8Array
 
 /** XOR b into a in-place */
 function xorInPlace(a: Uint8Array, b: Uint8Array): void {
-  for (let i = 0; i < a.length; i++) a[i]! ^= b[i]!;
+  for (let i = 0; i < a.length; i++) {
+    a[i]! ^= b[i]!;
+  }
 }
 
 /**
@@ -153,7 +174,9 @@ function xorInPlace(a: Uint8Array, b: Uint8Array): void {
  */
 export function f4Jumble(M: Uint8Array): Uint8Array {
   const l = M.length;
-  if (l < 48 || l > 4194368) throw new Error(`f4Jumble: invalid length ${l}`);
+  if (l < 48 || l > 4194368) {
+    throw new Error(`f4Jumble: invalid length ${l}`);
+  }
 
   const lL = Math.min(Math.floor(l / 2), OUTBYTES);
   const lR = l - lL;
@@ -195,7 +218,9 @@ function encodeUnifiedSingleItem(typecode: number, itemBytes: Uint8Array, hrp: s
   container[1] = itemBytes.length;
   container.set(itemBytes, 2);
   const padOffset = 1 + 1 + itemBytes.length;
-  for (let i = 0; i < hrp.length; i++) container[padOffset + i] = hrp.charCodeAt(i);
+  for (let i = 0; i < hrp.length; i++) {
+    container[padOffset + i] = hrp.charCodeAt(i);
+  }
 
   const jumbled = f4Jumble(container);
   return bech32mEncode(hrp, jumbled);
@@ -241,10 +266,14 @@ export function encodeOrchardUfvk(fvkBytes: Uint8Array, mainnet = true): string 
  */
 export function fixOrchardAddress(addr: string, mainnet = true): string {
   const orchardPrefix = mainnet ? 'u1orchard:' : 'utest1orchard:';
-  if (!addr.startsWith(orchardPrefix)) return addr;
+  if (!addr.startsWith(orchardPrefix)) {
+    return addr;
+  }
 
   const hex = addr.slice(orchardPrefix.length);
-  if (hex.length !== 86) return addr; // 43 bytes = 86 hex chars
+  if (hex.length !== 86) {
+    return addr;
+  } // 43 bytes = 86 hex chars
 
   const rawBytes = new Uint8Array(43);
   for (let i = 0; i < 43; i++) {

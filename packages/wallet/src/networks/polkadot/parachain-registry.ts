@@ -104,8 +104,12 @@ let kusamaParachainsCache: ParachainInfo[] | null = null;
  */
 export async function fetchAvailableParachains(relay: RelayNetwork): Promise<ParachainInfo[]> {
   // check cache
-  if (relay === 'polkadot' && polkadotParachainsCache) return polkadotParachainsCache;
-  if (relay === 'kusama' && kusamaParachainsCache) return kusamaParachainsCache;
+  if (relay === 'polkadot' && polkadotParachainsCache) {
+    return polkadotParachainsCache;
+  }
+  if (relay === 'kusama' && kusamaParachainsCache) {
+    return kusamaParachainsCache;
+  }
 
   // the chainspecs site doesn't have a JSON index, so we use a curated list
   // that we know exists based on the parity chainspecs repo

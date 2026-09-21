@@ -38,7 +38,7 @@ const DORMANT_THRESHOLD = 3; // mark dormant after 3 consecutive zero fetches
 const balanceCache = new Map<string, CachedBalance>();
 
 /** chains user has explicitly enabled */
-let enabledChains: Set<SupportedChain> = new Set();
+let enabledChains = new Set<SupportedChain>();
 
 /**
  * set which chains user has enabled
@@ -229,7 +229,9 @@ export function getCachedBalance(publicKey: string, chain: SupportedChain): Chai
   const key = cacheKey(publicKey, chain);
   const cached = balanceCache.get(key);
 
-  if (!cached) return null;
+  if (!cached) {
+    return null;
+  }
 
   const info = CHAIN_INFO[chain];
   return {

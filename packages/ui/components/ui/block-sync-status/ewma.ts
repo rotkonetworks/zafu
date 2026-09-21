@@ -36,7 +36,7 @@ export class EWMA {
    * @param clock A function with a now() method. Defaults to Date. Helpful with testing.
    */
 
-  constructor({ halfLifeMs = 10_000, initialValue = undefined, clock = Date }: EWMAProps = {}) {
+  constructor({ halfLifeMs = 10_000, initialValue, clock = Date }: EWMAProps = {}) {
     this.decay = halfLifeMs;
     this.ewma = initialValue ?? 0;
     this.clock = clock;

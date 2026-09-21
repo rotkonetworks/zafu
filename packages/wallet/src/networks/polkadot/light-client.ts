@@ -243,7 +243,9 @@ export function detectRelayFromAddress(address: string): RelayChain | null {
     let num = BigInt(0);
     for (const char of address) {
       const idx = ALPHABET.indexOf(char);
-      if (idx === -1) return null;
+      if (idx === -1) {
+        return null;
+      }
       num = num * 58n + BigInt(idx);
     }
     // extract prefix from first bytes
@@ -260,13 +262,17 @@ export function detectRelayFromAddress(address: string): RelayChain | null {
     // kusama: prefix 2 or any kusama parachain prefix
     for (const [chain, info] of Object.entries(CHAIN_INFO) as [SupportedChain, ChainInfo][]) {
       if (info.ss58Prefix === prefix) {
-        return info.relay || (chain as RelayChain);
+        return info.relay ?? (chain as RelayChain);
       }
     }
 
     // default: polkadot (prefix 0 is generic substrate)
-    if (prefix === 0 || prefix === 42) return 'polkadot';
-    if (prefix === 2) return 'kusama';
+    if (prefix === 0 || prefix === 42) {
+      return 'polkadot';
+    }
+    if (prefix === 2) {
+      return 'kusama';
+    }
 
     return null;
   } catch {
@@ -281,7 +287,9 @@ export function detectChainFromAddress(address: string): SupportedChain | null {
     let num = BigInt(0);
     for (const char of address) {
       const idx = ALPHABET.indexOf(char);
-      if (idx === -1) return null;
+      if (idx === -1) {
+        return null;
+      }
       num = num * 58n + BigInt(idx);
     }
     const bytes = [];
@@ -297,8 +305,12 @@ export function detectChainFromAddress(address: string): SupportedChain | null {
       }
     }
     // generic substrate address (prefix 42) or polkadot (0) -> polkadot
-    if (prefix === 0 || prefix === 42) return 'polkadot';
-    if (prefix === 2) return 'kusama';
+    if (prefix === 0 || prefix === 42) {
+      return 'polkadot';
+    }
+    if (prefix === 2) {
+      return 'kusama';
+    }
 
     return null;
   } catch {
@@ -358,10 +370,10 @@ const CHAINSPEC_SOURCES: Record<SupportedChain, ChainSpecSource> = {
 };
 
 /** cache for fetched chain specs */
-const chainSpecCache: Map<string, string> = new Map();
+const chainSpecCache = new Map<string, string>();
 
 /** custom chainspecs registered by user (from storage) */
-const customChainSpecs: Map<
+const customChainSpecs = new Map<
   string,
   {
     chainspec: string;
@@ -370,7 +382,7 @@ const customChainSpecs: Map<
     symbol?: string;
     decimals?: number;
   }
-> = new Map();
+>();
 
 /**
  * register a custom chainspec from user upload
@@ -442,7 +454,9 @@ const CHAINSPEC_LOADERS: Record<string, () => Promise<{ chainSpec: string }>> = 
 async function loadChainSpec(chain: string): Promise<string> {
   // check cache first (includes custom chainspecs)
   const cached = chainSpecCache.get(chain);
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
 
   // check if this is a custom chain
   const customSpec = customChainSpecs.get(chain);
@@ -500,9 +514,7 @@ let smoldotInstance: ReturnType<typeof start> | null = null;
  * single instance shared across all chains
  */
 function getSmoldot() {
-  if (!smoldotInstance) {
-    smoldotInstance = start();
-  }
+  smoldotInstance ??= start();
   return smoldotInstance;
 }
 
@@ -514,7 +526,7 @@ export class PolkadotLightClient {
   private chain: SupportedChain;
   private chainClient: Awaited<ReturnType<typeof createClient>> | null = null;
   private _state: LightClientState;
-  private stateListeners: Set<(state: LightClientState) => void> = new Set();
+  private stateListeners = new Set<(state: LightClientState) => void>();
 
   constructor(chain: SupportedChain = 'polkadot') {
     this.chain = chain;
@@ -556,7 +568,7 @@ export class PolkadotLightClient {
 
       // for parachains, need to add relay chain first
       const info = CHAIN_INFO[this.chain];
-      let relayChain;
+      let relayChain: any;
       if (info.relay) {
         const relaySpec = await loadChainSpec(info.relay);
         relayChain = await smoldot.addChain({ chainSpec: relaySpec });
@@ -609,7 +621,9 @@ export class PolkadotLightClient {
   /** disconnect from chain */
   async disconnect(): Promise<void> {
     const unsub = (this as unknown as { _unsub?: () => void })._unsub;
-    if (unsub) unsub();
+    if (unsub) {
+      unsub();
+    }
 
     if (this.chainClient) {
       this.chainClient.destroy();
@@ -736,7 +750,7 @@ export class PolkadotLightClient {
 }
 
 /** singleton clients per chain */
-const clients: Map<SupportedChain, PolkadotLightClient> = new Map();
+const clients = new Map<SupportedChain, PolkadotLightClient>();
 
 export function getLightClient(chain: SupportedChain = 'polkadot'): PolkadotLightClient {
   let client = clients.get(chain);
@@ -748,7 +762,7 @@ export function getLightClient(chain: SupportedChain = 'polkadot'): PolkadotLigh
 }
 
 /** custom chain light clients (keyed by custom chain id) */
-const customClients: Map<string, PolkadotLightClient> = new Map();
+const customClients = new Map<string, PolkadotLightClient>();
 
 /**
  * get light client for a custom chainspec
@@ -812,7 +826,7 @@ export async function disconnectAll(): Promise<void> {
   customClients.clear();
 
   if (smoldotInstance) {
-    smoldotInstance.terminate();
+    void smoldotInstance.terminate();
     smoldotInstance = null;
   }
 }
@@ -864,7 +878,7 @@ export async function getUnifiedBalance(
           decimals: info.decimals,
           balance,
         };
-      } catch (err) {
+      } catch {
         // chain unavailable, return zero balance
         return {
           chain,

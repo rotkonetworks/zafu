@@ -19,7 +19,7 @@ export type MetadataFetchFn = (arg: {
 // Uses supplied metadata fetcher to see if it can augment fee ValueView with metadata
 const useFeeMetadata = (txv: TransactionView, getMetadata: MetadataFetchFn) => {
   const amount = txv.bodyView?.transactionParameters?.fee?.amount;
-  const [feeValueView, setFeeValueView] = useState<ValueView>(
+  const [feeValueView, setFeeValueView] = useState(
     new ValueView({
       valueView: {
         case: 'unknownAssetId',
@@ -28,7 +28,7 @@ const useFeeMetadata = (txv: TransactionView, getMetadata: MetadataFetchFn) => {
     }),
   );
 
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<unknown>();
 
   useEffect(() => {

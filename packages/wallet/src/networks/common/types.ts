@@ -100,10 +100,18 @@ export interface ZignerWallet {
 /** Get list of enabled networks for a wallet */
 export function getEnabledNetworks(wallet: ZignerWallet): NetworkType[] {
   const networks: NetworkType[] = [];
-  if (wallet.networks.penumbra) networks.push('penumbra');
-  if (wallet.networks.zcash) networks.push('zcash');
-  if (wallet.networks.polkadot) networks.push('polkadot');
-  if (wallet.networks.cosmos) networks.push('cosmos');
+  if (wallet.networks.penumbra) {
+    networks.push('penumbra');
+  }
+  if (wallet.networks.zcash) {
+    networks.push('zcash');
+  }
+  if (wallet.networks.polkadot) {
+    networks.push('polkadot');
+  }
+  if (wallet.networks.cosmos) {
+    networks.push('cosmos');
+  }
   return networks;
 }
 

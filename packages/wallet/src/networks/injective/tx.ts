@@ -70,7 +70,7 @@ export function buildSignedInjectiveTx(p: BuildInjectiveTxParams): Uint8Array {
  * Read the first protobuf field, expected to be field 1, wire type 2
  * (`base_account`). Varint length decoding is inherently bitwise.
  */
-/* eslint-disable no-bitwise -- protobuf varint length decoding is inherently bitwise */
+
 const readLengthDelimitedField1 = (buf: Uint8Array): Uint8Array => {
   if (buf[0] !== 0x0a) {
     throw new Error('unexpected EthAccount layout: base_account (field 1) not first');
@@ -91,7 +91,6 @@ const readLengthDelimitedField1 = (buf: Uint8Array): Uint8Array => {
   }
   return buf.slice(i, i + len);
 };
-/* eslint-enable no-bitwise -- end of varint reader */
 
 /**
  * Decode Injective's `/injective.types.v1beta1.EthAccount` value bytes to the
