@@ -55,6 +55,22 @@ describe('keyRing.setPassword re-seals existing vaults', () => {
     expect(await useStore.getState().keyRing.unlock(password)).toBe(false);
   });
 
+  test('a penumbra hot wallet seed still reveals after setPassword runs again', async () => {
+    await useStore.getState().keyRing.setPassword(password);
+    // wallets.addWallet stores the penumbra seed in penumbraWallets custody,
+    // sealed under the master key (a different store from the vault list).
+    await useStore.getState().wallets.addWallet({ label: 'Account #1', seedPhrase });
+
+    const before = await useStore.getState().wallets.getSeedPhrase();
+    expect(before.join(' ')).toBe(seedPhrase.join(' '));
+
+    // the bug trigger again - previously orphaned the penumbra seed too
+    await useStore.getState().keyRing.setPassword(newPassword);
+
+    const after = await useStore.getState().wallets.getSeedPhrase();
+    expect(after).toEqual(before);
+  });
+
   test('setPassword refuses to re-seal hot vaults while locked (no orphaning)', async () => {
     await useStore.getState().keyRing.setPassword(password);
     const vaultId = await useStore

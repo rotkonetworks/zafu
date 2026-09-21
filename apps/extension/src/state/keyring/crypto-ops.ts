@@ -84,6 +84,25 @@ export const reencryptVault = async (
   };
 };
 
+/**
+ * re-encrypt a raw seed Box (a penumbra wallet's custody.encryptedSeedPhrase)
+ * from oldKey to newKey. Same invariant as reencryptVault, but for the seed
+ * boxes that live in penumbraWallets rather than in the vault list - both are
+ * sealed under the master key, so a password change must re-seal both or the
+ * penumbra seed is orphaned exactly like the vault bug.
+ */
+export const reencryptSeedBox = async (
+  boxJson: BoxJson,
+  oldKey: Key,
+  newKey: Key,
+): Promise<BoxJson> => {
+  const plain = await oldKey.unseal(Box.fromJson(boxJson));
+  if (plain == null) {
+    throw new Error('failed to decrypt penumbra seed for migration');
+  }
+  return (await newKey.seal(plain)).toJson();
+};
+
 /** decrypt multisig secrets — tries vault first, then legacy zcash wallet record */
 export const decryptMultisigSecrets = async (
   ctx: CryptoCtx,

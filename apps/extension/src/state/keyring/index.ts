@@ -51,6 +51,7 @@ import {
   createMasterKey,
   recreateMasterKey,
   reencryptVault,
+  reencryptSeedBox,
   decryptMultisigSecrets,
   encryptFrostSecrets,
 } from './crypto-ops';
@@ -241,28 +242,36 @@ export const createKeyRingSlice =
         }
 
         // A keyprint ALREADY exists. createMasterKey mints a NEW random salt, so
-        // just overwriting the keyprint would orphan every vault sealed under the
+        // just overwriting the keyprint would orphan every secret sealed under the
         // old salt: they fail to decrypt forever ("failed to decrypt vault") even
         // with the correct password, while FVK-based sync keeps working. That was
         // a real data-loss bug (a "set password" step in an onboarding/import flow
-        // run on an existing wallet). Instead we re-seal every existing vault from
-        // the OLD key to the new one, exactly like the airgap upgrade below.
+        // run on an existing wallet). Instead we re-seal every existing secret from
+        // the OLD key to the new one.
         //
-        // Resolve the OLD key the vaults were sealed under:
-        //  - airgap-only wallets were sealed under the empty-password key
-        //  - hot wallets were sealed under the live session key, so the wallet
-        //    must be unlocked; if it is locked we refuse rather than orphan them.
-        const hasAirgapOnly =
-          vaults.length > 0 && vaults.every(v => v.insensitive?.['airgapOnly'] === true);
+        // Two stores hold seeds sealed under the master key: the vault list
+        // (`vaults`) and penumbra hot wallets (`penumbraWallets[].custody
+        // .encryptedSeedPhrase`). Re-seal BOTH or a password change orphans
+        // whichever one we miss.
+        const penumbra = (await local.get('penumbraWallets')) ?? [];
+        const hasHotPenumbra = penumbra.some(w => 'encryptedSeedPhrase' in w.custody);
+        const hasHotVault = vaults.some(v => v.insensitive?.['airgapOnly'] !== true);
+        // airgap-only means: some vaults, none hot, and no hot penumbra seed - the
+        // only case whose secrets are sealed under the empty-password key.
+        const airgapOnly = vaults.length > 0 && !hasHotVault && !hasHotPenumbra;
 
+        // Resolve the OLD key the secrets were sealed under:
+        //  - airgap-only: the empty-password key;
+        //  - any hot secret: the live session key (wallet must be unlocked, else
+        //    we refuse rather than orphan it).
         let oldKey: Key | null = null;
-        if (hasAirgapOnly) {
+        if (airgapOnly) {
           const oldResult = await recreateMasterKey('', existingKeyPrint);
           if (!oldResult) {
             throw new Error('failed to decrypt existing vaults for migration');
           }
           oldKey = oldResult.key;
-        } else if (vaults.length > 0) {
+        } else if (hasHotVault || hasHotPenumbra) {
           try {
             oldKey = await requireKey(ctx);
           } catch {
@@ -280,7 +289,32 @@ export const createKeyRingSlice =
           ? await Promise.all(vaults.map(v => reencryptVault(v, oldKey!, newKey)))
           : vaults;
 
+        let penumbraChanged = false;
+        const migratedPenumbra = oldKey
+          ? await Promise.all(
+              penumbra.map(async w => {
+                if ('encryptedSeedPhrase' in w.custody) {
+                  penumbraChanged = true;
+                  return {
+                    ...w,
+                    custody: {
+                      encryptedSeedPhrase: await reencryptSeedBox(
+                        w.custody.encryptedSeedPhrase,
+                        oldKey!,
+                        newKey,
+                      ),
+                    },
+                  };
+                }
+                return w; // airgapSigner (watch-only) - nothing sealed under the key
+              }),
+            )
+          : penumbra;
+
         await local.set('vaults', migratedVaults);
+        if (penumbraChanged) {
+          await local.set('penumbraWallets', migratedPenumbra);
+        }
         await local.set('passwordKeyPrint', newKeyPrint.toJson());
         await session.set('passwordKey', newKeyJson);
 
@@ -290,6 +324,11 @@ export const createKeyRingSlice =
           state.keyRing.status = 'unlocked';
           state.keyRing.keyInfos = keyInfos;
           state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+          // keep the in-memory penumbra wallets in sync so a same-session reveal
+          // uses the freshly re-sealed boxes, not the ones the new key can't open.
+          if (penumbraChanged) {
+            state.wallets.all = migratedPenumbra as typeof state.wallets.all;
+          }
         });
       },
 
