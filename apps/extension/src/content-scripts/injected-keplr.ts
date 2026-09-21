@@ -288,7 +288,11 @@ const installZafu = (): void => {
     return;
   }
   zafuInstalled = true;
-  Object.defineProperty(window, 'zafu', { value: zafuProvider, writable: false, configurable: true });
+  Object.defineProperty(window, 'zafu', {
+    value: zafuProvider,
+    writable: false,
+    configurable: true,
+  });
   window.dispatchEvent(new Event('zafu_keystorechange'));
 };
 // Install immediately - no gate, no slot race.

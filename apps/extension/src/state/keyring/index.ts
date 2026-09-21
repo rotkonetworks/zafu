@@ -286,7 +286,7 @@ export const createKeyRingSlice =
         } = await createMasterKey(password);
 
         const migratedVaults = oldKey
-          ? await Promise.all(vaults.map(v => reencryptVault(v, oldKey!, newKey)))
+          ? await Promise.all(vaults.map(v => reencryptVault(v, oldKey, newKey)))
           : vaults;
 
         let penumbraChanged = false;
@@ -300,7 +300,7 @@ export const createKeyRingSlice =
                     custody: {
                       encryptedSeedPhrase: await reencryptSeedBox(
                         w.custody.encryptedSeedPhrase,
-                        oldKey!,
+                        oldKey,
                         newKey,
                       ),
                     },

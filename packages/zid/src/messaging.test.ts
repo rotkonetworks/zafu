@@ -17,7 +17,7 @@ import { pqKeyAuthMessage } from '@zafu/pq';
 // Build a recipient whose pq_pubkey carries a VALID identity-key signature, the
 // way the wallet now advertises it (P1). encryptFor must accept only these.
 const validPqRecipient = () => {
-  const priv = ed25519.utils.randomPrivateKey();
+  const priv = ed25519.utils.randomSecretKey();
   const pubkey = bytesToHex(ed25519.getPublicKey(priv));
   const pqBytes = randomBytes(1216);
   const pq_pubkey = bytesToHex(pqBytes);

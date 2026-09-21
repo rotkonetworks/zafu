@@ -143,9 +143,11 @@ describe('transport symmetric ratchet (P3 Layer 1 forward secrecy)', () => {
     // send one full epoch + into the next; capture an epoch-0 ciphertext.
     let epoch0Wire: Uint8Array | null = null;
     for (let i = 0; i <= N; i++) {
-      const wire = encryptTransport(send, new TextEncoder().encode('m' + i));
-      if (i === 5) epoch0Wire = wire;
-      expect(new TextDecoder().decode(decryptTransport(recv, wire))).toBe('m' + i);
+      const wire = encryptTransport(send, new TextEncoder().encode(`m${i}`));
+      if (i === 5) {
+        epoch0Wire = wire;
+      }
+      expect(new TextDecoder().decode(decryptTransport(recv, wire))).toBe(`m${i}`);
     }
 
     // recv.k has ratcheted to epoch 1 (it crossed the boundary at counter N).

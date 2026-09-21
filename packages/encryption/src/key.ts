@@ -14,6 +14,11 @@ const constantTimeEqual = (a: Uint8Array, b: Uint8Array): boolean => {
   }
   let result = 0;
   for (let i = 0; i < a.length; i++) {
+    // Deliberate constant-time compare: bitwise OR-accumulate the XOR of every
+    // byte pair, no early exit. The lengths are equal (checked above), so the
+    // indexes are in range. eslint's no-bitwise / no-non-null-assertion are the
+    // wrong call for this specific timing-safe primitive.
+    // eslint-disable-next-line no-bitwise, @typescript-eslint/no-non-null-assertion
     result |= a[i]! ^ b[i]!;
   }
   return result === 0;
