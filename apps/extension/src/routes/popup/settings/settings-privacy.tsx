@@ -364,7 +364,7 @@ export function SettingsPrivacy() {
         <SigningSecuritySection />
         <ProxySection />
         {/* discovery derives from the zid contact layer; hide it when zid is off */}
-        {settings.enableIdentity !== false && <ContactDiscoverySection />}
+        {(settings.enableIdentity ?? true) && <ContactDiscoverySection />}
         {/* Keplr is a cosmos-family concern; hide it on networks (e.g. zcash)
             where it would only confuse. */}
         {(isIbcNetwork(activeNetwork) || activeNetwork === 'penumbra') && <KeplrCompatSection />}
