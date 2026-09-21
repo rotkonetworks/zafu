@@ -1,6 +1,7 @@
 import { useState, type JSX } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { usePopupReady } from '../../hooks/popup-ready';
+import { useSidePanelDelivery } from '../../hooks/side-panel-delivery';
 import { useZcashAutoSync } from '../../hooks/zcash-auto-sync';
 import { usePenumbraSwapClaim } from '../../hooks/penumbra-swap-claim';
 import { BottomTabs, BOTTOM_TABS_HEIGHT } from '../../components/bottom-tabs';
@@ -146,6 +147,7 @@ const matchesRoute = (pathname: string, routes: string[]) =>
 
 export const PopupLayout = () => {
   usePopupReady();
+  useSidePanelDelivery();
   useZcashAutoSync();
   const location = useLocation();
   const activeNetwork = useStore(selectActiveNetwork);

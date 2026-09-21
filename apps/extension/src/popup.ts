@@ -6,17 +6,15 @@ import { throwIfNeedsLogin } from './needs-login';
 import { openApprovalPopup } from './utils/popup-window';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { isSidePanelOpen } from './side-panel-presence';
+import { SIDE_PANEL_DELIVER } from './message/side-panel-delivery';
 
 const POPUP_READY_TIMEOUT = 60_000;
-// How long to wait for the side panel to render an approval. Presence is now
-// confirmed authoritatively (getContexts) BEFORE we route here, so this no
-// longer guesses "open vs closed" - it only guards an actual render failure.
-// That lets it be generous: routing reloads the panel document, and the ready
-// ping only fires after Penumbra WASM re-initialises, which routinely exceeds
-// a second on a cold load. 1500ms lost that race and fell back to a window
-// even though the panel was open; 6s covers the wasm warm-up.
+// How long to wait for the open side panel to ACK an approval. Delivery is now a
+// client-side route change (a message the panel navigates on), not a document
+// reload, so this no longer has to cover a Penumbra WASM cold-start - it only
+// guards "is a panel actually listening": no ack in this window -> fall back to
+// a popup window. Kept generous to absorb a busy main thread.
 const SIDE_PANEL_READY_TIMEOUT = 6_000;
-const SIDE_PANEL_DEFAULT_PATH = 'sidepanel.html';
 const POPUP_PATHS = {
   [PopupType.TxApproval]: PopupPath.TRANSACTION_APPROVAL,
   [PopupType.OriginApproval]: PopupPath.ORIGIN_APPROVAL,
@@ -73,7 +71,7 @@ export const popup = async <M extends PopupType>(
       throw new PopupAlreadyOpenError(popupType);
     }
 
-    const { popupId, viaSidePanel } = await spawnDetachedPopup(popupType).catch(cause => {
+    const popupId = await spawnDetachedPopup(popupType).catch(cause => {
       throw new Error(`Popup ${popupType} failed to open`, { cause });
     });
 
@@ -82,15 +80,11 @@ export const popup = async <M extends PopupType>(
       id: popupId,
     } as PopupRequest<M>;
 
-    try {
-      return await sendPopup(popupRequest);
-    } finally {
-      // Return the panel to the wallet once the approval is answered (or the
-      // panel was closed mid-flow), so it does not stay stuck on the approval.
-      if (viaSidePanel) {
-        await restoreSidePanel();
-      }
-    }
+    // No side-panel "restore" here anymore: the panel's document path never
+    // changes (delivery is a client-side navigation), and the approval screen
+    // returns the panel to the wallet itself via exitApprovalSurface. A detached
+    // window closes itself the same way.
+    return await sendPopup(popupRequest);
   };
 
   const popupResponse = await navigator.locks.request(
@@ -125,79 +119,61 @@ const popupUrl = (popupType?: PopupType, id?: string): URL => {
 };
 
 /**
- * Relative path (from the extension root) to an approval, served as the SIDE
- * PANEL document. Uses sidepanel.html (same bundle/entry as popup.html) rather
- * than popup.html so the reloaded panel keeps a pathname that isSidePanel()
- * recognises - otherwise the panel loses its own identity after routing and
- * stops re-announcing presence. Only the side-panel delivery uses this; the
- * detached-window fallback still opens popup.html (see popupUrl).
+ * Deliver an approval into an already-open side panel WITHOUT reloading it.
+ *
+ * The panel is already on the wallet, so instead of setOptions (which reloads the
+ * panel document and re-inits Penumbra WASM every approval), we message the panel
+ * to navigate its router to the approval route - a client-side change, like the
+ * in-app zcash flow. The panel's delivery listener (useSidePanelDelivery) wires
+ * the request listener and pings ready, which resolves `ready` here. If no panel
+ * is listening (closed, or in another window), ready times out and we return
+ * false so the caller falls back to a popup window. The panel's document path is
+ * never touched, so there is nothing to restore afterward.
  */
-const relativePopupPath = (popupType: PopupType, id: string): string =>
-  `sidepanel.html?id=${id}#${POPUP_PATHS[popupType]}`;
-
-/** Point the side panel back at the wallet home after an approval is done. */
-const restoreSidePanel = (): Promise<void> =>
-  chrome.sidePanel
-    .setOptions({ path: SIDE_PANEL_DEFAULT_PATH, enabled: true })
-    .catch(() => undefined);
-
-/**
- * Route an approval into the side panel if it is open. `setOptions` reloads the
- * (already-open) panel to the approval - same bundle as the popup, so it just
- * renders the route and signals ready. If the panel is closed it never renders,
- * `ready` times out, and we return false so the caller falls back to a popup
- * window. This also honours MV3's gesture rule: we never force the panel open
- * from a background event, we only reuse it when the user already had it open.
- */
-const deliverToSidePanel = async (path: string, popupId: string): Promise<boolean> => {
+const deliverToSidePanel = async (popupType: PopupType, popupId: string): Promise<boolean> => {
   const ready = listenReady(popupId, AbortSignal.timeout(SIDE_PANEL_READY_TIMEOUT));
-  await chrome.sidePanel.setOptions({ path, enabled: true });
+  chrome.runtime
+    .sendMessage({ type: SIDE_PANEL_DELIVER, popupId, route: POPUP_PATHS[popupType] })
+    .catch(() => undefined); // no receiver -> ready times out -> window fallback
   try {
     await ready;
     return true;
   } catch {
-    await restoreSidePanel();
     return false;
   }
 };
 
 /**
  * Spawns a detached approval and resolves when it is ready. Honours the user's
- * `approvalsInSidePanel` preference: try the open side panel first, else open a
- * popup window (also the fallback when the panel is closed). Returns whether the
- * side panel was used, so the caller can restore it afterward.
+ * `approvalsInSidePanel` preference: deliver into the open side panel first, else
+ * open a popup window (also the fallback when the panel is closed). Returns the
+ * popup id the request will be sent under.
  */
-const spawnDetachedPopup = async (
-  popupType: PopupType,
-): Promise<{ popupId: string; viaSidePanel: boolean }> => {
+const spawnDetachedPopup = async (popupType: PopupType): Promise<string> => {
   const popupId = crypto.randomUUID();
 
   // Presence MUST be scoped to the window the user is actually looking at.
   // getContexts is global, so a panel open in another window (or a stale/
-  // enabled-but-not-visible one) read as "open" - we then setOptions an invisible
-  // panel, its ready ping timed out (~6s, wasm warm-up), and we fell back to a
-  // popup WINDOW anyway. With many penumbra approvals that is the reported "still
-  // pushes a lot of popups even in side-panel mode". Scoping means: panel visible
-  // in THIS window -> deliver there (and it works); not here -> skip straight to
-  // the window with no wasted 6s race.
+  // enabled-but-not-visible one) read as "open" - we would then deliver to a
+  // panel the user cannot see, its ack would never come, and we'd fall back to a
+  // window anyway after the timeout. With many penumbra approvals that was the
+  // reported "still pushes a lot of popups even in side-panel mode". Scoping
+  // means: panel visible in THIS window -> deliver there; not here -> straight to
+  // the window with no wasted wait.
   const winId = await chrome.windows
     .getLastFocused({ windowTypes: ['normal'] })
     .then(w => w.id)
     .catch(() => undefined);
 
   // default ON: side panel is the default approval surface when it is open.
-  // Only an explicit `false` (user picked "popup window") opts out. Safe because
-  // the send itself now runs in the service worker (see penumbra-send), so it
-  // completes even though delivering the approval reloads the panel.
+  // Only an explicit `false` (user picked "popup window") opts out.
   if (
     (await isSidePanelOpen(winId)) &&
     (await localExtStorage.get('approvalsInSidePanel')) !== false
   ) {
-    const shown = await deliverToSidePanel(relativePopupPath(popupType, popupId), popupId).catch(
-      () => false,
-    );
+    const shown = await deliverToSidePanel(popupType, popupId).catch(() => false);
     if (shown) {
-      return { popupId, viaSidePanel: true };
+      return popupId;
     }
   }
 
@@ -206,5 +182,5 @@ const spawnDetachedPopup = async (
   // window id is guaranteed present after `create`
   void ready.catch(() => chrome.windows.remove(created.id!));
   await ready;
-  return { popupId, viaSidePanel: false };
+  return popupId;
 };
