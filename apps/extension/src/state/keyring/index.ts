@@ -226,42 +226,71 @@ export const createKeyRingSlice =
       setPassword: async (password: string) => {
         const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
         const existingKeyPrint = await local.get('passwordKeyPrint');
-        const hasAirgapOnly = vaults.some(v => v.insensitive?.['airgapOnly'] === true);
 
-        if (hasAirgapOnly && existingKeyPrint) {
-          const oldResult = await recreateMasterKey('', existingKeyPrint);
-          if (!oldResult) {
-            throw new Error('failed to decrypt existing vaults for migration');
-          }
-
-          const {
-            key: newKey,
-            keyPrint: newKeyPrint,
-            keyJson: newKeyJson,
-          } = await createMasterKey(password);
-          const migratedVaults = await Promise.all(
-            vaults.map(v => reencryptVault(v, oldResult.key, newKey)),
-          );
-
-          await local.set('vaults', migratedVaults);
-          await local.set('passwordKeyPrint', newKeyPrint.toJson());
-          await session.set('passwordKey', newKeyJson);
-
-          const selectedId = await local.get('selectedVaultId');
-          const keyInfos = vaultsToKeyInfos(migratedVaults, selectedId);
-          set(state => {
-            state.keyRing.status = 'unlocked';
-            state.keyRing.keyInfos = keyInfos;
-            state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
-          });
-        } else {
+        // Fresh profile - no key material yet. Mint a new master key. This is
+        // the only case where a brand-new random salt is safe, because there is
+        // nothing sealed under an older one.
+        if (!existingKeyPrint) {
           const { keyJson, keyPrint } = await createMasterKey(password);
           await session.set('passwordKey', keyJson);
           await local.set('passwordKeyPrint', keyPrint.toJson());
           set(state => {
             state.keyRing.status = 'unlocked';
           });
+          return;
         }
+
+        // A keyprint ALREADY exists. createMasterKey mints a NEW random salt, so
+        // just overwriting the keyprint would orphan every vault sealed under the
+        // old salt: they fail to decrypt forever ("failed to decrypt vault") even
+        // with the correct password, while FVK-based sync keeps working. That was
+        // a real data-loss bug (a "set password" step in an onboarding/import flow
+        // run on an existing wallet). Instead we re-seal every existing vault from
+        // the OLD key to the new one, exactly like the airgap upgrade below.
+        //
+        // Resolve the OLD key the vaults were sealed under:
+        //  - airgap-only wallets were sealed under the empty-password key
+        //  - hot wallets were sealed under the live session key, so the wallet
+        //    must be unlocked; if it is locked we refuse rather than orphan them.
+        const hasAirgapOnly =
+          vaults.length > 0 && vaults.every(v => v.insensitive?.['airgapOnly'] === true);
+
+        let oldKey: Key | null = null;
+        if (hasAirgapOnly) {
+          const oldResult = await recreateMasterKey('', existingKeyPrint);
+          if (!oldResult) {
+            throw new Error('failed to decrypt existing vaults for migration');
+          }
+          oldKey = oldResult.key;
+        } else if (vaults.length > 0) {
+          try {
+            oldKey = await requireKey(ctx);
+          } catch {
+            throw new Error('cannot change password while locked - unlock first');
+          }
+        }
+
+        const {
+          key: newKey,
+          keyPrint: newKeyPrint,
+          keyJson: newKeyJson,
+        } = await createMasterKey(password);
+
+        const migratedVaults = oldKey
+          ? await Promise.all(vaults.map(v => reencryptVault(v, oldKey!, newKey)))
+          : vaults;
+
+        await local.set('vaults', migratedVaults);
+        await local.set('passwordKeyPrint', newKeyPrint.toJson());
+        await session.set('passwordKey', newKeyJson);
+
+        const selectedId = await local.get('selectedVaultId');
+        const keyInfos = vaultsToKeyInfos(migratedVaults, selectedId);
+        set(state => {
+          state.keyRing.status = 'unlocked';
+          state.keyRing.keyInfos = keyInfos;
+          state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+        });
       },
 
       unlock: async (password: string) => {
