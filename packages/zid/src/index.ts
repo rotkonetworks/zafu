@@ -29,7 +29,24 @@ export {
   type ZidSignature,
 } from './messaging';
 export { ZafuError, type ZafuErrorCode } from './errors';
-export { createNoiseChannel } from './noise-channel';
+export { createNoiseChannel, isNoiseHandshakeFailure } from './noise-channel';
+export { openChannel } from './channel-select';
+
+export { createGuestIdentity, type GuestOptions } from './guest';
+
+export { createHttpRelayTransport, type HttpRelayTransportOptions } from './relay-http';
+
+export {
+  walletService,
+  walletStrategy,
+  channelService,
+  sealingFilter,
+  type WalletRequest,
+  type WalletResponse,
+  type WalletStrategyName,
+  type WalletStrategyOptions,
+  type SealingKeys,
+} from './services';
 export {
   upsertContact,
   removeContact,
@@ -44,6 +61,12 @@ export type {
   ZidIdentity,
   ZidChannel,
   ZidOptions,
+  AdvertisedKeys,
+  ChannelMode,
+  ChannelKind,
+  SealedBox,
+  OpenableSealed,
+  DiscoverOptions,
   ContactRef,
   ContactCardKey,
   ContactShare,

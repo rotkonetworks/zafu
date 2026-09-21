@@ -1,5 +1,5 @@
 /**
- * The zafu_* method names the wallet's three external listeners own, split by
+ * The zafu_* method names the wallet's four external listeners own, split by
  * listener. This is a dependency-free leaf module (no popup, no storage, no
  * chrome side effects at import) so the @zafu/protocol contract test can import
  * the REAL runtime values the dispatch uses without booting the whole
@@ -30,3 +30,11 @@ export const EASTEREGG_V1_METHODS = [
   'zafu_request_capability',
   'zafu_pick_contacts',
 ] as const;
+
+/**
+ * contact-discovery.ts - the opt-in, app-scoped presence primitive. Its own
+ * listener because it reads the contact store + a relay rather than opening a
+ * popup, but it is still a public v1 method, so the contract test checks it
+ * alongside the others.
+ */
+export const CONTACT_DISCOVERY_METHODS = ['zafu_discover_contacts'] as const;

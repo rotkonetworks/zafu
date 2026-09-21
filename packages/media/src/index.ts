@@ -27,8 +27,15 @@ export type { Call, CallOptions, MediaError, MediaErrorKind, MediaErrorStep } fr
 export { createVideoBlur } from './blur';
 export type { BlurMode, VideoBlur, VideoBlurOptions } from './blur';
 
-export { zidSignaling } from './signaling';
-export type { ByteChannel, MediaSignal, Signaling } from './signaling';
+export { zidSignaling, callSignalService, serviceSignaling, signalingStrategy } from './signaling';
+export type {
+  ByteChannel,
+  MediaSignal,
+  Signaling,
+  SignalSubscriber,
+  SignalingStrategyName,
+  SignalingStrategyOptions,
+} from './signaling';
 
 export { writable } from './store';
 export type { Readable, Writable } from './store';

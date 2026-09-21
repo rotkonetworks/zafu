@@ -1,6 +1,6 @@
 {
   "name": "@zafu/media",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "license": "MIT",
   "description": "Framework-agnostic P2P media primitives - opt-in WebRTC voice/video with perfect negotiation, local background blur, and pluggable (ZID-encrypted) signaling",
   "type": "module",
@@ -46,6 +46,9 @@
         "import": "./dist/index.js"
       }
     }
+  },
+  "dependencies": {
+    "@zafu/service": "workspace:*"
   },
   "peerDependencies": {
     "@mediapipe/tasks-vision": "^0.10.22"

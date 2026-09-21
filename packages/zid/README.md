@@ -100,6 +100,103 @@ const picked = await me.pickContacts({ purpose: 'invite a friend', max: 1 });
 // [{ handle, displayName }]
 ```
 
+## 6. Works without the wallet (guest identity)
+
+If no zafu wallet is installed, `zid.connect()` returns a **guest** identity
+instead of failing. It is not a degraded mode: from one in-page seed it derives
+an ed25519 identity _and_ an X-Wing (X25519 + ML-KEM-768) key, so the same calls
+work with or without the wallet.
+
+```ts
+const me = await zid.connect(); // wallet if present, guest otherwise
+
+const keys = me.keys?.(); // { pubkey, pq_pubkey, pq_suite, pq_sig, pq_epoch, origin }
+const sealed = await me.sealFor?.(theirKeys, bytes); // post-quantum sealed box
+const opened = await me.openSealed?.(sealed); // Uint8Array
+const ch = await me.channel(theirPubkey); // hybrid post-quantum channel by default
+```
+
+- `keys()` mirrors `zidPubkey()`, and `sealFor` / `openSealed` mirror
+  `encryptFor` / `decryptFrom` (same field names, bytes instead of the wallet
+  wire's base64/hex). `sealFor`/`openSealed` are present in `mode: 'zafu'` too and
+  delegate to the wallet, so the call site does not change with the backend.
+- `channel(peerPubkey)` uses the **hybrid** post-quantum Noise IK channel. The
+  handshake is the caller's choice via `zid.connect({ channel })`:
+
+  | `channel`            | behaviour                                                                                                                        |
+  | -------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+  | `'hybrid'` (default) | post-quantum Noise IK only; fails closed, never downgrades                                                                       |
+  | `'classical'`        | the legacy X25519 + AES-GCM channel                                                                                              |
+  | `'auto'`             | try hybrid, fall back to classical **only when the handshake failed**; a transport failure (relay down, socket error) propagates |
+
+  The channel you get carries `kind: 'hybrid' | 'classical'`, so an `'auto'`
+  caller can see and refuse a downgrade instead of being told nothing;
+  `isNoiseHandshakeFailure(err)` is the same test the fallback uses.
+
+  **A peer still on `@zafu/zid@0.1.0` speaks only the classical handshake.** The
+  hybrid handshake fails closed against it (different protocol name, never a
+  downgrade), so a default-mode call to such a peer will not open. Reach it with
+  `{ channel: 'classical' }`, or `{ channel: 'auto' }` to accept the downgrade
+  knowingly. There is no silent fallback in either direction.
+
+- The post-quantum prekey is authenticated exactly as on the wallet path: a
+  recipient that advertises `pq_pubkey` must carry a valid `pq_sig`, or `sealFor`
+  refuses rather than silently downgrading.
+
+**Custody - read this.** The guest is burner-grade. By default the seed lives in
+memory for the page and is gone on reload. `zid.connect({ persist: 'local' })`
+stores it in `localStorage` so the identity survives reloads - still no backup,
+no recovery, and readable by any script on the origin. Treat it as a throwaway
+handle, not the user's keys.
+
+### Contact discovery without the wallet
+
+The guest derives its own contact card (`suite: 'x25519-v1'`) and the pairwise
+root secret locally, then rides the same relay path as the wallet:
+
+```ts
+const me = await zid.connect({ relayEndpoint: 'https://relay.example/zid' });
+
+me.contactCard?.(); // hand this to a peer
+me.deriveRootSecret?.(peerCard); // pairwise secret from a card
+me.establishSecret?.(peerPubkey); // or: establish once for a stored contact
+const present = await me.discover?.(peers); // DiscoveredContact[]
+```
+
+`createHttpRelayTransport({ endpoint, fetch?, headers? })` is the HTTP relay
+client; its module doc is the exact wire contract a server must implement. The
+server MUST return the whole bucket for a coordinate and MUST NOT offer per-tag
+lookup - that invariant _is_ the privacy property.
+
+### Composition (services & filters)
+
+zid's seams are also `Service`s, so they compose with `@zafu/service` the way
+[`docs/services-pattern.md`](https://github.com/rotkonetworks/zafu/blob/main/docs/services-pattern.md)
+describes (Eriksen, "Your Server as a Function"):
+
+```ts
+import { compose, retry, timeout, trace } from '@zafu/service';
+import { walletService, walletStrategy, channelService, sealingFilter } from '@zafu/zid';
+
+// a named, pre-composed stack around the wallet I/O leaf:
+const wallet = walletStrategy('patient')(walletService(transport)); // trace + timeout + retry
+
+const send = channelService(channel); // Service<Uint8Array, void>
+
+// an end-to-end encrypted request path over any byte service:
+const encrypted = compose(
+  trace({ onComplete: log }),
+  timeout(5_000),
+  sealingFilter(keys), // seals the request, opens the sealed response
+  retry({ attempts: 3 }),
+)(relayService);
+```
+
+`compose` is left-to-right with the first-listed filter outermost, and filters
+never change request/response shapes. Note `channelService`/`callSignalService`
+resolve when a frame is _handed_ to the transport - `ZidChannel.send` is
+fire-and-forget, so there is no delivery ack to await.
+
 ## Errors
 
 Every functional helper throws a typed `ZafuError` with a `.code` you can branch on, instead of failing silently:
@@ -128,17 +225,24 @@ try {
 
 ## API
 
-| Function                                      | Purpose                                                                                                                                                     |
-| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `detect(zafu?)`                               | Feature-detect + version-negotiate. Never throws; returns `{ installed, compatible, walletVersion, protocolVersion, protocolVersions }`.                    |
-| `detectZafu()`                                | Return the raw wallet handle (or `null`), without throwing - the low-level counterpart to `requireWallet`.                                                  |
-| `requireWallet(zafu?)`                        | Resolve a compatible wallet handle, or throw `ZafuError('unavailable' \| 'incompatible')`.                                                                  |
-| `sign(wallet, challengeHex, statement?)`      | Sign a challenge with the site-scoped ZID ed25519 key → `{ signature, publicKey }`.                                                                         |
-| `signBytes(wallet, bytes, statement?)`        | As `sign`, hex-encoding the bytes for you.                                                                                                                  |
-| `zidPubkey(wallet)`                           | **Your** site-scoped keys → `{ pubkey, pq_pubkey?, pq_suite? }`.                                                                                            |
-| `encryptFor(wallet, recipient, bytes, opts?)` | Seal to a recipient's keys (auto post-quantum) → `{ ciphertext, ephemeral_pubkey, postQuantum }`. `opts.requirePq` fails closed if the PQ path wasn't used. |
-| `decryptFrom(wallet, sealed)`                 | Open a sealed box addressed to you → `Uint8Array`.                                                                                                          |
-| `zid.connect(opts?)`                          | Authorize a session → `me` with `channel()`, `pickContacts()`, `sign()`.                                                                                    |
+| Function                                                   | Purpose                                                                                                                                                                                                                                        |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `detect(zafu?)`                                            | Feature-detect + version-negotiate. Never throws; returns `{ installed, compatible, walletVersion, protocolVersion, protocolVersions }`.                                                                                                       |
+| `detectZafu()`                                             | Return the raw wallet handle (or `null`), without throwing - the low-level counterpart to `requireWallet`.                                                                                                                                     |
+| `requireWallet(zafu?)`                                     | Resolve a compatible wallet handle, or throw `ZafuError('unavailable' \| 'incompatible')`.                                                                                                                                                     |
+| `sign(wallet, challengeHex, statement?)`                   | Sign a challenge with the site-scoped ZID ed25519 key → `{ signature, publicKey }`.                                                                                                                                                            |
+| `signBytes(wallet, bytes, statement?)`                     | As `sign`, hex-encoding the bytes for you.                                                                                                                                                                                                     |
+| `zidPubkey(wallet)`                                        | **Your** site-scoped keys → `{ pubkey, pq_pubkey?, pq_suite? }`.                                                                                                                                                                               |
+| `encryptFor(wallet, recipient, bytes, opts?)`              | Seal to a recipient's keys (auto post-quantum) → `{ ciphertext, ephemeral_pubkey, postQuantum }`. `opts.requirePq` fails closed if the PQ path wasn't used.                                                                                    |
+| `decryptFrom(wallet, sealed)`                              | Open a sealed box addressed to you → `Uint8Array`.                                                                                                                                                                                             |
+| `zid.connect(opts?)`                                       | Authorize a session → `me` with `channel()`, `pickContacts()`, `sign()`. In `mode: 'ephemeral'` (no wallet) `me` also carries `keys()`, `sealFor()`, `openSealed()`, `contactCard()`, `deriveRootSecret()`, `establishSecret()`, `discover()`. |
+| `createGuestIdentity(opts)`                                | Build the ephemeral (no-wallet) identity directly: same crypto surface, from one in-page seed.                                                                                                                                                 |
+| `openChannel(session, peerPubkey, relayUrl, mode?)`        | Open a channel: `mode` is `'hybrid'` (default) \| `'classical'` \| `'auto'`; `'auto'` falls back only on a failed handshake and labels the result via `channel.kind`.                                                                          |
+| `isNoiseHandshakeFailure(err)`                             | Whether a failure was a hybrid HANDSHAKE failure (the only kind `'auto'` downgrades on) rather than a transport failure.                                                                                                                       |
+| `createHttpRelayTransport({ endpoint, fetch?, headers? })` | `RelayTransport` over HTTP for contact discovery; the module doc is the server wire contract.                                                                                                                                                  |
+| `walletService(transport)` / `walletStrategy(name)`        | The wallet as a `Service<WalletRequest, WalletResponse>`, and a named filter stack (`'default'` \| `'patient'`) around it.                                                                                                                     |
+| `channelService(channel)`                                  | Sending on a `ZidChannel` as a `Service<Uint8Array, void>`.                                                                                                                                                                                    |
+| `sealingFilter(keys)`                                      | A `Filter` that seals the request with `@zafu/pq` and opens the sealed response - an end-to-end encrypted request path over any byte service.                                                                                                  |
 
 ## Transport
 

@@ -267,6 +267,82 @@ function KeplrCompatSection() {
   );
 }
 
+/**
+ * Private contact discovery is opt-in and stores a relay endpoint the service
+ * worker reads directly (plaintext, no secrets), so - like the Keplr toggle - it
+ * is a standalone section rather than a boolean privacy-slice row. Default OFF:
+ * absent/false means `zafu_discover_contacts` refuses with `not_available`.
+ */
+function ContactDiscoverySection() {
+  const [saved, setSaved] = useState<{ enabled: boolean; relayEndpoint: string } | null>(null);
+  const [endpoint, setEndpoint] = useState('');
+
+  useEffect(() => {
+    void localExtStorage.get('zidDiscovery').then(v => {
+      const next = { enabled: v?.enabled === true, relayEndpoint: v?.relayEndpoint ?? '' };
+      setSaved(next);
+      setEndpoint(next.relayEndpoint);
+    });
+  }, []);
+
+  if (saved === null) {
+    return null;
+  }
+
+  const save = (enabled: boolean, relayEndpoint: string): void => {
+    const next = { enabled, relayEndpoint: relayEndpoint.trim() };
+    setSaved(next);
+    setEndpoint(next.relayEndpoint);
+    void localExtStorage.set('zidDiscovery', next);
+  };
+
+  const endpointValid = /^https?:\/\//.test(endpoint.trim());
+
+  return (
+    <div className='py-3'>
+      <div className='flex items-start justify-between gap-4'>
+        <div className='flex-1'>
+          <p className='text-sm font-medium'>private contact discovery</p>
+          <p className={`text-xs mt-0.5 ${saved.enabled ? 'text-fg-high' : 'text-fg-muted'}`}>
+            {saved.enabled
+              ? `beaconing presence via ${saved.relayEndpoint}`
+              : 'off - apps cannot learn which of your contacts are online'}
+          </p>
+        </div>
+        <ToggleSwitch
+          checked={saved.enabled}
+          onChange={next =>
+            next ? (endpointValid ? save(true, endpoint) : undefined) : save(false, endpoint)
+          }
+          label='private contact discovery'
+          className='mt-0.5'
+        />
+      </div>
+      {!saved.enabled && (
+        <div className='mt-2 flex gap-2'>
+          <input
+            value={endpoint}
+            onChange={e => setEndpoint(e.target.value)}
+            placeholder='https://relay.example'
+            className='flex-1 rounded border border-border-soft bg-transparent px-2 py-1 text-xs font-mono'
+          />
+          <button
+            onClick={() => save(true, endpoint)}
+            disabled={!endpointValid}
+            className='rounded border border-border-soft px-2 py-1 text-xs disabled:opacity-30'
+          >
+            enable
+          </button>
+        </div>
+      )}
+      <p className='text-label text-fg-muted/40 mt-1'>
+        an app learns only which contacts are present in that app, under app-scoped handles - never
+        your contact list, and unlinkable across apps.
+      </p>
+    </div>
+  );
+}
+
 export function SettingsPrivacy() {
   const { settings, setSetting } = useStore(privacySelector);
   const activeNetwork = useStore(selectActiveNetwork);
@@ -287,6 +363,8 @@ export function SettingsPrivacy() {
         ))}
         <SigningSecuritySection />
         <ProxySection />
+        {/* discovery derives from the zid contact layer; hide it when zid is off */}
+        {settings.enableIdentity !== false && <ContactDiscoverySection />}
         {/* Keplr is a cosmos-family concern; hide it on networks (e.g. zcash)
             where it would only confuse. */}
         {(isIbcNetwork(activeNetwork) || activeNetwork === 'penumbra') && <KeplrCompatSection />}

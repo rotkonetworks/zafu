@@ -31,8 +31,21 @@ export interface ZafuTransport {
    * a rejection: it comes back inside the resolved response as that method's
    * error shape (`{ error }`, or `{ success: false, ... }`), per ./methods.
    * This keeps "the wallet said no" distinct from "there was no wallet".
+   *
+   * `opts` is additive and MAY be ignored: the two-argument call still
+   * typechecks, and an implementation that cannot cancel in flight may drop it.
+   * The extension bridge (the only transport today) forwards `opts.signal`
+   * NOWHERE - `chrome.runtime.sendMessage` carries no cancellation channel, so
+   * an in-flight wallet request is NOT cancelled by aborting the caller; the
+   * signal can only prevent a not-yet-dispatched call. A future transport that
+   * does have a cancel channel (a relay with request ids, a native host) SHOULD
+   * honour it.
    */
-  request<M extends ZafuMethod>(method: M, req: ZafuRequest<M>): Promise<ZafuResponse<M>>;
+  request<M extends ZafuMethod>(
+    method: M,
+    req: ZafuRequest<M>,
+    opts?: ZafuTransportCallOptions,
+  ): Promise<ZafuResponse<M>>;
 }
 
 /**

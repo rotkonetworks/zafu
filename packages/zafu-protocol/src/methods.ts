@@ -239,6 +239,50 @@ export interface ZafuPickContactsRequest {
 }
 export type ZafuPickContactsResponse = { success: true; contacts: ZafuContact[] } | ZafuError;
 
+// -- contact discovery (opt-in, app-scoped presence) -------------------------
+
+/**
+ * Ask the wallet which of MY contacts are present in this app scope this epoch.
+ *
+ * This is the "is my friend online right now?" primitive. It is deliberately
+ * the NARROWEST possible social-graph query, and that narrowness is what makes
+ * it safe for arbitrary origins without a per-request approval prompt:
+ *
+ *   - it reveals ONLY the present intersection - never the contact list, never
+ *     who is ABSENT, never the pairwise root secret, never a raw peer pubkey.
+ *     A dapp can only learn "a handle I was already given is online now";
+ *   - handles are APP-SCOPED (SHA-256 over the contact key + the caller's
+ *     origin), so the same contact is an unrelated handle at every other app -
+ *     two colluding origins cannot join their results into one graph;
+ *   - an origin that holds no handle learns nothing it can attribute, and a
+ *     wallet that has not opted in (or has no relay configured, or is locked)
+ *     refuses with `not_available` rather than answering.
+ *
+ * The feature is off unless the user enables it and configures a relay, so a
+ * wallet that never opted in answers `not_available` and its behaviour is
+ * otherwise byte-identical.
+ */
+export interface ZafuDiscoverContactsRequest {
+  type: 'zafu_discover_contacts';
+  /** app scope the request is for (the dapp origin); tags are unlinkable across scopes. */
+  appScope: string;
+}
+export interface ZafuDiscoveredContact {
+  /** opaque, app-scoped handle - never the raw pubkey. */
+  handle: string;
+  /** ephemeral session pubkey to connect to for this epoch. */
+  sessionPubHex: Hex;
+  /** capability bits. */
+  caps: number;
+}
+/**
+ * The present intersection for the caller's scope, or the standard refusal
+ * shape. A non-refusal reply is ALWAYS `{ contacts }` - an empty array means
+ * "none of the handles you know are present", never "here is your contact
+ * list".
+ */
+export type ZafuDiscoverContactsResponse = { contacts: ZafuDiscoveredContact[] } | ZafuError;
+
 // -- the registry ------------------------------------------------------------
 
 /**
@@ -256,6 +300,10 @@ export interface ZafuApi {
   zafu_encrypt: { request: ZafuEncryptRequest; response: ZafuEncryptResponse };
   zafu_decrypt: { request: ZafuDecryptRequest; response: ZafuDecryptResponse };
   zafu_pick_contacts: { request: ZafuPickContactsRequest; response: ZafuPickContactsResponse };
+  zafu_discover_contacts: {
+    request: ZafuDiscoverContactsRequest;
+    response: ZafuDiscoverContactsResponse;
+  };
 }
 
 export type ZafuMethod = keyof ZafuApi;
@@ -279,6 +327,7 @@ export const ZAFU_V1_METHODS = [
   'zafu_encrypt',
   'zafu_decrypt',
   'zafu_pick_contacts',
+  'zafu_discover_contacts',
 ] as const satisfies readonly ZafuMethod[];
 
 // Compile-time guarantee that ZAFU_V1_METHODS lists EVERY key of ZafuApi (not

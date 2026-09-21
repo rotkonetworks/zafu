@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { ZAFU_PROTOCOL_VERSION } from './version';
-import { ZAFU_V1_METHODS, isZafuError, type ZafuMethod } from './methods';
+import {
+  ZAFU_V1_METHODS,
+  isZafuError,
+  type ZafuMethod,
+  type ZafuRequest,
+  type ZafuResponse,
+  type ZafuDiscoveredContact,
+} from './methods';
 
 describe('zafu protocol version', () => {
   it('is a positive integer major', () => {
@@ -41,6 +48,7 @@ describe('ZAFU_V1_METHODS', () => {
     const expected: ZafuMethod[] = [
       'ping',
       'zafu_decrypt',
+      'zafu_discover_contacts',
       'zafu_encrypt',
       'zafu_pick_contacts',
       'zafu_request_capability',
@@ -58,5 +66,38 @@ describe('isZafuError', () => {
     expect(isZafuError({ success: false, error: 'x' })).toBe(true);
     expect(isZafuError(null)).toBe(false);
     expect(isZafuError({ error: 42 })).toBe(false);
+  });
+});
+
+describe('zafu_discover_contacts wire shapes', () => {
+  it('the request carries exactly { type, appScope }', () => {
+    const req: ZafuRequest<'zafu_discover_contacts'> = {
+      type: 'zafu_discover_contacts',
+      appScope: 'https://poker.zk.bot',
+    };
+    expect(JSON.parse(JSON.stringify(req))).toEqual({
+      type: 'zafu_discover_contacts',
+      appScope: 'https://poker.zk.bot',
+    });
+  });
+
+  it('a success reply is a present intersection of handle/sessionPubHex/caps', () => {
+    const contact: ZafuDiscoveredContact = {
+      handle: 'a'.repeat(64),
+      sessionPubHex: 'b'.repeat(64),
+      caps: 3,
+    };
+    const res: ZafuResponse<'zafu_discover_contacts'> = { contacts: [contact] };
+    // round-trips unchanged and is NOT the error shape
+    expect(JSON.parse(JSON.stringify(res))).toEqual({ contacts: [contact] });
+    expect(isZafuError(res)).toBe(false);
+  });
+
+  it('a refusal is the standard error shape and narrows via isZafuError', () => {
+    const refusal: ZafuResponse<'zafu_discover_contacts'> = {
+      error: 'contact discovery is not available',
+      code: 'not_available',
+    };
+    expect(isZafuError(refusal)).toBe(true);
   });
 });

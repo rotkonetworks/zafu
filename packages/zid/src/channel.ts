@@ -3,6 +3,11 @@
  *
  * x25519 ECDH key exchange → AES-256-GCM encrypted messages
  * relay-agnostic: works over WebSocket, WebRTC, or any transport
+ *
+ * This is the CLASSICAL fallback, used only when the caller asks for it:
+ * `zid.connect({ channel: 'classical' })` (or the fallback half of `'auto'`).
+ * `openChannel` (./channel-select) is the one place that choice is made, and it
+ * defaults to the hybrid post-quantum channel (./noise-channel).
  */
 
 import type { ZidChannel } from './types';

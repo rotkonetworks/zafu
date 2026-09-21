@@ -195,6 +195,44 @@ function zeroize(buf: Uint8Array): void {
   buf.fill(0);
 }
 
+// ---------------------------------------------------------------------------
+// handshake failure tagging
+// ---------------------------------------------------------------------------
+//
+// `channel: 'auto'` (channel-select.ts) falls back to the CLASSICAL channel only
+// when the HYBRID HANDSHAKE failed. A transport failure - relay down, socket
+// error, a peer that simply never answers - must propagate instead, or an outage
+// would be misread as "this peer is not post-quantum capable" and quietly
+// downgrade. So every failure inside the handshake carries a stable `name`;
+// nothing outside the handshake is tagged.
+
+const NOISE_HANDSHAKE_ERROR = 'NoiseHandshakeError';
+
+/** tag `e` as a handshake failure and return it (the message is preserved). */
+const asHandshakeFailure = (e: unknown): Error => {
+  const err = e instanceof Error ? e : new Error(String(e));
+  err.name = NOISE_HANDSHAKE_ERROR;
+  return err;
+};
+
+/** run a handshake crypto step, tagging any throw as a handshake failure. */
+const handshakeStep = <T>(fn: () => T): T => {
+  try {
+    return fn();
+  } catch (e) {
+    throw asHandshakeFailure(e);
+  }
+};
+
+/**
+ * True for a FAILED HANDSHAKE - the peer could not complete the hybrid protocol -
+ * as opposed to a TRANSPORT failure (relay down, socket error, timeout).
+ * `openChannel(..., 'auto')` uses this to decide whether a downgrade is
+ * legitimate; transport failures are never tagged.
+ */
+export const isNoiseHandshakeFailure = (e: unknown): boolean =>
+  e instanceof Error && e.name === NOISE_HANDSHAKE_ERROR;
+
 /** constant-time equality for two byte arrays (peer-key authentication). */
 export function ctEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) {
@@ -308,10 +346,12 @@ export function initiatorHandshake(
 
   function finish(resp: Uint8Array): { sendCS: CipherState; recvCS: CipherState } {
     if (resp[0] !== NOISE_RESP) {
-      throw new Error('noise: expected resp message (0x02)');
+      throw asHandshakeFailure(new Error('noise: expected resp message (0x02)'));
     }
     if (resp.length < NOISE_RESP_MIN_LEN) {
-      throw new Error(`noise: resp message too short (${resp.length} < ${NOISE_RESP_MIN_LEN})`);
+      throw asHandshakeFailure(
+        new Error(`noise: resp message too short (${resp.length} < ${NOISE_RESP_MIN_LEN})`),
+      );
     }
     const re = resp.slice(1, 33);
     const mlCt = resp.slice(33, 33 + MLKEM_CT_LEN);
@@ -330,13 +370,13 @@ export function initiatorHandshake(
     rck = seRck;
 
     // decrypt responder payload (empty)
-    const dec = decryptAndHash(rk, 0n, rh, respCt);
+    const dec = handshakeStep(() => decryptAndHash(rk, 0n, rh, respCt));
     rh = dec.h;
 
     // <- pq: decapsulate the ML-KEM secret and mix it in LAST, so the transport
     // keys depend on both the X25519 chain AND the ML-KEM secret. A passive
     // recorder must break BOTH to derive them.
-    const mlSs = mlkem768Decapsulate(mlCt, savedMlSk);
+    const mlSs = handshakeStep(() => mlkem768Decapsulate(mlCt, savedMlSk));
     [rck] = mixKey(rck, mlSs);
     zeroize(mlSs);
 
@@ -385,10 +425,12 @@ export function responderHandshake(
   remoteXPub: Uint8Array;
 } {
   if (initMsg[0] !== NOISE_INIT) {
-    throw new Error('noise: expected init message (0x01)');
+    throw asHandshakeFailure(new Error('noise: expected init message (0x01)'));
   }
   if (initMsg.length < NOISE_INIT_MIN_LEN) {
-    throw new Error(`noise: init message too short (${initMsg.length} < ${NOISE_INIT_MIN_LEN})`);
+    throw asHandshakeFailure(
+      new Error(`noise: init message too short (${initMsg.length} < ${NOISE_INIT_MIN_LEN})`),
+    );
   }
 
   let { ck, h } = initSymmetric();
@@ -413,7 +455,7 @@ export function responderHandshake(
 
   // -> s: decrypt initiator's static x25519 pubkey
   const encStatic = initMsg.slice(staticOff, staticOff + 32 + TAG_LEN);
-  const decS = decryptAndHash(k, n, h, encStatic);
+  const decS = handshakeStep(() => decryptAndHash(k, n, h, encStatic));
   h = decS.h;
   n = decS.n;
   const remoteXPub = decS.pt;
@@ -424,7 +466,7 @@ export function responderHandshake(
 
   // decrypt initiator payload (empty)
   const encPayload = initMsg.slice(staticOff + 32 + TAG_LEN);
-  const decPayload = decryptAndHash(k, n, h, encPayload);
+  const decPayload = handshakeStep(() => decryptAndHash(k, n, h, encPayload));
   h = decPayload.h;
 
   // <- e: generate responder ephemeral
@@ -434,7 +476,7 @@ export function responderHandshake(
 
   // <- e_pq: encapsulate against the initiator's ML-KEM ek. mlSs is forward-secret
   // (initiator ek is ephemeral); bind the ciphertext into the transcript.
-  const { sharedSecret: mlSs, cipherText: mlCt } = mlkem768Encapsulate(mlEk);
+  const { sharedSecret: mlSs, cipherText: mlCt } = handshakeStep(() => mlkem768Encapsulate(mlEk));
   h = mixHash(h, mlCt);
 
   // <- ee: DH(e, re)
@@ -623,7 +665,7 @@ export async function createNoiseChannel(
             zeroize(result.sendCS.k);
             zeroize(result.recvCS.k);
             zeroize(localXPriv);
-            throw new Error('noise: unexpected initiator (peer key mismatch)');
+            throw asHandshakeFailure(new Error('noise: unexpected initiator (peer key mismatch)'));
           }
           sendCS = result.sendCS;
           recvCS = result.recvCS;

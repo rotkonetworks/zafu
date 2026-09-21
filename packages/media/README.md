@@ -102,14 +102,46 @@ const signaling: Signaling = {
 
 One `Call` talks to exactly one peer.
 
+## Services (composition)
+
+Signaling also composes with [`@zafu/service`](https://www.npmjs.com/package/@zafu/service)
+
+- the repo's one composition convention (Eriksen, "Your Server as a Function") -
+  so SDP/ICE can ride any `Service` the app already has.
+
+```ts
+import { compose, timeout, trace } from '@zafu/service';
+import { callSignalService, serviceSignaling, signalingStrategy } from '@zafu/media';
+
+// outbound: a signal -> Service<MediaSignal, void>
+const send = callSignalService(signaling);
+
+// a named filter stack (trace + timeout; deliberately NO retry - replaying an
+// SDP/ICE frame can reorder or duplicate a negotiation step):
+const patient = signalingStrategy('patient')(send);
+
+// both halves as a Signaling, when the inbound source is yours to inject:
+const bridged = serviceSignaling(send, handler => {
+  socket.on('message', handler);
+  return () => socket.off('message', handler);
+});
+```
+
+`Signaling.send` is void, so `serviceSignaling` drops a rejected outbound
+service - there is nowhere to report it. Use `callSignalService` directly when
+you need the promise (and filters around it).
+
 ## API
 
-| Export                        | Purpose                                                                                                                           |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `createCall(options)`         | Start a call session → `Call`. `options`: `signaling`, `polite`, `iceServers?`, `video?` (default 320x240 front camera), `blur?`. |
-| `createVideoBlur(options?)`   | Background processing for an outgoing track → `VideoBlur`. `options`: `assetBase?`, `modelFile?`, `blurPx?`.                      |
-| `zidSignaling(channel, tag?)` | Bridge a byte channel into `Signaling` for SDP/ICE.                                                                               |
-| `writable(initial)`           | `[read, write]` - the reactive primitive the call state is built on, if you want your own.                                        |
+| Export                                 | Purpose                                                                                                                           |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `createCall(options)`                  | Start a call session → `Call`. `options`: `signaling`, `polite`, `iceServers?`, `video?` (default 320x240 front camera), `blur?`. |
+| `createVideoBlur(options?)`            | Background processing for an outgoing track → `VideoBlur`. `options`: `assetBase?`, `modelFile?`, `blurPx?`.                      |
+| `zidSignaling(channel, tag?)`          | Bridge a byte channel into `Signaling` for SDP/ICE.                                                                               |
+| `callSignalService(signaling)`         | Outbound signaling as a `Service<MediaSignal, void>`.                                                                             |
+| `serviceSignaling(service, subscribe)` | Build a `Signaling` from an outbound `Service` plus a subscriber for the inbound half.                                            |
+| `signalingStrategy(name)`              | A named `Filter` stack (`'default'` \| `'patient'`) for the outbound signal service - trace + timeout, never retry.               |
+| `writable(initial)`                    | `[read, write]` - the reactive primitive the call state is built on, if you want your own.                                        |
 
 `Call`: `localStream`, `remoteStream`, `micEnabled`, `camEnabled`, `connected`, `acknowledged`, `incomingPending`, `blurMode`, `blurUnavailable`, `lastError` (all `Readable`), plus `acknowledge()`, `revoke()`, `dismissIncoming()`, `toggleMic()`, `toggleCam()`, `setBlurMode(mode)`, `setBlurImage(img)`, `retry()`, `clearError()`, `cleanup()`.
 

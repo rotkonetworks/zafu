@@ -13,6 +13,15 @@
  * ICE connects. Only offer/answer/candidate setup rides this channel.
  */
 
+import {
+  compose,
+  timeout,
+  trace,
+  type Service,
+  type ServiceFilter,
+  type TraceEvent,
+} from '@zafu/service';
+
 export type MediaSignal =
   | { t: '_sdp'; d: { sdp: RTCSessionDescriptionInit } }
   | { t: '_ice'; d: { candidate: RTCIceCandidateInit } };
@@ -69,4 +78,76 @@ export function zidSignaling(channel: ByteChannel, tag = 0xf0): Signaling {
       return () => handlers.delete(handler);
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Services pattern - so a call can ride ANY Service
+// ---------------------------------------------------------------------------
+//
+// docs/services-pattern.md is the repo's one composition convention. These two
+// adapters put signaling on both sides of it, so SDP/ICE can ride whatever
+// Service the app already has (a sealed relay, a retrying transport, ...).
+
+/** registers an inbound handler; returns its unsubscribe. */
+export type SignalSubscriber = (handler: (msg: MediaSignal) => void) => () => void;
+
+/**
+ * Outbound signaling as a Service: one signal in, sent to the peer. Wrap it in
+ * filters (`signalingStrategy`) to bound or observe the hand-off.
+ *
+ * Delivery semantics are the transport's: `Signaling.send` is void, so the
+ * promise resolves when the signal is HANDED to the transport, not when the peer
+ * receives it.
+ */
+export function callSignalService(signaling: Signaling): Service<MediaSignal, void> {
+  return async msg => {
+    signaling.send(msg);
+  };
+}
+
+/**
+ * Inbound signaling as the `subscribe` half of a `Signaling`, paired with a
+ * Service for the outbound half. A Service is one-way, so the source of inbound
+ * signals is injected: pass whatever registers a handler and returns an
+ * unsubscribe (a socket, a channel, an event emitter).
+ *
+ * `Signaling.send` returns void, so a rejected outbound service has nowhere to
+ * report - the rejection is dropped here. Use `callSignalService` directly when
+ * you need the promise (and filters around it).
+ */
+export function serviceSignaling(
+  service: Service<MediaSignal, void>,
+  subscribe: SignalSubscriber,
+): Signaling {
+  return {
+    send(msg: MediaSignal): void {
+      void service(msg, {}).catch(() => {});
+    },
+    onSignal(handler: (msg: MediaSignal) => void): () => void {
+      return subscribe(handler);
+    },
+  };
+}
+
+/** the named signaling strategies - the closed union callers bind to. */
+export type SignalingStrategyName = 'default' | 'patient';
+
+export interface SignalingStrategyOptions {
+  /** observe each send (duration, outcome); omit for the no-op default. */
+  onTrace?: (event: TraceEvent) => void;
+}
+
+/**
+ * A named, pre-composed filter stack for the outbound signal service.
+ *
+ * Deliberately no retry: re-sending an SDP/ICE frame can duplicate or reorder a
+ * negotiation step, and perfect negotiation is order-sensitive - so a send is
+ * bounded (timeout) and observed (trace), never replayed.
+ */
+export function signalingStrategy(
+  name: SignalingStrategyName,
+  opts: SignalingStrategyOptions = {},
+): ServiceFilter {
+  const timeoutMs = name === 'patient' ? 10_000 : 2_000;
+  return compose(trace({ onComplete: opts.onTrace ?? (() => undefined) }), timeout(timeoutMs));
 }

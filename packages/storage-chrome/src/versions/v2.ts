@@ -382,6 +382,21 @@ type LOCAL = {
     identity: string;
   }[];
 
+  /**
+   * Opt-in private contact discovery (zafu_discover_contacts). Default OFF:
+   * absent means the feature is disabled and the method refuses with
+   * `not_available`, so a wallet that never opted in behaves exactly as before.
+   *
+   * `relayEndpoint` is the blind key-value relay the wallet publishes presence
+   * to and reads friends' presence from; empty means "not configured", which is
+   * also a refusal. Plaintext (no secrets in it) and read directly by the
+   * service worker, so it lives outside the encrypted key set.
+   */
+  zidDiscovery?: {
+    enabled: boolean;
+    relayEndpoint: string;
+  };
+
   /** user-defined labels for sites (displayed instead of origin) */
   zidSiteLabels?: Record<string, string>;
 

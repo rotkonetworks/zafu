@@ -9,27 +9,32 @@
 
 import type { ZidOptions } from './types';
 import { createExtensionTransport, type ZafuHandle } from './transport';
+import { ed25519 } from '@noble/curves/ed25519';
+import { randomBytes } from '@noble/hashes/utils';
 
-/** ed25519 session keypair via Web Crypto */
+/**
+ * ed25519 session keypair.
+ *
+ * Derived from a fresh 32-byte seed with @noble/curves rather than WebCrypto so
+ * the raw SEED is available as `privkey`: the hybrid Noise channel needs the
+ * ed25519 seed to derive its X25519 static key (edPrivToX), which WebCrypto's
+ * opaque Ed25519 handle cannot supply. Existing callers are unaffected - the
+ * pubkey is still hex, `sign` still returns hex, `verify` still returns a bool.
+ */
 export async function createSessionKey() {
-  const keyPair = await crypto.subtle.generateKey('Ed25519', true, ['sign', 'verify']);
-  const pubRaw = new Uint8Array(await crypto.subtle.exportKey('raw', keyPair.publicKey));
-  const pubkey = hex(pubRaw);
+  const privkey = randomBytes(32);
+  const pubkey = hex(ed25519.getPublicKey(privkey));
 
   return {
     pubkey,
-    keyPair,
-    sign: async (data: Uint8Array): Promise<string> => {
-      const sig = new Uint8Array(
-        await crypto.subtle.sign('Ed25519', keyPair.privateKey, data as BufferSource),
-      );
-      return hex(sig);
-    },
+    privkey,
+    sign: async (data: Uint8Array): Promise<string> => hex(ed25519.sign(data, privkey)),
     verify: async (data: Uint8Array, sigHex: string, pubkeyHex: string): Promise<boolean> => {
-      const sigBytes = unhex(sigHex);
-      const pubBytes = unhex(pubkeyHex);
-      const key = await crypto.subtle.importKey('raw', pubBytes, 'Ed25519', false, ['verify']);
-      return crypto.subtle.verify('Ed25519', key, sigBytes, data as BufferSource);
+      try {
+        return ed25519.verify(unhex(sigHex), data, unhex(pubkeyHex));
+      } catch {
+        return false;
+      }
     },
   };
 }

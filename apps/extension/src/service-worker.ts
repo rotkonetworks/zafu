@@ -17,6 +17,7 @@ import { internalRevokeListener } from './message/listen/internal-revoke';
 import { internalServiceListener } from './message/listen/internal-services';
 import { externalMessageListener } from './message/listen/external-easteregg';
 import { encryptionMessageListener } from './message/listen/external-encryption';
+import { contactDiscoveryListener } from './message/listen/contact-discovery';
 import { internalZidListener } from './message/listen/internal-zid';
 import { keplrMessageListener } from './message/listen/keplr';
 import { createPenumbraSendListener } from './message/listen/penumbra-send';
@@ -69,6 +70,7 @@ import { backOff } from 'exponential-backoff';
 
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { networkAllowsBackgroundSync } from './state/privacy';
+import { runPresencePublish } from './state/contact-discovery-service';
 
 // count open side panels so approval routing can target the panel only when it
 // is actually open (see popup.ts). Registered once at worker startup.
@@ -390,6 +392,10 @@ chrome.runtime.onMessageExternal.addListener(externalMessageListener);
 // listen for external encryption API (sealed box encrypt/decrypt, ZID pubkey)
 chrome.runtime.onMessageExternal.addListener(encryptionMessageListener);
 
+// listen for private, app-scoped contact discovery (zafu_discover_contacts).
+// A no-op unless the user opted in and configured a relay.
+chrome.runtime.onMessageExternal.addListener(contactDiscoveryListener);
+
 // bridge: popup → SW result messages are sent via INTERNAL chrome.runtime.sendMessage
 // (onMessage), but their handlers live in the external listeners (onMessageExternal).
 const INTERNAL_RESULT_TYPES = new Set([
@@ -448,7 +454,21 @@ void chrome.alarms.create('ibcTransferPoll', {
   delayInMinutes: 1,
 });
 
+// private contact discovery: beacon this wallet's presence once per presence
+// epoch (5 min), so friends' apps can find it. Strict no-op unless the user
+// opted in AND configured a relay AND the wallet is unlocked; the per-scope
+// scheduler makes over-ticking idempotent within an epoch.
+void chrome.alarms.create('zidPresencePublish', {
+  periodInMinutes: 5,
+  delayInMinutes: 1,
+});
+
 chrome.alarms.onAlarm.addListener(async alarm => {
+  if (alarm.name === 'zidPresencePublish') {
+    await runPresencePublish();
+    return;
+  }
+
   if (alarm.name === 'ibcTransferPoll') {
     await runIbcTransferSweep().catch(e => console.warn('[ibc-tracker] poll failed', e));
     return;

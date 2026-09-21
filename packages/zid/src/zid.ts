@@ -2,18 +2,23 @@
  * zid - the simplest possible identity SDK
  *
  * detects zafu wallet → requests session → signs actions → opens e2ee channels
- * falls back to ephemeral browser keys if no wallet
+ * falls back to the guest (ephemeral, no-wallet) identity if no wallet is there:
+ * the SAME crypto surface (ed25519 + X-Wing keys, sealed boxes, hybrid channel,
+ * local contact discovery) so an app runs unchanged whether or not zafu is
+ * installed. See ./guest for the derivation and its custody caveats.
  *
  * contacts live in zid (localStorage), not in the wallet.
  * zafu provides richer contacts - zid uses them when available, works without.
  */
 
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import type {
   ZidIdentity,
   ZidOptions,
   PickContactsOptions,
   InvitePayload,
   IncomingInvite,
+  AdvertisedKeys,
 } from './types';
 import {
   createSessionKey,
@@ -24,25 +29,37 @@ import {
   listenInvites,
 } from './provider';
 import { createChannel } from './channel';
+import { openChannel } from './channel-select';
 import { getContactRefs, resolveHandle, upsertContact } from './contacts';
+import { createGuestIdentity } from './guest';
+import { decryptFrom, encryptFor, type ZidRecipient } from './messaging';
+
+const bytesToBase64 = (b: Uint8Array): string => btoa(String.fromCharCode(...b));
+const base64ToBytes = (s: string): Uint8Array => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
 /** the zid singleton */
 export const zid = {
   /**
-   * connect to zafu wallet or generate ephemeral identity.
+   * connect to zafu wallet or generate an ephemeral identity.
    *
    * ```typescript
    * const me = await zid.connect({ appName: 'poker.zk.bot' })
    * console.log(me.pubkey) // ed25519 hex
    * ```
+   *
+   * `me.channel()` uses the post-quantum hybrid Noise handshake by default. That
+   * handshake fails CLOSED against a peer that cannot do it - including a
+   * `@zafu/zid@0.1.0` peer, which speaks only the classical handshake - so pass
+   * `{ channel: 'classical' }` to reach one, or `{ channel: 'auto' }` to accept an
+   * automatic downgrade knowingly. There is no silent fallback.
    */
   async connect(opts: ZidOptions = {}): Promise<ZidIdentity> {
-    const session = await createSessionKey();
     const appOrigin = globalThis.location?.origin || opts.appName || 'unknown';
 
     if (!opts.ephemeral) {
       const zafu = await detectZafu();
       if (zafu) {
+        const session = await createSessionKey();
         const delegation = await requestDelegation(zafu, session.pubkey, opts);
         if (delegation) {
           const appKey = opts.appName ? `zid_name:${opts.appName}` : 'zid_name';
@@ -56,7 +73,32 @@ export const zid = {
             name,
             sign: session.sign,
             verify: session.verify,
-            channel: (peer: string) => createChannel(session, peer, opts.relayUrl),
+            // the handshake is the caller's choice (opts.channel); 'hybrid' by default.
+            channel: (peerPubkey: string) =>
+              openChannel(session, peerPubkey, opts.relayUrl, opts.channel),
+            // sealFor/openSealed mirror encryptFor/decryptFrom so the call site is
+            // identical to the guest's - only the backend (wallet vs local) differs.
+            sealFor: async (recipient: string | AdvertisedKeys, bytes: Uint8Array) => {
+              const r: ZidRecipient =
+                typeof recipient === 'string' ? { pubkey: recipient } : recipient;
+              const out = await encryptFor(zafu, r, bytes);
+              return {
+                ciphertext: base64ToBytes(out.ciphertext),
+                ephemeral_pubkey:
+                  out.ephemeral_pubkey === ''
+                    ? new Uint8Array(0)
+                    : hexToBytes(out.ephemeral_pubkey),
+                postQuantum: out.postQuantum,
+                ...(out.pq_epoch !== undefined ? { pq_epoch: out.pq_epoch } : {}),
+              };
+            },
+            openSealed: async sealed =>
+              decryptFrom(zafu, {
+                ciphertext: bytesToBase64(sealed.ciphertext),
+                ephemeral_pubkey:
+                  sealed.ephemeral_pubkey.length === 0 ? '' : bytesToHex(sealed.ephemeral_pubkey),
+                ...(sealed.pq_epoch !== undefined ? { pq_epoch: sealed.pq_epoch } : {}),
+              }),
             pickContacts: async (pickOpts?: PickContactsOptions) => {
               // try zafu wallet picker first
               const result = await providerPickContacts(zafu, {
@@ -78,7 +120,9 @@ export const zid = {
               if (result.sent) {
                 return result;
               }
-              // fallback: resolve handle locally and send via zid channel
+              // fallback: resolve handle locally and send via zid channel. Invites
+              // keep the classical channel: the handle gives only a bare pubkey and
+              // the receiver is an app-level listener, not channel().
               const pubkey = resolveHandle(handle, appOrigin);
               if (pubkey) {
                 const ch = await createChannel(session, pubkey, opts.relayUrl);
@@ -103,37 +147,17 @@ export const zid = {
       }
     }
 
-    // ephemeral mode - no wallet, zid-only contacts
-    const ephAppKey = opts.appName ? `zid_name:${opts.appName}` : 'zid_name';
-    const name =
-      localStorage.getItem(ephAppKey) ||
-      localStorage.getItem('zid_name') ||
-      session.pubkey.slice(0, 8);
-    return {
-      pubkey: session.pubkey,
-      network: 'none',
-      name,
-      sign: session.sign,
-      verify: session.verify,
-      channel: (peer: string) => createChannel(session, peer, opts.relayUrl),
-      pickContacts: async (_pickOpts?: PickContactsOptions) => {
-        return getContactRefs(appOrigin);
-      },
-      invite: async (handle: string, payload: InvitePayload) => {
-        const pubkey = resolveHandle(handle, appOrigin);
-        if (pubkey) {
-          const ch = await createChannel(session, pubkey, opts.relayUrl);
-          ch.send(JSON.stringify({ type: 'zid:invite', payload, from: name, appOrigin }));
-          setTimeout(() => ch.close(), 30_000);
-          return { sent: true };
-        }
-        return { sent: false };
-      },
-      mode: 'ephemeral',
-      disconnect: () => {
-        /* clear session */
-      },
-    };
+    // ephemeral mode - no wallet: the guest identity derives its own keys,
+    // contact card and hybrid channel from a seed (in-memory by default).
+    return createGuestIdentity({
+      origin: appOrigin,
+      appName: opts.appName,
+      relayUrl: opts.relayUrl,
+      channel: opts.channel,
+      persist: opts.persist,
+      relayTransport: opts.relayTransport,
+      relayEndpoint: opts.relayEndpoint,
+    });
   },
 
   /** set display name - per-app to prevent cross-app correlation */

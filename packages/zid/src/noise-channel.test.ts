@@ -7,6 +7,7 @@ import {
   encryptTransport,
   decryptTransport,
   ctEqual,
+  isNoiseHandshakeFailure,
   REKEY_EVERY,
   type CipherState,
 } from './noise-channel';
@@ -130,6 +131,62 @@ describe('hybrid PQ Noise IK handshake (X25519 + ML-KEM-768)', () => {
     const hs = initiatorHandshake(alice.priv, alice.pub, bob.pub);
     const classicalShaped = hs.message.slice(0, 1 + 32 + 48 + 16); // ek stripped
     expect(() => responderHandshake(bob.priv, bob.pub, classicalShaped)).toThrow();
+  });
+});
+
+describe('handshake failure tagging (what channel:auto may downgrade on)', () => {
+  /** run `fn` and return whatever it threw (so the tag can be inspected). */
+  const thrown = (fn: () => unknown): unknown => {
+    try {
+      fn();
+      return null;
+    } catch (e) {
+      return e;
+    }
+  };
+
+  it('tags a wrong protocol name as a handshake failure', () => {
+    const alice = staticKeypair();
+    const bob = staticKeypair();
+    const hs = initiatorHandshake(alice.priv, alice.pub, bob.pub);
+    const notAResp = new Uint8Array(2000);
+    notAResp[0] = 0xff;
+
+    expect(isNoiseHandshakeFailure(thrown(() => hs.finish(notAResp)))).toBe(true);
+  });
+
+  it('tags a truncated init message as a handshake failure', () => {
+    const bob = staticKeypair();
+    const short = new Uint8Array(100);
+    short[0] = 0x01;
+
+    expect(
+      isNoiseHandshakeFailure(thrown(() => responderHandshake(bob.priv, bob.pub, short))),
+    ).toBe(true);
+  });
+
+  it('tags an AEAD failure inside the handshake as a handshake failure', () => {
+    const alice = staticKeypair();
+    const bob = staticKeypair();
+    const hs = initiatorHandshake(alice.priv, alice.pub, bob.pub);
+    const resp = responderHandshake(bob.priv, bob.pub, hs.message);
+    const tampered = Uint8Array.from(resp.message);
+    const idx = 1 + 32 + 1088; // inside the encrypted response payload
+    tampered[idx] = (tampered[idx] ?? 0) ^ 0xff;
+
+    expect(isNoiseHandshakeFailure(thrown(() => hs.finish(tampered)))).toBe(true);
+  });
+
+  it('does NOT tag a transport-layer failure - auto must never downgrade for one', () => {
+    // the relay is down / the socket errored: a post-handshake transport failure,
+    // exactly the case that must propagate rather than become "try classical".
+    const cs: CipherState = { k: randomBytes(32), n: 0n };
+    const notTransport = new Uint8Array(64);
+    notTransport[0] = 0x01;
+
+    const caught = thrown(() => decryptTransport(cs, notTransport));
+    expect(caught).toBeInstanceOf(Error);
+    expect(isNoiseHandshakeFailure(caught)).toBe(false);
   });
 });
 

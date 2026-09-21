@@ -40,6 +40,9 @@ export {
   type ZafuContact,
   type ZafuPickContactsRequest,
   type ZafuPickContactsResponse,
+  type ZafuDiscoverContactsRequest,
+  type ZafuDiscoveredContact,
+  type ZafuDiscoverContactsResponse,
 } from './methods';
 
 export type { ZafuTransport, ZafuTransportCallOptions } from './transport';

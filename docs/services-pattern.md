@@ -17,6 +17,38 @@ a base service.
 The wallet exposes named strategies (e.g. `private` / `fast` / `paranoid`) as
 the only public surface. Filters are internal building blocks.
 
+## Shared implementation
+
+Those two types ship as a package so the wallet runtime and the published SDK
+packages use one definition instead of three: **`@zafu/service`**
+(`packages/service`, zero dependencies). It exports `Service`, `Filter`,
+`StreamService`, `StreamFilter`, `compose`, `identityFilter`, `detachedContext`,
+the filters most services end up wanting (`timeout`, `retry`, `trace`, `gate`),
+their typed errors (`TimeoutError`, `UnavailableError`) and the two combinators
+that are not already a language call (`select`, `rescue`).
+
+Three conventions it pins that this doc left open:
+
+- **Composition order.** `compose(a, b)(base) === a(b(base))` — the first-listed
+  filter is OUTERMOST. This matches `signing/external-signer.ts`. The local
+  helper in `services/memo-sync/strategy.ts` reads its array the other way
+  ("innermost first"); that helper is private to that module, and new code should
+  use the shared `compose`.
+- **Context threading.** The second argument is a per-service context type:
+  `Service<Req, Res, Ctx>`. Cancellation (`signal`) belongs in every context via
+  `ServiceContext`; knobs specific to one service family are added to that
+  family's context type with `declare module` augmentation, exactly as
+  `services/memo-sync/filters/concurrency.ts` does. A filter that needs a knob
+  adds it to the context type — never to the request or response shape (rule 1).
+- **Streaming is a separate type.** The `Promise<Res> | AsyncIterable<Res>` union
+  above is spelled as two aliases, `Service` and `StreamService` (with
+  `StreamFilter` alongside), so a filter never has to branch on which form it
+  was handed.
+
+There is deliberately no `collect` or `flatMap` in the package: `Promise.all` and
+`await` are those, and a wrapper that only renames a builtin costs the reader a
+jump to find out.
+
 ## Why this shape
 
 - **Composition over configuration.** Adding decoy buckets, shuffling, or a

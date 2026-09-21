@@ -14,6 +14,7 @@ import { Box, type BoxJson } from '@repo/encryption/box';
 import type { KeyPrintJson } from '@repo/encryption/key-print';
 import { readSentRecords, writeSentRecords, readTxNotes, writeTxNotes } from './personal-data';
 import type { SentTxRecord } from '../workers/sent-tx-reconcile';
+import type { ContactCardKey } from './identity';
 
 /**
  * Encrypted backup of ALL local, chain-irreplaceable personal data: contacts +
@@ -69,6 +70,14 @@ export interface Contact {
    */
   zid?: string;
   /**
+   * the contact's contact-card key-agreement key, for private, non-interactive
+   * contact discovery (zafu_discover_contacts). OPTIONAL by design - this IS
+   * the legacy-contact migration: contacts saved before discovery existed have
+   * no card, load unchanged, and discovery silently SKIPS them (never crashes).
+   * They gain it only when the relationship is re-exchanged.
+   */
+  card?: ContactCardKey;
+  /**
    * zcash.me username this contact was saved from (or linked to). A
    * directory handle, not an identity anchor - it says where the address
    * came from so the UI can show the profile link and verification state.
@@ -108,12 +117,20 @@ export interface ContactsSlice {
     zid?: string;
     zcashme?: string;
     website?: string;
+    /** contact-card KA key; supplied when a discovery-capable share is imported */
+    card?: ContactCardKey;
   }) => Promise<Contact>;
 
-  /** update contact info (name, notes, zid, website) */
+  /** update contact info (name, notes, zid, website, card) */
   updateContact: (
     id: string,
-    updates: { name?: string; notes?: string; zid?: string; website?: string },
+    updates: {
+      name?: string;
+      notes?: string;
+      zid?: string;
+      website?: string;
+      card?: ContactCardKey;
+    },
   ) => Promise<void>;
 
   /** remove a contact */
@@ -207,6 +224,7 @@ export const createContactsSlice =
           zcashme: data.zcashme?.trim() || undefined,
           website: data.website?.trim() || undefined,
           notes: data.notes?.trim() || undefined,
+          card: data.card,
           createdAt: Date.now(),
           addresses: [],
         };
@@ -239,6 +257,9 @@ export const createContactsSlice =
             }
             if (updates.website !== undefined) {
               contact.website = updates.website.trim() || undefined;
+            }
+            if (updates.card !== undefined) {
+              contact.card = updates.card;
             }
           }
         });
