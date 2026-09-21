@@ -1,12 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { x25519 } from '@noble/curves/ed25519';
-import { bytesToHex } from '@noble/hashes/utils';
+import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 import {
   initiatorHandshake,
   responderHandshake,
   encryptTransport,
   decryptTransport,
   ctEqual,
+  REKEY_EVERY,
+  type CipherState,
 } from './noise-channel';
 
 /** an x25519 static keypair (the handshake works on x25519 keys directly). */
@@ -128,5 +130,38 @@ describe('hybrid PQ Noise IK handshake (X25519 + ML-KEM-768)', () => {
     const hs = initiatorHandshake(alice.priv, alice.pub, bob.pub);
     const classicalShaped = hs.message.slice(0, 1 + 32 + 48 + 16); // ek stripped
     expect(() => responderHandshake(bob.priv, bob.pub, classicalShaped)).toThrow();
+  });
+});
+
+describe('transport symmetric ratchet (P3 Layer 1 forward secrecy)', () => {
+  it('round-trips across a rekey boundary and protects pre-ratchet messages', () => {
+    const k = randomBytes(32);
+    const send: CipherState = { k: k.slice(), n: 0n };
+    const recv: CipherState = { k: k.slice(), n: 0n };
+    const N = Number(REKEY_EVERY);
+
+    // send one full epoch + into the next; capture an epoch-0 ciphertext.
+    let epoch0Wire: Uint8Array | null = null;
+    for (let i = 0; i <= N; i++) {
+      const wire = encryptTransport(send, new TextEncoder().encode('m' + i));
+      if (i === 5) epoch0Wire = wire;
+      expect(new TextDecoder().decode(decryptTransport(recv, wire))).toBe('m' + i);
+    }
+
+    // recv.k has ratcheted to epoch 1 (it crossed the boundary at counter N).
+    // An attacker who compromises the CURRENT (epoch-1) key cannot read the
+    // earlier epoch-0 message - the old key was one-way-ratcheted away.
+    const stale: CipherState = { k: recv.k.slice(), n: 5n };
+    expect(() => decryptTransport(stale, epoch0Wire!)).toThrow();
+  });
+
+  it('the key actually changes at the boundary', () => {
+    const k = randomBytes(32);
+    const send: CipherState = { k: k.slice(), n: 0n };
+    const before = bytesToHex(send.k);
+    for (let i = 0; i < Number(REKEY_EVERY) + 1; i++) {
+      encryptTransport(send, new TextEncoder().encode('x'));
+    }
+    expect(bytesToHex(send.k)).not.toBe(before);
   });
 });

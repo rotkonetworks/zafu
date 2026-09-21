@@ -472,7 +472,40 @@ export function responderHandshake(
 
 // -- transport encryption (0x03 prefix) --
 
+/**
+ * Symmetric-key ratchet interval (P3 Layer 1). Every REKEY_EVERY messages on a
+ * cipherstate we advance its key by a ONE-WAY KDF, so a key compromise cannot
+ * decrypt traffic from before the last ratchet boundary (forward secrecy for the
+ * live channel, which the single hybrid handshake did not provide post-setup).
+ *
+ * This is deterministic and counter-driven: both directions cross the same
+ * boundary at the same counter and derive the same next key, so NO extra wire
+ * bytes and no coordination are needed. It does NOT provide post-compromise
+ * security - that needs a fresh ML-KEM re-encapsulation mixed in (P3 Layer 2),
+ * an interactive sub-protocol left as follow-up.
+ */
+export const REKEY_EVERY = 256n;
+
+/** k' = HKDF(salt=k, ikm=empty); old k is unrecoverable from k' (one-way). */
+function ratchetKey(k: Uint8Array): Uint8Array {
+  const [next] = noiseHKDF(k, EMPTY, 2);
+  return next;
+}
+
+/** Advance the key at a ratchet boundary (n a positive multiple of REKEY_EVERY). */
+function maybeRatchet(cs: CipherState): void {
+  if (cs.n > 0n && cs.n % REKEY_EVERY === 0n) {
+    const next = ratchetKey(cs.k);
+    zeroize(cs.k);
+    cs.k = next;
+  }
+}
+
 export function encryptTransport(cs: CipherState, plaintext: Uint8Array): Uint8Array {
+  // ratchet BEFORE using the key for message n, so both ends agree on the key
+  // for this counter. n stays monotonic (the wire counter is unambiguous); a
+  // fresh key with an already-advanced nonce is still unique.
+  maybeRatchet(cs);
   const ct = chacha20poly1305(cs.k, nonceBytes(cs.n)).encrypt(plaintext);
   // wire: [0x03][8-byte BE counter][ciphertext + tag]
   const counter = new Uint8Array(8);
@@ -489,6 +522,8 @@ export function decryptTransport(cs: CipherState, msg: Uint8Array): Uint8Array {
   if (wireN !== cs.n) {
     throw new Error(`noise: counter mismatch (expected ${cs.n}, got ${wireN})`);
   }
+  // mirror the sender: ratchet at the same boundary before decrypting message n.
+  maybeRatchet(cs);
   const ct = msg.slice(9);
   const pt = chacha20poly1305(cs.k, nonceBytes(cs.n)).decrypt(ct);
   cs.n += 1n;
