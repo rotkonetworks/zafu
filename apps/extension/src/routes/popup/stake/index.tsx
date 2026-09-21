@@ -166,12 +166,21 @@ export const StakePage = () => {
           // it directly gives NaN and every share renders 0.00%. It fits in the
           // low 64 bits, so lo is the value.
           const votingPower = Number(info.status?.votingPower?.lo ?? 0n);
-          // funding streams use a recipient oneof - get rate from recipient if available
-          const fundingStream = info.validator?.fundingStreams?.[0];
-          const commission =
-            fundingStream?.recipient?.case === 'toAddress'
-              ? Number(fundingStream.recipient.value.rateBps ?? 0) / 100
-              : 0;
+          // A validator's commission is the SUM of the rate_bps across ALL its
+          // funding streams, not just the first, and a stream directs rewards to
+          // EITHER an address OR the community pool - both carry a rate_bps. The
+          // old code read only fundingStreams[0] and only when it was `toAddress`,
+          // so a validator whose commission stream is `toCommunityPool` (or simply
+          // not first) rendered 0% - e.g. a 100%-commission validator showing 0%.
+          // rate_bps is basis points (10000 bps = 100%), so /100 gives percent.
+          const commissionBps = (info.validator?.fundingStreams ?? []).reduce((sum, fs) => {
+            const r = fs.recipient;
+            if (r?.case === 'toAddress' || r?.case === 'toCommunityPool') {
+              return sum + Number(r.value.rateBps ?? 0);
+            }
+            return sum;
+          }, 0);
+          const commission = commissionBps / 100;
           const state = getValidatorState(info);
           result.push({ info, name, identity, votingPower, commission, state });
         }
