@@ -13,6 +13,4 @@ export enum PagePath {
   SET_PASSWORD = '/welcome/set-password',
   /** Grant camera permission page - opened from popup, tells user to return */
   GRANT_CAMERA = '/grant-camera',
-  /** QR scanner page - opened in new tab for scanning */
-  QR_SCANNER = '/scan',
 }

@@ -90,6 +90,7 @@ const hiddenTabRoutes = [
   PopupPath.SIGN_APPROVAL,
   PopupPath.CAPABILITY_APPROVAL,
   PopupPath.ZCASH_SEND_APPROVAL,
+  PopupPath.KEPLR_APPROVAL,
   PopupPath.FROST_APPROVE,
   PopupPath.COSMOS_SIGN,
   PopupPath.CONTACTS,
@@ -109,7 +110,8 @@ const hiddenTabRoutes = [
  * AppHeader's network / wallet controls are meaningless mid-flow. Covers
  * auth / approval flows plus every secondary screen that carries its own
  * header: settings (whole subtree), identity, contacts, send, receive,
- * swap, and the multisig sub-flows.
+ * swap, the multisig sub-flows, and note-sync / pool-notes (both render the
+ * settings-style header).
  *
  * Deliberately excluded: the multisig tab (/multisig) and stake are
  * primary destinations with no own back-header - they rely on the
@@ -122,6 +124,7 @@ const hiddenHeaderRoutes = [
   PopupPath.SIGN_APPROVAL,
   PopupPath.CAPABILITY_APPROVAL,
   PopupPath.ZCASH_SEND_APPROVAL,
+  PopupPath.KEPLR_APPROVAL,
   PopupPath.FROST_APPROVE,
   PopupPath.COSMOS_SIGN,
   PopupPath.SETTINGS,
@@ -133,6 +136,8 @@ const hiddenHeaderRoutes = [
   PopupPath.MULTISIG_CREATE,
   PopupPath.MULTISIG_JOIN,
   PopupPath.MULTISIG_SIGN,
+  PopupPath.NOTE_SYNC,
+  PopupPath.POOL_NOTES,
 ];
 
 /** check if current path matches any hidden routes */

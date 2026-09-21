@@ -62,20 +62,6 @@ export function isSidePanel(): boolean {
 }
 
 /**
- * Open the extension in the side panel for the current tab.
- */
-export async function openInSidePanel(): Promise<void> {
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab?.windowId) {
-      await chrome.sidePanel.open({ windowId: tab.windowId });
-    }
-  } catch (e) {
-    console.error('Failed to open side panel:', e);
-  }
-}
-
-/**
  * Check if the current window is a popup.
  * Popups cannot request camera permissions - the permission dialog won't appear.
  */

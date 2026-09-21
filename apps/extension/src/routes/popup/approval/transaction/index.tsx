@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { MetadataFetchFn, TransactionViewComponent } from '@repo/ui/components/ui/tx';
-import { isSidePanel } from '../../../../utils/popup-detection';
-import { usePopupNav } from '../../../../utils/navigate';
-import { PopupPath } from '../../paths';
+import { exitApprovalSurface, usePopupNav } from '../../../../utils/navigate';
 import { Sensitive } from '../../../../components/sensitive';
 import { useStore } from '../../../../state';
 import { txApprovalSelector } from '../../../../state/tx-approval';
@@ -92,13 +90,9 @@ export const TransactionApproval = () => {
   // After responding, a toolbar popup or dedicated window should close, but the
   // side panel must NOT - closing it tears down the panel the user deliberately
   // pinned open (the reported "sidebar closes after a penumbra tx like a popup
-  // did"). In the side panel, return to the wallet home instead.
+  // did"). `exitApprovalSurface` returns to the wallet home in that context.
   const finish = () => {
-    if (isSidePanel()) {
-      navigate(PopupPath.INDEX);
-    } else {
-      window.close();
-    }
+    exitApprovalSurface(navigate);
   };
 
   const approve = () => {

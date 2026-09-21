@@ -6,6 +6,7 @@ import { LinkGradientIcon } from '../../../icons/link-gradient';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
 import { cn } from '@repo/ui/lib/utils';
 import { UserChoice } from '@repo/storage-chrome/records';
+import { exitApprovalSurface, usePopupNav } from '../../../utils/navigate';
 import {
   CAPABILITY_META,
   type Capability,
@@ -73,6 +74,7 @@ const CapabilityItem = ({ cap }: { cap: Capability }) => {
 };
 
 export const OriginApproval = () => {
+  const navigate = usePopupNav();
   const {
     requestOrigin,
     favIconUrl,
@@ -86,19 +88,19 @@ export const OriginApproval = () => {
   const approve = () => {
     setChoice(UserChoice.Approved);
     sendResponse();
-    window.close();
+    exitApprovalSurface(navigate);
   };
 
   const deny = () => {
     setChoice(UserChoice.Denied);
     sendResponse();
-    window.close();
+    exitApprovalSurface(navigate);
   };
 
   const ignore = () => {
     setChoice(UserChoice.Ignored);
     sendResponse();
-    window.close();
+    exitApprovalSurface(navigate);
   };
 
   if (!requestOrigin) {

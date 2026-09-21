@@ -46,6 +46,11 @@ export const DEFAULT_ZAPPS: Zapp[] = [
     category: 'social',
     builtin: true,
   },
+  // Discord invites were verified live 2026-09-21 against Discord's own endpoint
+  // (`GET https://discord.com/api/v10/invites/<code>`): zcash -> guild "Zcash",
+  // penumbra -> guild "Penumbra", neither expiring. `discord.gg/penumbra` answers
+  // "Unknown Invite" (code 10006) - re-check with that endpoint before changing
+  // either string.
   {
     id: 'discord-zcash',
     name: 'zcash discord',
@@ -213,31 +218,11 @@ export const DEFAULT_ZAPPS: Zapp[] = [
   },
 ];
 
-/**
- * Community Discord servers the packaged `chat` zapp points at, chosen by the
- * active network.
- *
- * Both invites were verified live 2026-09-21 against Discord's own endpoint
- * (`GET https://discord.com/api/v10/invites/<code>`): zcash -> guild "Zcash",
- * penumbra -> guild "Penumbra", neither expiring. The tile previously pointed
- * at `discord.gg/penumbra`, which answers "Unknown Invite" (code 10006) - a
- * dead invite sends users to nowhere. Re-check with that endpoint before
- * changing either string.
- */
-export const DISCORD_BY_NETWORK: Record<string, string> = {
-  zcash: 'https://discord.gg/zcash',
-  penumbra: 'https://discord.gg/hKvkrqa3zC',
-};
-
-/** Fall back to the Zcash server when the network has no mapping. */
-export const resolveDiscordUrl = (network: string | undefined): string =>
-  (network && DISCORD_BY_NETWORK[network]) || DISCORD_BY_NETWORK['zcash']!;
-
 /** resolve special URLs to actual chrome-extension:// URLs */
 export const resolveZappUrl = (url: string): string | null => {
-  if (url === '__sidepanel__' || url === '__discord__') {
+  if (url === '__sidepanel__') {
     return null;
-  } // handled specially in the click handler (need active network / side panel)
+  } // handled specially in the click handler (opens the side panel)
   if (url === '__zitadel__') {
     return chrome.runtime.getURL('zitadel.html');
   }

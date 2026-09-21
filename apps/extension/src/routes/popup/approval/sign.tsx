@@ -16,10 +16,12 @@ import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { hexToBytes } from '@noble/hashes/utils';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { QrScanner } from '../../../shared/components/qr-scanner';
+import { exitApprovalSurface, usePopupNav } from '../../../utils/navigate';
 
 type SignStep = 'review' | 'password' | 'show-qr' | 'scan-qr' | 'signing';
 
 export const SignApproval = () => {
+  const navigate = usePopupNav();
   const {
     origin,
     challengeHex,
@@ -117,8 +119,18 @@ export const SignApproval = () => {
       setChoice(UserChoice.Denied);
       sendResponse();
     }
-    window.close();
-  }, [keyInfo, challengeHex, origin, algorithm, pref, getMnemonic, setChoice, sendResponse]);
+    exitApprovalSurface(navigate);
+  }, [
+    keyInfo,
+    challengeHex,
+    origin,
+    algorithm,
+    pref,
+    getMnemonic,
+    setChoice,
+    sendResponse,
+    navigate,
+  ]);
 
   const handlePasswordSubmit = useCallback(async () => {
     setPasswordError('');
@@ -142,12 +154,12 @@ export const SignApproval = () => {
         // share log is written by the service worker (sign-request.ts) after popup closes
         setChoice(UserChoice.Approved);
         sendResponse({ signature: resp.signature, publicKey: resp.publicKey });
-        window.close();
+        exitApprovalSurface(navigate);
       } catch {
         // invalid QR, keep scanning
       }
     },
-    [setChoice, sendResponse],
+    [setChoice, sendResponse, navigate],
   );
 
   const approve = () => {
@@ -161,7 +173,7 @@ export const SignApproval = () => {
   const deny = () => {
     setChoice(UserChoice.Denied);
     sendResponse();
-    window.close();
+    exitApprovalSurface(navigate);
   };
 
   if (!origin) {

@@ -6,7 +6,6 @@
  */
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { viewClient, simulationClient } from '../../../clients';
 import { Sensitive } from '../../../components/sensitive';
@@ -66,6 +65,8 @@ import {
   bytesToHex,
 } from '@repo/wallet/networks';
 import { selectActiveZcashWallet } from '../../../state/wallets';
+import { useBackNav } from '../../../utils/navigate';
+import { PopupPath } from '../paths';
 
 /** input asset with balance */
 interface InputAsset {
@@ -140,7 +141,7 @@ function LiveTimer({ startMs }: { startMs: number }) {
 }
 
 const ZcashCrosschainSwap = () => {
-  const navigate = useNavigate();
+  const goBack = useBackNav(PopupPath.INDEX);
   const { address: zcashAddress } = useActiveAddress();
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { contacts } = useStore(contactsSelector);
@@ -526,10 +527,7 @@ const ZcashCrosschainSwap = () => {
       {PasswordModal}
       {/* header with back arrow */}
       <div className='flex items-center gap-3 -mx-4 -mt-4 border-b border-border-soft px-4 py-3'>
-        <button
-          onClick={() => navigate(-1)}
-          className='text-fg-muted transition-colors hover:text-fg-high'
-        >
+        <button onClick={goBack} className='text-fg-muted transition-colors hover:text-fg-high'>
           <span className='i-ph-arrow-left h-5 w-5' />
         </button>
         <h1 className='text-lg font-medium'>crosschain swap</h1>
@@ -1017,7 +1015,7 @@ const ZcashCrosschainSwap = () => {
 // ── Penumbra DEX Swap ──
 
 const PenumbraSwap = () => {
-  const navigate = useNavigate();
+  const goBack = useBackNav(PopupPath.INDEX);
   const penumbraAccount = useStore(selectPenumbraAccount);
   const [amountIn, setAmountIn] = useState('');
   const [assetInOpen, setAssetInOpen] = useState(false);
@@ -1282,10 +1280,7 @@ const PenumbraSwap = () => {
   return (
     <div className='flex flex-col gap-4 p-4'>
       <div className='flex items-center gap-3 -mx-4 -mt-4 border-b border-border-soft px-4 py-3 mb-1'>
-        <button
-          onClick={() => navigate(-1)}
-          className='text-fg-muted transition-colors hover:text-fg-high'
-        >
+        <button onClick={goBack} className='text-fg-muted transition-colors hover:text-fg-high'>
           <span className='i-ph-arrow-left h-5 w-5' />
         </button>
         <h1 className='text-lg font-medium'>swap</h1>

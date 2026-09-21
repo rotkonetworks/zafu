@@ -2,6 +2,7 @@ import { NavigateOptions, useLocation, useNavigate } from 'react-router-dom';
 import { PagePath } from '../routes/page/paths';
 import { PopupPath } from '../routes/popup/paths';
 import { POPUP_WINDOW_HEIGHT, POPUP_WINDOW_WIDTH } from './popup-window';
+import { isSidePanel } from './popup-detection';
 
 // Used to add type-safety to navigating routes
 export const useTypesafeNav = <T extends string>() => {
@@ -17,6 +18,9 @@ export const useTypesafeNav = <T extends string>() => {
 
 export const usePageNav = useTypesafeNav<PagePath>;
 export const usePopupNav = useTypesafeNav<PopupPath>;
+
+/** popup-path navigate function, as returned by `usePopupNav` */
+export type PopupNav = (to: PopupPath | number, options?: NavigateOptions) => void;
 
 /**
  * Back navigation that respects where the user actually came from.
@@ -79,5 +83,21 @@ export const openInSidePanel = async (path: PopupPath): Promise<void> => {
     }
   } catch (e) {
     console.error('Failed to open side panel:', e);
+  }
+};
+
+/**
+ * Leave an approval surface once the user has responded.
+ *
+ * Approval routes are deliverable in three contexts: the toolbar popup and
+ * dedicated windows can be closed, but `window.close()` is a no-op in the
+ * side panel - the panel stays pinned open on a spent approval screen with
+ * no way to dismiss it. There, return to the wallet home instead.
+ */
+export const exitApprovalSurface = (navigate: PopupNav): void => {
+  if (isSidePanel()) {
+    navigate(PopupPath.INDEX);
+  } else {
+    window.close();
   }
 };
