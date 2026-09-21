@@ -16,6 +16,10 @@ interface KeplrWireRequest {
   id: string;
   method: string;
   params: unknown;
+  // true when the call came through zafu's OWN provider (window.zafu) rather
+  // than the window.keplr impersonation. Native calls are never gated by the
+  // Keplr-compat opt-in - picking "Zafu" explicitly IS the consent.
+  native?: boolean;
 }
 
 const isKeplrRequest = (d: unknown): d is KeplrWireRequest =>
@@ -36,13 +40,16 @@ window.addEventListener('message', (ev: MessageEvent) => {
   if (ev.source !== window || !isKeplrRequest(ev.data)) {
     return;
   }
-  const { id, method, params } = ev.data;
+  const { id, method, params, native } = ev.data;
 
   const respond = (payload: { ok: boolean; result?: unknown; error?: string }) =>
     window.postMessage({ channel: CHANNEL, direction: 'response', id, ...payload }, window.origin);
 
-  // opt-out gate: refuse every keplr method unless the user enabled compatibility
-  if (!keplrEnabled) {
+  // opt-in gate applies ONLY to the window.keplr impersonation. zafu's own
+  // provider (window.zafu, native===true) is always allowed: it neither
+  // impersonates nor clobbers Keplr, and every signing call still needs explicit
+  // in-extension approval, so there is nothing to gate behind a setting.
+  if (!native && !keplrEnabled) {
     respond({ ok: false, error: 'keplr compatibility is disabled in zafu settings' });
     return;
   }

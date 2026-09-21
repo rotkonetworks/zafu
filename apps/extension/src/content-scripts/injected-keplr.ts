@@ -64,13 +64,18 @@ window.addEventListener('message', (ev: MessageEvent) => {
   }
 });
 
-/** send a method call to the bridge and await its result */
-const request = <T = unknown>(method: string, params: unknown): Promise<T> => {
+/**
+ * Send a method call to the bridge and await its result. `native` marks a call
+ * that came through zafu's OWN provider (window.zafu) rather than the Keplr
+ * impersonation (window.keplr): native calls are always allowed, whereas the
+ * window.keplr path stays behind the opt-in Keplr-compat gate (see keplr-bridge).
+ */
+const request = <T = unknown>(method: string, params: unknown, native = false): Promise<T> => {
   const id = nextId();
   return new Promise<T>((resolve, reject) => {
     pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
     window.postMessage(
-      { channel: CHANNEL, direction: 'request', id, method, params },
+      { channel: CHANNEL, direction: 'request', id, method, params, native },
       window.origin,
     );
   });
@@ -111,9 +116,9 @@ interface AccountData {
 }
 
 /** offline signer covering both amino and direct signing */
-const makeOfflineSigner = (chainId: string) => ({
+const makeOfflineSigner = (chainId: string, native = false) => ({
   getAccounts: async (): Promise<AccountData[]> => {
-    const key = decodeKey(await request<WireKey>('getKey', { chainId }));
+    const key = decodeKey(await request<WireKey>('getKey', { chainId }, native));
     return [{ address: key.bech32Address, algo: key.algo, pubkey: key.pubKey }];
   },
   signAmino: async (signerAddress: string, signDoc: unknown) => {
@@ -122,7 +127,7 @@ const makeOfflineSigner = (chainId: string) => ({
       signed: unknown;
       signatureB64: string;
       pubKeyB64: string;
-    }>('signAmino', { chainId, signerAddress, signDoc });
+    }>('signAmino', { chainId, signerAddress, signDoc }, native);
     return {
       signed: res.signed,
       signature: {
@@ -147,16 +152,20 @@ const makeOfflineSigner = (chainId: string) => ({
       chainId: string;
       signatureB64: string;
       pubKeyB64: string;
-    }>('signDirect', {
-      chainId,
-      signerAddress,
-      signDoc: {
-        bodyBytesB64: bytesToB64(signDoc.bodyBytes),
-        authInfoBytesB64: bytesToB64(signDoc.authInfoBytes),
-        chainId: signDoc.chainId,
-        accountNumber: signDoc.accountNumber.toString(),
+    }>(
+      'signDirect',
+      {
+        chainId,
+        signerAddress,
+        signDoc: {
+          bodyBytesB64: bytesToB64(signDoc.bodyBytes),
+          authInfoBytesB64: bytesToB64(signDoc.authInfoBytes),
+          chainId: signDoc.chainId,
+          accountNumber: signDoc.accountNumber.toString(),
+        },
       },
-    });
+      native,
+    );
     return {
       signed: {
         bodyBytes: b64ToBytes(res.bodyB64),
@@ -172,36 +181,42 @@ const makeOfflineSigner = (chainId: string) => ({
   },
 });
 
-const keplr = {
+// The provider surface, parameterized by `native`. `native=false` backs the
+// Keplr-impersonation at window.keplr (opt-in, defers to a real Keplr);
+// `native=true` backs zafu's own window.zafu (always on, its own slot). Both
+// speak the identical Keplr interface so cosmos-kit / graz / Skip drive either.
+const makeProvider = (native: boolean) => ({
   version: 'zafu-0.1',
   mode: 'extension' as const,
 
   enable: async (chainIds: string | string[]): Promise<void> => {
-    await request('enable', { chainIds: Array.isArray(chainIds) ? chainIds : [chainIds] });
+    await request('enable', { chainIds: Array.isArray(chainIds) ? chainIds : [chainIds] }, native);
   },
 
   disable: async (chainIds?: string | string[]): Promise<void> => {
-    await request('disable', {
-      chainIds: chainIds ? (Array.isArray(chainIds) ? chainIds : [chainIds]) : [],
-    });
+    await request(
+      'disable',
+      { chainIds: chainIds ? (Array.isArray(chainIds) ? chainIds : [chainIds]) : [] },
+      native,
+    );
   },
 
   getKey: async (chainId: string): Promise<KeplrKey> =>
-    decodeKey(await request<WireKey>('getKey', { chainId })),
+    decodeKey(await request<WireKey>('getKey', { chainId }, native)),
 
   experimentalSuggestChain: async (chainInfo: unknown): Promise<void> => {
-    await request('experimentalSuggestChain', { chainInfo });
+    await request('experimentalSuggestChain', { chainInfo }, native);
   },
 
-  getOfflineSigner: (chainId: string) => makeOfflineSigner(chainId),
+  getOfflineSigner: (chainId: string) => makeOfflineSigner(chainId, native),
   getOfflineSignerOnlyAmino: (chainId: string) => {
-    const s = makeOfflineSigner(chainId);
+    const s = makeOfflineSigner(chainId, native);
     return { getAccounts: s.getAccounts, signAmino: s.signAmino };
   },
-  getOfflineSignerAuto: async (chainId: string) => makeOfflineSigner(chainId),
+  getOfflineSignerAuto: async (chainId: string) => makeOfflineSigner(chainId, native),
 
   signAmino: async (chainId: string, signer: string, signDoc: unknown) =>
-    makeOfflineSigner(chainId).signAmino(signer, signDoc),
+    makeOfflineSigner(chainId, native).signAmino(signer, signDoc),
   signDirect: async (
     chainId: string,
     signer: string,
@@ -211,17 +226,21 @@ const keplr = {
       chainId: string;
       accountNumber: bigint;
     },
-  ) => makeOfflineSigner(chainId).signDirect(signer, signDoc),
+  ) => makeOfflineSigner(chainId, native).signDirect(signer, signDoc),
 
   sendTx: async (chainId: string, tx: Uint8Array, mode: string): Promise<Uint8Array> => {
-    const res = await request<{ hashB64: string }>('sendTx', {
-      chainId,
-      txB64: bytesToB64(tx),
-      mode,
-    });
+    const res = await request<{ hashB64: string }>(
+      'sendTx',
+      { chainId, txB64: bytesToB64(tx), mode },
+      native,
+    );
     return b64ToBytes(res.hashB64);
   },
-};
+});
+
+// window.keplr impersonation provider (gated) and zafu's own provider (native).
+const keplr = makeProvider(false);
+const zafuProvider = makeProvider(true);
 
 // Keplr compatibility is OPT-IN (default off). Injecting window.keplr
 // unconditionally clobbered a user's real Keplr: with `writable: false`,
@@ -255,6 +274,25 @@ const installKeplr = (): void => {
   // let dapps that already probed re-detect the newly present provider
   window.dispatchEvent(new Event('keplr_keystorechange'));
 };
+
+// zafu's OWN cosmos provider. Unlike the window.keplr impersonation above, this
+// lives on its own slot (window.zafu), so it never races or clobbers a real
+// Keplr and needs no opt-in - a dapp (or our cosmos-kit adapter) that explicitly
+// picks "Zafu" always finds it. This is the reliable path; the window.keplr
+// impersonation stays only for third-party dapps that hard-code window.keplr.
+// Signing still requires explicit in-extension approval, so an always-present
+// provider grants no authority on its own.
+let zafuInstalled = false;
+const installZafu = (): void => {
+  if (zafuInstalled || 'zafu' in window) {
+    return;
+  }
+  zafuInstalled = true;
+  Object.defineProperty(window, 'zafu', { value: zafuProvider, writable: false, configurable: true });
+  window.dispatchEvent(new Event('zafu_keystorechange'));
+};
+// Install immediately - no gate, no slot race.
+installZafu();
 
 // the ISOLATED bridge reads the opt-in flag (it has chrome.storage access) and
 // posts this once, only when the user has enabled Keplr compatibility
