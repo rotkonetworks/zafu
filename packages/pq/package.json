@@ -1,6 +1,6 @@
 {
   "name": "@zafu/pq",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
   "description": "Hybrid post-quantum key agreement (X25519 + ML-KEM-768 / X-Wing) - harvest-now-decrypt-later-resistant confidentiality",
   "type": "module",

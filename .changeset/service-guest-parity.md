@@ -1,5 +1,7 @@
 ---
 '@zafu/service': minor
+'@zafu/pq': minor
+'@zafu/protocol': minor
 '@zafu/zid': minor
 '@zafu/media': minor
 ---
@@ -11,6 +13,12 @@
   filters with typed `TimeoutError`/`UnavailableError`, and `select`/`rescue`.
   Filters compose by `(Service) => Service`; `timeout` aborts the signal it passes
   downstream, so the deadline interrupts the work instead of only abandoning it.
+- **@zafu/pq**: exposes `PQ_KEY_AUTH_DOMAIN` and `pqKeyAuthMessage`, which the
+  prekey-authentication work added after the 0.1.0 publish. zid's advertised-key
+  path imports it, so this is a hard dependency of the zid release below: an
+  installed zid against the published pq 0.1.0 cannot even load.
+- **@zafu/protocol**: `zafu_discover_contacts` (present intersection only, under
+  app-scoped handles) and an additive `opts` argument on `ZafuTransport.request`.
 - **@zafu/zid**: wallet-free parity. `zid.connect()` without a wallet now yields a
   guest identity with the same crypto surface as the wallet path - one in-page
   seed deriving the ed25519 identity plus an X-Wing (X25519 + ML-KEM-768) keypair,
@@ -29,4 +37,5 @@
   explicit via `zid.connect({ channel })`: `'hybrid'` (default - never downgrades),
   `'classical'` (the legacy handshake, to reach a 0.1.0 peer), or `'auto'` (try
   hybrid, fall back to classical - a downgrade the caller accepts knowingly).
-  There is no silent fallback and no implicit `'auto'`.
+  There is no silent fallback and no implicit `'auto'`; `ZidChannel.kind` reports
+  which handshake was actually used, so a caller can refuse a downgrade.
