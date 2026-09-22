@@ -32,14 +32,11 @@ const NETWORK_DOT: Record<string, string> = {
   penumbra: 'bg-teal-300',
 };
 
-// Grouped by intent: what protects funds first (security & backup, with
-// auto-lock rendered inline in that group), then privacy, then wallet
-// plumbing (networks, zigner), then about. Lock stays pinned at the
+// Grouped by intent: what protects funds first (security & backup - a hub for
+// recovery/backup/auto-lock/clear-cache), then privacy, then the active
+// network's own settings, then wallet plumbing (wallets & networks + the zigner
+// cold signer), then app-level (appearance, about). Lock stays pinned at the
 // bottom where muscle memory can't hit it by accident.
-//
-// TODO(orphan): link or delete - settings-rpc, settings-numeraires,
-// settings-trading-mode, and settings-parachains have screens but no route
-// and no nav-in. Decide whether they should be reachable or removed.
 const groups: SettingsGroup[] = [
   {
     label: 'security & backup',
