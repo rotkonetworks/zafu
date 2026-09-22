@@ -22,6 +22,14 @@ import worker from './worker.js';
 const relay = process.env['RELAY_URL'] ?? 'http://127.0.0.1:8099';
 const port = Number(process.env['PORT'] ?? 8098);
 
+// the same bindings the Worker reads, so a gated bouncer can be exercised locally
+const bindings = {
+  RELAY_URL: relay,
+  ...(process.env['BOUNCER_TOKENS'] ? { BOUNCER_TOKENS: process.env['BOUNCER_TOKENS'] } : {}),
+  ...(process.env['BOUNCER_ORIGINS'] ? { BOUNCER_ORIGINS: process.env['BOUNCER_ORIGINS'] } : {}),
+  ...(process.env['RELAY_TOKEN'] ? { RELAY_TOKEN: process.env['RELAY_TOKEN'] } : {}),
+};
+
 const server = createServer(async (req, res) => {
   const chunks = [];
   for await (const chunk of req) {
@@ -36,8 +44,17 @@ const server = createServer(async (req, res) => {
   });
 
   try {
-    const response = await worker.fetch(request, { RELAY_URL: relay });
-    res.writeHead(response.status, Object.fromEntries(response.headers));
+    const response = await worker.fetch(request, bindings);
+    for (const [name, value] of response.headers) {
+      if (name.toLowerCase() !== 'set-cookie') {
+        res.setHeader(name, value);
+      }
+    }
+    const cookies = response.headers.getSetCookie();
+    if (cookies.length > 0) {
+      res.setHeader('set-cookie', cookies); // one header, many cookies - never folded
+    }
+    res.writeHead(response.status);
     res.end(Buffer.from(await response.arrayBuffer()));
   } catch (error) {
     res.writeHead(502, { 'content-type': 'text/plain' });
