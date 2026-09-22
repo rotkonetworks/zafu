@@ -44,27 +44,13 @@ const groups: SettingsGroup[] = [
   {
     label: 'security & backup',
     links: [
+      // Single hub. It holds auto-lock and links to the canonical recovery-
+      // passphrase / multisig-backup / clear-cache screens - so those are no
+      // longer duplicated as flat rows here (they were reachable both ways).
       {
         title: 'security & backup',
         icon: 'i-ph-shield-check',
         href: PopupPath.SETTINGS_SECURITY_BACKUP,
-      },
-      {
-        title: 'recovery passphrase',
-        icon: 'i-ph-file-text',
-        href: PopupPath.SETTINGS_RECOVERY_PASSPHRASE,
-      },
-      {
-        title: 'multisig backup',
-        icon: 'i-ph-shield',
-        href: PopupPath.SETTINGS_MULTISIG_BACKUP,
-        networks: ['zcash'],
-      },
-      // auto-lock renders here as an inline control (see below)
-      {
-        title: 'clear cache',
-        icon: 'i-ph-trash',
-        href: PopupPath.SETTINGS_CLEAR_CACHE,
       },
     ],
   },
