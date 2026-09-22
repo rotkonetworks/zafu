@@ -27,7 +27,12 @@ import {
   formatDateInput,
 } from '../../../utils/zcash-blocks';
 
-type RemovalStep = 'idle' | 'password' | 'backup' | 'confirm';
+// One shared state machine drives BOTH remove and export-recovery-phrase, so
+// only one wallet's secret is ever in React state at a time (mutual exclusion)
+// and the "failed to decrypt vault" handling is shared. 'reveal' is the
+// export-only terminal step (show phrase, no backup-ack, no delete).
+type RemovalStep = 'idle' | 'password' | 'backup' | 'confirm' | 'reveal';
+type ActionKind = 'remove' | 'export';
 
 /** network badges for a vault */
 const networkBadge = (network: string) => {
@@ -91,6 +96,7 @@ export const SettingsWallets = ({
   // -- removal state --
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removingType, setRemovingType] = useState<string>('mnemonic');
+  const [actionKind, setActionKind] = useState<ActionKind>('remove');
   const [step, setStep] = useState<RemovalStep>('idle');
   const [password, setPassword] = useState('');
   const [passwordError, setPasswordError] = useState(false);
@@ -125,6 +131,7 @@ export const SettingsWallets = ({
   // -- removal logic --
   const resetRemoval = () => {
     setRemovingId(null);
+    setActionKind('remove');
     setStep('idle');
     setPassword('');
     setPasswordError(false);
@@ -138,7 +145,20 @@ export const SettingsWallets = ({
     resetRemoval();
     setRemovingId(vault.id);
     setRemovingType(vault.type);
+    setActionKind('remove');
     setStep(vault.type === 'mnemonic' ? 'password' : 'confirm');
+  };
+
+  // Export the recovery phrase of ONE wallet (Keplr-style per-wallet action),
+  // reusing the same password-gated reveal as removal - so it shares the
+  // orphaned-vault handling and the single secret-in-state surface. Only
+  // meaningful for mnemonic vaults (zigner/multisig hold no seed phrase here).
+  const startExport = (vault: KeyInfo) => {
+    resetRemoval();
+    setRemovingId(vault.id);
+    setRemovingType(vault.type);
+    setActionKind('export');
+    setStep('password');
   };
 
   const verifyPassword = async (e: React.FormEvent) => {
@@ -154,25 +174,33 @@ export const SettingsWallets = ({
     try {
       setPhrase((await getMnemonic(removingId)).split(' '));
       setPassword('');
-      setStep('backup');
+      // export -> straight to the reveal screen; remove -> the backup-ack step.
+      setStep(actionKind === 'export' ? 'reveal' : 'backup');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      // Escape hatch for an ORPHANED vault: its seed was sealed under a previous
-      // password key and can no longer be decrypted, so we physically cannot show
-      // the phrase to back up. Requiring the backup step would make such a vault
-      // permanently undeletable (the reported "delete + continue with pw does
-      // nothing" - the throw set an error the password card never rendered).
-      // Password is already verified (ownership proof), and this path is reachable
-      // ONLY on a decrypt failure - a readable vault always shows its phrase - so
-      // skipping backup is not a safety regression: the phrase is already gone
-      // from storage. Jump to confirm, which surfaces the reason. Any OTHER error
-      // stays on the password step with a now-visible message.
       if (msg.includes('failed to decrypt vault')) {
-        setPassword('');
-        setStateError(
-          "this wallet's recovery phrase can't be read from storage (the vault is unreadable). make sure you have it backed up elsewhere before removing - it cannot be shown here.",
-        );
-        setStep('confirm');
+        if (actionKind === 'export') {
+          // Can't export a vault we can't decrypt - there is no phrase to show.
+          // Surface it (the password card now renders `error`) and stay put;
+          // the user's real backup is elsewhere. No delete escape here.
+          setStateError(
+            "this wallet's recovery phrase can't be read from storage (the vault is unreadable), so it cannot be exported here. use your existing backup.",
+          );
+        } else {
+          // Escape hatch for an ORPHANED vault on REMOVE: its seed was sealed
+          // under a previous password key and can't be decrypted, so we cannot
+          // show the phrase to back up. Requiring backup would make it
+          // permanently undeletable (the "delete + continue does nothing" bug -
+          // the throw set an error the password card never rendered). Password is
+          // verified (ownership), and this path is reachable ONLY on a decrypt
+          // failure, so skipping backup is not a regression: the phrase is
+          // already gone from storage. Jump to confirm, which states the reason.
+          setPassword('');
+          setStateError(
+            "this wallet's recovery phrase can't be read from storage (the vault is unreadable). make sure you have it backed up elsewhere before removing - it cannot be shown here.",
+          );
+          setStep('confirm');
+        }
       } else {
         setStateError(msg);
       }
@@ -393,6 +421,7 @@ export const SettingsWallets = ({
                     networks={shownNetworks}
                     multisigWallet={multisigWallet}
                     onRemove={() => startRemoval(v)}
+                    onExport={() => startExport(v)}
                     onRename={name => handleRename(v.id, name)}
                     disabled={step !== 'idle'}
                   />
@@ -406,7 +435,9 @@ export const SettingsWallets = ({
           {/* ── removal flow ── */}
 
           {removingVault && removingType === 'mnemonic' && step === 'password' && (
-            <RemovalCard title={`remove "${removingVault.name}"`}>
+            <RemovalCard
+              title={`${actionKind === 'export' ? 'export' : 'remove'} "${removingVault.name}"`}
+            >
               <p className='text-xs text-fg-muted mb-3'>enter password to view recovery phrase.</p>
               <form onSubmit={e => void verifyPassword(e)} className='flex flex-col gap-2'>
                 <input
@@ -429,6 +460,20 @@ export const SettingsWallets = ({
                   </Btn>
                 </div>
               </form>
+            </RemovalCard>
+          )}
+
+          {removingVault && step === 'reveal' && (
+            <RemovalCard title={`recovery phrase - "${removingVault.name}"`}>
+              <p className='text-xs text-fg-muted mb-3'>
+                write this down and keep it offline. anyone with it controls this wallet.
+              </p>
+              <div className='select-all cursor-text rounded-lg bg-canvas border border-border-soft p-3 mb-3 text-xs leading-relaxed break-words'>
+                {phrase.join(' ')}
+              </div>
+              <div className='flex gap-2'>
+                <Btn onClick={resetRemoval}>done</Btn>
+              </div>
             </RemovalCard>
           )}
 
@@ -637,6 +682,7 @@ const VaultRow = ({
   networks,
   multisigWallet,
   onRemove,
+  onExport,
   onRename,
   disabled,
 }: {
@@ -644,12 +690,17 @@ const VaultRow = ({
   networks: string[];
   multisigWallet?: import('../../../state/wallets').ZcashWalletJson;
   onRemove: () => void;
+  onExport: () => void;
   onRename: (name: string) => void;
   disabled: boolean;
 }) => {
   const navigate = usePopupNav();
   const { setMultisigHidden } = useStore(keyRingSelector);
   const [editing, setEditing] = useState(false);
+  // Per-wallet actions menu (Keplr-style), rendered inline rather than as a
+  // floating dropdown - matches the existing inline-expand idiom (the birthday
+  // block below) and avoids a new popup-positioning component.
+  const [menuOpen, setMenuOpen] = useState(false);
   const [draft, setDraft] = useState(vault.name);
   const ref = useRef<HTMLInputElement>(null);
   const hasZcash = networks.includes('zcash');
@@ -764,13 +815,58 @@ const VaultRow = ({
           )}
         </div>
         <button
-          onClick={onRemove}
+          onClick={() => setMenuOpen(o => !o)}
           disabled={disabled}
-          className='p-1 text-fg-muted/0 group-hover:text-fg-muted hover:!text-red-400 transition-colors disabled:opacity-50'
+          aria-label='wallet actions'
+          aria-expanded={menuOpen}
+          className='p-1 text-fg-muted hover:text-fg-high transition-colors disabled:opacity-50'
         >
-          <span className='i-ph-trash size-3.5' />
+          <span className='i-ph-dots-three-vertical size-4' />
         </button>
       </div>
+
+      {/* per-wallet actions: rename, export recovery phrase (mnemonic only),
+          remove. Rename is also still available by clicking the name above. */}
+      {menuOpen && (
+        <div className='mt-2 flex flex-wrap gap-2 border-t border-border-soft/70 pt-2'>
+          <button
+            type='button'
+            disabled={disabled}
+            onClick={() => {
+              setMenuOpen(false);
+              setDraft(vault.name);
+              setEditing(true);
+            }}
+            className='text-label text-fg-muted hover:text-fg-high transition-colors disabled:opacity-50'
+          >
+            rename
+          </button>
+          {vault.type === 'mnemonic' && (
+            <button
+              type='button'
+              disabled={disabled}
+              onClick={() => {
+                setMenuOpen(false);
+                onExport();
+              }}
+              className='text-label text-zigner-gold hover:underline transition-colors disabled:opacity-50'
+            >
+              export recovery phrase
+            </button>
+          )}
+          <button
+            type='button'
+            disabled={disabled}
+            onClick={() => {
+              setMenuOpen(false);
+              onRemove();
+            }}
+            className='ml-auto text-label text-fg-muted hover:text-red-400 transition-colors disabled:opacity-50'
+          >
+            remove
+          </button>
+        </div>
+      )}
 
       {/* zcash sync start.
 
