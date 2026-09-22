@@ -126,5 +126,21 @@ export type {
   DiscoveredContact,
 } from './presence-service';
 
+export {
+  createGroupSession,
+  encodeGroupEnvelope,
+  decodeGroupEnvelope,
+  signedBytes,
+  pubkeyHex,
+  pubkeyBytes,
+} from './group';
+export type {
+  GroupEnvelope,
+  GroupMember,
+  GroupSession,
+  GroupSessionOptions,
+  RoundStatus,
+} from './group';
+
 export { createPresenceScheduler } from './presence-scheduler';
 export type { PresenceScheduler, PresenceSchedulerDeps, PublishArgs } from './presence-scheduler';
