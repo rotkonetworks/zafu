@@ -142,5 +142,8 @@ export type {
   RoundStatus,
 } from './group';
 
+export { DEFAULT_RULES, itemIsHidden, modeStateAt, tallyDecision } from './vote';
+export type { ModeRecord, ModerationRules, Tally, VoteRecord } from './vote';
+
 export { createPresenceScheduler } from './presence-scheduler';
 export type { PresenceScheduler, PresenceSchedulerDeps, PublishArgs } from './presence-scheduler';
