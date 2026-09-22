@@ -1,7 +1,7 @@
 name: Publish @zafu SDK (npm, OIDC)
 
 # Publishes the @zafu npm packages (@zafu/service, @zafu/protocol, @zafu/pq,
-# @zafu/zid, @zafu/media) using Trusted Publishing (OIDC) - no long-lived token,
+# @zafu/zid, @zafu/media, @zafu/zirc) using Trusted Publishing (OIDC) - no long-lived token,
 # no 2FA prompt, and automatic provenance. This is the durable path once npm
 # removes token-based 2FA bypass (announced for 2027).
 #
@@ -9,13 +9,13 @@ name: Publish @zafu SDK (npm, OIDC)
 #   1. The package must already EXIST (the very first publish of a brand-new
 #      name cannot use OIDC - do that one bootstrap publish manually with a
 #      Classic Automation token, then this workflow owns every release after).
-#      @zafu/service is the newest name and needs that bootstrap.
+#      @zafu/service and @zafu/zirc are the newest names and need that bootstrap.
 #   2. Package -> Settings -> Trusted Publisher -> GitHub Actions:
 #        Organization/owner : rotkonetworks
 #        Repository         : zafu
 #        Workflow filename  : publish-zafu-sdk.yml
-#      Do this for all five: @zafu/service, @zafu/protocol, @zafu/pq,
-#      @zafu/zid, @zafu/media.
+#      Do this for all six: @zafu/service, @zafu/protocol, @zafu/pq,
+#      @zafu/zid, @zafu/media, @zafu/zirc.
 #   3. After OIDC is proven, flip each package to
 #      "Require two-factor authentication and disallow tokens" and revoke the
 #      bootstrap automation token.
@@ -66,7 +66,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Build packages
-        run: pnpm --filter @zafu/service --filter @zafu/protocol --filter @zafu/pq --filter @zafu/zid --filter @zafu/media build
+        run: pnpm --filter @zafu/service --filter @zafu/protocol --filter @zafu/pq --filter @zafu/zid --filter @zafu/media --filter @zafu/zirc build
 
       - name: Pack tarballs (applies publishConfig dist override)
         run: |
@@ -80,6 +80,7 @@ jobs:
           pnpm --filter @zafu/pq       exec pnpm pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
           pnpm --filter @zafu/zid      exec pnpm pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
           pnpm --filter @zafu/media    exec pnpm pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
+          pnpm --filter @zafu/zirc     exec pnpm pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
           ls -la "$GITHUB_WORKSPACE/tarballs"
 
       # Publish in dependency order: service first (it is a dependency of any
@@ -90,7 +91,7 @@ jobs:
         if: ${{ !inputs.dry_run }}
         run: |
           set -euo pipefail
-          for pkg in service protocol pq zid media; do
+          for pkg in service protocol pq zid media zirc; do
             tgz=$(ls "$GITHUB_WORKSPACE"/tarballs/zafu-${pkg}-*.tgz)
             echo "publishing $tgz"
             npm publish "$tgz" --access public --provenance

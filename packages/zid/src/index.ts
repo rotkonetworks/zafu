@@ -126,6 +126,8 @@ export type {
   DiscoveredContact,
 } from './presence-service';
 
+export { concat, lp, lpText, signedFields, u32be } from './canonical';
+
 export {
   createGroupSession,
   encodeGroupEnvelope,
@@ -141,9 +143,6 @@ export type {
   GroupSessionOptions,
   RoundStatus,
 } from './group';
-
-export { DEFAULT_RULES, itemIsHidden, modeStateAt, tallyDecision } from './vote';
-export type { ModeRecord, ModerationRules, Tally, VoteRecord } from './vote';
 
 export { createPresenceScheduler } from './presence-scheduler';
 export type { PresenceScheduler, PresenceSchedulerDeps, PublishArgs } from './presence-scheduler';

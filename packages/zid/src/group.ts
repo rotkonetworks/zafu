@@ -31,11 +31,9 @@
 import { sha256 } from '@noble/hashes/sha2';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 
-const enc = new TextEncoder();
-const dec = new TextDecoder();
+import { lpText, signedFields, u32be, utf8 } from './canonical';
 
-/** domain separator: bytes signed for one group are never valid for anything else. */
-const DOMAIN = enc.encode('zid-group-v1');
+const dec = new TextDecoder();
 
 /** one envelope: who spoke, in which round, of which group, with what. */
 export interface GroupEnvelope {
@@ -95,34 +93,6 @@ export interface GroupSession {
   close(): void;
 }
 
-const u32be = (n: number): Uint8Array => {
-  if (!Number.isInteger(n) || n < 0 || n > 0xffffffff) {
-    throw new Error(`group: ${n} does not fit a u32`);
-  }
-  const out = new Uint8Array(4);
-  new DataView(out.buffer).setUint32(0, n, false);
-  return out;
-};
-
-/** length-prefixed field: no two parts can be confused for different fields. */
-const lp = (bytes: Uint8Array): Uint8Array => {
-  const out = new Uint8Array(4 + bytes.length);
-  out.set(u32be(bytes.length), 0);
-  out.set(bytes, 4);
-  return out;
-};
-
-const concat = (parts: Uint8Array[]): Uint8Array => {
-  const total = parts.reduce((n, p) => n + p.length, 0);
-  const out = new Uint8Array(total);
-  let at = 0;
-  for (const p of parts) {
-    out.set(p, at);
-    at += p.length;
-  }
-  return out;
-};
-
 /** exactly the bytes a member signs - exported so a test (or an implementation in another language) can recompute them. */
 export const signedBytes = (
   group: string,
@@ -130,14 +100,14 @@ export const signedBytes = (
   from: string,
   payload: Uint8Array,
 ): Uint8Array =>
-  concat([DOMAIN, u32be(round), lp(enc.encode(group)), lp(enc.encode(from)), sha256(payload)]);
+  signedFields('zid-group-v1', [u32be(round), lpText(group), lpText(from), sha256(payload)]);
 
 const b64 = (bytes: Uint8Array): string => btoa(String.fromCharCode(...bytes));
 const unb64 = (s: string): Uint8Array => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
 /** wire form: JSON, so a relay or another language can carry it without knowing anything about it. */
 export const encodeGroupEnvelope = (envelope: GroupEnvelope): Uint8Array =>
-  enc.encode(
+  utf8(
     JSON.stringify({
       group: envelope.group,
       round: envelope.round,

@@ -109,7 +109,7 @@ importers:
         version: 66.8.1(@unocss/postcss@66.8.1(postcss@8.5.26))(@unocss/webpack@66.8.1(esbuild@0.28.2)(rollup@4.62.5)(vite@5.4.21(@types/node@26.4.0)(lightningcss@1.32.0)(terser@5.50.0))(webpack@5.109.2(esbuild@0.28.2)(lightningcss@1.32.0)(postcss@8.5.26)))(vite@5.4.21(@types/node@26.4.0)(lightningcss@1.32.0)(terser@5.50.0))
       vitest:
         specifier: ~1.6.1
-        version: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1(playwright@1.62.1)(vitest@1.6.1))(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
+        version: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
 
   apps/extension:
     dependencies:
@@ -463,7 +463,7 @@ importers:
         version: 0.0.270
       vitest:
         specifier: ~1.6.1
-        version: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1(playwright@1.62.1)(vitest@1.6.1))(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
+        version: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
 
   packages/pq:
     dependencies:
@@ -518,7 +518,7 @@ importers:
         version: 8.5.0(jiti@2.7.0)(postcss@8.5.26)(tsx@4.23.12)(typescript@5.9.3)(yaml@2.9.0)
       vitest:
         specifier: ~1.6.1
-        version: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1(playwright@1.62.1)(vitest@1.6.1))(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
+        version: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
 
   packages/storage-chrome:
     dependencies:
@@ -845,6 +845,25 @@ importers:
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(jiti@2.7.0)(postcss@8.5.26)(tsx@4.23.12)(typescript@5.9.3)(yaml@2.9.0)
+
+  packages/zirc:
+    dependencies:
+      '@noble/hashes':
+        specifier: ^1.8.0
+        version: 1.8.0
+      '@zafu/zid':
+        specifier: workspace:*
+        version: link:../zid
+    devDependencies:
+      '@noble/curves':
+        specifier: ^1.9.7
+        version: 1.9.7
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.0(jiti@2.7.0)(postcss@8.5.26)(tsx@4.23.12)(typescript@5.9.3)(yaml@2.9.0)
+      vitest:
+        specifier: ~1.6.1
+        version: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.32.0)(terser@5.50.0)
 
 packages:
 
@@ -2281,10 +2300,6 @@ packages:
   '@noble/hashes@1.8.0':
     resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
     engines: {node: ^14.21.3 || >=16}
-
-  '@noble/hashes@2.3.0':
-    resolution: {integrity: sha512-oN+QwyX7VSHotibwubG3kpzbwKrfnyR6OOO+3Nk/53ADL7FmgHHz4TgrbaYKvvOw09u6QTx0oiH1cNCIOuN0CQ==}
-    engines: {node: '>= 20.19.0'}
 
   '@noble/hashes@2.4.0':
     resolution: {integrity: sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA==}
@@ -10116,6 +10131,11 @@ snapshots:
       '@eslint/core': 0.17.0
       levn: 0.4.1
 
+  '@exodus/bytes@1.15.1(@noble/hashes@1.8.0)':
+    optionalDependencies:
+      '@noble/hashes': 1.8.0
+    optional: true
+
   '@exodus/bytes@1.15.1(@noble/hashes@2.4.0)':
     optionalDependencies:
       '@noble/hashes': 2.4.0
@@ -10595,8 +10615,6 @@ snapshots:
 
   '@noble/hashes@1.8.0': {}
 
-  '@noble/hashes@2.3.0': {}
-
   '@noble/hashes@2.4.0': {}
 
   '@noble/post-quantum@0.7.1':
@@ -10948,7 +10966,7 @@ snapshots:
 
   '@polkadot-api/signer@0.2.13':
     dependencies:
-      '@noble/hashes': 2.3.0
+      '@noble/hashes': 2.4.0
       '@polkadot-api/merkleize-metadata': 1.1.29
       '@polkadot-api/polkadot-signer': 0.1.6
       '@polkadot-api/signers-common': 0.1.20
@@ -10978,14 +10996,14 @@ snapshots:
 
   '@polkadot-api/substrate-bindings@0.17.0':
     dependencies:
-      '@noble/hashes': 2.3.0
+      '@noble/hashes': 2.4.0
       '@polkadot-api/utils': 0.2.0
       '@scure/base': 2.3.0
       scale-ts: 1.6.1
 
   '@polkadot-api/substrate-bindings@0.21.0':
     dependencies:
-      '@noble/hashes': 2.3.0
+      '@noble/hashes': 2.4.0
       '@polkadot-api/utils': 0.4.0
       '@scure/base': 2.3.0
       scale-ts: 1.6.1
@@ -12320,7 +12338,7 @@ snapshots:
       picocolors: 1.1.1
       redent: 3.0.0
     optionalDependencies:
-      vitest: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1(playwright@1.62.1)(vitest@1.6.1))(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
+      vitest: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
 
   '@testing-library/react@16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
@@ -12906,7 +12924,7 @@ snapshots:
       '@vitest/utils': 1.6.1
       magic-string: 0.30.21
       sirv: 2.0.4
-      vitest: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1(playwright@1.62.1)(vitest@1.6.1))(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
+      vitest: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
     optionalDependencies:
       playwright: 1.62.1
 
@@ -13887,6 +13905,14 @@ snapshots:
 
   csstype@3.2.3: {}
 
+  data-urls@7.0.0(@noble/hashes@1.8.0):
+    dependencies:
+      whatwg-mimetype: 5.0.0
+      whatwg-url: 16.0.1(@noble/hashes@1.8.0)
+    transitivePeerDependencies:
+      - '@noble/hashes'
+    optional: true
+
   data-urls@7.0.0(@noble/hashes@2.4.0):
     dependencies:
       whatwg-mimetype: 5.0.0
@@ -14517,7 +14543,7 @@ snapshots:
       '@typescript-eslint/utils': 7.18.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)
       eslint: 9.39.5(jiti@2.7.0)
     optionalDependencies:
-      vitest: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1(playwright@1.62.1)(vitest@1.6.1))(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
+      vitest: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
     transitivePeerDependencies:
       - supports-color
       - typescript
@@ -15077,6 +15103,13 @@ snapshots:
     dependencies:
       lru-cache: 11.5.2
 
+  html-encoding-sniffer@6.0.0(@noble/hashes@1.8.0):
+    dependencies:
+      '@exodus/bytes': 1.15.1(@noble/hashes@1.8.0)
+    transitivePeerDependencies:
+      - '@noble/hashes'
+    optional: true
+
   html-encoding-sniffer@6.0.0(@noble/hashes@2.4.0):
     dependencies:
       '@exodus/bytes': 1.15.1(@noble/hashes@2.4.0)
@@ -15478,6 +15511,33 @@ snapshots:
   jsbi@3.2.5: {}
 
   jsdoc-type-pratt-parser@4.8.0: {}
+
+  jsdom@30.0.1(@noble/hashes@1.8.0):
+    dependencies:
+      '@asamuzakjp/css-color': 6.0.7
+      '@asamuzakjp/dom-selector': 8.3.2
+      '@bramus/specificity': 2.4.2
+      '@csstools/css-syntax-patches-for-csstree': 1.1.10(css-tree@3.2.1)
+      '@exodus/bytes': 1.15.1(@noble/hashes@1.8.0)
+      css-tree: 3.2.1
+      data-urls: 7.0.0(@noble/hashes@1.8.0)
+      decimal.js: 10.6.0
+      html-encoding-sniffer: 6.0.0(@noble/hashes@1.8.0)
+      is-potential-custom-element-name: 1.0.1
+      lru-cache: 11.5.2
+      parse5: 8.0.1
+      saxes: 6.0.0
+      symbol-tree: 3.2.4
+      tough-cookie: 6.0.2
+      undici: 8.10.0
+      w3c-xmlserializer: 5.0.0
+      webidl-conversions: 8.0.1
+      whatwg-mimetype: 5.0.0
+      whatwg-url: 17.1.0(@noble/hashes@1.8.0)
+      xml-name-validator: 5.0.0
+    transitivePeerDependencies:
+      - '@noble/hashes'
+    optional: true
 
   jsdom@30.0.1(@noble/hashes@2.4.0):
     dependencies:
@@ -17856,7 +17916,43 @@ snapshots:
       lightningcss: 1.32.0
       terser: 5.50.0
 
-  vitest@1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1(playwright@1.62.1)(vitest@1.6.1))(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0):
+  vitest@1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.32.0)(terser@5.50.0):
+    dependencies:
+      '@vitest/expect': 1.6.1
+      '@vitest/runner': 1.6.1
+      '@vitest/snapshot': 1.6.1
+      '@vitest/spy': 1.6.1
+      '@vitest/utils': 1.6.1
+      acorn-walk: 8.3.5
+      chai: 4.5.0
+      debug: 4.4.3
+      execa: 8.0.1
+      local-pkg: 0.5.1
+      magic-string: 0.30.21
+      pathe: 1.1.2
+      picocolors: 1.1.1
+      std-env: 3.10.0
+      strip-literal: 2.1.1
+      tinybench: 2.9.0
+      tinypool: 0.8.4
+      vite: 5.4.21(@types/node@26.4.0)(lightningcss@1.32.0)(terser@5.50.0)
+      vite-node: 1.6.1(@types/node@26.4.0)(lightningcss@1.32.0)(terser@5.50.0)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/node': 26.4.0
+      '@vitest/browser': 1.6.1(playwright@1.62.1)(vitest@1.6.1)
+      jsdom: 30.0.1(@noble/hashes@1.8.0)
+    transitivePeerDependencies:
+      - less
+      - lightningcss
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+
+  vitest@1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0):
     dependencies:
       '@vitest/expect': 1.6.1
       '@vitest/runner': 1.6.1
@@ -18091,6 +18187,15 @@ snapshots:
 
   whatwg-mimetype@5.0.0: {}
 
+  whatwg-url@16.0.1(@noble/hashes@1.8.0):
+    dependencies:
+      '@exodus/bytes': 1.15.1(@noble/hashes@1.8.0)
+      tr46: 6.0.0
+      webidl-conversions: 8.0.1
+    transitivePeerDependencies:
+      - '@noble/hashes'
+    optional: true
+
   whatwg-url@16.0.1(@noble/hashes@2.4.0):
     dependencies:
       '@exodus/bytes': 1.15.1(@noble/hashes@2.4.0)
@@ -18098,6 +18203,15 @@ snapshots:
       webidl-conversions: 8.0.1
     transitivePeerDependencies:
       - '@noble/hashes'
+
+  whatwg-url@17.1.0(@noble/hashes@1.8.0):
+    dependencies:
+      '@exodus/bytes': 1.15.1(@noble/hashes@1.8.0)
+      tr46: 6.0.0
+      webidl-conversions: 8.0.1
+    transitivePeerDependencies:
+      - '@noble/hashes'
+    optional: true
 
   whatwg-url@17.1.0(@noble/hashes@2.4.0):
     dependencies:

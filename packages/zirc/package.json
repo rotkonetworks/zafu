@@ -1,27 +1,24 @@
 {
-  "name": "@zafu/zid",
-  "version": "0.2.3",
+  "name": "@zafu/zirc",
+  "version": "0.1.0",
   "license": "MIT",
-  "description": "zafu identity SDK - connect wallet, sign actions, post-quantum e2ee channels and messaging",
+  "description": "zirc - IRC-style channels on zid: genesis, a hash-chained log of modes and votes, an electorate you can audit, and hiding that is never deletion",
   "type": "module",
   "keywords": [
-    "zafu",
-    "zid",
-    "identity",
-    "sdk",
-    "login",
+    "irc",
+    "channels",
+    "moderation",
+    "votes",
     "e2ee",
-    "post-quantum",
-    "wallet",
-    "zcash",
-    "penumbra"
+    "zafu",
+    "zid"
   ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rotkonetworks/zafu.git",
-    "directory": "packages/zid"
+    "directory": "packages/zirc"
   },
-  "homepage": "https://github.com/rotkonetworks/zafu/tree/main/packages/zid#readme",
+  "homepage": "https://github.com/rotkonetworks/zafu/tree/main/packages/zirc#readme",
   "sideEffects": false,
   "files": [
     "dist",
@@ -31,7 +28,7 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
     "lint": "eslint \"**/*.ts*\"",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run"
   },
   "exports": {
     ".": "./src/index.ts"
@@ -49,14 +46,12 @@
     }
   },
   "dependencies": {
-    "@noble/ciphers": "^2.3.0",
-    "@noble/curves": "^1.9.7",
     "@noble/hashes": "^1.8.0",
-    "@zafu/pq": "workspace:*",
-    "@zafu/protocol": "workspace:*",
-    "@zafu/service": "workspace:*"
+    "@zafu/zid": "workspace:*"
   },
   "devDependencies": {
-    "tsup": "^8.5.0"
+    "tsup": "^8.5.0",
+    "vitest": "~1.6.1",
+    "@noble/curves": "^1.9.7"
   }
 }
