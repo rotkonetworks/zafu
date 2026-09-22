@@ -18,13 +18,18 @@ export function useTransparentAddresses(isMainnet: boolean) {
 
   const [tAddresses, setTAddresses] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // true when this wallet's seed is sealed under a stale password key and can
+  // no longer be decrypted. Lets consumers show a recovery affordance instead
+  // of a silently-empty address list. Does NOT mutate or delete anything.
+  const [undecryptable, setUndecryptable] = useState(false);
 
   const isMnemonic = selectedKeyInfo?.type === 'mnemonic';
 
   useEffect(() => {
-    // clear before deriving — previous vault's addresses would otherwise
+    // clear before deriving - previous vault's addresses would otherwise
     // bleed into the new vault's history query when derivation bails out.
     setTAddresses([]);
+    setUndecryptable(false);
 
     if (!selectedKeyInfo) {
       setIsLoading(false);
@@ -92,7 +97,19 @@ export function useTransparentAddresses(isMainnet: boolean) {
           setTAddresses(addrs);
         }
       } catch (err) {
-        console.error('[use-transparent-addresses] derivation failed:', err);
+        // A vault whose seed was sealed under a stale password key throws
+        // 'failed to decrypt vault' - expected and recoverable (re-import),
+        // not a bug. Surface it to the UI and keep the console quiet; anything
+        // else is a genuine failure and stays a loud console.error.
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('failed to decrypt vault')) {
+          if (!cancelled) {
+            setUndecryptable(true);
+          }
+          console.warn('[use-transparent-addresses] vault cannot be decrypted (re-import to fix)');
+        } else {
+          console.error('[use-transparent-addresses] derivation failed:', err);
+        }
       }
       if (!cancelled) {
         setIsLoading(false);
@@ -112,5 +129,5 @@ export function useTransparentAddresses(isMainnet: boolean) {
     watchOnly?.orchardFvk,
   ]);
 
-  return { tAddresses, isLoading };
+  return { tAddresses, isLoading, undecryptable };
 }

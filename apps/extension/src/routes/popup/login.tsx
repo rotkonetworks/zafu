@@ -5,6 +5,7 @@ import { PasswordInput } from '../../shared/components/password-input';
 import { usePopupNav } from '../../utils/navigate';
 import { useStore } from '../../state';
 import { passwordSelector } from '../../state/password';
+import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../state/keyring';
 import { FormEvent, useState } from 'react';
 import { PopupPath } from './paths';
 import { needsOnboard } from './popup-needs';
@@ -15,8 +16,15 @@ export const Login = () => {
   const navigate = usePopupNav();
 
   const { isPassword, setSessionPassword } = useStore(passwordSelector);
+  const activeKeyInfo = useStore(selectEffectiveKeyInfo);
+  const getMnemonic = useStore(selectGetMnemonic);
   const [input, setInputValue] = useState('');
   const [enteredIncorrect, setEnteredIncorrect] = useState(false);
+  // Set when the password is correct (unlock succeeds) but the active wallet's
+  // seed is sealed under a stale password key and cannot be decrypted. The
+  // wallet is not lost - the user re-imports its recovery phrase. We never
+  // mutate or delete anything here.
+  const [undecryptable, setUndecryptable] = useState(false);
   // Key derivation (PBKDF2, 210k rounds) takes a visible beat on slower
   // machines. Without feedback the button reads as dead and users mash it.
   const [unlocking, setUnlocking] = useState(false);
@@ -32,6 +40,24 @@ export const Login = () => {
       try {
         if (await isPassword(input)) {
           await setSessionPassword(input); // saves to session state
+          // Probe the active vault before navigating: the global password is
+          // right, but this vault's seed may be sealed under a stale key (e.g.
+          // created before a password change) and throw 'failed to decrypt
+          // vault'. Surface that gracefully instead of leaving the home screen
+          // to spew console errors. Other wallets may be fine, so we don't hard
+          // block - we offer re-import or continue.
+          if (activeKeyInfo?.type === 'mnemonic') {
+            try {
+              await getMnemonic(activeKeyInfo.id); // result intentionally discarded
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              if (msg.includes('failed to decrypt vault')) {
+                setUndecryptable(true);
+                return;
+              }
+              // any other derivation failure is not an unlock problem - proceed
+            }
+          }
           navigate(PopupPath.INDEX);
         } else {
           setEnteredIncorrect(true);
@@ -58,8 +84,35 @@ export const Login = () => {
             zafu
           </h1>
         </div>
-        <form onSubmit={handleUnlock} className='grid gap-4'>
-          <PasswordInput
+        {undecryptable ? (
+          <div className='grid gap-4'>
+            <p className='text-title text-fg-high lowercase tracking-[-0.01em]'>
+              this wallet can't be unlocked
+            </p>
+            <p className='text-body text-fg-muted lowercase'>
+              its recovery data can no longer be decrypted with this password. your funds aren't
+              lost - re-import this wallet's recovery phrase to restore it.
+            </p>
+            <Button
+              size='lg'
+              variant='gradient'
+              type='button'
+              onClick={() => navigate(PopupPath.SETTINGS_WALLETS)}
+            >
+              re-import wallet
+            </Button>
+            <Button
+              size='sm'
+              variant='ghost'
+              type='button'
+              onClick={() => navigate(PopupPath.INDEX)}
+            >
+              continue anyway
+            </Button>
+          </div>
+        ) : (
+          <form onSubmit={handleUnlock} className='grid gap-4'>
+            <PasswordInput
             autoFocus
             name='password'
             passwordValue={input}
@@ -93,7 +146,8 @@ export const Login = () => {
               your funds aren't lost — you can restore from your seed phrase by reinstalling zafu.
             </p>
           )}
-        </form>
+          </form>
+        )}
         <div className='flex flex-col gap-1'>
           <p className='text-center text-xs text-fg-muted lowercase'>
             need help?{' '}

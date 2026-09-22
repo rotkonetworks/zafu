@@ -8,6 +8,12 @@
  * - session manager for rpc entry
  */
 
+// Register the global error / unhandledrejection listeners FIRST, from a sync
+// module, so MV3 sees them on the worker's initial synchronous evaluation. This
+// import MUST stay above every wasm-backed import below (see the file's note on
+// asyncWebAssembly deferring the entry body).
+import './install-global-error-handlers';
+
 // listeners
 import { contentScriptConnectListener } from './message/listen/content-script-connect';
 import { signRequestListener } from './message/listen/sign-request';
@@ -64,7 +70,6 @@ import { walletIdCtx } from '@rotko/penumbra-services/ctx/wallet-id';
 import type { Services } from '@repo/context';
 import { startWalletServices } from './wallet-services';
 import { performPendingClears } from './clear-cache-startup';
-import { installGracefulNetworkErrorHandler } from './utils/graceful-network-errors';
 
 import { backOff } from 'exponential-backoff';
 
@@ -76,11 +81,10 @@ import { runPresencePublish } from './state/contact-discovery-service';
 // is actually open (see popup.ts). Registered once at worker startup.
 trackSidePanelPresence();
 
-// Quiet transient network fetch failures (offline/unreachable endpoints) so
-// best-effort background calls do not spam "Uncaught (in promise): Failed to
-// fetch" - non-network rejections still surface. Installed first, before any
-// services start, and must be synchronous at initial worker evaluation.
-installGracefulNetworkErrorHandler();
+// The graceful network-error handler (unhandledrejection + error) is registered
+// by the top-of-file './install-global-error-handlers' import - it must run on
+// the worker's initial synchronous evaluation, which the entry body (deferred
+// past the async wasm imports) is not. See that file for the full rationale.
 
 // Migrations are now attached at localExtStorage construction (see
 // storage-chrome/local.ts) so every realm - SW, popup, options page - has them,
@@ -89,9 +93,10 @@ installGracefulNetworkErrorHandler();
 /**
  * Load polkadot custom chainspecs - but ONLY when polkadot/kusama is actually
  * enabled. The polkadot light client (smoldot) is heavy and was previously
- * imported statically at service-worker startup, which deferred the SW body
- * past initial evaluation (breaking the synchronous `unhandledrejection`
- * registration) and ran for every user regardless of the networks they use.
+ * imported statically at service-worker startup, and ran for every user
+ * regardless of the networks they use. (The `unhandledrejection` / `error`
+ * listeners no longer depend on when the body runs - they register from a sync
+ * top-of-file import, see './install-global-error-handlers'.)
  *
  * We are a privacy-preserving wallet: a network the user has not selected must
  * not load code or open connections. So the import is dynamic and gated on the
