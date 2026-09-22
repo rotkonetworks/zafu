@@ -1,0 +1,22 @@
+# Caddy in front of the bouncer: TLS (automatic certs) and the WebSocket upgrade
+# pass straight through, so serve.mjs itself stays a plain-HTTP process on
+# loopback and never touches certificates.
+#
+#   caddy run --config Caddyfile        # or: systemctl reload caddy
+#
+# Replace the host with yours. Nothing else is needed: /bucket (presence) and
+# /ws/zid (channels) are both ordinary HTTP traffic to Caddy's eyes.
+
+bouncer.veil.example {
+	encode zstd gzip
+
+	# the client IP is Caddy's to see, not the bouncer's business: it is not
+	# forwarded upstream, and nothing downstream logs it.
+	reverse_proxy 127.0.0.1:8098
+
+	# Caddy keeps access logs by default; a bouncer's whole promise is that no
+	# address-to-member mapping exists. Turn them off for this site.
+	log {
+		output discard
+	}
+}

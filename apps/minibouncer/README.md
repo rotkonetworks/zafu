@@ -1,17 +1,27 @@
 # minibouncer
 
-An IP bouncer for zafu relays: **one Cloudflare Worker, no dependencies, ~2 minute
-deploy**. It terminates your connection and opens its own to the relay, so the
+An IP bouncer for zafu relays: **no dependencies, ~2 minute deploy**, in either of
+two shapes. It terminates your connection and opens its own to the relay, so the
 relay sees the bouncer's address instead of yours.
 
 ```sh
-cd apps/minibouncer
-# set RELAY_URL in wrangler.toml to your relay (e.g. https://relay.example)
-npx wrangler deploy
+# on Cloudflare (one Worker, one file of rules)
+cd apps/minibouncer && npx wrangler deploy    # set RELAY_URL in wrangler.toml first
+
+# on a box you own (your VPS, the machine that hosts your community)
+RELAY_URL=https://relay.zafu.pro PORT=8098 node serve.mjs
 ```
 
+Both shapes apply the same gates, from the same `gates.js` - one implementation,
+two runtimes, no drift. The Worker handles `/bucket` (presence) and `/ws/*`
+(channels) through Cloudflare's WebSocket plumbing; `serve.mjs` replays the
+handshake to the relay with swapped credentials and then becomes a raw pipe, which
+is all a channel needs.
+
 Then point clients at the bouncer instead of the relay - no protocol change, the
-bouncer forwards `/bucket` (presence) and `/ws/*` (channels) verbatim:
+bouncer forwards `/bucket` (presence) and `/ws/*` (channels) verbatim. One bouncer
+covers both halves of an app: presence to the relay's HTTP endpoint, channels to
+its WebSocket one, which may well be the same host (e.g. `relay.zafu.pro`):
 
 ```ts
 await zid.connect({
@@ -86,6 +96,53 @@ the way out - the friend's token never reaches the relay, and the relay's never
 reaches the friend. Do not treat source addresses as identity - that is the property
 the bouncer exists to break, and it is a property the relay never needed.
 
+## On your own server (veil)
+
+The Worker is the easy path; this is the one for a machine you control, next to the
+rest of your stack.
+
+```sh
+# 1. files (three, no dependencies, no build)
+install -d /opt/minibouncer
+cp serve.mjs worker.js gates.js /opt/minibouncer/
+
+# 2. settings
+cat >/etc/zafu-bouncer.env <<'EOF'
+RELAY_URL=https://relay.zafu.pro
+PORT=8098
+BOUNCER_TOKENS=alice:<t1>,bob:<t2>
+BOUNCER_ORIGINS=https://penumbra.fi
+RELAY_TOKEN=<the relay's token, if it has one>
+EOF
+chmod 600 /etc/zafu-bouncer.env
+
+# 3. run it
+cp minibouncer.service /etc/systemd/system/ && systemctl enable --now minibouncer
+
+# 4. TLS + the WebSocket upgrade, in front
+caddy run --config Caddyfile      # bouncer.veil.example -> 127.0.0.1:8098
+```
+
+The relay can be anything that speaks the same contract - your own `minirelay` for
+presence and your channel relay for `/ws/zid`, on one host or two. The bouncer does
+not care: it is a pipe with rules.
+
+Clients then take three values, which is exactly what `invite.mjs` prints:
+
+```ts
+await zid.connect({
+  relayEndpoint: 'https://bouncer.veil.example',   // presence, HTTP
+  relayUrl: 'wss://bouncer.veil.example/ws/zid',   // channels, WebSocket
+  relayToken: '<the token you gave them>',
+});
+```
+
+Nothing is logged per request, by design: an access log is precisely the
+address-to-member mapping the bouncer exists to not create. Errors reach the
+journal without addresses; `--verbose` adds method and path (still no addresses)
+for debugging. `systemctl status minibouncer` is the whole observability story, and
+that is the point.
+
 ## Check it locally
 
 The HTTP route runs outside Workers, so the whole chain (client -> bouncer -> relay)
@@ -96,7 +153,7 @@ can be exercised on one machine:
 cd apps/minirelay && MINIRELAY_PORT=8099 MINIRELAY_DB=/tmp/relay.sqlite cargo run --release &
 
 # 2. the bouncer, in front of it
-cd apps/minibouncer && RELAY_URL=http://127.0.0.1:8099 PORT=8098 node serve-local.mjs
+cd apps/minibouncer && RELAY_URL=http://127.0.0.1:8099 PORT=8098 node serve.mjs
 
 # 3. the SDK's opt-in end-to-end suite, through the bouncer
 cd packages/zid && MINIRELAY_URL=http://127.0.0.1:8098 pnpm test
@@ -108,7 +165,7 @@ Gates work locally too - the harness passes the same bindings the Worker reads:
 # a relay that wants a token, and a bouncer that wants a *different* one
 cd apps/minirelay && MINIRELAY_PORT=8099 MINIRELAY_TOKEN=relay-owner-token cargo run --release &
 cd apps/minibouncer && RELAY_URL=http://127.0.0.1:8099 PORT=8098 \
-  BOUNCER_TOKENS=friend-token RELAY_TOKEN=relay-owner-token node serve-local.mjs
+  BOUNCER_TOKENS=friend-token RELAY_TOKEN=relay-owner-token node serve.mjs
 
 # through the bouncer: the friend's token, and no address of theirs upstream
 cd packages/zid && MINIRELAY_URL=http://127.0.0.1:8098 MINIRELAY_TOKEN=friend-token pnpm test

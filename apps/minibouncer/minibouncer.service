@@ -1,0 +1,54 @@
+# The bouncer as a service, for a box you own (a VPS, the machine that already
+# hosts your community).
+#
+#   install -d /opt/minibouncer && cp serve.mjs worker.js gates.js /opt/minibouncer/
+#   install -m 600 /dev/null /etc/zafu-bouncer.env   # then edit it, see below
+#   cp minibouncer.service /etc/systemd/system/
+#   systemctl enable --now minibouncer
+#
+# /etc/zafu-bouncer.env:
+#
+#   RELAY_URL=https://relay.zafu.pro
+#   PORT=8098
+#   BOUNCER_TOKENS=alice:<t1>,bob:<t2>      # omit for an open bouncer
+#   BOUNCER_ORIGINS=https://penumbra.fi     # omit to accept any browser origin
+#   RELAY_TOKEN=<the relay's token>         # only if the relay requires one
+
+[Unit]
+Description=zafu bouncer (IP bouncer in front of a zafu relay)
+Documentation=file:/opt/minibouncer/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bouncer
+Group=bouncer
+WorkingDirectory=/opt/minibouncer
+EnvironmentFile=/etc/zafu-bouncer.env
+ExecStart=/usr/bin/node /opt/minibouncer/serve.mjs
+Restart=on-failure
+RestartSec=2
+
+# Nothing per-request is written anywhere: an access log is exactly the
+# address-to-member mapping a bouncer exists to not create. Errors land in the
+# journal, without addresses. Do not add --verbose on a machine whose users
+# trust you with their address.
+StandardOutput=journal
+StandardError=journal
+
+# The process needs a listening socket and an outbound connection, nothing else.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target
