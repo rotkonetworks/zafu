@@ -53,16 +53,19 @@ const NOT_AVAILABLE: ZafuDiscoverContactsResponse = {
 };
 
 export interface ContactDiscoveryDeps {
-  /** current discovery settings: the opt-in flag and the relay endpoint. */
-  settings: () => Promise<{ enabled: boolean; relayEndpoint: string }>;
+  /**
+   * current discovery settings: the opt-in flag, the relay endpoint, and the
+   * bearer token if the endpoint is gated (a friend's or community's bouncer).
+   */
+  settings: () => Promise<{ enabled: boolean; relayEndpoint: string; relayToken: string }>;
   /** true when the wallet is locked (no session key). */
   locked: () => Promise<boolean>;
   /** the wallet's contacts (decrypted). */
   contacts: () => Promise<Contact[]>;
   /** mnemonic + active identity name, or null when no key is selected. */
   identity: () => Promise<{ mnemonic: string; identityName: string } | null>;
-  /** build a relay transport for a configured endpoint. */
-  transport: (endpoint: string) => RelayTransport;
+  /** build a relay transport for a configured endpoint, token and all. */
+  transport: (endpoint: string, token: string) => RelayTransport;
 }
 
 /** the real deps, backed by extension storage + the keyring. */
@@ -72,6 +75,7 @@ export const contactDiscoveryDeps: ContactDiscoveryDeps = {
     return {
       enabled: stored?.enabled === true,
       relayEndpoint: (stored?.relayEndpoint ?? '').trim(),
+      relayToken: (stored?.relayToken ?? '').trim(),
     };
   },
   locked: async () => !(await sessionExtStorage.get('passwordKey')),
@@ -86,7 +90,11 @@ export const contactDiscoveryDeps: ContactDiscoveryDeps = {
     const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
     return { mnemonic, identityName: await currentIdentityName() };
   },
-  transport: endpoint => createHttpRelayTransport({ endpoint }),
+  transport: (endpoint, token) =>
+    createHttpRelayTransport({
+      endpoint,
+      ...(token === '' ? {} : { headers: { authorization: `Bearer ${token}` } }),
+    }),
 };
 
 /**
@@ -99,7 +107,7 @@ export const runDiscoveryForScope = async (
   deps: ContactDiscoveryDeps = contactDiscoveryDeps,
 ): Promise<ZafuDiscoverContactsResponse> => {
   try {
-    const { enabled, relayEndpoint } = await deps.settings();
+    const { enabled, relayEndpoint, relayToken } = await deps.settings();
     if (!enabled || !isUsableRelayEndpoint(relayEndpoint)) {
       return NOT_AVAILABLE;
     }
@@ -116,7 +124,7 @@ export const runDiscoveryForScope = async (
       contacts,
       mnemonic: identity.mnemonic,
       identityName: identity.identityName,
-      transport: deps.transport(relayEndpoint),
+      transport: deps.transport(relayEndpoint, relayToken),
     });
     return { contacts: discovered };
   } catch (e) {
@@ -139,6 +147,8 @@ const presenceScopes = async (): Promise<string[]> => {
 
 interface ScopeState {
   endpoint: string;
+  /** the token the state was built with, so a changed token rebuilds the service. */
+  token: string;
   identityName: string;
   scheduler: PresenceScheduler;
   /** the args the scheduler publishes on its next due tick. */
@@ -158,7 +168,7 @@ export const runPresencePublish = async (
   deps: ContactDiscoveryDeps = contactDiscoveryDeps,
 ): Promise<void> => {
   try {
-    const { enabled, relayEndpoint } = await deps.settings();
+    const { enabled, relayEndpoint, relayToken } = await deps.settings();
     if (!enabled || !isUsableRelayEndpoint(relayEndpoint)) {
       return;
     }
@@ -174,7 +184,7 @@ export const runPresencePublish = async (
       return;
     }
     const epoch = presenceEpoch();
-    const transport = deps.transport(relayEndpoint);
+    const transport = deps.transport(relayEndpoint, relayToken);
     const myPubHex = deriveZidContactCardKey(identity.mnemonic, identity.identityName).publicKey;
     const contacts = await deps.contacts();
 
@@ -183,6 +193,7 @@ export const runPresencePublish = async (
       if (
         !state ||
         state.endpoint !== relayEndpoint ||
+        state.token !== relayToken ||
         state.identityName !== identity.identityName
       ) {
         // settings/identity changed (or first run): rebuild so the service uses
@@ -190,6 +201,7 @@ export const runPresencePublish = async (
         const box: { args: PublishArgs } = { args: null };
         state = {
           endpoint: relayEndpoint,
+          token: relayToken,
           identityName: identity.identityName,
           scheduler: createPresenceScheduler(
             createPresenceService(createContactRelay(transport, appScope), appScope, myPubHex),

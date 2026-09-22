@@ -216,6 +216,24 @@ describe('group session - a coordination round', () => {
     expect(sb.received(1)).toEqual([]);
   });
 
+  it('refuses to build a session from a member that cannot sign or verify', () => {
+    const bus = new Bus();
+    const a = member(1);
+    const b = member(2);
+    expect(() =>
+      createGroupSession({
+        id: 'ceremony-1',
+        // a member object with only a pubkey: the shape a caller assembles when
+        // they hand in their own identity type by hand
+        me: { pubkey: a.pubkey, sign: (bytes: Uint8Array) => a.sign(bytes) },
+        members: [a.pubkey, b.pubkey],
+        deliver: bus.deliverFrom(a.pubkey),
+        subscribe: (handler: (from: string, bytes: Uint8Array) => void) =>
+          bus.subscribe(a.pubkey, handler),
+      } as unknown as Parameters<typeof createGroupSession>[0]),
+    ).toThrow(/sign\(\) and verify\(\)/);
+  });
+
   it('round-trips the wire encoding and refuses malformed bytes', () => {
     const payload = new Uint8Array([1, 2, 3, 250]);
     const wire = encodeGroupEnvelope({

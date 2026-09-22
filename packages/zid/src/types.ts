@@ -292,4 +292,6 @@ export interface ZidOptions {
   relayTransport?: RelayTransport;
   /** Base URL for the HTTP contact-discovery relay (see `createHttpRelayTransport`). */
   relayEndpoint?: string;
+  /** Bearer token for a gated relay endpoint (e.g. a friend's bouncer). */
+  relayToken?: string;
 }

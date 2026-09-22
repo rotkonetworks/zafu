@@ -105,7 +105,7 @@ const depsWith = (
   relay: MemRelay,
   overrides: Partial<ContactDiscoveryDeps> = {},
 ): ContactDiscoveryDeps => ({
-  settings: async () => ({ enabled: true, relayEndpoint: 'https://relay.example' }),
+  settings: async () => ({ enabled: true, relayEndpoint: 'https://relay.example', relayToken: '' }),
   locked: async () => false,
   contacts: async () => contacts,
   identity: async () => ({ mnemonic: MNEMONIC, identityName: IDENTITY }),
@@ -189,6 +189,28 @@ describe('zafu_discover_contacts - present intersection only', () => {
     expect(res).toEqual({ contacts: [] });
   });
 
+  it("hands a gated relay's token to the transport, so a friend's bouncer just works", async () => {
+    await publishPeerPresence(relay, epoch);
+    const built: Array<{ endpoint: string; token: string }> = [];
+    const res = await call(
+      depsWith(relay, {
+        settings: async () => ({
+          enabled: true,
+          relayEndpoint: 'https://bouncer.example',
+          relayToken: 'friend-token',
+        }),
+        transport: (endpoint, token) => {
+          built.push({ endpoint, token });
+          return relay;
+        },
+      }),
+      { type: 'zafu_discover_contacts', appScope: APP },
+      senderFor(APP),
+    );
+    expect(res.contacts).toHaveLength(1);
+    expect(built).toEqual([{ endpoint: 'https://bouncer.example', token: 'friend-token' }]);
+  });
+
   it('never puts a raw contact pubkey (or the root secret) in the response', async () => {
     await publishPeerPresence(relay, epoch);
     const res = await call(
@@ -209,7 +231,11 @@ describe('zafu_discover_contacts - refusals', () => {
   it('refuses not_available when the feature is off', async () => {
     const res = await call(
       depsWith(relay, {
-        settings: async () => ({ enabled: false, relayEndpoint: 'https://r.example' }),
+        settings: async () => ({
+          enabled: false,
+          relayEndpoint: 'https://r.example',
+          relayToken: '',
+        }),
       }),
       { type: 'zafu_discover_contacts', appScope: APP },
       senderFor(APP),
@@ -219,7 +245,9 @@ describe('zafu_discover_contacts - refusals', () => {
 
   it('refuses not_available when no relay endpoint is configured', async () => {
     const res = await call(
-      depsWith(relay, { settings: async () => ({ enabled: true, relayEndpoint: '' }) }),
+      depsWith(relay, {
+        settings: async () => ({ enabled: true, relayEndpoint: '', relayToken: '' }),
+      }),
       { type: 'zafu_discover_contacts', appScope: APP },
       senderFor(APP),
     );
@@ -228,7 +256,9 @@ describe('zafu_discover_contacts - refusals', () => {
 
   it('refuses not_available when the configured endpoint is not a usable URL', async () => {
     const res = await call(
-      depsWith(relay, { settings: async () => ({ enabled: true, relayEndpoint: 'not a url' }) }),
+      depsWith(relay, {
+        settings: async () => ({ enabled: true, relayEndpoint: 'not a url', relayToken: '' }),
+      }),
       { type: 'zafu_discover_contacts', appScope: APP },
       senderFor(APP),
     );

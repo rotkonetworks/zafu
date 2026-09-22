@@ -181,6 +181,12 @@ export const decodeGroupEnvelope = (bytes: Uint8Array): GroupEnvelope | null => 
  * that a member can re-verify later (a transcript is evidence, not hearsay).
  */
 export function createGroupSession(opts: GroupSessionOptions): GroupSession {
+  // Fail at construction, not inside a socket handler: a member object without
+  // `sign`/`verify` would otherwise surface as an unhandled rejection the first
+  // time a message arrived, which reads as a crash rather than a mistake.
+  if (typeof opts.me.sign !== 'function' || typeof opts.me.verify !== 'function') {
+    throw new Error('group: me must provide both sign() and verify() - see GroupMember');
+  }
   const roster = opts.members.map(m => m.toLowerCase());
   const me = opts.me.pubkey.toLowerCase();
   if (!roster.includes(me)) {
@@ -245,7 +251,9 @@ export function createGroupSession(opts: GroupSessionOptions): GroupSession {
   };
 
   const unsubscribe = opts.subscribe((from, bytes) => {
-    void accept(from, bytes);
+    // Nothing escapes into the transport's handler: a malformed frame or a
+    // misbehaving verifier drops the message, it does not take the socket with it.
+    void accept(from, bytes).catch(() => undefined);
   });
 
   return {

@@ -274,14 +274,24 @@ function KeplrCompatSection() {
  * absent/false means `zafu_discover_contacts` refuses with `not_available`.
  */
 function ContactDiscoverySection() {
-  const [saved, setSaved] = useState<{ enabled: boolean; relayEndpoint: string } | null>(null);
+  const [saved, setSaved] = useState<{
+    enabled: boolean;
+    relayEndpoint: string;
+    relayToken: string;
+  } | null>(null);
   const [endpoint, setEndpoint] = useState('');
+  const [token, setToken] = useState('');
 
   useEffect(() => {
     void localExtStorage.get('zidDiscovery').then(v => {
-      const next = { enabled: v?.enabled === true, relayEndpoint: v?.relayEndpoint ?? '' };
+      const next = {
+        enabled: v?.enabled === true,
+        relayEndpoint: v?.relayEndpoint ?? '',
+        relayToken: v?.relayToken ?? '',
+      };
       setSaved(next);
       setEndpoint(next.relayEndpoint);
+      setToken(next.relayToken);
     });
   }, []);
 
@@ -289,10 +299,11 @@ function ContactDiscoverySection() {
     return null;
   }
 
-  const save = (enabled: boolean, relayEndpoint: string): void => {
-    const next = { enabled, relayEndpoint: relayEndpoint.trim() };
+  const save = (enabled: boolean, relayEndpoint: string, relayToken: string): void => {
+    const next = { enabled, relayEndpoint: relayEndpoint.trim(), relayToken: relayToken.trim() };
     setSaved(next);
     setEndpoint(next.relayEndpoint);
+    setToken(next.relayToken);
     void localExtStorage.set('zidDiscovery', next);
   };
 
@@ -305,14 +316,18 @@ function ContactDiscoverySection() {
           <p className='text-sm font-medium'>private contact discovery</p>
           <p className={`text-xs mt-0.5 ${saved.enabled ? 'text-fg-high' : 'text-fg-muted'}`}>
             {saved.enabled
-              ? `beaconing presence via ${saved.relayEndpoint}`
+              ? `beaconing presence via ${saved.relayEndpoint}${saved.relayToken ? ' (with a token)' : ''}`
               : 'off - apps cannot learn which of your contacts are online'}
           </p>
         </div>
         <ToggleSwitch
           checked={saved.enabled}
           onChange={next =>
-            next ? (endpointValid ? save(true, endpoint) : undefined) : save(false, endpoint)
+            next
+              ? endpointValid
+                ? save(true, endpoint, token)
+                : undefined
+              : save(false, endpoint, token)
           }
           label='private contact discovery'
           className='mt-0.5'
@@ -326,8 +341,14 @@ function ContactDiscoverySection() {
             placeholder='https://relay.example'
             className='flex-1 rounded border border-border-soft bg-transparent px-2 py-1 text-xs font-mono'
           />
+          <input
+            value={token}
+            onChange={e => setToken(e.target.value)}
+            placeholder='token (only if the relay asks for one)'
+            className='w-48 rounded border border-border-soft bg-transparent px-2 py-1 text-xs font-mono'
+          />
           <button
-            onClick={() => save(true, endpoint)}
+            onClick={() => save(true, endpoint, token)}
             disabled={!endpointValid}
             className='rounded border border-border-soft px-2 py-1 text-xs disabled:opacity-30'
           >

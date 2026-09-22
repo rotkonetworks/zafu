@@ -395,6 +395,11 @@ type LOCAL = {
   zidDiscovery?: {
     enabled: boolean;
     relayEndpoint: string;
+    /**
+     * Bearer token for a gated endpoint - a friend's or a community's bouncer
+     * (`apps/minibouncer`). Optional: an ungated relay needs none.
+     */
+    relayToken?: string;
   };
 
   /** user-defined labels for sites (displayed instead of origin) */

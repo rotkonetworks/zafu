@@ -13,7 +13,14 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { ContactRelay, PRESENCE_BLOB_BYTES, PRESENCE_PAD_TO, presenceEpoch } from './index';
+import {
+  ContactRelay,
+  PRESENCE_BLOB_BYTES,
+  PRESENCE_PAD_TO,
+  createGuestIdentity,
+  createPresenceService,
+  presenceEpoch,
+} from './index';
 import { rendezvousTag } from './contact-discovery';
 import { createHttpRelayTransport } from './relay-http';
 
@@ -128,6 +135,67 @@ when('minirelay (real server, opt-in)', () => {
         [{ tag: rendezvousTag(secret(3), app, epoch, 'e1'.repeat(32)), blob: blob(4) }],
         epoch,
       ),
+    ).rejects.toThrow(/401/);
+  });
+
+  it('a friend reaches a gated relay with just the endpoint and token they were handed', async () => {
+    if (token === undefined || token === '') {
+      return; // only meaningful against a token-gated relay (or a friend's bouncer)
+    }
+    const app = `zid-e2e-handed-${Date.now()}`;
+    const epoch = presenceEpoch();
+    const shared = secret(11);
+    const farPub = 'f1'.repeat(32);
+
+    // the friend configures NOTHING but the two values from the invite: no
+    // transport object, no headers, no fetch mock - the identity builds it, token
+    // and all.
+    const friend = createGuestIdentity({
+      origin: app,
+      appName: 'e2e',
+      relayEndpoint: url ?? '',
+      relayToken: token,
+    });
+    const card = friend.contactCard?.();
+    const discover = friend.discover;
+    if (!card || !discover) {
+      throw new Error('a guest identity exposes a contact card and discovery');
+    }
+
+    // the far side announces the way a peer really does: under its own key,
+    // sealed to the friend's contact card - so what the friend finds is a record
+    // it can actually open, not filler bytes.
+    await createPresenceService(relayFor(app), app, farPub).publishSelf(
+      { sessionPub: new Uint8Array(32).fill(0x2a), caps: 7 },
+      [{ id: 'friend', friendPubHex: card.publicKey, rootSecret: shared }],
+      epoch,
+    );
+
+    const found = await discover([{ id: 'far', friendPubHex: farPub, rootSecret: shared }], {
+      epoch,
+    });
+    expect(found.map((c: { id: string }) => c.id)).toEqual(['far']);
+    expect(found[0]?.sessionPubHex).toBe('2a'.repeat(32));
+  });
+
+  it('the same endpoint without the token is refused', async () => {
+    if (token === undefined || token === '') {
+      return;
+    }
+    const app = `zid-e2e-nogrant-${Date.now()}`;
+    const stranger = createGuestIdentity({
+      origin: app,
+      appName: 'e2e',
+      relayEndpoint: url ?? '',
+    });
+    const discover = stranger.discover;
+    if (!discover) {
+      throw new Error('a guest identity exposes discovery');
+    }
+    await expect(
+      discover([{ id: 'peer', friendPubHex: 'f1'.repeat(32), rootSecret: secret(11) }], {
+        epoch: presenceEpoch(),
+      }),
     ).rejects.toThrow(/401/);
   });
 

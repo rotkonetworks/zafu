@@ -83,6 +83,13 @@ export interface GuestOptions {
   persist?: 'local';
   relayTransport?: RelayTransport;
   relayEndpoint?: string;
+  /**
+   * Bearer token for a relay that gates access - typically a friend's bouncer
+   * (see apps/minibouncer). Presented on the hop TO the endpoint; a bouncer
+   * replaces it with the relay's own token on the way out, so this is the
+   * credential you were given, not the one the relay holds.
+   */
+  relayToken?: string;
   /** inject a seed - tests and deterministic identities only. */
   seed?: Uint8Array;
 }
@@ -408,7 +415,12 @@ export function createGuestIdentity(opts: GuestOptions): ZidIdentity {
         discoverOpts?.transport ??
         opts.relayTransport ??
         (opts.relayEndpoint
-          ? createHttpRelayTransport({ endpoint: opts.relayEndpoint })
+          ? createHttpRelayTransport({
+              endpoint: opts.relayEndpoint,
+              ...(opts.relayToken === undefined || opts.relayToken === ''
+                ? {}
+                : { headers: { authorization: `Bearer ${opts.relayToken}` } }),
+            })
           : undefined);
       if (!transport) {
         throw new ZafuError(

@@ -157,6 +157,7 @@ export const zid = {
       persist: opts.persist,
       relayTransport: opts.relayTransport,
       relayEndpoint: opts.relayEndpoint,
+      relayToken: opts.relayToken,
     });
   },
 
