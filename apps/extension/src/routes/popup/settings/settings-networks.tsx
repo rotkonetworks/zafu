@@ -2,7 +2,7 @@
  * settings page for managing enabled networks + per-network endpoints
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useStore } from '../../../state';
 import {
@@ -45,8 +45,7 @@ import { NETWORKS, LAUNCHED_NETWORKS, getTopLevelNetworks } from '../../../confi
 import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
 import { NobleEndpointsEditor } from './noble-endpoints-editor';
-import { SettingsScreen } from './settings-screen';
-import { PopupPath } from '../paths';
+import { SettingsWallets } from './settings-wallets';
 
 /** color map for network indicators */
 const NETWORK_COLORS: Record<string, string> = {
@@ -65,7 +64,42 @@ const NETWORK_COLORS: Record<string, string> = {
 
 const getColorHex = (color: string): string => NETWORK_COLORS[color] ?? '#6B7280';
 
-export const SettingsNetworks = () => {
+/** one-line "what is this network" copy, shown under each top-level toggle so
+    a user can tell the pools apart without opening docs. */
+const NETWORK_DESCRIPTIONS: Record<string, string> = {
+  zcash: 'Orchard + Ironwood shielded pools',
+  penumbra: 'shielded DeFi',
+};
+
+/** Cosmos/IBC lives UNDER Penumbra (Noble is a Penumbra subnetwork, edited in
+    the expanded panel), so it has no top-level toggle of its own. Surface it as
+    a plain line under Penumbra - the point is that you don't need a second
+    extension for cosmos/IBC. */
+const COSMOS_IBC_DESCRIPTION =
+  'cosmos IBC - Noble (USDC); Injective support in progress for easier bridging';
+
+/**
+ * The merged "wallets & networks" screen. SettingsWallets supplies the screen
+ * chrome (header + back button) and the wallet-management UI; the network
+ * enable/disable toggles render as a section right below it, so wallet and
+ * network management live in one place.
+ */
+export const SettingsWalletsNetworks = () => (
+  // Networks fold INTO the wallets screen via appendSlot, so both share one
+  // header/back/scroll column (one tab) - not a sibling block hanging below a
+  // full-height wallets screen.
+  <SettingsWallets
+    title='wallets & networks'
+    appendSlot={
+      <div className='flex flex-col gap-2'>
+        <p className='kicker'>networks</p>
+        <NetworkToggles />
+      </div>
+    }
+  />
+);
+
+const NetworkToggles = () => {
   const activeNetwork = useStore(selectActiveNetwork);
   const enabledNetworks = useStore(selectEnabledNetworks);
   const setActiveNetwork = useStore(selectSetActiveNetwork);
@@ -93,6 +127,18 @@ export const SettingsNetworks = () => {
     initialExpand ? (networkState[initialExpand as NetworkId]?.endpoint ?? '') : '',
   );
   const [saving, setSaving] = useState(false);
+
+  // On a `?network=` deep-link, the toggles sit below a full-height wallets
+  // block, so bring them into view - the home sync-bar action expects to land
+  // on the node picker, not the top of the wallets list.
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (initialExpand) {
+      containerRef.current?.scrollIntoView({ block: 'start' });
+    }
+    // run once on mount; initialExpand is derived from the entry URL
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleToggle = async (network: NetworkType) => {
     const wasEnabled = enabledNetworks.includes(network);
@@ -127,8 +173,7 @@ export const SettingsNetworks = () => {
   };
 
   return (
-    <SettingsScreen title='networks' backPath={PopupPath.INDEX}>
-      <div className='flex flex-col gap-1'>
+    <div ref={containerRef} className='flex flex-col gap-1'>
         {/* Top-level networks only. Subnetworks like Noble (parent: penumbra)
             are not standalone rows here - Noble's RPC pool is edited under the
             Penumbra panel via NobleEndpointsEditor, so listing it again would
@@ -215,6 +260,19 @@ export const SettingsNetworks = () => {
                 </div>
               </div>
 
+              {/* one-line "what is this" copy, so pools read apart at a glance */}
+              {NETWORK_DESCRIPTIONS[networkId] && (
+                <div className='-mt-1 flex flex-col gap-0.5 px-3 pb-3'>
+                  <p className='text-label text-fg-dim leading-snug'>
+                    {NETWORK_DESCRIPTIONS[networkId]}
+                  </p>
+                  {/* Cosmos/IBC has no toggle of its own (it lives under Penumbra) */}
+                  {networkId === 'penumbra' && (
+                    <p className='text-label text-fg-dim leading-snug'>{COSMOS_IBC_DESCRIPTION}</p>
+                  )}
+                </div>
+              )}
+
               {/* endpoint config — expanded */}
               {isExpanded && isEnabled && (
                 <div className='border-t border-border-soft p-3 bg-elev-2/10 flex flex-col gap-3'>
@@ -279,8 +337,7 @@ export const SettingsNetworks = () => {
             </div>
           );
         })}
-      </div>
-    </SettingsScreen>
+    </div>
   );
 };
 
@@ -690,4 +747,4 @@ const SegmentedPair = ({
   </div>
 );
 
-export default SettingsNetworks;
+export default SettingsWalletsNetworks;

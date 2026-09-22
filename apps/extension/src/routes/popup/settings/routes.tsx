@@ -15,8 +15,10 @@ const SettingsPassphrase = lazy(() =>
 const SettingsDefaultFrontend = lazy(() =>
   import('./settings-default-frontend').then(m => ({ default: m.SettingsDefaultFrontend })),
 );
-const SettingsNetworks = lazy(() =>
-  import('./settings-networks').then(m => ({ default: m.SettingsNetworks })),
+// wallets + networks are one merged screen (SettingsWallets supplies the
+// header/back chrome; the network toggles render below it).
+const SettingsWalletsNetworks = lazy(() =>
+  import('./settings-networks').then(m => ({ default: m.SettingsWalletsNetworks })),
 );
 const SettingsPrivacy = lazy(() =>
   import('./settings-privacy').then(m => ({ default: m.SettingsPrivacy })),
@@ -25,8 +27,10 @@ const SettingsAppearance = lazy(() =>
   import('./settings-appearance').then(m => ({ default: m.SettingsAppearance })),
 );
 const SettingsFees = lazy(() => import('./settings-fees').then(m => ({ default: m.SettingsFees })));
-const SettingsWallets = lazy(() =>
-  import('./settings-wallets').then(m => ({ default: m.SettingsWallets })),
+// Security & Backup tab. SecurityBackup (authored by another engineer) brings
+// its own SettingsScreen chrome, so mount it directly - no extra wrapper.
+const SettingsSecurityBackup = lazy(() =>
+  import('./settings-security-backup').then(m => ({ default: m.SecurityBackup })),
 );
 const SettingsAbout = lazy(() =>
   import('./settings-about').then(m => ({ default: m.SettingsAbout })),
@@ -94,8 +98,10 @@ export const settingsRoutes = [
     element: withSuspense(SettingsZigner),
   },
   {
+    // networks deep-links (?network=zcash) still land here; the merged screen
+    // keeps the ?network auto-expand + scroll-into-view.
     path: PopupPath.SETTINGS_NETWORKS,
-    element: withSuspense(SettingsNetworks),
+    element: withSuspense(SettingsWalletsNetworks),
   },
   {
     path: PopupPath.SETTINGS_PRIVACY,
@@ -111,7 +117,11 @@ export const settingsRoutes = [
   },
   {
     path: PopupPath.SETTINGS_WALLETS,
-    element: withSuspense(SettingsWallets),
+    element: withSuspense(SettingsWalletsNetworks),
+  },
+  {
+    path: PopupPath.SETTINGS_SECURITY_BACKUP,
+    element: withSuspense(SettingsSecurityBackup),
   },
   {
     path: PopupPath.SETTINGS_ABOUT,

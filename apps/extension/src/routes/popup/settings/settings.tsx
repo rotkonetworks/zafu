@@ -46,6 +46,11 @@ const groups: SettingsGroup[] = [
     label: 'security & backup',
     links: [
       {
+        title: 'security & backup',
+        icon: 'i-ph-shield-check',
+        href: PopupPath.SETTINGS_SECURITY_BACKUP,
+      },
+      {
         title: 'recovery passphrase',
         icon: 'i-ph-file-text',
         href: PopupPath.SETTINGS_RECOVERY_PASSPHRASE,
@@ -83,9 +88,11 @@ const groups: SettingsGroup[] = [
     label: 'wallet',
     links: [
       {
-        title: 'networks',
-        icon: 'i-ph-share-network',
-        href: PopupPath.SETTINGS_NETWORKS,
+        // wallets + networks are one screen now - manage vaults and enable/
+        // disable networks in the same place.
+        title: 'wallets & networks',
+        icon: 'i-ph-wallet',
+        href: PopupPath.SETTINGS_WALLETS,
       },
       {
         title: 'appearance',

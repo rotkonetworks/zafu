@@ -51,7 +51,19 @@ const networkBadge = (network: string) => {
   );
 };
 
-export const SettingsWallets = () => {
+export const SettingsWallets = ({
+  title = 'wallets',
+  appendSlot,
+}: {
+  /** Screen title - overridden to "wallets & networks" when the networks
+   *  section is composed into this screen (settings IA merge). */
+  title?: string;
+  /** Extra content rendered INSIDE this screen's scroll column, after the
+   *  wallet/add sections - used to fold the networks section into one tab so it
+   *  shares the same header/back/scroll chrome instead of hanging off a sibling
+   *  block below a full-height screen. */
+  appendSlot?: React.ReactNode;
+} = {}) => {
   const location = useLocation();
   const autoScan = (location.state as { autoScan?: boolean } | null)?.autoScan;
 
@@ -319,7 +331,7 @@ export const SettingsWallets = () => {
           description='point camera at your zigner FVK QR code'
         />
       )}
-      <SettingsScreen title='wallets' backPath={PopupPath.INDEX}>
+      <SettingsScreen title={title} backPath={PopupPath.INDEX}>
         <div className='flex flex-col gap-5'>
           {/* ── wallet list ── */}
 
@@ -611,6 +623,7 @@ export const SettingsWallets = () => {
               </div>
             )}
           </div>
+          {appendSlot}
         </div>
       </SettingsScreen>
     </>

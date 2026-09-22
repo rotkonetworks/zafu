@@ -70,6 +70,7 @@ export enum PopupPath {
   SETTINGS_CONNECTED_SITES = '/settings/connected-sites',
   SETTINGS_CLEAR_CACHE = '/settings/clear-cache',
   SETTINGS_RECOVERY_PASSPHRASE = '/settings/recovery-passphrase',
+  SETTINGS_SECURITY_BACKUP = '/settings/security-backup',
   SETTINGS_ZIGNER = '/settings/zigner',
   SETTINGS_APPEARANCE = '/settings/appearance',
   SETTINGS_FEES = '/settings/fees',
