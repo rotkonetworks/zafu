@@ -1519,6 +1519,19 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   // The destination is our own burner deposit address on the counterparty chain
   // (Noble etc.) by default - unshielding is an off-ramp INTO the burner, not a
   // send to a stranger. Derive the cosmos chain id from the IBC chain's prefix.
+  //
+  // TODO(injective): Injective is gated out today (config `launched:false`, so
+  // useIbcChains/getActiveIbcChainIds never surfaces it here). When it flips on,
+  // two things must hold before this selector may offer it:
+  //   (a) COSMOS_CHAINS is keyed 'injective' but the bech32 prefix is 'inj', so
+  //       `addressPrefix in COSMOS_CHAINS` is FALSE for injective - cosmosChainId
+  //       stays undefined and the mnemonic burner path below is correctly skipped
+  //       (a prefix->key map is needed if the burner path is ever wanted there);
+  //   (b) an own inj address must come ONLY from the stored `cosmosAddresses`
+  //       (eth_secp256k1 / coin-type 60). deriveChainAddress / the useCosmos
+  //       deposit scan re-encode a secp256k1 key and would yield a WRONG inj
+  //       address (lost funds). The prefix-matched `storedOwnAddress` fallback
+  //       below already does the safe thing for a zigner-imported inj address.
   const cosmosChainId =
     ibcState.chain && ibcState.chain.addressPrefix in COSMOS_CHAINS
       ? (ibcState.chain.addressPrefix as CosmosChainId)
@@ -1526,13 +1539,32 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   const { data: depositData } = useCosmosDepositWallets(cosmosChainId ?? 'noble');
   const burnerAddress = cosmosChainId ? depositData?.receive?.address : undefined;
 
-  // when we have a burner address and the user hasn't opted into a custom
-  // recipient, keep the destination pinned to the fresh burner address
-  useEffect(() => {
-    if (burnerAddress && !overrideAddress && ibcState.destinationAddress !== burnerAddress) {
-      ibcState.setDestinationAddress(burnerAddress);
+  // Own cosmos address to offer as the one-tap target. Mnemonic vaults get a
+  // FRESH burner deposit address (a new one each unshield - the privacy-forward
+  // default). Zigner (cold) vaults can't derive cosmos in-app, so fall back to
+  // the watch-only address the device exported at import, matched by bech32
+  // prefix so we only ever surface an address that already exists for this exact
+  // chain - never a re-derived one (see the injective note above). Read straight
+  // from the vault's insensitive store, so it is the user's REAL stored address.
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const storedOwnAddress = useMemo(() => {
+    if (selectedKeyInfo?.type !== 'zigner-zafu' || !ibcState.chain) {
+      return undefined;
     }
-  }, [burnerAddress, overrideAddress]);
+    const addrs = selectedKeyInfo.insensitive['cosmosAddresses'] as
+      | { chainId: string; address: string; prefix: string }[]
+      | undefined;
+    return addrs?.find(a => a.prefix === ibcState.chain!.addressPrefix)?.address;
+  }, [selectedKeyInfo, ibcState.chain]);
+  const ownAddress = burnerAddress ?? storedOwnAddress;
+
+  // when we have our own address and the user hasn't opted into a custom
+  // recipient, keep the destination pinned to it
+  useEffect(() => {
+    if (ownAddress && !overrideAddress && ibcState.destinationAddress !== ownAddress) {
+      ibcState.setDestinationAddress(ownAddress);
+    }
+  }, [ownAddress, overrideAddress]);
 
   // Noble charges a ~0.15-0.16 USDC fee per tx, so unshielding less than that
   // strands the balance: the burner can never cover its own fee to move again.
@@ -1547,6 +1579,32 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   }, [ibcState.chain, ibcState.denom, selectedAsset]);
   const belowNobleMin =
     isNobleUsdc && !!ibcState.amount && parseFloat(ibcState.amount) < MIN_NOBLE_USDC_UNSHIELD;
+
+  // spendable display-unit balance of the selected asset, from the same
+  // viewClient.balances source the asset list is built from (no separate balance
+  // math). Mirrors PenumbraNativeSend's selectedBalance.
+  const selectedBalance = useMemo(() => {
+    if (!selectedAsset?.balanceView) {
+      return '0';
+    }
+    const val = fromValueView(selectedAsset.balanceView);
+    return typeof val === 'string' ? val : val.toString();
+  }, [selectedAsset]);
+
+  const handleMax = useCallback(() => {
+    // Fill the FULL spendable balance of the selected asset, mirroring the max in
+    // native-send and cosmos-send. No fee is reserved here on purpose: Penumbra
+    // fees are a separate spend the planner adds (normally from UM), so maxing a
+    // NON-UM asset (e.g. USDC out to Noble) is planner-safe. Maxing UM itself
+    // leaves nothing for the UM fee and the planner rejects the plan - it can
+    // never overspend, and the amount only moves on the user's explicit tap.
+    //
+    // NOTE (18-decimal assets, e.g. injective INJ once live): a display balance
+    // below 1e-6 stringifies to exponent notation ("1e-7"), which
+    // isValidWithdrawAmount rejects (its grammar has no exponent). Harmless while
+    // only 6-decimal assets (UM, USDC) are live; revisit if an 18-dec asset ships.
+    ibcState.setAmount(selectedBalance);
+  }, [selectedBalance, ibcState]);
 
   // Amount must be expressible in the asset's own base units: more fractional
   // digits than the exponent allows is a user error we surface up front rather
@@ -1654,7 +1712,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
         <label className='mb-1 block text-xs text-fg-muted'>
           recipient {ibcState.chain && `(${ibcState.chain.addressPrefix}1...)`}
         </label>
-        {burnerAddress && !overrideAddress ? (
+        {ownAddress && !overrideAddress ? (
           <div className='rounded-lg border border-border-soft bg-input px-3 py-2.5'>
             <div className='flex items-center justify-between gap-2'>
               <span className='text-label text-fg-muted lowercase'>your deposit address</span>
@@ -1662,8 +1720,8 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
                 transparent
               </span>
             </div>
-            <p className='mt-1 break-all font-mono text-xs text-fg' title={burnerAddress}>
-              {burnerAddress}
+            <p className='mt-1 break-all font-mono text-xs text-fg' title={ownAddress}>
+              {ownAddress}
             </p>
             <button
               type='button'
@@ -1706,12 +1764,12 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
               onSelect={ibcState.setDestinationAddress}
               show={!ibcState.destinationAddress}
             />
-            {burnerAddress && (
+            {ownAddress && (
               <button
                 type='button'
                 onClick={() => {
                   setOverrideAddress(false);
-                  ibcState.setDestinationAddress(burnerAddress);
+                  ibcState.setDestinationAddress(ownAddress);
                 }}
                 disabled={txStatus !== 'idle'}
                 className='mt-1.5 text-label text-network-accent transition-colors hover:text-fg-high disabled:opacity-50'
@@ -1783,7 +1841,24 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
 
       {/* amount */}
       <div>
-        <label className='mb-1 block text-xs text-fg-muted'>amount</label>
+        <div className='mb-1 flex items-center justify-between'>
+          <label className='text-xs text-fg-muted'>amount</label>
+          {selectedAsset && (
+            <div className='flex items-center gap-2'>
+              <span className='text-xs text-fg-muted'>
+                balance: <Sensitive>{selectedBalance}</Sensitive>
+              </span>
+              <button
+                type='button'
+                onClick={handleMax}
+                disabled={txStatus !== 'idle'}
+                className='text-xs text-zigner-gold hover:text-zigner-gold-light disabled:opacity-50'
+              >
+                max
+              </button>
+            </div>
+          )}
+        </div>
         <input
           type='text'
           value={ibcState.amount}
