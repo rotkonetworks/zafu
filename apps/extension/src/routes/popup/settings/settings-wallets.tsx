@@ -144,7 +144,26 @@ export const SettingsWallets = () => {
       setPassword('');
       setStep('backup');
     } catch (err) {
-      setStateError(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      // Escape hatch for an ORPHANED vault: its seed was sealed under a previous
+      // password key and can no longer be decrypted, so we physically cannot show
+      // the phrase to back up. Requiring the backup step would make such a vault
+      // permanently undeletable (the reported "delete + continue with pw does
+      // nothing" - the throw set an error the password card never rendered).
+      // Password is already verified (ownership proof), and this path is reachable
+      // ONLY on a decrypt failure - a readable vault always shows its phrase - so
+      // skipping backup is not a safety regression: the phrase is already gone
+      // from storage. Jump to confirm, which surfaces the reason. Any OTHER error
+      // stays on the password step with a now-visible message.
+      if (msg.includes('failed to decrypt vault')) {
+        setPassword('');
+        setStateError(
+          "this wallet's recovery phrase can't be read from storage (the vault is unreadable). make sure you have it backed up elsewhere before removing - it cannot be shown here.",
+        );
+        setStep('confirm');
+      } else {
+        setStateError(msg);
+      }
     }
   };
 
@@ -390,6 +409,7 @@ export const SettingsWallets = () => {
                   className='w-full bg-input border border-border-soft px-3 py-2.5 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
                 />
                 {passwordError && <span className='text-xs text-red-400'>wrong password</span>}
+                {error && <span className='text-xs text-red-400'>{error}</span>}
                 <div className='flex gap-2 mt-1'>
                   <Btn onClick={resetRemoval}>cancel</Btn>
                   <Btn submit destructive disabled={!password}>
@@ -429,6 +449,8 @@ export const SettingsWallets = () => {
                 "{removingVault.name}" will be permanently removed.
                 {removingType === 'zigner-zafu' && ' re-import from zigner anytime.'}
                 {removingType === 'frost-multisig' && ' you would need to run DKG again.'}
+                {keyInfos.length <= 1 &&
+                  ' this is your LAST wallet - removing it wipes all wallet data from this extension.'}
               </p>
               {error && <p className='text-xs text-red-400 mb-2'>{error}</p>}
               <div className='flex gap-2'>
@@ -752,7 +774,12 @@ const VaultRow = ({
               className='i-ph-calendar-blank size-3.5 text-fg-muted shrink-0'
               title='when this wallet was first used - scanning starts here'
             />
-            <span className='text-label text-fg-muted whitespace-nowrap'>first used</span>
+            <span
+              className='text-label text-fg-muted whitespace-nowrap'
+              title='Zcash only - sets where Zcash sync starts. Penumbra does not scan from a date.'
+            >
+              zcash first used
+            </span>
             <input
               type='date'
               min={formatDateInput(blockToDate(ZCASH_ORCHARD_ACTIVATION))}
