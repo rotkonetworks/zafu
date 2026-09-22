@@ -5,6 +5,11 @@
  * implementation - only test doubles. This is the real one: a dumb key-value
  * relay addressed by `(appScope, epoch, shard)` over plain HTTP.
  *
+ * A reference SERVER implementing the contract below lives in `apps/minirelay`
+ * (Rust + SQLite, two routes, no crypto) - run it, or write your own against the
+ * same contract. Note there is no npm package for the server side on purpose: a
+ * relay is a service somebody runs, and the SDK already carries the client.
+ *
  * ===========================================================================
  * WIRE CONTRACT - exactly what a server MUST implement
  * ===========================================================================

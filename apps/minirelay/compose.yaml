@@ -1,0 +1,18 @@
+# Example deployment: put TLS in front with haproxy/nginx, and keep the volume
+# on a path you actually back up (the data is disposable, but the endpoint is not).
+services:
+  minirelay:
+    build: .
+    image: ghcr.io/rotkonetworks/minirelay:latest
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:8090:8080'
+    volumes:
+      - minirelay-data:/data
+    environment:
+      MINIRELAY_RETENTION_SECONDS: '3600'
+      MINIRELAY_MAX_ENTRIES_PER_COORD: '1000000'
+      # MINIRELAY_ALLOW_ORIGIN: 'https://zafu.pro'
+
+volumes:
+  minirelay-data:

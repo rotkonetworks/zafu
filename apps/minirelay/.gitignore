@@ -1,0 +1,11 @@
+# Build output (Rust)
+/target
+
+# Runtime state: sqlite files and its WAL companions
+minirelay.sqlite
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Local overrides
+.env

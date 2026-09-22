@@ -49,7 +49,8 @@
       "inputs": ["**/*.ts", "**/*.tsx", "package.json"]
     },
     "test": {
-      "cache": false
+      "cache": false,
+      "env": ["MINIRELAY_URL"]
     }
   }
 }
