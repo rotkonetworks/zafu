@@ -709,6 +709,11 @@ const VaultRow = ({
   // but entered as a date, which is the only form a person actually knows.
   const [birthday, setBirthday] = useState<string>('');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // When a birthday is already SET, the full picker is just clutter on every
+  // row - collapse it to a compact "sync from <date>" line the user can tap to
+  // edit. When UNSET we keep the full block open, because its "set a date if
+  // older" nudge is what stops an old import from missing early notes.
+  const [birthdayOpen, setBirthdayOpen] = useState(false);
   const birthdayKey = `zcashBirthday_${vault.id}`;
 
   useEffect(() => {
@@ -876,7 +881,23 @@ const VaultRow = ({
           derives keys for penumbra too, so both badges sit right above this
           field. The height still exists (sync consumes it) but it lives
           under `advanced`, alongside the date it resolves to. */}
-      {hasZcash && (
+      {hasZcash && birthdayValid && !birthdayOpen && (
+        // Compact summary for a wallet whose sync-start is already set.
+        <button
+          type='button'
+          onClick={() => setBirthdayOpen(true)}
+          title='zcash sync start - tap to change'
+          className='mt-2 flex w-full items-center gap-2 rounded-md border border-border-soft/70 px-2.5 py-1.5 text-left transition-colors hover:border-fg-muted'
+        >
+          <span className='i-ph-calendar-blank size-3.5 text-fg-muted shrink-0' />
+          <span className='text-label text-fg-muted'>
+            zcash sync from {formatDateInput(blockToDate(birthdayNum))}
+          </span>
+          <span className='i-ph-pencil-simple ml-auto size-3.5 text-fg-dim' />
+        </button>
+      )}
+
+      {hasZcash && !(birthdayValid && !birthdayOpen) && (
         <div className='mt-2 rounded-md border border-border-soft/70 px-2.5 py-2'>
           <div className='flex flex-wrap items-center gap-2'>
             <span
