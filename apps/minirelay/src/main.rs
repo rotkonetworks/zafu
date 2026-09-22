@@ -8,6 +8,7 @@ use std::time::Duration;
 use minirelay::config::Config;
 use minirelay::server::{app, AppState};
 use minirelay::store::Store;
+use minirelay::strategy;
 
 #[tokio::main]
 async fn main() {
@@ -39,13 +40,22 @@ async fn main() {
         }
     });
 
-    let router = app(
-        AppState {
-            store,
-            max_entries_per_put: config.max_entries_per_put,
-        },
-        config.max_body_bytes,
+    // Policy is a strategy: a named, pre-composed stack of filters around the one
+    // base service. Nothing below this line knows what the stack contains.
+    let (service, enforced) = strategy::build(&config, store);
+    eprintln!(
+        "minirelay: policy {:?} (entries/put {}, entries/coordinate {}, retention {}s)",
+        enforced.layers,
+        enforced.max_entries_per_put,
+        enforced.max_entries_per_coord,
+        enforced.retention_seconds
     );
+
+    let router = app(AppState {
+        service,
+        max_entries_per_put: config.max_entries_per_put,
+        max_body_bytes: config.max_body_bytes,
+    });
 
     let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
     let listener = match tokio::net::TcpListener::bind(addr).await {
@@ -60,11 +70,16 @@ async fn main() {
         config.db_path, config.retention_seconds, config.max_entries_per_coord, config.allow_origin
     );
 
-    if let Err(e) = axum::serve(listener, router)
-        .with_graceful_shutdown(async {
+    // Connect info so a policy filter can do per-source rate limiting; without it
+    // every request would look like it came from the same address.
+    if let Err(e) = axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;
         })
-        .await
+    .await
     {
         eprintln!("minirelay: server error: {e}");
         std::process::exit(1);

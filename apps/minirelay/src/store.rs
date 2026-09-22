@@ -16,7 +16,7 @@
 //! Nothing here interprets tag or blob bytes: the relay is a store, and any
 //! meaning they carry is between two clients.
 
-use std::sync::Mutex;
+use parking_lot::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{params, Connection, OptionalExtension};
@@ -115,7 +115,7 @@ impl Store {
     /// Merge a batch into its coordinate. Returns how many entries the
     /// coordinate holds afterwards.
     pub fn put(&self, coord: &Coord, entries: &[Entry]) -> Result<i64, StoreError> {
-        let mut conn = self.conn.lock().expect("store mutex poisoned");
+        let mut conn = self.conn.lock();
 
         let held: i64 = conn.query_row(
             "SELECT COUNT(*) FROM entries WHERE app_scope = ?1 AND epoch = ?2 AND shard = ?3",
@@ -180,7 +180,7 @@ impl Store {
     /// The WHOLE coordinate. There is no single-tag read by design (see the
     /// module note); callers intersect locally.
     pub fn get(&self, coord: &Coord) -> Result<Vec<Entry>, StoreError> {
-        let conn = self.conn.lock().expect("store mutex poisoned");
+        let conn = self.conn.lock();
         let mut stmt = conn.prepare_cached(
             "SELECT tag, blob FROM entries WHERE app_scope = ?1 AND epoch = ?2 AND shard = ?3",
         )?;
@@ -200,13 +200,13 @@ impl Store {
     /// Drop entries older than the retention window. Returns how many went.
     pub fn gc(&self) -> Result<usize, StoreError> {
         let cutoff = self.now() - self.retention_seconds;
-        let conn = self.conn.lock().expect("store mutex poisoned");
+        let conn = self.conn.lock();
         let removed = conn.execute("DELETE FROM entries WHERE inserted_at < ?1", params![cutoff])?;
         Ok(removed)
     }
 
     pub fn count(&self) -> Result<i64, StoreError> {
-        let conn = self.conn.lock().expect("store mutex poisoned");
+        let conn = self.conn.lock();
         let n = conn.query_row("SELECT COUNT(*) FROM entries", [], |row| row.get(0))?;
         Ok(n)
     }

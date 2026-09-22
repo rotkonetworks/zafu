@@ -18,15 +18,30 @@ import { rendezvousTag } from './contact-discovery';
 import { createHttpRelayTransport } from './relay-http';
 
 const url = process.env['MINIRELAY_URL'];
+const token = process.env['MINIRELAY_TOKEN'];
 const when = url === undefined || url === '' ? describe.skip : describe;
 
-/** a reachable relay, configured the way a wallet or guest would configure it. */
+/**
+ * A reachable relay, configured the way a wallet or guest would configure it.
+ *
+ * `MINIRELAY_TOKEN` exercises operator policy: a relay may require a bearer token
+ * (who may use it), restrict which app scopes it serves, and cap request rates -
+ * all server-side, none of it touching this client beyond a header.
+ */
 const relayFor = (appOrigin: string) =>
-  new ContactRelay(createHttpRelayTransport({ endpoint: url ?? '' }), {
-    appOrigin,
-    padTo: PRESENCE_PAD_TO,
-    blobBytes: PRESENCE_BLOB_BYTES,
-  });
+  new ContactRelay(
+    createHttpRelayTransport({
+      endpoint: url ?? '',
+      ...(token === undefined || token === ''
+        ? {}
+        : { headers: { authorization: `Bearer ${token}` } }),
+    }),
+    {
+      appOrigin,
+      padTo: PRESENCE_PAD_TO,
+      blobBytes: PRESENCE_BLOB_BYTES,
+    },
+  );
 
 const secret = (n: number) => new Uint8Array(32).fill(n);
 const blob = (n: number) => new Uint8Array(PRESENCE_BLOB_BYTES).fill(n);
@@ -94,6 +109,26 @@ when('minirelay (real server, opt-in)', () => {
       epoch,
     );
     expect(unused).toEqual([]);
+  });
+
+  it('is refused when the relay requires a token and none is sent', async () => {
+    if (token === undefined || token === '') {
+      return; // only meaningful against a token-gated relay
+    }
+    const app = `zid-e2e-notoken-${Date.now()}`;
+    const epoch = presenceEpoch();
+    const bare = new ContactRelay(createHttpRelayTransport({ endpoint: url ?? '' }), {
+      appOrigin: app,
+      padTo: PRESENCE_PAD_TO,
+      blobBytes: PRESENCE_BLOB_BYTES,
+    });
+
+    await expect(
+      bare.publishPresence(
+        [{ tag: rendezvousTag(secret(3), app, epoch, 'e1'.repeat(32)), blob: blob(4) }],
+        epoch,
+      ),
+    ).rejects.toThrow(/401/);
   });
 
   it('re-publishing an epoch does not duplicate the friend', async () => {

@@ -20,6 +20,15 @@ pub struct Config {
     /// CORS origin for browser clients. `*` is the default because the protocol
     /// carries no credentials and a wallet may point at any relay.
     pub allow_origin: String,
+    /// When set, every request must present `authorization: Bearer <token>`.
+    /// Operator policy, not user auth: the relay can only decide who may use it.
+    pub token: Option<String>,
+    /// When non-empty, only these app scopes are served. A scope is a public
+    /// string, so this is how an operator hosts a relay for one community.
+    pub allowed_scopes: Vec<String>,
+    /// Per-source request budget (0 = unlimited). Honest usage is a publish plus
+    /// a fetch per epoch.
+    pub rate_limit_per_minute: usize,
 }
 
 fn var_i64(name: &str, default: i64) -> i64 {
@@ -46,6 +55,18 @@ impl Config {
             max_entries_per_put: var_usize("MINIRELAY_MAX_ENTRIES_PER_PUT", 4096),
             max_body_bytes: var_usize("MINIRELAY_MAX_BODY_BYTES", 8 * 1024 * 1024),
             allow_origin: env::var("MINIRELAY_ALLOW_ORIGIN").unwrap_or_else(|_| "*".to_string()),
+            token: env::var("MINIRELAY_TOKEN").ok().filter(|t| !t.is_empty()),
+            allowed_scopes: env::var("MINIRELAY_ALLOWED_SCOPES")
+                .ok()
+                .map(|list| {
+                    list.split(',')
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)
+                        .collect()
+                })
+                .unwrap_or_default(),
+            rate_limit_per_minute: var_usize("MINIRELAY_RATE_LIMIT_PER_MINUTE", 0),
         }
     }
 }
@@ -53,6 +74,24 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_empty_token_env_var_is_treated_as_unset() {
+        // MINIRELAY_TOKEN= (present but empty) must not lock the relay behind a
+        // token nobody can present.
+        std::env::set_var("MINIRELAY_TOKEN", "");
+        let c = Config::from_env();
+        std::env::remove_var("MINIRELAY_TOKEN");
+        assert!(c.token.is_none());
+    }
+
+    #[test]
+    fn scope_lists_split_and_drop_blank_entries() {
+        std::env::set_var("MINIRELAY_ALLOWED_SCOPES", "poker, , notes ");
+        let c = Config::from_env();
+        std::env::remove_var("MINIRELAY_ALLOWED_SCOPES");
+        assert_eq!(c.allowed_scopes, vec!["poker", "notes"]);
+    }
 
     #[test]
     fn defaults_accept_a_full_padded_batch() {

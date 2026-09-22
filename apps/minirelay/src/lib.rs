@@ -15,4 +15,6 @@
 
 pub mod config;
 pub mod server;
+pub mod service;
 pub mod store;
+pub mod strategy;

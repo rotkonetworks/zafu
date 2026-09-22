@@ -6,6 +6,7 @@
 //! `there_is_no_per_tag_route` (the invariant that keeps the operator from
 //! learning edges).
 
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::body::Body;
@@ -13,27 +14,61 @@ use axum::http::{Request, StatusCode};
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine as _;
 use http_body_util::BodyExt;
+use minirelay::config::Config;
 use minirelay::server::{app, AppState};
+
 use minirelay::store::Store;
+use minirelay::strategy;
 use serde_json::{json, Value};
 use tower::ServiceExt;
 
-fn app_with(store: Store, max_entries_per_put: usize, max_body: usize) -> axum::Router {
-    app(
-        AppState {
-            store: Arc::new(store),
-            max_entries_per_put,
-        },
-        max_body,
-    )
+/// A relay with no policy filters: the base service alone.
+fn fresh(cap: i64, max_per_put: usize) -> axum::Router {
+    let store = Arc::new(Store::open(":memory:", cap, 3600).unwrap());
+    let config = policy_config();
+    app(AppState {
+        service: strategy::build(&config, store).0,
+        max_entries_per_put: max_per_put,
+        max_body_bytes: 8 * 1024 * 1024,
+    })
 }
 
-fn fresh(cap: i64, max_per_put: usize) -> axum::Router {
-    app_with(Store::open(":memory:", cap, 3600).unwrap(), max_per_put, 8 * 1024 * 1024)
+fn policy_config() -> Config {
+    Config {
+        port: 0,
+        db_path: ":memory:".into(),
+        max_entries_per_coord: 1000,
+        retention_seconds: 3600,
+        max_entries_per_put: 4096,
+        max_body_bytes: 8 * 1024 * 1024,
+        allow_origin: "*".into(),
+        token: None,
+        allowed_scopes: Vec::new(),
+        rate_limit_per_minute: 0,
+    }
+}
+
+/// A relay whose policy came from configuration, exactly as the binary builds it.
+fn with_policy(config: &Config) -> axum::Router {
+    let store = Arc::new(Store::open(":memory:", config.max_entries_per_coord, 3600).unwrap());
+    let (service, _enforced) = strategy::build(config, store);
+    app(AppState {
+        service,
+        max_entries_per_put: config.max_entries_per_put,
+        max_body_bytes: config.max_body_bytes,
+    })
+}
+
+/// Every request carries the peer address the real server gets from the socket;
+/// in-process tests supply it themselves.
+fn with_peer(mut req: Request<Body>) -> Request<Body> {
+    req.extensions_mut()
+        .insert(axum::extract::ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 41234))));
+    req
 }
 
 async fn send(router: &axum::Router, req: Request<Body>) -> (StatusCode, Value) {
-    let res = router.clone().oneshot(req).await.unwrap();
+    let res = router.clone().oneshot(with_peer(req)).await.unwrap();
     let status = res.status();
     let bytes = res.into_body().collect().await.unwrap().to_bytes();
     let value = if bytes.is_empty() {
@@ -44,7 +79,14 @@ async fn send(router: &axum::Router, req: Request<Body>) -> (StatusCode, Value) 
     (status, value)
 }
 
-fn put_request(app_scope: &str, epoch: i64, entries: &[(u8, u8)]) -> Request<Body> {
+fn put_request_with_token(app_scope: &str, epoch: i64, entries: &[(u8, u8)], token: Option<&str>) -> Request<Body> {
+    let mut builder = Request::builder()
+        .method("POST")
+        .uri("/bucket")
+        .header("content-type", "application/json");
+    if let Some(t) = token {
+        builder = builder.header("authorization", format!("Bearer {t}"));
+    }
     let body = json!({
         "appScope": app_scope,
         "epoch": epoch,
@@ -54,12 +96,11 @@ fn put_request(app_scope: &str, epoch: i64, entries: &[(u8, u8)]) -> Request<Bod
             .map(|(tag, blob)| json!({ "tag": B64.encode([*tag; 16]), "blob": B64.encode([*blob; 64]) }))
             .collect::<Vec<_>>(),
     });
-    Request::builder()
-        .method("POST")
-        .uri("/bucket")
-        .header("content-type", "application/json")
-        .body(Body::from(body.to_string()))
-        .unwrap()
+    builder.body(Body::from(body.to_string())).unwrap()
+}
+
+fn put_request(app_scope: &str, epoch: i64, entries: &[(u8, u8)]) -> Request<Body> {
+    put_request_with_token(app_scope, epoch, entries, None)
 }
 
 fn get_request(app_scope: &str, epoch: i64) -> Request<Body> {
@@ -235,4 +276,68 @@ async fn cors_preflight_is_allowed() {
             .and_then(|v| v.to_str().ok()),
         Some("*")
     );
+}
+// -- policy through the HTTP edge ---------------------------------------------
+//
+// These are the extensibility proof: operator authority is configuration plus a
+// layer, and the edge turns each refusal into the right status code.
+
+#[tokio::test]
+async fn a_token_gated_relay_refuses_without_the_token_and_serves_with_it() {
+    let mut config = policy_config();
+    config.token = Some("s3cret".into());
+    let router = with_policy(&config);
+
+    let (status, body) = send(&router, put_request("poker", 100, &[(1, 7)])).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert!(body["error"].as_str().unwrap().contains("bearer token"));
+
+    let (status, _) = send(
+        &router,
+        put_request_with_token("poker", 100, &[(1, 7)], Some("s3cret")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    // and the read side is gated by the same layer
+    let (status, _) = send(&router, get_request("poker", 100)).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn a_scope_restricted_relay_serves_only_its_namespace() {
+    let mut config = policy_config();
+    config.allowed_scopes = vec!["poker".into()];
+    let router = with_policy(&config);
+
+    let (status, _) = send(&router, put_request("poker", 100, &[(1, 1)])).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let (status, body) = send(&router, put_request("someone-elses-app", 100, &[(1, 1)])).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert!(body["error"].as_str().unwrap().contains("does not serve"));
+}
+
+#[tokio::test]
+async fn a_rate_limited_relay_says_so_with_retry_after() {
+    let mut config = policy_config();
+    config.rate_limit_per_minute = 2;
+    let router = with_policy(&config);
+
+    assert_eq!(
+        send(&router, put_request("poker", 100, &[(1, 1)])).await.0,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        send(&router, put_request("poker", 100, &[(2, 2)])).await.0,
+        StatusCode::NO_CONTENT
+    );
+
+    let res = router
+        .clone()
+        .oneshot(with_peer(put_request("poker", 100, &[(3, 3)])))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert!(res.headers().get("retry-after").is_some());
 }
