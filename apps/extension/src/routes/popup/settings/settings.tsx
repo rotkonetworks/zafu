@@ -80,11 +80,6 @@ const groups: SettingsGroup[] = [
         href: PopupPath.SETTINGS_WALLETS,
       },
       {
-        title: 'appearance',
-        icon: 'i-zafu-enso',
-        href: PopupPath.SETTINGS_APPEARANCE,
-      },
-      {
         title: 'fees',
         icon: 'i-zafu-mon',
         href: PopupPath.SETTINGS_FEES,
@@ -115,8 +110,15 @@ const groups: SettingsGroup[] = [
     ],
   },
   {
-    label: 'about',
+    // app-level settings: appearance is not a wallet concern, so it lives here
+    // with the other app-wide meta rather than in the wallet group.
+    label: 'app',
     links: [
+      {
+        title: 'appearance',
+        icon: 'i-zafu-enso',
+        href: PopupPath.SETTINGS_APPEARANCE,
+      },
       ...(SUBSCRIBE_ENABLED
         ? [
             {
