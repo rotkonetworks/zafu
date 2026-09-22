@@ -1,0 +1,19 @@
+# Deploy: wrangler deploy
+# Docs:   https://developers.cloudflare.com/workers/wrangler/configuration/
+
+name = "minibouncer"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+# One setting, and it is the relay this bouncer fronts. Leave it out of [vars] and
+# set it with `wrangler secret put RELAY_URL` if you would rather not commit it.
+[vars]
+RELAY_URL = "https://relay.example"
+
+# No routes/custom domain needed: workers.dev gives you TLS and WSS for free, which
+# is what makes this a two-minute deploy for someone who just wants their own IP
+# out of the relay's logs. Add a custom domain if you want one:
+#
+# [[routes]]
+# pattern = "bouncer.example/*"
+# zone_name = "example"
