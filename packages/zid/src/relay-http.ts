@@ -13,13 +13,47 @@
  *     Content-Type: application/json
  *     { "appScope": string, "epoch": number, "shard": string,
  *       "entries": [ { "tag": <base64>, "blob": <base64> }, ... ] }
- *     -> any 2xx; the body is ignored. Store the entries for the coordinate,
- *        REPLACING whatever was there for that (appScope, epoch, shard).
+ *     -> any 2xx; the body is ignored. MERGE the entries into the coordinate,
+ *        KEYED BY TAG: an entry whose tag already exists replaces it, every other
+ *        entry stays. Do NOT replace the whole coordinate with this batch.
+ *
+ *        Why merge-by-tag and not replace: a coordinate holds one padded batch per
+ *        PUBLISHER, and `ContactRelay.publishPresence` never reads before it
+ *        writes, so a replace would silently drop every publisher but the last and
+ *        discovery would only ever find one friend per scope. Keying by tag also
+ *        makes a RETRY safe: a real tag is unique per (publisher, epoch) by
+ *        construction (HKDF output), so re-publishing overwrites the publisher's
+ *        own real entries instead of duplicating them. Dummies are random per
+ *        publish, so a retry does add another batch's worth of them - harmless,
+ *        since dummies are indistinguishable from reals by design and the whole
+ *        coordinate is dropped at epoch rotation, but it is why the cap below
+ *        exists.
+ *
+ *        Nothing on the wire says which batch is whose, and the relay must not try
+ *        to infer it.
  *
  *   GET bucket   GET   <endpoint>/bucket?appScope=<url-encoded>&epoch=<n>&shard=<url-encoded>
  *     -> 2xx with JSON { "entries": [ { "tag": <base64>, "blob": <base64> }, ... ] }
  *        for that coordinate, or an empty `entries` array when nothing was
  *        published. Any other shape is a contract violation and is rejected.
+ *
+ *   Retention    A relay SHOULD drop coordinates for epochs that have passed.
+ *                Old epochs are useless to readers (tags rotate every epoch) and
+ *                the presence layer has no forward secrecy by design, so keeping
+ *                them only lengthens the window in which a later key compromise
+ *                reconstructs who was online when.
+ *
+ *   Limits       Floors and ceilings. The server MUST accept a batch of at least
+ *                PRESENCE_PAD_TO entries per request (clients write a constant 64
+ *                per epoch - splitting a batch would change the write shape and
+ *                leak the friend count the padding exists to hide) and MUST NOT
+ *                rate-limit a client below one publish plus one fetch per epoch.
+ *                It SHOULD bound a coordinate: an honest client contributes one
+ *                batch per epoch, so a coordinate that keeps growing within an
+ *                epoch is abuse (a hostile client can append random tags without
+ *                limit). A cap in the low multiples of the expected entries,
+ *                enforced by rejecting further writes or dropping the coordinate,
+ *                keeps a single client from inflating everyone's download.
  *
  * `tag` and `blob` are BYTES on the client side and base64 on the wire; nothing
  * else about them is interpreted here (the relay must not either - see below).

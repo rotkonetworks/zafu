@@ -10,9 +10,14 @@ import {
   type RandomBytes,
 } from './contact-relay';
 
-// in-memory blind relay: a dumb KV store keyed by (appScope, epoch, shard).
+// In-memory blind relay: a dumb KV store keyed by (appScope, epoch, shard),
+// CONFORMING to the wire contract in relay-http.ts: a PUT MERGES its entries into
+// the coordinate keyed by tag, it does not replace the batch. A coordinate holds
+// one padded batch per publisher, so a replacing store would drop everyone but
+// the last writer - see the "two publishers" test below, which is the property
+// that makes that difference observable.
 class MemRelay implements RelayTransport {
-  store = new Map<string, PresenceEntry[]>();
+  store = new Map<string, Map<string, Uint8Array>>();
   private key(a: string, e: number, s: string) {
     return `${a}|${e}|${s}`;
   }
@@ -22,10 +27,22 @@ class MemRelay implements RelayTransport {
     shard: string;
     entries: PresenceEntry[];
   }) {
-    this.store.set(this.key(req.appScope, req.epoch, req.shard), req.entries);
+    const at = this.key(req.appScope, req.epoch, req.shard);
+    const bucket = this.store.get(at) ?? new Map<string, Uint8Array>();
+    for (const e of req.entries) {
+      bucket.set(bytesToHex(e.tag), e.blob);
+    }
+    this.store.set(at, bucket);
   }
   async getBucket(req: { appScope: string; epoch: number; shard: string }) {
-    return this.store.get(this.key(req.appScope, req.epoch, req.shard)) ?? [];
+    const bucket = this.store.get(this.key(req.appScope, req.epoch, req.shard));
+    if (bucket === undefined) {
+      return [];
+    }
+    return [...bucket].map(([tag, blob]) => ({
+      tag: Uint8Array.from(Buffer.from(tag, 'hex')),
+      blob,
+    }));
   }
 }
 
@@ -135,6 +152,49 @@ describe('ContactRelay - discovery (invariant 1: whole-bucket local match)', () 
       EPOCH,
     );
     expect(present).toHaveLength(0);
+  });
+
+  it('finds BOTH publishers when two write the same coordinate', async () => {
+    // The contract-critical case: two publishers' padded batches coexist at one
+    // (appScope, epoch, shard). A relay that replaced the coordinate would pass
+    // every single-publisher test and still only ever surface one friend.
+    const t = new MemRelay();
+    const sA = secret(5);
+    const sB = secret(6);
+    const pubA = pub('a1');
+    const pubB = pub('b1');
+    await relay(t).publishPresence(
+      [{ tag: rendezvousTag(sA, APP, EPOCH, pubA), blob: blob(7) }],
+      EPOCH,
+    );
+    await relay(t).publishPresence(
+      [{ tag: rendezvousTag(sB, APP, EPOCH, pubB), blob: blob(8) }],
+      EPOCH,
+    );
+
+    const present = await relay(t).discover(
+      [
+        { id: 'A', friendPubHex: pubA, rootSecret: sA },
+        { id: 'B', friendPubHex: pubB, rootSecret: sB },
+      ],
+      EPOCH,
+    );
+    expect(present.map(p => p.id).sort()).toEqual(['A', 'B']);
+  });
+
+  it('re-publishing an epoch does not duplicate a friend', async () => {
+    const t = new MemRelay();
+    const s = secret(5);
+    const aPub = pub('a1');
+    const entry = { tag: rendezvousTag(s, APP, EPOCH, aPub), blob: blob(7) };
+    await relay(t).publishPresence([entry], EPOCH);
+    await relay(t).publishPresence([entry], EPOCH);
+
+    const present = await relay(t).discover(
+      [{ id: 'A', friendPubHex: aPub, rootSecret: s }],
+      EPOCH,
+    );
+    expect(present).toHaveLength(1);
   });
 
   it('expectedFriendTags/matchBucket compose the same as discover', () => {

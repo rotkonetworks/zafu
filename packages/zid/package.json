@@ -1,6 +1,6 @@
 {
   "name": "@zafu/zid",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "license": "MIT",
   "description": "zafu identity SDK - connect wallet, sign actions, post-quantum e2ee channels and messaging",
   "type": "module",
