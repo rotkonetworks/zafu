@@ -136,6 +136,12 @@ export const useFinalizeOnboarding = () => {
           if (origin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED) {
             await setFreshWalletBlockHeights();
           }
+          // Recover/import is idempotent by walletId: recovering the same seed
+          // derives the same key, and the wallet layer must NOT create a second
+          // record for it (that was the "same wallet appears multiple times"
+          // bug). Adding an already-present wallet is therefore treated as
+          // success - the existing record is selected rather than duplicated -
+          // so this call must not be made to throw on "already exists".
           await addWallet(password);
         }
 
@@ -148,12 +154,29 @@ export const useFinalizeOnboarding = () => {
         // wallet. Always clear the key regardless.
         const pendingBirthday = sessionStorage.getItem(PENDING_ZCASH_BIRTHDAY_KEY);
         if (pendingBirthday && origin === SEED_PHRASE_ORIGIN.IMPORTED) {
-          const vaults = (await localExtStorage.get('vaults')) as { id: string }[] | null;
-          const vaultId = vaults?.[0]?.id;
+          // Use the selected vault, not vaults[0]. Under dedupe an idempotent
+          // re-import lands on an EXISTING vault which is not necessarily first
+          // in the list, so anchoring the birthday to index 0 would write it
+          // onto the wrong wallet. selectedVaultId always points at the vault
+          // this import resolved to (fresh or matched).
+          const vaultId = (await localExtStorage.get('selectedVaultId')) as string | undefined;
           if (vaultId) {
-            await chrome.storage.local.set({
-              [`zcashBirthday_${vaultId}`]: parseInt(pendingBirthday, 10),
-            });
+            const birthdayKey = `zcashBirthday_${vaultId}`;
+            const newHeight = parseInt(pendingBirthday, 10);
+            // Only LOWER an existing birthday, never raise it. When a re-import
+            // resolves to an already-synced existing vault, writing a LATER
+            // height would make the scanner skip notes below it - money-adjacent
+            // data loss. So write only if there is no birthday yet, or the new
+            // height is earlier than the stored one; otherwise leave it alone.
+            const stored = (await chrome.storage.local.get(birthdayKey))[birthdayKey] as
+              | number
+              | undefined;
+            if (
+              Number.isFinite(newHeight) &&
+              (stored === undefined || !Number.isFinite(stored) || newHeight < stored)
+            ) {
+              await chrome.storage.local.set({ [birthdayKey]: newHeight });
+            }
           }
         }
         sessionStorage.removeItem(PENDING_ZCASH_BIRTHDAY_KEY);

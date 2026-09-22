@@ -107,8 +107,40 @@ export const createWalletsSlice =
           throw new Error('Password Key not in storage');
         }
 
-        const key = await Key.fromJson(passwordKey);
         const walletId = await getWalletId(fullViewingKey);
+        const walletIdStr = walletId.toJsonString();
+
+        // Idempotency guard (root cause of duplicate wallets):
+        // recovering/importing the same seed phrase derives the SAME
+        // fullViewingKey and therefore the SAME walletId. Without this check
+        // every re-import unshifted another record, so the identical key
+        // appeared multiple times in the wallet list. If a record with this
+        // walletId already exists, we do NOT create a second one - we just
+        // select the existing record and return. We deliberately do NOT touch
+        // its label or its sealed seed: `Wallet` forbids an empty label so a
+        // label is always supplied (onboarding hardcodes 'Wallet 1'), and
+        // rewriting it here would clobber any custom name the user has given
+        // that wallet on every re-import. This is money-adjacent: we never
+        // delete or overwrite key material, we only avoid a duplicate record.
+        // (The persisted `penumbraWallets` list is read through the encrypting
+        // proxy, so entries arrive here decrypted with plaintext `id`/`label`.)
+        const persisted = await local.get('penumbraWallets');
+        const existingList = Array.isArray(persisted) ? persisted : [];
+        const dupeIndex = existingList.findIndex(w => w.id === walletIdStr);
+        if (dupeIndex !== -1) {
+          set(state => {
+            // stored entries carry an optional vaultId; the in-memory list
+            // types it as required. runtime shape is identical (fromJson
+            // tolerates a missing vaultId), so mirror the persisted list as-is.
+            state.wallets.all =
+              existingList as WalletJson<'encryptedSeedPhrase' | 'airgapSigner'>[];
+            state.wallets.activeIndex = dupeIndex;
+          });
+          await local.set('activeWalletIndex', dupeIndex);
+          return;
+        }
+
+        const key = await Key.fromJson(passwordKey);
         const newWallet = new Wallet(label, walletId, fullViewingKey, {
           encryptedSeedPhrase: await key.seal(seedPhraseStr),
         });
@@ -120,11 +152,7 @@ export const createWalletsSlice =
           state.wallets.all.unshift(newWallet.toJson());
         });
 
-        const wallets = (await local.get('penumbraWallets')) ?? [];
-        await local.set('penumbraWallets', [
-          newWallet.toJson(),
-          ...(Array.isArray(wallets) ? wallets : []),
-        ]);
+        await local.set('penumbraWallets', [newWallet.toJson(), ...existingList]);
       },
 
       updateMultisigWallet: async (id, updates) => {

@@ -25,18 +25,33 @@ export async function createPenumbraWalletForMnemonic(
   const spendKey = await generateSpendKey(mnemonic);
   const fullViewingKey = await getFullViewingKey(spendKey);
   const walletId = await getWalletId(fullViewingKey);
+  const walletIdStr = walletId.toJsonString();
+
+  // Belt-and-suspenders with newMnemonicKey's merge-by-identity: if this seed's
+  // penumbra wallet already exists (same walletId), do NOT unshift a second
+  // record - just select the existing one and return. This runs BEFORE sealing
+  // the mnemonic, so we never re-seal or overwrite existing key material.
+  // (`local` is the encrypting proxy, so entries read back decrypted with a
+  // plaintext `id`.)
+  const wallets = (await local.get('penumbraWallets')) ?? [];
+  const existingIdx = Array.isArray(wallets)
+    ? wallets.findIndex((w: { id: string }) => w.id === walletIdStr)
+    : -1;
+  if (existingIdx !== -1) {
+    await local.set('activeWalletIndex', existingIdx);
+    return;
+  }
 
   const encryptedSeedPhrase = await key.seal(mnemonic);
   const praxWallet = {
-    id: walletId.toJsonString(),
+    id: walletIdStr,
     label: name,
     fullViewingKey: fullViewingKey.toJsonString(),
     custody: { encryptedSeedPhrase: encryptedSeedPhrase.toJson() },
     vaultId,
   };
 
-  const wallets = (await local.get('penumbraWallets')) ?? [];
-  await local.set('penumbraWallets', [praxWallet, ...wallets]);
+  await local.set('penumbraWallets', [praxWallet, ...(Array.isArray(wallets) ? wallets : [])]);
   await local.set('activeWalletIndex', 0);
 }
 

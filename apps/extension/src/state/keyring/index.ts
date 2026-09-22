@@ -374,15 +374,41 @@ export const createKeyRingSlice =
       // ── vault creation ──
 
       newMnemonicKey: async (mnemonic: string, name: string) => {
+        // Per-seed identity. deriveZid(mnemonic) is deterministic from the
+        // mnemonic (HMAC-SHA512 root -> ed25519), so the same seed always yields
+        // the same zid publicKey. It is stored in the vault's insensitive
+        // metadata (readable without the password) and reused as the merge key.
+        const { deriveZid } = await import('../identity');
+        const zid = deriveZid(mnemonic);
+
+        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+
+        // Idempotent recover/import - ROOT CAUSE of the duplicate VAULT the user
+        // sees multiple times in the wallet list (the settings list is driven by
+        // keyInfos = vaults). Recovering the same seed derives the same zid, so if
+        // a mnemonic vault with this identity already exists we do NOT mint a new
+        // vault: we select the existing one and return its id, exactly as the
+        // newZignerZafuKey merge-by-ZID path does below. Money-safety: the
+        // existing vault's sealed seed (encryptedData/salt) is left untouched and
+        // is never re-sealed - merge means SELECT, not overwrite/create.
+        const mergeTarget = vaults.find(
+          v => v.type === 'mnemonic' && v.insensitive['zid'] === zid.publicKey,
+        );
+        if (mergeTarget) {
+          await local.set('selectedVaultId', mergeTarget.id);
+          const keyInfos = vaultsToKeyInfos(vaults, mergeTarget.id);
+          set(state => {
+            state.keyRing.keyInfos = keyInfos;
+            state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+          });
+          return mergeTarget.id;
+        }
+
         const vaultId = generateVaultId();
         const encryptedData = await encrypt(ctx, mnemonic);
         const vault = buildMnemonicVault(vaultId, name, encryptedData);
-        // store zid pubkey in unencrypted metadata — readable without password
-        const { deriveZid } = await import('../identity');
-        const zid = deriveZid(mnemonic);
         vault.insensitive['zid'] = zid.publicKey;
 
-        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
         const newVaults = [vault, ...vaults];
         await local.set('vaults', newVaults);
         await local.set('selectedVaultId', vaultId);
