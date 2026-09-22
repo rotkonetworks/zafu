@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect } from 'react';
+import { Fragment } from 'react';
 import { useStore } from '../../../state';
 import { passwordSelector } from '../../../state/password';
 import { selectActiveNetwork } from '../../../state/keyring';
@@ -7,7 +7,6 @@ import { PopupPath } from '../paths';
 import { SUBSCRIBE_ENABLED } from '../../../config/feature-flags';
 import { SettingsScreen } from './settings-screen';
 import { cn } from '@repo/ui/lib/utils';
-import { localExtStorage } from '@repo/storage-chrome/local';
 
 interface SettingsLink {
   title: string;
@@ -171,30 +170,10 @@ function SettingsRow({
   );
 }
 
-const AUTO_LOCK_OPTIONS = [
-  { label: 'disabled', value: 0 },
-  { label: '5 min', value: 5 },
-  { label: '15 min', value: 15 },
-  { label: '30 min', value: 30 },
-  { label: '1 hour', value: 60 },
-];
-
 export const Settings = () => {
   const navigate = usePopupNav();
   const { clearSessionPassword } = useStore(passwordSelector);
   const activeNetwork = useStore(selectActiveNetwork);
-  const [autoLock, setAutoLock] = useState(15);
-
-  useEffect(() => {
-    void localExtStorage.get('autoLockMinutes').then(v => setAutoLock(v ?? 15));
-  }, []);
-
-  const cycleAutoLock = () => {
-    const idx = AUTO_LOCK_OPTIONS.findIndex(o => o.value === autoLock);
-    const next = AUTO_LOCK_OPTIONS[(idx + 1) % AUTO_LOCK_OPTIONS.length]!;
-    setAutoLock(next.value);
-    void localExtStorage.set('autoLockMinutes', next.value);
-  };
 
   // Generic settings keep their intent groups; anything network-specific is
   // pulled OUT of them and shown under its own group, headed by the network it
@@ -227,8 +206,6 @@ export const Settings = () => {
     visibleGroups.push(networkGroup);
   }
 
-  const autoLockLabel = AUTO_LOCK_OPTIONS.find(o => o.value === autoLock)?.label ?? '15 min';
-
   return (
     <SettingsScreen title='settings' backPath={PopupPath.INDEX}>
       <div className='flex grow flex-col justify-between'>
@@ -249,26 +226,9 @@ export const Settings = () => {
               <div className='flex flex-col divide-y divide-border-soft/40'>
                 {group.links.map(l => (
                   <Fragment key={l.href}>
-                    {/* auto-lock lives with the security controls, before clear cache */}
-                    {group.label === 'security & backup' && l.title === 'clear cache' && (
-                      <button
-                        onClick={cycleAutoLock}
-                        className='flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-elev-1 hover:text-fg-high group'
-                      >
-                        <span
-                          className={cn(
-                            'i-ph-timer',
-                            'size-5 text-fg-muted group-hover:text-fg-high',
-                          )}
-                        />
-                        <span className='flex-1 text-data text-fg group-hover:text-fg-high lowercase'>
-                          auto-lock
-                        </span>
-                        <span className='text-label tabular text-fg-dim group-hover:text-fg-muted'>
-                          {autoLockLabel}
-                        </span>
-                      </button>
-                    )}
+                    {/* auto-lock now lives in the Security & Backup screen (its own
+                        select control), not as an inline row here - see
+                        settings-security-backup.tsx. */}
                     <SettingsRow icon={l.icon} title={l.title} onClick={() => navigate(l.href)} />
                   </Fragment>
                 ))}
