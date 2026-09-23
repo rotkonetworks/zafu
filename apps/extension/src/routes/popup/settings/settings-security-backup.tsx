@@ -42,9 +42,9 @@ export const SecurityBackup = () => {
               />
             )}
             <LinkRow
-              icon='i-ph-trash'
-              title='clear cache'
-              hint='recover from a stuck sync - keys & history kept'
+              icon='i-ph-arrows-clockwise'
+              title='resync state'
+              hint='refetch balance & history from chain - keys kept'
               onClick={() => navigate(PopupPath.SETTINGS_CLEAR_CACHE)}
             />
           </div>

@@ -119,7 +119,7 @@ export const SettingsClearCache = () => {
   })).filter(g => g.vaults.length > 0);
 
   return (
-    <SettingsScreen title='clear cache'>
+    <SettingsScreen title='resync state'>
       <div className='flex flex-col gap-4'>
         {clearingState.inProgress ? (
           <div className='flex flex-col gap-3'>
@@ -139,11 +139,12 @@ export const SettingsClearCache = () => {
           <>
             <div className='flex flex-col gap-3'>
               <p className='text-sm text-fg-muted'>
-                clears sync data per network and resynchronizes from chain.
+                re-fetches your balance and history from the chain. use this if your balance
+                looks out of date or a transaction seems missing.
               </p>
-              <p className='flex items-center gap-2 text-xs text-rust'>
-                <span className='i-ph-warning size-4' />
-                your private keys won't be lost
+              <p className='flex items-center gap-2 text-xs text-fg-dim'>
+                <span className='i-ph-shield-check size-4' />
+                your seed phrase, private keys, and personal notes are untouched.
               </p>
             </div>
 
@@ -167,7 +168,7 @@ export const SettingsClearCache = () => {
                               onClick={() => void handleClearZcash(v)}
                               className='rounded border border-red-500/25 bg-red-500/5 px-2 py-0.5 text-label text-red-400 hover:bg-red-500/15 transition-colors disabled:opacity-50'
                             >
-                              {clearingKey === `${v.id}:zcash` ? 'clearing...' : 'clear zcash'}
+                              {clearingKey === `${v.id}:zcash` ? 'resyncing...' : 'resync zcash'}
                             </button>
                           )}
                           {hasPenumbra && (
@@ -177,8 +178,8 @@ export const SettingsClearCache = () => {
                               className='rounded border border-red-500/25 bg-red-500/5 px-2 py-0.5 text-label text-red-400 hover:bg-red-500/15 transition-colors disabled:opacity-50'
                             >
                               {clearingKey === `${v.id}:penumbra`
-                                ? 'clearing...'
-                                : 'clear penumbra'}
+                                ? 'resyncing...'
+                                : 'resync penumbra'}
                             </button>
                           )}
                         </div>
