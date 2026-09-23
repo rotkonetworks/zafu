@@ -47,16 +47,33 @@ export const trackSidePanelPresence = (): void => {
  */
 export const isSidePanelOpen = async (windowId?: number): Promise<boolean> => {
   try {
-    const ctxs = await chrome.runtime.getContexts({
-      contextTypes: [chrome.runtime.ContextType.SIDE_PANEL],
-      // getContexts is GLOBAL by default: a panel open in another browser window
-      // counts as "open" here. When a caller knows which window the user is
-      // actually looking at, scope to it - otherwise login routing targets a
-      // panel the user cannot see and appears to hang. windowIds is Chrome 116+;
-      // an older browser ignores it (falls back to global, the prior behavior).
-      ...(windowId != null ? { windowIds: [windowId] } : {}),
-    });
-    return ctxs.length > 0;
+    // Query ALL contexts and filter in JS. Two reasons this beats passing
+    // `contextTypes`/`windowIds` to getContexts:
+    //  - contextType is compared as the STRING 'SIDE_PANEL', so a browser whose
+    //    `chrome.runtime.ContextType.SIDE_PANEL` enum member is absent/renamed
+    //    can't silently turn the filter into a no-match (which read as "closed"
+    //    and sent every approval to a popup).
+    //  - windowId scoping is done ONLY when the panel contexts actually carry a
+    //    usable windowId. Side-panel ExtensionContexts don't reliably populate
+    //    windowId on every Chrome build (it can be -1/absent); passing
+    //    windowIds:[id] to the API then excludes the real panel and we wrongly
+    //    fall back to a popup even with the panel open (the reported bug). If no
+    //    panel carries a usable windowId, treat "a panel is open" as open - a
+    //    freshly-delivered approval that lands in a panel in another window just
+    //    fails its ready-ack and falls back to a popup, which is the safe path.
+    const ctxs = await chrome.runtime.getContexts({});
+    const panels = ctxs.filter(c => c.contextType === 'SIDE_PANEL');
+    if (panels.length === 0) {
+      return false;
+    }
+    if (windowId == null) {
+      return true;
+    }
+    const scopable = panels.some(c => typeof c.windowId === 'number' && c.windowId >= 0);
+    if (!scopable) {
+      return true; // windowId not reported on this build - don't over-filter
+    }
+    return panels.some(c => c.windowId === windowId);
   } catch {
     return openCount > 0;
   }
