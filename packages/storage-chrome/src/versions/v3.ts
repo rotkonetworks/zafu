@@ -168,6 +168,15 @@ type LOCAL = {
   mempoolWatchSettings?: {
     zcash?: 'off' | 'on';
   };
+  /**
+   * How the endpoint picker chooses among preset nodes when the user hits
+   * "smart pick". `manual` means: never auto-pick, the last-saved endpoint
+   * URL wins even after a fresh latency probe. Optional (default 'fastest');
+   * new additive field, absent for pre-existing installs.
+   */
+  endpointSelectionStrategies?: {
+    zcash?: 'fastest' | 'most-synced' | 'random' | 'manual';
+  };
   zcashBackend?: 'zidecar' | 'lightwalletd';
 
   votingConfigOverride?: {

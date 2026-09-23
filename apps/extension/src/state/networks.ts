@@ -2,6 +2,16 @@ import { AllSlices, SliceCreator } from '.';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import { isZidecarEndpoint, type ZcashBackend } from './keyring/zcash-backend';
+import { DEFAULT_STRATEGY, type SelectionStrategy } from './keyring/endpoint-strategy';
+
+const KNOWN_SELECTION_STRATEGIES: readonly SelectionStrategy[] = [
+  'fastest',
+  'most-synced',
+  'random',
+  'manual',
+];
+const isSelectionStrategy = (v: unknown): v is SelectionStrategy =>
+  typeof v === 'string' && (KNOWN_SELECTION_STRATEGIES as readonly string[]).includes(v);
 
 /**
  * Supported network ecosystems.
@@ -92,6 +102,14 @@ export interface NetworkConfig {
    *   'lightwalletd' — trusted public indexer (no verification)
    */
   backend?: ZcashBackend;
+  /**
+   * How the endpoint picker chooses among preset nodes for this network.
+   * `manual` means: never auto-swap — the user's last-saved endpoint URL
+   * wins, even after a fresh latency probe. Only meaningful for networks
+   * with a preset pool (zcash today). Default 'fastest' (persisted so a
+   * `manual` choice survives popup restarts).
+   */
+  endpointSelectionStrategy?: SelectionStrategy;
 }
 
 export interface NetworksSlice {
@@ -109,6 +127,8 @@ export interface NetworksSlice {
   setMempoolWatch: (id: NetworkId, setting: MempoolWatchSetting) => Promise<void>;
   /** Manually override the Zcash sync backend (advanced settings). */
   setZcashBackend: (backend: ZcashBackend) => Promise<void>;
+  /** Update the endpoint-selection strategy for a network's preset pool. */
+  setEndpointSelectionStrategy: (id: NetworkId, strategy: SelectionStrategy) => Promise<void>;
   /** Get list of enabled networks */
   getEnabledNetworks: () => NetworkConfig[];
   /** Check if a network is enabled */
@@ -142,6 +162,7 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
     memoSyncStrategy: 'private',
     mempoolWatch: 'off',
     backend: 'zidecar',
+    endpointSelectionStrategy: DEFAULT_STRATEGY,
   },
 
   // === IBC/Cosmos Chains (for Penumbra deposits/withdrawals) ===
@@ -219,13 +240,15 @@ export const createNetworksSlice =
       const memoSyncStrategies = await local.get('memoSyncStrategies');
       const mempoolWatchSettings = await local.get('mempoolWatchSettings');
       const zcashBackend = await local.get('zcashBackend');
+      const endpointSelectionStrategies = await local.get('endpointSelectionStrategies');
 
       if (
         enabledNetworks ||
         networkEndpoints ||
         memoSyncStrategies ||
         mempoolWatchSettings ||
-        zcashBackend
+        zcashBackend ||
+        endpointSelectionStrategies
       ) {
         set(state => {
           // Apply enabled state from storage
@@ -266,6 +289,16 @@ export const createNetworksSlice =
           // Apply persisted Zcash backend (defensive: only known enum values).
           if (zcashBackend === 'zidecar' || zcashBackend === 'lightwalletd') {
             state.networks.networks.zcash.backend = zcashBackend;
+          }
+          // Apply per-network endpoint-selection strategies (defensive:
+          // ignore unknown enum values from tampered storage).
+          if (endpointSelectionStrategies) {
+            for (const [id, s] of Object.entries(endpointSelectionStrategies)) {
+              const cfg = state.networks.networks[id as NetworkId];
+              if (cfg && isSelectionStrategy(s)) {
+                cfg.endpointSelectionStrategy = s;
+              }
+            }
           }
         });
       }
@@ -396,6 +429,20 @@ export const createNetworksSlice =
         await local.set('mempoolWatchSettings', {
           ...current,
           [id]: effective,
+        });
+      },
+
+      setEndpointSelectionStrategy: async (id: NetworkId, strategy: SelectionStrategy) => {
+        if (!isSelectionStrategy(strategy)) {
+          throw new Error(`invalid endpoint-selection strategy: ${String(strategy)}`);
+        }
+        set(state => {
+          state.networks.networks[id].endpointSelectionStrategy = strategy;
+        });
+        const current = (await local.get('endpointSelectionStrategies')) || {};
+        await local.set('endpointSelectionStrategies', {
+          ...current,
+          [id]: strategy,
         });
       },
 
