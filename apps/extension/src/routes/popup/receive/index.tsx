@@ -683,22 +683,17 @@ function ReceiveTab({
     };
   }, [transparent, transparentAddress, zidecarUrl]);
 
-  // auto-rotate zcash addresses on mount: bump both indices
+  // Load the current zcash transparent index (do NOT rotate). This used to bump
+  // BOTH indices on every mount, silently burning a fresh address each time the
+  // user merely opened the Receive screen. Rotation is explicit - the address
+  // carets below advance the index on demand. Shielded loads separately above.
   useEffect(() => {
     if (!isZcash || !canTransparent) {
       return;
     }
-
-    (async () => {
-      const r = await chrome.storage.local.get(['zcashShieldedIndex', 'zcashTransparentIndex']);
-      const nextShielded = (r['zcashShieldedIndex'] ?? 0) + 1;
-      const nextTransparent = (r['zcashTransparentIndex'] ?? 0) + 1;
-      await chrome.storage.local.set({
-        zcashShieldedIndex: nextShielded,
-        zcashTransparentIndex: nextTransparent,
-      });
-      setTransparentIndex(nextTransparent);
-    })();
+    void chrome.storage.local.get('zcashTransparentIndex').then(r => {
+      setTransparentIndex(r['zcashTransparentIndex'] ?? 0);
+    });
   }, [isZcash, canTransparent]);
 
   const displayAddress =

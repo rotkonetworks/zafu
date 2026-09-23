@@ -204,3 +204,23 @@ export function isValidCosmosAddress(address: string): boolean {
 export function getChainFromAddress(address: string): CosmosChainConfig | undefined {
   return Object.values(COSMOS_CHAINS).find(chain => address.startsWith(`${chain.bech32Prefix}1`));
 }
+
+/**
+ * Canonical lookup by the cosmos chain id (e.g. "injective-1", "noble-1").
+ *
+ * This is the single source of truth callers should use instead of the ad-hoc,
+ * mutually-inconsistent maps that grew around the receive/send flows (a
+ * hardcoded 3-entry registry->CosmosChainId map, a broken `prefix in
+ * COSMOS_CHAINS` test, and a `['noble']` allow-list) - those disagreed about
+ * which chains exist and were the root of the "Noble only" symptom. Rewiring
+ * those call sites onto this lookup is a follow-up that touches which chain a
+ * signer runs against, so it is done under review, not here.
+ */
+export function chainByChainId(chainId: string): CosmosChainConfig | undefined {
+  return Object.values(COSMOS_CHAINS).find(chain => chain.chainId === chainId);
+}
+
+/** Canonical lookup by bare bech32 prefix (e.g. "inj", "noble"). */
+export function chainByPrefix(prefix: string): CosmosChainConfig | undefined {
+  return Object.values(COSMOS_CHAINS).find(chain => chain.bech32Prefix === prefix);
+}
