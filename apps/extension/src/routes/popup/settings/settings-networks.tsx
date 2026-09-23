@@ -67,16 +67,9 @@ const getColorHex = (color: string): string => NETWORK_COLORS[color] ?? '#6B7280
 /** one-line "what is this network" copy, shown under each top-level toggle so
     a user can tell the pools apart without opening docs. */
 const NETWORK_DESCRIPTIONS: Record<string, string> = {
-  zcash: 'Orchard + Ironwood shielded pools',
+  zcash: 'Ironwood + Orchard turnstile',
   penumbra: 'shielded DeFi',
 };
-
-/** Cosmos/IBC lives UNDER Penumbra (Noble is a Penumbra subnetwork, edited in
-    the expanded panel), so it has no top-level toggle of its own. Surface it as
-    a plain line under Penumbra - the point is that you don't need a second
-    extension for cosmos/IBC. */
-const COSMOS_IBC_DESCRIPTION =
-  'cosmos IBC - Noble (USDC); Injective support in progress for easier bridging';
 
 /**
  * The merged "wallets & networks" screen. SettingsWallets supplies the screen
@@ -262,14 +255,10 @@ const NetworkToggles = () => {
 
               {/* one-line "what is this" copy, so pools read apart at a glance */}
               {NETWORK_DESCRIPTIONS[networkId] && (
-                <div className='-mt-1 flex flex-col gap-0.5 px-3 pb-3'>
+                <div className='-mt-1 px-3 pb-3'>
                   <p className='text-label text-fg-dim leading-snug'>
                     {NETWORK_DESCRIPTIONS[networkId]}
                   </p>
-                  {/* Cosmos/IBC has no toggle of its own (it lives under Penumbra) */}
-                  {networkId === 'penumbra' && (
-                    <p className='text-label text-fg-dim leading-snug'>{COSMOS_IBC_DESCRIPTION}</p>
-                  )}
                 </div>
               )}
 
@@ -323,10 +312,13 @@ const NetworkToggles = () => {
                         </div>
                       </div>
 
-                      {/* Noble is a transparent subnetwork under Penumbra (the
-                          USDC off-ramp); its rotating RPC pool is edited here. */}
+                      {/* Burners: transparent cosmos chains under Penumbra used
+                          as bridge off-ramps (Noble for USDC; Injective next).
+                          Managed here in the Penumbra submenu, no second
+                          extension needed. */}
                       {networkId === 'penumbra' && (
                         <div className='border-t border-border-soft pt-3'>
+                          <div className='text-label text-fg-muted mb-2'>burners</div>
                           <NobleEndpointsEditor />
                         </div>
                       )}
