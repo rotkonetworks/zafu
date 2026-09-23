@@ -5,14 +5,13 @@ import { SettingsScreen } from './settings-screen';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { useAutoLock, AUTO_LOCK_OPTIONS } from './use-auto-lock';
+import { SigningSecuritySelector } from './signing-security-selector';
 
 /**
- * "Security & Backup" hub. Auto-lock is the one control that has no dedicated
- * screen, so it lives here inline. Everything else (recovery phrase, multisig
- * backup, clear cache) already has its own canonical screen - so this hub LINKS
- * to those rather than reimplementing them (an earlier version duplicated the
- * recovery-phrase reveal and a weaker clear-cache; those are gone). One place to
- * find all security actions, no duplicate implementations.
+ * "Security & Backup" hub. Auto-lock and transaction-signing security live
+ * here inline (they're posture settings, not their own destinations).
+ * Recovery phrase, multisig backup, and resync state each have their own
+ * canonical screen - this hub LINKS to those rather than duplicating.
  */
 export const SecurityBackup = () => {
   const navigate = usePopupNav();
@@ -22,6 +21,7 @@ export const SecurityBackup = () => {
   return (
     <SettingsScreen title='security & backup'>
       <div className='flex flex-col gap-5'>
+        <SigningSecuritySelector />
         <AutoLock />
 
         <div>
