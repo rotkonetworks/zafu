@@ -71,7 +71,16 @@ export const popup = async <M extends PopupType>(
       throw new PopupAlreadyOpenError(popupType);
     }
 
-    const popupId = await spawnDetachedPopup(popupType).catch(cause => {
+    // Surface exception owned by zafu, not the app: an airgap (Zigner) approval
+    // shows/scans QR codes, which a side panel is too narrow for. Force a full
+    // popup window for it regardless of the user's side-panel preference. The
+    // app never chooses this - it only sets `isAirgap` on the request; zafu
+    // decides the surface, so the experience stays consistent.
+    const forceWindow =
+      (popupType === PopupType.TxApproval || popupType === PopupType.SignRequest) &&
+      (request as { isAirgap?: boolean }).isAirgap === true;
+
+    const popupId = await spawnDetachedPopup(popupType, forceWindow).catch(cause => {
       throw new Error(`Popup ${popupType} failed to open`, { cause });
     });
 
@@ -161,7 +170,13 @@ const deliverToSidePanel = async (popupType: PopupType, popupId: string): Promis
  * open a popup window (also the fallback when the panel is closed). Returns the
  * popup id the request will be sent under.
  */
-const spawnDetachedPopup = async (popupType: PopupType): Promise<string> => {
+const spawnDetachedPopup = async (
+  popupType: PopupType,
+  // When true, skip the side panel entirely and open a full popup window - used
+  // for airgap (Zigner) approvals whose QR display/scan does not fit a panel.
+  // The user's side-panel preference is respected for every other approval.
+  forceWindow = false,
+): Promise<string> => {
   const popupId = crypto.randomUUID();
 
   // Presence MUST be scoped to the window the user is actually looking at.
@@ -179,7 +194,7 @@ const spawnDetachedPopup = async (popupType: PopupType): Promise<string> => {
 
   // default ON: side panel is the default approval surface. Only an explicit
   // `false` (user picked "popup window") opts out.
-  const wantSidebar = (await localExtStorage.get('approvalsInSidePanel')) !== false;
+  const wantSidebar = !forceWindow && (await localExtStorage.get('approvalsInSidePanel')) !== false;
   if (wantSidebar) {
     let panelOpen = await isSidePanelOpen(winId);
 
