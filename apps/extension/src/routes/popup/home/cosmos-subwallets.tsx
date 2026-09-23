@@ -22,6 +22,7 @@ import {
   type CosmosChainConfig,
 } from '@repo/wallet/networks/cosmos/chains';
 import { useNobleRpcPool } from '../../../hooks/noble-rpc';
+import { useInjectiveRpcPool } from '../../../hooks/injective-rpc';
 import { getActiveIbcSubnetworks } from '../../../config/networks';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
@@ -240,7 +241,13 @@ const ChainDeposits = ({ chainId, view }: { chainId: CosmosChainId; view: 'home'
   // which RPC each address is queried through (rotated per index) - surfaced on
   // hover. Noble's pool is user-editable; other chains use their config pool.
   const { pool: noblePool } = useNobleRpcPool();
-  const pool = chainId === 'noble' ? noblePool : rpcEndpointPool(chainId);
+  const { pool: injectivePool } = useInjectiveRpcPool();
+  const pool =
+    chainId === 'noble'
+      ? noblePool
+      : chainId === 'injective'
+        ? injectivePool
+        : rpcEndpointPool(chainId);
   const endpointFor = (index: number): string | undefined =>
     pool.length ? pool[index % pool.length] : undefined;
 

@@ -22,6 +22,7 @@ import {
   type CosmosChainId,
 } from '@repo/wallet/networks/cosmos/chains';
 import { getNobleRpcPool } from './noble-rpc';
+import { getInjectiveRpcPool } from './injective-rpc';
 import { shortSymbol } from '../utils/asset-display';
 
 /** hook to get balance for a specific cosmos chain */
@@ -175,8 +176,14 @@ export const useCosmosDepositWallets = (chainId: CosmosChainId) => {
       }
       const mnemonic = await getMnemonic(selectedKeyInfo.id);
       const config = COSMOS_CHAINS[chainId];
-      // the user-editable pool for Noble; other chains use their config pool
-      const pool = chainId === 'noble' ? await getNobleRpcPool() : rpcEndpointPool(chainId);
+      // user-editable pools for Noble + Injective (Settings -> Penumbra ->
+      // burners); other chains use their config pool
+      const pool =
+        chainId === 'noble'
+          ? await getNobleRpcPool()
+          : chainId === 'injective'
+            ? await getInjectiveRpcPool()
+            : rpcEndpointPool(chainId);
 
       // Track whether any burner scan couldn't reach the RPC at all (both its
       // rotated endpoint and the fallback failed). Without this, an unreachable

@@ -1,12 +1,7 @@
 import { useEffect, useState } from 'react';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../../../state';
-import {
-  privacySelector,
-  selectTxSigningSecurity,
-  type PrivacySettings,
-} from '../../../state/privacy';
-import type { TxSigningSecurity } from '../../../shared/tx-signing-security';
+import { privacySelector, type PrivacySettings } from '../../../state/privacy';
 import { selectActiveNetwork } from '../../../state/keyring';
 import { isPro } from '../../../state/license';
 import { SettingsScreen } from './settings-screen';
