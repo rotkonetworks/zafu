@@ -234,40 +234,6 @@ function SigningSecuritySection() {
 }
 
 /**
- * Keplr compatibility is opt-in and lives in plaintext local storage (the
- * content script must read it without a session key), so it is a standalone
- * toggle rather than a privacy-slice row.
- */
-function KeplrCompatSection() {
-  const [enabled, setEnabled] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    void localExtStorage.get('keplrCompat').then(v => setEnabled(v === true));
-  }, []);
-
-  const toggle = (v: boolean): void => {
-    setEnabled(v);
-    void localExtStorage.set('keplrCompat', v);
-  };
-
-  if (enabled === null) {
-    return null;
-  }
-  return (
-    <Row
-      label='act as keplr'
-      stateLabel={
-        enabled
-          ? 'cosmos dapps see zafu as keplr - applies on next page load'
-          : 'off - a real keplr extension is left untouched'
-      }
-      checked={enabled}
-      onChange={toggle}
-    />
-  );
-}
-
-/**
  * Private contact discovery is opt-in and stores a relay endpoint the service
  * worker reads directly (plaintext, no secrets), so - like the Keplr toggle - it
  * is a standalone section rather than a boolean privacy-slice row. Default OFF:
@@ -386,9 +352,8 @@ export function SettingsPrivacy() {
         <ProxySection />
         {/* discovery derives from the zid contact layer; hide it when zid is off */}
         {(settings.enableIdentity ?? true) && <ContactDiscoverySection />}
-        {/* Keplr is a cosmos-family concern; hide it on networks (e.g. zcash)
-            where it would only confuse. */}
-        {(isIbcNetwork(activeNetwork) || activeNetwork === 'penumbra') && <KeplrCompatSection />}
+        {/* Keplr "act as" toggle moved to Networks → Penumbra section
+            since it only affects the Penumbra/IBC scope. */}
         {visibleRows.length === 0 && (
           <p className='py-8 text-center text-sm text-fg-muted'>
             no privacy settings for this network

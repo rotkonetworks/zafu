@@ -45,6 +45,7 @@ import { NETWORKS, LAUNCHED_NETWORKS, getTopLevelNetworks } from '../../../confi
 import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
 import { NobleEndpointsEditor } from './noble-endpoints-editor';
+import { KeplrCompatToggle } from './keplr-compat-toggle';
 import { SettingsWallets } from './settings-wallets';
 
 /** color map for network indicators */
@@ -317,10 +318,20 @@ const NetworkToggles = () => {
                           Managed here in the Penumbra submenu, no second
                           extension needed. */}
                       {networkId === 'penumbra' && (
-                        <div className='border-t border-border-soft pt-3'>
-                          <div className='text-label text-fg-muted mb-2'>burners</div>
-                          <NobleEndpointsEditor />
-                        </div>
+                        <>
+                          <div className='border-t border-border-soft pt-3'>
+                            <div className='text-label text-fg-muted mb-2'>burners</div>
+                            <NobleEndpointsEditor />
+                          </div>
+                          {/* Cosmos-family dapps (IBC, Keplr-only sites)
+                              only make sense to intercept when Penumbra
+                              is the active network — lives here rather
+                              than in Privacy so it's next to its
+                              actual scope. */}
+                          <div className='border-t border-border-soft pt-3'>
+                            <KeplrCompatToggle />
+                          </div>
+                        </>
                       )}
                     </div>
                   )}
