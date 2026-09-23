@@ -132,14 +132,26 @@ const popupUrl = (popupType?: PopupType, id?: string): URL => {
  */
 const deliverToSidePanel = async (popupType: PopupType, popupId: string): Promise<boolean> => {
   const ready = listenReady(popupId, AbortSignal.timeout(SIDE_PANEL_READY_TIMEOUT));
-  chrome.runtime
-    .sendMessage({ type: SIDE_PANEL_DELIVER, popupId, route: POPUP_PATHS[popupType] })
-    .catch(() => undefined); // no receiver -> ready times out -> window fallback
+  const route = POPUP_PATHS[popupType];
+  const send = () =>
+    chrome.runtime
+      .sendMessage({ type: SIDE_PANEL_DELIVER, popupId, route })
+      .catch(() => undefined); // no receiver yet -> retry below, else ready times out
+  // Send immediately, then retry on an interval until the panel acks (ready) or
+  // we time out. An ALREADY-open panel acks on the first send; a FRESHLY-opened
+  // panel (see spawnDetachedPopup's sidePanel.open) mounts its delivery listener
+  // a beat after the document loads, so the first send can land before anyone is
+  // listening - retrying lets that cold panel still receive the approval instead
+  // of dropping it and falling back to a window.
+  void send();
+  const interval = setInterval(() => void send(), 250);
   try {
     await ready;
     return true;
   } catch {
     return false;
+  } finally {
+    clearInterval(interval);
   }
 };
 
@@ -165,15 +177,33 @@ const spawnDetachedPopup = async (popupType: PopupType): Promise<string> => {
     .then(w => w.id)
     .catch(() => undefined);
 
-  // default ON: side panel is the default approval surface when it is open.
-  // Only an explicit `false` (user picked "popup window") opts out.
-  if (
-    (await isSidePanelOpen(winId)) &&
-    (await localExtStorage.get('approvalsInSidePanel')) !== false
-  ) {
-    const shown = await deliverToSidePanel(popupType, popupId).catch(() => false);
-    if (shown) {
-      return popupId;
+  // default ON: side panel is the default approval surface. Only an explicit
+  // `false` (user picked "popup window") opts out.
+  const wantSidebar = (await localExtStorage.get('approvalsInSidePanel')) !== false;
+  if (wantSidebar) {
+    let panelOpen = await isSidePanelOpen(winId);
+
+    // If the panel is CLOSED, try to open it before falling back to a popup. A
+    // dapp connect (and an approval prompted by a page action) is driven by a
+    // user click on the page, which Chrome MAY accept as the user gesture that
+    // chrome.sidePanel.open() requires. When it does, the approval lands in the
+    // side panel - what "side panel mode" should do on connect, instead of the
+    // popup users kept seeing. When no gesture propagated, open() throws and we
+    // fall straight through to the popup window below (prior behavior, no change).
+    if (!panelOpen && winId != null) {
+      try {
+        await chrome.sidePanel.open({ windowId: winId });
+        panelOpen = true;
+      } catch {
+        // no user gesture available in this context - popup fallback below
+      }
+    }
+
+    if (panelOpen) {
+      const shown = await deliverToSidePanel(popupType, popupId).catch(() => false);
+      if (shown) {
+        return popupId;
+      }
     }
   }
 
