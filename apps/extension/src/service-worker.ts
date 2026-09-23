@@ -36,6 +36,7 @@ import { sweepAndResume, defaultTrackerDeps } from './state/ibc-transfer-tracker
 import { makeIbcProbe } from './state/ibc-transfer-probes';
 import { openApprovalPopup } from './utils/popup-window';
 import { trackSidePanelPresence } from './side-panel-presence';
+import { initSidePanelPref } from './side-panel-pref';
 
 // all rpc implementations, local and proxy
 import { getRpcImpls } from './rpc';
@@ -80,6 +81,11 @@ import { runPresencePublish } from './state/contact-discovery-service';
 // count open side panels so approval routing can target the panel only when it
 // is actually open (see popup.ts). Registered once at worker startup.
 trackSidePanelPresence();
+
+// Seed the in-memory `approvalsInSidePanel` mirror so the connect listener can
+// decide to open the side panel without an awaited storage read (which would
+// lose the user gesture chrome.sidePanel.open requires).
+initSidePanelPref();
 
 // The graceful network-error handler (unhandledrejection + error) is registered
 // by the top-of-file './install-global-error-handlers' import - it must run on
