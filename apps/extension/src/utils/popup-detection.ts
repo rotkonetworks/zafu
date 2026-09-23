@@ -14,15 +14,13 @@
  * Dedicated windows are opened via chrome.windows.create() and won't close on focus loss.
  */
 export function isDedicatedWindow(): boolean {
-  // Extension popup views are returned by getViews({ type: 'popup' })
-  // If our window is NOT among them but uses popup.html, we're in a dedicated window
+  // A dedicated window loads popup.html (like the toolbar popup) but is NOT
+  // among getViews({type:'popup'}) - that API returns only the toolbar popup.
+  // Both signals are exact facts: the document identity and the view registry.
   if (typeof chrome !== 'undefined' && chrome.extension?.getViews) {
     try {
-      const popupViews = chrome.extension.getViews({ type: 'popup' });
-      const isExtensionPopup = popupViews.some(view => view === window);
-      const isPopupUrl = window.location.pathname.includes('popup');
-      // We're in dedicated window if: using popup.html but NOT in extension popup views
-      return isPopupUrl && !isExtensionPopup;
+      const isToolbarPopup = chrome.extension.getViews({ type: 'popup' }).some(v => v === window);
+      return window.location.pathname.endsWith('popup.html') && !isToolbarPopup;
     } catch {
       return false;
     }
@@ -51,24 +49,23 @@ export function isSidePanel(): boolean {
  * Popups cannot request camera permissions - the permission dialog won't appear.
  */
 export function isPopup(): boolean {
-  // Check if we're in a small popup window
-  // Extension popups are typically 400x600 or smaller
-  // Also check the URL - popups use popup.html
-  const isSmallWindow = window.innerWidth < 500 && window.innerHeight < 700;
-  const isPopupUrl = window.location.pathname.includes('popup');
-
-  // Use chrome API if available for more reliable detection
+  // The toolbar popup is the one context that cannot prompt for camera/USB, so
+  // callers redirect to a tab when this is true. getViews({type:'popup'}) is the
+  // authoritative signal: our window is the toolbar popup iff it is among those
+  // views. No window-size guess - a 400x600 tab and a large popup both fooled
+  // the old `innerWidth < 500 && innerHeight < 700` heuristic. A dedicated
+  // window loads popup.html but is NOT in getViews, so it correctly reads false
+  // (it can prompt for camera/USB).
   if (typeof chrome !== 'undefined' && chrome.extension?.getViews) {
     try {
-      const popupViews = chrome.extension.getViews({ type: 'popup' });
-      // If we find popup views and our window is among them, we're in a popup
-      return popupViews.some(view => view === window);
+      return chrome.extension.getViews({ type: 'popup' }).some(v => v === window);
     } catch {
-      // Fallback to URL/size detection
+      // fall through to the document-identity fallback
     }
   }
-
-  return isPopupUrl || isSmallWindow;
+  // Fallback only when getViews is unavailable: the popup document (not a tab or
+  // side panel). No dimensions involved.
+  return window.location.pathname.endsWith('popup.html');
 }
 
 /**
