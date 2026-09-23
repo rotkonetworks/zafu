@@ -18,7 +18,8 @@
     "./origin": "./src/origin.ts",
     "./session": "./src/session.ts",
     "./records": "./src/records/index.ts",
-    "./capabilities": "./src/capabilities.ts"
+    "./capabilities": "./src/capabilities.ts",
+    "./cosmos-chain-counters": "./src/cosmos-chain-counters.ts"
   },
   "dependencies": {
     "@penumbra-zone/bech32m": "18.0.0",
