@@ -6,6 +6,56 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 28.2.0
+
+Covers everything since 28.0.4. Focus: the side panel stays put, a reorganized
+settings surface, and Injective endpoint control - plus wallet-management and
+reliability fixes.
+
+### Side panel stays open
+
+- In side-panel mode, connecting a dapp now opens the side panel directly (using
+  the connect click as the gesture) instead of falling back to a popup window,
+  and the panel stays on the wallet home after you approve a transaction. This
+  ends the behavior where the sidebar turned into popups after the first
+  approval.
+- Airgap (Zigner) approvals always open in a full window, where the QR codes
+  fit. The surface (side panel vs window) is the wallet's decision, not the
+  app's, so the experience stays consistent across apps.
+- An open side panel is detected reliably, so approvals stop opening a separate
+  window when the panel is already there.
+
+### Settings, reorganized
+
+- One "Wallets & Networks" tab, and a dedicated "Security & Backup" hub that
+  gathers the recovery passphrase, auto-lock, and "resync state" (formerly
+  "clear cache").
+- Each wallet has an actions menu - rename, export recovery phrase, or remove.
+  Recovering the same seed no longer creates duplicate wallet entries, and an
+  un-decryptable vault can now be removed.
+- Penumbra node selection is registry-backed with latency probes, and each
+  network remembers your endpoint-selection strategy.
+- The transaction-signing control moved from Privacy to Security, and "act as
+  Keplr" moved from Privacy to the Penumbra network settings.
+
+### Cosmos and Injective
+
+- Injective now has a user-editable RPC endpoint pool (a burner subnetwork under
+  Penumbra); balance and subwallet reads rotate across it, like Noble, so no
+  single provider can link your burner addresses.
+- Withdrawing to Noble or Injective offers your own wallet as the destination,
+  with a max-amount shortcut.
+- Burner addresses rotate: a fresh chain address per use, rate-limited.
+
+### Reliability
+
+- The network worker no longer errors "worker not ready" when a call arrives
+  during startup - for example a Zigner cold-wallet sync. It waits for the
+  worker to come up instead of failing.
+- LP NFTs and other synthetic tokens are hidden from asset pickers.
+- Per-asset Send/Swap quick actions on the home screen, pre-selecting the asset.
+- Camera/QR permission handling is reliable in Brave, without a grant-tab loop.
+
 ## 28.0.4
 
 Covers everything since 28.0.3. Focus: assets show their real names and icons
