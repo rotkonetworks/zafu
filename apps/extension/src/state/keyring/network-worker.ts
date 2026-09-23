@@ -356,25 +356,36 @@ export const terminateNetworkWorker = (network: NetworkType): void => {
 /**
  * send message to network worker and await response
  */
-const callWorker = <T>(
+const callWorker = async <T>(
   network: NetworkType,
   type: NetworkWorkerMessage['type'],
   payload?: unknown,
   walletId?: string,
 ): Promise<T> => {
-  const state = workers.get(network);
+  let state = workers.get(network);
+  if (!state?.ready) {
+    // A call can arrive a beat before the worker has finished spinning up - e.g.
+    // a sync/Zigner op fired during startup - which used to hard-reject with
+    // "<network> worker not ready". Wait for it instead: spawnNetworkWorker is
+    // idempotent (returns at once if ready, joins an in-flight spawn, else
+    // spawns and waits with a 30s timeout), so an early call now blocks briefly
+    // rather than throwing. Only a genuine init timeout or termination rejects.
+    await spawnNetworkWorker(network);
+    state = workers.get(network);
+  }
   if (!state?.ready) {
     return Promise.reject(new Error(`${network} worker not ready`));
   }
 
+  const ready = state;
   const id = nextId();
   return new Promise((resolve, reject) => {
-    state.pendingCallbacks.set(id, {
+    ready.pendingCallbacks.set(id, {
       resolve: resolve as (value: unknown) => void,
       reject,
     });
 
-    state.worker.postMessage({
+    ready.worker.postMessage({
       type,
       id,
       network,
