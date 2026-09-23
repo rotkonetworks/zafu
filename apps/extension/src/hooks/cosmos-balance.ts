@@ -24,11 +24,31 @@ import {
 import { getNobleRpcPool } from './noble-rpc';
 import { getInjectiveRpcPool } from './injective-rpc';
 import { shortSymbol } from '../utils/asset-display';
+import { isLaunched } from '../config/networks';
+
+/**
+ * Cosmos chains (Noble, Injective, ...) are penumbra BURNERS - transparent
+ * sub-accounts that only exist to shield into / withdraw out of penumbra. So
+ * their balance polling is gated on penumbra being an enabled network: a
+ * zcash-only wallet must never reach out to noble-rpc / injective RPC. Injective
+ * is additionally gated on its launch flag so a held chain is not polled.
+ */
+const useBurnerPollingEnabled = (chainId?: CosmosChainId): boolean => {
+  const penumbraEnabled = useStore(s => s.networks.networks.penumbra.enabled);
+  if (!penumbraEnabled) {
+    return false;
+  }
+  if (chainId === 'injective' && !isLaunched('injective')) {
+    return false;
+  }
+  return true;
+};
 
 /** hook to get balance for a specific cosmos chain */
 export const useCosmosBalance = (chainId: CosmosChainId, accountIndex = 0) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { getMnemonic } = useStore(keyRingSelector);
+  const burnerEnabled = useBurnerPollingEnabled(chainId);
 
   return useQuery({
     queryKey: ['cosmosBalance', chainId, selectedKeyInfo?.id, accountIndex],
@@ -56,6 +76,7 @@ export const useCosmosBalance = (chainId: CosmosChainId, accountIndex = 0) => {
       };
     },
     enabled:
+      burnerEnabled &&
       !!selectedKeyInfo &&
       (selectedKeyInfo.type === 'mnemonic' || selectedKeyInfo.type === 'zigner-zafu'),
     structuralSharing: false, // balance.amount is bigint — not JSON-serializable
@@ -68,6 +89,7 @@ export const useCosmosBalance = (chainId: CosmosChainId, accountIndex = 0) => {
 export const useAllCosmosBalances = (accountIndex = 0) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { getMnemonic } = useStore(keyRingSelector);
+  const burnerEnabled = useBurnerPollingEnabled();
 
   return useQuery({
     queryKey: ['allCosmosBalances', selectedKeyInfo?.id, accountIndex],
@@ -122,6 +144,7 @@ export const useAllCosmosBalances = (accountIndex = 0) => {
       >;
     },
     enabled:
+      burnerEnabled &&
       !!selectedKeyInfo &&
       (selectedKeyInfo.type === 'mnemonic' || selectedKeyInfo.type === 'zigner-zafu'),
     structuralSharing: false, // balances contain bigint — not JSON-serializable
@@ -163,10 +186,11 @@ const DEPOSIT_SCAN_GAP = 8;
 export const useCosmosDepositWallets = (chainId: CosmosChainId) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { getMnemonic } = useStore(keyRingSelector);
+  const burnerEnabled = useBurnerPollingEnabled(chainId);
 
   return useQuery({
     queryKey: ['cosmosDepositWallets', chainId, selectedKeyInfo?.id],
-    enabled: !!selectedKeyInfo && selectedKeyInfo.type === 'mnemonic',
+    enabled: burnerEnabled && !!selectedKeyInfo && selectedKeyInfo.type === 'mnemonic',
     structuralSharing: false, // balances are bigint
     staleTime: 30_000,
     refetchInterval: 30_000,
@@ -332,6 +356,7 @@ export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
 
   // find a wallet with cosmos capability (may differ from effective when active network is penumbra)
   const cosmosKey = findCosmosCapableKey(allKeyInfos, selectedKeyInfo, chainId);
+  const burnerEnabled = useBurnerPollingEnabled(chainId);
 
   return useQuery({
     queryKey: ['cosmosAssets', chainId, cosmosKey?.id ?? null, accountIndex],
@@ -390,7 +415,7 @@ export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
         nativeAsset: assets.find(a => a.isNative) ?? null,
       };
     },
-    enabled: !!cosmosKey,
+    enabled: burnerEnabled && !!cosmosKey,
     structuralSharing: false, // CosmosAsset.amount is bigint — not JSON-serializable
     staleTime: 30_000,
     refetchInterval: 60_000,
