@@ -17,6 +17,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { viewClient, stakeClient, sctClient } from '../../../clients';
 import { assetPatterns } from '@rotko/penumbra-types/assets';
 import { fromValueView } from '@rotko/penumbra-types/amount';
+import { filterFungibleBalances } from '../../../utils/is-fungible-asset';
 import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { useSyncProgress } from '../../../hooks/full-sync-height';
@@ -83,21 +84,8 @@ const AssetRow = memo(
 );
 AssetRow.displayName = 'AssetRow';
 
-/** filter out non-displayable assets */
-const filterBalances = (balances: BalancesResponse[]): BalancesResponse[] =>
-  balances.filter(balance => {
-    const metadata = getMetadataFromBalancesResponse.optional(balance);
-    if (!metadata?.base || typeof metadata.base !== 'string') {
-      return true;
-    }
-
-    return !(
-      assetPatterns.auctionNft.matches(metadata.base) ||
-      assetPatterns.lpNft.matches(metadata.base) ||
-      assetPatterns.proposalNft.matches(metadata.base) ||
-      assetPatterns.votingReceipt.matches(metadata.base)
-    );
-  });
+/** filter out non-fungible synthetic tokens (LP NFTs, delegation, etc.) */
+const filterBalances = filterFungibleBalances;
 
 /** sort by priority score descending */
 const sortBalances = (balances: BalancesResponse[]): BalancesResponse[] =>

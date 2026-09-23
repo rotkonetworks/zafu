@@ -29,7 +29,10 @@ import {
 import { AssetIcon } from '@repo/ui/components/ui/asset-icon';
 import { symbolFromMetadata } from '../../../utils/asset-display';
 import { fromValueView } from '@rotko/penumbra-types/amount';
-import { assetPatterns } from '@rotko/penumbra-types/assets';
+import {
+  filterFungibleBalances,
+  isFungibleMetadata,
+} from '../../../utils/is-fungible-asset';
 import { cn } from '@repo/ui/lib/utils';
 import { useActiveAddress } from '../../../hooks/use-address';
 import {
@@ -1043,26 +1046,11 @@ const PenumbraSwap = () => {
         const raw = await Array.fromAsync(
           viewClient.balances({ accountFilter: { account: penumbraAccount } }),
         );
-        return raw
-          .filter(b => {
-            const meta = getMetadataFromBalancesResponse.optional(b);
-            if (!meta?.base || typeof meta.base !== 'string') {
-              return true;
-            }
-            return !(
-              assetPatterns.auctionNft.matches(meta.base) ||
-              assetPatterns.lpNft.matches(meta.base) ||
-              assetPatterns.proposalNft.matches(meta.base) ||
-              assetPatterns.votingReceipt.matches(meta.base) ||
-              assetPatterns.delegationToken.matches(meta.base) ||
-              assetPatterns.unbondingToken.matches(meta.base)
-            );
-          })
-          .sort((a, b) => {
-            const aScore = getMetadataFromBalancesResponse.optional(a)?.priorityScore ?? 0n;
-            const bScore = getMetadataFromBalancesResponse.optional(b)?.priorityScore ?? 0n;
-            return Number(bScore - aScore);
-          });
+        return filterFungibleBalances(raw).sort((a, b) => {
+          const aScore = getMetadataFromBalancesResponse.optional(a)?.priorityScore ?? 0n;
+          const bScore = getMetadataFromBalancesResponse.optional(b)?.priorityScore ?? 0n;
+          return Number(bScore - aScore);
+        });
       } catch {
         return [];
       }
@@ -1076,20 +1064,7 @@ const PenumbraSwap = () => {
       try {
         const raw = await Array.fromAsync(viewClient.assets({}));
         return raw
-          .filter(resp => {
-            const meta = resp.denomMetadata;
-            if (!meta?.base || typeof meta.base !== 'string') {
-              return true;
-            }
-            return !(
-              assetPatterns.auctionNft.matches(meta.base) ||
-              assetPatterns.lpNft.matches(meta.base) ||
-              assetPatterns.proposalNft.matches(meta.base) ||
-              assetPatterns.votingReceipt.matches(meta.base) ||
-              assetPatterns.delegationToken.matches(meta.base) ||
-              assetPatterns.unbondingToken.matches(meta.base)
-            );
-          })
+          .filter(resp => isFungibleMetadata(resp.denomMetadata))
           .sort((a, b) =>
             Number((b.denomMetadata?.priorityScore ?? 0n) - (a.denomMetadata?.priorityScore ?? 0n)),
           );

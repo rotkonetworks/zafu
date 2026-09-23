@@ -24,7 +24,6 @@ import { viewClient } from '../../../clients';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
 import { getDisplayDenomExponent } from '@penumbra-zone/getters/metadata';
 import { fromValueView } from '@rotko/penumbra-types/amount';
-import { assetPatterns } from '@rotko/penumbra-types/assets';
 import { useSkipRoute, useSkipChains } from '../../../hooks/skip-route';
 import { useCosmosSend, useCosmosIbcTransfer } from '../../../hooks/cosmos-signer';
 import { parseAmountToBaseUnits } from '@repo/wallet/networks/cosmos/signer';
@@ -46,6 +45,7 @@ import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
 import { AssetIcon } from '@repo/ui/components/ui/asset-icon';
 import { symbolFromMetadata } from '../../../utils/asset-display';
+import { filterFungibleBalances } from '../../../utils/is-fungible-asset';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { isDedicatedWindow } from '../../../utils/popup-detection';
 import { openInDedicatedWindow } from '../../../utils/navigate';
@@ -1069,25 +1069,12 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
         const raw = await Array.fromAsync(
           viewClient.balances({ accountFilter: { account: penumbraAccount } }),
         );
-        // filter and sort
-        return raw
-          .filter(b => {
-            const meta = getMetadataFromBalancesResponse.optional(b);
-            if (!meta?.base || typeof meta.base !== 'string') {
-              return true;
-            }
-            return !(
-              assetPatterns.auctionNft.matches(meta.base) ||
-              assetPatterns.lpNft.matches(meta.base) ||
-              assetPatterns.proposalNft.matches(meta.base) ||
-              assetPatterns.votingReceipt.matches(meta.base)
-            );
-          })
-          .sort((a, b) => {
-            const aScore = getMetadataFromBalancesResponse.optional(a)?.priorityScore ?? 0n;
-            const bScore = getMetadataFromBalancesResponse.optional(b)?.priorityScore ?? 0n;
-            return Number(bScore - aScore);
-          });
+        // filter non-fungible synthetic tokens (LP NFTs, delegation, etc.) then sort
+        return filterFungibleBalances(raw).sort((a, b) => {
+          const aScore = getMetadataFromBalancesResponse.optional(a)?.priorityScore ?? 0n;
+          const bScore = getMetadataFromBalancesResponse.optional(b)?.priorityScore ?? 0n;
+          return Number(bScore - aScore);
+        });
       } catch {
         return [];
       }
@@ -1452,18 +1439,11 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
         const raw = await Array.fromAsync(
           viewClient.balances({ accountFilter: { account: penumbraAccount } }),
         );
-        return raw.filter(b => {
-          const meta = getMetadataFromBalancesResponse.optional(b);
-          if (!meta?.base || typeof meta.base !== 'string') {
-            return false;
-          }
-          return !(
-            assetPatterns.auctionNft.matches(meta.base) ||
-            assetPatterns.lpNft.matches(meta.base) ||
-            assetPatterns.proposalNft.matches(meta.base) ||
-            assetPatterns.votingReceipt.matches(meta.base)
-          );
-        });
+        // exclude non-fungible synthetic tokens (LP NFTs, delegation, etc.)
+        // and any balance we can't classify (no metadata = not withdrawable)
+        return filterFungibleBalances(raw).filter(
+          b => !!getMetadataFromBalancesResponse.optional(b)?.base,
+        );
       } catch {
         return [];
       }
