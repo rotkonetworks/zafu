@@ -35,30 +35,15 @@ export function isDedicatedWindow(): boolean {
  * Side panels don't close on focus loss, so we can navigate normally.
  */
 export function isSidePanel(): boolean {
-  // Side panel URL contains 'sidepanel' or we can check the window type
-  if (window.location.pathname.includes('sidepanel')) {
-    return true;
-  }
-
-  // Alternative: check if opened via side panel API by looking at document URL
-  // Side panels typically have a specific URL pattern
-  if (typeof chrome !== 'undefined' && chrome.extension?.getViews) {
-    try {
-      // Side panel views are not returned by getViews({ type: 'popup' })
-      // and window dimensions are typically different
-      const popupViews = chrome.extension.getViews({ type: 'popup' });
-      const isExtensionPopup = popupViews.some(view => view === window);
-
-      // If we're not in popup views and not a tab, we might be in side panel
-      // Check window properties - side panels are usually taller
-      if (!isExtensionPopup && window.innerHeight > 700) {
-        return true;
-      }
-    } catch {
-      return false;
-    }
-  }
-  return false;
+  // The side panel loads a DISTINCT document - sidepanel.html (the manifest's
+  // side_panel.default_path) - so the pathname is an exact, reliable signal.
+  // This is the same approach Keplr uses (pathname === '/sidePanel.html'). No
+  // window-size heuristic: the old `innerHeight > 700` fallback misfired both
+  // ways - a short side panel read as a popup (so approvals closed it with
+  // window.close instead of returning to the wallet home), and a tall popup
+  // read as a panel. The document identity is the truth; measuring the window
+  // is not.
+  return window.location.pathname.endsWith('sidepanel.html');
 }
 
 /**
