@@ -7,6 +7,7 @@ import { openApprovalPopup } from './utils/popup-window';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { isSidePanelOpen } from './side-panel-presence';
 import { SIDE_PANEL_DELIVER } from './message/side-panel-delivery';
+import { rescue, detachedContext, UnavailableError, type Service } from '@zafu/service';
 
 const POPUP_READY_TIMEOUT = 60_000;
 // How long to wait for the open side panel to ACK an approval. Delivery is now a
@@ -110,6 +111,14 @@ export const popup = async <M extends PopupType>(
 };
 
 /**
+ * Intent-first name for {@link popup}: an app requests a user interaction and
+ * zafu decides the surface (side panel vs window) from the user's preference and
+ * the interaction kind - never the app's choice. Callers migrate to this name
+ * over time; it is the seam a future `@zafu/interactions` package builds on.
+ */
+export const present = popup;
+
+/**
  * The popup document uses a hash router. Each popup type has a unique path in
  * the router. The popup id is a query parameter and does not affect routing.
  */
@@ -179,53 +188,64 @@ const spawnDetachedPopup = async (
 ): Promise<string> => {
   const popupId = crypto.randomUUID();
 
-  // Presence MUST be scoped to the window the user is actually looking at.
-  // getContexts is global, so a panel open in another window (or a stale/
-  // enabled-but-not-visible one) read as "open" - we would then deliver to a
-  // panel the user cannot see, its ack would never come, and we'd fall back to a
-  // window anyway after the timeout. With many penumbra approvals that was the
-  // reported "still pushes a lot of popups even in side-panel mode". Scoping
-  // means: panel visible in THIS window -> deliver there; not here -> straight to
-  // the window with no wasted wait.
-  const winId = await chrome.windows
-    .getLastFocused({ windowTypes: ['normal'] })
-    .then(w => w.id)
-    .catch(() => undefined);
+  // The window surface: open a detached popup window and resolve when its
+  // approval document is ready. Also the fallback for the side-panel surface.
+  const openInWindow: Service<void, string> = async () => {
+    const ready = listenReady(popupId, AbortSignal.timeout(POPUP_READY_TIMEOUT));
+    const created = await openApprovalPopup(popupUrl(popupType, popupId).href);
+    // window id is guaranteed present after `create`
+    void ready.catch(() => chrome.windows.remove(created.id!));
+    await ready;
+    return popupId;
+  };
 
-  // default ON: side panel is the default approval surface. Only an explicit
-  // `false` (user picked "popup window") opts out.
+  // default ON: the side panel is the default approval surface. Only an explicit
+  // `false` (user picked "popup window"), or an airgap approval (forceWindow),
+  // opts out. The surface is the wallet's decision, never the app's.
   const wantSidebar = !forceWindow && (await localExtStorage.get('approvalsInSidePanel')) !== false;
-  if (wantSidebar) {
-    let panelOpen = await isSidePanelOpen(winId);
+  if (!wantSidebar) {
+    return openInWindow(undefined, detachedContext);
+  }
 
-    // If the panel is CLOSED, try to open it before falling back to a popup. A
-    // dapp connect (and an approval prompted by a page action) is driven by a
-    // user click on the page, which Chrome MAY accept as the user gesture that
-    // chrome.sidePanel.open() requires. When it does, the approval lands in the
-    // side panel - what "side panel mode" should do on connect, instead of the
-    // popup users kept seeing. When no gesture propagated, open() throws and we
-    // fall straight through to the popup window below (prior behavior, no change).
+  // The side-panel surface: deliver into the panel visible in the window the
+  // user is looking at. Presence MUST be scoped to that window - getContexts is
+  // global, so a panel open in another window would read as "open" and its ack
+  // would never come. Throws UnavailableError when the panel cannot take the
+  // approval, which the rescue below turns into the window fallback.
+  const deliverToOpenSidePanel: Service<void, string> = async () => {
+    const winId = await chrome.windows
+      .getLastFocused({ windowTypes: ['normal'] })
+      .then(w => w.id)
+      .catch(() => undefined);
+
+    let panelOpen = await isSidePanelOpen(winId);
+    // A closed panel is normally opened on the connect gesture (see
+    // content-script-connect). This best-effort open covers an approval that
+    // arrives with the panel openable; by here we are past the gesture and only
+    // delivering, so an await before it is fine.
     if (!panelOpen && winId != null) {
       try {
         await chrome.sidePanel.open({ windowId: winId });
         panelOpen = true;
       } catch {
-        // no user gesture available in this context - popup fallback below
+        // no panel, and none openable in this context
       }
     }
-
-    if (panelOpen) {
-      const shown = await deliverToSidePanel(popupType, popupId).catch(() => false);
-      if (shown) {
-        return popupId;
-      }
+    if (!panelOpen) {
+      throw new UnavailableError('side panel is not open in this window');
     }
-  }
+    const shown = await deliverToSidePanel(popupType, popupId).catch(() => false);
+    if (!shown) {
+      throw new UnavailableError('side panel did not acknowledge the approval');
+    }
+    return popupId;
+  };
 
-  const ready = listenReady(popupId, AbortSignal.timeout(POPUP_READY_TIMEOUT));
-  const created = await openApprovalPopup(popupUrl(popupType, popupId).href);
-  // window id is guaranteed present after `create`
-  void ready.catch(() => chrome.windows.remove(created.id!));
-  await ready;
-  return popupId;
+  // Try the side panel; on ANY failure fall back to a popup window. `rescue`
+  // (from @zafu/service) keeps that fallback a value-level combinator instead of
+  // a nested try/catch - the shared services pattern the wallet is standardizing
+  // on for interaction surface routing.
+  return rescue(deliverToOpenSidePanel(undefined, detachedContext), () =>
+    openInWindow(undefined, detachedContext),
+  );
 };

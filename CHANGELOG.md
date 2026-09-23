@@ -24,6 +24,10 @@ reliability fixes.
   app's, so the experience stays consistent across apps.
 - An open side panel is detected reliably, so approvals stop opening a separate
   window when the panel is already there.
+- Interaction surface routing (side panel vs window, with the window fallback)
+  is now built on the shared `@zafu/service` services pattern - a consistent,
+  extensible foundation for how the wallet presents every approval, with the
+  surface chosen by the wallet, not the requesting app.
 
 ### Settings, reorganized
 

@@ -221,6 +221,9 @@ importers:
       '@zafu/protocol':
         specifier: workspace:*
         version: link:../../packages/zafu-protocol
+      '@zafu/service':
+        specifier: workspace:*
+        version: link:../../packages/service
       '@zafu/zid':
         specifier: workspace:*
         version: link:../../packages/zid
