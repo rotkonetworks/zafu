@@ -119,6 +119,14 @@ export const QrScanner = ({
       Object.assign(videoConstraints, { focusMode: { ideal: 'continuous' } });
 
       const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
+      // Unmounted during the getUserMedia await (e.g. navigated away mid-scan):
+      // stop this stream instead of setting srcObject on a null element - which
+      // threw "Cannot set properties of null (setting 'srcObject')" and leaked
+      // the camera. Mirrors animated-qr-scanner's guard.
+      if (!videoRef.current) {
+        stream.getTracks().forEach(t => t.stop());
+        return;
+      }
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
 
