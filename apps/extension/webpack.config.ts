@@ -458,6 +458,17 @@ export default ({
         '@penumbra-zone/services': '@rotko/penumbra-services',
         '@protobufjs/inquire': path.resolve(__dirname, 'src/stubs/protobufjs-inquire.cjs'),
       },
+      // Mirror the browser config: the service worker now pulls the cosmos
+      // signer (fresh-address derivation via external-easteregg), which drags in
+      // @cosmjs/crypto -> node `crypto`/`buffer`/`stream`. Without these
+      // fallbacks the worker bundle fails to resolve `crypto`. `crypto: false`
+      // routes to WebCrypto (same as the browser bundle), buffer/stream are
+      // polyfilled.
+      fallback: {
+        crypto: false,
+        buffer: require.resolve('buffer/'),
+        stream: require.resolve('stream-browserify'),
+      },
     },
     plugins: [...sharedPlugins],
     experiments: {
