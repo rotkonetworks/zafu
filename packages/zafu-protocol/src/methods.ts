@@ -283,6 +283,62 @@ export interface ZafuDiscoveredContact {
  */
 export type ZafuDiscoverContactsResponse = { contacts: ZafuDiscoveredContact[] } | ZafuError;
 
+// -- cosmos fresh-address rotation (burner receive addresses) ---------------
+
+/**
+ * Ask the wallet for a fresh cosmos-family receive address on `chainId`.
+ *
+ * Motivation: on the unshield side of a shielded pool (Penumbra), sending
+ * every exit to the same inj1…/osmo1… destination lets an observer group
+ * every unshield to that account. The wallet keeps a per-chain HD-index
+ * counter and derives a fresh address at each new index, giving the caller
+ * (veil, penumbra.fi, any unshield UI) a receiver that has never appeared
+ * on-chain before.
+ *
+ * Scope:
+ *   - ONLY for the unshield direction (shielded pool -> transparent chain).
+ *     Deposits into the pool keep a stable address for CEX compliance and
+ *     should NOT use this method.
+ *   - The wallet holds the counter; the caller must NOT try to predict
+ *     future addresses. A returned `hdIndex` is informational (for a UI
+ *     that wants to display "burner #7").
+ *
+ * Approvals & rate limiting:
+ *   - First call from an origin prompts the user for the wallet's normal
+ *     site-permission flow. Subsequent calls succeed silently while the
+ *     permission is held.
+ *   - Wallets cap total allocations at 100 per origin per chain per 24 h
+ *     (`code: 'rate_limited'`) so a hostile site cannot balloon the counter
+ *     into the millions.
+ *   - `expiresAt` is optional; a wallet MAY hint how long the caller should
+ *     wait for a deposit at this address before rotating again (ms since
+ *     epoch). Callers SHOULD treat it as advisory - the address remains
+ *     spendable indefinitely.
+ */
+export interface ZafuGetFreshChainAddressRequest {
+  type: 'zafu_get_fresh_chain_address';
+  /**
+   * The chain to derive an address on. This is the wallet's own CosmosChainId
+   * (`noble`, `cosmoshub`, `injective`, `osmosis` at time of writing), not a
+   * SLIP-173 prefix or a chain-id like `noble-1`.
+   */
+  chainId: string;
+}
+export type ZafuGetFreshChainAddressResponse =
+  | {
+      /** the freshly-derived bech32 address (e.g. `inj1…`) */
+      address: string;
+      /** the HD index the address was derived at (post-increment, first call = 1). */
+      hdIndex: number;
+      /**
+       * advisory UTC millis after which the caller SHOULD request a new
+       * address rather than reuse this one. Omitted when the wallet has no
+       * hint; callers MUST NOT assume the address stops working at this time.
+       */
+      expiresAt?: number;
+    }
+  | ZafuError;
+
 // -- the registry ------------------------------------------------------------
 
 /**
@@ -303,6 +359,10 @@ export interface ZafuApi {
   zafu_discover_contacts: {
     request: ZafuDiscoverContactsRequest;
     response: ZafuDiscoverContactsResponse;
+  };
+  zafu_get_fresh_chain_address: {
+    request: ZafuGetFreshChainAddressRequest;
+    response: ZafuGetFreshChainAddressResponse;
   };
 }
 
@@ -328,6 +388,7 @@ export const ZAFU_V1_METHODS = [
   'zafu_decrypt',
   'zafu_pick_contacts',
   'zafu_discover_contacts',
+  'zafu_get_fresh_chain_address',
 ] as const satisfies readonly ZafuMethod[];
 
 // Compile-time guarantee that ZAFU_V1_METHODS lists EVERY key of ZafuApi (not

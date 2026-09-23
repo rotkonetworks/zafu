@@ -43,6 +43,8 @@ export {
   type ZafuDiscoverContactsRequest,
   type ZafuDiscoveredContact,
   type ZafuDiscoverContactsResponse,
+  type ZafuGetFreshChainAddressRequest,
+  type ZafuGetFreshChainAddressResponse,
 } from './methods';
 
 export type { ZafuTransport, ZafuTransportCallOptions } from './transport';

@@ -29,6 +29,7 @@ export const EASTEREGG_V1_METHODS = [
   'ping',
   'zafu_request_capability',
   'zafu_pick_contacts',
+  'zafu_get_fresh_chain_address',
 ] as const;
 
 /**

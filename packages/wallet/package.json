@@ -28,6 +28,7 @@
     "./networks/cosmos/adapter": "./src/networks/cosmos/adapter.ts",
     "./networks/cosmos/chains": "./src/networks/cosmos/chains.ts",
     "./networks/cosmos/signer": "./src/networks/cosmos/signer.ts",
+    "./networks/cosmos/fresh-address": "./src/networks/cosmos/fresh-address.ts",
     "./networks/cosmos/airgap": "./src/networks/cosmos/airgap.ts",
     "./networks/cosmos/client": "./src/networks/cosmos/client.ts",
     "./networks/injective/derive": "./src/networks/injective/derive.ts",

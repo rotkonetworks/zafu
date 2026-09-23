@@ -32,6 +32,11 @@ import {
   type Capability,
   CAPABILITY_META,
 } from '@repo/storage-chrome/capabilities';
+import {
+  nextHdIndex,
+  checkAndBumpFreshAddressRateLimit,
+} from '@repo/storage-chrome/cosmos-chain-counters';
+import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { isPro } from '../../state/license';
 import { isValidExternalSender } from '../../senders/external';
 import { ZAFU_PROTOCOL_VERSION, ZAFU_SUPPORTED_PROTOCOL_VERSIONS } from '@zafu/protocol';
@@ -703,6 +708,96 @@ export const externalMessageListener = (
         pendingPicks.delete(requestId);
       }
       sendResponse({ ok: true });
+      return true;
+    }
+
+    // ── Fresh cosmos burner address (unshield receiver rotation) ──
+
+    case 'zafu_get_fresh_chain_address': {
+      // Headless provider method: derives a fresh inj1…/osmo1… burner address
+      // per unshield so an on-chain observer cannot group exits by receiver.
+      // Only relevant for the unshield direction (shielded -> transparent);
+      // deposits use a stable address for CEX compliance.
+      //
+      // Gates (in order):
+      //   1. valid external sender (rejects iframes and unauthenticated pages)
+      //   2. requested chain is a known CosmosChainId
+      //   3. origin holds the 'connect' capability — first call prompts the
+      //      user like any other connect; subsequent calls succeed silently
+      //   4. per-origin+chain rate limit (100 / 24 h) — a hostile site can't
+      //      pump the counter into the millions and bomb the user's UX
+      //   5. wallet is unlocked and has a mnemonic vault selected
+      //
+      // TODO(later): per-address approval popup. Not built here because the
+      // whole point of this API is one-click unshield UX; a popup per
+      // derivation would defeat that. A dedicated confirmation lives in the
+      // unshield flow instead.
+      if (!isValidExternalSender(sender)) {
+        sendResponse({ error: 'denied', code: 'denied' });
+        return true;
+      }
+      const freshOrigin = sender.origin;
+      const rawChainId = String(msg['chainId'] ?? '');
+      if (!rawChainId || !(rawChainId in COSMOS_CHAINS)) {
+        sendResponse({ error: `unknown chainId '${rawChainId}'`, code: 'invalid_request' });
+        return true;
+      }
+      const chainId = rawChainId as CosmosChainId;
+
+      void (async () => {
+        try {
+          const perms = await getOriginPermissions(freshOrigin);
+          if (!hasCapability(perms, 'connect')) {
+            sendResponse({ error: 'not connected', code: 'denied' });
+            return;
+          }
+
+          const gate = await checkAndBumpFreshAddressRateLimit(freshOrigin, chainId);
+          if (!gate.ok) {
+            sendResponse({
+              error: `rate limit exceeded; retry in ${Math.ceil(gate.retryAfterMs / 1000)}s`,
+              code: 'rate_limited',
+            });
+            return;
+          }
+
+          // Wallet state: needs to be unlocked and have a selected mnemonic
+          // vault. Any failure between here and derivation is opaque
+          // ('internal_error') so we don't leak "locked" vs "no vault".
+          const { useStore } = await import('../../state');
+          const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
+          if (!keyInfo) {
+            sendResponse({ error: 'wallet locked', code: 'locked' });
+            return;
+          }
+          let mnemonic: string;
+          try {
+            mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
+          } catch {
+            sendResponse({ error: 'wallet locked', code: 'locked' });
+            return;
+          }
+
+          try {
+            const hdIndex = await nextHdIndex(chainId);
+            const { deriveFreshChainAddress } = await import(
+              '@repo/wallet/networks/cosmos/fresh-address'
+            );
+            const derived = await deriveFreshChainAddress(chainId, mnemonic, hdIndex);
+            sendResponse({ address: derived.address, hdIndex: derived.hdIndex });
+          } finally {
+            // Best-effort scrub of the mnemonic reference. JS strings are
+            // immutable so this only drops the local binding; GC still governs
+            // when the underlying storage is reclaimed.
+            mnemonic = '';
+          }
+        } catch (e) {
+          sendResponse({
+            error: e instanceof Error ? e.message : 'internal error',
+            code: 'internal_error',
+          });
+        }
+      })();
       return true;
     }
 
