@@ -304,6 +304,58 @@ function SaveContactPrompt({
 const PENUMBRA_CHAIN_ID = 'penumbra-1';
 
 /** cosmos send form with skip routing */
+/**
+ * Loaded lazily and defensively ON PURPOSE. This module also hosts
+ * PenumbraSend, PenumbraNativeSend and ZcashSend, so a module-scope
+ * `import ... from 'bip39'` would let a failure in a Cosmos-only
+ * convenience take down sending on every other network. Worst case here
+ * is that the mnemonic check silently does nothing.
+ */
+let bip39WordCache: Set<string> | null | undefined;
+const bip39Words = (): Set<string> | null => {
+  if (bip39WordCache !== undefined) {
+    return bip39WordCache;
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- keep
+    // this off the module's static import graph; see comment above.
+    const { wordlists } = require('bip39') as { wordlists: Record<string, string[]> };
+    bip39WordCache = new Set(wordlists['english'] ?? []);
+  } catch {
+    bip39WordCache = null;
+  }
+  return bip39WordCache;
+};
+
+/**
+ * Memos are the one free-text field whose contents become permanent and
+ * public the moment the tx is broadcast, so a paste-slip is unrecoverable.
+ * Keplr guards the specific slip people actually make — pasting a seed
+ * phrase in — by rejecting a memo that is mostly BIP-39 words. Same rule
+ * here: 8-32 words and at least three quarters of them in the wordlist.
+ */
+const memoLooksLikeMnemonic = (memo: string): boolean => {
+  const words = memo
+    .trim()
+    .split(/\s+/)
+    .filter(w => w.length > 0);
+  if (words.length < 8 || words.length > 32) {
+    return false;
+  }
+  const wordSet = bip39Words();
+  if (!wordSet) {
+    return false;
+  }
+  const threshold = (words.length / 4) * 3;
+  let hits = 0;
+  for (const word of words) {
+    if (wordSet.has(word.toLowerCase())) {
+      hits++;
+    }
+  }
+  return hits >= threshold;
+};
+
 function CosmosSend({
   sourceChainId,
   initialAccountIndex = 0,
@@ -322,6 +374,7 @@ function CosmosSend({
   // Sign from the burner index the caller chose (which funded address to spend),
   // so a rotated/never-reused address is actually spendable. Default 0.
   const [accountIndex] = useState(initialAccountIndex);
+  const [memo, setMemo] = useState('');
   const [txStatus, setTxStatus] = useState<
     'idle' | 'confirm' | 'signing' | 'broadcasting' | 'success' | 'error'
   >('idle');
@@ -563,6 +616,7 @@ function CosmosSend({
           toAddress: recipient,
           amount,
           denom: selectedAsset.denom,
+          memo: memo.trim() || undefined,
           accountIndex,
         });
       } else {
@@ -586,6 +640,7 @@ function CosmosSend({
           toAddress: recipient,
           amount,
           denom: selectedAsset.denom,
+          memo: memo.trim() || undefined,
           accountIndex,
         });
       }
@@ -779,6 +834,34 @@ function CosmosSend({
             </button>
           )}
         </div>
+      </div>
+
+      {/* memo — required by most exchanges to credit a deposit. Penumbra
+          cannot supply one (Ics20Withdrawal has no memo field, and the
+          shielded tx memo is encrypted), so for an exchange deposit this
+          is the only place the memo can be set. */}
+      <div>
+        <label htmlFor='cosmos-send-memo' className='mb-1 block text-xs text-fg-muted'>
+          memo (optional)
+        </label>
+        <input
+          id='cosmos-send-memo'
+          type='text'
+          value={memo}
+          onChange={e => setMemo(e.target.value)}
+          placeholder='exchange deposit memo / tag'
+          className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
+        />
+        {memoLooksLikeMnemonic(memo) && (
+          <p className='mt-1 text-xs text-red-400'>
+            this looks like a recovery phrase — never put one in a memo, it is
+            published on-chain in the clear
+          </p>
+        )}
+        <p className='mt-1 text-xs text-fg-muted'>
+          sending to an exchange? paste the memo/tag from its deposit page —
+          without it the deposit may not be credited
+        </p>
       </div>
 
       {/* route info */}
