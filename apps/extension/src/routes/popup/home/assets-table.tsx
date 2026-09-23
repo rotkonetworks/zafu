@@ -26,6 +26,8 @@ import { bech32mIdentityKey, identityKeyFromBech32m } from '@penumbra-zone/bech3
 import { isSidePanel, isDedicatedWindow } from '../../../utils/popup-detection';
 import { openInSidePanel } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
+import { useNavigate } from 'react-router-dom';
+import { symbolFromMetadata } from '../../../utils/asset-display';
 
 const UNBONDING_DELAY_BLOCKS = 120_960;
 
@@ -50,6 +52,32 @@ const EquivalentValues = memo(({ valueView }: { valueView?: ValueView }) => {
 });
 EquivalentValues.displayName = 'EquivalentValues';
 
+/**
+ * True when this balance represents a synthetic per-position token (LP NFT,
+ * delegation/unbonding, auction, governance vote/proposal). These are chain
+ * state, not something the user can "send X" or "swap X" — the row-level
+ * Send/Swap quick actions must not appear on them. The main balance-list
+ * filter above already drops the NFT variants; delegation and unbonding
+ * tokens still render (they show a Claim affordance instead) so this guard
+ * covers those too, and stays correct when the shared fungible-asset filter
+ * lands and removes them from the list entirely.
+ */
+const isNonFungibleBalance = (balance: BalancesResponse): boolean => {
+  const meta = getMetadataFromBalancesResponse.optional(balance);
+  const display = meta?.display;
+  if (!display) {
+    return false;
+  }
+  return (
+    assetPatterns.delegationToken.matches(display) ||
+    assetPatterns.unbondingToken.matches(display) ||
+    assetPatterns.lpNft.matches(display) ||
+    assetPatterns.auctionNft.matches(display) ||
+    assetPatterns.proposalNft.matches(display) ||
+    assetPatterns.votingReceipt.matches(display)
+  );
+};
+
 /** memoized row component */
 const AssetRow = memo(
   ({
@@ -57,30 +85,70 @@ const AssetRow = memo(
     currentBlockHeight,
     validatorName,
     onClaim,
+    onSend,
+    onSwap,
   }: {
     balance: BalancesResponse;
     currentBlockHeight?: number;
     validatorName?: string;
     onClaim?: () => void;
-  }) => (
-    <TableRow className='group'>
-      <TableCell>
-        <Sensitive>
-          <ValueViewComponent
-            view={balance.balanceView}
-            currentBlockHeight={currentBlockHeight}
-            validatorName={validatorName}
-            onClaim={onClaim}
-          />
-        </Sensitive>
-      </TableCell>
-      <TableCell>
-        <Sensitive>
-          <EquivalentValues valueView={balance.balanceView} />
-        </Sensitive>
-      </TableCell>
-    </TableRow>
-  ),
+    /** invoked with the balance's base denom (unique across the wallet) */
+    onSend?: (base: string) => void;
+    onSwap?: (base: string) => void;
+  }) => {
+    const meta = getMetadataFromBalancesResponse.optional(balance);
+    const base = typeof meta?.base === 'string' ? meta.base : undefined;
+    const symbol = symbolFromMetadata(meta);
+    const showActions = !!base && !isNonFungibleBalance(balance) && !!(onSend || onSwap);
+
+    return (
+      <TableRow className='group'>
+        <TableCell>
+          <Sensitive>
+            <ValueViewComponent
+              view={balance.balanceView}
+              currentBlockHeight={currentBlockHeight}
+              validatorName={validatorName}
+              onClaim={onClaim}
+            />
+          </Sensitive>
+        </TableCell>
+        <TableCell>
+          <Sensitive>
+            <EquivalentValues valueView={balance.balanceView} />
+          </Sensitive>
+        </TableCell>
+        <TableCell className='w-px whitespace-nowrap text-right'>
+          {showActions && (
+            <div className='flex items-center justify-end gap-1'>
+              {onSend && (
+                <button
+                  type='button'
+                  onClick={() => onSend(base)}
+                  aria-label={`Send ${symbol}`}
+                  title={`send ${symbol}`}
+                  className='inline-flex h-7 w-7 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-elev-2 hover:text-fg-high focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zigner-gold/60'
+                >
+                  <span className='i-ph-arrow-up-right h-4 w-4' />
+                </button>
+              )}
+              {onSwap && (
+                <button
+                  type='button'
+                  onClick={() => onSwap(base)}
+                  aria-label={`Swap ${symbol}`}
+                  title={`swap ${symbol}`}
+                  className='inline-flex h-7 w-7 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-elev-2 hover:text-fg-high focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zigner-gold/60'
+                >
+                  <span className='i-ph-arrows-left-right h-4 w-4' />
+                </button>
+              )}
+            </div>
+          )}
+        </TableCell>
+      </TableRow>
+    );
+  },
 );
 AssetRow.displayName = 'AssetRow';
 
@@ -125,6 +193,22 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
   const { latestBlockHeight } = useSyncProgress();
   const penumbraTx = usePenumbraTransaction();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  // Quick-action nav handlers. Stable across renders so memo(AssetRow)
+  // stays effective — the row only re-renders on balance changes.
+  // Pre-fill travels via router state (already the mechanism SendPage
+  // consumes for inbox compose etc.), keyed by the balance's `base` denom
+  // because it is unique across the wallet and unambiguous (IBC base
+  // denoms contain slashes that URL params would need to encode).
+  const goSend = useCallback(
+    (base: string) => navigate(PopupPath.SEND, { state: { prefillAsset: base } }),
+    [navigate],
+  );
+  const goSwap = useCallback(
+    (base: string) => navigate(PopupPath.SWAP, { state: { prefillFromAsset: base } }),
+    [navigate],
+  );
 
   // claim modal state
   const [claimBalance, setClaimBalance] = useState<BalancesResponse | undefined>();
@@ -375,6 +459,9 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
             <TableRow>
               <TableHead>balance</TableHead>
               <TableHead>value</TableHead>
+              <TableHead className='w-px'>
+                <span className='sr-only'>actions</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -395,6 +482,8 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
                   currentBlockHeight={latestBlockHeight}
                   validatorName={validatorName}
                   onClaim={isReady ? () => openClaimForBalance(balance) : undefined}
+                  onSend={goSend}
+                  onSwap={goSwap}
                 />
               );
             })}

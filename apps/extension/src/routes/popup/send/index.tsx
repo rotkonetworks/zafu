@@ -1010,7 +1010,13 @@ function CosmosSend({
 type PenumbraMode = 'send' | 'ibc';
 
 /** Combined Penumbra send with tabs */
-function PenumbraSend({ onSuccess }: { onSuccess?: () => void }) {
+function PenumbraSend({
+  onSuccess,
+  prefillAsset,
+}: {
+  onSuccess?: () => void;
+  prefillAsset?: string;
+}) {
   const [mode, setMode] = useState<PenumbraMode>('send');
 
   return (
@@ -1038,7 +1044,7 @@ function PenumbraSend({ onSuccess }: { onSuccess?: () => void }) {
       </div>
 
       {mode === 'send' ? (
-        <PenumbraNativeSend onSuccess={onSuccess} />
+        <PenumbraNativeSend onSuccess={onSuccess} prefillAsset={prefillAsset} />
       ) : (
         <PenumbraIbcSend onSuccess={onSuccess} />
       )}
@@ -1047,7 +1053,14 @@ function PenumbraSend({ onSuccess }: { onSuccess?: () => void }) {
 }
 
 /** Penumbra native send form (penumbra -> penumbra) */
-function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
+function PenumbraNativeSend({
+  onSuccess,
+  prefillAsset,
+}: {
+  onSuccess?: () => void;
+  /** Base denom of the asset the caller (row-level Send action) wants preselected. */
+  prefillAsset?: string;
+}) {
   const sendState = useStore(selectPenumbraSend);
   const penumbraAccount = useStore(selectPenumbraAccount);
   const [txStatus, setTxStatus] = useState<
@@ -1084,12 +1097,19 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
   // local state for selected asset (not in zustand due to immer/protobuf incompatibility)
   const [selectedAsset, setSelectedAsset] = useState<(typeof balances)[0] | undefined>();
 
-  // auto-select first balance if none selected
+  // auto-select first balance if none selected. If the caller pre-filled an
+  // asset (row-level "Send USDC" action on home) prefer the balance whose
+  // metadata.base matches; fall back to the top-priority balance so the form
+  // is never empty when the user has funds.
   useEffect(() => {
-    if (!selectedAsset && balances.length > 0) {
-      setSelectedAsset(balances[0]);
+    if (selectedAsset || balances.length === 0) {
+      return;
     }
-  }, [balances, selectedAsset]);
+    const match = prefillAsset
+      ? balances.find(b => getMetadataFromBalancesResponse.optional(b)?.base === prefillAsset)
+      : undefined;
+    setSelectedAsset(match ?? balances[0]);
+  }, [balances, selectedAsset, prefillAsset]);
 
   // recent addresses
   const { recordUsage } = useStore(recentAddressesSelector);
@@ -1311,6 +1331,11 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
           onChange={e => sendState.setAmount(e.target.value)}
           placeholder='0.00'
           disabled={txStatus !== 'idle'}
+          // When a row-level Send picked the asset for us, the user's only
+          // remaining decision on the "amount" pane is how much - land them
+          // in the amount field. Without a prefill we leave focus to the
+          // default (recipient field is the first thing they need to fill).
+          autoFocus={!!prefillAsset}
           className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
         />
       </div>
@@ -1987,6 +2012,12 @@ interface SendLocationState {
   prefillRecipient?: string;
   prefillAmount?: string;
   /**
+   * Row-level "Send X" quick-action on the home asset list: base denom of the
+   * asset to preselect. Matched against `metadata.base` on the fetched balance
+   * list. Falls back to the top-priority balance if the denom is not found.
+   */
+  prefillAsset?: string;
+  /**
    * Cosmos off-ramp: open the cosmos send for this chain WITHOUT switching the
    * active network. Noble is a burner doorway, not a network - the user stays
    * on Penumbra; this just routes the send form to the transparent chain.
@@ -2111,7 +2142,10 @@ export function SendPage() {
       {/* Content */}
       <div className='p-4'>
         {isPenumbra ? (
-          <PenumbraSend onSuccess={inDedicatedWindow ? () => window.close() : undefined} />
+          <PenumbraSend
+            onSuccess={inDedicatedWindow ? () => window.close() : undefined}
+            prefillAsset={locationState?.prefillAsset}
+          />
         ) : isCosmos ? (
           isActiveIbcChain((cosmosChain ?? activeNetwork) as NetworkType) ? (
             <CosmosSend

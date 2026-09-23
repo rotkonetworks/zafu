@@ -70,6 +70,17 @@ import {
 import { selectActiveZcashWallet } from '../../../state/wallets';
 import { useBackNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
+import { useLocation } from 'react-router-dom';
+
+/**
+ * Router state accepted by the swap page. Set from the row-level "Swap X"
+ * quick-action on the home asset list so the from-leg boots pre-selected.
+ */
+interface SwapLocationState {
+  /** Base denom of the asset to preselect as the FROM leg. Falls back to
+   *  top-priority balance when the denom is not found. */
+  prefillFromAsset?: string;
+}
 
 /** input asset with balance */
 interface InputAsset {
@@ -92,12 +103,14 @@ interface OutputAsset {
 
 export const SwapPage = () => {
   const activeNetwork = useStore(selectActiveNetwork);
+  const location = useLocation();
+  const swapState = location.state as SwapLocationState | undefined;
 
   if (activeNetwork === 'zcash') {
     return <ZcashCrosschainSwap />;
   }
   if (activeNetwork === 'penumbra') {
-    return <PenumbraSwap />;
+    return <PenumbraSwap prefillFromAsset={swapState?.prefillFromAsset} />;
   }
 
   return (
@@ -1017,7 +1030,7 @@ const ZcashCrosschainSwap = () => {
 
 // ── Penumbra DEX Swap ──
 
-const PenumbraSwap = () => {
+const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) => {
   const goBack = useBackNav(PopupPath.INDEX);
   const penumbraAccount = useStore(selectPenumbraAccount);
   const [amountIn, setAmountIn] = useState('');
@@ -1096,11 +1109,18 @@ const PenumbraSwap = () => {
     });
   }, [allAssets]);
 
+  // Auto-select the FROM leg. If the row-level "Swap X" quick-action passed
+  // a base denom, prefer the matching input asset; fall back to the
+  // top-priority balance so the form is never empty when the user has funds.
   useEffect(() => {
-    if (!selectedIn && inputAssets.length > 0) {
-      setSelectedIn(inputAssets[0]);
+    if (selectedIn || inputAssets.length === 0) {
+      return;
     }
-  }, [inputAssets, selectedIn]);
+    const match = prefillFromAsset
+      ? inputAssets.find(a => a.metadata?.base === prefillFromAsset)
+      : undefined;
+    setSelectedIn(match ?? inputAssets[0]);
+  }, [inputAssets, selectedIn, prefillFromAsset]);
 
   const {
     data: simulation,
@@ -1276,6 +1296,10 @@ const PenumbraSwap = () => {
             onChange={e => setAmountIn(e.target.value)}
             placeholder='0.00'
             disabled={txStatus !== 'idle'}
+            // Row-level "Swap USDC" preselected the FROM leg for us; land
+            // the cursor in the amount field so the user picks the TO leg
+            // as a deliberate next click, not as the first input decision.
+            autoFocus={!!prefillFromAsset}
             className='flex-1 bg-transparent text-lg font-medium text-fg placeholder:text-fg-muted focus:outline-none disabled:opacity-50'
           />
           <button
