@@ -30,7 +30,7 @@ import { AssetIcon } from '@repo/ui/components/ui/asset-icon';
 import { symbolFromMetadata } from '../../../utils/asset-display';
 import { fromValueView } from '@rotko/penumbra-types/amount';
 import {
-  filterFungibleBalances,
+  filterSelectableBalances,
   isFungibleMetadata,
 } from '../../../utils/is-fungible-asset';
 import { cn } from '@repo/ui/lib/utils';
@@ -1059,7 +1059,7 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
         const raw = await Array.fromAsync(
           viewClient.balances({ accountFilter: { account: penumbraAccount } }),
         );
-        return filterFungibleBalances(raw).sort((a, b) => {
+        return filterSelectableBalances(raw).sort((a, b) => {
           const aScore = getMetadataFromBalancesResponse.optional(a)?.priorityScore ?? 0n;
           const bScore = getMetadataFromBalancesResponse.optional(b)?.priorityScore ?? 0n;
           return Number(bScore - aScore);

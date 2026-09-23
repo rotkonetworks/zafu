@@ -45,7 +45,7 @@ import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
 import { AssetIcon } from '@repo/ui/components/ui/asset-icon';
 import { symbolFromMetadata } from '../../../utils/asset-display';
-import { filterFungibleBalances } from '../../../utils/is-fungible-asset';
+import { filterSelectableBalances } from '../../../utils/is-fungible-asset';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { isDedicatedWindow } from '../../../utils/popup-detection';
 import { openInDedicatedWindow } from '../../../utils/navigate';
@@ -1166,7 +1166,7 @@ function PenumbraNativeSend({
           viewClient.balances({ accountFilter: { account: penumbraAccount } }),
         );
         // filter non-fungible synthetic tokens (LP NFTs, delegation, etc.) then sort
-        return filterFungibleBalances(raw).sort((a, b) => {
+        return filterSelectableBalances(raw).sort((a, b) => {
           const aScore = getMetadataFromBalancesResponse.optional(a)?.priorityScore ?? 0n;
           const bScore = getMetadataFromBalancesResponse.optional(b)?.priorityScore ?? 0n;
           return Number(bScore - aScore);
@@ -1549,7 +1549,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
         );
         // exclude non-fungible synthetic tokens (LP NFTs, delegation, etc.)
         // and any balance we can't classify (no metadata = not withdrawable)
-        return filterFungibleBalances(raw).filter(
+        return filterSelectableBalances(raw).filter(
           b => !!getMetadataFromBalancesResponse.optional(b)?.base,
         );
       } catch {

@@ -68,3 +68,37 @@ export const isFungibleBalance = (balance: BalancesResponse): boolean =>
  */
 export const filterFungibleBalances = (balances: BalancesResponse[]): BalancesResponse[] =>
   balances.filter(isFungibleBalance);
+
+/**
+ * Stricter filter for ACTION SELECTORS (the swap from-leg, the send asset
+ * picker) rather than balance lists: a balance is selectable only if it is
+ * fungible AND carries resolved, human metadata (a symbol or display).
+ *
+ * Why the extra check: an LP-position NFT whose metadata has not resolved shows
+ * up as "Unknown asset" with no display denom, so `isFungibleBalance` (which
+ * matches the non-fungible patterns against the display string) can't see it and
+ * lets it through - which is exactly the LP-NFT pollution reported in swap/send.
+ * You cannot meaningfully choose an unnamed asset to move, so a selector should
+ * hide it; a real-but-unresolved token is only transiently hidden until its
+ * metadata loads. Balance LISTS deliberately keep using `filterFungibleBalances`
+ * so a holding is never silently swallowed just because we failed to name it.
+ */
+export const isSelectableBalance = (balance: BalancesResponse): boolean => {
+  const metadata = getMetadataFromBalancesResponse.optional(balance);
+  if (!metadata) {
+    return false;
+  }
+  const named =
+    (metadata.symbol ?? '').trim().length > 0 || (metadata.display ?? '').trim().length > 0;
+  if (!named) {
+    return false;
+  }
+  return isFungibleMetadata(metadata);
+};
+
+/**
+ * Drop non-fungible AND unnamed ("Unknown asset") balances - use for asset
+ * pickers where the user chooses something to move. See {@link isSelectableBalance}.
+ */
+export const filterSelectableBalances = (balances: BalancesResponse[]): BalancesResponse[] =>
+  balances.filter(isSelectableBalance);
