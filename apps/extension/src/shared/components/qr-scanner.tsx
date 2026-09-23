@@ -47,6 +47,10 @@ export const QrScanner = ({
   const mountedRef = useRef(true);
   const startingRef = useRef(false);
   const scannedRef = useRef(false);
+  // The grant-camera tab is opened at most ONCE. If permission is still denied
+  // after it (e.g. Brave blocks the camera for the extension at the browser
+  // level), reopening it on every retry would loop - show guidance instead.
+  const grantAttemptedRef = useRef(false);
 
   // Stable refs for callbacks — avoids re-creating startScanning on every render
   const onScanRef = useRef(onScan);
@@ -83,6 +87,13 @@ export const QrScanner = ({
       const reader = new BrowserQRCodeReader(hints, {
         delayBetweenScanAttempts: 100, // scan ~10x/sec instead of default ~2x/sec
       });
+
+      // Brave (and any hardened/insecure context) can leave mediaDevices absent
+      // entirely - fail with a clear message instead of a "cannot read
+      // getUserMedia of undefined" crash.
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new DOMException('camera API unavailable in this browser', 'NotFoundError');
+      }
 
       // request camera permission FIRST — Chrome MV3 extension pages may
       // auto-dismiss the permission prompt if enumerateDevices() runs before
@@ -130,38 +141,64 @@ export const QrScanner = ({
       }
     } catch (err) {
       startingRef.current = false;
+      // Classify by the standardized DOMException NAME first. getUserMedia rejects
+      // with a DOMException whose `.name` is stable across browsers, whereas
+      // `.message` wording differs - Brave/Chromium phrase permission denials
+      // differently, so message-only matching missed Brave and the camera just
+      // died with no guidance (the reported "camera won't pop up in Brave").
+      const name = err instanceof DOMException ? err.name : '';
       const msg = err instanceof Error ? err.message : 'Failed to start camera';
+      const isPermission =
+        name === 'NotAllowedError' ||
+        name === 'SecurityError' ||
+        name === 'PermissionDeniedError' ||
+        /Permission|NotAllowed|denied/i.test(msg);
+      const isNotFound =
+        name === 'NotFoundError' ||
+        name === 'OverconstrainedError' ||
+        name === 'DevicesNotFoundError' ||
+        /NotFound|no camera|Overconstrained/i.test(msg);
+      const isInUse =
+        name === 'NotReadableError' ||
+        name === 'AbortError' ||
+        /NotReadable|AbortError|Could not start|in use/i.test(msg);
 
-      if (/Permission|NotAllowed/.test(msg)) {
-        // side panels and popups can't show permission prompts.
-        // open a dedicated window to request camera access, then retry.
-        try {
-          const grantUrl = chrome.runtime.getURL('page.html#/grant-camera');
-          const tab = await chrome.tabs.create({ url: grantUrl, active: true });
-          // wait for the tab to close (user granted or denied)
-          await new Promise<void>(resolve => {
-            const listener = (tabId: number) => {
-              if (tabId === tab.id) {
-                chrome.tabs.onRemoved.removeListener(listener);
-                resolve();
-              }
-            };
-            chrome.tabs.onRemoved.addListener(listener);
-          });
-          // retry - if permission was granted this will work
-          startingRef.current = false;
-          void startScanning();
-          return;
-        } catch {
-          // fallback if tabs API not available
+      if (isPermission) {
+        // Side panels and popups can't show the permission prompt, so open a
+        // dedicated page that can - but ONLY ONCE (grantAttemptedRef), or a
+        // browser-level block (Brave) would reopen the tab on every retry.
+        if (!grantAttemptedRef.current) {
+          grantAttemptedRef.current = true;
+          try {
+            const grantUrl = chrome.runtime.getURL('page.html#/grant-camera');
+            const tab = await chrome.tabs.create({ url: grantUrl, active: true });
+            // wait for the tab to close (user granted or denied)
+            await new Promise<void>(resolve => {
+              const listener = (tabId: number) => {
+                if (tabId === tab.id) {
+                  chrome.tabs.onRemoved.removeListener(listener);
+                  resolve();
+                }
+              };
+              chrome.tabs.onRemoved.addListener(listener);
+            });
+            // retry - if permission was granted this will work
+            startingRef.current = false;
+            void startScanning();
+            return;
+          } catch {
+            // tabs API unavailable - fall through to the guidance below
+          }
         }
         setError('permission');
-      } else if (/NotReadable|AbortError|Could not start/i.test(msg)) {
+      } else if (isInUse) {
         setError('Camera is in use by another app. Close it and retry.');
-      } else if (/NotFound|no camera/i.test(msg)) {
-        setError('No camera found on this device.');
+      } else if (isNotFound) {
+        setError(
+          'No camera found. On Brave, Shields/privacy settings can hide the camera - allow it for this extension, or paste the QR data instead.',
+        );
       } else {
-        setError(msg);
+        setError(msg || 'Failed to start camera');
       }
       onErrorRef.current?.(msg);
     }
@@ -233,6 +270,11 @@ export const QrScanner = ({
             {error === 'permission' ? (
               <>
                 <p className='text-xs text-red-400'>camera access is required to scan QR codes</p>
+                <p className='text-label text-fg-muted leading-snug max-w-[16rem]'>
+                  if nothing happens, your browser is blocking the camera. on Brave, open Shields or
+                  site settings for this extension and allow camera, then retry. you can also paste
+                  the QR data manually.
+                </p>
                 <div className='flex gap-2'>
                   <Button variant='secondary' size='sm' onClick={handleClose}>
                     cancel
@@ -244,7 +286,7 @@ export const QrScanner = ({
                       void startScanning();
                     }}
                   >
-                    grant access
+                    retry
                   </Button>
                 </div>
               </>
