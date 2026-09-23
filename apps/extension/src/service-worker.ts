@@ -37,6 +37,9 @@ import { makeIbcProbe } from './state/ibc-transfer-probes';
 import { openApprovalPopup } from './utils/popup-window';
 import { trackSidePanelPresence } from './side-panel-presence';
 import { initSidePanelPref } from './side-panel-pref';
+import { setDappSessionHooks } from './dapp-session-presence';
+import { getRootNetwork } from './config/networks';
+import type { NetworkType } from './state/keyring';
 
 // all rpc implementations, local and proxy
 import { getRpcImpls } from './rpc';
@@ -187,6 +190,22 @@ const reinitializeServices = async () => {
     }
   });
 };
+
+// Keep penumbra services in step with connected dapps. When the extension UI is
+// NOT on penumbra, a dapp session (or losing the last one) flips whether
+// penumbra should sync, so reinit to apply the gate. When the UI IS on penumbra,
+// penumbra is already active and a session change is a no-op - skip the churn
+// (reinit restarts the block processor, which is not free on a large wallet).
+const reinitForSessionIfNeeded = async () => {
+  const activeNetwork = await localExtStorage.get('activeNetwork');
+  if (activeNetwork && getRootNetwork(activeNetwork as NetworkType) !== 'penumbra') {
+    void reinitializeServices();
+  }
+};
+setDappSessionHooks({
+  onFirst: () => void reinitForSessionIfNeeded(),
+  onLast: () => void reinitForSessionIfNeeded(),
+});
 
 // Listen for wallet and network changes
 localExtStorage.addListener(changes => {

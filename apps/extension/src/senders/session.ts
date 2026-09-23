@@ -1,6 +1,7 @@
 import { alreadyApprovedSender } from './approve';
 import { isValidExternalSender, type ValidExternalSender } from './external';
 import { type ValidInternalSender, isValidInternalSender } from './internal';
+import { trackDappSession } from '../dapp-session-presence';
 
 // Diagnostic dedup: an unapproved dapp reconnects on a loop, so the rejection
 // below floods the console once per retry ("Session sender is not approved").
@@ -15,6 +16,10 @@ export const validateSessionPort = async (port: chrome.runtime.Port) => {
   }
 
   if (isValidExternalSender(port.sender) && (await alreadyApprovedSender(port.sender))) {
+    // A live penumbra dapp session. Note it so the active-network gate keeps
+    // penumbra services running while this dapp is connected, even if the
+    // extension UI is on another network (see dapp-session-presence).
+    trackDappSession(port);
     return port as chrome.runtime.Port & { sender: ValidExternalSender };
   }
 

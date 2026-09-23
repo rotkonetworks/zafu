@@ -10,6 +10,7 @@ import { Services } from '@repo/context';
 import { WalletServices } from '@rotko/penumbra-types/services';
 import { getRootNetwork } from './config/networks';
 import type { NetworkType } from './state/keyring';
+import { hasLiveDappSession } from './dapp-session-presence';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { SENTINEL_U64_MAX } from './utils/sentinel';
 
@@ -78,9 +79,19 @@ export const startWalletServices = async (
   // A cosmos subnetwork (e.g. Noble) roots to penumbra, so viewing it still
   // needs penumbra context for unshielding - treat the whole penumbra group as
   // active. Only a different root (zcash) skips penumbra sync.
-  if (activeNetwork && getRootNetwork(activeNetwork as NetworkType) !== 'penumbra') {
-    // expected whenever the user is on zcash/another network - not an error,
-    // and it fires on every sync tick, so stay silent rather than spam the log.
+  if (
+    activeNetwork &&
+    getRootNetwork(activeNetwork as NetworkType) !== 'penumbra' &&
+    // ...unless a penumbra dapp (e.g. Veil) is connected right now. Its session
+    // needs penumbra services regardless of which network the extension UI is
+    // viewing; otherwise every dapp view call fails with "penumbra network not
+    // active". The service worker reinitializes on the first/last session so
+    // this state stays consistent.
+    !hasLiveDappSession()
+  ) {
+    // expected whenever the user is on zcash/another network with no penumbra
+    // dapp connected - not an error, and it fires on every sync tick, so stay
+    // silent rather than spam the log.
     return stubServices('penumbra network not active');
   }
 
