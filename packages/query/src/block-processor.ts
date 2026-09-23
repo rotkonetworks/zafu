@@ -257,10 +257,17 @@ export class BlockProcessor implements BlockProcessorInterface {
     // planner fails with "SctParameters not available" / "FmdParameters not
     // available". Re-fetch and re-store both when either is missing.
     try {
-      const [fmd, storedApp] = await Promise.all([
-        this.indexedDb.getFmdParams(),
-        this.indexedDb.getAppParams(),
-      ]);
+      // A previously-stored FmdParameters can be undecodable - e.g. a legacy
+      // asOfBlockHeight of -1 written before the clamp in
+      // saveFmdParamsFromAppParams. getFmdParams then THROWS rather than
+      // returning undefined, so read it defensively and treat a decode failure
+      // as missing: that forces a re-fetch below which overwrites the poisoned
+      // entry, instead of letting the throw stall every sync.
+      const fmd = await this.indexedDb.getFmdParams().catch(err => {
+        console.warn('[sync] stored FMD params undecodable, will re-fetch:', err);
+        return undefined;
+      });
+      const storedApp = await this.indexedDb.getAppParams();
       // Only hit the network when something the planner needs is actually
       // missing - once repaired, later syncs skip the fetch, and a fresh wallet
       // (which already ran the isFreshWallet branch above) does not re-fetch.
@@ -452,6 +459,12 @@ export class BlockProcessor implements BlockProcessorInterface {
       return;
     }
 
+    // asOfBlockHeight is a uint64. A fresh wallet's currentHeight is -1n before
+    // any block is scanned; storing that makes the FmdParameters JSON
+    // undecodable ("uint64 invalid: -1"), and every later getFmdParams read
+    // then throws and stalls sync entirely. Clamp to 0.
+    const safeHeight = height < 0n ? 0n : height;
+
     /* eslint-disable @typescript-eslint/no-deprecated -- fixedFmdParams is the legacy path */
     if (spp.fixedFmdParams) {
       await this.indexedDb.saveFmdParams(
@@ -468,7 +481,7 @@ export class BlockProcessor implements BlockProcessorInterface {
     if (meta) {
       const precisionBits = meta.algorithm.case === 'fixedPrecisionBits' ? meta.algorithm.value : 0;
       await this.indexedDb.saveFmdParams(
-        new FmdParameters({ precisionBits, asOfBlockHeight: height }),
+        new FmdParameters({ precisionBits, asOfBlockHeight: safeHeight }),
       );
     }
   }

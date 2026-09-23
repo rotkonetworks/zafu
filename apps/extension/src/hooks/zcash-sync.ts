@@ -39,6 +39,11 @@ export interface ZcashSyncState {
 export function useZcashSyncStatus(): ZcashSyncState {
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || DEFAULT_ZIDECAR_URL;
   const backend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
+  // Privacy: never poll the zcash zidecar when zcash is not an enabled network.
+  // Otherwise a penumbra-only wallet still hammered zcash.rotko.net for GetTip /
+  // GetSyncStatus on an interval - a network connection the user never opted in
+  // to (reported: "why do we connect zcash if only penumbra is selected").
+  const zcashEnabled = useStore(s => s.networks.networks.zcash.enabled);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const activeWalletId = selectedKeyInfo?.id;
   const [workerSyncHeight, setWorkerSyncHeight] = useState(0);
@@ -140,8 +145,9 @@ export function useZcashSyncStatus(): ZcashSyncState {
     error: syncError,
   } = useQuery({
     queryKey: ['zcashSyncStatus', backend, zidecarUrl],
-    // GetSyncStatus is a zidecar-only RPC; public lightwalletd endpoints lack it
-    enabled: backend === 'zidecar',
+    // GetSyncStatus is a zidecar-only RPC; public lightwalletd endpoints lack it.
+    // Also gated on zcash being enabled - no polling for a penumbra-only wallet.
+    enabled: zcashEnabled && backend === 'zidecar',
     queryFn: () => client().getSyncStatus(),
     staleTime: POLL_INTERVAL,
     refetchInterval: POLL_INTERVAL,
@@ -157,6 +163,9 @@ export function useZcashSyncStatus(): ZcashSyncState {
     // with the right client instead of serving a stale one (zidecar GetTip
     // against a lightwalletd endpoint → "tip error" until extension reload).
     queryKey: ['zcashChainTip', backend, zidecarUrl],
+    // Gated on zcash being enabled - a penumbra-only wallet must not poll the
+    // zidecar for the chain tip.
+    enabled: zcashEnabled,
     queryFn: () => client().getTip(),
     staleTime: POLL_INTERVAL,
     refetchInterval: POLL_INTERVAL,
