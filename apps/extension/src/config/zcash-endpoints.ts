@@ -154,10 +154,16 @@ export function defaultZcashEndpoint(): ZcashEndpointPreset {
   return ZCASH_MAINNET_ENDPOINTS.find(p => p.isDefault) ?? ZCASH_MAINNET_ENDPOINTS[0]!;
 }
 
-/** Group presets by region for the dropdown UI. */
-export function groupPresetsByRegion(
-  presets: readonly ZcashEndpointPreset[] = ZCASH_MAINNET_ENDPOINTS,
-): readonly { region: RpcEndpointRegion; presets: ZcashEndpointPreset[] }[] {
+/**
+ * Group presets by region for the dropdown UI.
+ *
+ * Generic over the preset shape so the Penumbra panel can reuse the same
+ * regional grouping without duplicating this logic — the helper only reads
+ * `p.region`, so any `{ region: RpcEndpointRegion }` shape works.
+ */
+export function groupPresetsByRegion<T extends { readonly region: RpcEndpointRegion }>(
+  presets: readonly T[],
+): readonly { region: RpcEndpointRegion; presets: T[] }[] {
   const order: RpcEndpointRegion[] = [
     'default',
     'global',
@@ -166,7 +172,7 @@ export function groupPresetsByRegion(
     'asia-pacific',
     'community',
   ];
-  const groups = new Map<RpcEndpointRegion, ZcashEndpointPreset[]>();
+  const groups = new Map<RpcEndpointRegion, T[]>();
   for (const p of presets) {
     if (!groups.has(p.region)) {
       groups.set(p.region, []);
