@@ -28,6 +28,34 @@ export const isPenumbraEnabled = async (): Promise<boolean> => {
   return enabledNetworks.includes('penumbra');
 };
 
+/**
+ * Whether penumbra services should run right now. The single source of truth
+ * for both startWalletServices (build real vs stub services) and the service
+ * worker's decision to rebuild them - if the two disagreed, the worker would
+ * rebuild for nothing, or keep stale services around.
+ *
+ * - privacy gate: the network must be enabled.
+ * - active-scoped gate: only while the extension UI is on the penumbra group
+ *   (a cosmos subnetwork like Noble roots to penumbra; unset = pre-selection),
+ *   so no gRPC stream stays open to a network the user switched away from...
+ * - ...unless a penumbra dapp (e.g. Veil) is connected: its session needs
+ *   penumbra services regardless of which network the UI is viewing.
+ */
+export const penumbraGate = async (): Promise<{ run: true } | { run: false; reason: string }> => {
+  if (!(await isPenumbraEnabled())) {
+    return { run: false, reason: 'penumbra network not enabled' };
+  }
+  const activeNetwork = await localExtStorage.get('activeNetwork');
+  if (
+    activeNetwork &&
+    getRootNetwork(activeNetwork as NetworkType) !== 'penumbra' &&
+    !hasLiveDappSession()
+  ) {
+    return { run: false, reason: 'penumbra network not active' };
+  }
+  return { run: true };
+};
+
 // Default Penumbra gRPC endpoint
 const DEFAULT_PENUMBRA_ENDPOINT = 'https://penumbra.rotko.net';
 
@@ -64,35 +92,12 @@ export const startWalletServices = async (
     reason,
   });
 
-  // privacy gate: check if penumbra is enabled before making network connections
-  const enabled = await isPenumbraEnabled();
-  if (!enabled) {
-    return stubServices('penumbra network not enabled');
-  }
-
-  // active-scoped privacy gate: only sync penumbra while the user is actually on
-  // it. A privacy-preserving wallet must not keep a gRPC stream open to a
-  // network you have switched away from. Zcash already gates its worker on the
-  // active network; this brings penumbra in line. Unset activeNetwork (fresh
-  // wallet, pre-selection) falls through to the enabled behaviour above.
-  const activeNetwork = await localExtStorage.get('activeNetwork');
-  // A cosmos subnetwork (e.g. Noble) roots to penumbra, so viewing it still
-  // needs penumbra context for unshielding - treat the whole penumbra group as
-  // active. Only a different root (zcash) skips penumbra sync.
-  if (
-    activeNetwork &&
-    getRootNetwork(activeNetwork as NetworkType) !== 'penumbra' &&
-    // ...unless a penumbra dapp (e.g. Veil) is connected right now. Its session
-    // needs penumbra services regardless of which network the extension UI is
-    // viewing; otherwise every dapp view call fails with "penumbra network not
-    // active". The service worker reinitializes on the first/last session so
-    // this state stays consistent.
-    !hasLiveDappSession()
-  ) {
-    // expected whenever the user is on zcash/another network with no penumbra
-    // dapp connected - not an error, and it fires on every sync tick, so stay
-    // silent rather than spam the log.
-    return stubServices('penumbra network not active');
+  // privacy + active-scoped gates (see penumbraGate). A stub is expected
+  // whenever the user is on zcash with no penumbra dapp connected - not an
+  // error, so stay silent.
+  const gate = await penumbraGate();
+  if (!gate.run) {
+    return stubServices(gate.reason);
   }
 
   console.log('[sync] starting wallet services...');

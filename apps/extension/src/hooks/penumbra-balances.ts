@@ -29,4 +29,9 @@ export const balancesQueryOptions = (account: number) =>
   queryOptions({
     queryKey: balancesQueryKey(account),
     queryFn: () => fetchBalances(account),
+    // One retry, not react-query's default three with 1s/2s/4s backoff: this
+    // is a full balances stream over every note (hundreds of LP NFTs on a big
+    // wallet), so three retries meant 7s+ of "loading" and four expensive
+    // streams whenever the view service was briefly unavailable.
+    retry: 1,
   });

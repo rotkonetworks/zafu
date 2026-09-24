@@ -38,8 +38,6 @@ import { openApprovalPopup } from './utils/popup-window';
 import { trackSidePanelPresence } from './side-panel-presence';
 import { initSidePanelPref } from './side-panel-pref';
 import { setDappSessionHooks } from './dapp-session-presence';
-import { getRootNetwork } from './config/networks';
-import type { NetworkType } from './state/keyring';
 
 // all rpc implementations, local and proxy
 import { getRpcImpls } from './rpc';
@@ -72,7 +70,8 @@ import { internalTransportOptions } from './transport-options';
 // idb, querier, block processor
 import { walletIdCtx } from '@rotko/penumbra-services/ctx/wallet-id';
 import type { Services } from '@repo/context';
-import { startWalletServices } from './wallet-services';
+import { startWalletServices, penumbraGate } from './wallet-services';
+import { createRebuildScheduler } from './rebuild-scheduler';
 import { performPendingClears } from './clear-cache-startup';
 
 import { backOff } from 'exponential-backoff';
@@ -154,8 +153,29 @@ let walletServices: Promise<Services>;
 let currentWalletIndex: number | undefined;
 let currentSyncAbort: AbortController | undefined;
 
-// Reinitialize services when active wallet changes
-const reinitializeServices = async () => {
+/**
+ * What the running penumbra services are for: which wallet, and whether they
+ * are real or a stub. A rebuild is only worth doing when this changes - a full
+ * rebuild restarts sync, reloads the whole state-commitment tree from IndexedDB
+ * into wasm and re-fetches genesis, which on a large wallet (hundreds of LP
+ * positions) takes a long time, and dapps see empty/zero state meanwhile.
+ */
+interface PenumbraTarget {
+  walletIndex: number;
+  run: boolean;
+}
+
+const desiredPenumbraTarget = async (): Promise<PenumbraTarget> => ({
+  walletIndex: (await localExtStorage.get('activeWalletIndex')) ?? 0,
+  run: (await penumbraGate()).run,
+});
+
+/** Tear down the current services and start fresh ones for `target`. */
+const rebuildServices = async (
+  target: PenumbraTarget,
+  previous: PenumbraTarget | undefined,
+  why: string,
+) => {
   // tear down old services: stop block processor + cancel fullSyncHeight subscription
   if (currentSyncAbort) {
     currentSyncAbort.abort();
@@ -163,48 +183,68 @@ const reinitializeServices = async () => {
   try {
     const oldServices = await walletServices;
     const oldWs = await oldServices.getWalletServices();
-    oldWs.blockProcessor.stop('wallet switch');
-    console.log('[sync] stopped old block processor');
+    oldWs.blockProcessor.stop(why);
+    console.log(`[sync] stopped old block processor (${why})`);
   } catch {
-    // old services may not have initialized — that's fine
+    // old services were a stub or never initialized - nothing to stop
   }
 
   // new RPC requests will block on getWalletReady() until the new wallet is cached
   resetWalletCache();
 
-  // clear stale fullSyncHeight so UI doesn't show old wallet's height
-  await localExtStorage.set('fullSyncHeight', 0);
+  // Only a WALLET change makes the stored height wrong. For the same wallet the
+  // IndexedDB still holds its real sync height, so resetting to 0 just made
+  // every rebuild look like a from-scratch resync with zero balances.
+  if (previous && previous.walletIndex !== target.walletIndex) {
+    await localExtStorage.set('fullSyncHeight', 0);
+  }
 
-  // start fresh services for the new wallet
   currentSyncAbort = new AbortController();
   walletServicesResult = startWalletServices(currentSyncAbort.signal);
   walletServices = walletServicesResult.then(r => r.services);
   const { services, wallet, reason } = await walletServicesResult;
   setCachedWallet(wallet, reason);
-  const ws = await services.getWalletServices();
-  void ws.blockProcessor.sync().catch((e: unknown) => {
-    // terminal rejection after an intentional stop is expected teardown;
-    // anything else deserves the console
-    if (!String(e).includes('Sync stop')) {
-      console.error('[sync] block processor terminated:', e);
-    }
-  });
+  try {
+    const ws = await services.getWalletServices();
+    void ws.blockProcessor.sync().catch((e: unknown) => {
+      // terminal rejection after an intentional stop is expected teardown;
+      // anything else deserves the console
+      if (!String(e).includes('Sync stop')) {
+        console.error('[sync] block processor terminated:', e);
+      }
+    });
+  } catch {
+    // stub services (penumbra gated off): nothing to sync
+  }
 };
+
+// Serialized + coalesced + skip-if-unchanged (see rebuild-scheduler.ts): no two
+// rebuilds overlap, bursts fold into one, and a request that would produce what
+// is already running does nothing.
+const rebuilds = createRebuildScheduler<PenumbraTarget>({
+  desired: desiredPenumbraTarget,
+  same: (a, b) => a.walletIndex === b.walletIndex && a.run === b.run,
+  rebuild: rebuildServices,
+  onError: e => console.error('[sync] rebuild failed:', e),
+});
+const reinitializeServices = (why: string) => rebuilds.request(why);
 
 // Keep penumbra services in step with connected dapps. When the extension UI is
 // NOT on penumbra, a dapp session (or losing the last one) flips whether
 // penumbra should sync, so reinit to apply the gate. When the UI IS on penumbra,
 // penumbra is already active and a session change is a no-op - skip the churn
 // (reinit restarts the block processor, which is not free on a large wallet).
-const reinitForSessionIfNeeded = async () => {
-  const activeNetwork = await localExtStorage.get('activeNetwork');
-  if (activeNetwork && getRootNetwork(activeNetwork as NetworkType) !== 'penumbra') {
-    void reinitializeServices();
-  }
-};
+//
+// Only the FIRST session acts: it starts penumbra if the gate had it stubbed
+// (a no-op when it is already running). The LAST session ending deliberately
+// does NOT tear penumbra down. Dapps open a short-lived port per streaming RPC,
+// so the count drops to zero between requests all the time; tearing down on
+// each drop rebuilt the whole wallet (tree reload, genesis fetch, zeroed
+// balances) several times per transaction - dapps then saw stale or empty
+// state. Penumbra stays up until the user next switches networks, which
+// re-evaluates the gate.
 setDappSessionHooks({
-  onFirst: () => void reinitForSessionIfNeeded(),
-  onLast: () => void reinitForSessionIfNeeded(),
+  onFirst: () => void reinitializeServices('dapp session started'),
 });
 
 // Listen for wallet and network changes
@@ -215,7 +255,7 @@ localExtStorage.addListener(changes => {
     if (currentWalletIndex !== undefined && currentWalletIndex !== newIndex) {
       console.log(`Switching wallet from ${currentWalletIndex} to ${newIndex}`);
       currentWalletIndex = newIndex;
-      void reinitializeServices();
+      void reinitializeServices('wallet switch');
     } else {
       currentWalletIndex = newIndex;
     }
@@ -227,7 +267,7 @@ localExtStorage.addListener(changes => {
     const newVaults = (changes.vaults.newValue ?? []) as unknown[];
     if (oldVaults.length === 0 && newVaults.length > 0) {
       console.log('[sync] first vault created, initializing services...');
-      void reinitializeServices();
+      void reinitializeServices('first vault');
     }
   }
 
@@ -237,7 +277,7 @@ localExtStorage.addListener(changes => {
     const oldNetworks = changes.enabledNetworks.oldValue ?? [];
     if (!oldNetworks.includes('penumbra') && newNetworks.includes('penumbra')) {
       console.log('[sync] penumbra network enabled, initializing services...');
-      void reinitializeServices();
+      void reinitializeServices('penumbra enabled');
     }
   }
 
@@ -245,8 +285,10 @@ localExtStorage.addListener(changes => {
   // penumbra sync starts only when penumbra is the active network and stops
   // when they switch away (privacy - no background stream to a network you are
   // not viewing). startWalletServices enforces the active gate.
+  // Skipped automatically when the gate outcome does not change (e.g.
+  // penumbra <-> noble, both in the penumbra group).
   if (changes.activeNetwork !== undefined) {
-    void reinitializeServices();
+    void reinitializeServices('network switch');
   }
 
   // sync custom chainspecs when they change (no-op unless polkadot is enabled)
@@ -262,6 +304,9 @@ const initHandler = async () => {
 
   // Track initial wallet index
   currentWalletIndex = (await localExtStorage.get('activeWalletIndex')) ?? 0;
+  // record what the boot services are for, so a later request that would
+  // produce the same thing is skipped instead of rebuilding
+  rebuilds.setRunning(await desiredPenumbraTarget());
   currentSyncAbort = new AbortController();
   walletServicesResult = startWalletServices(currentSyncAbort.signal);
   walletServices = walletServicesResult.then(r => r.services);
