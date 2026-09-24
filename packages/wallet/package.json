@@ -34,6 +34,8 @@
     "./networks/injective/derive": "./src/networks/injective/derive.ts",
     "./networks/injective/conduit": "./src/networks/injective/conduit.ts",
     "./networks/injective/client": "./src/networks/injective/client.ts",
+    "./networks/injective/tx": "./src/networks/injective/tx.ts",
+    "./networks/injective/feegrant": "./src/networks/injective/feegrant.ts",
     "./networks/polkadot/parachain-registry": "./src/networks/polkadot/parachain-registry.ts",
     "./networks/ethereum/derive": "./src/networks/ethereum/derive.ts",
     "./networks/bitcoin/derive": "./src/networks/bitcoin/derive.ts",

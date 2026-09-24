@@ -37,6 +37,12 @@ export interface BuildInjectiveTxParams {
   accountNumber: bigint;
   sequence: number;
   chainId: string;
+  /**
+   * inj1 address that pays the fee through an x/feegrant allowance (a gas
+   * sponsor). The signer then needs no INJ. The grant must already be
+   * on-chain, or the ante handler rejects the tx with "fee-grant not found".
+   */
+  feeGranter?: string;
 }
 
 /**
@@ -52,7 +58,7 @@ export function buildSignedInjectiveTx(p: BuildInjectiveTxParams): Uint8Array {
     [{ pubkey: ethSecp256k1PubKeyAny(p.pubKey), sequence: p.sequence }],
     p.fee.amount,
     Number(p.fee.gas),
-    undefined,
+    p.feeGranter,
     undefined,
     SignMode.SIGN_MODE_DIRECT,
   );

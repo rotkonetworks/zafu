@@ -1,0 +1,19 @@
+{
+  "name": "@repo/feegrant",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Injective gas sponsor: x/feegrant allowances so USDC.inj holders can shield without INJ",
+  "type": "module",
+  "scripts": {
+    "dev": "bun src/server.ts",
+    "build": "bun build src/server.ts --compile --target=bun-linux-x64-baseline --outfile dist/feegrant",
+    "lint": "eslint \"src/**/*.ts\"",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@repo/wallet": "workspace:*"
+  },
+  "devDependencies": {
+    "cosmjs-types": "^0.9.0"
+  }
+}

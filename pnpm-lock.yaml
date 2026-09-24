@@ -376,6 +376,16 @@ importers:
         specifier: ^3.1.0
         version: 3.2.0(webpack@5.109.2(esbuild@0.28.2)(lightningcss@1.32.0)(postcss@8.5.26)(webpack-cli@7.2.3))
 
+  apps/feegrant:
+    dependencies:
+      '@repo/wallet':
+        specifier: workspace:*
+        version: link:../../packages/wallet
+    devDependencies:
+      cosmjs-types:
+        specifier: ^0.9.0
+        version: 0.9.0
+
   packages/context:
     dependencies:
       '@bufbuild/protobuf':

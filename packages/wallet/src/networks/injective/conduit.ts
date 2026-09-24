@@ -35,6 +35,8 @@ interface CommonParams {
   fee: { amount: Coin[]; gas: string };
   chainId?: string;
   fetchFn?: FetchFn;
+  /** gas sponsor (x/feegrant granter); see BuildInjectiveTxParams.feeGranter */
+  feeGranter?: string;
 }
 
 /** IBC-transfer USDC from Injective to a Penumbra address (the shield-in leg). */
@@ -71,6 +73,7 @@ export async function shieldInToPenumbra(
       accountNumber,
       sequence,
       chainId: p.chainId ?? 'injective-1',
+      feeGranter: p.feeGranter,
     });
     return await broadcastInjectiveTx(p.restUrl, raw, p.fetchFn);
   } finally {
@@ -99,6 +102,7 @@ export async function withdrawToExchange(
       sequence,
       chainId: p.chainId ?? 'injective-1',
       memo: p.memo,
+      feeGranter: p.feeGranter,
     });
     return await broadcastInjectiveTx(p.restUrl, raw, p.fetchFn);
   } finally {
