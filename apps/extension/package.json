@@ -6,7 +6,7 @@
   "description": "multi-chain privacy wallet for penumbra, zcash, and more",
   "type": "module",
   "scripts": {
-    "build": "pnpm bundle:prod && pnpm bundle:beta",
+    "build": "pnpm bundle:prod && pnpm bundle:beta && node scripts/verify-dist.mjs dist beta-dist",
     "bundle:beta": "NODE_OPTIONS=\"--max-old-space-size=8192 --import=tsx\" webpack --config webpack.beta-config.ts",
     "bundle:prod": "NODE_OPTIONS=\"--max-old-space-size=8192 --import=tsx\" webpack --config webpack.prod-config.ts",
     "clean": "rm -rfv dist beta-dist bin",

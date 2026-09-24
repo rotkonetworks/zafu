@@ -440,6 +440,15 @@ export default ({
     output: {
       path: distDir,
       filename: '[name].js',
+      // Both compilations write into the same dist/. With webpack's default
+      // `[id].js`, a chunk this worker compilation emits (e.g. a nested web
+      // worker bundle) can get the same numeric id as a browser chunk and
+      // silently OVERWRITE it - whichever compilation finishes last wins. That
+      // shipped once: the worker's 88.js replaced the popup's chunk 88, the
+      // popup's entry waited forever for a chunk that never registered, and
+      // the popup rendered as a blank white screen with no error. A distinct
+      // prefix keeps the two compilations' chunk files disjoint.
+      chunkFilename: 'worker-chunk-[id].js',
     },
     optimization: {
       // service workers cannot use importScripts for dynamic chunks
