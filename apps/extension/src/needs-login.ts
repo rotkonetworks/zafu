@@ -105,20 +105,46 @@ const spawnLoginPopup = async (): Promise<void> => {
   });
 };
 
-/**
- * Ensures user is logged in before continuing.
- * If not logged in, opens a login popup and waits for login.
- * Throws if user closes the login window without logging in.
- */
-export const throwIfNeedsLogin = async () => {
-  const loggedIn = await sessionExtStorage.get('passwordKey');
-  if (loggedIn) {
-    return;
-  }
+/** Opens the unlock surface (side panel if available, else a login window). */
+const openUnlockSurface = async (): Promise<void> => {
   // Prefer unlocking inside an open side panel; only spawn a login window when
   // the panel isn't available (or the user opted out of side-panel approvals).
   if (await loginViaSidePanel()) {
     return;
   }
   await spawnLoginPopup();
+};
+
+/**
+ * One shared unlock attempt at a time. Concurrent callers await the SAME promise
+ * rather than each opening their own surface, so a single unlock resolves them
+ * all and a single dismissal rejects them all - no cascade of login windows as
+ * one dismissal wakes the next queued caller (which an exclusive lock would do).
+ * Module state is fine: needs-login runs only in the service worker (it drives
+ * chrome.windows), and a killed worker drops every waiter with it.
+ */
+let inflightUnlock: Promise<void> | undefined;
+
+/**
+ * Ensures user is logged in before continuing.
+ * If not logged in, opens a login popup and waits for login.
+ * Throws if user closes the login window without logging in.
+ *
+ * Deduped across every caller (tx/sign approval, the dapp connect gate, and
+ * several dapp tabs auto-reconnecting at once) via a shared in-flight promise:
+ * spawnLoginPopup has no dedup of its own, unlike popup()'s per-type
+ * navigator.locks, so without this each locked caller would open its own window.
+ */
+export const throwIfNeedsLogin = async () => {
+  const loggedIn = await sessionExtStorage.get('passwordKey');
+  if (loggedIn) {
+    return;
+  }
+  // Join the existing attempt if one is already showing; otherwise start it and
+  // clear the slot when it settles (either outcome), so a later locked action can
+  // prompt again.
+  inflightUnlock ??= openUnlockSurface().finally(() => {
+    inflightUnlock = undefined;
+  });
+  await inflightUnlock;
 };
