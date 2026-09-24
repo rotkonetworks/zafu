@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLocation } from 'react-router-dom';
 import { QrCode } from '../../../components/qr-code';
 import { Button } from '@repo/ui/components/ui/button';
 import { useStore } from '../../../state';
@@ -43,7 +44,7 @@ import {
   resolveSelectedInjectiveIndex,
   shortInjAddress,
   type InjectiveIndexBalance,
-} from './injective-burners';
+} from './addresses';
 
 const CFG = COSMOS_CHAINS.injective;
 
@@ -245,7 +246,7 @@ const TxRef = ({ hash }: { hash: string }) => {
   );
 };
 
-export const InjectivePanel = () => {
+export const InjectiveAccount = () => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const penumbraAccount = useStore(selectPenumbraAccount);
   const { getMnemonic } = useStore(keyRingSelector);
@@ -462,7 +463,9 @@ export const InjectivePanel = () => {
   // The ONE index the shield / withdraw forms act on. Every balance check, the
   // sponsor decision, the fee-grant grantee, and the signer's accountIndex all
   // derive from `selected`, so they can never disagree about which account.
-  const [userPick, setUserPick] = useState<number | undefined>(undefined);
+  // an address picked elsewhere (home's deposit rows) arrives as nav state
+  const navIndex = (useLocation().state as { injectiveIndex?: number } | null)?.injectiveIndex;
+  const [userPick, setUserPick] = useState<number | undefined>(navIndex);
   const resolvedIndex = resolveSelectedInjectiveIndex(rows, userPick);
   // Freeze the address while the user is mid-action. The resolved default can
   // move on its own (another address becomes the largest, a burner empties, a

@@ -32,6 +32,7 @@ const GroupChatThread = lazy(() =>
 const ContactsPage = lazy(() => import('./contacts').then(m => ({ default: m.ContactsPage })));
 const SendPage = lazy(() => import('./send').then(m => ({ default: m.SendPage })));
 const ReceivePage = lazy(() => import('./receive').then(m => ({ default: m.ReceivePage })));
+const InjectivePage = lazy(() => import('./injective').then(m => ({ default: m.InjectivePage })));
 const CosmosSign = lazy(() => import('./cosmos-sign').then(m => ({ default: m.CosmosSign })));
 const MultisigSessions = lazy(() =>
   import('./multisig/sessions').then(m => ({ default: m.MultisigPage })),
@@ -188,6 +189,14 @@ export const popupRoutes: RouteObject[] = [
             element: (
               <Suspense fallback={<LazyFallback />}>
                 <ReceivePage />
+              </Suspense>
+            ),
+          },
+          {
+            path: PopupPath.INJECTIVE,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <InjectivePage />
               </Suspense>
             ),
           },

@@ -10,9 +10,8 @@
 
 import { getTransparentHistoryInWorker } from '../../../state/keyring/network-worker';
 import { useState, useCallback, useEffect } from 'react';
-import { InjectivePanel } from './injective-panel';
 import { useBackNav } from '../../../utils/navigate';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
 import {
@@ -29,7 +28,6 @@ import {
   deriveZcashTransparent,
   deriveZcashTransparentFromUfvk,
 } from '../../../hooks/use-address';
-import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { QrCode } from '../../../components/qr-code';
 
 /** receive tab - QR code + address display */
@@ -579,31 +577,23 @@ function ReceiveTab({
   );
 }
 
-type ReceiveMode = 'receive' | 'shield';
-
 export function ReceivePage() {
   const activeNetwork = useStore(selectActiveNetwork);
 
   const { address, loading } = useActiveAddress();
   const isPenumbra = activeNetwork === 'penumbra';
-  // the burner "shield" button navigates here asking for the ibc-shield tab,
-  // and passes which burner (chain + index) to shield from
+  // Old deep links (`?mode=shield`, nav state mode 'shield') meant the
+  // Injective shield view, which is its own screen now.
   const location = useLocation();
-  const navState = location.state as
-    | { mode?: ReceiveMode; cosmosChain?: CosmosChainId; cosmosAccountIndex?: number }
-    | undefined;
-  // `?mode=shield` comes from a dapp handoff (zafu_open_shield). It may arrive
-  // while this page is already mounted in the side panel, so react to it
-  // rather than only reading it for the initial state.
-  const shieldRequested = new URLSearchParams(location.search).get('mode') === 'shield';
-  const initialMode: ReceiveMode =
-    navState?.mode === 'shield' || shieldRequested ? 'shield' : 'receive';
-  const [mode, setMode] = useState<ReceiveMode>(initialMode);
+  const navigate = useNavigate();
+  const legacyShield =
+    new URLSearchParams(location.search).get('mode') === 'shield' ||
+    (location.state as { mode?: string } | null)?.mode === 'shield';
   useEffect(() => {
-    if (shieldRequested) {
-      setMode('shield');
+    if (legacyShield) {
+      navigate(PopupPath.INJECTIVE, { replace: true });
     }
-  }, [shieldRequested, location.key]);
+  }, [legacyShield, navigate]);
   const goBack = useBackNav(PopupPath.INDEX);
 
   return (
@@ -616,39 +606,16 @@ export function ReceivePage() {
       </div>
 
       <div className='flex flex-1 flex-col p-4'>
-        {/* tabs - Penumbra only. Two tabs: the plain shielded-address receive,
-              and a "shield USDC" view holding the Injective USDC ramp
-              (InjectivePanel). Injective is the sole shield-in path now; Noble
-              shield-in was removed (Circle winds USDC down on Noble). */}
+        <ReceiveTab address={address} loading={loading} activeNetwork={activeNetwork} />
         {isPenumbra && (
-          <div className='mb-4 flex rounded-lg bg-elev-2 p-1'>
-            {(['receive', 'shield'] as const).map(m => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-                  mode === m ? 'bg-canvas text-fg shadow-sm' : 'text-fg-muted hover:text-fg-high'
-                }`}
-              >
-                {m === 'shield' ? 'shield USDC' : m}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* content */}
-        {/* A handoff asks for the shield screen explicitly, so show it even if
-            the wallet's active network is not penumbra at this moment. */}
-        {(!isPenumbra && !shieldRequested) || mode === 'receive' ? (
-          <ReceiveTab address={address} loading={loading} activeNetwork={activeNetwork} />
-        ) : (
-          <div className='flex flex-col gap-6 overflow-y-auto'>
-            {/* Injective USDC (USDC.inj) is the ONLY shielding ramp now. Noble is
-                being retired (Circle winds USDC down on Noble), so shielding IN
-                from Noble is removed - Noble remains available as a withdraw /
-                off-ramp destination in Send only. */}
-            <InjectivePanel />
-          </div>
+          <button
+            type='button'
+            onClick={() => navigate(PopupPath.INJECTIVE)}
+            className='mt-4 flex w-full items-center justify-between border border-border-soft px-3 py-2.5 text-sm text-fg-high hover:bg-elev-1'
+          >
+            <span className='lowercase'>deposit from Injective</span>
+            <span className='i-ph-caret-right h-4 w-4 text-fg-muted' />
+          </button>
         )}
       </div>
     </div>

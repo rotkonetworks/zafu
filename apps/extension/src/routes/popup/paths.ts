@@ -24,6 +24,7 @@ export enum PopupPath {
   // Send/Receive
   SEND = '/send',
   RECEIVE = '/receive',
+  INJECTIVE = '/injective',
 
   // Cosmos airgap signing (dedicated window)
   COSMOS_SIGN = '/cosmos-sign',

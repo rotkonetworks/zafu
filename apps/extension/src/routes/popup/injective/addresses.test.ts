@@ -8,7 +8,7 @@ import {
   resolveSelectedInjectiveIndex,
   shortInjAddress,
   type InjectiveIndexBalance,
-} from './injective-burners';
+} from './addresses';
 
 const row = (index: number, usdc: bigint, inj = 0n): InjectiveIndexBalance => ({
   index,

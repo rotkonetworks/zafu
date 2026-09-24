@@ -48,7 +48,7 @@ describe('zafu_open_shield', () => {
     expect(res).toEqual({ opened: true });
     expect(createMock).toHaveBeenCalledTimes(1);
     const { url } = (createMock.mock.calls[0] as [{ url: string }])[0];
-    expect(url).toBe('chrome-extension://test/popup.html#/receive?mode=shield');
+    expect(url).toBe('chrome-extension://test/popup.html#/injective');
   });
 
   it('refuses a site without the connect capability', async () => {

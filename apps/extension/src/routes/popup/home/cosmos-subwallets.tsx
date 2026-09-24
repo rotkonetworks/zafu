@@ -274,13 +274,12 @@ const ChainDeposits = ({ chainId, view }: { chainId: CosmosChainId; view: 'home'
       state: { cosmosChain: chainId, cosmosAccountIndex: index, cosmosIntent: 'send' },
     });
 
-  // Shield a specific address back INTO Penumbra: the real IBC deposit flow lives
-  // on the Receive page's "ibc shield" tab. Pass chain + index so it shields THAT
-  // address, not account 0.
+  // Shield a specific address back INTO Penumbra: the injective screen, with
+  // THAT address preselected (not account 0).
   const shieldIntoPenumbra = (index: number) =>
-    navigate(PopupPath.RECEIVE, {
-      state: { mode: 'shield', cosmosChain: chainId, cosmosAccountIndex: index },
-    });
+    chainId === 'injective'
+      ? navigate(PopupPath.INJECTIVE, { state: { injectiveIndex: index } })
+      : navigate(PopupPath.RECEIVE);
 
   const row = (w: DepositWallet) => (
     <DepositRow

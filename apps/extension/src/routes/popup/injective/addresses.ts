@@ -56,7 +56,9 @@ export interface InjectiveIndexBalance {
  * Default index for the shield / withdraw forms: the one with the largest
  * USDC.inj balance (ties -> lowest index), or 0 when nothing holds USDC.
  */
-export function pickDefaultInjectiveIndex(rows: readonly { index: number; usdc: bigint }[]): number {
+export function pickDefaultInjectiveIndex(
+  rows: readonly { index: number; usdc: bigint }[],
+): number {
   let best: { index: number; usdc: bigint } | undefined;
   for (const r of rows) {
     if (r.usdc <= 0n) {
