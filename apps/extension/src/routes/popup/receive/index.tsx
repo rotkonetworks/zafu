@@ -1,10 +1,11 @@
 /**
  * receive screen - show QR code for current address
  *
- * for penumbra: supports IBC deposit from zafu's own cosmos wallets
- * - select source chain (Noble, Osmosis, etc.)
- * - shows zafu's address + balances on that chain
- * - pick asset + amount, shield into penumbra via IBC
+ * for penumbra: a "shield USDC" tab holds the Injective USDC (USDC.inj) ramp -
+ * the only shielding-in path now (Noble shield-in was retired as Circle winds
+ * USDC down on Noble; Noble stays a withdraw-only destination in Send). The
+ * plain receive tab shows the shielded address, defaulting to a rotating
+ * ephemeral address with the static index one toggle away.
  */
 
 import { getTransparentHistoryInWorker } from '../../../state/keyring/network-worker';
@@ -113,7 +114,7 @@ function ReceiveTab({
           setTransparentUsed(true);
         }
       } catch {
-        /* probe is best-effort — never block showing the address */
+        /* probe is best-effort - never block showing the address */
       }
     })();
     return () => {
@@ -187,6 +188,12 @@ function ReceiveTab({
         : address;
   const isLoading =
     transparent && isZcash ? transparentLoading : ephemeral ? ephemeralLoading : loading;
+  // "ephemeral toggle is on" is not the same as "an ephemeral address is on
+  // screen": if derivation fails or the wallet has no key material, we fall back
+  // to the static `address`. Label, styling, the rotate-on-copy and the footer
+  // must key off what is ACTUALLY shown, so a fallback never masquerades as a
+  // fresh single-use address.
+  const showingEphemeral = ephemeral && isPenumbra && !!ephemeralAddress;
 
   useEffect(() => {
     if (canvasRef.current && displayAddress) {
@@ -229,6 +236,13 @@ function ReceiveTab({
             penumbraAccount,
           );
         } else {
+          // No key material to derive from (e.g. a penumbra wallet whose JSON
+          // has no FVK yet, or one still hydrating). Clear loading so the view
+          // falls back to the static address instead of a forever-skeleton -
+          // showingEphemeral below keeps that fallback honestly labeled static.
+          if (!cancelled) {
+            setEphemeralLoading(false);
+          }
           return;
         }
         if (!cancelled) {
@@ -247,7 +261,18 @@ function ReceiveTab({
     return () => {
       cancelled = true;
     };
-  }, [ephemeral, penumbraAccount, ephemeralNonce]);
+    // selectedKeyInfo id/type and the FVK are read inside; a late-hydrating
+    // wallet must re-trigger derivation or the default ephemeral view would
+    // stay empty forever (deps were [ephemeral, penumbraAccount] only).
+  }, [
+    ephemeral,
+    isPenumbra,
+    penumbraAccount,
+    ephemeralNonce,
+    selectedKeyInfo?.id,
+    selectedKeyInfo?.type,
+    penumbraWallet?.fullViewingKey,
+  ]);
 
   // derive zcash transparent address when toggled on or index changes
   useEffect(() => {
@@ -285,7 +310,7 @@ function ReceiveTab({
           const msg = err instanceof Error ? err.message : String(err);
           if (msg.includes('no transparent component')) {
             setTransparentError(
-              'this wallet key does not include a transparent key — re-import from an updated zigner to enable transparent addresses',
+              'this wallet key does not include a transparent key - re-import from an updated zigner to enable transparent addresses',
             );
           } else {
             setTransparentError(msg);
@@ -312,10 +337,10 @@ function ReceiveTab({
     // Rotate: after copying an ephemeral penumbra address, advance to a fresh one
     // so the next share is a new, unlinkable address (burner semantics). The just
     // -copied one stays valid forever - the wallet's FVK detects every ephemeral.
-    if (ephemeral && isPenumbra) {
+    if (showingEphemeral) {
       setEphemeralNonce(n => n + 1);
     }
-  }, [displayAddress, ephemeral, isPenumbra]);
+  }, [displayAddress, showingEphemeral]);
 
   const handleToggle = useCallback(() => {
     setEphemeral(prev => {
@@ -341,18 +366,19 @@ function ReceiveTab({
     setCopied(false);
   }, []);
 
-  // manually rotate shielded address — bump index in storage
+  // manually rotate shielded address - bump index in storage
   const handleRotateShielded = useCallback(async () => {
     const r = await chrome.storage.local.get('zcashShieldedIndex');
     const next = (r['zcashShieldedIndex'] ?? 0) + 1;
     await chrome.storage.local.set({ zcashShieldedIndex: next });
   }, []);
 
-  // shielded badge logic: zcash 'u'-prefixed unified addresses and
-  // penumbra default addresses are shielded by construction. Transparent
-  // zcash (t1/t3) and ephemeral penumbra addresses get different labels.
+  // shielded badge logic: zcash 'u'-prefixed unified addresses and ALL penumbra
+  // addresses are shielded by construction - an ephemeral penumbra address is
+  // just as shielded as the static one (notes hide the recipient either way), so
+  // it keeps the badge. Only transparent zcash (t1/t3) is public and drops it.
   const isShielded =
-    (isZcash && !transparent && displayAddress?.startsWith('u')) || (isPenumbra && !ephemeral);
+    (isZcash && !transparent && displayAddress?.startsWith('u')) || isPenumbra;
 
   return (
     <div className='flex flex-col items-center gap-4'>
@@ -377,7 +403,7 @@ function ReceiveTab({
         {isShielded && (
           <span
             className='inline-flex items-center gap-1 rounded-sm border border-zigner-gold/30 bg-zigner-gold/10 px-2 py-0.5 text-label text-zigner-gold lowercase tracking-[0.05em]'
-            title='shielded — senders cannot see your other transactions'
+            title='shielded - senders cannot see your other transactions'
           >
             <span className='i-ph-shield-check h-2.5 w-2.5' />
             shielded
@@ -386,7 +412,7 @@ function ReceiveTab({
         {isZcash && transparent && (
           <span
             className='inline-flex items-center gap-1 rounded-sm border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-label text-red-400 lowercase tracking-[0.05em]'
-            title='transparent — balance and history publicly visible'
+            title='transparent - balance and history publicly visible'
           >
             <span className='i-ph-eye h-2.5 w-2.5' />
             public
@@ -527,7 +553,7 @@ function ReceiveTab({
 
       <div className='w-full'>
         <div className='mb-1 text-xs text-fg-muted'>
-          {ephemeral && isPenumbra ? (
+          {showingEphemeral ? (
             'ephemeral address'
           ) : transparent && isZcash ? (
             <span className='flex items-center gap-1.5'>
@@ -535,7 +561,7 @@ function ReceiveTab({
               {transparentUsed && (
                 <span className='mt-1 flex items-start gap-1.5 text-label text-hanko'>
                   <span className='i-ph-warning mt-0.5 size-3 shrink-0' />
-                  this address was used before — reusing it publicly links your payments. rotate to
+                  this address was used before - reusing it publicly links your payments. rotate to
                   a fresh address.
                 </span>
               )}
@@ -551,7 +577,7 @@ function ReceiveTab({
         </div>
         <div
           className={`flex items-center gap-2 rounded-lg border p-3 ${
-            ephemeral && isPenumbra
+            showingEphemeral
               ? 'border-green-500/40 bg-green-500/5'
               : transparent && isZcash
                 ? 'border-rust/35 bg-rust/8'
@@ -560,7 +586,7 @@ function ReceiveTab({
         >
           <code
             className={`flex-1 break-all text-xs ${
-              ephemeral && isPenumbra ? 'text-green-400' : transparent && isZcash ? 'text-rust' : ''
+              showingEphemeral ? 'text-green-400' : transparent && isZcash ? 'text-rust' : ''
             }`}
           >
             {isLoading ? 'generating...' : displayAddress || 'no wallet selected'}
@@ -585,7 +611,7 @@ function ReceiveTab({
       </div>
 
       <p className='text-center text-xs text-fg-muted leading-snug lowercase'>
-        {ephemeral && isPenumbra
+        {showingEphemeral
           ? 'fresh single-use address - share with one party; reuse lets senders link payments.'
           : transparent && isZcash
             ? 'public on-chain - one index per exchange, then shield to ironwood.'
@@ -624,12 +650,10 @@ export function ReceivePage() {
       </div>
 
       <div className='flex flex-1 flex-col p-4'>
-        {/* tabs - Penumbra only. Two tabs: the plain shielded-address
-              receive, and a combined "shield USDC" view that holds the Noble
-              receive address plus the IBC-shield form. Noble is being retired
-              (see the deprecation notice inside NobleReceivePanel); the
-              Injective USDC ramp will replace it once eth_secp256k1 support
-              lands. */}
+        {/* tabs - Penumbra only. Two tabs: the plain shielded-address receive,
+              and a "shield USDC" view holding the Injective USDC ramp
+              (InjectivePanel). Injective is the sole shield-in path now; Noble
+              shield-in was removed (Circle winds USDC down on Noble). */}
         {isPenumbra && (
           <div className='mb-4 flex rounded-lg bg-elev-2 p-1'>
             {(['receive', 'shield'] as const).map(m => (
