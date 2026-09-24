@@ -4,13 +4,12 @@
  * for penumbra: a "shield USDC" tab holds the Injective USDC (USDC.inj) ramp -
  * the only shielding-in path now (Noble shield-in was retired as Circle winds
  * USDC down on Noble; Noble stays a withdraw-only destination in Send). The
- * plain receive tab shows the shielded address, defaulting to a rotating
- * ephemeral address with the static index one toggle away.
+ * plain receive tab shows the shielded address; for penumbra that is always a
+ * rotating ephemeral address (the static index address is never exposed).
  */
 
 import { getTransparentHistoryInWorker } from '../../../state/keyring/network-worker';
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { ToggleSwitch } from '../../../components/toggle-switch';
 import { InjectivePanel } from './injective-panel';
 import { useBackNav } from '../../../utils/navigate';
 import { useLocation } from 'react-router-dom';
@@ -45,15 +44,16 @@ function ReceiveTab({
   activeNetwork: string;
 }) {
   const [copied, setCopied] = useState(false);
-  const [ephemeral, setEphemeral] = useState(false);
+  // Penumbra receive is ephemeral-ONLY: a fresh randomized single-use address
+  // that rotates on every copy. The static index address is deliberately not
+  // offered - ephemeral addresses never expire (the FVK detects funds sent to
+  // any of them forever), so a static address buys nothing for receiving and
+  // only invites reuse, which links payments off-chain. Anyone who genuinely
+  // needs the deterministic index address can derive it with an external tool.
   const [ephemeralAddress, setEphemeralAddress] = useState('');
   const [ephemeralLoading, setEphemeralLoading] = useState(false);
   // Bumped on each copy to rotate to a fresh ephemeral address for the next share.
   const [ephemeralNonce, setEphemeralNonce] = useState(0);
-  // True once the user has explicitly chosen static; keeps the default-ephemeral
-  // effect from re-forcing ephemeral back on after they opted out.
-  const [staticChosen, setStaticChosen] = useState(false);
-  const [showTooltip, setShowTooltip] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -180,20 +180,19 @@ function ReceiveTab({
     };
   }, [transparent, isZcash, canTransparent, isMnemonic, selectedKeyInfo, keyRing, zcashUfvk, zidecarUrl]);
 
+  // Penumbra shows ONLY the derived ephemeral address - never the static
+  // `address`. While it derives, `displayAddress` is empty and `isLoading`
+  // drives the skeleton; we never fall back to the static address, so a stable
+  // reusable string is never presented for penumbra.
   const displayAddress =
     transparent && isZcash && transparentAddress
       ? transparentAddress
-      : ephemeral && ephemeralAddress
+      : isPenumbra
         ? ephemeralAddress
         : address;
   const isLoading =
-    transparent && isZcash ? transparentLoading : ephemeral ? ephemeralLoading : loading;
-  // "ephemeral toggle is on" is not the same as "an ephemeral address is on
-  // screen": if derivation fails or the wallet has no key material, we fall back
-  // to the static `address`. Label, styling, the rotate-on-copy and the footer
-  // must key off what is ACTUALLY shown, so a fallback never masquerades as a
-  // fresh single-use address.
-  const showingEphemeral = ephemeral && isPenumbra && !!ephemeralAddress;
+    transparent && isZcash ? transparentLoading : isPenumbra ? ephemeralLoading : loading;
+  const showingEphemeral = isPenumbra && !!ephemeralAddress;
 
   useEffect(() => {
     if (canvasRef.current && displayAddress) {
@@ -205,19 +204,8 @@ function ReceiveTab({
     }
   }, [displayAddress]);
 
-  // Penumbra receive defaults to a fresh ephemeral (rotating) address: it leaks
-  // less pubkey material (a partial harvest-now-decrypt-later hedge) and keeps
-  // counterparties from linking your receives. The static index address stays one
-  // toggle away below. Fires only on the transition to penumbra, and not once the
-  // user has explicitly chosen static, so their choice is preserved.
   useEffect(() => {
-    if (isPenumbra && !staticChosen) {
-      setEphemeral(true);
-    }
-  }, [isPenumbra, staticChosen]);
-
-  useEffect(() => {
-    if (!ephemeral || !isPenumbra) {
+    if (!isPenumbra) {
       return;
     }
 
@@ -236,10 +224,9 @@ function ReceiveTab({
             penumbraAccount,
           );
         } else {
-          // No key material to derive from (e.g. a penumbra wallet whose JSON
-          // has no FVK yet, or one still hydrating). Clear loading so the view
-          // falls back to the static address instead of a forever-skeleton -
-          // showingEphemeral below keeps that fallback honestly labeled static.
+          // No key material to derive from (a penumbra wallet whose JSON has no
+          // FVK yet, or one still hydrating). Clear loading; the view shows the
+          // empty/"no address" state rather than ever exposing the static one.
           if (!cancelled) {
             setEphemeralLoading(false);
           }
@@ -262,10 +249,9 @@ function ReceiveTab({
       cancelled = true;
     };
     // selectedKeyInfo id/type and the FVK are read inside; a late-hydrating
-    // wallet must re-trigger derivation or the default ephemeral view would
-    // stay empty forever (deps were [ephemeral, penumbraAccount] only).
+    // wallet must re-trigger derivation or the ephemeral view would stay empty
+    // forever. ephemeralNonce re-derives to rotate after each copy.
   }, [
-    ephemeral,
     isPenumbra,
     penumbraAccount,
     ephemeralNonce,
@@ -341,20 +327,6 @@ function ReceiveTab({
       setEphemeralNonce(n => n + 1);
     }
   }, [displayAddress, showingEphemeral]);
-
-  const handleToggle = useCallback(() => {
-    setEphemeral(prev => {
-      const next = !prev;
-      // Turning ephemeral OFF is an explicit choice to view the static address;
-      // remember it so the default-ephemeral effect does not flip it back.
-      setStaticChosen(!next);
-      if (prev) {
-        setEphemeralAddress('');
-      }
-      return next;
-    });
-    setCopied(false);
-  }, []);
 
   const handleTransparentToggle = useCallback(() => {
     setTransparent(prev => {
@@ -446,8 +418,10 @@ function ReceiveTab({
         <p className='w-full text-xs text-red-400'>{transparentError}</p>
       )}
 
-      {/* advanced: address rotation + ephemeral live behind one disclosure */}
-      {(isPenumbra || isZcash) && (
+      {/* advanced: zcash address-index rotation lives behind one disclosure.
+          Penumbra has nothing here - it is ephemeral-only, so there is no
+          static/index option to expose. */}
+      {isZcash && (
         <div className='w-full'>
           <button
             onClick={() => setShowAdvanced(prev => !prev)}
@@ -463,34 +437,6 @@ function ReceiveTab({
 
           {showAdvanced && (
             <div className='mt-2 flex flex-col gap-3 rounded-lg border border-border-soft bg-elev-1 p-3'>
-              {isPenumbra && (
-                <div className='flex w-full items-center justify-between'>
-                  <div className='flex items-center gap-2'>
-                    <span className='text-sm font-medium'>ephemeral address</span>
-                    <div className='relative'>
-                      <button
-                        onClick={() => setShowTooltip(prev => !prev)}
-                        className='text-fg-muted transition-colors hover:text-fg-high'
-                      >
-                        <span className='i-ph-info h-3.5 w-3.5' />
-                      </button>
-                      {showTooltip && (
-                        <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border-soft bg-canvas p-3 text-xs text-fg-muted shadow-lg lowercase'>
-                          on by default. a fresh randomized address each copy, unlinkable to your
-                          main address or to each other - only your viewing key detects incoming
-                          funds. turn off to show your reusable static index address.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <ToggleSwitch
-                    checked={ephemeral}
-                    onChange={() => handleToggle()}
-                    label='ephemeral address'
-                  />
-                </div>
-              )}
-
               {isZcash && !transparent && (
                 <div className='flex w-full items-center justify-center gap-2'>
                   <button
