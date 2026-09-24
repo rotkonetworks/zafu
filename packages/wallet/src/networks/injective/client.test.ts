@@ -88,7 +88,7 @@ describe('injective client', () => {
       USDC_DENOM,
       fetchFn as never,
     );
-    expect(bal).toEqual({ usdc: 0n, inj: 0n });
+    expect(bal).toEqual({ usdc: 0n, inj: 0n, all: [] });
   });
 
   it('reports a tx as pending (not found) on a 404', async () => {

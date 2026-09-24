@@ -61,6 +61,8 @@ export interface InjectiveBalances {
   usdc: bigint;
   /** INJ gas-token balance in base units (18-dec). */
   inj: bigint;
+  /** every bank balance on the address (denom as the bank spells it) */
+  all?: { denom: string; amount: bigint }[];
 }
 
 /**
@@ -93,10 +95,12 @@ export async function queryInjectiveBalances(
   const wantUsdc = usdcDenom.toLowerCase();
   let usdc = 0n;
   let inj = 0n;
+  const all: { denom: string; amount: bigint }[] = [];
   for (const b of json.balances ?? []) {
     if (!b.denom || b.amount == null) {
       continue;
     }
+    all.push({ denom: b.denom, amount: BigInt(b.amount) });
     const denom = b.denom.toLowerCase();
     if (denom === wantUsdc) {
       usdc = BigInt(b.amount);
@@ -104,7 +108,7 @@ export async function queryInjectiveBalances(
       inj = BigInt(b.amount);
     }
   }
-  return { usdc, inj };
+  return { usdc, inj, all };
 }
 
 export interface InjectiveTxStatus {

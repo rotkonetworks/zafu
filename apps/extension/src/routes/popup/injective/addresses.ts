@@ -50,6 +50,8 @@ export interface InjectiveIndexBalance {
   usdc: bigint;
   /** INJ base units (18-dec) */
   inj: bigint;
+  /** every bank balance on the address */
+  all?: { denom: string; amount: bigint }[];
 }
 
 /**

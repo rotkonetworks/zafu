@@ -37,6 +37,7 @@ import { queryInjectiveBalances, queryInjectiveTx } from '@repo/wallet/networks/
 import { shieldInToPenumbra, withdrawToExchange } from '@repo/wallet/networks/injective/conduit';
 import { requestInjectiveFeeGrant } from '@repo/wallet/networks/injective/feegrant';
 import { trackTx } from '../../../tx-ops';
+import { acceptedInjectiveAssets, heldAcceptedAssets, totalHeld, type HeldAsset } from './assets';
 import { nextHdIndex, peekHdIndex } from '@repo/storage-chrome/cosmos-chain-counters';
 import {
   injectiveScanIndices,
@@ -117,17 +118,17 @@ function fullDecimalString(amount: bigint, decimals: number): string {
 }
 
 /**
- * USDC.inj is 6-dec; convert a human amount to integer base units WITHOUT float
- * math (Math.round(n * 1e6) loses precision and Number() accepts scientific
- * notation / trailing junk). Reuse the integer-only helper; reject anything that
- * is not a plain decimal, and treat zero as invalid.
+ * Convert a human amount to integer base units of an asset with `decimals`,
+ * WITHOUT float math (Math.round(n * 1e6) loses precision and Number() accepts
+ * scientific notation / trailing junk). Reject anything that is not a plain
+ * decimal, and treat zero as invalid.
  */
-function toBaseUnits(human: string): string | undefined {
+function toBaseUnits(human: string, decimals: number): string | undefined {
   const trimmed = human.trim();
   if (!/^\d+(\.\d+)?$/.test(trimmed)) {
     return undefined;
   }
-  const base = parseAmountToBaseUnits(trimmed, CFG.decimals);
+  const base = parseAmountToBaseUnits(trimmed, decimals);
   return base === '0' ? undefined : base;
 }
 
@@ -431,7 +432,13 @@ export const InjectiveAccount = () => {
       settled.forEach((r, i) => {
         const t = scanTargets[i]!;
         if (r.status === 'fulfilled') {
-          rows.push({ index: t.index, address: t.address, usdc: r.value.usdc, inj: r.value.inj });
+          rows.push({
+            index: t.index,
+            address: t.address,
+            usdc: r.value.usdc,
+            inj: r.value.inj,
+            all: r.value.all,
+          });
         } else if (t.index === 0) {
           throw r.reason;
         }
@@ -452,10 +459,11 @@ export const InjectiveAccount = () => {
   }, [rows, fundedKey, fundedIndices]);
   const totals = useMemo(
     () =>
-      rows.reduce((acc, r) => ({ usdc: acc.usdc + r.usdc, inj: acc.inj + r.inj }), {
-        usdc: 0n,
-        inj: 0n,
-      }),
+      totalHeld(
+        rows.map(r => r.all ?? []),
+        acceptedInjectiveAssets(CFG.penumbraSourceChannel ?? 'channel-18'),
+        CFG.denom,
+      ),
     [rows],
   );
   const [showAddresses, setShowAddresses] = useState(false);
@@ -489,6 +497,20 @@ export const InjectiveAccount = () => {
   const selected = rows.find(r => r.index === selectedIndex);
   const selectedAddress = selected?.address ?? (selectedIndex === 0 ? injAddress : '');
   const usdcBal = selected?.usdc ?? 0n;
+
+  // Any accepted Injective asset on the selected address, USDC.inj by default.
+  // Both forms act on this one asset.
+  const accepted = acceptedInjectiveAssets(CFG.penumbraSourceChannel ?? 'channel-18');
+  const held = heldAcceptedAssets(selected?.all ?? [], accepted, CFG.denom);
+  const [assetDenom, setAssetDenom] = useState<string>(CFG.denom);
+  const usdcMeta = accepted.get(CFG.denom.toLowerCase()) ?? {
+    denom: CFG.denom,
+    symbol: CFG.symbol,
+    decimals: CFG.decimals,
+  };
+  const asset: HeldAsset = held.find(a => a.denom === assetDenom) ??
+    held[0] ?? { ...usdcMeta, amount: 0n };
+  const isInj = asset.denom.toLowerCase() === GAS_ASSET.denom;
   const injBal = selected?.inj ?? 0n;
   const balancesReady = selected !== undefined;
 
@@ -529,16 +551,50 @@ export const InjectiveAccount = () => {
   // The shield leg may be sponsored; the withdraw leg (MsgSend) never is.
   const shieldGasOk = gasOk || canSponsor;
 
-  const shieldBase = toBaseUnits(shieldAmount);
-  const shieldExceeds = balancesReady && !!shieldBase && BigInt(shieldBase) > usdcBal;
-  const withdrawBase = toBaseUnits(withdrawAmount);
-  const withdrawExceeds = balancesReady && !!withdrawBase && BigInt(withdrawBase) > usdcBal;
+  // moving INJ itself must leave the fee behind
+  const spendable = isInj ? (asset.amount > feeInj ? asset.amount - feeInj : 0n) : asset.amount;
+  const shieldBase = toBaseUnits(shieldAmount, asset.decimals);
+  const shieldExceeds = balancesReady && !!shieldBase && BigInt(shieldBase) > spendable;
+  const withdrawBase = toBaseUnits(withdrawAmount, asset.decimals);
+  const withdrawExceeds = balancesReady && !!withdrawBase && BigInt(withdrawBase) > spendable;
   const recipient = parseInjectiveRecipient(withdrawAddr);
   const withdrawAddrOk = recipient.ok;
   const withdrawTo = recipient.ok ? recipient.address : '';
   // one send at a time: when both legs act on the same index an overlapping
   // shield + withdraw would collide on the sequence number.
   const anyBusy = isBusy(shieldTx.status) || isBusy(withdrawTx.status);
+
+  /** "20 USDC.inj +1" for an address row */
+  const rowSummary = (r: InjectiveIndexBalance): string => {
+    const list = heldAcceptedAssets(r.all ?? [], accepted, CFG.denom);
+    const first = list[0];
+    if (!first) {
+      return '0';
+    }
+    const more = list.length > 1 ? ` +${list.length - 1}` : '';
+    return `${formatBaseUnits(first.amount, first.decimals, 2)} ${first.symbol}${more}`;
+  };
+  /** the asset picker both forms share; nothing when there is one asset */
+  const assetPicker =
+    held.length > 1 ? (
+      <select
+        value={asset.denom}
+        onChange={e => {
+          setAssetDenom(e.target.value);
+          setShieldAmount('');
+          setWithdrawAmount('');
+        }}
+        disabled={anyBusy}
+        aria-label='asset'
+        className='mb-2 w-full border border-border-soft bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none'
+      >
+        {held.map(a => (
+          <option key={a.denom} value={a.denom}>
+            {a.symbol} - {formatBaseUnits(a.amount, a.decimals, 4)}
+          </option>
+        ))}
+      </select>
+    ) : null;
 
   const copy = useCallback(() => {
     if (!receive) {
@@ -550,7 +606,7 @@ export const InjectiveAccount = () => {
   }, [receive]);
 
   const handleShield = useCallback(async () => {
-    const base = toBaseUnits(shieldAmount);
+    const base = toBaseUnits(shieldAmount, asset.decimals);
     if (!base || !selectedKeyInfo || !CFG.penumbraChannel || !selectedAddress) {
       return;
     }
@@ -561,7 +617,7 @@ export const InjectiveAccount = () => {
     setShieldTx({ status: 'signing' });
     try {
       const res = await trackTx(
-        { network: 'injective', label: `shield ${shieldAmount} ${CFG.symbol}` },
+        { network: 'injective', label: `shield ${shieldAmount} ${asset.symbol}` },
         async step => {
           const mnemonic = await getMnemonic(selectedKeyInfo.id);
           if (!mnemonic) {
@@ -590,7 +646,7 @@ export const InjectiveAccount = () => {
               restUrl: CFG.restEndpoint,
               sourceChannel,
               penumbraReceiver,
-              token: { denom: CFG.denom, amount: base },
+              token: { denom: asset.denom, amount: base },
               // 10-minute IBC timeout, in nanoseconds
               timeoutTimestamp: BigInt(Date.now() + 10 * 60 * 1000) * 1_000_000n,
               fee: injectiveFee(),
@@ -619,6 +675,7 @@ export const InjectiveAccount = () => {
       setShieldTx({ status: 'error', error: err instanceof Error ? err.message : 'shield failed' });
     }
   }, [
+    asset,
     shieldAmount,
     selectedKeyInfo,
     requestAuth,
@@ -631,7 +688,7 @@ export const InjectiveAccount = () => {
   ]);
 
   const handleWithdraw = useCallback(async () => {
-    const base = toBaseUnits(withdrawAmount);
+    const base = toBaseUnits(withdrawAmount, asset.decimals);
     if (!base || !withdrawTo || !selectedKeyInfo || !selectedAddress) {
       return;
     }
@@ -641,7 +698,7 @@ export const InjectiveAccount = () => {
     setWithdrawTx({ status: 'signing' });
     try {
       const res = await trackTx(
-        { network: 'injective', label: `withdraw ${withdrawAmount} ${CFG.symbol}` },
+        { network: 'injective', label: `withdraw ${withdrawAmount} ${asset.symbol}` },
         async step => {
           const mnemonic = await getMnemonic(selectedKeyInfo.id);
           if (!mnemonic) {
@@ -656,7 +713,7 @@ export const InjectiveAccount = () => {
             accountIndex: selectedIndex,
             restUrl: CFG.restEndpoint,
             toAddress: withdrawTo,
-            amount: { denom: CFG.denom, amount: base },
+            amount: { denom: asset.denom, amount: base },
             fee: injectiveFee(),
           });
           if (res.code !== 0) {
@@ -675,6 +732,7 @@ export const InjectiveAccount = () => {
       });
     }
   }, [
+    asset,
     withdrawAmount,
     withdrawTo,
     selectedKeyInfo,
@@ -758,14 +816,20 @@ export const InjectiveAccount = () => {
           {balancesQuery.isError ? (
             <p className='mt-1 text-label text-red-400 lowercase'>couldn't load balance</p>
           ) : (
-            <div className='mt-1 flex items-baseline justify-between'>
-              <span className='font-mono text-lg'>
-                {formatBaseUnits(totals.usdc, CFG.decimals, 4)}{' '}
-                <span className='text-xs text-fg-muted'>{CFG.symbol}</span>
-              </span>
-              <span className='font-mono text-xs text-fg-muted'>
-                {formatBaseUnits(totals.inj, GAS_ASSET.decimals, 6)} {GAS_ASSET.symbol}
-              </span>
+            <div className='mt-1 flex flex-col gap-0.5'>
+              {totals.length === 0 ? (
+                <span className='font-mono text-lg text-fg-muted'>0</span>
+              ) : (
+                totals.map((t, i) => (
+                  <span
+                    key={t.denom}
+                    className={`font-mono ${i === 0 ? 'text-lg' : 'text-xs text-fg-muted'}`}
+                  >
+                    {formatBaseUnits(t.amount, t.decimals, i === 0 ? 4 : 6)}{' '}
+                    <span className='text-xs text-fg-muted'>{t.symbol}</span>
+                  </span>
+                ))
+              )}
             </div>
           )}
           {/* every scanned address; funded ones can be picked for shield / withdraw */}
@@ -806,12 +870,7 @@ export const InjectiveAccount = () => {
                     />
                     <span className='w-8 shrink-0'>#{r.index}</span>
                     <span className='truncate'>{shortInjAddress(r.address)}</span>
-                    <span className='ml-auto shrink-0'>
-                      {formatBaseUnits(r.usdc, CFG.decimals, 2)} {CFG.symbol}
-                    </span>
-                    <span className='shrink-0'>
-                      {formatBaseUnits(r.inj, GAS_ASSET.decimals, 4)} {GAS_ASSET.symbol}
-                    </span>
+                    <span className='ml-auto shrink-0'>{rowSummary(r)}</span>
                   </button>
                 );
               })}
@@ -833,6 +892,7 @@ export const InjectiveAccount = () => {
             </span>
           )}
         </div>
+        {assetPicker}
         <div className='relative mb-2'>
           <input
             type='number'
@@ -840,13 +900,13 @@ export const InjectiveAccount = () => {
             step='any'
             value={shieldAmount}
             onChange={e => setShieldAmount(e.target.value)}
-            placeholder='USDC amount'
+            placeholder={`${asset.symbol} amount`}
             className='w-full rounded-lg border border-border-soft bg-input px-3 py-2 pr-14 text-sm focus:border-zigner-gold focus:outline-none'
           />
           <button
             type='button'
-            onClick={() => setShieldAmount(fullDecimalString(usdcBal, CFG.decimals))}
-            disabled={usdcBal === 0n}
+            onClick={() => setShieldAmount(fullDecimalString(spendable, asset.decimals))}
+            disabled={spendable === 0n}
             className='absolute right-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-label font-medium text-zigner-gold hover:bg-elev-1 disabled:opacity-40'
           >
             max
@@ -874,7 +934,7 @@ export const InjectiveAccount = () => {
               : 'shielding...'
             : shieldTx.status === 'submitted'
               ? 'confirming...'
-              : 'shield USDC to Penumbra'}
+              : `shield ${asset.symbol} to Penumbra`}
         </Button>
         {shieldTx.status === 'submitted' && (
           <p className='mt-2 text-label text-fg-muted lowercase'>
@@ -937,6 +997,7 @@ export const InjectiveAccount = () => {
                   {RECIPIENT_PROBLEM[recipient.problem](recipient.prefix)}
                 </p>
               ))}
+            {assetPicker}
             <div className='relative mb-2'>
               <input
                 type='number'
@@ -944,13 +1005,13 @@ export const InjectiveAccount = () => {
                 step='any'
                 value={withdrawAmount}
                 onChange={e => setWithdrawAmount(e.target.value)}
-                placeholder='USDC amount'
+                placeholder={`${asset.symbol} amount`}
                 className='w-full rounded-lg border border-border-soft bg-input px-3 py-2 pr-14 text-sm focus:border-zigner-gold focus:outline-none'
               />
               <button
                 type='button'
-                onClick={() => setWithdrawAmount(fullDecimalString(usdcBal, CFG.decimals))}
-                disabled={usdcBal === 0n}
+                onClick={() => setWithdrawAmount(fullDecimalString(spendable, asset.decimals))}
+                disabled={spendable === 0n}
                 className='absolute right-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-label font-medium text-zigner-gold hover:bg-elev-1 disabled:opacity-40'
               >
                 max
@@ -984,7 +1045,7 @@ export const InjectiveAccount = () => {
                   ? 'confirming...'
                   : !gasOk
                     ? 'needs INJ for gas'
-                    : 'withdraw USDC'}
+                    : `withdraw ${asset.symbol}`}
             </Button>
             {withdrawTx.status === 'submitted' && (
               <p className='mt-2 text-label text-fg-muted lowercase'>
