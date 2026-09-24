@@ -4,6 +4,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { ChainRegistryClient } from '@penumbrafi/registry';
+import { isValidBech32 } from '@repo/wallet/networks/cosmos/chains';
 import { useChainIdQuery } from './chain-id';
 import { getActiveIbcChainIds } from '../config/networks';
 
@@ -53,11 +54,15 @@ export const useIbcChains = () => {
   });
 };
 
-/** validate destination address for a chain */
+/**
+ * Validate a destination address for a chain - a FULL bech32 decode (checksum +
+ * structure), not just a prefix match. An unshield out of penumbra is
+ * irreversible, so a typo'd `inj1...` / `noble1...` recipient must be caught
+ * here; a prefix-only check would pass a corrupted address and strand funds.
+ */
 export const isValidIbcAddress = (chain: IbcChain | undefined, address: string): boolean => {
   if (!chain || !address) {
     return false;
   }
-  // simple prefix check - full bech32 validation happens on submit
-  return address.startsWith(`${chain.addressPrefix}1`);
+  return isValidBech32(address, chain.addressPrefix);
 };

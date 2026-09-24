@@ -12,6 +12,8 @@
  * all use same key derivation (m/44'/118'/0'/0/0) with different bech32 prefix
  */
 
+import { fromBech32 } from '@cosmjs/encoding';
+
 export type CosmosChainId = 'noble' | 'cosmoshub' | 'injective' | 'osmosis';
 
 export interface CosmosChainConfig {
@@ -223,4 +225,18 @@ export function chainByChainId(chainId: string): CosmosChainConfig | undefined {
 /** Canonical lookup by bare bech32 prefix (e.g. "inj", "noble"). */
 export function chainByPrefix(prefix: string): CosmosChainConfig | undefined {
   return Object.values(COSMOS_CHAINS).find(chain => chain.bech32Prefix === prefix);
+}
+
+/**
+ * Full bech32 validation (checksum + structure) against an expected prefix -
+ * NOT a prefix-only `startsWith`. Use this to validate an irreversible unshield
+ * / withdraw destination: a corrupted `inj1.../noble1...` address passes a
+ * prefix check but fails the checksum here, so funds are never sent to a typo.
+ */
+export function isValidBech32(address: string, prefix: string): boolean {
+  try {
+    return fromBech32(address).prefix === prefix;
+  } catch {
+    return false;
+  }
 }
