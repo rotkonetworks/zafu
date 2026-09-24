@@ -17,6 +17,8 @@ import { loadConfig } from './config';
 import { Granter } from './granter';
 import { Limits } from './limits';
 import { handleGrant } from './handler';
+import { clientIpFrom } from './client-ip';
+import { initGranter } from './init';
 
 const MAX_BODY_BYTES = 1024;
 
@@ -58,6 +60,10 @@ const readJson = (req: IncomingMessage): Promise<unknown> =>
   });
 
 const main = async () => {
+  if (process.argv[2] === 'init') {
+    await initGranter(process.argv[3]);
+    return;
+  }
   const config = loadConfig();
   const wallet = await deriveInjectiveWallet(config.mnemonic, config.accountIndex);
   const deps = {
@@ -73,16 +79,8 @@ const main = async () => {
   const balances = (address: string) =>
     queryInjectiveBalances(config.lcdUrl, address, config.usdcDenom, fetch);
 
-  const clientIp = (req: IncomingMessage): string => {
-    if (config.trustProxy) {
-      const fwd = req.headers['x-forwarded-for'];
-      const first = (Array.isArray(fwd) ? fwd[0] : fwd)?.split(',')[0]?.trim();
-      if (first) {
-        return first;
-      }
-    }
-    return req.socket.remoteAddress ?? 'unknown';
-  };
+  const clientIp = (req: IncomingMessage): string =>
+    clientIpFrom(req.headers['x-forwarded-for'], req.socket.remoteAddress, config.trustProxy);
 
   const server = createServer((req, res) => {
     void (async () => {

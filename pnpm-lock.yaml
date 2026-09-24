@@ -381,6 +381,9 @@ importers:
       '@repo/wallet':
         specifier: workspace:*
         version: link:../../packages/wallet
+      bip39:
+        specifier: ^3.1.0
+        version: 3.1.0
     devDependencies:
       cosmjs-types:
         specifier: ^0.9.0
