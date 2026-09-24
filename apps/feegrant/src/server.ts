@@ -2,7 +2,8 @@
 /**
  * Injective gas sponsor.
  *
- *   GET  /health                -> { ok, granter, grantsToday, dailyGrantCap }
+ *   GET  /health                -> { ok, funded, granter, balanceInj, minBalanceInj,
+ *                                    grantsToday, dailyGrantCap }; 503 when not ok
  *   GET  /v1/injective/granter  -> { granter, spendLimit, grantTtlHours }
  *   POST /v1/injective/grant    -> { granter, status, txhash?, height?, expiresAt? }
  *
@@ -84,15 +85,19 @@ const main = async () => {
   // unfunded or drained granter must read as unavailable there - otherwise the
   // UI promises "no INJ needed" and then fails at the grant step. Cached so
   // probes don't hit the LCD on every request.
-  let fundedCache: { at: number; funded: boolean } | undefined;
-  const isFunded = async (): Promise<boolean> => {
-    if (fundedCache && Date.now() - fundedCache.at < 60_000) {
-      return fundedCache.funded;
+  let balanceCache: { at: number; inj: bigint } | undefined;
+  const granterBalance = async (): Promise<bigint> => {
+    if (balanceCache && Date.now() - balanceCache.at < 60_000) {
+      return balanceCache.inj;
     }
-    const funded = (await balances(granter.address)).inj >= config.minGranterBalance;
-    fundedCache = { at: Date.now(), funded };
-    return funded;
+    const inj = (await balances(granter.address)).inj;
+    balanceCache = { at: Date.now(), inj };
+    return inj;
   };
+  const isFunded = async (): Promise<boolean> =>
+    (await granterBalance()) >= config.minGranterBalance;
+  /** base units (18 decimals) -> INJ, for humans and monitors */
+  const toInj = (base: bigint): number => Number(base) / 1e18;
 
   const clientIp = (req: IncomingMessage): string =>
     clientIpFrom(req.headers['x-forwarded-for'], req.socket.remoteAddress, config.trustProxy);
@@ -104,9 +109,26 @@ const main = async () => {
         if (req.method === 'OPTIONS') {
           send(res, 204, {});
         } else if (req.method === 'GET' && path === '/health') {
-          send(res, 200, {
-            ok: true,
+          // Honest health: "the process answers" is not "sponsorship works".
+          // ok = the granter's balance was read and covers the cutoff below
+          // which /v1/injective/granter stops offering grants. A monitor can
+          // also warn early on balanceInj before it reaches minBalanceInj.
+          let balance: bigint | undefined;
+          try {
+            balance = await granterBalance();
+          } catch {
+            // LCD unreachable: balance unknown, so not ok
+          }
+          const funded = balance !== undefined && balance >= config.minGranterBalance;
+          const capped = limits.grantsToday >= config.dailyGrantCap;
+          const ok = funded && !capped;
+          send(res, ok ? 200 : 503, {
+            ok,
+            funded,
+            capped,
             granter: granter.address,
+            balanceInj: balance === undefined ? null : toInj(balance),
+            minBalanceInj: toInj(config.minGranterBalance),
             grantsToday: limits.grantsToday,
             dailyGrantCap: config.dailyGrantCap,
           });
