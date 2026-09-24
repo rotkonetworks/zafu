@@ -15,7 +15,27 @@ const POPUP_READY_TIMEOUT = 60_000;
 // reload, so this no longer has to cover a Penumbra WASM cold-start - it only
 // guards "is a panel actually listening": no ack in this window -> fall back to
 // a popup window. Kept generous to absorb a busy main thread.
-const SIDE_PANEL_READY_TIMEOUT = 6_000;
+// A cold panel must load the popup bundle and init Penumbra wasm before its
+// delivery listener mounts; 6s was too short on a busy machine, the approval
+// then fell back to a popup window while the panel finished opening anyway.
+const SIDE_PANEL_READY_TIMEOUT = 15_000;
+// How long to wait for a panel opened on the connect gesture to appear in
+// getContexts before deciding there is no panel.
+const SIDE_PANEL_REGISTER_WAIT = 2_000;
+
+/** Poll until a side panel is visible in `winId`, or `ms` elapses. */
+const waitForSidePanel = async (winId: number | undefined, ms: number): Promise<boolean> => {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    await new Promise<void>(resolve => {
+      setTimeout(resolve, 150);
+    });
+    if (await isSidePanelOpen(winId)) {
+      return true;
+    }
+  }
+  return false;
+};
 const POPUP_PATHS = {
   [PopupType.TxApproval]: PopupPath.TRANSACTION_APPROVAL,
   [PopupType.OriginApproval]: PopupPath.ORIGIN_APPROVAL,
@@ -219,6 +239,14 @@ const spawnDetachedPopup = async (
       .catch(() => undefined);
 
     let panelOpen = await isSidePanelOpen(winId);
+    // The connect gesture (content-script-connect) opens the panel a beat before
+    // this runs, but a just-opened panel is not in getContexts yet. Treating that
+    // as "closed" sent us to the gesture-less open below (which Chrome refuses)
+    // and then to the window fallback - so the user got the side panel AND a
+    // popup. Give a just-opened panel a moment to register first.
+    if (!panelOpen) {
+      panelOpen = await waitForSidePanel(winId, SIDE_PANEL_REGISTER_WAIT);
+    }
     // A closed panel is normally opened on the connect gesture (see
     // content-script-connect). This best-effort open covers an approval that
     // arrives with the panel openable; by here we are past the gesture and only

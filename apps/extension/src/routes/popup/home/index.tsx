@@ -58,6 +58,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { viewClient, sctClient } from '../../../clients';
 import { getDisplayDenomFromView } from '@penumbra-zone/getters/value-view';
 import { fromValueView } from '@rotko/penumbra-types/amount';
+import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
+import { balancesQueryOptions, balancesQueryKey } from '../../../hooks/penumbra-balances';
 import { getHistoryInWorker } from '../../../state/keyring/network-worker';
 import { deleteZcashDatabases } from '../../../clear-cache-startup';
 import { cn } from '@repo/ui/lib/utils';
@@ -67,6 +69,21 @@ import { SyncStatus, type SyncStage } from '../../../components/zcash/sync-statu
 import { useSyncProgress } from '../../../hooks/full-sync-height';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import type { TransactionInfo } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
+
+/** UM total across balances; module-level so react-query's select is stable. */
+const selectUmTotal = (balances: BalancesResponse[]): number => {
+  let total = 0;
+  for (const b of balances) {
+    if (!b.balanceView) {
+      continue;
+    }
+    const denom = getDisplayDenomFromView(b.balanceView);
+    if (denom === 'penumbra' || denom === 'UM') {
+      total += Number(fromValueView(b.balanceView));
+    }
+  }
+  return total;
+};
 
 /** lazy load network-specific content - only load when needed */
 const AssetsTable = lazy(() => import('./assets-table').then(m => ({ default: m.AssetsTable })));
@@ -592,37 +609,24 @@ const PenumbraContent = ({
       ? `syncing ${syncPct}%`
       : `block ${(fullSyncHeight ?? latestBlockHeight).toLocaleString()}`;
 
-  // query UM balance for the balance card
+  // UM total for the balance card, derived from the SAME cached balances stream
+  // the assets table uses (react-query `select` runs on the shared cache). It
+  // used to run its own full viewClient.balances stream - over every note,
+  // hundreds of LP NFTs on a big wallet - so every block paid for two.
   const { data: umBalance } = useQuery({
-    queryKey: ['um-balance', account],
+    ...balancesQueryOptions(account),
     staleTime: 5_000,
-    queryFn: async () => {
-      try {
-        const balances = await Array.fromAsync(viewClient.balances({ accountFilter: { account } }));
-        let total = 0;
-        for (const b of balances) {
-          if (!b.balanceView) {
-            continue;
-          }
-          const denom = getDisplayDenomFromView(b.balanceView);
-          if (denom === 'penumbra' || denom === 'UM') {
-            total += Number(fromValueView(b.balanceView));
-          }
-        }
-        return total;
-      } catch {
-        return null;
-      }
-    },
+    select: selectUmTotal,
   });
 
-  // refetch UM balance when sync height advances (no flicker)
+  // refresh balances when sync height advances (no flicker). Same key as the
+  // assets table's refresh, so concurrent invalidations share ONE fetch.
   const queryClient = useQueryClient();
   const prevHeight = useRef(fullSyncHeight);
   useEffect(() => {
     if (fullSyncHeight && fullSyncHeight !== prevHeight.current) {
       prevHeight.current = fullSyncHeight;
-      void queryClient.invalidateQueries({ queryKey: ['um-balance', account] });
+      void queryClient.invalidateQueries({ queryKey: balancesQueryKey(account) });
     }
   }, [fullSyncHeight, account, queryClient]);
 
