@@ -311,10 +311,54 @@ describe('Storage migrations', () => {
       expect(migrationSpy).toHaveBeenCalledOnce();
     });
 
-    test('migrating to older step (local dev possibly)', async () => {
+    test('stored version newer than code is forward-compatible (rollout skew)', async () => {
+      // Simulates an MV3 rollout where a newer chunk has migrated storage up to
+      // v2 while an older service-worker instance is still running v1 code.
+      // Schemas are additive, so the old reader must operate on the newer state
+      // rather than brick, and must never lower the stored version.
       await v2ExtStorage.set('fullSyncHeight', '123');
-      await expect(v1ExtStorage.get('fullSyncHeight')).rejects.toThrow(
-        'Failed to migrate storage: RangeError: No migration provided for version: 2',
+      expect(rawStorage.mock.get(VERSION_FIELD)).toBe(2);
+
+      // old code reads the newer state without throwing, and gets the value as
+      // stored (no down-migration / coercion happens)
+      const result = await v1ExtStorage.get('fullSyncHeight');
+      expect(result).toBe('123');
+      // stored version is untouched by the read
+      expect(rawStorage.mock.get(VERSION_FIELD)).toBe(2);
+
+      // a write from the old code also leaves the stored version intact
+      await v1ExtStorage.set('network', 'mainnet');
+      expect(rawStorage.mock.get(VERSION_FIELD)).toBe(2);
+      expect(await v1ExtStorage.get('network')).toBe('mainnet');
+    });
+
+    test('a genuinely broken up-migration chain still throws', async () => {
+      // Forward-compat must not swallow real migration bugs: an up-migration
+      // whose version() overshoots the target leaves a gap below this.version,
+      // which must still surface as "No migration provided".
+      await v1ExtStorage.set('fullSyncHeight', 123);
+      expect(rawStorage.mock.get(VERSION_FIELD)).toBe(1);
+
+      const brokenChain = new ExtensionStorage<MockV2State, 2>(
+        rawStorage,
+        {
+          network: '',
+          accounts: [],
+          seedPhrase: [],
+          frontend: 'http://default.com',
+          grpcUrl: { url: '', image: '' },
+          fullSyncHeight: '0',
+        },
+        2,
+        {
+          0: mockV0toV1Migration,
+          // overshoots: walks 1 -> 3, so migrations[3] is undefined and 3 !== 2
+          1: { version: () => 3, transform: prev => Promise.resolve(prev) },
+        },
+      );
+
+      await expect(brokenChain.get('network')).rejects.toThrow(
+        'Failed to migrate storage: RangeError: No migration provided for version: 3',
       );
     });
 
