@@ -348,7 +348,26 @@ export const InjectivePanel = () => {
   // sponsor decision, the fee-grant grantee, and the signer's accountIndex all
   // derive from `selected`, so they can never disagree about which account.
   const [userPick, setUserPick] = useState<number | undefined>(undefined);
-  const selectedIndex = resolveSelectedInjectiveIndex(rows, userPick);
+  const resolvedIndex = resolveSelectedInjectiveIndex(rows, userPick);
+  // Freeze the address while the user is mid-action. The resolved default can
+  // move on its own (another address becomes the largest, a burner empties, a
+  // poll of the chosen burner fails); an amount typed while looking at one
+  // address must never be shielded or withdrawn from another. Only an explicit
+  // pick moves a pinned selection.
+  const midAction =
+    shieldAmount !== '' ||
+    withdrawAmount !== '' ||
+    isBusy(shieldTx.status) ||
+    isBusy(withdrawTx.status);
+  const [pinnedIndex, setPinnedIndex] = useState<number>();
+  useEffect(() => {
+    if (midAction && pinnedIndex === undefined) {
+      setPinnedIndex(resolvedIndex);
+    } else if (!midAction && pinnedIndex !== undefined) {
+      setPinnedIndex(undefined);
+    }
+  }, [midAction, pinnedIndex, resolvedIndex]);
+  const selectedIndex = pinnedIndex ?? resolvedIndex;
   const selected = rows.find(r => r.index === selectedIndex);
   const selectedAddress = selected?.address ?? (selectedIndex === 0 ? injAddress : '');
   const usdcBal = selected?.usdc ?? 0n;
@@ -603,7 +622,13 @@ export const InjectivePanel = () => {
                   <button
                     key={r.index}
                     type='button'
-                    onClick={() => setUserPick(r.index)}
+                    onClick={() => {
+                      setUserPick(r.index);
+                      // an explicit pick is the one thing allowed to move a pin
+                      if (pinnedIndex !== undefined) {
+                        setPinnedIndex(r.index);
+                      }
+                    }}
                     disabled={anyBusy}
                     title={r.address}
                     className={`flex w-full items-center gap-2 rounded px-1.5 py-1 text-left font-mono text-label disabled:opacity-60 ${
