@@ -29,7 +29,7 @@ import {
   deriveZcashTransparent,
   deriveZcashTransparentFromUfvk,
 } from '../../../hooks/use-address';
-import { type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import QRCode from 'qrcode';
 
 
@@ -47,6 +47,11 @@ function ReceiveTab({
   const [ephemeral, setEphemeral] = useState(false);
   const [ephemeralAddress, setEphemeralAddress] = useState('');
   const [ephemeralLoading, setEphemeralLoading] = useState(false);
+  // Bumped on each copy to rotate to a fresh ephemeral address for the next share.
+  const [ephemeralNonce, setEphemeralNonce] = useState(0);
+  // True once the user has explicitly chosen static; keeps the default-ephemeral
+  // effect from re-forcing ephemeral back on after they opted out.
+  const [staticChosen, setStaticChosen] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -193,6 +198,17 @@ function ReceiveTab({
     }
   }, [displayAddress]);
 
+  // Penumbra receive defaults to a fresh ephemeral (rotating) address: it leaks
+  // less pubkey material (a partial harvest-now-decrypt-later hedge) and keeps
+  // counterparties from linking your receives. The static index address stays one
+  // toggle away below. Fires only on the transition to penumbra, and not once the
+  // user has explicitly chosen static, so their choice is preserved.
+  useEffect(() => {
+    if (isPenumbra && !staticChosen) {
+      setEphemeral(true);
+    }
+  }, [isPenumbra, staticChosen]);
+
   useEffect(() => {
     if (!ephemeral || !isPenumbra) {
       return;
@@ -231,7 +247,7 @@ function ReceiveTab({
     return () => {
       cancelled = true;
     };
-  }, [ephemeral, penumbraAccount]);
+  }, [ephemeral, penumbraAccount, ephemeralNonce]);
 
   // derive zcash transparent address when toggled on or index changes
   useEffect(() => {
@@ -293,14 +309,24 @@ function ReceiveTab({
     await navigator.clipboard.writeText(displayAddress);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
-  }, [displayAddress]);
+    // Rotate: after copying an ephemeral penumbra address, advance to a fresh one
+    // so the next share is a new, unlinkable address (burner semantics). The just
+    // -copied one stays valid forever - the wallet's FVK detects every ephemeral.
+    if (ephemeral && isPenumbra) {
+      setEphemeralNonce(n => n + 1);
+    }
+  }, [displayAddress, ephemeral, isPenumbra]);
 
   const handleToggle = useCallback(() => {
     setEphemeral(prev => {
+      const next = !prev;
+      // Turning ephemeral OFF is an explicit choice to view the static address;
+      // remember it so the default-ephemeral effect does not flip it back.
+      setStaticChosen(!next);
       if (prev) {
         setEphemeralAddress('');
       }
-      return !prev;
+      return next;
     });
     setCopied(false);
   }, []);
@@ -424,8 +450,9 @@ function ReceiveTab({
                       </button>
                       {showTooltip && (
                         <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border-soft bg-canvas p-3 text-xs text-fg-muted shadow-lg lowercase'>
-                          randomized single-use address, unlinkable to your main address or to each
-                          other. only your viewing key detects incoming funds.
+                          on by default. a fresh randomized address each copy, unlinkable to your
+                          main address or to each other - only your viewing key detects incoming
+                          funds. turn off to show your reusable static index address.
                         </div>
                       )}
                     </div>
