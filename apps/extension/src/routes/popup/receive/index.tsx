@@ -32,7 +32,6 @@ import {
 import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import QRCode from 'qrcode';
 
-
 /** receive tab - QR code + address display */
 function ReceiveTab({
   address,
@@ -178,7 +177,16 @@ function ReceiveTab({
     return () => {
       cancelled = true;
     };
-  }, [transparent, isZcash, canTransparent, isMnemonic, selectedKeyInfo, keyRing, zcashUfvk, zidecarUrl]);
+  }, [
+    transparent,
+    isZcash,
+    canTransparent,
+    isMnemonic,
+    selectedKeyInfo,
+    keyRing,
+    zcashUfvk,
+    zidecarUrl,
+  ]);
 
   // Penumbra shows ONLY the derived ephemeral address - never the static
   // `address`. While it derives, `displayAddress` is empty and `isLoading`
@@ -349,8 +357,7 @@ function ReceiveTab({
   // addresses are shielded by construction - an ephemeral penumbra address is
   // just as shielded as the static one (notes hide the recipient either way), so
   // it keeps the badge. Only transparent zcash (t1/t3) is public and drops it.
-  const isShielded =
-    (isZcash && !transparent && displayAddress?.startsWith('u')) || isPenumbra;
+  const isShielded = (isZcash && !transparent && displayAddress?.startsWith('u')) || isPenumbra;
 
   return (
     <div className='flex flex-col items-center gap-4'>
@@ -522,9 +529,9 @@ function ReceiveTab({
           )}
         </div>
         <div
-          className={`flex items-center gap-2 rounded-lg border p-3 ${
+          className={`flex items-center gap-2 border p-3 ${
             showingEphemeral
-              ? 'border-green-500/40 bg-green-500/5'
+              ? 'border-zigner-gold/40 bg-zigner-gold/5'
               : transparent && isZcash
                 ? 'border-rust/35 bg-rust/8'
                 : 'border-border-soft bg-elev-2'
@@ -532,7 +539,7 @@ function ReceiveTab({
         >
           <code
             className={`flex-1 break-all text-xs ${
-              showingEphemeral ? 'text-green-400' : transparent && isZcash ? 'text-rust' : ''
+              showingEphemeral ? 'text-zigner-gold' : transparent && isZcash ? 'text-rust' : ''
             }`}
           >
             {isLoading ? 'generating...' : displayAddress || 'no wallet selected'}
@@ -569,15 +576,16 @@ function ReceiveTab({
         </div>
       </div>
 
-      <p className='text-center text-xs text-fg-muted leading-snug lowercase'>
-        {showingEphemeral
-          ? 'fresh single-use address - share with one party; reuse lets senders link payments.'
-          : transparent && isZcash
+      {/* the rotate button already says "fresh address"; no caption needed */}
+      {!showingEphemeral && (
+        <p className='text-center text-xs text-fg-muted leading-snug lowercase'>
+          {transparent && isZcash
             ? 'public on-chain - one index per exchange, then shield to ironwood.'
             : transparent
               ? 'transparent chain - this address is PUBLIC, not shielded. use a fresh deposit address per sender and shield into Penumbra soon after.'
               : 'shielded - senders cannot see your other transactions.'}
-      </p>
+        </p>
+      )}
     </div>
   );
 }

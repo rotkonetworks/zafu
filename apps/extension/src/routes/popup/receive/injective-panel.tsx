@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import QRCode from 'qrcode';
 import { Button } from '@repo/ui/components/ui/button';
 import { useStore } from '../../../state';
@@ -29,15 +29,16 @@ import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { parseAmountToBaseUnits } from '@repo/wallet/networks/cosmos/signer';
 import {
   deriveInjectiveAddress,
-  isValidInjectiveAddress,
+  parseInjectiveRecipient,
+  type InjectiveRecipientProblem,
 } from '@repo/wallet/networks/injective/derive';
 import { queryInjectiveBalances, queryInjectiveTx } from '@repo/wallet/networks/injective/client';
 import { shieldInToPenumbra, withdrawToExchange } from '@repo/wallet/networks/injective/conduit';
 import { requestInjectiveFeeGrant } from '@repo/wallet/networks/injective/feegrant';
-import { peekHdIndex } from '@repo/storage-chrome/cosmos-chain-counters';
+import { nextHdIndex, peekHdIndex } from '@repo/storage-chrome/cosmos-chain-counters';
 import {
-  fundedBurners,
   injectiveScanIndices,
+  mergeFundedIndices,
   resolveSelectedInjectiveIndex,
   shortInjAddress,
   type InjectiveIndexBalance,
@@ -53,6 +54,14 @@ const CFG = COSMOS_CHAINS.injective;
  * Withdraw-to-exchange is a MsgSend, which the allowance does not cover.
  */
 const GAS_SPONSOR_URL = 'https://sponsor.zafu.pro';
+
+/** One short line per way a pasted recipient can be wrong. */
+const RECIPIENT_PROBLEM: Record<InjectiveRecipientProblem, (prefix?: string) => string> = {
+  penumbra: () => 'penumbra address - use shield instead',
+  'other-chain': prefix => `${prefix ?? 'other'} address, not injective`,
+  checksum: () => 'typo - a character is wrong',
+  format: () => 'not an address',
+};
 const GAS_ASSET = CFG.gasAsset ?? { symbol: 'INJ', denom: 'inj', decimals: 18 };
 
 /**
@@ -240,6 +249,7 @@ export const InjectivePanel = () => {
   const penumbraAccount = useStore(selectPenumbraAccount);
   const { getMnemonic } = useStore(keyRingSelector);
   const { requestAuth, PasswordModal } = usePasswordGate();
+  const queryClient = useQueryClient();
 
   const [injAddress, setInjAddress] = useState('');
   const [qr, setQr] = useState('');
@@ -274,7 +284,6 @@ export const InjectivePanel = () => {
           return;
         }
         setInjAddress(addr);
-        setQr(await QRCode.toDataURL(addr, { margin: 1, width: 200 }));
       } catch (err) {
         console.error('[injective] failed to derive address:', err);
       }
@@ -283,6 +292,59 @@ export const InjectivePanel = () => {
       cancelled = true;
     };
   }, [isMnemonic, selectedKeyInfo, getMnemonic]);
+
+  // Receive like a bitcoin HD wallet: every open takes the next unused index,
+  // and the rotate button takes another. An address is never shown twice, even
+  // one that already holds funds - those stay in the addresses list below, where
+  // they are still scanned and can be shielded from. Shares the counter with
+  // dapp burners (zafu_get_fresh_chain_address), so indices never collide.
+  const [receiveNonce, setReceiveNonce] = useState(0);
+  const [receive, setReceive] = useState<{ index: number; address: string }>();
+  useEffect(() => {
+    let cancelled = false;
+    const keyId = isMnemonic ? selectedKeyInfo?.id : undefined;
+    if (!keyId) {
+      setReceive(undefined);
+      setQr('');
+      return;
+    }
+    void (async () => {
+      try {
+        const index = await nextHdIndex('injective');
+        const mnemonic = await getMnemonic(keyId);
+        if (!mnemonic || cancelled) {
+          return;
+        }
+        const address = await deriveInjectiveAddress(mnemonic, index);
+        if (cancelled) {
+          return;
+        }
+        setReceive({ index, address });
+        setQr(await QRCode.toDataURL(address, { margin: 1, width: 200 }));
+        void queryClient.invalidateQueries({ queryKey: ['injective-hd-peek'] });
+      } catch (err) {
+        console.error('[injective] failed to allocate a receive address:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isMnemonic, selectedKeyInfo?.id, getMnemonic, receiveNonce, queryClient]);
+
+  // Indices that have ever held funds, per vault, so an old receive address
+  // that rotated out of the recent scan window keeps being watched.
+  const fundedKey = selectedKeyInfo?.id ? `injectiveFundedIndices:${selectedKeyInfo.id}` : '';
+  const [fundedIndices, setFundedIndices] = useState<number[]>([]);
+  useEffect(() => {
+    if (!fundedKey) {
+      setFundedIndices([]);
+      return;
+    }
+    void chrome.storage.local
+      .get(fundedKey)
+      .then(r => setFundedIndices((r[fundedKey] as number[] | undefined) ?? []))
+      .catch(() => undefined);
+  }, [fundedKey]);
 
   // Burner discovery: dapps get fresh inj1 burners from zafu_get_fresh_chain_address,
   // which allocates via nextHdIndex('injective'). peekHdIndex reads that counter
@@ -295,7 +357,7 @@ export const InjectivePanel = () => {
     refetchInterval: 15_000,
     queryFn: () => peekHdIndex('injective'),
   });
-  const scanKey = injectiveScanIndices(hdPeekQuery.data ?? 0)
+  const scanKey = injectiveScanIndices(hdPeekQuery.data ?? 0, undefined, fundedIndices)
     .filter(i => i > 0)
     .join(',');
 
@@ -379,8 +441,25 @@ export const InjectivePanel = () => {
     },
   });
   const rows = useMemo(() => balancesQuery.data ?? [], [balancesQuery.data]);
-  const mainRow = rows.find(r => r.index === 0);
-  const burnerRows = fundedBurners(rows);
+  useEffect(() => {
+    if (!fundedKey || !rows.length) {
+      return;
+    }
+    const merged = mergeFundedIndices(fundedIndices, rows);
+    if (merged.length !== fundedIndices.length) {
+      setFundedIndices(merged);
+      void chrome.storage.local.set({ [fundedKey]: merged }).catch(() => undefined);
+    }
+  }, [rows, fundedKey, fundedIndices]);
+  const totals = useMemo(
+    () =>
+      rows.reduce((acc, r) => ({ usdc: acc.usdc + r.usdc, inj: acc.inj + r.inj }), {
+        usdc: 0n,
+        inj: 0n,
+      }),
+    [rows],
+  );
+  const [showAddresses, setShowAddresses] = useState(false);
 
   // The ONE index the shield / withdraw forms act on. Every balance check, the
   // sponsor decision, the fee-grant grantee, and the signer's accountIndex all
@@ -453,19 +532,21 @@ export const InjectivePanel = () => {
   const shieldExceeds = balancesReady && !!shieldBase && BigInt(shieldBase) > usdcBal;
   const withdrawBase = toBaseUnits(withdrawAmount);
   const withdrawExceeds = balancesReady && !!withdrawBase && BigInt(withdrawBase) > usdcBal;
-  const withdrawAddrOk = isValidInjectiveAddress(withdrawAddr);
+  const recipient = parseInjectiveRecipient(withdrawAddr);
+  const withdrawAddrOk = recipient.ok;
+  const withdrawTo = recipient.ok ? recipient.address : '';
   // one send at a time: when both legs act on the same index an overlapping
   // shield + withdraw would collide on the sequence number.
   const anyBusy = isBusy(shieldTx.status) || isBusy(withdrawTx.status);
 
   const copy = useCallback(() => {
-    if (!injAddress) {
+    if (!receive) {
       return;
     }
-    void navigator.clipboard.writeText(injAddress);
+    void navigator.clipboard.writeText(receive.address);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
-  }, [injAddress]);
+  }, [receive]);
 
   const handleShield = useCallback(async () => {
     const base = toBaseUnits(shieldAmount);
@@ -538,7 +619,7 @@ export const InjectivePanel = () => {
 
   const handleWithdraw = useCallback(async () => {
     const base = toBaseUnits(withdrawAmount);
-    if (!base || !isValidInjectiveAddress(withdrawAddr) || !selectedKeyInfo || !selectedAddress) {
+    if (!base || !withdrawTo || !selectedKeyInfo || !selectedAddress) {
       return;
     }
     if (!(await requestAuth())) {
@@ -557,7 +638,7 @@ export const InjectivePanel = () => {
         mnemonic,
         accountIndex: selectedIndex,
         restUrl: CFG.restEndpoint,
-        toAddress: withdrawAddr.trim(),
+        toAddress: withdrawTo,
         amount: { denom: CFG.denom, amount: base },
         fee: injectiveFee(),
       });
@@ -575,7 +656,7 @@ export const InjectivePanel = () => {
     }
   }, [
     withdrawAmount,
-    withdrawAddr,
+    withdrawTo,
     selectedKeyInfo,
     requestAuth,
     getMnemonic,
@@ -596,17 +677,24 @@ export const InjectivePanel = () => {
     <div className='flex flex-col gap-4'>
       {/* receive */}
       <div className='rounded-lg border border-border-soft p-4'>
-        <div className='mb-2 text-xs font-medium lowercase'>your Injective address</div>
-        <p className='mb-3 text-label text-fg-muted lowercase'>
-          send USDC.inj here from an exchange, then shield it below. keep a little INJ for gas.
-        </p>
-        {qr && (
-          <img src={qr} alt='inj address QR' className='mb-3 h-40 w-40 rounded bg-white p-1' />
-        )}
+        <div className='mb-2 flex items-center justify-between text-xs font-medium lowercase'>
+          <span>your Injective address</span>
+          {receive && <span className='font-mono text-label text-fg-muted'>#{receive.index}</span>}
+        </div>
+        {qr && <img src={qr} alt='Injective address QR' className='mb-3 h-40 w-40 bg-white p-1' />}
         <div className='mb-3 flex items-center gap-2'>
-          <span className='truncate font-mono text-xs' title={injAddress}>
-            {injAddress || 'deriving...'}
+          <span className='truncate font-mono text-xs' title={receive?.address}>
+            {receive?.address ?? 'deriving...'}
           </span>
+          <button
+            type='button'
+            onClick={() => setReceiveNonce(n => n + 1)}
+            className='flex shrink-0 items-center text-fg-muted hover:text-fg-high'
+            title='new address'
+            aria-label='new address'
+          >
+            <span className='i-ph-arrows-clockwise h-4 w-4' />
+          </button>
           <button
             type='button'
             onClick={copy}
@@ -616,45 +704,48 @@ export const InjectivePanel = () => {
           </button>
         </div>
 
-        {/* live balances */}
+        {/* balances across every address */}
         <div className='rounded-md border border-border-soft bg-elev-1 p-3'>
           <div className='flex items-center justify-between'>
-            <span className='text-label text-fg-muted lowercase'>balance</span>
+            <button
+              type='button'
+              onClick={() => setShowAddresses(v => !v)}
+              className='flex items-center gap-1 text-label text-fg-muted lowercase hover:text-fg-high'
+            >
+              <span
+                className={`h-3 w-3 ${showAddresses ? 'i-ph-caret-down' : 'i-ph-caret-right'}`}
+              />
+              addresses ({rows.length})
+            </button>
             <button
               type='button'
               onClick={refetchBalances}
               disabled={!injAddress || isFetching}
               className='flex items-center gap-1 text-label text-fg-muted hover:text-fg-high disabled:opacity-50'
               title='refresh balance'
+              aria-label='refresh balance'
             >
               <span className={`i-lucide-refresh-cw h-3 w-3 ${isFetching ? 'animate-spin' : ''}`} />
-              refresh
             </button>
           </div>
           {balancesQuery.isError ? (
-            <p className='mt-1 text-label text-red-400 lowercase'>
-              couldn't load balance - retrying
-            </p>
+            <p className='mt-1 text-label text-red-400 lowercase'>couldn't load balance</p>
           ) : (
             <div className='mt-1 flex items-baseline justify-between'>
               <span className='font-mono text-lg'>
-                {formatBaseUnits(mainRow?.usdc ?? 0n, CFG.decimals, 4)}{' '}
+                {formatBaseUnits(totals.usdc, CFG.decimals, 4)}{' '}
                 <span className='text-xs text-fg-muted'>{CFG.symbol}</span>
               </span>
               <span className='font-mono text-xs text-fg-muted'>
-                {formatBaseUnits(mainRow?.inj ?? 0n, GAS_ASSET.decimals, 6)} {GAS_ASSET.symbol}{' '}
-                (gas)
+                {formatBaseUnits(totals.inj, GAS_ASSET.decimals, 6)} {GAS_ASSET.symbol}
               </span>
             </div>
           )}
-          {/* funds on burner addresses (fresh unshield receivers). pick which
-              address shield + withdraw act on. */}
-          {burnerRows.length > 0 && (
+          {/* every scanned address; funded ones can be picked for shield / withdraw */}
+          {showAddresses && (
             <div className='mt-2 border-t border-border-soft pt-2'>
-              <div className='mb-1 text-label text-fg-muted lowercase'>
-                other addresses - pick one to move
-              </div>
-              {(mainRow ? [mainRow, ...burnerRows] : burnerRows).map(r => {
+              {rows.map(r => {
+                const funded = r.usdc > 0n || r.inj > 0n;
                 const active = r.index === selectedIndex;
                 return (
                   <button
@@ -667,20 +758,27 @@ export const InjectivePanel = () => {
                         setPinnedIndex(r.index);
                       }
                     }}
-                    disabled={anyBusy}
+                    disabled={anyBusy || !funded}
                     title={r.address}
-                    className={`flex w-full items-center gap-2 rounded px-1.5 py-1 text-left font-mono text-label disabled:opacity-60 ${
-                      active ? 'bg-elev-2 text-fg-high' : 'text-fg-muted hover:bg-elev-2'
+                    className={`flex w-full items-center gap-2 px-1.5 py-1 text-left font-mono text-label disabled:cursor-default ${
+                      active
+                        ? 'bg-elev-2 text-fg-high'
+                        : funded
+                          ? 'text-fg-muted hover:bg-elev-2'
+                          : 'text-fg-dim'
                     }`}
                   >
                     <span
                       className={`h-3 w-3 shrink-0 ${
-                        active ? 'i-ph-radio-button-fill text-zigner-gold' : 'i-ph-circle'
+                        active
+                          ? 'i-ph-radio-button-fill text-zigner-gold'
+                          : funded
+                            ? 'i-ph-circle'
+                            : ''
                       }`}
                     />
-                    <span className='truncate'>
-                      {r.index === 0 ? 'main' : shortInjAddress(r.address)}
-                    </span>
+                    <span className='w-8 shrink-0'>#{r.index}</span>
+                    <span className='truncate'>{shortInjAddress(r.address)}</span>
                     <span className='ml-auto shrink-0'>
                       {formatBaseUnits(r.usdc, CFG.decimals, 2)} {CFG.symbol}
                     </span>
@@ -692,16 +790,9 @@ export const InjectivePanel = () => {
               })}
             </div>
           )}
-          {!gasOk &&
-            (canSponsor ? (
-              <p className='mt-2 text-label text-fg-muted lowercase'>
-                no INJ needed - rotko pays the gas to shield. the sponsor is visible on-chain.
-              </p>
-            ) : (
-              <p className='mt-2 text-label text-amber-400/90 lowercase'>
-                not enough INJ for gas - send a little INJ here to move USDC (fee ~{feeDisplay}).
-              </p>
-            ))}
+          {!gasOk && !canSponsor && (
+            <p className='mt-2 text-label text-amber-400/90 lowercase'>no INJ for gas</p>
+          )}
         </div>
       </div>
 
@@ -734,7 +825,11 @@ export const InjectivePanel = () => {
             max
           </button>
         </div>
-        <p className='mb-2 text-label text-fg-muted lowercase'>fee ~{feeDisplay}, paid in INJ.</p>
+        <p className='mb-2 text-label text-fg-muted lowercase'>
+          {canSponsor && !gasOk
+            ? 'fee covered by the rotko sponsor - no INJ needed.'
+            : `fee ~${feeDisplay}, paid in INJ.`}
+        </p>
         {shieldExceeds && (
           <p className='mb-2 text-label text-amber-400/90 lowercase'>
             amount is more than your USDC.inj balance.
@@ -757,17 +852,13 @@ export const InjectivePanel = () => {
         {shieldTx.status === 'submitted' && (
           <p className='mt-2 text-label text-fg-muted lowercase'>
             submitted - included soon, then IBC-delivered to Penumbra.{' '}
-            {shieldTx.hash && (
-              <TxRef hash={shieldTx.hash} />
-            )}
+            {shieldTx.hash && <TxRef hash={shieldTx.hash} />}
           </p>
         )}
         {shieldTx.status === 'done' && (
           <p className='mt-2 text-label text-green-400 lowercase'>
             included on Injective - IBC delivery to Penumbra is in flight.{' '}
-            {shieldTx.hash && (
-              <TxRef hash={shieldTx.hash} />
-            )}
+            {shieldTx.hash && <TxRef hash={shieldTx.hash} />}
           </p>
         )}
         {shieldTx.status === 'error' && (
@@ -789,82 +880,99 @@ export const InjectivePanel = () => {
         </button>
         {showWithdraw && (
           <div className='mt-3'>
-        {selectedIndex !== 0 && (
-          <p className='mb-1 font-mono text-label text-fg-muted' title={selectedAddress}>
-            from {shortInjAddress(selectedAddress)}
-          </p>
-        )}
-        <input
-          type='text'
-          value={withdrawAddr}
-          onChange={e => setWithdrawAddr(e.target.value.trim())}
-          placeholder='inj1... exchange deposit address'
-          className='mb-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-xs focus:border-zigner-gold focus:outline-none'
-        />
-        {withdrawAddr && !withdrawAddrOk && (
-          <p className='mb-1 text-label text-red-400 lowercase'>
-            not a valid Injective (inj1...) address.
-          </p>
-        )}
-        <p className='mb-2 text-label leading-snug text-amber-400/90 lowercase'>
-          inj1... only - the exchange's Injective USDC deposit address. a wrong-network address
-          loses the funds.
-        </p>
-        <div className='relative mb-2'>
-          <input
-            type='number'
-            min='0'
-            step='any'
-            value={withdrawAmount}
-            onChange={e => setWithdrawAmount(e.target.value)}
-            placeholder='USDC amount'
-            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2 pr-14 text-sm focus:border-zigner-gold focus:outline-none'
-          />
-          <button
-            type='button'
-            onClick={() => setWithdrawAmount(fullDecimalString(usdcBal, CFG.decimals))}
-            disabled={usdcBal === 0n}
-            className='absolute right-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-label font-medium text-zigner-gold hover:bg-elev-1 disabled:opacity-40'
-          >
-            max
-          </button>
-        </div>
-        <p className='mb-2 text-label text-fg-muted lowercase'>fee ~{feeDisplay}, paid in INJ.</p>
-        {withdrawExceeds && (
-          <p className='mb-2 text-label text-amber-400/90 lowercase'>
-            amount is more than your USDC.inj balance.
-          </p>
-        )}
-        <Button
-          className='w-full'
-          disabled={!withdrawBase || withdrawExceeds || !withdrawAddrOk || !gasOk || anyBusy}
-          onClick={() => void handleWithdraw()}
-        >
-          {withdrawTx.status === 'signing'
-            ? 'sending...'
-            : withdrawTx.status === 'submitted'
-              ? 'confirming...'
-              : 'withdraw USDC'}
-        </Button>
-        {withdrawTx.status === 'submitted' && (
-          <p className='mt-2 text-label text-fg-muted lowercase'>
-            submitted - waiting for inclusion.{' '}
-            {withdrawTx.hash && (
-              <TxRef hash={withdrawTx.hash} />
+            {selectedIndex !== 0 && (
+              <p className='mb-1 font-mono text-label text-fg-muted' title={selectedAddress}>
+                from {shortInjAddress(selectedAddress)}
+              </p>
             )}
-          </p>
-        )}
-        {withdrawTx.status === 'done' && (
-          <p className='mt-2 text-label text-green-400 lowercase'>
-            sent - included on Injective.{' '}
-            {withdrawTx.hash && (
-              <TxRef hash={withdrawTx.hash} />
+            <input
+              type='text'
+              value={withdrawAddr}
+              onChange={e => setWithdrawAddr(e.target.value.trim())}
+              placeholder='exchange deposit address (inj1 or 0x)'
+              className='mb-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-xs focus:border-zigner-gold focus:outline-none'
+            />
+            {withdrawAddr &&
+              (recipient.ok ? (
+                <p
+                  className='mb-2 flex items-center gap-1 font-mono text-label text-fg-muted'
+                  title={recipient.address}
+                >
+                  <span className='i-ph-check size-3 text-zigner-gold' />
+                  {recipient.fromHex ? 'sends to ' : ''}
+                  {shortInjAddress(recipient.address)}
+                  {recipient.address === selectedAddress && (
+                    <span className='text-amber-400/90'> - this wallet</span>
+                  )}
+                </p>
+              ) : (
+                <p className='mb-2 text-label text-red-400 lowercase'>
+                  {RECIPIENT_PROBLEM[recipient.problem](recipient.prefix)}
+                </p>
+              ))}
+            <div className='relative mb-2'>
+              <input
+                type='number'
+                min='0'
+                step='any'
+                value={withdrawAmount}
+                onChange={e => setWithdrawAmount(e.target.value)}
+                placeholder='USDC amount'
+                className='w-full rounded-lg border border-border-soft bg-input px-3 py-2 pr-14 text-sm focus:border-zigner-gold focus:outline-none'
+              />
+              <button
+                type='button'
+                onClick={() => setWithdrawAmount(fullDecimalString(usdcBal, CFG.decimals))}
+                disabled={usdcBal === 0n}
+                className='absolute right-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-label font-medium text-zigner-gold hover:bg-elev-1 disabled:opacity-40'
+              >
+                max
+              </button>
+            </div>
+            <p className='mb-2 text-label text-fg-muted lowercase'>
+              fee ~{feeDisplay}, paid in INJ.
+            </p>
+            {/* The sponsor's grant covers only the IBC transfer into Penumbra, so a
+            withdrawal (a plain send on Injective) always needs the user's own
+            INJ. The button used to just sit disabled with no reason. */}
+            {!gasOk && (
+              <p className='mb-2 text-label text-amber-400/90 lowercase'>
+                withdrawing needs ~{feeDisplay} of your own INJ for gas - the sponsor only covers
+                moving funds into Penumbra. send a little INJ to this address first.
+              </p>
             )}
-          </p>
-        )}
-        {withdrawTx.status === 'error' && (
-          <p className='mt-2 text-label text-red-400'>{withdrawTx.error}</p>
-        )}
+            {withdrawExceeds && (
+              <p className='mb-2 text-label text-amber-400/90 lowercase'>
+                amount is more than your USDC.inj balance.
+              </p>
+            )}
+            <Button
+              className='w-full'
+              disabled={!withdrawBase || withdrawExceeds || !withdrawAddrOk || !gasOk || anyBusy}
+              onClick={() => void handleWithdraw()}
+            >
+              {withdrawTx.status === 'signing'
+                ? 'sending...'
+                : withdrawTx.status === 'submitted'
+                  ? 'confirming...'
+                  : !gasOk
+                    ? 'needs INJ for gas'
+                    : 'withdraw USDC'}
+            </Button>
+            {withdrawTx.status === 'submitted' && (
+              <p className='mt-2 text-label text-fg-muted lowercase'>
+                submitted - waiting for inclusion.{' '}
+                {withdrawTx.hash && <TxRef hash={withdrawTx.hash} />}
+              </p>
+            )}
+            {withdrawTx.status === 'done' && (
+              <p className='mt-2 text-label text-green-400 lowercase'>
+                sent - included on Injective. {withdrawTx.hash && <TxRef hash={withdrawTx.hash} />}
+              </p>
+            )}
+            {withdrawTx.status === 'error' && (
+              <p className='mt-2 text-label text-red-400'>{withdrawTx.error}</p>
+            )}
           </div>
         )}
       </div>

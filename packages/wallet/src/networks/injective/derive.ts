@@ -21,6 +21,7 @@
  */
 
 import { toBech32, fromBech32 } from '@cosmjs/encoding';
+import { keccak_256 } from '@noble/hashes/sha3';
 import { deriveEthWallet } from '../ethereum/derive';
 
 /** Injective bech32 human-readable prefix. */
@@ -41,6 +42,69 @@ export function isValidInjectiveAddress(address: string): boolean {
     return prefix === INJECTIVE_PREFIX && data.length === 20;
   } catch {
     return false;
+  }
+}
+
+/** Why a pasted recipient can't be used, short enough to show under the field. */
+export type InjectiveRecipientProblem =
+  | 'penumbra' // a Penumbra address: this sends on Injective, not into Penumbra
+  | 'other-chain' // valid bech32 for another chain (cosmos1, osmo1, noble1...)
+  | 'checksum' // looks like an address but a character is wrong
+  | 'format'; // not an address
+
+export type InjectiveRecipient =
+  | { ok: true; address: string; fromHex: boolean }
+  | { ok: false; problem: InjectiveRecipientProblem; prefix?: string };
+
+const HEX_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+
+/** EIP-55: a mixed-case 0x address carries a checksum in its letter case. */
+const eip55Valid = (hex: string): boolean => {
+  const body = hex.slice(2);
+  if (body === body.toLowerCase() || body === body.toUpperCase()) {
+    return true; // single-case: no checksum to verify
+  }
+  const hash = keccak_256(new TextEncoder().encode(body.toLowerCase()));
+  for (let i = 0; i < 40; i++) {
+    const nibble = (hash[i >> 1]! >> (i % 2 === 0 ? 4 : 0)) & 0xf;
+    const ch = body[i]!;
+    if (/[a-f]/i.test(ch) && (nibble >= 8) !== (ch === ch.toUpperCase())) {
+      return false;
+    }
+  }
+  return true;
+};
+
+/**
+ * Parse a pasted Injective recipient. Accepts `inj1...` (bech32, checked) and
+ * the same account as a `0x...` address (what Coinbase and Injective's EVM
+ * side show; EIP-55 checked when mixed-case), returning the `inj1` form to
+ * send to. On failure says what was pasted instead, so the UI can name it.
+ */
+export function parseInjectiveRecipient(input: string): InjectiveRecipient {
+  const text = input.trim();
+  if (HEX_ADDRESS.test(text)) {
+    if (!eip55Valid(text)) {
+      return { ok: false, problem: 'checksum' };
+    }
+    const bytes = Uint8Array.from(text.slice(2).match(/../g)!, h => parseInt(h, 16));
+    return { ok: true, address: toBech32(INJECTIVE_PREFIX, bytes), fromHex: true };
+  }
+  if (/^penumbra1/i.test(text) || /^penumbracompat1/i.test(text)) {
+    return { ok: false, problem: 'penumbra' };
+  }
+  try {
+    const { prefix, data } = fromBech32(text);
+    if (prefix !== INJECTIVE_PREFIX) {
+      return { ok: false, problem: 'other-chain', prefix };
+    }
+    return data.length === 20
+      ? { ok: true, address: text.toLowerCase(), fromHex: false }
+      : { ok: false, problem: 'format' };
+  } catch {
+    return /^inj1[02-9ac-hj-np-z]{20,}$/i.test(text)
+      ? { ok: false, problem: 'checksum' }
+      : { ok: false, problem: 'format' };
   }
 }
 

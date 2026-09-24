@@ -18,15 +18,29 @@ export const MAX_INJECTIVE_SCAN = 20;
  * the cap allows, the MOST RECENT ones are scanned: freshly issued burners are
  * the likeliest to hold unshielded funds.
  */
-export function injectiveScanIndices(highest: number, cap = MAX_INJECTIVE_SCAN): number[] {
+export function injectiveScanIndices(
+  highest: number,
+  cap = MAX_INJECTIVE_SCAN,
+  /**
+   * Indices that have ever held funds. Always scanned, on top of the recent
+   * window: receive addresses rotate on every open, so an old address can
+   * fall out of the window and must not vanish while it still holds money.
+   */
+  alwaysScan: readonly number[] = [],
+): number[] {
   const top = Number.isSafeInteger(highest) && highest > 0 ? highest : 0;
   const size = Math.max(1, Math.floor(cap));
   const start = Math.max(1, top - (size - 1) + 1);
-  const out = [0];
-  for (let i = start; i <= top && out.length < size; i++) {
-    out.push(i);
+  const out = new Set([0]);
+  for (let i = start; i <= top && out.size < size; i++) {
+    out.add(i);
   }
-  return out;
+  for (const i of alwaysScan) {
+    if (Number.isSafeInteger(i) && i >= 0 && i <= top) {
+      out.add(i);
+    }
+  }
+  return [...out].sort((a, b) => a - b);
 }
 
 export interface InjectiveIndexBalance {
@@ -53,6 +67,20 @@ export function pickDefaultInjectiveIndex(rows: readonly { index: number; usdc: 
     }
   }
   return best?.index ?? 0;
+}
+
+/** indices in `rows` holding anything, merged into the remembered set. */
+export function mergeFundedIndices(
+  remembered: readonly number[],
+  rows: readonly InjectiveIndexBalance[],
+): number[] {
+  const out = new Set(remembered);
+  for (const r of rows) {
+    if (r.usdc > 0n || r.inj > 0n) {
+      out.add(r.index);
+    }
+  }
+  return [...out].sort((a, b) => a - b);
 }
 
 /** burner (index > 0) rows that hold anything - drives whether the picker shows. */

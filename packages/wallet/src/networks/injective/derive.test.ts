@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { fromBech32 } from '@cosmjs/encoding';
-import { deriveInjectiveWallet, deriveInjectiveAddress, isValidInjectiveAddress } from './derive';
+import { fromBech32, toBech32 } from '@cosmjs/encoding';
+import {
+  deriveInjectiveWallet,
+  deriveInjectiveAddress,
+  isValidInjectiveAddress,
+  parseInjectiveRecipient,
+} from './derive';
 
 const toHex = (b: Uint8Array) =>
   Array.from(b)
@@ -72,5 +77,43 @@ describe('injective derivation', () => {
       expect(isValidInjectiveAddress('inj1')).toBe(false);
       expect(isValidInjectiveAddress('not an address')).toBe(false);
     });
+  });
+});
+
+describe('parseInjectiveRecipient', () => {
+  // the same 20-byte account in both forms
+  const hex = '0x8c7f1c9e9a0f2d3b4a5c6d7e8f9011223344556a';
+  const inj = toBech32('inj', Uint8Array.from(hex.slice(2).match(/../g)!, h => parseInt(h, 16)));
+
+  it('accepts inj1', () => {
+    expect(parseInjectiveRecipient(inj)).toEqual({ ok: true, address: inj, fromHex: false });
+  });
+  it('accepts 0x and converts to the same inj1 account', () => {
+    expect(parseInjectiveRecipient(hex)).toEqual({ ok: true, address: inj, fromHex: true });
+  });
+  it('rejects a mixed-case 0x with a bad checksum', () => {
+    const bad = '0x8C7f1c9e9a0f2d3b4a5c6d7e8f9011223344556A';
+    expect(parseInjectiveRecipient(bad)).toMatchObject({ ok: false });
+  });
+  it('names a penumbra address', () => {
+    expect(parseInjectiveRecipient('penumbra1qagc0nutnx6v23c8w44z0qku8stu9')).toEqual({
+      ok: false,
+      problem: 'penumbra',
+    });
+  });
+  it('names another chain', () => {
+    const cosmos = toBech32('cosmos', new Uint8Array(20));
+    expect(parseInjectiveRecipient(cosmos)).toEqual({
+      ok: false,
+      problem: 'other-chain',
+      prefix: 'cosmos',
+    });
+  });
+  it('catches a one-character typo as a checksum error', () => {
+    const typo = inj.slice(0, -1) + (inj.endsWith('q') ? 'p' : 'q');
+    expect(parseInjectiveRecipient(typo)).toEqual({ ok: false, problem: 'checksum' });
+  });
+  it('rejects junk', () => {
+    expect(parseInjectiveRecipient('hello')).toEqual({ ok: false, problem: 'format' });
   });
 });

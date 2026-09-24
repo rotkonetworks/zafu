@@ -3,6 +3,7 @@ import {
   MAX_INJECTIVE_SCAN,
   fundedBurners,
   injectiveScanIndices,
+  mergeFundedIndices,
   pickDefaultInjectiveIndex,
   resolveSelectedInjectiveIndex,
   shortInjAddress,
@@ -93,5 +94,28 @@ describe('shortInjAddress', () => {
   it('shortens long addresses and leaves short ones', () => {
     expect(shortInjAddress('inj1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqwxyz')).toBe('inj1qqqq...wxyz');
     expect(shortInjAddress('inj1abc')).toBe('inj1abc');
+  });
+});
+
+describe('injectiveScanIndices alwaysScan', () => {
+  it('keeps an old funded index that fell out of the recent window', () => {
+    const idx = injectiveScanIndices(50, MAX_INJECTIVE_SCAN, [3]);
+    expect(idx).toContain(3);
+    expect(idx).toContain(50);
+    expect(idx[0]).toBe(0);
+  });
+  it('ignores remembered indices above the counter or invalid', () => {
+    expect(injectiveScanIndices(2, MAX_INJECTIVE_SCAN, [7, -1, 1.5])).toEqual([0, 1, 2]);
+  });
+});
+
+describe('mergeFundedIndices', () => {
+  it('adds indices that hold anything, keeps remembered ones', () => {
+    const rows = [
+      { index: 0, address: 'a', usdc: 0n, inj: 0n },
+      { index: 4, address: 'b', usdc: 1n, inj: 0n },
+      { index: 9, address: 'c', usdc: 0n, inj: 5n },
+    ];
+    expect(mergeFundedIndices([2], rows)).toEqual([2, 4, 9]);
   });
 });
