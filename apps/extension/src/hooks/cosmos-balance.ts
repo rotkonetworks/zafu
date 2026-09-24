@@ -8,7 +8,9 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useStore } from '../state';
-import { selectEffectiveKeyInfo, keyRingSelector } from '../state/keyring';
+import { selectEffectiveKeyInfo, keyRingSelector, selectActiveNetwork } from '../state/keyring';
+import { getRootNetwork } from '../config/networks';
+import type { NetworkType } from '../state/keyring';
 import {
   createSigningClient,
   deriveAllChainAddresses,
@@ -27,14 +29,16 @@ import { shortSymbol } from '../utils/asset-display';
 
 /**
  * Cosmos chains (Noble, Injective, ...) are penumbra BURNERS - transparent
- * sub-accounts that only exist to shield into / withdraw out of penumbra. So
- * their balance polling is gated on penumbra being an enabled network: a
- * zcash-only wallet must never reach out to noble-rpc / injective RPC. Injective
- * is additionally gated on its launch flag so a held chain is not polled.
+ * sub-accounts that only exist to shield into / withdraw out of penumbra. Their
+ * balance polling is gated on the user being ACTIVELY on penumbra (its root),
+ * not merely having it enabled: full network isolation means a wallet viewing
+ * zcash touches NO noble-rpc / injective RPC at all. A cosmos subnetwork (Noble)
+ * roots to penumbra, so viewing a burner still counts as on-penumbra. Injective
+ * is additionally excluded from this generic coin-118 path (its own conduit).
  */
 const useBurnerPollingEnabled = (chainId?: CosmosChainId): boolean => {
-  const penumbraEnabled = useStore(s => s.networks.networks.penumbra.enabled);
-  if (!penumbraEnabled) {
+  const activeNetwork = useStore(selectActiveNetwork);
+  if (!activeNetwork || getRootNetwork(activeNetwork as NetworkType) !== 'penumbra') {
     return false;
   }
   // Injective (eth_secp256k1 / coin-60) is a conduit-only ramp with its OWN

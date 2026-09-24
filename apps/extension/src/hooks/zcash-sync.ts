@@ -11,7 +11,7 @@ import { ZidecarClient, type SyncStatus, type ChainTip } from '../state/keyring/
 import { LightwalletdClient } from '../state/keyring/lightwalletd-client';
 import type { ZcashClient } from '../state/keyring/zcash-backend';
 import { useStore } from '../state';
-import { selectEffectiveKeyInfo } from '../state/keyring';
+import { selectEffectiveKeyInfo, selectActiveNetwork } from '../state/keyring';
 import { zcashSyncHeightKey } from '../state/keyring/network-worker';
 import { classifySyncFailure, type SyncFailure } from '../state/sync-failure';
 
@@ -43,7 +43,9 @@ export function useZcashSyncStatus(): ZcashSyncState {
   // Otherwise a penumbra-only wallet still hammered zcash.rotko.net for GetTip /
   // GetSyncStatus on an interval - a network connection the user never opted in
   // to (reported: "why do we connect zcash if only penumbra is selected").
-  const zcashEnabled = useStore(s => s.networks.networks.zcash.enabled);
+  // Full network isolation: only poll the zidecar when ACTIVELY on zcash, not
+  // merely when zcash is enabled - a wallet viewing penumbra touches no zcash RPC.
+  const zcashActive = useStore(selectActiveNetwork) === 'zcash';
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const activeWalletId = selectedKeyInfo?.id;
   const [workerSyncHeight, setWorkerSyncHeight] = useState(0);
@@ -147,7 +149,7 @@ export function useZcashSyncStatus(): ZcashSyncState {
     queryKey: ['zcashSyncStatus', backend, zidecarUrl],
     // GetSyncStatus is a zidecar-only RPC; public lightwalletd endpoints lack it.
     // Also gated on zcash being enabled - no polling for a penumbra-only wallet.
-    enabled: zcashEnabled && backend === 'zidecar',
+    enabled: zcashActive && backend === 'zidecar',
     queryFn: () => client().getSyncStatus(),
     staleTime: POLL_INTERVAL,
     refetchInterval: POLL_INTERVAL,
@@ -165,7 +167,7 @@ export function useZcashSyncStatus(): ZcashSyncState {
     queryKey: ['zcashChainTip', backend, zidecarUrl],
     // Gated on zcash being enabled - a penumbra-only wallet must not poll the
     // zidecar for the chain tip.
-    enabled: zcashEnabled,
+    enabled: zcashActive,
     queryFn: () => client().getTip(),
     staleTime: POLL_INTERVAL,
     refetchInterval: POLL_INTERVAL,
