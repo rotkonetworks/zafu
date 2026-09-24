@@ -23,6 +23,8 @@
  *     → schedule (or immediately do) deletion of a multisig vault by name prefix.
  *       used by app-driven multisigs (poker tables) to evaporate themselves after settlement.
  *       no popup — silent operation. delayMs default 0 (immediate).
+ * - { type: 'zafu_open_shield', chainId } → show the wallet's own shield-in screen
+ *     (dapp handoff, e.g. Veil's "deposit from Injective"); nothing crosses back.
  */
 
 import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
@@ -40,6 +42,41 @@ import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/
 import { isPro } from '../../state/license';
 import { isValidExternalSender } from '../../senders/external';
 import { ZAFU_PROTOCOL_VERSION, ZAFU_SUPPORTED_PROTOCOL_VERSIONS } from '@zafu/protocol';
+import { localExtStorage } from '@repo/storage-chrome/local';
+import { isSidePanelOpen } from '../../side-panel-presence';
+import { SIDE_PANEL_NAVIGATE } from '../side-panel-delivery';
+import { POPUP_WINDOW_HEIGHT, POPUP_WINDOW_WIDTH } from '../../utils/popup-window';
+import { PopupPath } from '../../routes/popup/paths';
+
+/**
+ * Show a wallet route on the user's chosen surface: navigate the side panel
+ * when it is open in the window they are looking at (and they haven't opted
+ * out of side-panel approvals), otherwise open a popup window. Same routing
+ * rule as the unlock flow in needs-login.ts, so the wallet - not the dapp -
+ * decides where its UI appears. The popup path goes through the per-origin
+ * guard below (one wallet window per site at a time), so a page cannot spam
+ * windows. Returns false when a window for this origin is already open.
+ */
+const openWalletRoute = async (origin: string, route: string): Promise<boolean> => {
+  const win = await chrome.windows
+    .getLastFocused({ windowTypes: ['normal'] })
+    .catch(() => undefined);
+  const inPanel =
+    (await isSidePanelOpen(win?.id)) && (await localExtStorage.get('approvalsInSidePanel')) !== false;
+  if (inPanel) {
+    await chrome.runtime.sendMessage({ type: SIDE_PANEL_NAVIGATE, route });
+    return true;
+  }
+  const url = new URL(chrome.runtime.getURL('/popup.html'));
+  url.hash = route;
+  return openApprovalPopup(origin, url.href, {
+    width: POPUP_WINDOW_WIDTH,
+    height: POPUP_WINDOW_HEIGHT,
+  });
+};
+
+/** Source chains the wallet can shield from via zafu_open_shield. */
+const OPEN_SHIELD_CHAINS = new Set<string>(['injective']);
 
 // The v1 methods this listener routes to a real handler here (vs delegating to
 // sign-request.ts / external-encryption.ts) are enumerated as EASTEREGG_V1_METHODS
@@ -708,6 +745,44 @@ export const externalMessageListener = (
         pendingPicks.delete(requestId);
       }
       sendResponse({ ok: true });
+      return true;
+    }
+
+    // ── Open the wallet's own shield-in screen (dapp handoff) ──
+
+    case 'zafu_open_shield': {
+      // A dapp (e.g. Veil's deposit flow) asks the wallet to show ITS shield
+      // screen. Nothing crosses back: no address, key, amount or destination.
+      // The wallet picks the surface and runs the shield flow itself.
+      if (!isValidExternalSender(sender)) {
+        sendResponse({ error: 'denied', code: 'denied' });
+        return true;
+      }
+      const shieldChain = String(msg['chainId'] ?? '');
+      if (!OPEN_SHIELD_CHAINS.has(shieldChain)) {
+        sendResponse({ error: `unsupported chainId '${shieldChain}'`, code: 'invalid_request' });
+        return true;
+      }
+      const shieldOrigin = sender.origin;
+      void (async () => {
+        try {
+          const perms = await getOriginPermissions(shieldOrigin);
+          if (!hasCapability(perms, 'connect')) {
+            sendResponse({ error: 'not connected', code: 'denied' });
+            return;
+          }
+          if (!(await openWalletRoute(shieldOrigin, `${PopupPath.RECEIVE}?mode=shield`))) {
+            sendResponse({ error: 'a wallet window is already open', code: 'rate_limited' });
+            return;
+          }
+          sendResponse({ opened: true });
+        } catch (e) {
+          sendResponse({
+            error: e instanceof Error ? e.message : 'internal error',
+            code: 'internal_error',
+          });
+        }
+      })();
       return true;
     }
 

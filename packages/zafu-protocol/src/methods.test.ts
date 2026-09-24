@@ -51,6 +51,7 @@ describe('ZAFU_V1_METHODS', () => {
       'zafu_discover_contacts',
       'zafu_encrypt',
       'zafu_get_fresh_chain_address',
+      'zafu_open_shield',
       'zafu_pick_contacts',
       'zafu_request_capability',
       'zafu_sign',

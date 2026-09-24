@@ -30,6 +30,7 @@ export const EASTEREGG_V1_METHODS = [
   'zafu_request_capability',
   'zafu_pick_contacts',
   'zafu_get_fresh_chain_address',
+  'zafu_open_shield',
 ] as const;
 
 /**

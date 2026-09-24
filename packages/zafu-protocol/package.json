@@ -1,6 +1,6 @@
 {
   "name": "@zafu/protocol",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "license": "MIT",
   "description": "Versioned, transport-agnostic contract for the zafu_* wallet<->dapp API",
   "type": "module",

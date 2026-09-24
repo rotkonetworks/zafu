@@ -339,6 +339,27 @@ export type ZafuGetFreshChainAddressResponse =
     }
   | ZafuError;
 
+/**
+ * zafu_open_shield - ask the wallet to show its own shield-in screen for a
+ * public source chain (e.g. Veil's "deposit from Injective" handing off to
+ * the wallet).
+ *
+ * The dapp learns nothing and controls nothing: no address, key, amount or
+ * destination crosses the boundary. The wallet picks the surface (its side
+ * panel when open, else a popup) and runs the whole shield flow itself, so the
+ * user sees their wallet's UI, not the dapp's. Requires the origin to hold the
+ * `connect` capability; the call resolves once the screen is shown.
+ */
+export interface ZafuOpenShieldRequest {
+  type: 'zafu_open_shield';
+  /**
+   * Source chain to shield from, as the wallet's CosmosChainId
+   * (`injective` at time of writing).
+   */
+  chainId: string;
+}
+export type ZafuOpenShieldResponse = { opened: true } | ZafuError;
+
 // -- the registry ------------------------------------------------------------
 
 /**
@@ -364,6 +385,7 @@ export interface ZafuApi {
     request: ZafuGetFreshChainAddressRequest;
     response: ZafuGetFreshChainAddressResponse;
   };
+  zafu_open_shield: { request: ZafuOpenShieldRequest; response: ZafuOpenShieldResponse };
 }
 
 export type ZafuMethod = keyof ZafuApi;
@@ -389,6 +411,7 @@ export const ZAFU_V1_METHODS = [
   'zafu_pick_contacts',
   'zafu_discover_contacts',
   'zafu_get_fresh_chain_address',
+  'zafu_open_shield',
 ] as const satisfies readonly ZafuMethod[];
 
 // Compile-time guarantee that ZAFU_V1_METHODS lists EVERY key of ZafuApi (not

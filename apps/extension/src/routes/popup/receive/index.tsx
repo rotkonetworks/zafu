@@ -595,8 +595,18 @@ export function ReceivePage() {
   const navState = location.state as
     | { mode?: ReceiveMode; cosmosChain?: CosmosChainId; cosmosAccountIndex?: number }
     | undefined;
-  const initialMode: ReceiveMode = navState?.mode === 'shield' ? 'shield' : 'receive';
+  // `?mode=shield` comes from a dapp handoff (zafu_open_shield). It may arrive
+  // while this page is already mounted in the side panel, so react to it
+  // rather than only reading it for the initial state.
+  const shieldRequested = new URLSearchParams(location.search).get('mode') === 'shield';
+  const initialMode: ReceiveMode =
+    navState?.mode === 'shield' || shieldRequested ? 'shield' : 'receive';
   const [mode, setMode] = useState<ReceiveMode>(initialMode);
+  useEffect(() => {
+    if (shieldRequested) {
+      setMode('shield');
+    }
+  }, [shieldRequested, location.key]);
   const goBack = useBackNav(PopupPath.INDEX);
 
   return (
@@ -630,7 +640,9 @@ export function ReceivePage() {
         )}
 
         {/* content */}
-        {!isPenumbra || mode === 'receive' ? (
+        {/* A handoff asks for the shield screen explicitly, so show it even if
+            the wallet's active network is not penumbra at this moment. */}
+        {(!isPenumbra && !shieldRequested) || mode === 'receive' ? (
           <ReceiveTab address={address} loading={loading} activeNetwork={activeNetwork} />
         ) : (
           <div className='flex flex-col gap-6 overflow-y-auto'>
