@@ -1,27 +1,24 @@
 {
-  "name": "@zafu/zid",
-  "version": "0.3.0",
+  "name": "@zafu/interactions",
+  "version": "0.1.0",
   "license": "MIT",
-  "description": "zafu identity SDK - connect wallet, sign actions, post-quantum e2ee channels and messaging",
+  "description": "Wallet interactions for apps: one request in flight per intent, live status, honest outcomes, no timers that fire while the user is typing their password",
   "type": "module",
   "keywords": [
     "zafu",
-    "zid",
-    "identity",
-    "sdk",
-    "login",
-    "e2ee",
-    "post-quantum",
     "wallet",
-    "zcash",
-    "penumbra"
+    "interactions",
+    "connect",
+    "approval",
+    "dapp",
+    "sdk"
   ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rotkonetworks/zafu.git",
-    "directory": "packages/zid"
+    "directory": "packages/interactions"
   },
-  "homepage": "https://github.com/rotkonetworks/zafu/tree/main/packages/zid#readme",
+  "homepage": "https://github.com/rotkonetworks/zafu/tree/main/packages/interactions#readme",
   "sideEffects": false,
   "files": [
     "dist",
@@ -31,7 +28,7 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
     "lint": "eslint \"**/*.ts*\"",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run"
   },
   "exports": {
     ".": "./src/index.ts"
@@ -48,16 +45,8 @@
       }
     }
   },
-  "dependencies": {
-    "@noble/ciphers": "^2.3.0",
-    "@noble/curves": "^1.9.7",
-    "@noble/hashes": "^1.8.0",
-    "@zafu/interactions": "workspace:*",
-    "@zafu/pq": "workspace:*",
-    "@zafu/protocol": "workspace:*",
-    "@zafu/service": "workspace:*"
-  },
   "devDependencies": {
-    "tsup": "^8.5.0"
+    "tsup": "^8.5.0",
+    "vitest": "~1.6.1"
   }
 }

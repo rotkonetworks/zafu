@@ -13,7 +13,17 @@
  * ```
  */
 
+import { zid as zidSingleton } from './zid';
+
 export { zid } from './zid';
+/** `connect({ appName, onWaiting })` - the same as `zid.connect`. */
+export const connect = zidSingleton.connect.bind(zidSingleton);
+export {
+  type Interaction,
+  type InteractionStatus,
+  interaction,
+  interactionKey,
+} from '@zafu/interactions';
 export { detectZafu } from './provider';
 export { createExtensionTransport, type ZafuHandle } from './transport';
 export {

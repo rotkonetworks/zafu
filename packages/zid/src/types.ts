@@ -1,3 +1,4 @@
+import type { InteractionStatus } from '@zafu/interactions';
 import type { RelayTransport } from './contact-relay';
 import type { DiscoveredContact, DiscoveryPeer } from './presence-service';
 
@@ -265,6 +266,23 @@ export interface ZidOptions {
   relayUrl?: string;
   /** skip zafu detection, use ephemeral key */
   ephemeral?: boolean;
+  /**
+   * Throw `ZafuError('unavailable')` when no zafu wallet is installed, instead
+   * of falling back to an ephemeral guest identity. Use it for "Log in with
+   * zafu" buttons. (With a wallet installed, a failed request always throws -
+   * `denied`, `locked`, ... - and never falls back.)
+   */
+  requireWallet?: boolean;
+  /** Called once when the wallet request starts: show "Approve in zafu...". */
+  onWaiting?: () => void;
+  /**
+   * Every status change of the wallet request: `waiting`, then `slow` if the
+   * user takes a while (say where to look; it keeps waiting), then `done` or
+   * `failed`.
+   */
+  onStatus?: (status: InteractionStatus) => void;
+  /** ms before status turns `slow`. Default 15000. Never a timeout. */
+  slowAfterMs?: number;
   /**
    * Which handshake `me.channel()` uses - see {@link ChannelMode}. Default
    * `'hybrid'`.

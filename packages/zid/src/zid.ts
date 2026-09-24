@@ -33,6 +33,9 @@ import { openChannel } from './channel-select';
 import { getContactRefs, resolveHandle, upsertContact } from './contacts';
 import { createGuestIdentity } from './guest';
 import { decryptFrom, encryptFor, type ZidRecipient } from './messaging';
+import { ZafuError } from './errors';
+import type { ZafuHandle } from './transport';
+import { interaction, interactionKey } from '@zafu/interactions';
 
 const bytesToBase64 = (b: Uint8Array): string => btoa(String.fromCharCode(...b));
 const base64ToBytes = (s: string): Uint8Array => Uint8Array.from(atob(s), c => c.charCodeAt(0));
@@ -59,91 +62,28 @@ export const zid = {
     if (!opts.ephemeral) {
       const zafu = await detectZafu();
       if (zafu) {
-        const session = await createSessionKey();
-        const delegation = await requestDelegation(zafu, session.pubkey, opts);
-        if (delegation) {
-          const appKey = opts.appName ? `zid_name:${opts.appName}` : 'zid_name';
-          const name =
-            localStorage.getItem(appKey) ||
-            localStorage.getItem('zid_name') ||
-            delegation.walletPubkey.slice(0, 8);
-          return {
-            pubkey: session.pubkey,
-            network: delegation.network,
-            name,
-            sign: session.sign,
-            verify: session.verify,
-            // the handshake is the caller's choice (opts.channel); 'hybrid' by default.
-            channel: (peerPubkey: string) =>
-              openChannel(session, peerPubkey, opts.relayUrl, opts.channel),
-            // sealFor/openSealed mirror encryptFor/decryptFrom so the call site is
-            // identical to the guest's - only the backend (wallet vs local) differs.
-            sealFor: async (recipient: string | AdvertisedKeys, bytes: Uint8Array) => {
-              const r: ZidRecipient =
-                typeof recipient === 'string' ? { pubkey: recipient } : recipient;
-              const out = await encryptFor(zafu, r, bytes);
-              return {
-                ciphertext: base64ToBytes(out.ciphertext),
-                ephemeral_pubkey:
-                  out.ephemeral_pubkey === ''
-                    ? new Uint8Array(0)
-                    : hexToBytes(out.ephemeral_pubkey),
-                postQuantum: out.postQuantum,
-                ...(out.pq_epoch !== undefined ? { pq_epoch: out.pq_epoch } : {}),
-              };
-            },
-            openSealed: async sealed =>
-              decryptFrom(zafu, {
-                ciphertext: bytesToBase64(sealed.ciphertext),
-                ephemeral_pubkey:
-                  sealed.ephemeral_pubkey.length === 0 ? '' : bytesToHex(sealed.ephemeral_pubkey),
-                ...(sealed.pq_epoch !== undefined ? { pq_epoch: sealed.pq_epoch } : {}),
-              }),
-            pickContacts: async (pickOpts?: PickContactsOptions) => {
-              // try zafu wallet picker first
-              const result = await providerPickContacts(zafu, {
-                ...pickOpts,
-                appName: opts.appName,
-              });
-              if (result && result.length > 0) {
-                return result;
+        // One request per app at a time: a second connect() while the wallet
+        // is still asking the user JOINS the first instead of sending another
+        // approval. Status goes waiting -> slow -> done | failed; nothing times
+        // out on this side (see @zafu/interactions).
+        let announced = false;
+        return interaction(
+          interactionKey('zid.connect', opts.appName ?? ''),
+          () => connectWallet(zafu, opts, appOrigin),
+          {
+            slowAfterMs: opts.slowAfterMs,
+            onStatus: status => {
+              if (!announced && (status === 'waiting' || status === 'slow')) {
+                announced = true;
+                opts.onWaiting?.();
               }
-              // fallback to zid local contacts
-              return getContactRefs(appOrigin);
+              opts.onStatus?.(status);
             },
-            invite: async (handle: string, payload: InvitePayload) => {
-              // try zafu-routed invite first (e2ee via wallet)
-              const result = await sendInvite(zafu, handle, payload, {
-                appName: opts.appName,
-                relayUrl: opts.relayUrl,
-              });
-              if (result.sent) {
-                return result;
-              }
-              // fallback: resolve handle locally and send via zid channel. Invites
-              // keep the classical channel: the handle gives only a bare pubkey and
-              // the receiver is an app-level listener, not channel().
-              const pubkey = resolveHandle(handle, appOrigin);
-              if (pubkey) {
-                const ch = await createChannel(session, pubkey, opts.relayUrl);
-                ch.send(JSON.stringify({ type: 'zid:invite', payload, from: name, appOrigin }));
-                // don't close channel immediately - recipient needs time to receive
-                setTimeout(() => ch.close(), 30_000);
-                return { sent: true };
-              }
-              return { sent: false };
-            },
-            onInvite: (handler: (invite: IncomingInvite) => void) => {
-              return listenInvites(zafu, handler);
-            },
-            mode: 'zafu',
-            walletPubkey: delegation.walletPubkey,
-            delegation: delegation.signature,
-            disconnect: () => {
-              /* clear session */
-            },
-          };
-        }
+          },
+        ).result;
+      }
+      if (opts.requireWallet) {
+        throw new ZafuError('unavailable', 'no zafu wallet reachable');
       }
     }
 
@@ -182,3 +122,94 @@ export const zid = {
     return getContactRefs(origin);
   },
 };
+
+/**
+ * The wallet half of connect: a fresh session key, delegated by the wallet.
+ * Throws a typed ZafuError when the wallet declines, is locked, or is
+ * unreachable - never falls back to a guest identity.
+ */
+async function connectWallet(
+  zafu: ZafuHandle,
+  opts: ZidOptions,
+  appOrigin: string,
+): Promise<ZidIdentity> {
+  const session = await createSessionKey();
+  const delegation = await requestDelegation(zafu, session.pubkey, opts);
+  const appKey = opts.appName ? `zid_name:${opts.appName}` : 'zid_name';
+  const name =
+    localStorage.getItem(appKey) ||
+    localStorage.getItem('zid_name') ||
+    delegation.walletPubkey.slice(0, 8);
+  return {
+    pubkey: session.pubkey,
+    network: delegation.network,
+    name,
+    sign: session.sign,
+    verify: session.verify,
+    // the handshake is the caller's choice (opts.channel); 'hybrid' by default.
+    channel: (peerPubkey: string) => openChannel(session, peerPubkey, opts.relayUrl, opts.channel),
+    // sealFor/openSealed mirror encryptFor/decryptFrom so the call site is
+    // identical to the guest's - only the backend (wallet vs local) differs.
+    sealFor: async (recipient: string | AdvertisedKeys, bytes: Uint8Array) => {
+      const r: ZidRecipient = typeof recipient === 'string' ? { pubkey: recipient } : recipient;
+      const out = await encryptFor(zafu, r, bytes);
+      return {
+        ciphertext: base64ToBytes(out.ciphertext),
+        ephemeral_pubkey:
+          out.ephemeral_pubkey === '' ? new Uint8Array(0) : hexToBytes(out.ephemeral_pubkey),
+        postQuantum: out.postQuantum,
+        ...(out.pq_epoch !== undefined ? { pq_epoch: out.pq_epoch } : {}),
+      };
+    },
+    openSealed: async sealed =>
+      decryptFrom(zafu, {
+        ciphertext: bytesToBase64(sealed.ciphertext),
+        ephemeral_pubkey:
+          sealed.ephemeral_pubkey.length === 0 ? '' : bytesToHex(sealed.ephemeral_pubkey),
+        ...(sealed.pq_epoch !== undefined ? { pq_epoch: sealed.pq_epoch } : {}),
+      }),
+    pickContacts: async (pickOpts?: PickContactsOptions) => {
+      // try zafu wallet picker first
+      const result = await providerPickContacts(zafu, {
+        ...pickOpts,
+        appName: opts.appName,
+      });
+      if (result && result.length > 0) {
+        return result;
+      }
+      // fallback to zid local contacts
+      return getContactRefs(appOrigin);
+    },
+    invite: async (handle: string, payload: InvitePayload) => {
+      // try zafu-routed invite first (e2ee via wallet)
+      const result = await sendInvite(zafu, handle, payload, {
+        appName: opts.appName,
+        relayUrl: opts.relayUrl,
+      });
+      if (result.sent) {
+        return result;
+      }
+      // fallback: resolve handle locally and send via zid channel. Invites
+      // keep the classical channel: the handle gives only a bare pubkey and
+      // the receiver is an app-level listener, not channel().
+      const pubkey = resolveHandle(handle, appOrigin);
+      if (pubkey) {
+        const ch = await createChannel(session, pubkey, opts.relayUrl);
+        ch.send(JSON.stringify({ type: 'zid:invite', payload, from: name, appOrigin }));
+        // don't close channel immediately - recipient needs time to receive
+        setTimeout(() => ch.close(), 30_000);
+        return { sent: true };
+      }
+      return { sent: false };
+    },
+    onInvite: (handler: (invite: IncomingInvite) => void) => {
+      return listenInvites(zafu, handler);
+    },
+    mode: 'zafu',
+    walletPubkey: delegation.walletPubkey,
+    delegation: delegation.signature,
+    disconnect: () => {
+      /* clear session */
+    },
+  };
+}

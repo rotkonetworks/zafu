@@ -9,6 +9,7 @@
 
 import type { ZidOptions } from './types';
 import { createExtensionTransport, type ZafuHandle } from './transport';
+import { ZafuError, classifyWalletError } from './errors';
 import { ed25519 } from '@noble/curves/ed25519';
 import { randomBytes } from '@noble/hashes/utils';
 
@@ -74,52 +75,75 @@ export async function detectZafu(): Promise<ZafuHandle | null> {
   return null;
 }
 
-/** request delegation from zafu wallet */
+/**
+ * Map a failed `provider.connect()` to a typed error. The penumbra provider
+ * rejects with `cause` set to a PenumbraRequestFailure string ('Denied',
+ * 'NeedsLogin', ...); matched by value so this package needs no dependency on
+ * @penumbra-zone/client.
+ */
+function connectFailure(e: unknown): ZafuError {
+  const cause = (e as { cause?: unknown } | null)?.cause;
+  const message = e instanceof Error ? e.message : String(e);
+  if (cause === 'NeedsLogin') {
+    return new ZafuError('locked', 'unlock zafu, then try again');
+  }
+  if (cause === 'Denied') {
+    return new ZafuError('denied', 'the connection was declined in zafu');
+  }
+  return new ZafuError('transport_error', message);
+}
+
+/**
+ * Request delegation from the zafu wallet. Throws a typed ZafuError (`denied`,
+ * `locked`, `transport_error`, ...) instead of returning null, so callers can
+ * tell "you declined" from "unlock your wallet".
+ *
+ * No timeout: the user may be typing their password. The old 3s race gave up
+ * mid-approval, and zid.connect() then silently handed back a guest identity.
+ */
 export async function requestDelegation(
   zafu: ZafuHandle,
   sessionPubkey: string,
   opts: ZidOptions = {},
-): Promise<{ walletPubkey: string; signature: string; network: string } | null> {
-  try {
-    // connect with timeout
-    await Promise.race([
-      zafu.provider.connect(),
-      new Promise((_, rej) => {
-        setTimeout(() => rej(new Error('timeout')), 3000);
-      }),
-    ]);
+): Promise<{ walletPubkey: string; signature: string; network: string }> {
+  const provider = zafu.provider as { connect: () => Promise<void> };
+  await provider.connect().catch((e: unknown) => {
+    throw connectFailure(e);
+  });
 
-    const appName = opts.appName || globalThis.location?.hostname || 'zid-app';
-    const delegationMsg = `zid:delegate:${sessionPubkey}:${appName}`;
-    const challengeHex = hex(new TextEncoder().encode(delegationMsg));
+  const appName = opts.appName || globalThis.location?.hostname || 'zid-app';
+  const delegationMsg = `zid:delegate:${sessionPubkey}:${appName}`;
+  const challengeHex = hex(new TextEncoder().encode(delegationMsg));
 
-    // NOTE: opts.tradingMode / opts.sessionMinutes are session-layer hints the
-    // v1 wallet handler does not read, so they are NOT put on the wire (that was
-    // live drift - fields the wallet silently ignored). They belong to the
-    // QUIC-style session/resumption design (v2), not the v1 zafu_sign request.
-    // NOTE: the signature covers only `challengeHex` - the wallet does not bind
-    // the origin. `delegationMsg` above therefore commits the session pubkey and
-    // app name into the signed bytes; a server verifying this delegation must
-    // also pin a fresh nonce + its own origin to stop cross-site replay.
-    const transport = createExtensionTransport(zafu);
-    const resp = await transport.request('zafu_sign', {
+  // NOTE: opts.tradingMode / opts.sessionMinutes are session-layer hints the
+  // v1 wallet handler does not read, so they are NOT put on the wire (that was
+  // live drift - fields the wallet silently ignored). They belong to the
+  // QUIC-style session/resumption design (v2), not the v1 zafu_sign request.
+  // NOTE: the signature covers only `challengeHex` - the wallet does not bind
+  // the origin. `delegationMsg` above therefore commits the session pubkey and
+  // app name into the signed bytes; a server verifying this delegation must
+  // also pin a fresh nonce + its own origin to stop cross-site replay.
+  const transport = createExtensionTransport(zafu);
+  const resp = await transport
+    .request('zafu_sign', {
       type: 'zafu_sign',
       challengeHex,
       statement: `Authorize ${appName}\nSession: ${sessionPubkey.slice(0, 16)}...`,
+    })
+    .catch((e: unknown) => {
+      throw new ZafuError('transport_error', e instanceof Error ? e.message : String(e));
     });
 
-    if (resp.success && resp.publicKey && resp.signature) {
-      return {
-        walletPubkey: resp.publicKey,
-        signature: resp.signature,
-        // v1 zafu_sign carries no network field; zafu identity keys are penumbra-rooted.
-        network: 'penumbra',
-      };
-    }
-    return null;
-  } catch {
-    return null;
+  if (resp.success && resp.publicKey && resp.signature) {
+    return {
+      walletPubkey: resp.publicKey,
+      signature: resp.signature,
+      // v1 zafu_sign carries no network field; zafu identity keys are penumbra-rooted.
+      network: 'penumbra',
+    };
   }
+  const failed = resp as { error?: string; code?: string };
+  throw classifyWalletError(failed.error ?? 'wallet returned no delegation', failed.code);
 }
 
 /** pick contacts from zafu address book (opens extension picker UI) */

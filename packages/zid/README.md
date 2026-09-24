@@ -6,6 +6,34 @@ The zafu identity SDK for websites. Let a visitor **log in with their zafu walle
 npm install @zafu/zid
 ```
 
+## Quick start: a "Log in with zafu" button
+
+```ts
+import { connect, ZafuError } from '@zafu/zid';
+
+button.onclick = async () => {
+  try {
+    const me = await connect({
+      appName: 'My App',
+      requireWallet: true,
+      onWaiting: () => (button.textContent = 'Approve in zafu...'),
+    });
+    console.log('signed in as', me.pubkey);
+  } catch (e) {
+    if (e instanceof ZafuError) showError(e.code); // 'unavailable' | 'denied' | 'locked' ...
+  }
+};
+```
+
+That is the whole integration. What it handles for you:
+
+- **Double clicks.** A second `connect()` while zafu is still asking the user joins the first request. The wallet never gets two approvals.
+- **Slow approvals.** Nothing times out while the user unlocks or reads the request. Pass `onStatus` to see `waiting`, then `slow` after 15s (a good moment to say "click the zafu icon in your toolbar"), then `done` or `failed`.
+- **Honest outcomes.** A declined or locked wallet throws a `ZafuError` with a code you can show (see [Errors](#errors)). It never quietly hands you a different identity.
+- **Where the approval appears** (side panel or popup window) is the user's setting in zafu. Your app doesn't choose it.
+
+Drop `requireWallet: true` to get a guest identity instead of an error when zafu is not installed (see [section 6](#6-works-without-the-wallet-guest-identity)).
+
 ## Two ways to use it
 
 - **Functional helpers** (one-shot, typed errors) - `requireWallet()` gives you a `wallet` handle, then `sign`, `zidPubkey`, `encryptFor`, `decryptFrom` each do one thing and throw a typed `ZafuError` on failure. Best for **login** and **encrypting a message**.
@@ -103,7 +131,9 @@ const picked = await me.pickContacts({ purpose: 'invite a friend', max: 1 });
 ## 6. Works without the wallet (guest identity)
 
 If no zafu wallet is installed, `zid.connect()` returns a **guest** identity
-instead of failing. It is not a degraded mode: from one in-page seed it derives
+instead of failing (pass `requireWallet: true` to get `ZafuError('unavailable')`
+instead). A guest is only ever returned when there is no wallet: if zafu is
+installed and the request fails (declined, locked), `connect()` throws. It is not a degraded mode: from one in-page seed it derives
 an ed25519 identity _and_ an X-Wing (X25519 + ML-KEM-768) key, so the same calls
 work with or without the wallet.
 
