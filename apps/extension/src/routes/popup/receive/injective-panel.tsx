@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import QRCode from 'qrcode';
+import { QrCode } from '../../../components/qr-code';
 import { Button } from '@repo/ui/components/ui/button';
 import { useStore } from '../../../state';
 import {
@@ -253,7 +253,6 @@ export const InjectivePanel = () => {
   const queryClient = useQueryClient();
 
   const [injAddress, setInjAddress] = useState('');
-  const [qr, setQr] = useState('');
   const [copied, setCopied] = useState(false);
   const [shieldAmount, setShieldAmount] = useState('');
   const [withdrawAddr, setWithdrawAddr] = useState('');
@@ -306,7 +305,6 @@ export const InjectivePanel = () => {
     const keyId = isMnemonic ? selectedKeyInfo?.id : undefined;
     if (!keyId) {
       setReceive(undefined);
-      setQr('');
       return;
     }
     void (async () => {
@@ -321,7 +319,6 @@ export const InjectivePanel = () => {
           return;
         }
         setReceive({ index, address });
-        setQr(await QRCode.toDataURL(address, { margin: 1, width: 200 }));
         void queryClient.invalidateQueries({ queryKey: ['injective-hd-peek'] });
       } catch (err) {
         console.error('[injective] failed to allocate a receive address:', err);
@@ -701,7 +698,14 @@ export const InjectivePanel = () => {
           <span>your Injective address</span>
           {receive && <span className='font-mono text-label text-fg-muted'>#{receive.index}</span>}
         </div>
-        {qr && <img src={qr} alt='Injective address QR' className='mb-3 h-40 w-40 bg-white p-1' />}
+        {receive && (
+          <QrCode
+            value={receive.address}
+            size={176}
+            label='Injective address QR'
+            className='mb-3'
+          />
+        )}
         <div className='mb-3 flex items-center gap-2'>
           <span className='truncate font-mono text-xs' title={receive?.address}>
             {receive?.address ?? 'deriving...'}

@@ -9,7 +9,7 @@
  */
 
 import { getTransparentHistoryInWorker } from '../../../state/keyring/network-worker';
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { InjectivePanel } from './injective-panel';
 import { useBackNav } from '../../../utils/navigate';
 import { useLocation } from 'react-router-dom';
@@ -30,7 +30,7 @@ import {
   deriveZcashTransparentFromUfvk,
 } from '../../../hooks/use-address';
 import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
-import QRCode from 'qrcode';
+import { QrCode } from '../../../components/qr-code';
 
 /** receive tab - QR code + address display */
 function ReceiveTab({
@@ -54,7 +54,6 @@ function ReceiveTab({
   // Bumped on each copy to rotate to a fresh ephemeral address for the next share.
   const [ephemeralNonce, setEphemeralNonce] = useState(0);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const penumbraAccount = useStore(selectPenumbraAccount);
@@ -201,16 +200,6 @@ function ReceiveTab({
   const isLoading =
     transparent && isZcash ? transparentLoading : isPenumbra ? ephemeralLoading : loading;
   const showingEphemeral = isPenumbra && !!ephemeralAddress;
-
-  useEffect(() => {
-    if (canvasRef.current && displayAddress) {
-      QRCode.toCanvas(canvasRef.current, displayAddress, {
-        width: 192,
-        margin: 2,
-        color: { dark: '#000', light: '#fff' },
-      });
-    }
-  }, [displayAddress]);
 
   useEffect(() => {
     if (!isPenumbra) {
@@ -361,13 +350,13 @@ function ReceiveTab({
 
   return (
     <div className='flex flex-col items-center gap-4'>
-      <div className='rounded-md border border-border-soft bg-white p-2'>
+      <div className='border border-border-soft'>
         {isLoading ? (
-          // Skeleton matches the QR's 192×192 footprint (canvas size).
-          // Pulses gently while the address derives.
+          // Skeleton matches the QR's 192x192 footprint; pulses while the
+          // address derives.
           <div className='h-48 w-48 animate-pulse bg-elev-2/40' />
         ) : displayAddress ? (
-          <canvas ref={canvasRef} className='h-48 w-48' />
+          <QrCode value={displayAddress} size={192} label='address QR' />
         ) : (
           <div className='flex h-48 w-48 items-center justify-center'>
             <span className='text-label text-fg-dim lowercase'>no wallet</span>
