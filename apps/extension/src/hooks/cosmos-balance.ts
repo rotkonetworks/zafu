@@ -24,7 +24,6 @@ import {
 import { getNobleRpcPool } from './noble-rpc';
 import { getInjectiveRpcPool } from './injective-rpc';
 import { shortSymbol } from '../utils/asset-display';
-import { isLaunched } from '../config/networks';
 
 /**
  * Cosmos chains (Noble, Injective, ...) are penumbra BURNERS - transparent
@@ -38,7 +37,13 @@ const useBurnerPollingEnabled = (chainId?: CosmosChainId): boolean => {
   if (!penumbraEnabled) {
     return false;
   }
-  if (chainId === 'injective' && !isLaunched('injective')) {
+  // Injective (eth_secp256k1 / coin-60) is a conduit-only ramp with its OWN
+  // queries (injective-panel + networks/injective/client, LCD). It must never
+  // go through this generic coin-118 cosmos path: the StargateClient there
+  // cannot parse Injective's EthAccount ("Unsupported type:
+  // /injective.types.v1beta1.EthAccount"), and coin-118 derivation would produce
+  // the wrong inj address entirely.
+  if (chainId && COSMOS_CHAINS[chainId]?.keyAlgo === 'eth_secp256k1') {
     return false;
   }
   return true;
@@ -107,9 +112,13 @@ export const useAllCosmosBalances = (accountIndex = 0) => {
       const { address: nobleAddress } = await createSigningClient('noble', mnemonic, accountIndex);
       const addresses = deriveAllChainAddresses(nobleAddress);
 
-      // fetch all balances in parallel
+      // fetch all balances in parallel. Skip eth_secp256k1 chains (Injective):
+      // they are conduit-only, coin-60, and cannot be derived from the coin-118
+      // noble base address nor queried through the StargateClient path here.
       const results = await Promise.all(
-        Object.entries(COSMOS_CHAINS).map(async ([chainId, config]) => {
+        Object.entries(COSMOS_CHAINS)
+          .filter(([, config]) => config.keyAlgo !== 'eth_secp256k1')
+          .map(async ([chainId, config]) => {
           try {
             const address = addresses[chainId as CosmosChainId];
             const balance = await getBalance(chainId as CosmosChainId, address);

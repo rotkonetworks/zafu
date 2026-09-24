@@ -143,12 +143,11 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     // replaces the sunsetting Noble path. Ethermint (eth_secp256k1/coin-type-60)
     // so it derives+signs via packages/wallet/src/networks/injective, NOT the
     // shared cosmos secp256k1 path. Signer proven on mainnet (round-trip tx
-    // 5699D4FC..., code 0) and the live channel-494/18 is wired. HELD launched
-    // :false until the inj<->penumbra path is ACTIVELY RELAYED - the client
-    // (07-tendermint-353, 100h trusting period) was last updated ~2026-09-17 and
-    // expires ~2026-09-21 if nothing relays it; ibc.rotko.net covers noble/
-    // osmosis/penumbra but not injective yet. Flip true once relaying is steady.
-    launched: false,
+    // 5699D4FC..., code 0) and the live channel-494/18 is wired. LAUNCHED: we run
+    // the inj<->penumbra relayer ourselves (hermes/ops/injective, gatus at
+    // status.penumbra.fi) and the client 07-tendermint-353 is Active. Injective
+    // is now the shielding ramp; Noble is off-ramp (withdraw) only.
+    launched: true,
     parent: 'penumbra',
     ibcChainId: 'injective-1',
     // Injective runs sub-second blocks (~0.65-0.8s).
