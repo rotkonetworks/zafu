@@ -11,7 +11,7 @@ import { Vote_Vote } from '@penumbra-zone/protobuf/penumbra/core/component/gover
 import type { ProposalListResponse } from '@penumbra-zone/protobuf/penumbra/core/component/governance/v1/governance_pb';
 import { viewClient } from '../../../clients';
 import { useStore } from '../../../state';
-import { selectActiveNetwork } from '../../../state/keyring';
+import { selectActiveNetwork, selectPenumbraAccount } from '../../../state/keyring';
 import { NetworkUnavailable } from '../../../shared/components/network-unavailable';
 import { ZcashVotePage } from './zcash-vote';
 
@@ -23,6 +23,21 @@ interface ProposalEntry {
   state: string;
   startBlock: bigint;
   endBlock: bigint;
+  /** the whole proposal as JSON: what the chain will actually enact. */
+  raw: string;
+}
+
+/**
+ * The full proposal, not just its prose: for a parameter change this is the
+ * old and new parameters the chain will apply, which the description can
+ * misstate. Worth reading before voting.
+ */
+function proposalJson(proposal: NonNullable<ProposalListResponse['proposal']>): string {
+  try {
+    return JSON.stringify(proposal.toJson(), null, 2);
+  } catch (e) {
+    return `could not render proposal json: ${e instanceof Error ? e.message : String(e)}`;
+  }
 }
 
 function parseProposalKind(proposal: ProposalListResponse['proposal']): string {
@@ -106,8 +121,10 @@ function voteIcon(vote: Vote_Vote): string {
 
 export function VotePage() {
   const activeNetwork = useStore(selectActiveNetwork);
+  const penumbraAccount = useStore(selectPenumbraAccount);
   const [showInactive, setShowInactive] = useState(false);
   const [expandedId, setExpandedId] = useState<bigint | null>(null);
+  const [rawId, setRawId] = useState<bigint | null>(null);
   const [votingId, setVotingId] = useState<bigint | null>(null);
   const [voteError, setVoteError] = useState<string | null>(null);
 
@@ -131,6 +148,7 @@ export function VotePage() {
             state: parseState(r.state),
             startBlock: r.startBlockHeight,
             endBlock: r.endBlockHeight,
+            raw: proposalJson(r.proposal),
           });
         }
       }
@@ -144,21 +162,43 @@ export function VotePage() {
     setVotingId(proposalId);
     setVoteError(null);
     try {
-      // build delegator vote transaction plan via view service
+      // The planner does NOT look these up: it finds the delegation notes
+      // held at the proposal's start height and values each one with that
+      // validator's rate data at the start. Passing 0 / [] (as this used to)
+      // finds no notes, or finds notes but matches none of them - which could
+      // plan a fee-only transaction that votes nothing.
+      const { startBlockHeight, startPosition } = await governanceClient.proposalData({
+        proposalId,
+      });
+      const rateData = [];
+      for await (const r of governanceClient.proposalRateData({ proposalId })) {
+        if (r.rateData) {
+          rateData.push(r.rateData);
+        }
+      }
+
       const plan = await viewClient.transactionPlanner({
+        // the account that votes (its delegation notes) and pays the fee
+        source: { account: penumbraAccount },
         delegatorVotes: [
           {
             proposal: proposalId,
             vote: { vote },
-            startBlockHeight: 0n, // filled by planner
-            startPosition: 0n,
-            rateData: [],
+            startBlockHeight,
+            startPosition,
+            rateData,
           },
         ],
       });
 
       if (!plan.plan) {
         throw new Error('failed to create vote plan');
+      }
+      // never broadcast a vote transaction that contains no vote
+      if (!plan.plan.actions.some(a => a.action.case === 'delegatorVote')) {
+        throw new Error(
+          'this account had no staked UM when voting opened, so it has no votes on this proposal',
+        );
       }
 
       // authorize and build
@@ -177,7 +217,12 @@ export function VotePage() {
       await viewClient.broadcastTransaction({ transaction, awaitDetection: true });
       void proposalsQuery.refetch();
     } catch (err) {
-      setVoteError(err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      setVoteError(
+        message.includes('no notes were found for voting')
+          ? 'this account had no staked UM when voting opened, so it has no votes on this proposal'
+          : message,
+      );
     } finally {
       setVotingId(null);
     }
@@ -292,7 +337,33 @@ export function VotePage() {
                   <div className='flex items-center gap-3 mt-2 text-label text-fg-muted'>
                     <span>start: {p.startBlock.toLocaleString()}</span>
                     <span>end: {p.endBlock.toLocaleString()}</span>
+                    <span className='flex-1' />
+                    <button
+                      onClick={() => setRawId(rawId === p.id ? null : p.id)}
+                      className='flex items-center gap-1 hover:text-fg-high'
+                    >
+                      <span className='i-ph-brackets-curly h-3.5 w-3.5' />
+                      {rawId === p.id ? 'hide json' : 'raw json'}
+                    </button>
                   </div>
+
+                  {rawId === p.id && (
+                    <div className='mt-2 rounded-md border border-border-soft bg-elev-2'>
+                      <div className='flex items-center justify-between px-2 py-1 text-label text-fg-muted'>
+                        <span>what the chain enacts</span>
+                        <button
+                          onClick={() => void navigator.clipboard.writeText(p.raw)}
+                          className='flex items-center gap-1 hover:text-fg-high'
+                        >
+                          <span className='i-ph-copy h-3.5 w-3.5' />
+                          copy
+                        </button>
+                      </div>
+                      <pre className='max-h-[260px] overflow-auto px-2 pb-2 font-mono text-[10px] leading-snug text-fg-high whitespace-pre'>
+                        {p.raw}
+                      </pre>
+                    </div>
+                  )}
 
                   {/* vote buttons */}
                   {canVote && (
