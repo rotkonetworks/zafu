@@ -79,6 +79,21 @@ const main = async () => {
   const balances = (address: string) =>
     queryInjectiveBalances(config.lcdUrl, address, config.usdcDenom, fetch);
 
+  // Whether the sponsor can actually pay right now. Clients probe
+  // /v1/injective/granter to decide whether to OFFER sponsorship, so an
+  // unfunded or drained granter must read as unavailable there - otherwise the
+  // UI promises "no INJ needed" and then fails at the grant step. Cached so
+  // probes don't hit the LCD on every request.
+  let fundedCache: { at: number; funded: boolean } | undefined;
+  const isFunded = async (): Promise<boolean> => {
+    if (fundedCache && Date.now() - fundedCache.at < 60_000) {
+      return fundedCache.funded;
+    }
+    const funded = (await balances(granter.address)).inj >= config.minGranterBalance;
+    fundedCache = { at: Date.now(), funded };
+    return funded;
+  };
+
   const clientIp = (req: IncomingMessage): string =>
     clientIpFrom(req.headers['x-forwarded-for'], req.socket.remoteAddress, config.trustProxy);
 
@@ -96,6 +111,16 @@ const main = async () => {
             dailyGrantCap: config.dailyGrantCap,
           });
         } else if (req.method === 'GET' && path === '/v1/injective/granter') {
+          let funded = false;
+          try {
+            funded = await isFunded();
+          } catch {
+            // LCD unreachable: don't advertise what we can't confirm
+          }
+          if (!funded) {
+            send(res, 503, { error: 'gas sponsorship is temporarily unavailable' });
+            return;
+          }
           send(res, 200, {
             granter: granter.address,
             spendLimit: config.spendLimit.toString(),

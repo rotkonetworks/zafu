@@ -19,7 +19,7 @@ MsgTransfer with `fee.granter = <granter>`, and Injective charges the fee to us.
 | Method | Path | Response |
 |---|---|---|
 | GET | `/health` | `{ ok, granter, grantsToday, dailyGrantCap }` |
-| GET | `/v1/injective/granter` | `{ granter, spendLimit, grantTtlHours }` - clients probe this to decide whether to offer sponsorship |
+| GET | `/v1/injective/granter` | `{ granter, spendLimit, grantTtlHours }`, or 503 while the granter is below `MIN_GRANTER_BALANCE` - clients probe this to decide whether to offer sponsorship |
 | POST | `/v1/injective/grant` `{ address }` | 200 `{ granter, status: 'granted'\|'exists', txhash?, height?, expiresAt? }` |
 
 `POST /grant` answers only once a new grant is **included in a block**, so the
@@ -82,21 +82,26 @@ cd apps/feegrant && bun run build     # -> dist/feegrant, one self-contained bin
 `bun build --compile` bundles the Bun runtime and all dependencies, so the host
 needs no Node or Bun.
 
-## Deploy (bkk07 CT 350001, next to license-server)
+## Deploy (live: web.rotko.net, `root@157.180.90.37`)
 
-1. Create a **dedicated** granter wallet (fresh mnemonic, used for nothing
-   else). Put the mnemonic in `/root/feegrant/granter.mnemonic`, `chmod 600`.
-2. Start the service once and read the granter address from the log line
-   `granter inj1...`, then fund it with a few INJ.
-3. Copy `dist/feegrant` to `/root/feegrant/feegrant`, and `feegrant.env.example`
-   to `/root/feegrant/feegrant.env` (edit as needed).
-4. Install `feegrant.service` to `/etc/systemd/system/`, then
-   `systemctl daemon-reload && systemctl enable --now feegrant`.
-5. Route a public HTTPS hostname to `127.0.0.1:3335` in the reverse proxy
-   (set `TRUST_PROXY=1` once the proxy sets `X-Forwarded-For`). The zafu and
-   Veil clients point at `https://sponsor.zafu.pro` by default.
-6. Verify: `curl https://sponsor.zafu.pro/health`, then shield a small amount
-   from an address holding USDC.inj and no INJ.
+Running since 2026-09-24 at **https://sponsor.zafu.pro**, next to the other
+zafu.pro sites (HAProxy + certbot on the same box).
+
+- Service: `/root/feegrant/feegrant` under systemd (`feegrant.service`), bound
+  to `127.0.0.1:3335`, env in `/root/feegrant/feegrant.env` (`TRUST_PROXY=1`).
+- Granter: `inj1uzht5zad7rs8j029r8895anfzh9u8v86908p50`. Its mnemonic was
+  generated on the box with `feegrant init` and lives only in
+  `/root/feegrant/granter.mnemonic` (0600). It is a hot wallet: keep a few INJ.
+- Route: `sponsor.zafu.pro be_feegrant` in `/etc/haproxy/backends.map`, plus a
+  `backend be_feegrant` block (server `127.0.0.1:3335`) in `haproxy.cfg`.
+- TLS: certbot webroot (`/var/lib/letsencrypt`). The deploy hook
+  `/etc/letsencrypt/renewal-hooks/deploy/haproxy-pem.sh` rebuilds
+  `/etc/haproxy/certs/sponsor.zafu.pro.pem` on renewal.
+- DNS: `sponsor.zafu.pro` A `157.180.90.37`, AAAA `2a01:4f9:c013:c132::1` (Porkbun).
+
+Fresh install elsewhere: copy the binary, `feegrant init <dir>/granter.mnemonic`
+(prints only the address to fund), write the env file, install the unit, route
+a hostname to the port, `systemctl enable --now feegrant`.
 
 Upgrades follow the license-server pattern: build, keep a `.bak` of the old
 binary, swap, `systemctl restart feegrant`.
