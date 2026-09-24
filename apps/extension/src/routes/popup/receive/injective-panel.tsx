@@ -609,7 +609,7 @@ export const InjectivePanel = () => {
           if (res.code !== 0) {
             throw new Error(res.rawLog || `broadcast failed (code ${res.code})`);
           }
-          return { ...res, txId: res.txhash };
+          return { ...res, txId: res.txhash, restUrl: CFG.restEndpoint };
         },
       );
       setShieldTx({ status: 'submitted', hash: res.txhash });
@@ -662,7 +662,7 @@ export const InjectivePanel = () => {
           if (res.code !== 0) {
             throw new Error(res.rawLog || `broadcast failed (code ${res.code})`);
           }
-          return { ...res, txId: res.txhash };
+          return { ...res, txId: res.txhash, restUrl: CFG.restEndpoint };
         },
       );
       setWithdrawTx({ status: 'submitted', hash: res.txhash });

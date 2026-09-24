@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  awaitingConfirmation,
   KEEP_FINISHED_MS,
   STALE_PENDING_MS,
   isTerminal,
@@ -55,5 +56,14 @@ describe('tx-ops', () => {
     expect(sweep([op({ status: 'done', notified: true })], late).remove).toEqual(['a']);
     expect(sweep([op({ status: 'done', notified: false })], late).remove).toEqual([]);
     expect(sweep([op({ status: 'failed', notified: true })], 1).remove).toEqual([]);
+  });
+
+  it('awaits chain confirmation only for pending ops with a hash and endpoint', () => {
+    const ops = [
+      op({ opId: 'a', txId: 'h', restUrl: 'https://lcd' }),
+      op({ opId: 'b', txId: 'h' }),
+      op({ opId: 'c', status: 'done', txId: 'h', restUrl: 'https://lcd' }),
+    ];
+    expect(awaitingConfirmation(ops).map(o => o.opId)).toEqual(['a']);
   });
 });

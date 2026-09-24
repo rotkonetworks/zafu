@@ -40,6 +40,12 @@ export interface TxOp {
   error?: string;
   startedAt: number;
   updatedAt: number;
+  /**
+   * Cosmos-SDK REST endpoint to confirm `txId` on. Set when the tx was only
+   * accepted into the mempool: any open zafu window then checks the chain for
+   * inclusion, so the outcome no longer depends on the page that sent it.
+   */
+  restUrl?: string;
   /** the completion toast has been shown */
   notified?: boolean;
   /** penumbra send: carried so the sent-message memo can be recorded */
@@ -49,6 +55,10 @@ export interface TxOp {
 
 export const TX_OP_PREFIX = 'txOp:';
 export const txOpKey = (opId: string): string => `${TX_OP_PREFIX}${opId}`;
+
+/** ops waiting for chain confirmation (txId + restUrl, still pending) */
+export const awaitingConfirmation = (ops: readonly TxOp[]): TxOp[] =>
+  ops.filter(op => op.status === 'pending' && op.txId && op.restUrl);
 
 /** a pending op with no update for this long is marked unknown */
 export const STALE_PENDING_MS = 10 * 60_000;
@@ -122,9 +132,10 @@ export const removeTxOps = (opIds: readonly string[]): Promise<void> =>
  * Track a transaction driven from the current page. `run` gets a `step`
  * callback for progress text and returns the tx id once the network accepted
  * it; a throw records the failure (and is rethrown to the caller). A result
- * without a txId means nothing was broadcast, and the record is removed.
+ * without a txId means nothing was broadcast, and the record is removed; one
+ * with a `restUrl` stays pending until the chain confirms it.
  */
-export const trackTx = async <T extends { txId?: string }>(
+export const trackTx = async <T extends { txId?: string; restUrl?: string }>(
   meta: { network: TxNetwork; label: string },
   run: (step: (text: string) => void) => Promise<T>,
 ): Promise<T> => {
@@ -136,6 +147,14 @@ export const trackTx = async <T extends { txId?: string }>(
       // nothing was broadcast (e.g. handed to a cold signer as a QR): not ours
       // to report as sent
       await removeTxOps([opId]);
+    } else if (result.restUrl) {
+      // in the mempool, not yet in a block: confirmed from the chain
+      await writeTxOp(opId, {
+        status: 'pending',
+        step: 'confirming',
+        txId: result.txId,
+        restUrl: result.restUrl,
+      });
     } else {
       await writeTxOp(opId, { status: 'done', step: undefined, txId: result.txId });
     }

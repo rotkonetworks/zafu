@@ -13,11 +13,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../state';
 import { messagesSelector } from '../state/messages';
-import { isTerminal, readTxOps, removeTxOps, sweep, writeTxOp, type TxOp } from '../tx-ops';
+import { queryInjectiveTx } from '@repo/wallet/networks/injective/client';
+import {
+  awaitingConfirmation,
+  isTerminal,
+  readTxOps,
+  removeTxOps,
+  sweep,
+  writeTxOp,
+  type TxOp,
+} from '../tx-ops';
 import { useTxOps } from '../tx-ops/use-tx-ops';
 
 const TOAST_MS = 6_000;
 const SWEEP_EVERY_MS = 60_000;
+const CONFIRM_EVERY_MS = 6_000;
 
 export const TxTrackerWatcher = () => {
   const { addMessage } = useStore(messagesSelector);
@@ -54,6 +64,47 @@ export const TxTrackerWatcher = () => {
       void writeTxOp(op.opId, { status: op.status, notified: true });
     }
   }, [ops, addMessage]);
+
+  // confirm mempool-accepted txs from the chain, whichever page sent them
+  const confirming = awaitingConfirmation(ops)
+    .map(op => op.opId)
+    .join(',');
+  useEffect(() => {
+    if (!confirming) {
+      return;
+    }
+    const check = () =>
+      void readTxOps().then(list =>
+        Promise.all(
+          awaitingConfirmation(list).map(async op => {
+            if (!op.restUrl || !op.txId) {
+              return;
+            }
+            try {
+              const r = await queryInjectiveTx(op.restUrl, op.txId);
+              if (!r.found) {
+                return; // not in a block yet
+              }
+              await writeTxOp(
+                op.opId,
+                r.code === 0
+                  ? { status: 'done', step: undefined }
+                  : {
+                      status: 'failed',
+                      step: undefined,
+                      error: r.rawLog || `failed (code ${r.code})`,
+                    },
+              );
+            } catch {
+              // endpoint hiccup: try again next tick
+            }
+          }),
+        ),
+      );
+    check();
+    const id = setInterval(check, CONFIRM_EVERY_MS);
+    return () => clearInterval(id);
+  }, [confirming]);
 
   // housekeeping
   useEffect(() => {
