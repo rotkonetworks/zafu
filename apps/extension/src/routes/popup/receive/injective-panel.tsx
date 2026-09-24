@@ -33,8 +33,18 @@ import {
 } from '@repo/wallet/networks/injective/derive';
 import { queryInjectiveBalances, queryInjectiveTx } from '@repo/wallet/networks/injective/client';
 import { shieldInToPenumbra, withdrawToExchange } from '@repo/wallet/networks/injective/conduit';
+import { requestInjectiveFeeGrant } from '@repo/wallet/networks/injective/feegrant';
 
 const CFG = COSMOS_CHAINS.injective;
+
+/**
+ * Gas sponsor (apps/feegrant). When the user holds USDC.inj but not enough INJ,
+ * the shield-in is sent with fee.granter = the sponsor and costs them no INJ.
+ * The sponsor is only contacted in that case; if it is not deployed or is down,
+ * the probe fails and the panel behaves exactly as before (INJ required).
+ * Withdraw-to-exchange is a MsgSend, which the allowance does not cover.
+ */
+const GAS_SPONSOR_URL = 'https://sponsor.zafu.pro';
 const GAS_ASSET = CFG.gasAsset ?? { symbol: 'INJ', denom: 'inj', decimals: 18 };
 
 /**
@@ -259,6 +269,26 @@ export const InjectivePanel = () => {
   // actually know the INJ balance can't cover gas.
   const gasOk = !balancesReady || injBal >= feeInj;
 
+  // Only probe the sponsor when it would actually be used: USDC to shield and
+  // too little INJ to pay for it. No request (and no IP to the sponsor) otherwise.
+  const wantsSponsor = balancesReady && injBal < feeInj && usdcBal > 0n;
+  const sponsorQuery = useQuery({
+    queryKey: ['injective-gas-sponsor'],
+    enabled: wantsSponsor,
+    staleTime: 5 * 60_000,
+    retry: false,
+    queryFn: async () => {
+      const res = await fetch(`${GAS_SPONSOR_URL}/v1/injective/granter`);
+      if (!res.ok) {
+        throw new Error(`gas sponsor unavailable (${res.status})`);
+      }
+      return (await res.json()) as { granter?: string };
+    },
+  });
+  const canSponsor = wantsSponsor && !!sponsorQuery.data?.granter;
+  // The shield leg may be sponsored; the withdraw leg (MsgSend) never is.
+  const shieldGasOk = gasOk || canSponsor;
+
   const shieldBase = toBaseUnits(shieldAmount);
   const shieldExceeds = balancesReady && !!shieldBase && BigInt(shieldBase) > usdcBal;
   const withdrawBase = toBaseUnits(withdrawAmount);
@@ -293,16 +323,32 @@ export const InjectivePanel = () => {
       }
       // fresh single-use Penumbra IBC deposit address for this shield-in
       const penumbraReceiver = await derivePenumbraEphemeralFromMnemonic(mnemonic, penumbraAccount);
-      const res = await shieldInToPenumbra({
-        mnemonic,
-        restUrl: CFG.restEndpoint,
-        sourceChannel: CFG.penumbraChannel, // channel-494 (injective -> penumbra)
-        penumbraReceiver,
-        token: { denom: CFG.denom, amount: base },
-        // 10-minute IBC timeout, in nanoseconds
-        timeoutTimestamp: BigInt(Date.now() + 10 * 60 * 1000) * 1_000_000n,
-        fee: injectiveFee(),
-      });
+      const sourceChannel = CFG.penumbraChannel; // channel-494 (injective -> penumbra)
+      // No INJ for gas: get a fee allowance first. Resolves once it is on-chain.
+      const feeGranter = canSponsor
+        ? (await requestInjectiveFeeGrant(GAS_SPONSOR_URL, injAddress)).granter
+        : undefined;
+      const send = () =>
+        shieldInToPenumbra({
+          mnemonic,
+          restUrl: CFG.restEndpoint,
+          sourceChannel,
+          penumbraReceiver,
+          token: { denom: CFG.denom, amount: base },
+          // 10-minute IBC timeout, in nanoseconds
+          timeoutTimestamp: BigInt(Date.now() + 10 * 60 * 1000) * 1_000_000n,
+          fee: injectiveFee(),
+          feeGranter,
+        });
+      let res = await send();
+      if (feeGranter && res.code !== 0 && /fee-grant not found/i.test(res.rawLog)) {
+        // The grant is in a block the sponsor's node has seen but this node may
+        // not have yet. A CheckTx rejection consumes no sequence, so resend once.
+        await new Promise<void>(resolve => {
+          setTimeout(resolve, 3000);
+        });
+        res = await send();
+      }
       if (res.code !== 0) {
         throw new Error(res.rawLog || `broadcast failed (code ${res.code})`);
       }
@@ -312,7 +358,16 @@ export const InjectivePanel = () => {
     } catch (err) {
       setShieldTx({ status: 'error', error: err instanceof Error ? err.message : 'shield failed' });
     }
-  }, [shieldAmount, selectedKeyInfo, requestAuth, getMnemonic, penumbraAccount, refetchBalances]);
+  }, [
+    shieldAmount,
+    selectedKeyInfo,
+    requestAuth,
+    getMnemonic,
+    penumbraAccount,
+    refetchBalances,
+    canSponsor,
+    injAddress,
+  ]);
 
   const handleWithdraw = useCallback(async () => {
     const base = toBaseUnits(withdrawAmount);
@@ -411,11 +466,16 @@ export const InjectivePanel = () => {
               </span>
             </div>
           )}
-          {!gasOk && (
-            <p className='mt-2 text-label text-amber-400/90 lowercase'>
-              not enough INJ for gas - send a little INJ here to move USDC (fee ~{feeDisplay}).
-            </p>
-          )}
+          {!gasOk &&
+            (canSponsor ? (
+              <p className='mt-2 text-label text-fg-muted lowercase'>
+                no INJ needed - rotko pays the gas to shield. the sponsor is visible on-chain.
+              </p>
+            ) : (
+              <p className='mt-2 text-label text-amber-400/90 lowercase'>
+                not enough INJ for gas - send a little INJ here to move USDC (fee ~{feeDisplay}).
+              </p>
+            ))}
         </div>
       </div>
 
@@ -450,11 +510,13 @@ export const InjectivePanel = () => {
         <Button
           variant='gradient'
           className='w-full'
-          disabled={!shieldBase || shieldExceeds || !gasOk || anyBusy}
+          disabled={!shieldBase || shieldExceeds || !shieldGasOk || anyBusy}
           onClick={() => void handleShield()}
         >
           {shieldTx.status === 'signing'
-            ? 'shielding...'
+            ? canSponsor && !gasOk
+              ? 'getting gas, shielding...'
+              : 'shielding...'
             : shieldTx.status === 'submitted'
               ? 'confirming...'
               : 'shield USDC to Penumbra'}
