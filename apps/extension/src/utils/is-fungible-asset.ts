@@ -35,25 +35,39 @@ const NON_FUNGIBLE_PATTERNS = [
   assetPatterns.delegationToken,
 ] as const;
 
+/** True when any non-fungible pattern matches the given denom string. */
+const matchesNonFungible = (value: string | undefined): boolean => {
+  if (!value) {
+    return false;
+  }
+  return NON_FUNGIBLE_PATTERNS.some(pattern => pattern.matches(value));
+};
+
 /**
  * True when the given display / symbol string names a non-fungible synthetic
  * Penumbra token (LP NFT, auction NFT, delegation token, etc.). Missing /
  * empty input is treated as fungible - "we don't know, don't hide it".
  */
-export const isNonFungibleDisplay = (display: string | undefined): boolean => {
-  if (!display) {
-    return false;
-  }
-  return NON_FUNGIBLE_PATTERNS.some(pattern => pattern.matches(display));
-};
+export const isNonFungibleDisplay = (display: string | undefined): boolean =>
+  matchesNonFungible(display);
 
 /**
  * True when `metadata` describes a token users can meaningfully hold a
  * transferable balance of. Unknown / missing metadata is treated as fungible
  * so we never silently swallow a real balance we failed to classify.
+ *
+ * The patterns must be tested against BOTH the base and the display denom, not
+ * display alone: the pattern anchors differ per token. `lpNft`/`auctionNft` are
+ * anchored on the BASE form (`^lpnft_`, `^auctionnft_`), while the LP NFT's
+ * DISPLAY denom is `lpNft:opened(...)` - which `^lpnft_` never matches (capital
+ * N, a colon, no underscore). Matching display only therefore let every LP
+ * position leak into the swap/send pickers (reported: "100 lpNft:opened(...) in
+ * the send asset dropdown"). Delegation/unbonding conversely need the display
+ * form (their base carries a `u` SI prefix), so we check both and hide the
+ * balance if EITHER matches.
  */
 export const isFungibleMetadata = (metadata: Metadata | undefined): boolean =>
-  !isNonFungibleDisplay(metadata?.display);
+  !matchesNonFungible(metadata?.display) && !matchesNonFungible(metadata?.base);
 
 /**
  * True when `balance` should appear in a fungible-asset UI list.
