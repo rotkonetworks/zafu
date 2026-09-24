@@ -23,6 +23,7 @@ import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view
 import { useSyncProgress } from '../../../hooks/full-sync-height';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { bech32mIdentityKey, identityKeyFromBech32m } from '@penumbra-zone/bech32m/penumbravalid';
+import { bech32mAssetId } from '@penumbra-zone/bech32m/passet';
 import { isSidePanel, isDedicatedWindow } from '../../../utils/popup-detection';
 import { openInSidePanel } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
@@ -101,6 +102,35 @@ const AssetRow = memo(
     const symbol = symbolFromMetadata(meta);
     const showActions = !!base && !isNonFungibleBalance(balance) && !!(onSend || onSwap);
 
+    // For an asset the wallet has no metadata for, the library renders a bare
+    // "Unknown asset" with no way to tell what it actually is. Surface the raw
+    // identifier - the bech32m asset id for a truly unknown asset, else the base
+    // denom (e.g. an unregistered IBC path) - as a copyable, hoverable line so
+    // the user can look it up. Shown only when there is no real symbol, to keep
+    // known-asset rows clean.
+    const vv = balance.balanceView?.valueView;
+    const rawId =
+      vv?.case === 'unknownAssetId' && vv.value.assetId
+        ? (() => {
+            try {
+              return bech32mAssetId(vv.value.assetId);
+            } catch {
+              return undefined;
+            }
+          })()
+        : !meta?.symbol
+          ? base
+          : undefined;
+    const [copiedRawId, setCopiedRawId] = useState(false);
+    const copyRawId = useCallback(() => {
+      if (!rawId) {
+        return;
+      }
+      void navigator.clipboard.writeText(rawId);
+      setCopiedRawId(true);
+      setTimeout(() => setCopiedRawId(false), 1500);
+    }, [rawId]);
+
     return (
       <TableRow className='group'>
         <TableCell>
@@ -112,6 +142,16 @@ const AssetRow = memo(
               onClaim={onClaim}
             />
           </Sensitive>
+          {rawId && (
+            <button
+              type='button'
+              onClick={copyRawId}
+              title={`${rawId} (click to copy)`}
+              className='mt-0.5 block max-w-[220px] truncate font-mono text-[10px] text-fg-muted transition-colors hover:text-fg-high'
+            >
+              {copiedRawId ? 'copied id' : rawId}
+            </button>
+          )}
         </TableCell>
         <TableCell>
           <Sensitive>
