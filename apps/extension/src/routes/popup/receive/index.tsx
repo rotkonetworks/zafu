@@ -116,18 +116,63 @@ function ReceiveTab({
     };
   }, [transparent, transparentAddress, zidecarUrl]);
 
-  // Load the current zcash transparent index (do NOT rotate). This used to bump
-  // BOTH indices on every mount, silently burning a fresh address each time the
-  // user merely opened the Receive screen. Rotation is explicit - the address
-  // carets below advance the index on demand. Shielded loads separately above.
+  // Burner rotation for zcash transparent addresses. A transparent address is
+  // public and, in this wallet's design, a recoverable burner - reusing one lets
+  // senders link your payments, exactly like reusing a cosmos ramp address. So
+  // when the user opens the transparent view we scan forward from the last-known
+  // index for the first UNUSED address (no on-chain history) and default to it,
+  // so the address presented for receiving is always fresh. The carets below
+  // still let the user browse earlier (used) addresses; this only sets the
+  // default. Best-effort: any failure leaves the stored index in place. Bounded
+  // by a gap so a heavily-used wallet cannot scan unboundedly.
   useEffect(() => {
-    if (!isZcash || !canTransparent) {
+    if (!transparent || !isZcash || !canTransparent) {
       return;
     }
-    void chrome.storage.local.get('zcashTransparentIndex').then(r => {
-      setTransparentIndex(r['zcashTransparentIndex'] ?? 0);
-    });
-  }, [isZcash, canTransparent]);
+    let cancelled = false;
+    const SCAN_GAP = 20;
+    void (async () => {
+      try {
+        const mnemonic =
+          isMnemonic && selectedKeyInfo ? await keyRing.getMnemonic(selectedKeyInfo.id) : undefined;
+        const deriveAt = (i: number): Promise<string> | undefined =>
+          mnemonic
+            ? deriveZcashTransparent(mnemonic, 0, i, true)
+            : zcashUfvk
+              ? deriveZcashTransparentFromUfvk(zcashUfvk, i)
+              : undefined;
+        const stored = (await chrome.storage.local.get('zcashTransparentIndex'))[
+          'zcashTransparentIndex'
+        ] as number | undefined;
+        const start = typeof stored === 'number' && stored > 0 ? stored : 0;
+        for (let i = start; i <= start + SCAN_GAP; i++) {
+          if (cancelled) {
+            return;
+          }
+          const addr = await deriveAt(i);
+          if (!addr) {
+            return;
+          }
+          const hist = await getTransparentHistoryInWorker('zcash', zidecarUrl, [addr]).catch(
+            () => [],
+          );
+          if (cancelled) {
+            return;
+          }
+          if (hist.length === 0) {
+            setTransparentIndex(i);
+            void chrome.storage.local.set({ zcashTransparentIndex: i });
+            return;
+          }
+        }
+      } catch {
+        // best-effort: on any failure keep whatever index is set
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [transparent, isZcash, canTransparent, isMnemonic, selectedKeyInfo, keyRing, zcashUfvk, zidecarUrl]);
 
   const displayAddress =
     transparent && isZcash && transparentAddress
