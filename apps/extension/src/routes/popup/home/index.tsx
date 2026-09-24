@@ -2099,9 +2099,23 @@ const PendingMark = ({ className }: { className?: string }) => (
   </svg>
 );
 
-/** public per-tx explorer URL, per network (shielded penumbra has none). */
-const txExplorerUrl = (network: NetworkType, txid: string): string | undefined =>
-  network === 'zcash' ? `https://cipherscan.app/tx/${txid}` : undefined;
+/** public per-tx explorer URL, per network. Penumbra's contents are shielded,
+ *  but the tx hash IS public and penumbra.fi/explore resolves it, so the link is
+ *  offered (still behind the opt-in explorer-links gate, since it leaks IP). */
+const txExplorerUrl = (network: NetworkType, txid: string): string | undefined => {
+  switch (network) {
+    case 'zcash':
+      return `https://cipherscan.app/tx/${txid}`;
+    case 'penumbra':
+      return `https://penumbra.fi/explore/tx/${txid}`;
+    case 'noble':
+      return `https://www.mintscan.io/noble/tx/${txid}`;
+    case 'injective':
+      return `https://explorer.injective.network/transaction/${txid}`;
+    default:
+      return undefined;
+  }
+};
 
 function TxRow({ tx, network }: { tx: ParsedTransaction; network: NetworkType }) {
   const [expanded, setExpanded] = useState(false);
