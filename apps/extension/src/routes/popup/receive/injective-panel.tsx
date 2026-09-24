@@ -13,7 +13,7 @@
  * calls is unit-tested but unproven on a live node until then.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import QRCode from 'qrcode';
 import { Button } from '@repo/ui/components/ui/button';
@@ -34,6 +34,14 @@ import {
 import { queryInjectiveBalances, queryInjectiveTx } from '@repo/wallet/networks/injective/client';
 import { shieldInToPenumbra, withdrawToExchange } from '@repo/wallet/networks/injective/conduit';
 import { requestInjectiveFeeGrant } from '@repo/wallet/networks/injective/feegrant';
+import { peekHdIndex } from '@repo/storage-chrome/cosmos-chain-counters';
+import {
+  fundedBurners,
+  injectiveScanIndices,
+  resolveSelectedInjectiveIndex,
+  shortInjAddress,
+  type InjectiveIndexBalance,
+} from './injective-burners';
 
 const CFG = COSMOS_CHAINS.injective;
 
@@ -238,19 +246,114 @@ export const InjectivePanel = () => {
     };
   }, [isMnemonic, selectedKeyInfo, getMnemonic]);
 
-  // live balances on the derived inj address: USDC.inj (ramp asset) + INJ (gas).
-  // Read-only LCD bank query, refreshed periodically so funds arriving from an
-  // exchange show up without a manual reload.
-  const balancesQuery = useQuery({
-    queryKey: ['injective-balances', injAddress],
-    enabled: !!injAddress,
+  // Burner discovery: dapps get fresh inj1 burners from zafu_get_fresh_chain_address,
+  // which allocates via nextHdIndex('injective'). peekHdIndex reads that counter
+  // (the highest index handed out) WITHOUT incrementing it. Same cadence as the
+  // balance poll so a burner issued while the popup is open shows up.
+  const hdPeekQuery = useQuery({
+    queryKey: ['injective-hd-peek'],
+    enabled: isMnemonic,
     staleTime: 10_000,
     refetchInterval: 15_000,
-    queryFn: () => queryInjectiveBalances(CFG.restEndpoint, injAddress, CFG.denom),
+    queryFn: () => peekHdIndex('injective'),
   });
-  const usdcBal = balancesQuery.data?.usdc ?? 0n;
-  const injBal = balancesQuery.data?.inj ?? 0n;
-  const balancesReady = balancesQuery.data !== undefined;
+  const scanKey = injectiveScanIndices(hdPeekQuery.data ?? 0)
+    .filter(i => i > 0)
+    .join(',');
+
+  // Derive burner addresses (index > 0). Each derivation runs a sync bip39 seed
+  // stretch, so results are cached per vault+index and only new indices are
+  // derived when the counter grows. Coin type 60 via deriveInjectiveAddress only.
+  const burnerCache = useRef<{ keyId?: string; map: Map<number, string> }>({ map: new Map() });
+  const [burnerAddrs, setBurnerAddrs] = useState<{ index: number; address: string }[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const keyId = isMnemonic ? selectedKeyInfo?.id : undefined;
+    if (!keyId) {
+      burnerCache.current = { map: new Map() };
+      setBurnerAddrs([]);
+      return;
+    }
+    if (burnerCache.current.keyId !== keyId) {
+      burnerCache.current = { keyId, map: new Map() };
+      setBurnerAddrs([]);
+    }
+    const cache = burnerCache.current.map;
+    const wanted = scanKey ? scanKey.split(',').map(Number) : [];
+    void (async () => {
+      try {
+        const missing = wanted.filter(i => !cache.has(i));
+        if (missing.length) {
+          const mnemonic = await getMnemonic(keyId);
+          if (!mnemonic) {
+            return;
+          }
+          for (const i of missing) {
+            if (cancelled) {
+              return;
+            }
+            cache.set(i, await deriveInjectiveAddress(mnemonic, i));
+            // yield between derivations so the popup stays responsive
+            await new Promise<void>(resolve => setTimeout(resolve, 0));
+          }
+        }
+        if (!cancelled) {
+          setBurnerAddrs(wanted.map(index => ({ index, address: cache.get(index)! })));
+        }
+      } catch (err) {
+        console.error('[injective] failed to derive burner addresses:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isMnemonic, selectedKeyInfo?.id, scanKey, getMnemonic]);
+
+  const scanTargets = useMemo(
+    () => (injAddress ? [{ index: 0, address: injAddress }, ...burnerAddrs] : []),
+    [injAddress, burnerAddrs],
+  );
+
+  // live balances on account 0 + every scanned burner: USDC.inj (ramp asset) +
+  // INJ (gas). Read-only LCD bank queries, refreshed periodically so funds
+  // arriving from an exchange (or an unshield to a burner) show up. Account 0
+  // failing fails the query (shown as an error); a burner failing only drops
+  // that burner for this tick.
+  const balancesQuery = useQuery({
+    queryKey: ['injective-balances', scanTargets.map(t => `${t.index}:${t.address}`).join(',')],
+    enabled: scanTargets.length > 0,
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+    queryFn: async (): Promise<InjectiveIndexBalance[]> => {
+      const settled = await Promise.allSettled(
+        scanTargets.map(t => queryInjectiveBalances(CFG.restEndpoint, t.address, CFG.denom)),
+      );
+      const rows: InjectiveIndexBalance[] = [];
+      settled.forEach((r, i) => {
+        const t = scanTargets[i]!;
+        if (r.status === 'fulfilled') {
+          rows.push({ index: t.index, address: t.address, usdc: r.value.usdc, inj: r.value.inj });
+        } else if (t.index === 0) {
+          throw r.reason;
+        }
+      });
+      return rows;
+    },
+  });
+  const rows = useMemo(() => balancesQuery.data ?? [], [balancesQuery.data]);
+  const mainRow = rows.find(r => r.index === 0);
+  const burnerRows = fundedBurners(rows);
+
+  // The ONE index the shield / withdraw forms act on. Every balance check, the
+  // sponsor decision, the fee-grant grantee, and the signer's accountIndex all
+  // derive from `selected`, so they can never disagree about which account.
+  const [userPick, setUserPick] = useState<number | undefined>(undefined);
+  const selectedIndex = resolveSelectedInjectiveIndex(rows, userPick);
+  const selected = rows.find(r => r.index === selectedIndex);
+  const selectedAddress = selected?.address ?? (selectedIndex === 0 ? injAddress : '');
+  const usdcBal = selected?.usdc ?? 0n;
+  const injBal = selected?.inj ?? 0n;
+  const balancesReady = selected !== undefined;
 
   // `refetch` is bound once by the QueryObserver and is identity-stable, unlike
   // `balancesQuery` (a fresh tracked object every render). Depending on the
@@ -294,7 +397,7 @@ export const InjectivePanel = () => {
   const withdrawBase = toBaseUnits(withdrawAmount);
   const withdrawExceeds = balancesReady && !!withdrawBase && BigInt(withdrawBase) > usdcBal;
   const withdrawAddrOk = isValidInjectiveAddress(withdrawAddr);
-  // one send at a time: both legs sign from the same account, so an overlapping
+  // one send at a time: when both legs act on the same index an overlapping
   // shield + withdraw would collide on the sequence number.
   const anyBusy = isBusy(shieldTx.status) || isBusy(withdrawTx.status);
 
@@ -309,7 +412,7 @@ export const InjectivePanel = () => {
 
   const handleShield = useCallback(async () => {
     const base = toBaseUnits(shieldAmount);
-    if (!base || !selectedKeyInfo || !CFG.penumbraChannel) {
+    if (!base || !selectedKeyInfo || !CFG.penumbraChannel || !selectedAddress) {
       return;
     }
     if (!(await requestAuth())) {
@@ -321,16 +424,22 @@ export const InjectivePanel = () => {
       if (!mnemonic) {
         throw new Error('wallet locked');
       }
+      // the conduit re-derives from accountIndex; make sure that is the address
+      // every check (and the fee grant) above was made against.
+      if ((await deriveInjectiveAddress(mnemonic, selectedIndex)) !== selectedAddress) {
+        throw new Error('address/index mismatch - refresh and retry');
+      }
       // fresh single-use Penumbra IBC deposit address for this shield-in
       const penumbraReceiver = await derivePenumbraEphemeralFromMnemonic(mnemonic, penumbraAccount);
       const sourceChannel = CFG.penumbraChannel; // channel-494 (injective -> penumbra)
       // No INJ for gas: get a fee allowance first. Resolves once it is on-chain.
       const feeGranter = canSponsor
-        ? (await requestInjectiveFeeGrant(GAS_SPONSOR_URL, injAddress)).granter
+        ? (await requestInjectiveFeeGrant(GAS_SPONSOR_URL, selectedAddress)).granter
         : undefined;
       const send = () =>
         shieldInToPenumbra({
           mnemonic,
+          accountIndex: selectedIndex,
           restUrl: CFG.restEndpoint,
           sourceChannel,
           penumbraReceiver,
@@ -366,12 +475,13 @@ export const InjectivePanel = () => {
     penumbraAccount,
     refetchBalances,
     canSponsor,
-    injAddress,
+    selectedIndex,
+    selectedAddress,
   ]);
 
   const handleWithdraw = useCallback(async () => {
     const base = toBaseUnits(withdrawAmount);
-    if (!base || !isValidInjectiveAddress(withdrawAddr) || !selectedKeyInfo) {
+    if (!base || !isValidInjectiveAddress(withdrawAddr) || !selectedKeyInfo || !selectedAddress) {
       return;
     }
     if (!(await requestAuth())) {
@@ -383,8 +493,12 @@ export const InjectivePanel = () => {
       if (!mnemonic) {
         throw new Error('wallet locked');
       }
+      if ((await deriveInjectiveAddress(mnemonic, selectedIndex)) !== selectedAddress) {
+        throw new Error('address/index mismatch - refresh and retry');
+      }
       const res = await withdrawToExchange({
         mnemonic,
+        accountIndex: selectedIndex,
         restUrl: CFG.restEndpoint,
         toAddress: withdrawAddr.trim(),
         amount: { denom: CFG.denom, amount: base },
@@ -402,7 +516,16 @@ export const InjectivePanel = () => {
         error: err instanceof Error ? err.message : 'withdraw failed',
       });
     }
-  }, [withdrawAmount, withdrawAddr, selectedKeyInfo, requestAuth, getMnemonic, refetchBalances]);
+  }, [
+    withdrawAmount,
+    withdrawAddr,
+    selectedKeyInfo,
+    requestAuth,
+    getMnemonic,
+    refetchBalances,
+    selectedIndex,
+    selectedAddress,
+  ]);
 
   if (!isMnemonic) {
     return (
@@ -458,12 +581,52 @@ export const InjectivePanel = () => {
           ) : (
             <div className='mt-1 flex items-baseline justify-between'>
               <span className='font-mono text-lg'>
-                {formatBaseUnits(usdcBal, CFG.decimals, 4)}{' '}
+                {formatBaseUnits(mainRow?.usdc ?? 0n, CFG.decimals, 4)}{' '}
                 <span className='text-xs text-fg-muted'>{CFG.symbol}</span>
               </span>
               <span className='font-mono text-xs text-fg-muted'>
-                {formatBaseUnits(injBal, GAS_ASSET.decimals, 6)} {GAS_ASSET.symbol} (gas)
+                {formatBaseUnits(mainRow?.inj ?? 0n, GAS_ASSET.decimals, 6)} {GAS_ASSET.symbol}{' '}
+                (gas)
               </span>
+            </div>
+          )}
+          {/* funds on burner addresses (fresh unshield receivers). pick which
+              address shield + withdraw act on. */}
+          {burnerRows.length > 0 && (
+            <div className='mt-2 border-t border-border-soft pt-2'>
+              <div className='mb-1 text-label text-fg-muted lowercase'>
+                other addresses - pick one to move
+              </div>
+              {(mainRow ? [mainRow, ...burnerRows] : burnerRows).map(r => {
+                const active = r.index === selectedIndex;
+                return (
+                  <button
+                    key={r.index}
+                    type='button'
+                    onClick={() => setUserPick(r.index)}
+                    disabled={anyBusy}
+                    title={r.address}
+                    className={`flex w-full items-center gap-2 rounded px-1.5 py-1 text-left font-mono text-label disabled:opacity-60 ${
+                      active ? 'bg-elev-2 text-fg-high' : 'text-fg-muted hover:bg-elev-2'
+                    }`}
+                  >
+                    <span
+                      className={`h-3 w-3 shrink-0 ${
+                        active ? 'i-ph-radio-button-fill text-zigner-gold' : 'i-ph-circle'
+                      }`}
+                    />
+                    <span className='truncate'>
+                      {r.index === 0 ? 'main' : shortInjAddress(r.address)}
+                    </span>
+                    <span className='ml-auto shrink-0'>
+                      {formatBaseUnits(r.usdc, CFG.decimals, 2)} {CFG.symbol}
+                    </span>
+                    <span className='shrink-0'>
+                      {formatBaseUnits(r.inj, GAS_ASSET.decimals, 4)} {GAS_ASSET.symbol}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           )}
           {!gasOk &&
@@ -481,7 +644,14 @@ export const InjectivePanel = () => {
 
       {/* shield in */}
       <div className='rounded-lg border border-border-soft p-4'>
-        <div className='mb-2 text-xs font-medium lowercase'>shield into Penumbra</div>
+        <div className='mb-2 flex items-baseline justify-between text-xs font-medium lowercase'>
+          <span>shield into Penumbra</span>
+          {selectedIndex !== 0 && (
+            <span className='font-mono text-label text-fg-muted' title={selectedAddress}>
+              from {shortInjAddress(selectedAddress)}
+            </span>
+          )}
+        </div>
         <div className='relative mb-2'>
           <input
             type='number'
@@ -570,6 +740,11 @@ export const InjectivePanel = () => {
         </button>
         {showWithdraw && (
           <div className='mt-3'>
+        {selectedIndex !== 0 && (
+          <p className='mb-1 font-mono text-label text-fg-muted' title={selectedAddress}>
+            from {shortInjAddress(selectedAddress)}
+          </p>
+        )}
         <input
           type='text'
           value={withdrawAddr}
