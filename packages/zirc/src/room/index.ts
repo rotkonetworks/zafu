@@ -60,6 +60,9 @@ export {
 } from './commands';
 export type { Candidate, CommandSpec, Completion, Member, ParsedLine } from './commands';
 
+export { openInvite, sealInvite } from './invite-seal';
+export type { SealedInvite, SealingIdentity } from './invite-seal';
+
 export { listFriends } from './friends';
 export type { Friend } from './friends';
 
