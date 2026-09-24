@@ -54,6 +54,9 @@ export class ExtensionStorage<
 > {
   private migrations?: ExtensionStorageMigrations<V>;
 
+  /** Ensures the forward-compat warning is logged at most once per instance. */
+  private warnedNewerVersion = false;
+
   /**
    * @param storage storage area to use (local, sync, a mock, etc)
    * @param defaults default values for storage keys
@@ -202,6 +205,24 @@ export class ExtensionStorage<
 
     // storage is current, no migration needed
     if (storedVersion === this.version) {
+      return;
+    }
+
+    // storage is from a NEWER build than this running code. During an MV3
+    // rollout, an older service-worker instance can still be on version N after
+    // a newer chunk has already migrated chrome.storage.local up to N+1. Our
+    // storage schemas are additive, so an older reader can operate safely on
+    // newer data - it just ignores fields it does not know about. Do NOT migrate
+    // down, do NOT throw, and do NOT rewrite the stored version downward; treat
+    // storage as forward-compatible so wallet services start against the
+    // existing state instead of bricking with "couldn't start wallet services".
+    if (storedVersion !== undefined && storedVersion > this.version) {
+      if (!this.warnedNewerVersion) {
+        this.warnedNewerVersion = true;
+        console.warn(
+          `Stored storage version ${storedVersion} is newer than this build's version ${this.version}; treating storage as forward-compatible and skipping migration`,
+        );
+      }
       return;
     }
 
