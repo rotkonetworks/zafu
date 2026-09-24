@@ -9,7 +9,8 @@ import { useQuery } from '@tanstack/react-query';
 import { governanceClient } from '../../../clients';
 import { Vote_Vote } from '@penumbra-zone/protobuf/penumbra/core/component/governance/v1/governance_pb';
 import type { ProposalListResponse } from '@penumbra-zone/protobuf/penumbra/core/component/governance/v1/governance_pb';
-import { viewClient } from '../../../clients';
+import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
+import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { useStore } from '../../../state';
 import { selectActiveNetwork, selectPenumbraAccount } from '../../../state/keyring';
 import { NetworkUnavailable } from '../../../shared/components/network-unavailable';
@@ -122,6 +123,7 @@ function voteIcon(vote: Vote_Vote): string {
 export function VotePage() {
   const activeNetwork = useStore(selectActiveNetwork);
   const penumbraAccount = useStore(selectPenumbraAccount);
+  const penumbraTx = usePenumbraTransaction();
   const [showInactive, setShowInactive] = useState(false);
   const [expandedId, setExpandedId] = useState<bigint | null>(null);
   const [rawId, setRawId] = useState<bigint | null>(null);
@@ -177,44 +179,25 @@ export function VotePage() {
         }
       }
 
-      const plan = await viewClient.transactionPlanner({
-        // the account that votes (its delegation notes) and pays the fee
-        source: { account: penumbraAccount },
-        delegatorVotes: [
-          {
-            proposal: proposalId,
-            vote: { vote },
-            startBlockHeight,
-            startPosition,
-            rateData,
-          },
-        ],
+      // Runs in the service worker like every other penumbra tx: tracked on
+      // home, and it survives the side panel reloading for the approval. The
+      // SW refuses a plan that ends up with no vote in it.
+      await penumbraTx.mutateAsync({
+        label: `vote ${voteLabel(vote).toLowerCase()} on #${String(proposalId)}`,
+        planRequest: new TransactionPlannerRequest({
+          // the account that votes (its delegation notes) and pays the fee
+          source: { account: penumbraAccount },
+          delegatorVotes: [
+            {
+              proposal: proposalId,
+              vote: { vote },
+              startBlockHeight,
+              startPosition,
+              rateData,
+            },
+          ],
+        }),
       });
-
-      if (!plan.plan) {
-        throw new Error('failed to create vote plan');
-      }
-      // never broadcast a vote transaction that contains no vote
-      if (!plan.plan.actions.some(a => a.action.case === 'delegatorVote')) {
-        throw new Error(
-          'this account had no staked UM when voting opened, so it has no votes on this proposal',
-        );
-      }
-
-      // authorize and build
-      const buildResponse = await viewClient.authorizeAndBuild({ transactionPlan: plan.plan });
-      let transaction;
-      for await (const msg of buildResponse) {
-        if (msg.status.case === 'complete') {
-          transaction = msg.status.value.transaction;
-          break;
-        }
-      }
-      if (!transaction) {
-        throw new Error('failed to build vote transaction');
-      }
-
-      await viewClient.broadcastTransaction({ transaction, awaitDetection: true });
       void proposalsQuery.refetch();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

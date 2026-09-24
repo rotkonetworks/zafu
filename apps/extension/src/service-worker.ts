@@ -27,11 +27,7 @@ import { contactDiscoveryListener } from './message/listen/contact-discovery';
 import { internalZidListener } from './message/listen/internal-zid';
 import { keplrMessageListener } from './message/listen/keplr';
 import { createPenumbraSendListener } from './message/listen/penumbra-send';
-import {
-  PENUMBRA_SEND_OP_PREFIX,
-  isTerminalStatus,
-  type PenumbraSendOp,
-} from './message/penumbra-send';
+import { TX_OP_PREFIX, isTxOp, type TxOp } from './tx-ops';
 import { sweepAndResume, defaultTrackerDeps } from './state/ibc-transfer-tracker';
 import { makeIbcProbe } from './state/ibc-transfer-probes';
 import { openApprovalPopup } from './utils/popup-window';
@@ -423,22 +419,23 @@ const runIbcTransferSweep = (): Promise<void> =>
 // script bridge; this handles connect, getKey, cosmos signing, and broadcast.
 chrome.runtime.onMessage.addListener(keplrMessageListener);
 
-// On startup, any send op still in a non-terminal state belongs to a service
-// worker that has since died; the task cannot resume, so mark it failed rather
-// than leaving a row spinning forever.
+// On startup, a Penumbra op still pending belonged to a service worker that has
+// since died (those ops run in the SW); the task cannot resume. Mark it unknown,
+// not failed: it may have been broadcast before the worker died.
 void (async () => {
   const all = await chrome.storage.session.get(null);
-  const patch: Record<string, PenumbraSendOp> = {};
+  const patch: Record<string, TxOp> = {};
   for (const [key, value] of Object.entries(all)) {
     if (
-      key.startsWith(PENUMBRA_SEND_OP_PREFIX) &&
-      value &&
-      !isTerminalStatus((value as PenumbraSendOp).status)
+      key.startsWith(TX_OP_PREFIX) &&
+      isTxOp(value) &&
+      value.network === 'penumbra' &&
+      value.status === 'pending'
     ) {
       patch[key] = {
-        ...(value as PenumbraSendOp),
-        status: 'error',
-        error: 'interrupted - extension restarted',
+        ...value,
+        status: 'unknown',
+        error: 'interrupted - the extension restarted; check activity',
         updatedAt: Date.now(),
       };
     }

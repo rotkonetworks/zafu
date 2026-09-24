@@ -1,3 +1,4 @@
+import { InFlightCard } from '../../../components/in-flight-card';
 import { lazy, Suspense, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -446,6 +447,9 @@ export const PopupIndex = () => {
             )}
           </div>
         </div>
+
+        {/* transactions in flight / just finished, any network */}
+        <InFlightCard />
 
         {/* multisig portfolio overview (zcash only, when multisigs exist) */}
         {activeNetwork === 'zcash' && <MultisigOverview />}

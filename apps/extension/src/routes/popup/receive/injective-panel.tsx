@@ -35,6 +35,7 @@ import {
 import { queryInjectiveBalances, queryInjectiveTx } from '@repo/wallet/networks/injective/client';
 import { shieldInToPenumbra, withdrawToExchange } from '@repo/wallet/networks/injective/conduit';
 import { requestInjectiveFeeGrant } from '@repo/wallet/networks/injective/feegrant';
+import { trackTx } from '../../../tx-ops';
 import { nextHdIndex, peekHdIndex } from '@repo/storage-chrome/cosmos-chain-counters';
 import {
   injectiveScanIndices,
@@ -553,52 +554,64 @@ export const InjectivePanel = () => {
     if (!base || !selectedKeyInfo || !CFG.penumbraChannel || !selectedAddress) {
       return;
     }
+    const penumbraChannel = CFG.penumbraChannel;
     if (!(await requestAuth())) {
       return;
     }
     setShieldTx({ status: 'signing' });
     try {
-      const mnemonic = await getMnemonic(selectedKeyInfo.id);
-      if (!mnemonic) {
-        throw new Error('wallet locked');
-      }
-      // the conduit re-derives from accountIndex; make sure that is the address
-      // every check (and the fee grant) above was made against.
-      if ((await deriveInjectiveAddress(mnemonic, selectedIndex)) !== selectedAddress) {
-        throw new Error('address/index mismatch - refresh and retry');
-      }
-      // fresh single-use Penumbra IBC deposit address for this shield-in
-      const penumbraReceiver = await derivePenumbraEphemeralFromMnemonic(mnemonic, penumbraAccount);
-      const sourceChannel = CFG.penumbraChannel; // channel-494 (injective -> penumbra)
-      // No INJ for gas: get a fee allowance first. Resolves once it is on-chain.
-      const feeGranter = canSponsor
-        ? (await requestInjectiveFeeGrant(GAS_SPONSOR_URL, selectedAddress)).granter
-        : undefined;
-      const send = () =>
-        shieldInToPenumbra({
-          mnemonic,
-          accountIndex: selectedIndex,
-          restUrl: CFG.restEndpoint,
-          sourceChannel,
-          penumbraReceiver,
-          token: { denom: CFG.denom, amount: base },
-          // 10-minute IBC timeout, in nanoseconds
-          timeoutTimestamp: BigInt(Date.now() + 10 * 60 * 1000) * 1_000_000n,
-          fee: injectiveFee(),
-          feeGranter,
-        });
-      let res = await send();
-      if (feeGranter && res.code !== 0 && /fee-grant not found/i.test(res.rawLog)) {
-        // The grant is in a block the sponsor's node has seen but this node may
-        // not have yet. A CheckTx rejection consumes no sequence, so resend once.
-        await new Promise<void>(resolve => {
-          setTimeout(resolve, 3000);
-        });
-        res = await send();
-      }
-      if (res.code !== 0) {
-        throw new Error(res.rawLog || `broadcast failed (code ${res.code})`);
-      }
+      const res = await trackTx(
+        { network: 'injective', label: `shield ${shieldAmount} ${CFG.symbol}` },
+        async step => {
+          const mnemonic = await getMnemonic(selectedKeyInfo.id);
+          if (!mnemonic) {
+            throw new Error('wallet locked');
+          }
+          // the conduit re-derives from accountIndex; make sure that is the address
+          // every check (and the fee grant) above was made against.
+          if ((await deriveInjectiveAddress(mnemonic, selectedIndex)) !== selectedAddress) {
+            throw new Error('address/index mismatch - refresh and retry');
+          }
+          // fresh single-use Penumbra IBC deposit address for this shield-in
+          const penumbraReceiver = await derivePenumbraEphemeralFromMnemonic(
+            mnemonic,
+            penumbraAccount,
+          );
+          const sourceChannel = penumbraChannel; // channel-494 (injective -> penumbra)
+          // No INJ for gas: get a fee allowance first. Resolves once it is on-chain.
+          step(canSponsor ? 'getting gas' : 'signing');
+          const feeGranter = canSponsor
+            ? (await requestInjectiveFeeGrant(GAS_SPONSOR_URL, selectedAddress)).granter
+            : undefined;
+          const send = () =>
+            shieldInToPenumbra({
+              mnemonic,
+              accountIndex: selectedIndex,
+              restUrl: CFG.restEndpoint,
+              sourceChannel,
+              penumbraReceiver,
+              token: { denom: CFG.denom, amount: base },
+              // 10-minute IBC timeout, in nanoseconds
+              timeoutTimestamp: BigInt(Date.now() + 10 * 60 * 1000) * 1_000_000n,
+              fee: injectiveFee(),
+              feeGranter,
+            });
+          step('broadcasting');
+          let res = await send();
+          if (feeGranter && res.code !== 0 && /fee-grant not found/i.test(res.rawLog)) {
+            // The grant is in a block the sponsor's node has seen but this node may
+            // not have yet. A CheckTx rejection consumes no sequence, so resend once.
+            await new Promise<void>(resolve => {
+              setTimeout(resolve, 3000);
+            });
+            res = await send();
+          }
+          if (res.code !== 0) {
+            throw new Error(res.rawLog || `broadcast failed (code ${res.code})`);
+          }
+          return { ...res, txId: res.txhash };
+        },
+      );
       setShieldTx({ status: 'submitted', hash: res.txhash });
       setShieldAmount('');
       refetchBalances();
@@ -627,24 +640,31 @@ export const InjectivePanel = () => {
     }
     setWithdrawTx({ status: 'signing' });
     try {
-      const mnemonic = await getMnemonic(selectedKeyInfo.id);
-      if (!mnemonic) {
-        throw new Error('wallet locked');
-      }
-      if ((await deriveInjectiveAddress(mnemonic, selectedIndex)) !== selectedAddress) {
-        throw new Error('address/index mismatch - refresh and retry');
-      }
-      const res = await withdrawToExchange({
-        mnemonic,
-        accountIndex: selectedIndex,
-        restUrl: CFG.restEndpoint,
-        toAddress: withdrawTo,
-        amount: { denom: CFG.denom, amount: base },
-        fee: injectiveFee(),
-      });
-      if (res.code !== 0) {
-        throw new Error(res.rawLog || `broadcast failed (code ${res.code})`);
-      }
+      const res = await trackTx(
+        { network: 'injective', label: `withdraw ${withdrawAmount} ${CFG.symbol}` },
+        async step => {
+          const mnemonic = await getMnemonic(selectedKeyInfo.id);
+          if (!mnemonic) {
+            throw new Error('wallet locked');
+          }
+          if ((await deriveInjectiveAddress(mnemonic, selectedIndex)) !== selectedAddress) {
+            throw new Error('address/index mismatch - refresh and retry');
+          }
+          step('broadcasting');
+          const res = await withdrawToExchange({
+            mnemonic,
+            accountIndex: selectedIndex,
+            restUrl: CFG.restEndpoint,
+            toAddress: withdrawTo,
+            amount: { denom: CFG.denom, amount: base },
+            fee: injectiveFee(),
+          });
+          if (res.code !== 0) {
+            throw new Error(res.rawLog || `broadcast failed (code ${res.code})`);
+          }
+          return { ...res, txId: res.txhash };
+        },
+      );
       setWithdrawTx({ status: 'submitted', hash: res.txhash });
       setWithdrawAmount('');
       refetchBalances();

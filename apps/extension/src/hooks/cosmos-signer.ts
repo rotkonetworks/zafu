@@ -49,7 +49,7 @@ export interface CosmosIbcTransferParams {
 }
 
 /** result from mnemonic sign+broadcast */
-interface CosmosTxResult {
+export interface CosmosTxResult {
   type: 'broadcast';
   txHash: string;
   code: number;

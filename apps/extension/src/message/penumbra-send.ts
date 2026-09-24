@@ -23,37 +23,12 @@ export interface PenumbraSendRequest {
   /** TransactionPlannerRequest.toJson() - runtime messages are JSON, not
    *  structured-clone, so the protobuf's bigints must be serialized explicitly */
   planRequestJson: JsonValue;
+  /** short label for the tracker ("send 5 UM"); derived from the plan if omitted */
+  label?: string;
 }
-
-export type PenumbraSendStatus = 'planning' | 'building' | 'broadcasting' | 'success' | 'error';
-
-/** Persisted state of one send, mirrored in chrome.storage.session. */
-export interface PenumbraSendOp {
-  opId: string;
-  status: PenumbraSendStatus;
-  /** hex tx id, present once broadcast succeeds */
-  txId?: string;
-  /** detection height, filled in later if awaited */
-  blockHeight?: number;
-  /** human-readable failure reason when status === 'error' */
-  error?: string;
-  /** memo text, carried so the home screen / SW can record it */
-  memo?: string;
-  /** recipient bech32m, for the message record */
-  recipient?: string;
-  /** ms timestamp of the last update - drives toast ordering + stale sweep */
-  updatedAt: number;
-}
-
-export const PENUMBRA_SEND_OP_PREFIX = 'penumbraSendOp:';
-
-export const sendOpKey = (opId: string): string => `${PENUMBRA_SEND_OP_PREFIX}${opId}`;
 
 export const isPenumbraSendRequest = (m: unknown): m is PenumbraSendRequest =>
   typeof m === 'object' &&
   m !== null &&
   (m as { type?: unknown }).type === 'PenumbraSend' &&
   typeof (m as { opId?: unknown }).opId === 'string';
-
-export const isTerminalStatus = (s: PenumbraSendStatus): boolean =>
-  s === 'success' || s === 'error';

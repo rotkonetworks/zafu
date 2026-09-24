@@ -24,7 +24,13 @@ import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances
 import { getDisplayDenomExponent } from '@penumbra-zone/getters/metadata';
 import { fromValueView } from '@rotko/penumbra-types/amount';
 import { useSkipRoute, useSkipChains } from '../../../hooks/skip-route';
-import { useCosmosSend, useCosmosIbcTransfer } from '../../../hooks/cosmos-signer';
+import {
+  useCosmosSend,
+  useCosmosIbcTransfer,
+  type CosmosTxResult,
+  type CosmosZignerSignResult,
+} from '../../../hooks/cosmos-signer';
+import { trackTx } from '../../../tx-ops';
 import { parseAmountToBaseUnits } from '@repo/wallet/networks/cosmos/signer';
 import {
   useCosmosAssets,
@@ -618,17 +624,30 @@ function CosmosSend({
     setTxError(undefined);
 
     try {
+      const sym = selectedAsset.symbol;
+      // Tracked on home (any result with a txHash); a zigner QR hand-off
+      // broadcasts nothing here, so trackTx drops its record.
+      const tracked = <T extends CosmosTxResult | CosmosZignerSignResult>(
+        label: string,
+        run: () => Promise<T>,
+      ) =>
+        trackTx({ network: 'cosmos', label }, async () => {
+          const r = await run();
+          return { r, txId: 'txHash' in r ? r.txHash : undefined };
+        }).then(x => x.r);
       let result;
 
       if (isSameChain) {
-        result = await cosmosSend.mutateAsync({
-          chainId: sourceChainId,
-          toAddress: recipient,
-          amount,
-          denom: selectedAsset.denom,
-          memo: memo.trim() || undefined,
-          accountIndex,
-        });
+        result = await tracked(`send ${amount} ${sym}`, () =>
+          cosmosSend.mutateAsync({
+            chainId: sourceChainId,
+            toAddress: recipient,
+            amount,
+            denom: selectedAsset.denom,
+            memo: memo.trim() || undefined,
+            accountIndex,
+          }),
+        );
       } else {
         // penumbra shield-in: direct single-hop MsgTransfer over our relayed
         // channel (verified STATE_OPEN, client Active). Skip is bypassed.
@@ -643,16 +662,20 @@ function CosmosSend({
           );
         }
 
-        result = await cosmosIbcTransfer.mutateAsync({
-          sourceChainId,
-          destChainId: effectiveDestChainId,
-          sourceChannel: channel,
-          toAddress: recipient,
-          amount,
-          denom: selectedAsset.denom,
-          memo: memo.trim() || undefined,
-          accountIndex,
-        });
+        result = await tracked(
+          isPenumbraDest ? `shield ${amount} ${sym}` : `send ${amount} ${sym}`,
+          () =>
+            cosmosIbcTransfer.mutateAsync({
+              sourceChainId,
+              destChainId: effectiveDestChainId,
+              sourceChannel: channel,
+              toAddress: recipient,
+              amount,
+              denom: selectedAsset.denom,
+              memo: memo.trim() || undefined,
+              accountIndex,
+            }),
+        );
       }
 
       // check if this is a zigner sign request (needs QR flow in dedicated window)
@@ -864,13 +887,13 @@ function CosmosSend({
         />
         {memoLooksLikeMnemonic(memo) && (
           <p className='mt-1 text-xs text-red-400'>
-            this looks like a recovery phrase — never put one in a memo, it is
-            published on-chain in the clear
+            this looks like a recovery phrase — never put one in a memo, it is published on-chain in
+            the clear
           </p>
         )}
         <p className='mt-1 text-xs text-fg-muted'>
-          sending to an exchange? paste the memo/tag from its deposit page —
-          without it the deposit may not be credited
+          sending to an exchange? paste the memo/tag from its deposit page — without it the deposit
+          may not be credited
         </p>
       </div>
 

@@ -7,7 +7,7 @@ import { usePenumbraSwapClaim } from '../../hooks/penumbra-swap-claim';
 import { BottomTabs, BOTTOM_TABS_HEIGHT } from '../../components/bottom-tabs';
 import { AppHeader } from '../../components/app-header';
 import { MenuDrawer } from '../../components/menu-drawer';
-import { PenumbraSendWatcher } from '../../components/penumbra-send-watcher';
+import { TxTrackerWatcher } from '../../components/tx-tracker-watcher';
 import { PopupPath } from './paths';
 import { useStore } from '../../state';
 import {
@@ -187,9 +187,9 @@ export const PopupLayout = () => {
       </div>
       {showTabs && <BottomTabs tabs={tabs} />}
       {showChrome && <MenuDrawer open={menuOpen} onClose={() => setMenuOpen(false)} />}
-      {/* surfaces the outcome of a service-worker-driven send even when the
-          originating page was destroyed (side-panel approval reload) */}
-      <PenumbraSendWatcher />
+      {/* one toast per finished transaction, whichever page started it (the
+          page may be gone after a side-panel approval reload) */}
+      <TxTrackerWatcher />
     </div>
   );
 };
