@@ -19,11 +19,17 @@
 
 import { queryOptions } from '@tanstack/react-query';
 import { viewClient } from '../clients';
+import { saveBalancesSnapshot } from './balances-snapshot';
 
 export const balancesQueryKey = (account: number) => ['balances', account] as const;
 
-export const fetchBalances = (account: number) =>
-  Array.fromAsync(viewClient.balances({ accountFilter: { account } }));
+export const fetchBalances = async (account: number) => {
+  const balances = await Array.fromAsync(viewClient.balances({ accountFilter: { account } }));
+  // remember them so the next popup open paints these instantly (see
+  // balances-snapshot.ts - session memory only, never disk)
+  void saveBalancesSnapshot(account, balances);
+  return balances;
+};
 
 export const balancesQueryOptions = (account: number) =>
   queryOptions({

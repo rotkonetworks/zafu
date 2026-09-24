@@ -8,6 +8,8 @@ import { announceSidePanelPresence } from '../side-panel-presence';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
 import { AppErrorBoundary, reportRenderError } from '../components/error-boundary';
+import { loadBalancesSnapshot } from '../hooks/balances-snapshot';
+import { balancesQueryKey } from '../hooks/penumbra-balances';
 
 import '@repo/ui/styles/globals.css';
 import '@repo/ui/styles/icons.css';
@@ -23,6 +25,23 @@ installGracefulNetworkErrorHandler();
 const MainPopup = () => {
   const [queryClient] = useState(() => new QueryClient());
   const [wasmReady, setWasmReady] = useState(false);
+  const [cacheSeeded, setCacheSeeded] = useState(false);
+
+  // Seed the balances cache from the session snapshot BEFORE the first route
+  // renders, so home shows the last known balances instead of "0" while the
+  // view service recomputes. `updatedAt` is the snapshot's age, so the query
+  // is stale and refetches in the background right away.
+  useEffect(() => {
+    void loadBalancesSnapshot()
+      .then(snapshot => {
+        if (snapshot) {
+          queryClient.setQueryData(balancesQueryKey(snapshot.account), snapshot.items, {
+            updatedAt: snapshot.at,
+          });
+        }
+      })
+      .finally(() => setCacheSeeded(true));
+  }, [queryClient]);
 
   useEffect(() => {
     // initialize standard wasm module for keys, addresses
@@ -59,7 +78,7 @@ const MainPopup = () => {
     }
   }, []);
 
-  if (!wasmReady) {
+  if (!wasmReady || !cacheSeeded) {
     return (
       <div className='flex h-full items-center justify-center bg-canvas text-fg'>
         <span className='text-data text-fg-dim lowercase'>loading...</span>

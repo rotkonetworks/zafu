@@ -562,7 +562,7 @@ chrome.alarms.onAlarm.addListener(async alarm => {
         console.log(`[idle] auto-locking after ${minutes}m of inactivity`);
         // grace must never outlive the unlock; session storage survives
         // runtime.reload(), so remove it explicitly here too
-        await chrome.storage.session.remove(['passwordKey', 'signGraceUntil']);
+        await chrome.storage.session.remove(['passwordKey', 'signGraceUntil', 'penumbraBalancesSnapshot']);
         chrome.runtime.reload();
       }
     }
