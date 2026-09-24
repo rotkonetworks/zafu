@@ -197,6 +197,44 @@ function useInjectiveInclusion(tx: TxState, setTx: (t: TxState) => void, onSettl
   }, [status, hash, setTx, onSettled]);
 }
 
+/**
+ * A reference to a broadcast tx. Opening a block explorer hands it the user's
+ * IP next to this txid, which links them to the transaction - so the link only
+ * appears when they opted in (settings > privacy > explorer links, off by
+ * default). Otherwise the hash is copyable, to look up privately (e.g. over Tor).
+ */
+const TxRef = ({ hash }: { hash: string }) => {
+  const explorerEnabled = useStore(s => s.privacy.settings.enableExplorerLinks);
+  const [copied, setCopied] = useState(false);
+  if (explorerEnabled) {
+    return (
+      <a
+        href={EXPLORER_TX(hash)}
+        target='_blank'
+        rel='noreferrer noopener'
+        className='text-zigner-gold hover:underline'
+        title='opens injscan.com - it sees your ip and this tx'
+      >
+        view tx
+      </a>
+    );
+  }
+  return (
+    <button
+      type='button'
+      onClick={() => {
+        void navigator.clipboard.writeText(hash);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+      className='text-zigner-gold hover:underline'
+      title={hash}
+    >
+      {copied ? 'copied tx id' : 'copy tx id'}
+    </button>
+  );
+};
+
 export const InjectivePanel = () => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const penumbraAccount = useStore(selectPenumbraAccount);
@@ -720,14 +758,7 @@ export const InjectivePanel = () => {
           <p className='mt-2 text-label text-fg-muted lowercase'>
             submitted - included soon, then IBC-delivered to Penumbra.{' '}
             {shieldTx.hash && (
-              <a
-                href={EXPLORER_TX(shieldTx.hash)}
-                target='_blank'
-                rel='noreferrer'
-                className='text-zigner-gold hover:underline'
-              >
-                view tx
-              </a>
+              <TxRef hash={shieldTx.hash} />
             )}
           </p>
         )}
@@ -735,14 +766,7 @@ export const InjectivePanel = () => {
           <p className='mt-2 text-label text-green-400 lowercase'>
             included on Injective - IBC delivery to Penumbra is in flight.{' '}
             {shieldTx.hash && (
-              <a
-                href={EXPLORER_TX(shieldTx.hash)}
-                target='_blank'
-                rel='noreferrer'
-                className='text-zigner-gold hover:underline'
-              >
-                view tx
-              </a>
+              <TxRef hash={shieldTx.hash} />
             )}
           </p>
         )}
@@ -826,14 +850,7 @@ export const InjectivePanel = () => {
           <p className='mt-2 text-label text-fg-muted lowercase'>
             submitted - waiting for inclusion.{' '}
             {withdrawTx.hash && (
-              <a
-                href={EXPLORER_TX(withdrawTx.hash)}
-                target='_blank'
-                rel='noreferrer'
-                className='text-zigner-gold hover:underline'
-              >
-                view tx
-              </a>
+              <TxRef hash={withdrawTx.hash} />
             )}
           </p>
         )}
@@ -841,14 +858,7 @@ export const InjectivePanel = () => {
           <p className='mt-2 text-label text-green-400 lowercase'>
             sent - included on Injective.{' '}
             {withdrawTx.hash && (
-              <a
-                href={EXPLORER_TX(withdrawTx.hash)}
-                target='_blank'
-                rel='noreferrer'
-                className='text-zigner-gold hover:underline'
-              >
-                view tx
-              </a>
+              <TxRef hash={withdrawTx.hash} />
             )}
           </p>
         )}
