@@ -1,15 +1,17 @@
 {
   "name": "@zafu/zirc",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "license": "MIT",
-  "description": "zirc - IRC-style channels on zid: genesis, a hash-chained log of modes and votes, an electorate you can audit, and hiding that is never deletion",
+  "description": "zirc - IRC-style channels on zid: a relay-blind encrypted room, genesis, a hash-chained log of modes and votes, an electorate you can audit, and hiding that is never deletion",
   "type": "module",
   "keywords": [
-    "irc",
     "channels",
-    "moderation",
-    "votes",
+    "chat",
     "e2ee",
+    "irc",
+    "moderation",
+    "relay",
+    "votes",
     "zafu",
     "zid"
   ],
@@ -26,12 +28,13 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --clean --treeshake",
+    "build": "tsup src/index.ts src/room/index.ts --format esm --dts --clean --treeshake",
     "lint": "eslint \"**/*.ts*\"",
     "test": "vitest run"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./room": "./src/room/index.ts"
   },
   "publishConfig": {
     "access": "public",
@@ -42,6 +45,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
+      },
+      "./room": {
+        "types": "./dist/room/index.d.ts",
+        "import": "./dist/room/index.js"
       }
     }
   },
