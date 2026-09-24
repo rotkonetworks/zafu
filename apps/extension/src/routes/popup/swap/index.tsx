@@ -30,9 +30,12 @@ import { AssetIcon } from '@repo/ui/components/ui/asset-icon';
 import { symbolFromMetadata } from '../../../utils/asset-display';
 import { fromValueView } from '@rotko/penumbra-types/amount';
 import {
-  filterSelectableBalances,
   isFungibleMetadata,
+  positionLabel,
+  selectPickerBuckets,
 } from '../../../utils/is-fungible-asset';
+import { balancesQueryOptions } from '../../../hooks/penumbra-balances';
+import { AssetBucketToggle, type AssetBucket } from '../../../components/asset-bucket-toggle';
 import { cn } from '@repo/ui/lib/utils';
 import { useActiveAddress } from '../../../hooks/use-address';
 import {
@@ -91,6 +94,9 @@ interface InputAsset {
   exponent: number;
   metadata?: Metadata;
 }
+
+/** stable empty list so memo/effect deps don't churn while balances load */
+const EMPTY_BALANCES: BalancesResponse[] = [];
 
 /** output asset from assets list */
 interface OutputAsset {
@@ -1047,28 +1053,28 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
   const penumbraTx = usePenumbraTransaction();
 
   // fetch balances
+  // The ['balances', account] cache holds the RAW list (the home screen
+  // preloads it); `select` buckets it per observer, so the picker filter
+  // applies no matter who populated the cache.
   const {
-    data: balances = [],
+    data: buckets,
     isLoading: balancesLoading,
     refetch: refetchBalances,
   } = useQuery({
-    queryKey: ['balances', penumbraAccount],
+    ...balancesQueryOptions(penumbraAccount),
     staleTime: 30_000,
-    queryFn: async () => {
-      try {
-        const raw = await Array.fromAsync(
-          viewClient.balances({ accountFilter: { account: penumbraAccount } }),
-        );
-        return filterSelectableBalances(raw).sort((a, b) => {
-          const aScore = getMetadataFromBalancesResponse.optional(a)?.priorityScore ?? 0n;
-          const bScore = getMetadataFromBalancesResponse.optional(b)?.priorityScore ?? 0n;
-          return Number(bScore - aScore);
-        });
-      } catch {
-        return [];
-      }
-    },
+    select: selectPickerBuckets,
   });
+  const balances = buckets?.assets ?? EMPTY_BALANCES;
+  const positions = buckets?.positions ?? EMPTY_BALANCES;
+  const [bucketIn, setBucketIn] = useState<AssetBucket>('assets');
+
+  // the picker always reopens on the fungible list
+  useEffect(() => {
+    if (!assetInOpen) {
+      setBucketIn('assets');
+    }
+  }, [assetInOpen]);
 
   const { data: allAssets = [], isLoading: assetsLoading } = useQuery({
     queryKey: ['assets'],
@@ -1335,29 +1341,72 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
           </button>
 
           {assetInOpen && (
-            <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-soft bg-canvas shadow-lg'>
-              {inputAssets.map((item, i) => (
-                <button
-                  key={i}
-                  onClick={() => {
-                    setSelectedIn(item);
-                    setAssetInOpen(false);
-                  }}
-                  className={cn(
-                    'flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-elev-1',
-                    selectedIn === item && 'bg-elev-2',
-                  )}
-                >
-                  <span className='flex items-center gap-1.5'>
-                    <AssetIcon metadata={item.metadata} size='xs' />
-                    {item.symbol}
-                  </span>
-                  <span className='text-fg-muted'>{item.amount}</span>
-                </button>
-              ))}
-              {inputAssets.length === 0 && (
-                <div className='px-3 py-2 text-sm text-fg-muted'>no assets</div>
-              )}
+            <div className='absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-border-soft bg-canvas shadow-lg'>
+              <div className='border-b border-border-soft p-1.5'>
+                <AssetBucketToggle
+                  bucket={bucketIn}
+                  onChange={setBucketIn}
+                  positionCount={positions.length}
+                />
+              </div>
+              <div className='max-h-48 overflow-y-auto'>
+                {bucketIn === 'assets' ? (
+                  <>
+                    {inputAssets.map((item, i) => (
+                      <button
+                        key={i}
+                        onClick={() => {
+                          setSelectedIn(item);
+                          setAssetInOpen(false);
+                        }}
+                        className={cn(
+                          'flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-elev-1',
+                          selectedIn === item && 'bg-elev-2',
+                        )}
+                      >
+                        <span className='flex items-center gap-1.5'>
+                          <AssetIcon metadata={item.metadata} size='xs' />
+                          {item.symbol}
+                        </span>
+                        <span className='text-fg-muted'>{item.amount}</span>
+                      </button>
+                    ))}
+                    {inputAssets.length === 0 && (
+                      <div className='px-3 py-2 text-sm text-fg-muted'>no assets</div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {/* inspect-only: an LP NFT can't be market-swapped */}
+                    {positions.length > 0 && (
+                      <div className='px-3 py-1.5 text-[11px] text-fg-muted'>
+                        positions can&apos;t be swapped - close them from the dex
+                      </div>
+                    )}
+                    {positions.map((balance, i) => {
+                      const meta = getMetadataFromBalancesResponse.optional(balance);
+                      const amt = balance.balanceView ? fromValueView(balance.balanceView) : 0;
+                      return (
+                        <div
+                          key={i}
+                          className='flex w-full items-center justify-between px-3 py-2 text-sm text-fg-muted'
+                        >
+                          <span className='flex min-w-0 items-center gap-1.5'>
+                            <AssetIcon metadata={meta} size='xs' />
+                            <span className='truncate'>
+                              {positionLabel(meta) ?? symbolFromMetadata(meta)}
+                            </span>
+                          </span>
+                          <span>{typeof amt === 'string' ? amt : amt.toString()}</span>
+                        </div>
+                      );
+                    })}
+                    {positions.length === 0 && (
+                      <div className='px-3 py-2 text-sm text-fg-muted'>no open positions</div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           )}
         </div>

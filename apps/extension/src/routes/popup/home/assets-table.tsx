@@ -14,13 +14,14 @@ import { getDisplayDenomFromView, getEquivalentValues } from '@penumbra-zone/get
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
 import { asValueView } from '@penumbra-zone/getters/equivalent-value';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { viewClient, stakeClient, sctClient } from '../../../clients';
+import { stakeClient, sctClient } from '../../../clients';
 import { assetPatterns } from '@rotko/penumbra-types/assets';
 import { fromValueView } from '@rotko/penumbra-types/amount';
 import { filterFungibleBalances } from '../../../utils/is-fungible-asset';
 import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { useSyncProgress } from '../../../hooks/full-sync-height';
+import { balancesQueryOptions } from '../../../hooks/penumbra-balances';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { bech32mIdentityKey, identityKeyFromBech32m } from '@penumbra-zone/bech32m/penumbravalid';
 import { bech32mAssetId } from '@penumbra-zone/bech32m/passet';
@@ -284,14 +285,15 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['balances', account],
-    staleTime: 5_000,
-    // Deliberately no try/catch here. Swallowing the failure made an
+    // Shared RAW balances query (same key + queryFn as the preload, send and
+    // swap); this table filters/sorts in the useMemo below. Deliberately no
+    // try/catch in the shared queryFn: swallowing the failure made an
     // unreachable view service indistinguishable from an empty wallet, so a
     // user who simply lost their connection was shown "no assets yet" and the
     // funding on-ramp - the one thing a wallet must never say, because it reads
     // as "your money is gone". Let the error reach the render below.
-    queryFn: async () => Array.fromAsync(viewClient.balances({ accountFilter: { account } })),
+    ...balancesQueryOptions(account),
+    staleTime: 5_000,
   });
 
   // refetch balances when sync height advances (live update, no flicker)

@@ -20,7 +20,6 @@ import { isActiveIbcChain, getNetwork } from '../../../config/networks';
 import type { NetworkType } from '../../../state/keyring';
 import { selectPenumbraSend } from '../../../state/penumbra-send';
 import { useIbcChains, isValidIbcAddress, type IbcChain } from '../../../hooks/ibc-chains';
-import { viewClient } from '../../../clients';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
 import { getDisplayDenomExponent } from '@penumbra-zone/getters/metadata';
 import { fromValueView } from '@rotko/penumbra-types/amount';
@@ -45,13 +44,24 @@ import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
 import { AssetIcon } from '@repo/ui/components/ui/asset-icon';
 import { symbolFromMetadata } from '../../../utils/asset-display';
-import { filterSelectableBalances } from '../../../utils/is-fungible-asset';
+import {
+  isPositionBalance,
+  positionLabel,
+  selectPickerBuckets,
+  selectWithdrawableBalances,
+} from '../../../utils/is-fungible-asset';
+import { balancesQueryOptions } from '../../../hooks/penumbra-balances';
+import { AssetBucketToggle, type AssetBucket } from '../../../components/asset-bucket-toggle';
+import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { isDedicatedWindow } from '../../../utils/popup-detection';
 import { openInDedicatedWindow } from '../../../utils/navigate';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { RecipientPicker } from '../../../components/recipient-picker';
 import { QrScanner } from '../../../shared/components/qr-scanner';
+
+/** stable empty list so memo/effect deps don't churn while balances load */
+const EMPTY_BALANCES: BalancesResponse[] = [];
 
 /** IBC chain selector dropdown */
 function ChainSelector({
@@ -317,8 +327,8 @@ const bip39Words = (): Set<string> | null => {
     return bip39WordCache;
   }
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports -- keep
-    // this off the module's static import graph; see comment above.
+    // keep this off the module's static import graph; see comment above.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { wordlists } = require('bip39') as { wordlists: Record<string, string[]> };
     bip39WordCache = new Set(wordlists['english'] ?? []);
   } catch {
@@ -1156,29 +1166,27 @@ function PenumbraNativeSend({
 
   const penumbraTx = usePenumbraTransaction();
 
-  // fetch balances
-  const { data: balances = [], isLoading: balancesLoading } = useQuery({
-    queryKey: ['balances', penumbraAccount],
+  // fetch balances. The ['balances', account] cache holds the RAW list (the
+  // home screen preloads it); `select` buckets it per observer, so the picker
+  // filter applies no matter who populated the cache.
+  const { data: buckets, isLoading: balancesLoading } = useQuery({
+    ...balancesQueryOptions(penumbraAccount),
     staleTime: 30_000,
-    queryFn: async () => {
-      try {
-        const raw = await Array.fromAsync(
-          viewClient.balances({ accountFilter: { account: penumbraAccount } }),
-        );
-        // filter non-fungible synthetic tokens (LP NFTs, delegation, etc.) then sort
-        return filterSelectableBalances(raw).sort((a, b) => {
-          const aScore = getMetadataFromBalancesResponse.optional(a)?.priorityScore ?? 0n;
-          const bScore = getMetadataFromBalancesResponse.optional(b)?.priorityScore ?? 0n;
-          return Number(bScore - aScore);
-        });
-      } catch {
-        return [];
-      }
-    },
+    select: selectPickerBuckets,
   });
+  const balances = buckets?.assets ?? EMPTY_BALANCES;
+  const positions = buckets?.positions ?? EMPTY_BALANCES;
+  const [bucket, setBucket] = useState<AssetBucket>('assets');
+
+  // the picker always reopens on the fungible list
+  useEffect(() => {
+    if (!assetOpen) {
+      setBucket('assets');
+    }
+  }, [assetOpen]);
 
   // local state for selected asset (not in zustand due to immer/protobuf incompatibility)
-  const [selectedAsset, setSelectedAsset] = useState<(typeof balances)[0] | undefined>();
+  const [selectedAsset, setSelectedAsset] = useState<BalancesResponse | undefined>();
 
   // auto-select first balance if none selected. If the caller pre-filled an
   // asset (row-level "Send USDC" action on home) prefer the balance whose
@@ -1207,7 +1215,8 @@ function PenumbraNativeSend({
     if (!selectedAsset?.balanceView) {
       return 'asset';
     }
-    return symbolFromMetadata(getMetadataFromBalancesResponse.optional(selectedAsset));
+    const meta = getMetadataFromBalancesResponse.optional(selectedAsset);
+    return positionLabel(meta) ?? symbolFromMetadata(meta);
   }, [selectedAsset]);
 
   const selectedBalance = useMemo(() => {
@@ -1305,38 +1314,61 @@ function PenumbraNativeSend({
           </button>
 
           {assetOpen && (
-            <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-soft bg-canvas shadow-lg'>
-              {balances.map((balance, i) => {
-                if (!balance.balanceView) {
-                  return null;
-                }
-                const meta = getMetadataFromBalancesResponse.optional(balance);
-                const symbol = symbolFromMetadata(meta);
-                const amt = fromValueView(balance.balanceView);
-                const amountStr = typeof amt === 'string' ? amt : amt.toString();
-                return (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      setSelectedAsset(balance);
-                      setAssetOpen(false);
-                    }}
-                    className={cn(
-                      'flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-elev-1',
-                      selectedAsset === balance && 'bg-elev-2',
-                    )}
-                  >
-                    <span className='flex items-center gap-1.5'>
-                      <AssetIcon metadata={meta} size='xs' />
-                      {symbol}
-                    </span>
-                    <span className='text-fg-muted'>{amountStr}</span>
-                  </button>
-                );
-              })}
-              {balances.length === 0 && (
-                <div className='px-3 py-2 text-sm text-fg-muted'>no assets</div>
-              )}
+            <div className='absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-border-soft bg-canvas shadow-lg'>
+              <div className='border-b border-border-soft p-1.5'>
+                <AssetBucketToggle
+                  bucket={bucket}
+                  onChange={setBucket}
+                  positionCount={positions.length}
+                />
+              </div>
+              <div className='max-h-48 overflow-y-auto'>
+                {(bucket === 'assets' ? balances : positions).map((balance, i) => {
+                  if (!balance.balanceView) {
+                    return null;
+                  }
+                  const meta = getMetadataFromBalancesResponse.optional(balance);
+                  const isPosition = bucket === 'positions';
+                  const symbol = isPosition
+                    ? (positionLabel(meta) ?? symbolFromMetadata(meta))
+                    : symbolFromMetadata(meta);
+                  const amt = fromValueView(balance.balanceView);
+                  const amountStr = typeof amt === 'string' ? amt : amt.toString();
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        const wasPosition = !!selectedAsset && isPositionBalance(selectedAsset);
+                        setSelectedAsset(balance);
+                        if (isPosition) {
+                          // a position NFT is indivisible - send the whole thing
+                          sendState.setAmount(amountStr);
+                        } else if (wasPosition) {
+                          // don't carry the position's "1" over to a fungible asset
+                          sendState.setAmount('');
+                        }
+                        setAssetOpen(false);
+                      }}
+                      className={cn(
+                        'flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-elev-1',
+                        selectedAsset === balance && 'bg-elev-2',
+                      )}
+                    >
+                      <span className='flex min-w-0 items-center gap-1.5'>
+                        <AssetIcon metadata={meta} size='xs' />
+                        <span className='truncate'>{symbol}</span>
+                      </span>
+                      <span className='text-fg-muted'>{amountStr}</span>
+                    </button>
+                  );
+                })}
+                {bucket === 'assets' && balances.length === 0 && (
+                  <div className='px-3 py-2 text-sm text-fg-muted'>no assets</div>
+                )}
+                {bucket === 'positions' && positions.length === 0 && (
+                  <div className='px-3 py-2 text-sm text-fg-muted'>no open positions</div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1539,23 +1571,13 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   const penumbraTx = usePenumbraTransaction();
 
   // fetch balances for asset selection
-  const { data: allBalances = [] } = useQuery({
-    queryKey: ['balances', penumbraAccount],
+  // Shared RAW ['balances', account] cache; `select` excludes non-fungible
+  // synthetic tokens (LP NFTs, delegation, etc.) and any balance we can't
+  // classify (no metadata = not withdrawable) per observer.
+  const { data: allBalances = EMPTY_BALANCES } = useQuery({
+    ...balancesQueryOptions(penumbraAccount),
     staleTime: 30_000,
-    queryFn: async () => {
-      try {
-        const raw = await Array.fromAsync(
-          viewClient.balances({ accountFilter: { account: penumbraAccount } }),
-        );
-        // exclude non-fungible synthetic tokens (LP NFTs, delegation, etc.)
-        // and any balance we can't classify (no metadata = not withdrawable)
-        return filterSelectableBalances(raw).filter(
-          b => !!getMetadataFromBalancesResponse.optional(b)?.base,
-        );
-      } catch {
-        return [];
-      }
-    },
+    select: selectWithdrawableBalances,
   });
 
   // Default the destination to Noble - the transparent USDC off-ramp is the

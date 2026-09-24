@@ -5,7 +5,7 @@
 
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { viewClient } from '../clients';
+import { balancesQueryOptions } from './penumbra-balances';
 
 /**
  * preload balances for account 0
@@ -15,17 +15,11 @@ export const usePreloadBalances = (account = 0) => {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    // prefetch in background - don't block render
+    // prefetch in background - don't block render. Seeds the shared RAW
+    // balances cache; consumers filter it via their own `select`.
     void queryClient.prefetchQuery({
-      queryKey: ['balances', account],
+      ...balancesQueryOptions(account),
       staleTime: 30_000, // 30 seconds
-      queryFn: async () => {
-        try {
-          return await Array.fromAsync(viewClient.balances({ accountFilter: { account } }));
-        } catch {
-          return [];
-        }
-      },
     });
   }, [queryClient, account]);
 };
