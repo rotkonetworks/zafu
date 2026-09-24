@@ -24,13 +24,14 @@ import {
   selectActiveZcashWallet,
   selectZcashWallets,
   selectActiveZcashIndex,
+  getActiveWalletJson,
 } from '../../../state/wallets';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { needsLogin, needsOnboard } from '../popup-needs';
 import { PopupPath } from '../paths';
 import { AssetListSkeleton } from '../../../components/primitives/skeleton';
 import { usePreloadBalances } from '../../../hooks/use-preload';
-import { useActiveAddress } from '../../../hooks/use-address';
+import { useActiveAddress, derivePenumbraEphemeralFromFvk } from '../../../hooks/use-address';
 import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
 import { usePolkadotPublicKey } from '../../../hooks/use-polkadot-key';
 import { useCosmosAssets } from '../../../hooks/cosmos-balance';
@@ -221,10 +222,46 @@ export const PopupIndex = () => {
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const zcashWallets = useStore(selectZcashWallets);
   const { address } = useActiveAddress();
+  const penumbraWallet = useStore(getActiveWalletJson);
   const { publicKey: polkadotPublicKey } = usePolkadotPublicKey();
 
   const [copied, setCopied] = useState(false);
   const navigate = useNavigate();
+
+  // Penumbra: never surface the static index address here - it is reusable and
+  // linkable. Derive a fresh ephemeral address (from the FVK, so no unlock is
+  // needed and watch-only works) and rotate it on every copy, mirroring the
+  // Receive screen. zcash keeps its own unified address (rotated via the button).
+  const isPenumbra = activeNetwork === 'penumbra';
+  const [penumbraEphemeral, setPenumbraEphemeral] = useState('');
+  const [ephemeralNonce, setEphemeralNonce] = useState(0);
+  useEffect(() => {
+    if (!isPenumbra || !penumbraWallet?.fullViewingKey) {
+      setPenumbraEphemeral('');
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const addr = await derivePenumbraEphemeralFromFvk(
+          penumbraWallet.fullViewingKey,
+          penumbraAccount,
+        );
+        if (!cancelled) {
+          setPenumbraEphemeral(addr);
+        }
+      } catch (err) {
+        console.error('[home] failed to derive ephemeral penumbra address:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isPenumbra, penumbraWallet?.fullViewingKey, penumbraAccount, ephemeralNonce]);
+
+  // The address shown/copied on home: ephemeral for penumbra, the unified
+  // address for zcash and everything else.
+  const effectiveAddress = isPenumbra ? penumbraEphemeral : address;
 
   // check if we're in side panel or dedicated window (can navigate normally)
   // preload balances in background for instant display
@@ -252,13 +289,18 @@ export const PopupIndex = () => {
   }, []);
 
   const copyAddress = useCallback(() => {
-    if (!address) {
+    if (!effectiveAddress) {
       return;
     }
     setCopied(true);
-    void navigator.clipboard.writeText(address);
+    void navigator.clipboard.writeText(effectiveAddress);
     setTimeout(() => setCopied(false), 1500);
-  }, [address]);
+    // Rotate to a fresh ephemeral for the next share (penumbra only). The copied
+    // one stays valid forever - the FVK detects every ephemeral.
+    if (isPenumbra) {
+      setEphemeralNonce(n => n + 1);
+    }
+  }, [effectiveAddress, isPenumbra]);
 
   // mnemonic vaults derive zcash keys directly — no zcash wallet record
   const walletName =
@@ -280,7 +322,7 @@ export const PopupIndex = () => {
   // nothing is lost by abbreviating here. walletName is the no-address fallback.
   const shortenMiddle = (a: string, head = 14, tail = 8) =>
     a.length <= head + tail + 1 ? a : `${a.slice(0, head)}…${a.slice(-tail)}`;
-  const displayAddress = address ? shortenMiddle(address) : walletName;
+  const displayAddress = effectiveAddress ? shortenMiddle(effectiveAddress) : walletName;
 
   // Backup nudge as a slot candidate: on zcash it competes inside the single
   // message slot (see ZcashContent); on other networks it renders alone.
@@ -326,7 +368,7 @@ export const PopupIndex = () => {
             {/* tiny shielded indicator - new users may not realize their
                 unified/orchard address is privacy-preserving. The shield
                 icon is universally understood; one icon, no extra text. */}
-            {address && address.startsWith('u') && (
+            {effectiveAddress && (isPenumbra || effectiveAddress.startsWith('u')) && (
               <span
                 className='i-ph-shield-check h-3 w-3 text-zigner-gold/70'
                 title='shielded address - senders cannot see your other transactions'
@@ -344,14 +386,14 @@ export const PopupIndex = () => {
                 the trailing icon flips to a check as copy feedback - no label. */}
             <button
               onClick={copyAddress}
-              disabled={!address}
-              title={address ? 'click to copy full address' : undefined}
+              disabled={!effectiveAddress}
+              title={effectiveAddress ? 'click to copy full address' : undefined}
               className='group flex min-w-0 flex-1 items-center gap-1.5 text-xs text-fg transition-colors duration-100 hover:text-fg-high disabled:cursor-not-allowed disabled:opacity-50'
             >
               <span className='min-w-0 flex-1 truncate text-left font-mono leading-snug'>
                 {displayAddress}
               </span>
-              {address && (
+              {effectiveAddress && (
                 <span
                   className={cn(
                     'h-3.5 w-3.5 shrink-0',
@@ -362,7 +404,16 @@ export const PopupIndex = () => {
                 />
               )}
             </button>
-            {address && activeNetwork === 'zcash' && (
+            {effectiveAddress && isPenumbra && (
+              <button
+                onClick={() => setEphemeralNonce(n => n + 1)}
+                className='shrink-0 rounded p-1 text-fg-muted transition-colors hover:bg-fg/5 hover:text-fg-high'
+                title='rotate to a fresh address'
+              >
+                <span className='i-ph-arrows-clockwise h-3.5 w-3.5' />
+              </button>
+            )}
+            {effectiveAddress && activeNetwork === 'zcash' && (
               <button
                 onClick={() => {
                   chrome.storage.local.get('zcashShieldedIndex', r => {
