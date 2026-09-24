@@ -537,6 +537,19 @@ function ReceiveTab({
           >
             {isLoading ? 'generating...' : displayAddress || 'no wallet selected'}
           </code>
+          {showingEphemeral && (
+            <button
+              onClick={() => {
+                setCopied(false);
+                setEphemeralNonce(n => n + 1);
+              }}
+              className='flex shrink-0 items-center text-fg-muted transition-colors hover:text-fg-high'
+              title='rotate to a fresh address'
+              aria-label='rotate to a fresh ephemeral address'
+            >
+              <span className='i-ph-arrows-clockwise h-4 w-4' />
+            </button>
+          )}
           {displayAddress && (
             <button
               onClick={copyAddress}

@@ -193,6 +193,9 @@ export const InjectivePanel = () => {
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [shieldTx, setShieldTx] = useState<TxState>({ status: 'idle' });
   const [withdrawTx, setWithdrawTx] = useState<TxState>({ status: 'idle' });
+  // Withdraw-to-exchange is the secondary flow; keep it collapsed so the default
+  // view is just receive + shield and not a wall of two forms.
+  const [showWithdraw, setShowWithdraw] = useState(false);
 
   const isMnemonic = selectedKeyInfo?.type === 'mnemonic';
 
@@ -360,8 +363,7 @@ export const InjectivePanel = () => {
       <div className='rounded-lg border border-border-soft p-4'>
         <div className='mb-2 text-xs font-medium lowercase'>your Injective address</div>
         <p className='mb-3 text-label text-fg-muted lowercase'>
-          withdraw USDC on Injective from Binance or Kraken to this address, then shield it into
-          Penumbra below. gas is paid in INJ - keep a little INJ here to move USDC.
+          send USDC.inj here from an exchange, then shield it below. keep a little INJ for gas.
         </p>
         {qr && (
           <img src={qr} alt='inj address QR' className='mb-3 h-40 w-40 rounded bg-white p-1' />
@@ -439,9 +441,7 @@ export const InjectivePanel = () => {
             max
           </button>
         </div>
-        <p className='mb-2 text-label text-fg-muted lowercase'>
-          network fee ~{feeDisplay} - paid in INJ, not USDC.
-        </p>
+        <p className='mb-2 text-label text-fg-muted lowercase'>fee ~{feeDisplay}, paid in INJ.</p>
         {shieldExceeds && (
           <p className='mb-2 text-label text-amber-400/90 lowercase'>
             amount is more than your USDC.inj balance.
@@ -494,9 +494,20 @@ export const InjectivePanel = () => {
         )}
       </div>
 
-      {/* withdraw */}
+      {/* withdraw - secondary flow, collapsed by default */}
       <div className='rounded-lg border border-border-soft p-4'>
-        <div className='mb-2 text-xs font-medium lowercase'>withdraw to an exchange</div>
+        <button
+          type='button'
+          onClick={() => setShowWithdraw(v => !v)}
+          className='flex w-full items-center justify-between text-xs font-medium lowercase text-fg-muted transition-colors hover:text-fg-high'
+        >
+          <span>withdraw to an exchange</span>
+          <span
+            className={`i-ph-caret-down h-4 w-4 transition-transform ${showWithdraw ? 'rotate-180' : ''}`}
+          />
+        </button>
+        {showWithdraw && (
+          <div className='mt-3'>
         <input
           type='text'
           value={withdrawAddr}
@@ -510,8 +521,8 @@ export const InjectivePanel = () => {
           </p>
         )}
         <p className='mb-2 text-label leading-snug text-amber-400/90 lowercase'>
-          must be an Injective-network deposit address (inj1...) that the exchange issued for USDC
-          on Injective. sending to an Ethereum or other-network USDC address loses the funds.
+          inj1... only - the exchange's Injective USDC deposit address. a wrong-network address
+          loses the funds.
         </p>
         <div className='relative mb-2'>
           <input
@@ -532,9 +543,7 @@ export const InjectivePanel = () => {
             max
           </button>
         </div>
-        <p className='mb-2 text-label text-fg-muted lowercase'>
-          network fee ~{feeDisplay} - paid in INJ, not USDC.
-        </p>
+        <p className='mb-2 text-label text-fg-muted lowercase'>fee ~{feeDisplay}, paid in INJ.</p>
         {withdrawExceeds && (
           <p className='mb-2 text-label text-amber-400/90 lowercase'>
             amount is more than your USDC.inj balance.
@@ -583,6 +592,8 @@ export const InjectivePanel = () => {
         )}
         {withdrawTx.status === 'error' && (
           <p className='mt-2 text-label text-red-400'>{withdrawTx.error}</p>
+        )}
+          </div>
         )}
       </div>
 
