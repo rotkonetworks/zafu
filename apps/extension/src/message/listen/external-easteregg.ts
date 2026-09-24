@@ -42,7 +42,7 @@ import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/
 import { isPro } from '../../state/license';
 import { isValidExternalSender } from '../../senders/external';
 import { ZAFU_PROTOCOL_VERSION, ZAFU_SUPPORTED_PROTOCOL_VERSIONS } from '@zafu/protocol';
-import { localExtStorage } from '@repo/storage-chrome/local';
+import { getApprovalSurface } from '../../side-panel-pref';
 import { isSidePanelOpen } from '../../side-panel-presence';
 import { SIDE_PANEL_NAVIGATE } from '../side-panel-delivery';
 import { POPUP_WINDOW_HEIGHT, POPUP_WINDOW_WIDTH } from '../../utils/popup-window';
@@ -62,7 +62,7 @@ const openWalletRoute = async (origin: string, route: string): Promise<boolean> 
     .getLastFocused({ windowTypes: ['normal'] })
     .catch(() => undefined);
   const inPanel =
-    (await isSidePanelOpen(win?.id)) && (await localExtStorage.get('approvalsInSidePanel')) !== false;
+    (await isSidePanelOpen(win?.id)) && (await getApprovalSurface()) !== 'popup';
   if (inPanel) {
     await chrome.runtime.sendMessage({ type: SIDE_PANEL_NAVIGATE, route });
     return true;

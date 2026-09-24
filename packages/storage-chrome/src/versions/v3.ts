@@ -77,6 +77,8 @@ type LOCAL = {
   zignerCameraEnabled?: boolean;
   cosmosAddressIndex?: number;
   approvalsInSidePanel?: boolean;
+  /** supersedes approvalsInSidePanel; see apps/extension side-panel-pref.ts */
+  approvalSurface?: 'hybrid' | 'sidebar' | 'popup';
   clearingCache?: boolean;
   pendingClearCache?: ('penumbra' | 'zcash')[];
   activeNetwork?:

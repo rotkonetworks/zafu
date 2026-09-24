@@ -4,7 +4,7 @@ import { sendPopup } from './message/send-popup';
 import { listenReady } from './message/listen-ready';
 import { throwIfNeedsLogin } from './needs-login';
 import { openApprovalPopup } from './utils/popup-window';
-import { localExtStorage } from '@repo/storage-chrome/local';
+import { getApprovalSurface, recentPanelOpenAccepted } from './side-panel-pref';
 import { isSidePanelOpen } from './side-panel-presence';
 import { SIDE_PANEL_DELIVER } from './message/side-panel-delivery';
 import { rescue, detachedContext, UnavailableError, type Service } from '@zafu/service';
@@ -19,9 +19,16 @@ const POPUP_READY_TIMEOUT = 60_000;
 // delivery listener mounts; 6s was too short on a busy machine, the approval
 // then fell back to a popup window while the panel finished opening anyway.
 const SIDE_PANEL_READY_TIMEOUT = 15_000;
-// How long to wait for a panel opened on the connect gesture to appear in
-// getContexts before deciding there is no panel.
+// How long to wait for a panel to appear in getContexts when nothing says one
+// is coming.
 const SIDE_PANEL_REGISTER_WAIT = 2_000;
+// ...and when Chrome accepted the connect gesture's sidePanel.open(), so a
+// panel IS coming and only its cold load is slow. Opening a popup window
+// before this ran out is what gave users a side panel AND a popup.
+const SIDE_PANEL_ACCEPTED_WAIT = 15_000;
+// Sidebar-only mode: how long an approval waits for the user to open the
+// panel from the badged toolbar icon before it is dropped (as a closed popup).
+const SIDEBAR_ONLY_WAIT = 120_000;
 
 /** Poll until a side panel is visible in `winId`, or `ms` elapses. */
 const waitForSidePanel = async (winId: number | undefined, ms: number): Promise<boolean> => {
@@ -219,11 +226,10 @@ const spawnDetachedPopup = async (
     return popupId;
   };
 
-  // default ON: the side panel is the default approval surface. Only an explicit
-  // `false` (user picked "popup window"), or an airgap approval (forceWindow),
-  // opts out. The surface is the wallet's decision, never the app's.
-  const wantSidebar = !forceWindow && (await localExtStorage.get('approvalsInSidePanel')) !== false;
-  if (!wantSidebar) {
+  // The surface is the wallet's decision (user preference), never the app's.
+  // An airgap approval (forceWindow) always gets a window.
+  const surface = forceWindow ? 'popup' : await getApprovalSurface();
+  if (surface === 'popup') {
     return openInWindow(undefined, detachedContext);
   }
 
@@ -243,9 +249,14 @@ const spawnDetachedPopup = async (
     // this runs, but a just-opened panel is not in getContexts yet. Treating that
     // as "closed" sent us to the gesture-less open below (which Chrome refuses)
     // and then to the window fallback - so the user got the side panel AND a
-    // popup. Give a just-opened panel a moment to register first.
+    // popup. Wait for it: long when Chrome accepted that open (the panel is
+    // coming, just slowly), briefly otherwise.
     if (!panelOpen) {
-      panelOpen = await waitForSidePanel(winId, SIDE_PANEL_REGISTER_WAIT);
+      const accepted = await recentPanelOpenAccepted();
+      panelOpen = await waitForSidePanel(
+        winId,
+        accepted ? SIDE_PANEL_ACCEPTED_WAIT : SIDE_PANEL_REGISTER_WAIT,
+      );
     }
     // A closed panel is normally opened on the connect gesture (see
     // content-script-connect). This best-effort open covers an approval that
@@ -269,11 +280,38 @@ const spawnDetachedPopup = async (
     return popupId;
   };
 
-  // Try the side panel; on ANY failure fall back to a popup window. `rescue`
-  // (from @zafu/service) keeps that fallback a value-level combinator instead of
-  // a nested try/catch - the shared services pattern the wallet is standardizing
-  // on for interaction surface routing.
+  // Sidebar only: never a window. When no panel could take the approval, badge
+  // the toolbar icon (its click opens the panel) and deliver once it opens.
+  const waitForUserToOpenPanel: Service<void, string> = async () => {
+    await chrome.action.setBadgeText({ text: '1' }).catch(() => undefined);
+    await chrome.action
+      .setTitle({ title: 'zafu - approval waiting, click to open' })
+      .catch(() => undefined);
+    try {
+      const winId = await chrome.windows
+        .getLastFocused({ windowTypes: ['normal'] })
+        .then(w => w.id)
+        .catch(() => undefined);
+      if (!(await waitForSidePanel(winId, SIDEBAR_ONLY_WAIT))) {
+        throw new UnavailableError('side panel was not opened for the approval');
+      }
+      if (!(await deliverToSidePanel(popupType, popupId).catch(() => false))) {
+        throw new UnavailableError('side panel did not acknowledge the approval');
+      }
+      return popupId;
+    } finally {
+      await chrome.action.setBadgeText({ text: '' }).catch(() => undefined);
+      await chrome.action.setTitle({ title: 'zafu' }).catch(() => undefined);
+    }
+  };
+
+  // Hybrid: try the side panel; on ANY failure fall back to a popup window.
+  // `rescue` (from @zafu/service) keeps that fallback a value-level combinator
+  // instead of a nested try/catch - the shared services pattern the wallet is
+  // standardizing on for interaction surface routing.
   return rescue(deliverToOpenSidePanel(undefined, detachedContext), () =>
-    openInWindow(undefined, detachedContext),
+    surface === 'sidebar'
+      ? waitForUserToOpenPanel(undefined, detachedContext)
+      : openInWindow(undefined, detachedContext),
   );
 };

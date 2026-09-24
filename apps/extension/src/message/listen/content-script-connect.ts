@@ -8,7 +8,7 @@ import { isValidExternalSender, ValidExternalSender } from '../../senders/extern
 import { PopupAlreadyOpenError } from '../../popup';
 import { throwIfNeedsLogin } from '../../needs-login';
 import { sendTab } from '../send/tab';
-import { wantsSidePanelSync } from '../../side-panel-pref';
+import { notePanelOpen, wantsSidePanelSync } from '../../side-panel-pref';
 
 // listen for page requests for approval
 export const contentScriptConnectListener = (
@@ -37,7 +37,9 @@ export const contentScriptConnectListener = (
   // open via exitApprovalSurface). Best-effort: on failure the popup path still
   // runs. Only in side-panel mode - popup mode stays popup.
   if (wantsSidePanelSync() && sender.tab?.id != null && chrome.sidePanel) {
-    void chrome.sidePanel.open({ tabId: sender.tab.id }).catch(() => undefined);
+    const open = chrome.sidePanel.open({ tabId: sender.tab.id });
+    notePanelOpen(open);
+    void open.catch(() => undefined);
   }
 
   void handle(sender).then(respond);

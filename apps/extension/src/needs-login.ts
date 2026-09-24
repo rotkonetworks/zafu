@@ -1,6 +1,6 @@
 import { ConnectError, Code } from '@connectrpc/connect';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
-import { localExtStorage } from '@repo/storage-chrome/local';
+import { getApprovalSurface } from './side-panel-pref';
 import { PopupPath } from './routes/popup/paths';
 import { openApprovalPopup } from './utils/popup-window';
 import { isSidePanelOpen } from './side-panel-presence';
@@ -44,7 +44,7 @@ const focusedWindowId = async (): Promise<number | undefined> => {
 const loginViaSidePanel = async (): Promise<boolean> => {
   const winId = await focusedWindowId();
   const useSidePanel =
-    (await isSidePanelOpen(winId)) && (await localExtStorage.get('approvalsInSidePanel')) !== false;
+    (await isSidePanelOpen(winId)) && (await getApprovalSurface()) !== 'popup';
   if (!useSidePanel) {
     return false;
   }

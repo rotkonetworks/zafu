@@ -3,6 +3,7 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { cn } from '@repo/ui/lib/utils';
 import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
+import { getApprovalSurface, type ApprovalSurface } from '../../../side-panel-pref';
 
 /**
  * appearance — theme and type, applied instantly, persisted locally.
@@ -68,22 +69,40 @@ const applyFont = (font: ZafuFont) => {
 export const SettingsAppearance = () => {
   const [theme, setTheme] = useState<ZafuTheme>('sumi');
   const [font, setFont] = useState<ZafuFont>('iosevka');
-  const [approvalsInSidePanel, setApprovalsInSidePanel] = useState(true);
+  const [approvalSurface, setApprovalSurface] = useState<ApprovalSurface>('hybrid');
 
   useEffect(() => {
     void localExtStorage.get('zafuTheme').then(v => setTheme(v ?? 'sumi'));
     void localExtStorage.get('zafuFont').then(v => setFont(v ?? 'iosevka'));
-    void localExtStorage.get('approvalsInSidePanel').then(v => setApprovalsInSidePanel(v ?? true));
+    void getApprovalSurface().then(setApprovalSurface);
   }, []);
 
-  const pickApprovalMode = (inSidePanel: boolean) => {
-    setApprovalsInSidePanel(inSidePanel);
-    void localExtStorage.set('approvalsInSidePanel', inSidePanel);
+  const pickApprovalMode = (surface: ApprovalSurface) => {
+    setApprovalSurface(surface);
+    void localExtStorage.set('approvalSurface', surface);
+    // keep the legacy flag in step for anything still reading it
+    void localExtStorage.set('approvalsInSidePanel', surface !== 'popup');
   };
 
   const APPROVAL_MODES = [
-    { id: false, name: 'popup window', blurb: 'approvals open in a separate window' },
-    { id: true, name: 'side panel', blurb: 'approvals appear in the panel when open' },
+    {
+      id: 'hybrid',
+      icon: 'i-ph-sidebar-simple',
+      name: 'hybrid',
+      blurb: 'side panel, or a popup window when the panel cannot open',
+    },
+    {
+      id: 'sidebar',
+      icon: 'i-ph-sidebar',
+      name: 'side panel only',
+      blurb: 'never a popup; the toolbar icon shows a badge until you open the panel',
+    },
+    {
+      id: 'popup',
+      icon: 'i-ph-app-window',
+      name: 'popup window',
+      blurb: 'approvals always open in a separate window',
+    },
   ] as const;
 
   const pickTheme = (t: ZafuTheme) => {
@@ -167,25 +186,25 @@ export const SettingsAppearance = () => {
           <div className='flex flex-col gap-2'>
             {APPROVAL_MODES.map(m => (
               <button
-                key={String(m.id)}
+                key={m.id}
                 onClick={() => pickApprovalMode(m.id)}
                 className={cn(
                   'flex w-full items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors',
-                  approvalsInSidePanel === m.id
+                  approvalSurface === m.id
                     ? 'border-zigner-gold/60 bg-elev-1'
                     : 'border-border-soft hover:bg-elev-1',
                 )}
               >
                 <span className='flex h-8 w-8 shrink-0 items-center justify-center rounded-[4px] border border-border-soft bg-elev-2 text-fg'>
                   <span
-                    className={cn(m.id ? 'i-ph-sidebar-simple' : 'i-ph-app-window', 'size-4')}
+                    className={cn(m.icon, 'size-4')}
                   />
                 </span>
                 <span className='flex flex-1 flex-col'>
                   <span className='text-data text-fg lowercase'>{m.name}</span>
                   <span className='text-label text-fg-dim lowercase'>{m.blurb}</span>
                 </span>
-                {approvalsInSidePanel === m.id && (
+                {approvalSurface === m.id && (
                   <span className='i-ph-check size-4 text-zigner-gold' />
                 )}
               </button>
