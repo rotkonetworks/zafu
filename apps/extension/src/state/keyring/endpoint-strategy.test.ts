@@ -48,11 +48,7 @@ describe('endpoint-strategy', () => {
   });
 
   describe('manual strategy', () => {
-    const candidates = [
-      c('a', healthy(50, 0)),
-      c('b', healthy(10, 0)),
-      c('c', healthy(200, 5)),
-    ];
+    const candidates = [c('a', healthy(50, 0)), c('b', healthy(10, 0)), c('c', healthy(200, 5))];
 
     it('rankEndpoints returns [] under manual — no auto ranking', () => {
       expect(rankEndpoints(candidates, 'manual')).toEqual([]);
@@ -86,10 +82,7 @@ describe('endpoint-strategy', () => {
     });
 
     it('drops unhealthy candidates before ranking', () => {
-      const candidates = [
-        c('dead', unhealthy()),
-        c('alive', healthy(200, 0)),
-      ];
+      const candidates = [c('dead', unhealthy()), c('alive', healthy(200, 0))];
       const picked = pickEndpoint(candidates, 'fastest');
       expect(picked?.preset.id).toBe('alive');
     });
@@ -105,10 +98,7 @@ describe('endpoint-strategy', () => {
     // was a no-op. On switching to 'fastest', the panel calls pickEndpoint again
     // with the new strategy — which must now return a real winner.
     it('same candidate set: manual returns null, fastest returns the fastest', () => {
-      const candidates = [
-        c('stale', healthy(800, 0)),
-        c('fresh', healthy(20, 0)),
-      ];
+      const candidates = [c('stale', healthy(800, 0)), c('fresh', healthy(20, 0))];
       expect(pickEndpoint(candidates, 'manual')).toBeNull();
       const picked = pickEndpoint(candidates, 'fastest');
       expect(picked?.preset.id).toBe('fresh');

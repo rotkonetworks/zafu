@@ -83,7 +83,10 @@ describe('injective derivation', () => {
 describe('parseInjectiveRecipient', () => {
   // the same 20-byte account in both forms
   const hex = '0x8c7f1c9e9a0f2d3b4a5c6d7e8f9011223344556a';
-  const inj = toBech32('inj', Uint8Array.from(hex.slice(2).match(/../g)!, h => parseInt(h, 16)));
+  const inj = toBech32(
+    'inj',
+    Uint8Array.from(hex.slice(2).match(/../g)!, h => parseInt(h, 16)),
+  );
 
   it('accepts inj1', () => {
     expect(parseInjectiveRecipient(inj)).toEqual({ ok: true, address: inj, fromHex: false });

@@ -61,8 +61,7 @@ const openWalletRoute = async (origin: string, route: string): Promise<boolean> 
   const win = await chrome.windows
     .getLastFocused({ windowTypes: ['normal'] })
     .catch(() => undefined);
-  const inPanel =
-    (await isSidePanelOpen(win?.id)) && (await getApprovalSurface()) !== 'popup';
+  const inPanel = (await isSidePanelOpen(win?.id)) && (await getApprovalSurface()) !== 'popup';
   if (inPanel) {
     await chrome.runtime.sendMessage({ type: SIDE_PANEL_NAVIGATE, route });
     return true;
@@ -855,9 +854,8 @@ export const externalMessageListener = (
 
           try {
             const hdIndex = await nextHdIndex(chainId);
-            const { deriveFreshChainAddress } = await import(
-              '@repo/wallet/networks/cosmos/fresh-address'
-            );
+            const { deriveFreshChainAddress } =
+              await import('@repo/wallet/networks/cosmos/fresh-address');
             const derived = await deriveFreshChainAddress(chainId, mnemonic, hdIndex);
             sendResponse({ address: derived.address, hdIndex: derived.hdIndex });
           } finally {

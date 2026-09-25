@@ -183,212 +183,206 @@ const NetworkToggles = () => {
 
   return (
     <div ref={containerRef} className='flex flex-col gap-1'>
-        {/* Top-level networks only. Subnetworks like Noble (parent: penumbra)
+      {/* Top-level networks only. Subnetworks like Noble (parent: penumbra)
             are not standalone rows here - Noble's RPC pool is edited under the
             Penumbra panel via NobleEndpointsEditor, so listing it again would
             be a confusing duplicate. */}
-        {getTopLevelNetworks().map(networkId => {
-          const network = NETWORKS[networkId];
-          const isEnabled = enabledNetworks.includes(networkId);
-          const isActive = activeNetwork === networkId;
-          const isExpanded = expandedNetwork === networkId;
-          const state = networkState[networkId as NetworkId];
+      {getTopLevelNetworks().map(networkId => {
+        const network = NETWORKS[networkId];
+        const isEnabled = enabledNetworks.includes(networkId);
+        const isActive = activeNetwork === networkId;
+        const isExpanded = expandedNetwork === networkId;
+        const state = networkState[networkId as NetworkId];
 
-          return (
-            <div
-              key={networkId}
-              className={cn(
-                'rounded-lg border overflow-hidden transition-colors',
-                isActive ? 'border-primary/60' : 'border-border-soft',
-              )}
-            >
-              {/* network row */}
-              <div className='flex items-center p-3'>
-                {/* name — click to set active (if enabled) */}
-                <button
-                  onClick={() => {
-                    if (isEnabled) {
-                      void setActiveNetwork(networkId);
-                    } else {
-                      void handleToggle(networkId);
-                    }
-                  }}
-                  className='flex flex-1 items-center gap-3'
-                >
-                  <div
-                    className={cn(
-                      'h-3 w-3 rounded-full',
-                      isActive && 'ring-2 ring-primary/40 ring-offset-1 ring-offset-background',
-                    )}
-                    style={{ backgroundColor: getColorHex(network.color) }}
-                  />
-                  <span className={cn('font-medium text-sm', !isEnabled && 'text-fg-muted')}>
-                    {network.name}
+        return (
+          <div
+            key={networkId}
+            className={cn(
+              'rounded-lg border overflow-hidden transition-colors',
+              isActive ? 'border-primary/60' : 'border-border-soft',
+            )}
+          >
+            {/* network row */}
+            <div className='flex items-center p-3'>
+              {/* name — click to set active (if enabled) */}
+              <button
+                onClick={() => {
+                  if (isEnabled) {
+                    void setActiveNetwork(networkId);
+                  } else {
+                    void handleToggle(networkId);
+                  }
+                }}
+                className='flex flex-1 items-center gap-3'
+              >
+                <div
+                  className={cn(
+                    'h-3 w-3 rounded-full',
+                    isActive && 'ring-2 ring-primary/40 ring-offset-1 ring-offset-background',
+                  )}
+                  style={{ backgroundColor: getColorHex(network.color) }}
+                />
+                <span className={cn('font-medium text-sm', !isEnabled && 'text-fg-muted')}>
+                  {network.name}
+                </span>
+                {isActive && (
+                  <span className='text-label px-1.5 py-0.5 rounded-md bg-primary/15 text-zigner-gold font-medium leading-none'>
+                    active
                   </span>
-                  {isActive && (
-                    <span className='text-label px-1.5 py-0.5 rounded-md bg-primary/15 text-zigner-gold font-medium leading-none'>
-                      active
-                    </span>
-                  )}
-                  {network.transparent && (
-                    <span className='text-label px-1.5 py-0.5 rounded-md border border-warning/30 bg-warning/10 text-warning font-medium leading-none'>
-                      public
-                    </span>
-                  )}
-                </button>
+                )}
+                {network.transparent && (
+                  <span className='text-label px-1.5 py-0.5 rounded-md border border-warning/30 bg-warning/10 text-warning font-medium leading-none'>
+                    public
+                  </span>
+                )}
+              </button>
 
-                <div className='flex items-center gap-2'>
-                  {/* endpoint expand button — only for enabled networks */}
-                  {isEnabled && (
-                    <button
-                      onClick={() => handleExpandToggle(networkId)}
-                      className={cn(
-                        'p-1 transition-colors',
-                        isExpanded ? 'text-fg' : 'text-fg-muted hover:text-fg-high',
-                      )}
-                      title='configure endpoint'
-                    >
-                      <span className='i-ph-gear-six h-3.5 w-3.5' />
-                    </button>
-                  )}
-
-                  {/* checkbox — toggles enabled/disabled */}
+              <div className='flex items-center gap-2'>
+                {/* endpoint expand button — only for enabled networks */}
+                {isEnabled && (
                   <button
-                    onClick={() => void handleToggle(networkId)}
+                    onClick={() => handleExpandToggle(networkId)}
                     className={cn(
-                      'h-5 w-5 rounded border-2 flex items-center justify-center transition-colors',
-                      isEnabled
-                        ? 'border-zigner-gold bg-zigner-gold'
-                        : 'border-muted-foreground/50',
+                      'p-1 transition-colors',
+                      isExpanded ? 'text-fg' : 'text-fg-muted hover:text-fg-high',
                     )}
+                    title='configure endpoint'
                   >
-                    {isEnabled && (
-                      <span className='i-ph-check h-3 w-3 text-zigner-gold-foreground' />
-                    )}
+                    <span className='i-ph-gear-six h-3.5 w-3.5' />
                   </button>
-                </div>
+                )}
+
+                {/* checkbox — toggles enabled/disabled */}
+                <button
+                  onClick={() => void handleToggle(networkId)}
+                  className={cn(
+                    'h-5 w-5 rounded border-2 flex items-center justify-center transition-colors',
+                    isEnabled ? 'border-zigner-gold bg-zigner-gold' : 'border-muted-foreground/50',
+                  )}
+                >
+                  {isEnabled && <span className='i-ph-check h-3 w-3 text-zigner-gold-foreground' />}
+                </button>
               </div>
+            </div>
 
-              {/* one-line "what is this" copy, so pools read apart at a glance */}
-              {NETWORK_DESCRIPTIONS[networkId] && (
-                <div className='-mt-1 px-3 pb-3'>
-                  <p className='text-label text-fg-dim leading-snug'>
-                    {NETWORK_DESCRIPTIONS[networkId]}
-                  </p>
-                </div>
-              )}
+            {/* one-line "what is this" copy, so pools read apart at a glance */}
+            {NETWORK_DESCRIPTIONS[networkId] && (
+              <div className='-mt-1 px-3 pb-3'>
+                <p className='text-label text-fg-dim leading-snug'>
+                  {NETWORK_DESCRIPTIONS[networkId]}
+                </p>
+              </div>
+            )}
 
-              {/* endpoint config — expanded */}
-              {isExpanded && isEnabled && (
-                <div className='border-t border-border-soft p-3 bg-elev-2/10 flex flex-col gap-3'>
-                  {networkId === 'zcash' ? (
-                    <ZcashEndpointPanel
-                      state={state as ZcashNetworkState | undefined}
+            {/* endpoint config — expanded */}
+            {isExpanded && isEnabled && (
+              <div className='border-t border-border-soft p-3 bg-elev-2/10 flex flex-col gap-3'>
+                {networkId === 'zcash' ? (
+                  <ZcashEndpointPanel
+                    state={state as ZcashNetworkState | undefined}
+                    editingEndpoint={editingEndpoint}
+                    setEditingEndpoint={setEditingEndpoint}
+                    saving={saving}
+                    onPick={async url => {
+                      // Persist via the store action; keep the panel open
+                      // so the user can verify (or pick again) without
+                      // re-expanding the card.
+                      setSaving(true);
+                      try {
+                        await setNetworkEndpoint('zcash', url);
+                        setEditingEndpoint(url);
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}
+                    onSaveCustom={() => void handleSaveEndpoint(networkId)}
+                    onBackendChange={b => void setZcashBackend(b)}
+                    onStrategyChange={st => void setMemoSyncStrategy('zcash', st)}
+                    onMempoolChange={st => void setMempoolWatch('zcash', st)}
+                    onSelectionStrategyChange={s => void setEndpointSelectionStrategy('zcash', s)}
+                  />
+                ) : networkId === 'penumbra' ? (
+                  <div className='flex flex-col gap-3'>
+                    <PenumbraEndpointPanel
+                      state={state as PenumbraNetworkState | undefined}
                       editingEndpoint={editingEndpoint}
                       setEditingEndpoint={setEditingEndpoint}
                       saving={saving}
                       onPick={async url => {
-                        // Persist via the store action; keep the panel open
-                        // so the user can verify (or pick again) without
-                        // re-expanding the card.
                         setSaving(true);
                         try {
-                          await setNetworkEndpoint('zcash', url);
+                          await setNetworkEndpoint('penumbra', url);
                           setEditingEndpoint(url);
                         } finally {
                           setSaving(false);
                         }
                       }}
-                      onSaveCustom={() => void handleSaveEndpoint(networkId)}
-                      onBackendChange={b => void setZcashBackend(b)}
-                      onStrategyChange={st => void setMemoSyncStrategy('zcash', st)}
-                      onMempoolChange={st => void setMempoolWatch('zcash', st)}
+                      onSaveCustom={() => {
+                        // custom url is an explicit override — pin the
+                        // strategy so a later mount doesn't rerank it away.
+                        void setEndpointSelectionStrategy('penumbra', 'manual');
+                        void handleSaveEndpoint('penumbra');
+                      }}
                       onSelectionStrategyChange={s =>
-                        void setEndpointSelectionStrategy('zcash', s)
+                        void setEndpointSelectionStrategy('penumbra', s)
                       }
                     />
-                  ) : networkId === 'penumbra' ? (
-                    <div className='flex flex-col gap-3'>
-                      <PenumbraEndpointPanel
-                        state={state as PenumbraNetworkState | undefined}
-                        editingEndpoint={editingEndpoint}
-                        setEditingEndpoint={setEditingEndpoint}
-                        saving={saving}
-                        onPick={async url => {
-                          setSaving(true);
-                          try {
-                            await setNetworkEndpoint('penumbra', url);
-                            setEditingEndpoint(url);
-                          } finally {
-                            setSaving(false);
-                          }
-                        }}
-                        onSaveCustom={() => {
-                          // custom url is an explicit override — pin the
-                          // strategy so a later mount doesn't rerank it away.
-                          void setEndpointSelectionStrategy('penumbra', 'manual');
-                          void handleSaveEndpoint('penumbra');
-                        }}
-                        onSelectionStrategyChange={s =>
-                          void setEndpointSelectionStrategy('penumbra', s)
-                        }
-                      />
 
-                      {/* Burners: transparent cosmos chains under Penumbra used
+                    {/* Burners: transparent cosmos chains under Penumbra used
                           as bridge off-ramps (Noble for USDC; Injective for
                           onboarding). Managed here in the Penumbra submenu,
                           no second extension needed. */}
-                      <div className='border-t border-border-soft pt-3'>
-                        <div className='text-label text-fg-muted mb-2'>burners</div>
-                        <div className='flex flex-col gap-4'>
-                          <InjectiveEndpointsEditor />
-                          <div className='flex flex-col gap-1.5'>
-                            <NobleEndpointsEditor />
-                            <p className='text-label text-fg-dim lowercase'>
-                              noble is being wound down by circle; new deposits should route through injective.
-                            </p>
-                          </div>
+                    <div className='border-t border-border-soft pt-3'>
+                      <div className='text-label text-fg-muted mb-2'>burners</div>
+                      <div className='flex flex-col gap-4'>
+                        <InjectiveEndpointsEditor />
+                        <div className='flex flex-col gap-1.5'>
+                          <NobleEndpointsEditor />
+                          <p className='text-label text-fg-dim lowercase'>
+                            noble is being wound down by circle; new deposits should route through
+                            injective.
+                          </p>
                         </div>
                       </div>
-                      {/* Cosmos-family dapps (IBC, Keplr-only sites) only
+                    </div>
+                    {/* Cosmos-family dapps (IBC, Keplr-only sites) only
                           make sense to intercept when Penumbra is the
                           active network — lives here rather than in
                           Privacy so it's next to its actual scope. */}
-                      <div className='border-t border-border-soft pt-3'>
-                        <KeplrCompatToggle />
+                    <div className='border-t border-border-soft pt-3'>
+                      <KeplrCompatToggle />
+                    </div>
+                  </div>
+                ) : (
+                  <div className='flex flex-col gap-3'>
+                    <div>
+                      <div className='text-label text-fg-muted mb-1'>endpoint</div>
+                      <div className='flex gap-2'>
+                        <input
+                          type='text'
+                          value={editingEndpoint}
+                          onChange={e => setEditingEndpoint(e.target.value)}
+                          placeholder={state?.endpoint ?? 'https://...'}
+                          className='flex-1 rounded-lg bg-input border border-border-soft px-3 py-2.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
+                        />
+                        <Button
+                          variant='gradient'
+                          size='md'
+                          onClick={() => void handleSaveEndpoint(networkId)}
+                          disabled={saving}
+                          className='text-xs'
+                        >
+                          {saving ? '...' : 'save'}
+                        </Button>
                       </div>
                     </div>
-                  ) : (
-                    <div className='flex flex-col gap-3'>
-                      <div>
-                        <div className='text-label text-fg-muted mb-1'>endpoint</div>
-                        <div className='flex gap-2'>
-                          <input
-                            type='text'
-                            value={editingEndpoint}
-                            onChange={e => setEditingEndpoint(e.target.value)}
-                            placeholder={state?.endpoint ?? 'https://...'}
-                            className='flex-1 rounded-lg bg-input border border-border-soft px-3 py-2.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
-                          />
-                          <Button
-                            variant='gradient'
-                            size='md'
-                            onClick={() => void handleSaveEndpoint(networkId)}
-                            disabled={saving}
-                            className='text-xs'
-                          >
-                            {saving ? '...' : 'save'}
-                          </Button>
-                        </div>
-                      </div>
-
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -636,7 +630,9 @@ const ZcashEndpointPanel = ({
               type='button'
               onClick={() => void handleAutoPick()}
               disabled={testing || autoPicking || isManual}
-              title={isManual ? 'disabled in manual mode — change strategy to auto-pick' : undefined}
+              title={
+                isManual ? 'disabled in manual mode — change strategy to auto-pick' : undefined
+              }
               className='text-label text-zigner-gold hover:underline disabled:opacity-50'
             >
               {autoPicking ? 'picking...' : 'smart pick'}
@@ -914,7 +910,8 @@ const PenumbraEndpointPanel = ({
     // switch them the first time they open it — default to manual if their
     // saved URL isn't the shipped default. Fresh installs (no saved URL yet)
     // land on `fastest` so the smart pick runs on first use.
-    (state?.endpoint && !PENUMBRA_MAINNET_ENDPOINTS.find(p => p.isDefault && p.url === state.endpoint)
+    (state?.endpoint &&
+    !PENUMBRA_MAINNET_ENDPOINTS.find(p => p.isDefault && p.url === state.endpoint)
       ? 'manual'
       : DEFAULT_STRATEGY);
   const [selectionStrategy, setSelectionStrategy] = useState<SelectionStrategy>(initialStrategy);
@@ -989,13 +986,14 @@ const PenumbraEndpointPanel = ({
       // median as the reference tip for behindBy.
       const initial = await probeAllPenumbra(presets);
       const peerTip = peerMedianTipPenumbra(initial);
-      const final = peerTip == null
-        ? initial
-        : initial.map(h => ({
-            ...h,
-            behindBy:
-              h.info && h.info.blockHeight > 0 ? Math.max(0, peerTip - h.info.blockHeight) : null,
-          }));
+      const final =
+        peerTip == null
+          ? initial
+          : initial.map(h => ({
+              ...h,
+              behindBy:
+                h.info && h.info.blockHeight > 0 ? Math.max(0, peerTip - h.info.blockHeight) : null,
+            }));
       const healthMap = new Map<string, EndpointHealth>();
       final.forEach(h => healthMap.set(h.presetId, h));
       setHealths(healthMap);

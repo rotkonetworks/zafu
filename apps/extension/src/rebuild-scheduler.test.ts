@@ -63,12 +63,7 @@ describe('createRebuildScheduler', () => {
   it('coalesces a burst of requests into one rebuild', async () => {
     const t = setup({ walletIndex: 1, run: true });
     t.s.setRunning({ walletIndex: 0, run: true });
-    await Promise.all([
-      t.s.request('a'),
-      t.s.request('b'),
-      t.s.request('c'),
-      t.s.request('d'),
-    ]);
+    await Promise.all([t.s.request('a'), t.s.request('b'), t.s.request('c'), t.s.request('d')]);
     expect(t.rebuilds).toHaveLength(1);
   });
 

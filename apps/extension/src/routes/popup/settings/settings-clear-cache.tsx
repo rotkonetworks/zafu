@@ -139,8 +139,8 @@ export const SettingsClearCache = () => {
           <>
             <div className='flex flex-col gap-3'>
               <p className='text-sm text-fg-muted'>
-                re-fetches your balance and history from the chain. use this if your balance
-                looks out of date or a transaction seems missing.
+                re-fetches your balance and history from the chain. use this if your balance looks
+                out of date or a transaction seems missing.
               </p>
               <p className='flex items-center gap-2 text-xs text-fg-dim'>
                 <span className='i-ph-shield-check size-4' />

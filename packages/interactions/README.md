@@ -26,11 +26,11 @@ const signature = await signing.result; // rejects with whatever the wallet thre
 
 ## API
 
-| | |
-|---|---|
+|                                                      |                                                                                                                   |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `interaction(key, run, { slowAfterMs?, onStatus? })` | Start `run`, or join the interaction already in flight under `key`. Returns `{ key, status, result, subscribe }`. |
-| `interactionKey(...parts)` | A stable key: JSON with sorted object keys, bytes as hex. |
-| `currentInteraction(key)` | The interaction in flight under `key`, if any. |
+| `interactionKey(...parts)`                           | A stable key: JSON with sorted object keys, bytes as hex.                                                         |
+| `currentInteraction(key)`                            | The interaction in flight under `key`, if any.                                                                    |
 
 Dependency-free: no chrome, no DOM.
 

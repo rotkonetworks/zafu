@@ -84,11 +84,11 @@ import {
 
 const FORWARDED_PREFIXES = ['/bucket'];
 
-  /**
-   * @param {Request} request
-   * @param {{ RELAY_URL?: string }} env
-   * @returns {Promise<Response>}
-   */
+/**
+ * @param {Request} request
+ * @param {{ RELAY_URL?: string }} env
+ * @returns {Promise<Response>}
+ */
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);

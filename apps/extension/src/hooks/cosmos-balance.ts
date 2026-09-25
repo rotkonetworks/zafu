@@ -122,32 +122,32 @@ export const useAllCosmosBalances = (accountIndex = 0) => {
         Object.entries(COSMOS_CHAINS)
           .filter(([, config]) => config.keyAlgo !== 'eth_secp256k1')
           .map(async ([chainId, config]) => {
-          try {
-            const address = addresses[chainId as CosmosChainId];
-            const balance = await getBalance(chainId as CosmosChainId, address);
-            return {
-              chainId: chainId as CosmosChainId,
-              address,
-              balance: balance.amount,
-              denom: balance.denom,
-              decimals: config.decimals,
-              symbol: config.symbol,
-              formatted: formatBalance(balance.amount, config.decimals, config.symbol),
-            };
-          } catch (err) {
-            console.warn(`failed to fetch ${chainId} balance:`, err);
-            return {
-              chainId: chainId as CosmosChainId,
-              address: addresses[chainId as CosmosChainId],
-              balance: 0n,
-              denom: config.denom,
-              decimals: config.decimals,
-              symbol: config.symbol,
-              formatted: `0 ${config.symbol}`,
-              error: true,
-            };
-          }
-        }),
+            try {
+              const address = addresses[chainId as CosmosChainId];
+              const balance = await getBalance(chainId as CosmosChainId, address);
+              return {
+                chainId: chainId as CosmosChainId,
+                address,
+                balance: balance.amount,
+                denom: balance.denom,
+                decimals: config.decimals,
+                symbol: config.symbol,
+                formatted: formatBalance(balance.amount, config.decimals, config.symbol),
+              };
+            } catch (err) {
+              console.warn(`failed to fetch ${chainId} balance:`, err);
+              return {
+                chainId: chainId as CosmosChainId,
+                address: addresses[chainId as CosmosChainId],
+                balance: 0n,
+                denom: config.denom,
+                decimals: config.decimals,
+                symbol: config.symbol,
+                formatted: `0 ${config.symbol}`,
+                error: true,
+              };
+            }
+          }),
       );
 
       return Object.fromEntries(results.map(r => [r.chainId, r])) as Record<

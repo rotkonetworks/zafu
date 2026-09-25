@@ -132,8 +132,9 @@ export const createWalletsSlice =
             // stored entries carry an optional vaultId; the in-memory list
             // types it as required. runtime shape is identical (fromJson
             // tolerates a missing vaultId), so mirror the persisted list as-is.
-            state.wallets.all =
-              existingList as WalletJson<'encryptedSeedPhrase' | 'airgapSigner'>[];
+            state.wallets.all = existingList as WalletJson<
+              'encryptedSeedPhrase' | 'airgapSigner'
+            >[];
             state.wallets.activeIndex = dupeIndex;
           });
           await local.set('activeWalletIndex', dupeIndex);

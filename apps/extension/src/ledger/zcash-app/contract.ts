@@ -97,7 +97,11 @@ export class LedgerError extends Error {
 export interface LedgerZcashProtocol {
   /** APDUs that export the UFVK for `accountIndex` (vizor: first + continuation). */
   ufvkPlan(accountIndex: number): ApduCommand[];
-  parseUfvk(responses: Uint8Array[], network: 'main' | 'test', accountIndex: number): LedgerAccountExport;
+  parseUfvk(
+    responses: Uint8Array[],
+    network: 'main' | 'test',
+    accountIndex: number,
+  ): LedgerAccountExport;
   /**
    * Throws LedgerError('unsupported_transaction') when the PCZT exceeds
    * LEDGER_ZCASH_LIMITS or spends legacy Orchard into Ironwood (unsupported by

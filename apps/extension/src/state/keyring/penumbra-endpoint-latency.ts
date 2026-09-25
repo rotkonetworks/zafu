@@ -56,8 +56,7 @@ export async function probePenumbraEndpoint(
         measuredAt: Date.now(),
       };
     }
-    const behindBy =
-      referenceTip != null && height > 0 ? Math.max(0, referenceTip - height) : null;
+    const behindBy = referenceTip != null && height > 0 ? Math.max(0, referenceTip - height) : null;
     return {
       presetId: preset.id,
       latencyMs,

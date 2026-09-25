@@ -179,9 +179,7 @@ const deliverToSidePanel = async (popupType: PopupType, popupId: string): Promis
   const ready = listenReady(popupId, AbortSignal.timeout(SIDE_PANEL_READY_TIMEOUT));
   const route = POPUP_PATHS[popupType];
   const send = () =>
-    chrome.runtime
-      .sendMessage({ type: SIDE_PANEL_DELIVER, popupId, route })
-      .catch(() => undefined); // no receiver yet -> retry below, else ready times out
+    chrome.runtime.sendMessage({ type: SIDE_PANEL_DELIVER, popupId, route }).catch(() => undefined); // no receiver yet -> retry below, else ready times out
   // Send immediately, then retry on an interval until the panel acks (ready) or
   // we time out. An ALREADY-open panel acks on the first send; a FRESHLY-opened
   // panel (see spawnDetachedPopup's sidePanel.open) mounts its delivery listener

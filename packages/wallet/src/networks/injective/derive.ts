@@ -68,7 +68,7 @@ const eip55Valid = (hex: string): boolean => {
   for (let i = 0; i < 40; i++) {
     const nibble = (hash[i >> 1]! >> (i % 2 === 0 ? 4 : 0)) & 0xf;
     const ch = body[i]!;
-    if (/[a-f]/i.test(ch) && (nibble >= 8) !== (ch === ch.toUpperCase())) {
+    if (/[a-f]/i.test(ch) && nibble >= 8 !== (ch === ch.toUpperCase())) {
       return false;
     }
   }

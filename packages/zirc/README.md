@@ -14,19 +14,24 @@ npm install @zafu/zirc
 
 ## The three pieces
 
-| module | what it does |
-| --- | --- |
-| `channel-log` | genesis, the hash-chained log, and **authority verification** |
-| `vote` | the electorate at a log index, and whether a decision passed |
-| *(re-exported from zid)* | `createGroupSession` - round-structured messages over pairwise channels |
+| module                   | what it does                                                            |
+| ------------------------ | ----------------------------------------------------------------------- |
+| `channel-log`            | genesis, the hash-chained log, and **authority verification**           |
+| `vote`                   | the electorate at a log index, and whether a decision passed            |
+| _(re-exported from zid)_ | `createGroupSession` - round-structured messages over pairwise channels |
 
 ## Worked example
 
 ```ts
 import { ed25519 } from '@noble/curves/ed25519';
 import {
-  appendRecord, createGenesis, channelStateAt, decisionView, verifyChain,
-  DEFAULT_RULES, type ChannelSigner,
+  appendRecord,
+  createGenesis,
+  channelStateAt,
+  decisionView,
+  verifyChain,
+  DEFAULT_RULES,
+  type ChannelSigner,
 } from '@zafu/zirc';
 
 const signer = (seed: number): ChannelSigner => {
@@ -50,8 +55,8 @@ const add = async (author, body) => {
 
 await add(founder, { kind: 'mode', mode: '+o', subject: alice.pubkey }); // alice may change modes
 await add(founder, { kind: 'mode', mode: '+v', subject: alice.pubkey }); // ...and may speak and vote
-await add(alice,   { kind: 'open', item: 'item-hash', decision: 'hide' });
-await add(alice,   { kind: 'vote', item: 'item-hash', decision: 'hide' });
+await add(alice, { kind: 'open', item: 'item-hash', decision: 'hide' });
+await add(alice, { kind: 'vote', item: 'item-hash', decision: 'hide' });
 
 await verifyChain({ genesis, records, signer: walletVerifier }); // { ok: true }
 channelStateAt(founder.pubkey, records, records.length);
@@ -71,7 +76,7 @@ decision). The founder is an operator by construction - the genesis is their
 signature - and every other operator exists because an operator granted them.
 
 **The log is hash-chained.** Each record carries the hash of its predecessor, so
-it is tamper-evident and totally ordered *without a server*: indices are the
+it is tamper-evident and totally ordered _without a server_: indices are the
 clock, which is exactly what the vote windows assume. Two parties holding the same
 records compute the same electorate, the same tallies and the same answer to "is
 this hidden".
@@ -103,12 +108,12 @@ vote-based systems lack.
 - **Not a place content lives.** Items are referenced by hash. The content is
   end-to-end encrypted elsewhere and this layer never sees it, which is why a
   `+G`-style word filter can only ever be a client convention: modes that gate
-  *keys* (`+i`, removal) are enforceable, modes that gate *words* are conventions
+  _keys_ (`+i`, removal) are enforceable, modes that gate _words_ are conventions
   clients follow, and a client that ignores `+m` is visibly ignoring it because
   every message is signed.
 - **Not a relay policy layer.** Relays stay dumb and unmoderated by design; a
   relay cannot moderate what it cannot read. See the `minirelay` reference server
-  in the repo for what a relay *can* express (who may use it, which scopes it
+  in the repo for what a relay _can_ express (who may use it, which scopes it
   serves, how fast).
 
 ## Limits, stated plainly

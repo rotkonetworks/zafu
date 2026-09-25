@@ -131,8 +131,8 @@ Clients then take three values, which is exactly what `invite.mjs` prints:
 
 ```ts
 await zid.connect({
-  relayEndpoint: 'https://bouncer.veil.example',   // presence, HTTP
-  relayUrl: 'wss://bouncer.veil.example/ws/zid',   // channels, WebSocket
+  relayEndpoint: 'https://bouncer.veil.example', // presence, HTTP
+  relayUrl: 'wss://bouncer.veil.example/ws/zid', // channels, WebSocket
   relayToken: '<the token you gave them>',
 });
 ```

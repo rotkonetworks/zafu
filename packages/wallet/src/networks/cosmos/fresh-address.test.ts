@@ -47,8 +47,8 @@ describe('deriveFreshChainAddress', () => {
   it('rejects an unknown chainId', async () => {
     // Cast is intentional: the runtime guard exists precisely for the case a
     // caller reaches this via the wire (string chainId), not through the type.
-    await expect(
-      deriveFreshChainAddress('made-up-chain' as never, M, 1),
-    ).rejects.toThrow(/unknown cosmos chain/);
+    await expect(deriveFreshChainAddress('made-up-chain' as never, M, 1)).rejects.toThrow(
+      /unknown cosmos chain/,
+    );
   });
 });

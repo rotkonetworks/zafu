@@ -49,8 +49,16 @@ const balanceOf = (
 // `lpNft:opened(...)` (the display form the user saw flooding the picker).
 const um = balanceOf('upenumbra', 'penumbra', 'UM', 50n);
 const usdc = balanceOf('transfer/channel-2/uusdc', 'transfer/channel-2/usdc', 'USDC', 100n);
-const lpOpen = balanceOf('lpnft_opened_plpid1aaaaaaaaaaaaaaaaaaaaaaaaaaaaz', 'lpNft:opened(plpid1aaaaaaaaaaaaaaaaaaaaaaaaaaaaz)', '');
-const lpClosed = balanceOf('lpnft_closed_plpid1bbbbbbbbbbbbbbbbbbbbbbbbbbbbz', 'lpNft:closed(plpid1bbbbbbbbbbbbbbbbbbbbbbbbbbbbz)', '');
+const lpOpen = balanceOf(
+  'lpnft_opened_plpid1aaaaaaaaaaaaaaaaaaaaaaaaaaaaz',
+  'lpNft:opened(plpid1aaaaaaaaaaaaaaaaaaaaaaaaaaaaz)',
+  '',
+);
+const lpClosed = balanceOf(
+  'lpnft_closed_plpid1bbbbbbbbbbbbbbbbbbbbbbbbbbbbz',
+  'lpNft:closed(plpid1bbbbbbbbbbbbbbbbbbbbbbbbbbbbz)',
+  '',
+);
 const auction = balanceOf('auctionnft_0_pauctid1ccccccccc', 'auctionnft_0_pauctid1ccccccccc', '');
 const unnamed = balanceOf('passet1zzz', '', '');
 const vote = balanceOf('voted_on_7', 'voted_on_7', '');

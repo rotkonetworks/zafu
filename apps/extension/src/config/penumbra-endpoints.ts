@@ -92,18 +92,18 @@ export function findPenumbraPresetByUrl(
 }
 
 export function defaultPenumbraEndpoint(): PenumbraEndpointPreset {
-  return (
-    PENUMBRA_MAINNET_ENDPOINTS.find(p => p.isDefault) ?? PENUMBRA_MAINNET_ENDPOINTS[0]!
-  );
+  return PENUMBRA_MAINNET_ENDPOINTS.find(p => p.isDefault) ?? PENUMBRA_MAINNET_ENDPOINTS[0]!;
 }
 
 /** Turn an operator name into a stable, url-safe id. */
 function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 64) || 'unnamed';
+  return (
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 64) || 'unnamed'
+  );
 }
 
 /**

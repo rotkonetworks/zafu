@@ -43,8 +43,7 @@ const focusedWindowId = async (): Promise<number | undefined> => {
  */
 const loginViaSidePanel = async (): Promise<boolean> => {
   const winId = await focusedWindowId();
-  const useSidePanel =
-    (await isSidePanelOpen(winId)) && (await getApprovalSurface()) !== 'popup';
+  const useSidePanel = (await isSidePanelOpen(winId)) && (await getApprovalSurface()) !== 'popup';
   if (!useSidePanel) {
     return false;
   }

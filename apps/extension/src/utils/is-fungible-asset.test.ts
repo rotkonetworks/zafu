@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  Metadata,
-  ValueView,
-} from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
+import { Metadata, ValueView } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import {
   filterFungibleBalances,
@@ -74,18 +71,11 @@ describe('isFungibleMetadata', () => {
 describe('filterFungibleBalances', () => {
   it('drops every synthetic per-position token and preserves order of the rest', () => {
     const um = balanceOf(meta('upenumbra', 'penumbra', 'UM'));
-    const usdc = balanceOf(
-      meta('transfer/channel-2/uusdc', 'transfer/channel-2/uusdc', 'USDC'),
-    );
+    const usdc = balanceOf(meta('transfer/channel-2/uusdc', 'transfer/channel-2/uusdc', 'USDC'));
     const lp = balanceOf(meta('lpnft_opened_plpid1x', 'lpnft_opened_plpid1x'));
-    const del = balanceOf(
-      meta('udelegation_penumbravalid1x', 'delegation_penumbravalid1x'),
-    );
+    const del = balanceOf(meta('udelegation_penumbravalid1x', 'delegation_penumbravalid1x'));
     const unb = balanceOf(
-      meta(
-        'uunbonding_start_at_10_penumbravalid1x',
-        'unbonding_start_at_10_penumbravalid1x',
-      ),
+      meta('uunbonding_start_at_10_penumbravalid1x', 'unbonding_start_at_10_penumbravalid1x'),
     );
     const vote = balanceOf(meta('voted_on_1', 'voted_on_1'));
     const prop = balanceOf(meta('proposal_1', 'proposal_1'));

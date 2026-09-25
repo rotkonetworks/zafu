@@ -16,11 +16,11 @@ MsgTransfer with `fee.granter = <granter>`, and Injective charges the fee to us.
 
 ## API
 
-| Method | Path | Response |
-|---|---|---|
-| GET | `/health` | `{ ok, granter, grantsToday, dailyGrantCap }` |
-| GET | `/v1/injective/granter` | `{ granter, spendLimit, grantTtlHours }`, or 503 while the granter is below `MIN_GRANTER_BALANCE` - clients probe this to decide whether to offer sponsorship |
-| POST | `/v1/injective/grant` `{ address }` | 200 `{ granter, status: 'granted'\|'exists', txhash?, height?, expiresAt? }` |
+| Method | Path                                | Response                                                                                                                                                      |
+| ------ | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/health`                           | `{ ok, granter, grantsToday, dailyGrantCap }`                                                                                                                 |
+| GET    | `/v1/injective/granter`             | `{ granter, spendLimit, grantTtlHours }`, or 503 while the granter is below `MIN_GRANTER_BALANCE` - clients probe this to decide whether to offer sponsorship |
+| POST   | `/v1/injective/grant` `{ address }` | 200 `{ granter, status: 'granted'\|'exists', txhash?, height?, expiresAt? }`                                                                                  |
 
 `POST /grant` answers only once a new grant is **included in a block**, so the
 client can use it immediately. Errors: 400 bad address, 409 not eligible
@@ -51,23 +51,23 @@ deanonymization. The clients say so where sponsorship is offered.
 
 ## Configuration
 
-| Env | Default | Meaning |
-|---|---|---|
-| `FEEGRANT_MNEMONIC_FILE` | required | path to the granter mnemonic (mode 0600) |
-| `FEEGRANT_ACCOUNT_INDEX` | `0` | HD account index of the granter |
-| `INJECTIVE_LCD` | `https://sentry.lcd.injective.network` | REST endpoint |
-| `HOST` / `PORT` | `127.0.0.1` / `3335` | bind address (keep it behind the proxy) |
-| `TRUST_PROXY` | `0` | `1` = take client IP from `X-Forwarded-For` |
-| `SPEND_LIMIT` | `1000000000000000` | per-grant allowance, base units (0.001 INJ) |
-| `GRANT_TTL_HOURS` | `24` | allowance lifetime |
-| `SHIELD_FEE` | `200000000000000` | largest single client fee; below this a grant counts as exhausted |
-| `MIN_USDC` | `1000000` | minimum USDC.inj held to qualify (1 USDC) |
-| `SPONSOR_BELOW_INJ` | `1000000000000000` | only sponsor addresses holding less INJ than this |
-| `DAILY_GRANT_CAP` | `200` | new grants per UTC day, all clients |
-| `PER_IP_DAILY_GRANT_CAP` | `3` | new grants per IP per UTC day |
-| `PER_IP_REQUESTS_PER_HOUR` | `30` | request rate per IP |
-| `MIN_GRANTER_BALANCE` | `100000000000000000` | stop granting below this (0.1 INJ) |
-| `STATE_FILE` | `./feegrant-state.json` | persisted daily counter |
+| Env                        | Default                                | Meaning                                                           |
+| -------------------------- | -------------------------------------- | ----------------------------------------------------------------- |
+| `FEEGRANT_MNEMONIC_FILE`   | required                               | path to the granter mnemonic (mode 0600)                          |
+| `FEEGRANT_ACCOUNT_INDEX`   | `0`                                    | HD account index of the granter                                   |
+| `INJECTIVE_LCD`            | `https://sentry.lcd.injective.network` | REST endpoint                                                     |
+| `HOST` / `PORT`            | `127.0.0.1` / `3335`                   | bind address (keep it behind the proxy)                           |
+| `TRUST_PROXY`              | `0`                                    | `1` = take client IP from `X-Forwarded-For`                       |
+| `SPEND_LIMIT`              | `1000000000000000`                     | per-grant allowance, base units (0.001 INJ)                       |
+| `GRANT_TTL_HOURS`          | `24`                                   | allowance lifetime                                                |
+| `SHIELD_FEE`               | `200000000000000`                      | largest single client fee; below this a grant counts as exhausted |
+| `MIN_USDC`                 | `1000000`                              | minimum USDC.inj held to qualify (1 USDC)                         |
+| `SPONSOR_BELOW_INJ`        | `1000000000000000`                     | only sponsor addresses holding less INJ than this                 |
+| `DAILY_GRANT_CAP`          | `200`                                  | new grants per UTC day, all clients                               |
+| `PER_IP_DAILY_GRANT_CAP`   | `3`                                    | new grants per IP per UTC day                                     |
+| `PER_IP_REQUESTS_PER_HOUR` | `30`                                   | request rate per IP                                               |
+| `MIN_GRANTER_BALANCE`      | `100000000000000000`                   | stop granting below this (0.1 INJ)                                |
+| `STATE_FILE`               | `./feegrant-state.json`                | persisted daily counter                                           |
 
 Worst-case spend per day with defaults: 200 grants x (0.001 INJ allowance +
 ~0.00004 INJ grant fee) = about 0.21 INJ.
