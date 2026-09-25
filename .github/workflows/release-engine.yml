@@ -195,6 +195,10 @@ jobs:
               --latest --title "beta ${VER}" \
               --target "$GITHUB_SHA" \
               --notes "Rolling beta build. Follows main; version auto-stamped \`<base>.<run_number>\` per build."
+          elif gh release view "$VER" >/dev/null 2>&1; then
+            # A re-run after a later step failed (e.g. the store upload): keep
+            # the existing release and tag, refresh the assets, carry on.
+            gh release upload "$VER" $assets --clobber
           else
             gh release create "$VER" $assets \
               --title "zafu $VER" --generate-notes
