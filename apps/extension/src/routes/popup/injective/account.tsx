@@ -61,6 +61,11 @@ const CFG = COSMOS_CHAINS.injective;
  */
 const GAS_SPONSOR_URL = 'https://sponsor.zafu.pro';
 
+/** how many shown receive indices to remember per vault */
+const MAX_SHOWN_REMEMBERED = 1000;
+/** cadence of the slow sweep over shown addresses outside the hot scan set */
+const COLD_SWEEP_MS = 180_000;
+
 /** One short line per way a pasted recipient can be wrong. */
 const RECIPIENT_PROBLEM: Record<InjectiveRecipientProblem, (prefix?: string) => string> = {
   penumbra: () => 'penumbra address - use shield instead',
@@ -316,16 +321,18 @@ export const InjectiveAccount = () => {
     }
     void (async () => {
       try {
-        const index = await nextHdIndex('injective');
+        // key first: allocating while locked would burn an index nobody sees
         const mnemonic = await getMnemonic(keyId);
         if (!mnemonic || cancelled) {
           return;
         }
+        const index = await nextHdIndex('injective');
         const address = await deriveInjectiveAddress(mnemonic, index);
         if (cancelled) {
           return;
         }
         setReceive({ index, address });
+        void rememberShown(keyId, index);
         void queryClient.invalidateQueries({ queryKey: ['injective-hd-peek'] });
       } catch (err) {
         console.error('[injective] failed to allocate a receive address:', err);
@@ -335,6 +342,44 @@ export const InjectiveAccount = () => {
       cancelled = true;
     };
   }, [isMnemonic, selectedKeyInfo?.id, getMnemonic, receiveNonce, queryClient]);
+
+  // Every index ever shown as a receive address, per vault (numbers only - no
+  // addresses on disk). An exchange often keeps paying a whitelisted address
+  // long after we rotated past it; those are swept too (see coldQuery), so
+  // funds sent to any address we ever showed always become visible.
+  const shownKeyFor = (keyId: string) => `injectiveShownIndices:${keyId}`;
+  const [shownIndices, setShownIndices] = useState<number[]>([]);
+  const rememberShown = useCallback(async (keyId: string, index: number) => {
+    const key = shownKeyFor(keyId);
+    const prev = ((await chrome.storage.local.get(key))[key] as number[] | undefined) ?? [];
+    if (prev.includes(index)) {
+      return;
+    }
+    const next = [...prev, index].slice(-MAX_SHOWN_REMEMBERED);
+    await chrome.storage.local.set({ [key]: next });
+    setShownIndices(next);
+  }, []);
+  useEffect(() => {
+    const keyId = selectedKeyInfo?.id;
+    if (!keyId) {
+      setShownIndices([]);
+      return;
+    }
+    const key = shownKeyFor(keyId);
+    void (async () => {
+      const stored = (await chrome.storage.local.get(key))[key] as number[] | undefined;
+      if (stored) {
+        setShownIndices(stored);
+        return;
+      }
+      // First run with this list: every index handed out so far (receive
+      // addresses and dapp burners share the counter) was potentially shown.
+      const highest = await peekHdIndex('injective');
+      const seeded = Array.from({ length: highest }, (_, i) => i + 1).slice(-MAX_SHOWN_REMEMBERED);
+      await chrome.storage.local.set({ [key]: seeded });
+      setShownIndices(seeded);
+    })().catch(() => undefined);
+  }, [selectedKeyInfo?.id]);
 
   // Indices that have ever held funds, per vault, so an old receive address
   // that rotated out of the recent scan window keeps being watched.
@@ -462,6 +507,58 @@ export const InjectiveAccount = () => {
       void chrome.storage.local.set({ [fundedKey]: merged }).catch(() => undefined);
     }
   }, [rows, fundedKey, fundedIndices]);
+  // Slow sweep of every shown address outside the hot scan set. Anything
+  // holding funds is promoted to the funded set, which the 15s poll watches.
+  const hotKey = scanKey;
+  const coldIndices = useMemo(() => {
+    const hot = new Set([0, ...(hotKey ? hotKey.split(',').map(Number) : [])]);
+    return shownIndices.filter(i => !hot.has(i));
+  }, [hotKey, shownIndices]);
+  const coldQuery = useQuery({
+    queryKey: ['injective-cold-sweep', selectedKeyInfo?.id, coldIndices.join(',')],
+    enabled: isMnemonic && coldIndices.length > 0,
+    staleTime: COLD_SWEEP_MS - 10_000,
+    refetchInterval: COLD_SWEEP_MS,
+    queryFn: async (): Promise<number[]> => {
+      const keyId = selectedKeyInfo?.id;
+      const mnemonic = keyId ? await getMnemonic(keyId) : undefined;
+      if (!mnemonic) {
+        return [];
+      }
+      const cache = burnerCache.current.map;
+      const found: number[] = [];
+      for (const i of coldIndices) {
+        let address = cache.get(i);
+        if (!address) {
+          address = await deriveInjectiveAddress(mnemonic, i);
+          cache.set(i, address);
+        }
+        try {
+          const b = await queryInjectiveBalances(CFG.restEndpoint, address, CFG.denom);
+          if (b.inj > 0n || b.usdc > 0n || (b.all ?? []).some(x => x.amount > 0n)) {
+            found.push(i);
+          }
+        } catch {
+          // endpoint hiccup: the next sweep retries this index
+        }
+        // one at a time, yielding: this is a background chore
+        await new Promise<void>(resolve => setTimeout(resolve, 50));
+      }
+      return found;
+    },
+  });
+  useEffect(() => {
+    const found = coldQuery.data;
+    if (!fundedKey || !found?.length) {
+      return;
+    }
+    const merged = [...new Set([...fundedIndices, ...found])].sort((a, b) => a - b);
+    if (merged.length !== fundedIndices.length) {
+      setFundedIndices(merged);
+      void chrome.storage.local.set({ [fundedKey]: merged }).catch(() => undefined);
+    }
+  }, [coldQuery.data, fundedKey, fundedIndices]);
+
   const totals = useMemo(
     () =>
       totalHeld(
