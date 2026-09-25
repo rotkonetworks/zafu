@@ -64,6 +64,13 @@ const PRIVACY_ROWS: readonly PrivacyRow[] = [
     offLabel: 'copy-only - nothing leaves the wallet',
     visible: n => n === 'zcash',
   },
+  {
+    key: 'enablePaymentRequests',
+    label: 'payment requests (zip 321)',
+    onLabel: 'zcash: links and QRs fill in amount and memo',
+    offLabel: 'zcash: links fill in the address only',
+    visible: n => n === 'zcash',
+  },
 ];
 
 function Row({

@@ -67,6 +67,7 @@ import { frostSelfCustodySigner } from '../../../signing/frost-signer';
 import { isPopup } from '../../../utils/popup-detection';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
+import { formatZecAmount, isZip321Uri, parseZip321 } from '@repo/wallet/networks/zcash/zip321';
 import { isZcashSignatureQR, parseZcashSignatureResponse, bytesToHex } from '@repo/wallet/networks'; // self-contained 4-step zigner-mediated multisig sign
 
 import { unwrapCborSinglePczt, parsePreludeSinglePcztResponse } from './zcash-send-cbor-helpers';
@@ -263,6 +264,67 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const [recipient, setRecipient] = useState(prefill?.recipient ?? '');
   const [amount, setAmount] = useState(prefill?.amount ?? '');
   const [memo, setMemo] = useState(prefill?.memo ?? '');
+
+  // ZIP 321: a scanned or pasted `zcash:` link fills the form for review
+  // (address only when payment requests are switched off in privacy settings)
+  const paymentRequests = useStore(s => s.privacy.settings.enablePaymentRequests);
+  const [requestNote, setRequestNote] = useState<string>();
+  const [requestError, setRequestError] = useState<string>();
+  // which fields the last request filled: a new request clears those it
+  // doesn't set, but never touches what the user typed
+  const filledByRequest = useRef({ amount: false, memo: false });
+  const applyZcashUri = useCallback(
+    (text: string): boolean => {
+      if (!isZip321Uri(text)) {
+        return false;
+      }
+      setRequestNote(undefined);
+      setRequestError(undefined);
+      if (!paymentRequests) {
+        setRecipient(text.trim().slice('zcash:'.length).split('?')[0] ?? '');
+        return true;
+      }
+      const r = parseZip321(text);
+      if (!r.ok) {
+        setRequestError(`not a valid payment request: ${r.error}`);
+        return true;
+      }
+      const [p, ...more] = r.payments;
+      if (!p || more.length > 0) {
+        setRequestError(
+          `this request pays ${r.payments.length} addresses - zafu pays one at a time`,
+        );
+        return true;
+      }
+      setRecipient(p.address);
+      const filled = filledByRequest.current;
+      if (p.amountZat !== undefined) {
+        setAmount(formatZecAmount(p.amountZat));
+      } else if (filled.amount) {
+        setAmount('');
+      }
+      if (p.memo !== undefined) {
+        setMemo(p.memo);
+      } else if (filled.memo) {
+        setMemo('');
+      }
+      filledByRequest.current = {
+        amount: p.amountZat !== undefined,
+        memo: p.memo !== undefined,
+      };
+      const note = [p.label, p.message].filter(Boolean).join(' - ');
+      setRequestNote(note || undefined);
+      return true;
+    },
+    [paymentRequests],
+  );
+  // a `zcash:` link handed in as the prefill recipient (inbox, deep links)
+  useEffect(() => {
+    if (prefill?.recipient) {
+      applyZcashUri(prefill.recipient);
+    }
+    // once, on open
+  }, []);
   const [formError, setFormError] = useState<string | null>(null);
   // legacy single-QR signing path (kept for non-PCZT consumers); the PCZT
   // path uses pcztSignFrames + AnimatedQrDisplay below. Once every flow is
@@ -1301,7 +1363,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     type='text'
                     placeholder='u1... / t1...'
                     value={recipient}
-                    onChange={e => setRecipient(e.target.value)}
+                    onChange={e => {
+                      if (!applyZcashUri(e.target.value)) {
+                        setRecipient(e.target.value);
+                      }
+                    }}
                     className='flex-1 rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none'
                   />
                   <button
@@ -1313,6 +1379,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     <span className='i-ph-scan h-4 w-4' />
                   </button>
                 </div>
+                {requestError && <p className='mt-1 text-xs text-red-400'>{requestError}</p>}
+                {requestNote && (
+                  <p className='mt-1 truncate text-xs text-fg-muted' title={requestNote}>
+                    request: {requestNote}
+                  </p>
+                )}
                 <ZcashMeRecipientResolver
                   input={recipient}
                   onResolve={p => {
@@ -1328,8 +1400,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 {showQrScanner && (
                   <QrScanner
                     onScan={data => {
-                      const addr = data.startsWith('zcash:') ? data.slice(6).split('?')[0]! : data;
-                      setRecipient(addr);
+                      if (!applyZcashUri(data)) {
+                        setRecipient(data);
+                      }
                       setShowQrScanner(false);
                     }}
                     onClose={() => setShowQrScanner(false)}
@@ -1365,7 +1438,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     type='number'
                     placeholder='0.0'
                     value={amount}
-                    onChange={e => setAmount(e.target.value)}
+                    onChange={e => {
+                      filledByRequest.current.amount = false;
+                      setAmount(e.target.value);
+                    }}
                     step='0.0001'
                     min='0'
                     className='flex-1 rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none'
@@ -1375,9 +1451,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     // MAX is the amount a transaction can actually be BUILT
                     // for: every note in the pool, minus the ZIP-317 fee that
                     // transaction really pays. Not balance minus a flat 10,000.
-                    onClick={() =>
-                      setAmount(maxSend.amountZat > 0n ? fmtZecShort(maxSend.amountZat) : '0')
-                    }
+                    onClick={() => {
+                      filledByRequest.current.amount = false;
+                      setAmount(maxSend.amountZat > 0n ? fmtZecShort(maxSend.amountZat) : '0');
+                    }}
                     disabled={maxSend.amountZat <= 0n}
                     className='shrink-0 h-[42px] rounded-lg border border-border-soft bg-input px-3 text-xs text-fg-muted hover:text-fg-high transition-colors disabled:opacity-50'
                   >
@@ -1423,7 +1500,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   type='text'
                   placeholder='private message'
                   value={memo}
-                  onChange={e => setMemo(e.target.value)}
+                  onChange={e => {
+                    filledByRequest.current.memo = false;
+                    setMemo(e.target.value);
+                  }}
                   maxLength={512}
                   className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none'
                 />
@@ -1949,8 +2029,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         <span className='i-ph-eye size-6 text-fg-muted' />
         <p className='text-sm text-fg-high lowercase'>this wallet is a viewing key</p>
         <p className='text-xs text-fg-muted lowercase'>
-          it can see this wallet&apos;s transactions but cannot spend. send from the wallet
-          that holds the keys.
+          it can see this wallet&apos;s transactions but cannot spend. send from the wallet that
+          holds the keys.
         </p>
         <Button variant='secondary' onClick={handleClose}>
           back

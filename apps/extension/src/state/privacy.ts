@@ -107,6 +107,14 @@ export interface PrivacySettings {
   enableExplorerLinks: boolean;
 
   /**
+   * ZIP 321 payment requests: a scanned or pasted `zcash:` link fills in the
+   * recipient, amount and memo for review, and Receive can put an amount in
+   * its QR. Parsed locally - nothing is fetched.
+   * when false: a `zcash:` link only fills in the address.
+   */
+  enablePaymentRequests: boolean;
+
+  /**
    * SOCKS5 proxy for all extension network traffic.
    * routes zidecar, license, relay, and rpc connections through proxy.
    * hides IP from all servers. uses chrome.proxy API.
@@ -186,6 +194,7 @@ export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   enableBackgroundSync: false,
   enablePriceFetching: false,
   enableExplorerLinks: false,
+  enablePaymentRequests: true,
   proxy: { enabled: false, host: '', port: 1080 },
   enableIdentity: true,
   hideBalances: false,

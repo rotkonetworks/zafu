@@ -29,6 +29,7 @@ import {
   deriveZcashTransparentFromUfvk,
 } from '../../../hooks/use-address';
 import { QrCode } from '../../../components/qr-code';
+import { buildZip321, parseZecAmount } from '@repo/wallet/networks/zcash/zip321';
 import { TransparentReceive } from './transparent-receive';
 import { getActiveIbcSubnetworks } from '../../../config/networks';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
@@ -349,6 +350,24 @@ function ReceiveTab({
   // it keeps the badge. Only transparent zcash (t1/t3) is public and drops it.
   const isShielded = (isZcash && !transparent && displayAddress?.startsWith('u')) || isPenumbra;
 
+  // ZIP 321: ask for an amount (and a memo, when shielded) in the QR itself
+  const paymentRequests = useStore(s => s.privacy.settings.enablePaymentRequests);
+  const [showRequest, setShowRequest] = useState(false);
+  const [requestAmount, setRequestAmount] = useState('');
+  const [requestMemo, setRequestMemo] = useState('');
+  const [linkCopied, setLinkCopied] = useState(false);
+  const requestZat = parseZecAmount(requestAmount.trim());
+  const amountInvalid = requestAmount.trim() !== '' && requestZat === undefined;
+  const requestUri =
+    isZcash && paymentRequests && showRequest && displayAddress && (requestZat || requestMemo)
+      ? buildZip321({
+          address: displayAddress,
+          amountZat: requestZat,
+          memo: isShielded ? requestMemo.trim() || undefined : undefined,
+        })
+      : undefined;
+  const qrValue = requestUri ?? displayAddress;
+
   return (
     <div className='flex flex-col items-center gap-4'>
       <div className='border border-border-soft'>
@@ -357,7 +376,11 @@ function ReceiveTab({
           // address derives.
           <div className='h-48 w-48 animate-pulse bg-elev-2/40' />
         ) : displayAddress ? (
-          <QrCode value={displayAddress} size={192} label='address QR' />
+          <QrCode
+            value={qrValue ?? displayAddress}
+            size={192}
+            label={requestUri ? 'payment request QR' : 'address QR'}
+          />
         ) : (
           <div className='flex h-48 w-48 items-center justify-center'>
             <span className='text-label text-fg-dim lowercase'>no wallet</span>
@@ -388,6 +411,71 @@ function ReceiveTab({
           </span>
         )}
       </div>
+
+      {isZcash && paymentRequests && displayAddress && (
+        <div className='flex w-full flex-col gap-1.5'>
+          {!showRequest ? (
+            <button
+              type='button'
+              onClick={() => setShowRequest(true)}
+              className='self-center text-xs text-fg-muted hover:text-fg-high lowercase'
+            >
+              request an amount
+            </button>
+          ) : (
+            <>
+              <div className='flex gap-1.5'>
+                <input
+                  type='text'
+                  inputMode='decimal'
+                  value={requestAmount}
+                  onChange={e => setRequestAmount(e.target.value)}
+                  placeholder='ZEC amount'
+                  aria-label='requested amount'
+                  className='min-w-0 flex-1 border border-border-soft bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none'
+                />
+                <button
+                  type='button'
+                  onClick={() => {
+                    setShowRequest(false);
+                    setRequestAmount('');
+                    setRequestMemo('');
+                  }}
+                  className='shrink-0 px-2 text-xs text-fg-muted hover:text-fg-high'
+                  aria-label='remove request'
+                >
+                  <span className='i-ph-x h-3.5 w-3.5' />
+                </button>
+              </div>
+              {isShielded && (
+                <input
+                  type='text'
+                  value={requestMemo}
+                  onChange={e => setRequestMemo(e.target.value)}
+                  maxLength={512}
+                  placeholder='memo (optional)'
+                  aria-label='requested memo'
+                  className='border border-border-soft bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none'
+                />
+              )}
+              {amountInvalid && <p className='text-xs text-red-400'>up to 8 decimals</p>}
+              {requestUri && (
+                <button
+                  type='button'
+                  onClick={() => {
+                    void navigator.clipboard.writeText(requestUri);
+                    setLinkCopied(true);
+                    setTimeout(() => setLinkCopied(false), 1500);
+                  }}
+                  className='self-center text-xs text-zigner-gold hover:underline'
+                >
+                  {linkCopied ? 'copied' : 'copy payment link'}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* zcash: shielded is the default; transparent is a secondary tab */}
       {isZcash && canTransparent && (
