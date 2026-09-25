@@ -49,7 +49,8 @@ export const InFlightCard = () => {
             }`}
           />
           <div className='min-w-0 flex-1'>
-            <p className='truncate text-xs text-fg-high lowercase'>{op.label}</p>
+            {/* no lowercase: labels carry asset symbols (USDC.inj) */}
+            <p className='truncate text-xs text-fg-high'>{op.label}</p>
             <p
               className={`truncate text-label lowercase ${
                 op.status === 'failed' || op.status === 'unknown' ? 'text-hanko' : 'text-fg-muted'
