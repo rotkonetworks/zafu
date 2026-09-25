@@ -1,3 +1,4 @@
+import { INJECTIVE_STABLE_DENOMS } from '@repo/wallet/networks/injective/feegrant';
 import { readFileSync } from 'node:fs';
 
 /**
@@ -23,7 +24,12 @@ export interface Config {
   shieldFee: bigint;
 
   usdcDenom: string;
-  /** Only sponsor addresses that already hold at least this much USDC.inj. */
+  /**
+   * Only sponsor addresses holding at least `minUsdc` (base units, all 6-dec)
+   * of one of these Penumbra-accepted stablecoins. Stablecoins only: an
+   * unpriced token would let anyone qualify with dust across many addresses.
+   */
+  stableDenoms: string[];
   minUsdc: bigint;
   /** Only sponsor addresses holding less INJ than this (others can pay their own gas). */
   sponsorBelowInj: bigint;
@@ -85,7 +91,11 @@ export const loadConfig = (): Config => {
     shieldFee: big('SHIELD_FEE', '200000000000000'), // 0.0002 INJ (400k gas @ 5e8)
 
     usdcDenom: str('USDC_DENOM', 'erc20:0xa00C59fF5a080D2b954d0c75e46E22a0c371235a'),
-    minUsdc: big('MIN_USDC', '1000000'), // 1 USDC.inj
+    stableDenoms: str('STABLE_DENOMS', INJECTIVE_STABLE_DENOMS.join(','))
+      .split(',')
+      .map(d => d.trim().toLowerCase())
+      .filter(Boolean),
+    minUsdc: big('MIN_USDC', '1000000'), // 1 unit of a stablecoin
     sponsorBelowInj: big('SPONSOR_BELOW_INJ', '1000000000000000'), // 0.001 INJ
 
     dailyGrantCap: int('DAILY_GRANT_CAP', 200),

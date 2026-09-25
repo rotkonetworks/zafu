@@ -160,7 +160,7 @@ const main = async () => {
             {
               config,
               granterAddress: granter.address,
-              ensureGrant: g => granter.ensureGrant(g),
+              ensureGrant: (g, t) => granter.ensureGrant(g, t),
               admit: ip => limits.admit(ip),
               recordGrant: ip => limits.recordGrant(ip),
               balances,

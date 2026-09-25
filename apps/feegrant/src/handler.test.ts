@@ -15,6 +15,7 @@ const deps = (over: Partial<HandlerDeps> = {}): HandlerDeps => ({
     sponsorBelowInj: 1_000_000_000_000_000n,
     minGranterBalance: 100_000_000_000_000_000n,
     usdcDenom: 'erc20:x',
+    stableDenoms: ['erc20:x', 'peggy0xusdt'],
   },
   granterAddress: GRANTER,
   ensureGrant: () =>
@@ -169,5 +170,67 @@ describe('Limits', () => {
     expect(restarted.admit('z')).toBe('daily_budget');
     now = new Date('2026-09-25T00:00:01Z');
     expect(restarted.admit('z')).toBeNull();
+  });
+
+  it('qualifies an address holding another stablecoin (USDT) instead of USDC.inj', async () => {
+    const res = await handleGrant(
+      deps({
+        balances: a =>
+          Promise.resolve(
+            a === GRANTER
+              ? { usdc: 0n, inj: 10n ** 18n }
+              : { usdc: 0n, inj: 0n, all: [{ denom: 'PEGGY0xUSDT', amount: 2_000_000n }] },
+          ),
+      }),
+      'ip',
+      { address: GRANTEE },
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('does not qualify dust of a non-stable token', async () => {
+    const res = await handleGrant(
+      deps({
+        balances: a =>
+          Promise.resolve(
+            a === GRANTER
+              ? { usdc: 0n, inj: 10n ** 18n }
+              : { usdc: 0n, inj: 0n, all: [{ denom: 'factory/x/meme', amount: 10n ** 30n }] },
+          ),
+      }),
+      'ip',
+      { address: GRANTEE },
+    );
+    expect(res).toMatchObject({ status: 409, body: { code: 'no_usdc' } });
+  });
+
+  it('asks for a send-capable grant when the purpose is send', async () => {
+    let asked = '';
+    await handleGrant(
+      deps({
+        ensureGrant: (_g, t) => {
+          asked = t;
+          return Promise.resolve({ status: 'exists' });
+        },
+      }),
+      'ip',
+      { address: GRANTEE, purpose: 'send' },
+    );
+    expect(asked).toBe('/cosmos.bank.v1beta1.MsgSend');
+  });
+
+  it('defaults to a shield (IBC transfer) grant', async () => {
+    let asked = '';
+    await handleGrant(
+      deps({
+        ensureGrant: (_g, t) => {
+          asked = t;
+          return Promise.resolve({ status: 'exists' });
+        },
+      }),
+      'ip',
+      { address: GRANTEE },
+    );
+    expect(asked).toBe('/ibc.applications.transfer.v1.MsgTransfer');
   });
 });

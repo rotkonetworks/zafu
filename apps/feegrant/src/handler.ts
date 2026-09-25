@@ -1,13 +1,21 @@
 import { isValidInjectiveAddress } from '@repo/wallet/networks/injective/derive';
 import type { InjectiveBalances } from '@repo/wallet/networks/injective/client';
+import {
+  MSG_SEND_TYPE_URL,
+  MSG_TRANSFER_TYPE_URL,
+  holdsSponsorStable,
+} from '@repo/wallet/networks/injective/feegrant';
 import type { Config } from './config';
 import { GrantError, type GrantOutcome } from './granter';
 import type { LimitDenial } from './limits';
 
 export interface HandlerDeps {
-  config: Pick<Config, 'minUsdc' | 'sponsorBelowInj' | 'minGranterBalance' | 'usdcDenom'>;
+  config: Pick<
+    Config,
+    'minUsdc' | 'sponsorBelowInj' | 'minGranterBalance' | 'usdcDenom' | 'stableDenoms'
+  >;
   granterAddress: string;
-  ensureGrant: (grantee: string) => Promise<GrantOutcome>;
+  ensureGrant: (grantee: string, messageType: string) => Promise<GrantOutcome>;
   admit: (ip: string) => LimitDenial | null;
   recordGrant: (ip: string) => void;
   balances: (address: string) => Promise<InjectiveBalances>;
@@ -39,6 +47,11 @@ export const handleGrant = async (
     typeof body === 'object' && body !== null && 'address' in body
       ? String((body as { address: unknown }).address).trim()
       : '';
+  const purpose =
+    typeof body === 'object' && body !== null && 'purpose' in body
+      ? String((body as { purpose: unknown }).purpose)
+      : 'shield';
+  const messageType = purpose === 'send' ? MSG_SEND_TYPE_URL : MSG_TRANSFER_TYPE_URL;
   if (!isValidInjectiveAddress(address)) {
     return { status: 400, body: { error: 'address must be a valid inj1... address' } };
   }
@@ -63,11 +76,15 @@ export const handleGrant = async (
     return { status: 502, body: { error: 'could not reach Injective; try again' } };
   }
 
-  if (grantee.usdc < deps.config.minUsdc) {
+  const holdsStable =
+    grantee.usdc >= deps.config.minUsdc ||
+    holdsSponsorStable(grantee.all ?? [], deps.config.stableDenoms, deps.config.minUsdc);
+  if (!holdsStable) {
     return {
       status: 409,
       body: {
-        error: 'gas is sponsored for addresses holding USDC.inj; deposit USDC.inj first',
+        error:
+          'gas is sponsored for addresses holding a stablecoin (e.g. USDC.inj); deposit one first',
         code: 'no_usdc',
       },
     };
@@ -84,7 +101,7 @@ export const handleGrant = async (
   }
 
   try {
-    const outcome = await deps.ensureGrant(address);
+    const outcome = await deps.ensureGrant(address, messageType);
     if (outcome.status === 'granted') {
       deps.recordGrant(ip);
     }

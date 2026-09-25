@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TxBody, TxRaw, AuthInfo } from 'cosmjs-types/cosmos/tx/v1beta1/tx';
 import { MsgGrantAllowance } from 'cosmjs-types/cosmos/feegrant/v1beta1/tx';
+import { AllowedMsgAllowance } from 'cosmjs-types/cosmos/feegrant/v1beta1/feegrant';
 import { deriveInjectiveWallet } from '@repo/wallet/networks/injective/derive';
 import { Granter, GrantError, type GranterDeps } from './granter';
 
@@ -114,6 +115,30 @@ describe('Granter.ensureGrant', () => {
     const out = await granter.ensureGrant(GRANTEE);
     expect(out.status).toBe('exists');
     expect(broadcasts).toHaveLength(0);
+  });
+
+  it('grants shield AND send', async () => {
+    const { granter, broadcasts } = await setup({ pendingPolls: 0 });
+    await granter.ensureGrant(GRANTEE);
+    const grant = MsgGrantAllowance.decode(
+      TxBody.decode(TxRaw.decode(broadcasts[0]!).bodyBytes).messages[0]!.value,
+    );
+    const allowed = AllowedMsgAllowance.decode(grant.allowance!.value);
+    expect(allowed.allowedMessages).toEqual([
+      '/ibc.applications.transfer.v1.MsgTransfer',
+      '/cosmos.bank.v1beta1.MsgSend',
+    ]);
+  });
+
+  it('upgrades a transfer-only grant when a send is asked for', async () => {
+    const { granter, broadcasts } = await setup({ allowance: usableAllowance });
+    expect((await granter.ensureGrant(GRANTEE, '/cosmos.bank.v1beta1.MsgSend')).status).toBe(
+      'granted',
+    );
+    expect(msgTypes(broadcasts[0]!)).toEqual([
+      '/cosmos.feegrant.v1beta1.MsgRevokeAllowance',
+      '/cosmos.feegrant.v1beta1.MsgGrantAllowance',
+    ]);
   });
 
   it('revokes and re-grants an exhausted allowance in one tx', async () => {

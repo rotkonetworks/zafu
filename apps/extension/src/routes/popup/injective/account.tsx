@@ -35,7 +35,10 @@ import {
 } from '@repo/wallet/networks/injective/derive';
 import { queryInjectiveBalances, queryInjectiveTx } from '@repo/wallet/networks/injective/client';
 import { shieldInToPenumbra, withdrawToExchange } from '@repo/wallet/networks/injective/conduit';
-import { requestInjectiveFeeGrant } from '@repo/wallet/networks/injective/feegrant';
+import {
+  holdsSponsorStable,
+  requestInjectiveFeeGrant,
+} from '@repo/wallet/networks/injective/feegrant';
 import { trackTx } from '../../../tx-ops';
 import { acceptedInjectiveAssets, heldAcceptedAssets, totalHeld, type HeldAsset } from './assets';
 import { nextHdIndex, peekHdIndex } from '@repo/storage-chrome/cosmos-chain-counters';
@@ -498,7 +501,6 @@ export const InjectiveAccount = () => {
   const selectedIndex = pinnedIndex ?? resolvedIndex;
   const selected = rows.find(r => r.index === selectedIndex);
   const selectedAddress = selected?.address ?? (selectedIndex === 0 ? injAddress : '');
-  const usdcBal = selected?.usdc ?? 0n;
 
   // Any accepted Injective asset on the selected address, USDC.inj by default.
   // Both forms act on this one asset.
@@ -539,7 +541,8 @@ export const InjectiveAccount = () => {
 
   // Only probe the sponsor when it would actually be used: USDC to shield and
   // too little INJ to pay for it. No request (and no IP to the sponsor) otherwise.
-  const wantsSponsor = balancesReady && injBal < feeInj && usdcBal > 0n;
+  // one unit of any accepted stablecoin qualifies (same rule as the sponsor)
+  const wantsSponsor = balancesReady && injBal < feeInj && holdsSponsorStable(selected?.all ?? []);
   const sponsorQuery = useQuery({
     queryKey: ['injective-gas-sponsor'],
     enabled: wantsSponsor,
@@ -713,15 +716,33 @@ export const InjectiveAccount = () => {
           if ((await deriveInjectiveAddress(mnemonic, selectedIndex)) !== selectedAddress) {
             throw new Error('address/index mismatch - refresh and retry');
           }
+          // No INJ for gas: a send-capable grant from the sponsor first.
+          const sponsored = canSponsor && !gasOk;
+          step(sponsored ? 'getting gas' : 'signing');
+          const feeGranter = sponsored
+            ? (await requestInjectiveFeeGrant(GAS_SPONSOR_URL, selectedAddress, fetch, 'send'))
+                .granter
+            : undefined;
+          const send = () =>
+            withdrawToExchange({
+              mnemonic,
+              accountIndex: selectedIndex,
+              restUrl: CFG.restEndpoint,
+              toAddress: withdrawTo,
+              amount: { denom: asset.denom, amount: base },
+              fee: injectiveFee(),
+              feeGranter,
+            });
           step('broadcasting');
-          const res = await withdrawToExchange({
-            mnemonic,
-            accountIndex: selectedIndex,
-            restUrl: CFG.restEndpoint,
-            toAddress: withdrawTo,
-            amount: { denom: asset.denom, amount: base },
-            fee: injectiveFee(),
-          });
+          let res = await send();
+          if (feeGranter && res.code !== 0 && /fee-grant not found/i.test(res.rawLog)) {
+            // the grant is in a block this node may not have seen yet; a CheckTx
+            // rejection consumes no sequence, so resend once
+            await new Promise<void>(resolve => {
+              setTimeout(resolve, 3000);
+            });
+            res = await send();
+          }
           if (res.code !== 0) {
             throw new Error(res.rawLog || `broadcast failed (code ${res.code})`);
           }
@@ -739,6 +760,8 @@ export const InjectiveAccount = () => {
     }
   }, [
     asset,
+    canSponsor,
+    gasOk,
     withdrawAmount,
     withdrawTo,
     selectedKeyInfo,
@@ -885,8 +908,8 @@ export const InjectiveAccount = () => {
           {!gasOk &&
             !canSponsor &&
             movable.some(a => a.denom.toLowerCase() !== GAS_ASSET.denom) && (
-            <p className='mt-2 text-label text-amber-400/90 lowercase'>no INJ for gas</p>
-          )}
+              <p className='mt-2 text-label text-amber-400/90 lowercase'>no INJ for gas</p>
+            )}
         </div>
       </div>
 
@@ -934,7 +957,7 @@ export const InjectiveAccount = () => {
             </p>
             {shieldExceeds && (
               <p className='mb-2 text-label text-amber-400/90 lowercase'>
-                amount is more than your USDC.inj balance.
+                amount is more than your {asset.symbol} balance.
               </p>
             )}
             <Button
@@ -1033,26 +1056,28 @@ export const InjectiveAccount = () => {
                   </button>
                 </div>
                 <p className='mb-2 text-label text-fg-muted lowercase'>
-                  fee ~{feeDisplay}, paid in INJ.
+                  {canSponsor && !gasOk
+                    ? 'fee covered by the rotko sponsor - no INJ needed.'
+                    : `fee ~${feeDisplay}, paid in INJ.`}
                 </p>
-                {/* The sponsor's grant covers only the IBC transfer into Penumbra, so a
-            withdrawal (a plain send on Injective) always needs the user's own
-            INJ. The button used to just sit disabled with no reason. */}
-                {!gasOk && (
+                {!gasOk && !canSponsor && (
                   <p className='mb-2 text-label text-amber-400/90 lowercase'>
-                    withdrawing needs ~{feeDisplay} of your own INJ for gas - the sponsor only
-                    covers moving funds into Penumbra. send a little INJ to this address first.
+                    needs ~{feeDisplay} of your own INJ for gas
                   </p>
                 )}
                 {withdrawExceeds && (
                   <p className='mb-2 text-label text-amber-400/90 lowercase'>
-                    amount is more than your USDC.inj balance.
+                    amount is more than your {asset.symbol} balance.
                   </p>
                 )}
                 <Button
                   className='w-full'
                   disabled={
-                    !withdrawBase || withdrawExceeds || !withdrawAddrOk || !gasOk || anyBusy
+                    !withdrawBase ||
+                    withdrawExceeds ||
+                    !withdrawAddrOk ||
+                    (!gasOk && !canSponsor) ||
+                    anyBusy
                   }
                   onClick={() => void handleWithdraw()}
                 >
@@ -1060,7 +1085,7 @@ export const InjectiveAccount = () => {
                     ? 'sending...'
                     : withdrawTx.status === 'submitted'
                       ? 'confirming...'
-                      : !gasOk
+                      : !gasOk && !canSponsor
                         ? 'needs INJ for gas'
                         : `withdraw ${asset.symbol}`}
                 </Button>

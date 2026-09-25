@@ -7,6 +7,7 @@ import {
 import { buildSignedInjectiveTx } from '@repo/wallet/networks/injective/tx';
 import {
   MSG_TRANSFER_TYPE_URL,
+  MSG_SEND_TYPE_URL,
   allowanceCovers,
   buildMsgGrantAllowance,
   buildMsgRevokeAllowance,
@@ -73,13 +74,15 @@ export class Granter {
    * Make sure `grantee` holds a usable allowance from us. Resolves only after
    * a new grant is included in a block, so the client can use it at once.
    */
-  ensureGrant(grantee: string): Promise<GrantOutcome> {
+  ensureGrant(grantee: string, messageType: string = MSG_TRANSFER_TYPE_URL): Promise<GrantOutcome> {
     return this.exclusive(async () => {
       const { lcdUrl, chainId } = this.opts;
       const fee = { denom: 'inj', amount: this.opts.shieldFee.toString() };
 
       const existing = await queryFeeAllowance(lcdUrl, this.address, grantee, this.deps.fetchFn);
-      if (existing && allowanceCovers(existing, fee, MSG_TRANSFER_TYPE_URL, this.deps.now())) {
+      // An older grant may be transfer-only; asking for a send then revokes it
+      // and re-grants with both, in one tx.
+      if (existing && allowanceCovers(existing, fee, messageType, this.deps.now())) {
         return { status: 'exists', expiresAt: existing.expiration?.toISOString() };
       }
 
@@ -93,7 +96,8 @@ export class Granter {
           grantee,
           spendLimit: [{ denom: 'inj', amount: this.opts.spendLimit.toString() }],
           expiration,
-          allowedMessages: [MSG_TRANSFER_TYPE_URL],
+          // shield into Penumbra (IBC) and send out (bank send) - nothing else
+          allowedMessages: [MSG_TRANSFER_TYPE_URL, MSG_SEND_TYPE_URL],
         }),
       ];
 

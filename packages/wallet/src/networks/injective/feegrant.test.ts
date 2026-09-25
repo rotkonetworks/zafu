@@ -13,6 +13,7 @@ import {
   queryFeeAllowance,
   requestInjectiveFeeGrant,
 } from './feegrant';
+import { holdsSponsorStable } from './feegrant';
 
 const MNEMONIC =
   'notice oak worry limit wrap speak medal online prefer cluster roof addict wrist behave treat actual wasp year salad speed social layer crew genius';
@@ -197,5 +198,23 @@ describe('requestInjectiveFeeGrant', () => {
         jsonFetch({ error: 'daily budget reached' }, 429),
       ),
     ).rejects.toThrow('daily budget reached');
+  });
+});
+
+describe('holdsSponsorStable', () => {
+  it('qualifies one unit of any listed stablecoin, case-insensitively', () => {
+    expect(
+      holdsSponsorStable([
+        { denom: 'PEGGY0xdAC17F958D2ee523a2206206994597C13D831ec7', amount: 1_000_000n },
+      ]),
+    ).toBe(true);
+  });
+  it('does not qualify less than one unit, or non-stables', () => {
+    expect(
+      holdsSponsorStable([
+        { denom: 'erc20:0xa00C59fF5a080D2b954d0c75e46E22a0c371235a', amount: 999_999n },
+      ]),
+    ).toBe(false);
+    expect(holdsSponsorStable([{ denom: 'inj', amount: 10n ** 30n }])).toBe(false);
   });
 });

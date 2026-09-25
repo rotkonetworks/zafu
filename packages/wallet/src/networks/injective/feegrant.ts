@@ -26,6 +26,35 @@ import type { EncodedMsg } from './tx';
 type FetchFn = typeof fetch;
 
 export const MSG_TRANSFER_TYPE_URL = '/ibc.applications.transfer.v1.MsgTransfer';
+/** a plain bank send - the withdraw-to-exchange leg */
+export const MSG_SEND_TYPE_URL = '/cosmos.bank.v1beta1.MsgSend';
+
+/**
+ * Penumbra-accepted stablecoins on Injective (all 6-dec). Holding at least one
+ * unit of any of these qualifies an address for gas sponsorship. Stablecoins
+ * only: an unpriced token would let anyone qualify with dust.
+ */
+export const INJECTIVE_STABLE_DENOMS: readonly string[] = [
+  'erc20:0xa00C59fF5a080D2b954d0c75e46E22a0c371235a', // USDC.inj
+  'peggy0xdAC17F958D2ee523a2206206994597C13D831ec7', // USDT
+  'factory/inj1n636d9gzrqggdk66n2f97th0x8yuhfrtx520e7/ausd', // AUSD
+  'inj1cy9hes20vww2yr6crvs75gxy5hpycya2hmjg9s', // nUSDT
+  'inj1dafy7fv7qczzatd98dv8hekx6ssckrflswpjaz', // nUSDC
+];
+export const MIN_SPONSOR_STABLE = 1_000_000n; // one unit
+
+/** does this balance list qualify for sponsorship? */
+export const holdsSponsorStable = (
+  balances: readonly { denom: string; amount: bigint }[],
+  denoms: readonly string[] = INJECTIVE_STABLE_DENOMS,
+  min: bigint = MIN_SPONSOR_STABLE,
+): boolean => {
+  const set = new Set(denoms.map(d => d.toLowerCase()));
+  return balances.some(b => set.has(b.denom.toLowerCase()) && b.amount >= min);
+};
+
+/** what the gas is for: shielding into Penumbra (IBC) or sending out (bank send) */
+export type FeeGrantPurpose = 'shield' | 'send';
 const MSG_GRANT_ALLOWANCE_TYPE_URL = '/cosmos.feegrant.v1beta1.MsgGrantAllowance';
 const MSG_REVOKE_ALLOWANCE_TYPE_URL = '/cosmos.feegrant.v1beta1.MsgRevokeAllowance';
 const BASIC_ALLOWANCE_TYPE_URL = '/cosmos.feegrant.v1beta1.BasicAllowance';
@@ -188,11 +217,13 @@ export async function requestInjectiveFeeGrant(
   serviceUrl: string,
   address: string,
   fetchFn: FetchFn = fetch,
+  /** older sponsors ignore this and grant for shielding only */
+  purpose: FeeGrantPurpose = 'shield',
 ): Promise<FeeGrantResult> {
   const res = await fetchFn(`${trimUrl(serviceUrl)}/v1/injective/grant`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ address }),
+    body: JSON.stringify({ address, purpose }),
   });
   const json = (await res.json().catch(() => ({}))) as Partial<FeeGrantResult> & {
     error?: string;
