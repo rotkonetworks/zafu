@@ -40,6 +40,8 @@ import {
   requestInjectiveFeeGrant,
 } from '@repo/wallet/networks/injective/feegrant';
 import { trackTx } from '../../../tx-ops';
+import { looksLikeRecoveryPhrase } from './memo';
+import { recentAddressesSelector } from '../../../state/recent-addresses';
 import { acceptedInjectiveAssets, heldAcceptedAssets, totalHeld, type HeldAsset } from './assets';
 import { nextHdIndex, peekHdIndex } from '@repo/storage-chrome/cosmos-chain-counters';
 import {
@@ -269,6 +271,9 @@ export const InjectiveAccount = () => {
   const [shieldAmount, setShieldAmount] = useState('');
   const [withdrawAddr, setWithdrawAddr] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('');
+  // Some exchanges credit a deposit only with their memo / tag (Keplr's send
+  // screen has the same field). Public forever once sent.
+  const [withdrawMemo, setWithdrawMemo] = useState('');
   const [shieldTx, setShieldTx] = useState<TxState>({ status: 'idle' });
   const [withdrawTx, setWithdrawTx] = useState<TxState>({ status: 'idle' });
   // Withdraw-to-exchange is the secondary flow; keep it collapsed so the default
@@ -674,7 +679,13 @@ export const InjectiveAccount = () => {
   const shieldExceeds = balancesReady && !!shieldBase && BigInt(shieldBase) > spendable;
   const withdrawBase = toBaseUnits(withdrawAmount, asset.decimals);
   const withdrawExceeds = balancesReady && !!withdrawBase && BigInt(withdrawBase) > spendable;
+  // exchange deposit addresses get reused: offer the recent ones (local only)
+  const { recordUsage, getRecent } = useStore(recentAddressesSelector);
+  const recentRecipients = getRecent('cosmos', 10)
+    .filter(r => r.chainId === CFG.chainId && r.address !== selectedAddress)
+    .slice(0, 3);
   const recipient = parseInjectiveRecipient(withdrawAddr);
+  const memoIsSecret = looksLikeRecoveryPhrase(withdrawMemo);
   const withdrawAddrOk = recipient.ok;
   const withdrawTo = recipient.ok ? recipient.address : '';
   // one send at a time: when both legs act on the same index an overlapping
@@ -840,6 +851,7 @@ export const InjectiveAccount = () => {
               amount: { denom: asset.denom, amount: base },
               fee: injectiveFee(),
               feeGranter,
+              memo: withdrawMemo.trim() || undefined,
             });
           step('broadcasting');
           let res = await send();
@@ -858,6 +870,8 @@ export const InjectiveAccount = () => {
         },
       );
       setWithdrawTx({ status: 'submitted', hash: res.txhash });
+      setWithdrawMemo('');
+      void recordUsage(withdrawTo, 'cosmos', CFG.chainId);
       setWithdrawAmount('');
       refetchBalances();
     } catch (err) {
@@ -872,6 +886,7 @@ export const InjectiveAccount = () => {
     gasOk,
     withdrawAmount,
     withdrawTo,
+    withdrawMemo,
     selectedKeyInfo,
     requestAuth,
     getMnemonic,
@@ -1038,6 +1053,18 @@ export const InjectiveAccount = () => {
                 </span>
               )}
             </div>
+            <input
+              type='text'
+              value={withdrawMemo}
+              onChange={e => setWithdrawMemo(e.target.value)}
+              placeholder='memo (if the exchange requires one)'
+              className='mb-1 w-full border border-border-soft bg-input px-3 py-2 font-mono text-xs focus:border-zigner-gold focus:outline-none'
+            />
+            {memoIsSecret && (
+              <p className='mb-1 text-label text-red-400 lowercase'>
+                that looks like a recovery phrase - never put it in a memo
+              </p>
+            )}
             {assetPicker}
             <div className='relative mb-2'>
               <input
@@ -1125,6 +1152,21 @@ export const InjectiveAccount = () => {
                   placeholder='exchange deposit address (inj1 or 0x)'
                   className='mb-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-xs focus:border-zigner-gold focus:outline-none'
                 />
+                {!withdrawAddr && recentRecipients.length > 0 && (
+                  <div className='mb-2 flex flex-wrap gap-1'>
+                    {recentRecipients.map(r => (
+                      <button
+                        key={r.address}
+                        type='button'
+                        onClick={() => setWithdrawAddr(r.address)}
+                        title={r.address}
+                        className='border border-border-soft px-2 py-1 font-mono text-label text-fg-muted hover:bg-elev-1 hover:text-fg-high'
+                      >
+                        {shortInjAddress(r.address)}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {withdrawAddr &&
                   (recipient.ok ? (
                     <p
@@ -1183,6 +1225,7 @@ export const InjectiveAccount = () => {
                   disabled={
                     !withdrawBase ||
                     withdrawExceeds ||
+                    memoIsSecret ||
                     !withdrawAddrOk ||
                     (!gasOk && !canSponsor) ||
                     anyBusy
