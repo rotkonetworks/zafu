@@ -119,12 +119,7 @@ export const recordBytes = (
   prev: string,
   body: ChannelBody,
 ): Uint8Array =>
-  signedFields(DOMAIN_RECORD, [
-    lpText(channel),
-    u32be(at),
-    lpText(prev),
-    sha256(bodyBytes(body)),
-  ]);
+  signedFields(DOMAIN_RECORD, [lpText(channel), u32be(at), lpText(prev), sha256(bodyBytes(body))]);
 
 /**
  * Found a channel. The founder is an operator by construction - there is no other

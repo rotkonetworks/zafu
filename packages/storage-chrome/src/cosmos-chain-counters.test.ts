@@ -36,14 +36,10 @@ describe('nextHdIndex', () => {
   it('two concurrent nextHdIndex calls return DIFFERENT values (lock race)', async () => {
     // Fire N parallel allocations; every returned value must be unique.
     const N = 8;
-    const results = await Promise.all(
-      Array.from({ length: N }, () => nextHdIndex('injective')),
-    );
+    const results = await Promise.all(Array.from({ length: N }, () => nextHdIndex('injective')));
     expect(new Set(results).size).toBe(N);
     // and they should be a permutation of 1..N (no gaps, no duplicates).
-    expect([...results].sort((a, b) => a - b)).toEqual(
-      Array.from({ length: N }, (_, i) => i + 1),
-    );
+    expect([...results].sort((a, b) => a - b)).toEqual(Array.from({ length: N }, (_, i) => i + 1));
   });
 
   it('counters are independent per chain', async () => {
@@ -64,7 +60,8 @@ describe('checkAndBumpFreshAddressRateLimit', () => {
     const now = 1_700_000_000_000;
     for (let i = 0; i < FRESH_ADDRESS_RATE_LIMIT_MAX; i++) {
       const r = await checkAndBumpFreshAddressRateLimit(origin, chainId, now);
-      expect(r.ok, `call ${i + 1} should be allowed`).toBe(true);
+      // (index in the message so a failure says which call tripped)
+      expect({ call: i + 1, ok: r.ok }).toEqual({ call: i + 1, ok: true });
     }
     const tripped = await checkAndBumpFreshAddressRateLimit(origin, chainId, now);
     expect(tripped.ok).toBe(false);

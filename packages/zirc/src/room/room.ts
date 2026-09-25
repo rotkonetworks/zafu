@@ -259,9 +259,13 @@ const toHex = (b: Uint8Array): string =>
   Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
 
 const fromHex = (s: string): Uint8Array => {
-  if (s.length % 2 !== 0) throw new Error('room: odd-length hex');
+  if (s.length % 2 !== 0) {
+    throw new Error('room: odd-length hex');
+  }
   const out = new Uint8Array(s.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(s.slice(i * 2, i * 2 + 2), 16);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(s.slice(i * 2, i * 2 + 2), 16);
+  }
   return out;
 };
 
@@ -331,7 +335,9 @@ const windowKey = async (
   // whole room can seal to a member and only that member can open it. Absent (the
   // default) it contributes no bytes at all, which keeps every other key exactly
   // as it was.
-  if (extra) parts.push(extra);
+  if (extra) {
+    parts.push(extra);
+  }
   const raw = await hkdfBytes(secret, label, concat(parts), KEY_BYTES);
   return crypto.subtle.importKey('raw', ab(raw), 'AES-GCM', false, ['encrypt', 'decrypt']);
 };
@@ -478,7 +484,9 @@ const open = async (
   aadBytes: Uint8Array,
   blob: Uint8Array,
 ): Promise<Uint8Array | null> => {
-  if (blob.length <= 1 + NONCE_BYTES + GCM_TAG_BYTES || blob[0] !== BLOB_VERSION) return null;
+  if (blob.length <= 1 + NONCE_BYTES + GCM_TAG_BYTES || blob[0] !== BLOB_VERSION) {
+    return null;
+  }
   const nonce = blob.subarray(1, 1 + NONCE_BYTES);
   const ct = blob.subarray(1 + NONCE_BYTES);
   try {
@@ -652,8 +660,12 @@ export class Room {
     body: string,
     opts: { name?: string; epoch?: number } = {},
   ): Promise<RoomMessage> {
-    if (to === this.identity.pubkey) throw new Error('room: a direct message needs a recipient');
-    if (to.length !== PUBKEY_HEX) throw new Error('room: recipient must be a 64-char public key');
+    if (to === this.identity.pubkey) {
+      throw new Error('room: a direct message needs a recipient');
+    }
+    if (to.length !== PUBKEY_HEX) {
+      throw new Error('room: recipient must be a 64-char public key');
+    }
     return this.publish('dm', body, { ...opts, to });
   }
 
@@ -688,7 +700,9 @@ export class Room {
     const rec = { kind, ts, seq, prev, author: this.identity.pubkey, to, name, body };
     const signed = recordBytes(rec);
     const sig = await this.identity.sign(signed);
-    if (sig.length !== SIG_HEX) throw new Error('room: identity returned a malformed signature');
+    if (sig.length !== SIG_HEX) {
+      throw new Error('room: identity returned a malformed signature');
+    }
 
     const hash = toHex(await sha256(concat([signed, fromHex(sig)])));
     const sigBytes = fromHex(sig);
@@ -891,7 +905,9 @@ export class Room {
               aad(appScopeHash, shardHash, epoch, 'presence'),
               entry.blob,
             );
-            if (plain) opened = { kind: 'presence', plain, plaintext: false };
+            if (plain) {
+              opened = { kind: 'presence', plain, plaintext: false };
+            }
           }
           if (!opened) {
             const plain = await open(
@@ -899,7 +915,9 @@ export class Room {
               aad(appScopeHash, shardHash, epoch, 'dm'),
               entry.blob,
             );
-            if (plain) opened = { kind: 'dm', plain, plaintext: false };
+            if (plain) {
+              opened = { kind: 'dm', plain, plaintext: false };
+            }
           }
         }
 
@@ -940,7 +958,9 @@ export class Room {
           dropped.push({ hash: toHex(entry.tag), reason: parsed, kind: dropKindFor(parsed) });
           continue;
         }
-        if (seen.has(parsed.hash)) continue;
+        if (seen.has(parsed.hash)) {
+          continue;
+        }
         seen.add(parsed.hash);
         messages.push(parsed);
       }
@@ -959,7 +979,9 @@ export class Room {
    */
   private adoptChainHead(messages: RoomMessage[]): void {
     for (const m of messages) {
-      if (m.author !== this.identity.pubkey) continue;
+      if (m.author !== this.identity.pubkey) {
+        continue;
+      }
       if (m.seq > this.seq) {
         this.seq = m.seq;
         this.head = m.hash;
@@ -985,16 +1007,22 @@ export class Room {
   ): Promise<RoomMessage | string> {
     try {
       const body = decodeRecord(plain, kind, SIG_HEX / 2);
-      if (typeof body === 'string') return body;
+      if (typeof body === 'string') {
+        return body;
+      }
       const { sigAt, ...fields } = body;
       // a direct message has to be addressed to this member: the key already
       // enforces it, and this makes the record say so too.
-      if (kind === 'dm' && fields.to !== this.identity.pubkey) return 'dm not addressed here';
+      if (kind === 'dm' && fields.to !== this.identity.pubkey) {
+        return 'dm not addressed here';
+      }
       // re-encode in the record's OWN version: a signature only verifies against
       // the layout its author wrote.
       const signed = recordBytes({ ...fields, kind }, body.version);
       const sig = toHex(plain.subarray(sigAt, sigAt + SIG_HEX / 2));
-      if (!(await this.identity.verify(signed, sig, fields.author))) return 'bad signature';
+      if (!(await this.identity.verify(signed, sig, fields.author))) {
+        return 'bad signature';
+      }
       return {
         hash: toHex(await sha256(concat([signed, fromHex(sig)]))),
         author: body.author,
@@ -1047,9 +1075,13 @@ const u32From = (b: Uint8Array, at: number): number =>
  * bytes, not two.
  */
 const lpFrom = (b: Uint8Array, at: number): { text: string; next: number } | null => {
-  if (at + 4 > b.length) return null;
+  if (at + 4 > b.length) {
+    return null;
+  }
   const len = u32From(b, at);
-  if (at + 4 + len > b.length) return null;
+  if (at + 4 + len > b.length) {
+    return null;
+  }
   return { text: dec.decode(b.subarray(at + 4, at + 4 + len)), next: at + 4 + len };
 };
 
@@ -1062,9 +1094,15 @@ const lpFrom = (b: Uint8Array, at: number): { text: string; next: number } | nul
  */
 function decodeRecord(plain: Uint8Array, kind: RoomKind, sigBytes: number): DecodedFields | string {
   const version = plain[0] ?? 0;
-  if (!ROOM_READ_VERSIONS.includes(version)) return `unsupported record version ${version}`;
-  if (plain[1] !== KIND_BYTE[kind]) return 'unexpected record kind';
-  if (plain.length < 2 + 4 + 4 + SHA256_BYTES + PUBKEY_HEX / 2) return 'record too short';
+  if (!ROOM_READ_VERSIONS.includes(version)) {
+    return `unsupported record version ${version}`;
+  }
+  if (plain[1] !== KIND_BYTE[kind]) {
+    return 'unexpected record kind';
+  }
+  if (plain.length < 2 + 4 + 4 + SHA256_BYTES + PUBKEY_HEX / 2) {
+    return 'record too short';
+  }
   let at = 2;
   const ts = u32From(plain, at);
   at += 4;
@@ -1078,20 +1116,32 @@ function decodeRecord(plain: Uint8Array, kind: RoomKind, sigBytes: number): Deco
   let to = '';
   if (version >= RECIPIENT_FIELD_VERSION) {
     const toRaw = plain.subarray(at, at + PUBKEY_HEX / 2);
-    if (toRaw.length < PUBKEY_HEX / 2) return 'record too short';
-    if (!toRaw.every(byte => byte === 0)) to = toHex(toRaw);
+    if (toRaw.length < PUBKEY_HEX / 2) {
+      return 'record too short';
+    }
+    if (!toRaw.every(byte => byte === 0)) {
+      to = toHex(toRaw);
+    }
     at += PUBKEY_HEX / 2;
   }
   const name = lpFrom(plain, at);
-  if (!name) return 'malformed name field';
+  if (!name) {
+    return 'malformed name field';
+  }
   const body = lpFrom(plain, name.next);
-  if (!body) return 'malformed body field';
+  if (!body) {
+    return 'malformed body field';
+  }
   const sigAt = body.next;
-  if (sigAt + sigBytes > plain.length) return 'record too short for its signature';
+  if (sigAt + sigBytes > plain.length) {
+    return 'record too short for its signature';
+  }
   // Only the pad may follow the signature; anything else means the plaintext was
   // not ours - or was ours and was edited.
   for (let i = sigAt + sigBytes; i < plain.length; i++) {
-    if (plain[i] !== 0) return 'non-zero padding';
+    if (plain[i] !== 0) {
+      return 'non-zero padding';
+    }
   }
   return {
     version,
@@ -1138,7 +1188,9 @@ function verifyChains(
     for (let i = 1; i < list.length; i++) {
       const prevMsg = list[i - 1]!;
       const msg = list[i]!;
-      if (msg.seq !== prevMsg.seq + 1) continue; // a gap, not a break
+      if (msg.seq !== prevMsg.seq + 1) {
+        continue;
+      } // a gap, not a break
       if (msg.prev && msg.prev !== prevMsg.hash) {
         dropped.push({
           hash: msg.hash,
@@ -1189,8 +1241,12 @@ export const encodeInvite = (invite: RoomInvite): string => {
   ];
   // Endpoint and token are positional, so an invite without a token still names
   // a reachable (ungated) relay: four fields mean "…endpoint.token".
-  if (invite.endpoint) parts.push(b64url(enc.encode(invite.endpoint)));
-  if (invite.token) parts.push(b64url(enc.encode(invite.token)));
+  if (invite.endpoint) {
+    parts.push(b64url(enc.encode(invite.endpoint)));
+  }
+  if (invite.token) {
+    parts.push(b64url(enc.encode(invite.token)));
+  }
   return INVITE_PREFIX + parts.join('.');
 };
 
@@ -1211,9 +1267,13 @@ export const parseInvite = (code: string): RoomInvite => {
   const endpointField = legacy ? third : fourth;
   const tokenField = legacy ? fourth : fifth;
 
-  if (!scopeField || !secretField) throw new Error('invite is missing its scope or secret');
+  if (!scopeField || !secretField) {
+    throw new Error('invite is missing its scope or secret');
+  }
   const secret = fromB64url(secretField);
-  if (secret.length !== KEY_BYTES) throw new Error('invite secret is not 32 bytes');
+  if (secret.length !== KEY_BYTES) {
+    throw new Error('invite secret is not 32 bytes');
+  }
 
   return {
     appScope: dec.decode(fromB64url(scopeField)),

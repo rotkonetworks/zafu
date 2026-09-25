@@ -33,7 +33,9 @@ const toHex = (b: Uint8Array): string =>
 
 const fromHex = (s: string): Uint8Array => {
   const out = new Uint8Array(s.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(s.slice(i * 2, i * 2 + 2), 16);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(s.slice(i * 2, i * 2 + 2), 16);
+  }
   return out;
 };
 
@@ -48,7 +50,9 @@ const fakeRelay = () => {
   const transport: RelayTransport = {
     putBucket: ({ appScope, epoch, shard, entries }) => {
       const coord = coords.get(key(appScope, epoch, shard)) ?? new Map<string, Uint8Array>();
-      for (const entry of entries) coord.set(toHex(entry.tag), entry.blob);
+      for (const entry of entries) {
+        coord.set(toHex(entry.tag), entry.blob);
+      }
       coords.set(key(appScope, epoch, shard), coord);
       return Promise.resolve();
     },
@@ -62,9 +66,13 @@ const fakeRelay = () => {
   /** mutate a stored blob in place, to model a relay - or a network - that lies. */
   const tamper = (scope: string, epoch: number, shard: string, at: number) => {
     const coord = coords.get(key(scope, epoch, shard));
-    if (!coord) throw new Error('tamper: nothing stored at that coordinate');
+    if (!coord) {
+      throw new Error('tamper: nothing stored at that coordinate');
+    }
     const entry = [...coord.entries()][at];
-    if (!entry) throw new Error('tamper: nothing stored at that entry');
+    if (!entry) {
+      throw new Error('tamper: nothing stored at that entry');
+    }
     const [tag, blob] = entry;
     const next = new Uint8Array(blob);
     const last = next.length - 1;

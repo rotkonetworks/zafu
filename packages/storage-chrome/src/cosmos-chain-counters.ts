@@ -67,8 +67,7 @@ export const nextHdIndex = async (chainId: string): Promise<number> =>
 export const resetHdIndex = async (chainId: string): Promise<void> =>
   navigator.locks.request(LOCK_NAME(), { mode: 'exclusive' }, async () => {
     const current = (await localExtStorage.get('cosmosChainCounters')) ?? {};
-    const updated = { ...current };
-    delete updated[chainId];
+    const updated = Object.fromEntries(Object.entries(current).filter(([k]) => k !== chainId));
     await localExtStorage.set('cosmosChainCounters', updated);
   });
 
@@ -112,14 +111,15 @@ export const checkAndBumpFreshAddressRateLimit = async (
       return { ok: false, retryAfterMs };
     }
 
+    const count = entry.count + 1;
     const updated = {
       ...map,
-      [key]: { count: entry.count + 1, windowStart: entry.windowStart },
+      [key]: { count, windowStart: entry.windowStart },
     };
     await localExtStorage.set('cosmosFreshAddressRateLimits', updated);
     return {
       ok: true,
-      remaining: FRESH_ADDRESS_RATE_LIMIT_MAX - updated[key]!.count,
+      remaining: FRESH_ADDRESS_RATE_LIMIT_MAX - count,
       windowStart: entry.windowStart,
     };
   });

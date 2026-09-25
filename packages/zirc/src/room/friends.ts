@@ -48,7 +48,9 @@ export const listFriends = async (appOrigin: string): Promise<Friend[]> => {
   const friends: Friend[] = [];
   for (const ref of refs) {
     const pubkey = resolveHandle(ref.handle, appOrigin);
-    if (!pubkey) continue;
+    if (!pubkey) {
+      continue;
+    }
     friends.push({ pubkey, label: ref.displayName || shortId(pubkey), handle: ref.handle });
   }
   return friends;

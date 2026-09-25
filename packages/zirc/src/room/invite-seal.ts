@@ -64,13 +64,16 @@ export interface SealingIdentity {
   }) => Promise<Uint8Array>;
 }
 
-const hex = (b: Uint8Array): string =>
-  [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+const hex = (b: Uint8Array): string => [...b].map(x => x.toString(16).padStart(2, '0')).join('');
 
 const unhex = (s: string): Uint8Array => {
-  if (s.length % 2 !== 0 || /[^0-9a-f]/i.test(s)) throw new Error('not hex');
+  if (s.length % 2 !== 0 || /[^0-9a-f]/i.test(s)) {
+    throw new Error('not hex');
+  }
   const out = new Uint8Array(s.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(s.slice(i * 2, i * 2 + 2), 16);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(s.slice(i * 2, i * 2 + 2), 16);
+  }
   return out;
 };
 
@@ -90,7 +93,9 @@ export const sealInvite = async (
   recipient: unknown,
   invite: RoomInvite,
 ): Promise<SealedInvite> => {
-  if (!me.sealFor) throw new Error('this identity cannot seal: no sealFor');
+  if (!me.sealFor) {
+    throw new Error('this identity cannot seal: no sealFor');
+  }
   const box = await me.sealFor(recipient, new TextEncoder().encode(encodeInvite(invite)));
   return {
     ciphertext: hex(box.ciphertext),
@@ -111,7 +116,9 @@ export const openInvite = async (
   me: SealingIdentity,
   sealed: SealedInvite,
 ): Promise<RoomInvite> => {
-  if (!me.openSealed) throw new Error('this identity cannot open: no openSealed');
+  if (!me.openSealed) {
+    throw new Error('this identity cannot open: no openSealed');
+  }
   const bytes = await me.openSealed({
     ciphertext: unhex(sealed.ciphertext),
     ephemeral_pubkey: unhex(sealed.ephemeralPubkey),

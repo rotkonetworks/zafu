@@ -24,9 +24,13 @@ const pair = () => {
     },
     openSealed: async sealed => {
       const id = new TextDecoder().decode(sealed.ciphertext);
-      if (!id.startsWith(`${who}/`)) throw new Error('not addressed to me');
+      if (!id.startsWith(`${who}/`)) {
+        throw new Error('not addressed to me');
+      }
       const bytes = boxes.get(id);
-      if (!bytes) throw new Error('no such box');
+      if (!bytes) {
+        throw new Error('no such box');
+      }
       return bytes;
     },
   });

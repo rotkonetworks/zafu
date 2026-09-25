@@ -263,7 +263,7 @@ export class BlockProcessor implements BlockProcessorInterface {
       // returning undefined, so read it defensively and treat a decode failure
       // as missing: that forces a re-fetch below which overwrites the poisoned
       // entry, instead of letting the throw stall every sync.
-      const fmd = await this.indexedDb.getFmdParams().catch(err => {
+      const fmd = await this.indexedDb.getFmdParams().catch((err: unknown) => {
         console.warn('[sync] stored FMD params undecodable, will re-fetch:', err);
         return undefined;
       });

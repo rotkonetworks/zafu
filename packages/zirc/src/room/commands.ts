@@ -76,7 +76,9 @@ export const helpText = (): string =>
   COMMANDS.map(command => `${command.usage} — ${command.help}`).join('\n');
 
 export const whoText = (members: readonly Member[], me: string | null, channel: string): string => {
-  if (members.length === 0) return `${channel}: nobody here but you`;
+  if (members.length === 0) {
+    return `${channel}: nobody here but you`;
+  }
   const listed = members
     .map(member => {
       const id = shortId(member.pubkey);
@@ -93,18 +95,25 @@ export const resolveMember = (
   members: readonly Member[],
 ): { ok: true; member: Member } | { ok: false; reason: string } => {
   const needle = token.trim().toLowerCase();
-  if (needle.length === 0) return { ok: false, reason: 'who? /msg needs a nick or an id' };
+  if (needle.length === 0) {
+    return { ok: false, reason: 'who? /msg needs a nick or an id' };
+  }
 
   const describe = (candidates: readonly Member[]) =>
     candidates.map(m => `${m.name || shortId(m.pubkey)} (${shortId(m.pubkey)})`).join(', ');
 
   const exact = members.filter(m => m.name.toLowerCase() === needle);
-  if (exact.length === 1) return { ok: true, member: exact[0]! };
-  if (exact.length > 1)
+  if (exact.length === 1) {
+    return { ok: true, member: exact[0]! };
+  }
+  if (exact.length > 1) {
     return { ok: false, reason: `two members answer to ${needle}: ${describe(exact)}` };
+  }
 
   const byName = members.filter(m => m.name.toLowerCase().startsWith(needle));
-  if (byName.length === 1) return { ok: true, member: byName[0]! };
+  if (byName.length === 1) {
+    return { ok: true, member: byName[0]! };
+  }
   if (byName.length > 1) {
     return { ok: false, reason: `${needle} is ambiguous: ${describe(byName)} — use an id` };
   }
@@ -112,7 +121,9 @@ export const resolveMember = (
   // ids are hex, so a prefix is enough - and it is what a name collision falls
   // back to.
   const byId = members.filter(m => m.pubkey.toLowerCase().startsWith(needle));
-  if (byId.length === 1) return { ok: true, member: byId[0]! };
+  if (byId.length === 1) {
+    return { ok: true, member: byId[0]! };
+  }
   if (byId.length > 1) {
     return { ok: false, reason: `${needle} matches ${byId.length} ids: ${describe(byId)}` };
   }
@@ -132,8 +143,12 @@ export const parseLine = (
   me: string | null = null,
 ): ParsedLine => {
   const line = raw.trim();
-  if (line.length === 0) return { kind: 'notice', text: 'nothing to send' };
-  if (!line.startsWith('/')) return { kind: 'send', body: line };
+  if (line.length === 0) {
+    return { kind: 'notice', text: 'nothing to send' };
+  }
+  if (!line.startsWith('/')) {
+    return { kind: 'send', body: line };
+  }
 
   const space = line.indexOf(' ');
   const command = (space === -1 ? line.slice(1) : line.slice(1, space)).toLowerCase();
@@ -164,12 +179,16 @@ export const parseLine = (
         return { kind: 'notice', text: 'a direct message needs something in it' };
       }
       const resolved = resolveMember(target, members);
-      if (!resolved.ok) return { kind: 'notice', text: resolved.reason };
+      if (!resolved.ok) {
+        return { kind: 'notice', text: resolved.reason };
+      }
       return { kind: 'dm', to: resolved.member, body };
     }
 
     case 'me':
-      if (rest.length === 0) return { kind: 'notice', text: 'usage: /me <action>' };
+      if (rest.length === 0) {
+        return { kind: 'notice', text: 'usage: /me <action>' };
+      }
       return { kind: 'action', body: rest };
 
     case 'who':
@@ -194,7 +213,9 @@ export const parseLine = (
       if (rest.length === 0) {
         return { kind: 'notice', text: `usage: /${command} <nick|id>` };
       }
-      if (!resolved.ok) return { kind: 'notice', text: resolved.reason };
+      if (!resolved.ok) {
+        return { kind: 'notice', text: resolved.reason };
+      }
       return command === 'forget'
         ? { kind: 'unfriend', to: resolved.member }
         : { kind: 'friend', to: resolved.member };
@@ -252,7 +273,9 @@ export const complete = (
   members: readonly Member[],
 ): Completion | null => {
   const prefix = line.slice(0, Math.max(0, Math.min(caret, line.length)));
-  if (!prefix.startsWith('/')) return null;
+  if (!prefix.startsWith('/')) {
+    return null;
+  }
 
   const space = prefix.indexOf(' ');
   if (space === -1) {
@@ -269,16 +292,22 @@ export const complete = (
   }
 
   const command = prefix.slice(1, space).toLowerCase();
-  if (!MEMBER_ARG_COMMANDS.includes(command)) return null;
+  if (!MEMBER_ARG_COMMANDS.includes(command)) {
+    return null;
+  }
   const argStart = space + 1;
   // only the first argument is a target; once it is complete, stop offering.
-  if (prefix.slice(argStart).includes(' ')) return null;
+  if (prefix.slice(argStart).includes(' ')) {
+    return null;
+  }
 
   const fragment = prefix.slice(argStart).toLowerCase();
   const matching = members.filter(
     m => m.name.toLowerCase().startsWith(fragment) || m.pubkey.toLowerCase().startsWith(fragment),
   );
-  if (!matching.length) return null;
+  if (!matching.length) {
+    return null;
+  }
 
   const nameCounts = new Map<string, number>();
   for (const member of members) {

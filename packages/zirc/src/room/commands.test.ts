@@ -173,10 +173,11 @@ describe('complete', () => {
   it('completes members for every command that takes one', () => {
     for (const command of ['msg', 'add', 'forget']) {
       const result = complete(`/${command} a`, command.length + 3, members);
-      expect(
-        result?.candidates.map(c => c.label),
+      // command in the value so a failure says which one
+      expect({ command, labels: result?.candidates.map(c => c.label) }).toEqual({
         command,
-      ).toEqual(['alice']);
+        labels: ['alice'],
+      });
     }
   });
 
