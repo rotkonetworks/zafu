@@ -11,8 +11,6 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useStore } from '../state';
 import { selectSelectedKeyInfo, selectEffectiveKeyInfo, keyRingSelector } from '../state/keyring';
 import {
-  signAndBroadcast,
-  createSigningClient,
   buildMsgSend,
   buildMsgTransfer,
   calculateFee,
@@ -25,6 +23,7 @@ import type { ZignerSignRequest, EncodeObject } from '@repo/wallet/networks/cosm
 import { encodeCosmosSignRequest } from '@repo/wallet/networks/cosmos/airgap';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { deriveChainAddress } from '@repo/wallet/networks/cosmos/signer';
+import { conduitFor, type TxKind } from '@repo/wallet/networks/transparent/conduit';
 
 /** send parameters */
 export interface CosmosSendParams {
@@ -34,6 +33,12 @@ export interface CosmosSendParams {
   denom?: string;
   memo?: string;
   accountIndex?: number;
+  /** decimals of `denom`; defaults to the chain's native asset */
+  decimals?: number;
+  /** the address the form checked balances against (re-derived before signing) */
+  expectedAddress?: string;
+  /** pay the fee through the chain's gas sponsor (x/feegrant) */
+  sponsored?: boolean;
 }
 
 /** ibc transfer parameters */
@@ -46,6 +51,12 @@ export interface CosmosIbcTransferParams {
   denom?: string;
   memo?: string;
   accountIndex?: number;
+  /** decimals of `denom`; defaults to the chain's native asset */
+  decimals?: number;
+  /** the address the form checked balances against (re-derived before signing) */
+  expectedAddress?: string;
+  /** pay the fee through the chain's gas sponsor (x/feegrant) */
+  sponsored?: boolean;
 }
 
 /** result from mnemonic sign+broadcast */
@@ -53,8 +64,11 @@ export interface CosmosTxResult {
   type: 'broadcast';
   txHash: string;
   code: number;
-  gasUsed: bigint;
-  gasWanted: bigint;
+  /**
+   * Set when the tx was only accepted into the mempool (sync broadcast): the
+   * LCD to confirm inclusion against. Unset = already included in a block.
+   */
+  restUrl?: string;
 }
 
 /** result from zigner sign request (needs QR flow before broadcast) */
@@ -71,6 +85,10 @@ function getZignerAddress(
   insensitive: Record<string, unknown>,
   chainId: CosmosChainId,
 ): string | null {
+  // zigner holds coin-118 cosmos keys; nothing it has is valid on an Ethermint chain
+  if (COSMOS_CHAINS[chainId].keyAlgo === 'eth_secp256k1') {
+    return null;
+  }
   const addrs = insensitive['cosmosAddresses'] as
     | { chainId: string; address: string; prefix: string }[]
     | undefined;
@@ -133,6 +151,49 @@ function findCosmosKey(
   return null;
 }
 
+/**
+ * Sign + broadcast with the vault's mnemonic through the chain's conduit, via
+ * the gas sponsor when asked. A rejected tx throws: code 0 is the only success.
+ */
+async function broadcastWithMnemonic(
+  chainId: CosmosChainId,
+  mnemonic: string,
+  accountIndex: number,
+  kind: TxKind,
+  sponsored: boolean | undefined,
+  expectedAddress: string | undefined,
+  run: (
+    conduit: ReturnType<typeof conduitFor>,
+    signer: {
+      mnemonic: string;
+      accountIndex: number;
+      expectedAddress?: string;
+      feeGranter?: string;
+    },
+  ) => Promise<{ txHash: string; code: number; rawLog: string }>,
+): Promise<CosmosTxResult> {
+  const conduit = conduitFor(chainId);
+  let feeGranter: string | undefined;
+  if (sponsored) {
+    if (!conduit.requestFeeGrant) {
+      throw new Error(`no gas sponsor for ${COSMOS_CHAINS[chainId].name}`);
+    }
+    const from = expectedAddress ?? (await conduit.deriveAddress(mnemonic, accountIndex));
+    feeGranter = (await conduit.requestFeeGrant(from, kind)).granter;
+  }
+  const res = await run(conduit, { mnemonic, accountIndex, expectedAddress, feeGranter });
+  if (res.code !== 0) {
+    throw new Error(res.rawLog || `broadcast failed (code ${res.code})`);
+  }
+  const syncBroadcast = COSMOS_CHAINS[chainId].keyAlgo === 'eth_secp256k1';
+  return {
+    type: 'broadcast',
+    txHash: res.txHash,
+    code: res.code,
+    ...(syncBroadcast ? { restUrl: COSMOS_CHAINS[chainId].restEndpoint } : {}),
+  };
+}
+
 /** hook for cosmos send transactions */
 export const useCosmosSend = () => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
@@ -146,7 +207,10 @@ export const useCosmosSend = () => {
       const config = COSMOS_CHAINS[params.chainId];
       const denom = params.denom ?? config.denom;
       const accountIndex = params.accountIndex ?? 0;
-      const amountInBase = parseAmountToBaseUnits(params.amount, config.decimals);
+      const amountInBase = parseAmountToBaseUnits(
+        params.amount,
+        params.decimals ?? config.decimals,
+      );
 
       const key = findCosmosKey(allKeyInfos, selectedKeyInfo, params.chainId);
       if (!key) {
@@ -154,41 +218,22 @@ export const useCosmosSend = () => {
       }
 
       if (key.type === 'mnemonic') {
-        // mnemonic path: direct sign+broadcast
         const mnemonic = await getMnemonic(key.id);
-        const { address: fromAddress } = await createSigningClient(
+        return broadcastWithMnemonic(
           params.chainId,
           mnemonic,
           accountIndex,
-        ).then(r => ({ address: r.address }));
-
-        const messages = [
-          buildMsgSend({
-            fromAddress,
-            toAddress: params.toAddress,
-            amount: [{ denom, amount: amountInBase }],
-          }),
-        ];
-
-        const gas = await estimateGas(params.chainId, fromAddress, messages);
-        const fee = calculateFee(params.chainId, gas);
-
-        const result = await signAndBroadcast(
-          params.chainId,
-          mnemonic,
-          messages,
-          fee,
-          params.memo ?? '',
-          accountIndex,
+          'send',
+          params.sponsored,
+          params.expectedAddress,
+          (conduit, signer) =>
+            conduit.send({
+              ...signer,
+              to: params.toAddress,
+              coin: { denom, amount: amountInBase },
+              memo: params.memo,
+            }),
         );
-
-        return {
-          type: 'broadcast',
-          txHash: result.transactionHash,
-          code: result.code,
-          gasUsed: result.gasUsed,
-          gasWanted: result.gasWanted,
-        };
       }
 
       if (key.type === 'zigner-zafu') {
@@ -256,7 +301,10 @@ export const useCosmosIbcTransfer = () => {
       const config = COSMOS_CHAINS[params.sourceChainId];
       const denom = params.denom ?? config.denom;
       const accountIndex = params.accountIndex ?? 0;
-      const amountInBase = parseAmountToBaseUnits(params.amount, config.decimals);
+      const amountInBase = parseAmountToBaseUnits(
+        params.amount,
+        params.decimals ?? config.decimals,
+      );
       const timeoutTimestamp = BigInt(Date.now() + 10 * 60 * 1000) * 1_000_000n;
 
       const key = findCosmosKey(allKeyInfos, selectedKeyInfo, params.sourceChainId);
@@ -265,43 +313,24 @@ export const useCosmosIbcTransfer = () => {
       }
 
       if (key.type === 'mnemonic') {
-        // mnemonic path: direct sign+broadcast
         const mnemonic = await getMnemonic(key.id);
-        const { client, address: fromAddress } = await createSigningClient(
+        return broadcastWithMnemonic(
           params.sourceChainId,
           mnemonic,
           accountIndex,
+          'ibc',
+          params.sponsored,
+          params.expectedAddress,
+          (conduit, signer) =>
+            conduit.ibcTransfer({
+              ...signer,
+              sourceChannel: params.sourceChannel,
+              receiver: params.toAddress,
+              coin: { denom, amount: amountInBase },
+              timeoutTimestamp,
+              memo: params.memo,
+            }),
         );
-
-        const messages = [
-          buildMsgTransfer({
-            sourcePort: 'transfer',
-            sourceChannel: params.sourceChannel,
-            token: { denom, amount: amountInBase },
-            sender: fromAddress,
-            receiver: params.toAddress,
-            timeoutTimestamp,
-            memo: params.memo,
-          }),
-        ];
-
-        try {
-          const result = await client.signAndBroadcast(
-            fromAddress,
-            messages,
-            'auto',
-            params.memo ?? '',
-          );
-          return {
-            type: 'broadcast',
-            txHash: result.transactionHash,
-            code: result.code,
-            gasUsed: result.gasUsed,
-            gasWanted: result.gasWanted,
-          };
-        } finally {
-          client.disconnect();
-        }
       }
 
       if (key.type === 'zigner-zafu') {
@@ -403,8 +432,7 @@ export const useCosmosAddress = (chainId: CosmosChainId, accountIndex = 0) => {
       }
 
       const mnemonic = await getMnemonic(selectedKeyInfo.id);
-      const { address } = await createSigningClient(chainId, mnemonic, accountIndex);
-      return address;
+      return conduitFor(chainId).deriveAddress(mnemonic, accountIndex);
     },
     enabled: !!selectedKeyInfo && selectedKeyInfo.type === 'mnemonic',
     staleTime: Infinity, // address won't change

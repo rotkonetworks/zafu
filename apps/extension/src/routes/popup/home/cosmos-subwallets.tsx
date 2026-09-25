@@ -274,12 +274,12 @@ const ChainDeposits = ({ chainId, view }: { chainId: CosmosChainId; view: 'home'
       state: { cosmosChain: chainId, cosmosAccountIndex: index, cosmosIntent: 'send' },
     });
 
-  // Shield a specific address back INTO Penumbra: the injective screen, with
-  // THAT address preselected (not account 0).
+  // Shield a specific address into Penumbra: the same send form, opened on
+  // "into my penumbra wallet" with THAT address selected.
   const shieldIntoPenumbra = (index: number) =>
-    chainId === 'injective'
-      ? navigate(PopupPath.INJECTIVE, { state: { injectiveIndex: index } })
-      : navigate(PopupPath.RECEIVE);
+    navigate(PopupPath.SEND, {
+      state: { cosmosChain: chainId, cosmosAccountIndex: index, cosmosIntent: 'shield' },
+    });
 
   const row = (w: DepositWallet) => (
     <DepositRow

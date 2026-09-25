@@ -11,7 +11,7 @@
 import { getTransparentHistoryInWorker } from '../../../state/keyring/network-worker';
 import { useState, useCallback, useEffect } from 'react';
 import { useBackNav } from '../../../utils/navigate';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
 import {
@@ -29,6 +29,9 @@ import {
   deriveZcashTransparentFromUfvk,
 } from '../../../hooks/use-address';
 import { QrCode } from '../../../components/qr-code';
+import { TransparentReceive } from './transparent-receive';
+import { getActiveIbcSubnetworks } from '../../../config/networks';
+import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 
 /** receive tab - QR code + address display */
 function ReceiveTab({
@@ -582,18 +585,23 @@ export function ReceivePage() {
 
   const { address, loading } = useActiveAddress();
   const isPenumbra = activeNetwork === 'penumbra';
+  // Transparent chains you can receive on from here: launched, with a route
+  // into Penumbra, and not being wound down (Noble is withdraw-only now).
+  const transparentChains = isPenumbra
+    ? (getActiveIbcSubnetworks('penumbra') as CosmosChainId[]).filter(
+        c => COSMOS_CHAINS[c].penumbraChannel && !COSMOS_CHAINS[c].deprecation,
+      )
+    : [];
   // Old deep links (`?mode=shield`, nav state mode 'shield') meant the
-  // Injective shield view, which is its own screen now.
+  // Injective deposit view; `receiveChain` picks a chain directly.
   const location = useLocation();
-  const navigate = useNavigate();
+  const navState = location.state as { mode?: string; receiveChain?: CosmosChainId } | null;
   const legacyShield =
-    new URLSearchParams(location.search).get('mode') === 'shield' ||
-    (location.state as { mode?: string } | null)?.mode === 'shield';
-  useEffect(() => {
-    if (legacyShield) {
-      navigate(PopupPath.INJECTIVE, { replace: true });
-    }
-  }, [legacyShield, navigate]);
+    new URLSearchParams(location.search).get('mode') === 'shield' || navState?.mode === 'shield';
+  const requested = navState?.receiveChain ?? (legacyShield ? 'injective' : undefined);
+  const [receiveOn, setReceiveOn] = useState<'penumbra' | CosmosChainId>(
+    requested && transparentChains.includes(requested) ? requested : 'penumbra',
+  );
   const goBack = useBackNav(PopupPath.INDEX);
 
   return (
@@ -606,16 +614,28 @@ export function ReceivePage() {
       </div>
 
       <div className='flex flex-1 flex-col p-4'>
-        <ReceiveTab address={address} loading={loading} activeNetwork={activeNetwork} />
-        {isPenumbra && (
-          <button
-            type='button'
-            onClick={() => navigate(PopupPath.INJECTIVE)}
-            className='mt-4 flex w-full items-center justify-between border border-border-soft px-3 py-2.5 text-sm text-fg-high hover:bg-elev-1'
-          >
-            <span className='lowercase'>deposit from Injective</span>
-            <span className='i-ph-caret-right h-4 w-4 text-fg-muted' />
-          </button>
+        {transparentChains.length > 0 && (
+          <div className='mb-4 flex gap-1 border border-border-soft p-1' role='tablist'>
+            {(['penumbra', ...transparentChains] as const).map(c => (
+              <button
+                key={c}
+                type='button'
+                role='tab'
+                aria-selected={receiveOn === c}
+                onClick={() => setReceiveOn(c)}
+                className={`flex-1 py-1.5 text-xs lowercase transition-colors ${
+                  receiveOn === c ? 'bg-elev-2 text-fg-high' : 'text-fg-muted hover:text-fg-high'
+                }`}
+              >
+                {c === 'penumbra' ? 'penumbra' : COSMOS_CHAINS[c].name}
+              </button>
+            ))}
+          </div>
+        )}
+        {receiveOn === 'penumbra' ? (
+          <ReceiveTab address={address} loading={loading} activeNetwork={activeNetwork} />
+        ) : (
+          <TransparentReceive key={receiveOn} chainId={receiveOn} />
         )}
       </div>
     </div>

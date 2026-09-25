@@ -857,6 +857,10 @@ export const externalMessageListener = (
             const { deriveFreshChainAddress } =
               await import('@repo/wallet/networks/cosmos/fresh-address');
             const derived = await deriveFreshChainAddress(chainId, mnemonic, hdIndex);
+            // remembered as shown, so the wallet keeps watching it even after
+            // it falls out of the recent-index window
+            const { rememberShownIndex } = await import('../../transparent/hd');
+            await rememberShownIndex(chainId, keyInfo.id, hdIndex).catch(() => undefined);
             sendResponse({ address: derived.address, hdIndex: derived.hdIndex });
           } finally {
             // Best-effort scrub of the mnemonic reference. JS strings are

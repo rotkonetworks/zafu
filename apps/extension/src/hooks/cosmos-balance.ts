@@ -6,7 +6,7 @@
  * when they explicitly toggle on a cosmos/IBC chain.
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useStore } from '../state';
 import { selectEffectiveKeyInfo, keyRingSelector, selectActiveNetwork } from '../state/keyring';
 import { getRootNetwork } from '../config/networks';
@@ -14,9 +14,8 @@ import {
   createSigningClient,
   deriveAllChainAddresses,
   deriveChainAddress,
-  deriveCosmosWallet,
 } from '@repo/wallet/networks/cosmos/signer';
-import { getBalance, getAllBalances } from '@repo/wallet/networks/cosmos/client';
+import { getBalance } from '@repo/wallet/networks/cosmos/client';
 import {
   COSMOS_CHAINS,
   rpcEndpointPool,
@@ -25,6 +24,15 @@ import {
 import { getNobleRpcPool } from './noble-rpc';
 import { getInjectiveRpcPool } from './injective-rpc';
 import { shortSymbol } from '../utils/asset-display';
+import { conduitFor } from '@repo/wallet/networks/transparent/conduit';
+import { peekHdIndex } from '@repo/storage-chrome/cosmos-chain-counters';
+import { knownAssets } from '../transparent/assets';
+import {
+  readFundedIndices,
+  readShownIndices,
+  rememberFundedIndices,
+  scanIndices,
+} from '../transparent/hd';
 
 /**
  * Cosmos chains (Noble, Injective, ...) are penumbra BURNERS - transparent
@@ -35,18 +43,14 @@ import { shortSymbol } from '../utils/asset-display';
  * roots to penumbra, so viewing a burner still counts as on-penumbra. Injective
  * is additionally excluded from this generic coin-118 path (its own conduit).
  */
-const useBurnerPollingEnabled = (chainId?: CosmosChainId): boolean => {
+const useBurnerPollingEnabled = (chainId?: CosmosChainId, legacyOnly = false): boolean => {
   const activeNetwork = useStore(selectActiveNetwork);
   if (!activeNetwork || getRootNetwork(activeNetwork) !== 'penumbra') {
     return false;
   }
-  // Injective (eth_secp256k1 / coin-60) is a conduit-only ramp with its OWN
-  // queries (injective-panel + networks/injective/client, LCD). It must never
-  // go through this generic coin-118 cosmos path: the StargateClient there
-  // cannot parse Injective's EthAccount ("Unsupported type:
-  // /injective.types.v1beta1.EthAccount"), and coin-118 derivation would produce
-  // the wrong inj address entirely.
-  if (chainId && COSMOS_CHAINS[chainId]?.keyAlgo === 'eth_secp256k1') {
+  // `chainId` only matters to the old coin-118-only hooks below, which still
+  // skip Ethermint chains; the deposit + asset hooks go through conduitFor.
+  if (chainId && COSMOS_CHAINS[chainId]?.keyAlgo === 'eth_secp256k1' && legacyOnly) {
     return false;
   }
   return true;
@@ -56,7 +60,7 @@ const useBurnerPollingEnabled = (chainId?: CosmosChainId): boolean => {
 export const useCosmosBalance = (chainId: CosmosChainId, accountIndex = 0) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { getMnemonic } = useStore(keyRingSelector);
-  const burnerEnabled = useBurnerPollingEnabled(chainId);
+  const burnerEnabled = useBurnerPollingEnabled(chainId, true);
 
   return useQuery({
     queryKey: ['cosmosBalance', chainId, selectedKeyInfo?.id, accountIndex],
@@ -169,6 +173,8 @@ export interface DepositAsset {
   denom: string;
   symbol: string;
   amount: bigint;
+  /** undefined for a denom we can't identify (shown in base units) */
+  decimals?: number;
   formatted: string;
 }
 
@@ -183,22 +189,68 @@ export interface DepositWallet {
   assets: DepositAsset[];
 }
 
-const DEPOSIT_SCAN_GAP = 8;
+/**
+ * Derived addresses per vault, chain and index. Each derivation stretches the
+ * seed, so a poll only derives indices it has not seen.
+ */
+const addressCache = new Map<string, string>();
+const deriveCached = async (
+  keyId: string,
+  chainId: CosmosChainId,
+  mnemonic: string,
+  index: number,
+): Promise<string> => {
+  const k = `${keyId}:${chainId}:${index}`;
+  let address = addressCache.get(k);
+  if (!address) {
+    address = await conduitFor(chainId).deriveAddress(mnemonic, index);
+    addressCache.set(k, address);
+  }
+  return address;
+};
 
 /**
- * Scan burner deposit addresses (indices 0..gap) for one chain. Returns the
- * FUNDED ones (your deposit wallets, each independently shieldable) plus the
- * first UNUSED index (the fresh address to receive on).
+ * Balances -> display assets. Known assets carry their real decimals (INJ is
+ * 18, USDC 6); an unknown denom is still listed, in raw base units, so no
+ * funds ever disappear from view.
+ */
+const toDepositAssets = (
+  chainId: CosmosChainId,
+  balances: readonly { denom: string; amount: bigint }[],
+): DepositAsset[] => {
+  const known = knownAssets(chainId);
+  return balances
+    .filter(b => b.amount > 0n)
+    .map(b => {
+      const meta = known.get(b.denom.toLowerCase());
+      const symbol = meta?.symbol ?? denomToSymbol(b.denom);
+      return {
+        denom: b.denom,
+        symbol,
+        amount: b.amount,
+        decimals: meta?.decimals,
+        formatted: meta
+          ? formatBalance(b.amount, meta.decimals, symbol)
+          : `${b.amount} ${symbol} (base units)`,
+      };
+    })
+    .sort((a, b) => Number(b.amount - a.amount));
+};
+
+/**
+ * Scan a transparent chain's deposit addresses: 0..8 (where the old
+ * first-empty model put them), the most recently handed-out indices, and
+ * every index that ever held funds. Returns the FUNDED ones (each
+ * independently shieldable / sendable) plus the first scanned empty address.
  *
- * Stateless on purpose: the receive pointer and the funded set are derived from
- * on-chain balances, not a stored counter. That is what makes it safe - a
- * counter that advances past a funded address (which is what shipped earlier)
- * strands funds; deriving from balances can never lose sight of money.
+ * Derivation and balances go through the chain's conduit, so Injective stays
+ * on coin type 60 and its LCD.
  */
 export const useCosmosDepositWallets = (chainId: CosmosChainId) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { getMnemonic } = useStore(keyRingSelector);
   const burnerEnabled = useBurnerPollingEnabled(chainId);
+  useColdSweep(chainId, burnerEnabled);
 
   return useQuery({
     queryKey: ['cosmosDepositWallets', chainId, selectedKeyInfo?.id],
@@ -210,8 +262,9 @@ export const useCosmosDepositWallets = (chainId: CosmosChainId) => {
       if (!selectedKeyInfo || selectedKeyInfo.type !== 'mnemonic') {
         return null;
       }
-      const mnemonic = await getMnemonic(selectedKeyInfo.id);
-      const config = COSMOS_CHAINS[chainId];
+      const keyId = selectedKeyInfo.id;
+      const mnemonic = await getMnemonic(keyId);
+      const conduit = conduitFor(chainId);
       // user-editable pools for Noble + Injective (Settings -> Penumbra ->
       // burners); other chains use their config pool
       const pool =
@@ -221,71 +274,121 @@ export const useCosmosDepositWallets = (chainId: CosmosChainId) => {
             ? await getInjectiveRpcPool()
             : rpcEndpointPool(chainId);
 
-      // Track whether any burner scan couldn't reach the RPC at all (both its
-      // rotated endpoint and the fallback failed). Without this, an unreachable
-      // RPC is indistinguishable from a genuinely empty burner - the funds look
-      // gone. Surfaced to the UI as a "balance may be stale" note.
+      const [highest, rememberedFunded] = await Promise.all([
+        peekHdIndex(chainId),
+        readFundedIndices(chainId, keyId),
+      ]);
+      const indices = scanIndices(highest, rememberedFunded);
+
+      // An unreachable endpoint must not read as an empty burner (funds look
+      // gone): surfaced to the UI as a "balance may be stale" note.
       let rpcError = false;
 
+      // derive first (CPU, cached), then query every address in parallel
+      const targets: { index: number; address: string }[] = [];
+      for (const index of indices) {
+        targets.push({ index, address: await deriveCached(keyId, chainId, mnemonic, index) });
+      }
+      const config = COSMOS_CHAINS[chainId];
       const scan = await Promise.all(
-        Array.from({ length: DEPOSIT_SCAN_GAP + 1 }, (_, i) => i).map(async index => {
-          const { address: base } = await deriveCosmosWallet(mnemonic, index);
-          const address = deriveChainAddress(base, chainId);
-          // A burner can hold more than its native asset: an unshield lands UM
-          // here, and the user may also route USDC into the same address before
-          // burning it. Scan every balance, not just the native denom.
-          //
-          // Query each burner through a DIFFERENT RPC endpoint (rotated by index)
-          // so no single provider sees all of your deposit addresses together.
-          // If that endpoint is down, fall back to the primary rather than hide
-          // a funded burner.
-          const toAssets = (balances: { denom: string; amount: bigint }[]): DepositAsset[] =>
-            balances
-              .filter(b => b.amount > 0n)
-              .map(b => {
-                const isNative = b.denom === config.denom;
-                const symbol = isNative ? config.symbol : denomToSymbol(b.denom);
-                const decimals = isNative ? config.decimals : 6;
-                return {
-                  denom: b.denom,
-                  symbol,
-                  amount: b.amount,
-                  formatted: formatBalance(b.amount, decimals, symbol),
-                };
-              })
-              .sort((a, b) => Number(b.amount - a.amount));
-
-          let assets: DepositAsset[] = [];
-          const endpoint = pool[index % pool.length];
+        targets.map(async ({ index, address }): Promise<DepositWallet> => {
+          // Each burner through a DIFFERENT endpoint (rotated by index) so no
+          // single provider sees all of your deposit addresses together; on
+          // failure fall back to the primary rather than hide a funded burner.
+          let balances: { denom: string; amount: bigint }[] = [];
           try {
-            assets = toAssets(await getAllBalances(chainId, address, endpoint));
+            balances = await conduit.queryBalances(address, pool[index % pool.length]);
           } catch {
             try {
-              assets = toAssets(await getAllBalances(chainId, address));
+              balances = await conduit.queryBalances(address);
             } catch {
-              /* both unreachable this pass -> empty, retried on refetch */
-              rpcError = true;
+              rpcError = true; // retried on refetch
             }
           }
-          const total = assets.reduce((sum, a) => sum + a.amount, 0n);
+          const assets = toDepositAssets(chainId, balances);
           const native = assets.find(a => a.denom === config.denom);
           return {
             index,
             address,
-            balance: total,
+            balance: assets.reduce((sum, x) => sum + x.amount, 0n),
             formatted: native?.formatted ?? formatBalance(0n, config.decimals, config.symbol),
             assets,
-          } as DepositWallet;
+          };
         }),
       );
 
       const funded = scan.filter(w => w.balance > 0n);
+      if (funded.some(w => !rememberedFunded.includes(w.index))) {
+        await rememberFundedIndices(
+          chainId,
+          keyId,
+          funded.map(w => w.index),
+        );
+      }
       const receive = scan.find(w => w.balance === 0n) ?? scan[scan.length - 1];
-      // `used` = every address up to (not including) the fresh receive pointer:
-      // funded now, or funded before and since drained. The Receive tab lists
-      // these so a user can see/return to any address they've deposited to.
+      // `used` = every scanned address below the receive pointer: funded now,
+      // or funded before and since drained.
       const used = receive ? scan.filter(w => w.index < receive.index) : [];
       return { funded, receive, used, all: scan, rpcError };
+    },
+  });
+};
+
+/** cadence of the slow sweep over every address ever shown */
+const COLD_SWEEP_MS = 180_000;
+
+/**
+ * Every address ever shown as a receive address stays watched: an exchange
+ * often keeps paying a whitelisted address long after we rotated past it.
+ * Shown indices outside the regular scan are checked one at a time every few
+ * minutes; any holding funds join the funded set, which the 30s scan covers.
+ */
+const useColdSweep = (chainId: CosmosChainId, enabled: boolean) => {
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const { getMnemonic } = useStore(keyRingSelector);
+  const queryClient = useQueryClient();
+  return useQuery({
+    queryKey: ['cosmosColdSweep', chainId, selectedKeyInfo?.id],
+    enabled: enabled && selectedKeyInfo?.type === 'mnemonic',
+    staleTime: COLD_SWEEP_MS - 10_000,
+    refetchInterval: COLD_SWEEP_MS,
+    queryFn: async (): Promise<number[]> => {
+      if (selectedKeyInfo?.type !== 'mnemonic') {
+        return [];
+      }
+      const keyId = selectedKeyInfo.id;
+      const [shown, funded, highest] = await Promise.all([
+        readShownIndices(chainId, keyId),
+        readFundedIndices(chainId, keyId),
+        peekHdIndex(chainId),
+      ]);
+      const hot = new Set(scanIndices(highest, funded));
+      const cold = shown.filter(i => !hot.has(i));
+      if (cold.length === 0) {
+        return [];
+      }
+      const mnemonic = await getMnemonic(keyId);
+      const conduit = conduitFor(chainId);
+      const found: number[] = [];
+      for (const index of cold) {
+        const address = await deriveCached(keyId, chainId, mnemonic, index);
+        try {
+          if ((await conduit.queryBalances(address)).some(b => b.amount > 0n)) {
+            found.push(index);
+          }
+        } catch {
+          // endpoint hiccup: the next sweep retries this index
+        }
+        // one at a time, yielding: this is a background chore
+        await new Promise<void>(resolve => {
+          setTimeout(resolve, 50);
+        });
+      }
+      if (found.length) {
+        await rememberFundedIndices(chainId, keyId, found);
+        void queryClient.invalidateQueries({ queryKey: ['cosmosDepositWallets', chainId] });
+      }
+      return found;
     },
   });
 };
@@ -309,6 +412,11 @@ function getZignerCosmosAddress(
   keyInfo: { insensitive: Record<string, unknown> },
   chainId: CosmosChainId,
 ): string | null {
+  // zigner holds coin-118 cosmos keys; any address it has for an Ethermint
+  // chain would be the wrong one
+  if (COSMOS_CHAINS[chainId].keyAlgo === 'eth_secp256k1') {
+    return null;
+  }
   const addrs = keyInfo.insensitive['cosmosAddresses'] as
     | { chainId: string; address: string; prefix: string }[]
     | undefined;
@@ -387,21 +495,24 @@ export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
         address = storedAddr;
       } else if (cosmosKey.type === 'mnemonic') {
         const mnemonic = await getMnemonic(cosmosKey.id);
-        const client = await createSigningClient(chainId, mnemonic, accountIndex);
-        address = client.address;
+        address = await deriveCached(cosmosKey.id, chainId, mnemonic, accountIndex);
       } else {
         return null;
       }
 
       const config = COSMOS_CHAINS[chainId];
-      const balances = await getAllBalances(chainId, address);
+      const balances = await conduitFor(chainId).queryBalances(address);
+      const known = knownAssets(chainId);
 
+      // Only assets we know the decimals of: this list feeds the send form, and
+      // a guessed exponent sends the wrong amount (INJ is 18, not 6).
       const assets: CosmosAsset[] = balances
-        .filter(b => b.amount > 0n)
+        .filter(b => b.amount > 0n && known.has(b.denom.toLowerCase()))
         .map(b => {
-          const isNative = b.denom === config.denom;
-          const symbol = isNative ? config.symbol : denomToSymbol(b.denom);
-          const decimals = isNative ? config.decimals : 6;
+          const meta = known.get(b.denom.toLowerCase())!;
+          const isNative = b.denom.toLowerCase() === config.denom.toLowerCase();
+          const symbol = meta.symbol;
+          const decimals = meta.decimals;
           return {
             denom: b.denom,
             amount: b.amount,

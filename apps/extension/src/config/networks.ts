@@ -40,16 +40,6 @@ export interface NetworkConfig {
    * ~5.5s), so a single constant silently gives Injective a 12-minute window.
    */
   ibcBlockTimeMs?: number;
-  /**
-   * Conduit-only subnetwork: reached through a dedicated derive+sign path
-   * (e.g. Injective's eth_secp256k1 conduit), NOT the shared cosmos secp256k1 /
-   * coin-118 IBC machinery. Excluded from getActiveIbcSubnetworks (which drives
-   * the standard cosmos deposit UI) and from network-loader adapter loading, so
-   * `launched:true` can't route it through the wrong (fund-losing) path. It IS
-   * in getActiveIbcChainIds (Penumbra's IBC send-out lists it); that screen
-   * derives its own-address on the coin-type-60 path (injective/shown.ts).
-   */
-  conduitOnly?: boolean;
   features: {
     stake: boolean;
     swap: boolean;
@@ -153,8 +143,6 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     ibcChainId: 'injective-1',
     // Injective runs sub-second blocks (~0.65-0.8s).
     ibcBlockTimeMs: 700,
-    // eth_secp256k1 conduit, not the shared cosmos coin-118 path
-    conduitOnly: true,
     features: { stake: false, swap: false, vote: false, inbox: false, multisig: false },
   },
   ethereum: {
@@ -204,16 +192,10 @@ export const getSubnetworks = (parent: NetworkType): NetworkType[] =>
 
 /**
  * IBC chain ids reachable from `parent` right now: launched subnetworks that
- * carry an `ibcChainId` (a live channel + client), INCLUDING conduit-only ramps
- * like Injective, so they are valid IBC deposit/withdraw destinations. Channels
- * close on network upgrades and re-open by setting `ibcChainId` + `launched`.
- *
- * Injective IS included here (it is a valid unshield/withdraw destination - the
- * user supplies the inj1 address) even though it is `conduitOnly`. Fund safety
- * holds because the shared coin-118 deposit UI is gated by getActiveIbcSubnetworks
- * (below), which EXCLUDES conduitOnly - so Injective never reaches a coin-118
- * derivation; its own conduit panel (eth_secp256k1) handles the inj side, and the
- * standard deposit list drops it via ibcChainToCosmosId.
+ * carry an `ibcChainId` (a live channel + client). Channels close on network
+ * upgrades and re-open by setting `ibcChainId` + `launched`. Every derive /
+ * balance / sign on these chains goes through conduitFor (packages/wallet
+ * networks/transparent), which keeps Injective on its coin-type-60 path.
  */
 export const getActiveIbcChainIds = (parent: NetworkType): string[] =>
   (Object.keys(NETWORKS) as NetworkType[])
@@ -223,11 +205,7 @@ export const getActiveIbcChainIds = (parent: NetworkType): string[] =>
 /** As above but returns the network KEYS (e.g. 'noble'), for gating by activeNetwork. */
 export const getActiveIbcSubnetworks = (parent: NetworkType): NetworkType[] =>
   (Object.keys(NETWORKS) as NetworkType[]).filter(
-    n =>
-      NETWORKS[n].launched &&
-      NETWORKS[n].parent === parent &&
-      NETWORKS[n].ibcChainId &&
-      !NETWORKS[n].conduitOnly,
+    n => NETWORKS[n].launched && NETWORKS[n].parent === parent && NETWORKS[n].ibcChainId,
   );
 
 /**

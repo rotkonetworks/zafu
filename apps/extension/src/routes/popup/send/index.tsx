@@ -16,7 +16,7 @@ import { recentAddressesSelector, type AddressNetwork } from '../../../state/rec
 import { contactsSelector } from '../../../state/contacts';
 import { selectIbcWithdraw } from '../../../state/ibc-withdraw';
 import { isValidWithdrawAmount } from '../../../state/ibc-withdraw-amount';
-import { isActiveIbcChain, getNetwork } from '../../../config/networks';
+import { isActiveIbcChain, getNetwork, getActiveIbcSubnetworks } from '../../../config/networks';
 import type { NetworkType } from '../../../state/keyring';
 import { selectPenumbraSend } from '../../../state/penumbra-send';
 import { useIbcChains, isValidIbcAddress, type IbcChain } from '../../../hooks/ibc-chains';
@@ -63,7 +63,14 @@ import { usePasswordGate } from '../../../hooks/password-gate';
 import { isDedicatedWindow } from '../../../utils/popup-detection';
 import { openInDedicatedWindow } from '../../../utils/navigate';
 import { keyRingSelector, selectEffectiveKeyInfo } from '../../../state/keyring';
-import { allocateInjectiveAddress } from '../injective/shown';
+import { useGasSponsor } from '../../../transparent/sponsor';
+import { formatBaseUnits, fullDecimalString } from '../../../transparent/assets';
+import { allocateTransparentAddress, shortAddress } from '../../../transparent/hd';
+import {
+  parseInjectiveRecipient,
+  type InjectiveRecipientProblem,
+} from '@repo/wallet/networks/injective/derive';
+import { derivePenumbraEphemeralFromMnemonic } from '../../../hooks/use-address';
 import { RecipientPicker } from '../../../components/recipient-picker';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 
@@ -373,24 +380,63 @@ const memoLooksLikeMnemonic = (memo: string): boolean => {
   return hits >= threshold;
 };
 
+/** one short line per way a pasted Injective recipient can be wrong */
+const ETHERMINT_RECIPIENT_PROBLEM: Record<InjectiveRecipientProblem, (prefix?: string) => string> =
+  {
+    penumbra: () => 'penumbra address - use shield instead',
+    'other-chain': prefix => `${prefix ?? 'other'} address, not injective`,
+    checksum: () => 'typo - a character is wrong',
+    format: () => 'not an address',
+  };
+
 function CosmosSend({
   sourceChainId,
-  initialAccountIndex = 0,
+  initialAccountIndex,
+  intent = 'send',
 }: {
   sourceChainId: CosmosChainId;
   initialAccountIndex?: number;
+  /** 'shield' opens straight on "into my Penumbra wallet" */
+  intent?: 'send' | 'shield';
 }) {
   const sourceChain = COSMOS_CHAINS[sourceChainId];
+  const isEthermint = sourceChain.keyAlgo === 'eth_secp256k1';
   // two ways to move funds out of a cosmos/burner wallet: same-chain (e.g. to a
   // Noble exchange deposit address) or cross-chain via IBC (Skip routing).
-  const [sendMode, setSendMode] = useState<'same' | 'ibc'>('same');
-  const [destChainId, setDestChainId] = useState<string | undefined>();
+  const [sendMode, setSendMode] = useState<'same' | 'ibc'>(
+    intent === 'shield' && sourceChain.penumbraChannel ? 'ibc' : 'same',
+  );
+  const [destChainId, setDestChainId] = useState<string | undefined>(
+    intent === 'shield' && sourceChain.penumbraChannel ? PENUMBRA_CHAIN_ID : undefined,
+  );
+  // once the user picks a destination, stop defaulting it
+  const [destTouched, setDestTouched] = useState(false);
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [selectedAsset, setSelectedAsset] = useState<CosmosAsset | undefined>();
-  // Sign from the burner index the caller chose (which funded address to spend),
-  // so a rotated/never-reused address is actually spendable. Default 0.
-  const [accountIndex] = useState(initialAccountIndex);
+  // The address being spent: the caller's pick, changeable among the funded
+  // ones. Locked while a tx is in flight.
+  const [accountIndex, setAccountIndex] = useState(initialAccountIndex ?? 0);
+  const { data: deposits } = useCosmosDepositWallets(sourceChainId);
+  // opened without a specific address (Send's source tab): start on the
+  // address holding the most, once the scan knows
+  const [autoPicked, setAutoPicked] = useState(initialAccountIndex !== undefined);
+  useEffect(() => {
+    if (autoPicked || !deposits) {
+      return;
+    }
+    // by the ramp asset (USDC.inj), not raw sums: 18-decimal INJ dust would
+    // otherwise outweigh real USDC
+    const ramp = (w: (typeof deposits.funded)[number]) =>
+      w.assets.find(x => x.denom === sourceChain.denom)?.amount ?? 0n;
+    const top = [...deposits.funded].sort((a, b) =>
+      ramp(a) !== ramp(b) ? (ramp(b) > ramp(a) ? 1 : -1) : b.balance > a.balance ? 1 : -1,
+    )[0];
+    if (top) {
+      setAccountIndex(top.index);
+    }
+    setAutoPicked(true);
+  }, [autoPicked, deposits, sourceChain.denom]);
   const [memo, setMemo] = useState('');
   const [txStatus, setTxStatus] = useState<
     'idle' | 'confirm' | 'signing' | 'broadcasting' | 'success' | 'error'
@@ -421,19 +467,39 @@ function CosmosSend({
   useEffect(() => {
     if (sendMode !== 'ibc') {
       setDestChainId(undefined);
+      setDestTouched(false);
       return;
     }
-    if (destChainId || sourceChain.chainId === PENUMBRA_CHAIN_ID) {
+    if (destTouched || destChainId || sourceChain.chainId === PENUMBRA_CHAIN_ID) {
       return;
     }
-    if (sourceChain.penumbraChannel && skipChains.some(c => c.chainId === PENUMBRA_CHAIN_ID)) {
+    // our own relayed channel: no Skip route needed
+    if (sourceChain.penumbraChannel) {
       setDestChainId(PENUMBRA_CHAIN_ID);
       return;
     }
     if (sourceChain.chainId !== 'osmosis-1' && skipChains.some(c => c.chainId === 'osmosis-1')) {
       setDestChainId('osmosis-1');
     }
-  }, [sendMode, skipChains, destChainId, sourceChain.chainId, sourceChain.penumbraChannel]);
+  }, [
+    sendMode,
+    skipChains,
+    destChainId,
+    destTouched,
+    sourceChain.chainId,
+    sourceChain.penumbraChannel,
+  ]);
+  // Penumbra is always offered when there is a direct channel, listed or not
+  const destChains = useMemo(
+    () =>
+      sourceChain.penumbraChannel
+        ? [
+            { chainId: PENUMBRA_CHAIN_ID, chainName: 'Penumbra (shielded)' },
+            ...skipChains.filter(c => c.chainId !== PENUMBRA_CHAIN_ID),
+          ]
+        : skipChains,
+    [skipChains, sourceChain.penumbraChannel],
+  );
 
   // assets hook - uses accountIndex
   const {
@@ -443,25 +509,71 @@ function CosmosSend({
   } = useCosmosAssets(sourceChainId, accountIndex);
 
   // auto-select native asset when data loads. Must be an effect, not useMemo:
-  // setState belongs in a commit-phase effect, not render.
+  // setState belongs in a commit-phase effect, not render. A selection this
+  // address doesn't hold falls back too.
   useEffect(() => {
-    if (assetsData?.nativeAsset && !selectedAsset) {
-      setSelectedAsset(assetsData.nativeAsset);
+    const held = assetsData?.assets ?? [];
+    if (!selectedAsset || !held.some(a => a.denom === selectedAsset.denom)) {
+      const next = assetsData?.nativeAsset ?? held[0];
+      if (next && next.denom !== selectedAsset?.denom) {
+        setSelectedAsset(next);
+      }
+    } else {
+      // keep the amount fresh for the same asset
+      const fresh = held.find(a => a.denom === selectedAsset.denom);
+      if (fresh && fresh.amount !== selectedAsset.amount) {
+        setSelectedAsset(fresh);
+      }
     }
   }, [assetsData, selectedAsset]);
+  // "20" typed for one asset or address never carries over to another
+  useEffect(() => {
+    setAmount('');
+  }, [selectedAsset?.denom, accountIndex]);
 
   // signing hooks
   const cosmosSend = useCosmosSend();
   const cosmosIbcTransfer = useCosmosIbcTransfer();
   const { requestAuth, PasswordModal } = usePasswordGate();
 
-  // set max amount for selected asset
+  // funded addresses (plus the current one) as "from" options
+  const fromOptions = useMemo(() => {
+    const funded = deposits?.funded ?? [];
+    const rows = funded.some(w => w.index === accountIndex)
+      ? funded
+      : [...funded, ...(deposits?.all ?? []).filter(w => w.index === accountIndex)];
+    return rows.map(w => ({
+      index: w.index,
+      address: w.address,
+      summary: w.assets[0]
+        ? `${w.assets[0].formatted}${w.assets.length > 1 ? ` +${w.assets.length - 1}` : ''}`
+        : 'empty',
+    }));
+  }, [deposits, accountIndex]);
+  const gas = useGasSponsor(
+    sourceChainId,
+    sendMode === 'same' ? 'send' : 'ibc',
+    assetsData?.assets,
+  );
+  const payWithSponsor = !gas.gasOk && gas.sponsored;
+  const canPayFee = gas.gasOk || gas.sponsored;
+  // moving the gas asset itself must leave the fee behind
+  const isGasAsset =
+    !!selectedAsset && selectedAsset.denom.toLowerCase() === gas.gasAsset.denom.toLowerCase();
+  const spendable = selectedAsset
+    ? isGasAsset && !payWithSponsor
+      ? selectedAsset.amount > gas.fee
+        ? selectedAsset.amount - gas.fee
+        : 0n
+      : selectedAsset.amount
+    : 0n;
+
+  // exact, no float: round-trips through parseAmountToBaseUnits
   const handleSetMax = useCallback(() => {
     if (selectedAsset) {
-      const maxAmount = Number(selectedAsset.amount) / Math.pow(10, selectedAsset.decimals);
-      setAmount(maxAmount.toString());
+      setAmount(fullDecimalString(spendable, selectedAsset.decimals));
     }
-  }, [selectedAsset]);
+  }, [selectedAsset, spendable]);
 
   // convert amount to base units (integer math, no float precision loss)
   const amountInBase = useMemo(() => {
@@ -515,10 +627,19 @@ function CosmosSend({
   // Shielding INTO penumbra: bypass Skip, use our own relayed channel directly.
   const isPenumbraDest = effectiveDestChainId === PENUMBRA_CHAIN_ID;
 
+  // Injective recipients: inj1 or 0x (EIP-55), with a reason when wrong
+  const ethermintRecipient =
+    isEthermint && isSameChain && recipient ? parseInjectiveRecipient(recipient) : undefined;
+  // the address the tx actually names (0x becomes its inj1 form)
+  const toAddress = ethermintRecipient?.ok ? ethermintRecipient.address : recipient;
+
   // validate recipient
   const recipientValid = useMemo(() => {
     if (!recipient) {
       return false;
+    }
+    if (ethermintRecipient) {
+      return ethermintRecipient.ok;
     }
     // penumbra addresses are bech32m and much longer than a cosmos address, so
     // isValidCosmosAddress would reject them - match the prefix directly.
@@ -532,10 +653,41 @@ function CosmosSend({
       }
     }
     return isValidCosmosAddress(recipient);
-  }, [recipient, destChainId, isPenumbraDest, skipChains]);
+  }, [recipient, destChainId, isPenumbraDest, skipChains, ethermintRecipient]);
 
+  const amountBase =
+    selectedAsset && /^\d+(\.\d+)?$/.test(amount.trim())
+      ? BigInt(parseAmountToBaseUnits(amount.trim(), selectedAsset.decimals))
+      : 0n;
+  const exceeds = amountBase > spendable;
   const canSubmit =
-    recipient && recipientValid && parseFloat(amount) > 0 && selectedAsset && txStatus === 'idle';
+    recipient &&
+    recipientValid &&
+    amountBase > 0n &&
+    !exceeds &&
+    canPayFee &&
+    !memoLooksLikeMnemonic(memo) &&
+    selectedAsset &&
+    txStatus === 'idle';
+
+  // Shielding to yourself: a fresh single-use Penumbra address of this wallet
+  const { getMnemonic } = useStore(keyRingSelector);
+  const penumbraAccount = useStore(selectPenumbraAccount);
+  const fillOwnPenumbra = useCallback(async () => {
+    if (selectedKeyInfo?.type !== 'mnemonic') {
+      return;
+    }
+    const mnemonic = await getMnemonic(selectedKeyInfo.id);
+    if (mnemonic) {
+      setRecipient(await derivePenumbraEphemeralFromMnemonic(mnemonic, penumbraAccount));
+    }
+  }, [selectedKeyInfo, getMnemonic, penumbraAccount]);
+  const wantsOwnPenumbra = intent === 'shield' && isPenumbraDest && !recipient;
+  useEffect(() => {
+    if (wantsOwnPenumbra) {
+      void fillOwnPenumbra().catch(() => undefined);
+    }
+  }, [wantsOwnPenumbra, fillOwnPenumbra]);
 
   // Listen for cosmos sign result from dedicated window
   useEffect(() => {
@@ -574,9 +726,9 @@ function CosmosSend({
         type: 'cosmos-sdk/MsgSend',
         chain_id: sourceChain.chainId,
         from: assetsData?.address ?? '...',
-        to: recipient,
+        to: toAddress,
         amount: [{ denom, amount: String(amtBase) }],
-        gas: '150000',
+        gas: gas.gasLimit,
       });
     } else {
       // penumbra shield-in uses our direct relayed channel; everything else
@@ -591,7 +743,7 @@ function CosmosSend({
         to: recipient,
         token: { denom, amount: String(amtBase) },
         source_channel: channel ?? 'unknown',
-        gas: '200000',
+        gas: gas.gasLimit,
       });
     }
 
@@ -607,6 +759,7 @@ function CosmosSend({
     recipient,
     assetsData,
     route,
+    gas.gasLimit,
   ]);
 
   // confirmed — ask password then sign+broadcast
@@ -632,21 +785,34 @@ function CosmosSend({
         label: string,
         run: () => Promise<T>,
       ) =>
-        trackTx({ network: 'cosmos', label }, async () => {
-          const r = await run();
-          return { r, txId: 'txHash' in r ? r.txHash : undefined };
-        }).then(x => x.r);
+        trackTx(
+          { network: sourceChainId === 'injective' ? 'injective' : 'cosmos', label },
+          async () => {
+            const r = await run();
+            return {
+              r,
+              txId: 'txHash' in r ? r.txHash : undefined,
+              restUrl: 'restUrl' in r ? r.restUrl : undefined,
+            };
+          },
+        ).then(x => x.r);
+      const signing = {
+        decimals: selectedAsset.decimals,
+        expectedAddress: assetsData?.address,
+        sponsored: payWithSponsor,
+      };
       let result;
 
       if (isSameChain) {
         result = await tracked(`send ${amount} ${sym}`, () =>
           cosmosSend.mutateAsync({
             chainId: sourceChainId,
-            toAddress: recipient,
+            toAddress,
             amount,
             denom: selectedAsset.denom,
             memo: memo.trim() || undefined,
             accountIndex,
+            ...signing,
           }),
         );
       } else {
@@ -675,6 +841,7 @@ function CosmosSend({
               denom: selectedAsset.denom,
               memo: memo.trim() || undefined,
               accountIndex,
+              ...signing,
             }),
         );
       }
@@ -698,9 +865,11 @@ function CosmosSend({
       setTxStatus('success');
       setTxHash(result.txHash);
       void refetchAssets();
-      void recordUsage(recipient, 'cosmos', sourceChainId);
-      if (shouldSuggestSave(recipient)) {
-        setShowSavePrompt(true);
+      if (!isPenumbraDest) {
+        void recordUsage(toAddress, 'cosmos', sourceChainId);
+        if (shouldSuggestSave(toAddress)) {
+          setShowSavePrompt(true);
+        }
       }
     } catch (err) {
       setTxStatus('error');
@@ -713,10 +882,14 @@ function CosmosSend({
     sourceChainId,
     effectiveDestChainId,
     recipient,
+    toAddress,
     amount,
     selectedAsset,
     accountIndex,
     route,
+    assetsData,
+    payWithSponsor,
+    isEthermint,
     cosmosSend,
     cosmosIbcTransfer,
     refetchAssets,
@@ -755,14 +928,29 @@ function CosmosSend({
         </button>
       </div>
 
-      {/* which burner address is being spent (fixed by the caller - not a
-          picker; the user chose it by shielding a specific funded address) */}
+      {/* the address being spent; any funded one can be picked */}
       {assetsData?.address && (
         <div>
           <label className='mb-1 block text-xs text-fg-muted'>from</label>
-          <span className='block rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm text-fg-muted'>
-            {assetsData.address.slice(0, 12)}…{assetsData.address.slice(-6)}
-          </span>
+          {fromOptions.length > 1 ? (
+            <select
+              value={accountIndex}
+              onChange={e => setAccountIndex(Number(e.target.value))}
+              disabled={txStatus !== 'idle'}
+              aria-label='from address'
+              className='w-full border border-border-soft bg-input px-3 py-2.5 font-mono text-sm text-fg focus:border-zigner-gold focus:outline-none'
+            >
+              {fromOptions.map(w => (
+                <option key={w.index} value={w.index}>
+                  #{w.index} {shortAddress(w.address)} - {w.summary}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className='block border border-border-soft bg-input px-3 py-2.5 font-mono text-sm text-fg-muted'>
+              {shortAddress(assetsData.address)}
+            </span>
+          )}
         </div>
       )}
 
@@ -774,16 +962,24 @@ function CosmosSend({
       {sendMode === 'ibc' && (
         <div>
           <label className='mb-1 block text-xs text-fg-muted'>destination chain</label>
-          {chainsLoading ? (
+          {chainsLoading && !sourceChain.penumbraChannel ? (
             <div className='h-10 rounded-lg bg-elev-2 animate-pulse' />
           ) : (
             <CosmosChainSelector
-              chains={skipChains}
+              chains={destChains}
               selected={destChainId ?? detectedChain?.chainId}
-              onSelect={id => setDestChainId(id || undefined)}
+              onSelect={id => {
+                setDestTouched(true);
+                setDestChainId(id || undefined);
+                setRecipient('');
+              }}
               currentChainId={sourceChain.chainId}
               autoLabel={
-                detectedChain ? `auto (${detectedChain.name})` : 'auto-detect from address'
+                destChainId
+                  ? undefined
+                  : detectedChain
+                    ? `auto (${detectedChain.name})`
+                    : 'auto-detect from address'
               }
             />
           )}
@@ -827,9 +1023,27 @@ function CosmosSend({
             recipient && !recipientValid ? 'border-red-400' : 'border-border-soft',
           )}
         />
+        {isPenumbraDest && selectedKeyInfo?.type === 'mnemonic' && (
+          <button
+            type='button'
+            onClick={() => void fillOwnPenumbra()}
+            className='mt-1 text-xs text-zigner-gold hover:underline'
+          >
+            my penumbra wallet
+          </button>
+        )}
         {recipient && !recipientValid && (
           <p className='mt-1 text-xs text-red-400'>
-            {isPenumbraDest ? 'invalid penumbra address' : 'invalid cosmos address'}
+            {ethermintRecipient && !ethermintRecipient.ok
+              ? ETHERMINT_RECIPIENT_PROBLEM[ethermintRecipient.problem](ethermintRecipient.prefix)
+              : isPenumbraDest
+                ? 'invalid penumbra address'
+                : 'invalid cosmos address'}
+          </p>
+        )}
+        {ethermintRecipient?.ok && ethermintRecipient.fromHex && (
+          <p className='mt-1 font-mono text-xs text-fg-muted' title={toAddress}>
+            sends to {shortAddress(toAddress)}
           </p>
         )}
         {sendMode === 'ibc' && detectedChain && !destChainId && (
@@ -858,7 +1072,7 @@ function CosmosSend({
             placeholder='0.00'
             className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 pr-14 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
           />
-          {selectedAsset && Number(selectedAsset.amount) > 0 && (
+          {selectedAsset && spendable > 0n && (
             <button
               type='button'
               onClick={handleSetMax}
@@ -870,33 +1084,38 @@ function CosmosSend({
         </div>
       </div>
 
-      {/* memo — required by most exchanges to credit a deposit. Penumbra
-          cannot supply one (Ics20Withdrawal has no memo field, and the
-          shielded tx memo is encrypted), so for an exchange deposit this
-          is the only place the memo can be set. */}
-      <div>
-        <label htmlFor='cosmos-send-memo' className='mb-1 block text-xs text-fg-muted'>
-          memo (optional)
-        </label>
-        <input
-          id='cosmos-send-memo'
-          type='text'
-          value={memo}
-          onChange={e => setMemo(e.target.value)}
-          placeholder='exchange deposit memo / tag'
-          className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
-        />
-        {memoLooksLikeMnemonic(memo) && (
-          <p className='mt-1 text-xs text-red-400'>
-            this looks like a recovery phrase — never put one in a memo, it is published on-chain in
-            the clear
-          </p>
+      {exceeds && <p className='-mt-2 text-xs text-amber-400/90'>more than this address holds</p>}
+      <p className='-mt-2 text-xs text-fg-muted'>
+        {payWithSponsor
+          ? 'fee covered by the rotko sponsor'
+          : `fee ~${formatBaseUnits(gas.fee, gas.gasAsset.decimals, 6)} ${gas.gasAsset.symbol}`}
+        {!canPayFee && (
+          <span className='text-amber-400/90'> - not enough {gas.gasAsset.symbol}</span>
         )}
-        <p className='mt-1 text-xs text-fg-muted'>
-          sending to an exchange? paste the memo/tag from its deposit page — without it the deposit
-          may not be credited
-        </p>
-      </div>
+      </p>
+
+      {/* memo: exchanges often credit a deposit only with it. Penumbra can't
+          carry one, so this is the only place it can be set. */}
+      {!isPenumbraDest && (
+        <div>
+          <label htmlFor='cosmos-send-memo' className='mb-1 block text-xs text-fg-muted'>
+            memo (optional)
+          </label>
+          <input
+            id='cosmos-send-memo'
+            type='text'
+            value={memo}
+            onChange={e => setMemo(e.target.value)}
+            placeholder='if the exchange needs one'
+            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
+          />
+          {memoLooksLikeMnemonic(memo) && (
+            <p className='mt-1 text-xs text-red-400'>
+              that looks like a recovery phrase - never put it in a memo
+            </p>
+          )}
+        </div>
+      )}
 
       {/* route info */}
       {routeLoading && (
@@ -931,13 +1150,10 @@ function CosmosSend({
         <p className='text-xs text-red-400'>{routeError.message}</p>
       )}
       {sendMode === 'ibc' && isPenumbraDest && (
-        <div className='flex items-start gap-2 rounded-lg border border-border-soft bg-elev-2/20 p-3 text-xs text-fg-muted'>
-          <span className='i-ph-shield h-3.5 w-3.5 shrink-0 text-penumbra-purple' />
-          <span>
-            direct shielded deposit into penumbra over {sourceChain.name}{' '}
-            {sourceChain.penumbraChannel} - funds arrive shielded, not routed through Skip
-          </span>
-        </div>
+        <p className='flex items-center gap-1.5 text-xs text-fg-muted'>
+          <span className='i-ph-shield h-3.5 w-3.5 shrink-0 text-zigner-gold' />
+          arrives shielded
+        </p>
       )}
 
       {/* transaction status */}
@@ -1111,14 +1327,8 @@ function CosmosSend({
         {txStatus === 'error' && 'retry'}
       </Button>
 
-      {txStatus !== 'confirm' && (
-        <p className='text-center text-xs text-fg-muted'>
-          {!isSameChain
-            ? 'ibc transfer via skip'
-            : isZigner
-              ? 'sign with zafu zigner'
-              : 'local transfer'}
-        </p>
+      {txStatus !== 'confirm' && isZigner && (
+        <p className='text-center text-xs text-fg-muted'>sign with zafu zigner</p>
       )}
     </div>
   );
@@ -1656,74 +1866,60 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   // (Noble etc.) by default - unshielding is an off-ramp INTO the burner, not a
   // send to a stranger. Derive the cosmos chain id from the IBC chain's prefix.
   //
-  // TODO(injective): Injective is gated out today (config `launched:false`, so
-  // useIbcChains/getActiveIbcChainIds never surfaces it here). When it flips on,
-  // two things must hold before this selector may offer it:
-  //   (a) COSMOS_CHAINS is keyed 'injective' but the bech32 prefix is 'inj', so
-  //       `addressPrefix in COSMOS_CHAINS` is FALSE for injective - cosmosChainId
-  //       stays undefined and the mnemonic burner path below is correctly skipped
-  //       (a prefix->key map is needed if the burner path is ever wanted there);
-  //   (b) an own inj address must come ONLY from the stored `cosmosAddresses`
-  //       (eth_secp256k1 / coin-type 60). deriveChainAddress / the useCosmos
-  //       deposit scan re-encode a secp256k1 key and would yield a WRONG inj
-  //       address (lost funds). The prefix-matched `storedOwnAddress` fallback
-  //       below already does the safe thing for a zigner-imported inj address.
-  const cosmosChainId =
-    ibcState.chain && ibcState.chain.addressPrefix in COSMOS_CHAINS
-      ? (ibcState.chain.addressPrefix as CosmosChainId)
-      : undefined;
-  const { data: depositData } = useCosmosDepositWallets(cosmosChainId ?? 'noble');
-  const burnerAddress = cosmosChainId ? depositData?.receive?.address : undefined;
+  // The transparent chain this withdrawal lands on, found by bech32 prefix
+  // ('inj' is keyed 'injective', so match on the config, not the key).
+  const destPrefix = ibcState.chain?.addressPrefix;
+  const cosmosChainId = destPrefix
+    ? Object.values(COSMOS_CHAINS).find(c => c.bech32Prefix === destPrefix)?.id
+    : undefined;
 
-  // Own cosmos address to offer as the one-tap target. Mnemonic vaults get a
-  // FRESH burner deposit address (a new one each unshield - the privacy-forward
-  // default). Zigner (cold) vaults can't derive cosmos in-app, so fall back to
-  // the watch-only address the device exported at import, matched by bech32
-  // prefix so we only ever surface an address that already exists for this exact
-  // chain - never a re-derived one (see the injective note above). Read straight
-  // from the vault's insensitive store, so it is the user's REAL stored address.
+  // Own address to offer as the one-tap target. Mnemonic vaults get a FRESH HD
+  // address (a new one each unshield, never shown twice), derived by the
+  // chain's conduit so Injective stays on coin type 60, and remembered as shown
+  // so it is always scanned. Zigner (cold) vaults can't derive in-app, so fall
+  // back to the watch-only address the device exported at import - coin-118
+  // chains only: zigner has no valid key for an Ethermint chain.
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const storedOwnAddress = useMemo(() => {
-    if (selectedKeyInfo?.type !== 'zigner-zafu' || !ibcState.chain) {
+    if (
+      selectedKeyInfo?.type !== 'zigner-zafu' ||
+      !ibcState.chain ||
+      (cosmosChainId && COSMOS_CHAINS[cosmosChainId].keyAlgo === 'eth_secp256k1')
+    ) {
       return undefined;
     }
     const addrs = selectedKeyInfo.insensitive['cosmosAddresses'] as
       | { chainId: string; address: string; prefix: string }[]
       | undefined;
     return addrs?.find(a => a.prefix === ibcState.chain!.addressPrefix)?.address;
-  }, [selectedKeyInfo, ibcState.chain]);
-  // Injective (Ethermint): the cosmos deposit path above would derive a WRONG
-  // address, so mnemonic vaults get a fresh HD address on the coin-type-60 path
-  // instead - remembered as shown, so the Injective screen sweeps it.
-  const isInjective = ibcState.chain?.addressPrefix === 'inj';
+  }, [selectedKeyInfo, ibcState.chain, cosmosChainId]);
   const { getMnemonic } = useStore(keyRingSelector);
-  const [injOwnAddress, setInjOwnAddress] = useState<string>();
+  const [freshOwnAddress, setFreshOwnAddress] = useState<string>();
   useEffect(() => {
     let cancelled = false;
-    setInjOwnAddress(undefined);
+    setFreshOwnAddress(undefined);
     const keyId = selectedKeyInfo?.type === 'mnemonic' ? selectedKeyInfo.id : undefined;
-    if (!isInjective || !keyId) {
+    if (!cosmosChainId || !keyId) {
       return;
     }
     void (async () => {
+      // key first: allocating while locked would burn an index nobody sees
       const mnemonic = await getMnemonic(keyId).catch(() => undefined);
       if (!mnemonic || cancelled) {
         return;
       }
-      const { address } = await allocateInjectiveAddress(keyId, mnemonic);
+      const { address } = await allocateTransparentAddress(cosmosChainId, keyId, mnemonic);
       if (!cancelled) {
-        setInjOwnAddress(address);
+        setFreshOwnAddress(address);
       }
-    })().catch(err => console.warn('[send] failed to allocate an injective address:', err));
+    })().catch(err => console.warn('[send] failed to allocate an own address:', err));
     return () => {
       cancelled = true;
     };
-  }, [isInjective, selectedKeyInfo?.id, selectedKeyInfo?.type, getMnemonic]);
-  const ownAddress = isInjective
-    ? (injOwnAddress ?? storedOwnAddress)
-    : (burnerAddress ?? storedOwnAddress);
-  // chain the arrival tracker polls ('inj' prefix is keyed 'injective')
-  const trackChainId: CosmosChainId | undefined = isInjective ? 'injective' : cosmosChainId;
+  }, [cosmosChainId, selectedKeyInfo?.id, selectedKeyInfo?.type, getMnemonic]);
+  const ownAddress = freshOwnAddress ?? storedOwnAddress;
+  // chain the arrival tracker polls
+  const trackChainId: CosmosChainId | undefined = cosmosChainId;
 
   // when we have our own address and the user hasn't opted into a custom
   // recipient, keep the destination pinned to it
@@ -2259,7 +2455,14 @@ export function SendPage() {
   const goBack = () => (inDedicatedWindow ? window.close() : navigate(PopupPath.INDEX));
   // cosmos chain from route state (burner off-ramp) takes precedence over the
   // active network - the user is on Penumbra, just routing a send to Noble.
-  const cosmosChain = locationState?.cosmosChain;
+  // On Penumbra, Send can also spend from a transparent chain (Injective, ...):
+  // same form as the home rows' send/shield buttons open.
+  const [pickedSource, setPickedSource] = useState<CosmosChainId>();
+  const sourceChoices =
+    activeNetwork === 'penumbra' && !locationState?.cosmosChain
+      ? (getActiveIbcSubnetworks('penumbra') as CosmosChainId[])
+      : [];
+  const cosmosChain = locationState?.cosmosChain ?? pickedSource;
   const isCosmos = cosmosChain != null || COSMOS_CHAIN_IDS.includes(activeNetwork as CosmosChainId);
   const isPenumbra = !cosmosChain && activeNetwork === 'penumbra';
   const isZcash = !cosmosChain && activeNetwork === 'zcash';
@@ -2305,6 +2508,27 @@ export function SendPage() {
 
       {/* Content */}
       <div className='p-4'>
+        {sourceChoices.length > 0 && (
+          <div className='mb-4 flex gap-1 border border-border-soft p-1' role='tablist'>
+            {([undefined, ...sourceChoices] as const).map(c => (
+              <button
+                key={c ?? 'shielded'}
+                type='button'
+                role='tab'
+                aria-selected={pickedSource === c}
+                onClick={() => setPickedSource(c)}
+                className={cn(
+                  'flex-1 py-1.5 text-xs lowercase transition-colors',
+                  pickedSource === c
+                    ? 'bg-elev-2 text-fg-high'
+                    : 'text-fg-muted hover:text-fg-high',
+                )}
+              >
+                {c ? COSMOS_CHAINS[c].name : 'shielded'}
+              </button>
+            ))}
+          </div>
+        )}
         {isPenumbra ? (
           <PenumbraSend
             onSuccess={inDedicatedWindow ? () => window.close() : undefined}
@@ -2313,8 +2537,10 @@ export function SendPage() {
         ) : isCosmos ? (
           isActiveIbcChain((cosmosChain ?? activeNetwork) as NetworkType) ? (
             <CosmosSend
+              key={cosmosChain ?? activeNetwork}
               sourceChainId={(cosmosChain ?? activeNetwork) as CosmosChainId}
-              initialAccountIndex={locationState?.cosmosAccountIndex ?? 0}
+              initialAccountIndex={locationState?.cosmosAccountIndex}
+              intent={locationState?.cosmosIntent ?? 'send'}
             />
           ) : (
             // No live IBC channel to this chain right now (channels close on
