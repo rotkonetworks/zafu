@@ -8,7 +8,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Sensitive } from '../../../components/sensitive';
 import { PopupPath } from '../paths';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ZcashSend } from './zcash-send';
 import { useStore } from '../../../state';
 import { selectActiveNetwork, selectPenumbraAccount } from '../../../state/keyring';
@@ -575,6 +575,65 @@ function CosmosSend({
     }
   }, [selectedAsset, spendable]);
 
+  // Addresses rotate, so gas bought for one can land on another. When this
+  // address can't pay its fee, offer to move gas over from one that can:
+  // a prefilled send from there to here, then back to this address.
+  const gasDenom = gas.gasAsset.denom.toLowerCase();
+  const gasOf = (w: { assets: { denom: string; amount: bigint }[] }) =>
+    w.assets.find(a => a.denom.toLowerCase() === gasDenom)?.amount ?? 0n;
+  const gasDonors = (deposits?.funded ?? []).filter(
+    // enough to pay its own send and still move something
+    w => w.index !== accountIndex && gasOf(w) > gas.fee * 2n,
+  );
+  const [topUp, setTopUp] = useState<{ back: number; to: string }>();
+  const queryClient = useQueryClient();
+  const startTopUp = (donorIndex: number) => {
+    if (!assetsData?.address) {
+      return;
+    }
+    setTopUp({ back: accountIndex, to: assetsData.address });
+    setSendMode('same');
+    setAccountIndex(donorIndex);
+    setRecipient(assetsData.address);
+    setTxStatus('idle');
+  };
+  const finishTopUp = () => {
+    if (!topUp) {
+      return;
+    }
+    setAccountIndex(topUp.back);
+    setTopUp(undefined);
+    // the gas just landed there: don't show the cached pre-transfer balance
+    void queryClient.invalidateQueries({ queryKey: ['cosmosAssets', sourceChainId] });
+    void queryClient.invalidateQueries({ queryKey: ['cosmosDepositWallets', sourceChainId] });
+    setRecipient('');
+    setTxHash(undefined);
+    setTxStatus('idle');
+    setSendMode(intent === 'shield' && sourceChain.penumbraChannel ? 'ibc' : 'same');
+  };
+  // on the donor: the gas asset, all of what can move
+  useEffect(() => {
+    if (!topUp || assetsData?.address === topUp.to) {
+      return;
+    }
+    const g = assetsData?.assets.find(a => a.denom.toLowerCase() === gasDenom);
+    if (g && selectedAsset?.denom !== g.denom) {
+      setSelectedAsset(g);
+    }
+  }, [topUp, assetsData, gasDenom, selectedAsset?.denom]);
+  useEffect(() => {
+    if (
+      topUp &&
+      txStatus === 'idle' &&
+      selectedAsset?.denom.toLowerCase() === gasDenom &&
+      amount === '' &&
+      spendable > 0n
+    ) {
+      setAmount(fullDecimalString(spendable, selectedAsset.decimals));
+    }
+  }, [topUp, txStatus, selectedAsset, gasDenom, amount, spendable]);
+  const [addrCopied, setAddrCopied] = useState(false);
+
   // convert amount to base units (integer math, no float precision loss)
   const amountInBase = useMemo(() => {
     if (!amount || isNaN(parseFloat(amount)) || !selectedAsset) {
@@ -1049,6 +1108,24 @@ function CosmosSend({
         {sendMode === 'ibc' && detectedChain && !destChainId && (
           <p className='mt-1 text-xs text-fg-muted'>detected: {detectedChain.name}</p>
         )}
+        {sendMode === 'same' && !recipient && (deposits?.funded.length ?? 0) > 1 && (
+          <div className='mt-1 flex flex-wrap gap-1'>
+            {(deposits?.funded ?? [])
+              .filter(w => w.index !== accountIndex)
+              .slice(0, 4)
+              .map(w => (
+                <button
+                  key={w.index}
+                  type='button'
+                  onClick={() => setRecipient(w.address)}
+                  title={w.address}
+                  className='border border-border-soft px-2 py-1 font-mono text-label text-fg-muted hover:bg-elev-1 hover:text-fg-high'
+                >
+                  my #{w.index}
+                </button>
+              ))}
+          </div>
+        )}
         <RecipientPicker network='cosmos' onSelect={setRecipient} show={!recipient} />
       </div>
 
@@ -1089,10 +1166,53 @@ function CosmosSend({
         {payWithSponsor
           ? 'fee covered by the rotko sponsor'
           : `fee ~${formatBaseUnits(gas.fee, gas.gasAsset.decimals, 6)} ${gas.gasAsset.symbol}`}
-        {!canPayFee && (
-          <span className='text-amber-400/90'> - not enough {gas.gasAsset.symbol}</span>
-        )}
+        {!canPayFee && <span className='text-amber-400/90'> - none on this address</span>}
       </p>
+      {!canPayFee && !topUp && assetsData?.address && (
+        <div className='-mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs'>
+          {gasDonors.slice(0, 2).map(w => (
+            <button
+              key={w.index}
+              type='button'
+              onClick={() => startTopUp(w.index)}
+              className='text-zigner-gold hover:underline'
+            >
+              move {gas.gasAsset.symbol} here from #{w.index} (
+              {formatBaseUnits(gasOf(w), gas.gasAsset.decimals, 4)})
+            </button>
+          ))}
+          <button
+            type='button'
+            onClick={() => {
+              void navigator.clipboard.writeText(assetsData.address);
+              setAddrCopied(true);
+              setTimeout(() => setAddrCopied(false), 1500);
+            }}
+            className='text-fg-muted hover:text-fg-high'
+            title={`send ${gas.gasAsset.symbol} to ${assetsData.address}`}
+          >
+            {addrCopied ? 'copied' : `copy this address to top up`}
+          </button>
+        </div>
+      )}
+      {topUp && (
+        <div className='-mt-2 flex items-center justify-between gap-2 border border-border-soft px-3 py-2 text-xs'>
+          <span className='text-fg-muted'>
+            moving {gas.gasAsset.symbol} to {shortAddress(topUp.to)} for gas
+          </span>
+          <button
+            type='button'
+            onClick={finishTopUp}
+            className={
+              txStatus === 'success'
+                ? 'text-zigner-gold hover:underline'
+                : 'text-fg-muted hover:text-fg-high'
+            }
+          >
+            {txStatus === 'success' ? 'continue on that address' : 'cancel'}
+          </button>
+        </div>
+      )}
 
       {/* memo: exchanges often credit a deposit only with it. Penumbra can't
           carry one, so this is the only place it can be set. */}
