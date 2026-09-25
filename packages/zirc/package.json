@@ -1,6 +1,6 @@
 {
   "name": "@zafu/zirc",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "license": "MIT",
   "description": "zirc - IRC-style channels on zid: a relay-blind encrypted room, genesis, a hash-chained log of modes and votes, an electorate you can audit, and hiding that is never deletion",
   "type": "module",
