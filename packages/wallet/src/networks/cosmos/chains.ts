@@ -78,6 +78,11 @@ export interface CosmosChainConfig {
    * must surface this. Undefined = gas is paid in the chain's own `denom`.
    */
   gasAsset?: { symbol: string; denom: string; decimals: number };
+  /**
+   * x/feegrant sponsor (apps/feegrant) that pays gas for holders of a supported
+   * stablecoin who have none of the gas asset. Contacted only when needed.
+   */
+  gasSponsorUrl?: string;
 }
 
 export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
@@ -143,6 +148,7 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
     keyAlgo: 'eth_secp256k1',
     coinType: 60,
     gasAsset: { symbol: 'INJ', denom: 'inj', decimals: 18 },
+    gasSponsorUrl: 'https://sponsor.zafu.pro',
     // Live channel (opened 2026-09-16, verified on-chain 2026-09-17: injective
     // channel-494 STATE_OPEN, client 07-tendermint-353 Active, tracks penumbra-1).
     // The old 15/434 path is dead and must NOT be used.
