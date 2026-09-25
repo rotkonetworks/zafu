@@ -1,6 +1,6 @@
 {
   "name": "zafu",
-  "version": "28.2.0",
+  "version": "28.1.0",
   "private": true,
   "license": "MIT",
   "description": "multi-chain privacy wallet for penumbra, zcash, and more",
