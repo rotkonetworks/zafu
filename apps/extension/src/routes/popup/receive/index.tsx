@@ -570,7 +570,7 @@ function ReceiveTab({
             ? 'public on-chain - one index per exchange, then shield to ironwood.'
             : transparent
               ? 'transparent chain - this address is PUBLIC, not shielded. use a fresh deposit address per sender and shield into Penumbra soon after.'
-              : 'shielded - senders cannot see your other transactions.'}
+              : null}
         </p>
       )}
     </div>

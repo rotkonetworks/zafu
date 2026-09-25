@@ -102,7 +102,9 @@ function formatBaseUnits(amount: bigint, decimals: number, maxFrac = decimals): 
     .padStart(decimals, '0')
     .slice(0, maxFrac)
     .replace(/0+$/, '');
-  return frac ? `${whole}.${frac}` : `${whole}`;
+  const shown = frac ? `${whole}.${frac}` : `${whole}`;
+  // a real balance too small to show must not read as zero
+  return amount > 0n && shown === '0' ? `<0.${'0'.repeat(Math.max(0, maxFrac - 1))}1` : shown;
 }
 
 /**
@@ -508,8 +510,12 @@ export const InjectiveAccount = () => {
     symbol: CFG.symbol,
     decimals: CFG.decimals,
   };
-  const asset: HeldAsset = held.find(a => a.denom === assetDenom) ??
-    held[0] ?? { ...usdcMeta, amount: 0n };
+  // what can actually move: INJ only when it covers more than the fee
+  const movable = held.filter(a =>
+    a.denom.toLowerCase() === GAS_ASSET.denom ? a.amount > gasFeeInjBaseUnits() : true,
+  );
+  const asset: HeldAsset = movable.find(a => a.denom === assetDenom) ??
+    movable[0] ?? { ...usdcMeta, amount: 0n };
   const isInj = asset.denom.toLowerCase() === GAS_ASSET.denom;
   const injBal = selected?.inj ?? 0n;
   const balancesReady = selected !== undefined;
@@ -576,7 +582,7 @@ export const InjectiveAccount = () => {
   };
   /** the asset picker both forms share; nothing when there is one asset */
   const assetPicker =
-    held.length > 1 ? (
+    movable.length > 1 ? (
       <select
         value={asset.denom}
         onChange={e => {
@@ -588,7 +594,7 @@ export const InjectiveAccount = () => {
         aria-label='asset'
         className='mb-2 w-full border border-border-soft bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none'
       >
-        {held.map(a => (
+        {movable.map(a => (
           <option key={a.denom} value={a.denom}>
             {a.symbol} - {formatBaseUnits(a.amount, a.decimals, 4)}
           </option>
@@ -876,141 +882,45 @@ export const InjectiveAccount = () => {
               })}
             </div>
           )}
-          {!gasOk && !canSponsor && (
+          {!gasOk &&
+            !canSponsor &&
+            movable.some(a => a.denom.toLowerCase() !== GAS_ASSET.denom) && (
             <p className='mt-2 text-label text-amber-400/90 lowercase'>no INJ for gas</p>
           )}
         </div>
       </div>
 
-      {/* shield in */}
-      <div className='rounded-lg border border-border-soft p-4'>
-        <div className='mb-2 flex items-baseline justify-between text-xs font-medium lowercase'>
-          <span>shield into Penumbra</span>
-          {selectedIndex !== 0 && (
-            <span className='font-mono text-label text-fg-muted' title={selectedAddress}>
-              from {shortInjAddress(selectedAddress)}
-            </span>
-          )}
+      {/* forms only when something can move; otherwise say so, once */}
+      {balancesReady && movable.length === 0 && !anyBusy ? (
+        <div className='border border-border-soft p-4 text-xs text-fg-muted lowercase'>
+          nothing to move yet
         </div>
-        {assetPicker}
-        <div className='relative mb-2'>
-          <input
-            type='number'
-            min='0'
-            step='any'
-            value={shieldAmount}
-            onChange={e => setShieldAmount(e.target.value)}
-            placeholder={`${asset.symbol} amount`}
-            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2 pr-14 text-sm focus:border-zigner-gold focus:outline-none'
-          />
-          <button
-            type='button'
-            onClick={() => setShieldAmount(fullDecimalString(spendable, asset.decimals))}
-            disabled={spendable === 0n}
-            className='absolute right-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-label font-medium text-zigner-gold hover:bg-elev-1 disabled:opacity-40'
-          >
-            max
-          </button>
-        </div>
-        <p className='mb-2 text-label text-fg-muted lowercase'>
-          {canSponsor && !gasOk
-            ? 'fee covered by the rotko sponsor - no INJ needed.'
-            : `fee ~${feeDisplay}, paid in INJ.`}
-        </p>
-        {shieldExceeds && (
-          <p className='mb-2 text-label text-amber-400/90 lowercase'>
-            amount is more than your USDC.inj balance.
-          </p>
-        )}
-        <Button
-          variant='gradient'
-          className='w-full'
-          disabled={!shieldBase || shieldExceeds || !shieldGasOk || anyBusy}
-          onClick={() => void handleShield()}
-        >
-          {shieldTx.status === 'signing'
-            ? canSponsor && !gasOk
-              ? 'getting gas, shielding...'
-              : 'shielding...'
-            : shieldTx.status === 'submitted'
-              ? 'confirming...'
-              : `shield ${asset.symbol} to Penumbra`}
-        </Button>
-        {shieldTx.status === 'submitted' && (
-          <p className='mt-2 text-label text-fg-muted lowercase'>
-            submitted - included soon, then IBC-delivered to Penumbra.{' '}
-            {shieldTx.hash && <TxRef hash={shieldTx.hash} />}
-          </p>
-        )}
-        {shieldTx.status === 'done' && (
-          <p className='mt-2 text-label text-green-400 lowercase'>
-            included on Injective - IBC delivery to Penumbra is in flight.{' '}
-            {shieldTx.hash && <TxRef hash={shieldTx.hash} />}
-          </p>
-        )}
-        {shieldTx.status === 'error' && (
-          <p className='mt-2 text-label text-red-400'>{shieldTx.error}</p>
-        )}
-      </div>
-
-      {/* withdraw - secondary flow, collapsed by default */}
-      <div className='rounded-lg border border-border-soft p-4'>
-        <button
-          type='button'
-          onClick={() => setShowWithdraw(v => !v)}
-          className='flex w-full items-center justify-between text-xs font-medium lowercase text-fg-muted transition-colors hover:text-fg-high'
-        >
-          <span>withdraw to an exchange</span>
-          <span
-            className={`i-ph-caret-down h-4 w-4 transition-transform ${showWithdraw ? 'rotate-180' : ''}`}
-          />
-        </button>
-        {showWithdraw && (
-          <div className='mt-3'>
-            {selectedIndex !== 0 && (
-              <p className='mb-1 font-mono text-label text-fg-muted' title={selectedAddress}>
-                from {shortInjAddress(selectedAddress)}
-              </p>
-            )}
-            <input
-              type='text'
-              value={withdrawAddr}
-              onChange={e => setWithdrawAddr(e.target.value.trim())}
-              placeholder='exchange deposit address (inj1 or 0x)'
-              className='mb-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-xs focus:border-zigner-gold focus:outline-none'
-            />
-            {withdrawAddr &&
-              (recipient.ok ? (
-                <p
-                  className='mb-2 flex items-center gap-1 font-mono text-label text-fg-muted'
-                  title={recipient.address}
-                >
-                  <span className='i-ph-check size-3 text-zigner-gold' />
-                  {recipient.fromHex ? 'sends to ' : ''}
-                  {shortInjAddress(recipient.address)}
-                  {recipient.address === selectedAddress && (
-                    <span className='text-amber-400/90'> - this wallet</span>
-                  )}
-                </p>
-              ) : (
-                <p className='mb-2 text-label text-red-400 lowercase'>
-                  {RECIPIENT_PROBLEM[recipient.problem](recipient.prefix)}
-                </p>
-              ))}
+      ) : (
+        <>
+          {/* shield in */}
+          <div className='rounded-lg border border-border-soft p-4'>
+            <div className='mb-2 flex items-baseline justify-between text-xs font-medium lowercase'>
+              <span>shield into Penumbra</span>
+              {selectedIndex !== 0 && (
+                <span className='font-mono text-label text-fg-muted' title={selectedAddress}>
+                  from {shortInjAddress(selectedAddress)}
+                </span>
+              )}
+            </div>
             {assetPicker}
             <div className='relative mb-2'>
               <input
                 type='number'
                 min='0'
                 step='any'
-                value={withdrawAmount}
-                onChange={e => setWithdrawAmount(e.target.value)}
+                value={shieldAmount}
+                onChange={e => setShieldAmount(e.target.value)}
                 placeholder={`${asset.symbol} amount`}
                 className='w-full rounded-lg border border-border-soft bg-input px-3 py-2 pr-14 text-sm focus:border-zigner-gold focus:outline-none'
               />
               <button
                 type='button'
-                onClick={() => setWithdrawAmount(fullDecimalString(spendable, asset.decimals))}
+                onClick={() => setShieldAmount(fullDecimalString(spendable, asset.decimals))}
                 disabled={spendable === 0n}
                 className='absolute right-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-label font-medium text-zigner-gold hover:bg-elev-1 disabled:opacity-40'
               >
@@ -1018,52 +928,162 @@ export const InjectiveAccount = () => {
               </button>
             </div>
             <p className='mb-2 text-label text-fg-muted lowercase'>
-              fee ~{feeDisplay}, paid in INJ.
+              {canSponsor && !gasOk
+                ? 'fee covered by the rotko sponsor - no INJ needed.'
+                : `fee ~${feeDisplay}, paid in INJ.`}
             </p>
-            {/* The sponsor's grant covers only the IBC transfer into Penumbra, so a
-            withdrawal (a plain send on Injective) always needs the user's own
-            INJ. The button used to just sit disabled with no reason. */}
-            {!gasOk && (
-              <p className='mb-2 text-label text-amber-400/90 lowercase'>
-                withdrawing needs ~{feeDisplay} of your own INJ for gas - the sponsor only covers
-                moving funds into Penumbra. send a little INJ to this address first.
-              </p>
-            )}
-            {withdrawExceeds && (
+            {shieldExceeds && (
               <p className='mb-2 text-label text-amber-400/90 lowercase'>
                 amount is more than your USDC.inj balance.
               </p>
             )}
             <Button
+              variant='gradient'
               className='w-full'
-              disabled={!withdrawBase || withdrawExceeds || !withdrawAddrOk || !gasOk || anyBusy}
-              onClick={() => void handleWithdraw()}
+              disabled={!shieldBase || shieldExceeds || !shieldGasOk || anyBusy}
+              onClick={() => void handleShield()}
             >
-              {withdrawTx.status === 'signing'
-                ? 'sending...'
-                : withdrawTx.status === 'submitted'
+              {shieldTx.status === 'signing'
+                ? canSponsor && !gasOk
+                  ? 'getting gas, shielding...'
+                  : 'shielding...'
+                : shieldTx.status === 'submitted'
                   ? 'confirming...'
-                  : !gasOk
-                    ? 'needs INJ for gas'
-                    : `withdraw ${asset.symbol}`}
+                  : `shield ${asset.symbol} to Penumbra`}
             </Button>
-            {withdrawTx.status === 'submitted' && (
+            {shieldTx.status === 'submitted' && (
               <p className='mt-2 text-label text-fg-muted lowercase'>
-                submitted - waiting for inclusion.{' '}
-                {withdrawTx.hash && <TxRef hash={withdrawTx.hash} />}
+                submitted - included soon, then IBC-delivered to Penumbra.{' '}
+                {shieldTx.hash && <TxRef hash={shieldTx.hash} />}
               </p>
             )}
-            {withdrawTx.status === 'done' && (
+            {shieldTx.status === 'done' && (
               <p className='mt-2 text-label text-green-400 lowercase'>
-                sent - included on Injective. {withdrawTx.hash && <TxRef hash={withdrawTx.hash} />}
+                included on Injective - IBC delivery to Penumbra is in flight.{' '}
+                {shieldTx.hash && <TxRef hash={shieldTx.hash} />}
               </p>
             )}
-            {withdrawTx.status === 'error' && (
-              <p className='mt-2 text-label text-red-400'>{withdrawTx.error}</p>
+            {shieldTx.status === 'error' && (
+              <p className='mt-2 text-label text-red-400'>{shieldTx.error}</p>
             )}
           </div>
-        )}
-      </div>
+
+          {/* withdraw - secondary flow, collapsed by default */}
+          <div className='rounded-lg border border-border-soft p-4'>
+            <button
+              type='button'
+              onClick={() => setShowWithdraw(v => !v)}
+              className='flex w-full items-center justify-between text-xs font-medium lowercase text-fg-muted transition-colors hover:text-fg-high'
+            >
+              <span>withdraw to an exchange</span>
+              <span
+                className={`i-ph-caret-down h-4 w-4 transition-transform ${showWithdraw ? 'rotate-180' : ''}`}
+              />
+            </button>
+            {showWithdraw && (
+              <div className='mt-3'>
+                {selectedIndex !== 0 && (
+                  <p className='mb-1 font-mono text-label text-fg-muted' title={selectedAddress}>
+                    from {shortInjAddress(selectedAddress)}
+                  </p>
+                )}
+                <input
+                  type='text'
+                  value={withdrawAddr}
+                  onChange={e => setWithdrawAddr(e.target.value.trim())}
+                  placeholder='exchange deposit address (inj1 or 0x)'
+                  className='mb-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-xs focus:border-zigner-gold focus:outline-none'
+                />
+                {withdrawAddr &&
+                  (recipient.ok ? (
+                    <p
+                      className='mb-2 flex items-center gap-1 font-mono text-label text-fg-muted'
+                      title={recipient.address}
+                    >
+                      <span className='i-ph-check size-3 text-zigner-gold' />
+                      {recipient.fromHex ? 'sends to ' : ''}
+                      {shortInjAddress(recipient.address)}
+                      {recipient.address === selectedAddress && (
+                        <span className='text-amber-400/90'> - this wallet</span>
+                      )}
+                    </p>
+                  ) : (
+                    <p className='mb-2 text-label text-red-400 lowercase'>
+                      {RECIPIENT_PROBLEM[recipient.problem](recipient.prefix)}
+                    </p>
+                  ))}
+                {assetPicker}
+                <div className='relative mb-2'>
+                  <input
+                    type='number'
+                    min='0'
+                    step='any'
+                    value={withdrawAmount}
+                    onChange={e => setWithdrawAmount(e.target.value)}
+                    placeholder={`${asset.symbol} amount`}
+                    className='w-full rounded-lg border border-border-soft bg-input px-3 py-2 pr-14 text-sm focus:border-zigner-gold focus:outline-none'
+                  />
+                  <button
+                    type='button'
+                    onClick={() => setWithdrawAmount(fullDecimalString(spendable, asset.decimals))}
+                    disabled={spendable === 0n}
+                    className='absolute right-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-label font-medium text-zigner-gold hover:bg-elev-1 disabled:opacity-40'
+                  >
+                    max
+                  </button>
+                </div>
+                <p className='mb-2 text-label text-fg-muted lowercase'>
+                  fee ~{feeDisplay}, paid in INJ.
+                </p>
+                {/* The sponsor's grant covers only the IBC transfer into Penumbra, so a
+            withdrawal (a plain send on Injective) always needs the user's own
+            INJ. The button used to just sit disabled with no reason. */}
+                {!gasOk && (
+                  <p className='mb-2 text-label text-amber-400/90 lowercase'>
+                    withdrawing needs ~{feeDisplay} of your own INJ for gas - the sponsor only
+                    covers moving funds into Penumbra. send a little INJ to this address first.
+                  </p>
+                )}
+                {withdrawExceeds && (
+                  <p className='mb-2 text-label text-amber-400/90 lowercase'>
+                    amount is more than your USDC.inj balance.
+                  </p>
+                )}
+                <Button
+                  className='w-full'
+                  disabled={
+                    !withdrawBase || withdrawExceeds || !withdrawAddrOk || !gasOk || anyBusy
+                  }
+                  onClick={() => void handleWithdraw()}
+                >
+                  {withdrawTx.status === 'signing'
+                    ? 'sending...'
+                    : withdrawTx.status === 'submitted'
+                      ? 'confirming...'
+                      : !gasOk
+                        ? 'needs INJ for gas'
+                        : `withdraw ${asset.symbol}`}
+                </Button>
+                {withdrawTx.status === 'submitted' && (
+                  <p className='mt-2 text-label text-fg-muted lowercase'>
+                    submitted - waiting for inclusion.{' '}
+                    {withdrawTx.hash && <TxRef hash={withdrawTx.hash} />}
+                  </p>
+                )}
+                {withdrawTx.status === 'done' && (
+                  <p className='mt-2 text-label text-green-400 lowercase'>
+                    sent - included on Injective.{' '}
+                    {withdrawTx.hash && <TxRef hash={withdrawTx.hash} />}
+                  </p>
+                )}
+                {withdrawTx.status === 'error' && (
+                  <p className='mt-2 text-label text-red-400'>{withdrawTx.error}</p>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {PasswordModal}
     </div>
