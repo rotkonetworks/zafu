@@ -144,7 +144,7 @@ export async function getRegistryEndpointsRemote(): Promise<readonly PenumbraEnd
 
 function mergeRegistry(
   base: readonly PenumbraEndpointPreset[],
-  registryRpcs: ReadonlyArray<{ readonly name: string; readonly url: string }>,
+  registryRpcs: readonly { readonly name: string; readonly url: string }[],
 ): readonly PenumbraEndpointPreset[] {
   const seen = new Set(base.map(p => normalize(p.url)));
   const merged: PenumbraEndpointPreset[] = [...base];

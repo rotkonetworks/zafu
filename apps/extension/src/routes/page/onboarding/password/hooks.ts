@@ -159,7 +159,7 @@ export const useFinalizeOnboarding = () => {
           // in the list, so anchoring the birthday to index 0 would write it
           // onto the wrong wallet. selectedVaultId always points at the vault
           // this import resolved to (fresh or matched).
-          const vaultId = (await localExtStorage.get('selectedVaultId')) as string | undefined;
+          const vaultId = (await localExtStorage.get('selectedVaultId'));
           if (vaultId) {
             const birthdayKey = `zcashBirthday_${vaultId}`;
             const newHeight = parseInt(pendingBirthday, 10);

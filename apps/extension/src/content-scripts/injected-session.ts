@@ -18,6 +18,14 @@
  * untouched; `reportError` still postMessages them to the client, exactly
  * as it does in a production build where this log does not exist at all.
  */
+import { PenumbraRequestFailure } from '@penumbra-zone/client/error';
+import { CRSessionClient } from '@penumbra-zone/transport-chrome/session-client';
+import { isZafuConnection } from './message/zafu-connection';
+import { isZafuControl, ZafuControl } from './message/zafu-control';
+import { ZafuMessageEvent, unwrapZafuMessageEvent } from './message/zafu-message-event';
+import { listenBackground, sendBackground } from './message/send-background';
+import { listenWindow, sendWindow } from './message/send-window';
+
 if (globalThis.__DEV__) {
   const nativeWarn = console.warn.bind(console);
   console.warn = (...args: unknown[]) => {
@@ -27,14 +35,6 @@ if (globalThis.__DEV__) {
     nativeWarn(...args);
   };
 }
-
-import { PenumbraRequestFailure } from '@penumbra-zone/client/error';
-import { CRSessionClient } from '@penumbra-zone/transport-chrome/session-client';
-import { isZafuConnection } from './message/zafu-connection';
-import { isZafuControl, ZafuControl } from './message/zafu-control';
-import { ZafuMessageEvent, unwrapZafuMessageEvent } from './message/zafu-message-event';
-import { listenBackground, sendBackground } from './message/send-background';
-import { listenWindow, sendWindow } from './message/send-window';
 
 // Bridge our extension id to the MAIN-world content script
 // (injected-penumbra-global.ts), which has no chrome.runtime access.

@@ -10,7 +10,6 @@ import { useQuery } from '@tanstack/react-query';
 import { useStore } from '../state';
 import { selectEffectiveKeyInfo, keyRingSelector, selectActiveNetwork } from '../state/keyring';
 import { getRootNetwork } from '../config/networks';
-import type { NetworkType } from '../state/keyring';
 import {
   createSigningClient,
   deriveAllChainAddresses,
@@ -38,7 +37,7 @@ import { shortSymbol } from '../utils/asset-display';
  */
 const useBurnerPollingEnabled = (chainId?: CosmosChainId): boolean => {
   const activeNetwork = useStore(selectActiveNetwork);
-  if (!activeNetwork || getRootNetwork(activeNetwork as NetworkType) !== 'penumbra') {
+  if (!activeNetwork || getRootNetwork(activeNetwork) !== 'penumbra') {
     return false;
   }
   // Injective (eth_secp256k1 / coin-60) is a conduit-only ramp with its OWN
