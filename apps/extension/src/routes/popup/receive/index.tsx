@@ -31,6 +31,11 @@ import {
 import { QrCode } from '../../../components/qr-code';
 import { buildZip321, parseZecAmount } from '@repo/wallet/networks/zcash/zip321';
 import { TransparentReceive } from './transparent-receive';
+import {
+  PrivacySwitch,
+  orderTransparentChains,
+  type Privacy,
+} from '../../../components/privacy-switch';
 import { getActiveIbcSubnetworks } from '../../../config/networks';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 
@@ -676,8 +681,10 @@ export function ReceivePage() {
   // Transparent chains you can receive on from here: launched, with a route
   // into Penumbra, and not being wound down (Noble is withdraw-only now).
   const transparentChains = isPenumbra
-    ? (getActiveIbcSubnetworks('penumbra') as CosmosChainId[]).filter(
-        c => COSMOS_CHAINS[c].penumbraChannel && !COSMOS_CHAINS[c].deprecation,
+    ? orderTransparentChains(
+        (getActiveIbcSubnetworks('penumbra') as CosmosChainId[]).filter(
+          c => COSMOS_CHAINS[c].penumbraChannel && !COSMOS_CHAINS[c].deprecation,
+        ),
       )
     : [];
   // Old deep links (`?mode=shield`, nav state mode 'shield') meant the
@@ -687,9 +694,11 @@ export function ReceivePage() {
   const legacyShield =
     new URLSearchParams(location.search).get('mode') === 'shield' || navState?.mode === 'shield';
   const requested = navState?.receiveChain ?? (legacyShield ? 'injective' : undefined);
-  const [receiveOn, setReceiveOn] = useState<'penumbra' | CosmosChainId>(
-    requested && transparentChains.includes(requested) ? requested : 'penumbra',
-  );
+  const initial = requested && transparentChains.includes(requested) ? requested : undefined;
+  const [privacy, setPrivacy] = useState<Privacy>(initial ? 'transparent' : 'shielded');
+  const [pickedChain, setPickedChain] = useState<CosmosChainId | undefined>(initial);
+  const receiveOn: 'penumbra' | CosmosChainId =
+    privacy === 'transparent' ? (pickedChain ?? transparentChains[0] ?? 'penumbra') : 'penumbra';
   const goBack = useBackNav(PopupPath.INDEX);
 
   return (
@@ -703,22 +712,13 @@ export function ReceivePage() {
 
       <div className='flex flex-1 flex-col p-4'>
         {transparentChains.length > 0 && (
-          <div className='mb-4 flex gap-1 border border-border-soft p-1' role='tablist'>
-            {(['penumbra', ...transparentChains] as const).map(c => (
-              <button
-                key={c}
-                type='button'
-                role='tab'
-                aria-selected={receiveOn === c}
-                onClick={() => setReceiveOn(c)}
-                className={`flex-1 py-1.5 text-xs lowercase transition-colors ${
-                  receiveOn === c ? 'bg-elev-2 text-fg-high' : 'text-fg-muted hover:text-fg-high'
-                }`}
-              >
-                {c === 'penumbra' ? 'penumbra' : COSMOS_CHAINS[c].name}
-              </button>
-            ))}
-          </div>
+          <PrivacySwitch
+            privacy={privacy}
+            onPrivacy={setPrivacy}
+            chains={transparentChains}
+            chain={receiveOn === 'penumbra' ? undefined : receiveOn}
+            onChain={setPickedChain}
+          />
         )}
         {receiveOn === 'penumbra' ? (
           <ReceiveTab address={address} loading={loading} activeNetwork={activeNetwork} />

@@ -72,6 +72,11 @@ import {
 } from '@repo/wallet/networks/injective/derive';
 import { derivePenumbraEphemeralFromMnemonic } from '../../../hooks/use-address';
 import { RecipientPicker } from '../../../components/recipient-picker';
+import {
+  PrivacySwitch,
+  orderTransparentChains,
+  type Privacy,
+} from '../../../components/privacy-switch';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 
 /** stable empty list so memo/effect deps don't churn while balances load */
@@ -962,28 +967,26 @@ function CosmosSend({
       {PasswordModal}
 
       {/* two ways out: same-chain (Noble) or cross-chain (IBC) */}
-      <div className='flex rounded-lg bg-elev-2 p-1'>
+      <div className='flex border border-border-soft p-1'>
         <button
           type='button'
           onClick={() => setSendMode('same')}
           className={cn(
-            'flex-1 rounded-md py-2 text-sm font-medium transition-colors',
-            sendMode === 'same'
-              ? 'bg-canvas text-fg shadow-sm'
-              : 'text-fg-muted hover:text-fg-high',
+            'flex-1 py-1.5 text-xs lowercase transition-colors',
+            sendMode === 'same' ? 'bg-elev-2 text-fg-high' : 'text-fg-muted hover:text-fg-high',
           )}
         >
-          send in {sourceChain.name}
+          within {sourceChain.name}
         </button>
         <button
           type='button'
           onClick={() => setSendMode('ibc')}
           className={cn(
-            'flex-1 rounded-md py-2 text-sm font-medium transition-colors',
-            sendMode === 'ibc' ? 'bg-canvas text-fg shadow-sm' : 'text-fg-muted hover:text-fg-high',
+            'flex-1 py-1.5 text-xs lowercase transition-colors',
+            sendMode === 'ibc' ? 'bg-elev-2 text-fg-high' : 'text-fg-muted hover:text-fg-high',
           )}
         >
-          send to ibc
+          to another chain
         </button>
       </div>
 
@@ -2577,11 +2580,13 @@ export function SendPage() {
   // active network - the user is on Penumbra, just routing a send to Noble.
   // On Penumbra, Send can also spend from a transparent chain (Injective, ...):
   // same form as the home rows' send/shield buttons open.
-  const [pickedSource, setPickedSource] = useState<CosmosChainId>();
   const sourceChoices =
     activeNetwork === 'penumbra' && !locationState?.cosmosChain
-      ? (getActiveIbcSubnetworks('penumbra') as CosmosChainId[])
+      ? orderTransparentChains(getActiveIbcSubnetworks('penumbra') as CosmosChainId[])
       : [];
+  const [privacy, setPrivacy] = useState<Privacy>('shielded');
+  const [pickedChain, setPickedChain] = useState<CosmosChainId>();
+  const pickedSource = privacy === 'transparent' ? (pickedChain ?? sourceChoices[0]) : undefined;
   const cosmosChain = locationState?.cosmosChain ?? pickedSource;
   const isCosmos = cosmosChain != null || COSMOS_CHAIN_IDS.includes(activeNetwork as CosmosChainId);
   const isPenumbra = !cosmosChain && activeNetwork === 'penumbra';
@@ -2629,25 +2634,13 @@ export function SendPage() {
       {/* Content */}
       <div className='p-4'>
         {sourceChoices.length > 0 && (
-          <div className='mb-4 flex gap-1 border border-border-soft p-1' role='tablist'>
-            {([undefined, ...sourceChoices] as const).map(c => (
-              <button
-                key={c ?? 'shielded'}
-                type='button'
-                role='tab'
-                aria-selected={pickedSource === c}
-                onClick={() => setPickedSource(c)}
-                className={cn(
-                  'flex-1 py-1.5 text-xs lowercase transition-colors',
-                  pickedSource === c
-                    ? 'bg-elev-2 text-fg-high'
-                    : 'text-fg-muted hover:text-fg-high',
-                )}
-              >
-                {c ? COSMOS_CHAINS[c].name : 'shielded'}
-              </button>
-            ))}
-          </div>
+          <PrivacySwitch
+            privacy={privacy}
+            onPrivacy={setPrivacy}
+            chains={sourceChoices}
+            chain={pickedSource}
+            onChain={setPickedChain}
+          />
         )}
         {isPenumbra ? (
           <PenumbraSend
