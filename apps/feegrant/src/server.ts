@@ -169,6 +169,14 @@ const main = async () => {
             clientIp(req),
             body,
           );
+          // outcome only - no address, no IP - so "did the wallet ask, and why
+          // was it refused?" is answerable from the journal
+          const code = (result.body as { code?: unknown }).code;
+          const purpose = (body as { purpose?: unknown } | undefined)?.purpose;
+          log(
+            `grant ${typeof purpose === 'string' ? purpose : 'shield'} -> ${result.status}` +
+              (typeof code === 'string' ? ` ${code}` : ''),
+          );
           send(res, result.status, result.body);
         } else {
           send(res, 404, { error: 'not found' });
