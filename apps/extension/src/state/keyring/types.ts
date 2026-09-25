@@ -181,9 +181,10 @@ export interface ZignerZafuImport {
    * pre-Keystone watch-only imports). Set to `'keystone'` for FVKs imported
    * from a Keystone hardware wallet — gates Zigner-only features (Penumbra,
    * FROST, ZID) in the UI even though the underlying Zcash signing path is
-   * shared via PCZT/UR.
+   * shared via PCZT/UR. `'viewing-key'` is a pasted viewing key with no signer
+   * at all: it can see, never spend (see settings-add-viewing-key).
    */
-  coldSignerType?: 'zigner' | 'keystone';
+  coldSignerType?: 'zigner' | 'keystone' | 'viewing-key';
 }
 
 /**

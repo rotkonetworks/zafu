@@ -354,7 +354,22 @@ export const PopupIndex = () => {
   // One tidy, evenly-spaced action row rendered under the balance figure.
   // Icon-forward: labels reveal on hover (plus a title tooltip), so the row
   // stays graphical and calm - Zashi's big obvious actions, zafu-sized.
-  const actions = (
+  // A pasted viewing key can see but never spend: offer only what it can do,
+  // rather than send/swap buttons that could never be signed.
+  const isViewingKeyOnly = selectedKeyInfo?.insensitive?.['coldSignerType'] === 'viewing-key';
+  const actions = isViewingKeyOnly ? (
+    <div className='flex flex-col gap-2'>
+      <ActionButton
+        icon='i-ph-arrow-down'
+        label='receive'
+        onClick={() => navigate(PopupPath.RECEIVE)}
+      />
+      <p className='text-center text-label text-fg-dim lowercase'>
+        <span className='i-ph-eye mr-1 inline-block size-3 align-[-1px]' />
+        viewing key - sees this wallet, cannot spend
+      </p>
+    </div>
+  ) : (
     <div className='grid grid-cols-3 gap-3'>
       <ActionButton
         icon='i-ph-arrow-down'

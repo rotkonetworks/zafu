@@ -1941,6 +1941,24 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     }
   };
 
+  // A pasted viewing key has no signer. Say so instead of offering a send
+  // that could never be signed.
+  if (coldSignerType === 'viewing-key') {
+    return (
+      <div className='flex h-full flex-col items-center justify-center gap-3 bg-canvas p-6 text-center'>
+        <span className='i-ph-eye size-6 text-fg-muted' />
+        <p className='text-sm text-fg-high lowercase'>this wallet is a viewing key</p>
+        <p className='text-xs text-fg-muted lowercase'>
+          it can see this wallet&apos;s transactions but cannot spend. send from the wallet
+          that holds the keys.
+        </p>
+        <Button variant='secondary' onClick={handleClose}>
+          back
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className='h-full bg-canvas'>
       {PasswordModal}

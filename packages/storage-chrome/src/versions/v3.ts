@@ -101,7 +101,7 @@ type LOCAL = {
     accountIndex: number;
     mainnet: boolean;
     vaultId?: string;
-    coldSignerType?: 'zigner' | 'keystone' | 'ledger';
+    coldSignerType?: 'zigner' | 'keystone' | 'ledger' | 'viewing-key';
   }[];
   activeZcashIndex?: number;
   polkadotZignerAccounts?: {

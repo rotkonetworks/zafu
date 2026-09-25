@@ -105,6 +105,8 @@ export const SettingsWallets = ({
   const [deleting, setDeleting] = useState(false);
   const [error, setStateError] = useState<string | null>(null);
 
+  const navigate = usePopupNav();
+
   // -- add wallet state --
   const [scanning, setScanning] = useState(false);
   const [addSuccess, setAddSuccess] = useState(false);
@@ -656,6 +658,12 @@ export const SettingsWallets = ({
                     + import seed phrase
                   </button>
                 )}
+                <button
+                  onClick={() => navigate(PopupPath.SETTINGS_ADD_VIEWING_KEY)}
+                  className='w-full rounded-lg border border-dashed border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high hover:border-border-soft transition-colors'
+                >
+                  + add viewing key (watch only)
+                </button>
                 {errorMessage && <p className='text-xs text-red-400 text-center'>{errorMessage}</p>}
               </div>
             )}

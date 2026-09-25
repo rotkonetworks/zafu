@@ -82,4 +82,5 @@ export enum PopupPath {
   SETTINGS_OTA = '/settings/ota',
   SETTINGS_VOTING = '/settings/voting',
   SETTINGS_ZCASHME = '/settings/zcashme',
+  SETTINGS_ADD_VIEWING_KEY = '/settings/add-viewing-key',
 }

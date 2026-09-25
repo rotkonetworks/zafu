@@ -84,6 +84,9 @@ export const buildZignerVault = (
     ...(data.publicKey ? { cosmosPublicKey: data.publicKey } : {}),
     ...(opts.airgapOnly ? { airgapOnly: true } : {}),
     ...(data.zidPublicKey ? { zid: data.zidPublicKey } : {}),
+    // the send screen reads the signer kind from here: a 'viewing-key' vault
+    // has no signer and must never be offered a send
+    ...(data.coldSignerType ? { coldSignerType: data.coldSignerType } : {}),
   },
 });
 

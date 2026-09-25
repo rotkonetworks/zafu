@@ -26,6 +26,9 @@ const SettingsPrivacy = lazy(() =>
 const SettingsAppearance = lazy(() =>
   import('./settings-appearance').then(m => ({ default: m.SettingsAppearance })),
 );
+const SettingsAddViewingKey = lazy(() =>
+  import('./settings-add-viewing-key').then(m => ({ default: m.SettingsAddViewingKey })),
+);
 const SettingsFees = lazy(() => import('./settings-fees').then(m => ({ default: m.SettingsFees })));
 // Security & Backup tab. SecurityBackup (authored by another engineer) brings
 // its own SettingsScreen chrome, so mount it directly - no extra wrapper.
@@ -146,5 +149,9 @@ export const settingsRoutes = [
   {
     path: PopupPath.SETTINGS_ZCASHME,
     element: withSuspense(SettingsZcashMe),
+  },
+  {
+    path: PopupPath.SETTINGS_ADD_VIEWING_KEY,
+    element: withSuspense(SettingsAddViewingKey),
   },
 ];
