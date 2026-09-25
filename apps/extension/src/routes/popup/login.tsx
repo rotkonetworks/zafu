@@ -8,12 +8,15 @@ import { passwordSelector } from '../../state/password';
 import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../state/keyring';
 import { FormEvent, useState } from 'react';
 import { PopupPath } from './paths';
-import { needsOnboard } from './popup-needs';
+import { needsOnboard, safeNext } from './popup-needs';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 export const popupLoginLoader = () => needsOnboard();
 
 export const Login = () => {
   const navigate = usePopupNav();
+  const routerNavigate = useNavigate();
+  const location = useLocation();
 
   const { isPassword, setSessionPassword } = useStore(passwordSelector);
   const activeKeyInfo = useStore(selectEffectiveKeyInfo);
@@ -58,7 +61,13 @@ export const Login = () => {
               // any other derivation failure is not an unlock problem - proceed
             }
           }
-          navigate(PopupPath.INDEX);
+          // back to the screen that sent us here (lockedScreenGuard), if any
+          const next = safeNext(new URLSearchParams(location.search).get('next'));
+          if (next) {
+            routerNavigate(next, { replace: true });
+          } else {
+            navigate(PopupPath.INDEX);
+          }
         } else {
           setEnteredIncorrect(true);
         }
@@ -113,39 +122,41 @@ export const Login = () => {
         ) : (
           <form onSubmit={handleUnlock} className='grid gap-4'>
             <PasswordInput
-            autoFocus
-            name='password'
-            passwordValue={input}
-            label={
-              <p className='text-title text-fg-high lowercase tracking-[-0.01em]'>enter password</p>
-            }
-            onChange={handleChangePassword}
-            validations={[
-              {
-                type: 'error',
-                issue: 'wrong password',
-                checkFn: () => enteredIncorrect,
-              },
-            ]}
-          />
-          <Button
-            size='lg'
-            variant='gradient'
-            disabled={enteredIncorrect || unlocking}
-            type='submit'
-          >
-            {unlocking ? 'unlocking\u2026' : 'unlock'}
-          </Button>
-          {/* New users who hit a wrong password without a hint of
+              autoFocus
+              name='password'
+              passwordValue={input}
+              label={
+                <p className='text-title text-fg-high lowercase tracking-[-0.01em]'>
+                  enter password
+                </p>
+              }
+              onChange={handleChangePassword}
+              validations={[
+                {
+                  type: 'error',
+                  issue: 'wrong password',
+                  checkFn: () => enteredIncorrect,
+                },
+              ]}
+            />
+            <Button
+              size='lg'
+              variant='gradient'
+              disabled={enteredIncorrect || unlocking}
+              type='submit'
+            >
+              {unlocking ? 'unlocking\u2026' : 'unlock'}
+            </Button>
+            {/* New users who hit a wrong password without a hint of
               recourse assume their wallet is gone. The line only
               surfaces after a failed attempt so we don't preemptively
               teach the wrong mental model — but the moment anxiety
               kicks in, the recovery path is visible. */}
-          {enteredIncorrect && (
-            <p className='text-center text-body text-fg-muted lowercase'>
-              your funds aren't lost — you can restore from your seed phrase by reinstalling zafu.
-            </p>
-          )}
+            {enteredIncorrect && (
+              <p className='text-center text-body text-fg-muted lowercase'>
+                your funds aren't lost — you can restore from your seed phrase by reinstalling zafu.
+              </p>
+            )}
           </form>
         )}
         <div className='flex flex-col gap-1'>

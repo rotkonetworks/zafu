@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { createHashRouter, RouteObject } from 'react-router-dom';
 import { RouteErrorScreen } from '../../components/error-boundary';
 import { PopupIndex, popupIndexLoader } from './home';
+import { lockedScreenGuard } from './popup-needs';
 import { Login, popupLoginLoader } from './login';
 import { PopupPath } from './paths';
 import { PopupLayout } from './popup-layout';
@@ -92,6 +93,10 @@ export const popupRoutes: RouteObject[] = [
       // still covers layout-hook throws.
       {
         ErrorBoundary: RouteErrorScreen,
+        // locked wallet -> unlock screen, for every screen that needs one
+        loader: lockedScreenGuard,
+        // re-check on every navigation, not only on first load
+        shouldRevalidate: () => true,
         children: [
           // Main tabs
           {
