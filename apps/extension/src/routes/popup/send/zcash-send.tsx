@@ -11,6 +11,7 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Sensitive } from '../../../components/sensitive';
+import { removeTxOps, writeTxOp } from '../../../tx-ops';
 import { useStore } from '../../../state';
 import { zignerSigningSelector } from '../../../state/zigner-signing';
 import { recentAddressesSelector } from '../../../state/recent-addresses';
@@ -177,6 +178,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // tempTxId for the optimistic outgoing record created on send-click;
   // promoted to the real txid once the build step returns one.
   const pendingTempTxIdRef = useRef<string | null>(null);
+  // the transaction tracker's record for this send (home card + toast)
+  const trackOpRef = useRef<string | null>(null);
 
   /** promote the optimistic record to the real txid and mark it broadcasted. */
   const promoteToBroadcasted = useCallback(
@@ -195,6 +198,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       } catch (e) {
         console.warn(e);
       }
+      if (trackOpRef.current) {
+        void writeTxOp(trackOpRef.current, { status: 'done', step: undefined, txId: realTxId });
+        trackOpRef.current = null;
+      }
     },
     [messages],
   );
@@ -202,6 +209,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   /** mark the optimistic record failed if one is still pending. */
   const markPendingFailed = useCallback(
     async (reason: string) => {
+      if (trackOpRef.current) {
+        void writeTxOp(trackOpRef.current, { status: 'failed', step: undefined, error: reason });
+        trackOpRef.current = null;
+      }
       const tempId = pendingTempTxIdRef.current;
       if (!tempId) {
         return;
@@ -564,6 +575,16 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       console.warn('[zcash-send] failed to record optimistic pending:', e);
       pendingTempTxIdRef.current = null;
     }
+    // Tracker record. If this page closes mid-send it stays pending and the
+    // sweep later says 'unknown' - it may still have been sent.
+    trackOpRef.current = crypto.randomUUID();
+    void writeTxOp(trackOpRef.current, {
+      network: 'zcash',
+      label: `send ${amount} ZEC`,
+      status: 'pending',
+      step: 'building',
+      startedAt: Date.now(),
+    });
 
     try {
       const walletId = selectedKeyInfo.id;
@@ -1170,6 +1191,15 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     [selectedKeyInfo, markPendingFailed, setError],
   );
 
+  // Backing out of a cold-signing step cancels before anything is broadcast:
+  // drop the tracker record rather than leave a spinner that ends 'unknown'.
+  const dropTrackOp = () => {
+    if (trackOpRef.current) {
+      void removeTxOps([trackOpRef.current]);
+      trackOpRef.current = null;
+    }
+  };
+
   const handleBack = () => {
     switch (step) {
       case 'review':
@@ -1179,9 +1209,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         setStep('review');
         break;
       case 'sign':
+        dropTrackOp();
         setStep('review');
         break;
       case 'scan':
+        dropTrackOp();
         setStep('sign');
         break;
       case 'ledger-sign':
@@ -1193,6 +1225,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       case 'airgap-flow':
         frostAbortRef.current?.abort();
         frostAbortRef.current = null;
+        dropTrackOp();
         setStep('review');
         break;
       case 'error':
@@ -1206,6 +1239,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const handleClose = () => {
     frostAbortRef.current?.abort();
     frostAbortRef.current = null;
+    if (['sign', 'scan', 'frost-room', 'frost-signing', 'airgap-flow'].includes(step)) {
+      dropTrackOp();
+    }
     reset();
     onClose();
   };
