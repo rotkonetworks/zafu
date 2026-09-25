@@ -8,7 +8,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { isPenumbraSendRequest, type PenumbraSendRequest } from '../message/penumbra-send';
-import { txOpKey, type TxOp } from '../tx-ops';
+import { txOpKey, writeTxOp, type TxOp } from '../tx-ops';
 
 /** transaction result */
 export interface PenumbraTransactionResult {
@@ -70,6 +70,17 @@ export const usePenumbraTransaction = () =>
         // listen before firing, so we cannot miss the first status write
         chrome.storage.session.onChanged.addListener(onChanged);
 
+        // Write the record ourselves before handing off. If the service worker
+        // dies before its first write, there is still a record for the sweep
+        // to settle as 'unknown' - otherwise this promise would wait forever
+        // (there is deliberately no page-side timeout).
+        const recorded = writeTxOp(opId, {
+          network: 'penumbra',
+          status: 'pending',
+          step: 'sending to the wallet',
+          ...(label ? { label } : {}),
+        });
+
         const request: PenumbraSendRequest = {
           type: 'PenumbraSend',
           opId,
@@ -81,9 +92,14 @@ export const usePenumbraTransaction = () =>
           finish(() => reject(new Error('invalid send request')));
           return;
         }
-        void chrome.runtime.sendMessage(request).catch((err: unknown) => {
-          finish(() => reject(err instanceof Error ? err : new Error('failed to reach wallet')));
-        });
+        // the record lands before the SW's first write, never racing it
+        void recorded
+          .then(() => chrome.runtime.sendMessage(request))
+          .catch((err: unknown) => {
+            const error = err instanceof Error ? err : new Error('failed to reach wallet');
+            void writeTxOp(opId, { status: 'failed', error: error.message });
+            finish(() => reject(error));
+          });
       });
     },
   });

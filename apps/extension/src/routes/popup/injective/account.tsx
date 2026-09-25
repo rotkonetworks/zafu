@@ -519,6 +519,17 @@ export const InjectiveAccount = () => {
   const asset: HeldAsset = movable.find(a => a.denom === assetDenom) ??
     movable[0] ?? { ...usdcMeta, amount: 0n };
   const isInj = asset.denom.toLowerCase() === GAS_ASSET.denom;
+  // If the asset the forms act on changes for ANY reason (picking another
+  // address that doesn't hold it, the balance emptying), a typed amount must
+  // not carry over: "20" meant 20 USDC.inj, never 20 INJ.
+  const lastAssetRef = useRef(asset.denom);
+  useEffect(() => {
+    if (lastAssetRef.current !== asset.denom) {
+      lastAssetRef.current = asset.denom;
+      setShieldAmount('');
+      setWithdrawAmount('');
+    }
+  }, [asset.denom]);
   const injBal = selected?.inj ?? 0n;
   const balancesReady = selected !== undefined;
 

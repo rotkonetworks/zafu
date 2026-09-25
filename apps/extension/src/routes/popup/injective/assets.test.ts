@@ -42,4 +42,11 @@ describe('injective assets', () => {
       ['INJ', 3n],
     ]);
   });
+
+  it('keeps the bank spelling of the denom for transfers', () => {
+    const bankSpelling = USDC.toLowerCase();
+    const [h] = heldAcceptedAssets([{ denom: bankSpelling, amount: 1n }], accepted, USDC);
+    expect(h?.denom).toBe(bankSpelling);
+    expect(h?.symbol).toBe('USDC.inj');
+  });
 });

@@ -62,7 +62,9 @@ export function heldAcceptedAssets(
   for (const b of balances) {
     const meta = accepted.get(b.denom.toLowerCase());
     if (meta && b.amount > 0n) {
-      out.push({ ...meta, amount: b.amount });
+      // the bank's spelling, not the registry's: a transfer must name the
+      // denom exactly as the account holds it
+      out.push({ ...meta, denom: b.denom, amount: b.amount });
     }
   }
   const p = prefer.toLowerCase();
