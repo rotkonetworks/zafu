@@ -146,7 +146,6 @@ const NetworkToggles = () => {
       containerRef.current?.scrollIntoView({ block: 'start' });
     }
     // run once on mount; initialExpand is derived from the entry URL
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleToggle = async (network: NetworkType) => {
