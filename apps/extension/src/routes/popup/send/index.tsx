@@ -62,7 +62,8 @@ import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { isDedicatedWindow } from '../../../utils/popup-detection';
 import { openInDedicatedWindow } from '../../../utils/navigate';
-import { selectEffectiveKeyInfo } from '../../../state/keyring';
+import { keyRingSelector, selectEffectiveKeyInfo } from '../../../state/keyring';
+import { allocateInjectiveAddress } from '../injective/shown';
 import { RecipientPicker } from '../../../components/recipient-picker';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 
@@ -1612,9 +1613,11 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
     if (ibcState.chain) {
       return;
     }
-    const noble = chains.find(c => c.addressPrefix === 'noble');
-    if (noble) {
-      ibcState.setChain(noble);
+    // Injective first: it is the live ramp; Circle is winding USDC down on Noble
+    const preferred =
+      chains.find(c => c.addressPrefix === 'inj') ?? chains.find(c => c.addressPrefix === 'noble');
+    if (preferred) {
+      ibcState.setChain(preferred);
     }
   }, [chains, ibcState.chain, ibcState.setChain]);
 
@@ -1689,7 +1692,38 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
       | undefined;
     return addrs?.find(a => a.prefix === ibcState.chain!.addressPrefix)?.address;
   }, [selectedKeyInfo, ibcState.chain]);
-  const ownAddress = burnerAddress ?? storedOwnAddress;
+  // Injective (Ethermint): the cosmos deposit path above would derive a WRONG
+  // address, so mnemonic vaults get a fresh HD address on the coin-type-60 path
+  // instead - remembered as shown, so the Injective screen sweeps it.
+  const isInjective = ibcState.chain?.addressPrefix === 'inj';
+  const { getMnemonic } = useStore(keyRingSelector);
+  const [injOwnAddress, setInjOwnAddress] = useState<string>();
+  useEffect(() => {
+    let cancelled = false;
+    setInjOwnAddress(undefined);
+    const keyId = selectedKeyInfo?.type === 'mnemonic' ? selectedKeyInfo.id : undefined;
+    if (!isInjective || !keyId) {
+      return;
+    }
+    void (async () => {
+      const mnemonic = await getMnemonic(keyId).catch(() => undefined);
+      if (!mnemonic || cancelled) {
+        return;
+      }
+      const { address } = await allocateInjectiveAddress(keyId, mnemonic);
+      if (!cancelled) {
+        setInjOwnAddress(address);
+      }
+    })().catch(err => console.warn('[send] failed to allocate an injective address:', err));
+    return () => {
+      cancelled = true;
+    };
+  }, [isInjective, selectedKeyInfo?.id, selectedKeyInfo?.type, getMnemonic]);
+  const ownAddress = isInjective
+    ? (injOwnAddress ?? storedOwnAddress)
+    : (burnerAddress ?? storedOwnAddress);
+  // chain the arrival tracker polls ('inj' prefix is keyed 'injective')
+  const trackChainId: CosmosChainId | undefined = isInjective ? 'injective' : cosmosChainId;
 
   // when we have our own address and the user hasn't opted into a custom
   // recipient, keep the destination pinned to it
@@ -1779,16 +1813,18 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
       // start tracking arrival on the destination cosmos chain (the relayer has
       // no status API, so we poll the burner/recipient balance). Capture the
       // fields BEFORE ibcState.reset() clears them. Best-effort + non-blocking.
-      if (result.txId && cosmosChainId) {
+      if (result.txId && trackChainId) {
         const meta = selectedAsset
           ? getMetadataFromBalancesResponse.optional(selectedAsset)
           : undefined;
         void trackUnshieldOut({
           srcTxHash: result.txId,
           amount: ibcState.amount,
-          decimals: COSMOS_CHAINS[cosmosChainId].decimals,
+          // the ASSET's decimals: INJ is 18, USDC.inj 6 - the chain's native
+          // decimals mis-sized the expected arrival for anything else
+          decimals: ibcState.exponent ?? COSMOS_CHAINS[trackChainId].decimals,
           symbol: meta?.symbol ?? meta?.display ?? ibcState.denom,
-          destChainId: cosmosChainId,
+          destChainId: trackChainId,
           destAddress: destAddr,
           isNative: isNobleUsdc,
         })

@@ -43,10 +43,11 @@ export interface NetworkConfig {
   /**
    * Conduit-only subnetwork: reached through a dedicated derive+sign path
    * (e.g. Injective's eth_secp256k1 conduit), NOT the shared cosmos secp256k1 /
-   * coin-118 IBC machinery. Excluded from getActiveIbcChainIds /
-   * getActiveIbcSubnetworks (which drive the standard cosmos deposit UI) and
-   * from network-loader adapter loading, so `launched:true` can't route it
-   * through the wrong (fund-losing) path. Its own UI gates on isLaunched.
+   * coin-118 IBC machinery. Excluded from getActiveIbcSubnetworks (which drives
+   * the standard cosmos deposit UI) and from network-loader adapter loading, so
+   * `launched:true` can't route it through the wrong (fund-losing) path. It IS
+   * in getActiveIbcChainIds (Penumbra's IBC send-out lists it); that screen
+   * derives its own-address on the coin-type-60 path (injective/shown.ts).
    */
   conduitOnly?: boolean;
   features: {

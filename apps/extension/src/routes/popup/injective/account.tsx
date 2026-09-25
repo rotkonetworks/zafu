@@ -41,9 +41,15 @@ import {
 } from '@repo/wallet/networks/injective/feegrant';
 import { trackTx } from '../../../tx-ops';
 import { looksLikeRecoveryPhrase } from './memo';
+import {
+  MAX_SHOWN_REMEMBERED,
+  allocateInjectiveAddress,
+  rememberShownIndex,
+  shownIndicesKey,
+} from './shown';
 import { recentAddressesSelector } from '../../../state/recent-addresses';
 import { acceptedInjectiveAssets, heldAcceptedAssets, totalHeld, type HeldAsset } from './assets';
-import { nextHdIndex, peekHdIndex } from '@repo/storage-chrome/cosmos-chain-counters';
+import { peekHdIndex } from '@repo/storage-chrome/cosmos-chain-counters';
 import {
   injectiveScanIndices,
   mergeFundedIndices,
@@ -63,8 +69,6 @@ const CFG = COSMOS_CHAINS.injective;
  */
 const GAS_SPONSOR_URL = 'https://sponsor.zafu.pro';
 
-/** how many shown receive indices to remember per vault */
-const MAX_SHOWN_REMEMBERED = 1000;
 /** cadence of the slow sweep over shown addresses outside the hot scan set */
 const COLD_SWEEP_MS = 180_000;
 
@@ -331,8 +335,7 @@ export const InjectiveAccount = () => {
         if (!mnemonic || cancelled) {
           return;
         }
-        const index = await nextHdIndex('injective');
-        const address = await deriveInjectiveAddress(mnemonic, index);
+        const { index, address } = await allocateInjectiveAddress(keyId, mnemonic);
         if (cancelled) {
           return;
         }
@@ -352,17 +355,10 @@ export const InjectiveAccount = () => {
   // addresses on disk). An exchange often keeps paying a whitelisted address
   // long after we rotated past it; those are swept too (see coldQuery), so
   // funds sent to any address we ever showed always become visible.
-  const shownKeyFor = (keyId: string) => `injectiveShownIndices:${keyId}`;
+  const shownKeyFor = shownIndicesKey;
   const [shownIndices, setShownIndices] = useState<number[]>([]);
   const rememberShown = useCallback(async (keyId: string, index: number) => {
-    const key = shownKeyFor(keyId);
-    const prev = ((await chrome.storage.local.get(key))[key] as number[] | undefined) ?? [];
-    if (prev.includes(index)) {
-      return;
-    }
-    const next = [...prev, index].slice(-MAX_SHOWN_REMEMBERED);
-    await chrome.storage.local.set({ [key]: next });
-    setShownIndices(next);
+    setShownIndices(await rememberShownIndex(keyId, index));
   }, []);
   useEffect(() => {
     const keyId = selectedKeyInfo?.id;
