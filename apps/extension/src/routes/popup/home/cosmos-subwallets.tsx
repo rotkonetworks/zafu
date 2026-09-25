@@ -349,16 +349,3 @@ export const CosmosSubwallets = () => {
     </div>
   );
 };
-
-/** Receive page (Noble tab): fresh receive address + addresses used over time. */
-export const NobleReceivePanel = () => {
-  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
-  if (selectedKeyInfo?.type !== 'mnemonic') {
-    return (
-      <div className='rounded-md border border-border-soft bg-elev-1 p-4 text-sm text-fg-muted lowercase'>
-        cold wallets can't derive a Noble deposit address in-app yet.
-      </div>
-    );
-  }
-  return <ChainDeposits chainId='noble' view='receive' />;
-};

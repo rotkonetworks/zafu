@@ -10,12 +10,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useStore } from '../state';
 import { selectEffectiveKeyInfo, keyRingSelector, selectActiveNetwork } from '../state/keyring';
 import { getRootNetwork } from '../config/networks';
-import {
-  createSigningClient,
-  deriveAllChainAddresses,
-  deriveChainAddress,
-} from '@repo/wallet/networks/cosmos/signer';
-import { getBalance } from '@repo/wallet/networks/cosmos/client';
+import { deriveChainAddress } from '@repo/wallet/networks/cosmos/signer';
 import {
   COSMOS_CHAINS,
   rpcEndpointPool,
@@ -40,133 +35,14 @@ import {
  * balance polling is gated on the user being ACTIVELY on penumbra (its root),
  * not merely having it enabled: full network isolation means a wallet viewing
  * zcash touches NO noble-rpc / injective RPC at all. A cosmos subnetwork (Noble)
- * roots to penumbra, so viewing a burner still counts as on-penumbra. Injective
- * is additionally excluded from this generic coin-118 path (its own conduit).
+ * roots to penumbra, so viewing a burner still counts as on-penumbra.
  */
-const useBurnerPollingEnabled = (chainId?: CosmosChainId, legacyOnly = false): boolean => {
+const useBurnerPollingEnabled = (): boolean => {
   const activeNetwork = useStore(selectActiveNetwork);
   if (!activeNetwork || getRootNetwork(activeNetwork) !== 'penumbra') {
     return false;
   }
-  // `chainId` only matters to the old coin-118-only hooks below, which still
-  // skip Ethermint chains; the deposit + asset hooks go through conduitFor.
-  if (chainId && COSMOS_CHAINS[chainId]?.keyAlgo === 'eth_secp256k1' && legacyOnly) {
-    return false;
-  }
   return true;
-};
-
-/** hook to get balance for a specific cosmos chain */
-export const useCosmosBalance = (chainId: CosmosChainId, accountIndex = 0) => {
-  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
-  const { getMnemonic } = useStore(keyRingSelector);
-  const burnerEnabled = useBurnerPollingEnabled(chainId, true);
-
-  return useQuery({
-    queryKey: ['cosmosBalance', chainId, selectedKeyInfo?.id, accountIndex],
-    queryFn: async () => {
-      if (!selectedKeyInfo) {
-        throw new Error('no wallet selected');
-      }
-      if (selectedKeyInfo.type !== 'mnemonic') {
-        return null;
-      }
-
-      const mnemonic = await getMnemonic(selectedKeyInfo.id);
-      const { address } = await createSigningClient(chainId, mnemonic, accountIndex);
-
-      const balance = await getBalance(chainId, address);
-      const config = COSMOS_CHAINS[chainId];
-
-      return {
-        address,
-        balance: balance.amount,
-        denom: balance.denom,
-        decimals: config.decimals,
-        symbol: config.symbol,
-        formatted: formatBalance(balance.amount, config.decimals, config.symbol),
-      };
-    },
-    enabled:
-      burnerEnabled &&
-      !!selectedKeyInfo &&
-      (selectedKeyInfo.type === 'mnemonic' || selectedKeyInfo.type === 'zigner-zafu'),
-    structuralSharing: false, // balance.amount is bigint — not JSON-serializable
-    staleTime: 30_000, // 30 seconds
-    refetchInterval: 60_000, // refetch every minute
-  });
-};
-
-/** hook to get balances for all cosmos chains */
-export const useAllCosmosBalances = (accountIndex = 0) => {
-  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
-  const { getMnemonic } = useStore(keyRingSelector);
-  const burnerEnabled = useBurnerPollingEnabled();
-
-  return useQuery({
-    queryKey: ['allCosmosBalances', selectedKeyInfo?.id, accountIndex],
-    queryFn: async () => {
-      if (!selectedKeyInfo) {
-        throw new Error('no wallet selected');
-      }
-      if (selectedKeyInfo.type !== 'mnemonic') {
-        return null;
-      }
-
-      const mnemonic = await getMnemonic(selectedKeyInfo.id);
-
-      // derive base address (noble) then convert to other chains
-      const { address: nobleAddress } = await createSigningClient('noble', mnemonic, accountIndex);
-      const addresses = deriveAllChainAddresses(nobleAddress);
-
-      // fetch all balances in parallel. Skip eth_secp256k1 chains (Injective):
-      // they are conduit-only, coin-60, and cannot be derived from the coin-118
-      // noble base address nor queried through the StargateClient path here.
-      const results = await Promise.all(
-        Object.entries(COSMOS_CHAINS)
-          .filter(([, config]) => config.keyAlgo !== 'eth_secp256k1')
-          .map(async ([chainId, config]) => {
-            try {
-              const address = addresses[chainId as CosmosChainId];
-              const balance = await getBalance(chainId as CosmosChainId, address);
-              return {
-                chainId: chainId as CosmosChainId,
-                address,
-                balance: balance.amount,
-                denom: balance.denom,
-                decimals: config.decimals,
-                symbol: config.symbol,
-                formatted: formatBalance(balance.amount, config.decimals, config.symbol),
-              };
-            } catch (err) {
-              console.warn(`failed to fetch ${chainId} balance:`, err);
-              return {
-                chainId: chainId as CosmosChainId,
-                address: addresses[chainId as CosmosChainId],
-                balance: 0n,
-                denom: config.denom,
-                decimals: config.decimals,
-                symbol: config.symbol,
-                formatted: `0 ${config.symbol}`,
-                error: true,
-              };
-            }
-          }),
-      );
-
-      return Object.fromEntries(results.map(r => [r.chainId, r])) as Record<
-        CosmosChainId,
-        (typeof results)[0]
-      >;
-    },
-    enabled:
-      burnerEnabled &&
-      !!selectedKeyInfo &&
-      (selectedKeyInfo.type === 'mnemonic' || selectedKeyInfo.type === 'zigner-zafu'),
-    structuralSharing: false, // balances contain bigint — not JSON-serializable
-    staleTime: 30_000,
-    refetchInterval: 60_000,
-  });
 };
 
 export interface DepositAsset {
@@ -249,7 +125,7 @@ const toDepositAssets = (
 export const useCosmosDepositWallets = (chainId: CosmosChainId) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { getMnemonic } = useStore(keyRingSelector);
-  const burnerEnabled = useBurnerPollingEnabled(chainId);
+  const burnerEnabled = useBurnerPollingEnabled();
   useColdSweep(chainId, burnerEnabled);
 
   return useQuery({
@@ -476,7 +352,7 @@ export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
 
   // find a wallet with cosmos capability (may differ from effective when active network is penumbra)
   const cosmosKey = findCosmosCapableKey(allKeyInfos, selectedKeyInfo, chainId);
-  const burnerEnabled = useBurnerPollingEnabled(chainId);
+  const burnerEnabled = useBurnerPollingEnabled();
 
   return useQuery({
     queryKey: ['cosmosAssets', chainId, cosmosKey?.id ?? null, accountIndex],
