@@ -65,10 +65,10 @@ const PRIVACY_ROWS: readonly PrivacyRow[] = [
     visible: n => n === 'zcash',
   },
   {
-    key: 'enablePaymentRequests',
-    label: 'payment requests (zip 321)',
-    onLabel: 'zcash: links and QRs fill in amount and memo',
-    offLabel: 'zcash: links fill in the address only',
+    key: 'openZcashLinks',
+    label: 'zcash: links',
+    onLabel: 'links on websites open in zafu',
+    offLabel: 'links open in your default zcash app',
     visible: n => n === 'zcash',
   },
 ];

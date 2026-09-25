@@ -273,6 +273,7 @@ export default ({
       'injected-keplr': path.join(injectDir, 'injected-keplr.ts'),
       'keplr-bridge': path.join(injectDir, 'keplr-bridge.ts'),
       'passkey-intercept': path.join(injectDir, 'passkey-intercept.ts'),
+      'zcash-links': path.join(injectDir, 'zcash-links.ts'),
       'offscreen-handler': path.join(entryDir, 'offscreen-handler.ts'),
       'page-root': path.join(entryDir, 'page-root.tsx'),
       'popup-root': path.join(entryDir, 'popup-root.tsx'),
@@ -296,6 +297,7 @@ export default ({
             'injected-keplr',
             'keplr-bridge',
             'passkey-intercept',
+            'zcash-links',
             'workers/zcash-worker',
             'workers/ur-decode-worker',
           ];

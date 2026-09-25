@@ -57,7 +57,7 @@ import { PopupPath } from '../../routes/popup/paths';
  * guard below (one wallet window per site at a time), so a page cannot spam
  * windows. Returns false when a window for this origin is already open.
  */
-const openWalletRoute = async (origin: string, route: string): Promise<boolean> => {
+export const openWalletRoute = async (origin: string, route: string): Promise<boolean> => {
   const win = await chrome.windows
     .getLastFocused({ windowTypes: ['normal'] })
     .catch(() => undefined);

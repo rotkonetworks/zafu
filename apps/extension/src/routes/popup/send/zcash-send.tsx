@@ -266,58 +266,47 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const [memo, setMemo] = useState(prefill?.memo ?? '');
 
   // ZIP 321: a scanned or pasted `zcash:` link fills the form for review
-  // (address only when payment requests are switched off in privacy settings)
-  const paymentRequests = useStore(s => s.privacy.settings.enablePaymentRequests);
   const [requestNote, setRequestNote] = useState<string>();
   const [requestError, setRequestError] = useState<string>();
   // which fields the last request filled: a new request clears those it
   // doesn't set, but never touches what the user typed
   const filledByRequest = useRef({ amount: false, memo: false });
-  const applyZcashUri = useCallback(
-    (text: string): boolean => {
-      if (!isZip321Uri(text)) {
-        return false;
-      }
-      setRequestNote(undefined);
-      setRequestError(undefined);
-      if (!paymentRequests) {
-        setRecipient(text.trim().slice('zcash:'.length).split('?')[0] ?? '');
-        return true;
-      }
-      const r = parseZip321(text);
-      if (!r.ok) {
-        setRequestError(`not a valid payment request: ${r.error}`);
-        return true;
-      }
-      const [p, ...more] = r.payments;
-      if (!p || more.length > 0) {
-        setRequestError(
-          `this request pays ${r.payments.length} addresses - zafu pays one at a time`,
-        );
-        return true;
-      }
-      setRecipient(p.address);
-      const filled = filledByRequest.current;
-      if (p.amountZat !== undefined) {
-        setAmount(formatZecAmount(p.amountZat));
-      } else if (filled.amount) {
-        setAmount('');
-      }
-      if (p.memo !== undefined) {
-        setMemo(p.memo);
-      } else if (filled.memo) {
-        setMemo('');
-      }
-      filledByRequest.current = {
-        amount: p.amountZat !== undefined,
-        memo: p.memo !== undefined,
-      };
-      const note = [p.label, p.message].filter(Boolean).join(' - ');
-      setRequestNote(note || undefined);
+  const applyZcashUri = useCallback((text: string): boolean => {
+    if (!isZip321Uri(text)) {
+      return false;
+    }
+    setRequestNote(undefined);
+    setRequestError(undefined);
+    const r = parseZip321(text);
+    if (!r.ok) {
+      setRequestError(`not a valid payment request: ${r.error}`);
       return true;
-    },
-    [paymentRequests],
-  );
+    }
+    const [p, ...more] = r.payments;
+    if (!p || more.length > 0) {
+      setRequestError(`this request pays ${r.payments.length} addresses - zafu pays one at a time`);
+      return true;
+    }
+    setRecipient(p.address);
+    const filled = filledByRequest.current;
+    if (p.amountZat !== undefined) {
+      setAmount(formatZecAmount(p.amountZat));
+    } else if (filled.amount) {
+      setAmount('');
+    }
+    if (p.memo !== undefined) {
+      setMemo(p.memo);
+    } else if (filled.memo) {
+      setMemo('');
+    }
+    filledByRequest.current = {
+      amount: p.amountZat !== undefined,
+      memo: p.memo !== undefined,
+    };
+    const note = [p.label, p.message].filter(Boolean).join(' - ');
+    setRequestNote(note || undefined);
+    return true;
+  }, []);
   // a `zcash:` link handed in as the prefill recipient (inbox, deep links)
   useEffect(() => {
     if (prefill?.recipient) {

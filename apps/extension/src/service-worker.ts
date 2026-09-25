@@ -25,6 +25,7 @@ import { externalMessageListener } from './message/listen/external-easteregg';
 import { encryptionMessageListener } from './message/listen/external-encryption';
 import { contactDiscoveryListener } from './message/listen/contact-discovery';
 import { internalZidListener } from './message/listen/internal-zid';
+import { zcashLinkListener } from './message/listen/zcash-link';
 import { keplrMessageListener } from './message/listen/keplr';
 import { createPenumbraSendListener } from './message/listen/penumbra-send';
 import { TX_OP_PREFIX, isTxOp, type TxOp } from './tx-ops';
@@ -358,6 +359,7 @@ chrome.runtime.onMessage.addListener(contentScriptDisconnectListener);
 chrome.runtime.onMessage.addListener(contentScriptLoadListener);
 chrome.runtime.onMessage.addListener(internalRevokeListener);
 chrome.runtime.onMessage.addListener(internalZidListener);
+chrome.runtime.onMessage.addListener(zcashLinkListener);
 
 // CRSessionManager must be initialized NOW — before wallet services are
 // ready — so content scripts can establish session ports right after the

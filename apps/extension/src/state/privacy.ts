@@ -107,12 +107,13 @@ export interface PrivacySettings {
   enableExplorerLinks: boolean;
 
   /**
-   * ZIP 321 payment requests: a scanned or pasted `zcash:` link fills in the
-   * recipient, amount and memo for review, and Receive can put an amount in
-   * its QR. Parsed locally - nothing is fetched.
-   * when false: a `zcash:` link only fills in the address.
+   * `zcash:` payment links (ZIP 321) clicked on websites.
+   * when true (default): zafu opens them - send, prefilled for review.
+   * when false: zafu leaves them alone and the browser hands them to your
+   * system's default Zcash app.
+   * Links pasted or scanned inside zafu are always understood.
    */
-  enablePaymentRequests: boolean;
+  openZcashLinks: boolean;
 
   /**
    * SOCKS5 proxy for all extension network traffic.
@@ -194,7 +195,7 @@ export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   enableBackgroundSync: false,
   enablePriceFetching: false,
   enableExplorerLinks: false,
-  enablePaymentRequests: true,
+  openZcashLinks: true,
   proxy: { enabled: false, host: '', port: 1080 },
   enableIdentity: true,
   hideBalances: false,

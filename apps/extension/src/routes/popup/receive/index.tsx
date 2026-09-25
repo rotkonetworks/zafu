@@ -355,22 +355,27 @@ function ReceiveTab({
   // it keeps the badge. Only transparent zcash (t1/t3) is public and drops it.
   const isShielded = (isZcash && !transparent && displayAddress?.startsWith('u')) || isPenumbra;
 
-  // ZIP 321: ask for an amount (and a memo, when shielded) in the QR itself
-  const paymentRequests = useStore(s => s.privacy.settings.enablePaymentRequests);
+  // ZIP 321 payment link: the way to share in a chat, next to the QR. An
+  // amount (and a memo, when shielded) rides along when set.
   const [showRequest, setShowRequest] = useState(false);
   const [requestAmount, setRequestAmount] = useState('');
   const [requestMemo, setRequestMemo] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
   const requestZat = parseZecAmount(requestAmount.trim());
   const amountInvalid = requestAmount.trim() !== '' && requestZat === undefined;
-  const requestUri =
-    isZcash && paymentRequests && showRequest && displayAddress && (requestZat || requestMemo)
+  const requestMemoText = isShielded && showRequest ? requestMemo.trim() : '';
+  const paymentLink =
+    isZcash && displayAddress
       ? buildZip321({
           address: displayAddress,
-          amountZat: requestZat,
-          memo: isShielded ? requestMemo.trim() || undefined : undefined,
+          amountZat: showRequest ? requestZat : undefined,
+          memo: requestMemoText || undefined,
         })
       : undefined;
+  // the QR stays a bare address unless something is requested: some wallets
+  // only scan plain addresses
+  const requestUri =
+    showRequest && (requestZat !== undefined || requestMemoText) ? paymentLink : undefined;
   const qrValue = requestUri ?? displayAddress;
 
   return (
@@ -417,17 +422,34 @@ function ReceiveTab({
         )}
       </div>
 
-      {isZcash && paymentRequests && displayAddress && (
+      {isZcash && paymentLink && (
         <div className='flex w-full flex-col gap-1.5'>
-          {!showRequest ? (
+          <div className='flex gap-1.5'>
             <button
               type='button'
-              onClick={() => setShowRequest(true)}
-              className='self-center text-xs text-fg-muted hover:text-fg-high lowercase'
+              onClick={() => {
+                void navigator.clipboard.writeText(paymentLink);
+                setLinkCopied(true);
+                setTimeout(() => setLinkCopied(false), 1500);
+              }}
+              title={paymentLink}
+              className='flex flex-1 items-center justify-center gap-1.5 border border-border-soft px-3 py-2 text-xs text-fg-high hover:bg-elev-1 lowercase'
             >
-              request an amount
+              <span className={`h-3.5 w-3.5 ${linkCopied ? 'i-ph-check' : 'i-ph-link'}`} />
+              {linkCopied ? 'copied' : requestUri ? 'copy payment request' : 'copy payment link'}
             </button>
-          ) : (
+            {!showRequest && (
+              <button
+                type='button'
+                onClick={() => setShowRequest(true)}
+                className='flex items-center gap-1 border border-border-soft px-3 py-2 text-xs text-fg-muted hover:bg-elev-1 hover:text-fg-high lowercase'
+              >
+                <span className='i-ph-plus h-3 w-3' />
+                amount
+              </button>
+            )}
+          </div>
+          {showRequest && (
             <>
               <div className='flex gap-1.5'>
                 <input
@@ -464,19 +486,6 @@ function ReceiveTab({
                 />
               )}
               {amountInvalid && <p className='text-xs text-red-400'>up to 8 decimals</p>}
-              {requestUri && (
-                <button
-                  type='button'
-                  onClick={() => {
-                    void navigator.clipboard.writeText(requestUri);
-                    setLinkCopied(true);
-                    setTimeout(() => setLinkCopied(false), 1500);
-                  }}
-                  className='self-center text-xs text-zigner-gold hover:underline'
-                >
-                  {linkCopied ? 'copied' : 'copy payment link'}
-                </button>
-              )}
             </>
           )}
         </div>

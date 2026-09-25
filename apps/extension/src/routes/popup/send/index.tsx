@@ -2589,8 +2589,11 @@ export function SendPage() {
   const pickedSource = privacy === 'transparent' ? (pickedChain ?? sourceChoices[0]) : undefined;
   const cosmosChain = locationState?.cosmosChain ?? pickedSource;
   const isCosmos = cosmosChain != null || COSMOS_CHAIN_IDS.includes(activeNetwork as CosmosChainId);
-  const isPenumbra = !cosmosChain && activeNetwork === 'penumbra';
-  const isZcash = !cosmosChain && activeNetwork === 'zcash';
+  // a zcash: payment link (clicked on a website) is a zcash send whatever
+  // network is active
+  const zcashLink = /^zcash:/i.test(searchParams.get('to') ?? '');
+  const isZcash = !cosmosChain && (activeNetwork === 'zcash' || zcashLink);
+  const isPenumbra = !cosmosChain && !zcashLink && activeNetwork === 'penumbra';
 
   const getTitle = () => {
     if (isPenumbra) {

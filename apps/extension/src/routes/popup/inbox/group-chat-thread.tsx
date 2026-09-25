@@ -18,6 +18,7 @@ import {
 } from '../../../state/group-chat';
 import { selectMultisigWallets } from '../../../state/wallets';
 import { PopupPath } from '../paths';
+import { MessageText } from '../../../components/message-text';
 
 /** short label for a peer relay pubkey, so distinct co-signers are tellable apart. */
 const shortPub = (hex: string): string => (hex ? hex.slice(0, 6) : 'peer');
@@ -149,7 +150,9 @@ function MessageBubble({ m }: { m: GroupChatMessage }) {
             {shortPub(m.senderPub)}
           </span>
         )}
-        <span className='whitespace-pre-wrap break-words'>{m.body}</span>
+        <span className='whitespace-pre-wrap break-words'>
+          <MessageText text={m.body} />
+        </span>
         <span
           className={
             m.mine

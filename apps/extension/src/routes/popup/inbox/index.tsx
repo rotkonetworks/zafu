@@ -51,6 +51,7 @@ import {
   decodeDataMemo,
   DataContentType,
 } from '@repo/wallet/networks/zcash/memo-codec';
+import { MessageText } from '../../../components/message-text';
 
 // ---- helpers ----
 
@@ -247,7 +248,11 @@ function MessageBubble({ message }: { message: InboxMessage }) {
 function MessageContent({ message }: { message: InboxMessage }) {
   switch (message.type) {
     case MemoType.Text:
-      return <p className='text-sm whitespace-pre-wrap break-words'>{message.body}</p>;
+      return (
+        <p className='text-sm whitespace-pre-wrap break-words'>
+          <MessageText text={message.body} />
+        </p>
+      );
 
     case MemoType.ContactCard:
       return <ContactCardBubble card={message.contactCard} />;
