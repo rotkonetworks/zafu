@@ -5,20 +5,53 @@ a founder, an operator set, an electorate you can audit, and moderation that
 **hides rather than deletes**.
 
 zid is the identity and transport layer (keys, sealed boxes, pairwise encrypted
-channels, presence). zirc is what a community builds on top. Nothing here talks to
-a network: every function is pure, over signed records.
+channels, presence). zirc is what a community builds on top.
 
 ```sh
 npm install @zafu/zirc
 ```
 
-## The three pieces
+## Two entry points
 
-| module                   | what it does                                                            |
-| ------------------------ | ----------------------------------------------------------------------- |
-| `channel-log`            | genesis, the hash-chained log, and **authority verification**           |
-| `vote`                   | the electorate at a log index, and whether a decision passed            |
-| _(re-exported from zid)_ | `createGroupSession` - round-structured messages over pairwise channels |
+The root is pure: every function is over signed records and **nothing there
+talks to a network**, which is what makes the log replayable from genesis
+wherever it happens to be stored, and the governance testable without a relay.
+
+The room is the substrate that pure half needs to sit on, and it does talk to
+a relay. It is a separate import so the property above survives.
+
+```ts
+import { createGenesis, modeStateAt } from '@zafu/zirc'; // pure
+import { Room, sealInvite } from '@zafu/zirc/room'; // talks to a relay
+```
+
+| module                   | entry               | what it does                                                            |
+| ------------------------ | ------------------- | ----------------------------------------------------------------------- |
+| `channel-log`            | `@zafu/zirc`        | genesis, the hash-chained log, and **authority verification**           |
+| `vote`                   | `@zafu/zirc`        | the electorate at a log index, and whether a decision passed            |
+| `room`                   | `@zafu/zirc/room`   | the encrypted windowed board, presence, sync, invites                   |
+| `commands`               | `@zafu/zirc/room`   | `/me`, `/nick`, `/who`, completion - the IRC line parser                |
+| _(re-exported from zid)_ | `@zafu/zirc`        | `createGroupSession` - round-structured messages over pairwise channels |
+
+## The room
+
+N members, one shared room secret, and a windowed append-only board the relay
+cannot read. It rides the transport a zafu relay already speaks for contact
+discovery - `putBucket`/`getBucket` keyed by `(appScope, epoch, shard)` - so a
+channel needs no new server behaviour and no relay cooperation. A bouncer in
+front changes nothing: it is HTTP, and it is blind by construction because the
+relay behind it is.
+
+Per-window AES-256-GCM keys via HKDF, ed25519 per-record signatures,
+per-author hash chains, opaque tags, and fixed-size writes - so the relay
+cannot tell a one-word reply from a paragraph. `room.ts` states what that
+guarantees and, more usefully, what it does not.
+
+An invite is deliberately a bearer token, so the dangerous moment is when it
+travels. `sealInvite` puts it in a zid sealed box addressed to one recipient -
+post-quantum (X-Wing) whenever they advertise a `pq_pubkey` - which means the
+transport carrying it does not have to be trusted with the key to a room it
+must never read.
 
 ## Worked example
 
@@ -101,10 +134,9 @@ vote-based systems lack.
 
 ## What it is not
 
-- **Not a transport.** Where the log lives - a relay scope, an append-only
-  service, content-addressed storage mirrored by clients - is the application's
-  decision (design notes are issues #46 and #47 in the repo). Every function here
-  is agnostic to it.
+- **Not a transport, at the root.** The governance half is agnostic to where
+  the log lives, and that is deliberate. `@zafu/zirc/room` supplies one answer
+  (a relay's blind store) without the root depending on it.
 - **Not a place content lives.** Items are referenced by hash. The content is
   end-to-end encrypted elsewhere and this layer never sees it, which is why a
   `+G`-style word filter can only ever be a client convention: modes that gate
@@ -128,6 +160,12 @@ vote-based systems lack.
 - Rules are fixed at genesis. A community that wants different thresholds forks -
   which is cheap by design, and the reason rules are signed into the channel's
   identity.
+- **The room's windows sweep, so a moderation log cannot live in them.**
+  `channelStateAt` replays from genesis; a swept log is an operator set you
+  cannot recompute. Messages may be ephemeral, the channel log may not. It
+  needs durable storage - though not *trusted* storage, since `verifyChain`
+  proves it from genesis, which is what makes an archiving bouncer a cache
+  rather than an authority.
 
 ## License
 
