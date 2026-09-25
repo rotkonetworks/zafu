@@ -18,7 +18,7 @@
     "lint": "turbo lint",
     "lint:fix": "turbo lint -- --fix",
     "lint:prettier": "prettier --check .",
-    "lint:rust": "turbo lint:rust",
+    "lint:rust": "cargo fmt --manifest-path apps/minirelay/Cargo.toml --check && cargo clippy --manifest-path apps/minirelay/Cargo.toml --all-targets -- -D warnings",
     "lint:strict": "turbo lint:strict",
     "lint:syncpack": "syncpack lint",
     "postinstall": "if command -v syncpack >/dev/null 2>&1; then syncpack lint; fi",

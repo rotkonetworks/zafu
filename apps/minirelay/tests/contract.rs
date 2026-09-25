@@ -63,7 +63,10 @@ fn with_policy(config: &Config) -> axum::Router {
 /// in-process tests supply it themselves.
 fn with_peer(mut req: Request<Body>) -> Request<Body> {
     req.extensions_mut()
-        .insert(axum::extract::ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 41234))));
+        .insert(axum::extract::ConnectInfo(SocketAddr::from((
+            [127, 0, 0, 1],
+            41234,
+        ))));
     req
 }
 
@@ -79,7 +82,12 @@ async fn send(router: &axum::Router, req: Request<Body>) -> (StatusCode, Value) 
     (status, value)
 }
 
-fn put_request_with_token(app_scope: &str, epoch: i64, entries: &[(u8, u8)], token: Option<&str>) -> Request<Body> {
+fn put_request_with_token(
+    app_scope: &str,
+    epoch: i64,
+    entries: &[(u8, u8)],
+    token: Option<&str>,
+) -> Request<Body> {
     let mut builder = Request::builder()
         .method("POST")
         .uri("/bucket")

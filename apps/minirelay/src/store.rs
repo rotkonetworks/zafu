@@ -79,7 +79,11 @@ pub struct Store {
 }
 
 impl Store {
-    pub fn open(path: &str, max_entries_per_coord: i64, retention_seconds: i64) -> Result<Self, StoreError> {
+    pub fn open(
+        path: &str,
+        max_entries_per_coord: i64,
+        retention_seconds: i64,
+    ) -> Result<Self, StoreError> {
         let conn = Connection::open(path)?;
         // WAL: reads do not block the writer. busy_timeout: a concurrent publish
         // waits instead of failing the request.
@@ -132,9 +136,10 @@ impl Store {
             )?;
             for e in entries {
                 let exists: Option<i64> = probe
-                    .query_row(params![coord.app_scope, coord.epoch, coord.shard, e.tag], |r| {
-                        r.get(0)
-                    })
+                    .query_row(
+                        params![coord.app_scope, coord.epoch, coord.shard, e.tag],
+                        |r| r.get(0),
+                    )
                     .optional()?;
                 if exists.is_none() {
                     fresh += 1;
@@ -201,7 +206,10 @@ impl Store {
     pub fn gc(&self) -> Result<usize, StoreError> {
         let cutoff = self.now() - self.retention_seconds;
         let conn = self.conn.lock();
-        let removed = conn.execute("DELETE FROM entries WHERE inserted_at < ?1", params![cutoff])?;
+        let removed = conn.execute(
+            "DELETE FROM entries WHERE inserted_at < ?1",
+            params![cutoff],
+        )?;
         Ok(removed)
     }
 
@@ -243,7 +251,11 @@ mod tests {
         s.put(&coord("poker", 100), &[entry(2, 2)]).unwrap();
 
         let got = s.get(&coord("poker", 100)).unwrap();
-        assert_eq!(got.len(), 2, "a replacing store would have dropped the first publisher");
+        assert_eq!(
+            got.len(),
+            2,
+            "a replacing store would have dropped the first publisher"
+        );
     }
 
     #[test]
@@ -273,9 +285,11 @@ mod tests {
     #[test]
     fn cap_refuses_growth_but_allows_retries() {
         let s = Store::open(":memory:", 2, 3600).unwrap();
-        s.put(&coord("poker", 100), &[entry(1, 1), entry(2, 2)]).unwrap();
+        s.put(&coord("poker", 100), &[entry(1, 1), entry(2, 2)])
+            .unwrap();
         // A retry of what is already there is not growth.
-        s.put(&coord("poker", 100), &[entry(1, 7), entry(2, 7)]).unwrap();
+        s.put(&coord("poker", 100), &[entry(1, 7), entry(2, 7)])
+            .unwrap();
         match s.put(&coord("poker", 100), &[entry(3, 3)]) {
             Err(StoreError::TooManyEntries { held, incoming }) => {
                 assert_eq!((held, incoming), (2, 1));

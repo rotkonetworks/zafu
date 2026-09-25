@@ -6,7 +6,6 @@
 //! concerns). Policy lives in filters (`service.rs`), storage lives in
 //! `store.rs`, and neither knows about HTTP.
 
-
 use axum::body::Bytes;
 use axum::extract::{ConnectInfo, DefaultBodyLimit, Query, Request, State};
 use axum::http::{header, HeaderValue, StatusCode};
@@ -86,9 +85,18 @@ struct ErrorBody {
 }
 
 fn bad_request(message: impl Into<String>) -> Response {
-    (StatusCode::BAD_REQUEST, Json(ErrorBody { error: message.into() })).into_response()
+    (
+        StatusCode::BAD_REQUEST,
+        Json(ErrorBody {
+            error: message.into(),
+        }),
+    )
+        .into_response()
 }
 
+// An axum Response as the error is the idiomatic early-return for request
+// validation; it is built at most once per request, so its size is moot.
+#[allow(clippy::result_large_err)]
 fn coord_is_sane(app_scope: &str, shard: &str) -> Result<(), Response> {
     if app_scope.is_empty() || app_scope.chars().count() > SCOPE_MAX_CHARS {
         return Err(bad_request("appScope must be 1..=256 characters"));
@@ -315,8 +323,10 @@ async fn cors(req: Request, next: Next) -> Response {
         header::ACCESS_CONTROL_ALLOW_HEADERS,
         HeaderValue::from_static("content-type, authorization"),
     );
-    res.headers_mut()
-        .insert(header::ACCESS_CONTROL_MAX_AGE, HeaderValue::from_static("86400"));
+    res.headers_mut().insert(
+        header::ACCESS_CONTROL_MAX_AGE,
+        HeaderValue::from_static("86400"),
+    );
     res
 }
 

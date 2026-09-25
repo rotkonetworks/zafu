@@ -77,8 +77,8 @@ async fn main() {
         router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
     .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
+        let _ = tokio::signal::ctrl_c().await;
+    })
     .await
     {
         eprintln!("minirelay: server error: {e}");

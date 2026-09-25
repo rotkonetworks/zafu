@@ -287,7 +287,7 @@ where
                 None => inner.call(req).await,
                 Some(allowed) => {
                     let scope = req.op.coord().app_scope.clone();
-                    if allowed.iter().any(|s| *s == scope) {
+                    if allowed.contains(&scope) {
                         inner.call(req).await
                     } else {
                         Err(RelayError::ScopeNotServed(scope))
@@ -500,7 +500,9 @@ mod tests {
             .await
             .unwrap()
             .call(RelayRequest {
-                op: Op::Get { coord: coord("poker") },
+                op: Op::Get {
+                    coord: coord("poker"),
+                },
                 source: put("poker").source,
             })
             .await
@@ -523,11 +525,7 @@ mod tests {
             .service(StoreService::new(store()));
 
         assert!(service.clone().oneshot(put("anything")).await.is_ok());
-        assert!(service
-            .clone()
-            .oneshot(put("anything"))
-            .await
-            .is_ok());
+        assert!(service.clone().oneshot(put("anything")).await.is_ok());
     }
 
     #[tokio::test]
