@@ -39,11 +39,23 @@ interface RelayWasm {
 
 let wasm: RelayWasm | null = null;
 
-/** Load the wasm bundle, the same way the rest of the extension does. */
+/**
+ * Load the wasm bundle, the same way the rest of the extension does.
+ *
+ * Importing the glue is not enough: until something calls its init, every
+ * export dies with "reading '__wbindgen_free'". This used to work only when
+ * some other screen had initialised the module first (the page shares one
+ * module instance per URL), so opening a multisig room straight away broke.
+ */
 async function loadWasm(): Promise<RelayWasm> {
   if (wasm !== null) {
     return wasm;
   }
+  // Initialise through the one page-realm initialiser (shared memory, panic
+  // hook). A second init of the same module instance is a no-op, so this is
+  // safe whichever screen gets there first.
+  const { initZcashWasm } = await import('./zcash');
+  await initZcashWasm();
   // The specifier is built at runtime on purpose. A literal here is
   // statically analyzable, and vite then tries to resolve a file that lives
   // in public/ and is only ever served, never bundled - which fails the test
