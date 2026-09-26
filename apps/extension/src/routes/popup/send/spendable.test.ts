@@ -19,12 +19,6 @@ describe('computeFeeZat — ZIP-317, mirroring the worker', () => {
   it('charges the transparent output on top of the shielded actions', () => {
     expect(computeFeeZat(1, 0, 1, true)).toBe(MARGINAL_FEE * 3n);
   });
-
-  it('applies the user multiplier and never drops below the consensus floor', () => {
-    expect(computeFeeZat(1, 1, 0, true, 2)).toBe(MARGINAL_FEE * 4n);
-    expect(computeFeeZat(1, 1, 0, true, 0.5)).toBe(MARGINAL_FEE * 2n);
-    expect(computeFeeZat(1, 1, 0, true, NaN)).toBe(MARGINAL_FEE * 2n);
-  });
 });
 
 describe('maxSendable', () => {
@@ -65,13 +59,6 @@ describe('maxSendable', () => {
     const transparent = maxSendable(notes, { transparentRecipient: true });
     expect(transparent.feeZat).toBeGreaterThan(shielded.feeZat);
     expect(transparent.amountZat).toBeLessThan(shielded.amountZat);
-  });
-
-  it('honours the fee multiplier', () => {
-    const notes = [zec(1)];
-    const single = maxSendable(notes, { transparentRecipient: false });
-    const doubled = maxSendable(notes, { transparentRecipient: false, feeMultiplier: 2 });
-    expect(doubled.feeZat).toBe(single.feeZat * 2n);
   });
 });
 

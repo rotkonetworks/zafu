@@ -14,7 +14,6 @@
  * - own indexeddb store
  */
 
-import { localExtStorage } from '@repo/storage-chrome/local';
 import type { NetworkType } from './types';
 
 /**
@@ -838,20 +837,6 @@ export interface SendTxUnsignedResult {
  * if mnemonic is provided: builds fully signed tx + broadcasts, returns { txid, fee }
  * if no mnemonic: builds unsigned tx for cold signing via QR (requires ufvk)
  */
-/**
- * User's ZIP-317 fee multiplier (settings → fees). Read on the main thread —
- * the compute worker is a dedicated Worker with no chrome.storage access — and
- * injected into every fee-bearing payload. Defaults to 1 (network standard).
- */
-export const getFeeMultiplier = async (): Promise<number> => {
-  try {
-    const v = await localExtStorage.get('zafuFeeMultiplier');
-    return typeof v === 'number' && Number.isFinite(v) ? Math.max(1, v) : 1;
-  } catch {
-    return 1;
-  }
-};
-
 export const buildSendTxInWorker = async (
   network: NetworkType,
   walletId: string,
@@ -864,11 +849,10 @@ export const buildSendTxInWorker = async (
   mnemonic?: string,
   ufvk?: string,
 ): Promise<SendTxUnsignedResult | { txid: string; fee: string }> => {
-  const feeMultiplier = await getFeeMultiplier();
   return callWorker(
     network,
     'send-tx',
-    { serverUrl, recipient, amount, memo, accountIndex, mainnet, mnemonic, ufvk, feeMultiplier },
+    { serverUrl, recipient, amount, memo, accountIndex, mainnet, mnemonic, ufvk },
     walletId,
   );
 };
@@ -1103,11 +1087,10 @@ export const buildTurnstileMigrationInWorker = async (
   mnemonic?: string,
   fragmentSize = 400,
 ): Promise<TurnstileMigrationUnsignedResult | { txid: string; fee: string }> => {
-  const feeMultiplier = await getFeeMultiplier();
   return callWorker(
     network,
     'send-turnstile-migration',
-    { serverUrl, accountIndex, mainnet, ufvk, backend, mnemonic, fragmentSize, feeMultiplier },
+    { serverUrl, accountIndex, mainnet, ufvk, backend, mnemonic, fragmentSize },
     walletId,
   );
 };

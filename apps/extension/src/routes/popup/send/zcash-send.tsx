@@ -27,7 +27,6 @@ import {
   applySignatureContributionsInWorker,
   type SignatureContribution,
   getBalanceInWorker,
-  getFeeMultiplier,
   getTransparentUtxosInWorker,
   broadcastRawTxInWorker,
   type SendTxUnsignedResult,
@@ -418,12 +417,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     sendChainHeight > 0 && sendChainHeight < nu63ActivationHeight(mainnet) ? 'orchard' : 'ironwood';
 
   const poolNotes = usePoolNotes(selectedKeyInfo?.id);
-  const [feeMultiplier, setFeeMultiplier] = useState(1);
-  useEffect(() => {
-    getFeeMultiplier()
-      .then(setFeeMultiplier)
-      .catch(() => {});
-  }, []);
 
   /** unspent note values in the pool this send would spend from */
   const spendableNotes = useMemo(
@@ -469,9 +462,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     () =>
       maxSendable(spendableNotes, {
         transparentRecipient: recipientIsTransparent,
-        feeMultiplier,
       }),
-    [spendableNotes, recipientIsTransparent, feeMultiplier],
+    [spendableNotes, recipientIsTransparent],
   );
 
   /**
@@ -485,9 +477,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     }
     return quoteSend(spendableNotes, BigInt(Math.round(n * 1e8)), {
       transparentRecipient: recipientIsTransparent,
-      feeMultiplier,
     });
-  }, [amount, spendableNotes, recipientIsTransparent, feeMultiplier, notesLoaded]);
+  }, [amount, spendableNotes, recipientIsTransparent, notesLoaded]);
 
   // Keep the DISPLAYED fee in step with the quote.
   //
@@ -559,12 +550,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     if (notesLoaded) {
       const quote = quoteSend(spendableNotes, BigInt(Math.round(Number(amount) * 1e8)), {
         transparentRecipient: /^(t1|t3|tm|t2)/.test(r),
-        feeMultiplier,
       });
       if (!quote.ok) {
         const maxForThis = maxSendable(spendableNotes, {
           transparentRecipient: /^(t1|t3|tm|t2)/.test(r),
-          feeMultiplier,
         });
         setFormError(
           `not enough spendable ${activePool} balance — the most this can send, ` +

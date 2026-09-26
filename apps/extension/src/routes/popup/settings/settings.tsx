@@ -77,12 +77,6 @@ const groups: SettingsGroup[] = [
         href: PopupPath.SETTINGS_WALLETS,
       },
       {
-        title: 'fees',
-        icon: 'i-zafu-mon',
-        href: PopupPath.SETTINGS_FEES,
-        networks: ['zcash'],
-      },
-      {
         title: 'voting endpoints',
         icon: 'i-ph-check-square-offset',
         href: PopupPath.SETTINGS_VOTING,

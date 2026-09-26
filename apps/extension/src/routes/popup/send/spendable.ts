@@ -31,24 +31,20 @@ const GRACE_ACTIONS = 2;
 const MIN_SHIELDED_ACTIONS = 2;
 
 /**
- * ZIP-317 fee, mirroring the worker's computeFee.
- *
- * `feeMultiplier` is clamped to >= 1: ZIP-317 is a consensus floor, not a fee
- * market, so a sub-standard multiplier can only produce a rejected transaction.
+ * ZIP-317 fee, mirroring the worker's computeFee. Always the standard fee:
+ * zcash has no fee market, so paying more buys no speed and only makes the
+ * transaction stand out from every other wallet's.
  */
 export const computeFeeZat = (
   nSpends: number,
   nZOutputs: number,
   nTOutputs: number,
   hasChange: boolean,
-  feeMultiplier = 1,
 ): bigint => {
   const nShieldedOutputs = nZOutputs + (hasChange ? 1 : 0);
   const nShieldedActions = Math.max(nSpends, nShieldedOutputs, MIN_SHIELDED_ACTIONS);
   const logicalActions = nShieldedActions + nTOutputs;
-  const base = MARGINAL_FEE * BigInt(Math.max(logicalActions, GRACE_ACTIONS));
-  const m = Number.isFinite(feeMultiplier) ? Math.max(1, feeMultiplier) : 1;
-  return m === 1 ? base : (base * BigInt(Math.round(m * 100))) / 100n;
+  return MARGINAL_FEE * BigInt(Math.max(logicalActions, GRACE_ACTIONS));
 };
 
 /**
@@ -93,18 +89,12 @@ export interface SpendableMax {
  */
 export const maxSendable = (
   noteValues: bigint[],
-  opts: { transparentRecipient: boolean; feeMultiplier?: number },
+  opts: { transparentRecipient: boolean },
 ): SpendableMax => {
   const total = noteValues.reduce((s, v) => s + v, 0n);
   const nTOutputs = opts.transparentRecipient ? 1 : 0;
   const nZOutputs = opts.transparentRecipient ? 0 : 1;
-  const feeZat = computeFeeZat(
-    noteValues.length,
-    nZOutputs,
-    nTOutputs,
-    false,
-    opts.feeMultiplier ?? 1,
-  );
+  const feeZat = computeFeeZat(noteValues.length, nZOutputs, nTOutputs, false);
   if (total <= feeZat) {
     return { amountZat: 0n, feeZat, nSpends: noteValues.length };
   }
@@ -135,9 +125,8 @@ export interface SendQuote {
 export const quoteSend = (
   noteValues: bigint[],
   amountZat: bigint,
-  opts: { transparentRecipient: boolean; feeMultiplier?: number },
+  opts: { transparentRecipient: boolean },
 ): SendQuote => {
-  const feeMultiplier = opts.feeMultiplier ?? 1;
   const nTOutputs = opts.transparentRecipient ? 1 : 0;
   const nZOutputs = opts.transparentRecipient ? 0 : 1;
 
@@ -145,10 +134,10 @@ export const quoteSend = (
     return { ok: false, error: 'dust', feeZat: 0n, nSpends: 0, requiredZat: 0n };
   }
 
-  const estFee = computeFeeZat(1, nZOutputs, nTOutputs, true, feeMultiplier);
+  const estFee = computeFeeZat(1, nZOutputs, nTOutputs, true);
   const selected = selectValues(noteValues, amountZat + estFee);
   if (!selected) {
-    const fee = computeFeeZat(noteValues.length, nZOutputs, nTOutputs, false, feeMultiplier);
+    const fee = computeFeeZat(noteValues.length, nZOutputs, nTOutputs, false);
     return {
       ok: false,
       error: 'insufficient',
@@ -160,8 +149,8 @@ export const quoteSend = (
 
   const totalIn = selected.reduce((s, v) => s + v, 0n);
   const hasChange =
-    totalIn > amountZat + computeFeeZat(selected.length, nZOutputs, nTOutputs, true, feeMultiplier);
-  const feeZat = computeFeeZat(selected.length, nZOutputs, nTOutputs, hasChange, feeMultiplier);
+    totalIn > amountZat + computeFeeZat(selected.length, nZOutputs, nTOutputs, true);
+  const feeZat = computeFeeZat(selected.length, nZOutputs, nTOutputs, hasChange);
   const requiredZat = amountZat + feeZat;
   return {
     ok: totalIn >= requiredZat,
