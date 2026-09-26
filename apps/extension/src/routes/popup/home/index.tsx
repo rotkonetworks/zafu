@@ -33,6 +33,7 @@ import { PopupPath } from '../paths';
 import { AssetListSkeleton } from '../../../components/primitives/skeleton';
 import { usePreloadBalances } from '../../../hooks/use-preload';
 import { useActiveAddress, derivePenumbraEphemeralFromFvk } from '../../../hooks/use-address';
+import { rotateShieldedIndex } from '../../../state/shielded-receive-index';
 import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
 import { usePolkadotPublicKey } from '../../../hooks/use-polkadot-key';
 import { useCosmosAssets } from '../../../hooks/cosmos-balance';
@@ -318,7 +319,11 @@ export const PopupIndex = () => {
     if (isPenumbra) {
       setEphemeralNonce(n => n + 1);
     }
-  }, [effectiveAddress, isPenumbra]);
+    // zcash shielded addresses are single-use too
+    if (activeNetwork === 'zcash' && effectiveAddress.startsWith('u')) {
+      void rotateShieldedIndex();
+    }
+  }, [effectiveAddress, isPenumbra, activeNetwork]);
 
   // mnemonic vaults derive zcash keys directly — no zcash wallet record
   const walletName =
@@ -442,20 +447,6 @@ export const PopupIndex = () => {
                 onClick={() => setEphemeralNonce(n => n + 1)}
                 className='shrink-0 rounded p-1 text-fg-muted transition-colors hover:bg-fg/5 hover:text-fg-high'
                 title='rotate to a fresh address'
-              >
-                <span className='i-ph-arrows-clockwise h-3.5 w-3.5' />
-              </button>
-            )}
-            {effectiveAddress && activeNetwork === 'zcash' && (
-              <button
-                onClick={() => {
-                  chrome.storage.local.get('zcashShieldedIndex', r => {
-                    const next = ((r['zcashShieldedIndex'] as number) ?? 0) + 1;
-                    void chrome.storage.local.set({ zcashShieldedIndex: next });
-                  });
-                }}
-                className='shrink-0 rounded p-1 text-fg-muted transition-colors hover:bg-fg/5 hover:text-fg-high'
-                title='rotate to a fresh receive address'
               >
                 <span className='i-ph-arrows-clockwise h-3.5 w-3.5' />
               </button>

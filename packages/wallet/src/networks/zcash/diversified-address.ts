@@ -7,9 +7,11 @@
  * payment came through.
  *
  * index allocation:
- *   0         = default receiving address (user's public address)
- *   1-999     = reserved for manual address rotation
- *   1000+     = per-contact diversified addresses
+ *   0, 1, 2.. = single-use receive addresses; the extension's receive counter
+ *               advances every time one is shown or copied, so low indices
+ *               are not stable "public" addresses
+ *   1000+     = per-contact diversified addresses (hash-spread over 2^48, so
+ *               the receive counter practically never reaches one)
  *
  * index derivation:
  *   index = 1000 + (SHA-256(contact_id)[0:6] as u48)

@@ -22,6 +22,7 @@ import {
 } from '../../../state/keyring';
 import { getActiveWalletJson, selectActiveZcashWallet } from '../../../state/wallets';
 import { useActiveAddress } from '../../../hooks/use-address';
+import { rotateShieldedIndex } from '../../../state/shielded-receive-index';
 import {
   derivePenumbraEphemeralFromMnemonic,
   derivePenumbraEphemeralFromFvk,
@@ -44,10 +45,13 @@ function ReceiveTab({
   address,
   loading,
   activeNetwork,
+  retireShielded,
 }: {
   address: string;
   loading: boolean;
   activeNetwork: string;
+  /** hand the zcash shielded address on screen out, and move to a fresh one */
+  retireShielded: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   // Penumbra receive is ephemeral-ONLY: a fresh randomized single-use address
@@ -77,24 +81,6 @@ function ReceiveTab({
     (zcashWallet?.orchardFvk?.startsWith('uview') ? zcashWallet.orchardFvk : undefined);
   // multisig UFVKs are orchard-only, no transparent component to derive.
   const canTransparent = (isMnemonic || !!zcashUfvk) && !isMultisig;
-
-  // zcash shielded diversifier index (synced with chrome.storage)
-  const [shieldedIndex, setShieldedIndex] = useState(0);
-  useEffect(() => {
-    if (!isZcash) {
-      return;
-    }
-    chrome.storage.local.get('zcashShieldedIndex').then(r => {
-      setShieldedIndex(r['zcashShieldedIndex'] ?? 0);
-    });
-    const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
-      if (changes['zcashShieldedIndex']?.newValue !== undefined) {
-        setShieldedIndex(changes['zcashShieldedIndex'].newValue);
-      }
-    };
-    chrome.storage.local.onChanged.addListener(listener);
-    return () => chrome.storage.local.onChanged.removeListener(listener);
-  }, [isZcash]);
 
   // zcash transparent address state
   const [transparent, setTransparent] = useState(false);
@@ -330,7 +316,11 @@ function ReceiveTab({
     if (showingEphemeral) {
       setEphemeralNonce(n => n + 1);
     }
-  }, [displayAddress, showingEphemeral]);
+    // same for zcash shielded: the copied address goes to one sender only
+    if (isZcash && !transparent) {
+      retireShielded();
+    }
+  }, [displayAddress, showingEphemeral, isZcash, transparent, retireShielded]);
 
   const handleTransparentToggle = useCallback(() => {
     setTransparent(prev => {
@@ -340,13 +330,6 @@ function ReceiveTab({
       return !prev;
     });
     setCopied(false);
-  }, []);
-
-  // manually rotate shielded address - bump index in storage
-  const handleRotateShielded = useCallback(async () => {
-    const r = await chrome.storage.local.get('zcashShieldedIndex');
-    const next = (r['zcashShieldedIndex'] ?? 0) + 1;
-    await chrome.storage.local.set({ zcashShieldedIndex: next });
   }, []);
 
   // shielded badge logic: zcash 'u'-prefixed unified addresses and ALL penumbra
@@ -429,6 +412,9 @@ function ReceiveTab({
               type='button'
               onClick={() => {
                 void navigator.clipboard.writeText(paymentLink);
+                if (!transparent) {
+                  retireShielded();
+                }
                 setLinkCopied(true);
                 setTimeout(() => setLinkCopied(false), 1500);
               }}
@@ -517,10 +503,10 @@ function ReceiveTab({
         <p className='w-full text-xs text-red-400'>{transparentError}</p>
       )}
 
-      {/* advanced: zcash address-index rotation lives behind one disclosure.
-          Penumbra has nothing here - it is ephemeral-only, so there is no
-          static/index option to expose. */}
-      {isZcash && (
+      {/* advanced: picking an address index is a transparent-only tool (sweeping
+          or shielding a specific address). Shielded addresses rotate on their
+          own and are never picked by hand; penumbra is ephemeral-only. */}
+      {isZcash && transparent && canTransparent && !transparentError && (
         <div className='w-full'>
           <button
             onClick={() => setShowAdvanced(prev => !prev)}
@@ -536,61 +522,35 @@ function ReceiveTab({
 
           {showAdvanced && (
             <div className='mt-2 flex flex-col gap-3 rounded-lg border border-border-soft bg-elev-1 p-3'>
-              {isZcash && !transparent && (
-                <div className='flex w-full items-center justify-center gap-2'>
-                  <button
-                    disabled={shieldedIndex <= 0}
-                    onClick={() => {
-                      const prev = Math.max(0, shieldedIndex - 1);
-                      void chrome.storage.local.set({ zcashShieldedIndex: prev });
-                    }}
-                    className='p-1 text-fg-muted transition-colors hover:text-fg-high disabled:opacity-50'
-                  >
-                    <span className='i-ph-caret-left h-4 w-4' />
-                  </button>
-                  <span className='min-w-[110px] text-center text-xs font-medium text-fg-muted'>
-                    address #{shieldedIndex}
-                  </span>
-                  <button
-                    onClick={() => void handleRotateShielded()}
-                    className='p-1 text-fg-muted transition-colors hover:text-fg-high'
-                  >
-                    <span className='i-ph-caret-right h-4 w-4' />
-                  </button>
-                </div>
-              )}
-
-              {isZcash && transparent && canTransparent && !transparentError && (
-                <div className='flex w-full items-center justify-center gap-2'>
-                  <button
-                    disabled={transparentIndex <= 0}
-                    onClick={() => setTransparentIndex(i => i - 1)}
-                    className='p-1 text-fg-muted transition-colors hover:text-fg-high disabled:opacity-50'
-                  >
-                    <span className='i-ph-caret-left h-4 w-4' />
-                  </button>
-                  <span className='min-w-[110px] text-center text-xs font-medium text-fg-muted'>
-                    address #{transparentIndex}
-                  </span>
-                  <button
-                    onClick={() => {
-                      setTransparentIndex(i => {
-                        const next = i + 1;
-                        // persist highest-seen index
-                        chrome.storage.local.get('zcashTransparentIndex').then(r => {
-                          if (next > (r['zcashTransparentIndex'] ?? 0)) {
-                            void chrome.storage.local.set({ zcashTransparentIndex: next });
-                          }
-                        });
-                        return next;
+              <div className='flex w-full items-center justify-center gap-2'>
+                <button
+                  disabled={transparentIndex <= 0}
+                  onClick={() => setTransparentIndex(i => i - 1)}
+                  className='p-1 text-fg-muted transition-colors hover:text-fg-high disabled:opacity-50'
+                >
+                  <span className='i-ph-caret-left h-4 w-4' />
+                </button>
+                <span className='min-w-[110px] text-center text-xs font-medium text-fg-muted'>
+                  address #{transparentIndex}
+                </span>
+                <button
+                  onClick={() => {
+                    setTransparentIndex(i => {
+                      const next = i + 1;
+                      // persist highest-seen index
+                      chrome.storage.local.get('zcashTransparentIndex').then(r => {
+                        if (next > (r['zcashTransparentIndex'] ?? 0)) {
+                          void chrome.storage.local.set({ zcashTransparentIndex: next });
+                        }
                       });
-                    }}
-                    className='p-1 text-fg-muted transition-colors hover:text-fg-high'
-                  >
-                    <span className='i-ph-caret-right h-4 w-4' />
-                  </button>
-                </div>
-              )}
+                      return next;
+                    });
+                  }}
+                  className='p-1 text-fg-muted transition-colors hover:text-fg-high'
+                >
+                  <span className='i-ph-caret-right h-4 w-4' />
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -615,7 +575,7 @@ function ReceiveTab({
               </span>
             </span>
           ) : isZcash ? (
-            `shielded address #${shieldedIndex}`
+            'shielded address'
           ) : (
             'address'
           )}
@@ -685,8 +645,27 @@ function ReceiveTab({
 export function ReceivePage() {
   const activeNetwork = useStore(selectActiveNetwork);
 
-  const { address, loading } = useActiveAddress();
+  const { address, loading, shieldedIndex } = useActiveAddress();
   const isPenumbra = activeNetwork === 'penumbra';
+  // zcash shielded addresses are single-use. Opening receive retires whatever
+  // was on offer (it may have been shown or copied elsewhere), and so do each
+  // copy and leaving. Nothing is shown until the address really is the fresh one, so a
+  // retired address never flashes up in the QR or lands on the clipboard twice.
+  const isZcash = activeNetwork === 'zcash';
+  const [offeredIndex, setOfferedIndex] = useState<number>();
+  const retireShielded = useCallback(() => {
+    setOfferedIndex(undefined);
+    void rotateShieldedIndex().then(setOfferedIndex);
+  }, []);
+  useEffect(() => {
+    if (!isZcash) {
+      return;
+    }
+    retireShielded();
+    // leaving retires the one left on screen too: its QR may have been scanned
+    return () => void rotateShieldedIndex();
+  }, [isZcash, retireShielded]);
+  const fresh = !isZcash || (offeredIndex !== undefined && shieldedIndex === offeredIndex);
   // Transparent chains you can receive on from here: launched, with a route
   // into Penumbra, and not being wound down (Noble is withdraw-only now).
   const transparentChains = isPenumbra
@@ -730,7 +709,12 @@ export function ReceivePage() {
           />
         )}
         {receiveOn === 'penumbra' ? (
-          <ReceiveTab address={address} loading={loading} activeNetwork={activeNetwork} />
+          <ReceiveTab
+            address={fresh ? address : ''}
+            loading={loading || !fresh}
+            activeNetwork={activeNetwork}
+            retireShielded={retireShielded}
+          />
         ) : (
           <TransparentReceive key={receiveOn} chainId={receiveOn} />
         )}

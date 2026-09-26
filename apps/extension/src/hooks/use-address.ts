@@ -20,6 +20,7 @@ import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { spawnNetworkWorker, deriveAddressInWorker } from '../state/keyring/network-worker';
 import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { createZafuWasmMemory } from '../config/zafu-wasm-memory';
+import { SHIELDED_INDEX_KEY } from '../state/shielded-receive-index';
 
 /** derive cosmos/ibc address from mnemonic */
 async function deriveCosmosAddress(mnemonic: string, prefix: string): Promise<string> {
@@ -141,14 +142,17 @@ export function useActiveAddress() {
   const [address, setAddress] = useState('');
   const [loading, setLoading] = useState(true);
   const [shieldedIndex, setShieldedIndex] = useState(0);
+  // the zcash shielded index `address` was derived at, so a caller can tell a
+  // freshly rotated address from the one it replaced
+  const [derivedIndex, setDerivedIndex] = useState<number>();
 
   // read stored shielded diversifier index
   useEffect(() => {
     if (activeNetwork !== 'zcash') {
       return;
     }
-    chrome.storage.local.get('zcashShieldedIndex').then(r => {
-      setShieldedIndex(r['zcashShieldedIndex'] ?? 0);
+    chrome.storage.local.get(SHIELDED_INDEX_KEY).then(r => {
+      setShieldedIndex(r[SHIELDED_INDEX_KEY] ?? 0);
     });
   }, [activeNetwork]);
 
@@ -158,8 +162,8 @@ export function useActiveAddress() {
       return;
     }
     const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
-      if (changes['zcashShieldedIndex']?.newValue !== undefined) {
-        setShieldedIndex(changes['zcashShieldedIndex'].newValue);
+      if (changes[SHIELDED_INDEX_KEY]?.newValue !== undefined) {
+        setShieldedIndex(changes[SHIELDED_INDEX_KEY].newValue);
       }
     };
     chrome.storage.local.onChanged.addListener(listener);
@@ -421,7 +425,12 @@ export function useActiveAddress() {
       }
     };
 
-    void deriveAddress();
+    const index = shieldedIndex;
+    void deriveAddress().then(() => {
+      if (!cancelled) {
+        setDerivedIndex(index);
+      }
+    });
     return () => {
       cancelled = true;
     };
@@ -438,5 +447,5 @@ export function useActiveAddress() {
     shieldedIndex,
   ]);
 
-  return { address, loading };
+  return { address, loading, shieldedIndex: derivedIndex };
 }
