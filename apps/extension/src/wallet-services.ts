@@ -9,6 +9,7 @@ import type { WalletJson } from '@repo/wallet';
 import { Services } from '@repo/context';
 import { WalletServices } from '@rotko/penumbra-types/services';
 import { getRootNetwork } from './config/networks';
+import { resolvePenumbraEndpoint } from './config/penumbra-endpoints';
 import type { NetworkType } from './state/keyring';
 import { hasLiveDappSession } from './dapp-session-presence';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
@@ -54,29 +55,6 @@ export const penumbraGate = async (): Promise<{ run: true } | { run: false; reas
     return { run: false, reason: 'penumbra network not active' };
   }
   return { run: true };
-};
-
-// Default Penumbra gRPC endpoint
-const DEFAULT_PENUMBRA_ENDPOINT = 'https://penumbra.rotko.net';
-
-/**
- * Get the Penumbra gRPC endpoint from storage or use default
- */
-const getPenumbraEndpoint = async (): Promise<string> => {
-  // First try the new networkEndpoints object (from Network Endpoints UI)
-  const networkEndpoints = await localExtStorage.get('networkEndpoints');
-  if (networkEndpoints?.penumbra) {
-    return networkEndpoints.penumbra;
-  }
-
-  // Then try the legacy grpcEndpoint field (for backwards compat)
-  const legacyEndpoint = await localExtStorage.get('grpcEndpoint');
-  if (legacyEndpoint) {
-    return legacyEndpoint;
-  }
-
-  // Fall back to default
-  return DEFAULT_PENUMBRA_ENDPOINT;
 };
 
 export const startWalletServices = async (
@@ -131,7 +109,7 @@ export const startWalletServices = async (
   }
   console.log('[sync] wallet loaded:', wallet.id.slice(0, 20) + '...');
 
-  const grpcEndpoint = await getPenumbraEndpoint();
+  const grpcEndpoint = await resolvePenumbraEndpoint();
   console.log('[sync] grpc endpoint:', grpcEndpoint);
 
   const numeraires = await localExtStorage.get('numeraires');

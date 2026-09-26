@@ -17,6 +17,7 @@
  */
 
 import { ChainRegistryClient } from '@penumbrafi/registry';
+import { localExtStorage } from '@repo/storage-chrome/local';
 import type { RpcEndpointRegion } from './zcash-endpoints';
 
 export interface PenumbraEndpointPreset {
@@ -94,6 +95,31 @@ export function findPenumbraPresetByUrl(
 export function defaultPenumbraEndpoint(): PenumbraEndpointPreset {
   return PENUMBRA_MAINNET_ENDPOINTS.find(p => p.isDefault) ?? PENUMBRA_MAINNET_ENDPOINTS[0]!;
 }
+
+/**
+ * The Penumbra gRPC endpoint the whole wallet must agree on.
+ *
+ * Resolution order: the node picked in Settings → Networks
+ * (`networkEndpoints.penumbra`), then the legacy `grpcEndpoint` key the old
+ * gRPC form and onboarding wrote, then the shipped default.
+ *
+ * Every consumer of "the penumbra endpoint" MUST come through here, because the
+ * two keys are written by different screens and drifting apart is not benign:
+ * the node picker writes ONLY `networkEndpoints`, while the service worker's RPC
+ * proxy used to build its transport once from the legacy key alone. A node
+ * picked in Settings was then ignored by every proxied RPC until the worker
+ * restarted - and with the legacy key unset, that transport waited for an
+ * onboarding write that never came, so the router never became ready and every
+ * wallet RPC (and the worker-driven send) hung with no error. Hence: always
+ * resolvable, never waiting.
+ */
+export const resolvePenumbraEndpoint = async (): Promise<string> => {
+  const [networkEndpoints, legacy] = await Promise.all([
+    localExtStorage.get('networkEndpoints'),
+    localExtStorage.get('grpcEndpoint'),
+  ]);
+  return networkEndpoints?.penumbra || legacy || defaultPenumbraEndpoint().url;
+};
 
 /** Turn an operator name into a stable, url-safe id. */
 function slugify(name: string): string {

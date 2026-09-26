@@ -5,29 +5,6 @@ import { sessionExtStorage } from './session';
 import { Key } from '@repo/encryption/key';
 import { Box, type BoxJson } from '@repo/encryption/box';
 
-/**
- * When a user first onboards with the extension, they won't have chosen a gRPC
- * endpoint yet. So we'll wait until they've chosen one to start trying to make
- * requests against it.
- */
-export const onboardGrpcEndpoint = async (): Promise<string> => {
-  const grpcEndpoint = await localExtStorage.get('grpcEndpoint');
-  if (grpcEndpoint) {
-    return grpcEndpoint;
-  }
-
-  return new Promise(resolve => {
-    const storageListener: ChromeStorageListener<LocalStorageState> = ({ grpcEndpoint }) => {
-      const rpcEndpoint = grpcEndpoint?.newValue;
-      if (rpcEndpoint) {
-        resolve(rpcEndpoint);
-        localExtStorage.removeListener(storageListener);
-      }
-    };
-    localExtStorage.addListener(storageListener);
-  });
-};
-
 /** decrypt wallets from encrypted storage */
 const decryptWallets = async (raw: unknown): Promise<WalletJson[]> => {
   if (!raw) {
