@@ -21,50 +21,13 @@
  * windows sweep.
  */
 
-export {
-  Room,
-  createRoomSecret,
-  encodeInvite,
-  parseInvite,
-  hkdfBytes,
-  roomShard,
-  plainTag,
-  maxBodyBytes,
-  DEFAULT_CHANNEL,
-  INVITE_PREFIX,
-  LEGACY_INVITE_PREFIX,
-  ROOM_VERSION,
-  ROOM_PLAINTEXT_BYTES,
-} from './room';
-export type {
-  RoomConfig,
-  RoomIdentity,
-  RoomInvite,
-  RoomKind,
-  RoomMessage,
-  RoomPresence,
-  RoomSync,
-  DropKind,
-  MessageKind,
-} from './room';
-
-export {
-  COMMANDS,
-  complete,
-  helpText,
-  isValidNick,
-  parseLine,
-  resolveMember,
-  shortId,
-  whoText,
-} from './commands';
-export type { Candidate, CommandSpec, Completion, Member, ParsedLine } from './commands';
-
-export { openInvite, sealInvite } from './invite-seal';
-export type { SealedInvite, SealingIdentity } from './invite-seal';
-
-export { listFriends } from './friends';
-export type { Friend } from './friends';
+// Re-exported wholesale rather than curated: a hand-kept list silently drops
+// what it forgets, and this one already had — `addFriend`, `forgetFriend` and
+// `friendCount` were missing from 0.2.1, which a consumer found for us.
+export * from './room';
+export * from './commands';
+export * from './friends';
+export * from './invite-seal';
 
 /**
  * How often to read the current window.
