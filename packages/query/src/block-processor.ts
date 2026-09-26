@@ -154,7 +154,18 @@ export class BlockProcessor implements BlockProcessorInterface {
           return false;
         }
         console.error(`Sync failure #${attemptNumber}: `, e);
-        await this.viewServer.resetTreeToStored();
+        // The tree reset is best-effort recovery, NOT a precondition for
+        // retrying: when it threw, backOff gave up and cleared the sync promise,
+        // so the wallet stopped syncing until some unrelated view RPC poked
+        // sync() again - which restarted a doomed sync, failed the same way, and
+        // left the worker looping on GetStatus with no block ever processed.
+        // A stale tree still syncs (blocks are re-scanned from stored height),
+        // so a failed reset must not end the loop.
+        try {
+          await this.viewServer.resetTreeToStored();
+        } catch (resetError) {
+          console.error('Sync tree reset failed; retrying anyway:', resetError);
+        }
         return true;
       },
     })).finally(
@@ -375,39 +386,59 @@ export class BlockProcessor implements BlockProcessorInterface {
     }
 
     // this is an indefinite stream of the (compact) chain from the network
-    // intended to run continuously
-    for await (const compactBlock of this.querier.compactBlock.compactBlockRange({
-      startHeight: currentHeight + 1n,
-      keepAlive: true,
-      abortSignal: this.abortController.signal,
-    })) {
-      // confirm block height to prevent corruption of local state
-      if (compactBlock.height === currentHeight + 1n) {
-        currentHeight = compactBlock.height;
-      } else {
-        throw new Error(`Unexpected block height: ${compactBlock.height} at ${currentHeight}`);
+    // intended to run continuously.
+    //
+    // `keepAlive` asks the node to hold the stream open, but a proxy or a node
+    // restart can still end it CLEANLY. A clean end used to return from
+    // syncAndStore, which cleared the sync promise - so the wallet resumed only
+    // when some unrelated view RPC poked sync() again: a GetStatus and a fresh
+    // stream per view call, with no block processed in between (the reported
+    // "workers looping on getStatus, nothing happening"). Re-subscribe here
+    // instead, so one sync loop lives for the life of the services. The pause
+    // keeps an endpoint that ends streams immediately from being hammered.
+    const STREAM_RESUBSCRIBE_DELAY_MS = 1_000;
+    for (;;) {
+      for await (const compactBlock of this.querier.compactBlock.compactBlockRange({
+        startHeight: currentHeight + 1n,
+        keepAlive: true,
+        abortSignal: this.abortController.signal,
+      })) {
+        // confirm block height to prevent corruption of local state
+        if (compactBlock.height === currentHeight + 1n) {
+          currentHeight = compactBlock.height;
+        } else {
+          throw new Error(`Unexpected block height: ${compactBlock.height} at ${currentHeight}`);
+        }
+
+        // set the trial decryption flag for all other compact blocks
+        const skipTrialDecrypt = shouldSkipTrialDecrypt(
+          this.walletCreationBlockHeight,
+          currentHeight,
+        );
+
+        await this.processBlock({
+          compactBlock: compactBlock,
+          latestKnownBlockHeight: latestKnownBlockHeight,
+          skipTrialDecrypt,
+        });
+
+        // We only query Tendermint for the latest known block height once, when
+        // the block processor starts running. Once we're caught up, though, the
+        // chain will of course continue adding blocks, and we'll keep processing
+        // them. So, we need to update `latestKnownBlockHeight` once we've passed
+        // it.
+        if (compactBlock.height > latestKnownBlockHeight) {
+          latestKnownBlockHeight = compactBlock.height;
+        }
       }
 
-      // set the trial decryption flag for all other compact blocks
-      const skipTrialDecrypt = shouldSkipTrialDecrypt(
-        this.walletCreationBlockHeight,
-        currentHeight,
-      );
-
-      await this.processBlock({
-        compactBlock: compactBlock,
-        latestKnownBlockHeight: latestKnownBlockHeight,
-        skipTrialDecrypt,
+      if (this.abortController.signal.aborted) {
+        return;
+      }
+      console.warn('[sync] compact block stream ended; resubscribing');
+      await new Promise<void>(resolve => {
+        setTimeout(resolve, STREAM_RESUBSCRIBE_DELAY_MS);
       });
-
-      // We only query Tendermint for the latest known block height once, when
-      // the block processor starts running. Once we're caught up, though, the
-      // chain will of course continue adding blocks, and we'll keep processing
-      // them. So, we need to update `latestKnownBlockHeight` once we've passed
-      // it.
-      if (compactBlock.height > latestKnownBlockHeight) {
-        latestKnownBlockHeight = compactBlock.height;
-      }
     }
   }
 
