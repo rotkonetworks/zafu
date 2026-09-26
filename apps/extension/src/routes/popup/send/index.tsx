@@ -408,11 +408,12 @@ function CosmosSend({
   const isEthermint = sourceChain.keyAlgo === 'eth_secp256k1';
   // two ways to move funds out of a cosmos/burner wallet: same-chain (e.g. to a
   // Noble exchange deposit address) or cross-chain via IBC (Skip routing).
-  const [sendMode, setSendMode] = useState<'same' | 'ibc'>(
-    intent === 'shield' && sourceChain.penumbraChannel ? 'ibc' : 'same',
-  );
+  // a shield has exactly one destination (penumbra over IBC), so the mode and
+  // destination-chain pickers don't apply to it
+  const isShield = intent === 'shield' && !!sourceChain.penumbraChannel;
+  const [sendMode, setSendMode] = useState<'same' | 'ibc'>(isShield ? 'ibc' : 'same');
   const [destChainId, setDestChainId] = useState<string | undefined>(
-    intent === 'shield' && sourceChain.penumbraChannel ? PENUMBRA_CHAIN_ID : undefined,
+    isShield ? PENUMBRA_CHAIN_ID : undefined,
   );
   // once the user picks a destination, stop defaulting it
   const [destTouched, setDestTouched] = useState(false);
@@ -967,28 +968,30 @@ function CosmosSend({
       {PasswordModal}
 
       {/* two ways out: same-chain (Noble) or cross-chain (IBC) */}
-      <div className='flex border border-border-soft p-1'>
-        <button
-          type='button'
-          onClick={() => setSendMode('same')}
-          className={cn(
-            'flex-1 py-1.5 text-xs lowercase transition-colors',
-            sendMode === 'same' ? 'bg-elev-2 text-fg-high' : 'text-fg-muted hover:text-fg-high',
-          )}
-        >
-          within {sourceChain.name}
-        </button>
-        <button
-          type='button'
-          onClick={() => setSendMode('ibc')}
-          className={cn(
-            'flex-1 py-1.5 text-xs lowercase transition-colors',
-            sendMode === 'ibc' ? 'bg-elev-2 text-fg-high' : 'text-fg-muted hover:text-fg-high',
-          )}
-        >
-          to another chain
-        </button>
-      </div>
+      {!isShield && (
+        <div className='flex border border-border-soft p-1'>
+          <button
+            type='button'
+            onClick={() => setSendMode('same')}
+            className={cn(
+              'flex-1 py-1.5 text-xs lowercase transition-colors',
+              sendMode === 'same' ? 'bg-elev-2 text-fg-high' : 'text-fg-muted hover:text-fg-high',
+            )}
+          >
+            within {sourceChain.name}
+          </button>
+          <button
+            type='button'
+            onClick={() => setSendMode('ibc')}
+            className={cn(
+              'flex-1 py-1.5 text-xs lowercase transition-colors',
+              sendMode === 'ibc' ? 'bg-elev-2 text-fg-high' : 'text-fg-muted hover:text-fg-high',
+            )}
+          >
+            to another chain
+          </button>
+        </div>
+      )}
 
       {/* the address being spent; any funded one can be picked */}
       {assetsData?.address && (
@@ -1021,7 +1024,7 @@ function CosmosSend({
           still fills the chain if they paste an address first. */}
 
       {/* destination chain - IBC mode only; same-chain stays on the source */}
-      {sendMode === 'ibc' && (
+      {sendMode === 'ibc' && !isShield && (
         <div>
           <label className='mb-1 block text-xs text-fg-muted'>destination chain</label>
           {chainsLoading && !sourceChain.penumbraChannel ? (
