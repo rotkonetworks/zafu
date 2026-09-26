@@ -23,6 +23,7 @@ import {
 import { getActiveWalletJson, selectActiveZcashWallet } from '../../../state/wallets';
 import { useActiveAddress } from '../../../hooks/use-address';
 import { rotateShieldedDiversifier } from '../../../state/shielded-receive-index';
+import { routeForChain, usePenumbraRoutes } from '../../../transparent/penumbra-routes';
 import {
   derivePenumbraEphemeralFromMnemonic,
   derivePenumbraEphemeralFromFvk,
@@ -688,10 +689,11 @@ export function ReceivePage() {
   }, [fresh, address]);
   // Transparent chains you can receive on from here: launched, with a route
   // into Penumbra, and not being wound down (Noble is withdraw-only now).
+  const routes = usePenumbraRoutes();
   const transparentChains = isPenumbra
     ? orderTransparentChains(
         (getActiveIbcSubnetworks('penumbra') as CosmosChainId[]).filter(
-          c => COSMOS_CHAINS[c].penumbraChannel && !COSMOS_CHAINS[c].deprecation,
+          c => routeForChain(c, routes) && !COSMOS_CHAINS[c].deprecation,
         ),
       )
     : [];

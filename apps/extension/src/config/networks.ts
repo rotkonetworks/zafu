@@ -106,9 +106,12 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     color: 'bg-indigo-500',
     focusColor: 'focus:border-indigo-500',
     transparent: true,
-    // Penumbra subnetwork; not enabled yet (no live IBC channel in veil config).
-    launched: false,
+    // Penumbra subnetwork. Offered only while the penumbra node reports a live
+    // route to it (transparent/penumbra-routes); the old channel-0 has expired.
+    launched: true,
     parent: 'penumbra',
+    ibcChainId: 'cosmoshub-4',
+    ibcBlockTimeMs: 6_000,
     features: { stake: true, swap: false, vote: false, inbox: false, multisig: false },
   },
   osmosis: {
@@ -117,9 +120,9 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     focusColor: 'focus:border-purple-400',
     transparent: true,
     // Penumbra subnetwork: standard cosmos chain (secp256k1, coin type 118).
-    // launched:false until the osmosis<->penumbra channel client is confirmed
-    // Active (registry has channel-4/channel-17; verify before flipping).
-    launched: false,
+    // Offered only while the penumbra node reports a live route to it
+    // (transparent/penumbra-routes); channel-4 and channel-17 have expired.
+    launched: true,
     parent: 'penumbra',
     ibcChainId: 'osmosis-1',
     ibcBlockTimeMs: 2_500,

@@ -65,6 +65,7 @@ import { openInDedicatedWindow } from '../../../utils/navigate';
 import { keyRingSelector, selectEffectiveKeyInfo } from '../../../state/keyring';
 import { useGasSponsor } from '../../../transparent/sponsor';
 import { formatBaseUnits, fullDecimalString } from '../../../transparent/assets';
+import { routeForChain, usePenumbraRoutes } from '../../../transparent/penumbra-routes';
 import { allocateTransparentAddress, shortAddress } from '../../../transparent/hd';
 import {
   parseInjectiveRecipient,
@@ -405,12 +406,15 @@ function CosmosSend({
   intent?: 'send' | 'shield';
 }) {
   const sourceChain = COSMOS_CHAINS[sourceChainId];
+  // the live chain -> penumbra channel (discovered, never an expired pin);
+  // undefined when the chain has no route into penumbra right now
+  const penumbraChannel = routeForChain(sourceChainId, usePenumbraRoutes())?.penumbraChannel;
   const isEthermint = sourceChain.keyAlgo === 'eth_secp256k1';
   // two ways to move funds out of a cosmos/burner wallet: same-chain (e.g. to a
   // Noble exchange deposit address) or cross-chain via IBC (Skip routing).
   // a shield has exactly one destination (penumbra over IBC), so the mode and
   // destination-chain pickers don't apply to it
-  const isShield = intent === 'shield' && !!sourceChain.penumbraChannel;
+  const isShield = intent === 'shield' && !!penumbraChannel;
   const [sendMode, setSendMode] = useState<'same' | 'ibc'>(isShield ? 'ibc' : 'same');
   const [destChainId, setDestChainId] = useState<string | undefined>(
     isShield ? PENUMBRA_CHAIN_ID : undefined,
@@ -480,31 +484,24 @@ function CosmosSend({
       return;
     }
     // our own relayed channel: no Skip route needed
-    if (sourceChain.penumbraChannel) {
+    if (penumbraChannel) {
       setDestChainId(PENUMBRA_CHAIN_ID);
       return;
     }
     if (sourceChain.chainId !== 'osmosis-1' && skipChains.some(c => c.chainId === 'osmosis-1')) {
       setDestChainId('osmosis-1');
     }
-  }, [
-    sendMode,
-    skipChains,
-    destChainId,
-    destTouched,
-    sourceChain.chainId,
-    sourceChain.penumbraChannel,
-  ]);
+  }, [sendMode, skipChains, destChainId, destTouched, sourceChain.chainId, penumbraChannel]);
   // Penumbra is always offered when there is a direct channel, listed or not
   const destChains = useMemo(
     () =>
-      sourceChain.penumbraChannel
+      penumbraChannel
         ? [
             { chainId: PENUMBRA_CHAIN_ID, chainName: 'Penumbra (shielded)' },
             ...skipChains.filter(c => c.chainId !== PENUMBRA_CHAIN_ID),
           ]
         : skipChains,
-    [skipChains, sourceChain.penumbraChannel],
+    [skipChains, penumbraChannel],
   );
 
   // assets hook - uses accountIndex
@@ -615,7 +612,7 @@ function CosmosSend({
     setRecipient('');
     setTxHash(undefined);
     setTxStatus('idle');
-    setSendMode(intent === 'shield' && sourceChain.penumbraChannel ? 'ibc' : 'same');
+    setSendMode(intent === 'shield' && penumbraChannel ? 'ibc' : 'same');
   };
   // on the donor: the gas asset, all of what can move
   useEffect(() => {
@@ -799,7 +796,7 @@ function CosmosSend({
       // penumbra shield-in uses our direct relayed channel; everything else
       // takes the channel Skip resolved.
       const channel = isPenumbraDest
-        ? sourceChain.penumbraChannel
+        ? penumbraChannel
         : route?.operations.find(op => op.transfer)?.transfer?.channel;
       setTxPreview({
         type: 'cosmos-sdk/MsgTransfer',
@@ -884,7 +881,7 @@ function CosmosSend({
         // penumbra shield-in: direct single-hop MsgTransfer over our relayed
         // channel (verified STATE_OPEN, client Active). Skip is bypassed.
         const channel = isPenumbraDest
-          ? sourceChain.penumbraChannel
+          ? penumbraChannel
           : route?.operations.find(op => op.transfer)?.transfer?.channel;
         if (!channel) {
           throw new Error(
@@ -1027,7 +1024,7 @@ function CosmosSend({
       {sendMode === 'ibc' && !isShield && (
         <div>
           <label className='mb-1 block text-xs text-fg-muted'>destination chain</label>
-          {chainsLoading && !sourceChain.penumbraChannel ? (
+          {chainsLoading && !penumbraChannel ? (
             <div className='h-10 rounded-lg bg-elev-2 animate-pulse' />
           ) : (
             <CosmosChainSelector
