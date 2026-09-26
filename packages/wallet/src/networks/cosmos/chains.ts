@@ -140,8 +140,14 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
     ],
     restEndpoint: 'https://cosmos-api.polkachu.com',
     gasPrice: '0.025uatom',
-    penumbraChannel: 'channel-940', // cosmoshub -> penumbra
-    penumbraSourceChannel: 'channel-0', // penumbra -> cosmoshub
+    // The live pair (checked 2026-09-27 against penumbra.rotko.net and the Hub
+    // LCD, both clients Active): penumbra channel-22 <-> hub channel-1934. The
+    // pair this replaced (channel-0 <-> channel-940) is still OPEN but its
+    // penumbra-side client is EXPIRED, so packets over it can't be relayed.
+    // ATOM that came in over channel-0 is a different denom and can only leave
+    // the way it came, once that client is revived.
+    penumbraChannel: 'channel-1934', // cosmoshub -> penumbra
+    penumbraSourceChannel: 'channel-22', // penumbra -> cosmoshub
   },
   injective: {
     id: 'injective',
