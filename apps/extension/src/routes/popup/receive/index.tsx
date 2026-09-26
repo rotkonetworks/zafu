@@ -44,11 +44,14 @@ import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/
 function ReceiveTab({
   address,
   loading,
+  stale,
   activeNetwork,
   retireShielded,
 }: {
   address: string;
   loading: boolean;
+  /** the zcash shielded address on screen is retired; its replacement is deriving */
+  stale: boolean;
   activeNetwork: string;
   /** hand the zcash shielded address on screen out, and move to a fresh one */
   retireShielded: () => void;
@@ -303,8 +306,12 @@ function ReceiveTab({
     };
   }, [transparent, transparentIndex, isZcash, canTransparent, isMnemonic, zcashUfvk]);
 
+  // a retired shielded address stays on screen until its replacement lands,
+  // so only the address and QR change, but it can't be handed out again
+  const retired = stale && isZcash && !transparent;
+
   const copyAddress = useCallback(async () => {
-    if (!displayAddress) {
+    if (!displayAddress || retired) {
       return;
     }
     await navigator.clipboard.writeText(displayAddress);
@@ -320,7 +327,7 @@ function ReceiveTab({
     if (isZcash && !transparent) {
       retireShielded();
     }
-  }, [displayAddress, showingEphemeral, isZcash, transparent, retireShielded]);
+  }, [displayAddress, retired, showingEphemeral, isZcash, transparent, retireShielded]);
 
   const handleTransparentToggle = useCallback(() => {
     setTransparent(prev => {
@@ -363,7 +370,9 @@ function ReceiveTab({
 
   return (
     <div className='flex flex-col items-center gap-4'>
-      <div className='border border-border-soft'>
+      <div
+        className={`border border-border-soft transition-opacity duration-150 ${retired ? 'opacity-30' : ''}`}
+      >
         {isLoading ? (
           // Skeleton matches the QR's 192x192 footprint; pulses while the
           // address derives.
@@ -410,6 +419,7 @@ function ReceiveTab({
           <div className='flex gap-1.5'>
             <button
               type='button'
+              disabled={retired}
               onClick={() => {
                 void navigator.clipboard.writeText(paymentLink);
                 if (!transparent) {
@@ -419,7 +429,7 @@ function ReceiveTab({
                 setTimeout(() => setLinkCopied(false), 1500);
               }}
               title={paymentLink}
-              className='flex flex-1 items-center justify-center gap-1.5 border border-border-soft px-3 py-2 text-xs text-fg-high hover:bg-elev-1 lowercase'
+              className='flex flex-1 items-center justify-center gap-1.5 border border-border-soft px-3 py-2 text-xs text-fg-high hover:bg-elev-1 lowercase disabled:opacity-50'
             >
               <span className={`h-3.5 w-3.5 ${linkCopied ? 'i-ph-check' : 'i-ph-link'}`} />
               {linkCopied ? 'copied' : requestUri ? 'copy payment request' : 'copy payment link'}
@@ -590,9 +600,9 @@ function ReceiveTab({
           }`}
         >
           <code
-            className={`flex-1 break-all text-xs ${
+            className={`flex-1 break-all text-xs transition-opacity duration-150 ${
               showingEphemeral ? 'text-zigner-gold' : transparent && isZcash ? 'text-rust' : ''
-            }`}
+            } ${retired ? 'opacity-30' : ''}`}
           >
             {isLoading ? 'generating...' : displayAddress || 'no wallet selected'}
           </code>
@@ -612,7 +622,8 @@ function ReceiveTab({
           {displayAddress && (
             <button
               onClick={copyAddress}
-              className='flex shrink-0 items-center gap-1 text-fg-muted transition-colors hover:text-fg-high'
+              disabled={retired}
+              className='flex shrink-0 items-center gap-1 text-fg-muted transition-colors hover:text-fg-high disabled:opacity-50'
               title={copied ? 'copied to clipboard' : 'copy address'}
             >
               {copied ? (
@@ -649,8 +660,7 @@ export function ReceivePage() {
   const isPenumbra = activeNetwork === 'penumbra';
   // zcash shielded addresses are single-use. Opening receive retires whatever
   // was on offer (it may have been shown or copied elsewhere), and so do each
-  // copy and leaving. Nothing is shown until the address really is the fresh one, so a
-  // retired address never flashes up in the QR or lands on the clipboard twice.
+  // copy and leaving. A retired address never lands on the clipboard twice.
   const isZcash = activeNetwork === 'zcash';
   const [offeredIndex, setOfferedIndex] = useState<string>();
   const retireShielded = useCallback(() => {
@@ -666,6 +676,16 @@ export function ReceivePage() {
     return () => void rotateShieldedDiversifier();
   }, [isZcash, retireShielded]);
   const fresh = !isZcash || (offeredIndex !== undefined && shieldedIndex === offeredIndex);
+  // Only the first address waits behind the skeleton (the one derived on arrival
+  // is whatever was on offer before, so it must not show). After that a rotation
+  // is a value change: the old address stays, marked retired, until the new one
+  // lands, and nothing else on the screen re-renders into a loading state.
+  const [shownFresh, setShownFresh] = useState(false);
+  useEffect(() => {
+    if (fresh && address) {
+      setShownFresh(true);
+    }
+  }, [fresh, address]);
   // Transparent chains you can receive on from here: launched, with a route
   // into Penumbra, and not being wound down (Noble is withdraw-only now).
   const transparentChains = isPenumbra
@@ -710,8 +730,9 @@ export function ReceivePage() {
         )}
         {receiveOn === 'penumbra' ? (
           <ReceiveTab
-            address={fresh ? address : ''}
-            loading={loading || !fresh}
+            address={fresh || shownFresh ? address : ''}
+            loading={loading || (!fresh && !shownFresh)}
+            stale={!fresh}
             activeNetwork={activeNetwork}
             retireShielded={retireShielded}
           />

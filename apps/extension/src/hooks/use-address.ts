@@ -6,7 +6,7 @@
  * - zigner-zafu: use stored viewing keys/addresses (watch-only)
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../state';
 import {
   selectActiveNetwork,
@@ -20,10 +20,7 @@ import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { spawnNetworkWorker, deriveAddressInWorker } from '../state/keyring/network-worker';
 import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { createZafuWasmMemory } from '../config/zafu-wasm-memory';
-import {
-  SHIELDED_DIVERSIFIER_KEY,
-  currentShieldedDiversifier,
-} from '../state/shielded-receive-index';
+import { SHIELDED_DIVERSIFIER_KEY, readShieldedDiversifier } from '../state/shielded-receive-index';
 
 /** derive cosmos/ibc address from mnemonic */
 async function deriveCosmosAddress(mnemonic: string, prefix: string): Promise<string> {
@@ -157,7 +154,9 @@ export function useActiveAddress() {
     if (activeNetwork !== 'zcash') {
       return;
     }
-    void currentShieldedDiversifier().then(setDiversifier);
+    // a rotation that lands (via the listener below) before this read resolves
+    // is newer; don't let the read overwrite it
+    void readShieldedDiversifier().then(d => setDiversifier(prev => prev ?? d));
   }, [activeNetwork]);
 
   // listen for storage changes so receive page bumps propagate here
@@ -175,11 +174,19 @@ export function useActiveAddress() {
     return () => chrome.storage.local.onChanged.removeListener(listener);
   }, [activeNetwork]);
 
+  // which wallet+network `address` belongs to. A new diversifier for the same
+  // one is a value update: the address on screen stays until its replacement
+  // arrives, instead of the whole screen dropping back to a loading state.
+  const derivedFor = useRef<string | undefined>(undefined);
+
   useEffect(() => {
     let cancelled = false;
+    const identity = `${activeNetwork}:${selectedKeyInfo?.id}:${zcashWallet?.ufvk ?? zcashWallet?.orchardFvk ?? ''}`;
 
     const deriveAddress = async () => {
-      setLoading(true);
+      if (derivedFor.current !== identity) {
+        setLoading(true);
+      }
 
       try {
         // mnemonic vault - derive addresses from seed for all networks
@@ -436,6 +443,7 @@ export function useActiveAddress() {
     const index = diversifier;
     void deriveAddress().then(() => {
       if (!cancelled) {
+        derivedFor.current = identity;
         setDerivedIndex(index);
       }
     });

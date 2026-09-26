@@ -35,9 +35,13 @@ export const rotateShieldedDiversifier = async (): Promise<string> => {
   return next;
 };
 
-/** The index on offer, picking one if none has been yet. */
-export const currentShieldedDiversifier = async (): Promise<string> => {
+/**
+ * The index on offer. Reading never writes: rotation is the only writer, so a
+ * read can't race a rotation into storage. With none stored yet it is a fresh
+ * random index that nobody has seen; the next rotation replaces it anyway.
+ */
+export const readShieldedDiversifier = async (): Promise<string> => {
   const r = await chrome.storage.local.get(SHIELDED_DIVERSIFIER_KEY);
   const stored = r[SHIELDED_DIVERSIFIER_KEY] as string | undefined;
-  return stored && /^[0-9a-f]{22}$/.test(stored) ? stored : rotateShieldedDiversifier();
+  return stored && /^[0-9a-f]{22}$/.test(stored) ? stored : randomDiversifier();
 };
