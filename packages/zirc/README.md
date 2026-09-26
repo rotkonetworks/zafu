@@ -25,13 +25,13 @@ import { createGenesis, modeStateAt } from '@zafu/zirc'; // pure
 import { Room, sealInvite } from '@zafu/zirc/room'; // talks to a relay
 ```
 
-| module                   | entry               | what it does                                                            |
-| ------------------------ | ------------------- | ----------------------------------------------------------------------- |
-| `channel-log`            | `@zafu/zirc`        | genesis, the hash-chained log, and **authority verification**           |
-| `vote`                   | `@zafu/zirc`        | the electorate at a log index, and whether a decision passed            |
-| `room`                   | `@zafu/zirc/room`   | the encrypted windowed board, presence, sync, invites                   |
-| `commands`               | `@zafu/zirc/room`   | `/me`, `/nick`, `/who`, completion - the IRC line parser                |
-| _(re-exported from zid)_ | `@zafu/zirc`        | `createGroupSession` - round-structured messages over pairwise channels |
+| module                   | entry             | what it does                                                            |
+| ------------------------ | ----------------- | ----------------------------------------------------------------------- |
+| `channel-log`            | `@zafu/zirc`      | genesis, the hash-chained log, and **authority verification**           |
+| `vote`                   | `@zafu/zirc`      | the electorate at a log index, and whether a decision passed            |
+| `room`                   | `@zafu/zirc/room` | the encrypted windowed board, presence, sync, invites                   |
+| `commands`               | `@zafu/zirc/room` | `/me`, `/nick`, `/who`, completion - the IRC line parser                |
+| _(re-exported from zid)_ | `@zafu/zirc`      | `createGroupSession` - round-structured messages over pairwise channels |
 
 ## The room
 
@@ -163,7 +163,7 @@ vote-based systems lack.
 - **The room's windows sweep, so a moderation log cannot live in them.**
   `channelStateAt` replays from genesis; a swept log is an operator set you
   cannot recompute. Messages may be ephemeral, the channel log may not. It
-  needs durable storage - though not *trusted* storage, since `verifyChain`
+  needs durable storage - though not _trusted_ storage, since `verifyChain`
   proves it from genesis, which is what makes an archiving bouncer a cache
   rather than an authority.
 

@@ -21,7 +21,7 @@ describe('BlockProcessor sync loop', () => {
   it('reopens the compact block stream when it ends cleanly', async () => {
     let streamsOpened = 0;
     const querier = {
-      tendermint: { latestBlockHeight: async () => 100n },
+      tendermint: { latestBlockHeight: () => Promise.resolve(100n) },
       compactBlock: {
         // ends immediately, without yielding a block: the dropped-stream case
         compactBlockRange: () => {
@@ -33,14 +33,14 @@ describe('BlockProcessor sync loop', () => {
       },
     };
     const indexedDb = {
-      getFullSyncHeight: async () => 99n,
-      getFmdParams: async () => ({}),
-      getAppParams: async () => ({ chainId: 'penumbra-1', sctParams: {} }),
+      getFullSyncHeight: () => Promise.resolve(99n),
+      getFmdParams: () => Promise.resolve({}),
+      getAppParams: () => Promise.resolve({ chainId: 'penumbra-1', sctParams: {} }),
       // a stored validator keeps the (fire-and-forget) validator repair out of
       // this test - it would otherwise fetch the validator list
-      iterateValidatorInfos: () => ({ next: async () => ({ done: false, value: {} }) }),
+      iterateValidatorInfos: () => ({ next: () => Promise.resolve({ done: false, value: {} }) }),
     };
-    const viewServer = { resetTreeToStored: async () => undefined };
+    const viewServer = { resetTreeToStored: () => Promise.resolve(undefined) };
 
     // partial doubles: only what syncAndStore touches before the stream loop
     const processor = new BlockProcessor({
