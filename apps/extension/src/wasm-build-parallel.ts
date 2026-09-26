@@ -174,22 +174,42 @@ const getRequiredProvingKeys = (txPlan: TransactionPlan): Set<string> => {
   return required;
 };
 
+/**
+ * Reply shape for a refused build. The success reply is the bare transaction
+ * JSON - the service worker's client parses it straight into a Transaction - so
+ * failures are marked with this key instead of a wrapper.
+ */
+const postBuildFailure = (e: unknown): void => {
+  self.postMessage({ __buildError: { message: e instanceof Error ? e.message : String(e) } });
+};
+
 // Listen for build requests
 const workerListener = ({ data }: { data: ParallelBuildRequest }) => {
-  const {
-    transactionPlan: transactionPlanJson,
-    witness: witnessJson,
-    fullViewingKey: fullViewingKeyJson,
-    authData: authDataJson,
-  } = data;
+  try {
+    const {
+      transactionPlan: transactionPlanJson,
+      witness: witnessJson,
+      fullViewingKey: fullViewingKeyJson,
+      authData: authDataJson,
+    } = data;
 
-  // Deserialize payload
-  const transactionPlan = TransactionPlan.fromJson(transactionPlanJson);
-  const witness = WitnessData.fromJson(witnessJson);
-  const fullViewingKey = FullViewingKey.fromJson(fullViewingKeyJson);
-  const authData = AuthorizationData.fromJson(authDataJson);
+    // Deserialize payload
+    const transactionPlan = TransactionPlan.fromJson(transactionPlanJson);
+    const witness = WitnessData.fromJson(witnessJson);
+    const fullViewingKey = FullViewingKey.fromJson(fullViewingKeyJson);
+    const authData = AuthorizationData.fromJson(authDataJson);
 
-  void executeWorker(transactionPlan, witness, fullViewingKey, authData).then(self.postMessage);
+    // ALWAYS reply. A rejection here - a proving key that fails to fetch, a WASM
+    // trap, a malformed payload - used to vanish into an unhandled rejection, so
+    // no message was ever posted and the offscreen handler's request (and with
+    // it the wallet's send) stayed pending forever.
+    void executeWorker(transactionPlan, witness, fullViewingKey, authData).then(
+      transaction => self.postMessage(transaction),
+      postBuildFailure,
+    );
+  } catch (e) {
+    postBuildFailure(e);
+  }
 };
 
 // Listen for all messages - worker is persistent

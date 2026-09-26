@@ -11,6 +11,10 @@
 import type { Client } from '@connectrpc/connect';
 import type { ViewService } from '@penumbra-zone/protobuf';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
+import type {
+  Transaction,
+  TransactionPlan,
+} from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
 import { bech32mAddress } from '@penumbra-zone/bech32m/penumbra';
 import { isValidInternalSender } from '../../senders/internal';
 import { isPenumbraSendRequest } from '../penumbra-send';
@@ -63,6 +67,52 @@ const describePlan = (req: TransactionPlannerRequest): string => {
 const toHex = (bytes: Uint8Array): string =>
   Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 
+/**
+ * Nothing on this path may wait forever. The view client is a DIRECT client
+ * (`defaultTimeoutMs: 0`), so a stalled planner or a build whose worker died
+ * left the op at "planning"/"approve and build" with no error and no end - the
+ * reported "the window to get the tx plan takes forever, nothing happening".
+ * Both bounds are ~100x a healthy duration: they only fire on a real stall.
+ */
+const PLAN_TIMEOUT_MS = 2 * 60_000;
+const BUILD_STALL_MS = 3 * 60_000;
+
+/**
+ * Run `authorizeAndBuild` to completion, failing if the stream goes silent.
+ *
+ * The stream ticks progress while it works - through the build AND through the
+ * wait for the user's approval - so a gap means the producer is stuck (a lost
+ * offscreen build worker, a dead router), not that the user is still reading the
+ * plan. Aborting also stops the build's progress loop in the worker.
+ */
+const authorizeAndBuildBounded = async (
+  client: Client<typeof ViewService>,
+  plan: TransactionPlan,
+): Promise<Transaction> => {
+  const abort = new AbortController();
+  const failIfSilent = () => abort.abort(new Error('the transaction build stalled'));
+  let watchdog = setTimeout(failIfSilent, BUILD_STALL_MS);
+  try {
+    for await (const msg of client.authorizeAndBuild(
+      { transactionPlan: plan },
+      { signal: abort.signal },
+    )) {
+      clearTimeout(watchdog);
+      watchdog = setTimeout(failIfSilent, BUILD_STALL_MS);
+      if (msg.status.case === 'complete') {
+        const { transaction } = msg.status.value;
+        if (!transaction) {
+          throw new Error('failed to build transaction');
+        }
+        return transaction;
+      }
+    }
+    throw new Error('failed to build transaction');
+  } finally {
+    clearTimeout(watchdog);
+  }
+};
+
 async function runSend(
   message: { opId: string; planRequestJson: unknown; label?: string },
   getViewClient: () => Promise<Client<typeof ViewService>>,
@@ -107,7 +157,9 @@ async function runSend(
     const client = await getViewClient();
 
     await write({ status: 'pending', step: 'planning' });
-    const { plan } = await client.transactionPlanner(planRequest);
+    const { plan } = await client.transactionPlanner(planRequest, {
+      signal: AbortSignal.timeout(PLAN_TIMEOUT_MS),
+    });
     if (!plan) {
       throw new Error('failed to create transaction plan');
     }
@@ -126,16 +178,7 @@ async function runSend(
     // context - identical machinery to a page-initiated authorizeAndBuild, but
     // driven from a client that survives the panel reload.
     await write({ status: 'pending', step: 'approve and build' });
-    let transaction;
-    for await (const msg of client.authorizeAndBuild({ transactionPlan: plan })) {
-      if (msg.status.case === 'complete') {
-        transaction = msg.status.value.transaction;
-        break;
-      }
-    }
-    if (!transaction) {
-      throw new Error('failed to build transaction');
-    }
+    const transaction = await authorizeAndBuildBounded(client, plan);
 
     // Broadcast without awaiting on-chain detection: the money is submitted at
     // broadcastSuccess, and we do not want this SW task blocked on chain

@@ -22,7 +22,7 @@ chrome.runtime.onMessage.addListener((req, _sender, respond) => {
   // Handle parallel build (rayon-based, single WASM call)
   if (type === 'BUILD_PARALLEL' && isParallelBuildRequest(request)) {
     console.log('[Offscreen] Received BUILD_PARALLEL request');
-    void handleBuildRequest(() => spawnParallelBuildWorker(request), type, respond);
+    void handleBuildRequest(() => runParallelBuild(request), type, respond);
     return true;
   }
 
@@ -84,36 +84,105 @@ const getOrCreateParallelWorker = (): Worker => {
 /**
  * Build transaction using persistent rayon worker.
  * First build initializes WASM + loads keys, subsequent builds are faster.
+ *
+ * Every request is BOUNDED and every request gets exactly one reply. Both
+ * properties are load-bearing for the wallet's send flow, which has no timeout
+ * of its own:
+ *
+ * - No reply, no answer. A worker that dies mid-prove (the offscreen document
+ *   torn down by another build's release, a WASM trap, a proving key that fails
+ *   to fetch) used to leave this promise pending forever: the send sat at
+ *   "approve and build" and nothing downstream ever gave up. The cap below turns
+ *   that into a failure the UI can show.
+ * - One reply per request. The wire shape carries no request id, so a second
+ *   build in flight (the wallet's send plus the 30s swap-claim sweep) could have
+ *   its reply taken as the other request's answer - and two rayon builds would
+ *   interleave inside one WASM instance. `runParallelBuild` serializes them.
  */
+const PARALLEL_BUILD_TIMEOUT_MS = 5 * 60_000;
+
 const spawnParallelBuildWorker = (req: ParallelBuildRequest) => {
   const { promise, resolve, reject } = Promise.withResolvers<ParallelBuildResponse>();
 
   const worker = getOrCreateParallelWorker();
+  let settled = false;
+
+  const settle = (fn: () => void) => {
+    if (settled) {
+      return;
+    }
+    settled = true;
+    clearTimeout(timer);
+    worker.removeEventListener('message', onWorkerMessage);
+    worker.removeEventListener('error', onWorkerError);
+    worker.removeEventListener('messageerror', onWorkerMessageError);
+    fn();
+  };
 
   const onWorkerMessage = (e: MessageEvent) => {
-    resolve(e.data as ParallelBuildResponse);
+    const reply: unknown = e.data;
+    // A refused build replies `{ __buildError: { message } }`; a successful one
+    // replies with the bare transaction JSON (wasm-build-parallel.ts).
+    if (typeof reply === 'object' && reply !== null && '__buildError' in reply) {
+      const failure: unknown = reply.__buildError;
+      const message =
+        typeof failure === 'object' &&
+        failure !== null &&
+        'message' in failure &&
+        typeof failure.message === 'string'
+          ? failure.message
+          : 'parallel build failed';
+      settle(() => reject(new Error(message)));
+    } else {
+      settle(() => resolve(reply as ParallelBuildResponse));
+    }
   };
 
   const onWorkerError = ({ error, filename, lineno, colno, message }: ErrorEvent) => {
     // Don't kill worker on build error, just reject this request
-    reject(
-      error instanceof Error
-        ? error
-        : new Error(`Parallel Worker ErrorEvent ${filename}:${lineno}:${colno} ${message}`),
+    settle(() =>
+      reject(
+        error instanceof Error
+          ? error
+          : new Error(`Parallel Worker ErrorEvent ${filename}:${lineno}:${colno} ${message}`),
+      ),
     );
   };
 
-  const onWorkerMessageError = (ev: MessageEvent) => reject(ConnectError.from(ev.data ?? ev));
+  const onWorkerMessageError = (ev: MessageEvent) =>
+    settle(() => reject(ConnectError.from(ev.data ?? ev)));
 
-  // Use once:true so handlers don't stack up
-  worker.addEventListener('message', onWorkerMessage, { once: true });
-  worker.addEventListener('error', onWorkerError, { once: true });
-  worker.addEventListener('messageerror', onWorkerMessageError, { once: true });
+  worker.addEventListener('message', onWorkerMessage);
+  worker.addEventListener('error', onWorkerError);
+  worker.addEventListener('messageerror', onWorkerMessageError);
+
+  // A stuck worker cannot answer again (a proof that never returns), so kill it:
+  // the next build then starts from a fresh WASM instance instead of queueing
+  // behind the corpse.
+  const timer = setTimeout(() => {
+    console.error(`[Offscreen] parallel build timed out after ${PARALLEL_BUILD_TIMEOUT_MS}ms`);
+    if (persistentWorker === worker) {
+      persistentWorker = null;
+    }
+    worker.terminate();
+    settle(() => reject(new Error('parallel build timed out')));
+  }, PARALLEL_BUILD_TIMEOUT_MS);
 
   // Send data to web worker
   worker.postMessage(req);
 
   return promise;
+};
+
+/**
+ * Serialize parallel builds: one at a time, in arrival order. A failed build
+ * must not poison the queue for the next one.
+ */
+let parallelBuildQueue: Promise<unknown> = Promise.resolve();
+const runParallelBuild = (req: ParallelBuildRequest): Promise<ParallelBuildResponse> => {
+  const run = parallelBuildQueue.then(() => spawnParallelBuildWorker(req));
+  parallelBuildQueue = run.catch(() => undefined);
+  return run;
 };
 
 // ── zcash parallel proving ──
