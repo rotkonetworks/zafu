@@ -11,13 +11,8 @@ import { useStore } from '../state';
 import { selectEffectiveKeyInfo, keyRingSelector, selectActiveNetwork } from '../state/keyring';
 import { getRootNetwork } from '../config/networks';
 import { deriveChainAddress } from '@repo/wallet/networks/cosmos/signer';
-import {
-  COSMOS_CHAINS,
-  rpcEndpointPool,
-  type CosmosChainId,
-} from '@repo/wallet/networks/cosmos/chains';
-import { getNobleRpcPool } from './noble-rpc';
-import { getInjectiveRpcPool } from './injective-rpc';
+import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { getRpcPool } from './transparent-rpc';
 import { shortSymbol } from '../utils/asset-display';
 import { conduitFor } from '@repo/wallet/networks/transparent/conduit';
 import { peekHdIndex } from '@repo/storage-chrome/cosmos-chain-counters';
@@ -141,14 +136,8 @@ export const useCosmosDepositWallets = (chainId: CosmosChainId) => {
       const keyId = selectedKeyInfo.id;
       const mnemonic = await getMnemonic(keyId);
       const conduit = conduitFor(chainId);
-      // user-editable pools for Noble + Injective (Settings -> Penumbra ->
-      // burners); other chains use their config pool
-      const pool =
-        chainId === 'noble'
-          ? await getNobleRpcPool()
-          : chainId === 'injective'
-            ? await getInjectiveRpcPool()
-            : rpcEndpointPool(chainId);
+      // user-editable per chain (Settings -> Penumbra -> transparent chains)
+      const pool = await getRpcPool(chainId);
 
       const [highest, rememberedFunded] = await Promise.all([
         peekHdIndex(chainId),

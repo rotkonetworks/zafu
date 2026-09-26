@@ -57,8 +57,8 @@ import {
 import { NETWORKS, LAUNCHED_NETWORKS, getTopLevelNetworks } from '../../../config/networks';
 import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
-import { NobleEndpointsEditor } from './noble-endpoints-editor';
-import { InjectiveEndpointsEditor } from './injective-endpoints-editor';
+import { TransparentChainEndpoints } from './transparent-chain-endpoints';
+import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { KeplrCompatToggle } from './keplr-compat-toggle';
 import { SettingsWallets } from './settings-wallets';
 
@@ -183,8 +183,8 @@ const NetworkToggles = () => {
   return (
     <div ref={containerRef} className='flex flex-col gap-1'>
       {/* Top-level networks only. Subnetworks like Noble (parent: penumbra)
-            are not standalone rows here - Noble's RPC pool is edited under the
-            Penumbra panel via NobleEndpointsEditor, so listing it again would
+            are not standalone rows here - their RPC pools are edited under the
+            Penumbra panel (transparent chains), so listing them again would
             be a confusing duplicate. */}
       {getTopLevelNetworks().map(networkId => {
         const network = NETWORKS[networkId];
@@ -327,21 +327,16 @@ const NetworkToggles = () => {
                       }
                     />
 
-                    {/* Burners: transparent cosmos chains under Penumbra used
-                          as bridge off-ramps (Noble for USDC; Injective for
-                          onboarding). Managed here in the Penumbra submenu,
-                          no second extension needed. */}
+                    {/* Transparent cosmos chains under Penumbra (bridge on-
+                          and off-ramps): one collapsible row per chain, Keplr
+                          style, each editing the RPC pool its lookups rotate
+                          across. Managed here, no second extension needed. */}
                     <div className='border-t border-border-soft pt-3'>
-                      <div className='text-label text-fg-muted mb-2'>burners</div>
-                      <div className='flex flex-col gap-4'>
-                        <InjectiveEndpointsEditor />
-                        <div className='flex flex-col gap-1.5'>
-                          <NobleEndpointsEditor />
-                          <p className='text-label text-fg-dim lowercase'>
-                            noble is being wound down by circle; new deposits should route through
-                            injective.
-                          </p>
-                        </div>
+                      <div className='text-label text-fg-muted mb-2'>transparent chains</div>
+                      <div className='flex flex-col gap-1.5'>
+                        {(Object.keys(COSMOS_CHAINS) as CosmosChainId[]).map(id => (
+                          <TransparentChainEndpoints key={id} chainId={id} />
+                        ))}
                       </div>
                     </div>
                     {/* Cosmos-family dapps (IBC, Keplr-only sites) only
@@ -1111,7 +1106,7 @@ const PenumbraEndpointPanel = ({
           consistent with the Zcash panel's one-line trust hint. */}
       <div className='flex items-center gap-1.5 text-label lowercase'>
         <span className='h-1.5 w-1.5 rounded-full bg-green-400' />
-        <span className='text-green-400'>trustless</span>
+        <span className='text-green-400'>private</span>
         <span className='text-fg-muted'>· compact blocks decrypted locally</span>
       </div>
 

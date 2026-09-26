@@ -17,12 +17,10 @@ import { cn } from '@repo/ui/lib/utils';
 import { useCosmosDepositWallets, type DepositWallet } from '../../../hooks/cosmos-balance';
 import {
   COSMOS_CHAINS,
-  rpcEndpointPool,
   type CosmosChainId,
   type CosmosChainConfig,
 } from '@repo/wallet/networks/cosmos/chains';
-import { useNobleRpcPool } from '../../../hooks/noble-rpc';
-import { useInjectiveRpcPool } from '../../../hooks/injective-rpc';
+import { useRpcPool } from '../../../hooks/transparent-rpc';
 import { getActiveIbcSubnetworks } from '../../../config/networks';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
@@ -239,15 +237,8 @@ const ChainDeposits = ({ chainId, view }: { chainId: CosmosChainId; view: 'home'
   const { data } = useCosmosDepositWallets(chainId);
   const config = COSMOS_CHAINS[chainId];
   // which RPC each address is queried through (rotated per index) - surfaced on
-  // hover. Noble's pool is user-editable; other chains use their config pool.
-  const { pool: noblePool } = useNobleRpcPool();
-  const { pool: injectivePool } = useInjectiveRpcPool();
-  const pool =
-    chainId === 'noble'
-      ? noblePool
-      : chainId === 'injective'
-        ? injectivePool
-        : rpcEndpointPool(chainId);
+  // hover. The pool is user-editable per chain.
+  const { pool } = useRpcPool(chainId);
   const endpointFor = (index: number): string | undefined =>
     pool.length ? pool[index % pool.length] : undefined;
 

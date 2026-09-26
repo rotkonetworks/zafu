@@ -98,8 +98,13 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
     // Interchangeable public Noble RPCs - rotated per address for privacy.
     // Only verified-reachable hosts ship as defaults; users can add their own
     // in Settings -> networks -> Penumbra -> Noble. (cosmos.directory is itself
-    // a load-balancing proxy, so it adds provider diversity on its own.)
-    rpcEndpoints: ['https://noble-rpc.polkachu.com', 'https://rpc.cosmos.directory/noble'],
+    // a load-balancing proxy, so it adds provider diversity on its own.) The
+    // keplr.app host is the one Keplr's chain registry lists for this chain.
+    rpcEndpoints: [
+      'https://noble-rpc.polkachu.com',
+      'https://rpc.cosmos.directory/noble',
+      'https://rpc-noble.keplr.app',
+    ],
     restEndpoint: 'https://noble-api.polkachu.com',
     gasPrice: '0.1uusdc',
     penumbraChannel: 'channel-89', // noble -> penumbra
@@ -125,6 +130,14 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
     denom: 'uatom',
     decimals: 6,
     rpcEndpoint: 'https://cosmos-rpc.polkachu.com',
+    // rotated per address for privacy, all verified reachable (2026-09); the
+    // keplr.app host is the one Keplr's chain registry lists for this chain
+    rpcEndpoints: [
+      'https://cosmos-rpc.polkachu.com',
+      'https://rpc.cosmos.directory/cosmoshub',
+      'https://cosmos-rpc.publicnode.com:443',
+      'https://rpc-cosmoshub.keplr.app',
+    ],
     restEndpoint: 'https://cosmos-api.polkachu.com',
     gasPrice: '0.025uatom',
     penumbraChannel: 'channel-940', // cosmoshub -> penumbra
@@ -141,6 +154,15 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
     denom: 'erc20:0xa00C59fF5a080D2b954d0c75e46E22a0c371235a',
     decimals: 6,
     rpcEndpoint: 'https://sentry.tm.injective.network:443',
+    // Interchangeable public Injective RPCs - rotated per address for privacy,
+    // all verified reachable (2026-09). The keplr.app host is the one Keplr's
+    // chain registry lists for this chain.
+    rpcEndpoints: [
+      'https://injective-rpc.publicnode.com:443',
+      'https://rpc.cosmos.directory/injective',
+      'https://sentry.tm.injective.network:443',
+      'https://rpc-injective.keplr.app',
+    ],
     restEndpoint: 'https://sentry.lcd.injective.network',
     gasPrice: '160000000inj', // INJ, 18 dec
     // Ethermint: coin type 60 / eth_secp256k1 - derive+sign via networks/injective,
@@ -167,6 +189,14 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
     denom: 'uosmo',
     decimals: 6,
     rpcEndpoint: 'https://osmosis-rpc.polkachu.com',
+    // rotated per address for privacy, all verified reachable (2026-09); the
+    // keplr.app host is the one Keplr's chain registry lists for this chain
+    rpcEndpoints: [
+      'https://osmosis-rpc.polkachu.com',
+      'https://rpc.cosmos.directory/osmosis',
+      'https://osmosis-rpc.publicnode.com:443',
+      'https://rpc-osmosis.keplr.app',
+    ],
     restEndpoint: 'https://osmosis-api.polkachu.com',
     gasPrice: '0.025uosmo',
     // standard cosmos: secp256k1, coin type 118 (keyAlgo/coinType left default),
