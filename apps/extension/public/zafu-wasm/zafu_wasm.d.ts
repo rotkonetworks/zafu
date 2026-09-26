@@ -66,6 +66,10 @@ export class WalletKeys {
      */
     get_receiving_address_at(diversifier_index: number, mainnet: boolean): string;
     /**
+     * Get receiving address at a full 11-byte diversifier index (22 hex chars, LE)
+     */
+    get_receiving_address_at_index(index_hex: string, mainnet: boolean): string;
+    /**
      * Scan actions from JSON (legacy compatibility, slower)
      */
     scan_actions(actions_json: any): any;
@@ -130,6 +134,10 @@ export class WatchOnlyWallet {
      */
     get_address_at(diversifier_index: number): string;
     /**
+     * Get address at a full 11-byte diversifier index (22 hex chars, LE)
+     */
+    get_address_at_index(index_hex: string): string;
+    /**
      * Is mainnet
      */
     is_mainnet(): boolean;
@@ -152,6 +160,12 @@ export class WatchOnlyWallet {
  * Derive an Orchard receiving address from a UFVK string (uview1.../uviewtest1...)
  */
 export function address_from_ufvk(ufvk_str: string, diversifier_index: number): string;
+
+/**
+ * Derive an Orchard receiving address from a UFVK string at a full 11-byte
+ * diversifier index (22 hex chars, LE).
+ */
+export function address_from_ufvk_at_index(ufvk_str: string, index_hex: string): string;
 
 /**
  * Apply spend-auth signatures to a compact PCZT received from a signer.
@@ -1055,6 +1069,7 @@ export interface InitOutput {
     readonly __wbg_walletkeys_free: (a: number, b: number) => void;
     readonly __wbg_watchonlywallet_free: (a: number, b: number) => void;
     readonly address_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly address_from_ufvk_at_index: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly apply_signature_contributions: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly build_delegation_pczt: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number) => [number, number, number, number];
     readonly build_ironwood_send_pczt: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number) => [number, number, number];
@@ -1136,6 +1151,7 @@ export interface InitOutput {
     readonly walletkeys_get_fvk_hex: (a: number) => [number, number];
     readonly walletkeys_get_receiving_address: (a: number, b: number) => [number, number];
     readonly walletkeys_get_receiving_address_at: (a: number, b: number, c: number) => [number, number];
+    readonly walletkeys_get_receiving_address_at_index: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly walletkeys_scan_actions: (a: number, b: any) => [number, number, number];
     readonly walletkeys_scan_actions_ironwood_parallel: (a: number, b: number, c: number) => [number, number, number];
     readonly walletkeys_scan_actions_parallel: (a: number, b: number, c: number) => [number, number, number];
@@ -1147,6 +1163,7 @@ export interface InitOutput {
     readonly watchonlywallet_get_account_index: (a: number) => number;
     readonly watchonlywallet_get_address: (a: number) => [number, number];
     readonly watchonlywallet_get_address_at: (a: number, b: number) => [number, number];
+    readonly watchonlywallet_get_address_at_index: (a: number, b: number, c: number) => [number, number, number, number];
     readonly watchonlywallet_is_mainnet: (a: number) => number;
     readonly watchonlywallet_scan_actions_ironwood_parallel: (a: number, b: number, c: number) => [number, number, number];
     readonly watchonlywallet_scan_actions_parallel: (a: number, b: number, c: number) => [number, number, number];

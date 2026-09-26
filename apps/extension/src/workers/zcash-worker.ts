@@ -212,6 +212,8 @@ interface ScannerKeys {
 interface WalletKeys extends ScannerKeys {
   get_receiving_address(mainnet: boolean): string;
   get_receiving_address_at(index: number, mainnet: boolean): string;
+  /** full 11-byte diversifier index as 22 hex chars, little-endian */
+  get_receiving_address_at_index(indexHex: string, mainnet: boolean): string;
   scan_actions(actionsJson: unknown): DecryptedNote[];
   calculate_balance(notes: unknown, spent: unknown): bigint;
   /** Raw 96-byte Orchard FVK as hex (not a bech32m UFVK string). */
@@ -221,6 +223,8 @@ interface WalletKeys extends ScannerKeys {
 interface WatchOnlyWallet extends ScannerKeys {
   get_address(): string;
   get_address_at(diversifierIndex: number): string;
+  /** full 11-byte diversifier index as 22 hex chars, little-endian */
+  get_address_at_index(indexHex: string): string;
   get_account_index(): number;
   is_mainnet(): boolean;
   export_fvk_hex(): string;
@@ -3079,13 +3083,17 @@ const buildWitnesses = async (
   return { anchorHex: networkRoot, paths };
 };
 
-const deriveAddress = (mnemonic: string, accountIndex: number): string => {
+const deriveAddress = (mnemonic: string, accountIndex: number, diversifierHex?: string): string => {
   if (!wasmModule) {
     throw new Error('wasm not initialized');
   }
   const keys = new wasmModule.WalletKeys(mnemonic);
   try {
-    const raw = keys.get_receiving_address_at(accountIndex, true);
+    // accountIndex is really a u32 diversifier index; receive passes the full
+    // 11-byte random one instead
+    const raw = diversifierHex
+      ? keys.get_receiving_address_at_index(diversifierHex, true)
+      : keys.get_receiving_address_at(accountIndex, true);
     return fixOrchardAddress(raw, true);
   } finally {
     keys.free();
@@ -4896,8 +4904,12 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
       case 'derive-address': {
         await initWasm();
-        const { mnemonic, accountIndex } = payload as { mnemonic: string; accountIndex: number };
-        const address = deriveAddress(mnemonic, accountIndex);
+        const { mnemonic, accountIndex, diversifierHex } = payload as {
+          mnemonic: string;
+          accountIndex: number;
+          diversifierHex?: string;
+        };
+        const address = deriveAddress(mnemonic, accountIndex, diversifierHex);
         workerSelf.postMessage({
           type: 'address',
           id,

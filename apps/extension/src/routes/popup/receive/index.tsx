@@ -22,7 +22,7 @@ import {
 } from '../../../state/keyring';
 import { getActiveWalletJson, selectActiveZcashWallet } from '../../../state/wallets';
 import { useActiveAddress } from '../../../hooks/use-address';
-import { rotateShieldedIndex } from '../../../state/shielded-receive-index';
+import { rotateShieldedDiversifier } from '../../../state/shielded-receive-index';
 import {
   derivePenumbraEphemeralFromMnemonic,
   derivePenumbraEphemeralFromFvk,
@@ -652,10 +652,10 @@ export function ReceivePage() {
   // copy and leaving. Nothing is shown until the address really is the fresh one, so a
   // retired address never flashes up in the QR or lands on the clipboard twice.
   const isZcash = activeNetwork === 'zcash';
-  const [offeredIndex, setOfferedIndex] = useState<number>();
+  const [offeredIndex, setOfferedIndex] = useState<string>();
   const retireShielded = useCallback(() => {
     setOfferedIndex(undefined);
-    void rotateShieldedIndex().then(setOfferedIndex);
+    void rotateShieldedDiversifier().then(setOfferedIndex);
   }, []);
   useEffect(() => {
     if (!isZcash) {
@@ -663,7 +663,7 @@ export function ReceivePage() {
     }
     retireShielded();
     // leaving retires the one left on screen too: its QR may have been scanned
-    return () => void rotateShieldedIndex();
+    return () => void rotateShieldedDiversifier();
   }, [isZcash, retireShielded]);
   const fresh = !isZcash || (offeredIndex !== undefined && shieldedIndex === offeredIndex);
   // Transparent chains you can receive on from here: launched, with a route

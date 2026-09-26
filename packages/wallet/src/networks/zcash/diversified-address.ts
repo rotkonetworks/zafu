@@ -7,11 +7,16 @@
  * payment came through.
  *
  * index allocation:
- *   0, 1, 2.. = single-use receive addresses; the extension's receive counter
- *               advances every time one is shown or copied, so low indices
- *               are not stable "public" addresses
- *   1000+     = per-contact diversified addresses (hash-spread over 2^48, so
- *               the receive counter practically never reaches one)
+ *   receive   = a fresh random 88-bit index each time an address is shown or
+ *               copied (extension state/shielded-receive-index.ts), so no
+ *               index, 0 included, is a stable "public" address
+ *   1000+     = per-contact diversified addresses, below
+ *
+ * NOTE: address_from_ufvk takes a u32, so the 48-bit index derived below is
+ * cut to its low 32 bits on the way into wasm. Contact addresses therefore
+ * spread over 2^32, not 2^48 (birthday ~65k contacts, not ~16M). Moving them
+ * to address_from_ufvk_at_index would change every address already handed to
+ * a contact, so it waits for a decision rather than riding along.
  *
  * index derivation:
  *   index = 1000 + (SHA-256(contact_id)[0:6] as u48)

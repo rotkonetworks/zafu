@@ -402,8 +402,10 @@ export const deriveAddressInWorker = async (
   network: NetworkType,
   mnemonic: string,
   accountIndex: number,
+  /** zcash: the 11-byte diversifier index as 22 hex chars (see shielded-receive-index) */
+  diversifierHex?: string,
 ): Promise<string> => {
-  return callWorker(network, 'derive-address', { mnemonic, accountIndex });
+  return callWorker(network, 'derive-address', { mnemonic, accountIndex, diversifierHex });
 };
 
 /**

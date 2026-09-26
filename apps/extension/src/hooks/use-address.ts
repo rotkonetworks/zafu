@@ -20,7 +20,10 @@ import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { spawnNetworkWorker, deriveAddressInWorker } from '../state/keyring/network-worker';
 import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { createZafuWasmMemory } from '../config/zafu-wasm-memory';
-import { SHIELDED_INDEX_KEY } from '../state/shielded-receive-index';
+import {
+  SHIELDED_DIVERSIFIER_KEY,
+  currentShieldedDiversifier,
+} from '../state/shielded-receive-index';
 
 /** derive cosmos/ibc address from mnemonic */
 async function deriveCosmosAddress(mnemonic: string, prefix: string): Promise<string> {
@@ -104,19 +107,20 @@ async function loadZcashWasm() {
   return zcashWasm;
 }
 
-/** derive zcash address from UFVK string (for watch-only wallets) */
-async function deriveZcashAddressFromUfvk(ufvk: string, diversifierIndex = 0): Promise<string> {
+/**
+ * derive zcash address from UFVK string (for watch-only wallets) at an 11-byte
+ * diversifier index (22 hex chars)
+ */
+async function deriveZcashAddressFromUfvk(ufvk: string, diversifierHex: string): Promise<string> {
   const zcashWasm = await loadZcashWasm();
-  // WatchOnlyWallet expects raw FVK bytes, but if we have a ufvk string
-  // we need to use address_from_ufvk if it exists, otherwise fall back
-  if (typeof zcashWasm.address_from_ufvk === 'function') {
-    const raw = zcashWasm.address_from_ufvk(ufvk, diversifierIndex);
+  if (ufvk.startsWith('uview')) {
+    const raw = zcashWasm.address_from_ufvk_at_index(ufvk, diversifierHex);
     return fixOrchardAddress(raw, !ufvk.startsWith('uviewtest'));
   }
-  // fallback: try WatchOnlyWallet if the ufvk is in qr hex format
+  // the ufvk field can also hold the zigner QR hex format
   const wallet = zcashWasm.WatchOnlyWallet.from_qr_hex(ufvk);
   try {
-    return wallet.get_address_at(diversifierIndex);
+    return wallet.get_address_at_index(diversifierHex);
   } finally {
     wallet.free();
   }
@@ -141,19 +145,19 @@ export function useActiveAddress() {
 
   const [address, setAddress] = useState('');
   const [loading, setLoading] = useState(true);
-  const [shieldedIndex, setShieldedIndex] = useState(0);
-  // the zcash shielded index `address` was derived at, so a caller can tell a
-  // freshly rotated address from the one it replaced
-  const [derivedIndex, setDerivedIndex] = useState<number>();
+  // the random diversifier index of the zcash shielded address on offer
+  // (22 hex chars); undefined until read, and nothing is derived before then,
+  // so there is no fallback to a fixed index that every sender would share
+  const [diversifier, setDiversifier] = useState<string>();
+  // the index `address` was derived at, so a caller can tell a freshly rotated
+  // address from the one it replaced
+  const [derivedIndex, setDerivedIndex] = useState<string>();
 
-  // read stored shielded diversifier index
   useEffect(() => {
     if (activeNetwork !== 'zcash') {
       return;
     }
-    chrome.storage.local.get(SHIELDED_INDEX_KEY).then(r => {
-      setShieldedIndex(r[SHIELDED_INDEX_KEY] ?? 0);
-    });
+    void currentShieldedDiversifier().then(setDiversifier);
   }, [activeNetwork]);
 
   // listen for storage changes so receive page bumps propagate here
@@ -162,8 +166,9 @@ export function useActiveAddress() {
       return;
     }
     const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
-      if (changes[SHIELDED_INDEX_KEY]?.newValue !== undefined) {
-        setShieldedIndex(changes[SHIELDED_INDEX_KEY].newValue);
+      const next = changes[SHIELDED_DIVERSIFIER_KEY]?.newValue as string | undefined;
+      if (next !== undefined) {
+        setDiversifier(next);
       }
     };
     chrome.storage.local.onChanged.addListener(listener);
@@ -200,7 +205,7 @@ export function useActiveAddress() {
               for (let attempt = 0; attempt < 3 && !cancelled; attempt++) {
                 try {
                   await spawnNetworkWorker('zcash');
-                  const rawAddr = await deriveAddressInWorker('zcash', mnemonic, shieldedIndex);
+                  const rawAddr = await deriveAddressInWorker('zcash', mnemonic, 0, diversifier);
                   const addr = fixOrchardAddress(rawAddr, true);
                   if (!cancelled) {
                     setAddress(addr);
@@ -301,7 +306,7 @@ export function useActiveAddress() {
             (zcashWallet.orchardFvk?.startsWith('uview') ? zcashWallet.orchardFvk : undefined);
           if (ufvkStr) {
             try {
-              const addr = await deriveZcashAddressFromUfvk(ufvkStr, shieldedIndex);
+              const addr = await deriveZcashAddressFromUfvk(ufvkStr, diversifier!);
               if (!cancelled) {
                 setAddress(addr);
               }
@@ -324,7 +329,7 @@ export function useActiveAddress() {
                 mainnet,
               );
               try {
-                const raw = wallet.get_address_at(shieldedIndex);
+                const raw = wallet.get_address_at_index(diversifier!);
                 if (!cancelled) {
                   setAddress(fixOrchardAddress(raw, mainnet));
                 }
@@ -425,7 +430,10 @@ export function useActiveAddress() {
       }
     };
 
-    const index = shieldedIndex;
+    if (activeNetwork === 'zcash' && !diversifier) {
+      return;
+    }
+    const index = diversifier;
     void deriveAddress().then(() => {
       if (!cancelled) {
         setDerivedIndex(index);
@@ -444,7 +452,7 @@ export function useActiveAddress() {
     zcashWallet?.orchardFvk,
     zcashWallet?.ufvk,
     getMnemonic,
-    shieldedIndex,
+    diversifier,
   ]);
 
   return { address, loading, shieldedIndex: derivedIndex };

@@ -33,7 +33,7 @@ import { PopupPath } from '../paths';
 import { AssetListSkeleton } from '../../../components/primitives/skeleton';
 import { usePreloadBalances } from '../../../hooks/use-preload';
 import { useActiveAddress, derivePenumbraEphemeralFromFvk } from '../../../hooks/use-address';
-import { rotateShieldedIndex } from '../../../state/shielded-receive-index';
+import { rotateShieldedDiversifier } from '../../../state/shielded-receive-index';
 import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
 import { usePolkadotPublicKey } from '../../../hooks/use-polkadot-key';
 import { useCosmosAssets } from '../../../hooks/cosmos-balance';
@@ -321,7 +321,7 @@ export const PopupIndex = () => {
     }
     // zcash shielded addresses are single-use too
     if (activeNetwork === 'zcash' && effectiveAddress.startsWith('u')) {
-      void rotateShieldedIndex();
+      void rotateShieldedDiversifier();
     }
   }, [effectiveAddress, isPenumbra, activeNetwork]);
 

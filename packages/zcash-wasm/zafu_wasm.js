@@ -235,6 +235,32 @@ export class WalletKeys {
         }
     }
     /**
+     * Get receiving address at a full 11-byte diversifier index (22 hex chars, LE)
+     * @param {string} index_hex
+     * @param {boolean} mainnet
+     * @returns {string}
+     */
+    get_receiving_address_at_index(index_hex, mainnet) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const ptr0 = passStringToWasm0(index_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.walletkeys_get_receiving_address_at_index(this.__wbg_ptr, ptr0, len0, mainnet);
+            var ptr2 = ret[0];
+            var len2 = ret[1];
+            if (ret[3]) {
+                ptr2 = 0; len2 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred3_0 = ptr2;
+            deferred3_1 = len2;
+            return getStringFromWasm0(ptr2, len2);
+        } finally {
+            wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        }
+    }
+    /**
      * Scan actions from JSON (legacy compatibility, slower)
      * @param {any} actions_json
      * @returns {any}
@@ -426,6 +452,31 @@ export class WatchOnlyWallet {
         }
     }
     /**
+     * Get address at a full 11-byte diversifier index (22 hex chars, LE)
+     * @param {string} index_hex
+     * @returns {string}
+     */
+    get_address_at_index(index_hex) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const ptr0 = passStringToWasm0(index_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.watchonlywallet_get_address_at_index(this.__wbg_ptr, ptr0, len0);
+            var ptr2 = ret[0];
+            var len2 = ret[1];
+            if (ret[3]) {
+                ptr2 = 0; len2 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred3_0 = ptr2;
+            deferred3_1 = len2;
+            return getStringFromWasm0(ptr2, len2);
+        } finally {
+            wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        }
+    }
+    /**
      * Is mainnet
      * @returns {boolean}
      */
@@ -493,6 +544,36 @@ export function address_from_ufvk(ufvk_str, diversifier_index) {
         return getStringFromWasm0(ptr2, len2);
     } finally {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * Derive an Orchard receiving address from a UFVK string at a full 11-byte
+ * diversifier index (22 hex chars, LE).
+ * @param {string} ufvk_str
+ * @param {string} index_hex
+ * @returns {string}
+ */
+export function address_from_ufvk_at_index(ufvk_str, index_hex) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(index_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.address_from_ufvk_at_index(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
 }
 

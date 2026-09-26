@@ -94,6 +94,32 @@ Reproduce by checking out the zcli rev below and running the commands.
 Verify: rebuild from the rev, sha256sum the outputs,
 diff against the values above. A mismatch means the vendored blob is stale.
 
+## 2026-09-27 rebuild - full 88-bit diversifier index (random receive addresses)
+
+- source repo: zcli, branch `feat/random-diversifier-zafu`, rev `c238955`
+  = `c111a06` (the rev of the blob it replaces, d6244ea9) + one commit adding
+  `get_address_at_index`, `get_receiving_address_at_index` and
+  `address_from_ufvk_at_index`. Deliberately NOT built from zcli master: master
+  is 48 commits ahead and carries the Zakura Common 1.0 proving swap, which has
+  not been verified in zafu. The same commit is on `feat/random-diversifier`
+  (off master) for when that lands.
+- toolchain: wasm-bindgen 0.2.126, wasm-opt (binaryen) 130
+  (/nix/store/azhmf1il8da9pps80bk2f4l6ql6bgfg7-binaryen-130).
+- parallel build: `env -u RUSTFLAGS RUSTUP_TOOLCHAIN=nightly cargo wasm-parallel`,
+  `wasm-bindgen --out-dir pkg-parallel --target web`, `wasm-opt -Oz` with the
+  standard flag set. Shared imported memory `(memory 50 32768 shared)` verified.
+- sha256(parallel zafu_wasm_bg.wasm) =
+  11413627f69a1fbab16aab0a8c8c43ef1ff1719537dc07e3c10e2040d5843a29
+- `.d.ts` diff against the previous blob: exactly the three new exports, nothing
+  removed or changed. Both trees updated byte-identical (wasm + glue + d.ts);
+  `snippets/` untouched, so the worker rayon patch (`wbgRayonBase` defined and
+  used) is preserved.
+- KNOWN, pre-existing: 21c7b17d (2026-08-29) shipped blob 980a08f0 built from
+  zcli 5650976 (frostd challenge signed over raw uuid bytes); merge 7a7c6f15
+  then restored this older c111a06 blob, so the frostd raw-uuid wasm fix is not
+  in the shipped wasm. This rebuild keeps that state; restoring it means
+  building from 5650976, which also brings the dc8b752 proving-fork bump.
+
 ## 2026-08-19 rebuild (2) - retain UNREDACTED ironwood pczt (compact-sign FVK fix)
 
 - source repo: zcli, branch `master`, rev `c111a06`
