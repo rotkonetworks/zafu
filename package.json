@@ -64,7 +64,7 @@
     "vitest": "~1.6.1"
   },
   "overrides": {
-    "@penumbrafi/registry": "^13.0.0",
+    "@penumbrafi/registry": "^13.2.0",
     "@bufbuild/protobuf": "^1.10.0",
     "@penumbra-zone/types": "npm:@rotko/penumbra-types@37.0.0",
     "@penumbra-zone/wasm": "npm:@rotko/penumbra-wasm@55.0.2",
@@ -73,7 +73,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@penumbra-labs/registry": "npm:@penumbrafi/registry@^13.0.0"
+      "@penumbra-labs/registry": "npm:@penumbrafi/registry@^13.2.0"
     },
     "peerDependencyRules": {
       "allowAny": [

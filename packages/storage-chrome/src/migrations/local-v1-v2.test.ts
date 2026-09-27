@@ -13,6 +13,21 @@ import * as Storage_V1 from '../versions/v1';
 import * as Storage_V2 from '../versions/v2';
 import local_v0_v1 from './local-v0-v1';
 import local_v1_v2 from './local-v1-v2';
+import { REGISTRY } from './util';
+/**
+ * The v0->v1 step keeps an endpoint or frontend the registry still lists and
+ * swaps an unlisted one for a listed one. These snapshots were taken when their
+ * values were listed; the registry has moved on since, so assert the rule, not
+ * a URL.
+ */
+const expectMigratedUrl = (got: unknown, original: string, listed: { url: string }[]) => {
+  const urls = listed.map(({ url }) => url);
+  if (urls.includes(original)) {
+    expect(got).toBe(original);
+  } else {
+    expect(urls).toContain(got);
+  }
+};
 
 const testPassword = 'test-password-12345';
 const testSeedPhrase =
@@ -305,10 +320,18 @@ describe('local-v1-v2 migration', () => {
       expect(passwordKeyPrint).toEqual(onboardV0PregenesisSnapshot.passwordKeyPrint.value);
 
       const grpcEndpoint = await v2ExtStorage.get('grpcEndpoint');
-      expect(grpcEndpoint).toBe(onboardV0PregenesisSnapshot.grpcEndpoint.value);
+      expectMigratedUrl(
+        grpcEndpoint,
+        onboardV0PregenesisSnapshot.grpcEndpoint.value,
+        REGISTRY.rpcs,
+      );
 
       const frontendUrl = await v2ExtStorage.get('frontendUrl');
-      expect(frontendUrl).toBe(onboardV0PregenesisSnapshot.frontendUrl.value);
+      expectMigratedUrl(
+        frontendUrl,
+        onboardV0PregenesisSnapshot.frontendUrl.value,
+        REGISTRY.frontends,
+      );
 
       const params = await v2ExtStorage.get('params');
       expect(params).toBe(onboardV0PregenesisSnapshot.params.value);
@@ -346,10 +369,18 @@ describe('local-v1-v2 migration', () => {
       expect(passwordKeyPrint).toEqual(onboardV0PostgenesisSnapshot.passwordKeyPrint.value);
 
       const grpcEndpoint = await v2ExtStorage.get('grpcEndpoint');
-      expect(grpcEndpoint).toBe(onboardV0PostgenesisSnapshot.grpcEndpoint.value);
+      expectMigratedUrl(
+        grpcEndpoint,
+        onboardV0PostgenesisSnapshot.grpcEndpoint.value,
+        REGISTRY.rpcs,
+      );
 
       const frontendUrl = await v2ExtStorage.get('frontendUrl');
-      expect(frontendUrl).toBe(onboardV0PostgenesisSnapshot.frontendUrl.value);
+      expectMigratedUrl(
+        frontendUrl,
+        onboardV0PostgenesisSnapshot.frontendUrl.value,
+        REGISTRY.frontends,
+      );
 
       const params = await v2ExtStorage.get('params');
       expect(params).toBe(onboardV0PostgenesisSnapshot.params.value);

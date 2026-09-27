@@ -207,13 +207,14 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
     gasPrice: '0.025uosmo',
     // standard cosmos: secp256k1, coin type 118 (keyAlgo/coinType left default),
     // so the shared cosmos adapter + coin-118 deriveChainAddress path handle it.
-    // Live pair (checked 2026-09-27, both clients Active): penumbra channel-19
-    // <-> osmosis channel-111092. channel-20 <-> 111093 is also live on the same
-    // connection; 19 is the lowest, which is what route discovery picks and
-    // what the penumbra asset registry should label. The old pairs (4/79703,
-    // 17/110473) have expired penumbra clients.
-    penumbraChannel: 'channel-111092', // osmosis -> penumbra
-    penumbraSourceChannel: 'channel-19', // penumbra -> osmosis
+    // Live pair (checked 2026-09-27, both clients Active): penumbra channel-20
+    // <-> osmosis channel-111093. channel-19 <-> 111092 is also live on the same
+    // connection, but the penumbra registry (penumbrafi 13.2.0) labels osmosis
+    // assets on channel-20, and a token's penumbra denom embeds its channel, so
+    // this pin must match it; route discovery keeps a live pin. The old pairs
+    // (4/79703, 17/110473) have expired penumbra clients.
+    penumbraChannel: 'channel-111093', // osmosis -> penumbra
+    penumbraSourceChannel: 'channel-20', // penumbra -> osmosis
   },
 };
 

@@ -37,8 +37,9 @@ describe('v1 old local schema migrations', () => {
   });
 
   test('works with all v1 local migrations together', async () => {
-    const grpcEndpointVal = 'https://grpc.penumbra.silentvalidator.com';
-    const frontendUrlVal = 'https://stake.with.starlingcyber.net';
+    // any endpoint the registry lists is kept as-is (unlisted ones get replaced)
+    const grpcEndpointVal = registryGlobals.rpcs[0]!.url;
+    const frontendUrlVal = registryGlobals.frontends[0]!.url;
     const passwordKeyPrintVal = { hash: 'xyz', salt: 'abc' };
     const fullSyncHeightVal = 13524524;
     const paramsVal = new AppParameters({ chainId: 'penumbra-1' }).toJsonString();
