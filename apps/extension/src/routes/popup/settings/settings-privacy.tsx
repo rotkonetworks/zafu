@@ -7,7 +7,10 @@ import { isPro } from '../../../state/license';
 import { SettingsScreen } from './settings-screen';
 import { ToggleSwitch } from '../../../components/toggle-switch';
 import { isIbcNetwork, type NetworkType } from '../../../state/keyring/network-types';
-import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../../../config/contact-discovery-relay';
+import {
+  DEFAULT_CONTACT_DISCOVERY_RELAY,
+  relayEndpointForStorage,
+} from '../../../config/contact-discovery-relay';
 
 interface PrivacyRow {
   key: keyof PrivacySettings;
@@ -171,7 +174,7 @@ function ProxySection() {
  * is a standalone section rather than a boolean privacy-slice row. Default OFF:
  * absent/false means `zafu_discover_contacts` refuses with `not_available`.
  */
-function ContactDiscoverySection() {
+export function ContactDiscoverySection() {
   const [saved, setSaved] = useState<{
     enabled: boolean;
     relayEndpoint: string;
@@ -200,9 +203,11 @@ function ContactDiscoverySection() {
   }
 
   const save = (enabled: boolean, relayEndpoint: string, relayToken: string): void => {
-    const next = { enabled, relayEndpoint: relayEndpoint.trim(), relayToken: relayToken.trim() };
+    // blank means "the built-in default" (see relayEndpointForStorage)
+    const stored = relayEndpointForStorage(relayEndpoint);
+    const next = { enabled, relayEndpoint: stored, relayToken: relayToken.trim() };
     setSaved(next);
-    setEndpoint(next.relayEndpoint);
+    setEndpoint(stored || DEFAULT_CONTACT_DISCOVERY_RELAY);
     setToken(next.relayToken);
     void localExtStorage.set('zidDiscovery', next);
   };

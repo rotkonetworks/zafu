@@ -18,3 +18,20 @@
  * into the void with the UI claiming otherwise.
  */
 export const DEFAULT_CONTACT_DISCOVERY_RELAY = 'https://zcash.rotko.net';
+
+/**
+ * What to persist when the user opts in. Blank is the stored spelling of "use
+ * the built-in default", so the default host must never be written down as if
+ * the user had chosen it: a pinned copy would outlive any later change to
+ * DEFAULT_CONTACT_DISCOVERY_RELAY (a moved or retired host) and would keep
+ * users pointing at it forever, with the UI claiming the wallet picked it.
+ *
+ * Settings pre-fills the input with the default precisely so that opting in is
+ * one click, which means "the user left the pre-filled value alone" and "the
+ * user typed this exact URL" are indistinguishable at save time - collapsing
+ * the default to blank is the only behaviour that is right for both.
+ */
+export function relayEndpointForStorage(endpoint: string): string {
+  const trimmed = endpoint.trim();
+  return trimmed === DEFAULT_CONTACT_DISCOVERY_RELAY ? '' : trimmed;
+}
