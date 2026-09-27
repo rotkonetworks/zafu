@@ -82,8 +82,8 @@ const getColorHex = (color: string): string => NETWORK_COLORS[color] ?? '#6B7280
 /** one-line "what is this network" copy, shown under each top-level toggle so
     a user can tell the pools apart without opening docs. */
 const NETWORK_DESCRIPTIONS: Record<string, string> = {
-  zcash: 'Ironwood + Orchard turnstile',
-  penumbra: 'shielded DeFi',
+  zcash: 'encrypted money',
+  penumbra: 'encrypted defi',
 };
 
 /**
