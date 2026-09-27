@@ -24,6 +24,10 @@ import { internalServiceListener } from './message/listen/internal-services';
 import { externalMessageListener } from './message/listen/external-easteregg';
 import { encryptionMessageListener } from './message/listen/external-encryption';
 import { contactDiscoveryListener } from './message/listen/contact-discovery';
+import {
+  contactDiscoveryRequestListener,
+  contactDiscoveryRequestResultListener,
+} from './message/listen/contact-discovery-request';
 import { internalZidListener } from './message/listen/internal-zid';
 import { zcashLinkListener } from './message/listen/zcash-link';
 import { keplrMessageListener } from './message/listen/keplr';
@@ -470,6 +474,11 @@ chrome.runtime.onMessageExternal.addListener(encryptionMessageListener);
 // A no-op unless the user opted in and configured a relay.
 chrome.runtime.onMessageExternal.addListener(contactDiscoveryListener);
 
+// listen for the contact-discovery CONSENT request
+// (zafu_request_contact_discovery): an app asks the user to turn the
+// wallet-wide feature on. Opens the consent popup.
+chrome.runtime.onMessageExternal.addListener(contactDiscoveryRequestListener);
+
 // bridge: popup → SW result messages are sent via INTERNAL chrome.runtime.sendMessage
 // (onMessage), but their handlers live in the external listeners (onMessageExternal).
 const INTERNAL_RESULT_TYPES = new Set([
@@ -485,6 +494,9 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
   }
   if (t === 'zafu_encryption_approval_result') {
     return encryptionMessageListener(req, sender, sendResponse);
+  }
+  if (t === 'zafu_contact_discovery_approval_result') {
+    return contactDiscoveryRequestResultListener(req, sender, sendResponse);
   }
   return false;
 });

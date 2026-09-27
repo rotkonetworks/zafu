@@ -9,9 +9,11 @@
  * relay transport, plus the fixed-cadence presence publisher the service
  * worker's alarm drives.
  *
- * Everything here is a STRICT NO-OP unless the user opted in AND configured a
- * relay AND the wallet is unlocked. A wallet that never opted in never reads a
- * contact, never derives a secret, and never opens a socket.
+ * Everything here is a STRICT NO-OP unless the user opted in AND the wallet is
+ * unlocked. A wallet that never opted in never reads a contact, never derives a
+ * secret, and never opens a socket. An opted-in wallet with no endpoint of its
+ * own talks to DEFAULT_CONTACT_DISCOVERY_RELAY — opting in IS the consent, so a
+ * blank endpoint field cannot leave the feature dead.
  */
 
 import { localExtStorage } from '@repo/storage-chrome/local';
@@ -32,6 +34,7 @@ import { readEncryptedWithMigration } from './encrypted-storage';
 import { currentIdentityName, deriveZidContactCardKey } from './identity';
 import type { Contact } from './contacts';
 import { buildPublishArgs, createContactRelay, discoverForScope } from './contact-discovery';
+import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../config/contact-discovery-relay';
 
 /** true when `endpoint` is an http(s) URL the relay transport can talk to.
  *  Anything else (unset, garbage) leaves the feature unconfigured. */
@@ -74,7 +77,11 @@ export const contactDiscoveryDeps: ContactDiscoveryDeps = {
     const stored = await localExtStorage.get('zidDiscovery');
     return {
       enabled: stored?.enabled === true,
-      relayEndpoint: (stored?.relayEndpoint ?? '').trim(),
+      // An opted-in wallet with no endpoint of its own uses the built-in
+      // relay: opting in is the consent, and a blank field must not leave the
+      // feature dead. Explicit endpoints still win.
+      relayEndpoint:
+        (stored?.relayEndpoint ?? '').trim() || DEFAULT_CONTACT_DISCOVERY_RELAY,
       relayToken: (stored?.relayToken ?? '').trim(),
     };
   },

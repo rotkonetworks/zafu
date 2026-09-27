@@ -110,6 +110,29 @@ const ENABLE_FROST_SIGN_ORCHARD = true;
 // pending pick requests: requestId → sendResponse callback
 const pendingPicks = new Map<string, (r: unknown) => void>();
 
+/**
+ * Register a pending popup callback keyed by `requestId`. Other external
+ * listeners that open an approval window (e.g. the contact-discovery consent
+ * request) share this registry so they inherit the SAME lifecycle: resolved by
+ * their internal result message, or - if the user closes the window without
+ * deciding - by the `chrome.windows.onRemoved` sweep below with the cancelled
+ * shape. Kept here rather than duplicated so the per-origin guard and the
+ * onRemoved cleanup stay a single implementation.
+ */
+export const registerPendingApproval = (requestId: string, cb: (r: unknown) => void): void => {
+  pendingPicks.set(requestId, cb);
+};
+
+/**
+ * Take (and remove) the pending callback for `requestId`, if any. The caller
+ * owns invoking it exactly once; used by an internal result listener.
+ */
+export const takePendingApproval = (requestId: string): ((r: unknown) => void) | undefined => {
+  const cb = pendingPicks.get(requestId);
+  pendingPicks.delete(requestId);
+  return cb;
+};
+
 // Origins that currently have an approval popup open. A second high-risk
 // request from the same origin is dropped while one is pending so a site
 // can't stack approval popups to fatigue the user into approving (gh #19).
@@ -157,7 +180,7 @@ chrome.windows?.onRemoved?.addListener(windowId => {
  * popup is already pending for the origin; true once the window has been
  * created. Released on window close via the onRemoved listener above.
  */
-async function openApprovalPopup(
+export async function openApprovalPopup(
   origin: string,
   url: string,
   size: { width: number; height: number },
@@ -1069,6 +1092,7 @@ export const externalMessageListener = (
         'zafu_decrypt',
         'zafu_zid_pubkey',
         'zafu_encryption_approval_result', // handled by external-encryption.ts
+        'zafu_request_contact_discovery', // handled by contact-discovery-request.ts
       ];
       if (typeof type === 'string' && delegatedTypes.includes(type)) {
         return false;

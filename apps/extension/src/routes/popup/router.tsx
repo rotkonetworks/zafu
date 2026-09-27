@@ -21,6 +21,9 @@ const SignApproval = lazy(() => import('./approval/sign').then(m => ({ default: 
 const CapabilityApproval = lazy(() =>
   import('./approval/capability').then(m => ({ default: m.CapabilityApproval })),
 );
+const ContactDiscoveryApproval = lazy(() =>
+  import('./approval/contact-discovery').then(m => ({ default: m.ContactDiscoveryApproval })),
+);
 
 // lazy load tab pages
 const StakePage = lazy(() => import('./stake').then(m => ({ default: m.StakePage })));
@@ -328,6 +331,14 @@ export const popupRoutes: RouteObject[] = [
             element: (
               <Suspense fallback={<LazyFallback />}>
                 <CapabilityApproval />
+              </Suspense>
+            ),
+          },
+          {
+            path: PopupPath.CONTACT_DISCOVERY_APPROVAL,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <ContactDiscoveryApproval />
               </Suspense>
             ),
           },

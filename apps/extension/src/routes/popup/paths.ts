@@ -54,6 +54,9 @@ export enum PopupPath {
   // Capability approval (opened by external apps via zafu_request_capability)
   CAPABILITY_APPROVAL = '/approval/capability',
 
+  // Contact-discovery consent (opened by external apps via zafu_request_contact_discovery)
+  CONTACT_DISCOVERY_APPROVAL = '/approval/contact-discovery',
+
   // Zcash multi-output send approval (opened by external apps via zafu_zcash_send)
   ZCASH_SEND_APPROVAL = '/approval/zcash-send',
   // Keplr provider approval (connect + cosmos signing, opened by cosmos dapps)

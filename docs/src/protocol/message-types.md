@@ -315,6 +315,62 @@ sufficient shares.
     payload: serialized FROST aggregate signature (binary)
     fragmentation: automatic if needed
 
+## dapp API - `zafu_request_contact_discovery`
+
+this section documents a message on the **dapp-facing `zafu_*` API** (the
+`chrome.runtime` external-message surface an SDK such as @zafu/zid talks to),
+NOT a shielded-memo type. it is recorded here alongside the other protocol
+surfaces because the two are frequently confused.
+
+`zafu_request_contact_discovery` lets a dapp ask the USER to turn on private
+contact discovery - the opt-in, app-scoped presence feature that
+`zafu_discover_contacts` serves. because that serving method refuses
+`not_available` while the feature is off, this request is how an app asks the
+user to enable it instead of sending them to a settings screen.
+
+### request
+
+    { "type": "zafu_request_contact_discovery" }
+
+the request carries NO relay endpoint and NO token. the wallet uses its own
+configured relay, falling back to its built-in default. an app can never point
+the wallet at a relay of the app's choosing, so it cannot observe or reroute
+the user's presence traffic.
+
+### response
+
+success (the feature is on - either already, or the user just accepted):
+
+    { "success": true, "enabled": true }
+
+nothing else is returned. in particular the wallet does NOT name its relay: the
+endpoint (often self-hosted, so a hostname identifying its owner) is shown to
+the USER in the consent popup, and an app has no use for it - it only asks the
+wallet to discover contacts.
+
+refusal (the standard `{ error, code }` shape):
+
+    { "error": "denied", "code": "denied" }        // bad sender or user declined
+    { "error": "cancelled", "cancelled": true }    // popup closed undecided
+    { "error": "contact discovery is not available", "code": "not_available" } // wallet locked
+
+### semantics
+
+- **wallet-wide.** accepting flips a GLOBAL setting, so ONE app's request turns
+  the feature on for EVERY app - the consent popup states this plainly.
+- **the app cannot choose the relay.** no endpoint or token crosses the wire;
+  the wallet's own configuration always wins.
+- **the relay is not disclosed.** the reply says only that discovery is on; the
+  user's relay setup stays private to the wallet.
+- **accepting preserves the user's relay.** a request never reroutes or clears
+  a configured endpoint/token; it only turns the feature on.
+- **deny is not remembered.** unlike a capability, a decline persists nothing,
+  so the app may ask again later.
+- **already enabled = no popup.** if the feature is on, the request resolves
+  success immediately and no popup is shown.
+- **cancelled is not a denial.** a popup the user closed without deciding
+  resolves `cancelled`; the caller MAY retry.
+
 ## references
 
 - [memo protocol](memo.md) - full protocol specification

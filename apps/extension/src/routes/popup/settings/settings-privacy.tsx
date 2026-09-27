@@ -7,6 +7,7 @@ import { isPro } from '../../../state/license';
 import { SettingsScreen } from './settings-screen';
 import { ToggleSwitch } from '../../../components/toggle-switch';
 import { isIbcNetwork, type NetworkType } from '../../../state/keyring/network-types';
+import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../../../config/contact-discovery-relay';
 
 interface PrivacyRow {
   key: keyof PrivacySettings;
@@ -187,7 +188,9 @@ function ContactDiscoverySection() {
         relayToken: v?.relayToken ?? '',
       };
       setSaved(next);
-      setEndpoint(next.relayEndpoint);
+      // show what the wallet will actually use, so "enable" is one click even
+      // for a user who never heard of a relay
+      setEndpoint(next.relayEndpoint || DEFAULT_CONTACT_DISCOVERY_RELAY);
       setToken(next.relayToken);
     });
   }, []);
@@ -213,7 +216,7 @@ function ContactDiscoverySection() {
           <p className='text-sm font-medium'>private contact discovery</p>
           <p className={`text-xs mt-0.5 ${saved.enabled ? 'text-fg-high' : 'text-fg-muted'}`}>
             {saved.enabled
-              ? `beaconing presence via ${saved.relayEndpoint}${saved.relayToken ? ' (with a token)' : ''}`
+              ? `beaconing presence via ${saved.relayEndpoint || DEFAULT_CONTACT_DISCOVERY_RELAY}${saved.relayToken ? ' (with a token)' : ''}`
               : 'off - apps cannot learn which of your contacts are online'}
           </p>
         </div>
@@ -235,7 +238,7 @@ function ContactDiscoverySection() {
           <input
             value={endpoint}
             onChange={e => setEndpoint(e.target.value)}
-            placeholder='https://relay.example'
+            placeholder={DEFAULT_CONTACT_DISCOVERY_RELAY}
             className='flex-1 rounded border border-border-soft bg-transparent px-2 py-1 text-xs font-mono'
           />
           <input

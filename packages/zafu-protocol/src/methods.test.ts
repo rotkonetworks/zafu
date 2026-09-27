@@ -54,6 +54,7 @@ describe('ZAFU_V1_METHODS', () => {
       'zafu_open_shield',
       'zafu_pick_contacts',
       'zafu_request_capability',
+      'zafu_request_contact_discovery',
       'zafu_sign',
       'zafu_zid_pubkey',
     ];
@@ -101,5 +102,46 @@ describe('zafu_discover_contacts wire shapes', () => {
       code: 'not_available',
     };
     expect(isZafuError(refusal)).toBe(true);
+  });
+});
+
+describe('zafu_request_contact_discovery wire shapes', () => {
+  it('the request carries exactly { type } - no endpoint, no token', () => {
+    const req: ZafuRequest<'zafu_request_contact_discovery'> = {
+      type: 'zafu_request_contact_discovery',
+    };
+    expect(JSON.parse(JSON.stringify(req))).toEqual({ type: 'zafu_request_contact_discovery' });
+  });
+
+  it('an accept is exactly { success, enabled } - the wallet never names its relay', () => {
+    // The user's relay (often self-hosted, so its hostname identifies them) is
+    // shown to the USER in the consent popup and is deliberately NOT disclosed
+    // to the caller. Exact-match, so adding a relay field back fails here.
+    const res: ZafuResponse<'zafu_request_contact_discovery'> = {
+      success: true,
+      enabled: true,
+    };
+    expect(JSON.parse(JSON.stringify(res))).toEqual({ success: true, enabled: true });
+    expect(isZafuError(res)).toBe(false);
+  });
+
+  it('refusals carry a code (denied / cancelled / not_available)', () => {
+    const denied: ZafuResponse<'zafu_request_contact_discovery'> = {
+      success: false,
+      error: 'denied',
+      code: 'denied',
+    };
+    const cancelled: ZafuResponse<'zafu_request_contact_discovery'> = {
+      success: false,
+      error: 'cancelled',
+      cancelled: true,
+    };
+    const unavailable: ZafuResponse<'zafu_request_contact_discovery'> = {
+      error: 'contact discovery is not available',
+      code: 'not_available',
+    };
+    expect(denied.code).toBe('denied');
+    expect(cancelled.cancelled).toBe(true);
+    expect(isZafuError(unavailable)).toBe(true);
   });
 });

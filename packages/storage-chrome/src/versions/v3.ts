@@ -282,6 +282,7 @@ type LOCAL = {
 
   zidDiscovery?: {
     enabled: boolean;
+    /** empty means DEFAULT_CONTACT_DISCOVERY_RELAY (config/contact-discovery-relay) */
     relayEndpoint: string;
     relayToken?: string;
   };

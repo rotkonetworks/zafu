@@ -21,16 +21,19 @@ import {
   ENCRYPTION_PUBLIC_METHODS,
   EASTEREGG_V1_METHODS,
   CONTACT_DISCOVERY_METHODS,
+  CONTACT_DISCOVERY_REQUEST_METHODS,
 } from './zafu-method-names';
 
 const encryptionPublicMethods = [...ENCRYPTION_PUBLIC_METHODS];
 const contactDiscoveryMethods = [...CONTACT_DISCOVERY_METHODS];
+const contactDiscoveryRequestMethods = [...CONTACT_DISCOVERY_REQUEST_METHODS];
 
 const walletHandledMethods = new Set<string>([
   ...encryptionPublicMethods,
   SIGN_REQUEST_TYPE,
   ...EASTEREGG_V1_METHODS,
   ...contactDiscoveryMethods,
+  ...contactDiscoveryRequestMethods,
 ]);
 
 describe('zafu_* wallet handlers vs @zafu/protocol v1', () => {
@@ -53,6 +56,7 @@ describe('zafu_* wallet handlers vs @zafu/protocol v1', () => {
       SIGN_REQUEST_TYPE,
       ...EASTEREGG_V1_METHODS,
       ...contactDiscoveryMethods,
+      ...contactDiscoveryRequestMethods,
     ];
     expect(all.length, 'a method is owned by more than one listener').toBe(new Set(all).size);
   });

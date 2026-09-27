@@ -40,3 +40,16 @@ export const EASTEREGG_V1_METHODS = [
  * alongside the others.
  */
 export const CONTACT_DISCOVERY_METHODS = ['zafu_discover_contacts'] as const;
+
+/**
+ * contact-discovery-request.ts - the CONSENT request: an app asks the USER to
+ * turn the (wallet-wide) feature on. Its own listener (unlike discovery it
+ * opens a popup), but still a public v1 method, so the contract test checks it
+ * alongside the others.
+ */
+export const CONTACT_DISCOVERY_REQUEST_METHODS = ['zafu_request_contact_discovery'] as const;
+
+/** contact-discovery-request.ts - internal popup->worker consent callback (not dapp-facing). */
+export const CONTACT_DISCOVERY_INTERNAL_METHODS = [
+  'zafu_contact_discovery_approval_result',
+] as const;

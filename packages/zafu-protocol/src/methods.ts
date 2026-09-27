@@ -283,6 +283,49 @@ export interface ZafuDiscoveredContact {
  */
 export type ZafuDiscoverContactsResponse = { contacts: ZafuDiscoveredContact[] } | ZafuError;
 
+/**
+ * Ask the USER to turn private contact discovery on, wallet-wide.
+ *
+ * The complement of `zafu_discover_contacts`: that method SERVES the feature
+ * and refuses `not_available` while it is off, so a dapp that needs presence
+ * ("show me which of my contacts are online") has a first-class way to ask the
+ * user to enable it rather than telling them to go hunt for a settings screen.
+ *
+ * Security and scope - the wire contract is deliberately narrow:
+ *   - the request carries NO relay endpoint and NO token. The wallet's own
+ *     configured relay is used, falling back to its built-in default. An app
+ *     can never point the wallet at a relay of the app's choosing, so it
+ *     cannot observe or reroute the user's presence traffic;
+ *   - the reply does not name the relay either. The USER sees the endpoint the
+ *     wallet will use in the consent popup, but a self-hosted relay's hostname
+ *     identifies its owner, and an app has no use for it: it only asks the
+ *     wallet to discover contacts. Nothing about the user's relay setup is
+ *     disclosed to the caller;
+ *   - accepting flips a GLOBAL setting, not a per-origin one: ONE app's
+ *     request turns the feature on for EVERY app. The consent popup says so
+ *     plainly, because the user is consenting on behalf of their whole wallet;
+ *   - accepting preserves any relay endpoint/token the user already configured
+ *     (a request never reroutes or clears it);
+ *   - the user may decline without consequence - a denial is NOT remembered
+ *     (unlike a capability), so the app can ask again later;
+ *   - if the feature is already on, the request resolves immediately and no
+ *     popup is shown.
+ *
+ * Refusals use the standard `{ error, code }` shape: `denied` (bad sender or
+ * the user declined), `cancelled` (the popup was closed undecided - the caller
+ * MAY retry), `not_available` (the wallet is locked).
+ */
+export interface ZafuRequestContactDiscoveryRequest {
+  type: 'zafu_request_contact_discovery';
+}
+export type ZafuRequestContactDiscoveryResponse =
+  | {
+      success: true;
+      /** the feature is now on wallet-wide; `zafu_discover_contacts` will serve it. */
+      enabled: true;
+    }
+  | (ZafuError & { success?: false; cancelled?: boolean });
+
 // -- cosmos fresh-address rotation (burner receive addresses) ---------------
 
 /**
@@ -381,6 +424,10 @@ export interface ZafuApi {
     request: ZafuDiscoverContactsRequest;
     response: ZafuDiscoverContactsResponse;
   };
+  zafu_request_contact_discovery: {
+    request: ZafuRequestContactDiscoveryRequest;
+    response: ZafuRequestContactDiscoveryResponse;
+  };
   zafu_get_fresh_chain_address: {
     request: ZafuGetFreshChainAddressRequest;
     response: ZafuGetFreshChainAddressResponse;
@@ -410,6 +457,7 @@ export const ZAFU_V1_METHODS = [
   'zafu_decrypt',
   'zafu_pick_contacts',
   'zafu_discover_contacts',
+  'zafu_request_contact_discovery',
   'zafu_get_fresh_chain_address',
   'zafu_open_shield',
 ] as const satisfies readonly ZafuMethod[];
