@@ -26,7 +26,10 @@ on:
 env:
   DO_NOT_TRACK: 1
   CRX3_VERSION: 1.1.3
-  # Chrome Web Store extension IDs (derived from each pubkey).
+  # Chrome Web Store listing ids as the dashboard shows them. These are *not*
+  # derived from the manifest `key` (that one fixes the id of an unpacked load:
+  # docs/publishing.md) - they address the store upload, so they must match the
+  # dashboard exactly or the upload 404s.
   CWS_PROD_ITEM_ID: oojfeopgoeapfgcfhmlpfgabcbhkglck
   CWS_BETA_ITEM_ID: ppgbkpjgpggkibdojjocgndbbhiempjf
 
