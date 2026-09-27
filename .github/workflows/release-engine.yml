@@ -193,8 +193,11 @@ jobs:
             # Rolling "beta": one release, always at the newest commit, assets
             # refreshed each push so continuous beta does not spam the releases
             # page. Move the tag with git first and let the release point at it:
-            # `gh release create --target` would have to create the tag itself,
-            # and `gh release edit --target` is not a reliable way to move one.
+            # the `gh release create --target` shape has to create the tag
+            # itself, and that answered `403 Resource not accessible by
+            # integration` with `contents: write` on the token while this shape
+            # publishes fine (2026-09-27). `gh release edit --target` is not a
+            # reliable way to move a tag either.
             git tag -f beta "$GITHUB_SHA"
             git push -f origin refs/tags/beta
             if gh release view beta >/dev/null 2>&1; then
