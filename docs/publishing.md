@@ -10,10 +10,10 @@ a tag.
 
 Two different IDs matter, and they are not the same number:
 
-| variant    | store listing (dashboard)          | CWS listing | unpacked `dist/` (manifest `key`)   |
-| ---------- | ---------------------------------- | ----------- | ----------------------------------- |
-| production | `oojfeopgoeapfgcfhmlpfgabcbhkglck` | zafu        | `bfdfeleokgpdladfmipfmffgpjfjibbe`  |
-| beta       | `ppgbkpjgpggkibdojjocgndbbhiempjf` | zafu BETA   | `bhlogefpcebekhjpomlodifcelldoimn`  |
+| variant    | store listing (dashboard)          | CWS listing | unpacked `dist/` (manifest `key`)  |
+| ---------- | ---------------------------------- | ----------- | ---------------------------------- |
+| production | `oojfeopgoeapfgcfhmlpfgabcbhkglck` | zafu        | `bfdfeleokgpdladfmipfmffgpjfjibbe` |
+| beta       | `ppgbkpjgpggkibdojjocgndbbhiempjf` | zafu BETA   | `bhlogefpcebekhjpomlodifcelldoimn` |
 
 - the **store listing** id is the one the dashboard shows, and the one the store
   upload is addressed by (`publishers/$PUB/items/$ITEM`). If it drifts, the
@@ -44,7 +44,7 @@ each build variant has its own RSA 2048 key pair, held as GitHub secrets:
 - `CRX_BETA_KEY` — signs the beta CRX
 
 the engine packs the build with the manifest `key` **stripped**, then signs the
-CRX with the secret, so the CRX it ships is identified by the *secret's* key
+CRX with the secret, so the CRX it ships is identified by the _secret's_ key
 pair. The `key` in the committed manifest only fixes the ID of an unpacked load,
 so the two agree only if the secret is the private half of the manifest's public
 key — worth checking when a signed CRX is meant to update a sideloaded install.
@@ -64,12 +64,12 @@ gpg --armor --export E468EC955CD56FF9
 
 ## required github secrets
 
-| secret               | description                                                     |
-| -------------------- | --------------------------------------------------------------- |
-| `CRX_PROD_KEY`       | RSA private key (PEM) for production CRX signing                 |
-| `CRX_BETA_KEY`       | RSA private key (PEM) for beta CRX signing                       |
-| `CWS_SA_JSON`        | Google Cloud service-account JSON key used to call the store API |
-| `CWS_PUBLISHER_ID`   | developer-dashboard publisher id (`publishers/$PUB/items/...`)   |
+| secret             | description                                                      |
+| ------------------ | ---------------------------------------------------------------- |
+| `CRX_PROD_KEY`     | RSA private key (PEM) for production CRX signing                 |
+| `CRX_BETA_KEY`     | RSA private key (PEM) for beta CRX signing                       |
+| `CWS_SA_JSON`      | Google Cloud service-account JSON key used to call the store API |
+| `CWS_PUBLISHER_ID` | developer-dashboard publisher id (`publishers/$PUB/items/...`)   |
 
 store uploads go through the Chrome Web Store API **v2**
 (`chromewebstore.googleapis.com`) with a service account, so there is no OAuth

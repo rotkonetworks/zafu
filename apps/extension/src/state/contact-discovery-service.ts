@@ -80,8 +80,7 @@ export const contactDiscoveryDeps: ContactDiscoveryDeps = {
       // An opted-in wallet with no endpoint of its own uses the built-in
       // relay: opting in is the consent, and a blank field must not leave the
       // feature dead. Explicit endpoints still win.
-      relayEndpoint:
-        (stored?.relayEndpoint ?? '').trim() || DEFAULT_CONTACT_DISCOVERY_RELAY,
+      relayEndpoint: (stored?.relayEndpoint ?? '').trim() || DEFAULT_CONTACT_DISCOVERY_RELAY,
       relayToken: (stored?.relayToken ?? '').trim(),
     };
   },

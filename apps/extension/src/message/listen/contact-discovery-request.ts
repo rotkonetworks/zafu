@@ -239,11 +239,7 @@ export const contactDiscoveryRequestResultListener = (
   sender: chrome.runtime.MessageSender,
   sendResponse: (r: unknown) => void,
 ): boolean => {
-  if (
-    typeof req !== 'object' ||
-    req === null ||
-    (req as { type?: unknown }).type !== RESULT_TYPE
-  ) {
+  if (typeof req !== 'object' || req === null || (req as { type?: unknown }).type !== RESULT_TYPE) {
     return false;
   }
   if (sender.id !== chrome.runtime.id) {

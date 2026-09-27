@@ -122,10 +122,7 @@ describe('zafu_request_contact_discovery - consent flow', () => {
 
   it('an already-enabled wallet resolves success without prompting', async () => {
     const prompt = vi.fn(async () => 'denied' as ConsentDecision);
-    const { deps } = makeDeps(
-      { prompt },
-      { enabled: true, relayEndpoint: 'https://mine.example' },
-    );
+    const { deps } = makeDeps({ prompt }, { enabled: true, relayEndpoint: 'https://mine.example' });
 
     const res = await call(deps, request, senderFor(APP));
 
@@ -174,7 +171,11 @@ describe('zafu_request_contact_discovery - real deps storage shape', () => {
   });
 
   it('enable() on an untouched wallet leaves the endpoint blank (default relay)', async () => {
-    await localExtStorage.set('zidDiscovery', { enabled: false, relayEndpoint: '', relayToken: '' });
+    await localExtStorage.set('zidDiscovery', {
+      enabled: false,
+      relayEndpoint: '',
+      relayToken: '',
+    });
 
     await contactDiscoveryRequestDeps.enable();
 
