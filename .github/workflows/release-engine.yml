@@ -204,6 +204,13 @@ jobs:
               # Refresh in place: nothing is deleted until its replacement is
               # uploaded, so a refused call cannot leave the repo with no beta.
               gh release upload beta $assets --clobber
+              # ... then drop assets from earlier builds, since --clobber only
+              # replaces same-named files and a beta build is ~150 MB.
+              gh release view beta --json assets --jq '.assets[].name' \
+                | grep -vE "^zafu-$CHAN-${VER}\.|^sha256sums\.txt$" \
+                | while read -r stale; do
+                    gh release delete-asset beta "$stale" --yes
+                  done
               gh release edit beta --title "beta ${VER}" --latest \
                 --notes "Rolling beta build. Follows main; version auto-stamped \`<base>.<run_number>\` per build."
             else
