@@ -17,7 +17,6 @@ import {
   buildMsgSend,
   buildMsgTransfer,
   calculateFee,
-  deriveChainAddress,
   deriveCosmosWallet,
   estimateGas,
   signAndBroadcast,
@@ -122,8 +121,10 @@ async function assertAddress(
 }
 
 function cosmosConduit(chainId: CosmosChainId): ChainConduit {
+  // derived on the chain's own path (its prefix picks the coin type), never a
+  // prefix-swap: a chain on another coin type (Kava) has different address bytes
   const deriveAddress = async (mnemonic: string, accountIndex: number) =>
-    deriveChainAddress((await deriveCosmosWallet(mnemonic, accountIndex)).address, chainId);
+    (await deriveCosmosWallet(mnemonic, accountIndex, COSMOS_CHAINS[chainId].bech32Prefix)).address;
   const feeFor = (kind: TxKind): TransparentFee => {
     const typeUrl =
       kind === 'ibc' ? '/ibc.applications.transfer.v1.MsgTransfer' : '/cosmos.bank.v1beta1.MsgSend';

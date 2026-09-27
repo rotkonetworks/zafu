@@ -14,7 +14,13 @@
 
 import { fromBech32 } from '@cosmjs/encoding';
 
-export type CosmosChainId = 'noble' | 'cosmoshub' | 'injective' | 'osmosis';
+import celestiaChain from 'chain-registry/mainnet/celestia/chain';
+import celestiaAssets from 'chain-registry/mainnet/celestia/asset-list';
+import kavaChain from 'chain-registry/mainnet/kava/chain';
+import kavaAssets from 'chain-registry/mainnet/kava/asset-list';
+import { chainFromRegistry } from './registry-chain';
+
+export type CosmosChainId = 'noble' | 'cosmoshub' | 'injective' | 'osmosis' | 'celestia' | 'kava';
 
 export interface CosmosChainConfig {
   id: CosmosChainId;
@@ -216,6 +222,19 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
     penumbraChannel: 'channel-111093', // osmosis -> penumbra
     penumbraSourceChannel: 'channel-20', // penumbra -> osmosis
   },
+  // From the cosmos chain registry (see registry-chain.ts). Channel pins are
+  // the ones the penumbrafi registry lists as verified end to end (deposit and
+  // withdraw); route discovery keeps them only while their client is Active.
+  celestia: chainFromRegistry('celestia', celestiaChain, celestiaAssets, {
+    penumbraChannel: 'channel-701', // celestia -> penumbra
+    penumbraSourceChannel: 'channel-23', // penumbra -> celestia
+  }),
+  // coin type 459 (the registry's slip44, and Keplr's default for Kava), so
+  // its address is derived on its own path, never prefix-swapped from 118
+  kava: chainFromRegistry('kava', kavaChain, kavaAssets, {
+    penumbraChannel: 'channel-162', // kava -> penumbra
+    penumbraSourceChannel: 'channel-21', // penumbra -> kava
+  }),
 };
 
 /** get chain config by id */

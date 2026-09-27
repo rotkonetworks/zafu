@@ -52,6 +52,31 @@ describe('transparent conduit', () => {
     expect(await c.deriveAddress(MNEMONIC, 2)).toBe(expected);
   });
 
+  it('derives kava on its own coin-459 path, not a prefix-swap of 118', async () => {
+    const { Secp256k1HdWallet } = await import('@cosmjs/amino');
+    const { stringToPath } = await import('@cosmjs/crypto');
+    const on459 = await Secp256k1HdWallet.fromMnemonic(MNEMONIC, {
+      prefix: 'kava',
+      hdPaths: [stringToPath("m/44'/459'/0'/0/1")],
+    });
+    const [expected] = await on459.getAccounts();
+    const c = conduitFor('kava');
+    const got = await c.deriveAddress(MNEMONIC, 1);
+    expect(got).toBe(expected!.address);
+    // the 118 key under a kava prefix is a different, unowned address
+    const on118 = (await cosmosSigner.deriveCosmosWallet(MNEMONIC, 1, 'osmo')).address;
+    expect(got).not.toBe(
+      cosmosSigner.deriveChainAddress(on118, 'cosmoshub').replace(/^cosmos/, 'kava'),
+    );
+  });
+
+  it('refuses to prefix-swap into kava', async () => {
+    const osmo = (await cosmosSigner.deriveCosmosWallet(MNEMONIC, 0, 'osmo')).address;
+    expect(() => cosmosSigner.deriveChainAddress(osmo, 'kava')).toThrow(/coin type 459/);
+    expect(cosmosSigner.deriveAllChainAddresses(osmo).kava).toBeUndefined();
+    expect(cosmosSigner.deriveAllChainAddresses(osmo).celestia).toMatch(/^celestia1/);
+  });
+
   it('never touches the coin-118 helpers for injective', async () => {
     vi.mocked(cosmosSigner.deriveCosmosWallet).mockClear();
     vi.mocked(cosmosSigner.deriveChainAddress).mockClear();
