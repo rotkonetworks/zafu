@@ -40,6 +40,12 @@ jobs:
 
   publish:
     needs: version
+    # A reusable workflow can only use permissions its caller grants, and an
+    # absent block here resolves to the repo-wide default - which is what
+    # stripped `gh release create` of write access on 2026-09-27. Say it out
+    # loud so the write never depends on that setting again.
+    permissions:
+      contents: write
     uses: ./.github/workflows/release-engine.yml
     with:
       channel: beta-only

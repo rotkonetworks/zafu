@@ -55,6 +55,10 @@ jobs:
 
   publish:
     needs: version
+    # Same reason as beta.yml: the callee can only use what the caller grants,
+    # so the `gh release create` at the end of the engine needs this explicit.
+    permissions:
+      contents: write
     uses: ./.github/workflows/release-engine.yml
     with:
       channel: prod-only
