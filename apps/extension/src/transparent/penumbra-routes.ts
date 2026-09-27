@@ -20,6 +20,7 @@ import {
 } from '@repo/wallet/networks/cosmos/penumbra-routes';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { resolvePenumbraEndpoint } from '../config/penumbra-endpoints';
+import { refreshRegistryAssets } from './assets';
 
 const KEY = 'penumbraRoutes';
 const MAX_AGE_MS = 60 * 60 * 1000;
@@ -89,12 +90,16 @@ export const routeForChain = (
   return selectPenumbraRoute(routes, cfg.chainId, cfg.penumbraSourceChannel);
 };
 
-/** react hook: discovered routes (undefined until the first discovery lands) */
+/**
+ * react hook: discovered routes (undefined until the first discovery lands).
+ * Also waits for the live asset registry, so the re-render this triggers shows
+ * the current labels for whatever the routes carry.
+ */
 export const usePenumbraRoutes = (): PenumbraRoute[] | undefined => {
   const [routes, setRoutes] = useState<PenumbraRoute[]>();
   useEffect(() => {
     let alive = true;
-    void getPenumbraRoutes().then(r => {
+    void Promise.all([getPenumbraRoutes(), refreshRegistryAssets()]).then(([r]) => {
       if (alive) {
         setRoutes(r);
       }

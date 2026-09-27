@@ -4,8 +4,11 @@
  *
  * "Shieldable" = the asset has come over the chain's Penumbra channel: the
  * Penumbra registry lists it as `transfer/<penumbra-side channel>/<denom>`.
- * Read from the registry BUNDLED in the extension - no network call. The
- * chain's own native and gas assets are known from its config.
+ * Read from the penumbrafi registry: the copy bundled in the extension at
+ * first, swapped for the live one (github main, the same file withdraw already
+ * reads) once `refreshRegistryAssets` has fetched it, so a registry merge
+ * relabels assets without a zafu release. The chain's own native and gas
+ * assets are known from its config.
  */
 
 import { ChainRegistryClient } from '@penumbrafi/registry';
@@ -26,6 +29,25 @@ export interface HeldAsset extends TransparentAsset {
 
 const registryCache = new Map<string, Map<string, TransparentAsset>>();
 
+type Registry = ReturnType<ChainRegistryClient['bundled']['get']>;
+let liveRegistry: Registry | undefined;
+let refreshing: Promise<void> | undefined;
+
+/**
+ * Fetch the live penumbra registry once per session (bundled copy if it can't
+ * be reached). Resolves when later `knownAssets` calls will see it.
+ */
+export const refreshRegistryAssets = (): Promise<void> =>
+  (refreshing ??= new ChainRegistryClient().remote
+    .getWithBundledBackup('penumbra-1')
+    .then(r => {
+      liveRegistry = r;
+      registryCache.clear();
+    })
+    .catch(err => {
+      console.warn('[transparent] live registry unavailable, using the bundled one', err);
+    }));
+
 /** assets Penumbra accepts over `penumbraChannel` (penumbra side), by lower-cased denom */
 function registryAssets(penumbraChannel: string): Map<string, TransparentAsset> {
   const cached = registryCache.get(penumbraChannel);
@@ -35,7 +57,7 @@ function registryAssets(penumbraChannel: string): Map<string, TransparentAsset> 
   const out = new Map<string, TransparentAsset>();
   try {
     const prefix = `transfer/${penumbraChannel}/`;
-    const registry = new ChainRegistryClient().bundled.get('penumbra-1');
+    const registry = liveRegistry ?? new ChainRegistryClient().bundled.get('penumbra-1');
     for (const m of registry.getAllAssets()) {
       if (!m.base.startsWith(prefix)) {
         continue;
