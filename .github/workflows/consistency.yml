@@ -1,0 +1,22 @@
+name: Consistency
+
+# The app version lives in three files that must never drift, and every release
+# must be recorded in the root CHANGELOG.md. Both are easy to forget in a PR, so
+# this gate fails fast and names the exact fix. The check is zero-dependency, so
+# there is no install step.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  consistency:
+    name: consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/check-release-consistency.mjs

@@ -15,6 +15,7 @@ dist/
 dist
 beta-dist
 dist-ssr
+docs/book/
 *.local
 apps/extension/public/wasm-parallel
 

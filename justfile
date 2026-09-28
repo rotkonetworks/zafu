@@ -13,3 +13,7 @@ build:
 # run tests
 test:
   pnpm turbo test
+
+# build the documentation book (output in docs/book, which is not committed)
+docs:
+  mdbook build docs
