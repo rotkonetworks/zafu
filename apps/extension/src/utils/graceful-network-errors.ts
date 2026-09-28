@@ -13,7 +13,24 @@
  * spam via `preventDefault()`. Every other rejection is left completely
  * untouched, so genuine bugs still surface loudly. Scope it narrowly on
  * purpose - a catch-all that swallows everything would hide real problems.
+ *
+ * It also handles the one non-transient case worth surfacing: an extension
+ * reload/auto-update that orphaned this document mid-flight. Every call then
+ * throws "Extension context invalidated" and the wallet is silently dead, so
+ * instead of a connect-error storm the user gets a reload notice (see
+ * `./reload-notice`).
  */
+
+import { isContextInvalidated, noteContextInvalidated } from './reload-notice';
+
+/** Extension reloaded/updated under a live page: notice once, stop the storm. */
+const handleContextLoss = (reason: unknown): boolean => {
+  if (!isContextInvalidated(reason)) {
+    return false;
+  }
+  noteContextInvalidated();
+  return true;
+};
 
 const messageOf = (reason: unknown): string => {
   if (reason instanceof Error) {
@@ -83,7 +100,9 @@ export const installGracefulNetworkErrorHandler = (): void => {
   };
   scope.addEventListener?.('unhandledrejection', (event: unknown) => {
     const e = event as RejectionEventLike;
-    if (isBenignBackgroundError(e.reason)) {
+    if (handleContextLoss(e.reason)) {
+      e.preventDefault();
+    } else if (isBenignBackgroundError(e.reason)) {
       console.debug('[net] benign background failure, ignored:', messageOf(e.reason));
       e.preventDefault();
     }
@@ -91,7 +110,9 @@ export const installGracefulNetworkErrorHandler = (): void => {
   scope.addEventListener?.('error', (event: unknown) => {
     const e = event as ErrorEventLike;
     const reason = e.error ?? e.message;
-    if (isBenignBackgroundError(reason)) {
+    if (handleContextLoss(reason)) {
+      e.preventDefault();
+    } else if (isBenignBackgroundError(reason)) {
       console.debug('[net] benign reported error, ignored:', messageOf(reason));
       e.preventDefault();
     }

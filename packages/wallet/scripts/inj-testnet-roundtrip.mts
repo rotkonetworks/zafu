@@ -11,7 +11,8 @@
  * little mainnet INJ (~0.005 INJ covers the fee).
  * Run 2: signs a self-send with our eth_secp256k1 signer and broadcasts to the
  * live Injective node. code === 0 means the node ACCEPTED the signature - the
- * gate passes and the Injective ramp can be enabled (flip launched:true).
+ * gate passed and the Injective ramp was enabled (NETWORKS.injective
+ * launched:true).
  *
  *   cd packages/wallet && npx tsx scripts/inj-testnet-roundtrip.mts
  *

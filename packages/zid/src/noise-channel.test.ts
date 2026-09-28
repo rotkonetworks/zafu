@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { x25519 } from '@noble/curves/ed25519';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { x25519, ed25519 } from '@noble/curves/ed25519';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 import {
   initiatorHandshake,
@@ -8,9 +8,16 @@ import {
   decryptTransport,
   ctEqual,
   isNoiseHandshakeFailure,
+  isNoiseTransportError,
+  isNoiseHandshakeTimeoutError,
+  encodeProtocolRefusal,
+  createNoiseChannel,
   REKEY_EVERY,
+  HANDSHAKE_TIMEOUT_MS,
   type CipherState,
+  type SessionKey,
 } from './noise-channel';
+import { openChannel } from './channel-select';
 
 /** an x25519 static keypair (the handshake works on x25519 keys directly). */
 function staticKeypair() {
@@ -27,6 +34,70 @@ function handshake() {
   const initCS = hs.finish(resp.message);
   return { alice, bob, init: hs, initCS, resp };
 }
+
+/** a real ed25519 session (createNoiseChannel derives its x25519 static from it). */
+function edSession() {
+  const seed = randomBytes(32);
+  const pub = ed25519.getPublicKey(seed);
+  const pubkey = bytesToHex(pub);
+  return {
+    pubkey,
+    xPub: ed25519.utils.toMontgomery(pub),
+    xPriv: ed25519.utils.toMontgomerySecret(seed),
+    session: { pubkey, privkey: seed, sign: async () => '00' } satisfies SessionKey,
+  };
+}
+
+/** two ed25519 sessions ordered so `lower.pubkey < higher.pubkey` (lower is initiator). */
+function orderedPair() {
+  const a = edSession();
+  const b = edSession();
+  return a.pubkey < b.pubkey ? { lower: a, higher: b } : { lower: b, higher: a };
+}
+
+/** minimal in-process WebSocket double: a test drives open/message/close itself. */
+class FakeWebSocket {
+  static last: FakeWebSocket | null = null;
+  binaryType = 'blob';
+  closed = false;
+  onopen: (() => void) | null = null;
+  onmessage: ((ev: { data: unknown }) => void) | null = null;
+  onerror: (() => void) | null = null;
+  onclose: (() => void) | null = null;
+  readonly sent: Array<string | Uint8Array> = [];
+
+  constructor(readonly url: string) {
+    FakeWebSocket.last = this;
+  }
+  send(data: string | Uint8Array): void {
+    this.sent.push(data);
+  }
+  close(): void {
+    this.closed = true;
+  }
+  open(): void {
+    this.onopen?.();
+  }
+  /** deliver a binary frame to this side's handler. */
+  emit(data: Uint8Array): void {
+    this.onmessage?.({ data });
+  }
+  /** the binary frames this side sent (skips the JSON announce). */
+  binarySent(): Uint8Array[] {
+    return this.sent.filter((d): d is Uint8Array => typeof d !== 'string');
+  }
+}
+
+/**
+ * createNoiseChannel's runtime channel ALSO emits 'error' (the typed fatal
+ * transport error); ZidChannel's type only names the 'message' event.
+ */
+interface NoiseErrorChannel {
+  on(event: 'error', handler: (e: Error) => void): void;
+}
+
+/** the stable `name` of a thrown value ('' for a non-Error). */
+const errorName = (e: unknown): string => (e instanceof Error ? e.name : '');
 
 describe('hybrid PQ Noise IK handshake (X25519 + ML-KEM-768)', () => {
   it('both sides derive matching transport keys', () => {
@@ -134,7 +205,7 @@ describe('hybrid PQ Noise IK handshake (X25519 + ML-KEM-768)', () => {
   });
 });
 
-describe('handshake failure tagging (what channel:auto may downgrade on)', () => {
+describe('downgrade eligibility (what channel:auto may fall back on)', () => {
   /** run `fn` and return whatever it threw (so the tag can be inspected). */
   const thrown = (fn: () => unknown): unknown => {
     try {
@@ -145,27 +216,29 @@ describe('handshake failure tagging (what channel:auto may downgrade on)', () =>
     }
   };
 
-  it('tags a wrong protocol name as a handshake failure', () => {
+  it('a wrong-tag frame is MALFORMED, not a downgrade signal', () => {
     const alice = staticKeypair();
     const bob = staticKeypair();
     const hs = initiatorHandshake(alice.priv, alice.pub, bob.pub);
     const notAResp = new Uint8Array(2000);
     notAResp[0] = 0xff;
 
-    expect(isNoiseHandshakeFailure(thrown(() => hs.finish(notAResp)))).toBe(true);
+    const caught = thrown(() => hs.finish(notAResp));
+    expect(errorName(caught)).toBe('NoiseMalformedMessageError');
+    expect(isNoiseHandshakeFailure(caught)).toBe(false);
   });
 
-  it('tags a truncated init message as a handshake failure', () => {
+  it('a truncated init message is MALFORMED, not a downgrade signal', () => {
     const bob = staticKeypair();
     const short = new Uint8Array(100);
     short[0] = 0x01;
 
-    expect(
-      isNoiseHandshakeFailure(thrown(() => responderHandshake(bob.priv, bob.pub, short))),
-    ).toBe(true);
+    const caught = thrown(() => responderHandshake(bob.priv, bob.pub, short));
+    expect(errorName(caught)).toBe('NoiseMalformedMessageError');
+    expect(isNoiseHandshakeFailure(caught)).toBe(false);
   });
 
-  it('tags an AEAD failure inside the handshake as a handshake failure', () => {
+  it('an AEAD failure inside the handshake is MALFORMED, not a downgrade signal', () => {
     const alice = staticKeypair();
     const bob = staticKeypair();
     const hs = initiatorHandshake(alice.priv, alice.pub, bob.pub);
@@ -174,7 +247,9 @@ describe('handshake failure tagging (what channel:auto may downgrade on)', () =>
     const idx = 1 + 32 + 1088; // inside the encrypted response payload
     tampered[idx] = (tampered[idx] ?? 0) ^ 0xff;
 
-    expect(isNoiseHandshakeFailure(thrown(() => hs.finish(tampered)))).toBe(true);
+    const caught = thrown(() => hs.finish(tampered));
+    expect(errorName(caught)).toBe('NoiseMalformedMessageError');
+    expect(isNoiseHandshakeFailure(caught)).toBe(false);
   });
 
   it('does NOT tag a transport-layer failure - auto must never downgrade for one', () => {
@@ -187,6 +262,162 @@ describe('handshake failure tagging (what channel:auto may downgrade on)', () =>
     const caught = thrown(() => decryptTransport(cs, notTransport));
     expect(caught).toBeInstanceOf(Error);
     expect(isNoiseHandshakeFailure(caught)).toBe(false);
+  });
+});
+
+describe('transport counter failures are fatal, never silently swallowed (A)', () => {
+  /** run `fn` and return whatever it threw. */
+  const thrown = (fn: () => unknown): unknown => {
+    try {
+      fn();
+      return null;
+    } catch (e) {
+      return e;
+    }
+  };
+
+  it('a replayed or dropped counter is a typed NoiseTransportError', () => {
+    const k = randomBytes(32);
+    const send: CipherState = { k: k.slice(), n: 0n };
+    const recv: CipherState = { k: k.slice(), n: 0n };
+    const first = encryptTransport(send, new TextEncoder().encode('one'));
+    expect(new TextDecoder().decode(decryptTransport(recv, first))).toBe('one');
+
+    // the relay replays the first frame: the implicit nonce can never resync.
+    const replayed = thrown(() => decryptTransport(recv, first));
+    expect(isNoiseTransportError(replayed)).toBe(true);
+    expect(isNoiseHandshakeFailure(replayed)).toBe(false);
+
+    // a dropped frame (the sender advanced, the receiver did not) is the same class.
+    encryptTransport(send, new Uint8Array(1)); // sender n=1: never delivered
+    const dropped = thrown(() => decryptTransport(recv, encryptTransport(send, new Uint8Array(1))));
+    expect(isNoiseTransportError(dropped)).toBe(true);
+
+    // ...and the failure is reported every time - never swallowed into a wedge.
+    expect(isNoiseTransportError(thrown(() => decryptTransport(recv, first)))).toBe(true);
+  });
+
+  it('the socket handler closes the channel and hands the caller a typed error', async () => {
+    const { lower, higher } = orderedPair();
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+    const errors: Error[] = [];
+    const seen: string[] = [];
+
+    const pending = createNoiseChannel(lower.session, higher.pubkey, 'ws://fake');
+    const fake = FakeWebSocket.last!;
+    fake.open(); // initiator sends its noise_init
+
+    const initMsg = fake.binarySent()[0]!;
+    const resp = responderHandshake(higher.xPriv, higher.xPub, initMsg);
+    fake.emit(resp.message);
+
+    const channel = await pending;
+    channel.on('message', d => seen.push(new TextDecoder().decode(d)));
+    // ZidChannel's type only names 'message'; the noise channel also emits 'error'.
+    const errorCapable = channel as unknown as NoiseErrorChannel;
+    errorCapable.on('error', e => errors.push(e));
+
+    // a legitimate frame is delivered...
+    const frame = encryptTransport(resp.sendCS, new TextEncoder().encode('hello'));
+    fake.emit(frame);
+    expect(seen).toEqual(['hello']);
+
+    // ...then the relay replays it: fatal, surfaced, socket closed.
+    fake.emit(frame);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.name).toBe('NoiseTransportError');
+    expect(fake.closed).toBe(true);
+
+    // and the dead channel delivers nothing further (no silent half-life).
+    fake.emit(encryptTransport(resp.sendCS, new TextEncoder().encode('later')));
+    expect(seen).toEqual(['hello']);
+  });
+});
+
+describe('bounded handshake deadline (B)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('openChannel rejects within a bounded time against a socket that never answers', async () => {
+    vi.useFakeTimers();
+    const { lower, higher } = orderedPair();
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+
+    const pending = openChannel(lower.session, higher.pubkey, 'ws://fake');
+    const fake = FakeWebSocket.last!;
+    const caughtPromise = pending.then(
+      () => null,
+      (e: unknown) => e,
+    );
+    fake.open(); // sends the init and then waits forever
+
+    await vi.advanceTimersByTimeAsync(HANDSHAKE_TIMEOUT_MS + 1);
+
+    const caught = await caughtPromise;
+    expect(caught).toMatchObject({ name: 'NoiseHandshakeTimeoutError' });
+    expect(isNoiseHandshakeTimeoutError(caught)).toBe(true);
+    // a deadline is a TRANSPORT failure - auto must never downgrade for it.
+    expect(isNoiseHandshakeFailure(caught)).toBe(false);
+    expect(fake.closed).toBe(true);
+  });
+});
+
+describe('channel:auto downgrades only on a genuine capability signal (C)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('a truncated/garbage responder frame does NOT produce a classical channel', async () => {
+    const { lower, higher } = orderedPair();
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+
+    const pending = openChannel(lower.session, higher.pubkey, 'ws://fake', 'auto');
+    const fake = FakeWebSocket.last!;
+    fake.open(); // sends noise_init
+    // the relay answers with bytes that are not a valid hybrid resp.
+    fake.emit(new Uint8Array([0x02, 0x00, 0x01, 0x02, 0x03, 0x04]));
+
+    const caught = await pending.then(
+      () => null,
+      (e: unknown) => e,
+    );
+    // a downgrade would have RESOLVED with a classical channel; we must reject.
+    expect(caught).toBeInstanceOf(Error);
+    expect(errorName(caught)).toBe('NoiseMalformedMessageError');
+    expect(isNoiseHandshakeFailure(caught)).toBe(false);
+  });
+
+  it('a malformed refusal frame is NOT a downgrade signal either', async () => {
+    const { lower, higher } = orderedPair();
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+
+    const pending = openChannel(lower.session, higher.pubkey, 'ws://fake', 'auto');
+    const fake = FakeWebSocket.last!;
+    fake.open();
+    // claims a 64-byte protocol name but carries 3 bytes -> malformed.
+    fake.emit(new Uint8Array([0x04, 0x00, 0x40, 0x41, 0x42, 0x43]));
+
+    const caught = await pending.then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(errorName(caught)).toBe('NoiseMalformedMessageError');
+    expect(isNoiseHandshakeFailure(caught)).toBe(false);
+  });
+
+  it('a well-formed unknown-protocol refusal still downgrades to classical', async () => {
+    const { lower, higher } = orderedPair();
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+
+    const pending = openChannel(lower.session, higher.pubkey, 'ws://fake', 'auto');
+    const fake = FakeWebSocket.last!;
+    fake.open();
+    fake.emit(encodeProtocolRefusal('zafuNoise_IK25519_AESGCM_SHA256'));
+
+    const channel = await pending;
+    expect(channel.kind).toBe('classical'); // the caller can SEE the downgrade
   });
 });
 

@@ -55,7 +55,7 @@ import { rescanStartHeight } from '../../../utils/zcash-blocks';
 import { classifyPenumbraTx, type PenumbraTxType } from '../../../utils/penumbra-tx-classify';
 import { IronwoodMigrationBanner, IronwoodMigrate } from '../send/ironwood-migrate';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
-import { getRootNetwork, getNetwork } from '../../../config/networks';
+import { getRootNetwork, getNetwork, hasFeature } from '../../../config/networks';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { viewClient, sctClient } from '../../../clients';
 import { getDisplayDenomFromView } from '@penumbra-zone/getters/value-view';
@@ -457,8 +457,8 @@ export const PopupIndex = () => {
         {/* transactions in flight / just finished, any network */}
         <InFlightCard />
 
-        {/* multisig portfolio overview (zcash only, when multisigs exist) */}
-        {activeNetwork === 'zcash' && <MultisigOverview />}
+        {/* multisig portfolio overview (when the network supports multisig) */}
+        {hasFeature(activeNetwork, 'multisig') && <MultisigOverview />}
 
         {/* network-specific content - lazy loaded with skeleton */}
         <Suspense fallback={<AssetListSkeleton rows={4} />}>

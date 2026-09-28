@@ -11,7 +11,9 @@
  * Layout, per window (one presence epoch = 5 minutes, so the relay's retention
  * sweep and this room's clock agree by construction):
  *
- *   one coordinate  (appScope, epoch, channelShard)
+ *   one coordinate  (appScope, epoch, shard) - the shard comes from the channel
+ *                   name for a public room and from the room secret for a sealed
+ *                   one, which is the default (see `RoomConfig.public`)
  *   one entry per message   tag = HKDF(roomSecret, 'veil-room-tag-v1', epoch, random nonce)
  *   one entry per member    tag = HKDF(roomSecret, 'veil-room-tag-v1', epoch, author)
  *
@@ -44,6 +46,11 @@
  *
  * What it does NOT guarantee, stated plainly:
  *
+ *   - No secrecy between members. A direct message is sealed under a key derived
+ *     from the room secret and the recipient's pubkey, so any holder of the room
+ *     secret can derive that key and read the message. The DM lane hides who is
+ *     talking to whom from the relay, and keeps non-members out; it is NOT a
+ *     member-to-member secret. See docs/design/zirc-shared-secret-mailbox.md.
  *   - No forward secrecy beyond the window: the room secret is long-lived. A
  *     member who leaks it can read this window and every window its writers
  *     derive from it, and the derivation is a KDF, not a ratchet with compromise
@@ -58,6 +65,12 @@
  *   - No moderation. Everything signed is kept; hiding, ops and votes live a
  *     layer up (see `@zafu/zirc`), where a decision is a signed record rather
  *     than a deletion.
+ *   - No hiding of the coordinate from the relay serving it. The relay is
+ *     addressed by the shard on every read and write, so it sees which board a
+ *     client uses and can refuse to serve it. What a sealed room (the default)
+ *     buys is that the shard is derived from the secret, not from a name, so
+ *     nobody can *enumerate* boards by guessing channel names - see
+ *     `roomShardFromSecret`.
  */
 
 import { concat, lpText, PresenceEntry, presenceEpoch, RelayTransport, u32be } from '@zafu/zid';
@@ -78,8 +91,21 @@ import { concat, lpText, PresenceEntry, presenceEpoch, RelayTransport, u32be } f
  */
 export const ROOM_VERSION = 0x02;
 
+/**
+ * Record version for the unsealed lane: 0x02 plus the window the record was
+ * written in.
+ *
+ * A sealed record's window is bound by the AEAD's AAD, so a relay cannot serve
+ * last window's ciphertext as this window's. An unsealed record has no AAD, and
+ * the author's `ts` is their own clock's claim, not the window - so without this
+ * field nothing binds a plain line, or a plain presence record, to a window and
+ * a relay could replay one as current. A plain record therefore carries its
+ * window inside the signed bytes, and a reader refuses one that does not.
+ */
+const ROOM_PLAIN_VERSION = 0x03;
+
 /** versions a reader will open, newest first. */
-const ROOM_READ_VERSIONS: readonly number[] = [0x02, 0x01];
+const ROOM_READ_VERSIONS: readonly number[] = [0x03, 0x02, 0x01];
 
 /** the first version that carries a recipient field. */
 const RECIPIENT_FIELD_VERSION = 0x02;
@@ -123,6 +149,7 @@ const LABEL_MSG_KEY = 'veil-room-msg-v1';
 const LABEL_PRESENCE_KEY = 'veil-room-presence-v1';
 const LABEL_DM_KEY = 'veil-room-dm-v1';
 const LABEL_SHARD = 'veil-room-shard-v1';
+const LABEL_KEY_SHARD = 'veil-room-key-shard-v1';
 
 /** kinds of entry that share a window. */
 export type RoomKind = 'msg' | 'presence' | 'action' | 'dm';
@@ -144,6 +171,14 @@ export const INVITE_PREFIX = 'zroom2:';
  * `zroom1:` code joins the default channel.
  */
 export const LEGACY_INVITE_PREFIX = 'zroom1:';
+
+/**
+ * The field that marks a public room in an encoded invite. It is one character,
+ * and `b64url` of any non-empty field is at least two, so it can never be
+ * confused with an endpoint or a token: the marker is unambiguous exactly where
+ * the optional fields are positional.
+ */
+const PUBLIC_FIELD = 'p';
 
 // ---------------------------------------------------------------------------
 // dependency surface: an identity, and a relay
@@ -183,8 +218,37 @@ export interface RoomConfig {
    * pre-provisioned coordinates is addressed.
    */
   shard?: string;
+  /**
+   * Address the board by the channel NAME instead of by the room secret - a
+   * public room, findable by anyone who can guess the name.
+   *
+   * That is what a visitor holding no invite needs: type `#penumbra`, land on
+   * the board, read the unsealed entries. It is also what lets anyone else do
+   * the same, which is the price - the relay can hash its guess list and see
+   * that this room exists, censor it by name, and watch when it is active, and
+   * every room that picks the same name shares one board. Only opt in when
+   * being findable is the point.
+   *
+   * Omitted (the default) means sealed: the coordinate is derived from
+   * `roomSecret`, so it cannot be enumerated by name or attributed to a
+   * community. The trade is real and worth stating: with no name coordinate
+   * there is nothing for a keyless visitor to find, so a sealed room has no
+   * public lane - and the channel name is a local label, not an address.
+   *
+   * What this decides is the *coordinate*, not the secrecy of the entries: a
+   * public room's sealed records stay sealed, and a sealed room's unsealed
+   * records stay readable by whoever holds the board.
+   */
+  public?: boolean;
   /** injectable clock, seconds. Defaults to `Date.now()`. Tests pass one. */
   now?: () => number;
+  /**
+   * This author's chain head as a previous session left it: `{ seq, hash }` from
+   * {@link Room.chainHead}. Persist it (a tab's storage, a device) and pass it
+   * back so a fresh {@link Room} continues the chain instead of restarting at
+   * seq 0 and re-signing a `(seq, prev)` pair this author already used.
+   */
+  head?: { seq: number; hash: string };
 }
 
 /** a message as it arrives from the room, after verification. */
@@ -331,10 +395,11 @@ const windowKey = async (
   // built: a promise in that array has no `length`, which is how a silent
   // zero-length concat happens.
   const parts = [await sha256(enc.encode(appScope)), shardHash, u32be(epoch)];
-  // `extra` binds a key to one more thing - a direct message's recipient, so the
-  // whole room can seal to a member and only that member can open it. Absent (the
-  // default) it contributes no bytes at all, which keeps every other key exactly
-  // as it was.
+  // `extra` binds a key to one more thing - a direct message's recipient, so
+  // the whole room can seal to a member and that member's client can open it.
+  // It is NOT a secret from other members: they hold the same room secret.
+  // Absent (the default) it contributes no bytes at all, which keeps every other
+  // key exactly as it was.
   if (extra) {
     parts.push(extra);
   }
@@ -346,20 +411,23 @@ const windowKey = async (
 export const DEFAULT_CHANNEL = '#penumbra';
 
 /**
- * The shard a channel lives on, inside a relay scope.
+ * The shard a **public** channel lives on, inside a relay scope - derived from
+ * the channel's NAME.
  *
  * The relay addresses every board by `(appScope, epoch, shard)`, and this is the
- * shard: derived from the channel's NAME and NOT from the room key. Two reasons,
- * both deliberate -
+ * public shard: a function of a string anyone can guess. That is the whole point
+ * of it - a visitor holding no key types `#penumbra` and lands on the board, and
+ * the relay needs no per-channel configuration to serve as many channels as a
+ * scope wants (`#penumbra`, `#trading`, `#offtopic`), each its own coordinate.
  *
- *   - a member's sealed records and a visitor's unsealed ones have to land in one
- *     place, so a visitor holding no key must still be able to find it;
- *   - a scope can then hold as many channels as it likes (`#penumbra`, `#trading`,
- *     `#offtopic`), each its own coordinate, on one relay, with no per-channel
- *     configuration on the relay at all.
+ * The price is exact and worth stating: anyone who can guess a name can compute
+ * the coordinate, so the relay can hash its guess list and see which channels
+ * exist, censor by name, and watch a community's traffic. Every room that picks
+ * the same name *shares* the board, too.
  *
- * It was never secret from the relay - the relay addresses by it - and the
- * sealing, not the coordinate, is what keeps the sealed lane private.
+ * So this is only for a room that wants to be findable by name - see
+ * {@link RoomConfig.public}. A sealed room addresses by
+ * {@link roomShardFromSecret} instead.
  */
 export const roomShard = async (appScope: string, channel: string): Promise<string> =>
   toHex(
@@ -367,6 +435,35 @@ export const roomShard = async (appScope: string, channel: string): Promise<stri
       new Uint8Array(KEY_BYTES),
       LABEL_SHARD,
       concat([await sha256(enc.encode(appScope)), await sha256(enc.encode(channel))]),
+      8,
+    ),
+  );
+
+/**
+ * The shard a **sealed** room lives on - derived from the room secret, never
+ * from the channel name.
+ *
+ * A secret is not guessable, so nobody can enumerate the board: the relay has no
+ * name to hash, and a community's existence, size and rhythm are not a lookup
+ * away (`#penumbra` keeps working as a label without being an address). Two
+ * rooms that happen to share a name are two separate boards here, not one shared
+ * one.
+ *
+ * The limit, stated honestly: this hides the coordinate from *enumeration*, not
+ * from *observation*. The relay serving the request sees the shard it is asked
+ * for either way, on every read and write. What changes is that the coordinate
+ * is not a function of a guessable string - so it cannot be probed for, matched
+ * against a name list, or censored by name.
+ */
+export const roomShardFromSecret = async (
+  appScope: string,
+  secret: Uint8Array,
+): Promise<string> =>
+  toHex(
+    await hkdfBytes(
+      secret,
+      LABEL_KEY_SHARD,
+      concat([await sha256(enc.encode(appScope))]),
       8,
     ),
   );
@@ -506,7 +603,7 @@ const open = async (
 // records
 // ---------------------------------------------------------------------------
 
-/** the signed payload: version ‖ kind ‖ ts ‖ seq ‖ prev ‖ author ‖ name ‖ body. */
+/** the signed payload: version ‖ kind ‖ [epoch] ‖ ts ‖ seq ‖ prev ‖ author ‖ name ‖ body. */
 const recordBytes = (
   r: {
     kind: RoomKind;
@@ -519,9 +616,13 @@ const recordBytes = (
     body: string;
   },
   version: number = ROOM_VERSION,
+  epoch = 0,
 ): Uint8Array =>
   concat([
     Uint8Array.of(version, KIND_BYTE[r.kind]),
+    // the unsealed lane has no AAD, so its window is a signed field instead -
+    // the whole reason a plain record cannot be replayed into another window.
+    ...(version >= ROOM_PLAIN_VERSION ? [u32be(epoch)] : []),
     u32be(r.ts),
     u32be(r.seq),
     r.prev ? fromHex(r.prev) : new Uint8Array(SHA256_BYTES),
@@ -537,18 +638,21 @@ const recordBytes = (
   ]);
 
 /** max body bytes that still fit one record. Callers get a clear error, not a cut. */
-export const maxBodyBytes = (name: string, to = ''): number =>
+export const maxBodyBytes = (name: string, to = '', version: number = ROOM_VERSION): number =>
   ROOM_PLAINTEXT_BYTES -
-  (recordBytes({
-    kind: 'msg',
-    ts: 0,
-    seq: 0,
-    prev: '',
-    author: '0'.repeat(PUBKEY_HEX),
-    to,
-    name,
-    body: '',
-  }).length +
+  (recordBytes(
+    {
+      kind: 'msg',
+      ts: 0,
+      seq: 0,
+      prev: '',
+      author: '0'.repeat(PUBKEY_HEX),
+      to,
+      name,
+      body: '',
+    },
+    version,
+  ).length +
     SIG_HEX / 2);
 
 /** the room, as seen by one member. */
@@ -562,6 +666,8 @@ export class Room {
   private readonly now: () => number;
   private readonly relay: RelayTransport;
   private readonly shardPin: string | undefined;
+  /** a public room addresses by channel name; a sealed one by the room secret. */
+  private readonly isPublic: boolean;
 
   /** epoch -> (shard) resolved once; the relay coordinate never changes. */
   private shard: string | null = null;
@@ -572,7 +678,9 @@ export class Room {
    * the same seq are the same entry as far as the relay is concerned, and the
    * second would overwrite the first. The counter therefore lives here, never in
    * a caller's default, and {@link sync} adopts whatever the room already holds
-   * so a reload continues the chain instead of colliding with it.
+   * so a reload continues the chain instead of colliding with it. A caller that
+   * persists the head and hands it back via {@link RoomConfig.head} gets that
+   * continuation across sessions too, and a relay reply below it is refused.
    */
   private seq = 0;
   private head = '';
@@ -595,6 +703,9 @@ export class Room {
     this.now = config.now ?? (() => Math.floor(Date.now() / 1000));
     this.relay = config.relay;
     this.shardPin = config.shard;
+    this.isPublic = config.public ?? false;
+    this.seq = config.head?.seq ?? 0;
+    this.head = config.head?.hash ?? '';
   }
 
   /** resolve derived coordinates once, then reuse. */
@@ -604,7 +715,15 @@ export class Room {
     appScopeHash: Uint8Array;
   }> {
     if (!this.shard) {
-      this.shard = this.shardPin ?? (await roomShard(this.appScope, this.channel));
+      // A pinned shard wins - tests, and a relay with pre-provisioned
+      // coordinates. Otherwise the mode decides: a public room is addressed by
+      // name so a keyless visitor can find it, a sealed one by the secret so
+      // nothing about it can be enumerated.
+      this.shard =
+        this.shardPin ??
+        (this.isPublic
+          ? await roomShard(this.appScope, this.channel)
+          : await roomShardFromSecret(this.appScope, this.secret));
       this.shardHash.set(fromHex(this.shard));
       this.appScopeHash.set(await sha256(enc.encode(this.appScope)));
     }
@@ -645,15 +764,19 @@ export class Room {
 
   /**
    * A direct message: sealed under a key derived from the room secret AND the
-   * recipient's pubkey, so every member can seal to any other and only that other
-   * can open. The recipient finds it by trying that key on entries the room key
-   * did not open - the sender never appears in the clear, so the relay learns
-   * nothing about who is talking to whom beyond "an entry appeared".
+   * recipient's pubkey, so every member can seal to any other and the named
+   * recipient's client opens it by trying that key on entries the room key did
+   * not open. The sender never appears in the clear, so the relay learns nothing
+   * about who is talking to whom beyond "an entry appeared".
    *
-   * The room's shared secret is what makes this work without a key exchange, and
-   * it is also the limit: anyone in the room can seal *to* you (that is how the
-   * key is defined), so a member can spam your slot. They cannot read it, and they
-   * cannot replace what you sent - tags are random per write.
+   * The room's shared secret is the limit, stated exactly: the DM key is
+   * HKDF(roomSecret, ..., recipientPubkey), so *any* holder of the room secret
+   * can derive it. This is confidentiality against non-members and the relay, NOT
+   * against fellow members - a member who keeps the secret (or kept a copy after
+   * leaving) can read every DM in the room. It is also why any member can seal
+   * *to* you, so a member can spam your slot; they cannot replace what you sent
+   * because tags are random per write. A genuine member-to-member secret needs a
+   * pairwise key exchange (see docs/design/zirc-shared-secret-mailbox.md).
    */
   async sendDirect(
     to: string,
@@ -689,7 +812,7 @@ export class Room {
     const name = opts.name ?? this.identity.name ?? this.identity.pubkey.slice(0, 8);
     const to = opts.to ?? '';
     const bytes = enc.encode(body);
-    const room = maxBodyBytes(name, to);
+    const room = maxBodyBytes(name, to, opts.plain ? ROOM_PLAIN_VERSION : ROOM_VERSION);
     if (bytes.length > room) {
       throw new Error(`room: message is ${bytes.length} bytes, the limit is ${room}`);
     }
@@ -698,7 +821,7 @@ export class Room {
     const prev = opts.prev ?? (seq === 1 ? '' : this.head);
     const ts = this.now();
     const rec = { kind, ts, seq, prev, author: this.identity.pubkey, to, name, body };
-    const signed = recordBytes(rec);
+    const signed = recordBytes(rec, opts.plain ? ROOM_PLAIN_VERSION : ROOM_VERSION, epoch);
     const sig = await this.identity.sign(signed);
     if (sig.length !== SIG_HEX) {
       throw new Error('room: identity returned a malformed signature');
@@ -783,7 +906,7 @@ export class Room {
       body: '',
     };
     const plaintext = new Uint8Array(ROOM_PLAINTEXT_BYTES);
-    plaintext.set(recordBytes(rec));
+    plaintext.set(recordBytes(rec, opts.plain ? ROOM_PLAIN_VERSION : ROOM_VERSION, win));
     const blob = opts.plain
       ? plainBlob(plaintext)
       : await seal(
@@ -850,8 +973,9 @@ export class Room {
             shardHash,
             epoch,
           ),
-          // the direct-message key is derived for THIS member as recipient; any
-          // room member can compute it to seal to me, and only I can open with it.
+          // the direct-message key is derived for THIS member as recipient. Any
+          // room member can compute it too - they hold the same room secret - so
+          // it is private against non-members, not against fellow members.
           dm: await windowKey(
             this.secret,
             LABEL_DM_KEY,
@@ -944,6 +1068,26 @@ export class Room {
             dropped.push({ hash: toHex(entry.tag), reason: fan, kind: dropKindFor(fan) });
             continue;
           }
+          if (opened.plaintext) {
+            const stale = plainWindowError(fan, epoch);
+            if (stale) {
+              dropped.push({ hash: toHex(entry.tag), reason: stale, kind: 'invalid' });
+              continue;
+            }
+            // presence is unsigned, so the window is also enforced by the tag: a
+            // plain presence tag is HKDF(appScope, epoch, author, stable), which
+            // a reader can recompute. A record replayed from another window - even
+            // with its epoch field rewritten - cannot carry the expected tag.
+            const expected = await plainTag(this.appScope, epoch, fan.author, true);
+            if (toHex(expected) !== toHex(entry.tag)) {
+              dropped.push({
+                hash: toHex(entry.tag),
+                reason: 'plain presence tag mismatch',
+                kind: 'invalid',
+              });
+              continue;
+            }
+          }
           present.push({
             author: fan.author,
             name: fan.name,
@@ -968,7 +1112,7 @@ export class Room {
 
     messages.sort((a, b) => a.epoch - b.epoch || a.ts - b.ts || (a.author < b.author ? -1 : 1));
     verifyChains(messages, dropped);
-    this.adoptChainHead(messages);
+    this.adoptChainHead(messages, dropped);
     return { messages, present, dropped, sealed };
   }
 
@@ -976,17 +1120,58 @@ export class Room {
    * Continue this author's chain from what the room holds: the highest seq we
    * sent, and its hash as the next `prev`. Called on every sync so a reload, a
    * second tab, or another device picks up where the previous one stopped.
+   *
+   * The relay decides which of our records to return, so "the highest seq in the
+   * reply" is not authoritative. We never adopt a head below the one we already
+   * hold - a persisted {@link RoomConfig.head}, or what this session has sent.
+   * Adopting a lower one would make the author re-sign a `(seq, prev)` pair they
+   * already used: silent self-equivocation. A reply that does not link to our
+   * known head - it stops short of it, rewrites that seq, or jumps over seqs
+   * without the record that continues the head - is reported in `dropped`, not
+   * silently adopted, and the head is left alone.
    */
-  private adoptChainHead(messages: RoomMessage[]): void {
-    for (const m of messages) {
-      if (m.author !== this.identity.pubkey) {
-        continue;
-      }
-      if (m.seq > this.seq) {
-        this.seq = m.seq;
-        this.head = m.hash;
-      }
+  private adoptChainHead(
+    messages: RoomMessage[],
+    dropped: { hash: string; reason: string; kind: DropKind }[],
+  ): void {
+    const own = messages.filter(m => m.author === this.identity.pubkey);
+    if (own.length === 0) {
+      // the relay said nothing about this author; keep the head we hold.
+      return;
     }
+    own.sort((a, b) => a.seq - b.seq);
+    const top = own[own.length - 1]!;
+    if (top.seq < this.seq) {
+      dropped.push({
+        hash: top.hash,
+        reason: `chain head rollback: room holds seq ${top.seq}, this author is at ${this.seq}`,
+        kind: 'invalid',
+      });
+      return;
+    }
+    if (top.seq === this.seq) {
+      if (top.hash !== this.head) {
+        dropped.push({
+          hash: top.hash,
+          reason: `chain head rewrite: seq ${top.seq} does not match this author's head`,
+          kind: 'invalid',
+        });
+      }
+      return;
+    }
+    // extending: the record that continues our head must be in the reply and
+    // linked, or the reply is skipping seqs this author would have signed.
+    const next = own.find(m => m.seq === this.seq + 1);
+    if (!next || next.prev !== this.head) {
+      dropped.push({
+        hash: top.hash,
+        reason: `chain head gap: no record links to this author's head at seq ${this.seq}`,
+        kind: 'invalid',
+      });
+      return;
+    }
+    this.seq = top.seq;
+    this.head = top.hash;
   }
 
   /** this author's chain head - the seq the next message will carry, minus one. */
@@ -1016,9 +1201,17 @@ export class Room {
       if (kind === 'dm' && fields.to !== this.identity.pubkey) {
         return 'dm not addressed here';
       }
+      // an unsealed record proves its own window; one that does not is refused,
+      // so a relay cannot replay a plain line as if it were written now.
+      if (plaintext) {
+        const stale = plainWindowError(body, epoch);
+        if (stale) {
+          return stale;
+        }
+      }
       // re-encode in the record's OWN version: a signature only verifies against
       // the layout its author wrote.
-      const signed = recordBytes({ ...fields, kind }, body.version);
+      const signed = recordBytes({ ...fields, kind }, body.version, body.epoch);
       const sig = toHex(plain.subarray(sigAt, sigAt + SIG_HEX / 2));
       if (!(await this.identity.verify(signed, sig, fields.author))) {
         return 'bad signature';
@@ -1054,6 +1247,11 @@ export class Room {
 interface DecodedFields {
   /** the wire version the record was written in - the signature covers that layout. */
   version: number;
+  /**
+   * the window signed into a plain record (0 on a sealed record, whose window is
+   * bound by the AEAD's AAD instead).
+   */
+  epoch: number;
   ts: number;
   seq: number;
   prev: string;
@@ -1104,6 +1302,13 @@ function decodeRecord(plain: Uint8Array, kind: RoomKind, sigBytes: number): Deco
     return 'record too short';
   }
   let at = 2;
+  // 0x03 carries the window the plain record was written in; older versions and
+  // the sealed lane (bound by AAD) do not.
+  let epoch = 0;
+  if (version >= ROOM_PLAIN_VERSION) {
+    epoch = u32From(plain, at);
+    at += 4;
+  }
   const ts = u32From(plain, at);
   at += 4;
   const seq = u32From(plain, at);
@@ -1145,6 +1350,7 @@ function decodeRecord(plain: Uint8Array, kind: RoomKind, sigBytes: number): Deco
   }
   return {
     version,
+    epoch,
     ts,
     seq,
     prev: seq === 1 ? '' : prev,
@@ -1166,6 +1372,23 @@ const dropKindFor = (reason: string): DropKind =>
 function decodePresence(plain: Uint8Array): DecodedFields | string {
   return decodeRecord(plain, 'presence', 0);
 }
+
+/**
+ * The window a plain record claims must be the window it was served in, or the
+ * reason it is refused.
+ *
+ * A sealed record's window is bound by the AEAD's AAD, but an unsealed record
+ * has no AAD, so the only thing that can stop a relay from serving last window's
+ * plain line (or presence) as this window's is the window the author signed into
+ * the record - and a record old enough to predate that binding (version < 0x03)
+ * cannot prove anything and is refused too.
+ */
+const plainWindowError = (body: DecodedFields, epoch: number): string | null => {
+  if (body.version < ROOM_PLAIN_VERSION) {
+    return 'plain record without a window';
+  }
+  return body.epoch === epoch ? null : 'plain record from another window';
+};
 
 /**
  * Enforce the per-author chain where the predecessor was seen in the same set.
@@ -1219,6 +1442,16 @@ export interface RoomInvite {
   /** the channel inside the scope, `#penumbra` when the invite predates channels. */
   channel: string;
   secret: Uint8Array;
+  /**
+   * The room is public: its board is addressed by the channel NAME, so a reader
+   * holding no key can find it by typing the name (see {@link RoomConfig.public}).
+   *
+   * It has to travel with the invite, because it decides the coordinate the
+   * guest derives: by name here, by the secret otherwise. Omitted (the default)
+   * is the sealed case, where the guest needs nothing but the secret it was just
+   * handed.
+   */
+  public?: boolean;
   /** relay endpoint the room was created against, so the guest can reach it. */
   endpoint?: string;
   /** bearer credential for a gated bouncer in front of that endpoint. */
@@ -1240,9 +1473,16 @@ export const encodeInvite = (invite: RoomInvite): string => {
     b64url(invite.secret),
   ];
   // Endpoint and token are positional, so an invite without a token still names
-  // a reachable (ungated) relay: four fields mean "…endpoint.token".
-  if (invite.endpoint) {
-    parts.push(b64url(enc.encode(invite.endpoint)));
+  // a reachable (ungated) relay: four fields mean "…endpoint.token". The public
+  // marker is one reserved character and therefore unambiguous, but it still
+  // shifts them by one when it is there.
+  if (invite.public) {
+    parts.push(PUBLIC_FIELD);
+  }
+  if (invite.endpoint || invite.token) {
+    // The endpoint slot is written even when empty, because a token written into
+    // it would be read back as the relay's address.
+    parts.push(invite.endpoint ? b64url(enc.encode(invite.endpoint)) : '');
   }
   if (invite.token) {
     parts.push(b64url(enc.encode(invite.token)));
@@ -1261,11 +1501,14 @@ export const parseInvite = (code: string): RoomInvite => {
 
   // zroom1: scope.secret[.endpoint[.token]] - written before channels existed, so
   // it names no channel and means the default one.
-  const [scopeField, second, third, fourth, fifth] = fields;
+  // zroom2: scope.channel.secret[.p][.endpoint[.token]] - `p` marks a public
+  // room and shifts the optional fields by one when present.
+  const [scopeField, second, third, fourth, fifth, sixth] = fields;
   const channelField = legacy ? undefined : second;
   const secretField = legacy ? second : third;
-  const endpointField = legacy ? third : fourth;
-  const tokenField = legacy ? fourth : fifth;
+  const marked = !legacy && fourth === PUBLIC_FIELD;
+  const endpointField = legacy ? third : marked ? fifth : fourth;
+  const tokenField = legacy ? fourth : marked ? sixth : fifth;
 
   if (!scopeField || !secretField) {
     throw new Error('invite is missing its scope or secret');
@@ -1281,6 +1524,8 @@ export const parseInvite = (code: string): RoomInvite => {
     // field at all and must not be run through the decoder.
     channel: channelField ? dec.decode(fromB64url(channelField)) : DEFAULT_CHANNEL,
     secret,
+    // only when the invite says so: absent is the sealed default, not `false`.
+    public: marked || undefined,
     endpoint: endpointField ? dec.decode(fromB64url(endpointField)) : undefined,
     token: tokenField ? dec.decode(fromB64url(tokenField)) : undefined,
   };

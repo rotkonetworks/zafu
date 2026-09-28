@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { ChainRegistryClient } from '@penumbrafi/registry';
 import { useMemo } from 'react';
+import { registryClient } from './ibc-chains';
 
 /** prefetch all asset icon URLs to prevent portfolio timing leak */
 const prefetchAssetIcons = (registry: {
@@ -24,7 +24,6 @@ export const useNumeraires = (chainId?: string) => {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['registry', chainId],
     queryFn: async () => {
-      const registryClient = new ChainRegistryClient();
       const registry = await registryClient.remote.get(chainId!);
       prefetchAssetIcons(registry);
       return registry;

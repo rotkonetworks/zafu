@@ -40,7 +40,6 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { isValidExternalSender } from '../../senders/external';
 import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../../config/contact-discovery-relay';
-import { POPUP_WINDOW_HEIGHT, POPUP_WINDOW_WIDTH } from '../../utils/popup-window';
 import { PopupPath } from '../../routes/popup/paths';
 import {
   openApprovalPopup,
@@ -176,12 +175,7 @@ const openConsentPopup = async (
 
   const params = new URLSearchParams({ app: origin, requestId, favIconUrl, title, relay });
   const url = `${chrome.runtime.getURL('popup.html')}#${PopupPath.CONTACT_DISCOVERY_APPROVAL}?${params.toString()}`;
-  const opened = await openApprovalPopup(
-    origin,
-    url,
-    { width: POPUP_WINDOW_WIDTH, height: POPUP_WINDOW_HEIGHT },
-    requestId,
-  );
+  const opened = await openApprovalPopup(origin, url, requestId);
   if (!opened) {
     // Already-open window for this origin, or create failed: drop the pending
     // entry and settle cancelled so the caller is not left hanging.

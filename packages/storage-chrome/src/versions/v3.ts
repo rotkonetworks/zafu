@@ -60,13 +60,42 @@ type LOCAL = {
         ts: number;
         recvTs: number;
         mine: boolean;
+        /** per-sender monotonic counter (absent on threads written by older builds) */
+        seq?: number;
       }[];
+      /** highest accepted counter per lowercased sender pubkey - the replay guard */
+      sendCounters?: Record<string, number>;
     }
   >;
   activeWalletIndex?: number;
   backupReminderSeen?: boolean;
   seedPhraseBackedUp?: boolean;
   keplrCompat?: boolean;
+  /**
+   * Per-capability participation switch, keyed by `Capability` (see
+   * @repo/storage-chrome/capabilities). An absent capability is `unset`, which
+   * is NOT the same as `disabled`: unset means the first site that asks gets
+   * the one-time opt-in prompt; disabled refuses without asking. Written by the
+   * opt-in prompt via state/capability-modes.ts, read by the worker's gate
+   * filter (message/listen/gate.ts).
+   */
+  capabilityModes?: Record<string, 'enabled' | 'disabled'>;
+  /**
+   * Outbound-destination ledger: one entry per host zafu has ever contacted,
+   * with the user's decision on it. The shape is owned by
+   * `apps/extension/src/net/destination.ts` and parsed defensively on read, so
+   * it is declared loosely here rather than duplicating the record in the
+   * storage package. Absent map == nothing recorded yet.
+   */
+  netEgress?: unknown;
+  /**
+   * Networks the user added manually (endpoint for a chain zafu does not ship).
+   * Shape is owned by `apps/extension/src/net/custom-networks.ts`; these hosts
+   * are part of the trusted egress inventory.
+   */
+  customNetworks?: unknown[];
+  /** bounded audit trail (who zafu called, when, why); see `net/destination.ts` */
+  netEgressLog?: unknown[];
   compactFrontierBlockHeight?: number;
   frontendUrl?: string;
   fullSyncHeight?: number;

@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { externalMessageListener } from './external-easteregg';
 import { grantCapability } from '@repo/storage-chrome/origin';
+import { localExtStorage } from '@repo/storage-chrome/local';
 
 const sender = (origin: string, frameId = 0): chrome.runtime.MessageSender => ({
   tab: { id: 1 } as chrome.tabs.Tab,
@@ -25,7 +26,10 @@ const call = (req: unknown, s: chrome.runtime.MessageSender): Promise<unknown> =
 
 let createMock: Mock;
 
-beforeEach(() => {
+beforeEach(async () => {
+  // `zafu_open_shield` is gated on `connect`; the global opt-in question for it
+  // is answered here so these tests exercise the per-origin gate they are about.
+  await localExtStorage.set('capabilityModes', { connect: 'enabled' });
   (globalThis.chrome.runtime as unknown as { getURL: unknown }).getURL = (p: string) =>
     `chrome-extension://test${p}`;
   // no side panel open anywhere -> the popup path

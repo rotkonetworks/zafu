@@ -6,7 +6,8 @@ import { selectActiveNetwork } from '../../../state/keyring';
 import { isPro } from '../../../state/license';
 import { SettingsScreen } from './settings-screen';
 import { ToggleSwitch } from '../../../components/toggle-switch';
-import { isIbcNetwork, type NetworkType } from '../../../state/keyring/network-types';
+import { type NetworkType } from '../../../state/keyring/network-types';
+import { hasFeature } from '../../../config/networks';
 import {
   DEFAULT_CONTACT_DISCOVERY_RELAY,
   relayEndpointForStorage,
@@ -39,7 +40,7 @@ const PRIVACY_ROWS: readonly PrivacyRow[] = [
     label: 'cosmos balances',
     onLabel: 'querying rpc for balances',
     offLabel: 'hidden - no rpc queries',
-    visible: n => isIbcNetwork(n) || n === 'penumbra',
+    visible: n => hasFeature(n, 'cosmos'),
   },
   {
     key: 'enableTransactionHistory',
@@ -52,28 +53,28 @@ const PRIVACY_ROWS: readonly PrivacyRow[] = [
     label: 'background sync',
     onLabel: 'syncing in background',
     offLabel: 'only when extension is open',
-    visible: n => isIbcNetwork(n) || n === 'penumbra',
+    visible: n => hasFeature(n, 'cosmos'),
   },
   {
     key: 'enablePriceFetching',
     label: 'price display',
     onLabel: 'fetching prices - apis cannot see your addresses, but do see your ip',
     offLabel: 'hidden',
-    visible: n => n === 'penumbra' || isIbcNetwork(n),
+    visible: n => hasFeature(n, 'cosmos'),
   },
   {
     key: 'enableExplorerLinks',
     label: 'explorer links',
     onLabel: 'tx rows link to a block explorer - it sees your ip and which tx you open',
     offLabel: 'copy-only - nothing leaves the wallet',
-    visible: n => n === 'zcash',
+    visible: n => hasFeature(n, 'zcash'),
   },
   {
     key: 'openZcashLinks',
     label: 'zcash: links',
     onLabel: 'links on websites open in zafu',
     offLabel: 'links open in your default zcash app',
-    visible: n => n === 'zcash',
+    visible: n => hasFeature(n, 'zcash'),
   },
 ];
 

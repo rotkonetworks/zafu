@@ -21,7 +21,8 @@
  * taking the lexicographically lowest id so every member converges on the same
  * session even if two were created in a race. If none exists we create one.
  * The chosen id is also cached in plain chrome.storage.local (it is a public
- * uuid the relay already knows, not a secret) to skip the scan next time.
+ * uuid the relay already knows, not a secret) as a fallback for when the relay
+ * cannot enumerate sessions; it is never trusted over a live scan.
  *
  * This class holds NO plaintext history and NO private key beyond the relay
  * identity handed in; sealing is group-chat-crypto's job.
@@ -36,9 +37,22 @@ export const CHAT_MESSAGE_COUNT = 255;
 
 const POLL_INTERVAL_MS = 1500;
 
-/** An opened, decrypted chat frame with its verified author. */
+/**
+ * Most frames we will process from one receive() call. The relay controls how
+ * many messages it hands back, so a poll must not be a vector for an arbitrarily
+ * large parse/decrypt batch.
+ */
+export const MAX_FRAMES_PER_POLL = 64;
+
+/**
+ * An opened, decrypted chat frame. `senderPub` is the sender label the relay
+ * attached, which is TRUSTED ONLY to the extent that a successful open proves
+ * the frame came from ONE OF THIS PAIR - not which member. See AUTHORSHIP in
+ * group-chat-crypto.ts: within a pair the attribution is unauthenticated and
+ * deniable; do not treat it as a verified author.
+ */
 export interface IncomingChatFrame {
-  /** hex relay pubkey of the author (proven by successful decrypt). */
+  /** hex relay pubkey of the sender; proven to be a member of this pair, not which. */
   senderPub: string;
   /** the frame's plaintext bytes (the caller parses the envelope). */
   payload: Uint8Array;
@@ -66,6 +80,8 @@ export class GroupChatChannel {
   private readonly privHex: string;
   /** every member of the chat, ourselves included. */
   private readonly members: string[];
+  /** lowercased members, for sender-label membership checks on inbound frames. */
+  private readonly memberSet: Set<string>;
   private sessionId: string | null = null;
   private loggedIn = false;
   private polling = false;
@@ -75,6 +91,7 @@ export class GroupChatChannel {
     this.identity = identity;
     this.privHex = privateKeyHex;
     this.members = [identity.publicKey, ...identity.peers];
+    this.memberSet = new Set(this.members.map(m => m.toLowerCase()));
   }
 
   private async ensureLoggedIn(): Promise<void> {
@@ -100,15 +117,55 @@ export class GroupChatChannel {
   }
 
   /**
-   * Resolve this group's chat session, creating it if none exists. `cachedId`
-   * is a previously chosen id to try first; the returned id should be cached
-   * by the caller. Idempotent - safe to call on every open.
+   * Resolve this group's chat session, creating it if none exists. Enumerates
+   * every qualifying session and takes the lowest id; `cachedId` is only a
+   * fallback for when the relay cannot enumerate. The returned id should be
+   * cached by the caller. Idempotent - safe to call on every open.
    */
   async resolveSession(cachedId?: string): Promise<string> {
     await this.ensureLoggedIn();
 
-    // the cached id, if it is still a live session for this exact group
-    if (cachedId) {
+    // ALWAYS enumerate and take the lexicographically lowest qualifying id.
+    // The cached id is a hint at best: a creation race can leave two chat
+    // sessions for the same group, and a member that trusted its own cached id
+    // would pin to one while its peers pinned to the other, silently never
+    // reading each other. Lowest id is the one rule every member can apply.
+    let ids: string[] | null = null;
+    try {
+      ids = await this.withRelogin(() => this.client.listSessions());
+    } catch {
+      // the relay cannot enumerate us - the cached id is the only way back
+      ids = null;
+    }
+
+    if (ids !== null) {
+      const matches: string[] = [];
+      for (const id of ids) {
+        try {
+          const info = await this.client.getSessionInfo(id);
+          if (info.messageCount === CHAT_MESSAGE_COUNT && sameSet(info.pubkeys, this.members)) {
+            matches.push(id);
+          }
+        } catch {
+          // a session that vanished mid-scan is not ours to worry about
+        }
+      }
+      if (matches.length > 0) {
+        matches.sort();
+        const lowest = matches[0]!;
+        if (cachedId && cachedId !== lowest && matches.includes(cachedId)) {
+          // two chat sessions exist for this group and the cache was pinning us
+          // to the higher one: say so loudly, then converge.
+          console.warn(
+            `group chat: ${matches.length} chat sessions for this group; ` +
+              `converging on ${lowest} over cached ${cachedId}`,
+          );
+        }
+        this.sessionId = lowest;
+        return lowest;
+      }
+    } else if (cachedId) {
+      // enumeration is unavailable - fall back to the cache if it still checks out
       try {
         const info = await this.withRelogin(() => this.client.getSessionInfo(cachedId));
         if (info.messageCount === CHAT_MESSAGE_COUNT && sameSet(info.pubkeys, this.members)) {
@@ -116,28 +173,8 @@ export class GroupChatChannel {
           return cachedId;
         }
       } catch {
-        // gone or not ours - fall through to a scan
+        // gone or not ours - fall through and create
       }
-    }
-
-    // scan our sessions for this group's chat session; lowest id wins so all
-    // members converge even if a race created two
-    const ids = await this.withRelogin(() => this.client.listSessions());
-    const matches: string[] = [];
-    for (const id of ids) {
-      try {
-        const info = await this.client.getSessionInfo(id);
-        if (info.messageCount === CHAT_MESSAGE_COUNT && sameSet(info.pubkeys, this.members)) {
-          matches.push(id);
-        }
-      } catch {
-        // a session that vanished mid-scan is not ours to worry about
-      }
-    }
-    if (matches.length > 0) {
-      matches.sort();
-      this.sessionId = matches[0]!;
-      return this.sessionId;
     }
 
     // none exists - create it. members include ourselves so we can receive.
@@ -162,8 +199,12 @@ export class GroupChatChannel {
   }
 
   /**
-   * Drain queued frames once and return the ones we can open. Undecryptable
-   * frames (addressed to someone else, or a lying relay's forgery) are dropped.
+   * Drain queued frames once and return the ones we can open. A frame whose
+   * relay-reported `sender` is not one of this chat's members is dropped before
+   * we touch the key: an attacker keypair (a,A) satisfies x25519(a, ourPub) ==
+   * pairKey(ourPriv, A), so a relay that supplies an arbitrary sender label
+   * could otherwise inject a frame that opens. Membership is the only thing the
+   * label is allowed to establish here. Undecryptable frames are dropped too.
    */
   async drain(): Promise<IncomingChatFrame[]> {
     const sessionId = this.sessionId;
@@ -171,8 +212,17 @@ export class GroupChatChannel {
       throw new Error('group chat: resolveSession must run before drain');
     }
     const msgs = await this.withRelogin(() => this.client.receive(sessionId, false));
+    if (msgs.length > MAX_FRAMES_PER_POLL) {
+      console.warn(
+        `group chat: relay returned ${msgs.length} frames; handling ${MAX_FRAMES_PER_POLL} this poll`,
+      );
+    }
     const out: IncomingChatFrame[] = [];
-    for (const m of msgs) {
+    for (const m of msgs.slice(0, MAX_FRAMES_PER_POLL)) {
+      if (!this.memberSet.has(m.sender.toLowerCase())) {
+        // not a key we ever sealed to - the relay invented this sender
+        continue;
+      }
       try {
         const payload = await openChatFrame(this.privHex, m.sender, sessionId, m.msg);
         out.push({ senderPub: m.sender, payload });

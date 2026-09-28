@@ -1,6 +1,6 @@
 # encrypted messaging
 
-zafu does end-to-end encryption in two places, and neither uses a
+zafu does end-to-end encryption in three places, none of which uses a
 dedicated encrypted memo type (0x06 is
 [reserved](message-types.md#0x06---encryptedmessage), not implemented):
 
@@ -9,8 +9,12 @@ dedicated encrypted memo type (0x06 is
    classical x25519 or the hybrid post-quantum X-Wing suite.
 2. **Noise channel** - a hybrid Noise IK session between two zid
    identities over a relay WebSocket. this is the chat DM transport.
+3. **multisig group chat** - frames sealed statelessly between
+   co-signers' relay identities: static-static x25519 + HKDF-SHA256 +
+   AES-256-GCM, with no forward secrecy and no post-quantum layer (see
+   [multisig group chat](#multisig-group-chat)).
 
-a third surface, the zitadel chat client's public rooms, is NOT
+a fourth surface, the zitadel chat client's public rooms, is NOT
 end-to-end encrypted; it relays plaintext and authenticates it with
 per-message ed25519 signatures.
 
@@ -93,7 +97,11 @@ ML-KEM key is fresh per handshake, the post-quantum secret is also
 forward-secret. authentication is unchanged - the X25519 static DHs
 (es / ss / se) bind the parties' identities; ML-KEM only adds
 confidentiality. the distinct protocol name makes a hybrid peer and a
-classical (old) peer fail the handshake rather than silently downgrade.
+classical (old) peer fail the handshake rather than silently downgrade: the
+old side parses JSON `keyex` only, drops the binary init unanswered, and the
+hybrid side reaches its readiness deadline. reach an old peer with
+`channel: 'classical'`. `channel: 'auto'` downgrades only on a well-formed
+refusal frame, never on a timeout, so a relay outage cannot force one.
 
 handshake pattern:
 
@@ -132,6 +140,39 @@ these messages ride a relay WebSocket, not zcash memos - the ML-KEM
 public key (1184 bytes) and ciphertext (1088 bytes) both exceed a
 512-byte memo. the relay routes by the `(from, to)` pubkey pair and sees
 only the envelope, never the Noise payloads.
+
+## multisig group chat
+
+every multisig group gets a coordination thread carried over the
+multisig (frostd) relay, not a zcash memo. the relay's own transport
+cipher (`FrostRelayCipher`) is stateful Noise_K - right for one bounded
+signing ceremony, wrong for chat, because the cipher lives in the popup
+and is torn down on close, so a returning co-signer could never resume a
+stream. chat frames are therefore sealed **statelessly**:
+
+```
+pair_key = HKDF-SHA256(x25519(my_relay_priv, peer_relay_pub),
+                       info="zafu-groupchat-v1:" + lo + ":" + hi + ":" + sessionId,
+                       32)
+frame    = AES-256-GCM(pair_key, nonce96, plaintext)
+```
+
+`lo` / `hi` are the two relay public keys sorted, so both ends derive the
+identical key; the session id is folded into the HKDF `info` so a frame
+cannot be replayed into a different chat session. this is **static-static**
+x25519 - both parties' long-lived relay keys - with one long-lived pair
+key per group, no ephemeral, no ratchet, and no rotation. what that means,
+stated plainly:
+
+- **no forward secrecy.** compromise of either relay private key exposes
+  every past frame in the thread.
+- **not post-quantum.** unlike the sealed box and the ZID DM lane above,
+  no ML-KEM is involved.
+- **pair membership, not authorship.** static-static DH is symmetric, so
+  an open frame proves it came from one of the pair, not which one - the
+  envelope carries no signature, and the relay's `sender` field is only a
+  hint for which peer key to try first. anything that must pin a frame to
+  a specific author needs a signature, which does not exist here.
 
 ## zitadel chat
 

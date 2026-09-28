@@ -59,6 +59,20 @@ export interface InboxMessage {
   direction: 'incoming' | 'outgoing';
   /** decoded contact card (only for MemoType.ContactCard) */
   contactCard?: ContactCard;
+  /**
+   * Raw return/sender address declared by the note that delivered this
+   * message (`reply:` line, cf. zcash-memos). A memo body cannot carry a
+   * signature, so this is the only thing an incoming claim can be bound to —
+   * absent when the delivering note declared none.
+   */
+  senderAddress?: string;
+  /**
+   * FROST session id carried by the memo, when it has one. The codec does not
+   * embed a session id today, so this is undefined for memo-delivered sign
+   * requests; the UI only trusts a signing memo whose id matches a session the
+   * wallet created or joined.
+   */
+  sessionId?: string;
 }
 
 /** a conversation = all messages to/from one diversified address */
@@ -101,6 +115,10 @@ export interface RawMemoNote {
   /** is this a change note (outgoing)? */
   isChange: boolean;
   timestamp?: number;
+  /** return/sender address declared by the delivering note */
+  senderAddress?: string;
+  /** FROST session id carried by the memo, when present */
+  sessionId?: string;
 }
 
 // ── fragment buffer for incomplete multi-part messages ──
@@ -150,6 +168,8 @@ export const createInboxSlice = (): SliceCreator<InboxSlice> => (set, get) => ({
             complete: true,
             direction: raw.isChange ? 'outgoing' : 'incoming',
             contactCard,
+            senderAddress: raw.senderAddress,
+            sessionId: raw.sessionId,
           },
         });
       } else {
@@ -184,6 +204,8 @@ export const createInboxSlice = (): SliceCreator<InboxSlice> => (set, get) => ({
               timestamp: buffer[0]?.meta.timestamp,
               complete: true,
               direction: raw.isChange ? 'outgoing' : 'incoming',
+              senderAddress: buffer[0]?.meta.senderAddress,
+              sessionId: buffer[0]?.meta.sessionId,
             },
           });
         }

@@ -9,6 +9,7 @@
  * The pieces, all pure functions over signed records:
  *
  *   channel-log.ts  genesis, the hash-chained log, and authority verification
+ *   custody.ts      the multisig roster at a log index: who signs, at which epoch
  *   vote.ts         the electorate at a log index, and whether a decision passed
  *
  * And re-exported from zid because a channel needs it: the round-structured group
@@ -38,6 +39,22 @@ export type {
   ChannelSigner,
   DecisionView,
 } from './channel-log';
+
+export {
+  canonicalRoster,
+  custodyBodyBytes,
+  custodyProblems,
+  custodyStateAt,
+  isFingerprint,
+  isScheme,
+} from './custody';
+export type {
+  CustodyBody,
+  CustodyEvent,
+  CustodyMember,
+  CustodyProposal,
+  CustodyState,
+} from './custody';
 
 export { DEFAULT_RULES, itemIsHidden, modeStateAt, tallyDecision } from './vote';
 export type { ModeRecord, ModerationRules, Tally, VoteRecord } from './vote';

@@ -15,7 +15,7 @@ import { removeTxOps, writeTxOp } from '../../../tx-ops';
 import { useStore } from '../../../state';
 import { zignerSigningSelector } from '../../../state/zigner-signing';
 import { recentAddressesSelector } from '../../../state/recent-addresses';
-import { contactsSelector } from '../../../state/contacts';
+import { contactsSelector, type Contact, type ContactAddress } from '../../../state/contacts';
 import { messagesSelector } from '../../../state/messages';
 import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
 import { selectActiveZcashWallet } from '../../../state/wallets';
@@ -106,6 +106,10 @@ type SendStep =
 const fmtZecShort = (zat: bigint): string =>
   (Number(zat) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
 
+/** address-book rows: keep the head/tail that actually identify the address. */
+const truncateAddress = (address: string): string =>
+  address.length > 22 ? `${address.slice(0, 12)}…${address.slice(-8)}` : address;
+
 /** live elapsed timer — ticks every second so the build screen never looks frozen */
 function LiveTimer({ startMs }: { startMs: number }) {
   const [elapsed, setElapsed] = useState(0);
@@ -173,7 +177,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
   // recent addresses and contacts
   const { recordUsage, shouldSuggestSave, dismissSuggestion } = useStore(recentAddressesSelector);
-  const { findByAddress } = useStore(contactsSelector);
+  const { findByAddress, contacts, getFavorites, markAddressUsed } = useStore(contactsSelector);
   const messages = useStore(messagesSelector);
   // tempTxId for the optimistic outgoing record created on send-click;
   // promoted to the real txid once the build step returns one.
@@ -352,7 +356,16 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // save-contact prefill after a successful send.
   const [resolvedProfile, setResolvedProfile] = useState<ZcashMeProfile | null>(null);
   const [fee, setFee] = useState('0.0001');
-  const [, setShowContacts] = useState(false);
+  // the real contact book: an in-page drawer over the recipient field.
+  const [showAddressBook, setShowAddressBook] = useState(false);
+  const [addressBookQuery, setAddressBookQuery] = useState('');
+  // the address the user picked from the book: kept so the send-time lastUsedAt
+  // stamp can fall back to it (findByAddress at send time stays authoritative).
+  const [pickedContact, setPickedContact] = useState<{
+    contactId: string;
+    addressId: string;
+    address: string;
+  } | null>(null);
   const [showQrScanner, setShowQrScanner] = useState(false);
   const unsignedTxRef = useRef<SendTxUnsignedResult | null>(null);
   // airgap FROST multisig now builds a PCZT (gh #17) — separate from the legacy
@@ -453,6 +466,77 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   }, [selectedKeyInfo?.id]);
 
   const balanceZat = notesLoaded ? spendableNotes.reduce((s, v) => s + v, 0n) : null;
+
+  // ── contact book ────────────────────────────────────────────────────────
+  //
+  // Only contacts with at least one zcash address appear in the send flow.
+  // Favorites first, then most-recently-used (lastUsedAt), then store order.
+  const zcashContactRows = useMemo(() => {
+    const all = Array.isArray(contacts) ? contacts : [];
+    const favoriteIds = new Set(getFavorites().map(c => c.id));
+    const rowsFor = (list: Contact[]) =>
+      list
+        .map(contact => ({
+          contact,
+          addresses: contact.addresses.filter(a => a.network === 'zcash'),
+        }))
+        .filter(row => row.addresses.length > 0);
+    const lastUsed = (contact: Contact) =>
+      contact.addresses.reduce(
+        (max, a) => (a.network === 'zcash' ? Math.max(max, a.lastUsedAt ?? 0) : max),
+        0,
+      );
+    const favorites = rowsFor(all.filter(c => favoriteIds.has(c.id)));
+    const rest = rowsFor(all.filter(c => !favoriteIds.has(c.id))).sort(
+      (a, b) => lastUsed(b.contact) - lastUsed(a.contact),
+    );
+    return [...favorites, ...rest];
+  }, [contacts, getFavorites]);
+
+  const addressBookRows = useMemo(() => {
+    const q = addressBookQuery.trim().toLowerCase();
+    if (!q) {
+      return zcashContactRows;
+    }
+    return zcashContactRows.filter(
+      ({ contact, addresses }) =>
+        contact.name.toLowerCase().includes(q) ||
+        addresses.some(a => a.address.toLowerCase().includes(q)),
+    );
+  }, [zcashContactRows, addressBookQuery]);
+
+  /** the saved contact the recipient currently resolves to — the trust signal */
+  const recipientContact = useMemo(() => {
+    const trimmed = recipient.trim();
+    return trimmed ? findByAddress(trimmed) : undefined;
+  }, [recipient, findByAddress]);
+
+  const selectBookAddress = useCallback((contactId: string, addr: ContactAddress) => {
+    setRecipient(addr.address);
+    setPickedContact({ contactId, addressId: addr.id, address: addr.address });
+    setShowAddressBook(false);
+    setAddressBookQuery('');
+  }, []);
+
+  // A completed send is the moment a saved address is "used": stamp lastUsedAt
+  // so the book can rank it, alongside the existing save-contact prompt.
+  // findByAddress at send time is the source of truth; the drawer pick is only
+  // a fallback for the same address (never required).
+  useEffect(() => {
+    if (step !== 'complete') {
+      return;
+    }
+    const trimmed = recipient.trim();
+    const found = trimmed ? findByAddress(trimmed) : undefined;
+    const match = found
+      ? { contactId: found.contact.id, addressId: found.address.id }
+      : pickedContact && pickedContact.address === trimmed
+        ? { contactId: pickedContact.contactId, addressId: pickedContact.addressId }
+        : null;
+    if (match) {
+      void markAddressUsed(match.contactId, match.addressId);
+    }
+  }, [step, recipient, findByAddress, markAddressUsed, pickedContact]);
 
   const recipientIsTransparent = /^(t1|t3|tm|t2)/.test(recipient.trim());
   // The real max: spends every note in the pool, priced with the ZIP-317 fee
@@ -1356,7 +1440,23 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   >
                     <span className='i-ph-scan h-4 w-4' />
                   </button>
+                  <button
+                    type='button'
+                    onClick={() => setShowAddressBook(true)}
+                    className='shrink-0 flex h-[42px] w-[42px] items-center justify-center rounded-lg border border-border-soft bg-input text-fg-muted hover:text-fg-high transition-colors'
+                    title='contacts'
+                  >
+                    <span className='i-ph-address-book h-4 w-4' />
+                  </button>
                 </div>
+                {/* the payoff of the book: a pasted/picked address that is a
+                    saved contact is called by name, not by its u1... prefix */}
+                {recipientContact && (
+                  <p className='mt-1.5 flex items-center gap-1.5 truncate text-label text-fg-muted'>
+                    <span className='i-ph-address-book h-3.5 w-3.5 shrink-0 text-zigner-gold' />
+                    <span className='truncate'>→ {recipientContact.contact.name}</span>
+                  </p>
+                )}
                 {requestError && <p className='mt-1 text-xs text-red-400'>{requestError}</p>}
                 {requestNote && (
                   <p className='mt-1 truncate text-xs text-fg-muted' title={requestNote}>
@@ -1393,10 +1493,72 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   network='zcash'
                   onSelect={addr => {
                     setRecipient(addr);
-                    setShowContacts(false);
                   }}
                   show={!recipient}
                 />
+                {/* contact book over the form: the picker above still covers
+                    recent/wallets/directory, this is the saved address book */}
+                {showAddressBook && (
+                  <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
+                    <div className='mx-4 flex max-h-[80vh] w-full max-w-sm flex-col rounded-lg border border-border-soft bg-canvas p-5 shadow-xl'>
+                      <div className='mb-4 flex items-center gap-2'>
+                        <span className='i-ph-address-book h-4 w-4 text-zigner-gold' />
+                        <h2 className='text-lg font-medium'>contacts</h2>
+                        <button
+                          type='button'
+                          onClick={() => setShowAddressBook(false)}
+                          className='ml-auto text-fg-muted hover:text-fg-high transition-colors'
+                          title='close'
+                        >
+                          <span className='i-ph-x h-4 w-4' />
+                        </button>
+                      </div>
+                      <input
+                        type='text'
+                        placeholder='search name or address'
+                        value={addressBookQuery}
+                        onChange={e => setAddressBookQuery(e.target.value)}
+                        autoFocus
+                        className='mb-3 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
+                      />
+                      <div className='flex flex-col gap-2 overflow-y-auto'>
+                        {addressBookRows.map(({ contact, addresses }) => (
+                          <div
+                            key={contact.id}
+                            className='rounded-lg border border-border-soft bg-elev-2 p-2.5'
+                          >
+                            <div className='flex items-center gap-1.5'>
+                              <p className='truncate text-sm text-fg-high'>{contact.name}</p>
+                              {contact.favorite && (
+                                <span className='i-ph-star-fill h-3 w-3 shrink-0 text-zigner-gold' />
+                              )}
+                            </div>
+                            {addresses.map(addr => (
+                              <button
+                                key={addr.id}
+                                type='button'
+                                onClick={() => selectBookAddress(contact.id, addr)}
+                                className='mt-1.5 flex w-full items-center gap-2 rounded-md border border-border-soft bg-input px-2 py-1.5 text-left transition-colors hover:border-zigner-gold'
+                              >
+                                <span className='truncate font-mono text-xs text-fg'>
+                                  {truncateAddress(addr.address)}
+                                </span>
+                                <span className='i-ph-caret-right ml-auto h-3.5 w-3.5 shrink-0 text-fg-dim' />
+                              </button>
+                            ))}
+                          </div>
+                        ))}
+                        {addressBookRows.length === 0 && (
+                          <p className='py-6 text-center text-xs text-fg-muted'>
+                            {addressBookQuery.trim()
+                              ? 'no contacts match that search'
+                              : 'no zcash contacts yet - add one to save addresses for next time'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>

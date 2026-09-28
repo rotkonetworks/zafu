@@ -21,11 +21,23 @@
  * AUTHORSHIP
  *
  * The relay is untrusted and can lie about a message's `sender`, so we do not
- * trust that field for authorship. The pair key can only be derived by the
- * holder of one of the two identities' private keys, so a frame that opens
- * under peer P's key was written by P. `sender` is used only as a hint for
- * which peer key to try first. The session id is folded into the key so a
- * frame cannot be replayed into a different chat session.
+ * trust that field for authorship. What a successful open proves is PAIR
+ * MEMBERSHIP, not which member: static-static DH is symmetric, so both ends
+ * derive the identical pair key and either can produce a frame the other opens
+ * and attributes to them. The wire envelope (ChatFrame) carries no signature,
+ * so within a two-member thread attribution is unauthenticated and deniable.
+ *
+ * In a group of n > 2 the damage is contained: pair keys are pairwise-unique,
+ * so member B cannot make member C accept a frame attributed to A - a forged
+ * attribution is visible only in the forger's own client.
+ *
+ * Anything that must pin a frame to a specific author - moderation, dispute
+ * resolution, a governance record - needs a signature over the envelope, which
+ * means a deliberate non-repudiation decision AND a binding from this relay
+ * identity to a signing identity. Neither exists here, so do not build on this
+ * as if it did. `sender` is used only as a hint for which peer key to try
+ * first. The session id is folded into the key so a frame cannot be replayed
+ * into a different chat session.
  *
  * The same static pair key is reused across a session's messages (no forward
  * secrecy); the 96-bit random GCM nonce per message keeps that safe at chat
@@ -53,6 +65,15 @@ const pairInfo = (aPubHex: string, bPubHex: string, sessionId: string): Uint8Arr
 
 const pairKey = (myPrivHex: string, peerPubHex: string, sessionId: string): Uint8Array => {
   const shared = x25519.getSharedSecret(hexToBytes(myPrivHex), hexToBytes(peerPubHex));
+  // A low-order (or all-zero) peer key drives the x25519 output to the all-zero
+  // shared secret, which any on-path attacker can predict - the DH is then
+  // non-contributory. @noble rejects such points outright, but a key that is
+  // all-zero after the scalar multiplication must never be turned into an
+  // encryption key either way.
+  if (shared.every(b => b === 0)) {
+    shared.fill(0);
+    throw new Error('group chat: non-contributory shared secret (low-order peer key)');
+  }
   const myPubHex = bytesToHex(x25519.getPublicKey(hexToBytes(myPrivHex)));
   const key = hkdf(sha256, shared, undefined, pairInfo(myPubHex, peerPubHex, sessionId), 32);
   shared.fill(0);
@@ -73,9 +94,11 @@ export const sealChatFrame = async (
 };
 
 /**
- * Open a frame from `senderPubHex`. Throws if it was not sealed by the holder
- * of `senderPubHex`'s private key for this session - so a successful return is
- * proof of authorship, not the relay's say-so.
+ * Open a frame from `senderPubHex`. Throws if the frame was not sealed under
+ * the pair key for (`senderPubHex`, us) - so a successful return proves the
+ * frame came from ONE OF THIS PAIR, not which one of them, and not the relay's
+ * say-so. See AUTHORSHIP above: pinning it to a specific author needs a
+ * signature the envelope does not carry.
  */
 export const openChatFrame = async (
   myPrivHex: string,

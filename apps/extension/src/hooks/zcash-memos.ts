@@ -137,20 +137,20 @@ export function useZcashMemos(walletId: string, zidecarUrl: string = DEFAULT_ZID
             for (let i = 0; i < bytes.length; i++) {
               bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
             }
-            return bytes;
+            return { m, bytes };
           })
-          .filter(bytes => isStructuredMemo(bytes))
-          .map((bytes, i) => {
-            const m = results.filter(r => r.memoBytes)[i]!;
-            return {
-              txid: m.txId,
-              height: m.blockHeight,
-              memo: bytes,
-              diversifierIndex: m.diversifierIndex ?? 0,
-              isChange: m.direction === 'sent',
-              timestamp: m.timestamp,
-            };
-          });
+          .filter(({ bytes }) => isStructuredMemo(bytes))
+          .map(({ m, bytes }) => ({
+            txid: m.txId,
+            height: m.blockHeight,
+            memo: bytes,
+            diversifierIndex: m.diversifierIndex ?? 0,
+            isChange: m.direction === 'sent',
+            timestamp: m.timestamp,
+            // the note's own declared return address is the only thing a
+            // card/sign payload can be bound to — a memo carries no signature
+            senderAddress: parseReturnAddress(m.content).returnAddress,
+          }));
         if (structuredNotes.length > 0) {
           inbox.ingestMemos(structuredNotes);
         }
@@ -179,7 +179,9 @@ export function useZcashMemos(walletId: string, zidecarUrl: string = DEFAULT_ZID
             blockHeight: m.blockHeight,
             timestamp: m.timestamp,
             content: `📇 ${card.name || 'anonymous'}\n${card.address}`,
-            senderAddress: card.address,
+            // never record the card's self-declared address as the sender:
+            // only the delivering note's own return address is evidence
+            senderAddress: note.senderAddress,
             recipientAddress: '',
             direction: m.direction as 'sent' | 'received',
             read: m.direction === 'sent',

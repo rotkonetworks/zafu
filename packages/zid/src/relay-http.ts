@@ -101,29 +101,94 @@ const bytesToBase64 = (bytes: Uint8Array): string => {
 
 const base64ToBytes = (s: string): Uint8Array => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
+/**
+ * Client-side ceiling on what an untrusted relay may make us decode. An honest
+ * client contributes one padded batch (PRESENCE_PAD_TO = 64) per epoch, so a
+ * cap of a few batches bounds a hostile relay without clipping legitimate data.
+ */
+export const MAX_RELAY_ENTRIES = 256;
+/** generous base64 ceiling for one tag (32 B) or blob (64 B) - anything longer is discarded. */
+export const MAX_RELAY_ENTRY_BASE64 = 1024;
+
+/**
+ * Client-side ceiling on what an untrusted relay may make us BUFFER. An honest
+ * bucket is at most MAX_RELAY_ENTRIES entries of two MAX_RELAY_ENTRY_BASE64
+ * fields (well under 0.5 MB), so 1 MiB accepts any legal response and still
+ * bounds a hostile one.
+ *
+ * This is the read-side twin of MAX_RELAY_ENTRIES, and it is not redundant:
+ * `JSON.parse` allocates the whole body before `parseEntries` can cap a single
+ * entry, so the count/cap checks alone still let a relay hand us a 2 GB body to
+ * materialise first. The limit is applied while reading, not after.
+ */
+export const MAX_RELAY_BODY_BYTES = 1024 * 1024;
+
+/** read a relay response body, refusing to buffer more than the ceiling above. */
+async function readBoundedBody(res: Response): Promise<string> {
+  const reader = res.body?.getReader();
+  if (!reader) {
+    // a Response without a stream (an exotic implementation or a test double)
+    const text = await res.text();
+    if (text.length > MAX_RELAY_BODY_BYTES) {
+      throw new Error(`relay: response body exceeds ${MAX_RELAY_BODY_BYTES} bytes`);
+    }
+    return text;
+  }
+  const decoder = new TextDecoder();
+  let text = '';
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      return text + decoder.decode();
+    }
+    bytes += value.byteLength;
+    if (bytes > MAX_RELAY_BODY_BYTES) {
+      await reader.cancel();
+      throw new Error(`relay: response body exceeds ${MAX_RELAY_BODY_BYTES} bytes`);
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+}
+
 /** parse the `{ entries: [{ tag, blob }] }` body, rejecting anything else loudly. */
 function parseEntries(body: unknown): PresenceEntry[] {
   if (typeof body !== 'object' || body === null) {
     throw new Error('relay: response is not a JSON object');
   }
-  const entries = (body as { entries?: unknown }).entries;
+  if (!('entries' in body)) {
+    throw new Error('relay: response has no `entries` array');
+  }
+  const entries = body.entries;
   if (!Array.isArray(entries)) {
     throw new Error('relay: response has no `entries` array');
   }
-  return entries.map((raw, i) => {
+  // DEFECT C: never decode an unbounded batch from untrusted relay output - cap
+  // the count and drop any entry whose encoded fields exceed the ceiling.
+  const parsed: PresenceEntry[] = [];
+  for (let i = 0; i < entries.length && parsed.length < MAX_RELAY_ENTRIES; i++) {
+    const raw: unknown = entries[i];
     if (typeof raw !== 'object' || raw === null) {
       throw new Error(`relay: entry ${i} is not an object`);
     }
-    const { tag, blob } = raw as { tag?: unknown; blob?: unknown };
+    if (!('tag' in raw) || !('blob' in raw)) {
+      throw new Error(`relay: entry ${i} must carry base64 strings for tag and blob`);
+    }
+    const tag = raw.tag;
+    const blob = raw.blob;
     if (typeof tag !== 'string' || typeof blob !== 'string') {
       throw new Error(`relay: entry ${i} must carry base64 strings for tag and blob`);
     }
+    if (tag.length > MAX_RELAY_ENTRY_BASE64 || blob.length > MAX_RELAY_ENTRY_BASE64) {
+      continue; // discard an oversized entry rather than decode it
+    }
     try {
-      return { tag: base64ToBytes(tag), blob: base64ToBytes(blob) };
+      parsed.push({ tag: base64ToBytes(tag), blob: base64ToBytes(blob) });
     } catch {
       throw new Error(`relay: entry ${i} carries invalid base64`);
     }
-  });
+  }
+  return parsed;
 }
 
 /** the relay transport from the wire contract above. */
@@ -159,7 +224,14 @@ export function createHttpRelayTransport(opts: HttpRelayTransportOptions): Relay
       if (!res.ok) {
         throw new Error(`relay: getBucket failed with HTTP ${res.status}`);
       }
-      return parseEntries(await res.json());
+      const raw = await readBoundedBody(res);
+      let body: unknown;
+      try {
+        body = JSON.parse(raw);
+      } catch {
+        throw new Error('relay: response body is not JSON');
+      }
+      return parseEntries(body);
     },
   };
 }

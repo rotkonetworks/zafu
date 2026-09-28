@@ -55,7 +55,9 @@ zafu uses several relays; each sees a different amount.
 
 - **frost multisig relay (frostd)**: transports DKG and signing messages, which
   are Noise_K encrypted end-to-end. it sees ciphertext and session metadata, not
-  keys, amounts, or recipients. see [frost](frost.md).
+  keys, amounts, or recipients. the per-group relay identity is encrypted at
+  rest: its x25519 key also seals group-chat frames, so it protects message
+  confidentiality, not relay authentication alone. see [frost](frost.md).
 - **zid direct messages and calls**: DMs use a Noise IK channel between two ZID
   keypairs, and voice/video call setup rides the same end-to-end encrypted
   channel (media is then direct peer-to-peer, which reveals your IP to the peer).
@@ -87,6 +89,6 @@ long-term decryption exposure.
 | group chats                 | chrome.storage.local   | yes                   |
 | recent / diversified addrs  | chrome.storage.local   | yes                   |
 | connected sites             | chrome.storage.local   | no (no private data)  |
-| frost relay identities      | chrome.storage.local   | no (not a spend key)  |
+| frost relay identities      | chrome.storage.local   | yes (chat key)        |
 | password key                | chrome.storage.session | session only          |
 | vaults (encrypted mnemonic) | chrome.storage.local   | yes (separate key)    |

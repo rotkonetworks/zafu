@@ -103,8 +103,8 @@ async function loadAdapter(network: NetworkId): Promise<NetworkAdapter> {
         // Ethermint (eth_secp256k1 / coin 60) - the shared CosmosAdapter would
         // derive the WRONG address via the coin-118 path. Injective is a
         // receive+shield conduit (packages/wallet/src/networks/injective),
-        // driven directly from the UI, not through a synced NetworkAdapter, and
-        // is launched:false until the #34 gates pass. Fail closed here.
+        // driven directly from the UI, not through a synced NetworkAdapter, so
+        // no adapter is registered. Fail closed here.
         throw new Error('injective has no network adapter (receive+shield conduit only)');
       case 'ethereum':
       case 'bitcoin':

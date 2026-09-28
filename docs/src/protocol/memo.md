@@ -67,7 +67,7 @@ is not 0x5A.
     0x03    PaymentRequest   Amount + optional address + label
     0x04    Ack              Read receipt / acknowledgment
     0x05    ContactCard      Name + address + TLV extensions
-    0x06    EncryptedMessage zid-authenticated encrypted payload
+    0x06    EncryptedMessage reserved, not implemented
     0x07    Data             Generic structured data (agentic)
     0x10    DkgRound1        FROST DKG round 1
     0x11    DkgRound2        FROST DKG round 2

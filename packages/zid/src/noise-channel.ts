@@ -26,6 +26,8 @@
  *   0x01 noise_init  - [tag][e 32][mlkem_ek 1184][encrypted s 48][encrypted payload 16+]
  *   0x02 noise_resp  - [tag][e 32][mlkem_ct 1088][encrypted payload 16+]
  *   0x03 noise_transport - [tag][counter BE 8][ciphertext+tag]
+ *   0x04 noise_refuse    - [tag][u16 BE name len][utf8 protocol name] (peer cannot
+ *                          speak this protocol; the one downgrade-eligible signal)
  *
  * These messages ride the relay WebSocket (no 512-byte memo limit); the memo is
  * only a classical bootstrap pointer. The relay routes by (from, to) pubkey pair
@@ -51,6 +53,10 @@ import type { ZidChannel } from './types';
 const NOISE_INIT = 0x01;
 const NOISE_RESP = 0x02;
 const NOISE_TRANSPORT = 0x03;
+// responder -> initiator: "I do not speak your protocol"; names the one it
+// speaks instead. The ONLY well-formed signal an `'auto'` caller may downgrade
+// on (see encodeProtocolRefusal).
+const NOISE_REFUSE = 0x04;
 
 // Hybrid IK: the classical Noise_IK_25519 handshake with an ephemeral ML-KEM-768
 // shared secret mixed into the chaining key, so recorded traffic stays
@@ -87,6 +93,26 @@ export interface SessionKey {
 export interface CipherState {
   k: Uint8Array; // 32-byte symmetric key
   n: bigint; // monotonic counter nonce
+}
+
+/** the initiator's in-flight hybrid handshake (before the responder's resp). */
+export interface InitiatorHandshake {
+  /** the noise_init message to send (0x01). */
+  message: Uint8Array;
+  /** process the responder's resp; returns the two transport cipher states. */
+  finish: (respMsg: Uint8Array) => { sendCS: CipherState; recvCS: CipherState };
+  /** zeroize the ephemeral handshake secrets (call on any non-success path). */
+  cleanup: () => void;
+}
+
+/** the responder's completed hybrid handshake. */
+export interface ResponderHandshake {
+  /** the noise_resp message to send back (0x02). */
+  message: Uint8Array;
+  sendCS: CipherState;
+  recvCS: CipherState;
+  /** the initiator's static x25519 key, for peer authentication by the caller. */
+  remoteXPub: Uint8Array;
 }
 
 // -- core Noise functions --
@@ -196,42 +222,115 @@ function zeroize(buf: Uint8Array): void {
 }
 
 // ---------------------------------------------------------------------------
-// handshake failure tagging
+// error taxonomy (what channel:auto may downgrade on)
 // ---------------------------------------------------------------------------
 //
-// `channel: 'auto'` (channel-select.ts) falls back to the CLASSICAL channel only
-// when the HYBRID HANDSHAKE failed. A transport failure - relay down, socket
-// error, a peer that simply never answers - must propagate instead, or an outage
-// would be misread as "this peer is not post-quantum capable" and quietly
-// downgrade. So every failure inside the handshake carries a stable `name`;
-// nothing outside the handshake is tagged.
+// `channel: 'auto'` (channel-select.ts) falls back to the CLASSICAL channel
+// ONLY on a genuine, well-formed CAPABILITY signal from the peer: an explicit
+// refusal naming the protocol it speaks instead of ours (NOISE_REFUSE). Every
+// other failure - a malformed or truncated frame, an AEAD or decapsulation
+// failure, a peer-key mismatch, a relay/socket outage, the handshake deadline -
+// is a TRANSPORT failure and PROPAGATES. So a hostile relay cannot force a
+// post-quantum -> classical downgrade with one crafted frame, and an outage is
+// never misread as "this peer is not post-quantum capable".
+//
+// Each class carries a stable `name` so a caller (and openChannel) can branch on
+// it without importing the concrete type.
 
+/** the peer cannot complete the hybrid handshake - a genuine capability signal. */
 const NOISE_HANDSHAKE_ERROR = 'NoiseHandshakeError';
+/** the peer's frame is not a valid hybrid message (wrong tag, short, tampered). */
+const NOISE_MALFORMED_ERROR = 'NoiseMalformedMessageError';
+/** a transport frame failed to decrypt (replayed, dropped, reordered, tampered). */
+const NOISE_TRANSPORT_ERROR = 'NoiseTransportError';
+/** the peer never completed the handshake inside the deadline. */
+const NOISE_HANDSHAKE_TIMEOUT_ERROR = 'NoiseHandshakeTimeoutError';
 
-/** tag `e` as a handshake failure and return it (the message is preserved). */
-const asHandshakeFailure = (e: unknown): Error => {
+/** tag `e` with a stable error `name` and return it (the message is preserved). */
+const tagged = (name: string, e: unknown): Error => {
   const err = e instanceof Error ? e : new Error(String(e));
-  err.name = NOISE_HANDSHAKE_ERROR;
+  err.name = name;
   return err;
 };
 
-/** run a handshake crypto step, tagging any throw as a handshake failure. */
-const handshakeStep = <T>(fn: () => T): T => {
+/** tag `e` as a malformed peer message (NOT a downgrade signal). */
+const asMalformedMessage = (e: unknown): Error => tagged(NOISE_MALFORMED_ERROR, e);
+
+/** tag `e` as a transport failure (NOT a downgrade signal). */
+const asTransportError = (e: unknown): Error => tagged(NOISE_TRANSPORT_ERROR, e);
+
+/** run a handshake crypto step, tagging any throw as a malformed message. */
+const malformedStep = <T>(fn: () => T): T => {
   try {
     return fn();
   } catch (e) {
-    throw asHandshakeFailure(e);
+    throw asMalformedMessage(e);
   }
 };
 
 /**
- * True for a FAILED HANDSHAKE - the peer could not complete the hybrid protocol -
- * as opposed to a TRANSPORT failure (relay down, socket error, timeout).
+ * True for a genuine handshake-CAPABILITY failure - a well-formed refusal from a
+ * peer that cannot do the hybrid protocol - as opposed to a MALFORMED frame, a
+ * TRANSPORT failure (relay down, socket error, deadline) or an outage.
  * `openChannel(..., 'auto')` uses this to decide whether a downgrade is
- * legitimate; transport failures are never tagged.
+ * legitimate; nothing else is ever tagged as a handshake failure.
  */
 export const isNoiseHandshakeFailure = (e: unknown): boolean =>
   e instanceof Error && e.name === NOISE_HANDSHAKE_ERROR;
+
+/** True for a fatal post-handshake transport failure (replay/drop/tampered frame). */
+export const isNoiseTransportError = (e: unknown): boolean =>
+  e instanceof Error && e.name === NOISE_TRANSPORT_ERROR;
+
+/** True for the handshake-deadline failure (the peer opened the socket but never answered). */
+export const isNoiseHandshakeTimeoutError = (e: unknown): boolean =>
+  e instanceof Error && e.name === NOISE_HANDSHAKE_TIMEOUT_ERROR;
+
+// -- protocol refusal (the one downgrade-eligible capability signal) ---------
+//
+// A peer that receives a hybrid init but does not speak this protocol answers
+// with a refusal naming the protocol it DOES speak. Only a well-formed refusal
+// is a capability signal; malformed bytes are a transport error and propagate.
+//
+// HONEST SCOPE: this is the READ side plus the fixed wire format. No zafu
+// responder emits a refusal yet - `./channel` parses JSON `keyex` only and drops
+// a binary init, so against it a hybrid initiator sees the readiness deadline
+// (`NoiseHandshakeTimeoutError`), which `'auto'` rethrows rather than
+// downgrading on. `encodeProtocolRefusal` is exported so the classical channel
+// can adopt the format without a second definition; until both ends do, a
+// classical-only peer is reached with `channel: 'classical'`.
+
+/**
+ * Encode a protocol refusal: `[0x04][u16 BE name length][utf8 protocol name]`.
+ * The wire format the hybrid initiator parses (`parseProtocolRefusal`), so a
+ * responder that cannot do the hybrid handshake can name what it speaks and let
+ * an `'auto'` initiator downgrade deliberately instead of guessing from an
+ * opaque crypto error. Exported for that future responder; nothing sends it yet.
+ */
+export function encodeProtocolRefusal(protocol: string): Uint8Array {
+  const name = new TextEncoder().encode(protocol);
+  if (name.length === 0 || name.length > 0xffff) {
+    throw new Error('noise: invalid protocol name length');
+  }
+  const out = new Uint8Array(3 + name.length);
+  out[0] = NOISE_REFUSE;
+  out[1] = (name.length >> 8) & 0xff;
+  out[2] = name.length & 0xff;
+  out.set(name, 3);
+  return out;
+}
+
+/** Parse a refusal; throw a MALFORMED error (never a capability signal) on bad bytes. */
+function parseProtocolRefusal(msg: Uint8Array): string {
+  if (msg.length < 3 || msg[0] !== NOISE_REFUSE) {
+    throw asMalformedMessage(new Error('noise: not a protocol refusal message'));
+  }
+  const nameLen = ((msg[1] ?? 0) << 8) | (msg[2] ?? 0);
+  if (nameLen === 0 || msg.length !== 3 + nameLen) {
+    throw asMalformedMessage(new Error('noise: malformed protocol refusal message'));
+  }
+  return new TextDecoder().decode(msg.slice(3));
+}
 
 /** constant-time equality for two byte arrays (peer-key authentication). */
 export function ctEqual(a: Uint8Array, b: Uint8Array): boolean {
@@ -284,11 +383,7 @@ export function initiatorHandshake(
   localXPriv: Uint8Array,
   localXPub: Uint8Array,
   remoteXPub: Uint8Array,
-): {
-  message: Uint8Array;
-  finish: (respMsg: Uint8Array) => { sendCS: CipherState; recvCS: CipherState };
-  cleanup: () => void;
-} {
+): InitiatorHandshake {
   let { ck, h } = initSymmetric();
 
   // pre-message: <- s (responder static known)
@@ -346,10 +441,10 @@ export function initiatorHandshake(
 
   function finish(resp: Uint8Array): { sendCS: CipherState; recvCS: CipherState } {
     if (resp[0] !== NOISE_RESP) {
-      throw asHandshakeFailure(new Error('noise: expected resp message (0x02)'));
+      throw asMalformedMessage(new Error('noise: expected resp message (0x02)'));
     }
     if (resp.length < NOISE_RESP_MIN_LEN) {
-      throw asHandshakeFailure(
+      throw asMalformedMessage(
         new Error(`noise: resp message too short (${resp.length} < ${NOISE_RESP_MIN_LEN})`),
       );
     }
@@ -370,13 +465,13 @@ export function initiatorHandshake(
     rck = seRck;
 
     // decrypt responder payload (empty)
-    const dec = handshakeStep(() => decryptAndHash(rk, 0n, rh, respCt));
+    const dec = malformedStep(() => decryptAndHash(rk, 0n, rh, respCt));
     rh = dec.h;
 
     // <- pq: decapsulate the ML-KEM secret and mix it in LAST, so the transport
     // keys depend on both the X25519 chain AND the ML-KEM secret. A passive
     // recorder must break BOTH to derive them.
-    const mlSs = handshakeStep(() => mlkem768Decapsulate(mlCt, savedMlSk));
+    const mlSs = malformedStep(() => mlkem768Decapsulate(mlCt, savedMlSk));
     [rck] = mixKey(rck, mlSs);
     zeroize(mlSs);
 
@@ -418,17 +513,12 @@ export function responderHandshake(
   localXPriv: Uint8Array,
   localXPub: Uint8Array,
   initMsg: Uint8Array,
-): {
-  message: Uint8Array;
-  sendCS: CipherState;
-  recvCS: CipherState;
-  remoteXPub: Uint8Array;
-} {
+): ResponderHandshake {
   if (initMsg[0] !== NOISE_INIT) {
-    throw asHandshakeFailure(new Error('noise: expected init message (0x01)'));
+    throw asMalformedMessage(new Error('noise: expected init message (0x01)'));
   }
   if (initMsg.length < NOISE_INIT_MIN_LEN) {
-    throw asHandshakeFailure(
+    throw asMalformedMessage(
       new Error(`noise: init message too short (${initMsg.length} < ${NOISE_INIT_MIN_LEN})`),
     );
   }
@@ -455,7 +545,7 @@ export function responderHandshake(
 
   // -> s: decrypt initiator's static x25519 pubkey
   const encStatic = initMsg.slice(staticOff, staticOff + 32 + TAG_LEN);
-  const decS = handshakeStep(() => decryptAndHash(k, n, h, encStatic));
+  const decS = malformedStep(() => decryptAndHash(k, n, h, encStatic));
   h = decS.h;
   n = decS.n;
   const remoteXPub = decS.pt;
@@ -466,7 +556,7 @@ export function responderHandshake(
 
   // decrypt initiator payload (empty)
   const encPayload = initMsg.slice(staticOff + 32 + TAG_LEN);
-  const decPayload = handshakeStep(() => decryptAndHash(k, n, h, encPayload));
+  const decPayload = malformedStep(() => decryptAndHash(k, n, h, encPayload));
   h = decPayload.h;
 
   // <- e: generate responder ephemeral
@@ -476,7 +566,7 @@ export function responderHandshake(
 
   // <- e_pq: encapsulate against the initiator's ML-KEM ek. mlSs is forward-secret
   // (initiator ek is ephemeral); bind the ciphertext into the transcript.
-  const { sharedSecret: mlSs, cipherText: mlCt } = handshakeStep(() => mlkem768Encapsulate(mlEk));
+  const { sharedSecret: mlSs, cipherText: mlCt } = malformedStep(() => mlkem768Encapsulate(mlEk));
   h = mixHash(h, mlCt);
 
   // <- ee: DH(e, re)
@@ -557,22 +647,39 @@ export function encryptTransport(cs: CipherState, plaintext: Uint8Array): Uint8A
 }
 
 export function decryptTransport(cs: CipherState, msg: Uint8Array): Uint8Array {
-  if (msg[0] !== NOISE_TRANSPORT) {
-    throw new Error('noise: expected transport message (0x03)');
+  if (msg.length < 9 || msg[0] !== NOISE_TRANSPORT) {
+    throw asTransportError(new Error('noise: expected transport message (0x03)'));
   }
   const wireN = new DataView(msg.buffer, msg.byteOffset + 1, 8).getBigUint64(0, false);
+  // The nonce is IMPLICIT and the key ratchets with the counter, so an out-of-
+  // order, dropped, replayed or forged counter can never be resynced. This is
+  // channel-fatal (the caller closes and zeroizes); it must never be swallowed,
+  // or the direction would wedge silently while the channel claims to be up.
   if (wireN !== cs.n) {
-    throw new Error(`noise: counter mismatch (expected ${cs.n}, got ${wireN})`);
+    throw asTransportError(new Error(`noise: counter mismatch (expected ${cs.n}, got ${wireN})`));
   }
   // mirror the sender: ratchet at the same boundary before decrypting message n.
   maybeRatchet(cs);
   const ct = msg.slice(9);
-  const pt = chacha20poly1305(cs.k, nonceBytes(cs.n)).decrypt(ct);
+  let pt: Uint8Array;
+  try {
+    pt = chacha20poly1305(cs.k, nonceBytes(cs.n)).decrypt(ct);
+  } catch (e) {
+    throw asTransportError(e);
+  }
   cs.n += 1n;
   return pt;
 }
 
 // -- public API --
+
+/**
+ * Deadline for the hybrid handshake. A peer (or relay) that opens the socket and
+ * then never answers must not leave the caller's promise pending forever; on
+ * expiry the socket is closed and the channel rejects with a tagged
+ * NoiseHandshakeTimeoutError (a transport failure - channel:auto never downgrades on it).
+ */
+export const HANDSHAKE_TIMEOUT_MS = 15_000;
 
 /** Create a Noise IK encrypted channel to a peer via relay WebSocket. */
 export async function createNoiseChannel(
@@ -585,6 +692,7 @@ export async function createNoiseChannel(
   const remoteXPub = edPubToX(unhex(peerPubkey));
 
   const handlers: ((data: Uint8Array) => void)[] = [];
+  const errorHandlers: ((e: Error) => void)[] = [];
   let sendCS: CipherState | null = null;
   let recvCS: CipherState | null = null;
   let ws: WebSocket | null = null;
@@ -596,33 +704,84 @@ export async function createNoiseChannel(
     relayUrl || `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/zid`;
 
   const handshakeComplete = new Promise<void>((resolve, reject) => {
-    ws = new WebSocket(url);
-    ws.binaryType = 'arraybuffer';
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    // the initiator's in-flight handshake, so the deadline can zeroize its secrets.
+    let pending: InitiatorHandshake | null = null;
 
-    function transportHandler(ev: MessageEvent): void {
-      if (typeof ev.data === 'string') {
+    const clearTimer = (): void => {
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    };
+    const settle = (error?: unknown): void => {
+      if (settled) {
         return;
       }
+      settled = true;
+      clearTimer();
+      if (error === undefined) {
+        resolve();
+      } else {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    };
+
+    /**
+     * A transport frame could not be decrypted (replayed, dropped, reordered or
+     * tampered). The implicit nonce can never resync, so this is channel-FATAL:
+     * close, zeroize, and hand the typed error (isNoiseTransportError) to the
+     * caller. NEVER swallow it - a swallowed mismatch wedges the direction for
+     * good while the channel still reports itself established.
+     */
+    const fatalTransport = (e: unknown): void => {
+      const err = e instanceof Error ? e : new Error(String(e));
+      if (sendCS) {
+        zeroize(sendCS.k);
+        sendCS = null;
+      }
+      if (recvCS) {
+        zeroize(recvCS.k);
+        recvCS = null;
+      }
+      ws?.close();
+      ws = null;
+      for (const h of errorHandlers) {
+        h(err);
+      }
+    };
+
+    function transportHandler(ev: MessageEvent): void {
+      if (typeof ev.data === 'string' || !recvCS) {
+        return;
+      }
+      const data = new Uint8Array(ev.data as ArrayBuffer);
+      if (data[0] !== NOISE_TRANSPORT) {
+        return;
+      }
+      let pt: Uint8Array;
       try {
-        const data = new Uint8Array(ev.data as ArrayBuffer);
-        if (data[0] === NOISE_TRANSPORT && recvCS) {
-          const pt = decryptTransport(recvCS, data);
-          for (const h of handlers) {
-            h(pt);
-          }
-        }
+        pt = decryptTransport(recvCS, data);
       } catch (e) {
-        console.error('noise: transport decrypt error', e);
+        fatalTransport(e);
+        return;
+      }
+      for (const h of handlers) {
+        h(pt);
       }
     }
+
+    ws = new WebSocket(url);
+    ws.binaryType = 'arraybuffer';
 
     ws.onopen = () => {
       // announce to relay so it knows our routing pair
       ws?.send(JSON.stringify({ type: 'announce', from: session.pubkey, to: peerPubkey }));
 
       if (isInitiator) {
-        const hs = initiatorHandshake(localXPriv, localXPub, remoteXPub);
-        ws?.send(hs.message);
+        pending = initiatorHandshake(localXPriv, localXPub, remoteXPub);
+        ws?.send(pending.message);
 
         ws!.onmessage = ev => {
           if (typeof ev.data === 'string') {
@@ -630,17 +789,33 @@ export async function createNoiseChannel(
           }
           try {
             const data = new Uint8Array(ev.data as ArrayBuffer);
+            // A well-formed refusal is the ONLY downgrade-eligible signal: the
+            // peer names the protocol it speaks instead of ours. Malformed bytes
+            // fall through to a crypto error and propagate as MALFORMED.
+            if (data[0] === NOISE_REFUSE) {
+              const offered = parseProtocolRefusal(data);
+              pending?.cleanup();
+              ws?.close();
+              settle(
+                tagged(
+                  NOISE_HANDSHAKE_ERROR,
+                  new Error(`noise: peer does not support ${PROTOCOL_NAME}; it offered ${offered}`),
+                ),
+              );
+              return;
+            }
             if (data[0] === NOISE_RESP) {
-              const result = hs.finish(data);
+              const result = pending!.finish(data);
               sendCS = result.sendCS;
               recvCS = result.recvCS;
               ws!.onmessage = transportHandler;
               zeroize(localXPriv);
-              resolve();
+              settle();
             }
           } catch (e) {
-            hs.cleanup();
-            reject(e instanceof Error ? e : new Error(String(e)));
+            pending?.cleanup();
+            ws?.close();
+            settle(e);
           }
         };
       }
@@ -660,31 +835,48 @@ export async function createNoiseChannel(
           // the untrusted relay can send a well-formed init and complete a fully
           // encrypted, "authenticated" channel with their OWN key while we
           // believe .peer is peerPubkey - impersonation. Reject + zeroize on
-          // mismatch (constant-time compare).
+          // mismatch (constant-time compare). This is an ATTACK, not a capability
+          // signal, so it is tagged MALFORMED and never triggers a downgrade.
           if (!ctEqual(result.remoteXPub, remoteXPub)) {
             zeroize(result.sendCS.k);
             zeroize(result.recvCS.k);
             zeroize(localXPriv);
-            throw asHandshakeFailure(new Error('noise: unexpected initiator (peer key mismatch)'));
+            throw asMalformedMessage(new Error('noise: unexpected initiator (peer key mismatch)'));
           }
           sendCS = result.sendCS;
           recvCS = result.recvCS;
           ws?.send(result.message);
           ws!.onmessage = transportHandler;
           zeroize(localXPriv);
-          resolve();
+          settle();
         } catch (e) {
-          reject(e instanceof Error ? e : new Error(String(e)));
+          ws?.close();
+          settle(e);
         }
       }
     };
 
-    ws.onerror = () => reject(new Error('noise: WebSocket error'));
+    ws.onerror = () => settle(new Error('noise: WebSocket error'));
     ws.onclose = () => {
       if (!sendCS) {
-        reject(new Error('noise: connection closed during handshake'));
+        settle(new Error('noise: connection closed during handshake'));
       }
     };
+
+    // Bounded handshake deadline: a relay that opens the socket and never
+    // answers must not leave openChannel's promise pending forever. Closes the
+    // socket and rejects with the tagged NoiseHandshakeTimeoutError - a TRANSPORT
+    // failure, so channel:auto PROPAGATES it rather than downgrading.
+    timer = setTimeout(() => {
+      pending?.cleanup();
+      ws?.close();
+      settle(
+        tagged(
+          NOISE_HANDSHAKE_TIMEOUT_ERROR,
+          new Error(`noise: hybrid handshake timed out after ${HANDSHAKE_TIMEOUT_MS}ms`),
+        ),
+      );
+    }, HANDSHAKE_TIMEOUT_MS);
   });
 
   try {
@@ -707,9 +899,18 @@ export async function createNoiseChannel(
       ws.send(encryptTransport(sendCS, plain));
     },
 
-    on(event: 'message', handler: (data: Uint8Array) => void): void {
+    // 'message' delivers decrypted payloads. 'error' delivers a typed fatal
+    // transport error (see isNoiseTransportError) AFTER the channel has closed
+    // and zeroized its keys - so a caller can act on a wedged direction
+    // (reconnect, surface it) instead of watching a silently dead channel.
+    on(
+      event: 'message' | 'error',
+      handler: ((data: Uint8Array) => void) | ((e: Error) => void),
+    ): void {
       if (event === 'message') {
-        handlers.push(handler);
+        handlers.push(handler as (data: Uint8Array) => void);
+      } else {
+        errorHandlers.push(handler as (e: Error) => void);
       }
     },
 

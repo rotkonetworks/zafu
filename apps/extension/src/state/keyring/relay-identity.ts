@@ -2,10 +2,14 @@
  * relay-identity — this device's identity on a frostd relay.
  *
  * A relay identity is NOT a wallet key and is deliberately unrelated to one.
- * It exists only to authenticate to the relay and to key the Noise_K sessions
- * that keep the relay from reading anything. Losing it costs you a session,
- * not funds; leaking it lets someone impersonate you to a relay that already
- * holds nothing but ciphertext.
+ * Its X25519 private key authenticates to the relay and keys the Noise_K
+ * sessions that keep the relay from reading anything - but that is not its
+ * only role. The same scalar is the static private half of the pairwise DH that
+ * seals group-chat frames (see group-chat-crypto), so it is the group-chat
+ * confidentiality key. Leaking it is therefore not "impersonation only": an
+ * attacker who holds it can decrypt every group-chat message encrypted to that
+ * identity, and impersonate the device to the relay besides. Losing it costs a
+ * session and read access to history sealed to it, not funds.
  *
  * It is generated per multisig group rather than once per device. Reusing one
  * identity across groups would let a relay operator - or anyone watching -
@@ -22,6 +26,8 @@
  */
 
 import { localExtStorage } from '@repo/storage-chrome/local';
+import { sessionExtStorage } from '@repo/storage-chrome/session';
+import { readEncryptedWithMigration, writeEncryptedDirect } from '../encrypted-storage';
 import type { RelayCipher, RelayIdentity } from './frostd-relay-client';
 
 /** What we persist. The private key never leaves this device. */
@@ -29,6 +35,8 @@ export interface StoredRelayIdentity {
   privateKey: string;
   publicKey: string;
 }
+
+type RelayIdentityMap = Record<string, StoredRelayIdentity>;
 
 /** The subset of the wasm bundle this module needs. */
 interface RelayWasm {
@@ -75,14 +83,82 @@ function hexToBytes(hex: string): Uint8Array {
 }
 
 /**
+ * Adding an identity is a read-modify-write over the whole `frostRelayIdentities`
+ * map, and it awaits wasm key generation in between. Two concurrent calls for
+ * different groups would otherwise both read the map before either writes, and
+ * the second write would clobber the first group's entry - silently losing that
+ * group's key (and with it its chat history). The queue re-reads the map
+ * immediately before each write, so a late entry is merged, never overwritten.
+ *
+ * Reads go through the encrypted path (migrating a legacy plaintext value in
+ * place): the private key is the group-chat confidentiality secret, so it is
+ * sealed at rest like the messages it opens.
+ */
+let writeChain: Promise<void> = Promise.resolve();
+
+/**
+ * A group's relay identity could not be stored: the wallet is locked, so there
+ * is no session key to seal it with and the write was skipped.
+ *
+ * It is thrown rather than papered over because the value being written is a
+ * GENERATED key: returning it would hand the caller a relay identity that does
+ * not exist on this device, and the next unlocked call would mint a DIFFERENT
+ * key for the same group - silently rotating it and orphaning every chat frame
+ * sealed to the original.
+ */
+export class RelayIdentityLockedError extends Error {
+  constructor(groupId: string) {
+    super(
+      `relay identity for '${groupId}': wallet is locked, refusing to return a key that cannot be persisted`,
+    );
+    this.name = 'RelayIdentityLockedError';
+  }
+}
+
+function updateRelayIdentities<T>(
+  mutate: (all: RelayIdentityMap) => T,
+  groupId: string,
+): Promise<T> {
+  const run = async (): Promise<T> => {
+    const all =
+      (await readEncryptedWithMigration<RelayIdentityMap>(
+        localExtStorage,
+        sessionExtStorage,
+        'frostRelayIdentities',
+      )) ?? {};
+    const result = mutate(all);
+    const persisted = await writeEncryptedDirect(
+      localExtStorage,
+      sessionExtStorage,
+      'frostRelayIdentities',
+      all,
+    );
+    if (!persisted) {
+      throw new RelayIdentityLockedError(groupId);
+    }
+    return result;
+  };
+  const result = writeChain.then(run);
+  // keep the chain alive past a failed write so one bad update cannot wedge it
+  writeChain = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
+
+/**
  * Get this device's relay identity for a group, creating one on first use.
  *
  * `groupId` scopes the identity. Any stable string for the multisig group
  * will do; what matters is that different groups get different keys.
  */
 export async function getOrCreateRelayIdentity(groupId: string): Promise<StoredRelayIdentity> {
-  const all = (await localExtStorage.get('frostRelayIdentities')) ?? {};
-  const existing = all[groupId];
+  const existing = ((await readEncryptedWithMigration<RelayIdentityMap>(
+    localExtStorage,
+    sessionExtStorage,
+    'frostRelayIdentities',
+  )) ?? {})[groupId];
   if (existing !== undefined) {
     return existing;
   }
@@ -96,15 +172,22 @@ export async function getOrCreateRelayIdentity(groupId: string): Promise<StoredR
     privateKey: generated.private,
     publicKey: generated.public,
   };
-  await localExtStorage.set('frostRelayIdentities', { ...all, [groupId]: identity });
-  return identity;
+  // Re-read and merge inside the serialised write: a concurrent call for a
+  // different group may have added its entry since the read above.
+  const all = await updateRelayIdentities(map => {
+    if (map[groupId] === undefined) {
+      map[groupId] = identity;
+    }
+    return map;
+  }, groupId);
+  return all[groupId]!;
 }
 
 /** Forget a group's identity. Ends any session it could still authenticate. */
 export async function forgetRelayIdentity(groupId: string): Promise<void> {
-  const all = (await localExtStorage.get('frostRelayIdentities')) ?? {};
-  const { [groupId]: _dropped, ...rest } = all;
-  await localExtStorage.set('frostRelayIdentities', rest);
+  await updateRelayIdentities(map => {
+    delete map[groupId];
+  }, groupId);
 }
 
 /**

@@ -64,6 +64,11 @@ const groups: SettingsGroup[] = [
         icon: 'i-ph-globe',
         href: PopupPath.SETTINGS_CONNECTED_SITES,
       },
+      {
+        title: 'features',
+        icon: 'i-ph-sliders-horizontal',
+        href: PopupPath.SETTINGS_FEATURES,
+      },
     ],
   },
   {

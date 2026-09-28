@@ -11,6 +11,7 @@ import { viewClient, stakeClient } from '../../../clients';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { useStore } from '../../../state';
 import { selectActiveNetwork, selectPenumbraAccount } from '../../../state/keyring';
+import { hasFeature } from '../../../config/networks';
 import { NetworkUnavailable } from '../../../shared/components/network-unavailable';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
@@ -139,7 +140,7 @@ export const StakePage = () => {
 
   // gate network-only queries via the hook's `enabled` flag rather than an
   // early return — Rules of Hooks require the same hook count on every render.
-  const isPenumbra = activeNetwork === 'penumbra';
+  const canStake = hasFeature(activeNetwork, 'stake');
 
   // fetch validators
   const {
@@ -148,7 +149,7 @@ export const StakePage = () => {
     refetch: refetchValidators,
   } = useQuery({
     queryKey: ['validators'],
-    enabled: isPenumbra,
+    enabled: canStake,
     staleTime: 60_000,
     queryFn: async () => {
       const result: ValidatorRow[] = [];
@@ -214,7 +215,7 @@ export const StakePage = () => {
     refetch: refetchDelegations,
   } = useQuery({
     queryKey: ['delegations', penumbraAccount],
-    enabled: isPenumbra,
+    enabled: canStake,
     staleTime: 30_000,
     queryFn: async () => {
       const result: BalancesResponse[] = [];
@@ -237,7 +238,7 @@ export const StakePage = () => {
   // fetch staking token balance
   const { data: stakingBalance } = useQuery({
     queryKey: ['staking-balance', penumbraAccount],
-    enabled: isPenumbra,
+    enabled: canStake,
     staleTime: 30_000,
     queryFn: async () => {
       try {
@@ -387,7 +388,7 @@ export const StakePage = () => {
 
   // placed after every hook so the count stays consistent across network
   // switches (was triggering React #300).
-  if (!isPenumbra) {
+  if (!canStake) {
     return <NetworkUnavailable feature='staking' iconClass='i-ph-stack' />;
   }
 

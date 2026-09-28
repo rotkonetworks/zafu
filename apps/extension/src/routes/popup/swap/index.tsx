@@ -74,6 +74,7 @@ import { selectActiveZcashWallet } from '../../../state/wallets';
 import { useBackNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { useLocation } from 'react-router-dom';
+import { hasFeature } from '../../../config/networks';
 
 /**
  * Router state accepted by the swap page. Set from the row-level "Swap X"
@@ -112,24 +113,26 @@ export const SwapPage = () => {
   const location = useLocation();
   const swapState = location.state as SwapLocationState | undefined;
 
+  // gate on the capability, not the chain: a network without swap has no page
+  // here. Which implementation renders below is chain-specific routing.
+  if (!hasFeature(activeNetwork, 'swap')) {
+    return (
+      <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
+        <div className='rounded-full bg-primary/10 p-4'>
+          <span className='i-ph-shuffle h-8 w-8 text-zigner-gold' />
+        </div>
+        <div>
+          <h2 className='text-lg font-medium'>swap</h2>
+          <p className='mt-1 text-sm text-fg-muted'>swapping is not available for this network.</p>
+        </div>
+      </div>
+    );
+  }
+
   if (activeNetwork === 'zcash') {
     return <ZcashCrosschainSwap />;
   }
-  if (activeNetwork === 'penumbra') {
-    return <PenumbraSwap prefillFromAsset={swapState?.prefillFromAsset} />;
-  }
-
-  return (
-    <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
-      <div className='rounded-full bg-primary/10 p-4'>
-        <span className='i-ph-shuffle h-8 w-8 text-zigner-gold' />
-      </div>
-      <div>
-        <h2 className='text-lg font-medium'>swap</h2>
-        <p className='mt-1 text-sm text-fg-muted'>swapping is not available for this network.</p>
-      </div>
-    </div>
-  );
+  return <PenumbraSwap prefillFromAsset={swapState?.prefillFromAsset} />;
 };
 
 // ── Zcash Crosschain Swap (NEAR 1Click) ──

@@ -3,10 +3,11 @@
 zafu organizes networks into three categories based on their privacy
 properties: privacy networks, IBC/cosmos chains, and transparent networks.
 
-zcash, penumbra, and noble (a penumbra USDC subnetwork) are currently
-launched. the remaining networks are defined in the codebase but not yet
-enabled in the UI. onboarding no longer has a network-select screen - a fresh
-wallet starts on zcash and more networks are enabled in settings > networks.
+zcash, penumbra, and their launched penumbra subnetworks noble and injective
+are currently launched. the remaining networks are defined in the codebase but
+not yet enabled in the UI. onboarding no longer has a network-select screen - a
+fresh wallet starts on zcash and more networks are enabled in settings >
+networks.
 
 ## privacy networks
 
@@ -87,8 +88,8 @@ all cosmos chains use BIP44 secp256k1 key derivation with path
 `m/44'/118'/0'/0/0` and chain-specific bech32 prefixes.
 
 only chains with an active relay channel against penumbra are launched. noble
-is currently launched; cosmoshub, osmosis, and injective are defined as
-penumbra subnetworks but not yet enabled.
+and injective are currently launched penumbra subnetworks; cosmoshub and
+osmosis are defined as penumbra subnetworks but not yet enabled.
 
 ### noble
 

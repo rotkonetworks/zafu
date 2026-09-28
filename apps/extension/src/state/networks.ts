@@ -325,17 +325,6 @@ export const createNetworksSlice =
       },
 
       disableNetwork: async (id: NetworkId) => {
-        // Check if any wallets still use this network
-        const wallets = get().wallets.all;
-        const hasWalletsOnNetwork = wallets.some(_w => {
-          // TODO: Add network field to wallet type
-          return false;
-        });
-
-        if (hasWalletsOnNetwork) {
-          throw new Error(`Cannot disable ${id} - wallets still exist on this network`);
-        }
-
         set(state => {
           state.networks.networks[id].enabled = false;
         });

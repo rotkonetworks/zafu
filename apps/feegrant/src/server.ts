@@ -2,8 +2,9 @@
 /**
  * Injective gas sponsor.
  *
- *   GET  /health                -> { ok, funded, granter, balanceInj, minBalanceInj,
- *                                    grantsToday, dailyGrantCap }; 503 when not ok
+ *   GET  /health                -> { ok, funded, capped, granter, balanceInj,
+ *                                    balanceMilliInj, minBalanceInj, grantsToday,
+ *                                    dailyGrantCap }; 503 when not ok
  *   GET  /v1/injective/granter  -> { granter, spendLimit, grantTtlHours }
  *   POST /v1/injective/grant    -> { granter, status, txhash?, height?, expiresAt? }
  *
@@ -98,6 +99,15 @@ const main = async () => {
     (await granterBalance()) >= config.minGranterBalance;
   /** base units (18 decimals) -> INJ, for humans and monitors */
   const toInj = (base: bigint): number => Number(base) / 1e18;
+  /**
+   * base units -> milli-INJ as an integer, for machine thresholds.
+   *
+   * Monitors like gatus compare integers only: `[BODY].balanceInj > 0.15`
+   * silently evaluates as `0 > 0` (both operands fail integer parsing), so a
+   * float field can never trip a threshold. `[BODY].balanceMilliInj > 150`
+   * means "above 0.15 INJ" and actually works.
+   */
+  const toMilliInj = (base: bigint): number => Number(base / 1_000_000_000_000_000n);
 
   const clientIp = (req: IncomingMessage): string =>
     clientIpFrom(req.headers['x-forwarded-for'], req.socket.remoteAddress, config.trustProxy);
@@ -128,6 +138,7 @@ const main = async () => {
             capped,
             granter: granter.address,
             balanceInj: balance === undefined ? null : toInj(balance),
+            balanceMilliInj: balance === undefined ? null : toMilliInj(balance),
             minBalanceInj: toInj(config.minGranterBalance),
             grantsToday: limits.grantsToday,
             dailyGrantCap: config.dailyGrantCap,

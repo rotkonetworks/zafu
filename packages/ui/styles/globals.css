@@ -312,7 +312,6 @@
        right. The layout is fluid (grid actions shrink, text truncates), so
        hold at a mobile-ish floor and reflow above it. */
     min-width: 280px;
-    min-height: 600px;
     height: 100vh;
     max-height: 100vh;
     display: flex;

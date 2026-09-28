@@ -24,6 +24,9 @@ const CapabilityApproval = lazy(() =>
 const ContactDiscoveryApproval = lazy(() =>
   import('./approval/contact-discovery').then(m => ({ default: m.ContactDiscoveryApproval })),
 );
+const DestinationApproval = lazy(() =>
+  import('./approval/destination').then(m => ({ default: m.DestinationApproval })),
+);
 
 // lazy load tab pages
 const StakePage = lazy(() => import('./stake').then(m => ({ default: m.StakePage })));
@@ -56,6 +59,9 @@ const ContactPicker = lazy(() =>
   import('./pick-contacts').then(m => ({ default: m.ContactPicker })),
 );
 const FrostApprove = lazy(() => import('./frost-approve').then(m => ({ default: m.FrostApprove })));
+const PasskeyApprove = lazy(() =>
+  import('./approval/passkey').then(m => ({ default: m.PasskeyApprove })),
+);
 const ZcashSendApproval = lazy(() =>
   import('./approval/zcash-send').then(m => ({ default: m.ZcashSendApproval })),
 );
@@ -293,6 +299,14 @@ export const popupRoutes: RouteObject[] = [
               </Suspense>
             ),
           },
+          {
+            path: PopupPath.PASSKEY_APPROVE,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <PasskeyApprove />
+              </Suspense>
+            ),
+          },
 
           // Auth
           {
@@ -339,6 +353,14 @@ export const popupRoutes: RouteObject[] = [
             element: (
               <Suspense fallback={<LazyFallback />}>
                 <ContactDiscoveryApproval />
+              </Suspense>
+            ),
+          },
+          {
+            path: PopupPath.DESTINATION_APPROVAL,
+            element: (
+              <Suspense fallback={<LazyFallback />}>
+                <DestinationApproval />
               </Suspense>
             ),
           },

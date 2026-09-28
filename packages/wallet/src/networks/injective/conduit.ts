@@ -8,10 +8,9 @@
  *   - withdrawToExchange: bank MsgSend of USDC from the inj account to an
  *     exchange deposit address.
  *
- * The private key is derived, used, and zeroed within each call. NOTHING here
- * is wired into the UI yet - the Injective path stays disabled until the #34
- * testnet round-trip passes; these functions exist so that wiring is a call,
- * not a re-implementation.
+ * The private key is derived, used, and zeroed within each call. Both calls
+ * are wired into the UI: the Injective ramp is launched (NETWORKS.injective,
+ * launched:true) after the #34 mainnet round-trip passed (code 0).
  */
 
 import type { Coin } from 'cosmjs-types/cosmos/base/v1beta1/coin';

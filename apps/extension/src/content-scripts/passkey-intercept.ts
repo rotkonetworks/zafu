@@ -2,11 +2,85 @@
  * passkey intercept — wraps navigator.credentials to offer zafu as authenticator.
  *
  * injected at document_start (before page JS can cache the original API).
- * communicates with service worker via chrome.runtime.sendMessage.
- * page JS cannot intercept the communication channel.
+ * this script runs in the MAIN world, where there is NO chrome.runtime (only
+ * the page's own object, which never exposes runtime for a plain https page) -
+ * reaching for it threw and every request fell straight back to the platform
+ * authenticator. It therefore speaks to the ISOLATED bridge (passkey-bridge.ts)
+ * over window.postMessage, exactly like injected-keplr.ts does; the bridge is
+ * the only side with chrome.runtime and relays to the service worker.
+ *
+ * the bridge is not a trust boundary: it only carries the request. The service
+ * worker derives the origin from the browser-attested sender and checks the
+ * rpId against it before anything is minted or signed.
  *
  * adapted from KeePassXC-Browser's passkeys-inject.js pattern.
  */
+
+export {}; // module scope - keeps CHANNEL out of the shared MAIN-world global
+
+const CHANNEL = 'zafu-passkey';
+
+// the wallet answers only after the user reads an origin-first consent screen
+// (and possibly unlocks), so give it a generous window; past it the page falls
+// back to the platform authenticator rather than hanging forever.
+const WALLET_TIMEOUT_MS = 5 * 60_000;
+
+interface WalletResponse {
+  success?: boolean;
+  error?: string;
+  /** machine-readable outcome: 'failed' means the wallet accepted and failed */
+  code?: string;
+  credentialId?: string;
+  authenticatorData?: string;
+  publicKey?: string;
+  signature?: string;
+  prfEnabled?: boolean;
+  prfResults?: { first?: string; second?: string };
+}
+
+let seq = 0;
+const pending = new Map<string, (res: WalletResponse | undefined) => void>();
+
+window.addEventListener('message', (ev: MessageEvent) => {
+  if (ev.source !== window) {
+    return;
+  }
+  const data = ev.data as
+    | { channel?: string; direction?: string; id?: string; result?: WalletResponse }
+    | undefined;
+  if (data?.channel !== CHANNEL || data.direction !== 'response' || !data.id) {
+    return;
+  }
+  const settle = pending.get(data.id);
+  if (!settle) {
+    return;
+  }
+  pending.delete(data.id);
+  settle(data.result);
+});
+
+/**
+ * Ask the ISOLATED bridge (and through it the service worker). Resolves
+ * `undefined` when the wallet cannot answer - no bridge, extension reloaded, or
+ * the user never responded - so callers fall back to the platform authenticator.
+ */
+function askWallet(
+  kind: 'create' | 'get',
+  payload: Record<string, unknown>,
+): Promise<WalletResponse | undefined> {
+  const { promise, resolve } = Promise.withResolvers<WalletResponse | undefined>();
+  const id = `${Date.now()}-${seq++}`;
+  const timer = setTimeout(() => {
+    pending.delete(id);
+    resolve(undefined);
+  }, WALLET_TIMEOUT_MS);
+  pending.set(id, res => {
+    clearTimeout(timer);
+    resolve(res);
+  });
+  window.postMessage({ channel: CHANNEL, direction: 'request', id, kind, payload }, window.origin);
+  return promise;
+}
 
 // capture originals before page JS can replace them
 const originalCreate = navigator.credentials.create.bind(navigator.credentials);
@@ -47,6 +121,20 @@ function hexToBuf(hex: string): ArrayBuffer {
 }
 
 /**
+ * The wallet's final word: it took the job and failed (locked mid-flight, an
+ * undecryptable vault, a signing error). Such a request MUST NOT fall through
+ * to the platform authenticator - the consent screen was already answered, and
+ * the browser's own prompt for a passkey that lives in zafu reads to the user
+ * as "the wallet stopped working" right after they clicked approve. Every other
+ * shape (no answer at all, denied, cancelled, no wallet) keeps the historical
+ * fallback, because there zafu genuinely has nothing to offer.
+ */
+const isWalletFailure = (r: WalletResponse | undefined): boolean => r?.code === 'failed';
+
+/** marks a wallet failure from `askWallet` so the catch below can tell it from an unreachable wallet */
+class WalletFailedError extends Error {}
+
+/**
  * wrapped navigator.credentials.create
  */
 navigator.credentials.create = async function (
@@ -62,12 +150,12 @@ navigator.credentials.create = async function (
   const challenge = bufToHex(pk.challenge);
 
   try {
-    const response = await chrome.runtime.sendMessage({
-      type: 'zafu_passkey_create',
+    // `origin` is deliberately NOT sent - the service worker derives it from
+    // the browser-attested sender and matches the rpId against it.
+    const response = await askWallet('create', {
       rpId,
       rpName: pk.rp?.name ?? rpId,
       challenge,
-      origin: window.location.origin,
       userName: pk.user?.name ?? '',
       userDisplayName: pk.user?.displayName ?? '',
       userId: pk.user?.id ? bufToHex(pk.user.id) : '',
@@ -75,13 +163,16 @@ navigator.credentials.create = async function (
     });
 
     if (!response?.success) {
-      // zafu declined — fall back to platform authenticator
+      if (isWalletFailure(response)) {
+        throw new WalletFailedError(response?.error);
+      }
+      // zafu declined or was unreachable — fall back to the platform authenticator
       return originalCreate(options);
     }
 
     // build PublicKeyCredential from zafu's response
-    const credentialId = hexToBuf(response.credentialId);
-    const authenticatorData = hexToBuf(response.authenticatorData);
+    const credentialId = hexToBuf(response.credentialId!);
+    const authenticatorData = hexToBuf(response.authenticatorData!);
     const clientDataJSON = new TextEncoder().encode(
       JSON.stringify({
         type: 'webauthn.create',
@@ -108,7 +199,7 @@ navigator.credentials.create = async function (
         clientDataJSON: clientDataJSON.buffer,
         attestationObject: attestationObject.buffer,
         getAuthenticatorData: () => authenticatorData,
-        getPublicKey: () => hexToBuf(response.publicKey),
+        getPublicKey: () => hexToBuf(response.publicKey!),
         getPublicKeyAlgorithm: () => -7, // ES256
         getTransports: () => ['internal'],
       },
@@ -121,7 +212,15 @@ navigator.credentials.create = async function (
         return results;
       },
     } as unknown as PublicKeyCredential;
-  } catch {
+  } catch (e) {
+    if (e instanceof WalletFailedError) {
+      // keep the wallet's own diagnostic off the page - a dapp has no business
+      // reading service-worker internals ("keyring locked", "failed to decrypt
+      // vault") - but give the user the honest outcome instead of a platform
+      // prompt that cannot satisfy a credential zafu owns.
+      console.warn('[zafu-passkey] create failed:', e.message);
+      throw new DOMException('zafu could not create the passkey', 'NotAllowedError');
+    }
     return originalCreate(options);
   }
 };
@@ -159,11 +258,9 @@ navigator.credentials.get = async function (
   );
 
   try {
-    const response = await chrome.runtime.sendMessage({
-      type: 'zafu_passkey_get',
+    const response = await askWallet('get', {
       rpId,
       clientDataHash,
-      origin: window.location.origin,
       prfSalts,
       allowCredentials: pk.allowCredentials?.map(c => ({
         id: bufToHex(c.id),
@@ -172,12 +269,15 @@ navigator.credentials.get = async function (
     });
 
     if (!response?.success) {
+      if (isWalletFailure(response)) {
+        throw new WalletFailedError(response?.error);
+      }
       return originalGet(options);
     }
 
-    const credentialId = hexToBuf(response.credentialId);
-    const authenticatorData = hexToBuf(response.authenticatorData);
-    const signature = hexToBuf(response.signature);
+    const credentialId = hexToBuf(response.credentialId!);
+    const authenticatorData = hexToBuf(response.authenticatorData!);
+    const signature = hexToBuf(response.signature!);
 
     return {
       id: btoa(String.fromCharCode(...new Uint8Array(credentialId)))
@@ -198,9 +298,9 @@ navigator.credentials.get = async function (
         if (response.prfResults) {
           results['prf'] = {
             results: {
-              first: hexToBuf(response.prfResults.first),
+              first: hexToBuf(response.prfResults!.first!),
               ...(response.prfResults.second
-                ? { second: hexToBuf(response.prfResults.second) }
+                ? { second: hexToBuf(response.prfResults!.second!) }
                 : {}),
             },
           };
@@ -208,7 +308,11 @@ navigator.credentials.get = async function (
         return results;
       },
     } as unknown as PublicKeyCredential;
-  } catch {
+  } catch (e) {
+    if (e instanceof WalletFailedError) {
+      console.warn('[zafu-passkey] get failed:', e.message);
+      throw new DOMException('zafu could not sign in with the passkey', 'NotAllowedError');
+    }
     return originalGet(options);
   }
 };

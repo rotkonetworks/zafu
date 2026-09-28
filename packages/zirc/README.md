@@ -47,6 +47,23 @@ per-author hash chains, opaque tags, and fixed-size writes - so the relay
 cannot tell a one-word reply from a paragraph. `room.ts` states what that
 guarantees and, more usefully, what it does not.
 
+The shard in that coordinate comes **from the room secret** by default, so the
+channel name is a label and not an address: two rooms sharing a name but not a
+secret sit on two different boards, and a board cannot be found by guessing its
+name. `public: true` moves the room onto the name's shard instead, so a visitor
+holding no key can find it by typing the name - guessable on purpose, and
+therefore a choice a room makes rather than a default it falls into. Either way
+the relay serving the request sees the shard; pinned `shard` overrides both.
+
+A direct message is sealed under a key derived from the room secret **and** the
+recipient's pubkey, so it never appears in the public lane and the relay cannot
+tell who is talking to whom. That key is not private _between members_: every
+member holds the room secret and can derive it, so the DM lane is confidential
+against the relay and against non-members only - not against fellow members (or
+a past member who kept the secret). That limit, and the shape a larger or social
+group needs instead, is spelled out in
+[`docs/design/zirc-shared-secret-mailbox.md`](../../docs/design/zirc-shared-secret-mailbox.md).
+
 An invite is deliberately a bearer token, so the dangerous moment is when it
 travels. `sealInvite` puts it in a zid sealed box addressed to one recipient -
 post-quantum (X-Wing) whenever they advertise a `pq_pubkey` - which means the
@@ -132,6 +149,64 @@ visible the same way. The cost of a vote is having convinced someone to voice yo
 a social cost with a cryptographic record, which is what IRC had and most
 vote-based systems lack.
 
+## Custody: the roster is a record, not a setting
+
+A channel that wants k-of-n signing rather than one founder key has to agree on
+_which_ keys the k are. That agreement is a `custody` record in the same hash
+chain, so there is no second source of truth to reconcile:
+
+```ts
+await add(founder, {
+  kind: 'custody',
+  scheme: 'frost', // a ciphersuite name, not a promise that a client can run it
+  threshold: 2,
+  epoch: 1, // a roster only ever moves forward
+  fingerprint: 'aabbccdd', // the parameters, as the ceremony would print them
+  roster: [{ ed25519: alice.pubkey }, { ed25519: bob.pubkey }],
+});
+
+custodyStateAt(records, records.length);
+// { scheme: 'frost', threshold: 2, epoch: 1, fingerprint: 'aabbccdd',
+//   roster: [{ ed25519: alice.pubkey }, { ed25519: bob.pubkey }],
+//   at: 2, by: founder.pubkey,   // the record this comes from, and who wrote it
+//   history: [{ at: 2, …, added: [alice.pubkey, bob.pubkey], removed: [] }] }
+```
+
+Before any custody record the fields but `history` are `null` - "no roster in
+force" is a state a view can check, not an exception it has to catch.
+
+**It is a claim about a wallet, never an instruction to a participant.** Nothing
+in it can spend and nothing can be spent on it: it says which key material would
+have to control an address, and `custodyProblems` checks that the roster is one a
+ceremony could actually _run_ - a known scheme, an 8-128 character fingerprint, a
+threshold between 1 and the roster size, and for k-of-n with k > 1, distinct
+64-character hex ed25519 identities. `verifyChain` refuses a record that fails
+that, so a roster no ceremony could run is never replayed as the multisig.
+
+Two rules fall out of the log's own logic:
+
+- **Authority is a vote's authority.** The author must have been voiced _before_
+  the record, so a member who cannot vote cannot redefine who the signers are. The
+  founder is an operator from the genesis alone but is not voiced _by_ it, so a
+  channel whose founder is to write rosters voices them first - the same bootstrap
+  the founder needs before their first vote.
+- **A roster never rolls back.** `epoch` must strictly advance, so replaying an
+  older roster cannot return a multisig to a set that was already superseded.
+
+Because the roster is derivable from the log, `history` answers "did a custodian
+leave, and when" mechanically: `added` and `removed` per rotation, compared as
+sets, so a repeated name is not a change and a rotation that only reorders the
+same roster is not a rotation.
+
+`/frost` is the client-side control plane over those same records:
+`/frost show` prints the roster in force, `/frost roster <k>-of-<n> <nick|id>…`
+resolves the names - and, for members the room has no name for, their id -
+against the members already in the room, `/frost verify <fingerprint>` pins the
+roster to the artifact the ceremony printed, and `/frost rotate` plans the next
+epoch. The parser refuses a line that looks like key material (`share`, `key`,
+`seed`, `secret`, `backup`): a room is the wrong place for a share, because this
+log is shared, archived and replayed by everyone in it.
+
 ## What it is not
 
 - **Not a transport, at the root.** The governance half is agnostic to where
@@ -153,10 +228,14 @@ vote-based systems lack.
 - Sessions fan out one copy per member over pairwise channels: right for
   coordination among 2-10 people, wrong for large channels. Beyond that the
   shared-secret mailbox shape is needed, which needs a ratchet and rotation it does
-  not have yet (issue #47).
+  not have yet (issue #47). What that mailbox is, and exactly what the current
+  lanes do and do not guarantee, is written up in
+  [`docs/design/zirc-shared-secret-mailbox.md`](../../docs/design/zirc-shared-secret-mailbox.md).
 - The founder's key is the channel's root of authority: lose it and the channel
-  cannot add operators. k-of-n operator keys (FROST) is the answer, and it is not
-  implemented here.
+  cannot add operators. A `custody` record can _name_ a k-of-n roster, so the
+  multisig's parameters are reproducible from the log, but FROST itself - running
+  the ceremony, signing with shares, refreshing them - is not implemented here:
+  `/frost rotate` plans an epoch, it does not perform one.
 - Rules are fixed at genesis. A community that wants different thresholds forks -
   which is cheap by design, and the reason rules are signed into the channel's
   identity.

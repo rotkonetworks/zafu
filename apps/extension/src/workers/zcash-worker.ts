@@ -89,6 +89,16 @@ const syncError = (code: SyncErrorCode, message: string): Error =>
  */
 const backendRegistry = new Map<string, ZcashBackend>();
 
+/**
+ * One-shot warning latches for conditions that are stable for the life of the
+ * worker. `verifySyncProofs` runs on every sync pass, so a per-pass `console`
+ * line for a condition that cannot change turns a healthy sync into hundreds of
+ * identical lines and hides the ones that matter. These warn once, then stay
+ * silent; the condition itself is unaffected.
+ */
+let warnedNullifierRootMoved = false;
+let warnedNonGenesisActionsCommitment = false;
+
 function registerBackend(serverUrl: string, backend: ZcashBackend): void {
   if (backend !== 'zidecar' && backend !== 'lightwalletd') {
     throw new Error(`unknown zcash backend: ${String(backend)}`);
@@ -1390,11 +1400,14 @@ const verifySyncProofs = async (
     // Making this meaningful needs a server that can prove against a pinned
     // historical root. Until then a divergence here is unremarkable.
     if (nfRootHex !== proven.nullifier_root) {
-      console.warn(
-        `[zcash-worker] nullifier root moved since the header proof ` +
-          `(live=${nfRootHex.slice(0, 16)} proven=${proven.nullifier_root.slice(0, 16)}); ` +
-          `expected while the server is indexing - proofs are still bound to the live root below`,
-      );
+      if (!warnedNullifierRootMoved) {
+        warnedNullifierRootMoved = true;
+        console.warn(
+          `[zcash-worker] nullifier root moved since the header proof ` +
+            `(live=${nfRootHex.slice(0, 16)} proven=${proven.nullifier_root.slice(0, 16)}); ` +
+            `expected while the server is indexing - proofs are still bound to the live root below`,
+        );
+      }
     }
 
     // Bind every proof to the root we actually checked, and to a nullifier we
@@ -1463,7 +1476,8 @@ const verifySyncProofs = async (
   if (genesisAnchoredActions) {
     zyncModule['verify_actions_commitment'](actionsCommitment, proven.actions_commitment, hasSaved);
     console.log(`[zcash-worker] actions commitment verified`);
-  } else {
+  } else if (!warnedNonGenesisActionsCommitment) {
+    warnedNonGenesisActionsCommitment = true;
     console.warn(
       '[zcash-worker] actions commitment check skipped: wallet started at a non-genesis ' +
         'height, so the fold is not genesis-anchored (verifying would always mismatch)',
@@ -4683,7 +4697,13 @@ const runSync = async (
       }
 
       consecutiveErrors++;
-      console.error(`[zcash-worker] sync error (${consecutiveErrors}):`, err);
+      // Retrying is the policy, so a flapping endpoint would otherwise produce
+      // one of these per backoff interval indefinitely. Log the first few and
+      // then every tenth; the UI sync-error message below is unaffected, so the
+      // user still sees the wallet struggling.
+      if (consecutiveErrors <= 3 || consecutiveErrors % 10 === 0) {
+        console.error(`[zcash-worker] sync error (${consecutiveErrors}):`, err);
+      }
       // surface to UI from the second consecutive failure (skip transient
       // single hiccups, but don't make the user stare at "syncing 0%" while
       // we silently retry forever)

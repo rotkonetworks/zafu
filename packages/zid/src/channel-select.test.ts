@@ -27,9 +27,23 @@ const fakeChannel: ZidChannel = {
   close: () => {},
 };
 
-/** a handshake failure, as noise-channel tags it. */
+/** a genuine capability signal: the peer's well-formed refusal naming its protocol. */
 const handshakeFailure = (): Error =>
-  Object.assign(new Error('noise: expected resp message (0x02)'), { name: 'NoiseHandshakeError' });
+  Object.assign(new Error('noise: peer does not support zafuNoise_IKhybrid...; it offered classical'), {
+    name: 'NoiseHandshakeError',
+  });
+
+/** a malformed/truncated peer frame - a TRANSPORT failure, NOT a downgrade signal. */
+const malformedFailure = (): Error =>
+  Object.assign(new Error('noise: resp message too short (100 < 1137)'), {
+    name: 'NoiseMalformedMessageError',
+  });
+
+/** the handshake deadline - also a TRANSPORT failure, NOT a downgrade signal. */
+const timeoutFailure = (): Error =>
+  Object.assign(new Error('noise: hybrid handshake timed out after 15000ms'), {
+    name: 'NoiseHandshakeTimeoutError',
+  });
 
 /** a transport failure - the relay is down, the socket errored. NOT tagged. */
 const transportFailure = (): Error => new Error('noise: connection closed during handshake');
@@ -54,7 +68,7 @@ describe('channel mode selection', () => {
     createNoiseChannel.mockRejectedValueOnce(handshakeFailure());
 
     await expect(openChannel(session, 'peer', undefined, 'hybrid')).rejects.toThrow(
-      'expected resp message',
+      'peer does not support',
     );
     expect(createNoiseChannel).toHaveBeenCalledTimes(1);
     expect(createChannel).not.toHaveBeenCalled();
@@ -68,7 +82,7 @@ describe('channel mode selection', () => {
     expect(channel.kind).toBe('classical');
   });
 
-  it("'auto' falls back to classical on a HANDSHAKE failure and labels the downgrade", async () => {
+  it("'auto' downgrades only on the well-formed capability refusal, and labels it", async () => {
     createNoiseChannel.mockRejectedValueOnce(handshakeFailure());
 
     const channel = await openChannel(session, 'peer', undefined, 'auto');
@@ -76,6 +90,22 @@ describe('channel mode selection', () => {
     expect(createNoiseChannel).toHaveBeenCalledTimes(1);
     expect(createChannel).toHaveBeenCalledTimes(1);
     expect(channel.kind).toBe('classical'); // the caller can SEE the downgrade
+  });
+
+  it("'auto' does NOT downgrade on a malformed/short responder frame - it propagates", async () => {
+    createNoiseChannel.mockRejectedValueOnce(malformedFailure());
+
+    await expect(openChannel(session, 'peer', undefined, 'auto')).rejects.toThrow(/too short/);
+    expect(createNoiseChannel).toHaveBeenCalledTimes(1);
+    expect(createChannel).not.toHaveBeenCalled(); // a crafted frame never forces classical
+  });
+
+  it("'auto' does NOT downgrade on a handshake timeout - it propagates", async () => {
+    createNoiseChannel.mockRejectedValueOnce(timeoutFailure());
+
+    await expect(openChannel(session, 'peer', undefined, 'auto')).rejects.toThrow(/timed out/);
+    expect(createNoiseChannel).toHaveBeenCalledTimes(1);
+    expect(createChannel).not.toHaveBeenCalled();
   });
 
   it("'auto' does NOT fall back on a transport failure - it propagates", async () => {

@@ -6,6 +6,7 @@ export type Capability =
   | 'view_contacts' // read contact list
   | 'view_history' // read transaction history
   | 'frost' // create/join/sign multisig sessions
+  | 'passkey' // register and sign in with a site-bound WebAuthn passkey
   | 'auto_sign' // skip per-tx confirmation (time-limited)
   | 'encrypt'; // sealed box encrypt/decrypt with ZID keys
 
@@ -53,6 +54,11 @@ export const CAPABILITY_META: Record<
     label: 'Multisig operations',
     description: 'Create, join, and sign threshold multisig wallets',
     risk: 'high',
+  },
+  passkey: {
+    label: 'Passkey',
+    description: 'Register a site-bound passkey and sign in with it',
+    risk: 'medium',
   },
   auto_sign: {
     label: 'Auto-sign transactions',

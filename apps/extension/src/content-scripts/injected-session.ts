@@ -1,45 +1,24 @@
-/**
- * Quiet one specific dev-build log before anything can emit it.
- *
- * `@penumbra-zone/transport-chrome`'s CRSessionClient logs EVERY reported
- * error as `console.warn('session-client reportError', requestId, msg)`,
- * gated on `globalThis.__DEV__` (session-client.js:292-295). Anything that
- * probes the wallet on a loop — cosmos-kit looking for a Keplr provider
- * while keplrCompat is off, a poller treating not-found as an error —
- * turns that into hundreds of identical lines and makes the page console
- * unusable for actual debugging.
- *
- * `installGracefulNetworkErrorHandler` cannot help here: it works by
- * preventDefault()-ing `error`/`unhandledrejection` events, and this is a
- * bare console.warn inside a dependency, with no event to cancel.
- *
- * Scoped as tightly as possible — exact first argument, warn only, dev
- * only — so nothing else is ever swallowed. The underlying errors are
- * untouched; `reportError` still postMessages them to the client, exactly
- * as it does in a production build where this log does not exist at all.
- */
+// Must be the first import: see install-console-quieting.ts.
+import '../install-console-quieting';
 import { PenumbraRequestFailure } from '@penumbra-zone/client/error';
 import { CRSessionClient } from '@penumbra-zone/transport-chrome/session-client';
+import { onContextInvalidated } from '../utils/reload-notice';
 import { isZafuConnection } from './message/zafu-connection';
 import { isZafuControl, ZafuControl } from './message/zafu-control';
 import { ZafuMessageEvent, unwrapZafuMessageEvent } from './message/zafu-message-event';
 import { listenBackground, sendBackground } from './message/send-background';
 import { listenWindow, sendWindow } from './message/send-window';
 
-if (globalThis.__DEV__) {
-  const nativeWarn = console.warn.bind(console);
-  console.warn = (...args: unknown[]) => {
-    if (args[0] === 'session-client reportError') {
-      return;
-    }
-    nativeWarn(...args);
-  };
-}
-
 // Bridge our extension id to the MAIN-world content script
 // (injected-penumbra-global.ts), which has no chrome.runtime access.
 // Manifest order has this ISOLATED script ahead of the MAIN one, so the
 // dataset attribute is always set before MAIN reads it.
+//
+// A plain attribute, not `dataset`: `dataset` is defined on HTMLElement and
+// SVGElement only, so on a non-HTML document (a top-level .xml/.svg response,
+// or a viewer page served as XML) `documentElement.dataset` is undefined and
+// writing it throws an uncaught TypeError that kills this script. setAttribute
+// is on Element and works in every document type.
 //
 // `chrome.runtime.id` returns the literal string 'invalid' for orphaned
 // content scripts (i.e. when the extension was reloaded or upgraded
@@ -48,9 +27,10 @@ if (globalThis.__DEV__) {
 // into window[PenumbraSymbol], which fails and breaks the page's
 // wallet picker. Bail silently; the user will get a fresh injection
 // next time they navigate.
+const ID_ATTRIBUTE = 'data-zafu-extension-id';
 const runtimeId = chrome.runtime.id;
 if (runtimeId && runtimeId !== 'invalid') {
-  document.documentElement.dataset['zafuExtensionId'] = runtimeId;
+  document.documentElement?.setAttribute(ID_ATTRIBUTE, runtimeId);
 }
 
 const zafuDocumentListener = (ev: ZafuMessageEvent): void => {
@@ -65,6 +45,12 @@ const zafuDocumentListener = (ev: ZafuMessageEvent): void => {
   }
 };
 
+// Set while the page holds a session port (from ZafuControl.Init until
+// ZafuControl.End). `CRSessionClient.end` throws on a manager id it never
+// serviced, so the pagehide teardown below must only fire for a session this
+// bridge actually opened.
+let sessionManagerId: string | undefined;
+
 const zafuExtensionListener = (message: unknown, responder: (response: null) => void): boolean => {
   if (!isZafuControl(message)) {
     return false;
@@ -73,9 +59,11 @@ const zafuExtensionListener = (message: unknown, responder: (response: null) => 
   const extensionId = chrome.runtime.id;
   switch (message) {
     case ZafuControl.Init:
+      sessionManagerId = extensionId;
       sendWindow<MessagePort>(CRSessionClient.init(extensionId));
       break;
     case ZafuControl.End:
+      sessionManagerId = undefined;
       CRSessionClient.end(extensionId);
       sendWindow<ZafuControl>(ZafuControl.End);
       break;
@@ -88,5 +76,34 @@ const zafuExtensionListener = (message: unknown, responder: (response: null) => 
   return true;
 };
 
-listenWindow(undefined, zafuDocumentListener);
-listenBackground<null>(undefined, zafuExtensionListener);
+// Once the extension context is gone (reload/auto-update under this tab), the
+// page can no longer reach us: every `sendBackground` throws
+// "Extension context invalidated". Drop our window listener so the page stops
+// being answered with a rejection per poke, and let the shared reload notice
+// tell the user what to do - the page's provider entry stays inert until then.
+const teardown = new AbortController();
+onContextInvalidated(() => teardown.abort());
+
+// Chromium reports an unchecked runtime.lastError when a page that still holds
+// an extension port enters the back/forward cache ("the page keeping the
+// extension port is moved into back/forward cache, so the message channel is
+// closed"). A dapp page that navigates away never sends ZafuControl.End, so the
+// port we opened for it would outlive the navigation, and a running
+// block-processor stream would stay attached to a frozen document. A page that
+// leaves has no session to keep, so release it here; a page restored from the
+// cache re-connects through the transport's own on-demand reconnect.
+window.addEventListener(
+  'pagehide',
+  () => {
+    if (!sessionManagerId) {
+      return;
+    }
+    const managerId = sessionManagerId;
+    sessionManagerId = undefined;
+    CRSessionClient.end(managerId);
+  },
+  { signal: teardown.signal },
+);
+
+listenWindow(teardown.signal, zafuDocumentListener);
+listenBackground<null>(teardown.signal, zafuExtensionListener);

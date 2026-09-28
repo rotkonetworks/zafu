@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { ChainRegistryClient } from '@penumbrafi/registry';
+import { registryClient } from '../../hooks/ibc-chains';
 
 /**
  * prefetch all icon URLs from the registry into browser cache.
@@ -39,7 +40,7 @@ export const useRegistry = () => {
   return useQuery({
     queryKey: ['registryGlobals'],
     queryFn: async () => {
-      const data = await new ChainRegistryClient().remote.globals();
+      const data = await registryClient.remote.globals();
       prefetchRegistryIcons(data);
       return data;
     },

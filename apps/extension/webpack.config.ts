@@ -272,6 +272,7 @@ export default ({
       'injected-penumbra-global': path.join(injectDir, 'injected-penumbra-global.ts'),
       'injected-keplr': path.join(injectDir, 'injected-keplr.ts'),
       'keplr-bridge': path.join(injectDir, 'keplr-bridge.ts'),
+      'passkey-bridge': path.join(injectDir, 'passkey-bridge.ts'),
       'passkey-intercept': path.join(injectDir, 'passkey-intercept.ts'),
       'zcash-links': path.join(injectDir, 'zcash-links.ts'),
       'offscreen-handler': path.join(entryDir, 'offscreen-handler.ts'),
@@ -296,6 +297,7 @@ export default ({
             'injected-penumbra-global',
             'injected-keplr',
             'keplr-bridge',
+            'passkey-bridge',
             'passkey-intercept',
             'zcash-links',
             'workers/zcash-worker',
@@ -424,6 +426,68 @@ export default ({
   };
 
   // Worker config for service worker and WASM build worker
+  /**
+   * Build-time guard against the "MV3 worker cannot load a script" incident.
+   *
+   * `dynamicImportMode: 'eager'` (below) inlines dynamic imports, so each worker
+   * entry is one self-contained script - but nothing stops a later edit from
+   * splitting one again, and the failure is quiet: the passkey flow surfaced
+   * "NetworkError: Failed to execute 'importScripts' on 'WorkerGlobalScope'",
+   * while anything behind a try/catch (contact discovery) just stopped working.
+   *
+   * The check reads the EMITTED service-worker.js, not the chunk graph: a chunk
+   * that has no async dependency still carries webpack's chunk-loading runtime
+   * module, which code generation then drops, so the chunk graph would fail the
+   * build on a healthy bundle. What Chrome enforces is the script's text - MV3
+   * refuses `importScripts()` after the worker's initial evaluation - and that
+   * is exactly the loader webpack's `webworker` target emits. Same spirit as
+   * assertZafuWasmMemoryPages above: a runtime failure that shipped once becomes
+   * a build failure.
+   */
+  const assertServiceWorkerSelfContained: webpack.WebpackPluginInstance = {
+    apply(compiler) {
+      compiler.hooks.compilation.tap('AssertServiceWorkerSelfContained', compilation => {
+        compilation.hooks.processAssets.tap(
+          {
+            name: 'AssertServiceWorkerSelfContained',
+            stage: webpack.Compilation.PROCESS_ASSETS_STAGE_REPORT,
+          },
+          () => {
+            const asset = compilation.getAsset('service-worker.js');
+            if (!asset) {
+              compilation.errors.push(
+                new webpack.WebpackError('the worker compilation emitted no service-worker.js'),
+              );
+              return;
+            }
+            const code = String(asset.source.source());
+            const found: string[] = [];
+            if (/\bimportScripts\s*\(\s*[^)\s]/.test(code)) {
+              found.push("webpack's importScripts() chunk loader");
+            }
+            const asyncChunk = /worker-chunk-\d+\.js/.exec(code);
+            if (asyncChunk) {
+              found.push(`a reference to the async chunk ${asyncChunk[0]}`);
+            }
+            if (found.length === 0) {
+              return;
+            }
+            compilation.errors.push(
+              new webpack.WebpackError(
+                `service-worker.js is not self-contained: it contains ${found.join(' and ')}. An MV3 ` +
+                  'service worker cannot load a script after its initial evaluation - importScripts() ' +
+                  'throws "importScripts() of new scripts after service worker installation is not ' +
+                  'allowed" and import() is disallowed on ServiceWorkerGlobalScope - so that chunk is ' +
+                  'dead on arrival. Keep dynamicImportMode: "eager" (module.parser.javascript below) so ' +
+                  'dynamic imports are inlined, or remove the import() that split the chunk off.',
+              ),
+            );
+          },
+        );
+      });
+    },
+  };
+
   // Uses 'webworker' target to avoid DOM-based chunk loading
   // Depends on 'browser' to ensure it runs after browser config (which cleans the dist)
   const workerConfig: webpack.Configuration = {
@@ -453,11 +517,28 @@ export default ({
       chunkFilename: 'worker-chunk-[id].js',
     },
     optimization: {
-      // service workers cannot use importScripts for dynamic chunks
-      // everything must be bundled into a single file
+      // Keep each entry in this compilation to its own file (no shared vendor
+      // chunks). NOTE: this alone does NOT stop webpack emitting async chunks for
+      // `import()` sites - see the parser option below, which is what actually
+      // guarantees a single self-contained script.
       splitChunks: false,
     },
     module: {
+      parser: {
+        javascript: {
+          // MV3 forbids loading a script after the service worker's initial
+          // evaluation: `importScripts()` throws, and `import()` is disallowed on
+          // ServiceWorkerGlobalScope. Every lazy `import()` left in this
+          // compilation therefore became a worker-chunk-*.js fetch that threw at
+          // runtime - the passkey flow died on the webauthn chunk, and other
+          // paths failed silently behind try/catch (e.g. contact discovery).
+          // Compiling the dynamic imports eagerly inlines them: each entry is one
+          // self-contained script with no chunk loading at all. Costs a bigger
+          // service-worker.js (parsed lazily by V8 on first call), which is the
+          // only legal option short of a module service worker.
+          dynamicImportMode: 'eager',
+        },
+      },
       rules: sharedModuleRules,
     },
     resolve: {
@@ -481,7 +562,7 @@ export default ({
         stream: require.resolve('stream-browserify'),
       },
     },
-    plugins: [...sharedPlugins],
+    plugins: [...sharedPlugins, assertServiceWorkerSelfContained],
     experiments: {
       asyncWebAssembly: true,
     },

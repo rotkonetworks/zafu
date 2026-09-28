@@ -116,6 +116,84 @@ function isFrostType(type: MemoType): boolean {
   return type >= MemoType.DkgRound1 && type <= MemoType.SignResult;
 }
 
+// ---- trust ----
+//
+// Every memo body is attacker-controlled: a memo field cannot carry a
+// signature, so a contact card's name/address/zid and a FROST sign request are
+// unproven claims until bound to something the wallet already knows. Keeping
+// the decision in pure helpers (rather than only inline in JSX) makes the gate
+// testable.
+
+export interface ContactCardTrust {
+  /**
+   * true only when the card's address is ALREADY in this wallet's address book.
+   * That is the one fact a card cannot forge: it is the wallet's own record,
+   * supplied as `isStoredContact`, not a comparison against the card.
+   */
+  known: boolean;
+  /**
+   * the card's address equals the address the delivering note declared. Both
+   * operands are sender-authored memo text, so this is a CLAIM the sender made,
+   * not evidence - surfaced as such and never as a verification glyph.
+   */
+  matchesDeliveringAddress: boolean;
+  /** the raw delivering address, shown next to the card as-is */
+  deliveringAddress?: string;
+}
+
+/**
+ * A contact card is never self-authenticating: the zid and the address it
+ * carries are exactly the values an attacker would forge, and the address the
+ * delivering note declares is written by the same sender, so the two agreeing
+ * proves nothing. The only verifiable fact is whether the address is one this
+ * wallet already stores; everything else stays unverified, and the card's zid
+ * is shown as self-declared, never as a verification glyph.
+ */
+export function contactCardTrust(
+  card: ContactCard | undefined,
+  deliveringAddress: string | undefined,
+  isStoredContact: (address: string) => boolean,
+): ContactCardTrust {
+  if (!card) {
+    return { known: false, matchesDeliveringAddress: false, deliveringAddress };
+  }
+  const address = card.address.trim();
+  return {
+    known: isStoredContact(address),
+    matchesDeliveringAddress:
+      !!deliveringAddress && address.toLowerCase() === deliveringAddress.trim().toLowerCase(),
+    deliveringAddress,
+  };
+}
+
+/** session ids this wallet has locally created or joined, from live FROST state */
+export function knownSignSessionIds(frost: AllSlices['frostSession']): string[] {
+  const ids: string[] = [];
+  if (frost.signing?.roomCode) {
+    ids.push(frost.signing.roomCode);
+  }
+  if (frost.dkg?.roomCode) {
+    ids.push(frost.dkg.roomCode);
+  }
+  if (frost.relayCeremonyId) {
+    ids.push(frost.relayCeremonyId);
+  }
+  return ids;
+}
+
+/**
+ * A FROST signing memo is actionable only when it names a session this wallet
+ * created or joined. The memo codec carries no session id today, so a
+ * chain-delivered sign request never matches and renders as an unverified
+ * payload rather than a "sign transaction" CTA.
+ */
+export function signRequestIsTrusted(
+  sessionId: string | undefined,
+  knownSessionIds: readonly string[],
+): boolean {
+  return !!sessionId && knownSessionIds.includes(sessionId);
+}
+
 // ---- conversation list ----
 
 function ConversationRow({
@@ -255,7 +333,9 @@ function MessageContent({ message }: { message: InboxMessage }) {
       );
 
     case MemoType.ContactCard:
-      return <ContactCardBubble card={message.contactCard} />;
+      return (
+        <ContactCardBubble card={message.contactCard} deliveringAddress={message.senderAddress} />
+      );
 
     case MemoType.Data:
       return <DataBubble body={message.body} />;
@@ -310,9 +390,18 @@ function MessageContent({ message }: { message: InboxMessage }) {
   }
 }
 
-function ContactCardBubble({ card }: { card?: ContactCard }) {
+export function ContactCardBubble({
+  card,
+  deliveringAddress,
+}: {
+  card?: ContactCard;
+  deliveringAddress?: string;
+}) {
   const { findByAddress, addContact, addAddress } = useStore(contactsSelector);
   const [saved, setSaved] = useState(false);
+  // the wallet's own address book is the only input that can establish that the
+  // card's address is real, so the trust decision reads it here.
+  const trust = contactCardTrust(card, deliveringAddress, address => !!findByAddress(address));
 
   useEffect(() => {
     if (card?.address) {
@@ -339,9 +428,34 @@ function ContactCardBubble({ card }: { card?: ContactCard }) {
       <p className='text-label font-mono text-fg-muted break-all'>{card.address}</p>
       {card.zid && (
         <div className='flex items-center gap-1'>
-          <span className='i-ph-fingerprint h-3 w-3 text-fg-muted' />
-          <span className='text-label font-mono text-fg-muted'>zid{card.zid.slice(0, 16)}</span>
+          <span className='i-ph-question h-3 w-3 text-fg-muted' />
+          <span className='text-label font-mono text-fg-muted'>
+            self-declared zid {card.zid.slice(0, 16)}
+          </span>
         </div>
+      )}
+      <div className='flex items-center gap-1'>
+        {trust.known ? (
+          <>
+            <span className='i-ph-check-circle h-3 w-3 text-fg-muted' />
+            <span className='text-label text-fg-muted'>address already in your contacts</span>
+          </>
+        ) : (
+          <>
+            <span className='i-ph-warning-circle h-3 w-3 text-warning' />
+            <span className='text-label text-warning'>unverified — not signed</span>
+          </>
+        )}
+      </div>
+      {!trust.known && trust.matchesDeliveringAddress && (
+        <p className='text-label text-fg-dim'>
+          the note's sender declares this address — a claim, not a verification
+        </p>
+      )}
+      {trust.deliveringAddress && (
+        <p className='text-label font-mono text-fg-dim break-all'>
+          delivering address {trust.deliveringAddress}
+        </p>
       )}
       {saved ? (
         <span className='flex items-center gap-1 text-label text-fg-muted'>
@@ -354,7 +468,7 @@ function ContactCardBubble({ card }: { card?: ContactCard }) {
           className='flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-label text-zigner-gold hover:bg-primary/20 transition-colors'
         >
           <span className='i-ph-user-plus h-3 w-3' />
-          save to contacts
+          {trust.known ? 'save to contacts' : 'save unverified'}
         </button>
       )}
     </div>
@@ -459,8 +573,10 @@ function FrostDkgBubble({ message }: { message: InboxMessage }) {
   );
 }
 
-function FrostSignBubble({ message }: { message: InboxMessage }) {
+export function FrostSignBubble({ message }: { message: InboxMessage }) {
   const navigate = useNavigate();
+  const frost = useStore(s => s.frostSession);
+  const trusted = signRequestIsTrusted(message.sessionId, knownSignSessionIds(frost));
   const labels: Record<number, string> = {
     [MemoType.SignRequest]: 'signature requested',
     [MemoType.SignCommitment]: 'commitment shared',
@@ -475,7 +591,22 @@ function FrostSignBubble({ message }: { message: InboxMessage }) {
         <span className='text-sm font-medium text-fg-high'>{message.typeLabel}</span>
       </div>
       <p className='text-label text-fg-muted'>{labels[message.type] ?? 'FROST signing round'}</p>
-      {message.direction === 'incoming' && message.type === MemoType.SignRequest && (
+      {!trusted && (
+        <div className='flex items-center gap-1'>
+          <span className='i-ph-warning-circle h-3 w-3 text-warning' />
+          <span className='text-label text-warning'>
+            {message.sessionId
+              ? 'unverified — session not recognised'
+              : 'unverified — no session id in memo'}
+          </span>
+        </div>
+      )}
+      {!trusted && message.senderAddress && (
+        <p className='text-label font-mono text-fg-dim break-all'>
+          delivering address {message.senderAddress}
+        </p>
+      )}
+      {trusted && message.direction === 'incoming' && message.type === MemoType.SignRequest && (
         <button
           onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
           className='flex items-center gap-1.5 rounded-md bg-elev-2 border border-border-soft px-2.5 py-1.5 text-xs text-fg-high hover:bg-elev-1 transition-colors'
@@ -484,7 +615,7 @@ function FrostSignBubble({ message }: { message: InboxMessage }) {
           sign transaction
         </button>
       )}
-      {message.type === MemoType.SignResult && (
+      {trusted && message.type === MemoType.SignResult && (
         <div className='flex items-center gap-1.5 text-fg-muted'>
           <span className='i-ph-check-circle h-3.5 w-3.5' />
           <span className='text-xs'>transaction signed</span>

@@ -8,8 +8,8 @@ version is **28.1.0**. a few recent highlights (from `git log`):
   stale lazy chunks after a chrome auto-update
 - **storage migrations** - local storage migrations attached at construction so the
   popup, options page, and service worker realms all run them
-- **injective** - native-usdc (`USDC.inj`) ramp wired as a penumbra subnetwork, held
-  `launched: false` until the ibc path is actively relayed
+- **injective** - native-usdc (`USDC.inj`) ramp wired as a penumbra subnetwork and
+  launched; the signer is proven on mainnet and the ibc path is actively relayed
 - **penumbra sends** - spend-all "max" button that reserves the um fee and leaves no
   dust change notes
 

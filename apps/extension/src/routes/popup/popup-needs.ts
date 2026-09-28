@@ -15,6 +15,7 @@ const OWN_LOGIN_HANDLING = [
   PopupPath.MULTISIG_SIGN,
   PopupPath.CONTACT_PICKER,
   PopupPath.FROST_APPROVE,
+  PopupPath.PASSKEY_APPROVE,
 ];
 
 export const handlesOwnLogin = (path: string): boolean =>

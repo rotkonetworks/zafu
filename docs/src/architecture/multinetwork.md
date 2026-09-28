@@ -34,21 +34,22 @@ recorded in `docs/adrs/cosmos-as-penumbra-subwallets.md`.
   channel in the current veil config).
 - **osmosis** - bech32 prefix `osmo`, denom `uosmo`, chain id `osmosis-1`. not
   launched until the channel client is confirmed active.
-- **injective** - special case, see below. not launched.
+- **injective** - special case, see below. launched.
 
 the standard cosmos chains use coin type 118 and derivation path
 `m/44'/118'/0'/0/0`, differing only in bech32 prefix.
 
 #### injective (ethermint special case)
 
-injective is a native-usdc (`USDC.inj`) receive-and-shield ramp. it is ethermint,
-so it uses `eth_secp256k1` on coin type 60 (`m/44'/60'/0'/0/0`) with
+injective is launched (`launched: true`) - the signer is proven on mainnet
+(round-trip tx `5699D4FC...`, code 0) and the live channel is wired. it is a
+native-usdc (`USDC.inj`) receive-and-shield ramp, and ethermint, so it uses
+`eth_secp256k1` on coin type 60 (`m/44'/60'/0'/0/0`) with
 `NETWORK_DEFAULT_ENCRYPTION.injective = 'ethereum'` - not the shared cosmos
 secp256k1 / coin-118 path. it derives and signs through
-`packages/wallet/src/networks/injective` (a dedicated conduit) and is flagged
-`conduitOnly: true` in `networks.ts`. that flag keeps it out of the shared
-coin-118 deposit machinery so a future `launched: true` can never route it through
-a fund-losing derivation. it is held `launched: false`.
+`packages/wallet/src/networks/injective`, and `deriveChainAddress` refuses any
+`eth_secp256k1` chain, so the coin-60 address can never be routed through the
+shared coin-118 deposit machinery.
 
 ### transparent networks
 
@@ -81,15 +82,14 @@ interface NetworkConfig {
   launched: boolean;
   parent?: NetworkType; // set on subnetworks (e.g. cosmos chains under penumbra)
   ibcChainId?: string; // set when a subnetwork has a live ibc channel + client
-  conduitOnly?: boolean; // dedicated derive/sign path, not the shared cosmos one
   features: { stake; swap; vote; inbox; multisig };
 }
 ```
 
 the `launched` flag controls which networks appear in the ui. currently launched:
-**zcash**, **penumbra**, and **noble** (noble being a penumbra subnetwork, not a
-top-level network). every other network is defined but gated behind
-`launched: false`.
+**zcash**, **penumbra**, and the penumbra subnetworks **noble** and **injective**
+(subnetworks are not top-level networks). the rest are defined but disabled in the
+ui.
 
 helpers derive the ui lists from these flags:
 
@@ -97,11 +97,11 @@ helpers derive the ui lists from these flags:
   picker): zcash and penumbra
 - `getSubnetworks(parent)` - launched subnetworks of a parent (noble under penumbra)
 - `getActiveIbcChainIds(parent)` - launched subnetworks that carry an `ibcChainId`
-  (a live channel), including conduit-only ramps - valid ibc deposit/withdraw
-  destinations
-- `getActiveIbcSubnetworks(parent)` - as above but excludes `conduitOnly` chains,
-  so the shared coin-118 cosmos deposit ui never reaches a conduit-only network
-  like injective (the fund-safety gate)
+  (a live channel) - valid ibc deposit/withdraw destinations
+- `getActiveIbcSubnetworks(parent)` - the same set, returned as network keys;
+  injective is included, but every derive/sign for it goes through `conduitFor`
+  (networks/transparent) and `deriveChainAddress` refuses `eth_secp256k1`, so it
+  never rides the shared coin-118 path
 
 feature flags per network include `multisig` (frost threshold wallets), currently
 true only for zcash. zcash also has `vote: true` (governance voting, backed by the

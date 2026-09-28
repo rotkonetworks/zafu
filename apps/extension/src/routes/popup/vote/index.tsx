@@ -13,6 +13,7 @@ import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { useStore } from '../../../state';
 import { selectActiveNetwork, selectPenumbraAccount } from '../../../state/keyring';
+import { hasFeature } from '../../../config/networks';
 import { NetworkUnavailable } from '../../../shared/components/network-unavailable';
 import { ZcashVotePage } from './zcash-vote';
 
@@ -219,7 +220,7 @@ export function VotePage() {
   if (activeNetwork === 'zcash') {
     return <ZcashVotePage />;
   }
-  if (!isPenumbra) {
+  if (!hasFeature(activeNetwork, 'vote')) {
     return <NetworkUnavailable feature='governance' iconClass='i-ph-check-square-offset' />;
   }
 

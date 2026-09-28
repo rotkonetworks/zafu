@@ -8,8 +8,8 @@
  * directly readable - and decodeEthAccount (tx.ts) covers the proto path.
  *
  * SAFETY: broadcastInjectiveTx submits a signed tx to the network. It is only
- * ever reached from an explicit user-approved send, and the whole Injective
- * path stays disabled until the testnet round-trip in #34 passes.
+ * ever reached from an explicit user-approved send; the #34 mainnet round-trip
+ * gate has passed (code 0) and the ramp is launched.
  */
 
 import { toBase64 } from '@cosmjs/encoding';

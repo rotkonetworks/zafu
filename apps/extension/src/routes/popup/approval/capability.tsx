@@ -55,6 +55,10 @@ export const CapabilityApproval = () => {
   const requestId = params.get('requestId') || '';
   const favIconUrl = params.get('favIconUrl') || '';
   const title = params.get('title') || '';
+  // Scope 'zafu' is the one-time global opt-in: the question is whether zafu
+  // should offer this capability at all, so it is asked with no site attached
+  // and every later site still gets its own per-origin consent.
+  const scope = params.get('scope') === 'zafu' ? 'zafu' : 'site';
 
   if (!capability || !(capability in CAPABILITY_META)) {
     return <div className='p-4 text-red-400'>invalid capability request</div>;
@@ -76,9 +80,11 @@ export const CapabilityApproval = () => {
     <ApprovalScreen
       header={
         <header className='flex h-[70px] flex-col items-center justify-center border-b border-border-soft'>
-          <span className='kicker mb-1'>capability request</span>
+          <span className='kicker mb-1'>
+            {scope === 'zafu' ? 'zafu setting' : 'capability request'}
+          </span>
           <h1 className='text-title text-fg-high lowercase tracking-[-0.01em]'>
-            permission request
+            {scope === 'zafu' ? 'enable this feature?' : 'permission request'}
           </h1>
         </header>
       }
@@ -89,18 +95,25 @@ export const CapabilityApproval = () => {
       </div>
       <div className='w-full px-[30px]'>
         <div className='flex flex-col gap-2'>
-          {/* origin display */}
-          <div className='flex items-center gap-2 rounded-lg bg-canvas p-3'>
-            {!!favIconUrl && <img src={favIconUrl} alt='' className='size-8 rounded-full' />}
-            <div className='flex flex-col overflow-hidden'>
-              {title && <span className='text-sm truncate'>{title}</span>}
-              {origin && (
-                <span className='text-xs text-fg-muted truncate'>
-                  <SafeOriginURL origin={origin} />
-                </span>
-              )}
+          {/* origin display — omitted for the global opt-in, which is not
+              about any particular site */}
+          {scope === 'site' ? (
+            <div className='flex items-center gap-2 rounded-lg bg-canvas p-3'>
+              {!!favIconUrl && <img src={favIconUrl} alt='' className='size-8 rounded-full' />}
+              <div className='flex flex-col overflow-hidden'>
+                {title && <span className='text-sm truncate'>{title}</span>}
+                {origin && (
+                  <span className='text-xs text-fg-muted truncate'>
+                    <SafeOriginURL origin={origin} />
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
+          ) : (
+            <p className='text-sm text-fg-muted'>
+              zafu will ask you again before any individual site is allowed to use it.
+            </p>
+          )}
 
           {/* capability card */}
           <div className={cn('rounded-lg border p-4', style.border, style.bg)}>
@@ -127,8 +140,9 @@ export const CapabilityApproval = () => {
           {/* extra warning for critical */}
           {meta.risk === 'critical' && (
             <div className='rounded-lg border border-red-500/50 bg-red-500/10 p-3 text-xs text-red-400'>
-              are you absolutely sure? this site can sign transactions on your behalf without
-              confirmation.
+              {scope === 'zafu'
+                ? 'are you absolutely sure? once enabled, a site you approve can sign transactions without per-transaction confirmation.'
+                : 'are you absolutely sure? this site can sign transactions on your behalf without confirmation.'}
             </div>
           )}
         </div>

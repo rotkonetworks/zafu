@@ -3,6 +3,7 @@ import { ed25519 } from '@noble/curves/ed25519';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { XWING_SUITE, pqKeyAuthMessage } from '@zafu/pq';
 import { createGuestIdentity } from './guest';
+import { getContactRefs, upsertContact } from './contacts';
 import { ZafuError } from './errors';
 import {
   ContactRelay,
@@ -208,6 +209,24 @@ describe('guest identity - contact discovery', () => {
     );
   });
 
+  it('refuses a low-order peer key in deriveRootSecret (non-contributory DH)', () => {
+    const alice = surface(createGuestIdentity({ origin: 'https://a.example' }));
+    // the identity point (0,1) is a valid encoding but a useless key: a raw
+    // getSharedSecret would return a value the attacker chose.
+    for (const key of ['01' + '00'.repeat(31), '00'.repeat(32)]) {
+      let thrown: unknown;
+      try {
+        alice.deriveRootSecret({ suite: 'x25519-v1', publicKey: key });
+      } catch (e) {
+        thrown = e;
+      }
+      if (!(thrown instanceof ZafuError)) {
+        throw new Error(`expected a ZafuError for low-order key ${key}, got ${String(thrown)}`);
+      }
+      expect(thrown.code).toBe('invalid_request');
+    }
+  });
+
   it('establishSecret returns null for a contact that was never stored', () => {
     const alice = surface(createGuestIdentity({ origin: 'https://a.example' }));
     expect(alice.establishSecret('deadbeef')).toBeNull();
@@ -257,5 +276,60 @@ describe('guest identity - contact discovery', () => {
     expect(found).toEqual([
       { id: 'bob', sessionPubHex: bytesToHex(new Uint8Array(32).fill(3)), caps: 0b101 },
     ]);
+  });
+});
+
+describe('guest identity - invite delivery', () => {
+  /** a socket that never answers a keyex, so the handshake can never complete. */
+  class DeadWebSocket {
+    static last: DeadWebSocket | null = null;
+    readonly sent: string[] = [];
+    onopen: (() => void) | null = null;
+    onmessage: ((ev: { data: string }) => void) | null = null;
+    onerror: (() => void) | null = null;
+    onclose: (() => void) | null = null;
+    constructor(readonly url: string) {
+      DeadWebSocket.last = this;
+    }
+    send(data: string): void {
+      this.sent.push(data);
+    }
+    close(): void {}
+    /** the relay drops before ever answering the key exchange. */
+    fail(): void {
+      this.onerror?.();
+    }
+  }
+
+  it('reports sent:false when the invite frame never reaches the transport', async () => {
+    const ORIGIN = 'https://a.example';
+    const peerPub = bytesToHex(ed25519.getPublicKey(new Uint8Array(32).fill(5)));
+    upsertContact(peerPub, 'peer');
+    const [ref] = await getContactRefs(ORIGIN);
+    if (!ref) {
+      throw new Error('expected a stored contact');
+    }
+
+    vi.stubGlobal('WebSocket', DeadWebSocket);
+
+    const alice = createGuestIdentity({ origin: ORIGIN, relayUrl: 'ws://relay' });
+    if (!alice.invite) {
+      throw new Error('guest identity must expose invite');
+    }
+    const pending = alice.invite(ref.handle, { type: 'zid:test', data: {} });
+    // wait until the invite has opened the channel, then kill the socket before
+    // the peer's keyex can ever arrive.
+    await vi.waitFor(() => {
+      if (!DeadWebSocket.last) {
+        throw new Error('invite has not opened a channel yet');
+      }
+    });
+    const ws = DeadWebSocket.last;
+    if (!ws) {
+      throw new Error('invite has not opened a channel yet');
+    }
+    ws.fail();
+
+    expect(await pending).toEqual({ sent: false });
   });
 });

@@ -48,6 +48,9 @@ export enum PopupPath {
   // FROST approval (opened by external apps via zafu_frost_*)
   FROST_APPROVE = '/frost-approve',
 
+  // Passkey creation consent (opened by external apps via zafu_passkey_create)
+  PASSKEY_APPROVE = '/passkey-approve',
+
   // Passwords (deterministic password generator)
   PASSWORDS = '/identity/passwords',
 
@@ -56,6 +59,10 @@ export enum PopupPath {
 
   // Contact-discovery consent (opened by external apps via zafu_request_contact_discovery)
   CONTACT_DISCOVERY_APPROVAL = '/approval/contact-discovery',
+
+  // Outbound-destination consent (raised by the egress gate when a dapp
+  // introduces a host that is not in zafu's config for an enabled network)
+  DESTINATION_APPROVAL = '/approval/destination',
 
   // Zcash multi-output send approval (opened by external apps via zafu_zcash_send)
   ZCASH_SEND_APPROVAL = '/approval/zcash-send',
@@ -79,6 +86,7 @@ export enum PopupPath {
   SETTINGS_APPEARANCE = '/settings/appearance',
   SETTINGS_NETWORKS = '/settings/networks',
   SETTINGS_PRIVACY = '/settings/privacy',
+  SETTINGS_FEATURES = '/settings/features',
   SETTINGS_WALLETS = '/settings/wallets',
   SETTINGS_ABOUT = '/settings/about',
   SETTINGS_OTA = '/settings/ota',

@@ -14,6 +14,14 @@
 // asyncWebAssembly deferring the entry body).
 import './install-global-error-handlers';
 
+// Patch `fetch` to run the egress gate on every outbound request. Sync and
+// dependency-free by design (the gate itself loads lazily on first request), so
+// it can sit here with the error handlers and cannot defer listener
+// registration.
+import { installEgressGuard } from './net/install-egress-guard';
+
+installEgressGuard();
+
 // listeners
 import { contentScriptConnectListener } from './message/listen/content-script-connect';
 import { signRequestListener } from './message/listen/sign-request';
@@ -28,7 +36,9 @@ import {
   contactDiscoveryRequestListener,
   contactDiscoveryRequestResultListener,
 } from './message/listen/contact-discovery-request';
+import { destinationConsentResultListener } from './net/prompt';
 import { internalZidListener } from './message/listen/internal-zid';
+import { NET_EGRESS_INTERNAL_METHODS } from './message/listen/zafu-method-names';
 import { zcashLinkListener } from './message/listen/zcash-link';
 import { keplrMessageListener } from './message/listen/keplr';
 import { createPenumbraSendListener } from './message/listen/penumbra-send';
@@ -150,7 +160,11 @@ let walletServicesResult: Promise<{
   wallet: import('@repo/wallet').WalletJson;
   reason?: string;
 }>;
-let walletServices: Promise<Services>;
+// Undefined until `initHandler` creates the boot services. Any awaited use must
+// tolerate that: the first millisecond of a worker's life is a real, reachable
+// state, not just a typing nicety (see the blockSync alarm and the internal
+// service listener).
+let walletServices: Promise<Services> | undefined;
 let currentWalletIndex: number | undefined;
 let currentSyncAbort: AbortController | undefined;
 
@@ -181,13 +195,16 @@ const rebuildServices = async (
   if (currentSyncAbort) {
     currentSyncAbort.abort();
   }
-  try {
-    const oldServices = await walletServices;
-    const oldWs = await oldServices.getWalletServices();
-    oldWs.blockProcessor.stop(why);
-    console.log(`[sync] stopped old block processor (${why})`);
-  } catch {
-    // old services were a stub or never initialized - nothing to stop
+  // a rebuild that races the boot (or follows a failed one) has nothing to stop
+  if (walletServices) {
+    try {
+      const oldServices = await walletServices;
+      const oldWs = await oldServices.getWalletServices();
+      oldWs.blockProcessor.stop(why);
+      console.log(`[sync] stopped old block processor (${why})`);
+    } catch {
+      // old services were a stub or never initialized - nothing to stop
+    }
   }
 
   // new RPC requests will block on getWalletReady() until the new wallet is cached
@@ -456,9 +473,16 @@ void (async () => {
 // record, so it survives SW eviction). Also prunes stale terminal records.
 void runIbcTransferSweep().catch(e => console.warn('[ibc-tracker] startup sweep failed', e));
 
-// listen for internal service controls
+// listen for internal service controls. A message can arrive before
+// `initHandler` created the boot services (the worker is started to deliver it),
+// and every consumer here awaits this promise inside its own try/catch - so the
+// pre-boot state is an explicit "still starting" rejection, not a TypeError on
+// undefined.
+const servicesNotStarted = (): Promise<Services> =>
+  Promise.reject(new Error('wallet services are still starting'));
+
 chrome.runtime.onMessage.addListener((req, sender, respond) =>
-  internalServiceListener(walletServices, req, sender, respond),
+  internalServiceListener(walletServices ?? servicesNotStarted(), req, sender, respond),
 );
 
 // listen for identity sign requests from approved origins
@@ -486,10 +510,20 @@ const INTERNAL_RESULT_TYPES = new Set([
   'zafu_frost_result',
   'zafu_capability_result',
   'zafu_zcash_send_result',
+  'zafu_passkey_create_result',
 ]);
 chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
   const t = (req as { type?: unknown } | null)?.type;
   if (typeof t === 'string' && INTERNAL_RESULT_TYPES.has(t)) {
+    return externalMessageListener(req, sender, sendResponse);
+  }
+  // passkey requests arrive from the ISOLATED content-script bridge
+  // (passkey-bridge.ts) over onMessage, but their handlers live in the external
+  // listener so the externally_connectable path and the injected intercept
+  // share one implementation. Delegating is safe: both handlers take the origin
+  // from the browser-attested sender and match the rpId against it, so a page
+  // cannot act for another origin through the bridge.
+  if (t === 'zafu_passkey_create' || t === 'zafu_passkey_get') {
     return externalMessageListener(req, sender, sendResponse);
   }
   if (t === 'zafu_encryption_approval_result') {
@@ -497,6 +531,9 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
   }
   if (t === 'zafu_contact_discovery_approval_result') {
     return contactDiscoveryRequestResultListener(req, sender, sendResponse);
+  }
+  if (NET_EGRESS_INTERNAL_METHODS[0] === t) {
+    return destinationConsentResultListener(req, sender, sendResponse);
   }
   return false;
 });
@@ -605,9 +642,24 @@ chrome.alarms.onAlarm.addListener(async alarm => {
       console.info('Background sync scheduled');
     }
 
+    // The alarm fires the moment the worker wakes, and `initHandler` reaches the
+    // point where it creates these only after an await on storage - so on a cold
+    // wake the block below read an undefined variable, dereferenced it
+    // (TypeError: reading 'getWalletServices') and this catch reported that as
+    // "services not initialized". The boot path syncs on its own
+    // (startWalletServices starts the block processor), so an alarm that wins
+    // the race has nothing to do.
+    const booting = walletServices;
+    if (!booting) {
+      if (globalThis.__DEV__) {
+        console.info('Skipping background sync: wallet services are still starting');
+      }
+      return;
+    }
+
     // trigger sync for enabled networks only
     try {
-      const services = await walletServices;
+      const services = await booting;
       const ws = await services.getWalletServices();
       void ws.blockProcessor.sync().catch((e: unknown) => {
         // terminal rejection after an intentional stop is expected teardown;

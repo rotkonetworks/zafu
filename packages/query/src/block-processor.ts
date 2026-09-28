@@ -153,7 +153,15 @@ export class BlockProcessor implements BlockProcessorInterface {
         if (this.abortController.signal.aborted) {
           return false;
         }
-        console.error(`Sync failure #${attemptNumber}: `, e);
+        // Retrying is the policy here, not a failure: an endpoint that is down
+        // produces one of these every backoff interval, forever, which buries
+        // the errors that actually need attention under hundreds of identical
+        // lines. Log the first few attempts and then every tenth; the recovery
+        // below still runs on every attempt either way.
+        const shouldLog = attemptNumber <= 3 || attemptNumber % 10 === 0;
+        if (shouldLog) {
+          console.error(`Sync failure #${attemptNumber}: `, e);
+        }
         // The tree reset is best-effort recovery, NOT a precondition for
         // retrying: when it threw, backOff gave up and cleared the sync promise,
         // so the wallet stopped syncing until some unrelated view RPC poked
@@ -164,7 +172,9 @@ export class BlockProcessor implements BlockProcessorInterface {
         try {
           await this.viewServer.resetTreeToStored();
         } catch (resetError) {
-          console.error('Sync tree reset failed; retrying anyway:', resetError);
+          if (shouldLog) {
+            console.error('Sync tree reset failed; retrying anyway:', resetError);
+          }
         }
         return true;
       },

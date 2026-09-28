@@ -1,3 +1,6 @@
+// Must be the first import: its side effect runs in webpack's hoisted,
+// synchronous require phase, ahead of this entry's wasm-backed deps.
+import '../install-console-quieting';
 import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
 import { pageRouter } from '../routes/page/router';
@@ -5,6 +8,7 @@ import { StrictMode, useState, useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
+import { noteContextInvalidated } from '../utils/reload-notice';
 import { AppErrorBoundary, reportRenderError } from '../components/error-boundary';
 
 import '@repo/ui/styles/globals.css';
@@ -14,6 +18,14 @@ import '@repo/ui/styles/icons.css';
 // AbortError unhandled rejections to console.debug, leave everything else
 // loud. See utils/graceful-network-errors.ts.
 installGracefulNetworkErrorHandler();
+
+// This page survives an extension reload/auto-update with its chrome.* bindings
+// gone: `runtime.id` disappears and every call throws "Extension context
+// invalidated". Detect the already-dead case up front (an idle page raises no
+// event to hook) and tell the user to reload instead of failing silently.
+if (!chrome.runtime?.id) {
+  noteContextInvalidated();
+}
 
 const MainPage = () => {
   const [queryClient] = useState(() => new QueryClient());

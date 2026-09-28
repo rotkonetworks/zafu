@@ -130,6 +130,73 @@ describe('parseLine', () => {
       body: 'ohai',
     });
   });
+
+  it('reads /frost as a control plane over the log: show, rotate, verify', () => {
+    expect(parseLine('/frost show', members)).toEqual({ kind: 'frost', command: { op: 'show' } });
+    expect(parseLine('/frost rotate', members)).toEqual({
+      kind: 'frost',
+      command: { op: 'rotate' },
+    });
+    expect(parseLine('/frost verify ABCD1234', members)).toEqual({
+      kind: 'frost',
+      command: { op: 'verify', fingerprint: 'abcd1234' },
+    });
+    // a fingerprint the ceremony printed is 8-128 letters or digits
+    expect(parseLine('/frost verify abcd', members)).toMatchObject({
+      kind: 'notice',
+      text: /usage/,
+    });
+    expect(parseLine('/frost', members)).toMatchObject({ kind: 'notice', text: /usage/ });
+    expect(parseLine('/frost show now', members)).toMatchObject({ kind: 'notice', text: /usage/ });
+    expect(parseLine('/frost nope', members)).toMatchObject({
+      kind: 'notice',
+      text: /unknown \/frost nope/,
+    });
+  });
+
+  it('refuses to put share material on a log everyone replays', () => {
+    for (const verb of ['share', 'export', 'key', 'keys', 'seed', 'secret', 'backup']) {
+      // the verb in the value, so a failure names which one leaked
+      expect({ verb, line: parseLine(`/frost ${verb} deadbeef`, members) }).toMatchObject({
+        verb,
+        line: { kind: 'notice', text: new RegExp(`no ${verb} material`) },
+      });
+    }
+  });
+
+  it('resolves a roster against the members already in the room', () => {
+    expect(parseLine(`/frost roster 2-of-3 alice bob ${shortId(carol.pubkey)}`, members)).toEqual({
+      kind: 'frost',
+      command: { op: 'roster', threshold: 2, of: [alice, bob, carol] },
+    });
+    // 2/3 is the same shape as 2-of-3, and it counts the names
+    expect(parseLine('/frost roster 2/3 alice bob', members)).toMatchObject({
+      kind: 'notice',
+      text: /needs 3 names/,
+    });
+  });
+
+  it('refuses a roster a ceremony could not run', () => {
+    expect(parseLine('/frost roster 4-of-3 alice bob carol', members)).toMatchObject({
+      kind: 'notice',
+      text: /not between 1 and 3/,
+    });
+    expect(parseLine('/frost roster 2-of-3 alice bob', members)).toMatchObject({
+      kind: 'notice',
+      text: /needs 3 names/,
+    });
+    expect(parseLine('/frost roster 2-of-3 alice bob alice', members)).toMatchObject({
+      kind: 'notice',
+      text: /alice is listed twice/,
+    });
+    expect(parseLine('/frost roster 2-of-3 alice bob nobody', members)).toMatchObject({
+      kind: 'notice',
+    });
+    expect(parseLine('/frost roster 2of3 alice bob carol', members)).toMatchObject({
+      kind: 'notice',
+      text: /usage/,
+    });
+  });
 });
 
 describe('resolveMember', () => {
@@ -200,6 +267,28 @@ describe('complete', () => {
     expect(complete('hello', 5, members)).toBeNull();
     expect(complete('/msg zzz', 8, members)).toBeNull();
     expect(complete('/who ', 5, members)).toBeNull();
+  });
+
+  it('offers the members a /frost roster has not listed yet', () => {
+    // /frost roster <k-of-n> ... - the argument where a typo costs a ceremony
+    const fresh = complete('/frost roster 2-of-3 ', 21, members);
+    expect(fresh?.candidates.map(c => c.label)).toEqual(['alice', 'bob', shortId(carol.pubkey)]);
+    expect(fresh?.from).toBe(21);
+    expect(fresh?.to).toBe(21);
+
+    const typing = complete('/frost roster 2-of-3 alice b', 28, members);
+    expect(typing?.candidates.map(c => c.label)).toEqual(['bob']);
+    expect(typing?.from).toBe(27);
+
+    const next = complete('/frost roster 2-of-3 alice ', 27, members);
+    expect(next?.candidates.map(c => c.label)).toEqual(['bob', shortId(carol.pubkey)]);
+  });
+
+  it('offers nothing until the /frost shape is a complete k-of-n', () => {
+    expect(complete('/frost ', 7, members)).toBeNull();
+    expect(complete('/frost r', 8, members)).toBeNull();
+    expect(complete('/frost roster', 13, members)).toBeNull();
+    expect(complete('/frost roster 2-', 18, members)).toBeNull();
   });
 });
 

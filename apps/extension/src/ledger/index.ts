@@ -8,8 +8,10 @@
 // hand-written .d.ts shim - one previously shadowed the real types and hid
 // several wrong field names).
 //
-// NOT FUNCTIONAL YET: the shielded path needs `describe_pczt_for_ledger` in
-// @repo/zcash-wasm, which does not exist. Every shielded sign attempt throws.
+// The Rust `describe_pczt_for_ledger` export this needs now ships in the
+// vendored @repo/zcash-wasm, so the Orchard-V5 shielded path is wired end to
+// end. The V6/ironwood path still throws: the export decodes Orchard V5 only
+// (see pcztHexToLedgerIronwoodTransaction).
 
 import { getZcashSigner } from './transport';
 import { runDeviceAction } from './da-util';

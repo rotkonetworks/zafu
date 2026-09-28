@@ -88,13 +88,20 @@ export async function readEncrypted<T>(
   return JSON.parse(plaintext) as T;
 }
 
-/** write an encrypted value to local storage. */
+/**
+ * write an encrypted value to local storage.
+ *
+ * Returns whether it was persisted. `false` means the wallet is locked, so
+ * there is no session key to seal with and the write was SKIPPED - a caller that
+ * is handing out what it just wrote (a generated secret, say) must not treat
+ * that value as durable.
+ */
 export async function writeEncrypted(
   local: ExtensionStorage<LocalStorageState>,
   session: ExtensionStorage<SessionStorageState>,
   storageKey: keyof LocalStorageState,
   data: unknown,
-): Promise<void> {
+): Promise<boolean> {
   // wait for hydration to complete before writing — prevents overwriting
   // existing encrypted data with empty/partial in-memory state during startup
   await waitForHydration();
@@ -102,17 +109,20 @@ export async function writeEncrypted(
   const key = await getKey(session);
   if (!key) {
     console.warn(`[encrypted-storage] skipping write of '${storageKey}'  - wallet is locked`);
-    return;
+    return false;
   }
 
   const plaintext = JSON.stringify(data);
   const box = await key.seal(plaintext);
   await local.set(storageKey, { encrypted: box.toJson() } as never);
+  return true;
 }
 
 /** keys encrypted at rest  - decrypted on-demand via session key.
  *  wallets/zcashWallets contain viewing keys (FVK) that reveal full
- *  transaction history. no viewing key data in plaintext storage  - ever. */
+ *  transaction history. no viewing key data in plaintext storage  - ever.
+ *  frostRelayIdentities holds each group's x25519 relay key, which also
+ *  seals group-chat frames  - a confidentiality secret, so sealed too. */
 /** knownSites is NOT encrypted  - origin approval records ({ origin, choice, date })
  *  contain no private data and are read by the origin storage package which
  *  doesn't have access to the session key. */
@@ -125,6 +135,7 @@ const ENCRYPTED_KEYS = new Set<string>([
   'messages',
   'diversifiedAddresses',
   'groupChats',
+  'frostRelayIdentities',
 ]);
 
 /** should this storage key be encrypted? */
@@ -171,14 +182,14 @@ export async function readEncryptedWithMigration<T>(
   return raw as T;
 }
 
-/** Write an encrypted key from outside the zustand store. */
+/** Write an encrypted key from outside the zustand store. Returns whether it landed. */
 export async function writeEncryptedDirect(
   local: ExtensionStorage<LocalStorageState>,
   session: ExtensionStorage<SessionStorageState>,
   storageKey: keyof LocalStorageState,
   data: unknown,
-): Promise<void> {
-  await writeEncrypted(local, session, storageKey, data);
+): Promise<boolean> {
+  return writeEncrypted(local, session, storageKey, data);
 }
 
 /**

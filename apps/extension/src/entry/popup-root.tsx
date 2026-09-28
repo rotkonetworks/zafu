@@ -1,3 +1,6 @@
+// Must be the first import: its side effect runs in webpack's hoisted,
+// synchronous require phase, ahead of this entry's wasm-backed deps.
+import '../install-console-quieting';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode, useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -7,6 +10,7 @@ import { isSidePanel } from '../utils/popup-detection';
 import { announceSidePanelPresence } from '../side-panel-presence';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
+import { noteContextInvalidated } from '../utils/reload-notice';
 import { AppErrorBoundary, reportRenderError } from '../components/error-boundary';
 import { loadBalancesSnapshot } from '../hooks/balances-snapshot';
 import { balancesQueryKey } from '../hooks/penumbra-balances';
@@ -21,6 +25,13 @@ import '@repo/ui/styles/icons.css';
 // those to console.debug; every other rejection still surfaces loudly, so
 // real bugs are not hidden. Installed before first render on purpose.
 installGracefulNetworkErrorHandler();
+
+// A popup left open across an extension reload/auto-update is alive but dead:
+// `runtime.id` is gone and every call throws "Extension context invalidated".
+// Surface that instead of failing silently (see entry/page-root.tsx).
+if (!chrome.runtime?.id) {
+  noteContextInvalidated();
+}
 
 const MainPopup = () => {
   const [queryClient] = useState(() => new QueryClient());

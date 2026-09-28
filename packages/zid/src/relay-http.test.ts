@@ -1,12 +1,39 @@
 import { describe, expect, it, vi, type Mock } from 'vitest';
-import { createHttpRelayTransport } from './relay-http';
+import {
+  createHttpRelayTransport,
+  MAX_RELAY_BODY_BYTES,
+  MAX_RELAY_ENTRIES,
+  MAX_RELAY_ENTRY_BASE64,
+} from './relay-http';
 
 const b64 = (b: Uint8Array): string => btoa(String.fromCharCode(...b));
 
-/** the narrow slice of Response the transport uses. */
-function jsonResponse(body: unknown, status = 200) {
-  return { ok: status >= 200 && status < 300, status, json: async () => body };
+/**
+ * The narrow slice of Response the transport uses.
+ *
+ * The body is a real ReadableStream, delivered in chunks, so these tests
+ * exercise the transport's bounded read (and its ceiling) rather than a
+ * single-shot shortcut a real relay would never provide.
+ */
+function streamedResponse(text: string, status = 200) {
+  const bytes = new TextEncoder().encode(text);
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    body: new ReadableStream<Uint8Array>({
+      start(c) {
+        for (let i = 0; i < bytes.length; i += 64 * 1024) {
+          c.enqueue(bytes.subarray(i, i + 64 * 1024));
+        }
+        c.close();
+      },
+    }),
+    text: async () => text,
+  };
 }
+
+const jsonResponse = (body: unknown, status = 200) =>
+  streamedResponse(JSON.stringify(body), status);
 
 type FetchMock = Mock;
 
@@ -102,5 +129,67 @@ describe('createHttpRelayTransport', () => {
         /relay:/,
       );
     }
+  });
+
+  it('rejects a body that is not JSON at all', async () => {
+    const fetchMock = vi.fn(async () => streamedResponse('<html>proxy error</html>'));
+    const transport = createHttpRelayTransport({
+      endpoint: 'https://r',
+      fetch: asFetch(fetchMock),
+    });
+
+    await expect(transport.getBucket({ appScope: 'a', epoch: 1, shard: '' })).rejects.toThrow(
+      /relay: response body is not JSON/,
+    );
+  });
+
+  it('caps the entry count and discards an oversized entry from an untrusted relay', async () => {
+    const tag = b64(new Uint8Array([1]));
+    const blob = b64(new Uint8Array([2]));
+    const entries: { tag: string; blob: string }[] = Array.from(
+      { length: MAX_RELAY_ENTRIES + 50 },
+      () => ({ tag, blob }),
+    );
+    // a valid base64 field longer than the ceiling would decode fine if it were
+    // trusted - the transport must refuse it before calling atob.
+    entries.splice(3, 0, { tag: 'A'.repeat(MAX_RELAY_ENTRY_BASE64 + 4), blob });
+    const fetchMock = vi.fn(async () => jsonResponse({ entries }));
+    const transport = createHttpRelayTransport({
+      endpoint: 'https://r',
+      fetch: asFetch(fetchMock),
+    });
+
+    const out = await transport.getBucket({ appScope: 'a', epoch: 1, shard: '' });
+
+    expect(out).toHaveLength(MAX_RELAY_ENTRIES); // excess beyond the cap dropped
+    expect(out.every(e => e.tag.length <= 32)).toBe(true); // oversized entry discarded
+  });
+
+  it('stops reading an oversized body instead of buffering it for JSON.parse', async () => {
+    // valid JSON with trailing whitespace: only the byte ceiling can reject this
+    const huge = '{"entries":[]}' + ' '.repeat(MAX_RELAY_BODY_BYTES);
+    const fetchMock = vi.fn(async () => streamedResponse(huge));
+    const transport = createHttpRelayTransport({
+      endpoint: 'https://r',
+      fetch: asFetch(fetchMock),
+    });
+
+    await expect(transport.getBucket({ appScope: 'a', epoch: 1, shard: '' })).rejects.toThrow(
+      new RegExp(`exceeds ${MAX_RELAY_BODY_BYTES}`),
+    );
+  });
+
+  it('bounds a response that carries no readable stream', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => `{"entries":[]}`,
+    }));
+    const transport = createHttpRelayTransport({
+      endpoint: 'https://r',
+      fetch: asFetch(fetchMock),
+    });
+
+    await expect(transport.getBucket({ appScope: 'a', epoch: 1, shard: '' })).resolves.toEqual([]);
   });
 });

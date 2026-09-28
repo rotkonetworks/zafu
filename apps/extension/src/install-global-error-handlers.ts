@@ -26,4 +26,12 @@
  */
 import { installGracefulNetworkErrorHandler } from './utils/graceful-network-errors';
 
+// The worker also bundles the transport session *client*: the IBC probe path
+// (`state/ibc-transfer-probes` -> `clients.ts`) uses the page client from the
+// worker, so its connect failures log through `console.warn`/`console.error`
+// here too. Installed by importing a sync module for the same reason as the
+// handlers above - the entry body runs only after the async wasm deps, so a
+// call there lands after the first client report.
+import './install-console-quieting';
+
 installGracefulNetworkErrorHandler();

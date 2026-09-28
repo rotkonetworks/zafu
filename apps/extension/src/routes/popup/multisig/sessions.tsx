@@ -25,6 +25,7 @@ import { getBalanceInWorker } from '../../../state/keyring/network-worker';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
 import { NetworkUnavailable } from '../../../shared/components/network-unavailable';
 import { usePasswordGate } from '../../../hooks/password-gate';
+import { hasFeature } from '../../../config/networks';
 import { Sensitive } from '../../../components/sensitive';
 import { cn } from '@repo/ui/lib/utils';
 import { PopupPath } from '../paths';
@@ -487,7 +488,7 @@ export const MultisigPage = () => {
     ? (`${PopupPath.MULTISIG_JOIN}?mode=zigner` as PopupPath)
     : PopupPath.MULTISIG_JOIN;
 
-  if (!isZcash) {
+  if (!hasFeature(activeNetwork, 'multisig')) {
     return <NetworkUnavailable feature='multisig' iconClass='i-ph-shield' />;
   }
 

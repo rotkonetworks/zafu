@@ -4,8 +4,8 @@ import { IndexedDb } from '@penumbra-zone/storage/indexed-db';
 import { ViewServer } from '@rotko/penumbra-wasm/view-server';
 import { ServicesInterface, WalletServices } from '@rotko/penumbra-types/services';
 import { FullViewingKey, WalletId } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
-import { ChainRegistryClient } from '@penumbrafi/registry';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
+import { withBundledFallback } from './registry-client';
 import { CompactBlock } from '@penumbra-zone/protobuf/penumbra/core/component/compact_block/v1/compact_block_pb';
 import { SctFrontierRequest } from '@penumbra-zone/protobuf/penumbra/core/component/sct/v1/sct_pb';
 
@@ -57,7 +57,10 @@ export class Services implements ServicesInterface {
       compactFrontierBlockHeight,
     } = this.config;
     const querier = new RootQuerier({ grpcEndpoint });
-    const registryClient = new ChainRegistryClient();
+    // `IndexedDb.initialize` pre-populates asset metadata from the remote
+    // registry and logs its own error if that fetch fails; the fallback client
+    // resolves offline boots from the bundled copy instead (see registry-client.ts).
+    const registryClient = withBundledFallback();
     const indexedDb = await IndexedDb.initialize({
       chainId,
       walletId,

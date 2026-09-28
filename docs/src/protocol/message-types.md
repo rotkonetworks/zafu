@@ -43,7 +43,7 @@ payload exceeds 508 bytes.
     0x03    PaymentRequest    amount + optional address + label
     0x04    Ack               read receipt / acknowledgment
     0x05    ContactCard       name + address + TLV extensions
-    0x06    EncryptedMessage  zid-authenticated encrypted payload
+    0x06    EncryptedMessage  reserved, not implemented
     0x07    Data              generic structured data
     0x10    DkgRound1         FROST DKG round 1
     0x11    DkgRound2         FROST DKG round 2

@@ -28,6 +28,12 @@
  */
 
 import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
+import { getCapabilityMode, setCapabilityMode } from '../../state/capability-modes';
+import {
+  decideCapabilityUse,
+  isOptinPending,
+  modeFromOptin,
+} from '../../utils/capability-decision';
 import {
   hasCapability,
   isDenied,
@@ -45,7 +51,7 @@ import { ZAFU_PROTOCOL_VERSION, ZAFU_SUPPORTED_PROTOCOL_VERSIONS } from '@zafu/p
 import { getApprovalSurface } from '../../side-panel-pref';
 import { isSidePanelOpen } from '../../side-panel-presence';
 import { SIDE_PANEL_NAVIGATE } from '../side-panel-delivery';
-import { POPUP_WINDOW_HEIGHT, POPUP_WINDOW_WIDTH } from '../../utils/popup-window';
+import { popupWindowGeometry } from '../../utils/popup-window';
 import { PopupPath } from '../../routes/popup/paths';
 
 /**
@@ -68,10 +74,7 @@ export const openWalletRoute = async (origin: string, route: string): Promise<bo
   }
   const url = new URL(chrome.runtime.getURL('/popup.html'));
   url.hash = route;
-  return openApprovalPopup(origin, url.href, {
-    width: POPUP_WINDOW_WIDTH,
-    height: POPUP_WINDOW_HEIGHT,
-  });
+  return openApprovalPopup(origin, url.href);
 };
 
 /** Source chains the wallet can shield from via zafu_open_shield. */
@@ -109,6 +112,14 @@ const ENABLE_FROST_SIGN_ORCHARD = true;
 
 // pending pick requests: requestId → sendResponse callback
 const pendingPicks = new Map<string, (r: unknown) => void>();
+
+// rpId + requesting origin for each pending passkey-create request, keyed by
+// requestId. The mint runs in the service worker (mnemonic access) after the
+// popup approves, so the rpId validated at gate time must survive until the
+// result arrives; the origin is kept for the same reason, so approval can grant
+// the `passkey` capability to the origin that actually asked. Kept here, not in
+// the popup round-trip: an extension page must not choose either value.
+const pendingPasskeyRequests = new Map<string, { origin: string; rpId: string }>();
 
 /**
  * Register a pending popup callback keyed by `requestId`. Other external
@@ -149,6 +160,16 @@ const popupWindowToOrigin = new Map<number, string>();
 // windowId registration and pendingPicks.set.
 const popupWindowToRequestId = new Map<number, string>();
 
+// A result message races the window removal: the approval popup sends its
+// approve/deny message and then closes itself, and `onRemoved` can win. Settling
+// a pending entry the instant the window disappears therefore threw away
+// approvals the user HAD given - the caller saw the cancelled shape, the content
+// script fell back to the platform authenticator, and the credential was never
+// minted even though the user pressed approve. Hold the cancellation briefly so
+// that a result already in flight can still claim the entry; a genuine close
+// without deciding is only reported late, never lost.
+const CLOSED_WINDOW_GRACE_MS = 1000;
+
 // optional-chained: chrome.windows is absent in unit-test mocks, and this
 // runs at module load, so guard it rather than crash the import.
 chrome.windows?.onRemoved?.addListener(windowId => {
@@ -158,20 +179,29 @@ chrome.windows?.onRemoved?.addListener(windowId => {
     originsWithOpenPopup.delete(origin);
   }
   const requestId = popupWindowToRequestId.get(windowId);
-  if (requestId !== undefined) {
-    popupWindowToRequestId.delete(windowId);
-    const cb = pendingPicks.get(requestId);
-    if (cb) {
-      pendingPicks.delete(requestId);
-      // Shape doubles for two callback flavours:
-      //  - FROST / pick_contacts / zcash_send sendResponse: they read `success`
-      //    and treat this as a cancelled/denied outcome.
-      //  - zafu_request_capability's resolve(): reads `cancelled` and skips
-      //    denyCapability (a persistent deny the user never made would be a
-      //    semantics change).
-      cb({ success: false, error: 'cancelled', cancelled: true });
-    }
+  // delete by windowId - the map is keyed by the window, so deleting by
+  // requestId left every entry behind and a reused window id could later
+  // cancel an unrelated request.
+  popupWindowToRequestId.delete(windowId);
+  if (requestId === undefined) {
+    return;
   }
+  setTimeout(() => {
+    // the result listeners take the entry synchronously when their message
+    // arrives, so an entry that is still here means the user never decided.
+    const cb = takePendingApproval(requestId);
+    if (!cb) {
+      return;
+    }
+    pendingPasskeyRequests.delete(requestId);
+    // Shape doubles for two callback flavours:
+    //  - FROST / pick_contacts / zcash_send sendResponse: they read `success`
+    //    and treat this as a cancelled/denied outcome.
+    //  - zafu_request_capability's resolve(): reads `cancelled` and skips
+    //    denyCapability (a persistent deny the user never made would be a
+    //    semantics change).
+    cb({ success: false, error: 'cancelled', cancelled: true });
+  }, CLOSED_WINDOW_GRACE_MS);
 });
 
 /**
@@ -183,19 +213,19 @@ chrome.windows?.onRemoved?.addListener(windowId => {
 export async function openApprovalPopup(
   origin: string,
   url: string,
-  size: { width: number; height: number },
   requestId?: string,
 ): Promise<boolean> {
   if (originsWithOpenPopup.has(origin)) {
     return false;
   }
   originsWithOpenPopup.add(origin);
+  const geometry = await popupWindowGeometry();
   try {
-    const win = await chrome.windows.create({ url, type: 'popup', ...size });
-    if (win?.id !== undefined) {
-      popupWindowToOrigin.set(win.id, origin);
+    const opened = await createPopupWindow(url, geometry);
+    if (opened?.id !== undefined) {
+      popupWindowToOrigin.set(opened.id, origin);
       if (requestId !== undefined) {
-        popupWindowToRequestId.set(win.id, requestId);
+        popupWindowToRequestId.set(opened.id, requestId);
       }
       return true;
     }
@@ -209,6 +239,30 @@ export async function openApprovalPopup(
     return false;
   }
 }
+
+/**
+ * Create the window, retrying once without the anchor. Chrome refuses a window
+ * placed less than half inside the visible screen, and the anchor is computed
+ * from the browser window's geometry - which can legitimately sit off-screen.
+ * The size (420x760, the whole point: approval screens must not clip their
+ * Approve/Deny row) is kept on the retry.
+ */
+const createPopupWindow = async (
+  url: string,
+  geometry: { width: number; height: number; top: number; left: number },
+): Promise<chrome.windows.Window | undefined> => {
+  try {
+    return await chrome.windows.create({ url, type: 'popup', focused: true, ...geometry });
+  } catch {
+    return chrome.windows.create({
+      url,
+      type: 'popup',
+      focused: true,
+      width: geometry.width,
+      height: geometry.height,
+    });
+  }
+};
 
 /**
  * Uniform capability gate for high-risk external entry points.
@@ -254,6 +308,14 @@ async function requireCapability(
     return reject();
   }
   try {
+    // Global participation first: a capability the user turned off (or is
+    // still undecided about, which prompts once) collapses into the same
+    // uniform rejection as a missing per-origin grant — the caller cannot
+    // tell a global refusal from a per-origin one.
+    const modeCheck = await ensureCapabilityMode(cap, origin);
+    if (!modeCheck.ok) {
+      return reject();
+    }
     const perms = await getOriginPermissions(origin);
     if (!hasCapability(perms, cap)) {
       return reject();
@@ -262,6 +324,58 @@ async function requireCapability(
     return reject();
   }
   return { ok: true, origin };
+}
+
+/**
+ * Global participation switch, consulted before any per-origin consent.
+ *
+ * The per-origin capability grant answers "may THIS site use this?"; this
+ * answers "does the user want zafu to offer this at all?". An undecided
+ * capability (absent from storage) is asked ONCE, globally — the question is
+ * not about the site, so the screen gets no origin — and the answer is
+ * persisted as the mode, so every later site skips straight to its own
+ * per-origin consent. A cancelled prompt persists nothing, so a site whose
+ * approval window died cannot lock the feature out.
+ *
+ * Returns `cancelled` for a prompt the user never answered: callers must not
+ * report a denial the user did not make.
+ */
+type ModeCheck = { ok: true } | { ok: false; reason: 'disabled' | 'cancelled' };
+type OptinAnswer = { approved: boolean; cancelled: boolean };
+
+/**
+ * Open the one-time global question (`scope=zafu`, no origin shown) and return
+ * the raw answer. Persisting is the caller's business: the same answer means
+ * "set the mode" in the worker and nothing at all in a popup.
+ */
+async function askOptin(origin: string, cap: Capability): Promise<OptinAnswer> {
+  const requestId = crypto.randomUUID();
+  const resultPromise = new Promise<unknown>(resolve => {
+    pendingPicks.set(requestId, resolve);
+  });
+  const params = new URLSearchParams({ capability: cap, requestId, scope: 'zafu' });
+  const url = chrome.runtime.getURL(`popup.html#/approval/capability?${params.toString()}`);
+  if (!(await openApprovalPopup(origin, url, requestId))) {
+    pendingPicks.delete(requestId);
+    return { approved: false, cancelled: true };
+  }
+  const result = (await resultPromise) as { approved?: boolean; cancelled?: boolean } | undefined;
+  if (result?.cancelled) return { approved: false, cancelled: true };
+  return { approved: result?.approved === true, cancelled: false };
+}
+
+async function ensureCapabilityMode(cap: Capability, origin: string): Promise<ModeCheck> {
+  const mode = await getCapabilityMode(cap);
+  if (!isOptinPending(mode)) {
+    return mode === 'enabled' ? { ok: true } : { ok: false, reason: 'disabled' };
+  }
+  const answer = await askOptin(origin, cap);
+  if (answer.cancelled) return { ok: false, reason: 'cancelled' };
+  // A denial is sticky, exactly like answering the per-site prompt: asking the
+  // same question again on every page load is the nagging this switch exists to
+  // prevent. Settings is where it is turned back on.
+  await setCapabilityMode(cap, modeFromOptin(answer.approved));
+  return answer.approved ? { ok: true } : { ok: false, reason: 'disabled' };
 }
 
 export const externalMessageListener = (
@@ -285,6 +399,7 @@ export const externalMessageListener = (
     'zafu_frost_result',
     'zafu_capability_result',
     'zafu_zcash_send_result',
+    'zafu_passkey_create_result',
   ]);
   if (INTERNAL_RESULT_TYPES.has(type)) {
     if (sender.id !== chrome.runtime.id) {
@@ -434,7 +549,7 @@ export const externalMessageListener = (
           // onRemoved sweep can find it if the window closes fast; clear it if
           // openApprovalPopup rejects the request.
           pendingPicks.set(requestId, sendResponse);
-          if (!(await openApprovalPopup(appOrigin, url, { width: 400, height: 520 }, requestId))) {
+          if (!(await openApprovalPopup(appOrigin, url, requestId))) {
             pendingPicks.delete(requestId);
             sendResponse({ success: false, error: 'denied' });
             return;
@@ -475,7 +590,7 @@ export const externalMessageListener = (
         });
         const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
         pendingPicks.set(requestId, sendResponse);
-        if (!(await openApprovalPopup(gate.origin, url, { width: 400, height: 520 }, requestId))) {
+        if (!(await openApprovalPopup(gate.origin, url, requestId))) {
           pendingPicks.delete(requestId);
           sendResponse({ success: false, error: 'denied' });
           return;
@@ -526,7 +641,7 @@ export const externalMessageListener = (
         }
         const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
         pendingPicks.set(requestId, sendResponse);
-        if (!(await openApprovalPopup(gate.origin, url, { width: 400, height: 520 }, requestId))) {
+        if (!(await openApprovalPopup(gate.origin, url, requestId))) {
           pendingPicks.delete(requestId);
           sendResponse({ error: 'denied' });
           return;
@@ -605,7 +720,7 @@ export const externalMessageListener = (
         }
         const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
         pendingPicks.set(requestId, sendResponse);
-        if (!(await openApprovalPopup(gate.origin, url, { width: 400, height: 560 }, requestId))) {
+        if (!(await openApprovalPopup(gate.origin, url, requestId))) {
           pendingPicks.delete(requestId);
           sendResponse({ error: 'denied' });
           return;
@@ -684,10 +799,34 @@ export const externalMessageListener = (
       void (async () => {
         try {
           const perms = await getOriginPermissions(origin);
+          const grantedToOrigin = hasCapability(perms, cap);
 
-          // already granted
-          if (hasCapability(perms, cap)) {
+          // One pure decision over both questions: does zafu offer this
+          // capability at all (global mode), and may this site use it? An
+          // undecided capability prompts the one-time global question first,
+          // and the decision is then re-made with the answer persisted — so the
+          // per-site prompt below only ever runs for a feature the user wants.
+          let decision = decideCapabilityUse({
+            mode: await getCapabilityMode(cap),
+            grantedToOrigin,
+          });
+          if (decision.action === 'prompt' && decision.prompt === 'opt-in') {
+            const optin = await askOptin(origin, cap);
+            if (optin.cancelled) {
+              // the user never answered: report no decision, not a denial.
+              sendResponse({ granted: false, capability: cap });
+              return;
+            }
+            const answeredMode = modeFromOptin(optin.approved);
+            await setCapabilityMode(cap, answeredMode);
+            decision = decideCapabilityUse({ mode: answeredMode, grantedToOrigin });
+          }
+          if (decision.action === 'allow') {
             sendResponse({ granted: true, capability: cap });
+            return;
+          }
+          if (decision.action === 'refuse') {
+            sendResponse({ granted: false, denied: true, capability: cap });
             return;
           }
 
@@ -788,6 +927,14 @@ export const externalMessageListener = (
       const shieldOrigin = sender.origin;
       void (async () => {
         try {
+          const shieldMode = await ensureCapabilityMode('connect', shieldOrigin);
+          if (!shieldMode.ok) {
+            sendResponse({
+              error: shieldMode.reason === 'cancelled' ? 'cancelled' : 'not connected',
+              code: 'denied',
+            });
+            return;
+          }
           const perms = await getOriginPermissions(shieldOrigin);
           if (!hasCapability(perms, 'connect')) {
             sendResponse({ error: 'not connected', code: 'denied' });
@@ -982,41 +1129,122 @@ export const externalMessageListener = (
         return true;
       }
       const reqOrigin = sender.origin;
-      // TODO: show approval popup before creating credential
-      // for now, auto-approve if origin has 'connect' capability
+      // Minting a site-bound P-256 credential derived from the mnemonic is
+      // high-risk, so it ALWAYS requires explicit per-credential user consent:
+      // there is no `connect` precondition any more, because requiring one made
+      // the whole feature unreachable for a site the user had not already
+      // connected (the popup IS the consent, and approving it grants the
+      // narrow `passkey` capability - approving a passkey must not hand a site
+      // the wider `connect` view). The gates below are unchanged; the mint
+      // itself moved to the result case and runs only after the popup approves.
       void (async () => {
         try {
           if (!rpIdMatchesOrigin(rpId, reqOrigin)) {
             sendResponse({ success: false, error: 'rpId does not match origin' });
             return;
           }
-          const perms = await getOriginPermissions(reqOrigin);
-          if (!hasCapability(perms, 'connect')) {
-            sendResponse({ success: false, error: 'not connected' });
+          // Global switch before the unlock: an undecided `passkey` asks its
+          // one-time zafu-level question, so the user is not first dragged
+          // through an unlock for a feature they may not want at all.
+          const modeCheck = await ensureCapabilityMode('passkey', reqOrigin);
+          if (!modeCheck.ok) {
+            sendResponse({
+              success: false,
+              error: modeCheck.reason === 'cancelled' ? 'cancelled' : 'denied',
+              ...(modeCheck.reason === 'cancelled' ? { code: 'cancelled' } : {}),
+            });
             return;
           }
-          // lazy import to avoid loading webauthn.ts in every page load
-          const { createCredential } = await import('../../state/webauthn');
-          const { useStore } = await import('../../state');
-          const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
-          if (!keyInfo) {
-            sendResponse({ success: false });
+          // The mint needs the mnemonic, so an unlocked wallet is a hard
+          // precondition of the consent screen itself. Opening the popup while
+          // locked let the user read a consent screen, press approve, and then
+          // hit a mint that threw 'keyring locked' - whose denial the content
+          // script turned into a silent fallback to the platform authenticator
+          // (the browser's own prompt / NotAllowedError). Asking for the unlock
+          // FIRST makes the popup appear only when approving can actually work.
+          try {
+            const { throwIfNeedsLogin } = await import('../../needs-login');
+            await throwIfNeedsLogin();
+          } catch {
+            // the user closed the unlock surface without logging in
+            sendResponse({ success: false, error: 'wallet locked', code: 'cancelled' });
             return;
           }
-          const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
-          const result = createCredential(mnemonic, rpId);
-          const { bytesToHex } = await import('@noble/hashes/utils');
-          sendResponse({
-            success: true,
-            credentialId: bytesToHex(result.credentialId),
-            authenticatorData: bytesToHex(result.authenticatorData),
-            publicKey: bytesToHex(result.publicKey),
-            prfEnabled: true,
-          });
-        } catch (e) {
-          sendResponse({ success: false, error: String(e) });
+          const requestId = crypto.randomUUID();
+          const params = new URLSearchParams({ app: reqOrigin, requestId });
+          const url = chrome.runtime.getURL(`popup.html#/passkey-approve?${params.toString()}`);
+          // Register the pending callback and the validated origin+rpId BEFORE
+          // opening the popup so the onRemoved sweep can find them if the window
+          // closes fast; clear both if openApprovalPopup rejects the request.
+          pendingPicks.set(requestId, sendResponse);
+          pendingPasskeyRequests.set(requestId, { origin: reqOrigin, rpId });
+          if (!(await openApprovalPopup(reqOrigin, url, requestId))) {
+            pendingPicks.delete(requestId);
+            pendingPasskeyRequests.delete(requestId);
+            sendResponse({ success: false, error: 'denied' });
+            return;
+          }
+        } catch {
+          // dynamic import / state read can throw; fall back to the uniform
+          // denied shape so the message channel closes cleanly.
+          sendResponse({ success: false, error: 'denied' });
         }
       })();
+      return true;
+    }
+
+    case 'zafu_passkey_create_result': {
+      // internal: passkey approval popup sends result back. The credential is
+      // minted HERE in the service worker (it needs the mnemonic), never in the
+      // popup - the popup only ever decides approve/deny.
+      const requestId = String(msg['requestId'] || '');
+      const callback = pendingPicks.get(requestId);
+      if (callback) {
+        pendingPicks.delete(requestId);
+        const pending = pendingPasskeyRequests.get(requestId);
+        pendingPasskeyRequests.delete(requestId);
+        const approval = msg['result'] as { approved?: boolean } | undefined;
+        if (!approval?.approved || pending === undefined) {
+          callback({ success: false, error: 'denied' });
+          sendResponse({ ok: true });
+          return true;
+        }
+        void (async () => {
+          try {
+            // lazy import to avoid loading webauthn.ts in every page load
+            const { createCredential } = await import('../../state/webauthn');
+            const { useStore } = await import('../../state');
+            const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
+            if (!keyInfo) {
+              callback({ success: false, error: 'no wallet selected', code: 'no-wallet' });
+              return;
+            }
+            const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
+            const result = createCredential(mnemonic, pending.rpId);
+            // the credential exists only after this approval, so the origin earns
+            // the narrow `passkey` grant HERE - that is what lets a later
+            // zafu_passkey_get sign in without a second popup. Never granted
+            // before the mint succeeds, and never above `passkey` (no `connect`).
+            await grantCapability(pending.origin, 'passkey');
+            const { bytesToHex } = await import('@noble/hashes/utils');
+            callback({
+              success: true,
+              credentialId: bytesToHex(result.credentialId),
+              authenticatorData: bytesToHex(result.authenticatorData),
+              publicKey: bytesToHex(result.publicKey),
+              prfEnabled: true,
+            });
+          } catch (e) {
+            // `failed`: the user already approved, so this is zafu's own
+            // failure (locked mid-flight, undecryptable vault) - the content
+            // script surfaces it instead of silently rerouting the site to the
+            // platform authenticator, which reads as "the wallet stopped
+            // working" right after a click on approve.
+            callback({ success: false, error: String(e), code: 'failed' });
+          }
+        })();
+      }
+      sendResponse({ ok: true });
       return true;
     }
 
@@ -1044,9 +1272,37 @@ export const externalMessageListener = (
             sendResponse({ success: false, error: 'rpId does not match origin' });
             return;
           }
+          // Global switch: a `passkey` the user turned off must not sign, and
+          // an undecided one asks the one-time zafu-level question rather than
+          // failing as 'not connected' (which would read as a site problem).
+          const modeCheck = await ensureCapabilityMode('passkey', getOrigin);
+          if (!modeCheck.ok) {
+            sendResponse({
+              success: false,
+              error: modeCheck.reason === 'cancelled' ? 'cancelled' : 'denied',
+              ...(modeCheck.reason === 'cancelled' ? { code: 'cancelled' } : {}),
+            });
+            return;
+          }
           const perms = await getOriginPermissions(getOrigin);
-          if (!hasCapability(perms, 'connect')) {
+          // `passkey` is the grant that passkey creation earns; `connect` stays
+          // accepted so origins already connected before the capability existed
+          // (and dapps that use the wallet's P-256 signer through an existing
+          // connect grant) keep signing without a new consent step.
+          if (!hasCapability(perms, 'passkey') && !hasCapability(perms, 'connect')) {
             sendResponse({ success: false, error: 'not connected' });
+            return;
+          }
+          // Signing needs the mnemonic too: unlocking first keeps a locked
+          // wallet from answering with a failure the content script would have
+          // to turn into a platform-authenticator fallback for a credential
+          // that only zafu holds.
+          try {
+            const { throwIfNeedsLogin } = await import('../../needs-login');
+            await throwIfNeedsLogin();
+          } catch {
+            // the user closed the unlock surface without logging in
+            sendResponse({ success: false, error: 'wallet locked', code: 'cancelled' });
             return;
           }
           const { signAssertion, buildCredentialId } = await import('../../state/webauthn');
@@ -1054,7 +1310,7 @@ export const externalMessageListener = (
           const { bytesToHex, hexToBytes: h2b } = await import('@noble/hashes/utils');
           const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
           if (!keyInfo) {
-            sendResponse({ success: false });
+            sendResponse({ success: false, error: 'no wallet selected', code: 'no-wallet' });
             return;
           }
           const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
@@ -1078,7 +1334,10 @@ export const externalMessageListener = (
               : undefined,
           });
         } catch (e) {
-          sendResponse({ success: false, error: String(e) });
+          // `failed`: zafu holds this credential, so a signing error must be
+          // reported rather than rerouted to the platform authenticator (whose
+          // prompt for a passkey that lives here can never succeed).
+          sendResponse({ success: false, error: String(e), code: 'failed' });
         }
       })();
       return true;

@@ -78,6 +78,7 @@ import {
   orderTransparentChains,
   type Privacy,
 } from '../../../components/privacy-switch';
+import { resolveNetworkCosmosChain } from './chain-identity';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 
 /** stable empty list so memo/effect deps don't churn while balances load */
@@ -2485,10 +2486,6 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   );
 }
 
-// Noble only for now - Cosmos Hub has no live channel to Penumbra, so shielding
-// from it doesn't work. Re-add when its channel/client is configured.
-const COSMOS_CHAIN_IDS: CosmosChainId[] = ['noble'];
-
 /** location state for prefilling forms from inbox */
 interface SendLocationState {
   prefillMemo?: string;
@@ -2588,7 +2585,13 @@ export function SendPage() {
   const [pickedChain, setPickedChain] = useState<CosmosChainId>();
   const pickedSource = privacy === 'transparent' ? (pickedChain ?? sourceChoices[0]) : undefined;
   const cosmosChain = locationState?.cosmosChain ?? pickedSource;
-  const isCosmos = cosmosChain != null || COSMOS_CHAIN_IDS.includes(activeNetwork as CosmosChainId);
+  // the active network may itself be a cosmos IBC destination (noble is the
+  // off-ramp, the rest are the shield ramps) - resolve it through the registry
+  // rather than a hand-maintained allow-list, so every live subnetwork the
+  // receive side offers is classified the same way here.
+  const activeCosmosChain = resolveNetworkCosmosChain(activeNetwork);
+  const sendChain = cosmosChain ?? activeCosmosChain;
+  const isCosmos = sendChain != null;
   // a zcash: payment link (clicked on a website) is a zcash send whatever
   // network is active
   const zcashLink = /^zcash:/i.test(searchParams.get('to') ?? '');
@@ -2651,10 +2654,10 @@ export function SendPage() {
             prefillAsset={locationState?.prefillAsset}
           />
         ) : isCosmos ? (
-          isActiveIbcChain((cosmosChain ?? activeNetwork) as NetworkType) ? (
+          isActiveIbcChain(sendChain as NetworkType) ? (
             <CosmosSend
-              key={cosmosChain ?? activeNetwork}
-              sourceChainId={(cosmosChain ?? activeNetwork) as CosmosChainId}
+              key={sendChain}
+              sourceChainId={sendChain}
               initialAccountIndex={locationState?.cosmosAccountIndex}
               intent={locationState?.cosmosIntent ?? 'send'}
             />
@@ -2664,9 +2667,8 @@ export function SendPage() {
             <div className='flex flex-col gap-2 rounded-lg border border-border-soft bg-elev-1 p-4 text-sm'>
               <span className='font-medium text-fg'>channel unavailable</span>
               <span className='text-fg-muted'>
-                {getNetwork((cosmosChain ?? activeNetwork) as NetworkType).name} has no open IBC
-                channel with Penumbra right now. Only Noble is available until other channels are
-                reopened.
+                {getNetwork(sendChain as NetworkType).name} has no open IBC channel with Penumbra
+                right now.
               </span>
             </div>
           )

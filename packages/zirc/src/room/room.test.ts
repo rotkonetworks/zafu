@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { RelayTransport, ZidIdentity, createGuestIdentity } from '@zafu/zid';
+import { RelayTransport, ZidIdentity, concat, createGuestIdentity, u32be } from '@zafu/zid';
 import {
   Room,
   createRoomSecret,
   encodeInvite,
+  hkdfBytes,
   maxBodyBytes,
   parseInvite,
   DEFAULT_CHANNEL,
   roomShard,
+  roomShardFromSecret,
   type RoomConfig,
   type RoomIdentity,
 } from './room';
@@ -39,6 +41,13 @@ const fromHex = (s: string): Uint8Array => {
   return out;
 };
 
+/** copy into an ArrayBuffer-backed view - WebCrypto wants BufferSource. */
+const ab = (u: Uint8Array): Uint8Array<ArrayBuffer> => {
+  const out = new Uint8Array(new ArrayBuffer(u.length));
+  out.set(u);
+  return out;
+};
+
 /**
  * The relay contract in memory: coordinates keyed by (scope, epoch, shard),
  * entries MERGED by tag - which is the whole reason two members can write to one
@@ -63,12 +72,37 @@ const fakeRelay = () => {
         ),
       ),
   };
-  /** mutate a stored blob in place, to model a relay - or a network - that lies. */
-  const tamper = (scope: string, epoch: number, shard: string, at: number) => {
-    const coord = coords.get(key(scope, epoch, shard));
-    if (!coord) {
-      throw new Error('tamper: nothing stored at that coordinate');
+  /**
+   * The bucket a room actually used. A test about what the relay stores must not
+   * re-derive the coordinate: the default is the secret's shard and a public
+   * room's is the name's, so the harness resolves what is there. An explicit
+   * shard still works and is required when a window holds more than one bucket.
+   */
+  const found = (
+    scope: string,
+    epoch: number,
+    shard?: string,
+  ): { shard: string; coord: Map<string, Uint8Array> } => {
+    if (shard) {
+      const coord = coords.get(key(scope, epoch, shard));
+      if (!coord) {
+        throw new Error('no bucket at that coordinate');
+      }
+      return { shard, coord };
     }
+    const held = [...coords.keys()].filter(k => k.startsWith(`${scope}|${epoch}|`));
+    const only = held.length === 1 ? held[0] : undefined;
+    if (!only) {
+      throw new Error(`expected one bucket for ${scope}|${epoch}, found ${held.length}`);
+    }
+    return { shard: only.slice(`${scope}|${epoch}|`.length), coord: coords.get(only)! };
+  };
+  const bucket = (scope: string, epoch: number, shard?: string) => found(scope, epoch, shard).coord;
+  /** the shard a single-bucket window is stored under, for tests that move it. */
+  const shardOf = (scope: string, epoch: number): string => found(scope, epoch).shard;
+  /** mutate a stored blob in place, to model a relay - or a network - that lies. */
+  const tamper = (scope: string, epoch: number, at: number, shard?: string) => {
+    const coord = bucket(scope, epoch, shard);
     const entry = [...coord.entries()][at];
     if (!entry) {
       throw new Error('tamper: nothing stored at that entry');
@@ -79,7 +113,15 @@ const fakeRelay = () => {
     next[last] = (next[last] ?? 0) ^ 0xff;
     coord.set(tag, next);
   };
-  return { transport, tamper };
+  /** drop one stored entry, to model a relay that withholds what it holds. */
+  const omit = (scope: string, epoch: number, at: number, shard?: string) => {
+    const coord = bucket(scope, epoch, shard);
+    const tag = [...coord.keys()][at];
+    if (coord && tag) {
+      coord.delete(tag);
+    }
+  };
+  return { transport, tamper, omit, bucket, shardOf };
 };
 
 /** a guest identity, deterministic per seed - the same shape the panel passes. */
@@ -151,6 +193,9 @@ describe('room', () => {
     const alice = openRoom(asIdentity(guest(1), 'alice'), {
       relay: transport,
       roomSecret: secret,
+      // public, so the room sits on the name coordinate: a stranger really can
+      // walk up to this board. Reaching it is what buys them nothing.
+      public: true,
     });
     await alice.send('private');
 
@@ -164,6 +209,8 @@ describe('room', () => {
     const seen = await eve.sync();
     expect(seen.messages).toEqual([]);
     expect(seen.present).toEqual([]);
+    // and she is told there is something she cannot read, rather than nothing
+    expect(seen.sealed).toBe(1);
   });
 
   it('drops a record whose signature is not its author s', async () => {
@@ -190,7 +237,7 @@ describe('room', () => {
     expect(seen.dropped).toEqual([expect.objectContaining({ reason: 'bad signature' })]);
   });
 
-  it('carries a direct message to its recipient and to nobody else', () => {
+  it('carries a direct message to its named recipient, not into the public lane', () => {
     return (async () => {
       const { transport } = fakeRelay();
       const secret = createRoomSecret();
@@ -217,15 +264,80 @@ describe('room', () => {
       ]);
       expect(seenByBob.messages[1]!.to).toBe(bobId.pubkey);
 
-      // carol holds the room secret, reads every public record, and still gets
-      // nothing of the private one - and nothing is reported as refused, because
-      // an entry she cannot open is indistinguishable from noise to her.
+      // carol's client reads every public record and nothing of the private one,
+      // because it only tries the key for messages addressed to carol - not
+      // because the key is unavailable to her. She can derive it (the next test
+      // proves it); the DM lane is private against non-members, not members.
       const seenByCarol = await carol.sync();
       expect(seenByCarol.messages.map(m => [m.kind, m.body])).toEqual([
         ['msg', 'everyone can read this'],
       ]);
       expect(seenByCarol.dropped).toEqual([]);
     })();
+  });
+
+  it('shows that any member can derive a peer s direct-message key', async () => {
+    // The DM key is HKDF(roomSecret, ..., recipientPubkey) and every member holds
+    // the room secret, so the lane is private against non-members and the relay,
+    // NOT against fellow members. This pins that claim to the code.
+    const { transport, shardOf } = fakeRelay();
+    const secret = createRoomSecret();
+    const aliceId = guest(1);
+    const bobId = guest(2);
+    const alice = openRoom(asIdentity(aliceId, 'alice'), { relay: transport, roomSecret: secret });
+    const epoch = alice.currentEpoch();
+
+    await alice.sendDirect(bobId.pubkey, 'just between us');
+    // the shard the room itself wrote to, which the key below has to bind
+    const shard = shardOf(SCOPE, epoch);
+
+    // a member reconstructs exactly the key bob's own client would: the room
+    // secret, this window's coordinates, and bob's public key. (The room keeps
+    // `shardHash` in a 32-byte buffer, so the 8-byte shard is zero-padded.)
+    const appScopeHash = new Uint8Array(
+      await crypto.subtle.digest('SHA-256', new TextEncoder().encode(SCOPE)),
+    );
+    const shardHash = new Uint8Array(32);
+    shardHash.set(fromHex(shard));
+    const raw = await hkdfBytes(
+      secret,
+      'veil-room-dm-v1',
+      concat([appScopeHash, shardHash, u32be(epoch), fromHex(bobId.pubkey)]),
+      32,
+    );
+    const key = await crypto.subtle.importKey('raw', ab(raw), 'AES-GCM', false, ['decrypt']);
+    const aadBytes = concat([
+      Uint8Array.of(0x01),
+      appScopeHash,
+      shardHash,
+      u32be(epoch),
+      Uint8Array.of(0x04),
+    ]);
+
+    const stored = await transport.getBucket({ appScope: SCOPE, epoch, shard });
+    let opened: string | null = null;
+    for (const entry of stored) {
+      if (entry.blob[0] !== 0x01) {
+        continue;
+      }
+      try {
+        const plaintext = new Uint8Array(
+          await crypto.subtle.decrypt(
+            {
+              name: 'AES-GCM',
+              iv: ab(entry.blob.subarray(1, 13)),
+              additionalData: ab(aadBytes),
+            },
+            key,
+            ab(entry.blob.subarray(13)),
+          ),
+        );
+        opened = new TextDecoder().decode(plaintext);
+      } catch {
+        // not this key - try the next entry
+      }
+    }
+    expect(opened).toContain('just between us');
   });
 
   it('marks an action as an action', async () => {
@@ -261,14 +373,17 @@ describe('room', () => {
     const member = openRoom(asIdentity(guest(1), 'member'), {
       relay: transport,
       roomSecret: secret,
+      // the room is on the name coordinate, which is how the visitor finds it
+      public: true,
       now: () => now,
     });
-    // the visitor holds a different secret and reaches the same coordinate: no key
-    // for the room, so the sealed lane is closed to them - which is the point.
+    // the visitor holds a different secret and reaches the same coordinate by
+    // name: no key for the room, so the sealed lane is closed to them - which is
+    // the point.
     const visitor = openRoom(asIdentity(guest(2), 'visitor'), {
       relay: transport,
       roomSecret: createRoomSecret(),
-      shard: await roomShard(SCOPE, DEFAULT_CHANNEL),
+      public: true,
       now: () => now,
     });
 
@@ -291,6 +406,169 @@ describe('room', () => {
       [true, 'anyone can read this'],
     ]);
     expect(seenByMember.sealed).toBe(0);
+  });
+
+  it('refuses a plain record replayed from a past window', async () => {
+    const { transport, shardOf } = fakeRelay();
+    const secret = createRoomSecret();
+    let now = T0;
+    const alice = openRoom(asIdentity(guest(1), 'alice'), {
+      relay: transport,
+      roomSecret: secret,
+      now: () => now,
+    });
+    await alice.send('written last window, in the clear', { plain: true });
+    const shard = shardOf(SCOPE, alice.currentEpoch());
+    const [entry] = await transport.getBucket({
+      appScope: SCOPE,
+      epoch: alice.currentEpoch(),
+      shard,
+    });
+
+    // the relay carries the same bytes forward and serves them as this window's:
+    // a plain record signs its own window, so the reader can tell.
+    now = T0 + WINDOW;
+    await transport.putBucket({
+      appScope: SCOPE,
+      epoch: alice.currentEpoch(),
+      shard,
+      entries: [{ tag: entry!.tag, blob: entry!.blob }],
+    });
+
+    const bob = openRoom(asIdentity(guest(2), 'bob'), {
+      relay: transport,
+      roomSecret: secret,
+      now: () => now,
+    });
+    const seen = await bob.sync(1);
+    expect(seen.messages).toEqual([]);
+    expect(seen.dropped).toEqual([
+      expect.objectContaining({ reason: 'plain record from another window' }),
+    ]);
+  });
+
+  it('refuses plain presence replayed from a past window', async () => {
+    const { transport, shardOf } = fakeRelay();
+    const secret = createRoomSecret();
+    let now = T0;
+    const alice = openRoom(asIdentity(guest(1), 'alice'), {
+      relay: transport,
+      roomSecret: secret,
+      now: () => now,
+    });
+    await alice.announce('alice', { plain: true });
+    const shard = shardOf(SCOPE, alice.currentEpoch());
+    const [entry] = await transport.getBucket({
+      appScope: SCOPE,
+      epoch: alice.currentEpoch(),
+      shard,
+    });
+
+    now = T0 + WINDOW;
+    // the relay is not limited to serving the bytes verbatim: it rewrites the
+    // window field to the current one. The unsigned presence record cannot prove
+    // its window that way - the old stable tag still names the old window.
+    const replay = new Uint8Array(entry!.blob);
+    replay.set(u32be(alice.currentEpoch()), 3);
+    await transport.putBucket({
+      appScope: SCOPE,
+      epoch: alice.currentEpoch(),
+      shard,
+      entries: [{ tag: entry!.tag, blob: replay }],
+    });
+
+    const bob = openRoom(asIdentity(guest(2), 'bob'), {
+      relay: transport,
+      roomSecret: secret,
+      now: () => now,
+    });
+    const seen = await bob.sync(1);
+    expect(seen.present).toEqual([]);
+    expect(seen.dropped).toEqual([
+      expect.objectContaining({ reason: 'plain presence tag mismatch' }),
+    ]);
+  });
+
+  it('continues a persisted chain head across a fresh session', async () => {
+    const { transport } = fakeRelay();
+    const secret = createRoomSecret();
+    const aliceId = guest(1);
+    const alice = openRoom(asIdentity(aliceId, 'alice'), { relay: transport, roomSecret: secret });
+    await alice.send('one');
+    const carried = alice.chainHead();
+
+    // a reload, a second tab, a second device: starts from the persisted head
+    // instead of restarting at seq 0.
+    const resumed = openRoom(asIdentity(aliceId, 'alice'), {
+      relay: transport,
+      roomSecret: secret,
+      head: carried,
+    });
+    await resumed.sync();
+    const next = await resumed.send('two');
+    expect(next.seq).toBe(2);
+    expect(next.prev).toBe(carried.hash);
+
+    const bob = openRoom(asIdentity(guest(2), 'bob'), { relay: transport, roomSecret: secret });
+    const seen = await bob.sync();
+    expect(seen.messages.map(m => m.body)).toEqual(['one', 'two']);
+    expect(seen.dropped).toEqual([]);
+  });
+
+  it('refuses a relay that rolls this author s chain head back', async () => {
+    const { transport, omit } = fakeRelay();
+    const secret = createRoomSecret();
+    const aliceId = guest(1);
+    const alice = openRoom(asIdentity(aliceId, 'alice'), { relay: transport, roomSecret: secret });
+    await alice.send('one');
+    await alice.send('two');
+    const carried = alice.chainHead();
+
+    // a withholding relay drops the author's newest record...
+    omit(SCOPE, alice.currentEpoch(), 1);
+
+    const resumed = openRoom(asIdentity(aliceId, 'alice'), {
+      relay: transport,
+      roomSecret: secret,
+      head: carried,
+    });
+    const seen = await resumed.sync();
+    // ...and the session refuses to adopt the lower head it is handed: doing so
+    // would re-sign a (seq, prev) pair this author already used.
+    expect(resumed.chainHead()).toEqual(carried);
+    expect(seen.dropped).toEqual([
+      expect.objectContaining({
+        reason: `chain head rollback: room holds seq 1, this author is at 2`,
+      }),
+    ]);
+  });
+
+  it('reports a corroborated gap above the author s head instead of adopting it', async () => {
+    const { transport, omit } = fakeRelay();
+    const secret = createRoomSecret();
+    const aliceId = guest(1);
+    const alice = openRoom(asIdentity(aliceId, 'alice'), { relay: transport, roomSecret: secret });
+    await alice.send('one');
+    await alice.send('two');
+    await alice.send('three');
+    // a session that only ever persisted the head after seq 1
+    const carried = { seq: 1, hash: (await alice.sync(1)).messages[0]!.hash };
+
+    // the relay serves seq 3 without seq 2, so the reply cannot link to the head
+    omit(SCOPE, alice.currentEpoch(), 1);
+
+    const resumed = openRoom(asIdentity(aliceId, 'alice'), {
+      relay: transport,
+      roomSecret: secret,
+      head: carried,
+    });
+    const seen = await resumed.sync();
+    expect(resumed.chainHead()).toEqual(carried);
+    expect(seen.dropped).toEqual([
+      expect.objectContaining({
+        reason: `chain head gap: no record links to this author's head at seq 1`,
+      }),
+    ]);
   });
 
   it('refuses to send a direct message in the clear', async () => {
@@ -319,7 +597,7 @@ describe('room', () => {
       roomSecret: secret,
     });
     await alice.send('honest');
-    tamper(SCOPE, alice.currentEpoch(), await roomShard(SCOPE, DEFAULT_CHANNEL), 0);
+    tamper(SCOPE, alice.currentEpoch(), 0);
 
     const seen = await bob.sync();
     expect(seen.messages).toEqual([]);
@@ -347,7 +625,7 @@ describe('room', () => {
   });
 
   it('writes the same number of bytes for a word and for a paragraph', async () => {
-    const { transport } = fakeRelay();
+    const { transport, shardOf } = fakeRelay();
     const secret = createRoomSecret();
     const alice = openRoom(asIdentity(guest(1), 'alice'), {
       relay: transport,
@@ -360,7 +638,7 @@ describe('room', () => {
     const stored = await transport.getBucket({
       appScope: SCOPE,
       epoch: alice.currentEpoch(),
-      shard: await roomShard(SCOPE, DEFAULT_CHANNEL),
+      shard: shardOf(SCOPE, alice.currentEpoch()),
     });
     const sizes = stored.map(e => e.blob.length);
     expect(sizes.length).toBe(3);
@@ -458,11 +736,140 @@ describe('room', () => {
     expect(legacy.endpoint).toBe('http://127.0.0.1:8098');
     expect(legacy.token).toBe('friend-token');
 
+    // a public room says so, and the marker shifts the positional fields along
+    const open = parseInvite(
+      encodeInvite({
+        appScope: SCOPE,
+        channel: '#penumbra',
+        secret,
+        public: true,
+        endpoint: 'https://bouncer.veil.example',
+        token: 'friend-token',
+      }),
+    );
+    expect(open.public).toBe(true);
+    expect(open.endpoint).toBe('https://bouncer.veil.example');
+    expect(open.token).toBe('friend-token');
+
+    // public and ungated, which is the point of the flag: the marker is one
+    // reserved character, so it never reads as an endpoint
+    const openOnly = parseInvite(
+      encodeInvite({ appScope: SCOPE, channel: '#penumbra', secret, public: true }),
+    );
+    expect(openOnly.public).toBe(true);
+    expect(openOnly.endpoint).toBeUndefined();
+    expect(openOnly.token).toBeUndefined();
+
+    // a sealed invite says nothing: absent means the default, not `false`
+    expect(parseInvite(code).public).toBeUndefined();
+
+    // a token with no endpoint keeps its slot instead of landing in the relay's
+    const tokenOnly = parseInvite(
+      encodeInvite({ appScope: SCOPE, channel: '#penumbra', secret, token: 'friend-token' }),
+    );
+    expect(tokenOnly.endpoint).toBeUndefined();
+    expect(tokenOnly.token).toBe('friend-token');
+
     expect(() => parseInvite('nope')).toThrow(/must start with/);
     // a truncated invite is refused, whatever shape it claims to be
     expect(() => parseInvite('zroom2:only-scope')).toThrow(/missing its scope or secret/);
     expect(() =>
       parseInvite(`zroom2:${code.slice(7).split('.')[0]}.${code.slice(7).split('.')[1]}.AAAA`),
     ).toThrow(/not 32 bytes/);
+  });
+});
+
+/**
+ * The coordinate a room reads and writes. Its default is the sealed mode: the
+ * shard comes from the room secret, so a name is not a board anybody can find by
+ * guessing it. `public: true` moves the room to the name coordinate on purpose -
+ * a reader holding no key finds it by typing the name - at the cost of a
+ * guessable address. Both are asserted through what a reader sees, not through
+ * the field that holds the shard.
+ */
+describe('room coordinate', () => {
+  const secretOf = (fill: number): Uint8Array => new Uint8Array(32).fill(fill);
+  const shardFor = (
+    identity: RoomIdentity,
+    opts: Partial<RoomConfig> & { relay: RelayTransport; roomSecret: Uint8Array },
+  ) => openRoom(identity, { ...opts, now: () => T0 });
+
+  it('gives a sealed room a board of its own, so one name means one room per secret', async () => {
+    const { transport } = fakeRelay();
+    const alice = shardFor(asIdentity(guest(1), 'alice'), {
+      relay: transport,
+      roomSecret: secretOf(1),
+    });
+    const bob = shardFor(asIdentity(guest(2), 'bob'), {
+      relay: transport,
+      roomSecret: secretOf(2),
+    });
+    // unsealed on purpose: a plain line crosses any board both rooms share, so
+    // bob's silence is the coordinate and not the seal
+    await alice.send('hello', { plain: true });
+    expect((await bob.sync(1)).messages).toHaveLength(0);
+
+    // pinned to the secret-derived coordinate, the line is there - including for
+    // a reader whose own secret is bob's
+    const bySecret = shardFor(asIdentity(guest(3), 'carol'), {
+      relay: transport,
+      roomSecret: secretOf(2),
+      shard: await roomShardFromSecret(SCOPE, secretOf(1)),
+    });
+    expect((await bySecret.sync(1)).messages.map(m => m.body)).toEqual(['hello']);
+
+    // and it is NOT on the name coordinate: a reader pinned to the name sees
+    // nothing, which is exactly what a name-guesser gets
+    const byName = shardFor(asIdentity(guest(4), 'dave'), {
+      relay: transport,
+      roomSecret: secretOf(2),
+      shard: await roomShard(SCOPE, DEFAULT_CHANNEL),
+    });
+    expect((await byName.sync(1)).messages).toHaveLength(0);
+  });
+
+  it('puts a public room on the name coordinate, where a keyless reader finds it', async () => {
+    const { transport } = fakeRelay();
+    const alice = shardFor(asIdentity(guest(1), 'alice'), {
+      relay: transport,
+      roomSecret: secretOf(1),
+      public: true,
+    });
+    await alice.send('hello', { plain: true });
+
+    // a visitor's shape: another secret, no pin, the same name - and it reads
+    const visitor = shardFor(asIdentity(guest(2), 'bob'), {
+      relay: transport,
+      roomSecret: secretOf(9),
+      public: true,
+    });
+    expect((await visitor.sync(1)).messages.map(m => m.body)).toEqual(['hello']);
+
+    // while a sealed room of the same name is somewhere else and sees nothing
+    const sealed = shardFor(asIdentity(guest(3), 'carol'), {
+      relay: transport,
+      roomSecret: secretOf(9),
+    });
+    expect((await sealed.sync(1)).messages).toHaveLength(0);
+  });
+
+  it('lets a pinned shard win over the mode, so a caller can address any writer', async () => {
+    const { transport } = fakeRelay();
+    const secret = secretOf(5);
+    // sealed, yet pinned onto a stranger's board by name - the pin is explicit
+    // and the mode must not quietly derive a different coordinate under it
+    const pinned = shardFor(asIdentity(guest(1), 'alice'), {
+      relay: transport,
+      roomSecret: secret,
+      shard: await roomShard(SCOPE, DEFAULT_CHANNEL),
+    });
+    await pinned.send('hello', { plain: true });
+
+    const byName = shardFor(asIdentity(guest(2), 'bob'), {
+      relay: transport,
+      roomSecret: secret,
+      shard: await roomShard(SCOPE, DEFAULT_CHANNEL),
+    });
+    expect((await byName.sync(1)).messages.map(m => m.body)).toEqual(['hello']);
   });
 });

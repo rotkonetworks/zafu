@@ -9,17 +9,23 @@
  *   (./noise-channel: X25519 + ML-KEM-768). It fails CLOSED against a peer that
  *   cannot do it; there is no downgrade.
  * - `'classical'` - the legacy X25519 + AES-GCM handshake (./channel).
- * - `'auto'` - try hybrid, and fall back to classical ONLY when the HANDSHAKE
- *   itself failed (see below). A transport failure - relay down, socket error, a
- *   peer that never answers - PROPAGATES: it is not a downgrade trigger, because
- *   an outage must not be misread as "this peer is not post-quantum capable".
+ * - `'auto'` - try hybrid, and fall back to classical ONLY on a genuine
+ *   handshake-CAPABILITY signal: a well-formed protocol refusal in which the
+ *   peer names the protocol it speaks instead of the hybrid one. A malformed or
+ *   truncated frame, an AEAD/decapsulation failure, a peer-key mismatch, a relay
+ *   down, a socket error or the handshake deadline all PROPAGATE: a hostile relay
+ *   must not be able to force a post-quantum -> classical downgrade with one
+ *   crafted frame, and an outage must not be misread as "this peer is not
+ *   post-quantum capable".
  *
  * INTEROP: `@zafu/zid@0.1.0` speaks only the classical handshake, and the hybrid
  * protocol name is deliberately distinct so a mixed pair FAILS rather than
- * negotiating a weaker key. A default (`'hybrid'`) caller therefore cannot open a
- * channel to a 0.1.0 peer - pass `'classical'` to reach one, or `'auto'` to
- * accept a downgrade knowingly. `'auto'` is the only path that falls back, it is
- * never the default, and it is never implicit.
+ * negotiating a weaker key. Pass `'classical'` to reach a 0.1.0 peer: it parses
+ * only JSON `keyex` frames and drops a binary hybrid init, and it never sends a
+ * refusal, so a hybrid attempt against it ends in the readiness deadline - which
+ * `'auto'` RETHROWS rather than downgrading on (a timeout is not a capability
+ * signal). `'auto'` therefore falls back only against a peer that implements the
+ * refusal; it is never the default, and it is never implicit.
  */
 
 import { createChannel } from './channel';
@@ -52,8 +58,10 @@ export async function openChannel(
   if (mode === 'hybrid') {
     return withKind(await createNoiseChannel(session, peerPubkey, relayUrl), 'hybrid');
   }
-  // 'auto': the caller has explicitly accepted a downgrade - but only for a
-  // failed handshake. Anything else (relay down, socket error) is rethrown.
+  // 'auto': the caller has explicitly accepted a downgrade - but ONLY on a
+  // well-formed capability signal (isNoiseHandshakeFailure). Anything else -
+  // malformed/short frame, AEAD failure, socket error, handshake deadline - is
+  // rethrown so a hostile relay cannot force a downgrade with crafted bytes.
   try {
     return withKind(await createNoiseChannel(session, peerPubkey, relayUrl), 'hybrid');
   } catch (e) {

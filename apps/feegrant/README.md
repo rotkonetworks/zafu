@@ -18,9 +18,14 @@ MsgTransfer with `fee.granter = <granter>`, and Injective charges the fee to us.
 
 | Method | Path                                | Response                                                                                                                                                      |
 | ------ | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/health`                           | `{ ok, granter, grantsToday, dailyGrantCap }`                                                                                                                 |
+| GET    | `/health`                           | `{ ok, funded, capped, granter, balanceInj, balanceMilliInj, minBalanceInj, grantsToday, dailyGrantCap }`; 503 when not ok                                     |
 | GET    | `/v1/injective/granter`             | `{ granter, spendLimit, grantTtlHours }`, or 503 while the granter is below `MIN_GRANTER_BALANCE` - clients probe this to decide whether to offer sponsorship |
 | POST   | `/v1/injective/grant` `{ address }` | 200 `{ granter, status: 'granted'\|'exists', txhash?, height?, expiresAt? }`                                                                                  |
+
+`balanceMilliInj` is the balance in milli-INJ as an **integer**: gatus and
+similar monitors compare integers only (`[BODY].balanceInj > 0.15` silently
+evaluates `0 > 0`), so threshold on `[BODY].balanceMilliInj > 150` for the
+0.15 INJ early warning.
 
 `POST /grant` answers only once a new grant is **included in a block**, so the
 client can use it immediately. Errors: 400 bad address, 409 not eligible

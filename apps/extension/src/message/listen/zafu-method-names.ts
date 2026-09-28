@@ -53,3 +53,10 @@ export const CONTACT_DISCOVERY_REQUEST_METHODS = ['zafu_request_contact_discover
 export const CONTACT_DISCOVERY_INTERNAL_METHODS = [
   'zafu_contact_discovery_approval_result',
 ] as const;
+
+/**
+ * net/prompt.ts - internal popup->worker callback carrying the user's answer to
+ * "may zafu connect to this host?" (not dapp-facing). The egress gate refuses
+ * the request until this arrives, so a lost answer can only ever refuse.
+ */
+export const NET_EGRESS_INTERNAL_METHODS = ['zafu_destination_approval_result'] as const;

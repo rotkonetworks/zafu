@@ -8,6 +8,12 @@
  * different pubkeys for the same seed — breaking "same device across
  * zafu and zigner = same identity" guarantee.
  *
+ * One tag branch exists beyond the legacy form: an origin containing ':'
+ * (an explicit port) is tagged 'site\0<origin>\0<rotation>' instead of
+ * 'site:<origin>[:<rotation>]', because the legacy form lets 'a.com:7' at
+ * rotation 0 collide with 'a.com' at rotation 7. Portless origins are
+ * byte-identical to the legacy tag, so no issued key changes.
+ *
  * @vitest-environment node
  */
 
@@ -34,6 +40,8 @@ describe('ZID v2 cross-repo compat', () => {
   test('site-specific example.com rotation 0 matches zigner', () => {
     const zid = deriveZidForSite(TEST_PHRASE, DEFAULT_IDENTITY, 'https://example.com', 0);
     // Pinned in zigner: auth.rs::test_sign_zid_site_specific_matches_zafu
+    // A portless origin keeps the legacy tag byte-for-byte, so this vector is
+    // unchanged and existing site keys stay valid.
     expect(zid.publicKey).toBe('3f96957e3a6ded64243bc0a3926faf79c25ddfb93b33c4d15d787fb13322ec5f');
   });
 
@@ -41,6 +49,22 @@ describe('ZID v2 cross-repo compat', () => {
     const zid = deriveZidForSite(TEST_PHRASE, DEFAULT_IDENTITY, 'https://example.com', 1);
     // Pinned in zigner: auth.rs::test_sign_zid_site_specific_matches_zafu
     expect(zid.publicKey).toBe('9eb0ab0f2c8c252e04b7dd4af0615ffe209171162523347e1a402bbdcffb42a5');
+  });
+
+  test('origin with a port cannot collide with the rotation field', () => {
+    // Before the port branch the tag was 'site:'+origin at rotation 0 and
+    // 'site:'+origin+':'+rotation otherwise, so these two were EQUAL bytes.
+    const portAtZero = deriveZidForSite(TEST_PHRASE, DEFAULT_IDENTITY, 'https://x.com:7', 0);
+    const rotAtSeven = deriveZidForSite(TEST_PHRASE, DEFAULT_IDENTITY, 'https://x.com', 7);
+    expect(portAtZero.publicKey).not.toBe(rotAtSeven.publicKey);
+  });
+
+  test('ported origin pins the branch (zigner MUST mirror)', () => {
+    // Portless origins keep the legacy tag; an origin containing ':' switches to
+    // 'site\0'+origin+'\0'+rotation. zigner/auth.rs must branch identically or a
+    // ported origin signs with a different key than zafu derives.
+    const zid = deriveZidForSite(TEST_PHRASE, DEFAULT_IDENTITY, 'https://x.com:7', 0);
+    expect(zid.publicKey).toBe('f7610fa86e280998f18dc5913cf5644b6d9bf67aa1776a735ad3dbc2239f66a6');
   });
 
   test('different identities produce different cross-site keys', () => {

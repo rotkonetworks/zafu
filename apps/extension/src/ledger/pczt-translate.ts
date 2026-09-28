@@ -5,8 +5,9 @@
 // the pczt-crate serialization (postcard/serde of nested Option/Vec) is already
 // decoded in the wasm crate. `frost_inspect_pczt_outputs` (zcli-ironwood
 // crates/zcash-wasm/src/lib.rs) already opens a PCZT and walks its Orchard
-// actions - that is the code to clone into a new `describe_pczt_for_ledger`
-// export (spec at the bottom of this file). This module then does a THIN, pure,
+// actions - `describe_pczt_for_ledger` (shipped in the vendored
+// @repo/zcash-wasm, spec at the bottom of this file) is the clone of it that
+// serialises the full decode the device needs. This module then does a THIN, pure,
 // fully-typed mapping from that Rust-emitted JSON into the device shape.
 //
 // SCOPE: Orchard V5 only. @ledgerhq/device-signer-kit-zcash 0.5.0 DOES model
@@ -153,10 +154,7 @@ export function ledgerDescribeToPcztTransaction(describe: LedgerPcztDescribe): P
 
 interface ZcashWasmDescribe {
   default?: (opts?: { module_or_path?: string }) => Promise<unknown>;
-  // TODO(rust): add this export to zcli-ironwood crates/zcash-wasm/src/lib.rs
-  // (see spec below) and re-vendor packages/zcash-wasm. Typed optional so a
-  // missing export fails loudly at runtime rather than at wasm-load.
-  describe_pczt_for_ledger?: (pcztHex: string, mainnet: boolean) => string;
+  describe_pczt_for_ledger: (pcztHex: string, mainnet: boolean) => string;
 }
 
 /**
@@ -177,10 +175,12 @@ export async function pcztHexToLedgerPcztTransaction(
   if (typeof zwasm.default === 'function') {
     await zwasm.default();
   }
+  // Defence-in-depth: the vendored wasm exports this (verified), but a stale or
+  // mismatched build would otherwise surface as an opaque "not a function".
   if (typeof zwasm.describe_pczt_for_ledger !== 'function') {
     throw new Error(
-      'describe_pczt_for_ledger missing from @repo/zcash-wasm - add it to the ' +
-        'zcli-ironwood zcash-wasm crate and re-vendor (see spec in pczt-translate.ts)',
+      'describe_pczt_for_ledger missing from @repo/zcash-wasm - the vendored build ' +
+        'is out of sync; re-vendor per packages/zcash-wasm/BUILD_PROVENANCE.md',
     );
   }
   const json = zwasm.describe_pczt_for_ledger(pcztHex, options.mainnet);
@@ -249,8 +249,9 @@ function parseDescribe(json: string): LedgerPcztDescribe {
  *
  * The blocker is on zafu's side, not Ledger's: device-signer-kit-zcash 0.5.0
  * already models `PcztIronwoodBundle` and returns per-action ironwood
- * `spendAuthSig`s, but zafu has no Rust describe that emits an ironwood bundle
- * (`describe_pczt_for_ledger` itself does not exist yet either).
+ * `spendAuthSig`s, but the vendored `describe_pczt_for_ledger` decodes Orchard
+ * V5 only and rejects V6 - there is no Rust describe that emits an ironwood
+ * bundle.
  *
  * Consequence, stated plainly: NU6.3 activated at mainnet height 3,428,143 and
  * orchard->orchard sends are consensus-disabled, so on mainnet the only
@@ -266,11 +267,12 @@ export function pcztHexToLedgerIronwoodTransaction(
   );
 }
 
-// ── RUST SPEC: describe_pczt_for_ledger (add to zcli-ironwood) ───────────────
+// ── RUST SPEC: describe_pczt_for_ledger (as shipped in zcli-ironwood) ────────
 //
-// Clone frost_inspect_pczt_outputs (crates/zcash-wasm/src/lib.rs) - it already
-// does `Pczt::parse(&bytes)` and iterates the Orchard bundle. Instead of
-// returning only outputs, serialize the full decode the device needs:
+// describe_pczt_for_ledger is cloned from frost_inspect_pczt_outputs
+// (crates/zcash-wasm/src/lib.rs) - which does `Pczt::parse(&bytes)` and iterates
+// the Orchard bundle. Instead of returning only outputs, it serialises the full
+// decode the device needs:
 //
 //   #[wasm_bindgen]
 //   pub fn describe_pczt_for_ledger(pczt_hex: &str, mainnet: bool) -> Result<String, JsValue>
@@ -302,4 +304,4 @@ export function pcztHexToLedgerIronwoodTransaction(
 //   (do NOT hardcode - they change per network upgrade and feed the sighash).
 // - signingPath / seedFingerprint come from each action's zip32_derivation.
 // - Reject V6/ironwood bundles here (return an error) - orchard-V5 only.
-// - Re-vendor per packages/zcash-wasm/BUILD_PROVENANCE.md after adding it.
+// - Re-vendor per packages/zcash-wasm/BUILD_PROVENANCE.md when it changes.

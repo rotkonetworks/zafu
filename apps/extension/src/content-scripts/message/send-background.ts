@@ -1,6 +1,6 @@
 import { PenumbraRequestFailure } from '@penumbra-zone/client/error';
 import type { ZafuConnection } from './zafu-connection';
-import { isContextInvalidated, showReloadNotice } from './reload-notice';
+import { isContextInvalidated, noteContextInvalidated } from '../../utils/reload-notice';
 
 export const sendBackground = async (
   request: ZafuConnection,
@@ -10,7 +10,10 @@ export const sendBackground = async (
 
     switch (response) {
       case undefined:
-        throw new ReferenceError(`No response to ${request}`);
+        // A listener received the request but declined to answer - a policy
+        // refusal (e.g. this origin is not one we serve), not a bug. Answer the
+        // page the same way we answer a rejection, without logging an error.
+        return PenumbraRequestFailure.NotHandled;
       case null:
       case PenumbraRequestFailure.Denied:
       case PenumbraRequestFailure.NeedsLogin:
@@ -24,9 +27,12 @@ export const sendBackground = async (
         ? PenumbraRequestFailure.BadResponse
         : PenumbraRequestFailure.NotHandled;
     // Orphaned content script (extension reloaded/upgraded under an open tab):
-    // tell the user to reload rather than leaving the wallet silently dead.
+    // expected state, not a failure. Mark it once - that tells the user to
+    // reload, tears down this page's listeners, and stops any further logging,
+    // so a page that keeps poking us cannot produce a console error per poke.
     if (isContextInvalidated(error)) {
-      showReloadNotice();
+      noteContextInvalidated();
+      return fallback;
     }
     const isExpected =
       error instanceof Error &&
@@ -59,5 +65,13 @@ export function listenBackground<R = never>(
 
   chrome.runtime.onMessage.addListener(wrappedListener);
 
-  signal?.addEventListener('abort', () => chrome.runtime.onMessage.removeListener(wrappedListener));
+  signal?.addEventListener('abort', () => {
+    try {
+      chrome.runtime.onMessage.removeListener(wrappedListener);
+    } catch {
+      // Orphaned context (extension reloaded under this page): the extension
+      // APIs throw on use. Nothing to detach - the dead context owns the
+      // listener, and this page is being torn down anyway.
+    }
+  });
 }

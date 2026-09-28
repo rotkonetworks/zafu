@@ -7,8 +7,9 @@
  * derivation hierarchy:
  *   root              = HMAC-SHA512("zid-v1", mnemonic)
  *   identity["poker"] = HMAC-SHA512(root, "identity:poker")     <- named persona
- *   per-site          = HMAC-SHA512(identity, "site:" + origin)  <- default, unlinkable
- *   rotated           = HMAC-SHA512(identity, "site:" + origin + ":" + N)
+ *   per-site          = HMAC-SHA512(identity, "site:" + origin [+ ":" + N]) <- default, unlinkable
+ *                       an origin ending in an explicit port instead uses
+ *                       "site\0" + origin + "\0" + N so it cannot collide with N
  *   per-contact       = HMAC-SHA512(identity, "contact:" + contactId)
  *   cross-site        = HMAC-SHA512(identity, "cross-site")     <- opt-in, dangerous
  *   key               = ed25519.fromSeed(seed[0:32])
@@ -215,10 +216,29 @@ const deriveIdentity = (root: Uint8Array, name: string): Uint8Array =>
 const deriveSeed = (identity: Uint8Array, tag: Uint8Array): Uint8Array =>
   hmac(sha512, identity, tag);
 
-/** derive per-site seed. */
+/**
+ * True when an origin ends with an explicit port. The legacy tag is
+ * 'site:' + origin (+ ':' + rotation), so an origin ending in ':<digits>'
+ * collides with another origin's rotation suffix: 'a.com:7' at rotation 0
+ * hashed the same bytes as 'a.com' at rotation 7. Exactly those origins take
+ * the NUL-delimited form; every other origin keeps the legacy tag
+ * byte-for-byte, so no already-issued key changes. (A scheme colon or an IPv6
+ * literal is not a port and does not collide.)
+ */
+const hasExplicitPort = (origin: string): boolean => /:\d+$/.test(origin);
+
+/**
+ * derive per-site seed. Identical bytes to the original
+ * 'site:'+origin (rot 0) / 'site:'+origin+':'+rotation form, except for an
+ * origin that ends with an explicit port - that one gets the unambiguous
+ * NUL-delimited, always-rotation-encoded tag (same shape as
+ * deriveSeedForSiteXWing) so it cannot collide with the rotation field.
+ * zigner MUST branch identically (see identity.test.ts).
+ */
 const deriveSeedForSite = (identity: Uint8Array, origin: string, rotation: number): Uint8Array => {
-  const tag =
-    rotation === 0 ? enc.encode('site:' + origin) : enc.encode('site:' + origin + ':' + rotation);
+  const tag = hasExplicitPort(origin)
+    ? enc.encode('site\0' + origin + '\0' + rotation)
+    : enc.encode('site:' + origin + (rotation > 0 ? ':' + rotation : ''));
   return deriveSeed(identity, tag);
 };
 
@@ -357,7 +377,8 @@ export const deriveZidForSite = (
   rotation = 0,
 ): Zid =>
   withIdentity(mnemonic, identity, id => {
-    const { publicKey } = keypairFromSeed(deriveSeedForSite(id, origin, rotation));
+    const { privateKey, publicKey } = keypairFromSeed(deriveSeedForSite(id, origin, rotation));
+    privateKey.fill(0);
     const hex = bytesToHex(publicKey);
     return { publicKey: hex, address: formatZid(hex) };
   });
@@ -414,7 +435,8 @@ export const deriveZidPqSeed = (
  */
 export const deriveZidCrossSite = (mnemonic: string, identity: string): Zid =>
   withIdentity(mnemonic, identity, id => {
-    const { publicKey } = keypairFromSeed(deriveSeedCrossSite(id));
+    const { privateKey, publicKey } = keypairFromSeed(deriveSeedCrossSite(id));
+    privateKey.fill(0);
     const hex = bytesToHex(publicKey);
     return { publicKey: hex, address: formatZid(hex) };
   });
@@ -507,7 +529,9 @@ export const zidContactRootSecret = (
 export const deriveRingVrfSeed = (mnemonic: string, identity = DEFAULT_IDENTITY): Uint8Array =>
   withIdentity(mnemonic, identity, id => {
     const seed = deriveSeedForRingVrf(id);
-    return seed.slice(0, 32);
+    const out = seed.slice(0, 32);
+    seed.fill(0);
+    return out;
   });
 
 /**
@@ -551,7 +575,8 @@ export const deriveHotWalletMnemonic = async (
  */
 export const deriveZidForContact = (mnemonic: string, identity: string, contactId: string): Zid =>
   withIdentity(mnemonic, identity, id => {
-    const { publicKey } = keypairFromSeed(deriveSeedForContact(id, contactId));
+    const { privateKey, publicKey } = keypairFromSeed(deriveSeedForContact(id, contactId));
+    privateKey.fill(0);
     const hex = bytesToHex(publicKey);
     return { publicKey: hex, address: formatZid(hex) };
   });
@@ -766,7 +791,8 @@ export const deriveP256ForSite = (
   rotation = 0,
 ): { publicKey: string } =>
   withIdentity(mnemonic, identity, id => {
-    const { publicKey } = p256KeypairFromSeed(deriveSeedForSite(id, origin, rotation));
+    const { privateKey, publicKey } = p256KeypairFromSeed(deriveSeedForSite(id, origin, rotation));
+    privateKey.fill(0);
     return { publicKey: bytesToHex(publicKey) };
   });
 
@@ -837,7 +863,8 @@ export const derivePasskeyForSite = (
   rpId: string,
 ): { publicKey: string } =>
   withIdentity(mnemonic, identity, id => {
-    const { publicKey } = p256KeypairFromSeed(deriveSeedForPasskey(id, rpId));
+    const { privateKey, publicKey } = p256KeypairFromSeed(deriveSeedForPasskey(id, rpId));
+    privateKey.fill(0);
     return { publicKey: bytesToHex(publicKey) };
   });
 

@@ -18,6 +18,12 @@ they only run for that one).
 - `pnpm format`, `pnpm lint`
 - `pnpm all-check` - everything
 
+## Building this book
+
+The prose in this directory is also an [mdBook](https://rust-lang.github.io/mdBook/)
+(`book.toml`, sources in `src/`). Build it with `just docs` from the repo root;
+the output lands in `docs/book/`, which is generated and must not be committed.
+
 ## Subject documents
 
 ### Zafu-specific

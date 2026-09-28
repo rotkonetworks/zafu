@@ -169,11 +169,16 @@ public keys, the session id, and message timing.
 ### relay identity
 
 each device holds a relay transport keypair that is deliberately **not** a wallet
-key. it authenticates to the relay and keys the Noise_K sessions. it is generated
-**per multisig group** (stored under `frostRelayIdentities`, keyed by the group's
-ceremony id) so that a relay operator cannot correlate one user's separate groups.
-losing it costs a session, not funds; leaking it allows relay impersonation only.
-this keypair is stored unencrypted in local storage (it is not a spend secret).
+key. its x25519 private key authenticates to the relay and keys the Noise_K
+sessions - and it is also the static private half of the pairwise DH that seals
+group-chat frames (see [encryption at rest](encryption.md) and the
+group-chat-crypto module), so it is the group-chat **confidentiality** key. it is
+generated **per multisig group** (stored under `frostRelayIdentities`, keyed by
+the group's ceremony id) so that a relay operator cannot correlate one user's
+separate groups. losing it costs a session, and read access to history sealed to
+it, not funds; leaking it lets an attacker decrypt that group's chat messages as
+well as impersonate the device to the relay. it is therefore encrypted at rest
+(it is not a spend secret, but it is a confidentiality secret).
 
 per-message `participantId` values are still 32-byte random per session, but the
 Noise identity above is the stable, whitelisted transport key.

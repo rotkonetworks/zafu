@@ -153,21 +153,24 @@ const ch = await me.channel(theirPubkey); // hybrid post-quantum channel by defa
 - `channel(peerPubkey)` uses the **hybrid** post-quantum Noise IK channel. The
   handshake is the caller's choice via `zid.connect({ channel })`:
 
-  | `channel`            | behaviour                                                                                                                        |
-  | -------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-  | `'hybrid'` (default) | post-quantum Noise IK only; fails closed, never downgrades                                                                       |
-  | `'classical'`        | the legacy X25519 + AES-GCM channel                                                                                              |
-  | `'auto'`             | try hybrid, fall back to classical **only when the handshake failed**; a transport failure (relay down, socket error) propagates |
+  | `channel`            | behaviour                                                                                                                                                      |
+  | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `'hybrid'` (default) | post-quantum Noise IK only; fails closed, never downgrades                                                                                                     |
+  | `'classical'`        | the legacy X25519 + AES-GCM channel                                                                                                                            |
+  | `'auto'`             | try hybrid, fall back to classical **only on a well-formed capability refusal**; a transport failure (relay down, socket error, handshake deadline) propagates |
 
   The channel you get carries `kind: 'hybrid' | 'classical'`, so an `'auto'`
   caller can see and refuse a downgrade instead of being told nothing;
   `isNoiseHandshakeFailure(err)` is the same test the fallback uses.
 
   **A peer still on `@zafu/zid@0.1.0` speaks only the classical handshake.** The
-  hybrid handshake fails closed against it (different protocol name, never a
-  downgrade), so a default-mode call to such a peer will not open. Reach it with
-  `{ channel: 'classical' }`, or `{ channel: 'auto' }` to accept the downgrade
-  knowingly. There is no silent fallback in either direction.
+  hybrid handshake fails closed against it, so a default-mode call to such a peer
+  will not open: it parses JSON `keyex` only and drops the binary init without
+  replying, so the attempt ends in the readiness deadline - and `'auto'` RETHROWS
+  a deadline (a timeout is not a capability signal, or a relay outage could force
+  a downgrade). Reach a 0.1.0 peer with `{ channel: 'classical' }`; `'auto'`
+  downgrades only against a peer that speaks this protocol's refusal frame. There
+  is no silent fallback in either direction.
 
 - The post-quantum prekey is authenticated exactly as on the wallet path: a
   recipient that advertises `pq_pubkey` must carry a valid `pq_sig`, or `sealFor`

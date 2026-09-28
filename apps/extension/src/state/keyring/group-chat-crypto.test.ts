@@ -96,4 +96,17 @@ describe('group-chat-crypto', () => {
 
     await expect(openChatFrame(bob.priv, alice.pub, session, tampered)).rejects.toThrow();
   });
+
+  it('rejects a low-order / zero peer key (non-contributory shared secret)', async () => {
+    const alice = identity();
+    // the all-zero point and the order-1 point are the canonical low-order
+    // x25519 inputs: they drive the shared secret to all-zero, which would make
+    // the pair key predictable no matter what alice's private key is.
+    const zeroPub = '00'.repeat(32);
+    const onePub = `${'01'}${'00'.repeat(31)}`;
+
+    await expect(sealChatFrame(alice.priv, zeroPub, session, enc('x'))).rejects.toThrow();
+    await expect(openChatFrame(alice.priv, zeroPub, session, '00'.repeat(60))).rejects.toThrow();
+    await expect(sealChatFrame(alice.priv, onePub, session, enc('x'))).rejects.toThrow();
+  });
 });

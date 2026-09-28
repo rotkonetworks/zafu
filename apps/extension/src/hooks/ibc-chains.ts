@@ -3,7 +3,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { ChainRegistryClient } from '@penumbrafi/registry';
+import { withBundledFallback } from '@repo/context/registry-client';
 import { COSMOS_CHAINS, isValidBech32 } from '@repo/wallet/networks/cosmos/chains';
 import { getPenumbraRoutes, routeForChain } from '../transparent/penumbra-routes';
 import { useChainIdQuery } from './chain-id';
@@ -21,8 +21,14 @@ export interface IbcChain {
   images: { svg?: string; png?: string }[];
 }
 
-/** shared penumbra chain-registry client - reused for asset metadata lookups */
-export const registryClient = new ChainRegistryClient();
+/**
+ * Shared penumbra chain-registry client - reused for asset metadata lookups and
+ * the IBC destination list, numeraires and the settings forms. `remote.get` and
+ * `remote.globals` degrade to the registry bundled in the extension when the
+ * remote CDN is unreachable, so an offline or firewalled load still resolves
+ * symbols, icons, chain names and default endpoints instead of erroring.
+ */
+export const registryClient = withBundledFallback();
 
 export const useIbcChains = () => {
   const { chainId } = useChainIdQuery();

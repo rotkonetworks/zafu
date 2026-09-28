@@ -284,9 +284,13 @@ export function createGuestIdentity(opts: GuestOptions): ZidIdentity {
   const seed = resolveSeed(origin, opts.persist, opts.seed);
 
   const identity = hmac(sha512, seed, enc.encode('identity:guest'));
-  // ed25519 signing key - the wallet's 'site:' tag, so the guest key is the same
-  // KIND of artifact a wallet site key is.
-  const edSeed = hmac(sha512, identity, enc.encode(`site:${origin}`)).slice(0, 32);
+  // ed25519 signing key - the wallet's site tag at rotation 0, so the guest key
+  // is the SAME key the wallet derives for this origin. Identical to identity.ts
+  // deriveSeedForSite: an origin ending in an explicit port takes the
+  // NUL-delimited form (the legacy 'site:'+origin collides with the rotation
+  // suffix), every other origin keeps the legacy tag.
+  const edTag = /:\d+$/.test(origin) ? 'site\0' + origin + '\0' + '0' : `site:${origin}`;
+  const edSeed = hmac(sha512, identity, enc.encode(edTag)).slice(0, 32);
   const edPub = ed25519.getPublicKey(edSeed);
   const pubkey = bytesToHex(edPub);
   // X-Wing KEM seed - 'xwing-site\0<origin>\0<rotation>', rotation always encoded
@@ -331,7 +335,9 @@ export function createGuestIdentity(opts: GuestOptions): ZidIdentity {
     if (peer.suite !== 'x25519-v1') {
       throw new ZafuError('invalid_request', `unsupported contact suite: ${peer.suite}`);
     }
-    return x25519.getSharedSecret(kaPriv, hexToBytes(peer.publicKey));
+    // DEFECT D: refuse a non-contributory (low-order) peer key, exactly as the
+    // sealed-box path does - a raw getSharedSecret would accept a degenerate key.
+    return checkedDh(kaPriv, hexToBytes(peer.publicKey));
   };
 
   const sealFor = async (
@@ -451,6 +457,14 @@ export function createGuestIdentity(opts: GuestOptions): ZidIdentity {
       // byte-compatible with existing invite senders. Use channel() for hybrid.
       const ch = await createChannel(session, target, opts.relayUrl);
       ch.send(JSON.stringify({ type: 'zid:invite', payload, from: name, appOrigin: origin }));
+      try {
+        // the frame is queued until the peer's keyex; only report success once
+        // the channel confirms the handshake and the flush reached the transport.
+        await ch.ready;
+      } catch {
+        ch.close();
+        return { sent: false };
+      }
       // don't close the channel immediately - the recipient needs time to receive
       setTimeout(() => ch.close(), 30_000);
       return { sent: true };

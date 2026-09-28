@@ -7,8 +7,14 @@
  *
  * Commands are deliberately few, and each one maps to something the room already
  * does: /nick is a presence re-announce, /me is a record kind, /msg is a record
- * sealed to one member, /who is the member list the sync already returns.
+ * sealed to one member, /who is the member list the sync already returns. /frost is
+ * the one that records a *fact about a wallet* rather than an instruction to a
+ * participant - who a multisig is made of - and it refuses a line that looks like
+ * key material, because this log is shared, archived and replayed by everyone in
+ * the room.
  */
+
+import { isFingerprint } from '../custody';
 
 export interface Member {
   pubkey: string;
@@ -29,7 +35,32 @@ export type ParsedLine =
   | { kind: 'clear' }
   | { kind: 'zafu' }
   | { kind: 'leave' }
-  | { kind: 'notice'; text: string };
+  | { kind: 'notice'; text: string }
+  | { kind: 'frost'; command: FrostCommand };
+
+/**
+ * What a group can say about a multisig in the room: show it, declare its roster,
+ * check it against the artifact the ceremony printed, or start a rotation.
+ *
+ * A roster resolved here carries room `Member`s - the parser has no key material
+ * and should not: the caller that holds the participants' keys turns this into a
+ * `custody` record, which is where the log's own rules apply.
+ */
+export type FrostCommand =
+  | { readonly op: 'show' }
+  | { readonly op: 'roster'; readonly threshold: number; readonly of: readonly Member[] }
+  | { readonly op: 'verify'; readonly fingerprint: string }
+  | { readonly op: 'rotate' };
+
+export const FROST_USAGE =
+  '/frost <show | roster k-of-n <nick|id>... | verify <fingerprint> | rotate>';
+
+/**
+ * Words that mean someone is about to paste a secret. A room is the wrong place for
+ * one, and saying so out loud is cheaper than a share that lives forever in a log
+ * every participant can replay.
+ */
+const FROST_REFUSED = ['share', 'shares', 'key', 'keys', 'seed', 'secret', 'backup'];
 
 /** IRC-ish nick: no spaces, no punctuation that means something in a command line. */
 const NICK_RE = /^[A-Za-z0-9_\-[\]\\^{}|`]{1,24}$/;
@@ -69,6 +100,11 @@ export const COMMANDS: readonly CommandSpec[] = [
     help: 'talk with your Zafu wallet identity, so it persists',
   },
   { name: 'who', usage: '/who', help: 'who is here, with the id each name resolves to' },
+  {
+    name: 'frost',
+    usage: '/frost <show|roster|verify|rotate>',
+    help: 'the multisig: who signs, at which epoch, pinned to which fingerprint',
+  },
   { name: 'part', usage: '/part', help: 'leave this room' },
 ];
 
@@ -221,6 +257,92 @@ export const parseLine = (
         : { kind: 'friend', to: resolved.member };
     }
 
+    case 'frost': {
+      if (rest.length === 0) {
+        return { kind: 'notice', text: `usage: ${FROST_USAGE}` };
+      }
+      const split = rest.indexOf(' ');
+      const verb = (split === -1 ? rest : rest.slice(0, split)).toLowerCase();
+      const args = (split === -1 ? '' : rest.slice(split + 1)).trim();
+
+      if (FROST_REFUSED.includes(verb)) {
+        return {
+          kind: 'notice',
+          text: `no ${verb} material in a room: this log is shared, archived and replayed by everyone in it. Keep your share where you keep your wallet.`,
+        };
+      }
+
+      switch (verb) {
+        case 'show':
+          if (args.length > 0) {
+            return { kind: 'notice', text: 'usage: /frost show' };
+          }
+          return { kind: 'frost', command: { op: 'show' } };
+
+        case 'rotate':
+          if (args.length > 0) {
+            return { kind: 'notice', text: 'usage: /frost rotate' };
+          }
+          return { kind: 'frost', command: { op: 'rotate' } };
+
+        case 'verify': {
+          const fingerprint = args.toLowerCase();
+          if (!isFingerprint(fingerprint)) {
+            return {
+              kind: 'notice',
+              text: 'usage: /frost verify <fingerprint> — 8-128 lowercase letters or digits, as the ceremony printed it',
+            };
+          }
+          return { kind: 'frost', command: { op: 'verify', fingerprint } };
+        }
+
+        case 'roster': {
+          const shape = args.split(' ')[0] ?? '';
+          const match = /^(\d+)(?:-of-|\/)(\d+)$/.exec(shape);
+          if (!match) {
+            return { kind: 'notice', text: `usage: ${FROST_USAGE}` };
+          }
+          const threshold = Number(match[1]);
+          const total = Number(match[2]);
+          if (threshold < 1 || threshold > total) {
+            return {
+              kind: 'notice',
+              text: `a threshold of ${threshold} is not between 1 and ${total}`,
+            };
+          }
+          const tokens = args
+            .slice(shape.length)
+            .trim()
+            .split(/\s+/)
+            .filter(token => token.length > 0);
+          if (tokens.length !== total) {
+            return {
+              kind: 'notice',
+              text: `a roster of ${shape} needs ${total} names — ${tokens.length} given`,
+            };
+          }
+          const of: Member[] = [];
+          for (const token of tokens) {
+            const resolved = resolveMember(token, members);
+            if (!resolved.ok) {
+              return { kind: 'notice', text: resolved.reason };
+            }
+            if (of.some(member => member.pubkey === resolved.member.pubkey)) {
+              return {
+                kind: 'notice',
+                text: `${resolved.member.name || shortId(resolved.member.pubkey)} is listed twice`,
+              };
+            }
+            of.push(resolved.member);
+          }
+          return { kind: 'frost', command: { op: 'roster', threshold, of } };
+        }
+
+        default:
+          return { kind: 'notice', text: `unknown /frost ${verb} — ${FROST_USAGE}` };
+      }
+    }
+
     case 'friends':
       return { kind: 'friends' };
 
@@ -259,10 +381,50 @@ export interface Completion {
 }
 
 /**
+ * Turn the members matching a fragment into completion candidates. Shared by the
+ * command whose first argument is a member and by `/frost roster`, because the two
+ * differ only in *which* members match, not in how one is offered: when a name is
+ * not unique the id is what gets inserted, since an id resolves unambiguously (see
+ * {@link resolveMember}).
+ */
+const memberCandidates = (
+  fragment: string,
+  from: number,
+  matching: readonly Member[],
+  members: readonly Member[],
+): Completion | null => {
+  if (!matching.length) {
+    return null;
+  }
+
+  const nameCounts = new Map<string, number>();
+  for (const member of members) {
+    const key = member.name.toLowerCase();
+    nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
+  }
+
+  const candidates = matching.map(member => {
+    const id = shortId(member.pubkey);
+    const uniqueName = member.name.length > 0 && nameCounts.get(member.name.toLowerCase()) === 1;
+    return {
+      kind: 'member' as const,
+      label: member.name || id,
+      detail: id,
+      insert: uniqueName ? member.name : id,
+    };
+  });
+  return { candidates, from, to: from + fragment.length };
+};
+
+/**
  * Complete the token under the caret, IRC-client style: commands after a bare
  * slash, members in the first argument of /msg. Members are matched by name and
  * by id prefix; when a name is not unique the *id* is what gets inserted, because
  * an id is what resolves unambiguously (see {@link resolveMember}).
+ *
+ * `/frost roster` completes its member list too, which is the argument where a
+ * typo is expensive: a roster has to name the exact identities the ceremony used,
+ * and it does not offer anyone the line already lists.
  *
  * Returns null when there is nothing to offer, so a caller can leave the caret
  * alone rather than pop an empty list.
@@ -292,10 +454,37 @@ export const complete = (
   }
 
   const command = prefix.slice(1, space).toLowerCase();
+  const argStart = space + 1;
+  const words = prefix
+    .slice(argStart)
+    .split(/\s+/)
+    .filter(word => word.length > 0);
+
+  if (command === 'frost') {
+    // /frost roster <k-of-n> <nick|id>... - after the shape, every token is a
+    // member. Nothing is offered until the shape is a complete k-of-n.
+    if (words[0]?.toLowerCase() !== 'roster' || !/^\d+(?:-of-|\/)\d+$/.test(words[1] ?? '')) {
+      return null;
+    }
+    const fragment = prefix.endsWith(' ') ? '' : (words[words.length - 1] ?? '').toLowerCase();
+    const from = prefix.length - fragment.length;
+    const listed = (prefix.endsWith(' ') ? words.slice(2) : words.slice(2, -1)).map(word =>
+      word.toLowerCase(),
+    );
+    const matching = members.filter(
+      member =>
+        !listed.some(
+          token => token === member.pubkey.toLowerCase() || token === member.name.toLowerCase(),
+        ) &&
+        (member.name.toLowerCase().startsWith(fragment) ||
+          member.pubkey.toLowerCase().startsWith(fragment)),
+    );
+    return memberCandidates(fragment, from, matching, members);
+  }
+
   if (!MEMBER_ARG_COMMANDS.includes(command)) {
     return null;
   }
-  const argStart = space + 1;
   // only the first argument is a target; once it is complete, stop offering.
   if (prefix.slice(argStart).includes(' ')) {
     return null;
@@ -305,25 +494,5 @@ export const complete = (
   const matching = members.filter(
     m => m.name.toLowerCase().startsWith(fragment) || m.pubkey.toLowerCase().startsWith(fragment),
   );
-  if (!matching.length) {
-    return null;
-  }
-
-  const nameCounts = new Map<string, number>();
-  for (const member of members) {
-    const key = member.name.toLowerCase();
-    nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
-  }
-
-  const candidates = matching.map(member => {
-    const id = shortId(member.pubkey);
-    const uniqueName = member.name.length > 0 && nameCounts.get(member.name.toLowerCase()) === 1;
-    return {
-      kind: 'member' as const,
-      label: member.name || id,
-      detail: id,
-      insert: uniqueName ? member.name : id,
-    };
-  });
-  return { candidates, from: argStart, to: prefix.length };
+  return memberCandidates(fragment, argStart, matching, members);
 };

@@ -42,6 +42,7 @@ const invite = () => ({
   channel: '#duel-4f2a',
   secret: createRoomSecret(),
   endpoint: 'https://zcash.rotko.net',
+  public: true,
 });
 
 describe('sealed invites', () => {
@@ -58,6 +59,9 @@ describe('sealed invites', () => {
     expect(opened.channel).toBe(original.channel);
     expect([...opened.secret]).toEqual([...original.secret]);
     expect(opened.endpoint).toBe(original.endpoint);
+    // the discovery mode travels too: a sealed box must not silently turn a room
+    // public, or seal one the sender meant to be findable
+    expect(opened.public).toBe(true);
   });
 
   it('survives JSON, which is what the transport will be', async () => {

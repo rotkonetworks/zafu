@@ -182,3 +182,62 @@ describe('assertValidExternalSender', () => {
     expect(() => assertValidExternalSender(different)).toThrow('Sender URL has unexpected origin');
   });
 });
+
+describe('assertValidExternalSender loopback protocol gate', () => {
+  const sender = (origin: string, path = '/index.html'): chrome.runtime.MessageSender => ({
+    tab: { id: 1 } as chrome.tabs.Tab,
+    frameId: 0,
+    documentId: 'mockId',
+    documentLifecycle: 'active',
+    origin,
+    url: `${origin}${path}`,
+  });
+
+  it('accepts https for any host', () => {
+    expect(() => assertValidExternalSender(sender('https://example.com'))).not.toThrow();
+    expect(() => assertValidExternalSender(sender('https://127.0.0.1', '/'))).not.toThrow();
+    expect(() =>
+      assertValidExternalSender(sender('https://[fedc:ba98:7654:3210::1]')),
+    ).not.toThrow();
+  });
+
+  it('accepts http for the three canonical loopback spellings', () => {
+    expect(() => assertValidExternalSender(sender('http://localhost'))).not.toThrow();
+    expect(() => assertValidExternalSender(sender('http://127.0.0.1'))).not.toThrow();
+    expect(() => assertValidExternalSender(sender('http://[::1]'))).not.toThrow();
+  });
+
+  it('accepts http loopback spellings with an explicit port', () => {
+    expect(() => assertValidExternalSender(sender('http://localhost:8000'))).not.toThrow();
+    expect(() => assertValidExternalSender(sender('http://127.0.0.1:8000'))).not.toThrow();
+    expect(() => assertValidExternalSender(sender('http://[::1]:8000'))).not.toThrow();
+  });
+
+  it('rejects http for non-loopback hosts', () => {
+    expect(() => assertValidExternalSender(sender('http://example.com'))).toThrow(
+      'Sender protocol is not',
+    );
+    expect(() => assertValidExternalSender(sender('http://127.0.0.2'))).toThrow(
+      'Sender protocol is not',
+    );
+    expect(() => assertValidExternalSender(sender('http://10.20.30.40'))).toThrow(
+      'Sender protocol is not',
+    );
+    // Hostnames that exist on Object.prototype must not pass a table lookup.
+    expect(() => assertValidExternalSender(sender('http://constructor'))).toThrow(
+      'Sender protocol is not',
+    );
+    expect(() => assertValidExternalSender(sender('http://__proto__'))).toThrow(
+      'Sender protocol is not',
+    );
+  });
+
+  it('rejects non-http(s) protocols', () => {
+    expect(() => assertValidExternalSender(sender('ftp://example.com'))).toThrow(
+      'Sender protocol is not',
+    );
+    expect(() => assertValidExternalSender(sender('ws://example.com'))).toThrow(
+      'Sender protocol is not',
+    );
+  });
+});

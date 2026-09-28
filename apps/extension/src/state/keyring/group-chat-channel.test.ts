@@ -7,10 +7,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { x25519 } from '@noble/curves/ed25519';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils';
-import { GroupChatChannel, CHAT_MESSAGE_COUNT } from './group-chat-channel';
+import { GroupChatChannel, CHAT_MESSAGE_COUNT, MAX_FRAMES_PER_POLL } from './group-chat-channel';
+import { sealChatFrame } from './group-chat-crypto';
 import type { RelayIdentity } from './frostd-relay-client';
 
 const HOST = 'https://relay.example';
+const enc = (s: string) => new TextEncoder().encode(s);
 
 const idHex = () => {
   const priv = randomBytes(32);
@@ -111,9 +113,10 @@ describe('GroupChatChannel.resolveSession', () => {
     expect(id).toBe('chat-new');
   });
 
-  it('trusts a valid cached id without scanning', async () => {
+  it('falls back to the cached id only when the relay cannot enumerate', async () => {
     const calls = mockFetch({
       ...loginOk,
+      // no list_sessions handler: the relay cannot enumerate us
       get_session_info: () => ({
         json: {
           message_count: CHAT_MESSAGE_COUNT,
@@ -125,7 +128,27 @@ describe('GroupChatChannel.resolveSession', () => {
 
     const id = await chan().resolveSession('cached-1');
     expect(id).toBe('cached-1');
-    expect(calls.some(c => c.path === 'list_sessions')).toBe(false);
+    expect(calls.some(c => c.path === 'list_sessions')).toBe(true);
+  });
+
+  it('converges on the lowest id even when members cached different ids', async () => {
+    // a creation race leaves two chat sessions for the group; each member
+    // cached the one it happened to create. Both must enumerate and pick the
+    // lowest, or they pin to different sessions and never read each other.
+    mockFetch({
+      ...loginOk,
+      list_sessions: () => ({ json: { session_ids: ['bbb', 'aaa'] } }),
+      get_session_info: () => ({
+        json: {
+          message_count: CHAT_MESSAGE_COUNT,
+          pubkeys: members,
+          coordinator_pubkey: alice.pub,
+        },
+      }),
+    });
+
+    expect(await chan().resolveSession('bbb')).toBe('aaa');
+    expect(await chan().resolveSession('aaa')).toBe('aaa');
   });
 
   it('re-logs in and retries when the access token has expired', async () => {
@@ -189,5 +212,72 @@ describe('GroupChatChannel send/drain round-trip', () => {
     expect(frames).toHaveLength(1);
     expect(frames[0]!.senderPub).toBe(alice.pub);
     expect(new TextDecoder().decode(frames[0]!.payload)).toBe('gm from alice');
+  });
+
+  it('drops a frame the relay labels with a sender that is not a member', async () => {
+    const alice = idHex();
+    const bob = idHex();
+    const eve = idHex();
+    const members = [alice.pub, bob.pub];
+    const SESSION = 'shared-session';
+
+    // eve is NOT a member, but any attacker keypair (e, E) satisfies
+    // x25519(e, bobPub) == pairKey(bobPriv, E), so a relay that supplies E as
+    // the sender label can hand bob a frame that opens. Membership is the check
+    // that stops it.
+    const forged = await sealChatFrame(
+      eve.priv,
+      bob.pub,
+      SESSION,
+      new TextEncoder().encode('forged'),
+    );
+
+    mockFetch({
+      ...loginOk,
+      get_session_info: () => ({
+        json: {
+          message_count: CHAT_MESSAGE_COUNT,
+          pubkeys: members,
+          coordinator_pubkey: alice.pub,
+        },
+      }),
+      receive: () => ({ json: { msgs: [{ sender: eve.pub, msg: forged }] } }),
+    });
+
+    const bobChan = new GroupChatChannel(HOST, relayIdentity(bob.pub, [alice.pub]), bob.priv);
+    await bobChan.resolveSession(SESSION);
+
+    expect(await bobChan.drain()).toEqual([]);
+  });
+
+  it('caps the frames handled from a single poll', async () => {
+    const alice = idHex();
+    const bob = idHex();
+    const members = [alice.pub, bob.pub];
+    const SESSION = 'shared-session';
+
+    const sealed = await Promise.all(
+      Array.from({ length: MAX_FRAMES_PER_POLL + 5 }, (_, i) =>
+        sealChatFrame(alice.priv, bob.pub, SESSION, enc(`m${i}`)),
+      ),
+    );
+    mockFetch({
+      ...loginOk,
+      get_session_info: () => ({
+        json: {
+          message_count: CHAT_MESSAGE_COUNT,
+          pubkeys: members,
+          coordinator_pubkey: alice.pub,
+        },
+      }),
+      receive: () => ({
+        json: { msgs: sealed.map(msg => ({ sender: alice.pub, msg })) },
+      }),
+    });
+
+    const bobChan = new GroupChatChannel(HOST, relayIdentity(bob.pub, [alice.pub]), bob.priv);
+    await bobChan.resolveSession(SESSION);
+
+    expect(await bobChan.drain()).toHaveLength(MAX_FRAMES_PER_POLL);
   });
 });

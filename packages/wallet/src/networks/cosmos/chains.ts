@@ -188,9 +188,9 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
     // The old 15/434 path is dead and must NOT be used.
     penumbraChannel: 'channel-494', // injective -> penumbra (shieldInToPenumbra sourceChannel)
     penumbraSourceChannel: 'channel-18', // penumbra -> injective
-    // NOTE: launched stays false in the extension until the testnet round-trip
-    // (inj-testnet-roundtrip.mts) returns code:0 - the channel unblocks shield-in
-    // wiring/testing but the enable gate is still the funded-testnet pass.
+    // NETWORKS.injective.launched is true: the signer is proven on mainnet
+    // (round-trip tx 5699D4FC..., code 0) and the channel above is live, so the
+    // earlier funded-testnet enable gate is satisfied.
   },
   osmosis: {
     id: 'osmosis',

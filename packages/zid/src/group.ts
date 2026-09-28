@@ -24,8 +24,9 @@
  * ceremony is seconds long, but this is not a chat protocol); fan-out cost grows
  * with the roster, so ~8-10 members is where another shape is needed; and the
  * roster is agreed out of band, which for a multisig config is exactly the case.
- * See the design note for the shared-secret mailbox that a larger or social group
- * would need - and for why it needs a ratchet and rotation, which this does not.
+ * See docs/design/zirc-shared-secret-mailbox.md for the shared-secret mailbox
+ * shape a larger or social group would need - and for why it needs a ratchet and
+ * rotation, which this does not.
  */
 
 import { sha256 } from '@noble/hashes/sha2';

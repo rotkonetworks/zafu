@@ -14,6 +14,7 @@
     "*.md"
   ],
   "exports": {
+    "./registry-client": "./src/registry-client.ts",
     ".": "./src/index.ts"
   },
   "peerDependencies": {

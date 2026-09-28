@@ -2,7 +2,10 @@ type ValidProtocol = 'https:';
 const validProtocols: ValidProtocol[] = ['https:'];
 
 type URLValidProtocol = URL & { protocol: ValidProtocol };
-type URLHttpLocalhost = URL & { protocol: 'http:'; hostname: 'localhost' };
+type URLHttpLocalhost = URL & {
+  protocol: 'http:';
+  hostname: 'localhost' | '127.0.0.1' | '[::1]';
+};
 
 export type ValidExternalSender = chrome.runtime.MessageSender & {
   documentLifecycle: 'active';
@@ -25,8 +28,16 @@ export type PrerenderingExternalSender = chrome.runtime.MessageSender & {
 const isHttps = (url: URL): url is URLValidProtocol =>
   typeof url.protocol === 'string' && (validProtocols as string[]).includes(url.protocol);
 
+// The three canonical loopback spellings only: not all of 127.0.0.0/8 nor *.localhost, so a
+// public hostname (or a DNS-rebinding record) can never be mistaken for a local dev server.
+const loopbackHostnames: Record<URLHttpLocalhost['hostname'], true> = {
+  localhost: true,
+  '127.0.0.1': true,
+  '[::1]': true,
+};
+
 const isHttpLocalhost = (url: URL): url is URLHttpLocalhost =>
-  url.protocol === 'http:' && url.hostname === 'localhost';
+  url.protocol === 'http:' && Object.hasOwn(loopbackHostnames, url.hostname);
 
 /**
  * Checks the sender is an active document in the top-level frame of a tab.

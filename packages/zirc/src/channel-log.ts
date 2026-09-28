@@ -20,6 +20,12 @@
  * compute the same electorate, the same tallies and the same answer to "is this
  * hidden", because none of it is stateful.
  *
+ * One body kind is not governance. A `custody` record is a roster for a threshold
+ * scheme, written where everyone who replays the log can see it: authorized like a
+ * vote (the author must be voiced), and required to be a roster a ceremony could
+ * actually run, at an epoch that advances - so a replayed older roster cannot roll
+ * a multisig back. `custody.ts` owns the shape and the replay.
+ *
  * What this module is NOT: a transport, a relay, or a place content lives. Items
  * are referenced by hash; the content is end-to-end encrypted somewhere else and
  * the channel never sees it. Publishing the log is the app's business (issue #46,
@@ -39,6 +45,7 @@ import {
   type Tally,
   type VoteRecord,
 } from './vote';
+import { custodyBodyBytes, custodyProblems, type CustodyMember } from './custody';
 
 /** the key material a channel record is signed with; `ZidIdentity` satisfies it. */
 export interface ChannelSigner {
@@ -56,7 +63,16 @@ export interface ChannelGenesis {
 export type ChannelBody =
   | { readonly kind: 'mode'; readonly mode: ModeRecord['mode']; readonly subject: string }
   | { readonly kind: 'vote'; readonly item: string; readonly decision: 'hide' | 'reveal' }
-  | { readonly kind: 'open'; readonly item: string; readonly decision: 'hide' | 'reveal' };
+  | { readonly kind: 'open'; readonly item: string; readonly decision: 'hide' | 'reveal' }
+  | {
+      /** a multisig roster: who signs, how many, and which defi wallet it protects */
+      readonly kind: 'custody';
+      readonly scheme: string;
+      readonly threshold: number;
+      readonly epoch: number;
+      readonly fingerprint: string;
+      readonly roster: readonly CustodyMember[];
+    };
 
 export interface ChannelRecord {
   /** log index: 1-based, because the genesis is index 0 */
@@ -110,6 +126,8 @@ const bodyBytes = (body: ChannelBody): Uint8Array => {
       return signedFields('zid-chan-vote-v1', [lpText(body.item), lpText(body.decision)]);
     case 'open':
       return signedFields('zid-chan-open-v1', [lpText(body.item), lpText(body.decision)]);
+    case 'custody':
+      return custodyBodyBytes(body);
   }
 };
 
@@ -182,6 +200,8 @@ export async function verifyChain(opts: {
   }
 
   let prevHash = genesisHash(genesis);
+  // the last custody epoch this chain put in force; a roster never rolls back
+  let custodyEpoch = 0;
   for (let i = 0; i < records.length; i += 1) {
     const record = records[i]!;
     const expectedAt = i + 1;
@@ -209,6 +229,28 @@ export async function verifyChain(opts: {
             ? `${record.author} was not an operator when this mode record was written`
             : `${record.author} was not voiced when this ${record.body.kind} record was written`,
       };
+    }
+
+    // A custody record must be a roster a ceremony could actually run, and it must
+    // move forward: replaying an older roster must not roll a multisig back to a set
+    // that was already superseded.
+    if (record.body.kind === 'custody') {
+      const problems = custodyProblems(record.body);
+      if (problems.length > 0) {
+        return {
+          ok: false,
+          at: record.at,
+          reason: `the custody roster is not runnable: ${problems[0]}`,
+        };
+      }
+      if (record.body.epoch <= custodyEpoch) {
+        return {
+          ok: false,
+          at: record.at,
+          reason: `custody epoch ${record.body.epoch} does not advance past ${custodyEpoch}`,
+        };
+      }
+      custodyEpoch = record.body.epoch;
     }
 
     const sigOk = await opts.signer

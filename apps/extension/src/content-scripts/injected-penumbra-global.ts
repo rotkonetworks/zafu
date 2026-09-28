@@ -40,15 +40,20 @@ const prerenderComplete = new Promise<void>(resolve =>
 
 // MAIN-world has no chrome.runtime; the ISOLATED-world content script
 // (injected-session.ts, listed first in the manifest) writes our extension
-// id to a DOM dataset attribute before this script runs. Reading it here
+// id to a DOM attribute before this script runs. Reading it here
 // keeps the build agnostic to the install method (unpacked vs Web Store).
+//
+// Read as an attribute, not via `dataset`: on a non-HTML document (a
+// top-level .xml/.svg response, or a viewer page served as XML)
+// `documentElement` is a plain Element with no `dataset`, and reading it
+// throws an uncaught TypeError that kills this script.
 //
 // We also reject the literal 'invalid' Chrome returns from
 // chrome.runtime.id when the script is orphaned (extension reloaded
 // in another tab). Without this guard, an orphaned ISOLATED script
 // would bridge 'invalid' through and we'd inject
 // chrome-extension://invalid/manifest.json into PenumbraSymbol.
-const extensionId = document.documentElement.dataset['zafuExtensionId'] ?? '';
+const extensionId = document.documentElement?.getAttribute('data-zafu-extension-id') ?? '';
 const extensionOrigin =
   extensionId && extensionId !== 'invalid' ? `chrome-extension://${extensionId}` : '';
 

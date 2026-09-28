@@ -61,6 +61,7 @@ import { TransparentChainEndpoints } from './transparent-chain-endpoints';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { KeplrCompatToggle } from './keplr-compat-toggle';
 import { SettingsWallets } from './settings-wallets';
+import { NetworksDirectory } from './settings-networks-directory';
 
 /** color map for network indicators */
 const NETWORK_COLORS: Record<string, string> = {
@@ -102,6 +103,7 @@ export const SettingsWalletsNetworks = () => (
       <div className='flex flex-col gap-2'>
         <p className='kicker'>networks</p>
         <NetworkToggles />
+        <NetworksDirectory />
       </div>
     }
   />

@@ -196,6 +196,14 @@ async function connectWallet(
       if (pubkey) {
         const ch = await createChannel(session, pubkey, opts.relayUrl);
         ch.send(JSON.stringify({ type: 'zid:invite', payload, from: name, appOrigin }));
+        try {
+          // the frame is queued until the peer's keyex; only report success once
+          // the channel confirms the handshake and the flush reached the transport.
+          await ch.ready;
+        } catch {
+          ch.close();
+          return { sent: false };
+        }
         // don't close channel immediately - recipient needs time to receive
         setTimeout(() => ch.close(), 30_000);
         return { sent: true };

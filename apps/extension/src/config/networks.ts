@@ -49,6 +49,16 @@ export interface NetworkConfig {
     inbox: boolean;
     /** FROST threshold multisig (shielded chains) */
     multisig: boolean;
+    /**
+     * cosmos/IBC account surfaces: transparent balances, transaction history,
+     * price feeds. True for Penumbra and every IBC destination it reaches.
+     */
+    cosmos: boolean;
+    /**
+     * zcash-native surfaces: block-explorer links, zafu link handling, the
+     * zcash.me directory. True only for Zcash itself (it has no subnetworks).
+     */
+    zcash: boolean;
   };
 }
 
@@ -60,7 +70,15 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     focusColor: 'focus:border-zigner-gold',
     transparent: false,
     launched: true,
-    features: { stake: false, swap: false, vote: true, inbox: true, multisig: true },
+    features: {
+      stake: false,
+      swap: true,
+      vote: true,
+      inbox: true,
+      multisig: true,
+      cosmos: false,
+      zcash: true,
+    },
   },
   penumbra: {
     name: 'Penumbra',
@@ -69,7 +87,15 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     transparent: false,
     launched: true,
     // multisig: FROST threshold wallets are not implemented for Penumbra yet.
-    features: { stake: true, swap: false, vote: true, inbox: true, multisig: false },
+    features: {
+      stake: true,
+      swap: true,
+      vote: true,
+      inbox: true,
+      multisig: false,
+      cosmos: true,
+      zcash: false,
+    },
   },
   polkadot: {
     name: 'Polkadot',
@@ -77,7 +103,15 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     focusColor: 'focus:border-pink-500',
     transparent: true,
     launched: false,
-    features: { stake: true, swap: false, vote: false, inbox: false, multisig: false },
+    features: {
+      stake: false,
+      swap: false,
+      vote: false,
+      inbox: false,
+      multisig: false,
+      cosmos: false,
+      zcash: false,
+    },
   },
   kusama: {
     name: 'Kusama',
@@ -85,7 +119,15 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     focusColor: 'focus:border-red-500',
     transparent: true,
     launched: false,
-    features: { stake: true, swap: false, vote: false, inbox: false, multisig: false },
+    features: {
+      stake: false,
+      swap: false,
+      vote: false,
+      inbox: false,
+      multisig: false,
+      cosmos: false,
+      zcash: false,
+    },
   },
   noble: {
     name: 'Noble',
@@ -99,7 +141,15 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     ibcChainId: 'noble-1',
     // Noble targets ~5s; observed intervals sit just above it.
     ibcBlockTimeMs: 5_500,
-    features: { stake: false, swap: false, vote: false, inbox: false, multisig: false },
+    features: {
+      stake: false,
+      swap: false,
+      vote: false,
+      inbox: false,
+      multisig: false,
+      cosmos: true,
+      zcash: false,
+    },
   },
   cosmoshub: {
     name: 'Cosmos Hub',
@@ -112,7 +162,15 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     parent: 'penumbra',
     ibcChainId: 'cosmoshub-4',
     ibcBlockTimeMs: 6_000,
-    features: { stake: true, swap: false, vote: false, inbox: false, multisig: false },
+    features: {
+      stake: false,
+      swap: false,
+      vote: false,
+      inbox: false,
+      multisig: false,
+      cosmos: true,
+      zcash: false,
+    },
   },
   osmosis: {
     name: 'Osmosis',
@@ -126,7 +184,15 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     parent: 'penumbra',
     ibcChainId: 'osmosis-1',
     ibcBlockTimeMs: 2_500,
-    features: { stake: false, swap: false, vote: false, inbox: false, multisig: false },
+    features: {
+      stake: false,
+      swap: false,
+      vote: false,
+      inbox: false,
+      multisig: false,
+      cosmos: true,
+      zcash: false,
+    },
   },
   injective: {
     name: 'Injective',
@@ -146,7 +212,15 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     ibcChainId: 'injective-1',
     // Injective runs sub-second blocks (~0.65-0.8s).
     ibcBlockTimeMs: 700,
-    features: { stake: false, swap: false, vote: false, inbox: false, multisig: false },
+    features: {
+      stake: false,
+      swap: false,
+      vote: false,
+      inbox: false,
+      multisig: false,
+      cosmos: true,
+      zcash: false,
+    },
   },
   ethereum: {
     name: 'Ethereum',
@@ -154,7 +228,15 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     focusColor: 'focus:border-blue-500',
     transparent: true,
     launched: false,
-    features: { stake: false, swap: true, vote: false, inbox: false, multisig: false },
+    features: {
+      stake: false,
+      swap: false,
+      vote: false,
+      inbox: false,
+      multisig: false,
+      cosmos: false,
+      zcash: false,
+    },
   },
   bitcoin: {
     name: 'Bitcoin',
@@ -162,7 +244,15 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     focusColor: 'focus:border-orange-400',
     transparent: true,
     launched: false,
-    features: { stake: false, swap: false, vote: false, inbox: false, multisig: false },
+    features: {
+      stake: false,
+      swap: false,
+      vote: false,
+      inbox: false,
+      multisig: false,
+      cosmos: false,
+      zcash: false,
+    },
   },
 };
 
@@ -174,7 +264,15 @@ export const getNetwork = (network: NetworkType): NetworkConfig =>
     focusColor: 'focus:border-primary/50',
     transparent: true,
     launched: false,
-    features: { stake: false, swap: false, vote: false, inbox: false, multisig: false },
+    features: {
+      stake: false,
+      swap: false,
+      vote: false,
+      inbox: false,
+      multisig: false,
+      cosmos: false,
+      zcash: false,
+    },
   };
 
 /** check feature support */

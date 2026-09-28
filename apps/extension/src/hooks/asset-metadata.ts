@@ -39,8 +39,8 @@ const buildMap = (assets: Metadata[]): AssetMetadataMap => {
 };
 
 /**
- * Load the registry asset map for the active penumbra chain. Uses the bundled
- * registry as an offline-first backup so the first render still resolves.
+ * Load the registry asset map for the active penumbra chain. The shared client's
+ * `remote.get` is bundled-backed, so the first render still resolves offline.
  */
 export const useRegistryAssetMetadata = () => {
   const { chainId } = useChainIdQuery();
@@ -53,7 +53,7 @@ export const useRegistryAssetMetadata = () => {
       if (!chainId) {
         return new Map();
       }
-      const registry = await registryClient.remote.getWithBundledBackup(chainId);
+      const registry = await registryClient.remote.get(chainId);
       return buildMap(registry.getAllAssets());
     },
   });

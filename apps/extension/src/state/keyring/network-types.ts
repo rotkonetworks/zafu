@@ -22,7 +22,7 @@
  *    - noble, cosmoshub: standard cosmos secp256k1, coin type 118
  *    - injective: Ethermint (eth_secp256k1, coin type 60) - a receive+shield
  *      USDC ramp only; derives/signs via networks/injective, NOT the shared
- *      cosmos path. Not launched yet (see NETWORKS.injective, launched:false)
+ *      coin-118 cosmos path (guarded in deriveChainAddress). Launched:true.
  *
  * 3. substrate networks - polkadot/kusama umbrella for all parachains
  *    - same adapter, different ss58 prefixes per chain

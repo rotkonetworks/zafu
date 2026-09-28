@@ -155,9 +155,22 @@ export interface ZidChannel {
    * warn, or record it instead of being told nothing.
    */
   kind?: ChannelKind;
-  /** send encrypted message */
+  /**
+   * Resolves once the session key is established and every frame queued before
+   * that has been handed to the transport; rejects if the handshake does not
+   * complete within the channel's readiness deadline. A `send` before it
+   * resolves is QUEUED, not dropped - await it to learn a frame was really
+   * written instead of assuming success.
+   */
+  ready?: Promise<void>;
+  /** send encrypted message (queued until the session key exists) */
   send: (data: string | Uint8Array) => void;
-  /** receive callback */
+  /**
+   * Subscribe to decrypted inbound frames. `'message'` is the ONLY event kind
+   * either backend implements today; the name is typed so a caller asking for
+   * another gets a compile error rather than a handler that never fires. Adding
+   * one means implementing it in BOTH backends (./channel, ./noise-channel).
+   */
   on: (event: 'message', handler: (data: Uint8Array) => void) => void;
   /** close channel */
   close: () => void;

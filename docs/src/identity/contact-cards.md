@@ -97,7 +97,7 @@ card arrives on a per-contact diversified address you previously shared,
 the inbox traces the diversifier index back through your
 diversified-address records and shows who that address was shared with:
 
-> **conversation #<index>**
+> **conversation #&lt;index&gt;**
 > via alice
 
 this works even for plain payments with no memo - the diversified
