@@ -99,41 +99,59 @@ const initParallelWasm = async () => {
   return wasmInitPromise;
 };
 
-// Track loaded proving keys
-const loadedProvingKeys = new Set<string>();
+// Proving keys are loaded once per KEY FILE, not per action type:
+// delegatorVote and actionLiquidityTournamentVote share delegator_vote_pk.bin
+// (~22MB). Keying by action type fetched it twice (and concurrently, via the
+// Promise.all below, when a plan contained both). Now the file is fetched once
+// and handed to load_proving_key under EVERY action type that uses it, so both
+// are ready without retaining the bytes in JS. (In wasm both names map to the
+// same OnceCell static, so the second call is a cheap no-op.)
+const keyFileLoads = new Map<string, Promise<void>>();
 
 /**
  * Load a proving key if not already loaded.
  */
-const loadProvingKeyIfNeeded = async (
+const loadProvingKeyIfNeeded = (
   actionType: string,
   loadKey: (key: Uint8Array, type: string) => void,
 ): Promise<void> => {
-  if (loadedProvingKeys.has(actionType)) {
-    return;
-  }
-
   const keyFile = ACTION_KEY_FILES[actionType];
   if (!keyFile) {
     console.warn(`[Parallel Build Worker] No proving key file for action type: ${actionType}`);
-    return;
+    return Promise.resolve();
   }
 
   const keyUrl = keyFileNames[actionType]?.href;
   if (!keyUrl) {
     console.warn(`[Parallel Build Worker] No key URL for action type: ${actionType}`);
-    return;
+    return Promise.resolve();
   }
 
-  console.log(`[Parallel Build Worker] Loading proving key: ${actionType}`);
-  const response = await fetch(keyUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch proving key: ${keyUrl}`);
+  const existing = keyFileLoads.get(keyFile);
+  if (existing) {
+    return existing;
   }
 
-  const keyBytes = new Uint8Array(await response.arrayBuffer());
-  loadKey(keyBytes, actionType);
-  loadedProvingKeys.add(actionType);
+  const load = (async () => {
+    console.log(`[Parallel Build Worker] Loading proving key file: ${keyFile}`);
+    const response = await fetch(keyUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch proving key: ${keyUrl}`);
+    }
+    const keyBytes = new Uint8Array(await response.arrayBuffer());
+    for (const [action, file] of Object.entries(ACTION_KEY_FILES)) {
+      if (file === keyFile) {
+        loadKey(keyBytes, action);
+      }
+    }
+  })().catch((e: unknown) => {
+    // Don't cache failures: allow a retry on the next build.
+    keyFileLoads.delete(keyFile);
+    throw e;
+  });
+
+  keyFileLoads.set(keyFile, load);
+  return load;
 };
 
 /**
