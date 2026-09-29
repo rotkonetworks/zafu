@@ -582,10 +582,19 @@ export const deriveZidForContact = (mnemonic: string, identity: string, contactI
   });
 
 /**
- * Global ZID rotation index. Mirrors the zcashShieldedIndex pattern -
- * a chrome.storage.local counter that lets the user rotate their entire
+ * ZID rotation index, per wallet. Mirrors the zcashShieldedIndex pattern -
+ * a chrome.storage.local counter that lets the user rotate a wallet's entire
  * ZID universe at once ("burn this identity, start over"). Per-site
- * rotation in ZidSitePreference still works on top of this global salt.
+ * rotation in ZidSitePreference still works on top of this salt.
+ *
+ * Scoped by walletId for the same reason the pins are: a generation is a
+ * derivation from ONE wallet's seed. A single global counter meant rotating
+ * wallet A silently moved wallet B to a new identity too.
+ *
+ * Callers that omit `walletId` get the selected vault - the one the
+ * background signing paths derive from. The bare 'zidIndex' key is the
+ * pre-scoping global value: a wallet with no scoped index yet inherits it, so
+ * nobody's presented identity changes on upgrade.
  *
  * Ring VRF seed (deriveRingVrfSeed) is intentionally NOT folded into
  * this rotation - the comment above explains why (subscriptions must
@@ -593,20 +602,40 @@ export const deriveZidForContact = (mnemonic: string, identity: string, contactI
  */
 export const ZID_INDEX_STORAGE_KEY = 'zidIndex';
 
-export async function getZidIndex(): Promise<number> {
-  const r = await chrome.storage.local.get(ZID_INDEX_STORAGE_KEY);
-  const v = r[ZID_INDEX_STORAGE_KEY];
-  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
+const zidIndexKey = (walletId: string): string => `${ZID_INDEX_STORAGE_KEY}:${walletId}`;
+
+async function selectedWalletId(): Promise<string> {
+  const r = await chrome.storage.local.get('selectedVaultId');
+  const v = r['selectedVaultId'];
+  return typeof v === 'string' ? v : '';
 }
 
-export async function setZidIndex(value: number): Promise<void> {
-  await chrome.storage.local.set({ [ZID_INDEX_STORAGE_KEY]: value });
+const validIndex = (v: unknown): v is number =>
+  typeof v === 'number' && Number.isFinite(v) && v >= 0;
+
+export async function getZidIndex(walletId?: string): Promise<number> {
+  const id = walletId ?? (await selectedWalletId());
+  const r = await chrome.storage.local.get(
+    id ? [zidIndexKey(id), ZID_INDEX_STORAGE_KEY] : [ZID_INDEX_STORAGE_KEY],
+  );
+  const scoped = id ? r[zidIndexKey(id)] : undefined;
+  if (validIndex(scoped)) {
+    return scoped;
+  }
+  const legacy = r[ZID_INDEX_STORAGE_KEY];
+  return validIndex(legacy) ? legacy : 0;
 }
 
-export async function rotateZidIndex(): Promise<number> {
-  const current = await getZidIndex();
+export async function setZidIndex(value: number, walletId?: string): Promise<void> {
+  const id = walletId ?? (await selectedWalletId());
+  await chrome.storage.local.set({ [id ? zidIndexKey(id) : ZID_INDEX_STORAGE_KEY]: value });
+}
+
+export async function rotateZidIndex(walletId?: string): Promise<number> {
+  const id = walletId ?? (await selectedWalletId());
+  const current = await getZidIndex(id);
   const next = current + 1;
-  await setZidIndex(next);
+  await setZidIndex(next, id);
   return next;
 }
 
@@ -618,10 +647,11 @@ export async function rotateZidIndex(): Promise<number> {
  * restores it exactly. This is what makes identity switching reversible
  * ("morph back") rather than a one-way burn.
  */
-export async function rotateZidIndexDown(): Promise<number> {
-  const current = await getZidIndex();
+export async function rotateZidIndexDown(walletId?: string): Promise<number> {
+  const id = walletId ?? (await selectedWalletId());
+  const current = await getZidIndex(id);
   const next = current > 0 ? current - 1 : 0;
-  await setZidIndex(next);
+  await setZidIndex(next, id);
   return next;
 }
 
@@ -700,28 +730,45 @@ export async function currentIdentityName(base: string = DEFAULT_IDENTITY): Prom
   return rotatedIdentity(base, await getZidIndex());
 }
 
-/** chrome.storage.local key: map of generation index -> zid public key hex.
- * Populated whenever a generation is actually derived, so display surfaces
- * can show the real key for the active generation without secret access. */
+/** chrome.storage.local key prefix: per wallet, a map of generation index ->
+ * zid public key hex. Populated whenever a generation is actually derived, so
+ * display surfaces can show the real key for the active generation without
+ * secret access.
+ *
+ * Scoped by walletId: the unscoped map mixed keys from every wallet's seed, so
+ * one wallet's display could show (and copy) another wallet's identity. The
+ * old unscoped map is ignored rather than migrated - it is only a cache, and
+ * nothing in it says which wallet a key came from. */
 export const ZID_GEN_KEYS_STORAGE_KEY = 'zidGenKeys';
 
-export async function getZidGenKeys(): Promise<Record<number, string>> {
-  const v = (await chrome.storage.local.get(ZID_GEN_KEYS_STORAGE_KEY))[ZID_GEN_KEYS_STORAGE_KEY] as
-    | Record<number, string>
-    | undefined;
+const zidGenKeysKey = (walletId: string): string => `${ZID_GEN_KEYS_STORAGE_KEY}:${walletId}`;
+
+export async function getZidGenKeys(walletId?: string): Promise<Record<number, string>> {
+  const id = walletId ?? (await selectedWalletId());
+  if (!id) {
+    return {};
+  }
+  const key = zidGenKeysKey(id);
+  const v = (await chrome.storage.local.get(key))[key] as Record<number, string> | undefined;
   return v ?? {};
 }
 
-/** derive the identity-level zid for a generation and record its public key */
+/** derive the identity-level zid for a generation and record its public key.
+ * `mnemonic` must be the seed of `walletId` (default: the selected vault). */
 export async function deriveAndCacheZidGeneration(
   mnemonic: string,
   zidIndex: number,
+  walletId?: string,
 ): Promise<string> {
   const zid = deriveZidCrossSite(mnemonic, rotatedIdentity(DEFAULT_IDENTITY, zidIndex));
-  const keys = await getZidGenKeys();
+  const id = walletId ?? (await selectedWalletId());
+  if (!id) {
+    return zid.publicKey;
+  }
+  const keys = await getZidGenKeys(id);
   if (keys[zidIndex] !== zid.publicKey) {
     keys[zidIndex] = zid.publicKey;
-    await chrome.storage.local.set({ [ZID_GEN_KEYS_STORAGE_KEY]: keys });
+    await chrome.storage.local.set({ [zidGenKeysKey(id)]: keys });
   }
   return zid.publicKey;
 }

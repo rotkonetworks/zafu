@@ -18,24 +18,20 @@ import { useNavigate } from 'react-router-dom';
 import { Segmented } from '@repo/ui/components/ui/segmented';
 import { QrCode } from '../../../components/qr-code';
 import { useStore } from '../../../state';
-import { selectEffectiveKeyInfo, selectKeyInfos, selectGetMnemonic } from '../../../state/keyring';
+import { selectEffectiveKeyInfo, selectKeyInfos } from '../../../state/keyring';
+import { useActiveZid } from '../../../hooks/use-active-zid';
 import { allContactsSelector } from '../../../state/contacts';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import type { ZidSitePreference, ZidShareRecord } from '../../../state/identity';
 import {
-  ZID_INDEX_STORAGE_KEY,
   ZID_PINS_STORAGE_KEY,
   type ZidPin,
   addZidPin,
-  getZidIndex,
   getZidPins,
   removeZidPin,
   rotateZidIndex,
   rotateZidIndexDown,
   setZidIndex,
-  getZidGenKeys,
-  ZID_GEN_KEYS_STORAGE_KEY,
-  deriveAndCacheZidGeneration,
 } from '../../../state/identity';
 import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
 import { revokeOrigin as revokeOriginFull } from '../../../senders/revoke';
@@ -189,7 +185,7 @@ export const IdentityPage = () => {
   const [showQr, setShowQr] = useState(false);
   const [showFullKey, setShowFullKey] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const [zidIndex, setZidIndexState] = useState(0);
+  const { zidIndex, zidPubkey } = useActiveZid(keyInfo);
   const [zidPins, setZidPins] = useState<ZidPin[]>([]);
   // inline pin rename: which pin index is being edited + the draft label
   const [editingPin, setEditingPin] = useState<number | null>(null);
@@ -214,27 +210,17 @@ export const IdentityPage = () => {
     return () => window.clearTimeout(t);
   }, [zidIndex, reducedMotion]);
 
-  // load + subscribe to global zidIndex + this wallet's pinned generations
+  // this wallet's generation + its key, and this wallet's pinned generations
   const walletId = keyInfo?.id ?? '';
   useEffect(() => {
-    void getZidIndex().then(setZidIndexState);
     void getZidPins(walletId).then(setZidPins);
     const listener = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
       if (area !== 'local') {
         return;
       }
-      if (changes[ZID_INDEX_STORAGE_KEY]) {
-        const v = changes[ZID_INDEX_STORAGE_KEY].newValue;
-        if (typeof v === 'number') {
-          setZidIndexState(v);
-        }
-      }
       // pins are stored per-wallet under `zidPins:<walletId>` - match by prefix
       if (Object.keys(changes).some(k => k.startsWith(ZID_PINS_STORAGE_KEY))) {
         void getZidPins(walletId).then(setZidPins);
-      }
-      if (changes[ZID_GEN_KEYS_STORAGE_KEY]) {
-        void getZidGenKeys().then(setGenKeys);
       }
     };
     chrome.storage.onChanged.addListener(listener);
@@ -245,21 +231,21 @@ export const IdentityPage = () => {
   // generation is a deterministic derivation, so switching never destroys an
   // identity - you can always rotate back down (or jump to a pin) to restore it.
   const handleRotateUp = useCallback(async () => {
-    await rotateZidIndex();
+    await rotateZidIndex(walletId);
     reloadSites();
-  }, [reloadSites]);
+  }, [reloadSites, walletId]);
 
   const handleRotateDown = useCallback(async () => {
-    await rotateZidIndexDown();
+    await rotateZidIndexDown(walletId);
     reloadSites();
-  }, [reloadSites]);
+  }, [reloadSites, walletId]);
 
   const handleJumpTo = useCallback(
     async (index: number) => {
-      await setZidIndex(index);
+      await setZidIndex(index, walletId);
       reloadSites();
     },
-    [reloadSites],
+    [reloadSites, walletId],
   );
 
   const handlePinCurrent = useCallback(async () => {
@@ -287,38 +273,11 @@ export const IdentityPage = () => {
     [walletId, zidPins],
   );
 
-  // try active keyinfo first, then any keyinfo with a zid (mnemonic wallets)
-  const storedZid = (keyInfo?.insensitive?.['zid'] ??
-    allKeyInfos.find(k => k.insensitive?.['zid'])?.insensitive?.['zid']) as string | undefined;
-  // generation-aware: the stored value is generation 0 (written at vault
-  // creation); rotated generations come from the derived-key cache, filled
-  // on rotation below. Without this, rotating generations changed nothing
-  // on screen - the icon and zid stayed pinned to gen 0.
-  const getMnemonic = useStore(selectGetMnemonic);
-  const [genKeys, setGenKeys] = useState<Record<number, string>>({});
-  useEffect(() => {
-    void getZidGenKeys().then(setGenKeys);
-  }, []);
-  const zidPubkey = genKeys[zidIndex] ?? (zidIndex === 0 ? storedZid : undefined);
+  // generation-aware and wallet-scoped (useActiveZid): the ACTIVE wallet's key
+  // for its current generation. This used to fall back to any wallet with a
+  // zid and derive rotated generations from the first wallet's seed, so the
+  // page could show - and QR-share - another wallet's identity.
   const zidAddress = zidPubkey ? 'zid' + zidPubkey.slice(0, 16) : undefined;
-
-  // derive + cache the active generation's key whenever it's missing (the
-  // wallet is unlocked here, so getMnemonic works without a prompt)
-  const mnemonicVault = allKeyInfos.find(k => k.insensitive?.['zid']);
-  useEffect(() => {
-    if (zidPubkey || !mnemonicVault) {
-      return;
-    }
-    void (async () => {
-      try {
-        const mnemonic = await getMnemonic(mnemonicVault.id);
-        await deriveAndCacheZidGeneration(mnemonic, zidIndex);
-        setGenKeys(await getZidGenKeys());
-      } catch {
-        /* locked or non-mnemonic vault - stored gen-0 display only */
-      }
-    })();
-  }, [zidIndex, zidPubkey, mnemonicVault, getMnemonic]);
 
   useEffect(() => {
     void (async () => {
