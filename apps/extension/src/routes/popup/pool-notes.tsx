@@ -13,7 +13,7 @@
  * glance = hero + hover split, tap = the full per-pool list.
  *
  * Reachable only when IRONWOOD_MIGRATION is ON (see config/feature-flags.ts);
- * the router gates the route and the menu-drawer gates the entry. Before
+ * the router gates the route and the tools screen gates the entry. Before
  * activation this is still safe to open - it is read-only and never builds a
  * transaction (the transparent tab's shield action runs the same flow as
  * home's ShieldTransparent component).
