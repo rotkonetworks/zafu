@@ -1,7 +1,6 @@
 import { useStore } from '../../../state';
 import { selectEnabledNetworks } from '../../../state/keyring';
 import { HARDWARE_WALLET_ENABLED, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
-import { SUBSCRIBE_ENABLED } from '../../../config/feature-flags';
 import { openPageInTab } from '../../../utils/popup-detection';
 import { PagePath } from '../../page/paths';
 import { usePopupNav } from '../../../utils/navigate';
@@ -57,13 +56,8 @@ export const SettingsDevicesAll = () => {
             label='features'
             onPress={() => navigate(PopupPath.SETTINGS_FEATURES)}
           />
-          {SUBSCRIBE_ENABLED && (
-            <Row
-              type='screen'
-              label='pro subscription'
-              onPress={() => navigate(PopupPath.SUBSCRIBE)}
-            />
-          )}
+          {/* pro is shelved until there is a critical mass of users - no row,
+              no upsell copy anywhere in settings (founder decision) */}
           <Row type='screen' label='about' onPress={() => navigate(PopupPath.SETTINGS_ABOUT)} />
         </RowGroup>
       </div>

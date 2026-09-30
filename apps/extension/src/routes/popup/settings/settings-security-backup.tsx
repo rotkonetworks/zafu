@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useStore } from '../../../state';
 import { selectEnabledNetworks } from '../../../state/keyring';
-import { cn } from '@repo/ui/lib/utils';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { SettingsScreen } from './settings-screen';
@@ -9,6 +8,7 @@ import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { useAutoLock, AUTO_LOCK_OPTIONS } from './use-auto-lock';
 import { SigningSecuritySelector } from './signing-security-selector';
+import { SheetOptions } from './sheet-options';
 
 /**
  * "all security controls" - the security category's power-user list. Auto-
@@ -80,36 +80,14 @@ export const AutoLockRow = () => {
         onPress={() => setOpen(true)}
       />
       <Sheet open={open} onOpenChange={setOpen} title='auto-lock'>
-        <div className='flex flex-col gap-2'>
-          {AUTO_LOCK_OPTIONS.map(o => {
-            const on = o.value === minutes;
-            return (
-              <button
-                key={o.value}
-                onClick={() => {
-                  set(o.value);
-                  setOpen(false);
-                }}
-                className={cn(
-                  'flex items-center gap-3 border px-3.5 py-3 text-left transition-colors',
-                  on
-                    ? 'border-zigner-gold bg-zigner-gold/10'
-                    : 'border-surface-border-soft hover:bg-surface-elev-2',
-                )}
-              >
-                <span
-                  className={cn(
-                    'flex size-4 shrink-0 items-center justify-center border',
-                    on ? 'border-zigner-gold' : 'border-surface-border',
-                  )}
-                >
-                  {on && <span className='size-2 bg-zigner-gold' />}
-                </span>
-                <span className='text-data text-fg-high lowercase'>{o.label}</span>
-              </button>
-            );
-          })}
-        </div>
+        <SheetOptions
+          value={minutes}
+          options={AUTO_LOCK_OPTIONS}
+          onPick={v => {
+            set(v);
+            setOpen(false);
+          }}
+        />
       </Sheet>
     </>
   );

@@ -4,11 +4,14 @@ import { PopupPath } from '../paths';
 import { SettingsScreen } from './settings-screen';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
-import { cn } from '@repo/ui/lib/utils';
 import { TintedRow } from './tinted-row';
+import { SheetOptions } from './sheet-options';
 import { useZafuTheme, type ZafuTheme } from './settings-appearance';
 
-const THEME_LABEL: Record<ZafuTheme, string> = { sumi: 'sumi', washi: 'washi' };
+const THEME_OPTIONS: readonly { value: ZafuTheme; label: string }[] = [
+  { value: 'sumi', label: 'sumi' },
+  { value: 'washi', label: 'washi' },
+];
 
 /**
  * Devices and app category home (SetDevices.dc.html): zigner, theme, about,
@@ -27,12 +30,7 @@ export const SettingsDevicesHome = () => {
       <div className='flex flex-col gap-5'>
         <RowGroup>
           <Row type='screen' label='zigner' onPress={() => navigate(PopupPath.SETTINGS_ZIGNER)} />
-          <Row
-            type='value'
-            label='theme'
-            value={THEME_LABEL[theme]}
-            onPress={() => setThemeOpen(true)}
-          />
+          <Row type='value' label='theme' value={theme} onPress={() => setThemeOpen(true)} />
           <Row
             type='value'
             label='about'
@@ -51,36 +49,14 @@ export const SettingsDevicesHome = () => {
       </div>
 
       <Sheet open={themeOpen} onOpenChange={setThemeOpen} title='theme'>
-        <div className='flex flex-col gap-2'>
-          {(['sumi', 'washi'] as const).map(t => {
-            const on = t === theme;
-            return (
-              <button
-                key={t}
-                onClick={() => {
-                  setTheme(t);
-                  setThemeOpen(false);
-                }}
-                className={cn(
-                  'flex items-center gap-3 border px-3.5 py-3 text-left transition-colors',
-                  on
-                    ? 'border-zigner-gold bg-zigner-gold/10'
-                    : 'border-surface-border-soft hover:bg-surface-elev-2',
-                )}
-              >
-                <span
-                  className={cn(
-                    'flex size-4 shrink-0 items-center justify-center border',
-                    on ? 'border-zigner-gold' : 'border-surface-border',
-                  )}
-                >
-                  {on && <span className='size-2 bg-zigner-gold' />}
-                </span>
-                <span className='text-data text-fg-high lowercase'>{THEME_LABEL[t]}</span>
-              </button>
-            );
-          })}
-        </div>
+        <SheetOptions
+          value={theme}
+          options={THEME_OPTIONS}
+          onPick={t => {
+            setTheme(t);
+            setThemeOpen(false);
+          }}
+        />
       </Sheet>
     </SettingsScreen>
   );

@@ -59,7 +59,10 @@ import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
 import { KeplrCompatToggle } from './keplr-compat-toggle';
 import { SettingsWallets } from './settings-wallets';
-import { NetworksDirectory, PenumbraIbcDirectory } from './settings-networks-directory';
+import { PenumbraIbcDirectory } from './settings-networks-directory';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { usePopupNav } from '../../../utils/navigate';
+import { PopupPath } from '../paths';
 
 /** color map for network indicators */
 const NETWORK_COLORS: Record<string, string> = {
@@ -91,21 +94,32 @@ const NETWORK_DESCRIPTIONS: Record<string, string> = {
  * enable/disable toggles render as a section right below it, so wallet and
  * network management live in one place.
  */
-export const SettingsWalletsNetworks = () => (
-  // Networks fold INTO the wallets screen via appendSlot, so both share one
-  // header/back/scroll column (one tab) - not a sibling block hanging below a
-  // full-height wallets screen.
-  <SettingsWallets
-    title='wallets & networks'
-    appendSlot={
-      <div className='flex flex-col gap-2'>
-        <p className='kicker'>networks</p>
-        <NetworkToggles />
-        <NetworksDirectory />
-      </div>
-    }
-  />
-);
+export const SettingsWalletsNetworks = () => {
+  const navigate = usePopupNav();
+  return (
+    // Networks fold INTO the wallets screen via appendSlot, so both share one
+    // header/back/scroll column (one tab) - not a sibling block hanging below
+    // a full-height wallets screen.
+    <SettingsWallets
+      title='wallets & networks'
+      appendSlot={
+        <div className='flex flex-col gap-2'>
+          <p className='kicker'>networks</p>
+          <NetworkToggles />
+          {/* the full destination list + allow/block now lives in privacy,
+              as its own screen rather than a folded-away accordion here */}
+          <RowGroup>
+            <Row
+              type='screen'
+              label='everything zafu talks to'
+              onPress={() => navigate(PopupPath.SETTINGS_CONNECTIONS)}
+            />
+          </RowGroup>
+        </div>
+      }
+    />
+  );
+};
 
 const NetworkToggles = () => {
   const activeNetwork = useStore(selectActiveNetwork);

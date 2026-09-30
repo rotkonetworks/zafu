@@ -60,6 +60,8 @@ export const popupScreens = {
     import('./settings/settings-devices-all').then(m => m.SettingsDevicesAll),
   settingsRemoveWallet: () =>
     import('./settings/settings-remove-wallet').then(m => m.SettingsRemoveWallet),
+  settingsConnections: () =>
+    import('./settings/settings-connections').then(m => m.SettingsConnections),
 
   // approvals
   transactionApproval: () => import('./approval/transaction').then(m => m.TransactionApproval),

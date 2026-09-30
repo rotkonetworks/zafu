@@ -104,4 +104,7 @@ export enum PopupPath {
   SETTINGS_DEVICES = '/settings/devices',
   SETTINGS_DEVICES_ALL = '/settings/devices/all',
   SETTINGS_REMOVE_WALLET = '/settings/remove-wallet',
+  /** "everything zafu talks to" - every known destination, grouped by
+   *  purpose, with an allow/block control per host. */
+  SETTINGS_CONNECTIONS = '/settings/privacy/connections',
 }

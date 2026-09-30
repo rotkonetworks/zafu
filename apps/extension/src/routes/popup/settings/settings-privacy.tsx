@@ -3,7 +3,6 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../../../state';
 import { privacySelector, type PrivacySettings } from '../../../state/privacy';
 import { selectActiveNetwork } from '../../../state/keyring';
-import { isPro } from '../../../state/license';
 import { SettingsScreen } from './settings-screen';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
@@ -107,11 +106,11 @@ const PRIVACY_ROWS: readonly PrivacyRow[] = [
   },
 ];
 
-/** proxy - a Row(value) opening a Sheet to edit the socks5 host/port, rather
- *  than expanding inline (nothing expands in place). */
+/** proxy - a plain, user-owned socks5 host/port, on or off. A Row(value)
+ *  opening a Sheet to edit it, rather than expanding inline (nothing
+ *  expands in place). No rotko/pro relay framing - pro is shelved. */
 function ProxySection() {
   const { settings, setProxy } = useStore(privacySelector);
-  const pro = useStore(isPro);
   // Defensive: settings persisted before the proxy field existed have no
   // proxy key. persist.ts now merges defaults on hydration, but guard here too.
   const proxy = settings.proxy ?? { enabled: false, host: '', port: 1080 };
@@ -175,11 +174,7 @@ function ProxySection() {
               </button>
             )}
           </div>
-          <p className='text-label text-fg-muted/60'>
-            {pro
-              ? 'routes all traffic - pro includes rotko proxy access'
-              : 'routes all traffic through your socks5 - pro includes proxy access'}
-          </p>
+          <p className='text-label text-fg-muted/60'>routes all traffic through your socks5</p>
         </div>
       </Sheet>
     </RowGroup>
@@ -291,6 +286,7 @@ export function ContactDiscoverySection() {
 export function SettingsPrivacy() {
   const { settings, setSetting } = useStore(privacySelector);
   const activeNetwork = useStore(selectActiveNetwork);
+  const navigate = usePopupNav();
 
   const visibleRows = PRIVACY_ROWS.filter(row => !row.visible || row.visible(activeNetwork));
 
@@ -319,6 +315,13 @@ export function SettingsPrivacy() {
             <ZcashMeRow />
           </RowGroup>
         )}
+        <RowGroup>
+          <Row
+            type='screen'
+            label='everything zafu talks to'
+            onPress={() => navigate(PopupPath.SETTINGS_CONNECTIONS)}
+          />
+        </RowGroup>
         {/* Keplr "act as" toggle moved to Networks → Penumbra section
             since it only affects the Penumbra/IBC scope. */}
         {visibleRows.length === 0 && (

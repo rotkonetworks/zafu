@@ -119,4 +119,8 @@ export const settingsRoutes: RouteObject[] = [
     path: PopupPath.SETTINGS_REMOVE_WALLET,
     lazy: lazyScreen('settingsRemoveWallet'),
   },
+  {
+    path: PopupPath.SETTINGS_CONNECTIONS,
+    lazy: lazyScreen('settingsConnections'),
+  },
 ];
