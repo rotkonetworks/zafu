@@ -12,7 +12,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { StepList } from '@repo/ui/components/ui/step-list';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
-import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { RowGroup } from '@repo/ui/components/ui/row';
 import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import { Sensitive } from '../../../components/sensitive';
 import { removeTxOps, writeTxOp } from '../../../tx-ops';
@@ -117,50 +117,47 @@ const truncateAddress = (address: string): string =>
 /**
  * One calm sentence explaining what the worker is doing right now, for the
  * StatusSlot under the proving StepList. Keyed on the worker's own `step`
- * labels (see zcash-worker.ts emitProgress calls) — a step this doesn't
- * recognise falls back to plain "working" copy rather than showing nothing.
+ * labels (see zcash-worker.ts emitProgress calls) - a step this table
+ * doesn't match falls back to plain "working" copy rather than nothing.
  *
  * The one exception to "no time estimate" is the witness-tree rebuild: the
- * worker itself reports that case takes about three minutes
- * (zcash-worker.ts ~line 3047, step 'witness corrupt — rebuilding'), so this
- * is the one place a duration is shown. The worker's own step string has an
- * em dash in it; the display copy here does not repeat it verbatim.
+ * worker itself reports that case takes about three minutes (zcash-worker.ts
+ * ~line 3047, step 'witness corrupt - rebuilding' - the worker's own string
+ * uses an em dash there), so this is the one place a duration is shown. The
+ * display copy here does not repeat that verbatim.
  */
-const explainSendStep = (step: string): string => {
-  if (step.startsWith('witness corrupt')) {
-    return 'rebuilding the merkle witnesses from a checkpoint. this takes about 3 min.';
-  }
-  if (step === 'loading wallet state' || step === 'fetching chain tip') {
-    return 'reading your wallet and the current chain tip.';
-  }
-  if (step === 'selecting notes' || step === 'notes selected') {
-    return 'choosing which notes to spend from.';
-  }
-  if (step === 'building merkle witnesses' || step === 'witnesses built') {
-    return 'building the merkle witnesses this spend needs.';
-  }
-  if (step === 'checking NU6.3 activation' || step === 'NU6.3 active') {
-    return 'checking which zcash pool is active on the network.';
-  }
-  if (step.startsWith('proving')) {
-    return 'your computer proves the payment is valid and signs it with your key. the network learns nothing about sender, amount or memo.';
-  }
-  if (
-    step.includes('signed') ||
-    step.includes('proved') ||
-    step.startsWith('PCZT') ||
-    step.startsWith('building & proving PCZT')
-  ) {
-    return 'the transaction is proved and signed.';
-  }
-  if (step.startsWith('broadcasting')) {
-    return 'sending the transaction to the zcash network.';
-  }
-  if (step === 'complete' || step.includes('complete')) {
-    return 'done.';
-  }
-  return 'working on your transaction.';
-};
+const SEND_STEP_EXPLAINERS: [match: (step: string) => boolean, copy: string][] = [
+  [
+    s => s.startsWith('witness corrupt'),
+    'rebuilding the merkle witnesses from a checkpoint. this takes about 3 min.',
+  ],
+  [
+    s => s === 'loading wallet state' || s === 'fetching chain tip',
+    'reading your wallet and the current chain tip.',
+  ],
+  [s => s === 'selecting notes' || s === 'notes selected', 'choosing which notes to spend from.'],
+  [
+    s => s === 'building merkle witnesses' || s === 'witnesses built',
+    'building the merkle witnesses this spend needs.',
+  ],
+  [
+    s => s === 'checking NU6.3 activation' || s === 'NU6.3 active',
+    'checking which zcash pool is active on the network.',
+  ],
+  [
+    s => s.startsWith('proving'),
+    'your computer proves the payment is valid and signs it with your key. the network learns nothing about sender, amount or memo.',
+  ],
+  [
+    s => s.includes('signed') || s.includes('proved') || s.startsWith('PCZT'),
+    'the transaction is proved and signed.',
+  ],
+  [s => s.startsWith('broadcasting'), 'sending the transaction to the zcash network.'],
+  [s => s.includes('complete'), 'done.'],
+];
+
+const explainSendStep = (step: string): string =>
+  SEND_STEP_EXPLAINERS.find(([match]) => match(step))?.[1] ?? 'working on your transaction.';
 
 /** live elapsed timer — ticks every second so the build screen never looks frozen */
 function LiveTimer({ startMs }: { startMs: number }) {
@@ -1656,7 +1653,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     arithmetic the worker will use at build time - this never
                     grows/shrinks the layout as the user types, it only swaps
                     which message (if any) sits in the reserved row. */}
-                <div className='mt-1.5 min-h-[2.25rem]'>
+                <div className='mt-1.5 min-h-[3.5rem]'>
                   {balanceZat === 0n && strandedZat === 0n ? (
                     <StatusSlot tone='info' icon='i-ph-info'>
                       no zec yet - receive first from the home screen.
@@ -1708,19 +1705,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               )}
             </div>
 
-            <div className='flex gap-2 mt-4'>
-              <Button variant='secondary' onClick={handleClose} className='flex-1'>
-                cancel
-              </Button>
-              <Button
-                variant='primary'
-                onClick={handleReview}
-                disabled={!canReview}
-                className='flex-1'
-              >
-                review
-              </Button>
-            </div>
+            {/* single full-width action - the header back-arrow (onClose)
+                already covers "leave the form", a redundant cancel button
+                next to it just split the one gold action in two. */}
+            <Button variant='primary' onClick={handleReview} disabled={!canReview} className='mt-4'>
+              review
+            </Button>
           </div>
         );
 
@@ -1737,19 +1727,27 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               <h2 className='text-lg font-medium'>review transaction</h2>
             </div>
 
+            {/* All five rows are static display, not <Row>: Row's value type
+                renders a clickable button with a hover state and a trailing
+                chevron (it's meant to open a Sheet), which would draw a fake
+                affordance on network/to that does nothing. RowGroup still
+                gives the bordered 1px box the design wants. amount/fee/total
+                additionally wrap their value in <Sensitive> for privacy-mode
+                blur, which Row's string-only `value` prop can't carry either
+                way. */}
             <RowGroup>
-              <Row
-                type='value'
-                label='network'
-                value={`zcash ${mainnet ? 'mainnet' : 'testnet'}`}
-                onPress={() => {}}
-              />
-              <Row type='value' label='to' value={truncateAddress(recipient)} onPress={() => {}} />
-              {/* amount/fee/total stay hand-rolled (not <Row>): they wrap each
-                  value in <Sensitive>, which Row's string-only `value` prop
-                  can't carry, and this is real privacy-mode blur, not
-                  decoration - not worth losing for the sake of using the
-                  primitive everywhere. */}
+              <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
+                <span className='text-data text-fg-muted lowercase'>network</span>
+                <span className='text-data text-fg-high'>
+                  zcash {mainnet ? 'mainnet' : 'testnet'}
+                </span>
+              </div>
+              <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
+                <span className='text-data text-fg-muted lowercase'>to</span>
+                <span className='truncate font-mono text-data text-fg-high'>
+                  {truncateAddress(recipient)}
+                </span>
+              </div>
               <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
                 <span className='text-data text-fg-muted lowercase'>amount</span>
                 <span className='text-data tabular-nums text-fg-high'>
@@ -1785,7 +1783,14 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           </div>
         );
 
-      case 'building': {
+      case 'building':
+      case 'broadcast': {
+        // Broadcasting is the tail of the same operation as building: the
+        // send-progress listener (effect above) already covers both steps,
+        // and sendSteps keeps accumulating straight through
+        // 'broadcasting transaction' -> 'complete'. One "sending" screen
+        // for both, matching the design board, instead of a second near-
+        // identical spinner screen with no step log.
         const currentStep = sendSteps.at(-1)?.step;
         return (
           <div className='flex flex-col gap-4 p-6'>
@@ -2022,19 +2027,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           </div>
         );
 
-      case 'broadcast':
-        return (
-          <div className='flex flex-col items-center gap-4 p-8'>
-            <div className='w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center animate-pulse'>
-              <div className='w-8 h-8 border-2 border-zigner-gold border-t-transparent rounded-full animate-spin' />
-            </div>
-            <h2 className='text-lg font-medium'>broadcasting transaction</h2>
-            <p className='text-sm text-fg-muted text-center'>
-              sending your transaction to the zcash network...
-            </p>
-          </div>
-        );
-
       case 'complete':
         return (
           <div className='flex flex-col items-center gap-4 p-8'>
@@ -2087,7 +2079,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 </div>
                 <div className='flex gap-2'>
                   <Button
-                    variant='primary'
+                    variant='secondary'
                     size='sm'
                     onClick={() => setShowContactModal(true)}
                     className='flex-1'
