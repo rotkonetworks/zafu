@@ -14,6 +14,8 @@
 
 import { useMemo, useState } from 'react';
 import { cn } from '@repo/ui/lib/utils';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+import { Button } from '@repo/ui/components/ui/button';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
 
@@ -115,36 +117,22 @@ export const CancelSessionModal = ({
   open: boolean;
   onStay: () => void;
   onLeave: () => void;
-}) => {
-  if (!open) {
-    return null;
-  }
-  return (
-    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4'>
-      <div className='w-full max-w-sm rounded-lg border border-amber-500/30 bg-elev-1 p-4'>
-        <h2 className='text-lg font-medium'>cancel this session?</h2>
-        <p className='mt-2 text-xs text-fg-muted'>
-          closing cancels this session for everyone - your co-signers will have to start over. are
-          you sure?
-        </p>
-        <div className='mt-4 flex gap-2'>
-          <button
-            onClick={onStay}
-            className='flex-1 rounded-lg border border-border-soft py-2 text-xs transition-colors hover:bg-elev-2'
-          >
-            stay
-          </button>
-          <button
-            onClick={onLeave}
-            className='flex-1 rounded-lg border border-red-500/40 bg-red-500/10 py-2 text-xs text-red-400 transition-colors hover:bg-red-500/20'
-          >
-            leave anyway
-          </button>
-        </div>
-      </div>
+}) => (
+  <Sheet open={open} onOpenChange={next => !next && onStay()} title='cancel this session?'>
+    <p className='text-xs text-fg-muted'>
+      closing cancels this session for everyone - your co-signers will have to start over. are you
+      sure?
+    </p>
+    <div className='flex gap-2'>
+      <Button variant='secondary' size='md' className='flex-1' onClick={onStay}>
+        stay
+      </Button>
+      <Button variant='danger' size='md' className='flex-1' onClick={onLeave}>
+        leave anyway
+      </Button>
     </div>
-  );
-};
+  </Sheet>
+);
 
 /* ────────────────────────────────────────────────────────────────────
  * Zigner QR-mediated step screens (shared by create + join).

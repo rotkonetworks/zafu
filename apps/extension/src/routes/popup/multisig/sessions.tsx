@@ -8,6 +8,8 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+import { Button } from '@repo/ui/components/ui/button';
 import { useStore } from '../../../state';
 import {
   selectZcashWallets,
@@ -178,58 +180,65 @@ const GuardedDeleteModal = (props: {
   };
 
   return (
-    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4'>
-      <div className='w-full max-w-sm rounded-lg border border-red-500/30 bg-elev-1 p-4'>
-        <h2 className='text-lg font-medium text-red-400'>delete "{label}"?</h2>
-        <div className='mt-3 rounded-md border border-red-500/40 bg-red-500/5 p-2 text-label text-red-300'>
-          <span className='i-ph-warning mr-1 inline-block size-3 align-text-bottom' />
-          You will permanently lose access to any funds in this table - it is NOT recoverable from
-          your seed. If other co-signers rely on your share to reach the signing threshold, they may
-          be unable to move funds either.
-        </div>
-        <button
-          onClick={props.onBackup}
-          className='mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border-soft px-3 py-2 text-xs text-fg-muted transition-colors hover:bg-elev-2'
-        >
-          <span className='i-ph-download-simple h-3.5 w-3.5' />
-          Export backup first
-        </button>
-        <label className='mt-3 block text-xs text-fg-muted'>
-          type <span className='font-mono text-fg'>{label}</span> (or{' '}
-          <span className='font-mono text-fg'>DELETE</span>) to confirm
-          <input
-            type='text'
-            autoFocus
-            autoComplete='off'
-            value={typed}
-            onChange={e => setTyped(e.target.value)}
-            className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-sm focus:border-red-500/50 focus:outline-none'
-            placeholder={label}
-          />
-        </label>
-        {error && (
-          <p className='mt-2 rounded-md border border-red-500/40 bg-red-500/5 p-2 text-body text-red-400'>
-            {error}
-          </p>
-        )}
-        <div className='mt-4 flex gap-2'>
-          <button
-            onClick={props.onClose}
-            disabled={working}
-            className='flex-1 rounded-lg border border-border-soft py-2 text-xs transition-colors hover:bg-elev-2 disabled:opacity-50'
-          >
-            cancel
-          </button>
-          <button
-            onClick={() => void confirm()}
-            disabled={!matches || working}
-            className='flex-1 rounded-lg border border-red-500/40 bg-red-500/15 py-2 text-xs text-red-400 transition-colors hover:bg-red-500/25 disabled:cursor-not-allowed disabled:opacity-40'
-          >
-            {working ? 'deleting…' : 'delete permanently'}
-          </button>
-        </div>
+    <Sheet
+      open
+      onOpenChange={next => !next && !working && props.onClose()}
+      title={`delete "${label}"?`}
+    >
+      <div className='rounded-md border border-red-500/40 bg-red-500/5 p-2 text-label text-red-300'>
+        <span className='i-ph-warning mr-1 inline-block size-3 align-text-bottom' />
+        You will permanently lose access to any funds in this table - it is NOT recoverable from
+        your seed. If other co-signers rely on your share to reach the signing threshold, they may
+        be unable to move funds either.
       </div>
-    </div>
+      <Button
+        variant='secondary'
+        size='md'
+        className='w-full justify-center gap-1.5'
+        onClick={props.onBackup}
+      >
+        <span className='i-ph-download-simple h-3.5 w-3.5' />
+        Export backup first
+      </Button>
+      <label className='block text-xs text-fg-muted'>
+        type <span className='font-mono text-fg'>{label}</span> (or{' '}
+        <span className='font-mono text-fg'>DELETE</span>) to confirm
+        <input
+          type='text'
+          autoFocus
+          autoComplete='off'
+          value={typed}
+          onChange={e => setTyped(e.target.value)}
+          className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-sm focus:border-red-500/50 focus:outline-none'
+          placeholder={label}
+        />
+      </label>
+      {error && (
+        <p className='rounded-md border border-red-500/40 bg-red-500/5 p-2 text-body text-red-400'>
+          {error}
+        </p>
+      )}
+      <div className='flex gap-2'>
+        <Button
+          variant='secondary'
+          size='md'
+          className='flex-1'
+          onClick={props.onClose}
+          disabled={working}
+        >
+          cancel
+        </Button>
+        <Button
+          variant='danger'
+          size='md'
+          className='flex-1'
+          onClick={() => void confirm()}
+          disabled={!matches || working}
+        >
+          {working ? 'deleting…' : 'delete permanently'}
+        </Button>
+      </div>
+    </Sheet>
   );
 };
 

@@ -7,6 +7,8 @@
  */
 
 import { useState } from 'react';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+import { Button } from '@repo/ui/components/ui/button';
 import { useStore } from '../state';
 import { contactsSelector, type ContactNetwork } from '../state/contacts';
 import type { ZcashMeProfile } from '../services/zcashme/api';
@@ -79,15 +81,13 @@ export function SaveContactModal({
   };
 
   return (
-    <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
-      <p className='text-sm font-medium mb-3'>save to contacts</p>
-
+    <Sheet open onOpenChange={next => !next && onCancel()} title='save to contacts'>
       {safeContacts.length > 0 && mode === 'choose' && (
         <>
           <select
             value={selectedContactId}
             onChange={e => setSelectedContactId(e.target.value)}
-            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2 text-sm focus:outline-none mb-2'
+            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2 text-sm focus:outline-none'
           >
             <option value=''>select existing contact...</option>
             {safeContacts.map(c => (
@@ -98,30 +98,26 @@ export function SaveContactModal({
           </select>
 
           {selectedContactId && (
-            <div className='flex gap-2 mb-2'>
-              <button
+            <div className='flex gap-2'>
+              <Button
+                variant='primary'
+                size='md'
+                className='flex-1'
                 onClick={() => void handleSaveExisting()}
                 disabled={saving}
-                className='flex-1 rounded-lg bg-zigner-gold py-2 text-xs font-medium text-zigner-gold-foreground hover:bg-primary/90 transition-colors disabled:opacity-50'
               >
                 add address
-              </button>
-              <button
-                onClick={onCancel}
-                className='flex-1 rounded-lg border border-border-soft py-2 text-xs text-fg-muted hover:text-fg-high transition-colors'
-              >
+              </Button>
+              <Button variant='secondary' size='md' className='flex-1' onClick={onCancel}>
                 cancel
-              </button>
+              </Button>
             </div>
           )}
 
           {!selectedContactId && (
-            <button
-              onClick={() => setMode('new')}
-              className='w-full text-xs text-fg-muted hover:text-fg-high transition-colors py-1'
-            >
+            <Button variant='quiet' size='sm' className='w-full' onClick={() => setMode('new')}>
               + new contact
-            </button>
+            </Button>
           )}
         </>
       )}
@@ -134,25 +130,29 @@ export function SaveContactModal({
             onChange={e => setNewName(e.target.value)}
             placeholder='contact name'
             autoFocus
-            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2 text-sm focus:outline-none mb-2'
+            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2 text-sm focus:outline-none'
           />
           <div className='flex gap-2'>
-            <button
+            <Button
+              variant='primary'
+              size='md'
+              className='flex-1'
               onClick={() => void handleSaveNew()}
               disabled={!newName.trim() || saving}
-              className='flex-1 rounded-lg bg-zigner-gold py-2 text-xs font-medium text-zigner-gold-foreground hover:bg-primary/90 transition-colors disabled:opacity-50'
             >
               save
-            </button>
-            <button
+            </Button>
+            <Button
+              variant='secondary'
+              size='md'
+              className='flex-1'
               onClick={safeContacts.length > 0 ? () => setMode('choose') : onCancel}
-              className='flex-1 rounded-lg border border-border-soft py-2 text-xs text-fg-muted hover:text-fg-high transition-colors'
             >
               {safeContacts.length > 0 ? 'back' : 'cancel'}
-            </button>
+            </Button>
           </div>
         </>
       )}
-    </div>
+    </Sheet>
   );
 }
