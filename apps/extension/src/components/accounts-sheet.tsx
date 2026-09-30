@@ -1,10 +1,9 @@
 /**
- * accounts sheet - wallet 1's accounts, cold signers, add wallet, lock, open
- * in window. Pockets (named sub-accounts within a wallet) are not
- * implemented yet, so this lists only the real accounts the keyring already
- * has - no placeholder "pocket" rows, no fake balances.
+ * accounts sheet - the hot wallet's pockets, other accounts, cold signers,
+ * add wallet, lock, open in window.
  */
 
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { cn } from '@repo/ui/lib/utils';
@@ -17,15 +16,68 @@ import {
   selectLock,
 } from '../state/keyring';
 import { isIdentityEnabled } from '../state/privacy';
+import { MAX_POCKETS, activeAccountIndex, activePockets, pocketOwner } from '../state/pockets';
+import { pocketStoreId } from '../state/pocket-id';
+import { getBalanceInWorker } from '../state/keyring/network-worker';
 import { PopupPath } from '../routes/popup/paths';
 import { screenTransition } from '../utils/navigate';
 import { isSidePanel } from '../utils/popup-detection';
 import { CustodyBadge } from './custody-badge';
 
+/** trims to at most 2 decimals worth of trailing zeros, same spirit as home's fmtZec */
+const fmtZec = (zat: bigint): string => {
+  const zec = Number(zat) / 1e8;
+  const s = zec.toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
+  return s.includes('.') ? s : `${s}.0`;
+};
+
+const PocketRow = ({
+  name,
+  account,
+  active,
+  canSync,
+  balanceZat,
+  onPick,
+}: {
+  name: string;
+  account: number;
+  active: boolean;
+  /** only account 0 can scan until a newer zafu-wasm ships pocket derivation */
+  canSync: boolean;
+  balanceZat: bigint | undefined;
+  onPick: () => void;
+}) => (
+  <button
+    type='button'
+    onClick={onPick}
+    className='flex min-h-[52px] items-center gap-3 px-3.5 py-2 text-left transition-colors hover:bg-surface-elev-2'
+  >
+    <span
+      className={cn(
+        'flex size-[18px] shrink-0 items-center justify-center border',
+        active ? 'border-zigner-gold' : 'border-surface-border',
+      )}
+      aria-hidden='true'
+    >
+      {active && <span className='size-2 bg-zigner-gold' />}
+    </span>
+    <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
+      <span className='truncate text-data text-fg-high lowercase'>{name}</span>
+      <span className='truncate text-label text-fg-muted lowercase'>
+        {canSync ? `account ${account}` : `account ${account} - starts syncing once zafu updates`}
+      </span>
+    </span>
+    {active && canSync && balanceZat !== undefined && (
+      <span className='shrink-0 tabular-nums text-data text-fg-high'>{fmtZec(balanceZat)}</span>
+    )}
+  </button>
+);
+
 export const AccountsSheet = ({
   open,
   onOpenChange,
   onAddWallet,
+  onNewPocket,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -34,6 +86,8 @@ export const AccountsSheet = ({
    * at once would overlap at the same fixed position), so the parent owns
    * that sheet and switches to it here. */
   onAddWallet: () => void;
+  /** same pattern: the new-pocket sheet replaces this one. */
+  onNewPocket: () => void;
 }) => {
   const navigate = useNavigate();
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
@@ -45,10 +99,45 @@ export const AccountsSheet = ({
   const identityEnabled = useStore(isIdentityEnabled);
   const inSidePanel = isSidePanel();
 
+  const isHotWallet = selectedKeyInfo?.type === 'mnemonic';
+  const pockets = useStore(useShallow(activePockets));
+  const activeAccount = useStore(activeAccountIndex);
+  const selectPocket = useStore(s => s.pockets.select);
+  const [activeBalanceZat, setActiveBalanceZat] = useState<bigint>();
+
+  useEffect(() => {
+    if (!open || !isHotWallet || !selectedKeyInfo) {
+      return;
+    }
+    let cancelled = false;
+    getBalanceInWorker('zcash', pocketStoreId(selectedKeyInfo.id, activeAccount))
+      .then(bal => {
+        if (!cancelled) {
+          setActiveBalanceZat(BigInt(bal));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setActiveBalanceZat(undefined);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, isHotWallet, selectedKeyInfo, activeAccount]);
+
   const pickWallet = (id: string) => {
     if (id !== selectedKeyInfo?.id) {
       void selectKeyRing(id);
     }
+    onOpenChange(false);
+  };
+
+  const pickPocket = (account: number) => {
+    if (!selectedKeyInfo) {
+      return;
+    }
+    void selectPocket(pocketOwner(selectedKeyInfo), account);
     onOpenChange(false);
   };
 
@@ -81,6 +170,33 @@ export const AccountsSheet = ({
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title='accounts'>
       <div className='flex flex-col gap-4'>
+        {isHotWallet && (
+          <div className='flex flex-col divide-y divide-surface-border-soft border border-surface-border-soft bg-surface-elev-1'>
+            {pockets.map(p => (
+              <PocketRow
+                key={p.account}
+                name={p.name}
+                account={p.account}
+                active={p.account === activeAccount}
+                canSync={p.account === 0}
+                balanceZat={activeBalanceZat}
+                onPick={() => pickPocket(p.account)}
+              />
+            ))}
+            <button
+              type='button'
+              onClick={onNewPocket}
+              disabled={pockets.length >= MAX_POCKETS}
+              className='flex min-h-[44px] items-center gap-3 px-3.5 py-2 text-left text-zigner-gold disabled:pointer-events-none disabled:opacity-50'
+            >
+              <span className='i-ph-plus size-[18px] shrink-0' aria-hidden='true' />
+              <span className='text-data lowercase'>
+                {pockets.length >= MAX_POCKETS ? `up to ${MAX_POCKETS} pockets` : 'new pocket'}
+              </span>
+            </button>
+          </div>
+        )}
+
         <div className='flex flex-col divide-y divide-surface-border-soft border border-surface-border-soft bg-surface-elev-1'>
           {keyInfos.length === 0 ? (
             <span className='px-3.5 py-3 text-data text-fg-muted lowercase'>no wallets</span>
