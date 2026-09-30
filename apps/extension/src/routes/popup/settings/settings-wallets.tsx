@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, type KeyboardEvent } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useStore } from '../../../state';
 import {
   keyRingSelector,
@@ -11,7 +11,6 @@ import { walletsSelector } from '../../../state/wallets';
 import { zignerConnectSelector } from '../../../state/zigner';
 import { passwordSelector } from '../../../state/password';
 import { SettingsScreen } from './settings-screen';
-import { terminateNetworkWorker } from '../../../state/keyring/network-worker';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
 import { keystoneDeviceId } from '../../../utils/viewing-key';
@@ -33,12 +32,11 @@ import {
   formatDateInput,
 } from '../../../utils/zcash-blocks';
 
-// One shared state machine drives BOTH remove and export-recovery-phrase, so
-// only one wallet's secret is ever in React state at a time (mutual exclusion)
-// and the "failed to decrypt vault" handling is shared. 'reveal' is the
-// export-only terminal step (show phrase, no backup-ack, no delete).
-type RemovalStep = 'idle' | 'password' | 'backup' | 'confirm' | 'reveal';
-type ActionKind = 'remove' | 'export';
+// Exporting a wallet's recovery phrase (Keplr-style per-wallet action) is
+// the one secret this screen still handles inline - removal now has its own
+// screen (settings-remove-wallet.tsx), reached via the vault's "remove"
+// action below, so only one secret is ever in React state at a time.
+type RemovalStep = 'idle' | 'password' | 'reveal';
 
 /** network badges for a vault */
 const networkBadge = (network: string) => {
@@ -78,8 +76,7 @@ export const SettingsWallets = ({
   const location = useLocation();
   const autoScan = (location.state as { autoScan?: boolean } | null)?.autoScan;
 
-  const { keyInfos, deleteKeyRing, getMnemonic, renameKeyRing, addZignerUnencrypted } =
-    useStore(keyRingSelector);
+  const { keyInfos, getMnemonic, renameKeyRing, addZignerUnencrypted } = useStore(keyRingSelector);
   const { isPassword } = useStore(passwordSelector);
   const { all: penumbraWallets, zcashWallets, updateMultisigWallet } = useStore(walletsSelector);
   const enabledNetworks = useStore(selectEnabledNetworks);
@@ -100,19 +97,18 @@ export const SettingsWallets = ({
     clearZignerState,
   } = useStore(zignerConnectSelector);
 
-  // -- removal state --
+  // -- export-recovery-phrase state --
   const [removingId, setRemovingId] = useState<string | null>(null);
-  const [removingType, setRemovingType] = useState<string>('mnemonic');
-  const [actionKind, setActionKind] = useState<ActionKind>('remove');
   const [step, setStep] = useState<RemovalStep>('idle');
   const [password, setPassword] = useState('');
   const [passwordError, setPasswordError] = useState(false);
   const [phrase, setPhrase] = useState<string[]>([]);
-  const [backupAcked, setBackupAcked] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [error, setStateError] = useState<string | null>(null);
 
   const navigate = usePopupNav();
+  // the remove-wallet screen takes a query param, which usePopupNav's typed
+  // `to` does not accept.
+  const rawNavigate = useNavigate();
 
   // -- add wallet state --
   const [scanning, setScanning] = useState(false);
@@ -138,36 +134,22 @@ export const SettingsWallets = ({
     }
   }, [autoScan]);
 
-  // -- removal logic --
+  // -- export-recovery-phrase logic --
   const resetRemoval = () => {
     setRemovingId(null);
-    setActionKind('remove');
     setStep('idle');
     setPassword('');
     setPasswordError(false);
     setPhrase([]);
-    setBackupAcked(false);
-    setDeleting(false);
     setStateError(null);
   };
 
-  const startRemoval = (vault: KeyInfo) => {
-    resetRemoval();
-    setRemovingId(vault.id);
-    setRemovingType(vault.type);
-    setActionKind('remove');
-    setStep(vault.type === 'mnemonic' ? 'password' : 'confirm');
-  };
-
-  // Export the recovery phrase of ONE wallet (Keplr-style per-wallet action),
-  // reusing the same password-gated reveal as removal - so it shares the
-  // orphaned-vault handling and the single secret-in-state surface. Only
-  // meaningful for mnemonic vaults (zigner/multisig hold no seed phrase here).
+  // Export the recovery phrase of ONE wallet (Keplr-style per-wallet action).
+  // Only meaningful for mnemonic vaults (zigner/multisig hold no seed phrase
+  // here). Removing a wallet is a separate screen - settings-remove-wallet.tsx.
   const startExport = (vault: KeyInfo) => {
     resetRemoval();
     setRemovingId(vault.id);
-    setRemovingType(vault.type);
-    setActionKind('export');
     setStep('password');
   };
 
@@ -184,58 +166,14 @@ export const SettingsWallets = ({
     try {
       setPhrase((await getMnemonic(removingId)).split(' '));
       setPassword('');
-      // export -> straight to the reveal screen; remove -> the backup-ack step.
-      setStep(actionKind === 'export' ? 'reveal' : 'backup');
+      setStep('reveal');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('failed to decrypt vault')) {
-        if (actionKind === 'export') {
-          // Can't export a vault we can't decrypt - there is no phrase to show.
-          // Surface it (the password card now renders `error`) and stay put;
-          // the user's real backup is elsewhere. No delete escape here.
-          setStateError(
-            "this wallet's recovery phrase can't be read from storage (the vault is unreadable), so it cannot be exported here. use your existing backup.",
-          );
-        } else {
-          // Escape hatch for an ORPHANED vault on REMOVE: its seed was sealed
-          // under a previous password key and can't be decrypted, so we cannot
-          // show the phrase to back up. Requiring backup would make it
-          // permanently undeletable (the "delete + continue does nothing" bug -
-          // the throw set an error the password card never rendered). Password is
-          // verified (ownership), and this path is reachable ONLY on a decrypt
-          // failure, so skipping backup is not a regression: the phrase is
-          // already gone from storage. Jump to confirm, which states the reason.
-          setPassword('');
-          setStateError(
-            "this wallet's recovery phrase can't be read from storage (the vault is unreadable). make sure you have it backed up elsewhere before removing - it cannot be shown here.",
-          );
-          setStep('confirm');
-        }
-      } else {
-        setStateError(msg);
-      }
-    }
-  };
-
-  const executeRemoval = async () => {
-    if (!removingId) {
-      return;
-    }
-    setDeleting(true);
-    setStateError(null);
-    try {
-      const isLast = keyInfos.length <= 1;
-      await deleteKeyRing(removingId);
-      if (isLast) {
-        terminateNetworkWorker('zcash');
-      }
-      resetRemoval();
-      if (isLast) {
-        window.close();
-      }
-    } catch (err) {
-      setStateError(err instanceof Error ? err.message : String(err));
-      setDeleting(false);
+      setStateError(
+        msg.includes('failed to decrypt vault')
+          ? "this wallet's recovery phrase can't be read from storage (the vault is unreadable), so it cannot be exported here. use your existing backup."
+          : msg,
+      );
     }
   };
 
@@ -459,7 +397,7 @@ export const SettingsWallets = ({
                     vault={v}
                     networks={shownNetworks}
                     multisigWallet={multisigWallet}
-                    onRemove={() => startRemoval(v)}
+                    onRemove={() => rawNavigate(`${PopupPath.SETTINGS_REMOVE_WALLET}?id=${v.id}`)}
                     onExport={() => startExport(v)}
                     onRename={name => handleRename(v.id, name)}
                     disabled={step !== 'idle'}
@@ -471,12 +409,10 @@ export const SettingsWallets = ({
             <p className='py-12 text-center text-sm text-fg-muted'>no wallets</p>
           )}
 
-          {/* ── removal flow ── */}
+          {/* ── export recovery phrase (removal is its own screen) ── */}
 
-          {removingVault && removingType === 'mnemonic' && step === 'password' && (
-            <RemovalCard
-              title={`${actionKind === 'export' ? 'export' : 'remove'} "${removingVault.name}"`}
-            >
+          {removingVault && step === 'password' && (
+            <RemovalCard title={`export "${removingVault.name}"`}>
               <p className='text-xs text-fg-muted mb-3'>enter password to view recovery phrase.</p>
               <form onSubmit={e => void verifyPassword(e)} className='flex flex-col gap-2'>
                 <input
@@ -510,48 +446,6 @@ export const SettingsWallets = ({
               <SeedPhraseBox phrase={phrase} className='mb-3' />
               <div className='flex gap-2'>
                 <Btn onClick={resetRemoval}>done</Btn>
-              </div>
-            </RemovalCard>
-          )}
-
-          {removingVault && removingType === 'mnemonic' && step === 'backup' && (
-            <RemovalCard title='back up recovery phrase'>
-              <SeedPhraseBox phrase={phrase} className='mb-3' />
-              <label className='flex items-start gap-2 mb-3 cursor-pointer select-none'>
-                <input
-                  type='checkbox'
-                  checked={backupAcked}
-                  onChange={e => setBackupAcked(e.target.checked)}
-                  className='mt-0.5'
-                />
-                <span className='text-xs text-fg-muted'>i have backed up my phrase</span>
-              </label>
-              <div className='flex gap-2'>
-                <Btn onClick={resetRemoval}>cancel</Btn>
-                <Btn destructive disabled={!backupAcked} onClick={() => setStep('confirm')}>
-                  remove
-                </Btn>
-              </div>
-            </RemovalCard>
-          )}
-
-          {removingVault && step === 'confirm' && (
-            <RemovalCard title='confirm removal'>
-              <p className='text-xs text-fg-muted mb-3'>
-                "{removingVault.name}" will be permanently removed.
-                {removingType === 'zigner-zafu' && ' re-import from zigner anytime.'}
-                {removingType === 'frost-multisig' && ' you would need to run DKG again.'}
-                {keyInfos.length <= 1 &&
-                  ' this is your LAST wallet - removing it wipes all wallet data from this extension.'}
-              </p>
-              {error && <p className='text-xs text-red-400 mb-2'>{error}</p>}
-              <div className='flex gap-2'>
-                <Btn onClick={resetRemoval} disabled={deleting}>
-                  cancel
-                </Btn>
-                <Btn destructive disabled={deleting} onClick={() => void executeRemoval()}>
-                  {deleting ? 'removing...' : 'remove'}
-                </Btn>
               </div>
             </RemovalCard>
           )}

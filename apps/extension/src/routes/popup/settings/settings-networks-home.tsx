@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../../state';
 import { selectEnabledNetworks } from '../../../state/keyring';
 import { usePopupNav } from '../../../utils/navigate';
@@ -13,6 +14,9 @@ import { TintedRow } from './tinted-row';
  */
 export const SettingsNetworksHome = () => {
   const navigate = usePopupNav();
+  // the penumbra deep-link needs a query string, which usePopupNav's typed
+  // `to` does not accept (same pattern as home/index.tsx's "switch endpoint").
+  const rawNavigate = useNavigate();
   const enabledNetworks = useStore(selectEnabledNetworks) as string[];
 
   return (
@@ -30,7 +34,7 @@ export const SettingsNetworksHome = () => {
             <Row
               type='screen'
               label='penumbra'
-              onPress={() => navigate(`${PopupPath.SETTINGS_NETWORKS}?network=penumbra`)}
+              onPress={() => rawNavigate(`${PopupPath.SETTINGS_NETWORKS}?network=penumbra`)}
             />
           )}
         </RowGroup>

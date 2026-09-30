@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../../state';
 import { selectKeyInfos } from '../../../state/keyring';
 import { selectZcashWallets } from '../../../state/wallets';
@@ -48,6 +49,7 @@ const useEarliestBirthday = (vaultIds: readonly string[]): number | null => {
  */
 export const SettingsZcashNetwork = () => {
   const navigate = usePopupNav();
+  const rawNavigate = useNavigate();
   const keyInfos = useStore(selectKeyInfos);
   const zcashWallets = useStore(selectZcashWallets);
   const { networks } = useStore(networksSelector);
@@ -138,7 +140,7 @@ export const SettingsZcashNetwork = () => {
               type='value'
               label='node'
               value={preset?.label ?? (endpoint ? 'custom' : 'auto')}
-              onPress={() => navigate(`${PopupPath.SETTINGS_NETWORKS}?network=zcash`)}
+              onPress={() => rawNavigate(`${PopupPath.SETTINGS_NETWORKS}?network=zcash`)}
             />
           </RowGroup>
         </div>
