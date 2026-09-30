@@ -75,8 +75,15 @@ describe('a pre-existing grant with no recorded expiry (upgrade safety)', () => 
   });
 });
 
-describe('reads prune expired time-limited capabilities out of `granted`', () => {
-  test('getOriginPermissions does not report an expired capability as granted', async () => {
+describe('`granted` is returned raw - never pruned of expired capabilities', () => {
+  test('an expired capability is still reported in `granted` by getOriginPermissions', async () => {
+    // `granted` must stay raw: zafu_passkey_get needs to tell "granted once,
+    // now expired" (re-authorize with one popup, task rule (a)) apart from
+    // "never granted at all" (hard refuse) - pruning `granted` here would
+    // make those two cases indistinguishable to every caller, not just the
+    // two UI counts and the presence-beacon scope that actually want the
+    // pruned view (they call hasCapability directly instead - see
+    // known-site.tsx, identity/index.tsx, contact-discovery-service.ts).
     const origin = 'https://stale-in-storage.example';
     await localExtStorage.set('knownSites', [
       {
@@ -90,27 +97,25 @@ describe('reads prune expired time-limited capabilities out of `granted`', () =>
 
     const perms = await getOriginPermissions(origin);
     expect(perms?.granted).toContain('connect');
-    expect(perms?.granted).not.toContain('encrypt');
-    // the capability's own record is otherwise untouched (not a denial)
-    expect(perms?.denied ?? []).not.toContain('encrypt');
+    expect(perms?.granted).toContain('encrypt');
+    // hasCapability is still the correct way to ask "is it usable now"
+    expect(hasCapability(perms, 'encrypt')).toBe(false);
   });
 
-  test('pruning is read-only: it does not persist a write back to storage', async () => {
-    const origin = 'https://read-only-prune.example';
-    const stored = {
-      origin,
-      granted: ['encrypt'],
-      denied: [],
-      grantedAt: 0,
-      expires: { encrypt: Date.now() - 1000 },
-    };
-    await localExtStorage.set('knownSites', [stored] as never);
+  test('getAllPermissions also returns `granted` raw', async () => {
+    const origin = 'https://stale-in-all-permissions.example';
+    await localExtStorage.set('knownSites', [
+      {
+        origin,
+        granted: ['passkey'],
+        denied: [],
+        grantedAt: 0,
+        expires: { passkey: Date.now() - 1000 },
+      },
+    ] as never);
 
-    await getOriginPermissions(origin);
-    await getAllPermissions();
-
-    const raw = await localExtStorage.get('knownSites');
-    expect((raw as unknown as (typeof stored)[])[0]?.granted).toContain('encrypt');
+    const all = await getAllPermissions();
+    expect(all.find(p => p.origin === origin)?.granted).toContain('passkey');
   });
 });
 
