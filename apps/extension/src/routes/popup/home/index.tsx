@@ -28,7 +28,8 @@ import { hasFeature } from '../../../config/networks';
 import { cn } from '@repo/ui/lib/utils';
 import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 
-import { ActionButton, BackupNudge } from './notices';
+import { BackupNudge } from './notices';
+import { Button } from '@repo/ui/components/ui/button';
 import { MultisigOverview } from './multisig-overview';
 import { HistoryContent } from './history';
 import { PenumbraContent } from './penumbra-home';
@@ -175,18 +176,17 @@ export const PopupIndex = () => {
   ) : null;
 
   // One tidy, evenly-spaced action row rendered under the balance figure.
-  // Icon-forward: labels reveal on hover (plus a title tooltip), so the row
-  // stays graphical and calm - Zashi's big obvious actions, zafu-sized.
+  // Icon + label always visible (board: receive/swap secondary, send the
+  // one gold primary on the screen).
   // A pasted viewing key can see but never spend: offer only what it can do,
   // rather than send/swap buttons that could never be signed.
   const isViewingKeyOnly = selectedKeyInfo?.insensitive?.['coldSignerType'] === 'viewing-key';
   const actions = isViewingKeyOnly ? (
     <div className='flex flex-col gap-2'>
-      <ActionButton
-        icon='i-ph-arrow-down'
-        label='receive'
-        onClick={() => navigate(PopupPath.RECEIVE)}
-      />
+      <Button variant='secondary' onClick={() => navigate(PopupPath.RECEIVE)} className='w-full'>
+        <span className='i-ph-arrow-down size-4' />
+        receive
+      </Button>
       <p className='text-center text-label text-fg-dim lowercase'>
         <span className='i-ph-eye mr-1 inline-block size-3 align-[-1px]' />
         viewing key - sees this wallet, cannot spend
@@ -194,22 +194,18 @@ export const PopupIndex = () => {
     </div>
   ) : (
     <div className='grid grid-cols-3 gap-3'>
-      <ActionButton
-        icon='i-ph-arrow-down'
-        label='receive'
-        onClick={() => navigate(PopupPath.RECEIVE)}
-      />
-      <ActionButton
-        icon='i-ph-arrows-left-right'
-        label='swap'
-        onClick={() => navigate(PopupPath.SWAP)}
-      />
-      <ActionButton
-        icon='i-ph-arrow-up'
-        label='send'
-        onClick={() => navigate(PopupPath.SEND)}
-        variant={activeNetwork === 'penumbra' ? 'penumbra' : 'zcash'}
-      />
+      <Button variant='secondary' onClick={() => navigate(PopupPath.RECEIVE)}>
+        <span className='i-ph-arrow-down size-4' />
+        receive
+      </Button>
+      <Button variant='secondary' onClick={() => navigate(PopupPath.SWAP)}>
+        <span className='i-ph-arrows-left-right size-4' />
+        swap
+      </Button>
+      <Button variant='primary' onClick={() => navigate(PopupPath.SEND)}>
+        <span className='i-ph-arrow-up size-4' />
+        send
+      </Button>
     </div>
   );
 

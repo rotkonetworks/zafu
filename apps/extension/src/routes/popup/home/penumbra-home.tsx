@@ -13,7 +13,7 @@ import { getDisplayDenomFromView } from '@penumbra-zone/getters/value-view';
 import { fromValueView } from '@rotko/penumbra-types/amount';
 import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { balancesQueryOptions, balancesQueryKey } from '../../../hooks/penumbra-balances';
-import { HintRow } from './notices';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
 
 /** lazy load network-specific content - only load when needed */
 const AssetsTable = lazy(() => import('./assets-table').then(m => ({ default: m.AssetsTable })));
@@ -129,12 +129,15 @@ export const PenumbraContent = ({
       {/* Trade entry - the shielded DEX was only reachable from the apps grid
           and the menu footer; surface it on the Penumbra home next to the swap
           action. Opens in a new tab, same as the apps grid. */}
-      <HintRow
-        icon='i-ph-chart-line-up'
-        title='trade on penumbra'
-        hint='shielded swaps & liquidity positions'
-        onClick={() => window.open('https://penumbra.fi', '_blank')}
-      />
+      <RowGroup>
+        <Row
+          type='screen'
+          icon='i-ph-chart-line-up'
+          label='trade on penumbra'
+          description='shielded swaps & liquidity positions'
+          onPress={() => window.open('https://penumbra.fi', '_blank', 'noopener,noreferrer')}
+        />
+      </RowGroup>
 
       {/* single message slot for penumbra: only the backup nudge competes */}
       {nudge}

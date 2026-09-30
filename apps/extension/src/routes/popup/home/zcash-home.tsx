@@ -831,7 +831,11 @@ export const ZcashContent = ({
                 title='view transparent funds'
                 className='group/row flex min-w-0 items-center gap-2 text-left'
               >
-                <span className='i-ph-eye h-3.5 w-3.5 shrink-0 text-fg-muted' />
+                {/* not the eye glyph - that is reserved for the hide/show
+                    balances toggle above, the only balance-hide control on
+                    this screen. "public" here means "visible to anyone on
+                    the chain", a different idea from "currently masked". */}
+                <span className='i-ph-lock-simple-open h-3.5 w-3.5 shrink-0 text-fg-muted' />
                 <span className='text-xs text-fg-muted lowercase transition-colors group-hover/row:text-fg-high'>
                   transparent
                 </span>
