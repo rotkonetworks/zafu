@@ -4,6 +4,7 @@ import { signApprovalSelector } from '../../../state/sign-approval';
 import { ApprovalScreen } from './approval-screen';
 import { ApproveDeny } from './approve-deny';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
+import { QrCode } from '../../../components/qr-code';
 import { UserChoice } from '@repo/storage-chrome/records';
 import {
   signZid,
@@ -308,9 +309,7 @@ export const SignApproval = () => {
       {step === 'show-qr' && (
         <div className='w-full px-[30px] flex flex-col gap-4 items-center'>
           <p className='text-sm text-fg-muted text-center'>scan this QR with your zigner device</p>
-          <div className='bg-white p-3 rounded-lg'>
-            <QrCanvas data={challengeQr} size={240} />
-          </div>
+          <QrCode value={challengeQr} size={240} label='zigner sign-challenge QR' />
           <div className='rounded-md bg-elev-2 p-3 w-full'>
             <p className='kicker'>origin</p>
             <p className='tabular text-xs text-fg-high mt-1'>{origin}</p>
@@ -346,24 +345,3 @@ export const SignApproval = () => {
   );
 };
 
-/* ── QR canvas for challenge display ── */
-const QrCanvas = ({ data, size }: { data: string; size: number }) => {
-  const ref = (canvas: HTMLCanvasElement | null) => {
-    if (!canvas || !data) {
-      return;
-    }
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const QRCode = require('qrcode');
-      QRCode.toCanvas(canvas, data, {
-        width: size,
-        margin: 1,
-        color: { dark: '#000', light: '#fff' },
-        errorCorrectionLevel: 'L',
-      });
-    } catch {
-      /* */
-    }
-  };
-  return <canvas ref={ref} />;
-};
