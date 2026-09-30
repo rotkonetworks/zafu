@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { Button } from '@repo/ui/components/ui/button';
 import { AnimatedQrScanner } from '../../../../shared/components/animated-qr-scanner';
 import { useStore } from '../../../../state';
 import { selectMultisigWallets } from '../../../../state/wallets';
@@ -163,21 +164,25 @@ export const AirgapQrImportModal = ({ open, onClose, onImported }: Props) => {
         )}
 
         <div className='mt-4 flex gap-2'>
-          <button
+          <Button
+            variant='secondary'
+            size='sm'
             disabled={working}
             onClick={onClose}
-            className='flex-1 rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-2 transition-colors disabled:opacity-50'
+            className='flex-1'
           >
             cancel
-          </button>
+          </Button>
           {payload && (
-            <button
+            <Button
+              variant='primary'
+              size='sm'
               disabled={working}
               onClick={() => void handleConfirm()}
-              className='flex-1 rounded-lg border border-primary/40 bg-primary/5 py-2 text-xs text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
+              className='flex-1'
             >
               {working ? 'importing...' : `import ${payload.length}`}
-            </button>
+            </Button>
           )}
         </div>
       </div>

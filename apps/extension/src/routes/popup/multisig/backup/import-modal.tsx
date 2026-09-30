@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { Button } from '@repo/ui/components/ui/button';
 import { importBackup, readEnvelopeFromFile, type ImportSummary } from './import-helpers';
 import type { FrostBackupEnvelope } from '../../../../state/keyring/multisig-backup';
 
@@ -129,21 +130,25 @@ export const ImportModal = ({ open, onClose, onImported }: Props) => {
         )}
 
         <div className='mt-4 flex gap-2'>
-          <button
+          <Button
+            variant='secondary'
+            size='sm'
             disabled={working}
             onClick={onClose}
-            className='flex-1 rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-2 transition-colors disabled:opacity-50'
+            className='flex-1'
           >
             cancel
-          </button>
+          </Button>
           {envelope && (
-            <button
+            <Button
+              variant='primary'
+              size='sm'
               disabled={passphrase.length === 0 || working}
               onClick={() => void handleImport()}
-              className='flex-1 rounded-lg border border-primary/40 bg-primary/5 py-2 text-xs text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
+              className='flex-1'
             >
               {working ? 'restoring...' : 'restore'}
-            </button>
+            </Button>
           )}
         </div>
       </div>
