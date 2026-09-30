@@ -123,6 +123,7 @@ describe('parseNetEgressState', () => {
         },
       },
       optIns: { 'zcash-me': 'allowed', 'near-swap': 'blocked', junk: 'maybe' },
+      v: 2,
     });
     expect(parsed.destinations['zcash.rotko.net']).toEqual({
       state: 'blocked',

@@ -68,6 +68,30 @@ export const migrateNetEgress = (storage: Raw): Raw | undefined => {
 };
 
 /**
+ * Installs from before `enabledNetworks` existed have no such key; the wallet
+ * then treats a mnemonic vault as Penumbra + Zcash (`isPenumbraEnabled`). The
+ * policy reads only the key, so seed it with that same reading - otherwise
+ * the worker would start Penumbra and every request it made would be refused.
+ * Returns undefined when the key exists (an empty list is a user choice).
+ */
+export const legacyEnabledNetworks = (storage: Raw): string[] | undefined => {
+  if (storage['enabledNetworks'] !== undefined || !Array.isArray(storage['vaults'])) {
+    return undefined;
+  }
+  const nets = storage['vaults'].flatMap(v => {
+    const vault = obj(v);
+    const supported = obj(vault['insensitive'])['supportedNetworks'];
+    return [
+      ...(vault['type'] === 'mnemonic' ? ['penumbra', 'zcash'] : []),
+      ...(Array.isArray(supported)
+        ? supported.filter((n): n is string => typeof n === 'string')
+        : []),
+    ];
+  });
+  return nets.length > 0 ? [...new Set(nets)] : undefined;
+};
+
+/**
  * Run once, from the service worker. Idempotent: a v2 ledger is left alone. A
  * missing ledger is migrated too - a zcash-only install never wrote one (its
  * sync ran outside the old worker-only gate) but may still have multisig
@@ -75,12 +99,17 @@ export const migrateNetEgress = (storage: Raw): Raw | undefined => {
  * writes the empty v2 ledger.
  */
 export const runNetEgressMigration = async (): Promise<void> => {
-  const ledger = obj((await chrome.storage.local.get('netEgress'))['netEgress']);
-  if (ledger['v'] === 2) {
+  const head = await chrome.storage.local.get(['netEgress', 'enabledNetworks']);
+  if (obj(head['netEgress'])['v'] === 2 && head['enabledNetworks'] !== undefined) {
     return;
   }
-  const next = migrateNetEgress(await chrome.storage.local.get(null));
-  if (next) {
-    await chrome.storage.local.set({ netEgress: next });
+  const storage = await chrome.storage.local.get(null);
+  const next = migrateNetEgress(storage);
+  const enabledNetworks = legacyEnabledNetworks(storage);
+  if (next || enabledNetworks) {
+    await chrome.storage.local.set({
+      ...(next ? { netEgress: next } : {}),
+      ...(enabledNetworks ? { enabledNetworks } : {}),
+    });
   }
 };

@@ -43,13 +43,14 @@ export interface DestinationRecord {
 }
 
 export interface NetEgressState {
-  v: 2;
+  /** 1 until `./egress-migrate` has run; kept as read so a write never fakes the migration */
+  v: 1 | 2;
   destinations: Record<string, DestinationRecord>;
   optIns: Record<string, OptInChoice>;
 }
 
 export const EMPTY_NET_EGRESS: NetEgressState = Object.freeze({
-  v: 2,
+  v: 1,
   destinations: Object.freeze({}) as Record<string, DestinationRecord>,
   optIns: Object.freeze({}) as Record<string, OptInChoice>,
 });
@@ -120,7 +121,7 @@ export const parseNetEgressState = (raw: unknown): NetEgressState => {
       optIns[id] = choice;
     }
   }
-  return { v: 2, destinations, optIns };
+  return { v: obj['v'] === 2 ? 2 : 1, destinations, optIns };
 };
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { migrateNetEgress } from './egress-migrate';
+import { legacyEnabledNetworks, migrateNetEgress } from './egress-migrate';
 import { compileEgress, type EgressInputs } from './egress-policy';
 import { decideEgress } from './egress-table';
 
@@ -73,5 +73,32 @@ describe('migrateNetEgress', () => {
     const table = compileEgress({ enabledNetworks: ['zcash'], netEgress: V1 } as EgressInputs);
     expect(decideEgress('https://relay.zafu.pro/', 'popup', table).allow).toBe(false);
     expect(decideEgress('https://rpc.dapp.example/', 'popup', table).allow).toBe(true);
+  });
+});
+
+describe('legacyEnabledNetworks', () => {
+  it('reads a pre-key install the way the wallet already did', () => {
+    expect(
+      legacyEnabledNetworks({
+        vaults: [
+          { type: 'mnemonic', insensitive: {} },
+          { type: 'zigner-zafu', insensitive: { supportedNetworks: ['zcash', 'noble'] } },
+        ],
+      }),
+    ).toEqual(['penumbra', 'zcash', 'noble']);
+  });
+
+  it('leaves a stored list alone, even an empty one', () => {
+    expect(
+      legacyEnabledNetworks({ enabledNetworks: [], vaults: [{ type: 'mnemonic' }] }),
+    ).toBeUndefined();
+    expect(
+      legacyEnabledNetworks({ enabledNetworks: ['zcash'], vaults: [{ type: 'mnemonic' }] }),
+    ).toBeUndefined();
+  });
+
+  it('writes nothing for a fresh install', () => {
+    expect(legacyEnabledNetworks({})).toBeUndefined();
+    expect(legacyEnabledNetworks({ vaults: [] })).toBeUndefined();
   });
 });
