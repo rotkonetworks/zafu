@@ -144,7 +144,7 @@ export function OnboardingShell({ children, art }: OnboardingShellProps) {
         />
         <div className='absolute left-10 top-9 flex items-center gap-3'>
           <span className='flex h-[38px] w-[38px] items-center justify-center bg-hanko font-display text-[21px] font-semibold text-fg-high'>
-            秘
+            匿
           </span>
           <span className='font-display text-[26px] font-semibold text-fg-high'>zafu</span>
         </div>
