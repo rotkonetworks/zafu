@@ -28,6 +28,9 @@ import { deleteZcashDatabases } from '../../../clear-cache-startup';
 import { cn } from '@repo/ui/lib/utils';
 import { SyncStatus, type SyncStage } from '../../../components/zcash/sync-status';
 import { usePasswordGate } from '../../../hooks/password-gate';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { Button } from '@repo/ui/components/ui/button';
 import { fmtZec } from './format';
 import { BalanceFigure } from './balance-figure';
 import { GetZecHint } from './notices';
@@ -130,10 +133,9 @@ export const ZcashContent = ({
 
   const { totalZat: transparentZat, isLoading: utxoLoading } = useTransparentBalance(tAddresses);
 
-  // per-pool split (orchard legacy / ironwood active) - revealed on
-  // hover/expand of the hero balance, never a second permanent box
+  // per-pool split (orchard legacy / ironwood active) - a permanent
+  // RowGroup below the hero balance (board: "balances" section)
   const pools = usePoolBalances(selectedKeyInfo?.id, workerSyncHeight);
-  const [poolsPinned, setPoolsPinned] = useState(false);
 
   // Sends we have broadcast that the chain has not confirmed. Their inputs are
   // already deducted from the figure above (markNotesSpentLocally runs at
@@ -590,43 +592,27 @@ export const ZcashContent = ({
   return (
     <div className='flex-1 flex flex-col gap-3'>
       {PasswordModal}
-      {/* hero balance - the single figure on this screen at two depths:
-          hover (or pin via the chevron) reveals the per-pool split inline,
-          click opens the full per-pool notes view. The split never
-          occupies a second permanent box. */}
+      {/* hero balance - the single figure on this screen. The per-pool
+          split is a permanent RowGroup below (board: "balances" section),
+          not a reveal-on-tap - nothing on this screen expands in place. */}
       <div className='rounded-md border border-network-accent/20 bg-elev-1 p-4'>
         <div className='flex items-center justify-between'>
           <span className='kicker'>balance</span>
-          <div className='flex items-center gap-1'>
-            {/* the global hide-balances control lives where you notice you
+          {/* the global hide-balances control lives where you notice you
               need it — same state as settings → privacy, effective on
-              every amount in the app */}
-            <button
-              onClick={() => void setPrivacySetting('hideBalances', !privacySettings.hideBalances)}
-              title={privacySettings.hideBalances ? 'show balances' : 'hide balances'}
-              className='p-0.5 text-fg-dim transition-colors hover:text-fg-high'
-            >
-              <span
-                className={cn(
-                  'block h-3.5 w-3.5',
-                  privacySettings.hideBalances ? 'i-ph-eye-slash' : 'i-ph-eye',
-                )}
-              />
-            </button>
-            <button
-              onClick={() => setPoolsPinned(v => !v)}
-              title={poolsPinned ? 'hide pool detail' : 'show pool detail'}
-              aria-expanded={poolsPinned}
-              className='p-0.5 text-fg-dim transition-colors hover:text-fg-high'
-            >
-              <span
-                className={cn(
-                  'block h-3.5 w-3.5 transition-transform',
-                  poolsPinned ? 'i-ph-caret-up' : 'i-ph-caret-down',
-                )}
-              />
-            </button>
-          </div>
+              every amount in the app. The one hide/show eye on this screen. */}
+          <button
+            onClick={() => void setPrivacySetting('hideBalances', !privacySettings.hideBalances)}
+            title={privacySettings.hideBalances ? 'show balances' : 'hide balances'}
+            className='p-0.5 text-fg-dim transition-colors hover:text-fg-high'
+          >
+            <span
+              className={cn(
+                'block h-3.5 w-3.5',
+                privacySettings.hideBalances ? 'i-ph-eye-slash' : 'i-ph-eye',
+              )}
+            />
+          </button>
         </div>
         {IRONWOOD_MIGRATION ? (
           <button
@@ -694,50 +680,52 @@ export const ZcashContent = ({
         {/* Rescan confirmation. This is the destructive one: it drops every
             scanned note and re-derives the wallet from `height` upward. Stating
             the cost is the whole point — the previous version had no confirm
-            step at all. */}
-        {rescanConfirmHeight !== null && (
-          <div className='mt-2 rounded-lg border border-hanko/40 bg-elev-2 p-3 text-label leading-snug'>
-            <div className='flex items-center gap-1.5 text-hanko'>
-              <span className='i-ph-warning h-3.5 w-3.5 shrink-0' />
-              <span className='font-medium'>this deletes the wallet&apos;s scanned history</span>
-            </div>
-            <p className='mt-1.5 text-fg-muted'>
-              every note zafu has found is dropped and the chain is read again from block{' '}
-              <span className='tabular-nums'>{rescanConfirmHeight.toLocaleString()}</span>. it can
-              take a long time, your balance reads zero until it finishes, and{' '}
-              <span className='text-fg-high'>
-                anything received before that block will not be found again
-              </span>
-              .
-            </p>
-            {!walletBirthday && (
-              <p className='mt-1.5 text-fg-muted'>
-                this wallet has no recorded birthday, so the scan starts at orchard activation — the
-                earliest block that can hold a note. set a birthday in settings to make this faster.
+            step at all. A Sheet, not an inline card: nothing on this screen
+            expands in place. */}
+        <Sheet
+          open={rescanConfirmHeight !== null}
+          onOpenChange={open => {
+            if (!open) {
+              setRescanConfirmHeight(null);
+            }
+          }}
+          title="this deletes the wallet's scanned history"
+        >
+          {rescanConfirmHeight !== null && (
+            <div className='flex flex-col gap-3 text-label leading-snug'>
+              <p className='text-fg-muted'>
+                every note zafu has found is dropped and the chain is read again from block{' '}
+                <span className='tabular-nums'>{rescanConfirmHeight.toLocaleString()}</span>. it can
+                take a long time, your balance reads zero until it finishes, and{' '}
+                <span className='text-fg-high'>
+                  anything received before that block will not be found again
+                </span>
+                .
               </p>
-            )}
-            <div className='mt-2.5 flex gap-2'>
-              <button
-                type='button'
-                onClick={() => {
-                  const h = rescanConfirmHeight;
-                  setRescanConfirmHeight(null);
-                  window.dispatchEvent(new CustomEvent('zcash-rescan', { detail: h }));
-                }}
-                className='rounded-md bg-hanko/15 px-2 py-1 text-hanko hover:bg-hanko/25'
-              >
-                rescan from {rescanConfirmHeight.toLocaleString()}
-              </button>
-              <button
-                type='button'
-                onClick={() => setRescanConfirmHeight(null)}
-                className='rounded-md px-2 py-1 text-fg-muted hover:text-fg-high'
-              >
-                cancel
-              </button>
+              {!walletBirthday && (
+                <p className='text-fg-muted'>
+                  this wallet has no recorded birthday, so the scan starts at orchard activation - the
+                  earliest block that can hold a note. set a birthday in settings to make this faster.
+                </p>
+              )}
+              <div className='flex gap-2'>
+                <Button
+                  variant='danger'
+                  onClick={() => {
+                    const h = rescanConfirmHeight;
+                    setRescanConfirmHeight(null);
+                    window.dispatchEvent(new CustomEvent('zcash-rescan', { detail: h }));
+                  }}
+                >
+                  rescan from {rescanConfirmHeight.toLocaleString()}
+                </Button>
+                <Button variant='secondary' onClick={() => setRescanConfirmHeight(null)}>
+                  cancel
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </Sheet>
         {/* the one sync surface: enso line + expandable detail (bar, stages,
             heights, rescan). Replaces the old status line + info card +
             progress card trio that repeated the same percent twice. */}
@@ -780,76 +768,6 @@ export const ZcashContent = ({
           onRescan={h => setRescanConfirmHeight(rescanStartHeight(h))}
         />
 
-        {/* per-pool reveal: click-driven only. Hover-expand made the corner
-            chevron look dead (the panel was already open by the time you
-            reached it) and it never worked on touch, where every one of these
-            rows is a deep link. Three rows - ironwood (active), orchard
-            (legacy), transparent (public) - each opening that pool's notes. */}
-        <div
-          className={cn(
-            'grid transition-[grid-template-rows] duration-200',
-            poolsPinned ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
-          )}
-        >
-          <div className='overflow-hidden'>
-            <div className='mt-3 flex flex-col gap-2 border-t border-border-soft pt-3'>
-              {poolRows.map(row => (
-                <div key={row.key} className='flex items-center justify-between gap-2'>
-                  <button
-                    type='button'
-                    onClick={() => openPoolNotes(row.key === 'shielded' ? 'ironwood' : row.key)}
-                    title={`view ${row.label} notes`}
-                    className='group/row flex min-w-0 flex-1 items-center gap-2 text-left'
-                  >
-                    <span className={cn(row.icon, 'h-3.5 w-3.5 shrink-0 text-fg-muted')} />
-                    <span className='text-xs text-fg-muted lowercase transition-colors group-hover/row:text-fg-high'>
-                      {row.label}
-                    </span>
-                    {row.badge && (
-                      <span className='rounded-sm bg-elev-2 px-1.5 py-0.5 text-label text-fg-dim leading-none lowercase'>
-                        {row.badge}
-                      </span>
-                    )}
-                    <span className='i-ph-caret-right h-3 w-3 shrink-0 text-fg-dim opacity-0 transition-opacity group-hover/row:opacity-100' />
-                    <Sensitive className='ml-auto text-xs tabular text-fg-high'>
-                      {`${fmtZec(Number(row.zat) / 1e8)} ZEC`}
-                    </Sensitive>
-                  </button>
-                  {row.key === 'orchard' && ironwoodEligible && (
-                    <button
-                      onClick={() => setShowIronwoodMigrate(true)}
-                      className='shrink-0 text-label font-medium text-network-accent transition-colors hover:text-fg-high'
-                    >
-                      migrate
-                    </button>
-                  )}
-                </div>
-              ))}
-              <button
-                type='button'
-                onClick={() => openPoolNotes('transparent')}
-                title='view transparent funds'
-                className='group/row flex min-w-0 items-center gap-2 text-left'
-              >
-                {/* not the eye glyph - that is reserved for the hide/show
-                    balances toggle above, the only balance-hide control on
-                    this screen. "public" here means "visible to anyone on
-                    the chain", a different idea from "currently masked". */}
-                <span className='i-ph-lock-simple-open h-3.5 w-3.5 shrink-0 text-fg-muted' />
-                <span className='text-xs text-fg-muted lowercase transition-colors group-hover/row:text-fg-high'>
-                  transparent
-                </span>
-                <span className='rounded-sm bg-elev-2 px-1.5 py-0.5 text-label text-fg-dim leading-none lowercase'>
-                  public
-                </span>
-                <span className='i-ph-caret-right h-3 w-3 shrink-0 text-fg-dim opacity-0 transition-opacity group-hover/row:opacity-100' />
-                <Sensitive className='ml-auto text-xs tabular text-fg-high'>
-                  {`${fmtZec(Number(transparentZat) / 1e8)} ZEC`}
-                </Sensitive>
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* action row directly under the balance - Zashi placement */}
@@ -857,6 +775,57 @@ export const ZcashContent = ({
 
       {/* single priority message slot */}
       {messageSlot}
+
+      {/* balances: a permanent bordered list, never a reveal-on-tap. Three
+          rows - ironwood (active) / orchard (legacy), transparent (public) -
+          each a deep link to that pool's notes; migrate/shield surface as a
+          trailing button on their row. `Row`'s value is a plain string, so
+          hide-balances masks it the same way `Sensitive` does elsewhere on
+          this screen - a constant-width dot mask, not the real figure. */}
+      <RowGroup>
+        {poolRows.map(row => (
+          <div key={row.key} className='flex items-center'>
+            <Row
+              type='value'
+              icon={row.icon}
+              label={row.label}
+              description={row.badge}
+              value={
+                privacySettings.hideBalances
+                  ? '•••••'
+                  : `${fmtZec(Number(row.zat) / 1e8)} ZEC`
+              }
+              className='flex-1 min-w-0'
+              onPress={() => openPoolNotes(row.key === 'shielded' ? 'ironwood' : row.key)}
+            />
+            {row.key === 'orchard' && ironwoodEligible && (
+              <Button
+                variant='secondary'
+                size='sm'
+                className='mr-3.5 shrink-0'
+                onClick={() => setShowIronwoodMigrate(true)}
+              >
+                migrate
+              </Button>
+            )}
+          </div>
+        ))}
+        <div className='flex items-center'>
+          <Row
+            type='value'
+            icon='i-ph-lock-simple-open'
+            label='transparent'
+            description='public'
+            value={
+              privacySettings.hideBalances
+                ? '•••••'
+                : `${fmtZec(Number(transparentZat) / 1e8)} ZEC`
+            }
+            className='flex-1 min-w-0'
+            onPress={() => openPoolNotes('transparent')}
+          />
+        </div>
+      </RowGroup>
 
       {/* small shield entry - replaces the old red alarming box; the full
           hot + zigner flow lives in ShieldTransparent */}
