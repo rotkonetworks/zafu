@@ -1,15 +1,22 @@
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
-import { beforeEach, describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { create } from 'zustand';
 import { AllSlices, initializeStore, TestStore } from '..';
 import { createEncryptedLocal } from '../encrypted-storage';
+import { zcashSyncHeightKey } from './network-worker';
 import type { ZcashWalletJson } from '../wallets';
 
 // zcashWallets is stored encrypted-at-rest (see ENCRYPTED_KEYS in
 // encrypted-storage.ts) - write it through the same wrapper the store uses,
 // not raw localExtStorage, or the keyring's read of it decrypts nothing.
 const encryptedLocal = createEncryptedLocal(localExtStorage, sessionExtStorage);
+
+const deleteWalletInWorkerMock = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock('./network-worker', async importOriginal => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return { ...actual, deleteWalletInWorker: deleteWalletInWorkerMock };
+});
 
 const localMock = (chrome.storage.local as unknown as { mock: Map<string, unknown> }).mock;
 const sessionMock = (chrome.storage.session as unknown as { mock: Map<string, unknown> }).mock;
@@ -33,6 +40,7 @@ describe('keyRing.deleteKeyRing purges per-wallet data', () => {
   beforeEach(() => {
     localMock.clear();
     sessionMock.clear();
+    deleteWalletInWorkerMock.mockClear();
     useStore = create<AllSlices>()(initializeStore(sessionExtStorage, localExtStorage));
   });
 
@@ -70,6 +78,18 @@ describe('keyRing.deleteKeyRing purges per-wallet data', () => {
       vaultId: vaultB,
     };
     await encryptedLocal.set('zcashWallets', [zcashWalletA, zcashWalletB]);
+
+    // other per-wallet leftovers, one set per vault, that must also be purged
+    // (or survive, for vault B) alongside zidPins/zignerWallets
+    await chrome.storage.local.set({
+      [zcashSyncHeightKey('zcash-a')]: 123,
+      [zcashSyncHeightKey('zcash-b')]: 456,
+      [`zcashTAddrs:${vaultA}`]: ['t1a'],
+      [`zcashTAddrs:${vaultB}`]: ['t1b'],
+      [`nobleShownIndices:${vaultA}`]: [0, 1],
+      [`nobleShownIndices:${vaultB}`]: [0],
+    });
+
     await localExtStorage.set('zignerWallets', [
       {
         id: 'legacy-a',
@@ -105,6 +125,64 @@ describe('keyRing.deleteKeyRing purges per-wallet data', () => {
     // zcashWallets: vault A's entry is gone, vault B's remains
     const zcashWallets = (await encryptedLocal.get('zcashWallets')) ?? [];
     expect(zcashWallets.map(w => w.id)).toEqual(['zcash-b']);
+
+    // the zcash worker was told to delete vault A's zcash wallet record
+    expect(deleteWalletInWorkerMock).toHaveBeenCalledWith('zcash', 'zcash-a');
+    expect(deleteWalletInWorkerMock).not.toHaveBeenCalledWith('zcash', 'zcash-b');
+
+    // sync-height hint (keyed by zcash wallet id, not vaultId): A gone, B kept
+    expect(await chrome.storage.local.get(zcashSyncHeightKey('zcash-a'))).toEqual({});
+    const bHeight = await chrome.storage.local.get(zcashSyncHeightKey('zcash-b'));
+    expect(bHeight[zcashSyncHeightKey('zcash-b')]).toBe(456);
+
+    // transparent-chain leftovers (keyed by vaultId): A gone, B kept
+    expect(await chrome.storage.local.get(`zcashTAddrs:${vaultA}`)).toEqual({});
+    const bAddrs = await chrome.storage.local.get(`zcashTAddrs:${vaultB}`);
+    expect(bAddrs[`zcashTAddrs:${vaultB}`]).toEqual(['t1b']);
+
+    expect(await chrome.storage.local.get(`nobleShownIndices:${vaultA}`)).toEqual({});
+    const bShown = await chrome.storage.local.get(`nobleShownIndices:${vaultB}`);
+    expect(bShown[`nobleShownIndices:${vaultB}`]).toEqual([0]);
+  });
+
+  test('a purgeWalletData failure leaves the vault in place, so the delete can be retried', async () => {
+    await useStore.getState().keyRing.setPassword(password);
+    const vaultA = await useStore.getState().keyRing.newMnemonicKey(seedA.join(' '), 'Wallet A');
+    await useStore.getState().keyRing.newMnemonicKey(seedB.join(' '), 'Wallet B');
+
+    const zcashWalletA: ZcashWalletJson = {
+      id: 'zcash-fail',
+      label: 'zcash a',
+      orchardFvk: 'uviewFVK_FAIL',
+      address: '',
+      accountIndex: 0,
+      mainnet: true,
+      vaultId: vaultA,
+    };
+    await encryptedLocal.set('zcashWallets', [zcashWalletA]);
+
+    // deleteWalletInWorker failures are already caught inside purgeWalletData
+    // (worker may not be running), so simulate a harder failure instead: make
+    // the vault-record write itself throw. removeLinkedWallets runs before
+    // `local.set('vaults', ...)`, so this proves the ordering: the vault is
+    // untouched, ready for another deleteKeyRing call.
+    const originalSet = localExtStorage.set.bind(localExtStorage);
+    const setSpy = vi
+      .spyOn(localExtStorage, 'set')
+      .mockImplementation(async (key: unknown, value: unknown) => {
+        if (key === 'zcashWallets') {
+          throw new Error('simulated storage failure');
+        }
+        return originalSet(key as never, value as never);
+      });
+
+    await expect(useStore.getState().keyRing.deleteKeyRing(vaultA)).rejects.toThrow(
+      'simulated storage failure',
+    );
+    setSpy.mockRestore();
+
+    const vaults = (await localExtStorage.get('vaults')) ?? [];
+    expect(vaults.some(v => v.id === vaultA)).toBe(true);
   });
 
   test('removing the last wallet nukes everything, including per-wallet keys', async () => {

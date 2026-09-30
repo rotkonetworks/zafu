@@ -11,6 +11,8 @@ import type { SessionStorageState } from '@repo/storage-chrome/session';
 import type { NetworkType, ZignerZafuImport, LedgerImport } from './types';
 import type { ZcashWalletJson } from '../wallets';
 import type { Key } from '@repo/encryption/key';
+import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { shownIndicesKey, fundedIndicesKey } from '../../transparent/hd';
 
 /** create penumbra wallet entry for a mnemonic vault (side effect: local.set) */
 export async function createPenumbraWalletForMnemonic(
@@ -345,6 +347,68 @@ async function purgeLegacyZignerWallets(
 }
 
 /**
+ * Delete every per-wallet Penumbra IndexedDB database for the removed
+ * wallets. `@penumbra-zone/storage`'s `IndexedDb.initialize` names each
+ * wallet's database `viewdata/<chainId>/<bech32mWalletId>` (see its
+ * `dist/indexed-db/index.js`; the extension's own
+ * `WalletId.fromJsonString(wallet.id)` call site is `wallet-services.ts`).
+ * `chainId` comes from the live RPC endpoint at sync time (not a constant -
+ * it can even change if the network migrates), so the database name cannot
+ * be reconstructed ahead of time; instead enumerate every IndexedDB in the
+ * origin and delete whichever ones match this wallet's bech32 id under any
+ * chainId, the same enumerate-and-filter approach `nukeAllWalletData` uses
+ * for the full wipe.
+ *
+ * Does NOT explicitly stop Penumbra sync first. `wallet-entries.ts` is
+ * shared with the popup/page realms, not just the service worker, so it
+ * cannot reach into `service-worker.ts`'s `rebuildServices` (a real
+ * teardown call would need to live there). `removeLinkedWallets` already
+ * updated `activeWalletIndex`/`penumbraWallets`, which the SW's rebuild
+ * scheduler watches and reacts to on its own; if this delete races an
+ * still-open connection, `deleteDatabaseAwaitable` degrades to a logged
+ * `onblocked` warning rather than hanging, exactly like the full-nuke path.
+ */
+async function purgePenumbraWalletDatabases(
+  removedPenumbra: RemovedPenumbraWallet[],
+): Promise<void> {
+  if (removedPenumbra.length === 0) {
+    return;
+  }
+  try {
+    const [{ bech32mWalletId }, { WalletId }] = await Promise.all([
+      import('@penumbra-zone/bech32m/penumbrawalletid'),
+      import('@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb'),
+    ]);
+    const bech32Ids = new Set<string>();
+    for (const w of removedPenumbra) {
+      if (!w.id) {
+        continue;
+      }
+      try {
+        bech32Ids.add(bech32mWalletId(WalletId.fromJsonString(w.id)));
+      } catch {
+        // a malformed/legacy id must not abort the rest of the purge
+      }
+    }
+    if (bech32Ids.size === 0) {
+      return;
+    }
+    const dbs = await indexedDB.databases();
+    const names = dbs
+      .map(d => d.name)
+      .filter(
+        (n): n is string =>
+          !!n && n.startsWith('viewdata/') && [...bech32Ids].some(id => n.endsWith('/' + id)),
+      );
+    await Promise.all(names.map(deleteDatabaseAwaitable));
+  } catch {
+    // indexedDB is unavailable in some environments (e.g. jsdom tests) and
+    // the penumbra-zone packages are optional-ish at this call depth; either
+    // way this step is best-effort and must not abort the rest of the purge.
+  }
+}
+
+/**
  * Purge every piece of per-wallet storage left behind by `deleteKeyRing` for
  * a single removed vault. This is the ONE place that must be extended when a
  * new per-wallet key is added - see the audit in the module doc comment above
@@ -358,10 +422,6 @@ async function purgeLegacyZignerWallets(
  *   exist for airgap/zigner/ledger/frost vaults at all. Left as shared,
  *   global data - same as site grants (`knownSites`), which are per-origin by
  *   design, not per-wallet.
- * - Penumbra per-wallet IndexedDB view state - no construction site for a
- *   per-wallet Penumbra database exists in this repo today (only the
- *   full-nuke path enumerates and deletes every IndexedDB database). Reported
- *   as an open question rather than guessing a naming scheme.
  */
 export async function purgeWalletData(
   vaultId: string,
@@ -375,36 +435,46 @@ export async function purgeWalletData(
     local,
   );
 
-  // zcash worker data + birthday key
+  // zcash worker data + birthday key + sync-height hint, per removed zcash wallet id
   for (const id of removedZcashIds) {
     try {
-      const { deleteWalletInWorker } = await import('./network-worker');
+      const { deleteWalletInWorker, zcashSyncHeightKey } = await import('./network-worker');
       await deleteWalletInWorker('zcash', id);
+      await chrome.storage.local.remove(zcashSyncHeightKey(id));
     } catch {
       // worker may not be running
     }
   }
-  try {
-    await chrome.storage.local.remove(`zcashBirthday_${vaultId}`);
-  } catch {}
 
-  // ZID generations pinned/labelled by this wallet - keyed by walletId by
-  // construction (see ZID_PINS_STORAGE_KEY doc comment in state/identity.ts).
+  // static per-wallet keys, batched into one remove call
+  const staticKeys = [
+    `zcashBirthday_${vaultId}`,
+    // ZID generations pinned/labelled by this wallet - keyed by walletId by
+    // construction (see ZID_PINS_STORAGE_KEY doc comment in state/identity.ts).
+    `zidPins:${vaultId}`,
+    // `zidGenKeys` is a display cache of generation-index -> derived pubkey,
+    // populated from whichever wallet was active when the identity page last
+    // rendered (see state/identity.ts - it is NOT keyed by walletId). It may
+    // hold this wallet's derived pubkeys, so clear it rather than leak them;
+    // it is cheaply rederived on demand for whichever wallet is active next.
+    'zidGenKeys',
+    // NOTE: the unmerged zid-per-wallet-generations branch moves zidGenKeys
+    // (and zidIndex) to a per-wallet key (`<key>:<walletId>`) - once that
+    // lands, the per-wallet form must be purged here too, not the bare key.
+    `zcashTAddrs:${vaultId}`,
+  ];
+  for (const cap of Object.keys(COSMOS_CHAINS) as CosmosChainId[]) {
+    staticKeys.push(shownIndicesKey(cap, vaultId), fundedIndicesKey(cap, vaultId));
+  }
   try {
-    await chrome.storage.local.remove(`zidPins:${vaultId}`);
-  } catch {}
-
-  // `zidGenKeys` is a display cache of generation-index -> derived pubkey,
-  // populated from whichever wallet was active when the identity page last
-  // rendered (see state/identity.ts - it is NOT keyed by walletId). It may
-  // hold this wallet's derived pubkeys, so clear it rather than leak them;
-  // it is cheaply rederived on demand for whichever wallet is active next.
-  try {
-    await chrome.storage.local.remove('zidGenKeys');
+    await chrome.storage.local.remove(staticKeys);
   } catch {}
 
   // legacy zigner wallet records (plaintext FVKs), attributed by FVK match
   await purgeLegacyZignerWallets(removedZcash, removedPenumbra, local);
+
+  // Penumbra per-wallet IndexedDB view state, attributed by bech32 wallet id
+  await purgePenumbraWalletDatabases(removedPenumbra);
 }
 
 /**
