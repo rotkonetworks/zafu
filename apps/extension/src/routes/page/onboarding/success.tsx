@@ -1,14 +1,12 @@
 /**
- * Onboarding completion - final step of the shell stepper.
- *
- * Removed the dense link-grid (poker / chat / dex / docs) that competed
- * for attention with the actual primary action ("open zafu"). A user
- * who just finished onboarding wants the single confidence: it worked,
- * here is the wallet. Discovery happens later from inside the wallet.
+ * Onboarding completion - Onb5Done board. One confidence, one action: it
+ * worked, here is the wallet. Discovery happens later from inside it.
  */
 
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
-import { cn } from '@repo/ui/lib/utils';
+import { Button } from '@repo/ui/components/ui/button';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
+import { OnboardingShell } from './onboarding-shell';
 
 const openSidePanel = async () => {
   // The onboarding tab is itself an extension page (page.html). After we
@@ -40,37 +38,24 @@ const openSidePanel = async () => {
 
 export const OnboardingSuccess = () => {
   return (
-    <FadeTransition>
-      <div className='flex h-full flex-col items-center justify-center gap-7 py-6 text-center'>
-        {/* tiny checkmark in a soft round badge - restrained */}
-        <span className='inline-flex h-12 w-12 items-center justify-center rounded-full bg-zigner-gold/15'>
-          <span className='i-ph-check h-5 w-5 text-zigner-gold' />
-        </span>
+    <OnboardingShell art='castle'>
+      <FadeTransition>
+        <div className='flex flex-col gap-[22px]'>
+          <span className='flex h-[76px] w-[76px] -rotate-[7deg] items-center justify-center border-[3px] border-hanko font-display text-[40px] font-semibold text-hanko'>
+            済
+          </span>
+          <h1 className='font-display text-[44px] font-medium text-fg-high'>wallet ready</h1>
 
-        <header className='flex flex-col gap-1'>
-          <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>wallet ready</h2>
-          <p className='text-xs text-fg-muted lowercase'>shielded signing, on your terms.</p>
-        </header>
+          <Button variant='primary' className='h-14 w-full text-body' onClick={() => void openSidePanel()}>
+            open zafu
+          </Button>
 
-        <button
-          type='button'
-          onClick={() => void openSidePanel()}
-          className={cn(
-            'group inline-flex items-center justify-center gap-2 px-6 py-3 text-sm lowercase',
-            '[border-radius:14px] border border-zigner-gold/30 bg-zigner-gold/10 text-zigner-gold',
-            'transition-[transform,background-color] duration-200',
-            'hover:-translate-y-[1px] hover:bg-zigner-gold/15',
-          )}
-        >
-          <span className='i-ph-sidebar-simple h-4 w-4' />
-          open zafu
-          <span className='i-ph-arrow-right h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5' />
-        </button>
-
-        <p className='mt-2 max-w-xs text-body text-fg-muted lowercase'>
-          discover dapps and tools from inside the wallet once you're in.
-        </p>
-      </div>
-    </FadeTransition>
+          <StatusSlot tone='info' icon='i-ph-shield-check'>
+            shielded signing, on your terms. syncing continues in the background - you can use
+            zafu now.
+          </StatusSlot>
+        </div>
+      </FadeTransition>
+    </OnboardingShell>
   );
 };
