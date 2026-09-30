@@ -17,7 +17,6 @@ import { ConnectedSitesSlice, createConnectedSitesSlice } from './connected-site
 import { createDefaultFrontendSlice, DefaultFrontendSlice } from './default-frontend';
 import { createNumerairesSlice, NumerairesSlice } from './numeraires';
 import { createZignerSlice, ZignerSlice } from './zigner';
-import { createTradingModeSlice, TradingModeSlice } from './trading-mode';
 import { createZignerSigningSlice, ZignerSigningSlice } from './zigner-signing';
 import { createPrivacySlice, PrivacySlice } from './privacy';
 import { createNetworksSlice, NetworksSlice } from './networks';
@@ -47,7 +46,6 @@ export interface AllSlices {
   connectedSites: ConnectedSitesSlice;
   defaultFrontend: DefaultFrontendSlice;
   zigner: ZignerSlice;
-  tradingMode: TradingModeSlice;
   zignerSigning: ZignerSigningSlice;
   privacy: PrivacySlice;
   networks: NetworksSlice;
@@ -93,7 +91,6 @@ export const initializeStore = (
     originApproval: createOriginApprovalSlice()(setState, getState, store),
     defaultFrontend: createDefaultFrontendSlice(local)(setState, getState, store),
     zigner: createZignerSlice(local)(setState, getState, store),
-    tradingMode: createTradingModeSlice(local)(setState, getState, store),
     zignerSigning: createZignerSigningSlice(setState, getState, store),
     privacy: createPrivacySlice(local)(setState, getState, store),
     networks: createNetworksSlice(local)(setState, getState, store),
