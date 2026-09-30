@@ -403,9 +403,27 @@
     font-weight: 400;
     src: url('../fonts/iosevka-term-ss03-italic.woff2') format('woff2');
   }
+  /* Shippori Mincho - display headings only (onboarding + wherever else picks
+   * it up later). SIL OFL, self-hosted, subset to ASCII + the two kanji the
+   * product uses (秘 済) so MV3's no-remote-fonts rule holds and the file
+   * stays small - a non-ASCII heading outside that subset falls back to the
+   * system serif. */
+  @font-face {
+    font-family: 'Shippori Mincho';
+    font-weight: 500;
+    src: url('../fonts/shippori-mincho-500.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Shippori Mincho';
+    font-weight: 600;
+    src: url('../fonts/shippori-mincho-600.woff2') format('woff2');
+  }
 }
 
 /* custom utilities */
+@utility font-display {
+  font-family: 'Shippori Mincho', serif;
+}
 @utility text-high-contrast {
   color: hsl(var(--foreground));
 }
