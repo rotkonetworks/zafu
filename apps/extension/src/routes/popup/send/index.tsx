@@ -161,7 +161,9 @@ export function SendPage() {
         </div>
       );
     }
-    return <ZcashSend onClose={goBack} accountIndex={activePocket} mainnet={true} prefill={prefill} />;
+    return (
+      <ZcashSend onClose={goBack} accountIndex={activePocket} mainnet={true} prefill={prefill} />
+    );
   }
 
   return (

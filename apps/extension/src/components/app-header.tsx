@@ -12,7 +12,7 @@ import { selectActiveZcashWallet } from '../state/wallets';
 import { activeAccountIndex, activePockets } from '../state/pockets';
 import { getNetwork } from '../config/networks';
 import { CustodyBadge } from './custody-badge';
-import { AccountsSheet } from './accounts-sheet';
+import { AccountsSheet, type PocketSheetTarget } from './accounts-sheet';
 import { NetworkSheet } from './network-sheet';
 import { AddWalletSheet } from './add-wallet-sheet';
 import { NewPocketSheet } from './new-pocket-sheet';
@@ -27,6 +27,9 @@ export const AppHeader = () => {
   const pockets = useStore(useShallow(activePockets));
   const pocketAccount = useStore(activeAccountIndex);
   const [openSheet, setOpenSheet] = useState<OpenSheet>(null);
+  // set when the new-pocket sheet is opened to rename an existing pocket
+  // instead of creating one
+  const [renameTarget, setRenameTarget] = useState<PocketSheetTarget>();
 
   const networkInfo = getNetwork(activeNetwork);
   // mnemonic vaults derive zcash keys directly - no zcash wallet record
@@ -81,7 +84,10 @@ export const AppHeader = () => {
         open={openSheet === 'accounts'}
         onOpenChange={next => setOpenSheet(next ? 'accounts' : null)}
         onAddWallet={() => setOpenSheet('add-wallet')}
-        onNewPocket={() => setOpenSheet('new-pocket')}
+        onNewPocket={rename => {
+          setRenameTarget(rename);
+          setOpenSheet('new-pocket');
+        }}
       />
       <NetworkSheet
         open={openSheet === 'network'}
@@ -94,6 +100,7 @@ export const AppHeader = () => {
       <NewPocketSheet
         open={openSheet === 'new-pocket'}
         onOpenChange={next => setOpenSheet(next ? 'new-pocket' : null)}
+        rename={renameTarget}
       />
     </header>
   );

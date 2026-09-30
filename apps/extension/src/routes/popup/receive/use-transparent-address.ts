@@ -60,9 +60,7 @@ export function useTransparentAddress(active: boolean) {
     let cancelled = false;
     void (async () => {
       try {
-        const stored = (await chrome.storage.local.get(indexKey))[indexKey] as
-          | number
-          | undefined;
+        const stored = (await chrome.storage.local.get(indexKey))[indexKey] as number | undefined;
         const start = typeof stored === 'number' && stored > 0 ? stored : 0;
         for (let i = start; i <= start + SCAN_GAP; i++) {
           if (cancelled) {

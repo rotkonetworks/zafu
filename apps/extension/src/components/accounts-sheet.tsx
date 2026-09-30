@@ -23,13 +23,11 @@ import { PopupPath } from '../routes/popup/paths';
 import { screenTransition } from '../utils/navigate';
 import { isSidePanel } from '../utils/popup-detection';
 import { CustodyBadge } from './custody-badge';
+import { Sensitive } from './sensitive';
+import { fmtZec } from '../routes/popup/home/format';
 
-/** trims to at most 2 decimals worth of trailing zeros, same spirit as home's fmtZec */
-const fmtZec = (zat: bigint): string => {
-  const zec = Number(zat) / 1e8;
-  const s = zec.toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
-  return s.includes('.') ? s : `${s}.0`;
-};
+/** what the new-pocket sheet should do: create a fresh pocket, or rename an existing one */
+export type PocketSheetTarget = { account: number; name: string } | undefined;
 
 const PocketRow = ({
   name,
@@ -38,6 +36,7 @@ const PocketRow = ({
   canSync,
   balanceZat,
   onPick,
+  onRename,
 }: {
   name: string;
   account: number;
@@ -46,31 +45,44 @@ const PocketRow = ({
   canSync: boolean;
   balanceZat: bigint | undefined;
   onPick: () => void;
+  onRename: () => void;
 }) => (
-  <button
-    type='button'
-    onClick={onPick}
-    className='flex min-h-[52px] items-center gap-3 px-3.5 py-2 text-left transition-colors hover:bg-surface-elev-2'
-  >
-    <span
-      className={cn(
-        'flex size-[18px] shrink-0 items-center justify-center border',
-        active ? 'border-zigner-gold' : 'border-surface-border',
-      )}
-      aria-hidden='true'
+  <div className='flex items-center'>
+    <button
+      type='button'
+      onClick={onPick}
+      className='flex min-h-[52px] flex-1 items-center gap-3 px-3.5 py-2 text-left transition-colors hover:bg-surface-elev-2'
     >
-      {active && <span className='size-2 bg-zigner-gold' />}
-    </span>
-    <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
-      <span className='truncate text-data text-fg-high lowercase'>{name}</span>
-      <span className='truncate text-label text-fg-muted lowercase'>
-        {canSync ? `account ${account}` : `account ${account} - starts syncing once zafu updates`}
+      <span
+        className={cn(
+          'flex size-[18px] shrink-0 items-center justify-center border',
+          active ? 'border-zigner-gold' : 'border-surface-border',
+        )}
+        aria-hidden='true'
+      >
+        {active && <span className='size-2 bg-zigner-gold' />}
       </span>
-    </span>
-    {active && canSync && balanceZat !== undefined && (
-      <span className='shrink-0 tabular-nums text-data text-fg-high'>{fmtZec(balanceZat)}</span>
-    )}
-  </button>
+      <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
+        <span className='truncate text-data text-fg-high lowercase'>{name}</span>
+        <span className='truncate text-label text-fg-muted lowercase'>
+          {canSync ? `account ${account}` : `account ${account} - starts syncing once zafu updates`}
+        </span>
+      </span>
+      {active && canSync && balanceZat !== undefined && (
+        <Sensitive className='shrink-0 tabular-nums text-data text-fg-high'>
+          {fmtZec(Number(balanceZat) / 1e8)} ZEC
+        </Sensitive>
+      )}
+    </button>
+    <button
+      type='button'
+      onClick={onRename}
+      aria-label={`rename ${name}`}
+      className='flex size-11 shrink-0 items-center justify-center text-fg-dim transition-colors hover:text-fg-high'
+    >
+      <span className='i-ph-pencil-simple size-4' aria-hidden='true' />
+    </button>
+  </div>
 );
 
 export const AccountsSheet = ({
@@ -86,8 +98,9 @@ export const AccountsSheet = ({
    * at once would overlap at the same fixed position), so the parent owns
    * that sheet and switches to it here. */
   onAddWallet: () => void;
-  /** same pattern: the new-pocket sheet replaces this one. */
-  onNewPocket: () => void;
+  /** same pattern: the new-pocket sheet replaces this one, in create mode
+   * (no argument) or rename mode (the pocket being renamed). */
+  onNewPocket: (rename?: PocketSheetTarget) => void;
 }) => {
   const navigate = useNavigate();
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
@@ -181,17 +194,20 @@ export const AccountsSheet = ({
                 canSync={p.account === 0}
                 balanceZat={activeBalanceZat}
                 onPick={() => pickPocket(p.account)}
+                onRename={() => onNewPocket({ account: p.account, name: p.name })}
               />
             ))}
             <button
               type='button'
-              onClick={onNewPocket}
+              onClick={() => onNewPocket()}
               disabled={pockets.length >= MAX_POCKETS}
               className='flex min-h-[44px] items-center gap-3 px-3.5 py-2 text-left text-zigner-gold disabled:pointer-events-none disabled:opacity-50'
             >
               <span className='i-ph-plus size-[18px] shrink-0' aria-hidden='true' />
               <span className='text-data lowercase'>
-                {pockets.length >= MAX_POCKETS ? `up to ${MAX_POCKETS} pockets` : 'new pocket'}
+                {pockets.length >= MAX_POCKETS
+                  ? `this wallet has ${MAX_POCKETS} pockets, the most it can hold`
+                  : 'new pocket'}
               </span>
             </button>
           </div>

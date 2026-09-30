@@ -34,6 +34,7 @@ import { usePasswordGate } from '../../../hooks/password-gate';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Button } from '@repo/ui/components/ui/button';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { fmtZec } from './format';
 import { BalanceFigure } from './balance-figure';
 import { GetZecHint } from './notices';
@@ -196,11 +197,9 @@ export const ZcashContent = ({
         // not just the active one - a rescan drops the shared commitment
         // tree, so a stale hint for an inactive pocket would resume it from
         // a height the tree no longer has.
-        const storeIds = pockets.length > 0 ? pockets.map(p => pocketStoreId(walletId, p.account)) : [walletId];
-        await chrome.storage.local.remove([
-          'zcashSyncHeight',
-          ...storeIds.map(zcashSyncHeightKey),
-        ]);
+        const storeIds =
+          pockets.length > 0 ? pockets.map(p => pocketStoreId(walletId, p.account)) : [walletId];
+        await chrome.storage.local.remove(['zcashSyncHeight', ...storeIds.map(zcashSyncHeightKey)]);
         setWalletBirthday(height);
         setOrchardZat(0n);
         setBalanceState('loading');
@@ -316,6 +315,24 @@ export const ZcashContent = ({
         <div className='text-xs text-fg-muted mt-1'>
           create a wallet or import a viewing key from zigner
         </div>
+      </div>
+    );
+  }
+
+  // hot-wallet pockets other than the main one (account 0) can't scan yet -
+  // the worker refuses to derive their keys until a newer zafu-wasm ships
+  // pocket derivation (see workers/pocket-keys.ts). A watch-only or zigner
+  // wallet's own accountIndex is unrelated (it scans by ufvk, not a seed
+  // pocket), so this only gates the hot-wallet case. Say so calmly instead
+  // of running the balance/sync machinery below against a call that always
+  // throws, which would otherwise surface as an unclassified sync error
+  // telling the user to "try again" - advice that can never help here.
+  if (hasMnemonic && pocketAccount > 0) {
+    return (
+      <div className='flex-1 flex flex-col gap-3'>
+        <StatusSlot icon='i-ph-hourglass' tone='info'>
+          this pocket starts syncing once zafu updates.
+        </StatusSlot>
       </div>
     );
   }
