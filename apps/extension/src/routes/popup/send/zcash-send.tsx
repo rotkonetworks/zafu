@@ -11,6 +11,9 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { StepList } from '@repo/ui/components/ui/step-list';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import { Sensitive } from '../../../components/sensitive';
 import { removeTxOps, writeTxOp } from '../../../tx-ops';
 import { useStore } from '../../../state';
@@ -110,6 +113,54 @@ const fmtZecShort = (zat: bigint): string =>
 /** address-book rows: keep the head/tail that actually identify the address. */
 const truncateAddress = (address: string): string =>
   address.length > 22 ? `${address.slice(0, 12)}…${address.slice(-8)}` : address;
+
+/**
+ * One calm sentence explaining what the worker is doing right now, for the
+ * StatusSlot under the proving StepList. Keyed on the worker's own `step`
+ * labels (see zcash-worker.ts emitProgress calls) — a step this doesn't
+ * recognise falls back to plain "working" copy rather than showing nothing.
+ *
+ * The one exception to "no time estimate" is the witness-tree rebuild: the
+ * worker itself reports that case takes about three minutes
+ * (zcash-worker.ts ~line 3047, step 'witness corrupt — rebuilding'), so this
+ * is the one place a duration is shown. The worker's own step string has an
+ * em dash in it; the display copy here does not repeat it verbatim.
+ */
+const explainSendStep = (step: string): string => {
+  if (step.startsWith('witness corrupt')) {
+    return 'rebuilding the merkle witnesses from a checkpoint. this takes about 3 min.';
+  }
+  if (step === 'loading wallet state' || step === 'fetching chain tip') {
+    return 'reading your wallet and the current chain tip.';
+  }
+  if (step === 'selecting notes' || step === 'notes selected') {
+    return 'choosing which notes to spend from.';
+  }
+  if (step === 'building merkle witnesses' || step === 'witnesses built') {
+    return 'building the merkle witnesses this spend needs.';
+  }
+  if (step === 'checking NU6.3 activation' || step === 'NU6.3 active') {
+    return 'checking which zcash pool is active on the network.';
+  }
+  if (step.startsWith('proving')) {
+    return 'your computer proves the payment is valid and signs it with your key. the network learns nothing about sender, amount or memo.';
+  }
+  if (
+    step.includes('signed') ||
+    step.includes('proved') ||
+    step.startsWith('PCZT') ||
+    step.startsWith('building & proving PCZT')
+  ) {
+    return 'the transaction is proved and signed.';
+  }
+  if (step.startsWith('broadcasting')) {
+    return 'sending the transaction to the zcash network.';
+  }
+  if (step === 'complete' || step.includes('complete')) {
+    return 'done.';
+  }
+  return 'working on your transaction.';
+};
 
 /** live elapsed timer — ticks every second so the build screen never looks frozen */
 function LiveTimer({ startMs }: { startMs: number }) {
@@ -1657,34 +1708,38 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               <h2 className='text-lg font-medium'>review transaction</h2>
             </div>
 
-            <div className='bg-elev-1 border border-border-soft rounded-lg p-4 flex flex-col gap-3'>
-              <div className='flex justify-between'>
-                <span className='text-fg-muted'>network</span>
-                <span className='font-medium'>zcash {mainnet ? 'mainnet' : 'testnet'}</span>
-              </div>
-              <div className='flex justify-between'>
-                <span className='text-fg-muted'>to</span>
-                <span className='font-mono text-sm truncate max-w-[180px]'>{recipient}</span>
-              </div>
-              <div className='flex justify-between'>
-                <span className='text-fg-muted'>amount</span>
-                <span className='font-medium tabular-nums'>
+            <RowGroup>
+              <Row
+                type='value'
+                label='network'
+                value={`zcash ${mainnet ? 'mainnet' : 'testnet'}`}
+                onPress={() => {}}
+              />
+              <Row type='value' label='to' value={truncateAddress(recipient)} onPress={() => {}} />
+              {/* amount/fee/total stay hand-rolled (not <Row>): they wrap each
+                  value in <Sensitive>, which Row's string-only `value` prop
+                  can't carry, and this is real privacy-mode blur, not
+                  decoration - not worth losing for the sake of using the
+                  primitive everywhere. */}
+              <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
+                <span className='text-data text-fg-muted lowercase'>amount</span>
+                <span className='text-data tabular-nums text-fg-high'>
                   <Sensitive>{amount} zec</Sensitive>
                 </span>
               </div>
-              <div className='flex justify-between'>
-                <span className='text-fg-muted'>fee</span>
-                <span className='text-sm tabular-nums'>
+              <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
+                <span className='text-data text-fg-muted lowercase'>fee</span>
+                <span className='text-data tabular-nums text-fg-high'>
                   <Sensitive>{fee} zec</Sensitive>
                 </span>
               </div>
-              <div className='border-t border-border-soft pt-2 flex justify-between'>
-                <span className='text-fg-muted'>total</span>
-                <span className='font-medium tabular-nums'>
+              <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
+                <span className='text-data text-fg-muted lowercase'>total</span>
+                <span className='text-data tabular-nums text-fg-high'>
                   <Sensitive>{(Number(amount) + Number(fee)).toFixed(4)} zec</Sensitive>
                 </span>
               </div>
-            </div>
+            </RowGroup>
 
             <div className='flex gap-2 mt-4'>
               <Button variant='secondary' onClick={handleBack} className='flex-1'>
@@ -1701,24 +1756,40 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           </div>
         );
 
-      case 'building':
+      case 'building': {
+        const currentStep = sendSteps.at(-1)?.step;
         return (
-          <div className='flex flex-col items-center gap-4 p-6'>
-            <div className='w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center'>
-              <div className='w-8 h-8 border-2 border-zigner-gold border-t-transparent rounded-full animate-spin' />
+          <div className='flex flex-col gap-4 p-6'>
+            <div className='flex flex-col items-center gap-3'>
+              <div className='relative flex h-16 w-16 items-center justify-center rounded-full bg-primary/20'>
+                <div className='h-8 w-8 animate-spin rounded-full border-2 border-zigner-gold border-t-transparent' />
+              </div>
+              <h2 className='text-lg font-medium'>sending</h2>
+              {/* live elapsed timer — ticks every second so the UI never looks frozen */}
+              <LiveTimer startMs={buildStartRef.current} />
             </div>
-            <h2 className='text-lg font-medium'>building transaction</h2>
 
-            {/* live elapsed timer — ticks every second so the UI never looks frozen */}
-            <LiveTimer startMs={buildStartRef.current} />
+            <div className='border border-border-soft bg-elev-1 p-3'>
+              <StepList steps={sendSteps} liveSinceMs={buildStartRef.current} className='w-full' />
+            </div>
 
-            <StepList
-              steps={sendSteps}
-              liveSinceMs={buildStartRef.current}
-              className='w-full max-w-sm'
-            />
+            {currentStep && (
+              <StatusSlot tone='gold' icon='i-ph-shield-check'>
+                {explainSendStep(currentStep)}
+              </StatusSlot>
+            )}
+
+            <div className='flex flex-col items-center gap-2 mt-2'>
+              <p className='text-xs text-fg-muted text-center'>
+                you can close this - it keeps going and shows on home
+              </p>
+              <Button variant='secondary' size='sm' onClick={onClose}>
+                back to wallet
+              </Button>
+            </div>
           </div>
         );
+      }
 
       case 'sign': {
         const truncAddr = (a: string) => (a.length > 22 ? `${a.slice(0, 10)}…${a.slice(-8)}` : a);
@@ -1945,7 +2016,14 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               {amount} zec sent successfully
               {totalElapsedSec !== null && ` in ${totalElapsedSec}s`}
             </p>
-            {txHash && <p className='font-mono text-xs text-fg-muted break-all'>{txHash}</p>}
+            {txHash && (
+              <div className='flex items-center gap-1.5'>
+                <p className='font-mono text-xs text-fg-muted break-all'>
+                  {truncateAddress(txHash)}
+                </p>
+                <CopyButton text={txHash} />
+              </div>
+            )}
 
             {/*
               Cold (zigner) wallet: the balance just changed, so the air-gapped
