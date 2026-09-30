@@ -27,6 +27,7 @@ import { ShieldTransparent } from '../../components/zcash/shield-transparent';
 import { useStore } from '../../state';
 import { selectEffectiveKeyInfo } from '../../state/keyring';
 import { selectActiveZcashWallet } from '../../state/wallets';
+import { activeZcashStoreId } from '../../state/pockets';
 import { getNotesInWorker, type DecryptedNoteWithTxid } from '../../state/keyring/network-worker';
 import { useZcashSyncStatus } from '../../hooks/zcash-sync';
 import { useTransparentAddresses } from '../../hooks/use-transparent-addresses';
@@ -251,8 +252,8 @@ function UtxoRow({ utxo }: { utxo: Utxo }) {
 export const PoolNotesPage = () => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
-  const walletId = selectedKeyInfo?.id;
-  const { notes, loading, error, refetch } = usePoolNotes(walletId);
+  const storeId = useStore(activeZcashStoreId);
+  const { notes, loading, error, refetch } = usePoolNotes(storeId);
 
   // deep-link support: home's balance card links here with ?pool=...
   const [searchParams] = useSearchParams();

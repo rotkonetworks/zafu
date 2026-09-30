@@ -11,6 +11,8 @@ import { useEffect, useState } from 'react';
 import { useStore } from '../../../state';
 import { keyRingSelector, selectEffectiveKeyInfo } from '../../../state/keyring';
 import { selectActiveZcashWallet } from '../../../state/wallets';
+import { activeAccountIndex } from '../../../state/pockets';
+import { zcashTransparentIndexKey } from '../../../state/pocket-id';
 import { getTransparentHistoryInWorker } from '../../../state/keyring/network-worker';
 import { deriveZcashTransparent, deriveZcashTransparentFromUfvk } from '../../../hooks/use-address';
 
@@ -20,6 +22,8 @@ export function useTransparentAddress(active: boolean) {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const keyRing = useStore(keyRingSelector);
   const zcashWallet = useStore(selectActiveZcashWallet);
+  const pocket = useStore(activeAccountIndex);
+  const indexKey = zcashTransparentIndexKey(pocket);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
 
   const isMnemonic = selectedKeyInfo?.type === 'mnemonic';
@@ -39,7 +43,7 @@ export function useTransparentAddress(active: boolean) {
   const deriveAt = async (i: number): Promise<string | undefined> => {
     if (isMnemonic && selectedKeyInfo) {
       const mnemonic = await keyRing.getMnemonic(selectedKeyInfo.id);
-      return deriveZcashTransparent(mnemonic, 0, i, true);
+      return deriveZcashTransparent(mnemonic, pocket, i, true);
     }
     if (zcashUfvk) {
       return deriveZcashTransparentFromUfvk(zcashUfvk, i);
@@ -56,9 +60,9 @@ export function useTransparentAddress(active: boolean) {
     let cancelled = false;
     void (async () => {
       try {
-        const stored = (await chrome.storage.local.get('zcashTransparentIndex'))[
-          'zcashTransparentIndex'
-        ] as number | undefined;
+        const stored = (await chrome.storage.local.get(indexKey))[indexKey] as
+          | number
+          | undefined;
         const start = typeof stored === 'number' && stored > 0 ? stored : 0;
         for (let i = start; i <= start + SCAN_GAP; i++) {
           if (cancelled) {
@@ -76,7 +80,7 @@ export function useTransparentAddress(active: boolean) {
           }
           if (hist.length === 0) {
             setIndex(i);
-            void chrome.storage.local.set({ zcashTransparentIndex: i });
+            void chrome.storage.local.set({ [indexKey]: i });
             return;
           }
         }
@@ -87,7 +91,7 @@ export function useTransparentAddress(active: boolean) {
     return () => {
       cancelled = true;
     };
-  }, [active, canDerive, isMnemonic, selectedKeyInfo, keyRing, zcashUfvk, zidecarUrl]);
+  }, [active, canDerive, isMnemonic, selectedKeyInfo, keyRing, zcashUfvk, zidecarUrl, indexKey]);
 
   // derive the address for the current index
   useEffect(() => {
@@ -121,7 +125,7 @@ export function useTransparentAddress(active: boolean) {
     return () => {
       cancelled = true;
     };
-  }, [active, index, canDerive, isMnemonic, zcashUfvk]);
+  }, [active, index, canDerive, isMnemonic, zcashUfvk, pocket]);
 
   // reuse probe: does the current address already have on-chain history?
   useEffect(() => {
@@ -147,9 +151,9 @@ export function useTransparentAddress(active: boolean) {
   const advance = () => {
     setIndex(i => {
       const next = i + 1;
-      void chrome.storage.local.get('zcashTransparentIndex').then(r => {
-        if (next > ((r['zcashTransparentIndex'] as number | undefined) ?? 0)) {
-          void chrome.storage.local.set({ zcashTransparentIndex: next });
+      void chrome.storage.local.get(indexKey).then(r => {
+        if (next > ((r[indexKey] as number | undefined) ?? 0)) {
+          void chrome.storage.local.set({ [indexKey]: next });
         }
       });
       return next;

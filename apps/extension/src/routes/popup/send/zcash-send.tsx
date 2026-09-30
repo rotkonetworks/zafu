@@ -23,6 +23,7 @@ import { contactsSelector, type Contact, type ContactAddress } from '../../../st
 import { messagesSelector } from '../../../state/messages';
 import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
 import { selectActiveZcashWallet } from '../../../state/wallets';
+import { activeZcashStoreId } from '../../../state/pockets';
 import {
   buildSendTxInWorker,
   buildSendTxPcztInWorker,
@@ -413,6 +414,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
   // store access for wallet id and server url
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  // the pocket's own worker store - account 0 uses the bare wallet id
+  const storeId = useStore(activeZcashStoreId);
   const getMnemonic = useStore(selectGetMnemonic);
   const { requestAuth, PasswordModal } = usePasswordGate();
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
@@ -458,7 +461,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const activePool: 'orchard' | 'ironwood' =
     sendChainHeight > 0 && sendChainHeight < nu63ActivationHeight(mainnet) ? 'orchard' : 'ironwood';
 
-  const poolNotes = usePoolNotes(selectedKeyInfo?.id);
+  const poolNotes = usePoolNotes(storeId);
 
   /** unspent note values in the pool this send would spend from */
   const spendableNotes = useMemo(
@@ -484,15 +487,15 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     }
   }, [poolNotes]);
   useEffect(() => {
-    if (!selectedKeyInfo) {
+    if (!storeId) {
       return;
     }
     // resolves even for a wallet with no notes at all, which the length check
     // above cannot distinguish from "not fetched yet"
-    getBalanceInWorker('zcash', selectedKeyInfo.id)
+    getBalanceInWorker('zcash', storeId)
       .then(() => setNotesLoaded(true))
       .catch(() => {});
-  }, [selectedKeyInfo?.id]);
+  }, [storeId]);
 
   const balanceZat = notesLoaded ? spendableNotes.reduce((s, v) => s + v, 0n) : null;
 
@@ -768,7 +771,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         const mnemonic = await getMnemonic(walletId);
         const result = await buildSendTxInWorker(
           'zcash',
-          walletId,
+          storeId,
           zidecarUrl,
           recipient.trim(),
           amountZat,
@@ -847,7 +850,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         // ironwood PCZT with empty sighash/alphas that no co-signer can sign.
         const result = await buildSendTxPcztInWorker(
           'zcash',
-          walletId,
+          storeId,
           zidecarUrl,
           recipient.trim(),
           amountZat,
@@ -887,7 +890,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         // complete_orchard_pczt (orchard/v5-only) cannot consume.
         const result = await buildSendTxPcztInWorker(
           'zcash',
-          walletId,
+          storeId,
           zidecarUrl,
           recipient.trim(),
           amountZat,
@@ -930,7 +933,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               spendIndices: result.spendIndices,
               coldSendId: result.coldSendId,
             },
-            { walletId, zidecarUrl, mainnet },
+            { walletId: storeId, zidecarUrl, mainnet },
             {
               onSigned: () => {
                 setStep('broadcast');
@@ -974,7 +977,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         const targetHeightHint = 0;
         const result = await buildSendTxPcztInWorker(
           'zcash',
-          walletId,
+          storeId,
           zidecarUrl,
           recipient.trim(),
           amountZat,
@@ -1031,7 +1034,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             spendIndices: result.spendIndices,
             coldSendId: result.coldSendId,
           },
-          { walletId, zidecarUrl, mainnet },
+          { walletId: storeId, zidecarUrl, mainnet },
           { onSigned: () => setStep('broadcast') },
         );
         pcztUnsignedRef.current = null;
@@ -1059,7 +1062,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         const targetHeightHint = 0;
         const result = await buildSendTxPcztInWorker(
           'zcash',
-          walletId,
+          storeId,
           zidecarUrl,
           recipient.trim(),
           amountZat,
@@ -1115,7 +1118,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             spendIndices: result.spendIndices,
             coldSendId: result.coldSendId,
           },
-          { walletId, zidecarUrl, mainnet },
+          { walletId: storeId, zidecarUrl, mainnet },
           { onSigned: () => setStep('broadcast') },
         );
         zignerDeliverRef.current = null;
