@@ -1,5 +1,4 @@
 import { ChainRegistryClient } from '@penumbrafi/registry';
-import { sample } from 'lodash';
 import { createClient } from '@connectrpc/connect';
 import { createGrpcWebTransport } from '@connectrpc/connect-web';
 import { localExtStorage } from '@repo/storage-chrome/local';
@@ -45,30 +44,27 @@ export const setFreshWalletBlockHeights = async () => {
 };
 
 export const setOnboardingValuesInStorage = async (seedPhraseOrigin: SEED_PHRASE_ORIGIN) => {
-  const chainRegistryClient = new ChainRegistryClient();
-  const { rpcs, frontends } = await chainRegistryClient.remote.globals();
-
-  // If the default frontend is not present, randomly sample a frontend from the chain registry.
-  const defaultFrontend = frontends.find(frontend => frontend.name === 'Radiant Commons');
-  const selectedFrontend = defaultFrontend ?? sample(frontends);
-  if (!selectedFrontend) {
-    throw new Error('Registry missing frontends.');
-  }
-
-  // Persist the frontend to LS storage.
   await localExtStorage.set('frontendUrl', DEFAULT_FRONTEND);
-
-  // Queries for block height regardless of 'SEED_PHRASE_ORIGIN' as a means of testing endpoint for liveness.
-  const { blockHeight, rpc } = await fetchBlockHeightWithFallback(rpcs.map(r => r.url));
-
-  // Persist the RPC to LS storage.
-  await localExtStorage.set('grpcEndpoint', rpc);
 
   if (seedPhraseOrigin === SEED_PHRASE_ORIGIN.IMPORTED) {
     // Importing means the user typed the phrase from an existing backup —
     // they demonstrably possess it. Suppress the home backup nudge.
     await localExtStorage.set('seedPhraseBackedUp', true);
   }
+
+  // Everything below talks to Penumbra and its registry: only for a wallet
+  // that chose Penumbra. A Zcash-only onboarding contacts nothing else.
+  if (!(await localExtStorage.get('enabledNetworks'))?.includes('penumbra')) {
+    return;
+  }
+  const chainRegistryClient = new ChainRegistryClient();
+  const { rpcs } = await chainRegistryClient.remote.globals();
+
+  // Queries for block height regardless of 'SEED_PHRASE_ORIGIN' as a means of testing endpoint for liveness.
+  const { blockHeight, rpc } = await fetchBlockHeightWithFallback(rpcs.map(r => r.url));
+
+  // Persist the RPC to LS storage.
+  await localExtStorage.set('grpcEndpoint', rpc);
 
   if (seedPhraseOrigin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED) {
     // NOTE: walletCreationBlockHeight and compactFrontierBlockHeight should already be set

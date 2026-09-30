@@ -115,8 +115,9 @@ export const useFinalizeOnboarding = () => {
             await setNetworkEndpoint('zcash', preset.url);
           }
 
-          // For fresh wallets, set block heights BEFORE creating wallet to avoid race condition
-          if (origin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED) {
+          // For fresh wallets, set Penumbra's block heights BEFORE creating the
+          // wallet to avoid a race. Penumbra only: this contacts its nodes.
+          if (origin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED && targets.includes('penumbra')) {
             await setFreshWalletBlockHeights();
           }
           // Recover/import is idempotent by walletId: recovering the same seed

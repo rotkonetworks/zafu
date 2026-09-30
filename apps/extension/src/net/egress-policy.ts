@@ -47,7 +47,8 @@ export interface EgressInputs {
   grpcEndpoint?: string;
   customNetworks?: unknown[];
   netEgress?: {
-    destinations?: Record<string, { state?: string }>;
+    /** `trusted` only on v1 records: zafu auto-allowed them, the user never chose */
+    destinations?: Record<string, { state?: string; trusted?: boolean }>;
     optIns?: Record<string, 'allowed' | 'blocked'>;
   };
   zidDiscovery?: { enabled?: boolean; relayEndpoint?: string };
@@ -364,7 +365,7 @@ export const compileEgress = (i: EgressInputs): EgressTable => {
   }
   const hosts: EgressTable['hosts'] = {};
   for (const [host, record] of Object.entries(i.netEgress?.destinations ?? {})) {
-    if (record?.state === 'allowed' || record?.state === 'blocked') {
+    if (record?.state === 'blocked' || (record?.state === 'allowed' && !record.trusted)) {
       hosts[host] = record.state;
     }
   }

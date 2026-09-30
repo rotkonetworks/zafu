@@ -15,6 +15,7 @@
  *     pinned config's server list.
  */
 
+import { grantDestinationHosts, requestEgressOptIn } from '../../net/egress-opt-in';
 import { BUNDLED_PINNED_SOURCE } from './types';
 import type {
   PinnedConfigSource,
@@ -269,8 +270,15 @@ export const fetchTally = async (
 
 /** One-call composition for the UI: pinned source → rounds. */
 export const loadVoting = async (source: PinnedConfigSource) => {
+  // optional destination: ask first; a no leaves the fetch below to refuse
+  await requestEgressOptIn('voting');
   const staticConfig = await fetchStaticConfig(source);
+  await grantDestinationHosts('voting', [staticConfig.dynamic_config_url]);
   const config = await fetchServiceConfig(staticConfig);
+  await grantDestinationHosts(
+    'voting',
+    [...config.vote_servers, ...(config.pir_endpoints ?? [])].map(s => s.url),
+  );
   const rounds = await fetchRounds(config);
   return { config, rounds };
 };

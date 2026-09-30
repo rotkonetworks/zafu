@@ -244,3 +244,44 @@ export const clearNetEgressLog = async (): Promise<void> => {
     logCache = [];
   });
 };
+
+/** The user's egress decisions, for the encrypted personal-data backup. */
+export interface EgressChoices {
+  hosts: Record<string, OptInChoice>;
+  optIns: Record<string, OptInChoice>;
+}
+
+export const exportEgressChoices = async (): Promise<EgressChoices> => {
+  const state = await readNetEgress();
+  const hosts: Record<string, OptInChoice> = {};
+  for (const [host, record] of Object.entries(state.destinations)) {
+    if (record.state !== 'pending') {
+      hosts[host] = record.state;
+    }
+  }
+  return { hosts, optIns: { ...state.optIns } };
+};
+
+/** Restore backed-up decisions over the current ones (a restore is the user choosing again). */
+export const importEgressChoices = async (
+  choices: Partial<EgressChoices> | undefined,
+): Promise<void> => {
+  const parsed = parseNetEgressState({
+    destinations: Object.fromEntries(
+      Object.entries(choices?.hosts ?? {}).map(([host, state]) => [
+        host,
+        { state, label: 'restored from backup' },
+      ]),
+    ),
+    optIns: choices?.optIns,
+  });
+  await mutateNetEgress(s => {
+    for (const [host, record] of Object.entries(parsed.destinations)) {
+      s.destinations[host] = {
+        ...record,
+        firstSeen: s.destinations[host]?.firstSeen ?? Date.now(),
+      };
+    }
+    Object.assign(s.optIns, parsed.optIns);
+  });
+};

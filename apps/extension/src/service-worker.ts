@@ -31,6 +31,7 @@ import {
   contactDiscoveryRequestResultListener,
 } from './message/listen/contact-discovery-request';
 import { destinationConsentResultListener } from './net/prompt';
+import { runNetEgressMigration } from './net/egress-migrate';
 import { internalZidListener } from './message/listen/internal-zid';
 import { NET_EGRESS_INTERNAL_METHODS } from './message/listen/zafu-method-names';
 import { zcashLinkListener } from './message/listen/zcash-link';
@@ -310,6 +311,9 @@ localExtStorage.addListener(changes => {
 });
 
 const initHandler = async () => {
+  // v1 egress ledger -> default deny, once (see net/egress-migrate.ts)
+  await runNetEgressMigration().catch(() => undefined);
+
   // run any pending IDB clears requested before the previous reload,
   // BEFORE wallet services open new connections (which would block deletion)
   await performPendingClears();
