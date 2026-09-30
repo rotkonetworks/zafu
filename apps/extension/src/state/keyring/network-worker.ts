@@ -403,8 +403,10 @@ export const deriveAddressInWorker = async (
   accountIndex: number,
   /** zcash: the 11-byte diversifier index as 22 hex chars (see shielded-receive-index) */
   diversifierHex?: string,
+  /** zcash: the pocket (zip32 account); accountIndex above is a diversifier index */
+  pocket = 0,
 ): Promise<string> => {
-  return callWorker(network, 'derive-address', { mnemonic, accountIndex, diversifierHex });
+  return callWorker(network, 'derive-address', { mnemonic, accountIndex, diversifierHex, pocket });
 };
 
 /**
@@ -1582,8 +1584,9 @@ export const pirFetchImtProofsInWorker = async (a: {
 export const getOrchardAccountInfoInWorker = async (
   mnemonic: string,
   mainnet: boolean,
+  pocket = 0,
 ): Promise<{ fvkHex: string; ufvkStr: string }> => {
-  return callWorker('zcash', 'get-orchard-account-info', { mnemonic, mainnet });
+  return callWorker('zcash', 'get-orchard-account-info', { mnemonic, mainnet, pocket });
 };
 
 /** Live consensus branch id (as a number) from the endpoint's GetLightdInfo,
