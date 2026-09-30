@@ -14,6 +14,7 @@ import type { ZidSitePreference } from '../../../../state/identity';
 import { getOriginPermissions } from '@repo/storage-chrome/origin';
 import {
   CAPABILITY_META,
+  hasCapability,
   type Capability,
   type OriginPermissions,
 } from '@repo/storage-chrome/capabilities';
@@ -244,7 +245,7 @@ export const KnownSite = ({
                 <CapabilityToggle
                   key={cap}
                   cap={cap}
-                  granted={perms?.granted.includes(cap) ?? false}
+                  granted={hasCapability(perms, cap)}
                   onToggle={handleCapToggle}
                 />
               ))}

@@ -451,4 +451,111 @@ describe('zafu_passkey_create — per-credential consent', () => {
     expect(res).toEqual({ success: false, error: 'not connected' });
     expect(signAssertionMock).not.toHaveBeenCalled();
   });
+
+  it('(f3) `connect` alone (no `passkey`) is refused, not accepted as a substitute', async () => {
+    // regression: passkey_get used to accept a bare `connect` grant in place of
+    // `passkey`, which made the passkey TTL a no-op for any connected origin.
+    const origin = 'https://connect-only.example';
+    await grantCapability(origin, 'connect');
+
+    const res = await call(
+      { type: 'zafu_passkey_get', rpId: 'connect-only.example', clientDataHash: 'aabb' },
+      validSender(origin),
+    );
+
+    expect(res).toEqual({ success: false, error: 'not connected' });
+    expect(signAssertionMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('zafu_passkey_get — expired grant re-asks instead of failing forever', () => {
+  // signing needs the mnemonic, same as the consent-flow describe above.
+  beforeEach(async () => {
+    signAssertionMock.mockClear();
+    await sessionExtStorage.set('passwordKey', 'unlocked-key');
+  });
+  afterEach(async () => {
+    await sessionExtStorage.remove('passwordKey');
+  });
+
+  /** the approval-popup URL opened for `origin` via the capability-approval path
+   *  (distinct from the passkey-CREATE consent screen, which uses /passkey-approve) */
+  const capabilityPopupUrlFor = (origin: string): string | undefined =>
+    createMock.mock.calls
+      .map((c: unknown[]) => String((c[0] as { url?: string } | undefined)?.url ?? ''))
+      .find(u => u.includes('/approval/capability') && appParam(u) === origin);
+
+  const waitForCapabilityPopup = async (origin: string): Promise<string> => {
+    await vi.waitFor(
+      () => {
+        if (!capabilityPopupUrlFor(origin)) {
+          throw new Error(`no capability approval popup was opened for ${origin}`);
+        }
+      },
+      { timeout: 4000, interval: 25 },
+    );
+    return capabilityPopupUrlFor(origin)!;
+  };
+
+  it('a passkey grant with no recorded expiry (pre-TTL data) re-asks, then signs on approval', async () => {
+    const origin = 'https://legacy-grant.example';
+    await grantCapability(origin, 'passkey');
+    // simulate storage written before the expiry mechanism existed
+    const perms = await getOriginPermissions(origin);
+    delete perms!.expires;
+    await localExtStorage.set(
+      'knownSites',
+      ((await localExtStorage.get('knownSites')) ?? []).map(p =>
+        p.origin === origin ? perms! : p,
+      ) as never,
+    );
+
+    const pending = call(
+      { type: 'zafu_passkey_get', rpId: 'legacy-grant.example', clientDataHash: 'aabb' },
+      validSender(origin),
+    );
+    await waitForCapabilityPopup(origin);
+    const requestId = new URLSearchParams(
+      capabilityPopupUrlFor(origin)!.slice(capabilityPopupUrlFor(origin)!.indexOf('?') + 1),
+    ).get('requestId')!;
+    await call(
+      { type: 'zafu_capability_result', requestId, result: { approved: true } },
+      internalSender(),
+    );
+
+    expect(await pending).toMatchObject({ success: true });
+    expect(signAssertionMock).toHaveBeenCalled();
+    // the re-approval refreshed the expiry
+    expect((await getOriginPermissions(origin))?.expires?.passkey).toBeDefined();
+  });
+
+  it('a lapsed passkey grant that the user denies re-asking does not sign', async () => {
+    const origin = 'https://lapsed-deny.example';
+    await grantCapability(origin, 'passkey');
+    const perms = await getOriginPermissions(origin);
+    perms!.expires = { passkey: Date.now() - 1000 };
+    await localExtStorage.set(
+      'knownSites',
+      ((await localExtStorage.get('knownSites')) ?? []).map(p =>
+        p.origin === origin ? perms! : p,
+      ) as never,
+    );
+
+    const pending = call(
+      { type: 'zafu_passkey_get', rpId: 'lapsed-deny.example', clientDataHash: 'aabb' },
+      validSender(origin),
+    );
+    await waitForCapabilityPopup(origin);
+    const requestId = new URLSearchParams(
+      capabilityPopupUrlFor(origin)!.slice(capabilityPopupUrlFor(origin)!.indexOf('?') + 1),
+    ).get('requestId')!;
+    await call(
+      { type: 'zafu_capability_result', requestId, result: { approved: false } },
+      internalSender(),
+    );
+
+    expect(await pending).toEqual({ success: false, error: 'denied' });
+    expect(signAssertionMock).not.toHaveBeenCalled();
+    expect((await getOriginPermissions(origin))?.granted ?? []).not.toContain('passkey');
+  });
 });

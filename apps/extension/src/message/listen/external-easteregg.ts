@@ -385,6 +385,72 @@ async function ensureCapabilityMode(cap: Capability, origin: string): Promise<Mo
   return answer.approved ? { ok: true } : { ok: false, reason: 'disabled' };
 }
 
+/**
+ * Open the per-origin capability approval popup and wait for a decision,
+ * granting/denying `cap` at `origin` as a side effect. This is the ONE
+ * place that opens that popup - both `zafu_request_capability`'s popup
+ * path and `zafu_passkey_get`'s re-authorization-after-expiry path (see
+ * TIME_LIMITED_CAPABILITIES) call this instead of each running their own
+ * copy of the window-lifecycle plumbing.
+ *
+ * Returns which of the three outcomes happened, since callers respond
+ * differently to "the user said no" than to "the popup never got an
+ * answer" (closed, failed to open): a cancelled decision must NOT persist
+ * a denial the user never made.
+ */
+async function requestCapabilityApprovalPopup(
+  origin: string,
+  cap: Capability,
+  sender: chrome.runtime.MessageSender,
+): Promise<'approved' | 'denied' | 'cancelled'> {
+  const requestId = crypto.randomUUID();
+  const resultPromise = new Promise<unknown>(resolve => {
+    pendingPicks.set(requestId, resolve);
+  });
+
+  const params = new URLSearchParams({
+    app: origin,
+    capability: cap,
+    requestId,
+    favIconUrl: sender.tab?.favIconUrl || '',
+    title: sender.tab?.title || '',
+  });
+  const url = chrome.runtime.getURL(`popup.html#/approval/capability?${params.toString()}`);
+  chrome.windows
+    .create({ url, type: 'popup', width: 400, height: 520 })
+    .then(win => {
+      if (win?.id !== undefined) {
+        popupWindowToRequestId.set(win.id, requestId);
+        return;
+      }
+      const r = pendingPicks.get(requestId);
+      if (r) {
+        pendingPicks.delete(requestId);
+        r({ success: false, error: 'cancelled', cancelled: true });
+      }
+    })
+    .catch(() => {
+      const r = pendingPicks.get(requestId);
+      if (r) {
+        pendingPicks.delete(requestId);
+        r({ success: false, error: 'cancelled', cancelled: true });
+      }
+    });
+
+  const result = (await resultPromise) as { approved?: boolean; cancelled?: boolean };
+  if (result?.approved) {
+    await grantCapability(origin, cap);
+    return 'approved';
+  }
+  if (result?.cancelled) {
+    // Popup never got a user decision (closed or failed to open). Do NOT
+    // persist a denial the user did not make; caller can retry.
+    return 'cancelled';
+  }
+  await denyCapability(origin, cap);
+  return 'denied';
+}
+
 export const externalMessageListener = (
   req: unknown,
   sender: chrome.runtime.MessageSender,
@@ -843,55 +909,14 @@ export const externalMessageListener = (
             return;
           }
 
-          // open approval popup for this capability
-          const requestId = crypto.randomUUID();
-          const resultPromise = new Promise<unknown>(resolve => {
-            pendingPicks.set(requestId, resolve);
-          });
-
-          const params = new URLSearchParams({
-            app: origin,
-            capability: cap,
-            requestId,
-            favIconUrl: sender.tab?.favIconUrl || '',
-            title: sender.tab?.title || '',
-          });
-          const url = chrome.runtime.getURL(`popup.html#/approval/capability?${params.toString()}`);
-          // Track windowId so the onRemoved sweep can resolve the pending
-          // approval on close; create-failure resolves the promise with the
-          // cancelled shape so the outer awaiter does NOT persist a denial
-          // the user never made.
-          chrome.windows
-            .create({ url, type: 'popup', width: 400, height: 520 })
-            .then(win => {
-              if (win?.id !== undefined) {
-                popupWindowToRequestId.set(win.id, requestId);
-                return;
-              }
-              const r = pendingPicks.get(requestId);
-              if (r) {
-                pendingPicks.delete(requestId);
-                r({ success: false, error: 'cancelled', cancelled: true });
-              }
-            })
-            .catch(() => {
-              const r = pendingPicks.get(requestId);
-              if (r) {
-                pendingPicks.delete(requestId);
-                r({ success: false, error: 'cancelled', cancelled: true });
-              }
-            });
-
-          const result = (await resultPromise) as { approved?: boolean; cancelled?: boolean };
-          if (result?.approved) {
-            await grantCapability(origin, cap);
+          // open approval popup for this capability (shared with
+          // zafu_passkey_get's re-authorization-after-expiry path)
+          const outcome = await requestCapabilityApprovalPopup(origin, cap, sender);
+          if (outcome === 'approved') {
             sendResponse({ granted: true, capability: cap });
-          } else if (result?.cancelled) {
-            // Popup never got a user decision (closed or failed to open).
-            // Do NOT persist a denial the user did not make; caller can retry.
+          } else if (outcome === 'cancelled') {
             sendResponse({ granted: false, capability: cap });
           } else {
-            await denyCapability(origin, cap);
             sendResponse({ granted: false, denied: true, capability: cap });
           }
         } catch {
@@ -1292,13 +1317,31 @@ export const externalMessageListener = (
             return;
           }
           const perms = await getOriginPermissions(getOrigin);
-          // `passkey` is the grant that passkey creation earns; `connect` stays
-          // accepted so origins already connected before the capability existed
-          // (and dapps that use the wallet's P-256 signer through an existing
-          // connect grant) keep signing without a new consent step.
-          if (!hasCapability(perms, 'passkey') && !hasCapability(perms, 'connect')) {
+          // `passkey` is the grant that passkey creation earns, and it is
+          // time-limited (see TIME_LIMITED_CAPABILITIES). `connect` is
+          // intentionally NOT accepted as a substitute here any more:
+          // `connect` never expires, so accepting it would make the passkey
+          // TTL a no-op for any site that also holds `connect`.
+          if (!perms?.granted.includes('passkey')) {
+            // never had a credential grant at all - nothing to re-authorize.
             sendResponse({ success: false, error: 'not connected' });
             return;
+          }
+          if (!hasCapability(perms, 'passkey')) {
+            // granted once, but the TTL lapsed (task rule (a): "an expired
+            // grant means the user is asked again", not a silent permanent
+            // failure). Re-run the exact approval popup
+            // `zafu_request_capability` uses; on approve this re-stamps a
+            // fresh expiry and the assertion proceeds in the same call.
+            const outcome = await requestCapabilityApprovalPopup(getOrigin, 'passkey', sender);
+            if (outcome !== 'approved') {
+              sendResponse({
+                success: false,
+                error: outcome === 'cancelled' ? 'cancelled' : 'denied',
+                ...(outcome === 'cancelled' ? { code: 'cancelled' } : {}),
+              });
+              return;
+            }
           }
           // Signing needs the mnemonic too: unlocking first keeps a locked
           // wallet from answering with a failure the content script would have

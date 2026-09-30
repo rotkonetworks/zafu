@@ -77,16 +77,63 @@ export interface OriginPermissions {
   granted: Capability[];
   denied: Capability[];
   grantedAt: number;
-  expiresAt?: number; // for auto_sign TTL
+  /**
+   * per-capability grant expiry, for capabilities that must be re-approved
+   * periodically rather than stand forever once granted (see
+   * TIME_LIMITED_CAPABILITIES). Keyed by capability because different
+   * capabilities on the same origin can be granted at different times -
+   * a single origin-wide expiry could not represent that.
+   */
+  expires?: Partial<Record<Capability, number>>;
   displayName?: string; // user-chosen nickname at this site ("poker-alice")
   identity?: string; // which named identity to use ("default", "poker")
 }
 
-export function hasCapability(perms: OriginPermissions | undefined, cap: Capability): boolean {
+/**
+ * Capabilities whose grant lets a site act SILENTLY, with no per-call
+ * confirmation, once approved once: `zafu_decrypt`/`zafu_encrypt` (encrypt),
+ * `passkey_get` (passkey), and auto-sign (auto_sign). An interactive
+ * capability like `send_tx` still shows a popup on every call, so a
+ * standing grant there is not a standing silent-access grant - only these
+ * need a TTL.
+ */
+export const TIME_LIMITED_CAPABILITIES: ReadonlySet<Capability> = new Set([
+  'encrypt',
+  'passkey',
+  'auto_sign',
+]);
+
+/** default lifetime of a time-limited grant before the site must be asked again. */
+export const GRANT_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+/**
+ * Single choke point for "is this capability usable right now". Every
+ * capability check in the extension (message handlers and settings UI)
+ * should go through this, not `perms.granted.includes(cap)` directly, so
+ * expiry is enforced in exactly one place.
+ *
+ * A time-limited capability with no recorded expiry (grants made before this
+ * TTL mechanism existed) is treated as expired - a safe default that asks the
+ * site once more rather than silently trusting an un-timestamped grant.
+ */
+export function hasCapability(
+  perms: OriginPermissions | undefined,
+  cap: Capability,
+  now: number = Date.now(),
+): boolean {
   if (!perms) {
     return false;
   }
-  return perms.granted.includes(cap);
+  if (!perms.granted.includes(cap)) {
+    return false;
+  }
+  if (TIME_LIMITED_CAPABILITIES.has(cap)) {
+    const expiresAt = perms.expires?.[cap];
+    if (expiresAt === undefined || now > expiresAt) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export function isDenied(perms: OriginPermissions | undefined, cap: Capability): boolean {

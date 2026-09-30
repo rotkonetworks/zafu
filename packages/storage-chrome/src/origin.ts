@@ -1,7 +1,12 @@
 import { localExtStorage } from './local';
 import { OriginRecord } from './records/known-site';
 import { UserChoice } from './records/user-choice';
-import { Capability, OriginPermissions } from './capabilities';
+import {
+  Capability,
+  OriginPermissions,
+  TIME_LIMITED_CAPABILITIES,
+  GRANT_TTL_MS,
+} from './capabilities';
 
 // --- New capability-based API ---
 
@@ -42,14 +47,27 @@ export const getOriginPermissions = async (
   return all.find(p => p.origin === origin);
 };
 
+/**
+ * grant `capability` at `origin`. Time-limited capabilities (see
+ * TIME_LIMITED_CAPABILITIES) get a fresh `expires[capability]` stamped
+ * GRANT_TTL_MS out from now - the TTL is a fixed constant, not a per-call
+ * parameter, so every call site gets the expiry behavior automatically
+ * without having to know which capabilities are time-limited.
+ */
 export const grantCapability = async (origin: string, capability: Capability): Promise<void> => {
   const all = await getPermissionsArray();
   const existing = all.find(p => p.origin === origin);
+  const expiresAt = TIME_LIMITED_CAPABILITIES.has(capability)
+    ? Date.now() + GRANT_TTL_MS
+    : undefined;
   if (existing) {
     if (!existing.granted.includes(capability)) {
       existing.granted.push(capability);
     }
     existing.denied = existing.denied.filter(c => c !== capability);
+    if (expiresAt !== undefined) {
+      existing.expires = { ...existing.expires, [capability]: expiresAt };
+    }
     await savePermissions(all);
   } else {
     await savePermissions([
@@ -59,6 +77,7 @@ export const grantCapability = async (origin: string, capability: Capability): P
         granted: [capability],
         denied: [],
         grantedAt: Date.now(),
+        ...(expiresAt !== undefined ? { expires: { [capability]: expiresAt } } : {}),
       },
     ]);
   }
@@ -71,6 +90,10 @@ export const denyCapability = async (origin: string, capability: Capability): Pr
     existing.granted = existing.granted.filter(c => c !== capability);
     if (!existing.denied.includes(capability)) {
       existing.denied.push(capability);
+    }
+    // a denied capability should not keep carrying a stale expiry around.
+    if (existing.expires && capability in existing.expires) {
+      existing.expires = { ...existing.expires, [capability]: undefined };
     }
     await savePermissions(all);
   } else {

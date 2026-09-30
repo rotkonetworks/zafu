@@ -39,6 +39,7 @@ import { getOriginPermissions, grantCapability, denyCapability } from '@repo/sto
 import { revokeOrigin as revokeOriginFull } from '../../../senders/revoke';
 import {
   CAPABILITY_META,
+  hasCapability,
   type Capability,
   type OriginPermissions,
 } from '@repo/storage-chrome/capabilities';
@@ -1137,7 +1138,7 @@ const SiteRow = ({
                   <span>{CAPABILITY_META[cap].label.toLowerCase()}</span>
                   <input
                     type='checkbox'
-                    checked={site.perms!.granted.includes(cap)}
+                    checked={hasCapability(site.perms, cap)}
                     onChange={e => void handleCapToggle(cap, e.target.checked)}
                     className={`size-3 ${focusRing}`}
                   />
