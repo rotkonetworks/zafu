@@ -1,50 +1,47 @@
-'use client';
-
-import * as React from 'react';
-import * as TogglePrimitive from '@radix-ui/react-toggle';
-import { ToggleProps as RadixToggleProps } from '@radix-ui/react-toggle';
-import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../../../lib/utils';
 
-const toggleVariants = cva(
-  'inline-flex items-center justify-center rounded-lg font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
-  {
-    variants: {
-      variant: {
-        default: 'bg-transparent data-[state=on]:bg-teal data-[state=off]:text-fg-muted',
-        outline: 'border border-input bg-transparent hover:bg-elev-1 hover:text-fg-high',
-      },
-      size: {
-        default: 'h-12 px-[22px]',
-        sm: 'h-9 px-2.5',
-        lg: 'h-11 px-5 text-lg',
-      },
-    },
-    defaultVariants: {
-      variant: 'default',
-      size: 'default',
-    },
-  },
+/**
+ * Toggle - the one on/off affordance for the whole popup. role="switch", a
+ * rounded track that fills gold with the knob on the right when on, and
+ * sits on surface-elev-2 with the knob on the left when off, so state reads
+ * without parsing text.
+ */
+export const Toggle = ({
+  checked,
+  onChange,
+  label,
+  disabled,
+  className,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  /** accessible name for the switch */
+  label?: string;
+  disabled?: boolean;
+  className?: string;
+}) => (
+  <button
+    type='button'
+    role='switch'
+    aria-checked={checked}
+    aria-label={label}
+    disabled={disabled}
+    onClick={() => onChange(!checked)}
+    className={cn(
+      'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors',
+      'focus:outline-none focus-visible:ring-1 focus-visible:ring-network-accent',
+      checked ? 'border-network-accent bg-network-accent' : 'border-surface-border-soft bg-surface-elev-2',
+      disabled && 'cursor-not-allowed opacity-40',
+      className,
+    )}
+  >
+    <span
+      className={cn(
+        'block size-3.5 rounded-full transition-transform',
+        checked
+          ? 'translate-x-[19px] bg-network-accent-foreground'
+          : 'translate-x-[2px] bg-fg-muted',
+      )}
+    />
+  </button>
 );
-
-export interface ToggleProps
-  extends
-    React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof toggleVariants>,
-    RadixToggleProps {}
-
-const Toggle = React.forwardRef<HTMLButtonElement, ToggleProps>(
-  ({ className, variant, size, ...props }, ref) => {
-    return (
-      <TogglePrimitive.Root
-        ref={ref}
-        className={cn(toggleVariants({ variant, size, className }))}
-        {...props}
-      />
-    );
-  },
-);
-
-Toggle.displayName = 'Toggle';
-
-export { Toggle, toggleVariants };

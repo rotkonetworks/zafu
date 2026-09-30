@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 // Lets react-dom's act() run outside a test renderer.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-// The section only needs the storage module and the real ToggleSwitch; the rest
+// The section only needs the storage module and the real Toggle; the rest
 // of this file's imports (store, license, screen chrome) are replaced so the
 // test stays about the storage the settings screen writes.
 let stored: unknown;

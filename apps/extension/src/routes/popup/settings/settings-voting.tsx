@@ -21,7 +21,7 @@ import { resolveVotingConfigSource } from '../../../services/voting/resolve';
 import { BUNDLED_PINNED_SOURCE } from '../../../services/voting/types';
 import type { ServiceEndpoint } from '../../../services/voting/types';
 import { SettingsScreen } from './settings-screen';
-import { ToggleSwitch } from '../../../components/toggle-switch';
+import { Toggle } from '@repo/ui/components/ui/toggle';
 
 interface VotingConfigOverride {
   enabled: boolean;
@@ -175,7 +175,7 @@ export const SettingsVoting = () => {
                     replaces the bundled default for this device only
                   </p>
                 </div>
-                <ToggleSwitch
+                <Toggle
                   checked={enabledInput}
                   onChange={setEnabledInput}
                   label='enable override'

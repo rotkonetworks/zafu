@@ -5,7 +5,7 @@ import { privacySelector, type PrivacySettings } from '../../../state/privacy';
 import { selectActiveNetwork } from '../../../state/keyring';
 import { isPro } from '../../../state/license';
 import { SettingsScreen } from './settings-screen';
-import { ToggleSwitch } from '../../../components/toggle-switch';
+import { Toggle } from '@repo/ui/components/ui/toggle';
 import type { NetworkType } from '../../../state/keyring/network-types';
 import { hasFeature } from '../../../config/networks';
 import {
@@ -97,7 +97,7 @@ function Row({
           {stateLabel}
         </p>
       </div>
-      <ToggleSwitch checked={checked} onChange={onChange} label={label} className='mt-0.5' />
+      <Toggle checked={checked} onChange={onChange} label={label} className='mt-0.5' />
     </div>
   );
 }
@@ -131,7 +131,7 @@ function ProxySection() {
               : 'direct - ip visible to servers'}
           </p>
         </div>
-        <ToggleSwitch
+        <Toggle
           checked={proxy.enabled}
           onChange={next => (next ? (host.trim() ? apply() : undefined) : disable())}
           label='proxy'
@@ -226,7 +226,7 @@ export function ContactDiscoverySection() {
               : 'off - apps cannot learn which of your contacts are online'}
           </p>
         </div>
-        <ToggleSwitch
+        <Toggle
           checked={saved.enabled}
           onChange={next =>
             next

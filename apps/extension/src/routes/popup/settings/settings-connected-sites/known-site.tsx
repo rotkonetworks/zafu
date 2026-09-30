@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { OriginRecord, UserChoice } from '@repo/storage-chrome/records';
 import { Button } from '@repo/ui/components/ui/button';
+import { Toggle } from '@repo/ui/components/ui/toggle';
 import { DisplayOriginURL } from '../../../../shared/components/display-origin-url';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../../../../state';
@@ -107,7 +108,7 @@ const CapabilityToggle = ({
 }) => {
   const meta = CAPABILITY_META[cap];
   return (
-    <label className='flex items-center justify-between gap-2 py-1'>
+    <div className='flex items-center justify-between gap-2 py-1'>
       <div className='flex items-center gap-1.5'>
         <span
           className={cn(
@@ -121,13 +122,8 @@ const CapabilityToggle = ({
           {meta.label}
         </span>
       </div>
-      <input
-        type='checkbox'
-        checked={granted}
-        onChange={e => onToggle(cap, e.target.checked)}
-        className='h-3 w-3 accent-primary'
-      />
-    </label>
+      <Toggle checked={granted} onChange={next => onToggle(cap, next)} label={meta.label} />
+    </div>
   );
 };
 

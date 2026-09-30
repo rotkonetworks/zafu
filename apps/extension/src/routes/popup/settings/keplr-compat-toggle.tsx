@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { localExtStorage } from '@repo/storage-chrome/local';
-import { ToggleSwitch } from '../../../components/toggle-switch';
+import { Toggle } from '@repo/ui/components/ui/toggle';
 
 /**
  * "Act as Keplr" toggle. Lives under the Penumbra network section because
@@ -37,7 +37,7 @@ export function KeplrCompatToggle() {
             : 'off — a real keplr extension is left untouched'}
         </span>
       </div>
-      <ToggleSwitch checked={enabled} onChange={toggle} />
+      <Toggle checked={enabled} onChange={toggle} />
     </div>
   );
 }
