@@ -2,8 +2,9 @@ name: Release (prod, manual)
 
 # Production promotion. Deliberate and rare: never triggered by a push. You
 # run this by hand once a beta has soaked and you're confident it's stable.
-# It ships the committed manifest version (vX.Y.Z) to the prod Chrome Web
-# Store listing and cuts the tagged GitHub release the README points at.
+# It builds the committed manifest version (vX.Y.Z) and cuts the tagged GitHub
+# release the README points at. The Chrome Web Store upload is manual: take the
+# zip from that release to the dashboard (release-engine.yml).
 #
 # Safety interlock: you must type the exact version to publish, and it must
 # match the version committed in apps/extension/public/manifest.json — so a
@@ -17,7 +18,7 @@ on:
         required: true
         type: string
       dry_run:
-        description: 'Build + sign only. No GitHub release, no Chrome Web Store upload.'
+        description: 'Build + sign only. No GitHub release.'
         required: false
         default: false
         type: boolean
