@@ -1,5 +1,5 @@
 /**
- * OnboardingShell — the full-tab first impression. Left art panel, right
+ * OnboardingShell - the full-tab first impression. Left art panel, right
  * column with back + step bars, one primary action per step, calm copy.
  * See the design canvas Onb1..Onb8 boards.
  *
@@ -161,7 +161,10 @@ export function OnboardingShell({ children, art }: OnboardingShellProps) {
                 {steps.slice(0, -1).map((s, i) => (
                   <span
                     key={s.label}
-                    className={cn('h-[3px] w-9', i <= activeIdx ? 'bg-zigner-gold' : 'bg-border-hard')}
+                    className={cn(
+                      'h-[3px] w-9',
+                      i <= activeIdx ? 'bg-zigner-gold' : 'bg-border-hard',
+                    )}
                   />
                 ))}
               </div>

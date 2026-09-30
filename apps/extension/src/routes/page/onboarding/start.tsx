@@ -68,7 +68,10 @@ export const OnboardingStart = () => {
                   onClick={go(opt.target)}
                   className='row flex h-[72px] items-center gap-4 border border-border-soft bg-elev-1 px-5 text-left transition-colors hover:bg-elev-2'
                 >
-                  <span className={opt.icon + ' size-[22px] shrink-0 text-zigner-gold'} aria-hidden='true' />
+                  <span
+                    className={opt.icon + ' size-[22px] shrink-0 text-zigner-gold'}
+                    aria-hidden='true'
+                  />
                   <span className='flex flex-col gap-1'>
                     <span className='text-data text-fg-high lowercase'>{opt.label}</span>
                     <span className='text-label text-fg-muted lowercase'>{opt.hint}</span>
@@ -94,7 +97,9 @@ export const OnboardingStart = () => {
             <br />
             own hands.
           </h1>
-          <p className='text-body text-fg-muted lowercase'>zcash and penumbra · private by default</p>
+          <p className='text-body text-fg-muted lowercase'>
+            zcash and penumbra · private by default
+          </p>
           <div className='mt-2 flex flex-col gap-3'>
             <Button
               variant='primary'

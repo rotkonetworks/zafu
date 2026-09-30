@@ -37,7 +37,10 @@ export const SetPassword = () => {
   // - see import-review.tsx); bounce back if this screen is reached without
   // one stashed (direct URL, or a back-then-forward past the birthday step).
   useEffect(() => {
-    if (origin === SEED_PHRASE_ORIGIN.IMPORTED && !sessionStorage.getItem(PENDING_ZCASH_BIRTHDAY_KEY)) {
+    if (
+      origin === SEED_PHRASE_ORIGIN.IMPORTED &&
+      !sessionStorage.getItem(PENDING_ZCASH_BIRTHDAY_KEY)
+    ) {
       navigate(PagePath.IMPORT_BIRTHDAY);
     }
   }, [origin, navigate]);

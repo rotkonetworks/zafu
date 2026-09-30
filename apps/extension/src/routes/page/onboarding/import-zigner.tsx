@@ -22,7 +22,10 @@ import { OnboardingBack, OnboardingShell } from './onboarding-shell';
  * import is always watch-only; the key never leaves the cold device.
  */
 const AccessNote = ({ kind }: { kind: 'airgap' | 'watch-only' }) => (
-  <StatusSlot tone={kind === 'airgap' ? 'gold' : 'info'} icon={kind === 'airgap' ? 'i-ph-shield' : 'i-ph-eye'}>
+  <StatusSlot
+    tone={kind === 'airgap' ? 'gold' : 'info'}
+    icon={kind === 'airgap' ? 'i-ph-shield' : 'i-ph-eye'}
+  >
     {kind === 'airgap' ? 'airgap signer' : 'watch-only account'} - view balances and build
     transactions. signing needs your zigner.
   </StatusSlot>
@@ -44,12 +47,24 @@ const PasswordChoice = ({
   onScanAgain: () => void;
 }) => (
   <div className='flex flex-col gap-2'>
-    <Button variant='primary' className='h-14 w-full text-body' onClick={onSetPassword} disabled={importing}>
+    <Button
+      variant='primary'
+      className='h-14 w-full text-body'
+      onClick={onSetPassword}
+      disabled={importing}
+    >
       set password
     </Button>
-    <p className='text-center text-label text-fg-muted lowercase'>required to use apps. more secure.</p>
+    <p className='text-center text-label text-fg-muted lowercase'>
+      required to use apps. more secure.
+    </p>
 
-    <Button variant='secondary' className='mt-2 h-14 w-full text-body' onClick={onSkip} disabled={importing}>
+    <Button
+      variant='secondary'
+      className='mt-2 h-14 w-full text-body'
+      onClick={onSkip}
+      disabled={importing}
+    >
       {importing ? 'importing...' : 'skip password'}
     </Button>
     <p className='text-center text-label text-fg-muted lowercase'>no login needed. less secure.</p>
@@ -112,7 +127,8 @@ function detailLine(
       title: 'polkadot account detected',
       detail: (
         <>
-          {ctx.parsedPolkadotExport.address.slice(0, 12)}...{ctx.parsedPolkadotExport.address.slice(-8)}
+          {ctx.parsedPolkadotExport.address.slice(0, 12)}...
+          {ctx.parsedPolkadotExport.address.slice(-8)}
         </>
       ),
       kind: 'watch-only',
@@ -214,7 +230,9 @@ export const ImportZigner = () => {
         let deviceId = zcashWalletImport.zidPublicKey;
         if (!deviceId) {
           deviceId =
-            kind === 'keystone' && ufvkOrFvkB64 ? keystoneDeviceId(ufvkOrFvkB64) : `zcash-${Date.now()}`;
+            kind === 'keystone' && ufvkOrFvkB64
+              ? keystoneDeviceId(ufvkOrFvkB64)
+              : `zcash-${Date.now()}`;
         }
         const defaultLabel = kind === 'keystone' ? 'keystone zcash' : 'zigner zcash';
         const zignerData: ZignerZafuImport = {
@@ -317,7 +335,10 @@ export const ImportZigner = () => {
         <div className='flex flex-col gap-5'>
           <OnboardingBack onClick={handleBack} />
           {/* title doubles as the hidden manual-input trigger (10 clicks) */}
-          <h1 onClick={handleTitleClick} className='cursor-default font-display text-[38px] font-medium text-fg-high'>
+          <h1
+            onClick={handleTitleClick}
+            className='cursor-default font-display text-[38px] font-medium text-fg-high'
+          >
             connect zigner
           </h1>
           <p className='text-body text-fg-muted lowercase'>
@@ -332,16 +353,21 @@ export const ImportZigner = () => {
                   on your zigner
                 </span>
                 <ol className='flex flex-col gap-1.5'>
-                  {['open the zcash key path', 'select FVK (viewing key)', 'scan the QR it shows below'].map(
-                    (label, i) => (
-                      <li key={i} className='flex items-center gap-2 text-label text-fg-muted lowercase'>
-                        <span className='flex size-4 shrink-0 items-center justify-center bg-zigner-gold/15 text-[9px] text-zigner-gold'>
-                          {i + 1}
-                        </span>
-                        {label}
-                      </li>
-                    ),
-                  )}
+                  {[
+                    'open the zcash key path',
+                    'select FVK (viewing key)',
+                    'scan the QR it shows below',
+                  ].map((label, i) => (
+                    <li
+                      key={i}
+                      className='flex items-center gap-2 text-label text-fg-muted lowercase'
+                    >
+                      <span className='flex size-4 shrink-0 items-center justify-center bg-zigner-gold/15 text-[9px] text-zigner-gold'>
+                        {i + 1}
+                      </span>
+                      {label}
+                    </li>
+                  ))}
                 </ol>
               </div>
 
@@ -414,7 +440,9 @@ export const ImportZigner = () => {
             <div className='flex flex-col gap-4'>
               <div className='flex flex-col gap-1'>
                 <div className='text-body text-fg-high lowercase'>{scanned.title}</div>
-                <div className={cn('font-mono text-fg-muted', 'text-label', 'break-all')}>{scanned.detail}</div>
+                <div className={cn('font-mono text-fg-muted', 'text-label', 'break-all')}>
+                  {scanned.detail}
+                </div>
               </div>
               <Input
                 placeholder='wallet label'

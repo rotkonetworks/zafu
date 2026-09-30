@@ -85,7 +85,9 @@ export const ImportBirthday = () => {
   }
 
   const resolved =
-    customHeight != null ? Math.max(ZCASH_ORCHARD_ACTIVATION, customHeight) : safeBirthdayFloor(presets[choice]!.height);
+    customHeight != null
+      ? Math.max(ZCASH_ORCHARD_ACTIVATION, customHeight)
+      : safeBirthdayFloor(presets[choice]!.height);
   const note =
     customHeight != null
       ? `sync starts at block ${resolved.toLocaleString()} (${formatBlockMonth(resolved)})`
@@ -143,7 +145,10 @@ export const ImportBirthday = () => {
           </div>
 
           <div className='flex h-12 items-center gap-2.5 border border-border-soft bg-elev-1 px-4'>
-            <span className='i-ph-clock-counter-clockwise size-[15px] shrink-0 text-zigner-gold' aria-hidden='true' />
+            <span
+              className='i-ph-clock-counter-clockwise size-[15px] shrink-0 text-zigner-gold'
+              aria-hidden='true'
+            />
             <span className='text-body text-fg'>{note}</span>
           </div>
 
@@ -155,7 +160,9 @@ export const ImportBirthday = () => {
             }}
             className='self-start bg-transparent text-label text-fg-muted transition-colors hover:text-fg-high lowercase'
           >
-            {customHeight != null ? `exact block ${customHeight.toLocaleString()} · change` : 'set an exact block height'}
+            {customHeight != null
+              ? `exact block ${customHeight.toLocaleString()} · change`
+              : 'set an exact block height'}
           </button>
 
           <Button variant='primary' className='h-14 w-full text-body' onClick={proceed}>
@@ -173,69 +180,72 @@ export const ImportBirthday = () => {
           outside OnboardingShell's own tree, matching how Sheet itself
           portals - keeps a bottom sheet correct regardless of which flex
           layout opens it. */}
-      {sheetOpen && createPortal(
-        <div className='fixed inset-0 z-50 flex flex-col justify-end'>
-          <button
-            type='button'
-            aria-label='close'
-            onClick={() => setSheetOpen(false)}
-            className='absolute inset-0 border-0 bg-canvas/85'
-          />
-          <div
-            role='dialog'
-            aria-modal='true'
-            aria-labelledby='birthday-sheet-title'
-            className='relative z-10 flex max-h-[85vh] flex-col gap-3 border-t border-border-hard bg-elev-1 p-4 pb-5'
-          >
-            <div className='flex items-center justify-between gap-3'>
-              <span id='birthday-sheet-title' className='text-body font-medium text-fg-high'>
-                exact block height
-              </span>
-              <button
-                type='button'
-                aria-label='close'
-                onClick={() => setSheetOpen(false)}
-                className='grid size-7 shrink-0 place-items-center bg-transparent text-fg-dim transition-colors hover:text-fg-high'
-              >
-                <span className='i-ph-x size-4' aria-hidden='true' />
-              </button>
-            </div>
-            <p className='text-label text-fg-muted lowercase'>
-              for restoring an old wallet when you know its birthday block exactly. sync starts
-              there - a lower number only costs scan time, a higher one can hide older notes.
-            </p>
-            <div className='flex flex-col gap-2'>
-              <label htmlFor='birthday-block' className='text-label text-fg-muted lowercase'>
-                block height
-              </label>
-              <input
-                id='birthday-block'
-                type='number'
-                min={ZCASH_ORCHARD_ACTIVATION}
-                step='1'
-                value={blockDraft}
-                onChange={e => setBlockDraft(e.target.value)}
-                placeholder={String(ZCASH_ORCHARD_ACTIVATION)}
-                className='h-11 w-full border border-border-soft bg-elev-2 px-3 font-mono text-body text-fg-high'
-              />
-              {draftHint && (
-                <span className={cn('text-label', draftHint.ok ? 'text-fg-dim' : 'text-hanko-light')}>
-                  {draftHint.text}
-                </span>
-              )}
-            </div>
-            <Button
-              variant='primary'
-              className='h-11 w-full text-body'
-              disabled={!draftHint?.ok}
-              onClick={applyCustom}
+      {sheetOpen &&
+        createPortal(
+          <div className='fixed inset-0 z-50 flex flex-col justify-end'>
+            <button
+              type='button'
+              aria-label='close'
+              onClick={() => setSheetOpen(false)}
+              className='absolute inset-0 border-0 bg-canvas/85'
+            />
+            <div
+              role='dialog'
+              aria-modal='true'
+              aria-labelledby='birthday-sheet-title'
+              className='relative z-10 flex max-h-[85vh] flex-col gap-3 border-t border-border-hard bg-elev-1 p-4 pb-5'
             >
-              use this height
-            </Button>
-          </div>
-        </div>,
-        document.body,
-      )}
+              <div className='flex items-center justify-between gap-3'>
+                <span id='birthday-sheet-title' className='text-body font-medium text-fg-high'>
+                  exact block height
+                </span>
+                <button
+                  type='button'
+                  aria-label='close'
+                  onClick={() => setSheetOpen(false)}
+                  className='grid size-7 shrink-0 place-items-center bg-transparent text-fg-dim transition-colors hover:text-fg-high'
+                >
+                  <span className='i-ph-x size-4' aria-hidden='true' />
+                </button>
+              </div>
+              <p className='text-label text-fg-muted lowercase'>
+                for restoring an old wallet when you know its birthday block exactly. sync starts
+                there - a lower number only costs scan time, a higher one can hide older notes.
+              </p>
+              <div className='flex flex-col gap-2'>
+                <label htmlFor='birthday-block' className='text-label text-fg-muted lowercase'>
+                  block height
+                </label>
+                <input
+                  id='birthday-block'
+                  type='number'
+                  min={ZCASH_ORCHARD_ACTIVATION}
+                  step='1'
+                  value={blockDraft}
+                  onChange={e => setBlockDraft(e.target.value)}
+                  placeholder={String(ZCASH_ORCHARD_ACTIVATION)}
+                  className='h-11 w-full border border-border-soft bg-elev-2 px-3 font-mono text-body text-fg-high'
+                />
+                {draftHint && (
+                  <span
+                    className={cn('text-label', draftHint.ok ? 'text-fg-dim' : 'text-hanko-light')}
+                  >
+                    {draftHint.text}
+                  </span>
+                )}
+              </div>
+              <Button
+                variant='primary'
+                className='h-11 w-full text-body'
+                disabled={!draftHint?.ok}
+                onClick={applyCustom}
+              >
+                use this height
+              </Button>
+            </div>
+          </div>,
+          document.body,
+        )}
     </OnboardingShell>
   );
 };

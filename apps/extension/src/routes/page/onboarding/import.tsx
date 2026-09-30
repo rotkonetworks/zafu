@@ -40,7 +40,9 @@ export const ImportSeedPhrase = () => {
   const commit = (nextText: string) => {
     setText(nextText);
     const nextWords = splitWords(nextText);
-    setLength(nextWords.length <= 12 ? SeedPhraseLength.TWELVE_WORDS : SeedPhraseLength.TWENTY_FOUR_WORDS);
+    setLength(
+      nextWords.length <= 12 ? SeedPhraseLength.TWELVE_WORDS : SeedPhraseLength.TWENTY_FOUR_WORDS,
+    );
     update(nextWords.join(' '), 0);
   };
 
@@ -59,15 +61,16 @@ export const ImportSeedPhrase = () => {
     navigate(PagePath.IMPORT_REVIEW);
   };
 
-  const note = text.length === 0
-    ? '12 or 24 words'
-    : firstTypo
-      ? suggestion
-        ? `"${firstTypo}" isn't a phrase word · did you mean ${suggestion}? (tap to fix)`
-        : `"${firstTypo}" isn't a phrase word`
-      : valid
-        ? `${words.length} words · valid phrase`
-        : `${words.length} words`;
+  const note =
+    text.length === 0
+      ? '12 or 24 words'
+      : firstTypo
+        ? suggestion
+          ? `"${firstTypo}" isn't a phrase word · did you mean ${suggestion}? (tap to fix)`
+          : `"${firstTypo}" isn't a phrase word`
+        : valid
+          ? `${words.length} words · valid phrase`
+          : `${words.length} words`;
   const noteColor = firstTypo ? 'text-warning' : valid ? 'text-green' : 'text-fg-muted';
 
   return (
@@ -97,7 +100,10 @@ export const ImportSeedPhrase = () => {
             type='button'
             onClick={applyFix}
             disabled={!firstTypo || !suggestion}
-            className={cn('flex h-5 items-center gap-2.5 bg-transparent text-left text-label', noteColor)}
+            className={cn(
+              'flex h-5 items-center gap-2.5 bg-transparent text-left text-label',
+              noteColor,
+            )}
           >
             <span
               className={cn(
@@ -108,7 +114,12 @@ export const ImportSeedPhrase = () => {
             {note}
           </button>
 
-          <Button type='submit' variant='primary' disabled={!valid} className='h-14 w-full text-body'>
+          <Button
+            type='submit'
+            variant='primary'
+            disabled={!valid}
+            className='h-14 w-full text-body'
+          >
             continue
           </Button>
           <span className='text-label text-fg-dim lowercase'>

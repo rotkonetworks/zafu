@@ -84,7 +84,9 @@ export const GenerateSeedPhrase = () => {
             <OnboardingBack onClick={() => setPhase('phrase')} />
             <h1 className='font-display text-[38px] font-medium text-fg-high'>quick check</h1>
             <div className='flex items-baseline justify-between'>
-              <span className='text-body text-fg-high'>tap word #{cur?.index != null ? cur.index + 1 : ''}</span>
+              <span className='text-body text-fg-high'>
+                tap word #{cur?.index != null ? cur.index + 1 : ''}
+              </span>
               <span className='text-label text-fg-muted'>{checkIndex} of 3</span>
             </div>
             <div className='grid grid-cols-3 gap-2.5'>
@@ -100,7 +102,9 @@ export const GenerateSeedPhrase = () => {
               ))}
             </div>
             <span className={cn('h-[18px] text-label', wrong ? 'text-warning' : 'text-fg-muted')}>
-              {wrong ? "that one doesn't match · please check your paper once more" : 'from the words you wrote down'}
+              {wrong
+                ? "that one doesn't match · please check your paper once more"
+                : 'from the words you wrote down'}
             </span>
           </div>
         </FadeTransition>
@@ -112,7 +116,9 @@ export const GenerateSeedPhrase = () => {
     <OnboardingShell art='enso'>
       <FadeTransition>
         <div className='flex flex-col gap-5'>
-          <h1 className='font-display text-[38px] font-medium text-fg-high'>your recovery phrase</h1>
+          <h1 className='font-display text-[38px] font-medium text-fg-high'>
+            your recovery phrase
+          </h1>
           <p className='text-body text-fg-muted lowercase'>
             write the 24 words on paper, in order. they are the wallet.
           </p>
@@ -141,7 +147,9 @@ export const GenerateSeedPhrase = () => {
                 >
                   <span className='i-ph-eye size-[22px] text-zigner-gold' aria-hidden='true' />
                   tap to reveal
-                  <span className='text-label text-fg-muted'>make sure nobody can see your screen</span>
+                  <span className='text-label text-fg-muted'>
+                    make sure nobody can see your screen
+                  </span>
                 </button>
               )}
             </div>

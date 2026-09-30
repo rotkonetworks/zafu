@@ -65,7 +65,11 @@ export const ImportReview = () => {
             and untouched, zafu simply cannot see them.
           </StatusSlot>
 
-          <Button variant='primary' className='h-14 w-full text-body' onClick={() => navigate(PagePath.IMPORT_BIRTHDAY)}>
+          <Button
+            variant='primary'
+            className='h-14 w-full text-body'
+            onClick={() => navigate(PagePath.IMPORT_BIRTHDAY)}
+          >
             looks right, continue
           </Button>
         </div>

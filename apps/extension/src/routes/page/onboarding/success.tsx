@@ -46,13 +46,17 @@ export const OnboardingSuccess = () => {
           </span>
           <h1 className='font-display text-[44px] font-medium text-fg-high'>wallet ready</h1>
 
-          <Button variant='primary' className='h-14 w-full text-body' onClick={() => void openSidePanel()}>
+          <Button
+            variant='primary'
+            className='h-14 w-full text-body'
+            onClick={() => void openSidePanel()}
+          >
             open zafu
           </Button>
 
           <StatusSlot tone='info' icon='i-ph-shield-check'>
-            shielded signing, on your terms. syncing continues in the background - you can use
-            zafu now.
+            shielded signing, on your terms. syncing continues in the background - you can use zafu
+            now.
           </StatusSlot>
         </div>
       </FadeTransition>
