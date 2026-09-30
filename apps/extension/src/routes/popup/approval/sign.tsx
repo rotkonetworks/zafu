@@ -344,4 +344,3 @@ export const SignApproval = () => {
     </ApprovalScreen>
   );
 };
-

@@ -152,7 +152,6 @@ export const KnownSite = ({
   const penumbraAddr = penumbraWallets[penumbraIdx]?.id;
   const zcashAddr = zcashWallets[zcashIdx]?.address;
 
-
   // default is site-specific. toggle switches to global (opt-in).
   const isSiteMode = !pref || pref.mode === 'site';
   const rotation = pref?.rotation ?? 0;

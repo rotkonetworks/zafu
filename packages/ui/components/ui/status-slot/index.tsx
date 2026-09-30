@@ -39,7 +39,13 @@ export function StatusSlot({
   className,
 }: StatusSlotProps) {
   return (
-    <div className={cn('flex flex-col gap-1.5 border p-3 text-left text-xs', TONE_CLASS[tone], className)}>
+    <div
+      className={cn(
+        'flex flex-col gap-1.5 border p-3 text-left text-xs',
+        TONE_CLASS[tone],
+        className,
+      )}
+    >
       <div className='flex items-start justify-between gap-2'>
         <div className='flex items-start gap-1.5'>
           {icon && <span className={cn(icon, 'mt-0.5 size-3.5 shrink-0')} aria-hidden='true' />}

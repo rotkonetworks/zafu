@@ -48,7 +48,6 @@ const MAINNET = true;
 // Version -> capability decisions come from the single source `ledgerCapabilities`
 // (../../../ledger/capabilities): transparent always; shielded iff app >= 3.8.0.
 
-
 /** Local view state - a small linear machine, no store slice needed. */
 type Phase = 'idle' | 'connecting' | 'connected' | 'importing';
 
@@ -184,7 +183,11 @@ export const ConnectLedger = () => {
                   </>
                 )}
               </Button>
-              {error && (<StatusSlot tone='danger' icon='i-ph-warning'>{error}</StatusSlot>)}
+              {error && (
+                <StatusSlot tone='danger' icon='i-ph-warning'>
+                  {error}
+                </StatusSlot>
+              )}
             </div>
           )}
 
@@ -235,7 +238,11 @@ export const ConnectLedger = () => {
                 with the ledger plugged in.
               </StatusSlot>
 
-              {error && (<StatusSlot tone='danger' icon='i-ph-warning'>{error}</StatusSlot>)}
+              {error && (
+                <StatusSlot tone='danger' icon='i-ph-warning'>
+                  {error}
+                </StatusSlot>
+              )}
 
               <div className='flex flex-col gap-2'>
                 <Button

@@ -30,7 +30,9 @@ export const Toggle = ({
     className={cn(
       'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors',
       'focus:outline-none focus-visible:ring-1 focus-visible:ring-network-accent',
-      checked ? 'border-network-accent bg-network-accent' : 'border-surface-border-soft bg-surface-elev-2',
+      checked
+        ? 'border-network-accent bg-network-accent'
+        : 'border-surface-border-soft bg-surface-elev-2',
       disabled && 'cursor-not-allowed opacity-40',
       className,
     )}

@@ -74,11 +74,7 @@ export const GrantCamera = () => {
 
           <div className='flex w-full flex-col gap-2'>
             {state === 'not-granted' && (
-              <Button
-                variant='primary'
-                className='w-full'
-                onClick={() => void handleGrantAccess()}
-              >
+              <Button variant='primary' className='w-full' onClick={() => void handleGrantAccess()}>
                 <span className='i-ph-camera mr-2 size-4' />
                 grant camera access
               </Button>

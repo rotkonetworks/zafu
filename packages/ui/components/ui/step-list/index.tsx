@@ -62,7 +62,10 @@ export function StepList({
             )}
           >
             <span
-              className={cn('w-10 shrink-0 text-right tabular-nums', isLast && liveSinceMs != null && 'text-zigner-gold')}
+              className={cn(
+                'w-10 shrink-0 text-right tabular-nums',
+                isLast && liveSinceMs != null && 'text-zigner-gold',
+              )}
             >
               {isLast && liveSinceMs != null ? (
                 <LiveElapsed startMs={liveSinceMs + s.elapsedMs} />

@@ -62,7 +62,12 @@ export function Row(props: RowProps) {
         <span className='i-ph-caret-right size-3.5 shrink-0 text-fg-dim' aria-hidden='true' />
       )}
       {props.type === 'toggle' && (
-        <Toggle checked={props.checked} onChange={props.onChange} label={label} disabled={disabled} />
+        <Toggle
+          checked={props.checked}
+          onChange={props.onChange}
+          label={label}
+          disabled={disabled}
+        />
       )}
     </>
   );

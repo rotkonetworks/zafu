@@ -14,7 +14,9 @@ export const WordLengthToogles = ({ toogleClick, phrase }: WordLengthTooglesPros
         label='seed phrase length'
         value={value}
         onChange={next =>
-          toogleClick(next === '24' ? SeedPhraseLength.TWENTY_FOUR_WORDS : SeedPhraseLength.TWELVE_WORDS)
+          toogleClick(
+            next === '24' ? SeedPhraseLength.TWENTY_FOUR_WORDS : SeedPhraseLength.TWELVE_WORDS,
+          )
         }
         options={[
           { value: '12', label: '12 words' },

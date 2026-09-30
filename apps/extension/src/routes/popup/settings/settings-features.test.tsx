@@ -32,7 +32,9 @@ const row = (cap: Capability): HTMLElement => {
   const label = CAPABILITY_META[cap].label;
   const hit = [...document.querySelectorAll('div')].find(d => {
     const states = [...d.children].find(
-      c => c.getAttribute('role') === 'radiogroup' && c.querySelectorAll(':scope > button').length === 3,
+      c =>
+        c.getAttribute('role') === 'radiogroup' &&
+        c.querySelectorAll(':scope > button').length === 3,
     );
     return !!states && (d.textContent ?? '').includes(label);
   });
