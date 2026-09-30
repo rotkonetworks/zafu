@@ -1,19 +1,16 @@
 /**
- * The networks directory.
- *
- * Three honest lists, in the order a user cares about:
+ * The networks directory - Penumbra's IBC side:
  *
  *  1. the ibc chains under penumbra - one row per chain with its rotating
  *     endpoint pool, whether a live channel to penumbra is open, and the
  *     egress decision on zafu's shipped rpc/rest, blockable/allowable inline;
  *  2. the user's own networks - a node they run or trust, added by hand, which
- *     then feeds the trusted egress inventory;
- *  3. everything else the wallet may talk to (the shipped + configured hosts),
- *     folded away so it does not dominate the screen.
+ *     then feeds the trusted egress inventory.
  *
- * Lists 1 and 2 are Penumbra's IBC side and render inside the Penumbra
- * network panel (PenumbraIbcDirectory); list 3 sits under all the network
- * cards (NetworksDirectory).
+ * Renders inside the Penumbra network panel (PenumbraIbcDirectory). The full
+ * destination list ("everything zafu talks to", every known host with its
+ * own allow/block control) is its own privacy screen now -
+ * settings-connections.tsx - not folded away here.
  *
  * The egress decision lives in the ledger (`net/ledger.ts`), not here: this
  * screen is a view that re-reads after every mutation.
@@ -34,7 +31,7 @@ import {
   type CustomNetwork,
 } from '../../../net/custom-networks';
 import { trustedDestinations, type TrustedDestination } from '../../../net/inventory';
-import { NET_PURPOSE_LABEL, type NetPurpose } from '../../../net/purpose';
+import type { NetPurpose } from '../../../net/purpose';
 
 /** what the row can say about a host - the ledger's `pending` reads as "not decided yet" */
 type EgressView = 'allowed' | 'blocked' | 'undecided';
@@ -351,55 +348,10 @@ const OwnNetworks = ({
   );
 };
 
-/** everything the wallet already has a reason to contact, folded away. */
-const KnownDestinations = ({ destinations }: { destinations: TrustedDestination[] }) => {
-  const [open, setOpen] = useState(false);
-
-  const grouped = destinations.reduce<Map<NetPurpose, TrustedDestination[]>>((acc, dest) => {
-    for (const purpose of dest.purposes.length ? dest.purposes : (['other'] as NetPurpose[])) {
-      const list = acc.get(purpose) ?? [];
-      list.push(dest);
-      acc.set(purpose, list);
-    }
-    return acc;
-  }, new Map());
-
-  return (
-    <div className='border-t border-border-soft pt-2'>
-      <button
-        type='button'
-        onClick={() => setOpen(o => !o)}
-        aria-expanded={open}
-        className='flex w-full items-center gap-1 text-label text-fg-muted lowercase transition-colors hover:text-fg-high'
-      >
-        <span
-          className={cn('i-ph-caret-right h-3.5 w-3.5 transition-transform', open && 'rotate-90')}
-        />
-        everything else the wallet may talk to ({destinations.length})
-      </button>
-      {open && (
-        <div className='mt-3 flex flex-col gap-3'>
-          {[...grouped.entries()].map(([purpose, list]) => (
-            <div key={purpose} className='flex flex-col gap-1'>
-              <span className='text-label text-fg-muted lowercase'>
-                {NET_PURPOSE_LABEL[purpose]}
-              </span>
-              {list.map(dest => (
-                <div key={`${purpose}-${dest.host}`} className='flex items-baseline gap-2'>
-                  <span className='flex-1 text-label text-fg-dim lowercase'>{dest.label}</span>
-                  <span className='break-all font-mono text-label text-fg-muted'>{dest.host}</span>
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-/** Shared load/refresh of the egress ledger, custom networks and inventory. */
-const useDirectoryState = () => {
+/** Shared load/refresh of the egress ledger, custom networks and inventory.
+ *  Exported for settings-connections.tsx (the "everything zafu talks to"
+ *  privacy screen), which needs the same egress + inventory + decide(). */
+export const useDirectoryState = () => {
   const [egress, setEgress] = useState<NetEgressState | null>(null);
   const [networks, setNetworks] = useState<CustomNetwork[]>([]);
   const [destinations, setDestinations] = useState<TrustedDestination[]>([]);
@@ -424,10 +376,15 @@ const useDirectoryState = () => {
    * this install), and `setDestinationDecision` is a no-op on a missing record -
    * so record the first contact here, trusted, before applying the choice.
    */
-  const decide = async (host: string, label: string, next: DestinationState) => {
+  const decide = async (
+    host: string,
+    label: string,
+    next: DestinationState,
+    purpose: NetPurpose = 'chain-rpc',
+  ) => {
     const state = await readNetEgress();
     if (!state.destinations[host]) {
-      await noteDestination(host, { purpose: 'chain-rpc', trusted: true, label });
+      await noteDestination(host, { purpose, trusted: true, label });
     }
     await setDestinationDecision(host, next);
     await refresh();
@@ -456,10 +413,4 @@ export const PenumbraIbcDirectory = () => {
       </div>
     </div>
   );
-};
-
-/** Network-agnostic list 3, shown under all the network cards. */
-export const NetworksDirectory = () => {
-  const { destinations } = useDirectoryState();
-  return <KnownDestinations destinations={destinations} />;
 };

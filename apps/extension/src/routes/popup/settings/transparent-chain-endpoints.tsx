@@ -1,7 +1,8 @@
 /**
- * One transparent chain's editable RPC endpoint pool, as a collapsible row (the
- * way Keplr lists chains): the header says how many endpoints are in use and
- * whether they are the shipped defaults; expanding it edits the list.
+ * One transparent chain's editable RPC endpoint pool, as a Row(value) that
+ * opens a Sheet (the header says how many endpoints are in use and whether
+ * they are the shipped defaults; the Sheet edits the list - nothing expands
+ * in place).
  *
  * Deposit-address lookups rotate across the pool per address, so no single
  * provider can link all of a user's addresses. Defaults come from the chain
@@ -15,6 +16,8 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { Sheet } from '@repo/ui/components/ui/sheet';
 import { cn } from '@repo/ui/lib/utils';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { defaultRpcPool, useRpcPool } from '../../../hooks/transparent-rpc';
@@ -68,40 +71,21 @@ export const TransparentChainEndpoints = ({
   };
 
   return (
-    <div className='border border-border-soft'>
-      <button
-        type='button'
-        onClick={() => setOpen(o => !o)}
-        aria-expanded={open}
-        className='flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-elev-1'
-      >
-        <span className='flex-1 text-xs text-fg lowercase'>{config.name}</span>
-        <ChannelTag open={channelOpen} />
-        {channelOpen !== undefined && <span className='text-label text-fg-dim'>·</span>}
-        <span className='text-label text-fg-muted lowercase tabular'>
-          {pool.length} {pool.length === 1 ? 'endpoint' : 'endpoints'}
-          {isCustom && ' · custom'}
-        </span>
-        <span
-          className={cn(
-            'i-ph-caret-down h-3.5 w-3.5 text-fg-muted transition-transform',
-            open && 'rotate-180',
-          )}
-        />
-      </button>
-
-      {config.deprecation && (
-        <div className='px-3 pb-2 text-label text-fg-dim lowercase'>
-          {config.deprecation.reason} move funds out by {config.deprecation.moveOutBy}.
-        </div>
-      )}
-
-      {open && (
-        <div
-          className='flex flex-col gap-2 border-t border-border-soft px-3 py-2'
-          title='deposit-address lookups rotate across these endpoints, so no single provider can link all of your addresses. add your own for more separation.'
-        >
-          <div className='flex flex-col gap-1.5'>
+    <RowGroup>
+      <Row
+        type='value'
+        label={config.name}
+        value={`${pool.length} ${pool.length === 1 ? 'endpoint' : 'endpoints'}${isCustom ? ' · custom' : ''}`}
+        description={config.deprecation ? `${config.deprecation.reason} move funds out by ${config.deprecation.moveOutBy}.` : undefined}
+        onPress={() => setOpen(true)}
+      />
+      <Sheet open={open} onOpenChange={setOpen} title={config.name}>
+        <div className='flex flex-col gap-3'>
+          {channelOpen !== undefined && <ChannelTag open={channelOpen} />}
+          <div
+            className='flex flex-col gap-1.5'
+            title='deposit-address lookups rotate across these endpoints, so no single provider can link all of your addresses. add your own for more separation.'
+          >
             {draft.map((url, i) => (
               <div key={i} className='flex items-center gap-1.5'>
                 <input
@@ -161,7 +145,7 @@ export const TransparentChainEndpoints = ({
 
           {children && <div className='border-t border-border-soft pt-2'>{children}</div>}
         </div>
-      )}
-    </div>
+      </Sheet>
+    </RowGroup>
   );
 };

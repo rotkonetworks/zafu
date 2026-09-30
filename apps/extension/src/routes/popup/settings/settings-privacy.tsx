@@ -3,16 +3,43 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../../../state';
 import { privacySelector, type PrivacySettings } from '../../../state/privacy';
 import { selectActiveNetwork } from '../../../state/keyring';
-import { isPro } from '../../../state/license';
 import { SettingsScreen } from './settings-screen';
-import { Toggle } from '@repo/ui/components/ui/toggle';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+import { PopupPath } from '../paths';
 import type { NetworkType } from '../../../state/keyring/network-types';
 import { hasFeature } from '../../../config/networks';
 import {
   DEFAULT_CONTACT_DISCOVERY_RELAY,
   relayEndpointForStorage,
 } from '../../../config/contact-discovery-relay';
+import { usePopupNav } from '../../../utils/navigate';
+import { readZcashMeConfig, type ZcashMeMode } from '../../../services/zcashme/config';
+
+const ZCASHME_MODE_LABEL: Record<ZcashMeMode, string> = {
+  off: 'off',
+  directory: 'directory',
+  live: 'live',
+};
+
+/** zcash.me - a Row(value) reading the persisted mode (an external system,
+ *  so this is a plain effect, not derived state); the detail screen owns
+ *  the mode picker itself (settings-zcashme.tsx). */
+function ZcashMeRow() {
+  const navigate = usePopupNav();
+  const [mode, setMode] = useState<ZcashMeMode>('off');
+  useEffect(() => {
+    void readZcashMeConfig().then(c => setMode(c.mode));
+  }, []);
+  return (
+    <Row
+      type='value'
+      label='zcash.me'
+      value={ZCASHME_MODE_LABEL[mode]}
+      onPress={() => navigate(PopupPath.SETTINGS_ZCASHME)}
+    />
+  );
+}
 
 interface PrivacyRow {
   key: keyof PrivacySettings;
@@ -79,18 +106,22 @@ const PRIVACY_ROWS: readonly PrivacyRow[] = [
   },
 ];
 
+/** proxy - a plain, user-owned socks5 host/port, on or off. A Row(value)
+ *  opening a Sheet to edit it, rather than expanding inline (nothing
+ *  expands in place). No rotko/pro relay framing - pro is shelved. */
 function ProxySection() {
   const { settings, setProxy } = useStore(privacySelector);
-  const pro = useStore(isPro);
   // Defensive: settings persisted before the proxy field existed have no
   // proxy key. persist.ts now merges defaults on hydration, but guard here too.
   const proxy = settings.proxy ?? { enabled: false, host: '', port: 1080 };
+  const [open, setOpen] = useState(false);
   const [host, setHost] = useState(proxy.host);
   const [port, setPort] = useState(String(proxy.port));
 
   const apply = () => {
     const p = parseInt(port, 10) || 1080;
     void setProxy({ enabled: true, host: host.trim(), port: p });
+    setOpen(false);
   };
 
   const disable = () => {
@@ -98,51 +129,55 @@ function ProxySection() {
   };
 
   return (
-    <div className='py-3'>
-      <div className='flex items-center justify-between'>
-        <div>
-          <p className='text-sm font-medium'>proxy</p>
-          <p className={`text-xs mt-0.5 ${proxy.enabled ? 'text-fg-high' : 'text-fg-muted'}`}>
+    <RowGroup>
+      <Row
+        type='value'
+        label='proxy'
+        value={proxy.enabled ? `socks5://${proxy.host}:${proxy.port}` : 'off'}
+        onPress={() => setOpen(true)}
+      />
+      <Sheet open={open} onOpenChange={setOpen} title='proxy'>
+        <div className='flex flex-col gap-3'>
+          <p className='text-xs text-fg-muted'>
             {proxy.enabled
-              ? `socks5://${proxy.host}:${proxy.port}`
-              : 'direct - ip visible to servers'}
+              ? `direct connections go through ${proxy.host}:${proxy.port}`
+              : 'off - your ip is visible to servers you connect to'}
           </p>
+          <div className='flex gap-2'>
+            <input
+              value={host}
+              onChange={e => setHost(e.target.value)}
+              placeholder='host'
+              className='flex-1 rounded border border-border-soft bg-transparent px-2 py-1.5 text-xs font-mono'
+            />
+            <input
+              value={port}
+              onChange={e => setPort(e.target.value)}
+              placeholder='port'
+              className='w-16 rounded border border-border-soft bg-transparent px-2 py-1.5 text-xs font-mono'
+            />
+          </div>
+          <div className='flex gap-2'>
+            <button
+              onClick={apply}
+              disabled={!host.trim()}
+              className='flex-1 rounded border border-zigner-gold bg-zigner-gold/10 py-2 text-xs text-zigner-gold disabled:opacity-30'
+            >
+              connect
+            </button>
+            {proxy.enabled && (
+              <button
+                onClick={disable}
+                className='rounded border border-border-soft px-3 py-2 text-xs text-fg-muted'
+              >
+                turn off
+              </button>
+            )}
+          </div>
+          <p className='text-label text-fg-muted/60'>routes all traffic through your socks5</p>
         </div>
-        <Toggle
-          checked={proxy.enabled}
-          onChange={next => (next ? (host.trim() ? apply() : undefined) : disable())}
-          label='proxy'
-        />
-      </div>
-      {!proxy.enabled && (
-        <div className='mt-2 flex gap-2'>
-          <input
-            value={host}
-            onChange={e => setHost(e.target.value)}
-            placeholder='host'
-            className='flex-1 rounded border border-border-soft bg-transparent px-2 py-1 text-xs font-mono'
-          />
-          <input
-            value={port}
-            onChange={e => setPort(e.target.value)}
-            placeholder='port'
-            className='w-16 rounded border border-border-soft bg-transparent px-2 py-1 text-xs font-mono'
-          />
-          <button
-            onClick={apply}
-            disabled={!host.trim()}
-            className='rounded border border-border-soft px-2 py-1 text-xs disabled:opacity-30'
-          >
-            connect
-          </button>
-        </div>
-      )}
-      <p className='text-label text-fg-muted/40 mt-1'>
-        {pro
-          ? 'routes all traffic - pro includes rotko proxy access'
-          : 'routes all traffic through your socks5 - pro includes proxy access'}
-      </p>
-    </div>
+      </Sheet>
+    </RowGroup>
   );
 }
 
@@ -158,6 +193,7 @@ export function ContactDiscoverySection() {
     relayEndpoint: string;
     relayToken: string;
   } | null>(null);
+  const [open, setOpen] = useState(false);
   const [endpoint, setEndpoint] = useState('');
   const [token, setToken] = useState('');
 
@@ -193,68 +229,69 @@ export function ContactDiscoverySection() {
   const endpointValid = /^https?:\/\//.test(endpoint.trim());
 
   return (
-    <div className='py-3'>
-      <div className='flex items-start justify-between gap-4'>
-        <div className='flex-1'>
-          <p className='text-sm font-medium'>private contact discovery</p>
-          <p className={`text-xs mt-0.5 ${saved.enabled ? 'text-fg-high' : 'text-fg-muted'}`}>
-            {saved.enabled
-              ? `beaconing presence via ${saved.relayEndpoint || DEFAULT_CONTACT_DISCOVERY_RELAY}${saved.relayToken ? ' (with a token)' : ''}`
-              : 'off - apps cannot learn which of your contacts are online'}
+    <RowGroup>
+      <Row
+        type='toggle'
+        label='private contact discovery'
+        description={
+          saved.enabled
+            ? `beaconing presence via ${saved.relayEndpoint || DEFAULT_CONTACT_DISCOVERY_RELAY}`
+            : 'off - apps cannot learn which of your contacts are online'
+        }
+        checked={saved.enabled}
+        onChange={next => (next ? save(true, endpoint, token) : save(false, endpoint, token))}
+      />
+      <Row
+        type='value'
+        label='relay'
+        value={saved.relayEndpoint || DEFAULT_CONTACT_DISCOVERY_RELAY}
+        onPress={() => setOpen(true)}
+      />
+      <Sheet open={open} onOpenChange={setOpen} title='contact-discovery relay'>
+        <div className='flex flex-col gap-3'>
+          <div className='flex flex-col gap-2'>
+            <input
+              value={endpoint}
+              onChange={e => setEndpoint(e.target.value)}
+              placeholder={DEFAULT_CONTACT_DISCOVERY_RELAY}
+              className='rounded border border-border-soft bg-transparent px-2 py-1.5 text-xs font-mono'
+            />
+            <input
+              value={token}
+              onChange={e => setToken(e.target.value)}
+              placeholder='token (only if the relay asks for one)'
+              className='rounded border border-border-soft bg-transparent px-2 py-1.5 text-xs font-mono'
+            />
+          </div>
+          <button
+            onClick={() => {
+              save(saved.enabled, endpoint, token);
+              setOpen(false);
+            }}
+            disabled={!endpointValid}
+            className='rounded border border-zigner-gold bg-zigner-gold/10 py-2 text-xs text-zigner-gold disabled:opacity-30'
+          >
+            save
+          </button>
+          <p className='text-label text-fg-muted/60'>
+            an app learns only which contacts are present in that app, under app-scoped handles -
+            never your contact list, and unlinkable across apps.
           </p>
         </div>
-        <Toggle
-          checked={saved.enabled}
-          onChange={next =>
-            next
-              ? endpointValid
-                ? save(true, endpoint, token)
-                : undefined
-              : save(false, endpoint, token)
-          }
-          label='private contact discovery'
-          className='mt-0.5'
-        />
-      </div>
-      {!saved.enabled && (
-        <div className='mt-2 flex gap-2'>
-          <input
-            value={endpoint}
-            onChange={e => setEndpoint(e.target.value)}
-            placeholder={DEFAULT_CONTACT_DISCOVERY_RELAY}
-            className='flex-1 rounded border border-border-soft bg-transparent px-2 py-1 text-xs font-mono'
-          />
-          <input
-            value={token}
-            onChange={e => setToken(e.target.value)}
-            placeholder='token (only if the relay asks for one)'
-            className='w-48 rounded border border-border-soft bg-transparent px-2 py-1 text-xs font-mono'
-          />
-          <button
-            onClick={() => save(true, endpoint, token)}
-            disabled={!endpointValid}
-            className='rounded border border-border-soft px-2 py-1 text-xs disabled:opacity-30'
-          >
-            enable
-          </button>
-        </div>
-      )}
-      <p className='text-label text-fg-muted/40 mt-1'>
-        an app learns only which contacts are present in that app, under app-scoped handles - never
-        your contact list, and unlinkable across apps.
-      </p>
-    </div>
+      </Sheet>
+    </RowGroup>
   );
 }
 
 export function SettingsPrivacy() {
   const { settings, setSetting } = useStore(privacySelector);
   const activeNetwork = useStore(selectActiveNetwork);
+  const navigate = usePopupNav();
 
   const visibleRows = PRIVACY_ROWS.filter(row => !row.visible || row.visible(activeNetwork));
 
   return (
-    <SettingsScreen title='privacy'>
+    <SettingsScreen title='all privacy controls' backPath={PopupPath.SETTINGS_PRIVACY_HOME}>
       <div className='flex flex-col gap-4'>
         {visibleRows.length > 0 && (
           <RowGroup>
@@ -273,6 +310,18 @@ export function SettingsPrivacy() {
         <ProxySection />
         {/* discovery derives from the zid contact layer; hide it when zid is off */}
         {(settings.enableIdentity ?? true) && <ContactDiscoverySection />}
+        {hasFeature(activeNetwork, 'zcash') && (
+          <RowGroup>
+            <ZcashMeRow />
+          </RowGroup>
+        )}
+        <RowGroup>
+          <Row
+            type='screen'
+            label='everything zafu talks to'
+            onPress={() => navigate(PopupPath.SETTINGS_CONNECTIONS)}
+          />
+        </RowGroup>
         {/* Keplr "act as" toggle moved to Networks → Penumbra section
             since it only affects the Penumbra/IBC scope. */}
         {visibleRows.length === 0 && (

@@ -94,4 +94,18 @@ export enum PopupPath {
   SETTINGS_VOTING = '/settings/voting',
   SETTINGS_ZCASHME = '/settings/zcashme',
   SETTINGS_ADD_VIEWING_KEY = '/settings/add-viewing-key',
+
+  // Settings IA rework: four category homes + a couple of new screens the
+  // category rows need (see routes/popup/settings/AGENTS scope). Every path
+  // above this line still resolves to its existing screen.
+  SETTINGS_SECURITY = '/settings/security',
+  SETTINGS_PRIVACY_HOME = '/settings/privacy/home',
+  SETTINGS_NETWORKS_HOME = '/settings/networks/home',
+  SETTINGS_ZCASH_NETWORK = '/settings/networks/zcash',
+  SETTINGS_DEVICES = '/settings/devices',
+  SETTINGS_DEVICES_ALL = '/settings/devices/all',
+  SETTINGS_REMOVE_WALLET = '/settings/remove-wallet',
+  /** "everything zafu talks to" - every known destination, grouped by
+   *  purpose, with an allow/block control per host. */
+  SETTINGS_CONNECTIONS = '/settings/privacy/connections',
 }

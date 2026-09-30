@@ -1,208 +1,56 @@
 import { useStore } from '../../../state';
 import { passwordSelector } from '../../../state/password';
-import { selectActiveNetwork } from '../../../state/keyring';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
-import { SUBSCRIBE_ENABLED } from '../../../config/feature-flags';
 import { SettingsScreen } from './settings-screen';
-import { cn } from '@repo/ui/lib/utils';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 
-interface SettingsLink {
-  title: string;
-  icon: string;
-  href: PopupPath;
-  /** which networks show this link. undefined = always visible */
-  networks?: string[];
-}
-
-interface SettingsGroup {
-  /** lowercase kicker header for the group */
-  label: string;
-  links: SettingsLink[];
-  /** when set, this group holds one network's own settings - render a
-      network-coloured dot on the kicker so the separation is unmistakable. */
-  network?: string;
-}
-
-// dot colours mirror the wallet-panel network tags so a network reads the same
-// everywhere in the app.
-const NETWORK_DOT: Record<string, string> = {
-  zcash: 'bg-yellow-400',
-  penumbra: 'bg-teal-300',
-};
-
-// Grouped by intent: what protects funds first (security & backup - a hub for
-// recovery/backup/auto-lock/clear-cache), then privacy, then the active
-// network's own settings, then wallet plumbing (wallets & networks + the zigner
-// cold signer), then app-level (appearance, about). Lock stays pinned at the
-// bottom where muscle memory can't hit it by accident.
-const groups: SettingsGroup[] = [
+/**
+ * Settings index - four categories (security · privacy · networks · devices
+ * and app), each a calm home with a few rows and an "all ... controls" row
+ * for the full list. See SetMap.dc.html for the per-setting re-home.
+ */
+const CATEGORIES = [
   {
-    label: 'security & backup',
-    links: [
-      // Single hub. It holds auto-lock and links to the canonical recovery-
-      // passphrase / multisig-backup / clear-cache screens - so those are no
-      // longer duplicated as flat rows here (they were reachable both ways).
-      {
-        title: 'security & backup',
-        icon: 'i-ph-shield-check',
-        href: PopupPath.SETTINGS_SECURITY_BACKUP,
-      },
-    ],
+    title: 'security',
+    icon: 'i-ph-shield-check',
+    href: PopupPath.SETTINGS_SECURITY,
   },
   {
-    label: 'privacy',
-    links: [
-      {
-        title: 'privacy',
-        icon: 'i-ph-eye-slash',
-        href: PopupPath.SETTINGS_PRIVACY,
-      },
-      {
-        title: 'connected sites',
-        icon: 'i-ph-globe',
-        href: PopupPath.SETTINGS_CONNECTED_SITES,
-      },
-      {
-        title: 'features',
-        icon: 'i-ph-sliders-horizontal',
-        href: PopupPath.SETTINGS_FEATURES,
-      },
-    ],
+    title: 'privacy',
+    icon: 'i-ph-eye-slash',
+    href: PopupPath.SETTINGS_PRIVACY_HOME,
   },
   {
-    label: 'wallet',
-    links: [
-      {
-        // wallets + networks are one screen now - manage vaults and enable/
-        // disable networks in the same place.
-        title: 'wallets & networks',
-        icon: 'i-ph-wallet',
-        href: PopupPath.SETTINGS_WALLETS,
-      },
-      {
-        title: 'voting endpoints',
-        icon: 'i-ph-check-square-offset',
-        href: PopupPath.SETTINGS_VOTING,
-        networks: ['zcash'],
-      },
-      {
-        title: 'zcash.me directory',
-        icon: 'i-ph-address-book',
-        href: PopupPath.SETTINGS_ZCASHME,
-        networks: ['zcash'],
-      },
-      {
-        title: 'zigner',
-        icon: 'i-ph-qr-code',
-        href: PopupPath.SETTINGS_ZIGNER,
-      },
-      {
-        title: 'device update',
-        icon: 'i-ph-cpu',
-        href: PopupPath.SETTINGS_OTA,
-      },
-    ],
+    title: 'networks',
+    icon: 'i-ph-compass',
+    href: PopupPath.SETTINGS_NETWORKS_HOME,
   },
   {
-    // app-level settings: appearance is not a wallet concern, so it lives here
-    // with the other app-wide meta rather than in the wallet group.
-    label: 'app',
-    links: [
-      {
-        title: 'appearance',
-        icon: 'i-zafu-enso',
-        href: PopupPath.SETTINGS_APPEARANCE,
-      },
-      ...(SUBSCRIBE_ENABLED
-        ? [
-            {
-              title: 'pro subscription',
-              icon: 'i-ph-lightning',
-              href: PopupPath.SUBSCRIBE,
-            },
-          ]
-        : []),
-      {
-        title: 'about',
-        icon: 'i-ph-info',
-        href: PopupPath.SETTINGS_ABOUT,
-      },
-    ],
+    title: 'devices and app',
+    icon: 'i-ph-sliders-horizontal',
+    href: PopupPath.SETTINGS_DEVICES,
   },
-];
+] as const;
 
 export const Settings = () => {
   const navigate = usePopupNav();
   const { clearSessionPassword } = useStore(passwordSelector);
-  const activeNetwork = useStore(selectActiveNetwork);
-
-  // Generic settings keep their intent groups; anything network-specific is
-  // pulled OUT of them and shown under its own group, headed by the network it
-  // belongs to (with a network-coloured dot). This makes "these are zcash's
-  // settings" explicit, instead of zcash rows silently appearing inside
-  // security & backup / wallet and vanishing when you switch to penumbra.
-  const genericGroups = groups
-    .map(g => ({ ...g, links: g.links.filter(l => !l.networks) }))
-    .filter(g => g.links.length > 0);
-
-  const networkLinks = groups
-    .flatMap(g => g.links)
-    .filter(l => l.networks?.includes(activeNetwork));
-
-  const networkGroup: SettingsGroup | null =
-    networkLinks.length > 0
-      ? { label: `${activeNetwork} settings`, links: networkLinks, network: activeNetwork }
-      : null;
-
-  // order: security & backup, privacy, <active network>, wallet, about - the
-  // network section sits right above the generic wallet plumbing.
-  const visibleGroups: SettingsGroup[] = [];
-  for (const g of genericGroups) {
-    if (g.label === 'wallet' && networkGroup) {
-      visibleGroups.push(networkGroup);
-    }
-    visibleGroups.push(g);
-  }
-  if (networkGroup && !visibleGroups.includes(networkGroup)) {
-    visibleGroups.push(networkGroup);
-  }
 
   return (
     <SettingsScreen title='settings' backPath={PopupPath.INDEX}>
       <div className='flex grow flex-col justify-between'>
-        <div className='flex flex-col gap-4'>
-          {visibleGroups.map(group => (
-            <div key={group.label}>
-              <p className='kicker px-4 pb-1 flex items-center gap-1.5'>
-                {group.network && (
-                  <span
-                    className={cn(
-                      'inline-block size-2 rounded-full',
-                      NETWORK_DOT[group.network] ?? 'bg-fg-dim',
-                    )}
-                  />
-                )}
-                {group.label}
-              </p>
-              {/* auto-lock now lives in the Security & Backup screen (its own
-                  select control), not as an inline row here - see
-                  settings-security-backup.tsx. */}
-              <RowGroup>
-                {group.links.map(l => (
-                  <Row
-                    key={l.href}
-                    type='screen'
-                    icon={l.icon}
-                    label={l.title}
-                    onPress={() => navigate(l.href)}
-                  />
-                ))}
-              </RowGroup>
-            </div>
+        <RowGroup>
+          {CATEGORIES.map(c => (
+            <Row
+              key={c.href}
+              type='screen'
+              icon={c.icon}
+              label={c.title}
+              onPress={() => navigate(c.href)}
+            />
           ))}
-        </div>
+        </RowGroup>
 
         <div className='mt-4 border-t border-border-soft pt-4'>
           <RowGroup>
