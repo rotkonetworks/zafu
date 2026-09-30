@@ -596,6 +596,21 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     });
   }, [amount, spendableNotes, recipientIsTransparent, notesLoaded]);
 
+  /**
+   * Dims the "continue" button - the same cheap synchronous checks
+   * validateForm runs, so it never disagrees with the click handler. Real
+   * validation (zcash.me handles, exact error copy) still happens in
+   * validateForm on click; this only decides whether the button looks
+   * pressable.
+   */
+  const canReview =
+    !!recipient.trim() &&
+    /^(u1|utest1|t1|t3|tm|t2)/.test(recipient.trim()) &&
+    !!amount.trim() &&
+    !isNaN(Number(amount)) &&
+    Number(amount) > 0 &&
+    (amountQuote === null || amountQuote.ok);
+
   // Keep the DISPLAYED fee in step with the quote.
   //
   // `fee` was initialised to the literal '0.0001' and only overwritten from the
@@ -672,10 +687,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           transparentRecipient: /^(t1|t3|tm|t2)/.test(r),
         });
         setFormError(
-          `not enough spendable ${activePool} balance — the most this can send, ` +
-            `after a ${fmtZecShort(quote.feeZat)} ZEC fee, is ${fmtZecShort(maxForThis.amountZat)} ZEC` +
+          `a little more than you have - up to ${fmtZecShort(maxForThis.amountZat)} zec ` +
+            `after a ${fmtZecShort(quote.feeZat)} zec fee` +
             (strandedZat > 0n
-              ? `. ${fmtZecShort(strandedZat)} ZEC is held in the legacy orchard pool and cannot ` +
+              ? ` - ${fmtZecShort(strandedZat)} zec is held in the legacy orchard pool and cannot ` +
                 'be spent until it is migrated to ironwood.'
               : ''),
         );
@@ -1489,7 +1504,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     <span className='truncate'>→ {recipientContact.contact.name}</span>
                   </p>
                 )}
-                {requestError && <p className='mt-1 text-xs text-red-400'>{requestError}</p>}
+                {requestError && (
+                  <StatusSlot tone='warn' icon='i-ph-warning' className='mt-1.5'>
+                    {requestError}
+                  </StatusSlot>
+                )}
                 {requestNote && (
                   <p className='mt-1 truncate text-xs text-fg-muted' title={requestNote}>
                     request: {requestNote}
@@ -1633,37 +1652,38 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     max
                   </button>
                 </div>
-                {/* Inline validation, all of it computed from the same fee
-                    arithmetic the worker will use at build time. */}
-                {balanceZat === 0n && strandedZat === 0n && (
-                  <p className='mt-1.5 text-label text-amber-400 leading-snug'>
-                    no zec yet - receive first from the home screen.
-                  </p>
-                )}
-                {/* Orchard funds are real but consensus-disabled post-NU6.3.
-                    Silently folding them into "your balance" is what produced
-                    a send that failed after a two-minute prove. Name them, and
-                    say what actually releases them. */}
-                {strandedZat > 0n && (
-                  <p className='mt-1.5 text-label text-amber-400 leading-snug tabular-nums'>
-                    <Sensitive>{fmtZecShort(strandedZat)} ZEC</Sensitive> is in the legacy orchard
-                    pool and cannot be sent. migrate it to ironwood from the home screen to spend
-                    it.
-                  </p>
-                )}
-                {amountQuote !== null && !amountQuote.ok && (
-                  <p className='mt-1.5 text-label text-red-400 leading-snug tabular-nums'>
-                    exceeds spendable balance — at most{' '}
-                    <Sensitive>{fmtZecShort(maxSend.amountZat)} ZEC</Sensitive> after a{' '}
-                    <Sensitive>{fmtZecShort(maxSend.feeZat)} ZEC</Sensitive> fee
-                  </p>
-                )}
-                {amountQuote !== null && amountQuote.ok && (
-                  <p className='mt-1.5 text-label text-fg-muted leading-snug tabular-nums'>
-                    fee <Sensitive>{fmtZecShort(amountQuote.feeZat)} ZEC</Sensitive> ·{' '}
-                    {amountQuote.nSpends} note{amountQuote.nSpends === 1 ? '' : 's'} spent
-                  </p>
-                )}
+                {/* Reserved-height slot, all of it computed from the same fee
+                    arithmetic the worker will use at build time - this never
+                    grows/shrinks the layout as the user types, it only swaps
+                    which message (if any) sits in the reserved row. */}
+                <div className='mt-1.5 min-h-[2.25rem]'>
+                  {balanceZat === 0n && strandedZat === 0n ? (
+                    <StatusSlot tone='info' icon='i-ph-info'>
+                      no zec yet - receive first from the home screen.
+                    </StatusSlot>
+                  ) : strandedZat > 0n ? (
+                    // Orchard funds are real but consensus-disabled post-NU6.3.
+                    // Silently folding them into "your balance" is what
+                    // produced a send that failed after a two-minute prove.
+                    // Name them, and say what actually releases them.
+                    <StatusSlot tone='info' icon='i-ph-info'>
+                      <Sensitive>{fmtZecShort(strandedZat)} zec</Sensitive> is in the legacy orchard
+                      pool and cannot be sent - migrate it to ironwood from the home screen to spend
+                      it.
+                    </StatusSlot>
+                  ) : amountQuote !== null && !amountQuote.ok ? (
+                    <StatusSlot tone='warn' icon='i-ph-warning'>
+                      a little more than you have - up to{' '}
+                      <Sensitive>{fmtZecShort(maxSend.amountZat)} zec</Sensitive> after a{' '}
+                      <Sensitive>{fmtZecShort(maxSend.feeZat)} zec</Sensitive> fee
+                    </StatusSlot>
+                  ) : amountQuote !== null && amountQuote.ok ? (
+                    <StatusSlot tone='info'>
+                      fee <Sensitive>{fmtZecShort(amountQuote.feeZat)} zec</Sensitive> ·{' '}
+                      {amountQuote.nSpends} note{amountQuote.nSpends === 1 ? '' : 's'} spent
+                    </StatusSlot>
+                  ) : null}
+                </div>
               </div>
 
               <div>
@@ -1681,15 +1701,24 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 />
               </div>
 
-              {formError && <p className='text-sm text-red-400'>{formError}</p>}
+              {formError && (
+                <StatusSlot tone='warn' icon='i-ph-warning'>
+                  {formError}
+                </StatusSlot>
+              )}
             </div>
 
             <div className='flex gap-2 mt-4'>
               <Button variant='secondary' onClick={handleClose} className='flex-1'>
                 cancel
               </Button>
-              <Button variant='primary' onClick={handleReview} className='flex-1'>
-                continue
+              <Button
+                variant='primary'
+                onClick={handleReview}
+                disabled={!canReview}
+                className='flex-1'
+              >
+                review
               </Button>
             </div>
           </div>
