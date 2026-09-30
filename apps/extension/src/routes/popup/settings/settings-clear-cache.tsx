@@ -144,7 +144,7 @@ export const SettingsClearCache = () => {
                         <p className='text-sm truncate'>{v.name}</p>
                         {hasZcash && (
                           <p className='text-label text-fg-dim mt-1'>
-                            zcash resync moved to settings → networks → zcash
+                            zcash resync moved to settings - networks - zcash
                           </p>
                         )}
                         {hasPenumbra && (

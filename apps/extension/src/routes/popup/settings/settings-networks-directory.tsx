@@ -31,6 +31,7 @@ import {
   type CustomNetwork,
 } from '../../../net/custom-networks';
 import { trustedDestinations, type TrustedDestination } from '../../../net/inventory';
+import type { NetPurpose } from '../../../net/purpose';
 
 /** what the row can say about a host - the ledger's `pending` reads as "not decided yet" */
 type EgressView = 'allowed' | 'blocked' | 'undecided';
@@ -375,10 +376,15 @@ export const useDirectoryState = () => {
    * this install), and `setDestinationDecision` is a no-op on a missing record -
    * so record the first contact here, trusted, before applying the choice.
    */
-  const decide = async (host: string, label: string, next: DestinationState) => {
+  const decide = async (
+    host: string,
+    label: string,
+    next: DestinationState,
+    purpose: NetPurpose = 'chain-rpc',
+  ) => {
     const state = await readNetEgress();
     if (!state.destinations[host]) {
-      await noteDestination(host, { purpose: 'chain-rpc', trusted: true, label });
+      await noteDestination(host, { purpose, trusted: true, label });
     }
     await setDestinationDecision(host, next);
     await refresh();

@@ -113,7 +113,9 @@ export const SettingsConnections = () => {
                     </div>
                     <Segmented
                       value={state}
-                      onChange={next => void decide(dest.host, dest.label, next)}
+                      onChange={next =>
+                        void decide(dest.host, dest.label, next, dest.purposes[0] ?? 'other')
+                      }
                       options={[
                         { value: 'pending', label: 'not decided' },
                         { value: 'allowed', label: 'allow' },
