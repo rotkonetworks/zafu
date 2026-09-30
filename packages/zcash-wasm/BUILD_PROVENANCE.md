@@ -94,6 +94,112 @@ Reproduce by checking out the zcli rev below and running the commands.
 Verify: rebuild from the rev, sha256sum the outputs,
 diff against the values above. A mismatch means the vendored blob is stale.
 
+## 2026-10-01 rebuild - explicit PCZT expiry + inspection fields + per-account WalletKeys
+
+- source repo: zcli, integration branch `integ/zafu-wasm-2026-10`, rev
+  `995f5a9` (merge into `origin/master` f597bb0). Built from TWO feature
+  branches merged for this rebuild, both clean fast-forward/auto-merges with
+  no conflicts:
+  - `feat/pczt-explicit-expiry` (594fc82, on top of 23f2c60): explicit PCZT
+    expiry on `build_unsigned_pczt` / `build_ironwood_send_pczt` (new trailing
+    optional `expiry_delta?: number | null` argument, after `memo_hex`), plus
+    new `frost_inspect_pczt_outputs` fields: `fee_zat`, `expiry_height`,
+    `tx_version`, `consensus_branch_id`, `value_balance_zat` (`{orchard,
+    ironwood, sapling}`), `sapling_present`, `transparent_input_count`,
+    `transparent_input_total_zat`, `transparent_outputs` (`[{value_zat,
+    script_pubkey_hex, address}]`), `committed_outputs_error`, and per-action
+    `committed_value_zat`, `committed_recipient_raw_hex`, `cmx_verified`,
+    `recipient_scope`. These are exactly the fields
+    `apps/extension/src/routes/popup/send/frost-multisig/multisig-verifier.ts`
+    `verifySealedIntent` was already coded against (fail-closed on
+    `committed_outputs_error` missing) - names matched byte for byte, no TS
+    changes needed.
+  - `feat/wallet-keys-account` (154bfde): `WalletKeys.from_seed_phrase_account
+    (seed, account)`, a new static method; the existing bare
+    `WalletKeys(seed_phrase)` constructor now delegates to it with account 0,
+    byte for byte unchanged. This is the export
+    `apps/extension/src/workers/pocket-keys.ts` `pocketWalletKeys()` guards
+    on before allowing pocket N>0 - previously absent from the shipped blob,
+    so every pocket > 0 threw "needs a newer zafu-wasm".
+- `cargo test -p zafu-wasm --lib --tests --release` on the merged tree: all
+  green (18 `test result: ok` blocks, 0 failed; 1 pre-existing ignored test
+  awaiting an external zashi/keystone fixture, unrelated). The crate's
+  `benches` target does not compile on master and was skipped, as expected.
+- toolchain: wasm-bindgen CLI 0.2.126, wasm-opt (binaryen) version 130.
+  The task asked for wasm-bindgen 0.2.114 pinned + verified; installed it
+  (`cargo install wasm-bindgen-cli --version 0.2.114 --locked`) and tried it
+  first, but it refused with a schema mismatch:
+  ```
+  rust Wasm file schema version: 0.2.126
+     this binary schema version: 0.2.114
+  ```
+  `Cargo.lock` pins `wasm-bindgen 0.2.126` (unchanged from every rebuild
+  since 2026-08-06, see that entry: js-sys forces it). Reverting the crate's
+  wasm-bindgen dependency to 0.2.114 is a dependency-graph decision out of
+  scope for this rebuild, so the CLI already on the machine (0.2.126) was
+  used instead, consistent with every entry below since 2026-08-06.
+  binaryen: downloaded the official
+  `binaryen-version_130-x86_64-linux.tar.gz` release tarball and verified its
+  sha256 against the value published on the GitHub release page
+  (`0a18362361ad05465118cd8eeb72edaeec89de6894bc283576ef4e07aa3babcc`) before
+  extracting - matched.
+- built (UTC): 2026-10-01 (nightly toolchain `rustc 1.95.0-nightly
+  (6a979b3e3 2026-02-26)`, commit `6a979b3e32522049d0acb4a47f7ae44b7c8abfd5`).
+- only the PARALLEL variant was built and shipped, matching the 2026-08-05
+  correction below: `packages/zcash-wasm/` and
+  `apps/extension/public/zafu-wasm/` are BOTH the parallel/rayon build; there
+  is no single-thread consumer left to refresh.
+- size: pre `wasm-opt` 22,011,140 bytes; post `-Oz` 9,952,339 bytes (previous
+  shipped blob was 8,765,230 bytes - the growth is the Zakura Common 1.0
+  proving stack + new inspection/expiry code compiled in from master, not a
+  build regression).
+- sha256(parallel zafu_wasm_bg.wasm) =
+  0c8719cc5094821fb1f9bf93226fddbcf9e2bc66af603648152d2191b4209249
+- shared imported memory confirmed post-bindgen:
+  `(memory $mimport$0 56 32768 shared)`. Full rayon export set present
+  (`initThreadPool`, `wbg_rayon_start_worker`, `__wbindgen_thread_destroy`
+  in the `.d.ts`).
+- `.d.ts` diff against the previous shipped blob: no new top-level
+  `export function`/`export class` names (the new surface is the
+  `expiry_delta` param and the `WalletKeys.from_seed_phrase_account` static
+  method, both additive inside existing declarations).
+- snippets: same `wasm-bindgen-rayon-38edf6e439f6d70d` hash as before (dep
+  unchanged); re-applied the Chrome worker patch
+  (`wbgRayonBase` defined and used, zero live `import('../../..')`) to the
+  freshly generated `workerHelpers.js` before copying, in both trees.
+- this is the first shipped blob built off zcli `master` proper (not a
+  narrower feature branch) since the 2026-09-27 rebuild deliberately avoided
+  it because master carries the unverified Zakura Common 1.0 proving swap +
+  `getrandom_backend="wasm_js"` cfg (see that entry). That swap is therefore
+  now live in the shipped extension for the first time via this rebuild.
+- NOT done: a reproducibility check against a previously recorded hash
+  (time did not allow rebuilding an unchanged prior rev to compare); no
+  `zcash_*` duplicate exists in `packages/zcash-wasm/` to keep in sync
+  (package `main`/`exports` already resolve `zafu_wasm.js` directly, per the
+  2026-08-07 fix above).
+
+Verified after copying (both `packages/zcash-wasm/` and
+`apps/extension/public/zafu-wasm/`, confirmed byte-identical):
+
+- `pnpm -w exec tsc --noEmit -p apps/extension`: clean, exit 0.
+- `pnpm vitest run` in `apps/extension`: 1009 passed, 10 skipped, 0 failed
+  (matches the pre-rebuild baseline of 1009 exactly). A transient single
+  failure in `src/clients.worker-env.test.ts` (5s timeout) on one run was
+  CPU-contention from a concurrent cargo build, not a regression - it passes
+  alone in 123ms and passed in the clean full rerun.
+- `src/workers/pocket-keys.test.ts`, `pocket-isolation.test.ts`,
+  `src/state/pockets.test.ts`,
+  `src/routes/popup/send/frost-multisig/multisig-verifier.test.ts`,
+  `sealed-intent.test.ts`: all green (83 tests). `pocket-keys.test.ts`
+  exercises the real wasm `from_seed_phrase_account` export end to end
+  (pocket 0 matches the legacy constructor byte for byte; pocket 1 derives a
+  different ZIP 32 account-1 key).
+- `pnpm lint`: pre-existing prettier drift in 14 unrelated files (none of
+  them touched by this rebuild - no `.tsx`/`.ts` source file was edited,
+  only the vendored wasm blobs, glue and this provenance doc) already fails
+  on `rework/base` before this change; not introduced here.
+- prod and beta webpack builds: see below.
+
 ## 2026-09-27 rebuild - full 88-bit diversifier index (random receive addresses)
 
 - source repo: zcli, branch `feat/random-diversifier-zafu`, rev `c238955`

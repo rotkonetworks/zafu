@@ -90,6 +90,12 @@ if (Symbol.dispose) FrostRelayCipher.prototype[Symbol.dispose] = FrostRelayCiphe
  * Wallet keys derived from seed phrase
  */
 export class WalletKeys {
+    static __wrap(ptr) {
+        const obj = Object.create(WalletKeys.prototype);
+        obj.__wbg_ptr = ptr;
+        WalletKeysFinalization.register(obj, obj.__wbg_ptr, obj);
+        return obj;
+    }
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
         this.__wbg_ptr = 0;
@@ -166,6 +172,22 @@ export class WalletKeys {
         this.__wbg_ptr = ret[0];
         WalletKeysFinalization.register(this, this.__wbg_ptr, this);
         return this;
+    }
+    /**
+     * Derive wallet keys for ZIP 32 account `account` (m/32'/133'/account').
+     * Account 0 is identical to the constructor. Used by zafu "pockets".
+     * @param {string} seed_phrase
+     * @param {number} account
+     * @returns {WalletKeys}
+     */
+    static from_seed_phrase_account(seed_phrase, account) {
+        const ptr0 = passStringToWasm0(seed_phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.walletkeys_from_seed_phrase_account(ptr0, len0, account);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return WalletKeys.__wrap(ret[0]);
     }
     /**
      * Get the wallet's receiving address (identifier)
@@ -707,6 +729,12 @@ export function build_delegation_pczt(fvk_hex, seed_fingerprint_hex, account_ind
  * `build_ironwood_send_pczt_proven` - the tx binds branch id 0x37a5165b, the
  * caller MUST pass that real id as `expected_branch_id`, and the 0xffff_ffff
  * placeholder is refused. No value or recipient appears in any error.
+ *
+ * `expiry_delta` (optional, last argument): blocks after `target_height` at
+ * which the transaction expires. Omitted means [`LEGACY_PCZT_EXPIRY_DELTA`]
+ * (40), exactly what this builder produced before the argument existed.
+ * Validated by [`resolve_pczt_expiry_height`]. The resolved height is returned
+ * as `expiry_height`.
  * @param {string} ufvk_str
  * @param {string} ironwood_notes_json
  * @param {string} recipient
@@ -719,9 +747,10 @@ export function build_delegation_pczt(fvk_hex, seed_fingerprint_hex, account_ind
  * @param {number} expected_branch_id
  * @param {boolean} mainnet
  * @param {string | null} [memo_hex]
+ * @param {number | null} [expiry_delta]
  * @returns {any}
  */
-export function build_ironwood_send_pczt(ufvk_str, ironwood_notes_json, recipient, amount, fee, ironwood_anchor_hex, ironwood_merkle_paths_json, account_index, target_height, expected_branch_id, mainnet, memo_hex) {
+export function build_ironwood_send_pczt(ufvk_str, ironwood_notes_json, recipient, amount, fee, ironwood_anchor_hex, ironwood_merkle_paths_json, account_index, target_height, expected_branch_id, mainnet, memo_hex, expiry_delta) {
     const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ptr1 = passStringToWasm0(ironwood_notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
@@ -734,7 +763,7 @@ export function build_ironwood_send_pczt(ufvk_str, ironwood_notes_json, recipien
     const len4 = WASM_VECTOR_LEN;
     var ptr5 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     var len5 = WASM_VECTOR_LEN;
-    const ret = wasm.build_ironwood_send_pczt(ptr0, len0, ptr1, len1, ptr2, len2, amount, fee, ptr3, len3, ptr4, len4, account_index, target_height, expected_branch_id, mainnet, ptr5, len5);
+    const ret = wasm.build_ironwood_send_pczt(ptr0, len0, ptr1, len1, ptr2, len2, amount, fee, ptr3, len3, ptr4, len4, account_index, target_height, expected_branch_id, mainnet, ptr5, len5, isLikeNone(expiry_delta) ? Number.MAX_SAFE_INTEGER : (expiry_delta) >>> 0);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -1210,7 +1239,13 @@ export function build_turnstile_migration_pczt(ufvk_str, orchard_notes_json, fee
  * activation for current mainnet operations. The tx version is derived from
  * network upgrade rules (currently V5).
  *
- * Returns JSON: `{ pczt_hex, summary, action_count }`.
+ * `expiry_delta` (optional, last argument): blocks after `target_height` at
+ * which the transaction expires. Omitted means the legacy default of
+ * [`LEGACY_PCZT_EXPIRY_DELTA`] (40), exactly what this builder produced before
+ * the argument existed. Validated by [`resolve_pczt_expiry_height`].
+ *
+ * Returns JSON: `{ pczt_hex, summary, action_count, sighash, alphas,
+ * spend_indices, expiry_height }`.
  * The TS layer wraps `pczt_hex` in CBOR `{1: bytes}` and UR-encodes as
  * `zcash-pczt` for animated QR transport.
  * @param {string} ufvk_str
@@ -1223,9 +1258,10 @@ export function build_turnstile_migration_pczt(ufvk_str, orchard_notes_json, fee
  * @param {number} target_height
  * @param {boolean} mainnet
  * @param {string | null} [memo_hex]
+ * @param {number | null} [expiry_delta]
  * @returns {any}
  */
-export function build_unsigned_pczt(ufvk_str, notes_json, recipient, amount, fee, anchor_hex, merkle_paths_json, target_height, mainnet, memo_hex) {
+export function build_unsigned_pczt(ufvk_str, notes_json, recipient, amount, fee, anchor_hex, merkle_paths_json, target_height, mainnet, memo_hex, expiry_delta) {
     const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ptr1 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
@@ -1234,7 +1270,7 @@ export function build_unsigned_pczt(ufvk_str, notes_json, recipient, amount, fee
     const len2 = WASM_VECTOR_LEN;
     var ptr3 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     var len3 = WASM_VECTOR_LEN;
-    const ret = wasm.build_unsigned_pczt(ptr0, len0, notes_json, ptr1, len1, amount, fee, ptr2, len2, merkle_paths_json, target_height, mainnet, ptr3, len3);
+    const ret = wasm.build_unsigned_pczt(ptr0, len0, notes_json, ptr1, len1, amount, fee, ptr2, len2, merkle_paths_json, target_height, mainnet, ptr3, len3, isLikeNone(expiry_delta) ? Number.MAX_SAFE_INTEGER : (expiry_delta) >>> 0);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -2385,6 +2421,36 @@ export function frost_generate_randomizer(ephemeral_seed_hex, message_hex, commi
  * So the value the joiner checks is the canonical message its signature will
  * commit to — never a host-supplied claim. The host publishes the (proven,
  * io-finalized, redacted) PCZT; `into_effects` needs neither proof nor sigs.
+ *
+ * ADDITIVE fields for intent verification (older consumers ignore them):
+ *
+ * per action:
+ *   - `committed_value_zat` / `committed_recipient_raw_hex`: the output note's
+ *     value and recipient as carried in the PCZT, reported ONLY when
+ *     `cmx_verified` is true, i.e. when `(recipient, value, rho, rseed)`
+ *     recompute the action's `cmx`. `cmx` is sighash-bound, so these are the
+ *     values the chain will actually record, independent of whether the
+ *     output is OVK-decryptable. (`null` when the PCZT lacks the fields or they
+ *     do not match.)
+ *   - `cmx_verified`: bool, as above.
+ *   - `recipient_scope`: `"external" | "internal" | null` - which scope of the
+ *     inspecting UFVK's orchard key the committed recipient belongs to
+ *     (`FullViewingKey::scope_for_address`), `null` for a foreign address.
+ *     This is a key-derivation fact, unlike `is_change`, which only says which
+ *     OVK decrypted the output.
+ *
+ * transaction level:
+ *   - `expiry_height`, `tx_version`, `consensus_branch_id` (from the global).
+ *   - `value_balance_zat`: `{ orchard, ironwood, sapling }` (i64 each, the
+ *     value the sighash binds; 0 when the bundle is absent).
+ *   - `sapling_present`: bool.
+ *   - `transparent_input_count`, `transparent_input_total_zat`.
+ *   - `transparent_outputs`: `[{ value_zat, script_pubkey_hex, address }]`,
+ *     `address` = encoded P2PKH/P2SH t-address or `null` for any other script.
+ *   - `fee_zat`: `orchard + ironwood + sapling value balances + transparent
+ *     inputs - transparent outputs`; `null` when negative or out of range.
+ *   - `committed_outputs_error`: `null`, or why the per-action committed view
+ *     could not be produced (the committed fields are then all null/false).
  * @param {string} pczt_hex
  * @param {string} orchard_fvk_uview
  * @returns {string}
@@ -3553,6 +3619,9 @@ function __wbg_get_imports(memory) {
                 wasm.__wbindgen_free(deferred0_0, deferred0_1, 1);
             }
         },
+        __wbg_getRandomValues_127d43fea0fcc894: function() { return handleError(function (arg0) {
+            globalThis.crypto.getRandomValues(arg0);
+        }, arguments); },
         __wbg_getRandomValues_c44a50d8cfdaebeb: function() { return handleError(function (arg0, arg1) {
             arg0.getRandomValues(arg1);
         }, arguments); },
@@ -3824,18 +3893,18 @@ function __wbg_get_imports(memory) {
             return ret;
         },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3329, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue__core_8266185441cb29e1___result__Result_____wasm_bindgen_aeea2c632802c019___JsError___true_);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 143, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue______true_);
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3331, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___futures__task__wait_async_polyfill__MessageEvent______true_);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3699, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue__core_8266185441cb29e1___result__Result_____wasm_bindgen_aeea2c632802c019___JsError___true_);
             return ret;
         },
         __wbindgen_cast_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 73, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue______true_);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3701, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___futures__task__wait_async_polyfill__MessageEvent______true_);
             return ret;
         },
         __wbindgen_cast_0000000000000004: function(arg0) {
@@ -3881,7 +3950,7 @@ function __wbg_get_imports(memory) {
             getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
             getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
         },
-        memory: memory || new WebAssembly.Memory({initial:50,maximum:32768,shared:true}),
+        memory: memory || new WebAssembly.Memory({initial:56,maximum:32768,shared:true}),
     };
     return {
         __proto__: null,
@@ -3889,12 +3958,12 @@ function __wbg_get_imports(memory) {
     };
 }
 
-function wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___futures__task__wait_async_polyfill__MessageEvent______true_(arg0, arg1, arg2) {
-    wasm.wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___futures__task__wait_async_polyfill__MessageEvent______true_(arg0, arg1, arg2);
-}
-
 function wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue______true_(arg0, arg1, arg2) {
     wasm.wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue______true_(arg0, arg1, arg2);
+}
+
+function wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___futures__task__wait_async_polyfill__MessageEvent______true_(arg0, arg1, arg2) {
+    wasm.wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___futures__task__wait_async_polyfill__MessageEvent______true_(arg0, arg1, arg2);
 }
 
 function wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue__core_8266185441cb29e1___result__Result_____wasm_bindgen_aeea2c632802c019___JsError___true_(arg0, arg1, arg2) {

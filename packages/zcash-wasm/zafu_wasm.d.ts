@@ -50,6 +50,11 @@ export class WalletKeys {
      */
     constructor(seed_phrase: string);
     /**
+     * Derive wallet keys for ZIP 32 account `account` (m/32'/133'/account').
+     * Account 0 is identical to the constructor. Used by zafu "pockets".
+     */
+    static from_seed_phrase_account(seed_phrase: string, account: number): WalletKeys;
+    /**
      * Get the wallet's receiving address (identifier)
      */
     get_address(): string;
@@ -231,8 +236,14 @@ export function build_delegation_pczt(fvk_hex: string, seed_fingerprint_hex: str
  * `build_ironwood_send_pczt_proven` - the tx binds branch id 0x37a5165b, the
  * caller MUST pass that real id as `expected_branch_id`, and the 0xffff_ffff
  * placeholder is refused. No value or recipient appears in any error.
+ *
+ * `expiry_delta` (optional, last argument): blocks after `target_height` at
+ * which the transaction expires. Omitted means [`LEGACY_PCZT_EXPIRY_DELTA`]
+ * (40), exactly what this builder produced before the argument existed.
+ * Validated by [`resolve_pczt_expiry_height`]. The resolved height is returned
+ * as `expiry_height`.
  */
-export function build_ironwood_send_pczt(ufvk_str: string, ironwood_notes_json: string, recipient: string, amount: bigint, fee: bigint, ironwood_anchor_hex: string, ironwood_merkle_paths_json: string, account_index: number, target_height: number, expected_branch_id: number, mainnet: boolean, memo_hex?: string | null): any;
+export function build_ironwood_send_pczt(ufvk_str: string, ironwood_notes_json: string, recipient: string, amount: bigint, fee: bigint, ironwood_anchor_hex: string, ironwood_merkle_paths_json: string, account_index: number, target_height: number, expected_branch_id: number, mainnet: boolean, memo_hex?: string | null, expiry_delta?: number | null): any;
 
 /**
  * Build merkle paths for note positions by replaying compact blocks from a checkpoint.
@@ -417,11 +428,17 @@ export function build_turnstile_migration_pczt(ufvk_str: string, orchard_notes_j
  * activation for current mainnet operations. The tx version is derived from
  * network upgrade rules (currently V5).
  *
- * Returns JSON: `{ pczt_hex, summary, action_count }`.
+ * `expiry_delta` (optional, last argument): blocks after `target_height` at
+ * which the transaction expires. Omitted means the legacy default of
+ * [`LEGACY_PCZT_EXPIRY_DELTA`] (40), exactly what this builder produced before
+ * the argument existed. Validated by [`resolve_pczt_expiry_height`].
+ *
+ * Returns JSON: `{ pczt_hex, summary, action_count, sighash, alphas,
+ * spend_indices, expiry_height }`.
  * The TS layer wraps `pczt_hex` in CBOR `{1: bytes}` and UR-encodes as
  * `zcash-pczt` for animated QR transport.
  */
-export function build_unsigned_pczt(ufvk_str: string, notes_json: any, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: any, target_height: number, mainnet: boolean, memo_hex?: string | null): any;
+export function build_unsigned_pczt(ufvk_str: string, notes_json: any, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: any, target_height: number, mainnet: boolean, memo_hex?: string | null, expiry_delta?: number | null): any;
 
 /**
  * Build an unsigned shielding transaction (transparent → orchard) for cold-wallet signing.
@@ -754,6 +771,36 @@ export function frost_generate_randomizer(ephemeral_seed_hex: string, message_he
  * So the value the joiner checks is the canonical message its signature will
  * commit to — never a host-supplied claim. The host publishes the (proven,
  * io-finalized, redacted) PCZT; `into_effects` needs neither proof nor sigs.
+ *
+ * ADDITIVE fields for intent verification (older consumers ignore them):
+ *
+ * per action:
+ *   - `committed_value_zat` / `committed_recipient_raw_hex`: the output note's
+ *     value and recipient as carried in the PCZT, reported ONLY when
+ *     `cmx_verified` is true, i.e. when `(recipient, value, rho, rseed)`
+ *     recompute the action's `cmx`. `cmx` is sighash-bound, so these are the
+ *     values the chain will actually record, independent of whether the
+ *     output is OVK-decryptable. (`null` when the PCZT lacks the fields or they
+ *     do not match.)
+ *   - `cmx_verified`: bool, as above.
+ *   - `recipient_scope`: `"external" | "internal" | null` - which scope of the
+ *     inspecting UFVK's orchard key the committed recipient belongs to
+ *     (`FullViewingKey::scope_for_address`), `null` for a foreign address.
+ *     This is a key-derivation fact, unlike `is_change`, which only says which
+ *     OVK decrypted the output.
+ *
+ * transaction level:
+ *   - `expiry_height`, `tx_version`, `consensus_branch_id` (from the global).
+ *   - `value_balance_zat`: `{ orchard, ironwood, sapling }` (i64 each, the
+ *     value the sighash binds; 0 when the bundle is absent).
+ *   - `sapling_present`: bool.
+ *   - `transparent_input_count`, `transparent_input_total_zat`.
+ *   - `transparent_outputs`: `[{ value_zat, script_pubkey_hex, address }]`,
+ *     `address` = encoded P2PKH/P2SH t-address or `null` for any other script.
+ *   - `fee_zat`: `orchard + ironwood + sapling value balances + transparent
+ *     inputs - transparent outputs`; `null` when negative or out of range.
+ *   - `committed_outputs_error`: `null`, or why the per-action committed view
+ *     could not be produced (the committed fields are then all null/false).
  */
 export function frost_inspect_pczt_outputs(pczt_hex: string, orchard_fvk_uview: string): string;
 
@@ -1072,7 +1119,7 @@ export interface InitOutput {
     readonly address_from_ufvk_at_index: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly apply_signature_contributions: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly build_delegation_pczt: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number) => [number, number, number, number];
-    readonly build_ironwood_send_pczt: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number) => [number, number, number];
+    readonly build_ironwood_send_pczt: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number, s: number) => [number, number, number];
     readonly build_merkle_paths: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
     readonly build_shielding_transaction: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number) => [number, number, number, number];
     readonly build_shielding_transaction_auto: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number, n: number) => [number, number, number, number];
@@ -1081,7 +1128,7 @@ export interface InitOutput {
     readonly build_signed_spend_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number, number, number];
     readonly build_signed_turnstile_migration: (a: number, b: number, c: number, d: number, e: bigint, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number, number, number];
     readonly build_turnstile_migration_pczt: (a: number, b: number, c: number, d: number, e: bigint, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number, number];
-    readonly build_unsigned_pczt: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number) => [number, number, number];
+    readonly build_unsigned_pczt: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number, o: number) => [number, number, number];
     readonly build_unsigned_shielding_transaction: (a: number, b: number, c: number, d: number, e: bigint, f: bigint, g: number, h: number, i: number, j: number) => [number, number, number, number];
     readonly build_unsigned_shielding_transaction_ironwood: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number) => [number, number, number, number];
     readonly build_unsigned_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number, number];
@@ -1147,6 +1194,7 @@ export interface InitOutput {
     readonly walletkeys_decrypt_transaction_memos: (a: number, b: number, c: number) => [number, number, number];
     readonly walletkeys_export_fvk_qr_hex: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly walletkeys_from_seed_phrase: (a: number, b: number) => [number, number, number];
+    readonly walletkeys_from_seed_phrase_account: (a: number, b: number, c: number) => [number, number, number];
     readonly walletkeys_get_address: (a: number) => [number, number];
     readonly walletkeys_get_fvk_hex: (a: number) => [number, number];
     readonly walletkeys_get_receiving_address: (a: number, b: number) => [number, number];
@@ -1191,8 +1239,8 @@ export interface InitOutput {
     readonly rustsecp256k1_v0_10_0_context_create: (a: number) => number;
     readonly wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue__core_8266185441cb29e1___result__Result_____wasm_bindgen_aeea2c632802c019___JsError___true_: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___Function_fn_wasm_bindgen_aeea2c632802c019___JsValue_____wasm_bindgen_aeea2c632802c019___sys__Undefined___js_sys_74738dcabc251f8d___Function_fn_wasm_bindgen_aeea2c632802c019___JsValue_____wasm_bindgen_aeea2c632802c019___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___futures__task__wait_async_polyfill__MessageEvent______true_: (a: number, b: number, c: any) => void;
     readonly wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue______true_: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___futures__task__wait_async_polyfill__MessageEvent______true_: (a: number, b: number, c: any) => void;
     readonly memory: WebAssembly.Memory;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
