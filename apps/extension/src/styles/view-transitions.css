@@ -1,0 +1,55 @@
+/*
+ * Screen transitions (View Transitions API, started by react-router's
+ * `viewTransition` navigate option - see utils/navigate.ts).
+ *
+ * Only the popup's screen area (`popup-screen`, the layout's Outlet wrapper)
+ * moves; the header and tab rail stay in the root snapshot and simply
+ * crossfade when they appear or disappear. `data-nav-dir` on <html> picks
+ * the direction: tab = plain crossfade, push / back = a slight slide.
+ */
+
+:root {
+  --zafu-nav-shift: 0px;
+}
+:root[data-nav-dir='push'] {
+  --zafu-nav-shift: 8px;
+}
+:root[data-nav-dir='back'] {
+  --zafu-nav-shift: -8px;
+}
+
+::view-transition-group(root),
+::view-transition-old(root),
+::view-transition-new(root),
+::view-transition-group(popup-screen) {
+  animation-duration: 180ms;
+  animation-timing-function: ease-out;
+}
+
+::view-transition-old(popup-screen) {
+  animation: zafu-screen-out 180ms ease-out both;
+}
+::view-transition-new(popup-screen) {
+  animation: zafu-screen-in 180ms ease-out both;
+}
+
+@keyframes zafu-screen-out {
+  to {
+    opacity: 0;
+    transform: translateX(calc(var(--zafu-nav-shift) * -1));
+  }
+}
+@keyframes zafu-screen-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--zafu-nav-shift));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}

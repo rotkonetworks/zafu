@@ -14,6 +14,7 @@ import { isIdentityEnabled } from '../state/privacy';
 import { PopupPath } from '../routes/popup/paths';
 import { cn } from '@repo/ui/lib/utils';
 import { isSidePanel } from '../utils/popup-detection';
+import { screenTransition } from '../utils/navigate';
 import { hasFeature } from '../config/networks';
 import { SUBSCRIBE_ENABLED } from '../config/feature-flags';
 
@@ -127,7 +128,10 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
       return;
     }
     onClose();
-    navigate(PopupPath.SEND, { state: { prefillRecipient: donation.address } });
+    navigate(PopupPath.SEND, {
+      ...screenTransition('push'),
+      state: { prefillRecipient: donation.address },
+    });
   }, [donation, navigate, onClose]);
 
   if (!open) {
@@ -152,7 +156,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
       icon: 'i-ph-arrows-left-right',
       label: 'swap',
       onClick: () => {
-        navigate(PopupPath.SWAP);
+        navigate(PopupPath.SWAP, screenTransition('push'));
         onClose();
       },
     },
@@ -171,7 +175,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
       icon: 'i-ph-fingerprint',
       label: 'identity',
       onClick: () => {
-        navigate(PopupPath.IDENTITY);
+        navigate(PopupPath.IDENTITY, screenTransition('push'));
         onClose();
       },
     },
@@ -182,7 +186,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
       icon: 'i-ph-users',
       label: 'contacts',
       onClick: () => {
-        navigate(PopupPath.CONTACTS);
+        navigate(PopupPath.CONTACTS, screenTransition('push'));
         onClose();
       },
     },
@@ -190,7 +194,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
       icon: 'i-ph-wallet',
       label: 'wallets',
       onClick: () => {
-        navigate(PopupPath.SETTINGS_WALLETS);
+        navigate(PopupPath.SETTINGS_WALLETS, screenTransition('push'));
         onClose();
       },
     },
@@ -203,7 +207,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
       icon: 'i-ph-gear',
       label: 'settings',
       onClick: () => {
-        navigate(PopupPath.SETTINGS);
+        navigate(PopupPath.SETTINGS, screenTransition('push'));
         onClose();
       },
     },
@@ -334,7 +338,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
           {!pro && SUBSCRIBE_ENABLED && (
             <button
               onClick={() => {
-                navigate(PopupPath.SUBSCRIBE);
+                navigate(PopupPath.SUBSCRIBE, screenTransition('push'));
                 onClose();
               }}
               className='flex w-full items-center justify-center gap-2 px-3 py-2 rounded-md bg-zigner-gold text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors text-data lowercase'

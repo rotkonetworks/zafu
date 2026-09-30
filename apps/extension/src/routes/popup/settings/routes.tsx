@@ -1,159 +1,94 @@
-import { lazy, Suspense } from 'react';
+import type { RouteObject } from 'react-router-dom';
 import { PopupPath } from '../paths';
+import { lazyScreen } from '../route-modules';
 
-// lazy load all settings screens
-const SettingsMain = lazy(() => import('./settings').then(m => ({ default: m.Settings })));
-const SettingsClearCache = lazy(() =>
-  import('./settings-clear-cache').then(m => ({ default: m.SettingsClearCache })),
-);
-const SettingsConnectedSites = lazy(() =>
-  import('./settings-connected-sites').then(m => ({ default: m.SettingsConnectedSites })),
-);
-const SettingsPassphrase = lazy(() =>
-  import('./settings-passphrase').then(m => ({ default: m.SettingsPassphrase })),
-);
-const SettingsDefaultFrontend = lazy(() =>
-  import('./settings-default-frontend').then(m => ({ default: m.SettingsDefaultFrontend })),
-);
-// wallets + networks are one merged screen (SettingsWallets supplies the
-// header/back chrome; the network toggles render below it).
-const SettingsWalletsNetworks = lazy(() =>
-  import('./settings-networks').then(m => ({ default: m.SettingsWalletsNetworks })),
-);
-const SettingsPrivacy = lazy(() =>
-  import('./settings-privacy').then(m => ({ default: m.SettingsPrivacy })),
-);
-const SettingsFeatures = lazy(() =>
-  import('./settings-features').then(m => ({ default: m.SettingsFeatures })),
-);
-const SettingsAppearance = lazy(() =>
-  import('./settings-appearance').then(m => ({ default: m.SettingsAppearance })),
-);
-const SettingsAddViewingKey = lazy(() =>
-  import('./settings-add-viewing-key').then(m => ({ default: m.SettingsAddViewingKey })),
-);
-// Security & Backup tab. SecurityBackup (authored by another engineer) brings
-// its own SettingsScreen chrome, so mount it directly - no extra wrapper.
-const SettingsSecurityBackup = lazy(() =>
-  import('./settings-security-backup').then(m => ({ default: m.SecurityBackup })),
-);
-const SettingsAbout = lazy(() =>
-  import('./settings-about').then(m => ({ default: m.SettingsAbout })),
-);
-const SettingsMultisig = lazy(() =>
-  import('./settings-multisig').then(m => ({ default: m.SettingsMultisig })),
-);
-const SettingsMultisigBackup = lazy(() =>
-  import('./settings-multisig-backup').then(m => ({ default: m.SettingsMultisigBackup })),
-);
-const SettingsZigner = lazy(() =>
-  import('./settings-zigner').then(m => ({ default: m.SettingsZigner })),
-);
-const SettingsOta = lazy(() => import('./settings-ota').then(m => ({ default: m.SettingsOta })));
-const SettingsVoting = lazy(() =>
-  import('./settings-voting').then(m => ({ default: m.SettingsVoting })),
-);
-const SettingsZcashMe = lazy(() =>
-  import('./settings-zcashme').then(m => ({ default: m.SettingsZcashMe })),
-);
-const SubscribePage = lazy(() => import('./subscribe').then(m => ({ default: m.SubscribePage })));
+// every settings screen is route-level lazy (see route-modules.ts): the router
+// loads the chunk before committing, so the previous screen stays up meanwhile
 
-const LazyFallback = () => (
-  <div className='flex h-full items-center justify-center p-4'>
-    <div className='h-6 w-6 animate-spin rounded-full border-2 border-zigner-gold border-t-transparent' />
-  </div>
-);
-
-const withSuspense = (Component: React.LazyExoticComponent<React.ComponentType>) => (
-  <Suspense fallback={<LazyFallback />}>
-    <Component />
-  </Suspense>
-);
-
-export const settingsRoutes = [
+export const settingsRoutes: RouteObject[] = [
   {
     path: PopupPath.SETTINGS,
-    element: withSuspense(SettingsMain),
+    lazy: lazyScreen('settingsMain'),
   },
   {
     path: PopupPath.SUBSCRIBE,
-    element: withSuspense(SubscribePage),
+    lazy: lazyScreen('subscribe'),
   },
   {
     path: PopupPath.SETTINGS_DEFAULT_FRONTEND,
-    element: withSuspense(SettingsDefaultFrontend),
+    lazy: lazyScreen('settingsDefaultFrontend'),
   },
   {
     path: PopupPath.SETTINGS_CLEAR_CACHE,
-    element: withSuspense(SettingsClearCache),
+    lazy: lazyScreen('settingsClearCache'),
   },
   {
     path: PopupPath.SETTINGS_CONNECTED_SITES,
-    element: withSuspense(SettingsConnectedSites),
+    lazy: lazyScreen('settingsConnectedSites'),
   },
   {
     path: PopupPath.SETTINGS_RECOVERY_PASSPHRASE,
-    element: withSuspense(SettingsPassphrase),
+    lazy: lazyScreen('settingsPassphrase'),
   },
   {
     // real zigner screen - a "zigner" link that silently redirected to the
     // wallets list made the label lie. wallets still handles vault import;
     // this screen owns zigner-specific settings (vault legacy mode, scan).
     path: PopupPath.SETTINGS_ZIGNER,
-    element: withSuspense(SettingsZigner),
+    lazy: lazyScreen('settingsZigner'),
   },
   {
     // networks deep-links (?network=zcash) still land here; the merged screen
     // keeps the ?network auto-expand + scroll-into-view.
     path: PopupPath.SETTINGS_NETWORKS,
-    element: withSuspense(SettingsWalletsNetworks),
+    lazy: lazyScreen('settingsWalletsNetworks'),
   },
   {
     path: PopupPath.SETTINGS_PRIVACY,
-    element: withSuspense(SettingsPrivacy),
+    lazy: lazyScreen('settingsPrivacy'),
   },
   {
     path: PopupPath.SETTINGS_FEATURES,
-    element: withSuspense(SettingsFeatures),
+    lazy: lazyScreen('settingsFeatures'),
   },
   {
     path: PopupPath.SETTINGS_APPEARANCE,
-    element: withSuspense(SettingsAppearance),
+    lazy: lazyScreen('settingsAppearance'),
   },
   {
     path: PopupPath.SETTINGS_WALLETS,
-    element: withSuspense(SettingsWalletsNetworks),
+    lazy: lazyScreen('settingsWalletsNetworks'),
   },
   {
     path: PopupPath.SETTINGS_SECURITY_BACKUP,
-    element: withSuspense(SettingsSecurityBackup),
+    lazy: lazyScreen('settingsSecurityBackup'),
   },
   {
     path: PopupPath.SETTINGS_ABOUT,
-    element: withSuspense(SettingsAbout),
+    lazy: lazyScreen('settingsAbout'),
   },
   {
     path: PopupPath.SETTINGS_MULTISIG,
-    element: withSuspense(SettingsMultisig),
+    lazy: lazyScreen('settingsMultisig'),
   },
   {
     path: PopupPath.SETTINGS_MULTISIG_BACKUP,
-    element: withSuspense(SettingsMultisigBackup),
+    lazy: lazyScreen('settingsMultisigBackup'),
   },
   {
     path: PopupPath.SETTINGS_OTA,
-    element: withSuspense(SettingsOta),
+    lazy: lazyScreen('settingsOta'),
   },
   {
     path: PopupPath.SETTINGS_VOTING,
-    element: withSuspense(SettingsVoting),
+    lazy: lazyScreen('settingsVoting'),
   },
   {
     path: PopupPath.SETTINGS_ZCASHME,
-    element: withSuspense(SettingsZcashMe),
+    lazy: lazyScreen('settingsZcashMe'),
   },
   {
     path: PopupPath.SETTINGS_ADD_VIEWING_KEY,
-    element: withSuspense(SettingsAddViewingKey),
+    lazy: lazyScreen('settingsAddViewingKey'),
   },
 ];

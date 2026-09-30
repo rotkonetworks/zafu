@@ -1,6 +1,7 @@
 import { ReactNode, memo, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { cn } from '@repo/ui/lib/utils';
+import { screenTransition } from '../utils/navigate';
 
 export interface BottomTab {
   path: string;
@@ -49,7 +50,7 @@ export const BottomTabs = memo(({ tabs }: BottomTabsProps) => {
       if (location.pathname === path) {
         return;
       }
-      navigate(path);
+      navigate(path, screenTransition('tab'));
     },
     [navigate, location.pathname],
   );
