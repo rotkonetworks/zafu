@@ -341,7 +341,10 @@ async function requireCapability(
  * report a denial the user did not make.
  */
 type ModeCheck = { ok: true } | { ok: false; reason: 'disabled' | 'cancelled' };
-type OptinAnswer = { approved: boolean; cancelled: boolean };
+interface OptinAnswer {
+  approved: boolean;
+  cancelled: boolean;
+}
 
 /**
  * Open the one-time global question (`scope=zafu`, no origin shown) and return
@@ -360,7 +363,9 @@ async function askOptin(origin: string, cap: Capability): Promise<OptinAnswer> {
     return { approved: false, cancelled: true };
   }
   const result = (await resultPromise) as { approved?: boolean; cancelled?: boolean } | undefined;
-  if (result?.cancelled) return { approved: false, cancelled: true };
+  if (result?.cancelled) {
+    return { approved: false, cancelled: true };
+  }
   return { approved: result?.approved === true, cancelled: false };
 }
 
@@ -370,7 +375,9 @@ async function ensureCapabilityMode(cap: Capability, origin: string): Promise<Mo
     return mode === 'enabled' ? { ok: true } : { ok: false, reason: 'disabled' };
   }
   const answer = await askOptin(origin, cap);
-  if (answer.cancelled) return { ok: false, reason: 'cancelled' };
+  if (answer.cancelled) {
+    return { ok: false, reason: 'cancelled' };
+  }
   // A denial is sticky, exactly like answering the per-site prompt: asking the
   // same question again on every page load is the nagging this switch exists to
   // prevent. Settings is where it is turned back on.

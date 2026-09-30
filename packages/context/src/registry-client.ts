@@ -34,7 +34,7 @@ export type RegistryClient = InstanceType<typeof ChainRegistryClient>;
 export const withBundledFallback = (
   client: RegistryClient = new ChainRegistryClient(),
 ): RegistryClient => {
-  const wrapped: RegistryClient = Object.create(client);
+  const wrapped = Object.create(client) as RegistryClient;
   Object.defineProperty(wrapped, 'remote', {
     value: Object.create(client.remote),
     writable: true,

@@ -36,7 +36,10 @@ export const setCapabilityMode = async (
   const stored = (await localExtStorage.get(KEY)) ?? {};
   const next: Record<string, 'enabled' | 'disabled'> = { ...stored };
   // Absence IS `unset`; never persist the string, so a reset is a delete.
-  if (mode === 'unset') delete next[capability];
-  else next[capability] = mode;
+  if (mode === 'unset') {
+    delete next[capability];
+  } else {
+    next[capability] = mode;
+  }
   await localExtStorage.set(KEY, next);
 };

@@ -158,9 +158,15 @@ describe('classical channel - queued sends and readiness', () => {
     await ws.deliver(keyexFrame(peer, ours.pubkey, bytesToHex(peerDh.pub)));
     await ch.ready;
 
-    const keyex = must(ws.frames().find(f => f.type === 'keyex'), 'our keyex frame');
+    const keyex = must(
+      ws.frames().find(f => f.type === 'keyex'),
+      'our keyex frame',
+    );
     const ourDhPub = hexToBytes(must(keyex.dhPub, 'our dh pubkey'));
-    const wire = must(ws.frames().find(f => f.type === 'enc'), 'the flushed enc frame');
+    const wire = must(
+      ws.frames().find(f => f.type === 'enc'),
+      'the flushed enc frame',
+    );
     const shared = x25519.getSharedSecret(peerDh.priv, ourDhPub);
     const key = await deriveAesKey(shared, ours.pubkey, peer.pubkey);
     const plain = await crypto.subtle.decrypt(
@@ -198,7 +204,10 @@ describe('classical channel - replay protection', () => {
     const ch = await createChannel(ours, peer.pubkey, 'ws://relay');
     const ws = FakeWebSocket.last();
     ws.open();
-    const keyex = must(ws.frames().find(f => f.type === 'keyex'), 'our keyex frame');
+    const keyex = must(
+      ws.frames().find(f => f.type === 'keyex'),
+      'our keyex frame',
+    );
     const ourDhPub = hexToBytes(must(keyex.dhPub, 'our dh pubkey'));
     await ws.deliver(keyexFrame(peer, ours.pubkey, bytesToHex(peerDh.pub)));
     await ch.ready;

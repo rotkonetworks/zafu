@@ -154,9 +154,17 @@ try {
       selectedVaultId: 'vault-smoke',
     });
     const raw = crypto.getRandomValues(new Uint8Array(32));
-    const b64 = btoa(String.fromCharCode(...raw)).split('+').join('-').split('/').join('_').split('=').join('');
+    const b64 = btoa(String.fromCharCode(...raw))
+      .split('+')
+      .join('-')
+      .split('/')
+      .join('_')
+      .split('=')
+      .join('');
     await chrome.storage.session.set({
-      passwordKey: { _inner: { kty: 'oct', k: b64, alg: 'A256GCM', ext: true, key_ops: ['encrypt', 'decrypt'] } },
+      passwordKey: {
+        _inner: { kty: 'oct', k: b64, alg: 'A256GCM', ext: true, key_ops: ['encrypt', 'decrypt'] },
+      },
     });
     return {
       vaults: (await chrome.storage.local.get('vaults')).vaults?.length,

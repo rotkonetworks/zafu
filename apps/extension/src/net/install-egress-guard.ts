@@ -41,6 +41,8 @@ const guardedFetch = async (
 };
 
 export const installEgressGuard = (): void => {
-  if (globalThis.fetch === guardedFetch) return;
+  if (globalThis.fetch === guardedFetch) {
+    return;
+  }
   globalThis.fetch = guardedFetch;
 };

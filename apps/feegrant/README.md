@@ -18,7 +18,7 @@ MsgTransfer with `fee.granter = <granter>`, and Injective charges the fee to us.
 
 | Method | Path                                | Response                                                                                                                                                      |
 | ------ | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/health`                           | `{ ok, funded, capped, granter, balanceInj, balanceMilliInj, minBalanceInj, grantsToday, dailyGrantCap }`; 503 when not ok                                     |
+| GET    | `/health`                           | `{ ok, funded, capped, granter, balanceInj, balanceMilliInj, minBalanceInj, grantsToday, dailyGrantCap }`; 503 when not ok                                    |
 | GET    | `/v1/injective/granter`             | `{ granter, spendLimit, grantTtlHours }`, or 503 while the granter is below `MIN_GRANTER_BALANCE` - clients probe this to decide whether to offer sponsorship |
 | POST   | `/v1/injective/grant` `{ address }` | 200 `{ granter, status: 'granted'\|'exists', txhash?, height?, expiresAt? }`                                                                                  |
 

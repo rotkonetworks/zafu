@@ -63,13 +63,23 @@ const ALLOW: EgressDecision = { action: 'allow' };
  *     to that host and a prompt would be unexplainable.
  */
 export const decideEgress = (facts: EgressFacts): EgressDecision => {
-  if (facts.local) return ALLOW;
+  if (facts.local) {
+    return ALLOW;
+  }
 
-  if (facts.destination === 'blocked') return { action: 'refuse', reason: 'blocked' };
-  if (facts.destination === 'allowed') return ALLOW;
+  if (facts.destination === 'blocked') {
+    return { action: 'refuse', reason: 'blocked' };
+  }
+  if (facts.destination === 'allowed') {
+    return ALLOW;
+  }
 
-  if (facts.trusted) return ALLOW;
+  if (facts.trusted) {
+    return ALLOW;
+  }
 
-  if (!facts.adhocConsentAvailable) return { action: 'refuse', reason: 'feature-disabled' };
+  if (!facts.adhocConsentAvailable) {
+    return { action: 'refuse', reason: 'feature-disabled' };
+  }
   return { action: 'prompt' };
 };

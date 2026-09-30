@@ -96,7 +96,9 @@ export const gateEgress = async (
   options: EgressOptions = {},
 ): Promise<EgressGate> => {
   const host = hostOf(input);
-  if (!host) return ALLOW;
+  if (!host) {
+    return ALLOW;
+  }
 
   const local = isLocalDeviceHost(host);
   const inventory = local ? undefined : await trustedDestinationFor(host);
@@ -120,7 +122,9 @@ export const gateEgress = async (
     destination: record.state,
   });
 
-  if (decision.action === 'allow') return ALLOW;
+  if (decision.action === 'allow') {
+    return ALLOW;
+  }
 
   if (decision.action === 'refuse') {
     await recordOutcome(host, purpose, decision.reason, options.detail);
@@ -141,7 +145,9 @@ export const gateEgress = async (
     origin: options.origin,
     detail: options.detail,
   });
-  if (answer === 'approved') return ALLOW;
+  if (answer === 'approved') {
+    return ALLOW;
+  }
 
   // The prompt persisted the answer (`allowed` / `blocked` / back to pending for
   // a cancelled window), so the next request takes the ledger's word for it.

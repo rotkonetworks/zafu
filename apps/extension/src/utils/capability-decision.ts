@@ -39,8 +39,12 @@ export interface CapabilityState {
  * capability off in settings revokes access immediately everywhere.
  */
 export const decideCapabilityUse = (state: CapabilityState): CapabilityDecision => {
-  if (state.mode === 'disabled') return { action: 'refuse' };
-  if (state.mode === 'unset') return { action: 'prompt', prompt: 'opt-in' };
+  if (state.mode === 'disabled') {
+    return { action: 'refuse' };
+  }
+  if (state.mode === 'unset') {
+    return { action: 'prompt', prompt: 'opt-in' };
+  }
   return state.grantedToOrigin
     ? { action: 'allow' }
     : { action: 'prompt', prompt: 'origin-consent' };

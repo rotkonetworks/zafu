@@ -193,11 +193,7 @@ export async function createChannel(
           [],
         );
         const sharedBits = new Uint8Array(
-          await crypto.subtle.deriveBits(
-            { name: 'X25519', public: peerDhPub },
-            dh.privateKey,
-            256,
-          ),
+          await crypto.subtle.deriveBits({ name: 'X25519', public: peerDhPub }, dh.privateKey, 256),
         );
         // derive AES key - info binds to both session pubkeys to prevent unknown-key-share
         const sortedPubkeys = [session.pubkey, peerPubkey].sort().join(':');

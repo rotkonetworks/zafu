@@ -16,7 +16,7 @@ const stubWithRemoteGet = (remoteGet: () => Promise<unknown>): RegistryClient =>
   const client = new ChainRegistryClient();
   return {
     bundled: client.bundled,
-    remote: Object.assign(Object.create(client.remote), { get: vi.fn(remoteGet) }),
+    remote: Object.assign(Object.create(client.remote) as object, { get: vi.fn(remoteGet) }),
   } as unknown as RegistryClient;
 };
 
@@ -61,7 +61,7 @@ describe('withBundledFallback', () => {
   test('passes the remote registry through when the fetch succeeds', async () => {
     const inner = new ChainRegistryClient();
     const remote = inner.bundled.get(CHAIN_ID);
-    const client = withBundledFallback(stubWithRemoteGet(async () => remote));
+    const client = withBundledFallback(stubWithRemoteGet(() => Promise.resolve(remote)));
 
     expect(await client.remote.get(CHAIN_ID)).toBe(remote);
   });

@@ -6,7 +6,7 @@ import { selectActiveNetwork } from '../../../state/keyring';
 import { isPro } from '../../../state/license';
 import { SettingsScreen } from './settings-screen';
 import { ToggleSwitch } from '../../../components/toggle-switch';
-import { type NetworkType } from '../../../state/keyring/network-types';
+import type { NetworkType } from '../../../state/keyring/network-types';
 import { hasFeature } from '../../../config/networks';
 import {
   DEFAULT_CONTACT_DISCOVERY_RELAY,

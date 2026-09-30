@@ -6,9 +6,9 @@ review findings (the wallet's channels, the group session, the room). Issue #47
 tracks this work.
 
 Scope: the **time-bounded** and **member-bounded** secrecy gaps - the two things
-neither the room nor the zid channel has. Post-quantum *confidentiality* is
+neither the room nor the zid channel has. Post-quantum _confidentiality_ is
 already in place (X25519 + ML-KEM-768 at every handshake/seal); post-quantum
-*authentication* is not, and is stage 5.
+_authentication_ is not, and is stage 5.
 
 ## The two gaps, restated precisely
 
@@ -38,14 +38,14 @@ mostly an honest-gap statement plus identity-layer work.
 Two KDF schedule changes, no new keys, no new records:
 
 - **Epoch key advances forward-only.** Keep `roomSecret` as the root, but make it
-  a *seed*: `epochSeed_0 = roomSecret`,
+  a _seed_: `epochSeed_0 = roomSecret`,
   `epochSeed_n = HKDF(epochSeed_{n-1}, 'veil-room-epoch-v1', epochIndex_n)`, and
   derive window keys from `epochSeed_n` instead of the root. Every member
   advances identically from the signed epoch number, so this needs **no
   interaction** - it is the same construction as the channel's existing
   symmetric ratchet, applied to the board.
   Buys: a state capture at epoch N cannot read epochs `< N`. Does not buy: PCS,
-  and it does not survive a capture of the *root*.
+  and it does not survive a capture of the _root_.
 - **Per-sender chains.** For each author, per epoch:
   `chain_0 = HKDF(epochSeed_n, 'veil-room-chain-v1', author)`,
   `chain_{i+1} = HKDF(chain_i, 'veil-room-chain-v1')`. The record carries its
@@ -60,7 +60,7 @@ Two KDF schedule changes, no new keys, no new records:
 Files: `packages/zirc/src/room/room.ts` (`windowKey`, sealing/opening paths,
 blob version table), `room.test.ts`.
 
-Acceptance: a reader given the *epoch N* state cannot open a captured epoch
+Acceptance: a reader given the _epoch N_ state cannot open a captured epoch
 `N-1` window; two authors' messages with the same index do not share a key; a
 reader replaying a pre-ratchet index derives a different key than the sender's
 current one; existing sealed records still open (version table).
@@ -124,7 +124,7 @@ and derive the DM tag from the same secret so the relay cannot group a pair's
 messages either. This makes the honest sentence in `room.ts:47` upgrade from
 "NOT secret between members" to "secret between the pair, and from the relay".
 
-Note: the DM *payload* is the same sealed-box format; only the key schedule and
+Note: the DM _payload_ is the same sealed-box format; only the key schedule and
 the tag derivation change. Keep v1 readable for captured history (version table),
 write v2 only.
 
@@ -187,17 +187,17 @@ old suite.
 The bar, in bytes on the wire per epoch (one object from each side), with our
 `REKEY_EVERY = 256` interval:
 
-| scheme | CKA material per epoch | amortised @256 | burst shape |
-| --- | --- | --- | --- |
-| Double Ratchet (classical DH only) | 32 (one X25519 pubkey) | 0.13 B/msg | one 32 B pubkey |
-| ML-KEM-768 generic CKA = **SPQR / Braid** | 1184 (`ek`) + 1088 (`ct`) = 2272 | 8.9 B/msg | 1184 / 1088, chunked into 32-512 B pieces |
-| Katana (Opp-RKEM-CKA, USENIX'25 §4) | 1344 (`ek`) + **72** (`ct`) = 1416 | 5.5 B/msg | `ek` chunked, `ct` = one chunk |
-| Apple PQ3 | 2272 every ~50 msgs, re-sent until acked | 45+ B/msg | 2.3 KB, repeated |
-| **stage 4 (ours)** | 32 + 1184 + 1088 = **2304** round trip | **9.0 B/msg** | init 1216 / resp 1088 |
+| scheme                                    | CKA material per epoch                   | amortised @256 | burst shape                               |
+| ----------------------------------------- | ---------------------------------------- | -------------- | ----------------------------------------- |
+| Double Ratchet (classical DH only)        | 32 (one X25519 pubkey)                   | 0.13 B/msg     | one 32 B pubkey                           |
+| ML-KEM-768 generic CKA = **SPQR / Braid** | 1184 (`ek`) + 1088 (`ct`) = 2272         | 8.9 B/msg      | 1184 / 1088, chunked into 32-512 B pieces |
+| Katana (Opp-RKEM-CKA, USENIX'25 §4)       | 1344 (`ek`) + **72** (`ct`) = 1416       | 5.5 B/msg      | `ek` chunked, `ct` = one chunk            |
+| Apple PQ3                                 | 2272 every ~50 msgs, re-sent until acked | 45+ B/msg      | 2.3 KB, repeated                          |
+| **stage 4 (ours)**                        | 32 + 1184 + 1088 = **2304** round trip   | **9.0 B/msg**  | init 1216 / resp 1088                     |
 
 Numbers: ML-KEM-768 from the Braid spec (`HEADER 64`, `EK 1184`, `CT1 960 +
 CT2 128 = 1088`, `MAC 32` on each); Katana's `(|ek|,|ct|) = (1344B, 72B)` and
-chunk counts from `usenixsecurity25-auerbach.pdf` §4. All of it is per *epoch*,
+chunk counts from `usenixsecurity25-auerbach.pdf` §4. All of it is per _epoch_,
 not per message.
 
 - **We are inside the budget by ~4x.** Signal's own published target is to keep
@@ -214,7 +214,7 @@ not per message.
   against 2272 B per epoch - but it is a research ratcheting KEM, not standard
   and not deployed; ML-KEM-768 is what Signal and we both ship.
 - The comparison is also the argument against the bare-ciphertext shortcut: the
-  cheap row does not exist for a *PQ* ratchet. Any scheme that delivers the
+  cheap row does not exist for a _PQ_ ratchet. Any scheme that delivers the
   property pays for both a fresh encapsulation key and its ciphertext.
 
 ## Stage 5 - post-quantum authentication (state the gap, then close it at the identity layer)
@@ -229,7 +229,7 @@ Until that lands, the honest sentence everywhere is "confidentiality is hybrid,
 authentication is classical".
 
 The threshold half of that gap is a separate project, not a change in this
-repo: a post-quantum replacement for FROST is threshold *signing* at the crate
+repo: a post-quantum replacement for FROST is threshold _signing_ at the crate
 layer, and that design lives with the crate -
 [frostito `docs/pq-threshold.md`](https://github.com/penumbrafi/frostito/blob/main/docs/pq-threshold.md).
 What it means for zafu:
@@ -249,7 +249,7 @@ What it means for zafu:
 
 - **Do not implement Signal's SPQR / Triple Ratchet verbatim.** It is well
   analysed - Eurocrypt'25 and USENIX'25 papers, ProVerif models, Rust extracted
-  to F* on every CI run - and it is still the wrong fit: SPQR is a per-message
+  to F\* on every CI run - and it is still the wrong fit: SPQR is a per-message
   header protocol for 1:1 sessions that carries chunked ML-KEM material through
   message capacity. Our ratchet is a session rekey, our rooms broadcast, and our
   records have fixed-size dispatch windows. Stage 4 reaches the same property with
@@ -283,10 +283,10 @@ What the tree already has, so nobody re-derives it:
   frames sized for a scannable QR - `k` = the frames needed to reconstruct,
   parity sized by `redundancy_pct`. **Dispersal only as shipped**: any `k` frames
   reconstruct the payload in full, so a codeword is not a sharing and must not
-  carry a secret. A *hiding* variant - the same code with the message masked so
+  carry a secret. A _hiding_ variant - the same code with the message masked so
   fewer than `t` chunks reveal nothing, plus commitments so a chunk is verifiable
   - is a genuine verifiable secret sharing at the same code rate, and is the
-  variant discussed below.
+    variant discussed below.
 - `packages/encryption`: box, key derivation, key at rest. **No secret sharing**,
   so there is no group key schedule in it to reuse.
 - FROST (`packages/zid/src/group.ts`, `docs/src/security/frost.md`): a 3-round
@@ -297,7 +297,7 @@ The question is narrower than "coding vs. sharing". **A broadcast room has no
 threshold worth protecting**: every member legitimately holds the epoch key, so
 hiding it from any member is not a goal and sharing it out t-of-n buys nothing for
 the message key. Where a hiding, verifiable sharing is decisive is anywhere the
-threshold is a *feature* - authority, quorum-read, dispersal of content that is
+threshold is a _feature_ - authority, quorum-read, dispersal of content that is
 not key material. What it cannot do is create the member bound:
 
 - **A sharing scheme cannot evict anyone.** The bound comes only from a
@@ -305,13 +305,13 @@ not key material. What it cannot do is create the member bound:
   published under the previous epoch key are readable by the departed member, who
   collects `t` chunks and reconstructs; shares published in the clear are worse.
   Membership change costs one per-member keying whichever scheme computes the
-  shares - VSS changes *who can compute and verify* them, not whether they are
+  shares - VSS changes _who can compute and verify_ them, not whether they are
   keyed to members.
 - **`t = n` degenerates to rotation.** If every member must decrypt every message
   - which is what a broadcast room means - then the epoch key has to be known to
-  all, and re-sharing *is* stage 2. Rotation with a commitment needs no sharing
-  scheme at all: a dealer picks the epoch secret, publishes a commitment, and
-  seals one share per member to their `kaPubkey`.
+    all, and re-sharing _is_ stage 2. Rotation with a commitment needs no sharing
+    scheme at all: a dealer picks the epoch secret, publishes a commitment, and
+    seals one share per member to their `kaPubkey`.
 - **`t = n` with public shares is a no-op**, and `t < n` is a different product,
   not a drop-in: nobody can read alone, and `t` members must cooperate per window
   (a release record on the board, plus liveness). Right for a moderator-quorum or
@@ -331,7 +331,7 @@ What the "run the whole room together" idea does earn, and is worth taking:
   so "who may deal epoch `n`, to whom" is a signed fact, not a convention.
 - **Use it where it actually fits: the board, not the key.** `k`-of-`n` coded
   frames of each window, published to several relays, so no single hostile relay
-  can withhold history - and with the *hiding* variant no sealing pass is needed
+  can withhold history - and with the _hiding_ variant no sealing pass is needed
   to put a window on the board, because `t-1` chunks reveal nothing. Dispersal-only
   frames cannot do that (a relay holding `k` frames reads the window), which is
   exactly why the hiding property is worth having even though it does nothing for
@@ -348,7 +348,7 @@ Ranked by value to this repo, assuming it delivers hiding below `t`, verifiable
 chunks, and no overhead beyond the code's own rate:
 
 1. **Board availability with no sealing pass.** Dispersing a window as `t`-of-`n`
-   hiding chunks to several relays is safe *in the clear*; a hostile relay holding
+   hiding chunks to several relays is safe _in the clear_; a hostile relay holding
    `t-1` learns nothing and cannot withhold the window. This is the one property
    the shipped dispersal-only frames lack and the reason to build the variant at
    all. Design note: the commitment has to ride the chunk it verifies (or the
@@ -371,19 +371,19 @@ chunks, and no overhead beyond the code's own rate:
 
 ### zoda-VSS vs. FROST: different primitives, one shared idea
 
-FROST's DKG *is* a VSS - rounds 1-3 are commitments, shares, finalize over a
+FROST's DKG _is_ a VSS - rounds 1-3 are commitments, shares, finalize over a
 Shamir (Reed-Solomon) sharing in the secp256k1 scalar field. The two part company
 on payload domain and on what the shares are for:
 
-| | zoda-VSS (hiding variant) | FROST as shipped |
-|---|---|---|
-| shared object | arbitrary bytes: epoch key, window, PCZT, seed | a secret **scalar** in secp256k1, whose group element is the wallet key |
-| needs | a linear code + commitments; field arithmetic and hashes | linearity over the scalar field, a curve, hash-to-curve, scalar mults |
-| reconstruction | terminal - `t` chunks put the secret in the clear | **never** - the scalar does not exist on any device; shares are used in-process to sign |
-| rounds | 1 broadcast to distribute (dealer from the log), 1 round to reconstruct | 3 DKG rounds, 2 signing rounds, all `t` online, 10-minute client-side deadline (`FROST_SESSION_TIMEOUT_MS`) |
-| verifiability yields | "this chunk is a correct share" | "these shares define the same group key and mine can sign" - verifying shares plus the FVK |
-| output | possession: the bytes | authority: a valid Orchard authorization signature |
-| transport | records on the async room board | frostd JSON-HTTP session with a fixed participant list |
+|                      | zoda-VSS (hiding variant)                                               | FROST as shipped                                                                                            |
+| -------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| shared object        | arbitrary bytes: epoch key, window, PCZT, seed                          | a secret **scalar** in secp256k1, whose group element is the wallet key                                     |
+| needs                | a linear code + commitments; field arithmetic and hashes                | linearity over the scalar field, a curve, hash-to-curve, scalar mults                                       |
+| reconstruction       | terminal - `t` chunks put the secret in the clear                       | **never** - the scalar does not exist on any device; shares are used in-process to sign                     |
+| rounds               | 1 broadcast to distribute (dealer from the log), 1 round to reconstruct | 3 DKG rounds, 2 signing rounds, all `t` online, 10-minute client-side deadline (`FROST_SESSION_TIMEOUT_MS`) |
+| verifiability yields | "this chunk is a correct share"                                         | "these shares define the same group key and mine can sign" - verifying shares plus the FVK                  |
+| output               | possession: the bytes                                                   | authority: a valid Orchard authorization signature                                                          |
+| transport            | records on the async room board                                         | frostd JSON-HTTP session with a fixed participant list                                                      |
 
 So they are not interchangeable, and the split is clean: **use FROST where the
 secret must never exist** (multisig spending; the k-of-n operator authority the
@@ -400,19 +400,19 @@ output shaped like `frostDkgPart3InWorker`'s (`key_package`,
 dispersal/shared-secret primitive, not a DKG for a Schnorr group.
 
 Could the variant supply a post-quantum threshold signature? It can supply the
-*distribution* half: a threshold signature needs no trusted dealer, verifiable
+_distribution_ half: a threshold signature needs no trusted dealer, verifiable
 shares, hiding below `t`, and **linearity over the algebra the signing protocol
 works in**. The first three are generic and post-quantum safe when the code's
 operations are information-theoretic; the fourth has to be checked per scheme, and
 that is where the scheme-specific work starts - lattice keys survive the check
 (`t = A*s1 + s2` interpolates through a linear code over `Z_q`), FROST's
-Schnorr *signing* does not (Dilithium rejection sampling is nonlinear in the
+Schnorr _signing_ does not (Dilithium rejection sampling is nonlinear in the
 share). Written up in `~/rotko/frostito/docs/pq-threshold.md`, which is also
 where the `ThresholdScheme` seam lives; it is a frostito design, not a room-key
 one.
 
 Outside our control either way: an Orchard spend authorizes with RedPallas, so a
-post-quantum *spending* threshold needs a Zcash network upgrade, not just a new
+post-quantum _spending_ threshold needs a Zcash network upgrade, not just a new
 DKG. Where a PQ threshold is actionable in this repo today is the authority that
 never touches the chain - the zirc operator quorum signing log records, relay
 and message authentication. That is stage 5's lane, not the room key
@@ -427,11 +427,11 @@ Signal's shipped design runs the Double Ratchet (ECDH DH ratchet plus symmetric
 chain) and the Sparse Post-Quantum Ratchet (SPQR) side by side and KDFs the two
 message keys together, so an attacker must break both X25519 and ML-KEM-768.
 Read on its own, SPQR is a continuous key agreement over ML-KEM-768 that builds a
-*standalone* messaging protocol with PQ forward secrecy and PQ post-compromise
+_standalone_ messaging protocol with PQ forward secrecy and PQ post-compromise
 security. Its sparse part is a state machine plus erasure-coded chunking ("ML-KEM
 Braid"): an EK is 1184 bytes and a CT 1088, split so the bulk of both travels in
 parallel - only EK1 (2 chunks) and CT2 (4 chunks) have to arrive without data
-going back. Epochs advance in *series*: their simulations
+going back. Epochs advance in _series_: their simulations
 found that generating EK#2 before CT#1 lands loses the property, because a device
 breach would then expose DK#1..DK#n and with them every future epoch's secrecy.
 
@@ -447,7 +447,7 @@ Where our plan already agrees:
 - **Explicit downgrade discipline.** SPQR data is MAC'd so a middleman cannot
   strip it, downgrade is allowed only on the first exchange, and a future release
   stops offering sessions without it. Our suite string sits inside the handshake,
-  so capability negotiation is authenticated *by construction* - but the missing
+  so capability negotiation is authenticated _by construction_ - but the missing
   refusal frame is exactly the silent-fallback hole they engineered against.
 
 Where it differs, and why we are not porting it:
@@ -469,7 +469,7 @@ Where it differs, and why we are not porting it:
    domain-separated (`HKDF` over chaining key and KEM secret with a fixed `info`),
    and the argument owed is a hybrid-composition one, not two independent ones.
 4. **Verification budget.** They model in ProVerif from the start, extract Rust to
-   F* with hax on every CI run, and prove invariants and panic-freedom. We have
+   F\* with hax on every CI run, and prove invariants and panic-freedom. We have
    tests and a suite gate. The affordable substitute is a modelled ratchet state
    machine tested across every transition - lost ratchet message, lost ack, late
    ack - since stage 4's "a dropped ratchet message does not strand the session"
@@ -494,12 +494,12 @@ not per-message PQ forward secrecy.
 ## Fork policy - the log is a fact, not a verdict
 
 The channel log records **validity**, not **canonicity**. A record is signed and its
-authority is a function of the state *before* it, so no branch can be forged or
+authority is a function of the state _before_ it, so no branch can be forged or
 self-authorized (`channel-log.ts`: a record "is authorized by the state BEFORE it,
 never by its own effect"). Nothing in the log says which of two valid branches is
-*the* one - and the dispersal construction cannot say it either: sampling proves
+_the_ one - and the dispersal construction cannot say it either: sampling proves
 "the data behind commitment `C` is available and unique", which only moves the
-question to *which `C`*.
+question to _which `C`_.
 
 Decision: **do not auto-resolve.** Keep the fork visible and let the people in the
 room settle it, the way a hard fork or a netsplit is settled - by who stays. No new
@@ -511,12 +511,12 @@ What "visible" costs, or the fork is invisible and there is nothing to choose:
   quiet one: `verifyChains` skips a gap - "a gap, not a break" - and the relay decides
   which records come back at all. Visible forks need **witnesses**: each record commits
   the digest of the bucket state its author saw. Then any member's record proves a
-  write existed, and a drop is *provable* rather than inferred. One field, on the
+  write existed, and a drop is _provable_ rather than inferred. One field, on the
   per-author chain that already exists.
 - **A fork is attributable, which is why "show both" is fair here.** Both branches are
   valid and both are signed, so a client can name the signer of each head. Unlike a
-  coin fork, the divergence is a *person* - visible, nameable, and accountable.
-- **A fork is not a merge.** A netsplit heals because each half is only *missing* the
+  coin fork, the divergence is a _person_ - visible, nameable, and accountable.
+- **A fork is not a merge.** A netsplit heals because each half is only _missing_ the
   other's events; two operators appending `at = prev + 1` never union. So the read path
   stops at the fork point, shows both heads, and takes a **local pin**. The pin is a
   preference, never a network rule - convergence is social or it does not happen.
@@ -525,7 +525,7 @@ What "visible" costs, or the fork is invisible and there is nothing to choose:
   That is the intended signal: a fork means a human, not a resolver.
 
 The one constraint the no-rule path still inherits from the log: a branch may only read
-the state *before* it. A pin reads the present; a resolution rule that read the branch's
+the state _before_ it. A pin reads the present; a resolution rule that read the branch's
 own effect would re-open self-authorization through the side door.
 
 ## The decisions this plan defers

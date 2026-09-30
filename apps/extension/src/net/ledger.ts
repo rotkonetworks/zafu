@@ -67,12 +67,20 @@ const runExclusive = <T>(fn: () => Promise<T>): Promise<T> => {
 const subscribeToExternalWrites = (): void => {
   // `chrome.storage` is absent in tests; the cache simply never invalidates.
   const onChanged = globalThis.chrome?.storage?.onChanged;
-  if (!onChanged?.addListener) return;
+  if (!onChanged?.addListener) {
+    return;
+  }
   onChanged.addListener(
     (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => {
-      if (areaName !== 'local') return;
-      if (changes[LEDGER_KEY] !== undefined) cache = undefined;
-      if (changes[LOG_KEY] !== undefined) logCache = undefined;
+      if (areaName !== 'local') {
+        return;
+      }
+      if (changes[LEDGER_KEY] !== undefined) {
+        cache = undefined;
+      }
+      if (changes[LOG_KEY] !== undefined) {
+        logCache = undefined;
+      }
     },
   );
 };
@@ -80,13 +88,17 @@ const subscribeToExternalWrites = (): void => {
 subscribeToExternalWrites();
 
 export const readNetEgress = async (): Promise<NetEgressState> => {
-  if (cache) return cache;
+  if (cache) {
+    return cache;
+  }
   cache = parseNetEgressState(await localExtStorage.get(LEDGER_KEY));
   return cache;
 };
 
 export const readNetEgressLog = async (): Promise<NetEgressLogEntry[]> => {
-  if (logCache) return logCache;
+  if (logCache) {
+    return logCache;
+  }
   logCache = parseNetEgressLog(await localExtStorage.get(LOG_KEY));
   return logCache;
 };
@@ -103,18 +115,24 @@ const mutateNetEgress = <T>(fn: (state: NetEgressState) => T): Promise<T> =>
 
 const flushCounters = (): void => {
   flushTimer = undefined;
-  if (pendingCounters.size === 0) return;
+  if (pendingCounters.size === 0) {
+    return;
+  }
   const batch = new Map(pendingCounters);
   pendingCounters.clear();
   void mutateNetEgress(state => {
     for (const [host, delta] of batch) {
       const record = state.destinations[host];
       // The record can be gone if another realm dropped it; nothing to add to.
-      if (!record) continue;
+      if (!record) {
+        continue;
+      }
       record.calls += delta.calls;
       record.lastUsed = Math.max(record.lastUsed, delta.lastUsed);
       for (const purpose of delta.purposes) {
-        if (!record.purposes.includes(purpose)) record.purposes.push(purpose);
+        if (!record.purposes.includes(purpose)) {
+          record.purposes.push(purpose);
+        }
       }
     }
   }).catch(() => {
@@ -123,7 +141,9 @@ const flushCounters = (): void => {
 };
 
 const scheduleFlush = (): void => {
-  if (flushTimer !== undefined) return;
+  if (flushTimer !== undefined) {
+    return;
+  }
   flushTimer = setTimeout(flushCounters, COUNTER_FLUSH_MS);
   // never hold the worker awake just to write counters
   (flushTimer as unknown as { unref?: () => void }).unref?.();
@@ -133,7 +153,9 @@ const bumpCounters = (host: string, purpose: NetPurpose): void => {
   const delta = pendingCounters.get(host) ?? { calls: 0, lastUsed: 0, purposes: [] };
   delta.calls += 1;
   delta.lastUsed = Date.now();
-  if (!delta.purposes.includes(purpose)) delta.purposes.push(purpose);
+  if (!delta.purposes.includes(purpose)) {
+    delta.purposes.push(purpose);
+  }
   pendingCounters.set(host, delta);
   scheduleFlush();
 };
@@ -172,15 +194,20 @@ export const noteDestination = async (
       // purpose is worth an immediate write; the counters are not.
       await mutateNetEgress(s => {
         const record = s.destinations[host];
-        if (!record) return;
-        if (!record.purposes.includes(observation.purpose))
+        if (!record) {
+          return;
+        }
+        if (!record.purposes.includes(observation.purpose)) {
           record.purposes.push(observation.purpose);
+        }
         // Trust is monotone: a host that is trusted once stays trusted, and a
         // host that was never trusted is not promoted by a later observation.
         if (observation.trusted) {
           record.trusted = true;
           record.label = observation.label;
-          if (record.state === 'pending') record.state = 'allowed';
+          if (record.state === 'pending') {
+            record.state = 'allowed';
+          }
         }
       });
       return (await readNetEgress()).destinations[host] ?? existing;
@@ -202,7 +229,9 @@ export const noteDestination = async (
   };
   await mutateNetEgress(s => {
     // A concurrent realm may have created it first; that record wins.
-    if (!s.destinations[host]) s.destinations[host] = record;
+    if (!s.destinations[host]) {
+      s.destinations[host] = record;
+    }
   });
   const stored = (await readNetEgress()).destinations[host];
   return stored ?? record;
@@ -216,10 +245,14 @@ export const setDestinationDecision = async (
   promptedThisSession.delete(host);
   await mutateNetEgress(s => {
     const record = s.destinations[host];
-    if (!record) return;
+    if (!record) {
+      return;
+    }
     record.state = state;
     record.promptedAt = undefined;
-    if (state === 'pending') record.lastOutcome = undefined;
+    if (state === 'pending') {
+      record.lastOutcome = undefined;
+    }
   });
 };
 
@@ -236,7 +269,9 @@ export const forgetDestination = async (host: string): Promise<boolean> => {
   promptedThisSession.delete(host);
   pendingCounters.delete(host);
   return mutateNetEgress(s => {
-    if (!s.destinations[host]) return false;
+    if (!s.destinations[host]) {
+      return false;
+    }
     delete s.destinations[host];
     return true;
   });
@@ -246,7 +281,9 @@ export const forgetDestination = async (host: string): Promise<boolean> => {
 export const markPrompted = async (host: string): Promise<void> => {
   await mutateNetEgress(s => {
     const record = s.destinations[host];
-    if (record) record.promptedAt = Date.now();
+    if (record) {
+      record.promptedAt = Date.now();
+    }
   });
 };
 
@@ -255,9 +292,13 @@ export const markPrompted = async (host: string): Promise<void> => {
  * service-worker restarts via `promptedAt`, and cheap-deduped within a session.
  */
 export const shouldPrompt = async (host: string): Promise<boolean> => {
-  if (promptedThisSession.has(host)) return false;
+  if (promptedThisSession.has(host)) {
+    return false;
+  }
   const record = (await readNetEgress()).destinations[host];
-  if (record?.promptedAt !== undefined) return false;
+  if (record?.promptedAt !== undefined) {
+    return false;
+  }
   promptedThisSession.add(host);
   return true;
 };
@@ -278,7 +319,9 @@ export const recordOutcome = async (
   await runExclusive(async () => {
     const state = parseNetEgressState(await localExtStorage.get(LEDGER_KEY));
     const record = state.destinations[host];
-    if (record) record.lastOutcome = outcome;
+    if (record) {
+      record.lastOutcome = outcome;
+    }
 
     const rawLog = parseNetEgressLog(await localExtStorage.get(LOG_KEY));
     const entry: NetEgressLogEntry = {
@@ -301,7 +344,9 @@ export const recordOutcome = async (
 export const setDestinationIdentity = async (host: string, identityId?: string): Promise<void> => {
   await mutateNetEgress(s => {
     const record = s.destinations[host];
-    if (!record) return;
+    if (!record) {
+      return;
+    }
     record.identity = identityId;
   });
 };

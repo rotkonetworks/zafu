@@ -93,8 +93,12 @@ export const requestDestinationConsent = async (
     purposeLabel: NET_PURPOSE_LABEL[purpose],
     requestId,
   });
-  if (context.origin) params.set('app', context.origin);
-  if (context.detail) params.set('detail', context.detail);
+  if (context.origin) {
+    params.set('app', context.origin);
+  }
+  if (context.detail) {
+    params.set('detail', context.detail);
+  }
   const url = `${chrome.runtime.getURL('popup.html')}#${PopupPath.DESTINATION_APPROVAL}?${params.toString()}`;
 
   const opened = await openApprovalPopup(host, url, requestId);
