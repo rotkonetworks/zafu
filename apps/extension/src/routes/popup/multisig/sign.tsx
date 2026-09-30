@@ -37,6 +37,8 @@ import { PopupPath } from '../paths';
 import { FrostAirgapJoinerSignFlow } from '../send/frost-multisig';
 import { Sensitive } from '../../../components/sensitive';
 import { DEFAULT_RELAY_URL } from './dkg-helpers';
+import { Button } from '@repo/ui/components/ui/button';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 
 type Step = 'input' | 'joining' | 'review' | 'signing' | 'complete' | 'error';
 
@@ -409,9 +411,9 @@ export const MultisigSign = () => {
   if (!ms) {
     return (
       <SettingsScreen title='co-sign' backPath={PopupPath.MULTISIG}>
-        <div className='rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-400'>
+        <StatusSlot tone='danger'>
           no active multisig wallet - select a multisig wallet first
-        </div>
+        </StatusSlot>
       </SettingsScreen>
     );
   }
@@ -477,9 +479,7 @@ export const MultisigSign = () => {
 
       {step === 'review' && (
         <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3'>
-            <p className='text-label tracking-wider text-yellow-400'>review transaction</p>
-          </div>
+          <StatusSlot tone='warn'>review transaction</StatusSlot>
 
           <div className='rounded-lg border border-border-soft bg-elev-1 p-3 flex flex-col gap-2.5'>
             <div>
@@ -639,19 +639,18 @@ export const MultisigSign = () => {
 
       {step === 'error' && (
         <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-400'>
-            {error}
-          </div>
-          <button
+          <StatusSlot tone='danger'>{error}</StatusSlot>
+          <Button
+            variant='secondary'
+            className='w-full'
             onClick={() => {
               teardown();
               setStep('input');
               setError('');
             }}
-            className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >
             try again
-          </button>
+          </Button>
         </div>
       )}
     </SettingsScreen>
