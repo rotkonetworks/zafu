@@ -113,6 +113,10 @@ export const AccountsSheet = ({
   const inSidePanel = isSidePanel();
 
   const isHotWallet = selectedKeyInfo?.type === 'mnemonic';
+  // the active hot wallet gets its own header + pockets block above; listing
+  // it again here would be the same wallet twice, and tapping it would do
+  // nothing (it is already selected).
+  const otherKeyInfos = isHotWallet ? keyInfos.filter(k => k.id !== selectedKeyInfo?.id) : keyInfos;
   const pockets = useStore(useShallow(activePockets));
   const activeAccount = useStore(activeAccountIndex);
   const selectPocket = useStore(s => s.pockets.select);
@@ -183,41 +187,51 @@ export const AccountsSheet = ({
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title='accounts'>
       <div className='flex flex-col gap-4'>
-        {isHotWallet && (
-          <div className='flex flex-col divide-y divide-surface-border-soft border border-surface-border-soft bg-surface-elev-1'>
-            {pockets.map(p => (
-              <PocketRow
-                key={p.account}
-                name={p.name}
-                account={p.account}
-                active={p.account === activeAccount}
-                canSync={p.account === 0}
-                balanceZat={activeBalanceZat}
-                onPick={() => pickPocket(p.account)}
-                onRename={() => onNewPocket({ account: p.account, name: p.name })}
-              />
-            ))}
-            <button
-              type='button'
-              onClick={() => onNewPocket()}
-              disabled={pockets.length >= MAX_POCKETS}
-              className='flex min-h-[44px] items-center gap-3 px-3.5 py-2 text-left text-zigner-gold disabled:pointer-events-none disabled:opacity-50'
-            >
-              <span className='i-ph-plus size-[18px] shrink-0' aria-hidden='true' />
-              <span className='text-data lowercase'>
-                {pockets.length >= MAX_POCKETS
-                  ? `this wallet has ${MAX_POCKETS} pockets, the most it can hold`
-                  : 'new pocket'}
+        {isHotWallet && selectedKeyInfo && (
+          <div className='flex flex-col gap-2'>
+            <div className='flex items-center gap-2 px-3.5'>
+              <span className='truncate text-label text-fg-muted lowercase'>
+                {selectedKeyInfo.name}
               </span>
-            </button>
+              <CustodyBadge vault={selectedKeyInfo} showLabel />
+            </div>
+            <div className='flex flex-col divide-y divide-surface-border-soft border border-surface-border-soft bg-surface-elev-1'>
+              {pockets.map(p => (
+                <PocketRow
+                  key={p.account}
+                  name={p.name}
+                  account={p.account}
+                  active={p.account === activeAccount}
+                  canSync={p.account === 0}
+                  balanceZat={activeBalanceZat}
+                  onPick={() => pickPocket(p.account)}
+                  onRename={() => onNewPocket({ account: p.account, name: p.name })}
+                />
+              ))}
+              <button
+                type='button'
+                onClick={() => onNewPocket()}
+                disabled={pockets.length >= MAX_POCKETS}
+                className='flex min-h-[44px] items-center gap-3 px-3.5 py-2 text-left text-zigner-gold disabled:pointer-events-none disabled:opacity-50'
+              >
+                <span className='i-ph-plus size-[18px] shrink-0' aria-hidden='true' />
+                <span className='text-data lowercase'>
+                  {pockets.length >= MAX_POCKETS
+                    ? `this wallet has ${MAX_POCKETS} pockets, the most it can hold`
+                    : 'new pocket'}
+                </span>
+              </button>
+            </div>
           </div>
         )}
 
         <div className='flex flex-col divide-y divide-surface-border-soft border border-surface-border-soft bg-surface-elev-1'>
-          {keyInfos.length === 0 ? (
-            <span className='px-3.5 py-3 text-data text-fg-muted lowercase'>no wallets</span>
+          {otherKeyInfos.length === 0 ? (
+            <span className='px-3.5 py-3 text-data text-fg-muted lowercase'>
+              {isHotWallet ? 'no other wallets' : 'no wallets'}
+            </span>
           ) : (
-            keyInfos.map(k => {
+            otherKeyInfos.map(k => {
               const active = k.id === selectedKeyInfo?.id;
               return (
                 <button
