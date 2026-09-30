@@ -45,6 +45,9 @@ import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
 import { useBackNav } from '../../../utils/navigate';
 import { QrDisplay } from '../../../shared/components/qr-display';
+import { Button } from '@repo/ui/components/ui/button';
+import { CopyButton } from '@repo/ui/components/ui/copy-button';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import {
   DEFAULT_RELAY_URL,
   RelayTransportField,
@@ -342,9 +345,10 @@ const MultisigCreateZafu = () => {
             />
           )}
           {rdvAvailable === true && (
-            <button
-              type='button'
-              className='self-start text-label text-fg-muted underline'
+            <Button
+              variant='quiet'
+              size='sm'
+              className='self-start'
               onClick={() => {
                 setManualKeys(m => !m);
                 setPeerKeys([]);
@@ -352,17 +356,18 @@ const MultisigCreateZafu = () => {
               }}
             >
               {manualKeys ? 'use a room code instead' : 'advanced: manual key exchange'}
-            </button>
+            </Button>
           )}
-          <button
-            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-40'
+          <Button
+            variant='primary'
+            className='w-full'
             disabled={peerKeys.length !== maxSigners - 1}
             onClick={() => void handleCreate()}
           >
             {peerKeys.length === maxSigners - 1
               ? 'create'
               : `waiting for ${maxSigners - 1 - peerKeys.length} more relay key(s)`}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -378,12 +383,7 @@ const MultisigCreateZafu = () => {
             {/* a session id is a uuid, not three short words - it needs to wrap
                 rather than run off the popup */}
             <span className='break-all font-mono text-xs'>{rdvRef.current?.code ?? roomCode}</span>
-            <button
-              onClick={() => void navigator.clipboard.writeText(rdvRef.current?.code ?? roomCode)}
-              className='p-1 text-fg-muted hover:text-fg-high transition-colors'
-            >
-              <span className='i-ph-copy size-4' />
-            </button>
+            <CopyButton text={rdvRef.current?.code ?? roomCode} />
           </div>
 
           <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
@@ -452,12 +452,7 @@ const MultisigCreateZafu = () => {
           {roomCode && (
             <div className='flex items-center gap-2 rounded-lg border border-border-soft bg-elev-1 px-4 py-2'>
               <span className='break-all font-mono text-xs'>{roomCode}</span>
-              <button
-                onClick={() => void navigator.clipboard.writeText(roomCode)}
-                className='p-1 text-fg-muted hover:text-fg-high transition-colors'
-              >
-                <span className='i-ph-copy size-3.5' />
-              </button>
+              <CopyButton text={roomCode} />
             </div>
           )}
         </div>
@@ -489,29 +484,29 @@ const MultisigCreateZafu = () => {
             {threshold}-of-{maxSigners}: any {threshold} of the {maxSigners} signers can approve
             outgoing transactions
           </p>
-          <button
-            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors'
+          <Button
+            variant='primary'
+            className='w-full'
             onClick={goBack}
           >
             done
-          </button>
+          </Button>
         </div>
       )}
 
       {step === 'error' && (
         <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-400'>
-            {error}
-          </div>
-          <button
+          <StatusSlot tone='danger'>{error}</StatusSlot>
+          <Button
+            variant='secondary'
+            className='w-full'
             onClick={() => {
               setStep('config');
               setError('');
             }}
-            className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >
             try again
-          </button>
+          </Button>
         </div>
       )}
     </SettingsScreen>
@@ -907,10 +902,10 @@ const MultisigCreateZigner = () => {
       />
       {step === 'config' && (
         <div className='flex flex-col gap-4'>
-          <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-2.5 text-label text-yellow-400'>
+          <StatusSlot tone='warn'>
             cold-multisig: your signing key is generated and stored on zigner only. zafu keeps only
             the public keys needed to watch the wallet.
-          </div>
+          </StatusSlot>
           <div className='flex gap-3'>
             <label className='flex-1 text-xs text-fg-muted'>
               signers
@@ -959,9 +954,10 @@ const MultisigCreateZigner = () => {
             />
           )}
           {rdvAvailable === true && (
-            <button
-              type='button'
-              className='self-start text-label text-fg-muted underline'
+            <Button
+              variant='quiet'
+              size='sm'
+              className='self-start'
               onClick={() => {
                 setManualKeys(m => !m);
                 setPeerKeys([]);
@@ -969,17 +965,18 @@ const MultisigCreateZigner = () => {
               }}
             >
               {manualKeys ? 'use a room code instead' : 'advanced: manual key exchange'}
-            </button>
+            </Button>
           )}
-          <button
-            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-40'
+          <Button
+            variant='primary'
+            className='w-full'
             disabled={peerKeys.length !== maxSigners - 1}
             onClick={() => void handleStart()}
           >
             {peerKeys.length === maxSigners - 1
               ? 'create'
               : `waiting for ${maxSigners - 1 - peerKeys.length} more relay key(s)`}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -1092,30 +1089,30 @@ const MultisigCreateZigner = () => {
           <p className='text-label text-fg-muted'>
             zigner wallet_id: <span className='font-mono'>{walletId}</span>
           </p>
-          <button
-            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors'
+          <Button
+            variant='primary'
+            className='w-full'
             onClick={goBack}
           >
             done
-          </button>
+          </Button>
         </div>
       )}
 
       {step === 'error' && (
         <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-400'>
-            {error}
-          </div>
-          <button
+          <StatusSlot tone='danger'>{error}</StatusSlot>
+          <Button
+            variant='secondary'
+            className='w-full'
             onClick={() => {
               setStep('config');
               setError('');
               resetDkg();
             }}
-            className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >
             try again
-          </button>
+          </Button>
         </div>
       )}
     </SettingsScreen>

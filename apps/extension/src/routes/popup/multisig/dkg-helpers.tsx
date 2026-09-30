@@ -57,16 +57,17 @@ export const RelayTransportField = ({
           <span className='shrink-0 text-xs text-fg-muted'>relay</span>
           <span className='truncate font-mono text-xs'>{value || DEFAULT_RELAY_URL}</span>
         </div>
-        <button
-          type='button'
+        <Button
+          variant='quiet'
+          size='sm'
+          className='flex shrink-0 gap-1'
           onClick={() => setOpen(o => !o)}
-          className='flex shrink-0 items-center gap-1 text-label text-fg-muted transition-colors hover:text-fg-high'
         >
           advanced
           <span
             className={cn('i-ph-caret-down size-3 transition-transform', open && 'rotate-180')}
           />
-        </button>
+        </Button>
       </div>
       {open && (
         <div className='flex flex-col gap-2 rounded-lg border border-border-soft bg-elev-1 p-3'>
@@ -164,12 +165,13 @@ export const ScreenWithTriggerQr = ({
       <p className='text-xs text-fg-muted'>{headline}</p>
       <p className='text-label text-fg-muted text-center max-w-xs'>{body}</p>
       <AnimatedQrDisplay data={bytes} urType={TRIGGER_UR_TYPE} size={200} />
-      <button
-        className='rounded-lg border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs text-zigner-gold'
+      <Button
+        variant='primary'
+        size='sm'
         onClick={onNext}
       >
         {nextLabel}
-      </button>
+      </Button>
     </div>
   );
 };

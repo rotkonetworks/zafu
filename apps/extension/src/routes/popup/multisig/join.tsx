@@ -41,6 +41,8 @@ import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
 import { useBackNav } from '../../../utils/navigate';
+import { Button } from '@repo/ui/components/ui/button';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import {
   DEFAULT_RELAY_URL,
   RelayTransportField,
@@ -311,9 +313,10 @@ const MultisigJoinZafu = () => {
             />
           )}
           {rdvAvailable === true && (
-            <button
-              type='button'
-              className='self-start text-label text-fg-muted underline'
+            <Button
+              variant='quiet'
+              size='sm'
+              className='self-start'
               onClick={() => {
                 setManualKeys(m => !m);
                 setPeerKeys([]);
@@ -322,16 +325,17 @@ const MultisigJoinZafu = () => {
               }}
             >
               {manualKeys ? 'use a room code instead' : 'advanced: join by session id'}
-            </button>
+            </Button>
           )}
           {rdvAvailable !== null && !rendezvous && (
-            <button
-              className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
+            <Button
+              variant='primary'
+              className='w-full'
               onClick={() => void handleJoin()}
               disabled={!roomCode.trim() || peerKeys.length === 0}
             >
               join
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -371,30 +375,30 @@ const MultisigJoinZafu = () => {
             <p className='text-label text-fg-muted'>address</p>
             <p className='mt-1 break-all font-mono text-xs'>{address}</p>
           </div>
-          <button
-            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors'
+          <Button
+            variant='primary'
+            className='w-full'
             onClick={goBack}
           >
             done
-          </button>
+          </Button>
         </div>
       )}
 
       {step === 'error' && (
         <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-400'>
-            {error}
-          </div>
-          <button
+          <StatusSlot tone='danger'>{error}</StatusSlot>
+          <Button
+            variant='secondary'
+            className='w-full'
             onClick={() => {
               setStep('input');
               setError('');
               autoJoinedRef.current = false;
             }}
-            className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >
             try again
-          </button>
+          </Button>
         </div>
       )}
     </SettingsScreen>
@@ -819,10 +823,10 @@ const MultisigJoinZigner = () => {
       />
       {step === 'input' && (
         <div className='flex flex-col gap-4'>
-          <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-2.5 text-label text-yellow-400'>
+          <StatusSlot tone='warn'>
             cold-multisig: your signing key is generated and stored on zigner only. zafu keeps only
             the public keys needed to watch the wallet.
-          </div>
+          </StatusSlot>
           {rdvAvailable !== null && !rendezvous && (
             <label className='text-xs text-fg-muted'>
               session id from the wallet creator
@@ -863,9 +867,10 @@ const MultisigJoinZigner = () => {
             />
           )}
           {rdvAvailable === true && (
-            <button
-              type='button'
-              className='self-start text-label text-fg-muted underline'
+            <Button
+              variant='quiet'
+              size='sm'
+              className='self-start'
               onClick={() => {
                 setManualKeys(m => !m);
                 setPeerKeys([]);
@@ -874,16 +879,17 @@ const MultisigJoinZigner = () => {
               }}
             >
               {manualKeys ? 'use a room code instead' : 'advanced: join by session id'}
-            </button>
+            </Button>
           )}
           {rdvAvailable !== null && !rendezvous && (
-            <button
-              className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
+            <Button
+              variant='primary'
+              className='w-full'
               onClick={() => void handleJoin()}
               disabled={!roomCode.trim() || peerKeys.length === 0}
             >
               join
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -989,30 +995,30 @@ const MultisigJoinZigner = () => {
           <p className='text-label text-fg-muted'>
             zigner wallet_id: <span className='font-mono'>{walletId}</span>
           </p>
-          <button
-            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors'
+          <Button
+            variant='primary'
+            className='w-full'
             onClick={goBack}
           >
             done
-          </button>
+          </Button>
         </div>
       )}
 
       {step === 'error' && (
         <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-400'>
-            {error}
-          </div>
-          <button
+          <StatusSlot tone='danger'>{error}</StatusSlot>
+          <Button
+            variant='secondary'
+            className='w-full'
             onClick={() => {
               setStep('input');
               setError('');
               autoJoinedRef.current = false;
             }}
-            className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >
             try again
-          </button>
+          </Button>
         </div>
       )}
     </SettingsScreen>
