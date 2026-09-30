@@ -1,4 +1,4 @@
-import { useState, type JSX } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { usePopupReady } from '../../hooks/popup-ready';
 import { useSidePanelDelivery } from '../../hooks/side-panel-delivery';
@@ -9,6 +9,7 @@ import { AppHeader } from '../../components/app-header';
 import { MenuDrawer } from '../../components/menu-drawer';
 import { TxTrackerWatcher } from '../../components/tx-tracker-watcher';
 import { PopupPath } from './paths';
+import { schedulePreloadAllScreens } from './route-modules';
 import { useStore } from '../../state';
 import {
   selectActiveNetwork,
@@ -159,6 +160,9 @@ export const PopupLayout = () => {
   usePenumbraSwapClaim(activeNetwork, onLoginPage, penumbraAccount);
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // first screen is up - warm every other screen's chunk while idle
+  useEffect(schedulePreloadAllScreens, []);
+
   const networkTabs = getTabsForNetwork(activeNetwork);
   // On a frost wallet, guarantee a multisig tab - but only append one if the
   // network's own feature-gated tabs don't already include it, otherwise the
@@ -183,7 +187,11 @@ export const PopupLayout = () => {
       {showChrome && <AppHeader onMenuClick={() => setMenuOpen(true)} />}
       <div
         className='min-h-0 flex-1 overflow-y-auto transform-gpu'
-        style={{ paddingBottom: showTabs ? BOTTOM_TABS_HEIGHT : 0 }}
+        style={{
+          paddingBottom: showTabs ? BOTTOM_TABS_HEIGHT : 0,
+          // the part that animates on navigation (styles/view-transitions.css)
+          viewTransitionName: 'popup-screen',
+        }}
       >
         <Outlet />
       </div>

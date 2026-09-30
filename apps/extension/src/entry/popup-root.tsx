@@ -17,6 +17,7 @@ import { balancesQueryKey } from '../hooks/penumbra-balances';
 
 import '@repo/ui/styles/globals.css';
 import '@repo/ui/styles/icons.css';
+import '../styles/view-transitions.css';
 
 // Safety net for the popup page itself: a best-effort fetch in a dependency
 // or a not-awaited background call that rejects with a transient network
