@@ -103,8 +103,8 @@ export const Login = () => {
               lost - re-import this wallet's recovery phrase to restore it.
             </p>
             <Button
-              size='lg'
-              variant='gradient'
+              size='md'
+              variant='primary'
               type='button'
               onClick={() => navigate(PopupPath.SETTINGS_WALLETS)}
             >
@@ -112,7 +112,7 @@ export const Login = () => {
             </Button>
             <Button
               size='sm'
-              variant='ghost'
+              variant='quiet'
               type='button'
               onClick={() => navigate(PopupPath.INDEX)}
             >
@@ -140,8 +140,8 @@ export const Login = () => {
               ]}
             />
             <Button
-              size='lg'
-              variant='gradient'
+              size='md'
+              variant='primary'
               disabled={enteredIncorrect || unlocking}
               type='submit'
             >

@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { Sensitive } from '../../../components/sensitive';
 import { Hint } from '../../../components/hint';
 import { cn } from '@repo/ui/lib/utils';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { useCosmosDepositWallets, type DepositWallet } from '../../../hooks/cosmos-balance';
 import {
   COSMOS_CHAINS,
@@ -118,33 +119,20 @@ const DeprecationNotice = ({
     return null;
   }
   return (
-    <div className='rounded-md border border-amber-400/40 bg-amber-400/10 px-3 py-2'>
-      <div className='flex items-start gap-1.5'>
-        <span className='i-ph-warning mt-0.5 h-4 w-4 shrink-0 text-amber-400' />
-        <div className='flex flex-col gap-1'>
-          <p className='text-xs font-medium text-amber-300 lowercase'>
-            {config.name} is being deprecated
-          </p>
-          <p className='text-label text-fg-muted'>
-            {dep.reason} {dep.guidance}
-          </p>
-          <p className='text-label text-fg-dim'>
-            move out by <span className='text-fg-high'>{fmtDate(dep.moveOutBy)}</span> · frozen{' '}
-            <span className='text-fg-high'>{fmtDate(dep.frozenBy)}</span>
-          </p>
-          {onMoveOut && (
-            <button
-              type='button'
-              onClick={onMoveOut}
-              className='mt-1 inline-flex w-fit items-center gap-1 rounded border border-amber-400/50 bg-amber-400/10 px-2 py-1 text-label font-medium text-amber-200 transition-colors hover:bg-amber-400/20'
-            >
-              <span className='i-ph-arrow-square-out h-3 w-3' />
-              move {config.symbol} out
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+    <StatusSlot
+      tone='warn'
+      icon='i-ph-warning'
+      action={onMoveOut ? { label: `move ${config.symbol} out`, onClick: onMoveOut } : undefined}
+    >
+      <span className='font-medium'>{config.name} is being deprecated</span>
+      <span className='normal-case text-fg-muted'>
+        {dep.reason} {dep.guidance}
+      </span>
+      <span className='text-fg-dim'>
+        move out by <span className='text-fg-high'>{fmtDate(dep.moveOutBy)}</span> · frozen{' '}
+        <span className='text-fg-high'>{fmtDate(dep.frozenBy)}</span>
+      </span>
+    </StatusSlot>
   );
 };
 

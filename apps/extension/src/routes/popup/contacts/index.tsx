@@ -4,6 +4,7 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Segmented } from '@repo/ui/components/ui/segmented';
 import { useBackNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
@@ -866,30 +867,15 @@ export function ContactsPage() {
             className='w-full rounded-lg border border-border-soft bg-input pl-9 pr-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
           />
         </div>
-        <div className='flex gap-2'>
-          <button
-            onClick={() => setFilter('all')}
-            className={cn(
-              'rounded-md px-3 py-1 text-xs transition-colors',
-              filter === 'all'
-                ? 'bg-zigner-gold text-zigner-gold-foreground'
-                : 'bg-elev-2 text-fg-muted hover:bg-elev-1/80',
-            )}
-          >
-            all
-          </button>
-          <button
-            onClick={() => setFilter('favorites')}
-            className={cn(
-              'rounded-md px-3 py-1 text-xs transition-colors',
-              filter === 'favorites'
-                ? 'bg-zigner-gold text-zigner-gold-foreground'
-                : 'bg-elev-2 text-fg-muted hover:bg-elev-1/80',
-            )}
-          >
-            favorites
-          </button>
-        </div>
+        <Segmented
+          label='contact filter'
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: 'all', label: 'all' },
+            { value: 'favorites', label: 'favorites' },
+          ]}
+        />
       </div>
 
       {/* contacts list */}

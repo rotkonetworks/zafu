@@ -5,7 +5,8 @@ import { privacySelector, type PrivacySettings } from '../../../state/privacy';
 import { selectActiveNetwork } from '../../../state/keyring';
 import { isPro } from '../../../state/license';
 import { SettingsScreen } from './settings-screen';
-import { ToggleSwitch } from '../../../components/toggle-switch';
+import { Toggle } from '@repo/ui/components/ui/toggle';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import type { NetworkType } from '../../../state/keyring/network-types';
 import { hasFeature } from '../../../config/networks';
 import {
@@ -78,30 +79,6 @@ const PRIVACY_ROWS: readonly PrivacyRow[] = [
   },
 ];
 
-function Row({
-  label,
-  stateLabel,
-  checked,
-  onChange,
-}: {
-  label: string;
-  stateLabel: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <div className='flex items-start justify-between gap-4 py-3'>
-      <div className='flex-1'>
-        <p className='text-sm font-medium'>{label}</p>
-        <p className={`text-xs mt-0.5 ${checked ? 'text-fg-high' : 'text-fg-muted'}`}>
-          {stateLabel}
-        </p>
-      </div>
-      <ToggleSwitch checked={checked} onChange={onChange} label={label} className='mt-0.5' />
-    </div>
-  );
-}
-
 function ProxySection() {
   const { settings, setProxy } = useStore(privacySelector);
   const pro = useStore(isPro);
@@ -131,7 +108,7 @@ function ProxySection() {
               : 'direct - ip visible to servers'}
           </p>
         </div>
-        <ToggleSwitch
+        <Toggle
           checked={proxy.enabled}
           onChange={next => (next ? (host.trim() ? apply() : undefined) : disable())}
           label='proxy'
@@ -226,7 +203,7 @@ export function ContactDiscoverySection() {
               : 'off - apps cannot learn which of your contacts are online'}
           </p>
         </div>
-        <ToggleSwitch
+        <Toggle
           checked={saved.enabled}
           onChange={next =>
             next
@@ -278,16 +255,21 @@ export function SettingsPrivacy() {
 
   return (
     <SettingsScreen title='privacy'>
-      <div className='flex flex-col divide-y divide-border/40'>
-        {visibleRows.map(row => (
-          <Row
-            key={row.key}
-            label={row.label}
-            stateLabel={settings[row.key] ? row.onLabel : row.offLabel}
-            checked={settings[row.key] as boolean}
-            onChange={v => setSetting(row.key, v as never)}
-          />
-        ))}
+      <div className='flex flex-col gap-4'>
+        {visibleRows.length > 0 && (
+          <RowGroup>
+            {visibleRows.map(row => (
+              <Row
+                key={row.key}
+                type='toggle'
+                label={row.label}
+                description={settings[row.key] ? row.onLabel : row.offLabel}
+                checked={settings[row.key] as boolean}
+                onChange={v => setSetting(row.key, v as never)}
+              />
+            ))}
+          </RowGroup>
+        )}
         <ProxySection />
         {/* discovery derives from the zid contact layer; hide it when zid is off */}
         {(settings.enableIdentity ?? true) && <ContactDiscoverySection />}

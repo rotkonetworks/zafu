@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { PasswordInput } from '../../../shared/components/password-input';
+import { QrCode } from '../../../components/qr-code';
 import { useStore } from '../../../state';
 import { passwordSelector } from '../../../state/password';
 import { walletsSelector } from '../../../state/wallets';
@@ -97,32 +98,11 @@ export const SettingsPassphrase = () => {
   );
 };
 
-/** QR code showing seed phrase for zigner backup import */
+/** QR code showing seed phrase for zigner backup import - gated behind an
+ * explicit show/hide, same as the seed phrase text itself. The phrase is
+ * sensitive but displayed only on user action; never a copy affordance. */
 const QrSeedDisplay = ({ phrase }: { phrase: string }) => {
   const [show, setShow] = useState(false);
-
-  const ref = useCallback(
-    (canvas: HTMLCanvasElement | null) => {
-      if (!canvas || !phrase) {
-        return;
-      }
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const QRCode = require('qrcode');
-        // encode as simple text QR — zigner's camera can read and import
-        // the phrase is sensitive but displayed only on user action
-        QRCode.toCanvas(canvas, phrase, {
-          width: 200,
-          margin: 2,
-          color: { dark: '#000', light: '#fff' },
-          errorCorrectionLevel: 'L',
-        });
-      } catch {
-        /* */
-      }
-    },
-    [phrase],
-  );
 
   if (!show) {
     return (
@@ -137,9 +117,7 @@ const QrSeedDisplay = ({ phrase }: { phrase: string }) => {
 
   return (
     <div className='flex flex-col items-center gap-2'>
-      <div className='bg-white p-2 rounded'>
-        <canvas ref={ref} />
-      </div>
+      <QrCode value={phrase} size={200} label='seed phrase QR for zigner backup' />
       <p className='text-label text-fg-muted/50 font-mono text-center'>
         scan with zigner camera to import seed. close this screen when done.
       </p>

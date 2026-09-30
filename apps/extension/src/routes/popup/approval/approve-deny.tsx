@@ -20,9 +20,9 @@ export const ApproveDeny = ({
   return (
     <div className='flex shrink-0 flex-row justify-between gap-4 rounded-lg bg-elev-1 px-4 py-7 shadow-lg'>
       <Button
-        variant='gradient'
+        variant='primary'
         className='w-1/2 py-3.5 text-base'
-        size='lg'
+        size='md'
         onClick={approve}
         disabled={!approve || count > 0}
       >
@@ -30,8 +30,8 @@ export const ApproveDeny = ({
       </Button>
       <Button
         className='w-1/2 py-3.5 text-base hover:bg-destructive/90 transition-colors'
-        size='lg'
-        variant='destructiveSecondary'
+        size='md'
+        variant='danger'
         onClick={deny}
       >
         deny
@@ -39,7 +39,7 @@ export const ApproveDeny = ({
       {ignore && (
         <Button
           className='w-1/2 py-3.5 text-base hover:bg-destructive/90'
-          size='lg'
+          size='md'
           variant='secondary'
           onClick={ignore}
         >

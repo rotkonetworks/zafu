@@ -245,17 +245,17 @@ export const CosmosSign = () => {
 
         <div className='shrink-0 border-t border-border-soft p-4 flex gap-3'>
           <Button
-            variant='gradient'
+            variant='primary'
             className='flex-1 py-3.5 text-base'
-            size='lg'
+            size='md'
             onClick={() => setStep('scan-qr')}
           >
             Scan Signed Response
           </Button>
           <Button
-            variant='destructiveSecondary'
+            variant='danger'
             className='flex-1 py-3.5 text-base hover:bg-destructive/90 transition-colors'
-            size='lg'
+            size='md'
             onClick={handleClose}
           >
             Cancel
@@ -303,7 +303,7 @@ export const CosmosSign = () => {
         {txHash && (
           <p className='text-label text-fg-muted tabular break-all text-center'>{txHash}</p>
         )}
-        <Button variant='gradient' onClick={handleClose} className='mt-4'>
+        <Button variant='primary' onClick={handleClose} className='mt-4'>
           Done
         </Button>
       </div>
@@ -316,7 +316,7 @@ export const CosmosSign = () => {
       <p className='text-red-400 text-center'>{error}</p>
       <div className='flex gap-3'>
         <Button
-          variant='gradient'
+          variant='primary'
           onClick={() => {
             setError(undefined);
             setStep(signData ? 'show-qr' : 'loading');
@@ -324,7 +324,7 @@ export const CosmosSign = () => {
         >
           Try Again
         </Button>
-        <Button variant='destructiveSecondary' onClick={handleClose}>
+        <Button variant='danger' onClick={handleClose}>
           Cancel
         </Button>
       </div>

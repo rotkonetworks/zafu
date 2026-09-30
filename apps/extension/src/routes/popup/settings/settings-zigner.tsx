@@ -6,7 +6,7 @@ import { isPro } from '../../../state/license';
 import { SettingsScreen } from './settings-screen';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
-import { ToggleSwitch } from '../../../components/toggle-switch';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { useState, useRef, useEffect } from 'react';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { PagePath } from '../../page/paths';
@@ -293,7 +293,7 @@ export const SettingsZigner = () => {
                     {confirmDeleteVault === vault.id ? (
                       <div className='flex items-center gap-2'>
                         <Button
-                          variant='destructive'
+                          variant='danger'
                           size='sm'
                           onClick={() => void handleDeleteVault(vault.id)}
                           disabled={deletingVaultId === vault.id}
@@ -311,7 +311,7 @@ export const SettingsZigner = () => {
                       </div>
                     ) : (
                       <Button
-                        variant='ghost'
+                        variant='quiet'
                         size='sm'
                         onClick={() => setConfirmDeleteVault(vault.id)}
                         disabled={keyInfos.length <= 1}
@@ -334,19 +334,15 @@ export const SettingsZigner = () => {
           <div className='border-t border-border-hard pt-4'>
             <p className='text-sm font-bold mb-3'>polkadot vault</p>
             <div className='flex flex-col gap-3'>
-              <div className='flex items-center justify-between border border-border-hard bg-elev-2 p-3'>
-                <div className='flex flex-col'>
-                  <span className='text-sm'>legacy mode</span>
-                  <span className='text-xs text-fg-muted'>
-                    for older parity signer / polkadot vault devices
-                  </span>
-                </div>
-                <ToggleSwitch
+              <RowGroup>
+                <Row
+                  type='toggle'
+                  label='legacy mode'
+                  description='for older parity signer / polkadot vault devices'
                   checked={vaultLegacyMode}
                   onChange={v => void handleVaultLegacyModeChange(v)}
-                  label='legacy mode'
                 />
-              </div>
+              </RowGroup>
 
               {vaultLegacyMode && (
                 <div className='border border-yellow-500/30 bg-yellow-500/10 p-3'>
@@ -404,7 +400,7 @@ export const SettingsZigner = () => {
                     cancel
                   </Button>
                   <Button
-                    variant='gradient'
+                    variant='primary'
                     className='flex-1'
                     onClick={handleAddWallet}
                     disabled={
@@ -495,7 +491,7 @@ export const SettingsZigner = () => {
                     cancel
                   </Button>
                   <Button
-                    variant='gradient'
+                    variant='primary'
                     className='flex-1'
                     onClick={handleAddWallet}
                     disabled={isAdding}

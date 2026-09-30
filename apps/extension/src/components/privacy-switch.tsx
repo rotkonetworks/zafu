@@ -5,7 +5,7 @@
  */
 
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
-import { cn } from '@repo/ui/lib/utils';
+import { Segmented } from '@repo/ui/components/ui/segmented';
 
 export type Privacy = 'shielded' | 'transparent';
 
@@ -30,51 +30,23 @@ export const PrivacySwitch = ({
   onChain: (c: CosmosChainId) => void;
 }) => (
   <div className='mb-4 flex flex-col gap-2'>
-    <div className='flex gap-1 border border-border-soft p-1' role='tablist'>
-      {(['shielded', 'transparent'] as const).map(p => (
-        <button
-          key={p}
-          type='button'
-          role='tab'
-          aria-selected={privacy === p}
-          onClick={() => onPrivacy(p)}
-          className={cn(
-            'flex flex-1 items-center justify-center gap-1.5 py-1.5 text-xs lowercase transition-colors',
-            privacy === p ? 'bg-elev-2 text-fg-high' : 'text-fg-muted hover:text-fg-high',
-          )}
-        >
-          <span
-            className={cn(
-              'h-3.5 w-3.5',
-              p === 'shielded' ? 'i-ph-shield-check' : 'i-ph-eye',
-              privacy === p && p === 'shielded' && 'text-zigner-gold',
-            )}
-          />
-          {p}
-        </button>
-      ))}
-    </div>
+    <Segmented
+      label='privacy'
+      value={privacy}
+      onChange={onPrivacy}
+      options={[
+        { value: 'shielded', label: 'shielded', icon: 'i-ph-shield-check' },
+        { value: 'transparent', label: 'transparent', icon: 'i-ph-eye' },
+      ]}
+    />
     {privacy === 'transparent' &&
-      (chains.length > 1 ? (
-        <div className='flex flex-wrap gap-1' role='radiogroup' aria-label='network'>
-          {chains.map(c => (
-            <button
-              key={c}
-              type='button'
-              role='radio'
-              aria-checked={chain === c}
-              onClick={() => onChain(c)}
-              className={cn(
-                'border px-2.5 py-1 text-xs lowercase transition-colors',
-                chain === c
-                  ? 'border-zigner-gold text-fg-high'
-                  : 'border-border-soft text-fg-muted hover:text-fg-high',
-              )}
-            >
-              {COSMOS_CHAINS[c].name}
-            </button>
-          ))}
-        </div>
+      (chains.length > 1 && chains[0] ? (
+        <Segmented
+          label='network'
+          value={chain ?? chains[0]}
+          onChange={onChain}
+          options={chains.map(c => ({ value: c, label: COSMOS_CHAINS[c].name }))}
+        />
       ) : chains[0] ? (
         <span className='text-xs text-fg-muted lowercase'>on {COSMOS_CHAINS[chains[0]].name}</span>
       ) : null)}

@@ -1,6 +1,7 @@
 import { Component, type ReactNode } from 'react';
 import { isRouteErrorResponse, useRouteError, useNavigate } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
+import { CopyButton } from '@repo/ui/components/ui/copy-button';
 
 /**
  * App-wide crash recovery.
@@ -81,15 +82,12 @@ const ErrorScreen = ({ error, notFound, onGoHome }: ErrorScreenProps) => {
 
   const approval = isApprovalHash();
 
-  const copyDetails = () => {
-    const details = [
-      `message: ${message}`,
-      `stack: ${error instanceof Error ? error.stack : 'n/a'}`,
-      `version: ${chrome.runtime.getManifest().version}`,
-      `hash: ${location.hash}`,
-    ].join('\n');
-    void navigator.clipboard.writeText(details).catch(() => {});
-  };
+  const details = [
+    `message: ${message}`,
+    `stack: ${error instanceof Error ? error.stack : 'n/a'}`,
+    `version: ${chrome.runtime.getManifest().version}`,
+    `hash: ${location.hash}`,
+  ].join('\n');
 
   return (
     <div className='flex h-full flex-col items-center justify-center gap-4 p-6 text-center bg-canvas text-fg'>
@@ -113,11 +111,7 @@ const ErrorScreen = ({ error, notFound, onGoHome }: ErrorScreenProps) => {
         <Button size='sm' variant='secondary' onClick={() => window.location.reload()}>
           <span className='i-lucide-refresh-cw mr-1 h-3 w-3' /> reload
         </Button>
-        {!notFound && (
-          <Button size='sm' variant='ghost' onClick={copyDetails}>
-            <span className='i-lucide-clipboard-copy mr-1 h-3 w-3' /> copy details
-          </Button>
-        )}
+        {!notFound && <CopyButton size='sm' variant='quiet' text={details} label='copy details' />}
       </div>
       {!notFound && (
         <button

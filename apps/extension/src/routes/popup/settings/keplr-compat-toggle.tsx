@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { localExtStorage } from '@repo/storage-chrome/local';
-import { ToggleSwitch } from '../../../components/toggle-switch';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
 
 /**
  * "Act as Keplr" toggle. Lives under the Penumbra network section because
@@ -28,16 +28,18 @@ export function KeplrCompatToggle() {
   }
 
   return (
-    <div className='flex items-start justify-between gap-3 rounded-lg border border-border-soft bg-elev-1 p-3'>
-      <div className='flex flex-col gap-1'>
-        <span className='text-sm text-fg-high'>act as keplr</span>
-        <span className='text-xs text-fg-muted'>
-          {enabled
+    <RowGroup>
+      <Row
+        type='toggle'
+        label='act as keplr'
+        description={
+          enabled
             ? 'cosmos dapps see zafu as keplr — applies on next page load'
-            : 'off — a real keplr extension is left untouched'}
-        </span>
-      </div>
-      <ToggleSwitch checked={enabled} onChange={toggle} />
-    </div>
+            : 'off — a real keplr extension is left untouched'
+        }
+        checked={enabled}
+        onChange={toggle}
+      />
+    </RowGroup>
   );
 }

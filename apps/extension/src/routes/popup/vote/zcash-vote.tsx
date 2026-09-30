@@ -12,6 +12,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@repo/ui/lib/utils';
+import { Segmented } from '@repo/ui/components/ui/segmented';
 import { loadVoting, fetchTally } from '../../../services/voting/api';
 import { resolveVotingConfigSource } from '../../../services/voting/resolve';
 import type { VotingRound, RoundStatus } from '../../../services/voting/types';
@@ -86,12 +87,15 @@ export const ZcashVotePage = () => {
 
       {/* active / past tabs (+ test reveal), matching the penumbra screen */}
       <div className='flex items-center gap-2'>
-        <button onClick={() => setFilter('active')} className={tabClass(filter === 'active')}>
-          active
-        </button>
-        <button onClick={() => setFilter('past')} className={tabClass(filter === 'past')}>
-          past
-        </button>
+        <Segmented
+          label='round filter'
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: 'active', label: 'active' },
+            { value: 'past', label: 'past' },
+          ]}
+        />
         {hasTest && (
           <button
             onClick={() => setShowTest(v => !v)}

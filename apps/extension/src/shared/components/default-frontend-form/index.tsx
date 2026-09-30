@@ -98,7 +98,7 @@ export const DefaultFrontendForm = ({ isOnboarding }: { isOnboarding?: boolean }
       <div className='sticky bottom-0 left-0 right-0 w-full backdrop-blur-md bg-background/70 border-t border-border-soft z-10 mt-4 pb-[15px]'>
         <Button
           key='save-button'
-          variant='gradient'
+          variant='primary'
           disabled={!selectedFrontend}
           type={isOnboarding ? 'submit' : 'button'}
           className='w-full'

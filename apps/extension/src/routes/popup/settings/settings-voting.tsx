@@ -21,7 +21,7 @@ import { resolveVotingConfigSource } from '../../../services/voting/resolve';
 import { BUNDLED_PINNED_SOURCE } from '../../../services/voting/types';
 import type { ServiceEndpoint } from '../../../services/voting/types';
 import { SettingsScreen } from './settings-screen';
-import { ToggleSwitch } from '../../../components/toggle-switch';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
 
 interface VotingConfigOverride {
   enabled: boolean;
@@ -168,19 +168,15 @@ export const SettingsVoting = () => {
                 </p>
               </div>
 
-              <div className='flex items-center justify-between gap-4'>
-                <div>
-                  <p className='text-sm font-medium'>enable override</p>
-                  <p className='mt-0.5 text-xs text-fg-muted'>
-                    replaces the bundled default for this device only
-                  </p>
-                </div>
-                <ToggleSwitch
+              <RowGroup>
+                <Row
+                  type='toggle'
+                  label='enable override'
+                  description='replaces the bundled default for this device only'
                   checked={enabledInput}
                   onChange={setEnabledInput}
-                  label='enable override'
                 />
-              </div>
+              </RowGroup>
 
               <label className='flex flex-col gap-1'>
                 <span className='text-label text-fg-muted'>static config url</span>

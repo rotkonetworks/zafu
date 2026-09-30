@@ -240,7 +240,7 @@ export const SettingsAddViewingKey = () => {
 
         {error && <p className='text-xs text-hanko lowercase'>{error}</p>}
 
-        <Button variant='gradient' disabled={!canAdd} onClick={() => void add()}>
+        <Button variant='primary' disabled={!canAdd} onClick={() => void add()}>
           {adding ? 'adding...' : 'add watch-only wallet'}
         </Button>
       </div>

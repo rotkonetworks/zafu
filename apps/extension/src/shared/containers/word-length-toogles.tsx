@@ -1,5 +1,5 @@
 import { SeedPhraseLength } from '../../state/seed-phrase/mnemonic';
-import { Toggle } from '@repo/ui/components/ui/toggle';
+import { Segmented } from '@repo/ui/components/ui/segmented';
 
 interface WordLengthTooglesProsp {
   toogleClick: (length: SeedPhraseLength) => void;
@@ -7,22 +7,22 @@ interface WordLengthTooglesProsp {
 }
 
 export const WordLengthToogles = ({ toogleClick, phrase }: WordLengthTooglesProsp) => {
+  const value = phrase.length === 24 ? '24' : '12';
   return (
     <div className='flex items-center justify-center'>
-      <div className='flex gap-3 rounded-lg bg-canvas p-2'>
-        <Toggle
-          onClick={() => toogleClick(SeedPhraseLength.TWELVE_WORDS)}
-          pressed={phrase.length === 12}
-        >
-          12 words
-        </Toggle>
-        <Toggle
-          onClick={() => toogleClick(SeedPhraseLength.TWENTY_FOUR_WORDS)}
-          pressed={phrase.length === 24}
-        >
-          24 words
-        </Toggle>
-      </div>
+      <Segmented
+        label='seed phrase length'
+        value={value}
+        onChange={next =>
+          toogleClick(
+            next === '24' ? SeedPhraseLength.TWENTY_FOUR_WORDS : SeedPhraseLength.TWELVE_WORDS,
+          )
+        }
+        options={[
+          { value: '12', label: '12 words' },
+          { value: '24', label: '24 words' },
+        ]}
+      />
     </div>
   );
 };

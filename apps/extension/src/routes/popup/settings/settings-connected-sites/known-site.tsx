@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { OriginRecord, UserChoice } from '@repo/storage-chrome/records';
 import { Button } from '@repo/ui/components/ui/button';
+import { Toggle } from '@repo/ui/components/ui/toggle';
+import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import { DisplayOriginURL } from '../../../../shared/components/display-origin-url';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../../../../state';
@@ -107,7 +109,7 @@ const CapabilityToggle = ({
 }) => {
   const meta = CAPABILITY_META[cap];
   return (
-    <label className='flex items-center justify-between gap-2 py-1'>
+    <div className='flex items-center justify-between gap-2 py-1'>
       <div className='flex items-center gap-1.5'>
         <span
           className={cn(
@@ -121,13 +123,8 @@ const CapabilityToggle = ({
           {meta.label}
         </span>
       </div>
-      <input
-        type='checkbox'
-        checked={granted}
-        onChange={e => onToggle(cap, e.target.checked)}
-        className='h-3 w-3 accent-primary'
-      />
-    </label>
+      <Toggle checked={granted} onChange={next => onToggle(cap, next)} label={meta.label} />
+    </div>
   );
 };
 
@@ -141,7 +138,6 @@ export const KnownSite = ({
   const { pref, update } = useZidPref(site.origin);
   const isApproved = site.choice === UserChoice.Approved;
   const { address: zidAddress, pubkey: zidPubkey } = useSharedZid(site.origin);
-  const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [capsExpanded, setCapsExpanded] = useState(false);
   const [confirming, setConfirming] = useState<'global' | 'rotate' | null>(null);
@@ -155,15 +151,6 @@ export const KnownSite = ({
   const zcashIdx = useStore(selectActiveZcashIndex);
   const penumbraAddr = penumbraWallets[penumbraIdx]?.id;
   const zcashAddr = zcashWallets[zcashIdx]?.address;
-
-  const copyZid = () => {
-    if (!zidPubkey) {
-      return;
-    }
-    void navigator.clipboard.writeText(zidPubkey);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
 
   // default is site-specific. toggle switches to global (opt-in).
   const isSiteMode = !pref || pref.mode === 'site';
@@ -253,15 +240,15 @@ export const KnownSite = ({
 
           {/* zid from share log - no mnemonic access needed */}
           {zidAddress ? (
-            <button
-              onClick={copyZid}
-              className='flex items-center gap-1.5 text-label font-mono text-fg-muted/70 hover:text-fg-high transition-colors'
-              title={copied ? 'copied' : 'copy full pubkey'}
-            >
-              <span className='i-ph-fingerprint h-3 w-3 shrink-0' />
-              <span className='truncate'>{zidAddress}</span>
-              {copied && <span className='text-green-500 shrink-0'>copied</span>}
-            </button>
+            <CopyButton
+              text={zidPubkey ?? ''}
+              disabled={!zidPubkey}
+              variant='quiet'
+              size='sm'
+              className='justify-start px-0 font-mono text-label text-fg-muted/70 hover:text-fg-high'
+              label={zidAddress}
+              title='copy full pubkey'
+            />
           ) : (
             <span className='flex items-center gap-1.5 text-label text-fg-muted/40'>
               <span className='i-ph-fingerprint h-3 w-3 shrink-0' />

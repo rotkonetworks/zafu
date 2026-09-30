@@ -21,6 +21,7 @@
     "./components/ui/icons/*": "./components/ui/icons/*.tsx",
     "./components/editorial": "./components/editorial/index.ts",
     "./components/ui/*": "./components/ui/*/index.tsx",
+    "./hooks/*": "./hooks/*.ts",
     "./lib/toast/*": "./lib/toast/*.ts",
     "./lib/toast/transaction-toast": "./lib/toast/transaction-toast.tsx",
     "./lib/utils": "./lib/utils.ts",

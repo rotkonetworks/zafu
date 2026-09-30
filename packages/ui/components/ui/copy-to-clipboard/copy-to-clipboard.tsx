@@ -24,7 +24,7 @@ const CopyToClipboard = React.forwardRef<HTMLButtonElement, CopyToClipboardProps
           'block px-0',
           className,
         )}
-        variant='link'
+        variant='quiet'
         ref={ref}
         size='sm'
         onClick={() => {

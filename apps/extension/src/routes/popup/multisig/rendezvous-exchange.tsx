@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import {
   announceSession,
   generateRoomCode,
@@ -90,7 +91,6 @@ export function RendezvousHost({
   const [code, setCode] = useState('');
   const [peers, setPeers] = useState<string[]>([]);
   const [error, setError] = useState('');
-  const [copied, setCopied] = useState(false);
   const onStateRef = useRef(onState);
   onStateRef.current = onState;
 
@@ -162,18 +162,13 @@ export function RendezvousHost({
           <span className='flex-1 rounded bg-input px-2 py-1.5 font-mono text-sm'>
             {code === '' ? 'opening room…' : code}
           </span>
-          <button
-            type='button'
+          <CopyButton
+            text={code}
             disabled={code === ''}
-            className='shrink-0 rounded border border-border-soft px-2 py-1 text-xs disabled:opacity-40'
-            onClick={() => {
-              void navigator.clipboard.writeText(code);
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1500);
-            }}
-          >
-            {copied ? 'copied' : 'copy'}
-          </button>
+            variant='secondary'
+            size='sm'
+            label='copy'
+          />
         </div>
       </div>
 

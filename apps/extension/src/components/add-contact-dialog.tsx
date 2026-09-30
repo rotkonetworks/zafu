@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import { useStore } from '../state';
 import { contactsSelector, type ContactNetwork, type Contact } from '../state/contacts';
 import { cn } from '@repo/ui/lib/utils';
+import { Segmented } from '@repo/ui/components/ui/segmented';
 
 interface AddContactDialogProps {
   address: string;
@@ -93,34 +94,20 @@ export function AddContactDialog({ address, network, onClose, onSuccess }: AddCo
           </div>
 
           {/* mode tabs */}
-          <div className='flex rounded-lg border border-border-soft overflow-hidden'>
-            <button
-              onClick={() => setMode('new')}
-              className={cn(
-                'flex-1 py-2 text-sm font-medium transition-colors',
-                mode === 'new'
-                  ? 'bg-zigner-gold text-zigner-gold-foreground'
-                  : 'bg-elev-2 hover:bg-elev-1',
-              )}
-            >
-              <span className='i-ph-plus h-4 w-4 inline mr-1' />
-              new contact
-            </button>
-            <button
-              onClick={() => setMode('existing')}
-              disabled={existingContacts.length === 0}
-              className={cn(
-                'flex-1 py-2 text-sm font-medium transition-colors',
-                mode === 'existing'
-                  ? 'bg-zigner-gold text-zigner-gold-foreground'
-                  : 'bg-elev-2 hover:bg-elev-1',
-                existingContacts.length === 0 && 'opacity-50 cursor-not-allowed',
-              )}
-            >
-              <span className='i-ph-user h-4 w-4 inline mr-1' />
-              existing
-            </button>
-          </div>
+          <Segmented
+            label='contact mode'
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: 'new', label: 'new contact', icon: 'i-ph-plus' },
+              {
+                value: 'existing',
+                label: 'existing',
+                icon: 'i-ph-user',
+                disabled: existingContacts.length === 0,
+              },
+            ]}
+          />
 
           {mode === 'new' ? (
             /* new contact form */

@@ -15,6 +15,8 @@
 import { OverlayPortal } from '../../../components/overlay-portal';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
+import { StepList } from '@repo/ui/components/ui/step-list';
 import { Sensitive } from '../../../components/sensitive';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
@@ -123,28 +125,23 @@ export function IronwoodMigrationBanner({
     return null;
   }
   return (
-    <div className='rounded-lg border border-primary/40 bg-primary/10 p-3'>
-      <div className='flex items-center justify-between'>
-        <div className='flex items-center gap-2'>
-          <span className='i-ph-arrows-left-right h-4 w-4 text-zigner-gold' />
-          <span className='text-xs text-fg-high'>orchard is now legacy</span>
-          <span className='text-xs font-medium tabular-nums text-fg-muted'>
-            <Sensitive>{fmtZec(orchardZat)}</Sensitive> ZEC to migrate
-          </span>
-        </div>
-        <button
-          onClick={onMigrate}
-          className='text-xs font-medium text-zigner-gold hover:text-primary/90 transition-colors'
-        >
-          migrate
-        </button>
-      </div>
-      <p className='mt-1.5 text-label text-fg-muted leading-snug'>
+    <StatusSlot
+      tone='gold'
+      icon='i-ph-arrows-left-right'
+      action={{ label: 'migrate', onClick: onMigrate }}
+    >
+      <span className='text-fg-high'>
+        orchard is now legacy ·{' '}
+        <span className='font-medium tabular-nums text-fg-muted'>
+          <Sensitive>{fmtZec(orchardZat)}</Sensitive> ZEC to migrate
+        </span>
+      </span>
+      <span className='text-label leading-snug text-fg-muted'>
         NU6.3 makes ironwood the active pool. your orchard funds are safe - move them one-way to
         your own ironwood address to keep spending normally. orchard-to-orchard sends are disabled
         after activation.
-      </p>
-    </div>
+      </span>
+    </StatusSlot>
   );
 }
 
@@ -381,7 +378,7 @@ export function IronwoodMigrate({
                 </p>
               </div>
               <div className='shrink-0 p-4'>
-                <Button variant='gradient' onClick={onClose} className='w-full'>
+                <Button variant='primary' onClick={onClose} className='w-full'>
                   done
                 </Button>
               </div>
@@ -471,7 +468,7 @@ export function IronwoodMigrate({
               <Button variant='secondary' onClick={onClose} className='flex-1'>
                 not now
               </Button>
-              <Button variant='gradient' onClick={() => void handleBuild()} className='flex-1'>
+              <Button variant='primary' onClick={() => void handleBuild()} className='flex-1'>
                 migrate
               </Button>
             </div>
@@ -485,28 +482,7 @@ export function IronwoodMigrate({
               <div className='w-8 h-8 border-2 border-zigner-gold border-t-transparent rounded-full animate-spin' />
             </div>
             <h2 className='text-lg font-medium'>building migration</h2>
-            {progressSteps.length > 0 ? (
-              <div className='w-full max-w-sm flex flex-col gap-1'>
-                {progressSteps.map((s, i) => (
-                  <div
-                    key={i}
-                    className={`flex items-start gap-2 text-xs ${
-                      i === progressSteps.length - 1 ? 'text-fg' : 'text-fg-muted'
-                    }`}
-                  >
-                    <span className='font-mono w-12 text-right shrink-0'>
-                      {(s.elapsedMs / 1000).toFixed(1)}s
-                    </span>
-                    <span>
-                      {s.step}
-                      {s.detail && <span className='text-fg-muted ml-1'>({s.detail})</span>}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className='text-sm text-fg-muted text-center'>preparing...</p>
-            )}
+            <StepList steps={progressSteps} className='w-full max-w-sm' />
           </div>
         );
 
@@ -579,7 +555,7 @@ export function IronwoodMigrate({
               </div>
             </div>
 
-            <Button variant='gradient' onClick={() => setStep('scan')} className='w-full'>
+            <Button variant='primary' onClick={() => setStep('scan')} className='w-full'>
               scan signature from zafu zigner
             </Button>
           </div>
@@ -625,7 +601,7 @@ export function IronwoodMigrate({
               transaction confirms, and you can keep spending normally.
             </p>
             {txid && <p className='break-all font-mono text-xs text-fg-muted'>{txid}</p>}
-            <Button variant='gradient' onClick={onClose} className='w-full mt-4'>
+            <Button variant='primary' onClick={onClose} className='w-full mt-4'>
               done
             </Button>
           </div>
@@ -647,7 +623,7 @@ export function IronwoodMigrate({
                 orchard to ironwood migration becomes available once NU6.3 activates on the network.
                 your orchard funds are safe in the meantime - nothing is required until then.
               </p>
-              <Button variant='gradient' onClick={onClose} className='mt-2 w-full'>
+              <Button variant='primary' onClick={onClose} className='mt-2 w-full'>
                 got it
               </Button>
             </div>
@@ -664,7 +640,7 @@ export function IronwoodMigrate({
               <Button variant='secondary' onClick={onClose} className='flex-1'>
                 close
               </Button>
-              <Button variant='gradient' onClick={() => setStep('review')} className='flex-1'>
+              <Button variant='primary' onClick={() => setStep('review')} className='flex-1'>
                 try again
               </Button>
             </div>

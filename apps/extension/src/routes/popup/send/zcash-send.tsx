@@ -10,6 +10,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { StepList } from '@repo/ui/components/ui/step-list';
 import { Sensitive } from '../../../components/sensitive';
 import { removeTxOps, writeTxOp } from '../../../tx-ops';
 import { useStore } from '../../../state';
@@ -123,26 +124,6 @@ function LiveTimer({ startMs }: { startMs: number }) {
     return () => clearInterval(id);
   }, [startMs]);
   return <div className='font-mono text-2xl tabular-nums text-zigner-gold'>{elapsed}s</div>;
-}
-
-// Ticks the running duration of the step currently in progress. The worker
-// emits a progress marker at the START of each step and can't emit again while
-// it's blocked doing synchronous work (e.g. a long witness replay), so without
-// this the active step would show a frozen number while all the time actually
-// accrues there - which reads as "stuck". This measures from when the step
-// began (buildStart + its cumulative offset) and updates every 100ms.
-function LiveStepTimer({ stepStartMs }: { stepStartMs: number }) {
-  const [elapsed, setElapsed] = useState(0);
-  useEffect(() => {
-    if (!stepStartMs) {
-      return;
-    }
-    const tick = () => setElapsed((Date.now() - stepStartMs) / 1000);
-    tick();
-    const id = setInterval(tick, 100);
-    return () => clearInterval(id);
-  }, [stepStartMs]);
-  return <>{elapsed.toFixed(1)}s</>;
 }
 
 // The zigner sign QR must be as LARGE as the surface allows so a phone camera
@@ -1656,7 +1637,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               <Button variant='secondary' onClick={handleClose} className='flex-1'>
                 cancel
               </Button>
-              <Button variant='gradient' onClick={handleReview} className='flex-1'>
+              <Button variant='primary' onClick={handleReview} className='flex-1'>
                 continue
               </Button>
             </div>
@@ -1709,7 +1690,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               <Button variant='secondary' onClick={handleBack} className='flex-1'>
                 back
               </Button>
-              <Button variant='gradient' onClick={() => void handleSign()} className='flex-1'>
+              <Button variant='primary' onClick={() => void handleSign()} className='flex-1'>
                 {selectedKeyInfo?.type === 'mnemonic'
                   ? 'sign & send'
                   : isLedgerAccount
@@ -1731,43 +1712,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             {/* live elapsed timer — ticks every second so the UI never looks frozen */}
             <LiveTimer startMs={buildStartRef.current} />
 
-            {sendSteps.length > 0 ? (
-              <div className='w-full max-w-sm flex flex-col gap-1'>
-                {sendSteps.map((s, i) => {
-                  const isLast = i === sendSteps.length - 1;
-                  const prevMs = i > 0 ? sendSteps[i - 1]!.elapsedMs : 0;
-                  const stepDuration = ((s.elapsedMs - prevMs) / 1000).toFixed(1);
-                  return (
-                    <div
-                      key={i}
-                      className={`flex items-start gap-2 text-xs ${isLast ? 'text-fg' : 'text-fg-muted'}`}
-                    >
-                      <span
-                        className={`font-mono w-12 text-right shrink-0 tabular-nums ${isLast ? 'text-zigner-gold' : ''}`}
-                      >
-                        {isLast ? (
-                          <LiveStepTimer stepStartMs={buildStartRef.current + s.elapsedMs} />
-                        ) : (
-                          `${(s.elapsedMs / 1000).toFixed(1)}s`
-                        )}
-                      </span>
-                      <span>
-                        {s.step}
-                        {s.detail && <span className='text-fg-muted ml-1'>({s.detail})</span>}
-                        {!isLast && Number(stepDuration) >= 0.5 && (
-                          <span className='text-fg-muted ml-1'>+{stepDuration}s</span>
-                        )}
-                        {isLast && (
-                          <span className='ml-1 inline-block w-1.5 h-1.5 rounded-full bg-zigner-gold animate-pulse align-middle' />
-                        )}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className='text-sm text-fg-muted text-center'>preparing...</p>
-            )}
+            <StepList
+              steps={sendSteps}
+              liveSinceMs={buildStartRef.current}
+              className='w-full max-w-sm'
+            />
           </div>
         );
 
@@ -1869,7 +1818,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             </div>
 
             <div className='px-4 py-3 border-t border-border-soft'>
-              <Button variant='gradient' onClick={handleScanSignature} className='w-full'>
+              <Button variant='primary' onClick={handleScanSignature} className='w-full'>
                 scan signature from zigner
               </Button>
             </div>
@@ -1990,7 +1939,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         return (
           <div className='flex flex-col items-center gap-4 p-8'>
             {/* the receipt gets stamped — a broadcast tx is sealed (封) */}
-            <HankoSeal glyph='封' size='lg' />
+            <HankoSeal glyph='封' size='md' />
             <h2 className='text-lg font-medium'>transaction sent</h2>
             <p className='text-sm text-fg-muted text-center'>
               {amount} zec sent successfully
@@ -2031,7 +1980,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 </div>
                 <div className='flex gap-2'>
                   <Button
-                    variant='gradient'
+                    variant='primary'
                     size='sm'
                     onClick={() => setShowContactModal(true)}
                     className='flex-1'
@@ -2070,7 +2019,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               />
             )}
 
-            <Button variant='gradient' onClick={handleClose} className='w-full mt-4'>
+            <Button variant='primary' onClick={handleClose} className='w-full mt-4'>
               done
             </Button>
           </div>
@@ -2149,7 +2098,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               <Button variant='secondary' onClick={handleClose} className='flex-1'>
                 cancel
               </Button>
-              <Button variant='gradient' onClick={handleBack} className='flex-1'>
+              <Button variant='primary' onClick={handleBack} className='flex-1'>
                 try again
               </Button>
             </div>

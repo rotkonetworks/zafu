@@ -143,7 +143,7 @@ export const TransparentChainEndpoints = ({
             )}
             <div className='flex-1' />
             <Button
-              variant='gradient'
+              variant='primary'
               size='md'
               onClick={() => void onSave()}
               disabled={!dirty}

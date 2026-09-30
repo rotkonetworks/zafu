@@ -63,7 +63,7 @@ export const AccountSwitcher = ({
   return (
     <div className='flex items-center justify-between'>
       <Button
-        variant='ghost'
+        variant='quiet'
         className={cn('hover:bg-inherit hover:text-slate-400', account === 0 && 'cursor-default')}
         disabled={!previousButtonEnabled}
       >
@@ -122,7 +122,7 @@ export const AccountSwitcher = ({
         </div>
       </div>
       <Button
-        variant='ghost'
+        variant='quiet'
         className={cn(
           'hover:bg-inherit hover:text-slate-400',
           account === MAX_INDEX && 'cursor-default',

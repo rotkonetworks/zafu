@@ -3,37 +3,32 @@ import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../../../lib/utils';
 
+/**
+ * Button - primary / secondary / danger / quiet, sizes md (44px, touch
+ * target) and sm (28px, dense inline actions). Square corners, 1px lines, no
+ * shadows, one gold primary per screen (see packages/ui/styles/globals.css
+ * and the design canvas). Icon support is a className on a child span
+ * (`i-ph-*` / `i-lucide-*`), never a React icon component.
+ */
 const buttonVariants = cva(
-  'inline-flex items-center justify-center rounded-md px-4 font-inherit ring-offset-background transition-[color,background-color,border-color,transform] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 active:translate-y-px',
+  'inline-flex items-center justify-center gap-1.5 rounded-none font-inherit transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zigner-gold disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
       variant: {
-        default:
-          'border border-zigner-gold text-zigner-gold hover:bg-zigner-gold hover:text-zigner-gold-foreground',
-        gradient:
-          'border border-zigner-gold text-zigner-gold hover:bg-zigner-gold hover:text-zigner-gold-foreground',
-        secondary: 'border border-border-soft text-fg-muted hover:bg-elev-1 hover:text-fg-high',
-        destructive:
-          'border border-destructive text-destructive hover:bg-destructive hover:text-white',
-        destructiveSecondary:
-          'border border-destructive/50 text-destructive hover:bg-destructive/20',
-        outline: 'border border-border-soft text-fg-muted hover:text-fg-high',
-        ghost: 'hover:bg-elev-1 hover:text-fg-high',
-        link: 'text-fg-muted underline-offset-4 hover:underline',
-        onLight:
-          'border border-zigner-gold text-zigner-gold hover:bg-zigner-gold hover:text-zigner-gold-foreground',
+        primary: 'border-0 bg-zigner-gold text-zigner-gold-foreground hover:bg-zigner-gold-light',
+        secondary:
+          'border border-surface-border bg-surface-elev-2 text-fg-high hover:bg-surface-border-soft',
+        danger: 'border border-hanko bg-transparent text-hanko-light hover:bg-hanko/10',
+        quiet: 'border-0 bg-transparent text-fg-muted hover:bg-surface-elev-1 hover:text-fg-high',
       },
       size: {
-        default: 'h-9 md:h-11',
-        sm: 'h-[22px] text-xs font-normal',
-        md: 'h-9',
-        lg: 'h-11',
-        icon: 'size-10',
+        md: 'h-11 px-4 text-sm',
+        sm: 'h-7 px-2.5 text-xs',
       },
     },
     defaultVariants: {
-      variant: 'default',
-      size: 'default',
+      variant: 'primary',
+      size: 'md',
     },
   },
 );
@@ -46,13 +41,33 @@ export interface ButtonProps
    * @see https://www.radix-ui.com/primitives/docs/utilities/slot#slot
    */
   asChild?: boolean;
+  /** shows a spinner in place of the label and disables the button. */
+  loading?: boolean;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
+  (
+    { className, variant, size, asChild = false, loading = false, disabled, children, ...props },
+    ref,
+  ) => {
     const Comp = asChild ? Slot : 'button';
     return (
-      <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        disabled={disabled || loading}
+        aria-busy={loading || undefined}
+        {...props}
+      >
+        {loading ? (
+          <>
+            <span className='i-ph-spinner-gap size-4 animate-spin' aria-hidden='true' />
+            <span className='sr-only'>loading</span>
+          </>
+        ) : (
+          children
+        )}
+      </Comp>
     );
   },
 );

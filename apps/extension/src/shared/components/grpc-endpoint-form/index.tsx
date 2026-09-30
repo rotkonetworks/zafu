@@ -99,7 +99,7 @@ export const GrpcEndpointForm = ({
 
           <div className='sticky bottom-0 left-0 right-0 w-full backdrop-blur-md bg-background/70 border-t border-border-soft z-10 mt-4 pb-[10px]'>
             <Button
-              variant='gradient'
+              variant='primary'
               type='submit'
               disabled={!isSubmitButtonEnabled}
               className='w-full'

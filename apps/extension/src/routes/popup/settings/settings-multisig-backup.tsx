@@ -99,7 +99,7 @@ export const SettingsMultisigBackup = () => {
             </p>
           ) : (
             <Button
-              variant='default'
+              variant='primary'
               size='md'
               className='mt-3 w-full gap-1.5 text-xs'
               onClick={async () => {
@@ -131,7 +131,7 @@ export const SettingsMultisigBackup = () => {
                     </span>
                   </div>
                   <Button
-                    variant='outline'
+                    variant='secondary'
                     size='sm'
                     onClick={async () => {
                       if (await requestAuth()) {

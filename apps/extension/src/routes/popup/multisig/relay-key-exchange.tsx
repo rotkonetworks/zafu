@@ -18,6 +18,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { CopyButton } from '@repo/ui/components/ui/copy-button';
 
 interface Props {
   /**
@@ -44,7 +45,6 @@ export function RelayKeyExchange({
   onPeerKeys,
 }: Props): React.JSX.Element {
   const [inputs, setInputs] = useState<string[]>([]);
-  const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
 
   // generate our key as soon as the step is visible — the user cannot share
@@ -95,18 +95,13 @@ export function RelayKeyExchange({
           <code className='flex-1 break-all rounded bg-input px-2 py-1.5 font-mono text-[10px]'>
             {myKey === '' ? 'generating…' : myKey}
           </code>
-          <button
-            type='button'
+          <CopyButton
+            text={myKey}
             disabled={myKey === ''}
-            className='shrink-0 rounded border border-border-soft px-2 py-1 text-xs disabled:opacity-40'
-            onClick={() => {
-              void navigator.clipboard.writeText(myKey);
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1500);
-            }}
-          >
-            {copied ? 'copied' : 'copy'}
-          </button>
+            variant='secondary'
+            size='sm'
+            label='copy'
+          />
         </div>
       </div>
 

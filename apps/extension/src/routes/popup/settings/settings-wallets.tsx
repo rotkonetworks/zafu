@@ -1108,7 +1108,7 @@ const Btn = ({
     type={submit ? 'submit' : 'button'}
     onClick={onClick}
     disabled={disabled}
-    variant={destructive ? 'destructiveSecondary' : primary ? 'default' : 'secondary'}
+    variant={destructive ? 'danger' : primary ? 'primary' : 'secondary'}
     size='md'
     className='flex-1 rounded-lg text-xs'
   >

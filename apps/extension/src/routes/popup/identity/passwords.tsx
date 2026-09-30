@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import { useCopy } from '@repo/ui/hooks/use-copy';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { derivePassword, normalizeOrigin, DEFAULT_IDENTITY } from '../../../state/identity';
@@ -18,7 +19,7 @@ export const PasswordsPage = () => {
   const [length, setLength] = useState(32);
   const [index, setIndex] = useState(0);
   const [password, setPassword] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const { copied, copy: copyText } = useCopy(2000);
   const [generating, setGenerating] = useState(false);
 
   const generate = useCallback(async () => {
@@ -47,9 +48,7 @@ export const PasswordsPage = () => {
     if (!password) {
       return;
     }
-    void navigator.clipboard.writeText(password);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    copyText(password);
   };
 
   return (

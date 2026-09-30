@@ -104,7 +104,7 @@ export function QrDisplay({
       {description && <p className='text-sm text-fg-muted text-center max-w-xs'>{description}</p>}
 
       {showCopy && (
-        <Button variant='ghost' size='sm' onClick={handleCopy} className='gap-2'>
+        <Button variant='quiet' size='sm' onClick={handleCopy} className='gap-2'>
           {copied ? (
             <>
               <span className='i-ph-check w-4 h-4 text-green-400' />

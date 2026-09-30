@@ -491,7 +491,7 @@ export function FrostAirgapJoinerSignFlow({
             <Button variant='secondary' onClick={cancel}>
               reject
             </Button>
-            <Button variant='gradient' onClick={approve} disabled={approveDisabled}>
+            <Button variant='primary' onClick={approve} disabled={approveDisabled}>
               {verdict.kind === 'mismatch' ? 'approve anyway' : 'approve & sign'}
             </Button>
           </div>
@@ -506,7 +506,7 @@ export function FrostAirgapJoinerSignFlow({
           <SignStepProgress current={1} />
           <p className='text-sm text-fg-high'>show this QR to zigner</p>
           {trigger1 && <AnimatedQrDisplay data={trigger1} urType='zafu-frost-sign' size={220} />}
-          <Button variant='gradient' onClick={() => setStep('r1-in')} className='w-full'>
+          <Button variant='primary' onClick={() => setStep('r1-in')} className='w-full'>
             scan qr from zigner
           </Button>
           <Button variant='secondary' onClick={cancel} className='w-full'>
@@ -570,7 +570,7 @@ export function FrostAirgapJoinerSignFlow({
           <SignStepProgress current={2} />
           <p className='text-sm text-fg-high'>show this QR to zigner</p>
           {trigger2 && <AnimatedQrDisplay data={trigger2} urType='zafu-frost-sign' size={220} />}
-          <Button variant='gradient' onClick={() => setStep('r2-in')} className='w-full'>
+          <Button variant='primary' onClick={() => setStep('r2-in')} className='w-full'>
             scan qr from zigner
           </Button>
           <Button variant='secondary' onClick={cancel} className='w-full'>

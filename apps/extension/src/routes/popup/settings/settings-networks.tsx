@@ -347,7 +347,7 @@ const NetworkToggles = () => {
                           className='flex-1 rounded-lg bg-input border border-border-soft px-3 py-2.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
                         />
                         <Button
-                          variant='gradient'
+                          variant='primary'
                           size='md'
                           onClick={() => void handleSaveEndpoint(networkId)}
                           disabled={saving}
@@ -711,7 +711,7 @@ const ZcashEndpointPanel = ({
                   className='flex-1 rounded-lg bg-input border border-border-soft px-3 py-2.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
                 />
                 <Button
-                  variant='gradient'
+                  variant='primary'
                   size='md'
                   onClick={onSaveCustom}
                   disabled={saving}
@@ -1126,7 +1126,7 @@ const PenumbraEndpointPanel = ({
                   className='flex-1 rounded-lg bg-input border border-border-soft px-3 py-2.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
                 />
                 <Button
-                  variant='gradient'
+                  variant='primary'
                   size='md'
                   onClick={onSaveCustom}
                   disabled={saving}

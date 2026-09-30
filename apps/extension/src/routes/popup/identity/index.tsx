@@ -15,6 +15,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Segmented } from '@repo/ui/components/ui/segmented';
+import { QrCode } from '../../../components/qr-code';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectKeyInfos, selectGetMnemonic } from '../../../state/keyring';
 import { allContactsSelector } from '../../../state/contacts';
@@ -731,39 +733,22 @@ export const IdentityPage = () => {
 
             {showQr && (
               <div className='flex justify-center'>
-                <div className='bg-white p-2'>
-                  <QrCanvas data={zidPubkey} size={140} />
-                </div>
+                <QrCode value={zidPubkey} size={140} label='zid public key QR' />
               </div>
             )}
           </div>
         </div>
 
         {/* -- tabs -- */}
-        <div className='flex gap-4 border-b border-border-soft text-body font-mono'>
-          <button
-            onClick={() => setActiveTab('sites')}
-            className={`-mb-px flex items-center gap-1.5 pb-2 border-b-2 transition-colors ${focusRing} ${
-              activeTab === 'sites'
-                ? 'border-network-accent text-fg-high'
-                : 'border-transparent text-fg-muted hover:text-fg'
-            }`}
-          >
-            <span className='i-ph-globe size-3.5' />
-            sites <span className='text-fg-dim'>({sites.length})</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('log')}
-            className={`-mb-px flex items-center gap-1.5 pb-2 border-b-2 transition-colors ${focusRing} ${
-              activeTab === 'log'
-                ? 'border-network-accent text-fg-high'
-                : 'border-transparent text-fg-muted hover:text-fg'
-            }`}
-          >
-            <span className='i-ph-scroll size-3.5' />
-            log <span className='text-fg-dim'>({shareLog.length})</span>
-          </button>
-        </div>
+        <Segmented
+          label='identity view'
+          value={activeTab}
+          onChange={setActiveTab}
+          options={[
+            { value: 'sites', label: 'sites', icon: 'i-ph-globe', meta: sites.length },
+            { value: 'log', label: 'log', icon: 'i-ph-scroll', meta: shareLog.length },
+          ]}
+        />
 
         {/* -- sites -- */}
         {activeTab === 'sites' && (
@@ -855,30 +840,6 @@ export const IdentityPage = () => {
 };
 
 /* -- qr -- */
-const QrCanvas = ({ data, size }: { data: string; size: number }) => {
-  const ref = useCallback(
-    (canvas: HTMLCanvasElement | null) => {
-      if (!canvas || !data) {
-        return;
-      }
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const QRCode = require('qrcode');
-        QRCode.toCanvas(canvas, data, {
-          width: size,
-          margin: 1,
-          color: { dark: '#000', light: '#fff' },
-          errorCorrectionLevel: 'L',
-        });
-      } catch {
-        /* */
-      }
-    },
-    [data, size],
-  );
-  return <canvas ref={ref} />;
-};
-
 /* -- site row -- */
 const ALL_CAPS: Capability[] = [
   'connect',
