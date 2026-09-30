@@ -9,6 +9,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Segmented } from '@repo/ui/components/ui/segmented';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { useShallow } from 'zustand/react/shallow';
 import { useStore, type AllSlices } from '../../../state';
 import { selectVisibleMultisigWallets } from '../../../state/wallets';
@@ -940,10 +941,10 @@ function ComposeMessage({
         )}
 
         {txStatus === 'error' && txError && (
-          <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
-            <p className='text-sm text-red-400'>failed to send</p>
-            <p className='text-xs text-fg-muted mt-1'>{txError}</p>
-          </div>
+          <StatusSlot tone='danger'>
+            <p>failed to send</p>
+            <p>{txError}</p>
+          </StatusSlot>
         )}
       </div>
 
