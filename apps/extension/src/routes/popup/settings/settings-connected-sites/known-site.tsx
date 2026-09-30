@@ -16,6 +16,7 @@ import type { ZidSitePreference } from '../../../../state/identity';
 import { getOriginPermissions } from '@repo/storage-chrome/origin';
 import {
   CAPABILITY_META,
+  hasCapability,
   type Capability,
   type OriginPermissions,
 } from '@repo/storage-chrome/capabilities';
@@ -223,7 +224,8 @@ export const KnownSite = ({
             className='flex items-center gap-1 text-label text-fg-muted/50 hover:text-fg-muted transition-colors'
           >
             <span className={`i-ph-caret-${capsExpanded ? 'down' : 'right'} h-2.5 w-2.5`} />
-            capabilities ({perms?.granted.length ?? 0} granted)
+            capabilities ({ALL_CAPABILITIES.filter(cap => hasCapability(perms, cap)).length}{' '}
+            granted)
           </button>
           {capsExpanded && (
             <div className='flex flex-col gap-0.5 pl-4 border-l border-border-hard/20'>
@@ -231,7 +233,7 @@ export const KnownSite = ({
                 <CapabilityToggle
                   key={cap}
                   cap={cap}
-                  granted={perms?.granted.includes(cap) ?? false}
+                  granted={hasCapability(perms, cap)}
                   onToggle={handleCapToggle}
                 />
               ))}

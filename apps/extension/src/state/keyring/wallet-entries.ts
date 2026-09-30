@@ -11,6 +11,8 @@ import type { SessionStorageState } from '@repo/storage-chrome/session';
 import type { NetworkType, ZignerZafuImport, LedgerImport } from './types';
 import type { ZcashWalletJson } from '../wallets';
 import type { Key } from '@repo/encryption/key';
+import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { shownIndicesKey, fundedIndicesKey } from '../../transparent/hd';
 
 /** create penumbra wallet entry for a mnemonic vault (side effect: local.set) */
 export async function createPenumbraWalletForMnemonic(
@@ -259,13 +261,25 @@ export async function createLedgerWalletEntries(
   return newEnabledNetworks;
 }
 
+/** minimal shape of a removed penumbra wallet record, enough to attribute
+ *  other per-wallet storage (e.g. legacy `zignerWallets`) by full viewing key */
+interface RemovedPenumbraWallet {
+  id: string;
+  fullViewingKey?: string;
+}
+
 /** remove all wallet records linked to a vaultId (side effect: local.set + worker cleanup) */
 export async function removeLinkedWallets(
   vaultId: string,
   local: ExtensionStorage<LocalStorageState>,
-): Promise<{ removedZcashIds: string[] }> {
+): Promise<{
+  removedZcashIds: string[];
+  removedZcash: ZcashWalletJson[];
+  removedPenumbra: RemovedPenumbraWallet[];
+}> {
   // penumbra wallets
   const wallets = (await local.get('penumbraWallets')) ?? [];
+  const removedPenumbra = wallets.filter((w: { vaultId?: string }) => w.vaultId === vaultId);
   const updatedWallets = wallets.filter((w: { vaultId?: string }) => w.vaultId !== vaultId);
   if (updatedWallets.length !== wallets.length) {
     await local.set('penumbraWallets', updatedWallets);
@@ -287,22 +301,180 @@ export async function removeLinkedWallets(
     }
   }
 
-  return { removedZcashIds: removedZcash.map(w => w.id) };
+  return {
+    removedZcashIds: removedZcash.map(w => w.id),
+    removedZcash,
+    removedPenumbra: removedPenumbra as RemovedPenumbraWallet[],
+  };
 }
 
-/** clean up zcash worker data + birthday key for a vault */
-export async function cleanupZcashData(vaultId: string, removedZcashIds: string[]): Promise<void> {
+/**
+ * Remove legacy `zignerWallets` entries belonging to the wallet(s) just
+ * removed from `penumbraWallets`/`zcashWallets`.
+ *
+ * `zignerWallets` (schema v2/v3) has no `vaultId` field of its own - nothing
+ * in the current import paths writes to it any more (zigner imports now land
+ * in `penumbraWallets`/`zcashWallets` with `custody.airgapSigner`, see
+ * `createZignerWalletEntries` above), so this is a best-effort cleanup of
+ * pre-existing/legacy rows: attribute by an exact full-viewing-key match
+ * against the records just removed, never by array position or id, so an
+ * unrelated legacy entry is never touched.
+ */
+async function purgeLegacyZignerWallets(
+  removedZcash: ZcashWalletJson[],
+  removedPenumbra: RemovedPenumbraWallet[],
+  local: ExtensionStorage<LocalStorageState>,
+): Promise<void> {
+  const zcashFvks = new Set(removedZcash.map(w => w.orchardFvk).filter(Boolean));
+  const penumbraFvks = new Set(removedPenumbra.map(w => w.fullViewingKey).filter(Boolean));
+  if (zcashFvks.size === 0 && penumbraFvks.size === 0) {
+    return;
+  }
+
+  const zignerWallets = (await local.get('zignerWallets')) ?? [];
+  if (zignerWallets.length === 0) {
+    return;
+  }
+  const updated = zignerWallets.filter(w => {
+    const zcashHit = w.networks?.zcash?.orchardFvk && zcashFvks.has(w.networks.zcash.orchardFvk);
+    const penumbraHit =
+      w.networks?.penumbra?.fullViewingKey && penumbraFvks.has(w.networks.penumbra.fullViewingKey);
+    return !zcashHit && !penumbraHit;
+  });
+  if (updated.length !== zignerWallets.length) {
+    await local.set('zignerWallets', updated);
+  }
+}
+
+/**
+ * Delete every per-wallet Penumbra IndexedDB database for the removed
+ * wallets. `@penumbra-zone/storage`'s `IndexedDb.initialize` names each
+ * wallet's database `viewdata/<chainId>/<bech32mWalletId>` (see its
+ * `dist/indexed-db/index.js`; the extension's own
+ * `WalletId.fromJsonString(wallet.id)` call site is `wallet-services.ts`).
+ * `chainId` comes from the live RPC endpoint at sync time (not a constant -
+ * it can even change if the network migrates), so the database name cannot
+ * be reconstructed ahead of time; instead enumerate every IndexedDB in the
+ * origin and delete whichever ones match this wallet's bech32 id under any
+ * chainId, the same enumerate-and-filter approach `nukeAllWalletData` uses
+ * for the full wipe.
+ *
+ * Does NOT explicitly stop Penumbra sync first. `wallet-entries.ts` is
+ * shared with the popup/page realms, not just the service worker, so it
+ * cannot reach into `service-worker.ts`'s `rebuildServices` (a real
+ * teardown call would need to live there). `removeLinkedWallets` already
+ * updated `activeWalletIndex`/`penumbraWallets`, which the SW's rebuild
+ * scheduler watches and reacts to on its own; if this delete races an
+ * still-open connection, `deleteDatabaseAwaitable` degrades to a logged
+ * `onblocked` warning rather than hanging, exactly like the full-nuke path.
+ */
+async function purgePenumbraWalletDatabases(
+  removedPenumbra: RemovedPenumbraWallet[],
+): Promise<void> {
+  if (removedPenumbra.length === 0) {
+    return;
+  }
+  try {
+    const [{ bech32mWalletId }, { WalletId }] = await Promise.all([
+      import('@penumbra-zone/bech32m/penumbrawalletid'),
+      import('@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb'),
+    ]);
+    const bech32Ids = new Set<string>();
+    for (const w of removedPenumbra) {
+      if (!w.id) {
+        continue;
+      }
+      try {
+        bech32Ids.add(bech32mWalletId(WalletId.fromJsonString(w.id)));
+      } catch {
+        // a malformed/legacy id must not abort the rest of the purge
+      }
+    }
+    if (bech32Ids.size === 0) {
+      return;
+    }
+    const dbs = await indexedDB.databases();
+    const names = dbs
+      .map(d => d.name)
+      .filter(
+        (n): n is string =>
+          !!n && n.startsWith('viewdata/') && [...bech32Ids].some(id => n.endsWith('/' + id)),
+      );
+    await Promise.all(names.map(deleteDatabaseAwaitable));
+  } catch {
+    // indexedDB is unavailable in some environments (e.g. jsdom tests) and
+    // the penumbra-zone packages are optional-ish at this call depth; either
+    // way this step is best-effort and must not abort the rest of the purge.
+  }
+}
+
+/**
+ * Purge every piece of per-wallet storage left behind by `deleteKeyRing` for
+ * a single removed vault. This is the ONE place that must be extended when a
+ * new per-wallet key is added - see the audit in the module doc comment above
+ * `NUKE_SURVIVORS` for the full-wipe counterpart.
+ *
+ * Deliberately excludes (left alone, and why):
+ * - `zidShareLog` / `zidPreferences` - no `walletId`/`vaultId` field; entries
+ *   are keyed by site origin and a user-chosen identity NAME shared across
+ *   wallets (not a wallet id). Correctly attributing an entry to this vault
+ *   would require re-deriving it from the vault's mnemonic, which does not
+ *   exist for airgap/zigner/ledger/frost vaults at all. Left as shared,
+ *   global data - same as site grants (`knownSites`), which are per-origin by
+ *   design, not per-wallet.
+ */
+export async function purgeWalletData(
+  vaultId: string,
+  local: ExtensionStorage<LocalStorageState>,
+): Promise<void> {
+  // remove the wallet's own penumbraWallets/zcashWallets records first - every
+  // other per-wallet key below is attributed FROM what comes back here, so
+  // this must run first and stay the single entry point callers use.
+  const { removedZcash, removedZcashIds, removedPenumbra } = await removeLinkedWallets(
+    vaultId,
+    local,
+  );
+
+  // zcash worker data + birthday key + sync-height hint, per removed zcash wallet id
   for (const id of removedZcashIds) {
     try {
-      const { deleteWalletInWorker } = await import('./network-worker');
+      const { deleteWalletInWorker, zcashSyncHeightKey } = await import('./network-worker');
       await deleteWalletInWorker('zcash', id);
+      await chrome.storage.local.remove(zcashSyncHeightKey(id));
     } catch {
       // worker may not be running
     }
   }
+
+  // static per-wallet keys, batched into one remove call
+  const staticKeys = [
+    `zcashBirthday_${vaultId}`,
+    // ZID generations pinned/labelled by this wallet - keyed by walletId by
+    // construction (see ZID_PINS_STORAGE_KEY doc comment in state/identity.ts).
+    `zidPins:${vaultId}`,
+    // `zidGenKeys` is a display cache of generation-index -> derived pubkey,
+    // populated from whichever wallet was active when the identity page last
+    // rendered (see state/identity.ts - it is NOT keyed by walletId). It may
+    // hold this wallet's derived pubkeys, so clear it rather than leak them;
+    // it is cheaply rederived on demand for whichever wallet is active next.
+    'zidGenKeys',
+    // NOTE: the unmerged zid-per-wallet-generations branch moves zidGenKeys
+    // (and zidIndex) to a per-wallet key (`<key>:<walletId>`) - once that
+    // lands, the per-wallet form must be purged here too, not the bare key.
+    `zcashTAddrs:${vaultId}`,
+  ];
+  for (const cap of Object.keys(COSMOS_CHAINS) as CosmosChainId[]) {
+    staticKeys.push(shownIndicesKey(cap, vaultId), fundedIndicesKey(cap, vaultId));
+  }
   try {
-    await chrome.storage.local.remove(`zcashBirthday_${vaultId}`);
+    await chrome.storage.local.remove(staticKeys);
   } catch {}
+
+  // legacy zigner wallet records (plaintext FVKs), attributed by FVK match
+  await purgeLegacyZignerWallets(removedZcash, removedPenumbra, local);
+
+  // Penumbra per-wallet IndexedDB view state, attributed by bech32 wallet id
+  await purgePenumbraWalletDatabases(removedPenumbra);
 }
 
 /**
@@ -410,7 +582,9 @@ export async function nukeAllWalletData(
   // and the session key was dropped at the top of this function, so the
   // writes would no-op with a "wallet is locked" warning. Only the plaintext
   // index keys are restored, so the store hydrates to a clean empty state.
-  await local.set('selectedVaultId', undefined);
+  // `selectedVaultId` is removed rather than set to `undefined` - the storage
+  // layer forbids a no-op `set(..., undefined)` outright.
+  await local.remove('selectedVaultId');
   await local.set('activeWalletIndex', 0);
   await local.set('activeZcashIndex', 0);
 }

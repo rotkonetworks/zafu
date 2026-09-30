@@ -41,6 +41,7 @@ import { getOriginPermissions, grantCapability, denyCapability } from '@repo/sto
 import { revokeOrigin as revokeOriginFull } from '../../../senders/revoke';
 import {
   CAPABILITY_META,
+  hasCapability,
   type Capability,
   type OriginPermissions,
 } from '@repo/storage-chrome/capabilities';
@@ -954,7 +955,9 @@ const SiteRow = ({
             <span className='text-fg-dim tabular'>{shortDate(site.lastShared.sharedAt)}</span>
           )}
           <span>
-            {site.perms ? `${site.perms.granted.length} caps` : ''}
+            {site.perms
+              ? `${ALL_CAPS.filter(cap => hasCapability(site.perms, cap)).length} caps`
+              : ''}
             {isSiteMode && rotation > 0 ? ` #${rotation}` : ''}
           </span>
           <span
@@ -1098,7 +1101,7 @@ const SiteRow = ({
                   <span>{CAPABILITY_META[cap].label.toLowerCase()}</span>
                   <input
                     type='checkbox'
-                    checked={site.perms!.granted.includes(cap)}
+                    checked={hasCapability(site.perms, cap)}
                     onChange={e => void handleCapToggle(cap, e.target.checked)}
                     className={`size-3 ${focusRing}`}
                   />

@@ -62,8 +62,7 @@ import {
   createZignerWalletEntries,
   createLedgerWalletEntries,
   assertLedgerUfvkValid,
-  removeLinkedWallets,
-  cleanupZcashData,
+  purgeWalletData,
   nukeAllWalletData,
 } from './wallet-entries';
 
@@ -902,10 +901,18 @@ export const createKeyRingSlice =
           );
         }
         const updatedVaults = vaults.filter(v => v.id !== vaultId);
-        await local.set('vaults', updatedVaults);
 
-        const { removedZcashIds } = await removeLinkedWallets(vaultId, local);
-        await cleanupZcashData(vaultId, removedZcashIds);
+        // Purge every other per-wallet key BEFORE removing the vault record
+        // itself. purgeWalletData does not touch `vaults` at all, so this
+        // ordering is free: if it throws partway (a storage failure, a
+        // worker call that rejects unexpectedly), the vault stays in the
+        // list and deleteKeyRing can simply be called again - nothing is
+        // orphaned. Removing the vault first and purging second would leave
+        // a vaultId with no UI entry point to retry cleanup if the purge
+        // failed after the vault was already gone.
+        await purgeWalletData(vaultId, local);
+
+        await local.set('vaults', updatedVaults);
 
         // last vault — nuke everything
         if (updatedVaults.length === 0) {
