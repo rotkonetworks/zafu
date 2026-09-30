@@ -60,3 +60,16 @@ export const viewingKeyDeviceId = async (key: string): Promise<string> => {
   const hex = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
   return `viewkey-${hex.slice(0, 16)}`;
 };
+
+/**
+ * Stable id for a Keystone import (Keystone exports no ZID). djb2 over the
+ * viewing key - kept as-is so ids already stored by earlier imports still
+ * match and re-importing the same Keystone account dedups.
+ */
+export const keystoneDeviceId = (key: string): string => {
+  let h = 5381;
+  for (let i = 0; i < key.length; i++) {
+    h = ((h << 5) + h + key.charCodeAt(i)) | 0;
+  }
+  return `keystone-${(h >>> 0).toString(16)}`;
+};

@@ -11,6 +11,7 @@ import { useCallback, useRef, useState } from 'react';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
 import { PagePath } from '../paths';
+import { keystoneDeviceId } from '../../../utils/viewing-key';
 import { setOnboardingValuesInStorage } from './persist-parameters';
 import { SEED_PHRASE_ORIGIN } from './password/types';
 import { navigateToPasswordPage } from './password/utils';
@@ -176,23 +177,16 @@ export const ImportZigner = () => {
         const ufvkOrFvkB64 = zcashWalletImport.orchardFvk
           ? btoa(String.fromCharCode(...zcashWalletImport.orchardFvk))
           : (zcashWalletImport.ufvk ?? undefined);
-        // Stable deviceId for keystone: hash of the ufvk (16-char prefix). The
-        // ufvk is the only canonical, immutable identifier we have for a
-        // Keystone wallet. A timestamp would mean "reimporting the same
-        // wallet" creates a new deviceId every time — bad for dedup.
+        // Stable deviceId for keystone: hash of the ufvk. The ufvk is the only
+        // canonical, immutable identifier we have for a Keystone wallet. A
+        // timestamp would mean "reimporting the same wallet" creates a new
+        // deviceId every time - bad for dedup.
         let deviceId = zcashWalletImport.zidPublicKey;
         if (!deviceId) {
-          if (kind === 'keystone' && ufvkOrFvkB64) {
-            // Quick non-crypto digest sufficient for dedup. Switch to a real
-            // hash if collision becomes a concern.
-            let h = 5381;
-            for (let i = 0; i < ufvkOrFvkB64.length; i++) {
-              h = ((h << 5) + h + ufvkOrFvkB64.charCodeAt(i)) | 0;
-            }
-            deviceId = `keystone-${(h >>> 0).toString(16)}`;
-          } else {
-            deviceId = `zcash-${Date.now()}`;
-          }
+          deviceId =
+            kind === 'keystone' && ufvkOrFvkB64
+              ? keystoneDeviceId(ufvkOrFvkB64)
+              : `zcash-${Date.now()}`;
         }
         const defaultLabel = kind === 'keystone' ? 'keystone zcash' : 'zigner zcash';
         const zignerData: ZignerZafuImport = {

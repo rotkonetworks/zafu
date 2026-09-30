@@ -27,6 +27,7 @@ import { Button } from '@repo/ui/components/ui/button';
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { Input } from '@repo/ui/components/ui/input';
 import { cn } from '@repo/ui/lib/utils';
+import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../../../state';
 import { keyRingSelector, type LedgerImport } from '../../../state/keyring';
 import { usePageNav } from '../../../utils/navigate';
@@ -142,8 +143,14 @@ export const ConnectLedger = () => {
         deviceId: account.deviceId,
         mainnet: MAINNET,
       };
+      // Also reachable from settings > wallets on an already set-up extension.
+      // The onboarding defaults (rpc, frontend) must only be written on first
+      // setup, or adding a ledger would reset the user's configured endpoints.
+      const firstWallet = !(await localExtStorage.get('vaults'))?.length;
       await addLedgerUnencrypted(ledgerImport, walletLabel || 'ledger (transparent)');
-      await setOnboardingValuesInStorage(SEED_PHRASE_ORIGIN.LEDGER);
+      if (firstWallet) {
+        await setOnboardingValuesInStorage(SEED_PHRASE_ORIGIN.LEDGER);
+      }
       navigate(PagePath.ONBOARDING_SUCCESS);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);

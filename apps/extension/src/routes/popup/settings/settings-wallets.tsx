@@ -13,6 +13,11 @@ import { passwordSelector } from '../../../state/password';
 import { SettingsScreen } from './settings-screen';
 import { terminateNetworkWorker } from '../../../state/keyring/network-worker';
 import { QrScanner } from '../../../shared/components/qr-scanner';
+import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
+import { keystoneDeviceId } from '../../../utils/viewing-key';
+import { openPageInTab } from '../../../utils/popup-detection';
+import { PagePath } from '../../page/paths';
+import { HARDWARE_WALLET_ENABLED, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { cn } from '@repo/ui/lib/utils';
@@ -88,6 +93,7 @@ export const SettingsWallets = ({
     detectedNetwork,
     errorMessage,
     processQrData,
+    processZcashAccountsBytes,
     setWalletLabel,
     setScanState,
     setError,
@@ -110,6 +116,7 @@ export const SettingsWallets = ({
 
   // -- add wallet state --
   const [scanning, setScanning] = useState(false);
+  const [scanningKeystone, setScanningKeystone] = useState(false);
   const [addSuccess, setAddSuccess] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
 
@@ -297,15 +304,23 @@ export const SettingsWallets = ({
           (zcashWalletImport.orchardFvk
             ? btoa(String.fromCharCode(...zcashWalletImport.orchardFvk))
             : undefined);
+        const kind = zcashWalletImport.coldSignerType ?? 'zigner';
         const zignerData: ZignerZafuImport = {
           viewingKey,
           accountIndex: zcashWalletImport.accountIndex,
-          deviceId: zcashWalletImport.zidPublicKey ?? `zcash-${Date.now()}`,
+          deviceId:
+            zcashWalletImport.zidPublicKey ??
+            (kind === 'keystone' && viewingKey
+              ? keystoneDeviceId(viewingKey)
+              : `zcash-${Date.now()}`),
           zidPublicKey: zcashWalletImport.zidPublicKey,
+          coldSignerType: kind,
         };
         await addZignerUnencrypted(
           zignerData,
-          walletLabel || zcashWalletImport.label || 'zigner zcash',
+          walletLabel ||
+            zcashWalletImport.label ||
+            (kind === 'keystone' ? 'keystone zcash' : 'zigner zcash'),
         );
       } else if (detectedNetwork === 'cosmos' && parsedCosmosExport && isLaunched('noble')) {
         const zignerData: ZignerZafuImport = {
@@ -360,6 +375,26 @@ export const SettingsWallets = ({
           onClose={() => setScanning(false)}
           title='scan zigner QR'
           description='point camera at your zigner FVK QR code'
+        />
+      )}
+      {scanningKeystone && (
+        <AnimatedQrScanner
+          onComplete={(bytes, urType) => {
+            setScanningKeystone(false);
+            if (urType !== 'zcash-accounts') {
+              setError(`expected ur:zcash-accounts, got ur:${urType}`);
+              return;
+            }
+            processZcashAccountsBytes(bytes, 'keystone');
+          }}
+          onError={err => {
+            setError(err);
+            setScanningKeystone(false);
+          }}
+          onClose={() => setScanningKeystone(false)}
+          title='scan keystone QR'
+          description='hold the camera steady on the animated zcash-accounts QR'
+          urTypeFilter='zcash-accounts'
         />
       )}
       <SettingsScreen title={title} backPath={PopupPath.INDEX}>
@@ -525,6 +560,7 @@ export const SettingsWallets = ({
           {/* ── add wallet ── */}
 
           <div className='border-t border-border-soft pt-4'>
+            <p className='text-label text-fg-muted mb-2'>add wallet</p>
             {/* zigner info box — tap 10x for dev paste mode */}
             <div
               className='rounded-lg border border-border-soft bg-elev-1 p-3 mb-3'
@@ -647,6 +683,23 @@ export const SettingsWallets = ({
                   <span className='i-ph-scan size-4' />
                   scan zigner QR
                 </button>
+                <button
+                  onClick={() => setScanningKeystone(true)}
+                  className='w-full flex items-center justify-center gap-2 rounded-lg border border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high transition-colors'
+                >
+                  <span className='i-ph-qr-code size-4' />
+                  scan keystone QR (zcash)
+                </button>
+                {(HARDWARE_WALLET_ENABLED || LEDGER_TRANSPARENT_ENABLED) && (
+                  <button
+                    // WebHID dies with the popup, so the ledger flow runs in a tab
+                    onClick={() => void openPageInTab(PagePath.CONNECT_LEDGER, true)}
+                    className='w-full flex items-center justify-center gap-2 rounded-lg border border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high transition-colors'
+                  >
+                    <span className='i-ph-usb size-4' />
+                    connect ledger
+                  </button>
+                )}
                 {!hasSeedVault && (
                   <button
                     onClick={() => chrome.runtime.openOptionsPage()}
