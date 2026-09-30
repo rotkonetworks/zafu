@@ -6,9 +6,34 @@ import {
   OriginPermissions,
   TIME_LIMITED_CAPABILITIES,
   GRANT_TTL_MS,
+  hasCapability,
 } from './capabilities';
 
 // --- New capability-based API ---
+
+/**
+ * Drop any time-limited capability from `granted` whose grant has expired.
+ * Read-only: never writes storage back (callers that mutate and save, like
+ * `grantCapability`/`denyCapability`, work off `getPermissionsArray`'s
+ * result, and re-pruning on every read is cheap and always correct - no
+ * separate migration or write-back pass is needed).
+ *
+ * `hasCapability` already enforces expiry live, so this pruning is not a
+ * security boundary - it exists so consumers that read `granted` directly
+ * (a capability COUNT in settings, or `contact-discovery-service.ts`'s
+ * "does this origin have anything granted" scan) see the same truth
+ * `hasCapability` would report, instead of a stale array entry that reads as
+ * "still granted" until something calls `hasCapability` on it specifically.
+ */
+const pruneExpiredGrants = (perms: OriginPermissions): OriginPermissions => {
+  const expired = perms.granted.filter(
+    cap => TIME_LIMITED_CAPABILITIES.has(cap) && !hasCapability(perms, cap),
+  );
+  if (expired.length === 0) {
+    return perms;
+  }
+  return { ...perms, granted: perms.granted.filter(cap => !expired.includes(cap)) };
+};
 
 const getPermissionsArray = async (): Promise<OriginPermissions[]> => {
   const raw = await localExtStorage.get('knownSites');
@@ -19,7 +44,7 @@ const getPermissionsArray = async (): Promise<OriginPermissions[]> => {
   return (raw as unknown[]).map(entry => {
     const r = entry as Record<string, unknown>;
     if ('granted' in r && Array.isArray(r['granted'])) {
-      return r as unknown as OriginPermissions;
+      return pruneExpiredGrants(r as unknown as OriginPermissions);
     }
     // legacy OriginRecord shape → convert
     const legacy = r as unknown as OriginRecord;

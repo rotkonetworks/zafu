@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
-import { grantCapability, denyCapability, getOriginPermissions } from './origin';
+import { grantCapability, denyCapability, getOriginPermissions, getAllPermissions } from './origin';
 import { GRANT_TTL_MS, TIME_LIMITED_CAPABILITIES, hasCapability } from './capabilities';
+import { localExtStorage } from './local';
 
 // tests-setup.ts installs a mock chrome.storage + navigator.locks; every test
 // file starts with a fresh storage area.
@@ -71,6 +72,45 @@ describe('a pre-existing grant with no recorded expiry (upgrade safety)', () => 
     delete perms!.expires;
 
     expect(hasCapability(perms, 'encrypt')).toBe(false);
+  });
+});
+
+describe('reads prune expired time-limited capabilities out of `granted`', () => {
+  test('getOriginPermissions does not report an expired capability as granted', async () => {
+    const origin = 'https://stale-in-storage.example';
+    await localExtStorage.set('knownSites', [
+      {
+        origin,
+        granted: ['connect', 'encrypt'],
+        denied: [],
+        grantedAt: 0,
+        expires: { encrypt: Date.now() - 1000 },
+      },
+    ] as never);
+
+    const perms = await getOriginPermissions(origin);
+    expect(perms?.granted).toContain('connect');
+    expect(perms?.granted).not.toContain('encrypt');
+    // the capability's own record is otherwise untouched (not a denial)
+    expect(perms?.denied ?? []).not.toContain('encrypt');
+  });
+
+  test('pruning is read-only: it does not persist a write back to storage', async () => {
+    const origin = 'https://read-only-prune.example';
+    const stored = {
+      origin,
+      granted: ['encrypt'],
+      denied: [],
+      grantedAt: 0,
+      expires: { encrypt: Date.now() - 1000 },
+    };
+    await localExtStorage.set('knownSites', [stored] as never);
+
+    await getOriginPermissions(origin);
+    await getAllPermissions();
+
+    const raw = await localExtStorage.get('knownSites');
+    expect((raw as unknown as (typeof stored)[])[0]?.granted).toContain('encrypt');
   });
 });
 

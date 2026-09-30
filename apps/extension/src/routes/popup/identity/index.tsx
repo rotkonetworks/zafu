@@ -994,7 +994,9 @@ const SiteRow = ({
             <span className='text-fg-dim tabular'>{shortDate(site.lastShared.sharedAt)}</span>
           )}
           <span>
-            {site.perms ? `${site.perms.granted.length} caps` : ''}
+            {site.perms
+              ? `${ALL_CAPS.filter(cap => hasCapability(site.perms, cap)).length} caps`
+              : ''}
             {isSiteMode && rotation > 0 ? ` #${rotation}` : ''}
           </span>
           <span

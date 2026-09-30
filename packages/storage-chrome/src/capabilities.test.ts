@@ -32,7 +32,7 @@ describe('hasCapability - non time-limited capabilities', () => {
   });
 });
 
-describe('hasCapability - time-limited capabilities (encrypt, passkey, auto_sign)', () => {
+describe('hasCapability - time-limited capabilities (encrypt, passkey)', () => {
   test.each([...TIME_LIMITED_CAPABILITIES])('%s: granted with future expiry -> true', cap => {
     const now = 1_000_000;
     const perms = basePerms({ granted: [cap], expires: { [cap]: now + 1 } });
@@ -65,6 +65,48 @@ describe('hasCapability - time-limited capabilities (encrypt, passkey, auto_sign
 
   test('GRANT_TTL_MS is 30 days', () => {
     expect(GRANT_TTL_MS).toBe(30 * 24 * 60 * 60 * 1000);
+  });
+
+  test('boundary: expiresAt === now is treated as expired', () => {
+    const now = 1_000_000;
+    const perms = basePerms({ granted: ['encrypt'], expires: { encrypt: now } });
+    expect(hasCapability(perms, 'encrypt', now)).toBe(false);
+  });
+
+  test('a non-finite expiry (Infinity) is refused, not trusted', () => {
+    const perms = basePerms({ granted: ['encrypt'], expires: { encrypt: Infinity } });
+    expect(hasCapability(perms, 'encrypt')).toBe(false);
+  });
+
+  test('a NaN expiry is refused', () => {
+    const perms = basePerms({ granted: ['encrypt'], expires: { encrypt: NaN } });
+    expect(hasCapability(perms, 'encrypt')).toBe(false);
+  });
+
+  test('an expiry further out than GRANT_TTL_MS from now is refused (clock-skew guard)', () => {
+    const now = 1_000_000;
+    const perms = basePerms({
+      granted: ['encrypt'],
+      expires: { encrypt: now + GRANT_TTL_MS + 1 },
+    });
+    expect(hasCapability(perms, 'encrypt', now)).toBe(false);
+  });
+
+  test('an expiry exactly GRANT_TTL_MS out is accepted', () => {
+    const now = 1_000_000;
+    const perms = basePerms({ granted: ['encrypt'], expires: { encrypt: now + GRANT_TTL_MS } });
+    expect(hasCapability(perms, 'encrypt', now)).toBe(true);
+  });
+});
+
+describe('auto_sign is intentionally not time-limited', () => {
+  test('auto_sign is not in TIME_LIMITED_CAPABILITIES', () => {
+    expect(TIME_LIMITED_CAPABILITIES.has('auto_sign')).toBe(false);
+  });
+
+  test('a granted auto_sign capability is usable with no expiry stamped at all', () => {
+    const perms = basePerms({ granted: ['auto_sign'] });
+    expect(hasCapability(perms, 'auto_sign')).toBe(true);
   });
 });
 

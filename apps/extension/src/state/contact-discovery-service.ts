@@ -19,6 +19,7 @@
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { getAllPermissions } from '@repo/storage-chrome/origin';
+import { hasCapability } from '@repo/storage-chrome/capabilities';
 import type { ZafuDiscoverContactsResponse } from '@zafu/protocol';
 import {
   createHttpRelayTransport,
@@ -148,7 +149,10 @@ export const runDiscoveryForScope = async (
  */
 const presenceScopes = async (): Promise<string[]> => {
   const permissions = await getAllPermissions();
-  return permissions.filter(p => p.granted.length > 0).map(p => p.origin);
+  // `granted.length > 0` counted an EXPIRED time-limited grant as live,
+  // keeping a site beaconing after the user's actual permission there
+  // lapsed. hasCapability is the source of truth for "is this usable now".
+  return permissions.filter(p => p.granted.some(cap => hasCapability(p, cap))).map(p => p.origin);
 };
 
 interface ScopeState {
