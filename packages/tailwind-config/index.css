@@ -71,6 +71,17 @@
   --color-border-soft: var(--surface-border-soft);
   --color-border-hard: var(--surface-border);
 
+  /* full `surface-*` names - the Wave 1 primitives (packages/ui/components/ui/
+     sheet, row, button) reference `bg-surface-elev-1`, `border-surface-border`,
+     etc. directly rather than the short aliases above. Without these, those
+     classes don't match any generated utility and resolve to nothing -
+     Sheet/RowGroup render with a transparent panel. Same underlying CSS
+     variables as the short aliases; just registered under both names. */
+  --color-surface-elev-1: var(--surface-elev-1);
+  --color-surface-elev-2: var(--surface-elev-2);
+  --color-surface-border: var(--surface-border);
+  --color-surface-border-soft: var(--surface-border-soft);
+
   /* hanko vermillion (personality accent — see globals.css) */
   --color-hanko: var(--hanko);
   --color-hanko-light: var(--hanko-light);

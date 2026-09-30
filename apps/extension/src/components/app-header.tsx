@@ -38,7 +38,7 @@ export const AppHeader = () => {
         aria-label='accounts'
         aria-haspopup='dialog'
       >
-        <span className='max-w-32 truncate text-data text-fg-high'>{walletName}</span>
+        <span className='max-w-32 truncate text-data text-fg-high lowercase'>{walletName}</span>
         {selectedKeyInfo && <CustodyBadge vault={selectedKeyInfo} showLabel={false} />}
         <span className='i-ph-caret-down h-3 w-3 shrink-0 text-fg-muted' />
       </button>
@@ -50,7 +50,7 @@ export const AppHeader = () => {
         aria-haspopup='dialog'
       >
         <span className={cn('h-2.5 w-2.5 rounded-full', networkInfo.color)} />
-        <span className='text-data text-fg-high'>{networkInfo.name}</span>
+        <span className='text-data text-fg-high lowercase'>{networkInfo.name}</span>
         {networkInfo.transparent && (
           <span
             className='flex items-center gap-0.5 rounded-md bg-red-500/15 px-1.5 py-0.5 text-label leading-none text-red-500'
