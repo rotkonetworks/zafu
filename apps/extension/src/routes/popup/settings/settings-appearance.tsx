@@ -8,13 +8,12 @@ import { getApprovalSurface, type ApprovalSurface } from '../../../side-panel-pr
 /**
  * appearance — theme and type, applied instantly, persisted locally.
  *
- * Themes are one material language in three states (see globals.css):
+ * Themes are one material language in two states (see globals.css):
  *   sumi ink  — warm ink-stone dark (default)
  *   washi     — sumi ink on unbleached paper (light)
- *   terminal  — the original cold pure black
  */
 
-type ZafuTheme = 'sumi' | 'washi' | 'terminal';
+type ZafuTheme = 'sumi' | 'washi';
 type ZafuFont = 'iosevka' | 'system';
 
 const THEMES: { id: ZafuTheme; name: string; blurb: string; chip: string; ink: string }[] = [
@@ -26,13 +25,6 @@ const THEMES: { id: ZafuTheme; name: string; blurb: string; chip: string; ink: s
     ink: '#ded5c4',
   },
   { id: 'washi', name: 'washi', blurb: 'ink on unbleached paper', chip: '#efe9dc', ink: '#2b241c' },
-  {
-    id: 'terminal',
-    name: 'terminal',
-    blurb: 'cold black, no cloth',
-    chip: '#000000',
-    ink: '#dcdcdc',
-  },
 ];
 
 const FONTS: { id: ZafuFont; name: string; blurb: string; stack: string }[] = [
@@ -72,7 +64,8 @@ export const SettingsAppearance = () => {
   const [approvalSurface, setApprovalSurface] = useState<ApprovalSurface>('hybrid');
 
   useEffect(() => {
-    void localExtStorage.get('zafuTheme').then(v => setTheme(v ?? 'sumi'));
+    // a retired 'terminal' choice falls back to the default
+    void localExtStorage.get('zafuTheme').then(v => setTheme(v === 'washi' ? 'washi' : 'sumi'));
     void localExtStorage.get('zafuFont').then(v => setFont(v ?? 'iosevka'));
     void getApprovalSurface().then(setApprovalSurface);
   }, []);
