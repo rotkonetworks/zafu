@@ -86,7 +86,7 @@ describe('parseNetEgressState', () => {
     for (const junk of [null, undefined, 42, 'x', [], {}]) {
       const parsed = parseNetEgressState(junk);
       expect(parsed.destinations).toEqual({});
-      expect(parsed.identities).toEqual({});
+      expect(parsed.optIns).toEqual({});
     }
     expect(parseNetEgressState(null)).toEqual(EMPTY_NET_EGRESS);
   });
@@ -101,7 +101,6 @@ describe('parseNetEgressState', () => {
     });
     expect(Object.keys(parsed.destinations)).toEqual(['good.example']);
     expect(parsed.destinations['good.example']!.state).toBe('allowed');
-    expect(parsed.destinations['good.example']!.trusted).toBe(true);
   });
 
   it('keeps a malformed entry out of the allowed set even when trusted is set', () => {
@@ -111,56 +110,30 @@ describe('parseNetEgressState', () => {
     expect(parsed.destinations['x.example']).toBeUndefined();
   });
 
-  it('round-trips a full record', () => {
+  it('round-trips a full record and the opt-ins, dropping unknown choices', () => {
     const parsed = parseNetEgressState({
       destinations: {
         'zcash.rotko.net': {
-          state: 'allowed',
-          trusted: true,
-          label: 'ships with zafu',
+          state: 'blocked',
+          label: 'you blocked this',
           purposes: ['chain-rpc', 'indexer'],
           firstSeen: 1,
-          lastUsed: 2,
-          calls: 3,
-          identity: 'id-1',
-          lastOutcome: 'allowed',
+          promptedAt: 2,
+          lastOutcome: 'blocked',
         },
       },
-      identities: {
-        'id-1': {
-          id: 'id-1',
-          name: 'tor',
-          proxy: { scheme: 'socks5', host: '127.0.0.1', port: 9050 },
-          headers: { 'x-api-key': 'k' },
-        },
-      },
+      optIns: { 'zcash-me': 'allowed', 'near-swap': 'blocked', junk: 'maybe' },
     });
     expect(parsed.destinations['zcash.rotko.net']).toEqual({
-      state: 'allowed',
-      trusted: true,
-      label: 'ships with zafu',
+      state: 'blocked',
+      label: 'you blocked this',
       purposes: ['chain-rpc', 'indexer'],
       firstSeen: 1,
-      lastUsed: 2,
-      calls: 3,
-      identity: 'id-1',
-      lastOutcome: 'allowed',
+      promptedAt: 2,
+      lastOutcome: 'blocked',
     });
-    expect(parsed.identities['id-1']?.proxy).toEqual({
-      scheme: 'socks5',
-      host: '127.0.0.1',
-      port: 9050,
-      username: undefined,
-      password: undefined,
-    });
-    expect(parsed.identities['id-1']?.headers).toEqual({ 'x-api-key': 'k' });
-  });
-
-  it('drops a proxy with an unknown scheme rather than trusting it', () => {
-    const parsed = parseNetEgressState({
-      identities: { a: { id: 'a', name: 'x', proxy: { scheme: 'gopher', host: 'h', port: 1 } } },
-    });
-    expect(parsed.identities['a']?.proxy).toBeUndefined();
+    expect(parsed.optIns).toEqual({ 'zcash-me': 'allowed', 'near-swap': 'blocked' });
+    expect(parsed.v).toBe(2);
   });
 });
 

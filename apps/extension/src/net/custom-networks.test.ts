@@ -7,8 +7,17 @@ import {
   removeCustomNetwork,
   type CustomNetwork,
 } from './custom-networks';
-import { trustedDestinationFor } from './inventory';
-import { noteDestination, readNetEgress } from './ledger';
+import { compileEgress } from './egress-policy';
+import { decideEgress } from './egress-table';
+import { readNetEgress, setDestinationDecision } from './ledger';
+
+/** Whether the policy lets zafu reach `host` with only the stored custom networks. */
+const reachable = async (host: string) =>
+  decideEgress(
+    `https://${host}/status`,
+    'popup',
+    compileEgress({ customNetworks: await readCustomNetworks() }),
+  ).allow;
 
 /** Unique hosts per test: the ledger caches in module scope, so tests must not
  *  share a host or they would observe each other's records. */
@@ -69,7 +78,7 @@ describe('addCustomNetwork', () => {
     expect(stored[0]!.name).toBe('second');
   });
 
-  it('makes the host a trusted destination the user configured', async () => {
+  it('makes the host a destination the user configured', async () => {
     const host = unique('trusted');
     const network = await addCustomNetwork({
       name: 'my node',
@@ -77,9 +86,7 @@ describe('addCustomNetwork', () => {
       rpc: `https://${host}`,
     });
 
-    const trusted = await trustedDestinationFor(host);
-    expect(trusted?.label).toBe('your network: my node');
-    expect(trusted?.purposes).toContain('chain-rpc');
+    expect(await reachable(host)).toBe(true);
 
     await removeCustomNetwork(network.id);
   });
@@ -93,13 +100,13 @@ describe('removeCustomNetwork', () => {
       chainId: `forget-${Date.now()}`,
       rpc: `https://${host}`,
     });
-    await noteDestination(host, { purpose: 'chain-rpc', trusted: true, label: network.name });
+    await setDestinationDecision(host, 'allowed', { label: network.name });
     expect((await readNetEgress()).destinations[host]).toBeDefined();
 
     await removeCustomNetwork(network.id);
 
     expect((await readNetEgress()).destinations[host]).toBeUndefined();
-    expect(await trustedDestinationFor(host)).toBeUndefined();
+    expect(await reachable(host)).toBe(false);
     expect((await readCustomNetworks()).some(n => n.id === network.id)).toBe(false);
   });
 });

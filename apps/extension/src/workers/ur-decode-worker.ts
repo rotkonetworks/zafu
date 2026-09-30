@@ -20,6 +20,8 @@
  * enforces MAX_UR_PARTS / MAX_UR_PART_BYTES, and the type filter) so this
  * worker only accumulates and decodes.
  */
+// egress guard first: nothing may capture fetch or open a socket before it
+import '../net/egress-install-lite';
 
 /// <reference lib="webworker" />
 

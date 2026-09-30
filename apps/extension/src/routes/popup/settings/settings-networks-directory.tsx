@@ -5,7 +5,7 @@
  *     endpoint pool, whether a live channel to penumbra is open, and the
  *     egress decision on zafu's shipped rpc/rest, blockable/allowable inline;
  *  2. the user's own networks - a node they run or trust, added by hand, which
- *     then feeds the trusted egress inventory.
+ *     then is a destination the egress policy allows (net/egress-policy.ts).
  *
  * Renders inside the Penumbra network panel (PenumbraIbcDirectory). The full
  * destination list ("everything zafu talks to", every known host with its
@@ -23,23 +23,21 @@ import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/
 import { ChannelTag, TransparentChainEndpoints } from './transparent-chain-endpoints';
 import { useIbcChains } from '../../../hooks/ibc-chains';
 import { hostOf, type DestinationState, type NetEgressState } from '../../../net/destination';
-import { noteDestination, readNetEgress, setDestinationDecision } from '../../../net/ledger';
+import { readNetEgress, setDestinationDecision } from '../../../net/ledger';
 import {
   addCustomNetwork,
   readCustomNetworks,
   removeCustomNetwork,
   type CustomNetwork,
 } from '../../../net/custom-networks';
-import { trustedDestinations, type TrustedDestination } from '../../../net/inventory';
-import type { NetPurpose } from '../../../net/purpose';
 
-/** what the row can say about a host - the ledger's `pending` reads as "not decided yet" */
+/** what the row can say about a host - no per-host decision: the policy decides from your networks */
 type EgressView = 'allowed' | 'blocked' | 'undecided';
 
 const EGRESS_LABEL: Record<EgressView, string> = {
   allowed: 'allowed',
   blocked: 'blocked',
-  undecided: 'not decided yet',
+  undecided: 'by your networks',
 };
 
 const EGRESS_DOT: Record<EgressView, string> = {
@@ -314,7 +312,7 @@ const OwnNetworks = ({
           </Button>
         </div>
         <p className='text-label text-fg-dim lowercase leading-snug'>
-          a node you run or trust. it joins the trusted egress inventory - one endpoint per chain,
+          a node you run or trust. zafu may contact it once added - one endpoint per chain,
           adding a second for the same chain id replaces the first.
         </p>
       </div>
@@ -348,49 +346,27 @@ const OwnNetworks = ({
   );
 };
 
-/** Shared load/refresh of the egress ledger, custom networks and inventory.
- *  Exported for settings-connections.tsx (the "everything zafu talks to"
- *  privacy screen), which needs the same egress + inventory + decide(). */
-export const useDirectoryState = () => {
+/** Shared load/refresh of the egress ledger and custom networks. */
+const useDirectoryState = () => {
   const [egress, setEgress] = useState<NetEgressState | null>(null);
   const [networks, setNetworks] = useState<CustomNetwork[]>([]);
-  const [destinations, setDestinations] = useState<TrustedDestination[]>([]);
 
   const refresh = useCallback(async () => {
-    const [state, custom, known] = await Promise.all([
-      readNetEgress(),
-      readCustomNetworks(),
-      trustedDestinations(),
-    ]);
+    const [state, custom] = await Promise.all([readNetEgress(), readCustomNetworks()]);
     setEgress(state);
     setNetworks(custom);
-    setDestinations(known);
   }, []);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  /**
-   * A shipped endpoint may have no ledger record yet (nothing has contacted it
-   * this install), and `setDestinationDecision` is a no-op on a missing record -
-   * so record the first contact here, trusted, before applying the choice.
-   */
-  const decide = async (
-    host: string,
-    label: string,
-    next: DestinationState,
-    purpose: NetPurpose = 'chain-rpc',
-  ) => {
-    const state = await readNetEgress();
-    if (!state.destinations[host]) {
-      await noteDestination(host, { purpose, trusted: true, label });
-    }
-    await setDestinationDecision(host, next);
+  const decide = async (host: string, label: string, next: DestinationState) => {
+    await setDestinationDecision(host, next, { label, purpose: 'chain-rpc' });
     await refresh();
   };
 
-  return { egress, networks, destinations, refresh, decide };
+  return { egress, networks, refresh, decide };
 };
 
 /**

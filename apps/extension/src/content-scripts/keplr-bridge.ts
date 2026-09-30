@@ -5,6 +5,8 @@
  * response back. Binary already crosses as base64 (see injected-keplr.ts), so
  * everything here is plain JSON.
  */
+// egress guard first: nothing may capture fetch or open a socket before it
+import '../net/egress-install-lite';
 
 export {}; // module scope - keeps CHANNEL out of the shared ISOLATED-world global
 

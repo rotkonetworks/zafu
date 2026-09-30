@@ -1,5 +1,7 @@
 // Must be the first import: its side effect runs in webpack's hoisted,
 // synchronous require phase, ahead of this entry's wasm-backed deps.
+// egress guard first: nothing may capture fetch or open a socket before it
+import '../net/egress-install';
 import '../install-console-quieting';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode, useState, useEffect } from 'react';

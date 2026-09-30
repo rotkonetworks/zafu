@@ -9,6 +9,8 @@
 // DMs use Noise IK over a separate WebSocket. they are end-to-end
 // encrypted between two ZID keypairs.
 
+// egress guard first: nothing may capture fetch or open a socket before it
+import '../net/egress-install';
 import { ed25519 } from '@noble/curves/ed25519';
 // eslint-disable-next-line import/no-relative-packages -- @zafu/zid publishes no subpath exports for these; the suggested specifiers do not resolve
 import { createNoiseChannel, type ZidChannel } from '../../../../packages/zid/src';
