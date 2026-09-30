@@ -1,6 +1,7 @@
 name: release-engine
 
-# Reusable single-channel build → sign → release → Chrome Web Store publish.
+# Reusable single-channel build → sign → GitHub release. The Chrome Web Store
+# upload is disabled (see the store step below): the zip is uploaded by hand.
 # Called by beta.yml (push-to-main, continuous beta) and release.yml
 # (manual prod promotion). The security-critical steps (CRX signing, key
 # shredding, CWS OAuth) are identical to the previous combined workflow;
@@ -227,107 +228,129 @@ jobs:
               --title "zafu $VER" --generate-notes
           fi
 
-      # ─── Chrome Web Store — upload + submit for review ───
-      # Chrome Web Store API **v2** (chromewebstore.googleapis.com), which is
-      # the only documented surface left: Google's own guide has dropped the
-      # old v1.1 www.googleapis.com/chromewebstore/v1.1/... endpoints, and v2
-      # takes a Google Cloud *service account* — so there is no OAuth consent
-      # screen, no user refresh token that dies after 7 days in "Testing"
-      # status, and no client secret to lose.
-      #
-      # One-time setup by someone with dashboard access:
-      #   1. GCP project → enable "Chrome Web Store API".
-      #   2. Create a service account (no IAM roles needed) and a JSON key.
-      #   3. Developer Dashboard → Account → add the service account email.
-      #   4. gh secret set CWS_SA_JSON < key.json
-      #      gh secret set CWS_PUBLISHER_ID --body <dashboard publisher id>
-      # https://developer.chrome.com/docs/webstore/service-accounts
-      #
-      # The secret must hold a *service-account* key (type: service_account,
-      # client_email, private_key) - not the OAuth client JSON you download
-      # from GCP, which has no private_key and cannot sign. A 403 from the
-      # upload/publish call with a good key means the store does not know the
-      # caller yet: add the key's client_email in the dashboard, on the
-      # publisher's own Account page.
-      #
-      # Everything here is name-addressed: publishers/$PUB/items/$ITEM.
-      #
-      # This runs AFTER the GitHub release is cut, so a failure here cannot
-      # un-cut it - but it must not pass silently either, or the store keeps
-      # serving the previous version while the tag says otherwise. No
-      # continue-on-error: the run goes red, and re-running it is safe.
-      - name: Publish to Chrome Web Store
+      # Chrome Web Store upload is DISABLED: the service account has no
+      # access to the store items (every upload answered 403
+      # PERMISSION_DENIED), so the step only turned every run red. Upload
+      # the zip from the GitHub release by hand in the developer dashboard.
+      # To turn it back on: give the service account dashboard access (see
+      # the setup notes below), uncomment the step, and remove the manual
+      # reminder step that follows.
+      - name: Chrome Web Store (manual upload)
         if: inputs.release_mode != 'none'
         env:
-          CWS_SA_JSON: ${{ secrets.CWS_SA_JSON }}
-          CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
           VER: ${{ inputs.version }}
           CHAN: ${{ steps.c.outputs.chan }}
           ITEM_ID: ${{ steps.c.outputs.item }}
         run: |
-          set -eu
-          if [ -z "${CWS_SA_JSON:-}" ] || [ -z "${CWS_PUBLISHER_ID:-}" ]; then
-            echo "CWS_SA_JSON / CWS_PUBLISHER_ID not set — skipping CWS publish."
-            echo "::warning::Chrome Web Store was NOT updated: CWS_SA_JSON / CWS_PUBLISHER_ID are unset. See https://developer.chrome.com/docs/webstore/service-accounts"
-            exit 0
-          fi
-          pip install --quiet google-auth requests
-          # The key stays in the environment — from_service_account_info never
-          # writes it to disk.
-          TOKEN="$(python3 - <<'PY'
-          import json, os
-          from google.oauth2 import service_account
-          from google.auth.transport.requests import Request
-          creds = service_account.Credentials.from_service_account_info(
-              json.loads(os.environ['CWS_SA_JSON']),
-              scopes=['https://www.googleapis.com/auth/chromewebstore'],
-          )
-          creds.refresh(Request())
-          print(creds.token)
-          PY
-          )"
-          name="publishers/${CWS_PUBLISHER_ID}/items/${ITEM_ID}"
-          zip="zafu-${CHAN}-${VER}.zip"
-          echo "─── ${CHAN} (${ITEM_ID}) ───"
-          upload_resp="$(curl -sS --fail-with-body \
-            -H "Authorization: Bearer ${TOKEN}" \
-            -H "Content-Type: application/zip" \
-            -X POST --data-binary "@${zip}" \
-            "https://chromewebstore.googleapis.com/upload/v2/${name}:upload")" || {
-            # --fail-with-body puts the API's reason on stdout, which the
-            # assignment has already captured: print it, or the log says only
-            # "curl: (22) ... error: 403" and the cause is thrown away.
-            echo "::error::the store refused the upload:"
-            echo "$upload_resp"
-            exit 1
-          }
-          echo "upload: $upload_resp"
-          # v2 spells the terminal state SUCCEEDED (v1.1 said SUCCESS). A large
-          # package can come back IN_PROGRESS, and then fetchStatus reports the
-          # async result — poll it rather than assuming the upload landed.
-          state="$(echo "$upload_resp" | python3 -c "import json,sys; print(json.load(sys.stdin).get('uploadState',''))")"
-          for _ in $(seq 1 12); do
-            [ "$state" = "IN_PROGRESS" ] || break
-            sleep 10
-            state="$(curl -sS --fail-with-body \
-              -H "Authorization: Bearer ${TOKEN}" \
-              "https://chromewebstore.googleapis.com/v2/${name}:fetchStatus" \
-              | python3 -c "import json,sys; print(json.load(sys.stdin).get('lastAsyncUploadState',''))")"
-            echo "upload state: $state"
-          done
-          if [ "$state" != "SUCCEEDED" ]; then
-            echo "::error::${CHAN} upload failed, state=$state"; exit 1
-          fi
-          publish_resp="$(curl -sS --fail-with-body \
-            -H "Authorization: Bearer ${TOKEN}" \
-            -H "Content-Type: application/json" \
-            -X POST --data '{"publishType":"DEFAULT_PUBLISH"}' \
-            "https://chromewebstore.googleapis.com/v2/${name}:publish")" || {
-            echo "::error::the store refused the publish:"
-            echo "$publish_resp"
-            exit 1
-          }
-          echo "publish: $publish_resp"
+          {
+            echo "### Chrome Web Store: upload by hand"
+            echo ""
+            echo "CI does not upload to the store. Upload \`zafu-${CHAN}-${VER}.zip\` from the GitHub release to item \`${ITEM_ID}\` in the developer dashboard."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::Chrome Web Store not updated by CI - upload zafu-${CHAN}-${VER}.zip by hand (item ${ITEM_ID})."
+
+      # --- disabled: automatic Chrome Web Store upload ---
+      # # ─── Chrome Web Store — upload + submit for review ───
+      # # Chrome Web Store API **v2** (chromewebstore.googleapis.com), which is
+      # # the only documented surface left: Google's own guide has dropped the
+      # # old v1.1 www.googleapis.com/chromewebstore/v1.1/... endpoints, and v2
+      # # takes a Google Cloud *service account* — so there is no OAuth consent
+      # # screen, no user refresh token that dies after 7 days in "Testing"
+      # # status, and no client secret to lose.
+      # #
+      # # One-time setup by someone with dashboard access:
+      # #   1. GCP project → enable "Chrome Web Store API".
+      # #   2. Create a service account (no IAM roles needed) and a JSON key.
+      # #   3. Developer Dashboard → Account → add the service account email.
+      # #   4. gh secret set CWS_SA_JSON < key.json
+      # #      gh secret set CWS_PUBLISHER_ID --body <dashboard publisher id>
+      # # https://developer.chrome.com/docs/webstore/service-accounts
+      # #
+      # # The secret must hold a *service-account* key (type: service_account,
+      # # client_email, private_key) - not the OAuth client JSON you download
+      # # from GCP, which has no private_key and cannot sign. A 403 from the
+      # # upload/publish call with a good key means the store does not know the
+      # # caller yet: add the key's client_email in the dashboard, on the
+      # # publisher's own Account page.
+      # #
+      # # Everything here is name-addressed: publishers/$PUB/items/$ITEM.
+      # #
+      # # This runs AFTER the GitHub release is cut, so a failure here cannot
+      # # un-cut it - but it must not pass silently either, or the store keeps
+      # # serving the previous version while the tag says otherwise. No
+      # # continue-on-error: the run goes red, and re-running it is safe.
+      # - name: Publish to Chrome Web Store
+      #   if: inputs.release_mode != 'none'
+      #   env:
+      #     CWS_SA_JSON: ${{ secrets.CWS_SA_JSON }}
+      #     CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+      #     VER: ${{ inputs.version }}
+      #     CHAN: ${{ steps.c.outputs.chan }}
+      #     ITEM_ID: ${{ steps.c.outputs.item }}
+      #   run: |
+      #     set -eu
+      #     if [ -z "${CWS_SA_JSON:-}" ] || [ -z "${CWS_PUBLISHER_ID:-}" ]; then
+      #       echo "CWS_SA_JSON / CWS_PUBLISHER_ID not set — skipping CWS publish."
+      #       echo "::warning::Chrome Web Store was NOT updated: CWS_SA_JSON / CWS_PUBLISHER_ID are unset. See https://developer.chrome.com/docs/webstore/service-accounts"
+      #       exit 0
+      #     fi
+      #     pip install --quiet google-auth requests
+      #     # The key stays in the environment — from_service_account_info never
+      #     # writes it to disk.
+      #     TOKEN="$(python3 - <<'PY'
+      #     import json, os
+      #     from google.oauth2 import service_account
+      #     from google.auth.transport.requests import Request
+      #     creds = service_account.Credentials.from_service_account_info(
+      #         json.loads(os.environ['CWS_SA_JSON']),
+      #         scopes=['https://www.googleapis.com/auth/chromewebstore'],
+      #     )
+      #     creds.refresh(Request())
+      #     print(creds.token)
+      #     PY
+      #     )"
+      #     name="publishers/${CWS_PUBLISHER_ID}/items/${ITEM_ID}"
+      #     zip="zafu-${CHAN}-${VER}.zip"
+      #     echo "─── ${CHAN} (${ITEM_ID}) ───"
+      #     upload_resp="$(curl -sS --fail-with-body \
+      #       -H "Authorization: Bearer ${TOKEN}" \
+      #       -H "Content-Type: application/zip" \
+      #       -X POST --data-binary "@${zip}" \
+      #       "https://chromewebstore.googleapis.com/upload/v2/${name}:upload")" || {
+      #       # --fail-with-body puts the API's reason on stdout, which the
+      #       # assignment has already captured: print it, or the log says only
+      #       # "curl: (22) ... error: 403" and the cause is thrown away.
+      #       echo "::error::the store refused the upload:"
+      #       echo "$upload_resp"
+      #       exit 1
+      #     }
+      #     echo "upload: $upload_resp"
+      #     # v2 spells the terminal state SUCCEEDED (v1.1 said SUCCESS). A large
+      #     # package can come back IN_PROGRESS, and then fetchStatus reports the
+      #     # async result — poll it rather than assuming the upload landed.
+      #     state="$(echo "$upload_resp" | python3 -c "import json,sys; print(json.load(sys.stdin).get('uploadState',''))")"
+      #     for _ in $(seq 1 12); do
+      #       [ "$state" = "IN_PROGRESS" ] || break
+      #       sleep 10
+      #       state="$(curl -sS --fail-with-body \
+      #         -H "Authorization: Bearer ${TOKEN}" \
+      #         "https://chromewebstore.googleapis.com/v2/${name}:fetchStatus" \
+      #         | python3 -c "import json,sys; print(json.load(sys.stdin).get('lastAsyncUploadState',''))")"
+      #       echo "upload state: $state"
+      #     done
+      #     if [ "$state" != "SUCCEEDED" ]; then
+      #       echo "::error::${CHAN} upload failed, state=$state"; exit 1
+      #     fi
+      #     publish_resp="$(curl -sS --fail-with-body \
+      #       -H "Authorization: Bearer ${TOKEN}" \
+      #       -H "Content-Type: application/json" \
+      #       -X POST --data '{"publishType":"DEFAULT_PUBLISH"}' \
+      #       "https://chromewebstore.googleapis.com/v2/${name}:publish")" || {
+      #       echo "::error::the store refused the publish:"
+      #       echo "$publish_resp"
+      #       exit 1
+      #     }
+      #     echo "publish: $publish_resp"
 
       # Dry run (release_mode=none): expose the signed artifacts as a
       # workflow download so a build can be sanity-checked without releasing.
