@@ -80,6 +80,10 @@ export const popupRoutes: RouteObject[] = [
             lazy: lazyScreen('contacts'),
           },
           {
+            path: PopupPath.TOOLS,
+            lazy: lazyScreen('tools'),
+          },
+          {
             path: PopupPath.SETTINGS,
             lazy: lazyScreen('settings'),
             children: settingsRoutes,

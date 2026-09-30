@@ -8,6 +8,7 @@ export enum PopupPath {
   /** multisig group coordination chat, one thread per group (wallet id param) */
   INBOX_GROUP = '/inbox/group/:walletId',
   CONTACTS = '/contacts',
+  TOOLS = '/tools',
   SETTINGS = '/settings',
 
   // Identity
