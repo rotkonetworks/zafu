@@ -21,6 +21,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { Segmented } from '@repo/ui/components/ui/segmented';
 import { Sensitive } from '../../components/sensitive';
 import { ShieldTransparent } from '../../components/zcash/shield-transparent';
 import { useStore } from '../../state';
@@ -289,29 +290,16 @@ export const PoolNotesPage = () => {
     <SettingsScreen title='pool notes' backPath={PopupPath.INDEX}>
       <div className='flex min-h-0 flex-1 flex-col gap-3'>
         {/* pool toggle - ironwood (active), orchard (legacy), transparent (public) */}
-        <div className='flex items-center gap-1 rounded-lg bg-elev-1 p-1'>
-          {POOL_TABS.map(t => (
-            <button
-              key={t.key}
-              type='button'
-              onClick={() => setFilter(t.key)}
-              className={cn(
-                'flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-data lowercase transition-colors',
-                filter === t.key
-                  ? 'bg-elev-2 text-fg-high'
-                  : 'text-fg-muted hover:text-fg-high hover:bg-elev-2/50',
-              )}
-            >
-              <span className={cn('h-3.5 w-3.5', t.icon)} />
-              <span>{t.key}</span>
-              {t.badge && (
-                <span className='rounded-md bg-elev-1 px-1 text-label leading-none text-fg-dim'>
-                  {t.badge}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          label='pool'
+          value={filter}
+          onChange={setFilter}
+          options={POOL_TABS.map(t => ({
+            value: t.key,
+            label: t.badge ? `${t.key} (${t.badge})` : t.key,
+            icon: t.icon,
+          }))}
+        />
 
         {filter === 'transparent' ? (
           <TransparentSection

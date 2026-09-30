@@ -15,6 +15,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Segmented } from '@repo/ui/components/ui/segmented';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectKeyInfos, selectGetMnemonic } from '../../../state/keyring';
 import { allContactsSelector } from '../../../state/contacts';
@@ -740,30 +741,15 @@ export const IdentityPage = () => {
         </div>
 
         {/* -- tabs -- */}
-        <div className='flex gap-4 border-b border-border-soft text-body font-mono'>
-          <button
-            onClick={() => setActiveTab('sites')}
-            className={`-mb-px flex items-center gap-1.5 pb-2 border-b-2 transition-colors ${focusRing} ${
-              activeTab === 'sites'
-                ? 'border-network-accent text-fg-high'
-                : 'border-transparent text-fg-muted hover:text-fg'
-            }`}
-          >
-            <span className='i-ph-globe size-3.5' />
-            sites <span className='text-fg-dim'>({sites.length})</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('log')}
-            className={`-mb-px flex items-center gap-1.5 pb-2 border-b-2 transition-colors ${focusRing} ${
-              activeTab === 'log'
-                ? 'border-network-accent text-fg-high'
-                : 'border-transparent text-fg-muted hover:text-fg'
-            }`}
-          >
-            <span className='i-ph-scroll size-3.5' />
-            log <span className='text-fg-dim'>({shareLog.length})</span>
-          </button>
-        </div>
+        <Segmented
+          label='identity view'
+          value={activeTab}
+          onChange={setActiveTab}
+          options={[
+            { value: 'sites', label: 'sites', icon: 'i-ph-globe', meta: sites.length },
+            { value: 'log', label: 'log', icon: 'i-ph-scroll', meta: shareLog.length },
+          ]}
+        />
 
         {/* -- sites -- */}
         {activeTab === 'sites' && (
