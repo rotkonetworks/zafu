@@ -62,9 +62,9 @@ const MainPage = () => {
 
 const rootElement = document.getElementById('root') as HTMLDivElement;
 // apply persisted appearance theme before first paint ('sumi' is the
-// :root default; 'terminal' restores the cold pure-black material)
+// :root default; a retired 'terminal' choice stays on sumi)
 void localExtStorage.get('zafuTheme').then(v => {
-  if (v && v !== 'sumi') {
+  if (v === 'washi') {
     document.documentElement.dataset['theme'] = v;
   }
 });
