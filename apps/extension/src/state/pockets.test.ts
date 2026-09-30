@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'vitest';
-import { hotSpendAccount, isStoreOfWallet, parsePocketStoreId, pocketStoreId } from './pocket-id';
+import {
+  hotSpendAccount,
+  isStoreOfWallet,
+  parsePocketStoreId,
+  pocketStoreId,
+  zcashTransparentIndexKey,
+} from './pocket-id';
+import { zcashSyncHeightKey } from './keyring/network-worker';
 import {
   activeAccountIndex,
   activePocketBirthday,
@@ -256,5 +263,32 @@ describe('pocket selectors', () => {
     const s = stateWith(undefined, {});
     expect(activeAccountIndex(s)).toBe(0);
     expect(activeZcashStoreId(s)).toBeUndefined();
+  });
+});
+
+describe('existing wallets are untouched (account 0 migration)', () => {
+  const hot = keyInfo({ insensitive: { zid: 'zid-abc' } });
+
+  test('a profile saved before pockets hydrates to the same wallet', () => {
+    // no zcashPockets key in storage at all
+    const book = sanitizePocketBook(undefined);
+    const s = stateWith(hot, book);
+    expect(activeZcashStoreId(s)).toBe(hot.id);
+    expect(activeAccountIndex(s)).toBe(0);
+  });
+
+  test('every per-wallet storage key keeps its historic name for account 0', () => {
+    const store = pocketStoreId(hot.id, 0);
+    // worker IndexedDB rows (notes, spent, witnesses, meta, sent) are keyed by
+    // this id, so the same rows load: same notes, same balance
+    expect(store).toBe(hot.id);
+    expect(zcashSyncHeightKey(store)).toBe(zcashSyncHeightKey(hot.id));
+    expect(`zcashTAddrs:${store}`).toBe(`zcashTAddrs:${hot.id}`);
+    expect(zcashTransparentIndexKey(0)).toBe('zcashTransparentIndex');
+  });
+
+  test('pockets get fresh keys that never collide with account 0', () => {
+    expect(zcashTransparentIndexKey(1)).toBe('zcashTransparentIndex#1');
+    expect(zcashSyncHeightKey(pocketStoreId(hot.id, 1))).not.toBe(zcashSyncHeightKey(hot.id));
   });
 });

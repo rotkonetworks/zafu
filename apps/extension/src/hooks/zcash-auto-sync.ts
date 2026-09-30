@@ -12,6 +12,7 @@ import { useLocation } from 'react-router-dom';
 import { useStore } from '../state';
 import { selectActiveNetwork, selectEffectiveKeyInfo, selectGetMnemonic } from '../state/keyring';
 import { selectActiveZcashWallet } from '../state/wallets';
+import { activePocketBirthday, activeZcashStoreId } from '../state/pockets';
 import {
   spawnNetworkWorker,
   startSyncInWorker,
@@ -75,6 +76,9 @@ export function useZcashAutoSync() {
   const hasMnemonic = selectedKeyInfo?.type === 'mnemonic';
   const watchOnly = activeZcashWallet;
   const walletId = selectedKeyInfo?.id;
+  // the worker store of the active pocket; the bare vault id for account 0
+  const storeId = useStore(activeZcashStoreId);
+  const pocketBirthday = useStore(activePocketBirthday);
 
   // track which walletId we started sync for, to avoid double-start
   const syncingWalletRef = useRef<string | null>(null);
@@ -107,13 +111,13 @@ export function useZcashAutoSync() {
     if (onLoginPage) {
       return;
     } // keyring not yet unlocked
-    if (!hasMnemonic || !walletId) {
+    if (!hasMnemonic || !walletId || !storeId) {
       return;
     }
 
     // stop previous wallet's sync if switching to a different wallet
     const prevWallet = syncingWalletRef.current;
-    if (prevWallet && prevWallet !== walletId && isWalletSyncing('zcash', prevWallet)) {
+    if (prevWallet && prevWallet !== storeId && isWalletSyncing('zcash', prevWallet)) {
       console.log('[zcash-sync] stopping sync for previous wallet', prevWallet);
       void stopSyncInWorker('zcash', prevWallet).catch(() => {});
       syncingWalletRef.current = null;
@@ -121,12 +125,12 @@ export function useZcashAutoSync() {
 
     // only bail if truly syncing with no pending stop (i.e. we started it, it's healthy)
     // and the endpoint/backend it was started with still matches the current one.
-    if (isWalletSyncing('zcash', walletId) && !stopPromiseRef.current) {
+    if (isWalletSyncing('zcash', storeId) && !stopPromiseRef.current) {
       const started = syncEndpointRef.current;
       const endpointChanged =
         started !== null && (started.endpoint !== zidecarUrl || started.backend !== zcashBackend);
       if (!endpointChanged) {
-        syncingWalletRef.current = walletId;
+        syncingWalletRef.current = storeId;
         return;
       }
       // endpoint or backend changed mid-sync - stop the stale loop the same
@@ -134,8 +138,8 @@ export function useZcashAutoSync() {
       // against the new server. The worker treats this abort as intentional
       // (no error surfacing), and runSync waits for the old loop to drain
       // before starting the new one.
-      console.log('[zcash-sync] endpoint/backend changed, restarting sync for', walletId);
-      stopPromiseRef.current = stopSyncInWorker('zcash', walletId).catch(() => {});
+      console.log('[zcash-sync] endpoint/backend changed, restarting sync for', storeId);
+      stopPromiseRef.current = stopSyncInWorker('zcash', storeId).catch(() => {});
       syncingWalletRef.current = null;
       syncEndpointRef.current = null;
     }
@@ -161,7 +165,12 @@ export function useZcashAutoSync() {
           if (cancelled) {
             return;
           }
-          const startHeight = await resolveBirthday(walletId, zidecarUrl, zcashBackend);
+          // a pocket scans from its own creation height; account 0 (and a
+          // pocket restored without one) from the wallet birthday
+          const startHeight =
+            pocketBirthday !== undefined
+              ? Math.max(ZCASH_ORCHARD_ACTIVATION, pocketBirthday)
+              : await resolveBirthday(walletId, zidecarUrl, zcashBackend);
           if (cancelled) {
             return;
           }
@@ -178,12 +187,12 @@ export function useZcashAutoSync() {
             }
           }
 
-          syncingWalletRef.current = walletId;
+          syncingWalletRef.current = storeId;
           syncEndpointRef.current = { endpoint: zidecarUrl, backend: zcashBackend };
-          console.log('[zcash-sync] starting mnemonic sync for', walletId);
+          console.log('[zcash-sync] starting mnemonic sync for', storeId);
           await startSyncInWorker(
             'zcash',
-            walletId,
+            storeId,
             mnemonic,
             zidecarUrl,
             startHeight,
@@ -200,7 +209,7 @@ export function useZcashAutoSync() {
             window.dispatchEvent(
               new CustomEvent('zcash-sync-error', {
                 detail: {
-                  walletId,
+                  walletId: storeId,
                   message: err instanceof Error ? err.message : String(err),
                 },
               }),
@@ -219,6 +228,8 @@ export function useZcashAutoSync() {
     onLoginPage,
     hasMnemonic,
     walletId,
+    storeId,
+    pocketBirthday,
     getMnemonic,
     zidecarUrl,
     zcashBackend,

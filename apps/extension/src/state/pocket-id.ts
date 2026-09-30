@@ -51,3 +51,10 @@ export const hotSpendAccount = (storeId: string, requested?: number): number => 
   }
   return account;
 };
+
+/**
+ * chrome.storage key of the highest transparent address index handed out.
+ * Account 0 keeps the historic global key so existing addresses never shift.
+ */
+export const zcashTransparentIndexKey = (account: number): string =>
+  account === 0 ? 'zcashTransparentIndex' : `zcashTransparentIndex#${account}`;

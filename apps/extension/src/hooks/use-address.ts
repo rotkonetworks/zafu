@@ -15,6 +15,7 @@ import {
   selectGetMnemonic,
 } from '../state/keyring';
 import { getActiveWalletJson, selectActiveZcashWallet } from '../state/wallets';
+import { activeAccountIndex } from '../state/pockets';
 import { NETWORK_CONFIGS, isIbcNetwork } from '../state/keyring/network-types';
 import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { spawnNetworkWorker, deriveAddressInWorker } from '../state/keyring/network-worker';
@@ -139,6 +140,7 @@ export function useActiveAddress() {
   const getMnemonic = useStore(selectGetMnemonic);
   const penumbraWallet = useStore(getActiveWalletJson);
   const zcashWallet = useStore(selectActiveZcashWallet);
+  const pocket = useStore(activeAccountIndex);
 
   const [address, setAddress] = useState('');
   const [loading, setLoading] = useState(true);
@@ -181,7 +183,7 @@ export function useActiveAddress() {
 
   useEffect(() => {
     let cancelled = false;
-    const identity = `${activeNetwork}:${selectedKeyInfo?.id}:${zcashWallet?.ufvk ?? zcashWallet?.orchardFvk ?? ''}`;
+    const identity = `${activeNetwork}:${selectedKeyInfo?.id}:${pocket}:${zcashWallet?.ufvk ?? zcashWallet?.orchardFvk ?? ''}`;
 
     const deriveAddress = async () => {
       if (derivedFor.current !== identity) {
@@ -212,7 +214,13 @@ export function useActiveAddress() {
               for (let attempt = 0; attempt < 3 && !cancelled; attempt++) {
                 try {
                   await spawnNetworkWorker('zcash');
-                  const rawAddr = await deriveAddressInWorker('zcash', mnemonic, 0, diversifier);
+                  const rawAddr = await deriveAddressInWorker(
+                    'zcash',
+                    mnemonic,
+                    0,
+                    diversifier,
+                    pocket,
+                  );
                   const addr = fixOrchardAddress(rawAddr, true);
                   if (!cancelled) {
                     setAddress(addr);
@@ -461,6 +469,7 @@ export function useActiveAddress() {
     zcashWallet?.ufvk,
     getMnemonic,
     diversifier,
+    pocket,
   ]);
 
   return { address, loading, shieldedIndex: derivedIndex };

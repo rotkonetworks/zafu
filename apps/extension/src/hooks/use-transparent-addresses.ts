@@ -10,11 +10,17 @@ import { useStore } from '../state';
 import { selectEffectiveKeyInfo, keyRingSelector } from '../state/keyring';
 import { selectActiveZcashWallet } from '../state/wallets';
 import { deriveZcashTransparent, deriveZcashTransparentFromUfvk } from './use-address';
+import { activeZcashStoreId, activeAccountIndex } from '../state/pockets';
+import { zcashTransparentIndexKey } from '../state/pocket-id';
 
 export function useTransparentAddresses(isMainnet: boolean) {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const keyRing = useStore(keyRingSelector);
   const watchOnly = useStore(selectActiveZcashWallet);
+  // a pocket has its own t-branch m/44'/133'/pocket'/0/i; account 0 keeps the
+  // historic storage keys, so existing addresses never shift
+  const pocket = useStore(activeAccountIndex);
+  const storeId = useStore(activeZcashStoreId);
 
   const [tAddresses, setTAddresses] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,13 +50,14 @@ export function useTransparentAddresses(isMainnet: boolean) {
     (async () => {
       setIsLoading(true);
       try {
-        const r = await chrome.storage.local.get('zcashTransparentIndex');
-        const storedIdx = r['zcashTransparentIndex'] ?? 0;
+        const indexKey = zcashTransparentIndexKey(isMnemonic ? pocket : 0);
+        const r = await chrome.storage.local.get(indexKey);
+        const storedIdx = (r[indexKey] as number | undefined) ?? 0;
         const maxIdx = Math.max(4, storedIdx);
         const expectedCount = maxIdx + 1;
 
         // check cache
-        const cacheKey = `zcashTAddrs:${selectedKeyInfo.id}`;
+        const cacheKey = `zcashTAddrs:${storeId ?? selectedKeyInfo.id}`;
         const cached = await chrome.storage.local.get(cacheKey);
         const cachedAddrs = cached[cacheKey] as string[] | undefined;
         if (cachedAddrs && cachedAddrs.length >= expectedCount) {
@@ -68,7 +75,7 @@ export function useTransparentAddresses(isMainnet: boolean) {
         if (isMnemonic) {
           const mnemonic = await keyRing.getMnemonic(selectedKeyInfo.id);
           addrs = await Promise.all(
-            indices.map(i => deriveZcashTransparent(mnemonic, 0, i, isMainnet)),
+            indices.map(i => deriveZcashTransparent(mnemonic, pocket, i, isMainnet)),
           );
         } else if (watchOnly) {
           const ufvk =
@@ -121,6 +128,8 @@ export function useTransparentAddresses(isMainnet: boolean) {
     };
   }, [
     isMnemonic,
+    pocket,
+    storeId,
     selectedKeyInfo?.id,
     selectedKeyInfo?.type,
     isMainnet,
