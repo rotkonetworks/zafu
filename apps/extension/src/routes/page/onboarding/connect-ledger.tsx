@@ -22,7 +22,6 @@
  */
 
 import { useCallback, useState } from 'react';
-import { BackIcon } from '@repo/ui/components/ui/icons/back-icon';
 import { Button } from '@repo/ui/components/ui/button';
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { Input } from '@repo/ui/components/ui/input';
@@ -35,6 +34,7 @@ import { isPopup } from '../../../utils/popup-detection';
 import { PagePath } from '../paths';
 import { setOnboardingValuesInStorage } from './persist-parameters';
 import { SEED_PHRASE_ORIGIN } from './password/types';
+import { OnboardingBack, OnboardingShell } from './onboarding-shell';
 import {
   connectLedgerBtc,
   getLedgerZcashTransparentAddress,
@@ -136,17 +136,14 @@ export const ConnectLedger = () => {
   }, [account, addLedgerUnencrypted, walletLabel, navigate]);
 
   return (
-    <FadeTransition>
-      <div className='flex h-full flex-col gap-6'>
-        <header className='flex flex-col gap-1'>
-          <div className='flex items-center gap-2'>
-            <BackIcon onClick={handleBack} />
-            <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>connect ledger</h2>
-          </div>
-          <p className='text-xs text-fg-muted lowercase'>
+    <OnboardingShell art='enso'>
+      <FadeTransition>
+        <div className='flex flex-col gap-5'>
+          <OnboardingBack onClick={handleBack} />
+          <h1 className='font-display text-[38px] font-medium text-fg-high'>connect ledger</h1>
+          <p className='text-body text-fg-muted lowercase'>
             plug in your ledger and open the zcash app to add a watch-only wallet.
           </p>
-        </header>
 
         <div className='flex flex-col gap-4'>
           {inPopup && (
@@ -269,7 +266,8 @@ export const ConnectLedger = () => {
             </div>
           )}
         </div>
-      </div>
-    </FadeTransition>
+        </div>
+      </FadeTransition>
+    </OnboardingShell>
   );
 };

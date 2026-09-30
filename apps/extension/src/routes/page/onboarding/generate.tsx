@@ -1,38 +1,39 @@
 /**
- * Seed-phrase generation + backup step.
+ * Seed-phrase generation, reveal and 3-word check - Onb3Phrase/Onb4Check
+ * boards. One route (GENERATE_SEED_PHRASE); `phrase`/`check` are local
+ * phases, not sub-routes, so the step bar can't distinguish them - reported.
  *
- * This screen previously auto-redirected the moment the phrase was
- * derived - the user finished onboarding without ever seeing their 24
- * words. For a self-custody wallet that's a loss-of-funds footgun:
- * device dies before the user finds settings → recovery passphrase,
- * and the wallet is unrecoverable.
- *
- * Now the step does what the stepper label ("secret phrase") promises:
- *   1. derive (skeleton for the <100ms WASM window)
- *   2. display the numbered 24-word grid
- *   3. require an explicit "I wrote it down" confirmation
- *   4. only then continue to network selection
+ * - covered until "tap to reveal"; no copy button anywhere on this screen.
+ * - "i wrote it down" only enables once revealed.
+ * - the 3-word tap check is new but small: three of the words are asked
+ *   back one at a time from a fixed 9-word pool (3 answers + 6 distractors).
+ * - "back up later" skips the check and keeps the existing backup nudge
+ *   (seedPhraseBackedUp is only set once the check actually passes).
  */
 
-import { SeedPhraseLength } from '../../../state/seed-phrase/mnemonic';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { SeedPhraseLength, generateValidationFields } from '../../../state/seed-phrase/mnemonic';
 import { useStore } from '../../../state';
 import { generateSelector } from '../../../state/seed-phrase/generate';
 import { usePageNav } from '../../../utils/navigate';
 import { SEED_PHRASE_ORIGIN } from './password/types';
 import { navigateToPasswordPage } from './password/utils';
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
+import { Button } from '@repo/ui/components/ui/button';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { cn } from '@repo/ui/lib/utils';
+import { OnboardingBack, OnboardingShell } from './onboarding-shell';
+
+type Phase = 'phrase' | 'check';
 
 export const GenerateSeedPhrase = () => {
   const navigate = usePageNav();
   const { phrase, generateRandomSeedPhrase } = useStore(generateSelector);
-  const [confirmed, setConfirmed] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [phase, setPhase] = useState<Phase>('phrase');
+  const [revealed, setRevealed] = useState(false);
+  const [checkIndex, setCheckIndex] = useState(0);
+  const [wrong, setWrong] = useState(false);
 
-  // On render, asynchronously generate a new seed phrase
-  // Use 24 words for better entropy and zcash compatibility
   useEffect(() => {
     if (!phrase.length) {
       generateRandomSeedPhrase(SeedPhraseLength.TWENTY_FOUR_WORDS);
@@ -41,95 +42,128 @@ export const GenerateSeedPhrase = () => {
 
   const ready = phrase.length === Number(SeedPhraseLength.TWENTY_FOUR_WORDS);
 
-  const copyPhrase = () => {
-    void navigator.clipboard.writeText(phrase.join(' '));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+  // three words to ask back, plus a fixed pool of distractors from the same
+  // phrase - computed once the phrase is ready, not reshuffled on re-render.
+  const asks = useMemo(() => (ready ? generateValidationFields(phrase, 3) : []), [ready, phrase]);
+  const pool = useMemo(() => {
+    if (!ready) {
+      return [];
+    }
+    const answers = asks.map(a => a.word);
+    const rest = phrase.filter(w => !answers.includes(w));
+    const distractors = [...rest].sort(() => 0.5 - Math.random()).slice(0, 6);
+    return [...answers, ...distractors].sort(() => 0.5 - Math.random());
+  }, [ready, asks, phrase]);
+
+  const toPassword = () => navigateToPasswordPage(navigate, SEED_PHRASE_ORIGIN.NEWLY_GENERATED);
+
+  const pickWord = (word: string) => {
+    const cur = asks[checkIndex];
+    if (!cur) {
+      return;
+    }
+    if (word !== cur.word) {
+      setWrong(true);
+      return;
+    }
+    setWrong(false);
+    if (checkIndex >= 2) {
+      void localExtStorage.set('seedPhraseBackedUp', true);
+      toPassword();
+      return;
+    }
+    setCheckIndex(i => i + 1);
   };
 
-  return (
-    <FadeTransition>
-      <div className='flex h-full flex-col gap-5'>
-        <header className='flex flex-col gap-1'>
-          <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>
-            your recovery phrase
-          </h2>
-          <p className='text-xs text-fg-muted lowercase'>
-            24 words, derived locally - no server ever sees this. write them down in order and store
-            them offline.
-          </p>
-        </header>
-
-        {!ready ? (
-          /* skeleton while WASM derives - CSS pulse only */
-          <div className='grid animate-pulse grid-cols-3 gap-2'>
-            {Array.from({ length: 24 }).map((_, i) => (
-              <div key={i} className='h-8 rounded-sm bg-elev-2/40' />
-            ))}
-          </div>
-        ) : (
-          <>
-            <ol className='grid select-all grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3'>
-              {phrase.map((word, i) => (
-                <li
-                  key={i}
-                  className='flex items-baseline gap-2 border border-border-soft/40 bg-canvas/60 px-2.5 py-1.5 [border-radius:8px]'
+  if (phase === 'check') {
+    const cur = asks[Math.min(checkIndex, 2)];
+    return (
+      <OnboardingShell art='enso'>
+        <FadeTransition>
+          <div className='flex flex-col gap-[22px]'>
+            <OnboardingBack onClick={() => setPhase('phrase')} />
+            <h1 className='font-display text-[38px] font-medium text-fg-high'>quick check</h1>
+            <div className='flex items-baseline justify-between'>
+              <span className='text-body text-fg-high'>tap word #{cur?.index != null ? cur.index + 1 : ''}</span>
+              <span className='text-label text-fg-muted'>{checkIndex} of 3</span>
+            </div>
+            <div className='grid grid-cols-3 gap-2.5'>
+              {pool.map(word => (
+                <button
+                  key={word}
+                  type='button'
+                  onClick={() => pickWord(word)}
+                  className='h-14 border border-border-soft bg-elev-1 text-body text-fg-high transition-colors hover:bg-elev-2'
                 >
-                  <span className='w-5 shrink-0 text-right text-label tabular text-fg-dim'>
-                    {i + 1}
-                  </span>
-                  <span className='text-data text-fg-high'>{word}</span>
-                </li>
+                  {word}
+                </button>
               ))}
-            </ol>
-
-            <div className='flex items-center gap-4'>
-              <button
-                type='button'
-                onClick={copyPhrase}
-                className='inline-flex items-center gap-1.5 text-label text-fg-muted lowercase transition-colors hover:text-fg-high'
-              >
-                <span className={cn(copied ? 'i-ph-check' : 'i-ph-copy', 'h-3.5 w-3.5')} />
-                {copied ? 'copied' : 'copy to clipboard'}
-              </button>
-              <span className='flex items-center gap-1.5 text-label text-rust lowercase'>
-                <span className='i-ph-warning h-3.5 w-3.5' />
-                never share these words with anyone
-              </span>
             </div>
+            <span className={cn('h-[18px] text-label', wrong ? 'text-warning' : 'text-fg-muted')}>
+              {wrong ? "that one doesn't match · please check your paper once more" : 'from the words you wrote down'}
+            </span>
+          </div>
+        </FadeTransition>
+      </OnboardingShell>
+    );
+  }
 
-            <div className='mt-auto flex flex-col gap-3 pt-4'>
-              <label className='flex cursor-pointer items-center gap-2.5 text-sm text-fg lowercase'>
-                <input
-                  type='checkbox'
-                  checked={confirmed}
-                  onChange={e => setConfirmed(e.target.checked)}
-                  className='h-4 w-4 accent-[var(--zigner-gold)]'
-                />
-                I wrote down all 24 words in order
-              </label>
-              <button
-                type='button'
-                disabled={!confirmed}
-                onClick={() => {
-                  void localExtStorage.set('seedPhraseBackedUp', true);
-                  navigateToPasswordPage(navigate, SEED_PHRASE_ORIGIN.NEWLY_GENERATED);
-                }}
-                className={cn(
-                  'inline-flex items-center justify-center gap-2 px-6 py-3 text-sm lowercase',
-                  '[border-radius:14px] border transition-[transform,background-color,opacity] duration-200',
-                  confirmed
-                    ? 'border-zigner-gold/30 bg-zigner-gold/10 text-zigner-gold hover:-translate-y-[1px] hover:bg-zigner-gold/15'
-                    : 'cursor-not-allowed border-border-soft/60 bg-elev-2/40 text-fg-dim opacity-60',
-                )}
-              >
-                continue
-                <span className='i-ph-arrow-right h-4 w-4' />
-              </button>
+  return (
+    <OnboardingShell art='enso'>
+      <FadeTransition>
+        <div className='flex flex-col gap-5'>
+          <h1 className='font-display text-[38px] font-medium text-fg-high'>your recovery phrase</h1>
+          <p className='text-body text-fg-muted lowercase'>
+            write the 24 words on paper, in order. they are the wallet.
+          </p>
+
+          {!ready ? (
+            <div className='grid animate-pulse grid-cols-4 gap-2 border border-border-soft bg-elev-1 p-3.5'>
+              {Array.from({ length: 24 }).map((_, i) => (
+                <div key={i} className='h-[18px] bg-elev-2' />
+              ))}
             </div>
-          </>
-        )}
-      </div>
-    </FadeTransition>
+          ) : (
+            <div className='relative border border-border-soft bg-elev-1'>
+              <div className='grid grid-cols-4 gap-0 p-3.5'>
+                {phrase.map((word, i) => (
+                  <span key={i} className='flex h-[34px] items-baseline gap-2 pt-2'>
+                    <span className='w-[18px] text-right text-label text-fg-dim'>{i + 1}</span>
+                    <span className='text-data text-fg-high'>{word}</span>
+                  </span>
+                ))}
+              </div>
+              {!revealed && (
+                <button
+                  type='button'
+                  onClick={() => setRevealed(true)}
+                  className='absolute inset-0 flex flex-col items-center justify-center gap-2.5 border-0 bg-elev-1 text-body text-fg-high'
+                >
+                  <span className='i-ph-eye size-[22px] text-zigner-gold' aria-hidden='true' />
+                  tap to reveal
+                  <span className='text-label text-fg-muted'>make sure nobody can see your screen</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          <Button
+            variant={revealed ? 'primary' : 'secondary'}
+            disabled={!revealed}
+            className='h-14 w-full text-body'
+            onClick={() => setPhase('check')}
+          >
+            i wrote it down
+          </Button>
+          <button
+            type='button'
+            onClick={toPassword}
+            className='self-center bg-transparent text-label text-fg-muted transition-colors hover:text-fg-high lowercase'
+          >
+            back up later · zafu will remind you before you receive
+          </button>
+        </div>
+      </FadeTransition>
+    </OnboardingShell>
   );
 };

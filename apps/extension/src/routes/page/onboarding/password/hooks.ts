@@ -7,10 +7,9 @@ import { SEED_PHRASE_ORIGIN } from './types';
 import { PagePath } from '../../paths';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { setOnboardingValuesInStorage, setFreshWalletBlockHeights } from '../persist-parameters';
-import { PENDING_ZCASH_BIRTHDAY_KEY, PENDING_IMPORT_NETWORKS_KEY } from '../constants';
+import { PENDING_ZCASH_BIRTHDAY_KEY } from '../constants';
 import { useStore } from '../../../../state';
 import { keyRingSelector } from '../../../../state/keyring';
-import type { NetworkType } from '../../../../state/keyring/network-types';
 import { networksSelector } from '../../../../state/networks';
 import { zignerConnectSelector } from '../../../../state/zigner';
 import { ZCASH_MAINNET_ENDPOINTS, defaultZcashEndpoint } from '../../../../config/zcash-endpoints';
@@ -103,33 +102,17 @@ export const useFinalizeOnboarding = () => {
 
           clearZignerState();
         } else {
-          // Standard mnemonic flow. A fresh wallet still defaults to Zcash only
-          // (no network-select screen - minimizes first-run confusion). An
-          // IMPORT recovers onto whatever the review step chose (both networks
-          // derive from the same seed, so a user recovering a Penumbra wallet is
-          // no longer forced through zcash). Enable + activate the chosen set
-          // here, BEFORE addWallet, so the keys are derived as part of wallet
-          // creation - these setters just record the choice (no wallet yet).
-          const chosen = (sessionStorage.getItem(PENDING_IMPORT_NETWORKS_KEY) ?? '')
-            .split(',')
-            .map(s => s.trim())
-            .filter(Boolean) as NetworkType[];
-          const targets: NetworkType[] =
-            origin === SEED_PHRASE_ORIGIN.IMPORTED && chosen.length > 0 ? chosen : ['zcash'];
-
-          for (const net of targets) {
-            if (!enabledNetworks.includes(net)) {
-              await toggleNetwork(net);
-            }
+          // Standard mnemonic flow. Both fresh and imported wallets are Zcash
+          // only out of onboarding - no network-select screen anywhere in this
+          // flow. Penumbra (same seed, derivable any time) is a settings >
+          // networks toggle once the wallet exists.
+          if (!enabledNetworks.includes('zcash')) {
+            await toggleNetwork('zcash');
           }
-          // Activate zcash if it's in the set (it owns the birthday/sync UX the
-          // rest of onboarding set up); otherwise the first chosen network.
-          await setActiveNetwork(targets.includes('zcash') ? 'zcash' : targets[0]!);
-          if (targets.includes('zcash')) {
-            const preset = ZCASH_MAINNET_ENDPOINTS.find(p => p.id === defaultZcashEndpoint().id);
-            if (preset) {
-              await setNetworkEndpoint('zcash', preset.url);
-            }
+          await setActiveNetwork('zcash');
+          const preset = ZCASH_MAINNET_ENDPOINTS.find(p => p.id === defaultZcashEndpoint().id);
+          if (preset) {
+            await setNetworkEndpoint('zcash', preset.url);
           }
 
           // For fresh wallets, set block heights BEFORE creating wallet to avoid race condition
@@ -180,7 +163,6 @@ export const useFinalizeOnboarding = () => {
           }
         }
         sessionStorage.removeItem(PENDING_ZCASH_BIRTHDAY_KEY);
-        sessionStorage.removeItem(PENDING_IMPORT_NETWORKS_KEY);
 
         navigate(PagePath.ONBOARDING_SUCCESS, { state: { origin } });
       } catch (e) {

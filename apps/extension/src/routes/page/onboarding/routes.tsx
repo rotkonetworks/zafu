@@ -1,6 +1,5 @@
 import { lazy, Suspense } from 'react';
 import { PagePath } from '../paths';
-import { OnboardingShell } from './onboarding-shell';
 
 // lazy load all onboarding screens
 const OnboardingStart = lazy(() => import('./start').then(m => ({ default: m.OnboardingStart })));
@@ -37,12 +36,14 @@ const LazyFallback = () => (
   </div>
 );
 
+// Each screen owns its <OnboardingShell> wrapper now (rather than routes.tsx
+// wrapping uniformly) because a couple of screens (welcome/choose, the
+// generate phrase/check pair) are local phase machines that pick their own
+// art per phase, not per route - only the screen itself knows which.
 const withSuspense = (Component: React.LazyExoticComponent<React.ComponentType>) => (
-  <OnboardingShell>
-    <Suspense fallback={<LazyFallback />}>
-      <Component />
-    </Suspense>
-  </OnboardingShell>
+  <Suspense fallback={<LazyFallback />}>
+    <Component />
+  </Suspense>
 );
 
 export const onboardingRoutes = [
