@@ -362,6 +362,7 @@ export const SettingsWallets = ({
     (walletImport || zcashWalletImport || parsedPolkadotExport || parsedCosmosExport);
   const showInitialState = scanState === 'idle' && !showManualInput;
   const hasSeedVault = keyInfos.some(v => v.type === 'mnemonic');
+  const zcashEnabled = enabledNetworks.includes('zcash');
 
   return (
     <>
@@ -683,14 +684,16 @@ export const SettingsWallets = ({
                   <span className='i-ph-scan size-4' />
                   scan zigner QR
                 </button>
-                <button
-                  onClick={() => setScanningKeystone(true)}
-                  className='w-full flex items-center justify-center gap-2 rounded-lg border border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high transition-colors'
-                >
-                  <span className='i-ph-qr-code size-4' />
-                  scan keystone QR (zcash)
-                </button>
-                {(HARDWARE_WALLET_ENABLED || LEDGER_TRANSPARENT_ENABLED) && (
+                {zcashEnabled && (
+                  <button
+                    onClick={() => setScanningKeystone(true)}
+                    className='w-full flex items-center justify-center gap-2 rounded-lg border border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high transition-colors'
+                  >
+                    <span className='i-ph-qr-code size-4' />
+                    scan keystone QR (zcash)
+                  </button>
+                )}
+                {zcashEnabled && (HARDWARE_WALLET_ENABLED || LEDGER_TRANSPARENT_ENABLED) && (
                   <button
                     // WebHID dies with the popup, so the ledger flow runs in a tab
                     onClick={() => void openPageInTab(PagePath.CONNECT_LEDGER, true)}
@@ -708,12 +711,14 @@ export const SettingsWallets = ({
                     + import seed phrase
                   </button>
                 )}
-                <button
-                  onClick={() => navigate(PopupPath.SETTINGS_ADD_VIEWING_KEY)}
-                  className='w-full rounded-lg border border-dashed border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high hover:border-border-soft transition-colors'
-                >
-                  + add viewing key (watch only)
-                </button>
+                {zcashEnabled && (
+                  <button
+                    onClick={() => navigate(PopupPath.SETTINGS_ADD_VIEWING_KEY)}
+                    className='w-full rounded-lg border border-dashed border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high hover:border-border-soft transition-colors'
+                  >
+                    + add viewing key (watch only)
+                  </button>
+                )}
                 {errorMessage && <p className='text-xs text-red-400 text-center'>{errorMessage}</p>}
               </div>
             )}

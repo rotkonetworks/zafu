@@ -4,7 +4,7 @@ import {
   type ClearCacheStep,
 } from '../../../message/services';
 import { useStore } from '../../../state';
-import { selectKeyInfos } from '../../../state/keyring';
+import { selectEnabledNetworks, selectKeyInfos } from '../../../state/keyring';
 import { selectZcashWallets, selectPenumbraWallets } from '../../../state/wallets';
 import { terminateNetworkWorker, spawnNetworkWorker } from '../../../state/keyring/network-worker';
 import { deleteZcashDatabases } from '../../../clear-cache-startup';
@@ -32,6 +32,7 @@ export const SettingsClearCache = () => {
   const keyInfos = useStore(selectKeyInfos);
   const zcashWallets = useStore(selectZcashWallets);
   const penumbraWallets = useStore(selectPenumbraWallets);
+  const enabledNetworks = useStore(selectEnabledNetworks);
   const [clearingKey, setClearingKey] = useState<string | null>(null);
   const clearContacts = useStore(s => s.contacts.clearAll);
   const [personalStep, setPersonalStep] = useState<'idle' | 'confirm' | 'clearing' | 'done'>(
@@ -154,9 +155,14 @@ export const SettingsClearCache = () => {
                 <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border-soft bg-elev-1'>
                   {g.vaults.map(v => {
                     const hasZcash =
-                      zcashWallets.some(w => w.vaultId === v.id) || v.type === 'mnemonic';
+                      enabledNetworks.includes('zcash') &&
+                      (zcashWallets.some(w => w.vaultId === v.id) || v.type === 'mnemonic');
                     const hasPenumbra =
-                      penumbraWallets.some(w => w.vaultId === v.id) || v.type === 'mnemonic';
+                      enabledNetworks.includes('penumbra') &&
+                      (penumbraWallets.some(w => w.vaultId === v.id) || v.type === 'mnemonic');
+                    if (!hasZcash && !hasPenumbra) {
+                      return null;
+                    }
 
                     return (
                       <div key={v.id} className='px-3 py-2.5'>
