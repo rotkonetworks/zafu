@@ -1379,6 +1379,25 @@ export interface FrostParsedAction {
   recipient_raw_hex: string | null;
   is_change: boolean;
   decrypted: boolean;
+  // ── additive, from frost_inspect_pczt_outputs (zcli feat/pczt-explicit-expiry).
+  // Absent from the currently vendored wasm; verifySealedIntent refuses when
+  // they are missing rather than guessing.
+  pool?: 'orchard' | 'ironwood';
+  /** Output note value, ONLY when `cmx_verified` (recomputed from the PCZT's
+   * recipient/value/rseed and the sighash-bound cmx). */
+  committed_value_zat?: number | null;
+  /** Output note recipient (raw 43 bytes hex), ONLY when `cmx_verified`. */
+  committed_recipient_raw_hex?: string | null;
+  cmx_verified?: boolean;
+  /** Scope of the inspecting UFVK the committed recipient derives from, or
+   * null for a foreign address. A key-derivation fact, unlike `is_change`. */
+  recipient_scope?: 'external' | 'internal' | null;
+}
+export interface FrostParsedTransparentOutput {
+  value_zat: number;
+  script_pubkey_hex: string;
+  /** encoded P2PKH/P2SH address, null for any other script */
+  address: string | null;
 }
 export interface FrostParsedTx {
   actions: FrostParsedAction[];
@@ -1395,6 +1414,20 @@ export interface FrostParsedTx {
    * tx shape (transparent or sapling component present) isn't covered by
    * this verifier yet — fall back to OVK-only check with a warning. */
   computed_sighash_hex: string | null;
+  // ── additive, transaction-level (see FrostParsedAction) ──
+  expiry_height?: number;
+  tx_version?: number;
+  consensus_branch_id?: number;
+  /** per-pool value balance the sighash binds (0 when the bundle is absent) */
+  value_balance_zat?: { orchard: number; ironwood: number; sapling: number };
+  sapling_present?: boolean;
+  transparent_input_count?: number;
+  transparent_input_total_zat?: number | null;
+  transparent_outputs?: FrostParsedTransparentOutput[];
+  /** value balances + transparent in - transparent out; null if negative */
+  fee_zat?: number | null;
+  /** null, or why the committed per-output view could not be produced */
+  committed_outputs_error?: string | null;
 }
 export const frostParseTxOutputsInWorker = async (
   unsignedTxHex: string,
