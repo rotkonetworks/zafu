@@ -1,10 +1,10 @@
 import { useState, useCallback } from 'react';
-import { CopyToClipboard } from '@repo/ui/components/ui/copy-to-clipboard';
 import { PasswordInput } from '../../../shared/components/password-input';
 import { useStore } from '../../../state';
 import { passwordSelector } from '../../../state/password';
 import { walletsSelector } from '../../../state/wallets';
 import { localExtStorage } from '@repo/storage-chrome/local';
+import { SeedPhraseBox } from '../../../components/seed-phrase-box';
 import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
 
@@ -80,15 +80,7 @@ export const SettingsPassphrase = () => {
               <span className='h-2 w-2 rounded-full bg-yellow-400' />
               hot wallet — seed is in browser memory
             </div>
-            <div className='select-all cursor-text rounded-lg bg-canvas border border-border-soft p-3 text-xs leading-relaxed break-words'>
-              {phrase.join(' ')}
-            </div>
-            <CopyToClipboard
-              text={phrase.join(' ')}
-              label={<span className='text-xs text-fg-muted'>copy to clipboard</span>}
-              className='m-auto'
-              isSuccessCopyText
-            />
+            <SeedPhraseBox phrase={phrase} />
 
             {/* backup to zigner */}
             <div className='border-t border-border-soft pt-3 mt-1'>

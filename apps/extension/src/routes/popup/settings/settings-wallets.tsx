@@ -17,6 +17,7 @@ import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { cn } from '@repo/ui/lib/utils';
 import { CustodyBadge } from '../../../components/custody-badge';
+import { SeedPhraseBox } from '../../../components/seed-phrase-box';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { ZCASH_ORCHARD_ACTIVATION, isLaunched } from '../../../config/networks';
@@ -470,9 +471,7 @@ export const SettingsWallets = ({
               <p className='text-xs text-fg-muted mb-3'>
                 write this down and keep it offline. anyone with it controls this wallet.
               </p>
-              <div className='select-all cursor-text rounded-lg bg-canvas border border-border-soft p-3 mb-3 text-xs leading-relaxed break-words'>
-                {phrase.join(' ')}
-              </div>
+              <SeedPhraseBox phrase={phrase} className='mb-3' />
               <div className='flex gap-2'>
                 <Btn onClick={resetRemoval}>done</Btn>
               </div>
@@ -481,9 +480,7 @@ export const SettingsWallets = ({
 
           {removingVault && removingType === 'mnemonic' && step === 'backup' && (
             <RemovalCard title='back up recovery phrase'>
-              <div className='select-all cursor-text rounded-lg bg-canvas border border-border-soft p-3 mb-3 text-xs leading-relaxed break-words'>
-                {phrase.join(' ')}
-              </div>
+              <SeedPhraseBox phrase={phrase} className='mb-3' />
               <label className='flex items-start gap-2 mb-3 cursor-pointer select-none'>
                 <input
                   type='checkbox'
