@@ -110,8 +110,10 @@ export const SettingsPassphrase = () => {
 
 /** the 24-word grid, blurred by default with a "show the words" overlay -
  *  no copy affordance anywhere (feedback_never_print_secret_files applies
- *  to a seed phrase too: never make it one click to exfiltrate). */
-const PhraseGrid = ({
+ *  to a seed phrase too: never make it one click to exfiltrate). Also used
+ *  by settings-wallets.tsx's per-wallet export-recovery-phrase reveal, so
+ *  that path never grows a copy button either. */
+export const PhraseGrid = ({
   words,
   revealed,
   onReveal,

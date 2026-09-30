@@ -6,8 +6,6 @@ import {
 import { useStore } from '../../../state';
 import { selectEnabledNetworks, selectKeyInfos } from '../../../state/keyring';
 import { selectZcashWallets, selectPenumbraWallets } from '../../../state/wallets';
-import { terminateNetworkWorker, spawnNetworkWorker } from '../../../state/keyring/network-worker';
-import { deleteZcashDatabases } from '../../../clear-cache-startup';
 import { clearPersonalData } from '../../../state/personal-data';
 import { useState, useEffect } from 'react';
 import { SettingsScreen } from './settings-screen';
@@ -33,7 +31,6 @@ export const SettingsClearCache = () => {
   const zcashWallets = useStore(selectZcashWallets);
   const penumbraWallets = useStore(selectPenumbraWallets);
   const enabledNetworks = useStore(selectEnabledNetworks);
-  const [clearingKey, setClearingKey] = useState<string | null>(null);
   const clearContacts = useStore(s => s.contacts.clearAll);
   const [personalStep, setPersonalStep] = useState<'idle' | 'confirm' | 'clearing' | 'done'>(
     'idle',
@@ -82,28 +79,6 @@ export const SettingsClearCache = () => {
 
   const progressPercent =
     clearingState.total > 0 ? Math.round((clearingState.completed / clearingState.total) * 100) : 0;
-
-  const handleClearZcash = async (_vault: KeyInfo) => {
-    setClearingKey(`${_vault.id}:zcash`);
-    try {
-      // terminate worker so in-memory commitment tree is dropped
-      try {
-        terminateNetworkWorker('zcash');
-      } catch {}
-      // delete the zcash database and WAIT for it, rather than firing the
-      // delete and sleeping. the memo cache is an object store inside
-      // 'zafu-zcash', not a database of its own, so dropping that database
-      // clears it — the separate 'zafu-memo-cache' delete that used to be
-      // here targeted a database that has never existed.
-      await deleteZcashDatabases();
-      // respawn worker fresh — sync will restart from birthday
-      try {
-        await spawnNetworkWorker('zcash');
-      } catch {}
-    } finally {
-      setClearingKey(null);
-    }
-  };
 
   const handleClearPenumbra = (_vault: KeyInfo) => {
     setClearingState({ inProgress: true, step: 'stopping', completed: 0, total: 4 });
@@ -167,28 +142,23 @@ export const SettingsClearCache = () => {
                     return (
                       <div key={v.id} className='px-3 py-2.5'>
                         <p className='text-sm truncate'>{v.name}</p>
-                        <div className='flex gap-2 mt-1.5'>
-                          {hasZcash && (
+                        {hasZcash && (
+                          <p className='text-label text-fg-dim mt-1'>
+                            zcash resync moved to settings → networks → zcash
+                          </p>
+                        )}
+                        {hasPenumbra && (
+                          <div className='flex gap-2 mt-1.5'>
                             <button
-                              disabled={!!clearingKey || clearingState.inProgress}
-                              onClick={() => void handleClearZcash(v)}
-                              className='rounded border border-red-500/25 bg-red-500/5 px-2 py-0.5 text-label text-red-400 hover:bg-red-500/15 transition-colors disabled:opacity-50'
-                            >
-                              {clearingKey === `${v.id}:zcash` ? 'resyncing...' : 'resync zcash'}
-                            </button>
-                          )}
-                          {hasPenumbra && (
-                            <button
-                              disabled={!!clearingKey || clearingState.inProgress}
+                              disabled={clearingState.inProgress}
                               onClick={() => handleClearPenumbra(v)}
                               className='rounded border border-red-500/25 bg-red-500/5 px-2 py-0.5 text-label text-red-400 hover:bg-red-500/15 transition-colors disabled:opacity-50'
+                              title='reloads the extension when done'
                             >
-                              {clearingKey === `${v.id}:penumbra`
-                                ? 'resyncing...'
-                                : 'resync penumbra'}
+                              resync penumbra - reloads the extension
                             </button>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

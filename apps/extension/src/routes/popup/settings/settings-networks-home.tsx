@@ -39,6 +39,16 @@ export const SettingsNetworksHome = () => {
           )}
         </RowGroup>
 
+        {enabledNetworks.includes('zcash') && (
+          <RowGroup>
+            <Row
+              type='screen'
+              label='voting servers'
+              onPress={() => navigate(PopupPath.SETTINGS_VOTING)}
+            />
+          </RowGroup>
+        )}
+
         <RowGroup>
           <TintedRow
             label='all network controls'

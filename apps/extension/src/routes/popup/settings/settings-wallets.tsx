@@ -21,7 +21,7 @@ import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { cn } from '@repo/ui/lib/utils';
 import { CustodyBadge } from '../../../components/custody-badge';
-import { SeedPhraseBox } from '../../../components/seed-phrase-box';
+import { PhraseGrid } from './settings-passphrase';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { ZCASH_ORCHARD_ACTIVATION, isLaunched } from '../../../config/networks';
@@ -443,7 +443,7 @@ export const SettingsWallets = ({
               <p className='text-xs text-fg-muted mb-3'>
                 write this down and keep it offline. anyone with it controls this wallet.
               </p>
-              <SeedPhraseBox phrase={phrase} className='mb-3' />
+              <PhraseGrid words={phrase} revealed onReveal={() => {}} />
               <div className='flex gap-2'>
                 <Btn onClick={resetRemoval}>done</Btn>
               </div>

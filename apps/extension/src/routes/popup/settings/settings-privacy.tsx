@@ -14,6 +14,33 @@ import {
   DEFAULT_CONTACT_DISCOVERY_RELAY,
   relayEndpointForStorage,
 } from '../../../config/contact-discovery-relay';
+import { usePopupNav } from '../../../utils/navigate';
+import { readZcashMeConfig, type ZcashMeMode } from '../../../services/zcashme/config';
+
+const ZCASHME_MODE_LABEL: Record<ZcashMeMode, string> = {
+  off: 'off',
+  directory: 'directory',
+  live: 'live',
+};
+
+/** zcash.me - a Row(value) reading the persisted mode (an external system,
+ *  so this is a plain effect, not derived state); the detail screen owns
+ *  the mode picker itself (settings-zcashme.tsx). */
+function ZcashMeRow() {
+  const navigate = usePopupNav();
+  const [mode, setMode] = useState<ZcashMeMode>('off');
+  useEffect(() => {
+    void readZcashMeConfig().then(c => setMode(c.mode));
+  }, []);
+  return (
+    <Row
+      type='value'
+      label='zcash.me'
+      value={ZCASHME_MODE_LABEL[mode]}
+      onPress={() => navigate(PopupPath.SETTINGS_ZCASHME)}
+    />
+  );
+}
 
 interface PrivacyRow {
   key: keyof PrivacySettings;
@@ -287,6 +314,11 @@ export function SettingsPrivacy() {
         <ProxySection />
         {/* discovery derives from the zid contact layer; hide it when zid is off */}
         {(settings.enableIdentity ?? true) && <ContactDiscoverySection />}
+        {hasFeature(activeNetwork, 'zcash') && (
+          <RowGroup>
+            <ZcashMeRow />
+          </RowGroup>
+        )}
         {/* Keplr "act as" toggle moved to Networks → Penumbra section
             since it only affects the Penumbra/IBC scope. */}
         {visibleRows.length === 0 && (

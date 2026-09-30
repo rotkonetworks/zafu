@@ -1,5 +1,5 @@
 import { useStore } from '../../../state';
-import { selectKeyInfos } from '../../../state/keyring';
+import { selectEnabledNetworks, selectKeyInfos } from '../../../state/keyring';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { SettingsScreen } from './settings-screen';
@@ -16,6 +16,8 @@ import { TintedRow } from './tinted-row';
 export const SettingsSecurityHome = () => {
   const navigate = usePopupNav();
   const hasWallet = useStore(selectKeyInfos).length > 0;
+  const enabledNetworks = useStore(selectEnabledNetworks) as string[];
+  const zcashOn = enabledNetworks.length === 0 || enabledNetworks.includes('zcash');
 
   return (
     <SettingsScreen title='security' backPath={PopupPath.SETTINGS}>
@@ -26,11 +28,13 @@ export const SettingsSecurityHome = () => {
             label='recovery phrase'
             onPress={() => navigate(PopupPath.SETTINGS_RECOVERY_PASSPHRASE)}
           />
-          <Row
-            type='screen'
-            label='backups'
-            onPress={() => navigate(PopupPath.SETTINGS_MULTISIG_BACKUP)}
-          />
+          {zcashOn && (
+            <Row
+              type='screen'
+              label='backups'
+              onPress={() => navigate(PopupPath.SETTINGS_MULTISIG_BACKUP)}
+            />
+          )}
           <AutoLockRow />
         </RowGroup>
 

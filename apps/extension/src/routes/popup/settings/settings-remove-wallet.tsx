@@ -87,6 +87,11 @@ export const SettingsRemoveWallet = () => {
                   meta='rebuilt if you add it back'
                 />
               </ul>
+              {keyInfos.length <= 1 && (
+                <p className='mt-2 text-label text-warn'>
+                  this is your last wallet - removing it wipes all wallet data from this extension.
+                </p>
+              )}
             </div>
             <div>
               <p className='kicker mb-2'>stays safe</p>
