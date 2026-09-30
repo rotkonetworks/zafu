@@ -165,11 +165,7 @@ export const ScreenWithTriggerQr = ({
       <p className='text-xs text-fg-muted'>{headline}</p>
       <p className='text-label text-fg-muted text-center max-w-xs'>{body}</p>
       <AnimatedQrDisplay data={bytes} urType={TRIGGER_UR_TYPE} size={200} />
-      <Button
-        variant='primary'
-        size='sm'
-        onClick={onNext}
-      >
+      <Button variant='primary' size='sm' onClick={onNext}>
         {nextLabel}
       </Button>
     </div>

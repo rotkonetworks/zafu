@@ -704,8 +704,9 @@ export const ZcashContent = ({
               </p>
               {!walletBirthday && (
                 <p className='text-fg-muted'>
-                  this wallet has no recorded birthday, so the scan starts at orchard activation - the
-                  earliest block that can hold a note. set a birthday in settings to make this faster.
+                  this wallet has no recorded birthday, so the scan starts at orchard activation -
+                  the earliest block that can hold a note. set a birthday in settings to make this
+                  faster.
                 </p>
               )}
               <div className='flex gap-2'>
@@ -767,7 +768,6 @@ export const ZcashContent = ({
           // less destructive than a suggested one
           onRescan={h => setRescanConfirmHeight(rescanStartHeight(h))}
         />
-
       </div>
 
       {/* action row directly under the balance - Zashi placement */}
@@ -791,9 +791,7 @@ export const ZcashContent = ({
               label={row.label}
               description={row.badge}
               value={
-                privacySettings.hideBalances
-                  ? '•••••'
-                  : `${fmtZec(Number(row.zat) / 1e8)} ZEC`
+                privacySettings.hideBalances ? '•••••' : `${fmtZec(Number(row.zat) / 1e8)} ZEC`
               }
               className='flex-1 min-w-0'
               onPress={() => openPoolNotes(row.key === 'shielded' ? 'ironwood' : row.key)}
@@ -817,9 +815,7 @@ export const ZcashContent = ({
             label='transparent'
             description='public'
             value={
-              privacySettings.hideBalances
-                ? '•••••'
-                : `${fmtZec(Number(transparentZat) / 1e8)} ZEC`
+              privacySettings.hideBalances ? '•••••' : `${fmtZec(Number(transparentZat) / 1e8)} ZEC`
             }
             className='flex-1 min-w-0'
             onPress={() => openPoolNotes('transparent')}
@@ -879,4 +875,3 @@ export const ZcashContent = ({
     </div>
   );
 };
-

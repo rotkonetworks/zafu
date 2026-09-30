@@ -76,7 +76,11 @@ export const TransparentChainEndpoints = ({
         type='value'
         label={config.name}
         value={`${pool.length} ${pool.length === 1 ? 'endpoint' : 'endpoints'}${isCustom ? ' · custom' : ''}`}
-        description={config.deprecation ? `${config.deprecation.reason} move funds out by ${config.deprecation.moveOutBy}.` : undefined}
+        description={
+          config.deprecation
+            ? `${config.deprecation.reason} move funds out by ${config.deprecation.moveOutBy}.`
+            : undefined
+        }
         onPress={() => setOpen(true)}
       />
       <Sheet open={open} onOpenChange={setOpen} title={config.name}>

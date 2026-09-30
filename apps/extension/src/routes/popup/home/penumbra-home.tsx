@@ -40,7 +40,6 @@ const selectUmTotal = (balances: BalancesResponse[]): number => {
   return total;
 };
 
-
 /** penumbra-specific content - balance card + sync bar + account picker + assets */
 export const PenumbraContent = ({
   account,
@@ -182,4 +181,3 @@ export const PenumbraContent = ({
     </div>
   );
 };
-

@@ -77,9 +77,7 @@ export const NetworkSheet = ({
                 onClick={() => pick(n)}
                 className='min-w-0 flex-1 text-left disabled:cursor-default'
               >
-                <span className='block truncate text-data text-fg-high lowercase'>
-                  {info.name}
-                </span>
+                <span className='block truncate text-data text-fg-high lowercase'>{info.name}</span>
               </button>
               {!enabled && (
                 <button

@@ -11,7 +11,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useStore } from '../../../state';
-import { selectEffectiveKeyInfo, selectPenumbraAccount, keyRingSelector } from '../../../state/keyring';
+import {
+  selectEffectiveKeyInfo,
+  selectPenumbraAccount,
+  keyRingSelector,
+} from '../../../state/keyring';
 import { getActiveWalletJson } from '../../../state/wallets';
 import {
   derivePenumbraEphemeralFromMnemonic,
@@ -71,7 +75,10 @@ export function ReceiveTab({
           const mnemonic = await keyRing.getMnemonic(selectedKeyInfo.id);
           addr = await derivePenumbraEphemeralFromMnemonic(mnemonic, penumbraAccount);
         } else if (penumbraWallet?.fullViewingKey) {
-          addr = await derivePenumbraEphemeralFromFvk(penumbraWallet.fullViewingKey, penumbraAccount);
+          addr = await derivePenumbraEphemeralFromFvk(
+            penumbraWallet.fullViewingKey,
+            penumbraAccount,
+          );
         } else {
           // No key material to derive from yet - clear loading, show the
           // empty state, never fall back to the static address.
@@ -229,7 +236,11 @@ export function ReceiveTab({
         >
           <code
             className={`flex-1 break-all text-label transition-opacity duration-150 ${
-              showingEphemeral ? 'text-zigner-gold' : transparent && isZcash ? 'text-hanko-light' : ''
+              showingEphemeral
+                ? 'text-zigner-gold'
+                : transparent && isZcash
+                  ? 'text-hanko-light'
+                  : ''
             } ${retired ? 'opacity-30' : ''}`}
           >
             {isLoading ? 'generating...' : displayAddress || 'no wallet selected'}

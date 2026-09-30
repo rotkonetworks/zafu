@@ -40,7 +40,6 @@ export interface PopupLoaderData {
   fullSyncHeight?: number;
 }
 
-
 export const popupIndexLoader = async (): Promise<Response | PopupLoaderData> => {
   await needsOnboard();
   const redirect = await needsLogin();
@@ -49,7 +48,6 @@ export const popupIndexLoader = async (): Promise<Response | PopupLoaderData> =>
   }
   return { fullSyncHeight: await localExtStorage.get('fullSyncHeight') };
 };
-
 
 export const PopupIndex = () => {
   // atomic selectors - each only re-renders when its value changes
@@ -297,7 +295,6 @@ export const PopupIndex = () => {
   );
 };
 
-
 /** network-specific content - split out to minimize re-renders */
 const NetworkContent = ({
   network,
@@ -385,4 +382,3 @@ const NetworkContent = ({
       );
   }
 };
-

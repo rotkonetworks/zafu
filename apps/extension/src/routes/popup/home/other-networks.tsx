@@ -36,7 +36,6 @@ export const PolkadotContent = ({
   );
 };
 
-
 /** cosmos chain content - shows balances from public RPC */
 export const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
   const config = COSMOS_CHAINS[chainId];
@@ -115,7 +114,6 @@ export const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
     </div>
   );
 };
-
 
 /** placeholder for networks not yet implemented */
 export const NetworkPlaceholder = ({ network }: { network: NetworkType }) => (

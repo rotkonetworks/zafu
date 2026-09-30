@@ -375,11 +375,7 @@ const MultisigJoinZafu = () => {
             <p className='text-label text-fg-muted'>address</p>
             <p className='mt-1 break-all font-mono text-xs'>{address}</p>
           </div>
-          <Button
-            variant='primary'
-            className='w-full'
-            onClick={goBack}
-          >
+          <Button variant='primary' className='w-full' onClick={goBack}>
             done
           </Button>
         </div>
@@ -995,11 +991,7 @@ const MultisigJoinZigner = () => {
           <p className='text-label text-fg-muted'>
             zigner wallet_id: <span className='font-mono'>{walletId}</span>
           </p>
-          <Button
-            variant='primary'
-            className='w-full'
-            onClick={goBack}
-          >
+          <Button variant='primary' className='w-full' onClick={goBack}>
             done
           </Button>
         </div>

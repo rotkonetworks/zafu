@@ -34,7 +34,6 @@ export interface ParsedTransaction {
   accountIndices?: Set<number>;
 }
 
-
 /**
  * Best-effort amount + asset + destination for a penumbra recent-activity row.
  *
@@ -118,7 +117,6 @@ function penumbraTxValue(
   return { amount, asset: bestDenom, recipient };
 }
 
-
 export function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
   const id = txInfo.id?.inner
     ? Array.from(txInfo.id.inner)
@@ -159,4 +157,3 @@ export function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
     recipient,
   };
 }
-

@@ -60,7 +60,9 @@ const CopyButton = ({ value, label }: { value: string; label?: string }) => {
       className='shrink-0 text-fg-muted transition-colors hover:text-fg-high'
       title={copied ? 'copied' : (label ?? `copy ${value}`)}
     >
-      <span className={cn('h-3.5 w-3.5', copied ? 'i-ph-check text-network-accent' : 'i-ph-copy')} />
+      <span
+        className={cn('h-3.5 w-3.5', copied ? 'i-ph-check text-network-accent' : 'i-ph-copy')}
+      />
     </button>
   );
 };

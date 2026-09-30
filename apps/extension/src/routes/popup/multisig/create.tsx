@@ -484,11 +484,7 @@ const MultisigCreateZafu = () => {
             {threshold}-of-{maxSigners}: any {threshold} of the {maxSigners} signers can approve
             outgoing transactions
           </p>
-          <Button
-            variant='primary'
-            className='w-full'
-            onClick={goBack}
-          >
+          <Button variant='primary' className='w-full' onClick={goBack}>
             done
           </Button>
         </div>
@@ -1089,11 +1085,7 @@ const MultisigCreateZigner = () => {
           <p className='text-label text-fg-muted'>
             zigner wallet_id: <span className='font-mono'>{walletId}</span>
           </p>
-          <Button
-            variant='primary'
-            className='w-full'
-            onClick={goBack}
-          >
+          <Button variant='primary' className='w-full' onClick={goBack}>
             done
           </Button>
         </div>

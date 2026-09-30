@@ -25,15 +25,15 @@ const useEarliestBirthday = (vaultIds: readonly string[]): number | null => {
   const [min, setMin] = useState<number | null>(null);
   useEffect(() => {
     let live = true;
-    void chrome.storage.local
-      .get(vaultIds.map(id => `zcashBirthday_${id}`))
-      .then(r => {
-        if (!live) {
-          return;
-        }
-        const heights = Object.values(r).map(v => Number(v)).filter(n => Number.isFinite(n));
-        setMin(heights.length ? Math.min(...heights) : null);
-      });
+    void chrome.storage.local.get(vaultIds.map(id => `zcashBirthday_${id}`)).then(r => {
+      if (!live) {
+        return;
+      }
+      const heights = Object.values(r)
+        .map(v => Number(v))
+        .filter(n => Number.isFinite(n));
+      setMin(heights.length ? Math.min(...heights) : null);
+    });
     return () => {
       live = false;
     };
@@ -111,14 +111,17 @@ export const SettingsZcashNetwork = () => {
   const statusLabel = error
     ? 'sync error'
     : resyncing
-      ? (progress ? getClearCacheStepLabel(progress.step) : 'resyncing')
+      ? progress
+        ? getClearCacheStepLabel(progress.step)
+        : 'resyncing'
       : syncing
         ? 'syncing'
         : fullSyncHeight != null
           ? 'up to date'
           : 'connecting';
 
-  const statusMeta = fullSyncHeight != null ? `block ${Number(fullSyncHeight).toLocaleString()}` : '';
+  const statusMeta =
+    fullSyncHeight != null ? `block ${Number(fullSyncHeight).toLocaleString()}` : '';
 
   return (
     <SettingsScreen title='zcash' backPath={PopupPath.SETTINGS_NETWORKS_HOME}>
@@ -169,10 +172,20 @@ export const SettingsZcashNetwork = () => {
             <span>you can keep using zafu</span>
           </div>
           <div className='flex gap-2 pt-1'>
-            <Button variant='secondary' size='md' className='w-28' onClick={() => setConfirmOpen(false)}>
+            <Button
+              variant='secondary'
+              size='md'
+              className='w-28'
+              onClick={() => setConfirmOpen(false)}
+            >
               not now
             </Button>
-            <Button variant='primary' size='md' className='flex-1' onClick={() => void startResync()}>
+            <Button
+              variant='primary'
+              size='md'
+              className='flex-1'
+              onClick={() => void startResync()}
+            >
               sync again
             </Button>
           </div>

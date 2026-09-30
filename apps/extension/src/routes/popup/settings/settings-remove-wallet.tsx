@@ -96,7 +96,11 @@ export const SettingsRemoveWallet = () => {
             <div>
               <p className='kicker mb-2'>stays safe</p>
               <div className='border border-border-soft bg-elev-1 p-3'>
-                <FactRow tone='bg-green-400' text='what is on chain' meta='the phrase brings it back' />
+                <FactRow
+                  tone='bg-green-400'
+                  text='what is on chain'
+                  meta='the phrase brings it back'
+                />
               </div>
             </div>
 
@@ -165,9 +169,7 @@ export const SettingsRemoveWallet = () => {
         {step === 'gone' && (
           <div className='flex grow flex-col items-center gap-4 pt-10 text-center'>
             <span className='i-ph-check-circle size-16 text-fg-muted' aria-hidden='true' />
-            <p className='text-title text-fg-high'>
-              {vault.name} has left this computer
-            </p>
+            <p className='text-title text-fg-high'>{vault.name} has left this computer</p>
             <p className='max-w-[280px] text-sm text-fg-muted'>
               what was on chain is still on chain. your recovery phrase brings it back whenever you
               like.
@@ -182,7 +184,9 @@ export const SettingsRemoveWallet = () => {
             variant='secondary'
             size='md'
             className='w-28'
-            onClick={() => (step === 'confirm' ? setStep('what') : navigate(PopupPath.SETTINGS_WALLETS))}
+            onClick={() =>
+              step === 'confirm' ? setStep('what') : navigate(PopupPath.SETTINGS_WALLETS)
+            }
           >
             not now
           </Button>

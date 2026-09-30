@@ -55,7 +55,9 @@ export const applyTheme = (theme: ZafuTheme) => {
 export const useZafuTheme = () => {
   const [theme, setThemeState] = useState<ZafuTheme>('sumi');
   useEffect(() => {
-    void localExtStorage.get('zafuTheme').then(v => setThemeState(v === 'washi' ? 'washi' : 'sumi'));
+    void localExtStorage
+      .get('zafuTheme')
+      .then(v => setThemeState(v === 'washi' ? 'washi' : 'sumi'));
   }, []);
   const set = (t: ZafuTheme) => {
     setThemeState(t);

@@ -3,7 +3,13 @@ import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Button } from '@repo/ui/components/ui/button';
 
 /** dismissible backup reminder - gone forever once confirmed */
-export const BackupNudge = ({ onBackUp, onDismiss }: { onBackUp: () => void; onDismiss: () => void }) => (
+export const BackupNudge = ({
+  onBackUp,
+  onDismiss,
+}: {
+  onBackUp: () => void;
+  onDismiss: () => void;
+}) => (
   <StatusSlot tone='warn' icon='i-ph-warning' action={{ label: 'back up', onClick: onBackUp }}>
     <span className='flex items-center gap-2'>
       recovery phrase not backed up
