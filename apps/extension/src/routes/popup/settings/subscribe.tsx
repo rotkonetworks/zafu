@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { StepList } from '@repo/ui/components/ui/step-list';
 import { Sensitive } from '../../../components/sensitive';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
@@ -660,36 +661,7 @@ export const SubscribePage = () => {
                 </span>
                 <LiveTimer startMs={buildStartRef.current} />
               </div>
-              {sendSteps.length > 0 ? (
-                <div className='flex flex-col gap-2 max-h-32 overflow-y-auto'>
-                  {sendSteps.map((s, i) => {
-                    const isLast = i === sendSteps.length - 1;
-                    const prevMs = i > 0 ? sendSteps[i - 1]!.elapsedMs : 0;
-                    const dur = ((s.elapsedMs - prevMs) / 1000).toFixed(1);
-                    return (
-                      <div
-                        key={i}
-                        className={`flex items-start gap-2 text-label font-mono ${isLast ? 'text-fg' : 'text-fg-muted'}`}
-                      >
-                        <span className='w-10 text-right shrink-0 tabular-nums'>
-                          {(s.elapsedMs / 1000).toFixed(1)}s
-                        </span>
-                        <span>
-                          {s.step}
-                          {s.detail && <span className='text-fg-muted ml-1'>({s.detail})</span>}
-                          {!isLast && Number(dur) >= 0.5 && (
-                            <span className='text-fg-muted ml-1'>+{dur}s</span>
-                          )}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <span className='text-label font-mono text-fg-muted animate-pulse'>
-                  preparing...
-                </span>
-              )}
+              <StepList steps={sendSteps} className='max-h-32' />
             </div>
           )}
 

@@ -16,6 +16,7 @@ import { OverlayPortal } from '../../../components/overlay-portal';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
+import { StepList } from '@repo/ui/components/ui/step-list';
 import { Sensitive } from '../../../components/sensitive';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
@@ -481,28 +482,7 @@ export function IronwoodMigrate({
               <div className='w-8 h-8 border-2 border-zigner-gold border-t-transparent rounded-full animate-spin' />
             </div>
             <h2 className='text-lg font-medium'>building migration</h2>
-            {progressSteps.length > 0 ? (
-              <div className='w-full max-w-sm flex flex-col gap-1'>
-                {progressSteps.map((s, i) => (
-                  <div
-                    key={i}
-                    className={`flex items-start gap-2 text-xs ${
-                      i === progressSteps.length - 1 ? 'text-fg' : 'text-fg-muted'
-                    }`}
-                  >
-                    <span className='font-mono w-12 text-right shrink-0'>
-                      {(s.elapsedMs / 1000).toFixed(1)}s
-                    </span>
-                    <span>
-                      {s.step}
-                      {s.detail && <span className='text-fg-muted ml-1'>({s.detail})</span>}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className='text-sm text-fg-muted text-center'>preparing...</p>
-            )}
+            <StepList steps={progressSteps} className='w-full max-w-sm' />
           </div>
         );
 

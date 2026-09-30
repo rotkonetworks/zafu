@@ -8,6 +8,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { viewClient, simulationClient } from '../../../clients';
+import { StepList } from '@repo/ui/components/ui/step-list';
 import { Sensitive } from '../../../components/sensitive';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { useStore } from '../../../state';
@@ -906,37 +907,7 @@ const ZcashCrosschainSwap = () => {
 
           <LiveTimer startMs={buildStartRef.current} />
 
-          {sendSteps.length > 0 ? (
-            <div className='w-full max-w-sm flex flex-col gap-1'>
-              {sendSteps.map((s, i) => {
-                const isLast = i === sendSteps.length - 1;
-                const prevMs = i > 0 ? sendSteps[i - 1]!.elapsedMs : 0;
-                const stepDuration = ((s.elapsedMs - prevMs) / 1000).toFixed(1);
-
-                return (
-                  <div
-                    key={i}
-                    className={`flex items-start gap-2 text-xs ${
-                      isLast ? 'text-fg' : 'text-fg-muted'
-                    }`}
-                  >
-                    <span className='font-mono w-12 text-right shrink-0'>
-                      {(s.elapsedMs / 1000).toFixed(1)}s
-                    </span>
-                    <span>
-                      {s.step}
-                      {s.detail && <span className='text-fg-muted ml-1'>({s.detail})</span>}
-                      {!isLast && Number(stepDuration) >= 0.5 && (
-                        <span className='text-fg-muted ml-1'>+{stepDuration}s</span>
-                      )}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className='text-sm text-fg-muted text-center'>preparing...</p>
-          )}
+          <StepList steps={sendSteps} className='w-full max-w-sm' />
         </div>
       )}
 
