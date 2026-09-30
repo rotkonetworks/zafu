@@ -1,171 +1,121 @@
 /**
- * Onboarding entry — rendered inside OnboardingShell.
- *
- * The shell already provides the brand lockup, stepper, and rounded
- * pane. This screen focuses on the user's first decision: which path
- * to take into the wallet.
- *
- * Visual hierarchy:
- *   1. One sentence framing the choice ("how would you like to begin?")
- *   2. Three path cards (create / import / zigner) with one-line
- *      descriptions — the user picks by clicking the card itself, not
- *      a tiny button. Bigger hit-target, calmer feel.
- *   3. A muted-link footer for source + license.
- *
- * The dense info-card grid from the old design is removed — it was
- * marketing copy that distracted from the choice the user came here to
- * make. Those messages will re-appear contextually during the path-
- * specific steps (e.g., the FROST multisig copy under the create flow).
+ * Welcome + "bring your wallet" choice - Onb1Welcome board, the `welcome`
+ * and `choose` screens. Local phase state, not two routes: both live at
+ * PagePath.WELCOME so a fresh tab always opens on the same first decision.
  */
 
-import { useCallback } from 'react';
-import { cn } from '@repo/ui/lib/utils';
+import { useCallback, useState } from 'react';
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
+import { Button } from '@repo/ui/components/ui/button';
 import { usePageNav } from '../../../utils/navigate';
 import { PagePath } from '../paths';
 import { HARDWARE_WALLET_ENABLED, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
+import { OnboardingBack, OnboardingShell } from './onboarding-shell';
 
-interface PathOption {
+type Phase = 'welcome' | 'choose';
+
+interface BringOption {
   readonly icon: string;
   readonly label: string;
   readonly hint: string;
   readonly target: PagePath;
-  readonly accent: 'gold' | 'blue';
-  /** When set, the card only renders while the named flag is on. */
   readonly flagged?: boolean;
 }
 
-const OPTIONS: readonly PathOption[] = [
-  {
-    icon: 'i-ph-sparkle',
-    label: 'create a new wallet',
-    hint: 'generate a fresh secret phrase on this device.',
-    target: PagePath.GENERATE_SEED_PHRASE,
-    accent: 'gold',
-  },
+const BRING_OPTIONS: readonly BringOption[] = [
   {
     icon: 'i-ph-key',
-    label: 'import a recovery phrase',
-    hint: '24 words from an existing wallet. no server roundtrip.',
+    label: 'recovery phrase',
+    hint: '12 or 24 words from any zcash wallet',
     target: PagePath.IMPORT_SEED_PHRASE,
-    accent: 'gold',
   },
   {
     icon: 'i-ph-device-mobile',
-    label: 'connect zigner (airgap)',
-    hint: 'keep keys on your phone. sign by QR.',
+    label: 'zigner or keystone',
+    hint: 'scan its connect code',
     target: PagePath.IMPORT_ZIGNER,
-    accent: 'blue',
   },
   {
     icon: 'i-ph-usb',
-    label: 'connect ledger',
-    hint: 'keys stay on the device. sign over usb.',
+    label: 'ledger',
+    hint: 'plug in over usb',
     target: PagePath.CONNECT_LEDGER,
-    accent: 'blue',
     flagged: true,
   },
 ];
 
-// Hide flagged cards until their feature flag is on. The ledger card is the
-// only flagged entry today - keep it invisible while HARDWARE_WALLET_ENABLED
-// is false so the option never appears mid-rollout.
-const visibleOptions = OPTIONS.filter(
-  opt => !opt.flagged || HARDWARE_WALLET_ENABLED || LEDGER_TRANSPARENT_ENABLED,
-);
-
 export const OnboardingStart = () => {
   const navigate = usePageNav();
+  const [phase, setPhase] = useState<Phase>('welcome');
   const go = useCallback((p: PagePath) => () => navigate(p), [navigate]);
 
-  return (
-    <FadeTransition>
-      <div className='flex h-full flex-col gap-6'>
-        <header className='flex flex-col gap-1'>
-          <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>
-            how would you like to begin?
-          </h2>
-          <p className='text-xs text-fg-muted lowercase'>your keys stay on this device. always.</p>
-        </header>
-
-        <ul className='flex flex-col gap-2.5'>
-          {visibleOptions.map(opt => (
-            <li key={opt.target}>
-              <PathCard option={opt} onClick={go(opt.target)} />
-            </li>
-          ))}
-        </ul>
-
-        <footer className='mt-auto flex items-center gap-4 pt-6 text-label tracking-[0.05em] text-fg-muted lowercase'>
-          <a
-            href='https://zafu.pro'
-            target='_blank'
-            rel='noopener noreferrer'
-            className='transition-colors hover:text-fg-high'
-          >
-            zafu.pro
-          </a>
-          <span className='text-fg-muted/40'>·</span>
-          <a
-            href='https://github.com/rotkonetworks/zafu'
-            target='_blank'
-            rel='noopener noreferrer'
-            className='transition-colors hover:text-fg-high'
-          >
-            source
-          </a>
-          <span className='text-fg-muted/40'>·</span>
-          <span className='text-fg-muted/60'>mit</span>
-        </footer>
-      </div>
-    </FadeTransition>
+  const visibleOptions = BRING_OPTIONS.filter(
+    opt => !opt.flagged || HARDWARE_WALLET_ENABLED || LEDGER_TRANSPARENT_ENABLED,
   );
-};
 
-interface PathCardProps {
-  readonly option: PathOption;
-  readonly onClick: () => void;
-}
+  if (phase === 'choose') {
+    return (
+      <OnboardingShell art='bamboo'>
+        <FadeTransition>
+          <div className='flex flex-col gap-[22px]'>
+            <OnboardingBack onClick={() => setPhase('welcome')} />
+            <h1 className='font-display text-[38px] font-medium text-fg-high'>bring your wallet</h1>
+            <div className='flex flex-col gap-2.5'>
+              {visibleOptions.map(opt => (
+                <button
+                  key={opt.target}
+                  type='button'
+                  onClick={go(opt.target)}
+                  className='row flex h-[72px] items-center gap-4 border border-surface-border-soft bg-surface-elev-1 px-5 text-left transition-colors hover:bg-surface-elev-2'
+                >
+                  <span className={opt.icon + ' size-[22px] shrink-0 text-zigner-gold'} aria-hidden='true' />
+                  <span className='flex flex-col gap-1'>
+                    <span className='text-data text-fg-high lowercase'>{opt.label}</span>
+                    <span className='text-label text-fg-muted lowercase'>{opt.hint}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </FadeTransition>
+      </OnboardingShell>
+    );
+  }
 
-const PathCard = ({ option, onClick }: PathCardProps) => {
-  const isBlue = option.accent === 'blue';
   return (
-    <button
-      type='button'
-      onClick={onClick}
-      className={cn(
-        'group relative flex w-full items-center gap-4 overflow-hidden text-left',
-        'border border-border-soft/60 bg-elev-2/40 px-5 py-4',
-        // cushion radius — local to onboarding, doesn't touch the wallet
-        // theme's deliberate zero-radius identity.
-        '[border-radius:16px]',
-        // smooth transition on transform/opacity only; no layout-affecting
-        // hover effects (no scale + width changes, no margin shifts).
-        'transition-[transform,border-color,background-color] duration-200',
-        'hover:-translate-y-[1px] hover:border-border-soft',
-        isBlue ? 'hover:bg-zafu-blue/[0.06]' : 'hover:bg-zigner-gold/[0.06]',
-      )}
-    >
-      <span
-        className={cn(
-          'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
-          isBlue ? 'bg-zafu-blue/15 text-zafu-blue' : 'bg-zigner-gold/15 text-zigner-gold',
-        )}
-      >
-        <span className={cn(option.icon, 'h-4 w-4')} />
-      </span>
-      <span className='flex flex-1 flex-col'>
-        <span className='text-sm lowercase text-fg-high'>{option.label}</span>
-        <span className='mt-0.5 text-body text-fg-muted lowercase'>{option.hint}</span>
-      </span>
-      <span
-        className={cn(
-          'i-ph-arrow-right h-4 w-4 shrink-0 text-fg-muted',
-          'transition-transform duration-200',
-          'group-hover:translate-x-0.5',
-          isBlue ? 'group-hover:text-zafu-blue' : 'group-hover:text-zigner-gold',
-        )}
-      />
-    </button>
+    <OnboardingShell art='samurai'>
+      <FadeTransition>
+        <div className='flex flex-col gap-[22px]'>
+          <span className='text-label text-fg-muted tracking-[0.18em] lowercase'>zafu wallet</span>
+          <h1 className='font-display text-[50px] font-medium leading-[1.15] text-fg-high'>
+            shielded money,
+            <br />
+            held in your
+            <br />
+            own hands.
+          </h1>
+          <p className='text-body text-fg-muted lowercase'>zcash and penumbra · private by default</p>
+          <div className='mt-2 flex flex-col gap-3'>
+            <Button
+              variant='primary'
+              className='h-14 w-full text-body'
+              onClick={go(PagePath.GENERATE_SEED_PHRASE)}
+            >
+              create a wallet
+            </Button>
+            <Button
+              variant='secondary'
+              className='h-14 w-full text-body'
+              onClick={() => setPhase('choose')}
+            >
+              i already have a wallet
+            </Button>
+          </div>
+          <span className='mt-[22px] text-label text-fg-dim lowercase'>
+            open source · your keys never leave this computer
+          </span>
+        </div>
+      </FadeTransition>
+    </OnboardingShell>
   );
 };
