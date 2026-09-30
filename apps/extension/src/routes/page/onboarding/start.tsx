@@ -66,7 +66,7 @@ export const OnboardingStart = () => {
                   key={opt.target}
                   type='button'
                   onClick={go(opt.target)}
-                  className='row flex h-[72px] items-center gap-4 border border-surface-border-soft bg-surface-elev-1 px-5 text-left transition-colors hover:bg-surface-elev-2'
+                  className='row flex h-[72px] items-center gap-4 border border-border-soft bg-elev-1 px-5 text-left transition-colors hover:bg-elev-2'
                 >
                   <span className={opt.icon + ' size-[22px] shrink-0 text-zigner-gold'} aria-hidden='true' />
                   <span className='flex flex-col gap-1'>

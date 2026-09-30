@@ -135,8 +135,8 @@ export function OnboardingShell({ children, art }: OnboardingShellProps) {
   const resolvedArt = art ?? steps[activeIdx]!.art;
 
   return (
-    <div className='flex min-h-screen w-full bg-surface-canvas text-fg'>
-      <aside className='relative hidden w-[620px] shrink-0 overflow-hidden border-r border-surface-border-soft bg-surface-elev-2 lg:block'>
+    <div className='flex min-h-screen w-full bg-canvas text-fg'>
+      <aside className='relative hidden w-[620px] shrink-0 overflow-hidden border-r border-border-soft bg-elev-2 lg:block'>
         <img
           src={ART_SRC[resolvedArt]}
           alt={ART_ALT[resolvedArt]}
@@ -161,7 +161,7 @@ export function OnboardingShell({ children, art }: OnboardingShellProps) {
                 {steps.slice(0, -1).map((s, i) => (
                   <span
                     key={s.label}
-                    className={cn('h-[3px] w-9', i <= activeIdx ? 'bg-zigner-gold' : 'bg-surface-border')}
+                    className={cn('h-[3px] w-9', i <= activeIdx ? 'bg-zigner-gold' : 'bg-border-hard')}
                   />
                 ))}
               </div>

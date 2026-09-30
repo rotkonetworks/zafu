@@ -88,8 +88,8 @@ export const ImportSeedPhrase = () => {
             onChange={e => commit(e.target.value)}
             placeholder='word word word ...'
             className={cn(
-              'h-[150px] w-full resize-none border bg-surface-elev-1 p-4 font-mono text-body text-fg-high',
-              firstTypo ? 'border-warning' : valid ? 'border-green' : 'border-surface-border-soft',
+              'h-[150px] w-full resize-none border bg-elev-1 p-4 font-mono text-body text-fg-high',
+              firstTypo ? 'border-warning' : valid ? 'border-green' : 'border-border-soft',
             )}
           />
 
@@ -102,7 +102,7 @@ export const ImportSeedPhrase = () => {
             <span
               className={cn(
                 'size-2 shrink-0',
-                firstTypo ? 'bg-warning' : valid ? 'bg-green' : 'bg-surface-border',
+                firstTypo ? 'bg-warning' : valid ? 'bg-green' : 'bg-border-hard',
               )}
             />
             {note}

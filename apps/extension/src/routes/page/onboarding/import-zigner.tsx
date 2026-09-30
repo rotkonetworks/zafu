@@ -326,7 +326,7 @@ export const ImportZigner = () => {
 
           {scanState === 'idle' && !showManualInput && (
             <div className='flex flex-col gap-2.5'>
-              <div className='flex flex-col gap-2 border border-surface-border-soft bg-surface-elev-1 p-3'>
+              <div className='flex flex-col gap-2 border border-border-soft bg-elev-1 p-3'>
                 <span className='flex items-center gap-1.5 text-label font-medium text-fg-high lowercase'>
                   <span className='i-ph-device-mobile size-3.5 text-zigner-gold' />
                   on your zigner

@@ -93,7 +93,7 @@ export const GenerateSeedPhrase = () => {
                   key={word}
                   type='button'
                   onClick={() => pickWord(word)}
-                  className='h-14 border border-surface-border-soft bg-surface-elev-1 text-body text-fg-high transition-colors hover:bg-surface-elev-2'
+                  className='h-14 border border-border-soft bg-elev-1 text-body text-fg-high transition-colors hover:bg-elev-2'
                 >
                   {word}
                 </button>
@@ -118,13 +118,13 @@ export const GenerateSeedPhrase = () => {
           </p>
 
           {!ready ? (
-            <div className='grid animate-pulse grid-cols-4 gap-2 border border-surface-border-soft bg-surface-elev-1 p-3.5'>
+            <div className='grid animate-pulse grid-cols-4 gap-2 border border-border-soft bg-elev-1 p-3.5'>
               {Array.from({ length: 24 }).map((_, i) => (
-                <div key={i} className='h-[18px] bg-surface-elev-2' />
+                <div key={i} className='h-[18px] bg-elev-2' />
               ))}
             </div>
           ) : (
-            <div className='relative border border-surface-border-soft bg-surface-elev-1'>
+            <div className='relative border border-border-soft bg-elev-1'>
               <div className='grid grid-cols-4 gap-0 p-3.5'>
                 {phrase.map((word, i) => (
                   <span key={i} className='flex h-[34px] items-baseline gap-2 pt-2'>
@@ -137,7 +137,7 @@ export const GenerateSeedPhrase = () => {
                 <button
                   type='button'
                   onClick={() => setRevealed(true)}
-                  className='absolute inset-0 flex flex-col items-center justify-center gap-2.5 border-0 bg-surface-elev-1 text-body text-fg-high'
+                  className='absolute inset-0 flex flex-col items-center justify-center gap-2.5 border-0 bg-elev-1 text-body text-fg-high'
                 >
                   <span className='i-ph-eye size-[22px] text-zigner-gold' aria-hidden='true' />
                   tap to reveal

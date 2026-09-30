@@ -50,7 +50,7 @@ export const ImportReview = () => {
             confirm these are the right words, in the right order.
           </p>
 
-          <ol className='grid grid-cols-3 gap-x-4 gap-y-1.5 border border-surface-border-soft bg-surface-elev-1 p-3.5'>
+          <ol className='grid grid-cols-3 gap-x-4 gap-y-1.5 border border-border-soft bg-elev-1 p-3.5'>
             {phrase.map((word, i) => (
               <li key={i} className='flex items-baseline gap-2'>
                 <span className='w-5 shrink-0 text-right text-label text-fg-dim'>{i + 1}</span>
