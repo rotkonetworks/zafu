@@ -191,17 +191,17 @@ export const TransactionApproval = () => {
 
         <div className='shrink-0 border-t border-border-soft p-4 flex gap-3'>
           <Button
-            variant='gradient'
+            variant='primary'
             className='flex-1 py-3.5 text-base'
-            size='lg'
+            size='md'
             onClick={() => setAirgapStep('scan-qr')}
           >
             Scan Signed Response
           </Button>
           <Button
-            variant='destructiveSecondary'
+            variant='danger'
             className='flex-1 py-3.5 text-base hover:bg-destructive/90 transition-colors'
-            size='lg'
+            size='md'
             onClick={deny}
           >
             Cancel
@@ -219,10 +219,10 @@ export const TransactionApproval = () => {
           <div className='flex h-full flex-col items-center justify-center gap-4 p-6'>
             <p className='text-red-400 text-center'>{scanError}</p>
             <div className='flex gap-3'>
-              <Button variant='gradient' onClick={() => setScanError(null)}>
+              <Button variant='primary' onClick={() => setScanError(null)}>
                 Try Again
               </Button>
-              <Button variant='destructiveSecondary' onClick={deny}>
+              <Button variant='danger' onClick={deny}>
                 Cancel
               </Button>
             </div>
@@ -311,9 +311,9 @@ export const TransactionApproval = () => {
         {isAirgap ? (
           <div className='flex flex-row justify-between gap-4 rounded-lg bg-elev-1 px-4 py-7 shadow-lg'>
             <Button
-              variant='gradient'
+              variant='primary'
               className='w-1/2 py-3.5 text-base'
-              size='lg'
+              size='md'
               onClick={invalidPlan ? undefined : startAirgapSigning}
               disabled={!!invalidPlan}
             >
@@ -321,8 +321,8 @@ export const TransactionApproval = () => {
             </Button>
             <Button
               className='w-1/2 py-3.5 text-base hover:bg-destructive/90 transition-colors'
-              size='lg'
-              variant='destructiveSecondary'
+              size='md'
+              variant='danger'
               onClick={deny}
             >
               Deny

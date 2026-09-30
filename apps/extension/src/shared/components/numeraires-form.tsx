@@ -76,7 +76,7 @@ export const NumeraireForm = ({
           <Button
             className='my-5'
             key='save-button'
-            variant='gradient'
+            variant='primary'
             type='submit'
             disabled={loading}
             onClick={handleSubmit}

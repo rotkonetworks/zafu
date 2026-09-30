@@ -307,7 +307,7 @@ const OwnNetworks = ({
         {error && <p className='text-label text-hanko lowercase leading-snug'>{error}</p>}
         <div className='flex items-center justify-end'>
           <Button
-            variant='gradient'
+            variant='primary'
             size='md'
             onClick={() => void onSubmit()}
             disabled={saving}

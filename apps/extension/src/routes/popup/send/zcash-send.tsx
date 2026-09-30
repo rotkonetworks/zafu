@@ -1656,7 +1656,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               <Button variant='secondary' onClick={handleClose} className='flex-1'>
                 cancel
               </Button>
-              <Button variant='gradient' onClick={handleReview} className='flex-1'>
+              <Button variant='primary' onClick={handleReview} className='flex-1'>
                 continue
               </Button>
             </div>
@@ -1709,7 +1709,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               <Button variant='secondary' onClick={handleBack} className='flex-1'>
                 back
               </Button>
-              <Button variant='gradient' onClick={() => void handleSign()} className='flex-1'>
+              <Button variant='primary' onClick={() => void handleSign()} className='flex-1'>
                 {selectedKeyInfo?.type === 'mnemonic'
                   ? 'sign & send'
                   : isLedgerAccount
@@ -1869,7 +1869,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             </div>
 
             <div className='px-4 py-3 border-t border-border-soft'>
-              <Button variant='gradient' onClick={handleScanSignature} className='w-full'>
+              <Button variant='primary' onClick={handleScanSignature} className='w-full'>
                 scan signature from zigner
               </Button>
             </div>
@@ -1990,7 +1990,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         return (
           <div className='flex flex-col items-center gap-4 p-8'>
             {/* the receipt gets stamped — a broadcast tx is sealed (封) */}
-            <HankoSeal glyph='封' size='lg' />
+            <HankoSeal glyph='封' size='md' />
             <h2 className='text-lg font-medium'>transaction sent</h2>
             <p className='text-sm text-fg-muted text-center'>
               {amount} zec sent successfully
@@ -2031,7 +2031,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 </div>
                 <div className='flex gap-2'>
                   <Button
-                    variant='gradient'
+                    variant='primary'
                     size='sm'
                     onClick={() => setShowContactModal(true)}
                     className='flex-1'
@@ -2070,7 +2070,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               />
             )}
 
-            <Button variant='gradient' onClick={handleClose} className='w-full mt-4'>
+            <Button variant='primary' onClick={handleClose} className='w-full mt-4'>
               done
             </Button>
           </div>
@@ -2149,7 +2149,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               <Button variant='secondary' onClick={handleClose} className='flex-1'>
                 cancel
               </Button>
-              <Button variant='gradient' onClick={handleBack} className='flex-1'>
+              <Button variant='primary' onClick={handleBack} className='flex-1'>
                 try again
               </Button>
             </div>

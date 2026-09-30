@@ -190,7 +190,7 @@ export const ConnectLedger = () => {
           {!inPopup && supported && phase !== 'connected' && phase !== 'importing' && (
             <div className='flex flex-col gap-2.5'>
               <Button
-                variant='gradient'
+                variant='primary'
                 className='w-full'
                 disabled={phase === 'connecting'}
                 onClick={handleConnect}
@@ -262,7 +262,7 @@ export const ConnectLedger = () => {
 
               <div className='flex flex-col gap-2'>
                 <Button
-                  variant='gradient'
+                  variant='primary'
                   className='w-full'
                   disabled={phase === 'importing'}
                   onClick={handleImport}
@@ -270,7 +270,7 @@ export const ConnectLedger = () => {
                   {phase === 'importing' ? 'importing...' : 'add wallet'}
                 </Button>
                 <Button
-                  variant='ghost'
+                  variant='quiet'
                   className='w-full'
                   disabled={phase === 'importing'}
                   onClick={() => {

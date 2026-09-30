@@ -55,7 +55,7 @@ const PasswordChoice = ({
   onScanAgain: () => void;
 }) => (
   <div className='flex flex-col gap-2'>
-    <Button variant='gradient' className='w-full' onClick={onSetPassword} disabled={importing}>
+    <Button variant='primary' className='w-full' onClick={onSetPassword} disabled={importing}>
       set password
     </Button>
     <p className='text-center text-xs text-fg-muted lowercase'>
@@ -67,7 +67,7 @@ const PasswordChoice = ({
     </Button>
     <p className='text-center text-xs text-fg-muted lowercase'>no login needed. less secure.</p>
 
-    <Button variant='ghost' className='mt-2 w-full' onClick={onScanAgain} disabled={importing}>
+    <Button variant='quiet' className='mt-2 w-full' onClick={onScanAgain} disabled={importing}>
       scan again
     </Button>
   </div>
@@ -334,7 +334,7 @@ export const ImportZigner = () => {
               </div>
 
               <Button
-                variant='gradient'
+                variant='primary'
                 className='w-full'
                 onClick={() => {
                   setKeystoneMode(false);
@@ -381,7 +381,7 @@ export const ImportZigner = () => {
                   cancel
                 </Button>
                 <Button
-                  variant='gradient'
+                  variant='primary'
                   className='flex-1'
                   disabled={!walletImport && !zcashWalletImport && !parsedPolkadotExport}
                   onClick={handleSkip}

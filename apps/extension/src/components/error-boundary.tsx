@@ -114,7 +114,7 @@ const ErrorScreen = ({ error, notFound, onGoHome }: ErrorScreenProps) => {
           <span className='i-lucide-refresh-cw mr-1 h-3 w-3' /> reload
         </Button>
         {!notFound && (
-          <Button size='sm' variant='ghost' onClick={copyDetails}>
+          <Button size='sm' variant='quiet' onClick={copyDetails}>
             <span className='i-lucide-clipboard-copy mr-1 h-3 w-3' /> copy details
           </Button>
         )}

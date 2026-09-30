@@ -1402,7 +1402,7 @@ function CosmosSend({
           )}
 
           <div className='flex gap-2 mt-3'>
-            <Button variant='gradient' onClick={() => void handleConfirm()} className='flex-1'>
+            <Button variant='primary' onClick={() => void handleConfirm()} className='flex-1'>
               confirm & sign
             </Button>
             <Button variant='secondary' onClick={() => setTxStatus('idle')} className='flex-1'>
@@ -1421,7 +1421,7 @@ function CosmosSend({
 
       {/* submit */}
       <Button
-        variant='gradient'
+        variant='primary'
         onClick={() => {
           if (txStatus === 'success' || txStatus === 'error') {
             setTxStatus('idle');
@@ -1843,7 +1843,7 @@ function PenumbraNativeSend({
 
       {/* submit */}
       <Button
-        variant='gradient'
+        variant='primary'
         onClick={() => {
           if (txStatus === 'success') {
             onSuccess ? onSuccess() : handleReset();
@@ -2449,7 +2449,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
 
       {/* submit */}
       <Button
-        variant='gradient'
+        variant='primary'
         onClick={() => {
           if (txStatus === 'success') {
             onSuccess ? onSuccess() : handleReset();
@@ -2692,7 +2692,7 @@ export function SendPage() {
               />
             </div>
 
-            <Button variant='gradient' className='mt-4 w-full'>
+            <Button variant='primary' className='mt-4 w-full'>
               continue
             </Button>
 

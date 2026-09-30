@@ -381,7 +381,7 @@ export function IronwoodMigrate({
                 </p>
               </div>
               <div className='shrink-0 p-4'>
-                <Button variant='gradient' onClick={onClose} className='w-full'>
+                <Button variant='primary' onClick={onClose} className='w-full'>
                   done
                 </Button>
               </div>
@@ -471,7 +471,7 @@ export function IronwoodMigrate({
               <Button variant='secondary' onClick={onClose} className='flex-1'>
                 not now
               </Button>
-              <Button variant='gradient' onClick={() => void handleBuild()} className='flex-1'>
+              <Button variant='primary' onClick={() => void handleBuild()} className='flex-1'>
                 migrate
               </Button>
             </div>
@@ -579,7 +579,7 @@ export function IronwoodMigrate({
               </div>
             </div>
 
-            <Button variant='gradient' onClick={() => setStep('scan')} className='w-full'>
+            <Button variant='primary' onClick={() => setStep('scan')} className='w-full'>
               scan signature from zafu zigner
             </Button>
           </div>
@@ -625,7 +625,7 @@ export function IronwoodMigrate({
               transaction confirms, and you can keep spending normally.
             </p>
             {txid && <p className='break-all font-mono text-xs text-fg-muted'>{txid}</p>}
-            <Button variant='gradient' onClick={onClose} className='w-full mt-4'>
+            <Button variant='primary' onClick={onClose} className='w-full mt-4'>
               done
             </Button>
           </div>
@@ -647,7 +647,7 @@ export function IronwoodMigrate({
                 orchard to ironwood migration becomes available once NU6.3 activates on the network.
                 your orchard funds are safe in the meantime - nothing is required until then.
               </p>
-              <Button variant='gradient' onClick={onClose} className='mt-2 w-full'>
+              <Button variant='primary' onClick={onClose} className='mt-2 w-full'>
                 got it
               </Button>
             </div>
@@ -664,7 +664,7 @@ export function IronwoodMigrate({
               <Button variant='secondary' onClick={onClose} className='flex-1'>
                 close
               </Button>
-              <Button variant='gradient' onClick={() => setStep('review')} className='flex-1'>
+              <Button variant='primary' onClick={() => setStep('review')} className='flex-1'>
                 try again
               </Button>
             </div>

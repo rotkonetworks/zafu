@@ -29,7 +29,7 @@ export const ConfirmChangedChainIdDialog = ({
             </p>
 
             <div className='flex flex-col gap-2'>
-              <Button onClick={() => promiseWithResolvers?.resolve()} variant='gradient'>
+              <Button onClick={() => promiseWithResolvers?.resolve()} variant='primary'>
                 Yes; proceed
               </Button>
 

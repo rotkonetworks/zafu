@@ -293,7 +293,7 @@ export const SettingsZigner = () => {
                     {confirmDeleteVault === vault.id ? (
                       <div className='flex items-center gap-2'>
                         <Button
-                          variant='destructive'
+                          variant='danger'
                           size='sm'
                           onClick={() => void handleDeleteVault(vault.id)}
                           disabled={deletingVaultId === vault.id}
@@ -311,7 +311,7 @@ export const SettingsZigner = () => {
                       </div>
                     ) : (
                       <Button
-                        variant='ghost'
+                        variant='quiet'
                         size='sm'
                         onClick={() => setConfirmDeleteVault(vault.id)}
                         disabled={keyInfos.length <= 1}
@@ -404,7 +404,7 @@ export const SettingsZigner = () => {
                     cancel
                   </Button>
                   <Button
-                    variant='gradient'
+                    variant='primary'
                     className='flex-1'
                     onClick={handleAddWallet}
                     disabled={
@@ -495,7 +495,7 @@ export const SettingsZigner = () => {
                     cancel
                   </Button>
                   <Button
-                    variant='gradient'
+                    variant='primary'
                     className='flex-1'
                     onClick={handleAddWallet}
                     disabled={isAdding}
