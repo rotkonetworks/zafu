@@ -244,4 +244,14 @@ describe('describeEgress', () => {
     expect(view.find(d => d.id === 'zcash')?.hosts).toEqual(['zcash.rotko.net']);
     expect(view.find(d => d.id === 'chat-relay')?.hosts).toContain('zcash.rotko.net/ws');
   });
+
+  it('lists each host under the destination that owns it, and what is needed', () => {
+    const view = describeEgress({ enabledNetworks: ['zcash'] });
+    const byId = Object.fromEntries(view.map(d => [d.id, d]));
+    expect(byId['zcash-servers']!.hosts).not.toContain('zcash.rotko.net');
+    expect(byId['zcash-servers']!.hosts).toContain('zec.rocks');
+    expect(byId['zcash']).toMatchObject({ needed: true, networks: ['zcash'] });
+    expect(byId['penumbra']).toMatchObject({ needed: false, networks: [] });
+    expect(view.filter(d => d.needed).map(d => d.id)).toEqual(['zcash']);
+  });
 });

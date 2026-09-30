@@ -312,8 +312,8 @@ const OwnNetworks = ({
           </Button>
         </div>
         <p className='text-label text-fg-dim lowercase leading-snug'>
-          a node you run or trust. zafu may contact it once added - one endpoint per chain,
-          adding a second for the same chain id replaces the first.
+          a node you run or trust. zafu may contact it once added - one endpoint per chain, adding a
+          second for the same chain id replaces the first.
         </p>
       </div>
 

@@ -20,7 +20,7 @@ import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../config/contact-discovery-rel
 import { PENUMBRA_MAINNET_ENDPOINTS, defaultPenumbraEndpoint } from '../config/penumbra-endpoints';
 import { ZCASH_MAINNET_ENDPOINTS, defaultZcashEndpoint } from '../config/zcash-endpoints';
 import { hostOf } from './destination';
-import type { EgressRule, EgressTable } from './egress-table';
+import { matchRule, type EgressRule, type EgressTable } from './egress-table';
 import type { NetPurpose } from './purpose';
 
 export type { EgressDecision, EgressRealm, EgressReason, EgressTable } from './egress-table';
@@ -285,8 +285,11 @@ export interface DestinationView {
   id: string;
   label: string;
   purpose: NetPurpose;
-  /** `required` rows serve an enabled network; `optional` rows need an opt-in */
   kind: DestinationKind['kind'];
+  /** an enabled network needs it (or the user added it): blocking it breaks that network */
+  needed: boolean;
+  /** the enabled networks it serves, for "zcash cannot sync while this is blocked" */
+  networks: string[];
   on: boolean;
   why: DestinationWhy;
   /** the hosts it would contact, `host` or `host/path` */
@@ -328,23 +331,34 @@ const REASON: Partial<Record<DestinationWhy, EgressRule['reason']>> = {
 };
 
 /** Every destination with its current state: the "everything zafu talks to" list. */
-export const describeEgress = (i: EgressInputs): DestinationView[] =>
-  DESTINATIONS.filter(d => !d.hidden).map(spec => {
+export const describeEgress = (i: EgressInputs): DestinationView[] => {
+  const table = compileEgress(i);
+  return DESTINATIONS.filter(d => !d.hidden).map(spec => {
     const { on, why } = stateOf(spec, i);
+    // only the hosts this destination owns: the configured zcash endpoint is
+    // the light client's, not also one of the "other zcash servers"
     const hosts = spec.urls(i).flatMap(u => {
       const t = u ? targetOf(u) : undefined;
-      return t ? [`${t.host}${t.path}`] : [];
+      const owned = t && matchRule(table, `https://${t.host}${t.path}`)?.destination === spec.id;
+      return owned ? [`${t.host}${t.path}`] : [];
     });
+    const networks =
+      spec.gate.kind === 'network'
+        ? spec.gate.networks.filter(n => i.enabledNetworks?.includes(n))
+        : [];
     return {
       id: spec.id,
       label: spec.label,
       purpose: spec.purpose,
       kind: spec.gate.kind,
+      needed: networks.length > 0 || (spec.gate.kind === 'configured' && hosts.length > 0),
+      networks,
       on,
       why,
       hosts: [...new Set(hosts)],
     };
   });
+};
 
 /** Compile settings into the table every realm decides against. */
 export const compileEgress = (i: EgressInputs): EgressTable => {
