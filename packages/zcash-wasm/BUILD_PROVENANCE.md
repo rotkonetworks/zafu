@@ -97,7 +97,10 @@ diff against the values above. A mismatch means the vendored blob is stale.
 ## 2026-10-01 rebuild - explicit PCZT expiry + inspection fields + per-account WalletKeys
 
 - source repo: zcli, integration branch `integ/zafu-wasm-2026-10`, rev
-  `995f5a9` (merge into `origin/master` f597bb0). Built from TWO feature
+  `f9eb264` (merge into `origin/master` f597bb0; message amended after the
+  merge to add commit detail and attribution, tree unchanged - `git diff
+--stat` between the original merge sha and `f9eb264` is empty). Built from
+  TWO feature
   branches merged for this rebuild, both clean fast-forward/auto-merges with
   no conflicts:
   - `feat/pczt-explicit-expiry` (594fc82, on top of 23f2c60): explicit PCZT
@@ -105,9 +108,9 @@ diff against the values above. A mismatch means the vendored blob is stale.
     optional `expiry_delta?: number | null` argument, after `memo_hex`), plus
     new `frost_inspect_pczt_outputs` fields: `fee_zat`, `expiry_height`,
     `tx_version`, `consensus_branch_id`, `value_balance_zat` (`{orchard,
-    ironwood, sapling}`), `sapling_present`, `transparent_input_count`,
+ironwood, sapling}`), `sapling_present`, `transparent_input_count`,
     `transparent_input_total_zat`, `transparent_outputs` (`[{value_zat,
-    script_pubkey_hex, address}]`), `committed_outputs_error`, and per-action
+script_pubkey_hex, address}]`), `committed_outputs_error`, and per-action
     `committed_value_zat`, `committed_recipient_raw_hex`, `cmx_verified`,
     `recipient_scope`. These are exactly the fields
     `apps/extension/src/routes/popup/send/frost-multisig/multisig-verifier.ts`
@@ -115,7 +118,7 @@ diff against the values above. A mismatch means the vendored blob is stale.
     `committed_outputs_error` missing) - names matched byte for byte, no TS
     changes needed.
   - `feat/wallet-keys-account` (154bfde): `WalletKeys.from_seed_phrase_account
-    (seed, account)`, a new static method; the existing bare
+(seed, account)`, a new static method; the existing bare
     `WalletKeys(seed_phrase)` constructor now delegates to it with account 0,
     byte for byte unchanged. This is the export
     `apps/extension/src/workers/pocket-keys.ts` `pocketWalletKeys()` guards
@@ -143,8 +146,9 @@ diff against the values above. A mismatch means the vendored blob is stale.
   sha256 against the value published on the GitHub release page
   (`0a18362361ad05465118cd8eeb72edaeec89de6894bc283576ef4e07aa3babcc`) before
   extracting - matched.
-- built (UTC): 2026-10-01 (nightly toolchain `rustc 1.95.0-nightly
-  (6a979b3e3 2026-02-26)`, commit `6a979b3e32522049d0acb4a47f7ae44b7c8abfd5`).
+- built (UTC): 2026-09-30 ~22:41 (05:41 +0700) (nightly toolchain `rustc
+1.95.0-nightly (6a979b3e3 2026-02-26)`, commit
+  `6a979b3e32522049d0acb4a47f7ae44b7c8abfd5`).
 - only the PARALLEL variant was built and shipped, matching the 2026-08-05
   correction below: `packages/zcash-wasm/` and
   `apps/extension/public/zafu-wasm/` are BOTH the parallel/rayon build; there
@@ -172,11 +176,15 @@ diff against the values above. A mismatch means the vendored blob is stale.
   it because master carries the unverified Zakura Common 1.0 proving swap +
   `getrandom_backend="wasm_js"` cfg (see that entry). That swap is therefore
   now live in the shipped extension for the first time via this rebuild.
-- NOT done: a reproducibility check against a previously recorded hash
-  (time did not allow rebuilding an unchanged prior rev to compare); no
-  `zcash_*` duplicate exists in `packages/zcash-wasm/` to keep in sync
-  (package `main`/`exports` already resolve `zafu_wasm.js` directly, per the
-  2026-08-07 fix above).
+- reproducibility check: rebuilt the 2026-09-27 rev (`feat/random-diversifier-zafu`
+  c238955, recorded hash `11413627f69a...`) from scratch with the identical
+  recipe (bindgen 0.2.126, `wasm-opt -Oz` with the same flag set, the same
+  GitHub-release binaryen 130 binary) in its existing worktree. Result:
+  `sha256(zafu_wasm_bg.wasm) = 11413627f69a1fbab16aab0a8c8c43ef1ff1719537dc07e3c10e2040d5843a29`
+  - an exact match to the recorded value. The toolchain reproduces an
+    unchanged input byte for byte; no `zcash_*` duplicate exists in
+    `packages/zcash-wasm/` to keep in sync (package `main`/`exports` already
+    resolve `zafu_wasm.js` directly, per the 2026-08-07 fix above).
 
 Verified after copying (both `packages/zcash-wasm/` and
 `apps/extension/public/zafu-wasm/`, confirmed byte-identical):
@@ -198,7 +206,19 @@ Verified after copying (both `packages/zcash-wasm/` and
   them touched by this rebuild - no `.tsx`/`.ts` source file was edited,
   only the vendored wasm blobs, glue and this provenance doc) already fails
   on `rework/base` before this change; not introduced here.
-- prod and beta webpack builds: see below.
+- prod (`webpack.prod-config.ts`) and beta (`webpack.beta-config.ts`) both
+  compile clean, one expected warning each (the local worker-patch
+  `wbgRayonBase` dynamic import is flagged by webpack as a "critical
+  dependency: the request of a dependency is an expression" - this is the
+  same LOCAL PATCH warning documented in the 2026-08-05 entry, not new).
+  `dist/zafu-wasm/` and `beta-dist/zafu-wasm/` both carry
+  `zafu_wasm_bg.wasm` sha256 `0c8719cc...` (matches the built blob exactly;
+  no stale `11413627...` blob survives in either output tree), and both
+  `zafu_wasm.js` glues contain `from_seed_phrase_account`.
+- headless render (`shoot.cjs`, real playwright+chromium, imports the
+  `abandon...art` test wallet): both `dist/` and `beta-dist/` render `/`
+  and `/settings` in both themes with zero page errors; `/` shows the
+  wallet home mid-sync ("syncing 0%").
 
 ## 2026-09-27 rebuild - full 88-bit diversifier index (random receive addresses)
 
