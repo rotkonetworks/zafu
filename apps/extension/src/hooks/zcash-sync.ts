@@ -11,7 +11,8 @@ import { ZidecarClient, type SyncStatus, type ChainTip } from '../state/keyring/
 import { LightwalletdClient } from '../state/keyring/lightwalletd-client';
 import type { ZcashClient } from '../state/keyring/zcash-backend';
 import { useStore } from '../state';
-import { selectEffectiveKeyInfo, selectActiveNetwork } from '../state/keyring';
+import { selectActiveNetwork } from '../state/keyring';
+import { activeZcashStoreId } from '../state/pockets';
 import { zcashSyncHeightKey } from '../state/keyring/network-worker';
 import { classifySyncFailure, type SyncFailure } from '../state/sync-failure';
 
@@ -46,8 +47,8 @@ export function useZcashSyncStatus(): ZcashSyncState {
   // Full network isolation: only poll the zidecar when ACTIVELY on zcash, not
   // merely when zcash is enabled - a wallet viewing penumbra touches no zcash RPC.
   const zcashActive = useStore(selectActiveNetwork) === 'zcash';
-  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
-  const activeWalletId = selectedKeyInfo?.id;
+  // the worker store of the active pocket (the bare vault id for account 0)
+  const activeWalletId = useStore(activeZcashStoreId);
   const [workerSyncHeight, setWorkerSyncHeight] = useState(0);
   const [workerChainHeight, setWorkerChainHeight] = useState(0);
   // Last sync error captured from the worker (via zcash-sync-error events).

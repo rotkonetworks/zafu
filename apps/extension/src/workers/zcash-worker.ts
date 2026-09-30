@@ -36,6 +36,8 @@ import { BlockPrefetcher } from './block-prefetcher';
 import { once } from './once';
 import { assessAmbientRayonIsolation, RAYON_ISOLATION_WARNING } from '../perf/rayon-isolation';
 import { loadVotingWasm } from '../state/voting-wasm';
+import { hotSpendAccount, isStoreOfWallet, parsePocketStoreId } from '../state/pocket-id';
+import { isP2pkhOf, pocketWalletKeys, type PocketKeysCtor } from './pocket-keys';
 import {
   parseExpiryHeight,
   reconcileSentTxs,
@@ -291,7 +293,7 @@ interface WalletState {
 }
 
 interface WasmModule {
-  WalletKeys: new (seed: string) => WalletKeys;
+  WalletKeys: PocketKeysCtor<WalletKeys>;
   WatchOnlyWallet: {
     from_ufvk(ufvk: string): WatchOnlyWallet;
     from_qr_hex(qrHex: string): WatchOnlyWallet;
@@ -3082,11 +3084,20 @@ const buildWitnesses = async (
   return { anchorHex: networkRoot, paths };
 };
 
-const deriveAddress = (mnemonic: string, accountIndex: number, diversifierHex?: string): string => {
+const walletKeysFor = (mnemonic: string, account: number): WalletKeys => {
   if (!wasmModule) {
     throw new Error('wasm not initialized');
   }
-  const keys = new wasmModule.WalletKeys(mnemonic);
+  return pocketWalletKeys(wasmModule.WalletKeys, mnemonic, account);
+};
+
+const deriveAddress = (
+  mnemonic: string,
+  accountIndex: number,
+  diversifierHex?: string,
+  pocket = 0,
+): string => {
+  const keys = walletKeysFor(mnemonic, pocket);
   try {
     // accountIndex is really a u32 diversifier index; receive passes the full
     // 11-byte random one instead
@@ -3320,7 +3331,7 @@ const runSync = async (
     state.keys = wasmModule.WatchOnlyWallet.from_ufvk(ufvk);
     console.log(`[zcash-worker] created WatchOnlyWallet from UFVK for wallet=${walletId}`);
   } else {
-    state.keys = new wasmModule.WalletKeys(mnemonic);
+    state.keys = walletKeysFor(mnemonic, parsePocketStoreId(walletId).account);
   }
   await loadState(walletId);
 
@@ -4903,12 +4914,14 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
       case 'derive-address': {
         await initWasm();
-        const { mnemonic, accountIndex, diversifierHex } = payload as {
+        const { mnemonic, accountIndex, diversifierHex, pocket } = payload as {
           mnemonic: string;
           accountIndex: number;
           diversifierHex?: string;
+          /** zip32 account; accountIndex above is a diversifier index */
+          pocket?: number;
         };
-        const address = deriveAddress(mnemonic, accountIndex, diversifierHex);
+        const address = deriveAddress(mnemonic, accountIndex, diversifierHex, pocket);
         workerSelf.postMessage({
           type: 'address',
           id,
@@ -5144,16 +5157,25 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (!walletId) {
           throw new Error('walletId required');
         }
-        const state = walletStates.get(walletId);
-        if (state?.syncing) {
-          state.syncAbort = true;
-          await waitForSyncStop(state);
+        // a wallet's pockets go with it (account 0 is walletId itself)
+        const ownStores = new Set([walletId]);
+        for (const storeId of [...(await listWallets()), ...walletStates.keys()]) {
+          if (isStoreOfWallet(storeId, walletId)) {
+            ownStores.add(storeId);
+          }
         }
-        if (state?.keys) {
-          state.keys.free();
-          state.keys = null;
+        for (const storeId of ownStores) {
+          const state = walletStates.get(storeId);
+          if (state?.syncing) {
+            state.syncAbort = true;
+            await waitForSyncStop(state);
+          }
+          if (state?.keys) {
+            state.keys.free();
+            state.keys = null;
+          }
+          await deleteWallet(storeId);
         }
-        await deleteWallet(walletId);
         workerSelf.postMessage({ type: 'wallet-deleted', id, network: 'zcash', walletId });
         return;
       }
@@ -6063,6 +6085,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           mnemonic?: string;
           ufvk?: string;
         };
+        // a hot build signs with the account of the store its notes come from
+        const spendAccount = sendPayload.mnemonic
+          ? hotSpendAccount(walletId, sendPayload.accountIndex)
+          : sendPayload.accountIndex;
 
         // encode memo to hex for WASM:
         // - if already hex (starts with ff5a = zafu structured memo), pass through
@@ -6283,7 +6309,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                   fee.toString(),
                   anchorHex,
                   JSON.stringify(iwPathsForWasm),
-                  sendPayload.accountIndex,
+                  spendAccount,
                   sendTip.height,
                   NU63_CONSENSUS_BRANCH_ID,
                   sendPayload.mainnet,
@@ -6381,7 +6407,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 fee.toString(),
                 anchorHex,
                 merklePathsForWasm,
-                sendPayload.accountIndex,
+                spendAccount,
                 sendPayload.mainnet,
                 memoHex,
                 sendBranchIdHex,
@@ -7254,6 +7280,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // and the fail-closed branch-id guard match the cold path bit for bit.
         if (isHotMigration) {
           const migrateSeed = migratePayload.mnemonic!;
+          const migrateAccount = hotSpendAccount(walletId, migratePayload.accountIndex);
           emitProgress(
             'building, proving & signing turnstile tx (halo2)',
             `${orchardNotes.length} orchard spends -> ironwood`,
@@ -7281,7 +7308,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 fee.toString(),
                 anchorHex,
                 JSON.stringify(pathsForWasm),
-                migratePayload.accountIndex,
+                migrateAccount,
                 migrateTip.height,
                 NU63_CONSENSUS_BRANCH_ID,
                 migratePayload.mainnet,
@@ -7516,6 +7543,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (!multiPayload.mnemonic) {
           throw new Error('mnemonic required for multi-output send');
         }
+        const multiAccount = hotSpendAccount(walletId, multiPayload.accountIndex);
 
         // validate all outputs up front before building any tx
         for (let i = 0; i < multiPayload.outputs.length; i++) {
@@ -7699,7 +7727,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 fee.toString(),
                 multiAnchor,
                 merklePathsForWasm,
-                multiPayload.accountIndex,
+                multiAccount,
                 multiPayload.mainnet,
                 memoHex,
                 multiBranchIdHex,
@@ -7800,8 +7828,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           group.push(utxo);
         }
 
-        // orchard recipient (same for all txs)
-        const keys = new wasmModule.WalletKeys(mnemonic);
+        // the pocket's own orchard address: transparent funds shield only into
+        // the pocket they belong to, and sign with that pocket's t-branch
+        const shieldAccount = hotSpendAccount(walletId);
+        const keys = walletKeysFor(mnemonic, shieldAccount);
         let rawRecipient: string;
         try {
           rawRecipient = keys.get_receiving_address(mainnet);
@@ -7830,7 +7860,18 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           }
 
           const shieldAmount = groupZat - fee;
-          const privkeyHex = wasmModule.derive_transparent_privkey(mnemonic, 0, addrIndex);
+          const privkeyHex = wasmModule.derive_transparent_privkey(
+            mnemonic,
+            shieldAccount,
+            addrIndex,
+          );
+          // every input must be locked to this key: this pocket's own t-branch
+          // at this index. Anything else is not this pocket's money.
+          if (!utxos.every(u => isP2pkhOf(u.script, privkeyHex))) {
+            throw new Error(
+              `transparent input is not on pocket ${shieldAccount} index ${addrIndex}`,
+            );
+          }
 
           const utxosJson = JSON.stringify(
             utxos.map(u => ({
@@ -8519,11 +8560,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (!wasmModule) {
           throw new Error('wasm not initialized');
         }
-        const { mnemonic, mainnet: infoMainnet } = payload as {
+        const {
+          mnemonic,
+          mainnet: infoMainnet,
+          pocket,
+        } = payload as {
           mnemonic: string;
           mainnet: boolean;
+          pocket?: number;
         };
-        const infoKeys = new wasmModule.WalletKeys(mnemonic);
+        const infoKeys = walletKeysFor(mnemonic, pocket ?? 0);
         let fvkHex: string;
         try {
           fvkHex = infoKeys.get_fvk_hex();

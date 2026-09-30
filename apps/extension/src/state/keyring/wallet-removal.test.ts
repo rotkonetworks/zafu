@@ -145,6 +145,42 @@ describe('keyRing.deleteKeyRing purges per-wallet data', () => {
     expect(bShown[`nobleShownIndices:${vaultB}`]).toEqual([0]);
   });
 
+  test("removing a hot wallet drops its pocket stores, keys and names, not another wallet's", async () => {
+    await useStore.getState().keyRing.setPassword(password);
+    const vaultA = await useStore.getState().keyRing.newMnemonicKey(seedA.join(' '), 'Wallet A');
+    const vaultB = await useStore.getState().keyRing.newMnemonicKey(seedB.join(' '), 'Wallet B');
+    const vaults = (await localExtStorage.get('vaults')) ?? [];
+    const zidOf = (id: string) => vaults.find(v => v.id === id)!.insensitive['zid'] as string;
+    const pockets = [
+      { account: 0, name: 'main' },
+      { account: 1, name: 'savings' },
+    ];
+    await chrome.storage.local.set({
+      zcashPockets: {
+        [zidOf(vaultA)]: { pockets, active: 1 },
+        [zidOf(vaultB)]: { pockets, active: 0 },
+      },
+      [zcashSyncHeightKey(vaultA)]: 1,
+      [zcashSyncHeightKey(`${vaultA}#1`)]: 2,
+      [`zcashTAddrs:${vaultA}#1`]: ['t1a1'],
+      [zcashSyncHeightKey(`${vaultB}#1`)]: 3,
+      [`zcashTAddrs:${vaultB}#1`]: ['t1b1'],
+    });
+
+    await useStore.getState().keyRing.deleteKeyRing(vaultA);
+
+    // the worker drops the vault's own store; it cascades to every pocket
+    expect(deleteWalletInWorkerMock).toHaveBeenCalledWith('zcash', vaultA);
+    expect(deleteWalletInWorkerMock).not.toHaveBeenCalledWith('zcash', vaultB);
+    const left = await chrome.storage.local.get(null);
+    expect(Object.keys(left)).not.toContain(zcashSyncHeightKey(vaultA));
+    expect(Object.keys(left)).not.toContain(zcashSyncHeightKey(`${vaultA}#1`));
+    expect(Object.keys(left)).not.toContain(`zcashTAddrs:${vaultA}#1`);
+    expect(left[zcashSyncHeightKey(`${vaultB}#1`)]).toBe(3);
+    expect(left[`zcashTAddrs:${vaultB}#1`]).toEqual(['t1b1']);
+    expect(Object.keys(left['zcashPockets'] as object)).toEqual([zidOf(vaultB)]);
+  });
+
   test('a purgeWalletData failure leaves the vault in place, so the delete can be retried', async () => {
     await useStore.getState().keyRing.setPassword(password);
     const vaultA = await useStore.getState().keyRing.newMnemonicKey(seedA.join(' '), 'Wallet A');

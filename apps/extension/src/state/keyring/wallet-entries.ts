@@ -13,6 +13,7 @@ import type { ZcashWalletJson } from '../wallets';
 import type { Key } from '@repo/encryption/key';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { shownIndicesKey, fundedIndicesKey } from '../../transparent/hd';
+import { isStoreOfWallet } from '../pocket-id';
 
 /** create penumbra wallet entry for a mnemonic vault (side effect: local.set) */
 export async function createPenumbraWalletForMnemonic(
@@ -309,6 +310,49 @@ export async function removeLinkedWallets(
 }
 
 /**
+ * A hot wallet's zcash pockets: its worker stores (account 0 is the vault id
+ * itself; the worker drops every pocket store with it), their per-pocket
+ * storage keys, and the pocket names. Must run while the vault still exists,
+ * since names are filed under its ZID.
+ */
+async function purgePockets(
+  vaultId: string,
+  local: ExtensionStorage<LocalStorageState>,
+): Promise<void> {
+  try {
+    const { deleteWalletInWorker } = await import('./network-worker');
+    await deleteWalletInWorker('zcash', vaultId);
+  } catch {
+    // worker may not be running
+  }
+  // sync-height hints and t-address caches of the vault's stores, all accounts
+  const isPocketKey = (key: string) =>
+    ['zcashSyncHeight_', 'zcashTAddrs:'].some(prefix => {
+      if (!key.startsWith(prefix)) {
+        return false;
+      }
+      return isStoreOfWallet(key.slice(prefix.length), vaultId);
+    });
+  try {
+    const stale = Object.keys(await chrome.storage.local.get(null)).filter(isPocketKey);
+    if (stale.length) {
+      await chrome.storage.local.remove(stale);
+    }
+  } catch {}
+  const vault = ((await local.get('vaults')) ?? []).find(v => v.id === vaultId);
+  if (vault) {
+    const { POCKETS_STORAGE_KEY, forgetWallet, pocketOwner, sanitizePocketBook } =
+      await import('../pockets');
+    const key = POCKETS_STORAGE_KEY as keyof LocalStorageState;
+    const owner = pocketOwner(vault);
+    const book = sanitizePocketBook(await local.get(key));
+    if (book[owner]) {
+      await local.set(key, forgetWallet(book, owner) as never);
+    }
+  }
+}
+
+/**
  * Remove legacy `zignerWallets` entries belonging to the wallet(s) just
  * removed from `penumbraWallets`/`zcashWallets`.
  *
@@ -445,6 +489,8 @@ export async function purgeWalletData(
       // worker may not be running
     }
   }
+
+  await purgePockets(vaultId, local);
 
   // static per-wallet keys, batched into one remove call
   const staticKeys = [

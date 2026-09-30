@@ -18,14 +18,14 @@ import type { ContactCardKey } from './identity';
 
 /**
  * Encrypted backup of ALL local, chain-irreplaceable personal data: contacts +
- * send history + per-tx "from" notes. Same password-derived-key envelope as the
+ * send history + per-tx "from" notes + zcash pocket names. Same password-derived-key envelope as the
  * contacts-only export, one version up. This is the "carry it across devices /
  * recover after a full wipe" layer for data the chain can never give back.
  */
 export interface PersonalDataBackup {
   version: 4;
   exportedAt: number;
-  /** encrypted { contacts, sent, txNotes } JSON */
+  /** encrypted { contacts, sent, txNotes, pockets } JSON */
   data: BoxJson;
   keyPrint: KeyPrintJson;
 }
@@ -545,7 +545,8 @@ export const createContactsSlice =
         const sent = await readSentRecords();
         const txNotes = await readTxNotes();
 
-        const plaintext = JSON.stringify({ contacts, sent, txNotes });
+        const pockets = get().pockets.book;
+        const plaintext = JSON.stringify({ contacts, sent, txNotes, pockets });
         const { key, keyPrint } = await Key.create(password);
         const box = await key.seal(plaintext);
 
@@ -587,6 +588,8 @@ export const createContactsSlice =
           }[];
           sent: SentTxRecord[];
           txNotes: Record<string, string>;
+          /** zcash pocket names (absent in backups made before pockets) */
+          pockets?: unknown;
         };
 
         const existingNames = new Set(safeContacts().map(c => c.name.toLowerCase()));
@@ -624,6 +627,7 @@ export const createContactsSlice =
         // send history + tx notes live outside the contacts store
         await writeSentRecords(parsed.sent ?? []);
         await writeTxNotes(parsed.txNotes ?? {}, mode);
+        await get().pockets.restore(parsed.pockets, mode);
 
         return {
           contacts: newContacts.length,
