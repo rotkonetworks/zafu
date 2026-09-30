@@ -47,6 +47,8 @@ describe('zcash worker pocket isolation', () => {
     expect(SRC).toMatch(/const shieldAccount = hotSpendAccount\(walletId\)/);
     expect(SRC).toMatch(/walletKeysFor\(mnemonic, shieldAccount\)/);
     expect(SRC).toMatch(/derive_transparent_privkey\(\s*mnemonic,\s*shieldAccount,/);
+    // and refuses an input that is not locked to that pocket's key
+    expect(SRC).toMatch(/utxos\.every\(u => isP2pkhOf\(u\.script, privkeyHex\)\)/);
   });
 
   test("deleting a wallet deletes its pockets' stores too", () => {

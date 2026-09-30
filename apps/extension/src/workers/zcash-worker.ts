@@ -37,7 +37,7 @@ import { once } from './once';
 import { assessAmbientRayonIsolation, RAYON_ISOLATION_WARNING } from '../perf/rayon-isolation';
 import { loadVotingWasm } from '../state/voting-wasm';
 import { hotSpendAccount, isStoreOfWallet, parsePocketStoreId } from '../state/pocket-id';
-import { pocketWalletKeys, type PocketKeysCtor } from './pocket-keys';
+import { isP2pkhOf, pocketWalletKeys, type PocketKeysCtor } from './pocket-keys';
 import {
   parseExpiryHeight,
   reconcileSentTxs,
@@ -7865,6 +7865,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             shieldAccount,
             addrIndex,
           );
+          // every input must be locked to this key: this pocket's own t-branch
+          // at this index. Anything else is not this pocket's money.
+          if (!utxos.every(u => isP2pkhOf(u.script, privkeyHex))) {
+            throw new Error(
+              `transparent input is not on pocket ${shieldAccount} index ${addrIndex}`,
+            );
+          }
 
           const utxosJson = JSON.stringify(
             utxos.map(u => ({
