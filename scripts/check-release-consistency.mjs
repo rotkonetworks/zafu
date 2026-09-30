@@ -22,9 +22,9 @@ const VERSION_FILES = [
   'apps/extension/public/beta-manifest.json',
 ];
 
-const readVersion = (rel) => JSON.parse(readFileSync(join(repoRoot, rel), 'utf8')).version;
+const readVersion = rel => JSON.parse(readFileSync(join(repoRoot, rel), 'utf8')).version;
 
-const fail = (lines) => {
+const fail = lines => {
   console.error('zafu release consistency check failed.\n');
   for (const line of lines) console.error(line);
   console.error('\nFix:');
@@ -33,7 +33,7 @@ const fail = (lines) => {
   process.exit(1);
 };
 
-const versions = VERSION_FILES.map((rel) => [rel, readVersion(rel)]);
+const versions = VERSION_FILES.map(rel => [rel, readVersion(rel)]);
 const unique = new Set(versions.map(([, v]) => v));
 
 if (unique.size > 1) {
@@ -53,4 +53,6 @@ if (!heading.test(changelog)) {
   fail([`CHANGELOG.md has no \`## ${version}\` section.`]);
 }
 
-console.log(`OK: version ${version} is consistent across ${VERSION_FILES.length} files and CHANGELOG.md.`);
+console.log(
+  `OK: version ${version} is consistent across ${VERSION_FILES.length} files and CHANGELOG.md.`,
+);

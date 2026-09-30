@@ -298,9 +298,9 @@ navigator.credentials.get = async function (
         if (response.prfResults) {
           results['prf'] = {
             results: {
-              first: hexToBuf(response.prfResults!.first!),
+              first: hexToBuf(response.prfResults.first!),
               ...(response.prfResults.second
-                ? { second: hexToBuf(response.prfResults!.second!) }
+                ? { second: hexToBuf(response.prfResults.second) }
                 : {}),
             },
           };

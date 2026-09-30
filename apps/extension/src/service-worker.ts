@@ -20,8 +20,6 @@ import './install-global-error-handlers';
 // registration.
 import { installEgressGuard } from './net/install-egress-guard';
 
-installEgressGuard();
-
 // listeners
 import { contentScriptConnectListener } from './message/listen/content-script-connect';
 import { signRequestListener } from './message/listen/sign-request';
@@ -90,6 +88,8 @@ import { backOff } from 'exponential-backoff';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { networkAllowsBackgroundSync } from './state/privacy';
 import { runPresencePublish } from './state/contact-discovery-service';
+
+installEgressGuard();
 
 // count open side panels so approval routing can target the panel only when it
 // is actually open (see popup.ts). Registered once at worker startup.

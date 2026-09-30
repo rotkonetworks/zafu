@@ -57,5 +57,5 @@ expected to combine themselves:
   203, FN-DSA/FIPS 206) and well-studied combiners (X-Wing-style concatenation). We do not
   invent a new primitive, and we do not invent a new combiner.
 - **Document the composition as a composition.** State plainly what is standardised, what is a
-  composed choice, and what the construction does *not* prove (e.g. static-static sealing
+  composed choice, and what the construction does _not_ prove (e.g. static-static sealing
   proves pair membership, not authorship).

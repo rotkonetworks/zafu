@@ -29,9 +29,12 @@ const fakeChannel: ZidChannel = {
 
 /** a genuine capability signal: the peer's well-formed refusal naming its protocol. */
 const handshakeFailure = (): Error =>
-  Object.assign(new Error('noise: peer does not support zafuNoise_IKhybrid...; it offered classical'), {
-    name: 'NoiseHandshakeError',
-  });
+  Object.assign(
+    new Error('noise: peer does not support zafuNoise_IKhybrid...; it offered classical'),
+    {
+      name: 'NoiseHandshakeError',
+    },
+  );
 
 /** a malformed/truncated peer frame - a TRANSPORT failure, NOT a downgrade signal. */
 const malformedFailure = (): Error =>

@@ -38,10 +38,14 @@ const isString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim() !== '';
 
 const parseCustomNetwork = (raw: unknown): CustomNetwork | undefined => {
-  if (typeof raw !== 'object' || raw === null) return undefined;
+  if (typeof raw !== 'object' || raw === null) {
+    return undefined;
+  }
   const record = raw as Record<string, unknown>;
   const { id, name, chainId, rpc, rest, prefix, addedAt } = record;
-  if (!isString(id) || !isString(name) || !isString(chainId) || !isString(rpc)) return undefined;
+  if (!isString(id) || !isString(name) || !isString(chainId) || !isString(rpc)) {
+    return undefined;
+  }
   return {
     id,
     name,
@@ -55,7 +59,9 @@ const parseCustomNetwork = (raw: unknown): CustomNetwork | undefined => {
 
 /** Defensive read: a hand-edited or older value degrades to the entries that parse. */
 export const parseCustomNetworks = (raw: unknown): CustomNetwork[] => {
-  if (!Array.isArray(raw)) return [];
+  if (!Array.isArray(raw)) {
+    return [];
+  }
   return raw.flatMap(entry => {
     const parsed = parseCustomNetwork(entry);
     return parsed ? [parsed] : [];
@@ -104,9 +110,13 @@ export const addCustomNetwork = async (input: NewCustomNetwork): Promise<CustomN
 export const customNetworkHosts = (network: CustomNetwork): string[] => {
   const hosts: string[] = [];
   for (const url of [network.rpc, network.rest]) {
-    if (!url) continue;
+    if (!url) {
+      continue;
+    }
     const host = hostOf(url);
-    if (host && !hosts.includes(host)) hosts.push(host);
+    if (host && !hosts.includes(host)) {
+      hosts.push(host);
+    }
   }
   return hosts;
 };
@@ -115,7 +125,9 @@ export const customNetworkHosts = (network: CustomNetwork): string[] => {
 export const removeCustomNetwork = async (id: string): Promise<CustomNetwork | undefined> => {
   const existing = await readCustomNetworks();
   const removed = existing.find(n => n.id === id);
-  if (!removed) return undefined;
+  if (!removed) {
+    return undefined;
+  }
   await writeCustomNetworks(existing.filter(n => n.id !== id));
   // The ledger entry existed only because the user configured this network;
   // keeping it would leave the host trusted (and listed) with nothing left to

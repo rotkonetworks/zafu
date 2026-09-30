@@ -84,7 +84,7 @@ const updateGroupChats = (
   mutate: (all: StoredChats) => void,
 ): Promise<void> => {
   const run = writeChain.then(async () => {
-    const all = ((await local.get('groupChats')) ?? {}) as StoredChats;
+    const all = (await local.get('groupChats')) ?? {};
     mutate(all);
     await local.set('groupChats', all);
   });

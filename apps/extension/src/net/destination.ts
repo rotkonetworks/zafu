@@ -124,16 +124,22 @@ const num = (raw: unknown, fallback = 0): number =>
 export const parseNetEgressState = (raw: unknown): NetEgressState => {
   // A fresh, mutable empty state: the constant is frozen and must not be handed
   // to a caller that is about to record a destination into it.
-  if (typeof raw !== 'object' || raw === null) return { destinations: {}, identities: {} };
+  if (typeof raw !== 'object' || raw === null) {
+    return { destinations: {}, identities: {} };
+  }
   const obj = raw as Record<string, unknown>;
 
   const destinations: Record<string, DestinationRecord> = {};
   const rawDestinations = obj['destinations'];
   if (typeof rawDestinations === 'object' && rawDestinations !== null) {
     for (const [host, value] of Object.entries(rawDestinations as Record<string, unknown>)) {
-      if (typeof value !== 'object' || value === null) continue;
+      if (typeof value !== 'object' || value === null) {
+        continue;
+      }
       const v = value as Record<string, unknown>;
-      if (!isState(v['state'])) continue;
+      if (!isState(v['state'])) {
+        continue;
+      }
       const purposes = Array.isArray(v['purposes']) ? v['purposes'] : [];
       destinations[host] = {
         state: v['state'],
@@ -154,9 +160,13 @@ export const parseNetEgressState = (raw: unknown): NetEgressState => {
   const rawIdentities = obj['identities'];
   if (typeof rawIdentities === 'object' && rawIdentities !== null) {
     for (const [id, value] of Object.entries(rawIdentities as Record<string, unknown>)) {
-      if (typeof value !== 'object' || value === null) continue;
+      if (typeof value !== 'object' || value === null) {
+        continue;
+      }
       const v = value as Record<string, unknown>;
-      if (typeof v['name'] !== 'string') continue;
+      if (typeof v['name'] !== 'string') {
+        continue;
+      }
       const proxyRaw = v['proxy'];
       let proxy: NetIdentity['proxy'];
       if (typeof proxyRaw === 'object' && proxyRaw !== null) {
@@ -180,7 +190,9 @@ export const parseNetEgressState = (raw: unknown): NetEgressState => {
       const headers: Record<string, string> = {};
       if (typeof headersRaw === 'object' && headersRaw !== null) {
         for (const [k, hv] of Object.entries(headersRaw as Record<string, unknown>)) {
-          if (typeof hv === 'string') headers[k] = hv;
+          if (typeof hv === 'string') {
+            headers[k] = hv;
+          }
         }
       }
       identities[id] = {
@@ -245,18 +257,26 @@ export const hostnameOf = (host: string): string => host.split(':')[0] ?? host;
 export const isLocalDeviceHost = (host: string): boolean => {
   // IPv6 loopback is written `::1`, `[::1]` or with a port. It cannot go
   // through `hostnameOf`, which splits on ':' and would read `::1` as ''.
-  if (/^(::1|\[::1\])(:\d+)?$/.test(host)) return true;
+  if (/^(::1|\[::1\])(:\d+)?$/.test(host)) {
+    return true;
+  }
   const name = hostnameOf(host);
   return name === 'localhost' || name === '127.0.0.1' || name === '0.0.0.0';
 };
 
 export const parseNetEgressLog = (raw: unknown): NetEgressLogEntry[] => {
-  if (!Array.isArray(raw)) return [];
+  if (!Array.isArray(raw)) {
+    return [];
+  }
   const entries: NetEgressLogEntry[] = [];
   for (const value of raw) {
-    if (typeof value !== 'object' || value === null) continue;
+    if (typeof value !== 'object' || value === null) {
+      continue;
+    }
     const v = value as Record<string, unknown>;
-    if (typeof v['host'] !== 'string' || typeof v['ts'] !== 'number') continue;
+    if (typeof v['host'] !== 'string' || typeof v['ts'] !== 'number') {
+      continue;
+    }
     const outcome = v['outcome'];
     if (
       outcome !== 'allowed' &&

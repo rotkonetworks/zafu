@@ -109,9 +109,13 @@ const SHIPPED: readonly TrustedDestination[] = shippedDestinations();
 const configuredDestinations = async (): Promise<TrustedDestination[]> => {
   const out: TrustedDestination[] = [];
   const push = (url: unknown, label: string, purposes: NetPurpose[]): void => {
-    if (typeof url !== 'string' || !url.trim()) return;
+    if (typeof url !== 'string' || !url.trim()) {
+      return;
+    }
     const host = hostOf(url.trim());
-    if (host) out.push({ host, label, purposes });
+    if (host) {
+      out.push({ host, label, purposes });
+    }
   };
 
   const [networkEndpoints, grpcEndpoint, zidDiscovery, votingOverride, customNetworks] =
@@ -136,7 +140,9 @@ const configuredDestinations = async (): Promise<TrustedDestination[]> => {
   // host, so prompting for it would only ask them to approve their own choice.
   for (const network of customNetworks) {
     for (const host of customNetworkHosts(network)) {
-      if (out.some(entry => entry.host === host)) continue;
+      if (out.some(entry => entry.host === host)) {
+        continue;
+      }
       out.push({ host, label: `your network: ${network.name}`, purposes: ['chain-rpc'] });
     }
   }

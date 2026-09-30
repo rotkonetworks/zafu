@@ -455,18 +455,8 @@ export const roomShard = async (appScope: string, channel: string): Promise<stri
  * is not a function of a guessable string - so it cannot be probed for, matched
  * against a name list, or censored by name.
  */
-export const roomShardFromSecret = async (
-  appScope: string,
-  secret: Uint8Array,
-): Promise<string> =>
-  toHex(
-    await hkdfBytes(
-      secret,
-      LABEL_KEY_SHARD,
-      concat([await sha256(enc.encode(appScope))]),
-      8,
-    ),
-  );
+export const roomShardFromSecret = async (appScope: string, secret: Uint8Array): Promise<string> =>
+  toHex(await hkdfBytes(secret, LABEL_KEY_SHARD, concat([await sha256(enc.encode(appScope))]), 8));
 
 /**
  * The entry tag for one message: opaque, unique per write, derived from a fresh
