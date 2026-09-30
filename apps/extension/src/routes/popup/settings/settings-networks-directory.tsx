@@ -3,13 +3,17 @@
  *
  * Three honest lists, in the order a user cares about:
  *
- *  1. chains with an open channel to penumbra - the real "you can bridge to
- *     these" set, each with zafu's shipped rpc/rest and its current egress
- *     decision, blockable/allowable inline;
+ *  1. the ibc chains under penumbra - one row per chain with its rotating
+ *     endpoint pool, whether a live channel to penumbra is open, and the
+ *     egress decision on zafu's shipped rpc/rest, blockable/allowable inline;
  *  2. the user's own networks - a node they run or trust, added by hand, which
  *     then feeds the trusted egress inventory;
  *  3. everything else the wallet may talk to (the shipped + configured hosts),
  *     folded away so it does not dominate the screen.
+ *
+ * Lists 1 and 2 are Penumbra's IBC side and render inside the Penumbra
+ * network panel (PenumbraIbcDirectory); list 3 sits under all the network
+ * cards (NetworksDirectory).
  *
  * The egress decision lives in the ledger (`net/ledger.ts`), not here: this
  * screen is a view that re-reads after every mutation.
@@ -18,10 +22,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
 import { cn } from '@repo/ui/lib/utils';
-import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
+import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { ChannelTag, TransparentChainEndpoints } from './transparent-chain-endpoints';
 import { useIbcChains } from '../../../hooks/ibc-chains';
-import { useStore } from '../../../state';
-import { selectEnabledNetworks } from '../../../state/keyring';
 import { hostOf, type DestinationState, type NetEgressState } from '../../../net/destination';
 import { noteDestination, readNetEgress, setDestinationDecision } from '../../../net/ledger';
 import {
@@ -121,69 +124,96 @@ const EndpointDecisionRow = ({
   );
 };
 
-const ChainsWithChannel = ({
+/** allow/block for zafu's shipped rpc + rest hosts of one chain */
+const ShippedHostDecisions = ({
+  rpc,
+  rest,
+  label,
+  egress,
+  onDecide,
+}: {
+  rpc?: string;
+  rest?: string;
+  label: string;
+  egress: NetEgressState | null;
+  onDecide: (host: string, label: string, next: DestinationState) => Promise<void>;
+}) => {
+  if (!rpc && !rest) {
+    return (
+      <p className='text-label text-fg-dim lowercase'>zafu ships no endpoint for this chain.</p>
+    );
+  }
+  return (
+    <div className='flex flex-col gap-2'>
+      {[
+        ['rpc', rpc],
+        ['rest', rest],
+      ].map(([kind, url]) =>
+        url ? (
+          <EndpointDecisionRow
+            key={kind}
+            kind={kind!}
+            url={url}
+            state={egressViewOf(egress, hostOf(url))}
+            onDecide={next => void onDecide(hostOf(url)!, `zafu's endpoint for ${label}`, next)}
+          />
+        ) : null,
+      )}
+    </div>
+  );
+};
+
+/**
+ * Every chain zafu knows under Penumbra, one row each: the rotating endpoint
+ * pool, whether a live IBC channel to Penumbra exists, and the allow/block
+ * decision on zafu's shipped hosts. Chains the node reports a channel for but
+ * zafu has no config for get a plain row, so the channel set stays complete.
+ */
+const IbcChains = ({
   egress,
   onDecide,
 }: {
   egress: NetEgressState | null;
   onDecide: (host: string, label: string, next: DestinationState) => Promise<void>;
 }) => {
-  const { data: chains, isLoading } = useIbcChains();
-
-  if (isLoading) {
-    return <p className='text-label text-fg-dim lowercase'>loading channels…</p>;
-  }
-  if (!chains || chains.length === 0) {
-    return (
-      <p className='text-label text-fg-dim lowercase leading-snug'>
-        no open channels to penumbra right now.
-      </p>
-    );
-  }
+  const { data: live, isLoading } = useIbcChains();
+  const known = Object.keys(COSMOS_CHAINS) as CosmosChainId[];
+  const channelOpen = (chainId: string) =>
+    isLoading ? undefined : Boolean(live?.some(c => c.chainId === chainId));
+  const unconfigured = (live ?? []).filter(
+    c => !Object.values(COSMOS_CHAINS).some(k => k.chainId === c.chainId),
+  );
 
   return (
     <div className='flex flex-col gap-1.5'>
-      {chains.map(chain => {
-        // zafu's shipped rpc/rest for this chain id - absent means it ships none
-        const config = Object.values(COSMOS_CHAINS).find(c => c.chainId === chain.chainId);
-        const rpc = config?.rpcEndpoint;
-        const rest = config?.restEndpoint;
+      {known.map(id => {
+        const config = COSMOS_CHAINS[id];
         return (
-          <div key={chain.chainId} className='rounded-lg border border-border-soft px-3 py-2'>
-            <div className='flex items-baseline gap-2'>
-              <span className='flex-1 text-xs text-fg lowercase'>{chain.displayName}</span>
-              <span className='break-all font-mono text-label text-fg-muted'>{chain.chainId}</span>
-            </div>
-            <div className='mt-2 flex flex-col gap-2'>
-              {rpc && (
-                <EndpointDecisionRow
-                  kind='rpc'
-                  url={rpc}
-                  state={egressViewOf(egress, hostOf(rpc))}
-                  onDecide={next =>
-                    void onDecide(hostOf(rpc)!, `zafu's endpoint for ${chain.displayName}`, next)
-                  }
-                />
-              )}
-              {rest && (
-                <EndpointDecisionRow
-                  kind='rest'
-                  url={rest}
-                  state={egressViewOf(egress, hostOf(rest))}
-                  onDecide={next =>
-                    void onDecide(hostOf(rest)!, `zafu's endpoint for ${chain.displayName}`, next)
-                  }
-                />
-              )}
-              {!rpc && !rest && (
-                <p className='text-label text-fg-dim lowercase'>
-                  zafu ships no endpoint for this chain.
-                </p>
-              )}
-            </div>
-          </div>
+          <TransparentChainEndpoints
+            key={id}
+            chainId={id}
+            channelOpen={channelOpen(config.chainId)}
+          >
+            <ShippedHostDecisions
+              rpc={config.rpcEndpoint}
+              rest={config.restEndpoint}
+              label={config.name}
+              egress={egress}
+              onDecide={onDecide}
+            />
+          </TransparentChainEndpoints>
         );
       })}
+      {unconfigured.map(chain => (
+        <div
+          key={chain.chainId}
+          className='flex items-center gap-2 border border-border-soft px-3 py-2'
+        >
+          <span className='flex-1 text-xs text-fg lowercase'>{chain.displayName}</span>
+          <ChannelTag open />
+          <span className='font-mono text-label text-fg-dim'>{chain.chainId}</span>
+        </div>
+      ))}
     </div>
   );
 };
@@ -358,8 +388,8 @@ const KnownDestinations = ({ destinations }: { destinations: TrustedDestination[
   );
 };
 
-export const NetworksDirectory = () => {
-  const penumbraEnabled = useStore(selectEnabledNetworks).includes('penumbra');
+/** Shared load/refresh of the egress ledger, custom networks and inventory. */
+const useDirectoryState = () => {
   const [egress, setEgress] = useState<NetEgressState | null>(null);
   const [networks, setNetworks] = useState<CustomNetwork[]>([]);
   const [destinations, setDestinations] = useState<TrustedDestination[]>([]);
@@ -393,23 +423,33 @@ export const NetworksDirectory = () => {
     await refresh();
   };
 
+  return { egress, networks, destinations, refresh, decide };
+};
+
+/**
+ * Penumbra's IBC side (lists 1 and 2): rendered inside the Penumbra network
+ * panel, so a Zcash-only user never sees cosmos chains in their settings.
+ */
+export const PenumbraIbcDirectory = () => {
+  const { egress, networks, refresh, decide } = useDirectoryState();
+
   return (
     <div className='flex flex-col gap-4'>
-      {penumbraEnabled && (
-        <div className='flex flex-col gap-2 border-b border-border-soft pb-3'>
-          <p className='text-label text-fg-muted lowercase'>
-            chains with an open channel to penumbra
-          </p>
-          <ChainsWithChannel egress={egress} onDecide={decide} />
-        </div>
-      )}
-
       <div className='flex flex-col gap-2'>
+        <p className='text-label text-fg-muted lowercase'>ibc chains</p>
+        <IbcChains egress={egress} onDecide={decide} />
+      </div>
+
+      <div className='flex flex-col gap-2 border-t border-border-soft pt-3'>
         <p className='text-label text-fg-muted lowercase'>your own networks</p>
         <OwnNetworks networks={networks} onRefresh={refresh} />
       </div>
-
-      <KnownDestinations destinations={destinations} />
     </div>
   );
+};
+
+/** Network-agnostic list 3, shown under all the network cards. */
+export const NetworksDirectory = () => {
+  const { destinations } = useDirectoryState();
+  return <KnownDestinations destinations={destinations} />;
 };

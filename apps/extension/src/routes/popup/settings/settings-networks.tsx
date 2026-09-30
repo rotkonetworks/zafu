@@ -57,11 +57,9 @@ import {
 import { NETWORKS, LAUNCHED_NETWORKS, getTopLevelNetworks } from '../../../config/networks';
 import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
-import { TransparentChainEndpoints } from './transparent-chain-endpoints';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { KeplrCompatToggle } from './keplr-compat-toggle';
 import { SettingsWallets } from './settings-wallets';
-import { NetworksDirectory } from './settings-networks-directory';
+import { NetworksDirectory, PenumbraIbcDirectory } from './settings-networks-directory';
 
 /** color map for network indicators */
 const NETWORK_COLORS: Record<string, string> = {
@@ -329,22 +327,9 @@ const NetworkToggles = () => {
                       }
                     />
 
-                    {/* Transparent cosmos chains under Penumbra (bridge on-
-                          and off-ramps): one collapsible row per chain, Keplr
-                          style, each editing the RPC pool its lookups rotate
-                          across. Managed here, no second extension needed. */}
                     <div className='border-t border-border-soft pt-3'>
-                      <div className='text-label text-fg-muted mb-2'>transparent chains</div>
-                      <div className='flex flex-col gap-1.5'>
-                        {(Object.keys(COSMOS_CHAINS) as CosmosChainId[]).map(id => (
-                          <TransparentChainEndpoints key={id} chainId={id} />
-                        ))}
-                      </div>
+                      <PenumbraIbcDirectory />
                     </div>
-                    {/* Cosmos-family dapps (IBC, Keplr-only sites) only
-                          make sense to intercept when Penumbra is the
-                          active network — lives here rather than in
-                          Privacy so it's next to its actual scope. */}
                     <div className='border-t border-border-soft pt-3'>
                       <KeplrCompatToggle />
                     </div>

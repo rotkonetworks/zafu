@@ -7,15 +7,43 @@
  * provider can link all of a user's addresses. Defaults come from the chain
  * config (packages/wallet cosmos chains), which includes the endpoint Keplr's
  * chain registry lists for the chain.
+ *
+ * The Penumbra networks panel also passes whether the chain has a live IBC
+ * channel to Penumbra, and the allow/block controls for its shipped hosts as
+ * children, so each chain is one row instead of appearing in two lists.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
 import { cn } from '@repo/ui/lib/utils';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { defaultRpcPool, useRpcPool } from '../../../hooks/transparent-rpc';
 
-export const TransparentChainEndpoints = ({ chainId }: { chainId: CosmosChainId }) => {
+/** "channel open" / "no channel" tag; nothing while the channel list loads. */
+export const ChannelTag = ({ open }: { open?: boolean }) =>
+  open === undefined ? null : (
+    <span
+      className={cn(
+        'flex items-center gap-1 text-label lowercase',
+        open ? 'text-fg-muted' : 'text-fg-dim',
+      )}
+    >
+      <span className={cn('h-1.5 w-1.5 rounded-full', open ? 'bg-green-400' : 'bg-fg-dim')} />
+      {open ? 'channel open' : 'no channel'}
+    </span>
+  );
+
+export const TransparentChainEndpoints = ({
+  chainId,
+  channelOpen,
+  children,
+}: {
+  chainId: CosmosChainId;
+  /** live IBC channel to Penumbra; undefined while unknown */
+  channelOpen?: boolean;
+  /** extra controls at the bottom of the expanded row */
+  children?: ReactNode;
+}) => {
   const config = COSMOS_CHAINS[chainId];
   const { pool, isCustom, save, reset } = useRpcPool(chainId);
   const [open, setOpen] = useState(false);
@@ -48,6 +76,8 @@ export const TransparentChainEndpoints = ({ chainId }: { chainId: CosmosChainId 
         className='flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-elev-1'
       >
         <span className='flex-1 text-xs text-fg lowercase'>{config.name}</span>
+        <ChannelTag open={channelOpen} />
+        {channelOpen !== undefined && <span className='text-label text-fg-dim'>·</span>}
         <span className='text-label text-fg-muted lowercase tabular'>
           {pool.length} {pool.length === 1 ? 'endpoint' : 'endpoints'}
           {isCustom && ' · custom'}
@@ -128,6 +158,8 @@ export const TransparentChainEndpoints = ({ chainId }: { chainId: CosmosChainId 
               empty - saving reverts to the {defaultRpcPool(chainId).length} shipped defaults.
             </p>
           )}
+
+          {children && <div className='border-t border-border-soft pt-2'>{children}</div>}
         </div>
       )}
     </div>
