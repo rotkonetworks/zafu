@@ -9,6 +9,7 @@ import { OriginRecord, UserChoice } from '@repo/storage-chrome/records';
 import { readEncrypted, writeEncrypted, markHydrated } from './encrypted-storage';
 import { backfillMissingMultisigMirrors } from './keyring/migration';
 import { DEFAULT_PRIVACY_SETTINGS } from './privacy';
+import { POCKETS_STORAGE_KEY } from './pockets';
 import type { WalletJson } from '@repo/wallet';
 import type { EncryptedVault } from './keyring/types';
 import type { ZcashWalletJson } from './wallets';
@@ -38,6 +39,11 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
     const zignerCameraEnabled = await localExtStorage.get('zignerCameraEnabled');
     const privacySettings = await localExtStorage.get(
       'privacySettings' as keyof import('@repo/storage-chrome/local').LocalStorageState,
+    );
+    get().pockets.hydrate(
+      await localExtStorage.get(
+        POCKETS_STORAGE_KEY as keyof import('@repo/storage-chrome/local').LocalStorageState,
+      ),
     );
 
     set(
@@ -325,6 +331,13 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
             }),
           );
         }
+      }
+
+      const pocketsChange = (changes as Record<string, { newValue?: unknown } | undefined>)[
+        POCKETS_STORAGE_KEY
+      ];
+      if (pocketsChange) {
+        get().pockets.hydrate(pocketsChange.newValue);
       }
 
       // re-init keyring if vaults or selected vault changes
