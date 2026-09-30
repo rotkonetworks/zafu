@@ -198,7 +198,7 @@ export const HistoryContent = ({
   if (q.error) {
     return (
       <div className='flex flex-col items-center justify-center gap-3 py-12'>
-        <span className='text-xs text-red-400'>failed to load</span>
+        <span className='text-xs text-hanko'>failed to load</span>
         <button
           onClick={() => void q.refetch()}
           className='text-xs text-zigner-gold hover:underline'

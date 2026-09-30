@@ -1,10 +1,14 @@
-/** format ZEC with meaningful digits only — no trailing zeros, min 2 decimals */
-export function fmtZec(val: number): string {
+/**
+ * Format ZEC with meaningful digits only - no trailing zeros, min 2 decimals.
+ * `maxDecimals` caps precision (default 8, full precision); the hero balance
+ * card passes 4 so a long amount fits without overflowing - full precision
+ * stays available in the pool view.
+ */
+export function fmtZec(val: number, maxDecimals = 8): string {
   if (val === 0) {
     return '0';
   }
-  const s = val.toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
-  // ensure at least 2 decimal places for readability
+  const s = val.toFixed(maxDecimals).replace(/0+$/, '').replace(/\.$/, '');
   const dot = s.indexOf('.');
   if (dot === -1) {
     return s + '.00';
@@ -13,22 +17,9 @@ export function fmtZec(val: number): string {
   return decimals < 2 ? s + '0'.repeat(2 - decimals) : s;
 }
 
-/**
- * Hero balance formatter - caps at 4 decimals so a long ZEC amount fits the
- * balance card instead of overflowing (the 8-decimal full precision was the
- * source of the overflow). Full precision stays available in the pool view.
- */
+/** hero balance formatter - see `fmtZec`'s `maxDecimals`. */
 export function fmtZecHero(val: number): string {
-  if (val === 0) {
-    return '0';
-  }
-  const s = val.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
-  const dot = s.indexOf('.');
-  if (dot === -1) {
-    return s + '.00';
-  }
-  const decimals = s.length - dot - 1;
-  return decimals < 2 ? s + '0'.repeat(2 - decimals) : s;
+  return fmtZec(val, 4);
 }
 
 export function zatToZec(zat: bigint | string): string {

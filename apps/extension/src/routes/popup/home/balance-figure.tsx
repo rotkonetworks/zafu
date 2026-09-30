@@ -66,7 +66,7 @@ export const BalanceFigure = ({
           'min-w-0 truncate text-hero leading-none tracking-tight text-network-accent tabular',
           view === 'partial' && 'animate-pulse',
         )}
-        title={view === 'partial' ? 'still scanning — more funds may yet be found' : undefined}
+        title={view === 'partial' ? 'still scanning - more funds may yet be found' : undefined}
       >
         <Sensitive>{fmtZecHero(zec)}</Sensitive>
       </span>

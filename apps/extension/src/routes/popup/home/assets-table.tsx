@@ -536,7 +536,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
       {/* claim confirmation modal */}
       {claimBalance && claimStatus !== 'idle' && (
         <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
-          <div className='mx-4 w-full max-w-sm rounded-lg border border-border-soft bg-canvas p-5 shadow-xl'>
+          <div className='mx-4 w-full max-w-sm rounded-lg border border-border-soft bg-canvas p-5'>
             <div className='flex items-center justify-between mb-4'>
               <h2 className='text-lg font-medium'>claim unbonding tokens</h2>
               {(claimStatus === 'confirm' ||
@@ -624,7 +624,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
 
             {claimStatus === 'error' && (
               <div className='flex flex-col gap-3'>
-                <p className='text-sm text-red-400'>{claimError ?? 'claim failed'}</p>
+                <p className='text-sm text-hanko'>{claimError ?? 'claim failed'}</p>
                 <div className='flex gap-2 mt-2'>
                   <button
                     onClick={closeClaim}

@@ -60,7 +60,7 @@ const CopyButton = ({ value, label }: { value: string; label?: string }) => {
       className='shrink-0 text-fg-muted transition-colors hover:text-fg-high'
       title={copied ? 'copied' : (label ?? `copy ${value}`)}
     >
-      <span className={cn('h-3.5 w-3.5', copied ? 'i-ph-check text-green-400' : 'i-ph-copy')} />
+      <span className={cn('h-3.5 w-3.5', copied ? 'i-ph-check text-network-accent' : 'i-ph-copy')} />
     </button>
   );
 };
@@ -79,7 +79,7 @@ const ReceiveCard = ({
     <div className='flex items-center justify-between'>
       <span className='text-label text-fg-muted lowercase'>receive on {chainName}</span>
       <Hint label='fresh single-use address, public until shielded. a new one appears once this is funded.'>
-        <span className='rounded bg-red-500/10 px-1.5 py-0.5 text-label leading-none text-red-400 lowercase'>
+        <span className='rounded bg-warning/10 px-1.5 py-0.5 text-label leading-none text-warning lowercase'>
           transparent
         </span>
       </Hint>

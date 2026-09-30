@@ -7,7 +7,7 @@ import { PenumbraAccountPicker } from '../../../components/penumbra-account-pick
 import { Sensitive } from '../../../components/sensitive';
 import { PopupPath } from '../paths';
 import { AssetListSkeleton } from '../../../components/primitives/skeleton';
-import { SyncProgressBar } from '../../../components/sync-progress-bar';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { useSyncProgress } from '../../../hooks/full-sync-height';
 import { getDisplayDenomFromView } from '@penumbra-zone/getters/value-view';
 import { fromValueView } from '@rotko/penumbra-types/amount';
@@ -142,17 +142,16 @@ export const PenumbraContent = ({
       {/* single message slot for penumbra: only the backup nudge competes */}
       {nudge}
 
-      {/* sync bar — visible while syncing or connecting */}
+      {/* sync status - a fixed-height reserved slot, not a growing card.
+          A sync error gets a one-tap link to the network picker so a new
+          user whose Penumbra grpc endpoint is unreachable doesn't have to
+          hunt through settings to switch. */}
       {(isSyncing || !latestBlockHeight) && (
-        <SyncProgressBar
-          percent={syncPct}
-          label={syncLabel}
-          error={error ? String(error) : undefined}
-          // Same recovery affordance as Zcash: a sync error gets a
-          // one-tap link to the network picker so a new user whose
-          // Penumbra grpc endpoint is unreachable doesn't have to
-          // hunt through settings to switch.
-          errorAction={
+        <StatusSlot
+          tone={error ? 'danger' : 'gold'}
+          icon={error ? 'i-ph-warning' : 'i-ph-arrows-clockwise'}
+          progress={error ? undefined : syncPct}
+          action={
             error
               ? {
                   label: 'switch endpoint',
@@ -160,9 +159,9 @@ export const PenumbraContent = ({
                 }
               : undefined
           }
-          barColor='bg-penumbra-purple'
-          barDoneColor='bg-penumbra-teal'
-        />
+        >
+          {error ? String(error) : syncLabel}
+        </StatusSlot>
       )}
 
       {/* account picker — between sync bar and assets */}
