@@ -27,7 +27,7 @@
     --fg-high: #f2ecdf;
     --fg: #ded5c4;
     --fg-muted: #948a79;
-    --fg-dim: #625a4d;
+    --fg-dim: #867d6e;
 
     /* brand — gold (cold side) */
     --zigner-gold-dark: #b8860b;
@@ -166,7 +166,7 @@
     --fg-high: #171310;
     --fg: #2b241c;
     --fg-muted: #6f6555;
-    --fg-dim: #a3947e;
+    --fg-dim: #6a6957;
     /* gold on paper: brand hue held, lightness dropped for contrast */
     --zigner-gold: #8a6508;
     /* same treatment for the blue sibling — #3b82f6 only clears ~3.7:1 on
