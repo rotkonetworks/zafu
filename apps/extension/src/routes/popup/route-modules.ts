@@ -58,6 +58,7 @@ export const popupScreens = {
   keplrApproval: () => import('./approval/keplr').then(m => m.KeplrApproval),
 
   // tab pages and flows
+  tools: () => import('./tools').then(m => m.ToolsPage),
   stake: () => import('./stake').then(m => m.StakePage),
   swap: () => import('./swap').then(m => m.SwapPage),
   vote: () => import('./vote').then(m => m.VotePage),
