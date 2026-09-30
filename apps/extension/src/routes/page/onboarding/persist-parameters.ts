@@ -47,7 +47,7 @@ export const setOnboardingValuesInStorage = async (seedPhraseOrigin: SEED_PHRASE
   await localExtStorage.set('frontendUrl', DEFAULT_FRONTEND);
 
   if (seedPhraseOrigin === SEED_PHRASE_ORIGIN.IMPORTED) {
-    // Importing means the user typed the phrase from an existing backup —
+    // Importing means the user typed the phrase from an existing backup -
     // they demonstrably possess it. Suppress the home backup nudge.
     await localExtStorage.set('seedPhraseBackedUp', true);
   }
