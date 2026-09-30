@@ -15,6 +15,7 @@
 import { OverlayPortal } from '../../../components/overlay-portal';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { Sensitive } from '../../../components/sensitive';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
@@ -123,28 +124,23 @@ export function IronwoodMigrationBanner({
     return null;
   }
   return (
-    <div className='rounded-lg border border-primary/40 bg-primary/10 p-3'>
-      <div className='flex items-center justify-between'>
-        <div className='flex items-center gap-2'>
-          <span className='i-ph-arrows-left-right h-4 w-4 text-zigner-gold' />
-          <span className='text-xs text-fg-high'>orchard is now legacy</span>
-          <span className='text-xs font-medium tabular-nums text-fg-muted'>
-            <Sensitive>{fmtZec(orchardZat)}</Sensitive> ZEC to migrate
-          </span>
-        </div>
-        <button
-          onClick={onMigrate}
-          className='text-xs font-medium text-zigner-gold hover:text-primary/90 transition-colors'
-        >
-          migrate
-        </button>
-      </div>
-      <p className='mt-1.5 text-label text-fg-muted leading-snug'>
+    <StatusSlot
+      tone='gold'
+      icon='i-ph-arrows-left-right'
+      action={{ label: 'migrate', onClick: onMigrate }}
+    >
+      <span className='text-fg-high'>
+        orchard is now legacy ·{' '}
+        <span className='font-medium tabular-nums text-fg-muted'>
+          <Sensitive>{fmtZec(orchardZat)}</Sensitive> ZEC to migrate
+        </span>
+      </span>
+      <span className='text-label leading-snug text-fg-muted'>
         NU6.3 makes ironwood the active pool. your orchard funds are safe - move them one-way to
         your own ironwood address to keep spending normally. orchard-to-orchard sends are disabled
         after activation.
-      </p>
-    </div>
+      </span>
+    </StatusSlot>
   );
 }
 

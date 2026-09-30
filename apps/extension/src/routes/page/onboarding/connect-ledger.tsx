@@ -26,7 +26,7 @@ import { BackIcon } from '@repo/ui/components/ui/icons/back-icon';
 import { Button } from '@repo/ui/components/ui/button';
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { Input } from '@repo/ui/components/ui/input';
-import { cn } from '@repo/ui/lib/utils';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../../../state';
 import { keyRingSelector, type LedgerImport } from '../../../state/keyring';
@@ -48,29 +48,6 @@ const MAINNET = true;
 // Version -> capability decisions come from the single source `ledgerCapabilities`
 // (../../../ledger/capabilities): transparent always; shielded iff app >= 3.8.0.
 
-/**
- * Small access/notice box - same visual language as import-zigner's AccessNote,
- * but ledger notices carry a warn or info tone depending on capability.
- */
-const NoticeBox = ({ tone, icon, children }: NoticeBoxProps) => (
-  <div
-    className={cn(
-      'flex items-start gap-1.5 rounded-lg border p-3 text-left text-xs lowercase',
-      tone === 'warn'
-        ? 'border-yellow-500/40 bg-yellow-500/10 text-yellow-400'
-        : 'border-border-soft/60 bg-elev-2/40 text-fg-muted',
-    )}
-  >
-    <span className={cn(icon, 'mt-0.5 h-3.5 w-3.5 shrink-0')} />
-    <span>{children}</span>
-  </div>
-);
-
-interface NoticeBoxProps {
-  readonly tone: 'warn' | 'info';
-  readonly icon: string;
-  readonly children: React.ReactNode;
-}
 
 /** Local view state - a small linear machine, no store slice needed. */
 type Phase = 'idle' | 'connecting' | 'connected' | 'importing';
@@ -174,16 +151,16 @@ export const ConnectLedger = () => {
 
         <div className='flex flex-col gap-4'>
           {inPopup && (
-            <NoticeBox tone='warn' icon='i-ph-arrow-square-out'>
+            <StatusSlot tone='warn' icon='i-ph-arrow-square-out'>
               open zafu in the side panel or a full tab to connect a ledger. usb sessions are
               dropped when the popup loses focus.
-            </NoticeBox>
+            </StatusSlot>
           )}
 
           {!inPopup && !supported && (
-            <NoticeBox tone='warn' icon='i-ph-warning'>
+            <StatusSlot tone='warn' icon='i-ph-warning'>
               this browser does not support webhid. use a chromium browser to connect a ledger.
-            </NoticeBox>
+            </StatusSlot>
           )}
 
           {/* idle - connect button */}
@@ -207,7 +184,7 @@ export const ConnectLedger = () => {
                   </>
                 )}
               </Button>
-              {error && <div className='mt-1 text-sm text-red-400'>{error}</div>}
+              {error && (<StatusSlot tone='danger' icon='i-ph-warning'>{error}</StatusSlot>)}
             </div>
           )}
 
@@ -238,27 +215,27 @@ export const ConnectLedger = () => {
                   device; an app that predates NU6.3 does not know the current
                   consensus branch id and REJECTS every send (6a80). Tell the user
                   to update before they try to send, or it fails on-device. */}
-              <NoticeBox tone='warn' icon='i-ph-arrows-clockwise'>
+              <StatusSlot tone='warn' icon='i-ph-arrows-clockwise'>
                 update your ledger zcash app to the latest version in ledger live first. an older
                 app does not recognise the current zcash network and will reject transparent sends.
-              </NoticeBox>
+              </StatusSlot>
 
               {/* TRANSPARENT-ONLY. zafu signs Ledger via the Bitcoin app (the only
                   path that works on mainnet today); the dedicated shielded app is
                   not published yet, so shielded on Ledger is unavailable REGARDLESS
                   of app version. State that plainly - do not imply shielded works. */}
-              <NoticeBox tone='warn' icon='i-ph-shield-slash'>
+              <StatusSlot tone='warn' icon='i-ph-shield-slash'>
                 ledger is transparent-only in zafu right now. you can send and receive transparent
                 zec (t-addresses). shielded on ledger needs a newer zcash app from ledger and is
                 coming later - keep long-term savings in a shielded zafu wallet.
-              </NoticeBox>
+              </StatusSlot>
 
-              <NoticeBox tone='info' icon='i-ph-usb'>
+              <StatusSlot tone='info' icon='i-ph-usb'>
                 watch-only + transparent. view your t-address balance and sign transparent sends
                 with the ledger plugged in.
-              </NoticeBox>
+              </StatusSlot>
 
-              {error && <div className='text-sm text-red-400'>{error}</div>}
+              {error && (<StatusSlot tone='danger' icon='i-ph-warning'>{error}</StatusSlot>)}
 
               <div className='flex flex-col gap-2'>
                 <Button
