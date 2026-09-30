@@ -62,8 +62,7 @@ import {
   createZignerWalletEntries,
   createLedgerWalletEntries,
   assertLedgerUfvkValid,
-  removeLinkedWallets,
-  cleanupZcashData,
+  purgeWalletData,
   nukeAllWalletData,
 } from './wallet-entries';
 
@@ -904,8 +903,7 @@ export const createKeyRingSlice =
         const updatedVaults = vaults.filter(v => v.id !== vaultId);
         await local.set('vaults', updatedVaults);
 
-        const { removedZcashIds } = await removeLinkedWallets(vaultId, local);
-        await cleanupZcashData(vaultId, removedZcashIds);
+        await purgeWalletData(vaultId, local);
 
         // last vault — nuke everything
         if (updatedVaults.length === 0) {
