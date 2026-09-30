@@ -20,6 +20,8 @@ import { Button } from '@repo/ui/components/ui/button';
 import { cn } from '@repo/ui/lib/utils';
 import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { useIbcChains } from '../../../hooks/ibc-chains';
+import { useStore } from '../../../state';
+import { selectEnabledNetworks } from '../../../state/keyring';
 import { hostOf, type DestinationState, type NetEgressState } from '../../../net/destination';
 import { noteDestination, readNetEgress, setDestinationDecision } from '../../../net/ledger';
 import {
@@ -357,6 +359,7 @@ const KnownDestinations = ({ destinations }: { destinations: TrustedDestination[
 };
 
 export const NetworksDirectory = () => {
+  const penumbraEnabled = useStore(selectEnabledNetworks).includes('penumbra');
   const [egress, setEgress] = useState<NetEgressState | null>(null);
   const [networks, setNetworks] = useState<CustomNetwork[]>([]);
   const [destinations, setDestinations] = useState<TrustedDestination[]>([]);
@@ -392,14 +395,16 @@ export const NetworksDirectory = () => {
 
   return (
     <div className='flex flex-col gap-4'>
-      <div className='flex flex-col gap-2'>
-        <p className='text-label text-fg-muted lowercase'>
-          chains with an open channel to penumbra
-        </p>
-        <ChainsWithChannel egress={egress} onDecide={decide} />
-      </div>
+      {penumbraEnabled && (
+        <div className='flex flex-col gap-2 border-b border-border-soft pb-3'>
+          <p className='text-label text-fg-muted lowercase'>
+            chains with an open channel to penumbra
+          </p>
+          <ChainsWithChannel egress={egress} onDecide={decide} />
+        </div>
+      )}
 
-      <div className='flex flex-col gap-2 border-t border-border-soft pt-3'>
+      <div className='flex flex-col gap-2'>
         <p className='text-label text-fg-muted lowercase'>your own networks</p>
         <OwnNetworks networks={networks} onRefresh={refresh} />
       </div>

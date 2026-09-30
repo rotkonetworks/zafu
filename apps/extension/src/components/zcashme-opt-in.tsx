@@ -15,6 +15,8 @@ import { useNavigate } from 'react-router-dom';
 import { PopupPath } from '../routes/popup/paths';
 import { DEFAULT_LIVE_DECOYS, useZcashMe, writeZcashMeConfig } from '../services/zcashme/config';
 import { cn } from '@repo/ui/lib/utils';
+import { useStore } from '../state';
+import { selectEnabledNetworks } from '../state/keyring';
 
 interface Props {
   /** what the user was trying to do, e.g. 'pay /alice' or 'find people' */
@@ -28,8 +30,14 @@ export function ZcashMeOptIn({ reason, respectDismissal = true, className }: Pro
   const navigate = useNavigate();
   const { config } = useZcashMe();
   const [busy, setBusy] = useState(false);
+  const zcashEnabled = useStore(selectEnabledNetworks).includes('zcash');
 
-  if (!config || config.mode !== 'off' || (respectDismissal && config.promptDismissed)) {
+  if (
+    !zcashEnabled ||
+    !config ||
+    config.mode !== 'off' ||
+    (respectDismissal && config.promptDismissed)
+  ) {
     return null;
   }
 
