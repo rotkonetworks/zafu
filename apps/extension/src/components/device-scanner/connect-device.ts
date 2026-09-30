@@ -59,9 +59,10 @@ export function buildZignerImport(parsed: ParsedConnectCode): ZignerZafuImport {
 
   const viewingKey =
     parsed.ufvk ?? (parsed.orchardFvk ? btoa(String.fromCharCode(...parsed.orchardFvk)) : undefined);
-  const deviceId =
-    parsed.zidPublicKey ??
-    (parsed.device === 'keystone' && viewingKey ? keystoneDeviceId(viewingKey) : undefined);
+  // no ZID on this device (keystone never has one; pre-ZID zigner firmware
+  // doesn't either) - fall back to a hash of the viewing key, never a
+  // timestamp, so re-scanning the same device dedups against itself.
+  const deviceId = parsed.zidPublicKey ?? (viewingKey ? keystoneDeviceId(viewingKey) : undefined);
   if (!deviceId) {
     throw new Error('this code has no device identity and no viewing key to derive one from.');
   }
