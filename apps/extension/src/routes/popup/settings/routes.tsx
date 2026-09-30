@@ -38,7 +38,12 @@ export const settingsRoutes: RouteObject[] = [
     lazy: lazyScreen('settingsZigner'),
   },
   {
-    // ?network=zcash|penumbra (the home "switch node" links) opens that network's node sheet
+    path: PopupPath.SETTINGS_CONNECT_DEVICE,
+    lazy: lazyScreen('settingsConnectDevice'),
+  },
+  {
+    // networks deep-links (?network=zcash) still land here; the merged screen
+    // keeps the ?network auto-expand + scroll-into-view.
     path: PopupPath.SETTINGS_NETWORKS,
     lazy: lazyScreen('settingsNetworks'),
   },
@@ -111,6 +116,11 @@ export const settingsRoutes: RouteObject[] = [
     lazy: lazyScreen('settingsSecurityHome'),
   },
   {
+    path: PopupPath.SETTINGS_PRIVACY_HOME,
+    lazy: lazyScreen('settingsPrivacyHome'),
+  },
+  {
+    // ?network=zcash|penumbra (the home "switch node" links) opens that network's node sheet
     path: PopupPath.SETTINGS_ZCASH_NETWORK,
     lazy: lazyScreen('settingsZcashNetwork'),
   },
