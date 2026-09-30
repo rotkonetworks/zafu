@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { useStore } from '../../../state';
 import { selectEnabledNetworks } from '../../../state/keyring';
 import { cn } from '@repo/ui/lib/utils';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { Sheet } from '@repo/ui/components/ui/sheet';
 import { SettingsScreen } from './settings-screen';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
@@ -26,28 +29,31 @@ export const SecurityBackup = () => {
 
         <div>
           <p className='kicker mb-2'>backup & recovery</p>
-          <div className='flex flex-col divide-y divide-border-soft/40 rounded-lg border border-border-soft bg-elev-1'>
-            <LinkRow
+          <RowGroup>
+            <Row
+              type='screen'
               icon='i-ph-file-text'
-              title='recovery passphrase'
-              hint='reveal this wallet&#39;s seed phrase'
-              onClick={() => navigate(PopupPath.SETTINGS_RECOVERY_PASSPHRASE)}
+              label='recovery passphrase'
+              description="reveal this wallet's seed phrase"
+              onPress={() => navigate(PopupPath.SETTINGS_RECOVERY_PASSPHRASE)}
             />
             {zcashOn && (
-              <LinkRow
+              <Row
+                type='screen'
                 icon='i-ph-shield'
-                title='multisig backup'
-                hint='back up FROST multisig shares'
-                onClick={() => navigate(PopupPath.SETTINGS_MULTISIG_BACKUP)}
+                label='multisig backup'
+                description='back up FROST multisig shares'
+                onPress={() => navigate(PopupPath.SETTINGS_MULTISIG_BACKUP)}
               />
             )}
-            <LinkRow
+            <Row
+              type='screen'
               icon='i-ph-arrows-clockwise'
-              title='resync state'
-              hint='refetch balance & history from chain - keys kept'
-              onClick={() => navigate(PopupPath.SETTINGS_CLEAR_CACHE)}
+              label='resync state'
+              description='refetch balance & history from chain - keys kept'
+              onPress={() => navigate(PopupPath.SETTINGS_CLEAR_CACHE)}
             />
-          </div>
+          </RowGroup>
         </div>
       </div>
     </SettingsScreen>
@@ -58,57 +64,53 @@ export const SecurityBackup = () => {
 
 const AutoLock = () => {
   const { minutes, set } = useAutoLock();
+  const [open, setOpen] = useState(false);
+  const current = AUTO_LOCK_OPTIONS.find(o => o.value === minutes);
 
   return (
     <div>
       <p className='kicker mb-2'>auto-lock</p>
-      <div className='flex flex-col gap-2 rounded-lg border border-border-soft bg-elev-1 p-3'>
-        <p className='text-label text-fg-muted'>
-          lock the wallet after this long with no activity.
-        </p>
-        <div className='flex flex-wrap gap-1.5'>
-          {AUTO_LOCK_OPTIONS.map(o => (
-            <button
-              key={o.value}
-              onClick={() => set(o.value)}
-              className={cn(
-                'rounded border px-2 py-0.5 text-label transition-colors',
-                minutes === o.value
-                  ? 'border-zigner-gold/50 bg-zigner-gold/10 text-zigner-gold'
-                  : 'border-border-soft text-fg-muted hover:text-fg-high hover:border-fg-muted',
-              )}
-            >
-              {o.label}
-            </button>
-          ))}
+      <RowGroup>
+        <Row
+          type='value'
+          label='auto-lock'
+          description='lock the wallet after this long with no activity'
+          value={current?.label ?? `${minutes} min`}
+          onPress={() => setOpen(true)}
+        />
+      </RowGroup>
+      <Sheet open={open} onOpenChange={setOpen} title='auto-lock'>
+        <div className='flex flex-col gap-2'>
+          {AUTO_LOCK_OPTIONS.map(o => {
+            const on = o.value === minutes;
+            return (
+              <button
+                key={o.value}
+                onClick={() => {
+                  set(o.value);
+                  setOpen(false);
+                }}
+                className={cn(
+                  'flex items-center gap-3 border px-3.5 py-3 text-left transition-colors',
+                  on
+                    ? 'border-zigner-gold bg-zigner-gold/10'
+                    : 'border-surface-border-soft hover:bg-surface-elev-2',
+                )}
+              >
+                <span
+                  className={cn(
+                    'flex size-4 shrink-0 items-center justify-center border',
+                    on ? 'border-zigner-gold' : 'border-surface-border',
+                  )}
+                >
+                  {on && <span className='size-2 bg-zigner-gold' />}
+                </span>
+                <span className='text-data text-fg-high lowercase'>{o.label}</span>
+              </button>
+            );
+          })}
         </div>
-      </div>
+      </Sheet>
     </div>
   );
 };
-
-/* ── link row to a canonical screen ──────────────────────────────────── */
-
-const LinkRow = ({
-  icon,
-  title,
-  hint,
-  onClick,
-}: {
-  icon: string;
-  title: string;
-  hint: string;
-  onClick: () => void;
-}) => (
-  <button
-    onClick={onClick}
-    className='group flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-elev-2'
-  >
-    <span className={cn(icon, 'size-5 text-fg-muted group-hover:text-fg-high')} />
-    <span className='flex flex-1 flex-col'>
-      <span className='text-data text-fg group-hover:text-fg-high lowercase'>{title}</span>
-      <span className='text-label text-fg-dim'>{hint}</span>
-    </span>
-    <span className='i-ph-caret-right size-4 text-fg-dim group-hover:text-fg-muted' />
-  </button>
-);

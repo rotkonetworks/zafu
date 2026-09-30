@@ -1,4 +1,3 @@
-import { Fragment } from 'react';
 import { useStore } from '../../../state';
 import { passwordSelector } from '../../../state/password';
 import { selectActiveNetwork } from '../../../state/keyring';
@@ -7,6 +6,7 @@ import { PopupPath } from '../paths';
 import { SUBSCRIBE_ENABLED } from '../../../config/feature-flags';
 import { SettingsScreen } from './settings-screen';
 import { cn } from '@repo/ui/lib/utils';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
 
 interface SettingsLink {
   title: string;
@@ -133,27 +133,6 @@ const groups: SettingsGroup[] = [
   },
 ];
 
-function SettingsRow({
-  icon,
-  title,
-  onClick,
-}: {
-  icon: string;
-  title: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className='flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-elev-1 hover:text-fg-high group'
-    >
-      <span className={cn(icon, 'size-5 text-fg-muted group-hover:text-fg-high')} />
-      <span className='flex-1 text-data text-fg group-hover:text-fg-high lowercase'>{title}</span>
-      <span className='i-ph-caret-right size-4 text-fg-dim group-hover:text-fg-muted' />
-    </button>
-  );
-}
-
 export const Settings = () => {
   const navigate = usePopupNav();
   const { clearSessionPassword } = useStore(passwordSelector);
@@ -207,29 +186,36 @@ export const Settings = () => {
                 )}
                 {group.label}
               </p>
-              <div className='flex flex-col divide-y divide-border-soft/40'>
+              {/* auto-lock now lives in the Security & Backup screen (its own
+                  select control), not as an inline row here - see
+                  settings-security-backup.tsx. */}
+              <RowGroup>
                 {group.links.map(l => (
-                  <Fragment key={l.href}>
-                    {/* auto-lock now lives in the Security & Backup screen (its own
-                        select control), not as an inline row here - see
-                        settings-security-backup.tsx. */}
-                    <SettingsRow icon={l.icon} title={l.title} onClick={() => navigate(l.href)} />
-                  </Fragment>
+                  <Row
+                    key={l.href}
+                    type='screen'
+                    icon={l.icon}
+                    label={l.title}
+                    onPress={() => navigate(l.href)}
+                  />
                 ))}
-              </div>
+              </RowGroup>
             </div>
           ))}
         </div>
 
         <div className='mt-4 border-t border-border-soft pt-4'>
-          <SettingsRow
-            icon='i-ph-sign-out'
-            title='lock wallet'
-            onClick={() => {
-              clearSessionPassword();
-              chrome.runtime.reload();
-            }}
-          />
+          <RowGroup>
+            <Row
+              type='screen'
+              icon='i-ph-sign-out'
+              label='lock wallet'
+              onPress={() => {
+                clearSessionPassword();
+                chrome.runtime.reload();
+              }}
+            />
+          </RowGroup>
         </div>
       </div>
     </SettingsScreen>

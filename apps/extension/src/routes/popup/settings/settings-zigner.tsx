@@ -6,7 +6,7 @@ import { isPro } from '../../../state/license';
 import { SettingsScreen } from './settings-screen';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
-import { Toggle } from '@repo/ui/components/ui/toggle';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { useState, useRef, useEffect } from 'react';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { PagePath } from '../../page/paths';
@@ -334,19 +334,15 @@ export const SettingsZigner = () => {
           <div className='border-t border-border-hard pt-4'>
             <p className='text-sm font-bold mb-3'>polkadot vault</p>
             <div className='flex flex-col gap-3'>
-              <div className='flex items-center justify-between border border-border-hard bg-elev-2 p-3'>
-                <div className='flex flex-col'>
-                  <span className='text-sm'>legacy mode</span>
-                  <span className='text-xs text-fg-muted'>
-                    for older parity signer / polkadot vault devices
-                  </span>
-                </div>
-                <Toggle
+              <RowGroup>
+                <Row
+                  type='toggle'
+                  label='legacy mode'
+                  description='for older parity signer / polkadot vault devices'
                   checked={vaultLegacyMode}
                   onChange={v => void handleVaultLegacyModeChange(v)}
-                  label='legacy mode'
                 />
-              </div>
+              </RowGroup>
 
               {vaultLegacyMode && (
                 <div className='border border-yellow-500/30 bg-yellow-500/10 p-3'>

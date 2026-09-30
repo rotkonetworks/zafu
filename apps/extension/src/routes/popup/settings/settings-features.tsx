@@ -3,6 +3,7 @@ import { CAPABILITY_META, type Capability } from '@repo/storage-chrome/capabilit
 import { PopupPath } from '../paths';
 import { SettingsScreen } from './settings-screen';
 import { cn } from '@repo/ui/lib/utils';
+import { Segmented } from '@repo/ui/components/ui/segmented';
 import { getCapabilityModes, setCapabilityMode } from '../../../state/capability-modes';
 import type { CapabilityMode, CapabilityModeMap } from '../../../utils/capability-decision';
 
@@ -70,22 +71,13 @@ export const SettingsFeatures = () => {
                     </span>
                     <span className='text-xs text-fg-muted'>{meta.description}</span>
                   </div>
-                  <div className='flex shrink-0 overflow-hidden rounded-md border border-border-soft'>
-                    {MODES.map(m => (
-                      <button
-                        key={m.value}
-                        onClick={() => set(cap, m.value)}
-                        className={cn(
-                          'px-2 py-1 text-label lowercase transition-colors',
-                          current === m.value
-                            ? 'bg-elev-3 text-fg-high'
-                            : 'text-fg-muted hover:text-fg-high',
-                        )}
-                      >
-                        {m.label}
-                      </button>
-                    ))}
-                  </div>
+                  <Segmented
+                    className='shrink-0'
+                    label={`${meta.label} mode`}
+                    value={current}
+                    onChange={mode => set(cap, mode)}
+                    options={MODES}
+                  />
                 </div>
               );
             })}
