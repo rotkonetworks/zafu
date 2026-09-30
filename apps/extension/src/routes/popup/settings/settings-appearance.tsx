@@ -13,7 +13,7 @@ import { getApprovalSurface, type ApprovalSurface } from '../../../side-panel-pr
  *   washi     — sumi ink on unbleached paper (light)
  */
 
-type ZafuTheme = 'sumi' | 'washi';
+export type ZafuTheme = 'sumi' | 'washi';
 type ZafuFont = 'iosevka' | 'system';
 
 const THEMES: { id: ZafuTheme; name: string; blurb: string; chip: string; ink: string }[] = [
@@ -42,12 +42,27 @@ const FONTS: { id: ZafuFont; name: string; blurb: string; stack: string }[] = [
   },
 ];
 
-const applyTheme = (theme: ZafuTheme) => {
+export const applyTheme = (theme: ZafuTheme) => {
   if (theme === 'sumi') {
     delete document.documentElement.dataset['theme'];
   } else {
     document.documentElement.dataset['theme'] = theme;
   }
+};
+
+/** reads + writes the persisted theme; also used by the devices home's
+ *  theme Row(value) so it doesn't duplicate this loader. */
+export const useZafuTheme = () => {
+  const [theme, setThemeState] = useState<ZafuTheme>('sumi');
+  useEffect(() => {
+    void localExtStorage.get('zafuTheme').then(v => setThemeState(v === 'washi' ? 'washi' : 'sumi'));
+  }, []);
+  const set = (t: ZafuTheme) => {
+    setThemeState(t);
+    applyTheme(t);
+    void localExtStorage.set('zafuTheme', t);
+  };
+  return { theme, set };
 };
 
 const applyFont = (font: ZafuFont) => {
@@ -111,7 +126,7 @@ export const SettingsAppearance = () => {
   };
 
   return (
-    <SettingsScreen title='appearance' backPath={PopupPath.SETTINGS}>
+    <SettingsScreen title='appearance' backPath={PopupPath.SETTINGS_DEVICES_ALL}>
       <div className='flex flex-col gap-5 px-4'>
         <div>
           <p className='kicker pb-2'>theme</p>

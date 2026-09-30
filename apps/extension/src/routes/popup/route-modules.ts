@@ -45,6 +45,22 @@ export const popupScreens = {
   settingsZcashMe: () => import('./settings/settings-zcashme').then(m => m.SettingsZcashMe),
   subscribe: () => import('./settings/subscribe').then(m => m.SubscribePage),
 
+  // four category homes (settings IA rework) + the screens their rows need
+  settingsSecurityHome: () =>
+    import('./settings/settings-security-home').then(m => m.SettingsSecurityHome),
+  settingsPrivacyHome: () =>
+    import('./settings/settings-privacy-home').then(m => m.SettingsPrivacyHome),
+  settingsNetworksHome: () =>
+    import('./settings/settings-networks-home').then(m => m.SettingsNetworksHome),
+  settingsZcashNetwork: () =>
+    import('./settings/settings-zcash-network').then(m => m.SettingsZcashNetwork),
+  settingsDevicesHome: () =>
+    import('./settings/settings-devices-home').then(m => m.SettingsDevicesHome),
+  settingsDevicesAll: () =>
+    import('./settings/settings-devices-all').then(m => m.SettingsDevicesAll),
+  settingsRemoveWallet: () =>
+    import('./settings/settings-remove-wallet').then(m => m.SettingsRemoveWallet),
+
   // approvals
   transactionApproval: () => import('./approval/transaction').then(m => m.TransactionApproval),
   originApproval: () => import('./approval/origin').then(m => m.OriginApproval),

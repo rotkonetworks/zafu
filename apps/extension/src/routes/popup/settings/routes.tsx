@@ -91,4 +91,32 @@ export const settingsRoutes: RouteObject[] = [
     path: PopupPath.SETTINGS_ADD_VIEWING_KEY,
     lazy: lazyScreen('settingsAddViewingKey'),
   },
+  {
+    path: PopupPath.SETTINGS_SECURITY,
+    lazy: lazyScreen('settingsSecurityHome'),
+  },
+  {
+    path: PopupPath.SETTINGS_PRIVACY_HOME,
+    lazy: lazyScreen('settingsPrivacyHome'),
+  },
+  {
+    path: PopupPath.SETTINGS_NETWORKS_HOME,
+    lazy: lazyScreen('settingsNetworksHome'),
+  },
+  {
+    path: PopupPath.SETTINGS_ZCASH_NETWORK,
+    lazy: lazyScreen('settingsZcashNetwork'),
+  },
+  {
+    path: PopupPath.SETTINGS_DEVICES,
+    lazy: lazyScreen('settingsDevicesHome'),
+  },
+  {
+    path: PopupPath.SETTINGS_DEVICES_ALL,
+    lazy: lazyScreen('settingsDevicesAll'),
+  },
+  {
+    path: PopupPath.SETTINGS_REMOVE_WALLET,
+    lazy: lazyScreen('settingsRemoveWallet'),
+  },
 ];
