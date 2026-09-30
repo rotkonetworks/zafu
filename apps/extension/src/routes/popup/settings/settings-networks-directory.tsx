@@ -52,7 +52,9 @@ const EGRESS_DOT: Record<EgressView, string> = {
 };
 
 const egressViewOf = (state: NetEgressState | null, host: string | undefined): EgressView => {
-  if (!host) return 'undecided';
+  if (!host) {
+    return 'undecided';
+  }
   const record = state?.destinations[host];
   return record?.state === 'allowed'
     ? 'allowed'
@@ -233,10 +235,18 @@ const OwnNetworks = ({
   const [saving, setSaving] = useState(false);
 
   const onSubmit = async () => {
-    if (!name.trim()) return setError('name is required.');
-    if (!chainId.trim()) return setError('chain id is required.');
-    if (!parseHttpUrl(rpc)) return setError('rpc must be an http(s) url.');
-    if (rest.trim() && !parseHttpUrl(rest)) return setError('rest must be an http(s) url.');
+    if (!name.trim()) {
+      return setError('name is required.');
+    }
+    if (!chainId.trim()) {
+      return setError('chain id is required.');
+    }
+    if (!parseHttpUrl(rpc)) {
+      return setError('rpc must be an http(s) url.');
+    }
+    if (rest.trim() && !parseHttpUrl(rest)) {
+      return setError('rest must be an http(s) url.');
+    }
     setError(null);
     setSaving(true);
     try {
