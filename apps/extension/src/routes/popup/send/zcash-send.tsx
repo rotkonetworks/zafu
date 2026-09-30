@@ -11,6 +11,9 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { StepList } from '@repo/ui/components/ui/step-list';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
+import { RowGroup } from '@repo/ui/components/ui/row';
+import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import { Sensitive } from '../../../components/sensitive';
 import { removeTxOps, writeTxOp } from '../../../tx-ops';
 import { useStore } from '../../../state';
@@ -110,6 +113,51 @@ const fmtZecShort = (zat: bigint): string =>
 /** address-book rows: keep the head/tail that actually identify the address. */
 const truncateAddress = (address: string): string =>
   address.length > 22 ? `${address.slice(0, 12)}…${address.slice(-8)}` : address;
+
+/**
+ * One calm sentence explaining what the worker is doing right now, for the
+ * StatusSlot under the proving StepList. Keyed on the worker's own `step`
+ * labels (see zcash-worker.ts emitProgress calls) - a step this table
+ * doesn't match falls back to plain "working" copy rather than nothing.
+ *
+ * The one exception to "no time estimate" is the witness-tree rebuild: the
+ * worker itself reports that case takes about three minutes (zcash-worker.ts
+ * ~line 3047, step 'witness corrupt - rebuilding' - the worker's own string
+ * uses an em dash there), so this is the one place a duration is shown. The
+ * display copy here does not repeat that verbatim.
+ */
+const SEND_STEP_EXPLAINERS: [match: (step: string) => boolean, copy: string][] = [
+  [
+    s => s.startsWith('witness corrupt'),
+    'rebuilding the merkle witnesses from a checkpoint. this takes about 3 min.',
+  ],
+  [
+    s => s === 'loading wallet state' || s === 'fetching chain tip',
+    'reading your wallet and the current chain tip.',
+  ],
+  [s => s === 'selecting notes' || s === 'notes selected', 'choosing which notes to spend from.'],
+  [
+    s => s === 'building merkle witnesses' || s === 'witnesses built',
+    'building the merkle witnesses this spend needs.',
+  ],
+  [
+    s => s === 'checking NU6.3 activation' || s === 'NU6.3 active',
+    'checking which zcash pool is active on the network.',
+  ],
+  [
+    s => s.startsWith('proving'),
+    'your computer proves the payment is valid and signs it with your key. the network learns nothing about sender, amount or memo.',
+  ],
+  [
+    s => s.includes('signed') || s.includes('proved') || s.startsWith('PCZT'),
+    'the transaction is proved and signed.',
+  ],
+  [s => s.startsWith('broadcasting'), 'sending the transaction to the zcash network.'],
+  [s => s.includes('complete'), 'done.'],
+];
+
+const explainSendStep = (step: string): string =>
+  SEND_STEP_EXPLAINERS.find(([match]) => match(step))?.[1] ?? 'working on your transaction.';
 
 /** live elapsed timer — ticks every second so the build screen never looks frozen */
 function LiveTimer({ startMs }: { startMs: number }) {
@@ -545,6 +593,21 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     });
   }, [amount, spendableNotes, recipientIsTransparent, notesLoaded]);
 
+  /**
+   * Dims the "continue" button - the same cheap synchronous checks
+   * validateForm runs, so it never disagrees with the click handler. Real
+   * validation (zcash.me handles, exact error copy) still happens in
+   * validateForm on click; this only decides whether the button looks
+   * pressable.
+   */
+  const canReview =
+    !!recipient.trim() &&
+    /^(u1|utest1|t1|t3|tm|t2)/.test(recipient.trim()) &&
+    !!amount.trim() &&
+    !isNaN(Number(amount)) &&
+    Number(amount) > 0 &&
+    (amountQuote === null || amountQuote.ok);
+
   // Keep the DISPLAYED fee in step with the quote.
   //
   // `fee` was initialised to the literal '0.0001' and only overwritten from the
@@ -621,10 +684,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           transparentRecipient: /^(t1|t3|tm|t2)/.test(r),
         });
         setFormError(
-          `not enough spendable ${activePool} balance — the most this can send, ` +
-            `after a ${fmtZecShort(quote.feeZat)} ZEC fee, is ${fmtZecShort(maxForThis.amountZat)} ZEC` +
+          `a little more than you have - up to ${fmtZecShort(maxForThis.amountZat)} zec ` +
+            `after a ${fmtZecShort(quote.feeZat)} zec fee` +
             (strandedZat > 0n
-              ? `. ${fmtZecShort(strandedZat)} ZEC is held in the legacy orchard pool and cannot ` +
+              ? ` - ${fmtZecShort(strandedZat)} zec is held in the legacy orchard pool and cannot ` +
                 'be spent until it is migrated to ironwood.'
               : ''),
         );
@@ -1438,7 +1501,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     <span className='truncate'>→ {recipientContact.contact.name}</span>
                   </p>
                 )}
-                {requestError && <p className='mt-1 text-xs text-red-400'>{requestError}</p>}
+                {requestError && (
+                  <StatusSlot tone='warn' icon='i-ph-warning' className='mt-1.5'>
+                    {requestError}
+                  </StatusSlot>
+                )}
                 {requestNote && (
                   <p className='mt-1 truncate text-xs text-fg-muted' title={requestNote}>
                     request: {requestNote}
@@ -1582,37 +1649,38 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     max
                   </button>
                 </div>
-                {/* Inline validation, all of it computed from the same fee
-                    arithmetic the worker will use at build time. */}
-                {balanceZat === 0n && strandedZat === 0n && (
-                  <p className='mt-1.5 text-label text-amber-400 leading-snug'>
-                    no zec yet - receive first from the home screen.
-                  </p>
-                )}
-                {/* Orchard funds are real but consensus-disabled post-NU6.3.
-                    Silently folding them into "your balance" is what produced
-                    a send that failed after a two-minute prove. Name them, and
-                    say what actually releases them. */}
-                {strandedZat > 0n && (
-                  <p className='mt-1.5 text-label text-amber-400 leading-snug tabular-nums'>
-                    <Sensitive>{fmtZecShort(strandedZat)} ZEC</Sensitive> is in the legacy orchard
-                    pool and cannot be sent. migrate it to ironwood from the home screen to spend
-                    it.
-                  </p>
-                )}
-                {amountQuote !== null && !amountQuote.ok && (
-                  <p className='mt-1.5 text-label text-red-400 leading-snug tabular-nums'>
-                    exceeds spendable balance — at most{' '}
-                    <Sensitive>{fmtZecShort(maxSend.amountZat)} ZEC</Sensitive> after a{' '}
-                    <Sensitive>{fmtZecShort(maxSend.feeZat)} ZEC</Sensitive> fee
-                  </p>
-                )}
-                {amountQuote !== null && amountQuote.ok && (
-                  <p className='mt-1.5 text-label text-fg-muted leading-snug tabular-nums'>
-                    fee <Sensitive>{fmtZecShort(amountQuote.feeZat)} ZEC</Sensitive> ·{' '}
-                    {amountQuote.nSpends} note{amountQuote.nSpends === 1 ? '' : 's'} spent
-                  </p>
-                )}
+                {/* Reserved-height slot, all of it computed from the same fee
+                    arithmetic the worker will use at build time - this never
+                    grows/shrinks the layout as the user types, it only swaps
+                    which message (if any) sits in the reserved row. */}
+                <div className='mt-1.5 min-h-[3.5rem]'>
+                  {balanceZat === 0n && strandedZat === 0n ? (
+                    <StatusSlot tone='info' icon='i-ph-info'>
+                      no zec yet - receive first from the home screen.
+                    </StatusSlot>
+                  ) : strandedZat > 0n ? (
+                    // Orchard funds are real but consensus-disabled post-NU6.3.
+                    // Silently folding them into "your balance" is what
+                    // produced a send that failed after a two-minute prove.
+                    // Name them, and say what actually releases them.
+                    <StatusSlot tone='info' icon='i-ph-info'>
+                      <Sensitive>{fmtZecShort(strandedZat)} zec</Sensitive> is in the legacy orchard
+                      pool and cannot be sent - migrate it to ironwood from the home screen to spend
+                      it.
+                    </StatusSlot>
+                  ) : amountQuote !== null && !amountQuote.ok ? (
+                    <StatusSlot tone='warn' icon='i-ph-warning'>
+                      a little more than you have - up to{' '}
+                      <Sensitive>{fmtZecShort(maxSend.amountZat)} zec</Sensitive> after a{' '}
+                      <Sensitive>{fmtZecShort(maxSend.feeZat)} zec</Sensitive> fee
+                    </StatusSlot>
+                  ) : amountQuote !== null && amountQuote.ok ? (
+                    <StatusSlot tone='info'>
+                      fee <Sensitive>{fmtZecShort(amountQuote.feeZat)} zec</Sensitive> ·{' '}
+                      {amountQuote.nSpends} note{amountQuote.nSpends === 1 ? '' : 's'} spent
+                    </StatusSlot>
+                  ) : null}
+                </div>
               </div>
 
               <div>
@@ -1630,17 +1698,19 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 />
               </div>
 
-              {formError && <p className='text-sm text-red-400'>{formError}</p>}
+              {formError && (
+                <StatusSlot tone='warn' icon='i-ph-warning'>
+                  {formError}
+                </StatusSlot>
+              )}
             </div>
 
-            <div className='flex gap-2 mt-4'>
-              <Button variant='secondary' onClick={handleClose} className='flex-1'>
-                cancel
-              </Button>
-              <Button variant='primary' onClick={handleReview} className='flex-1'>
-                continue
-              </Button>
-            </div>
+            {/* single full-width action - the header back-arrow (onClose)
+                already covers "leave the form", a redundant cancel button
+                next to it just split the one gold action in two. */}
+            <Button variant='primary' onClick={handleReview} disabled={!canReview} className='mt-4'>
+              review
+            </Button>
           </div>
         );
 
@@ -1657,34 +1727,46 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               <h2 className='text-lg font-medium'>review transaction</h2>
             </div>
 
-            <div className='bg-elev-1 border border-border-soft rounded-lg p-4 flex flex-col gap-3'>
-              <div className='flex justify-between'>
-                <span className='text-fg-muted'>network</span>
-                <span className='font-medium'>zcash {mainnet ? 'mainnet' : 'testnet'}</span>
+            {/* All five rows are static display, not <Row>: Row's value type
+                renders a clickable button with a hover state and a trailing
+                chevron (it's meant to open a Sheet), which would draw a fake
+                affordance on network/to that does nothing. RowGroup still
+                gives the bordered 1px box the design wants. amount/fee/total
+                additionally wrap their value in <Sensitive> for privacy-mode
+                blur, which Row's string-only `value` prop can't carry either
+                way. */}
+            <RowGroup>
+              <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
+                <span className='text-data text-fg-muted lowercase'>network</span>
+                <span className='text-data text-fg-high'>
+                  zcash {mainnet ? 'mainnet' : 'testnet'}
+                </span>
               </div>
-              <div className='flex justify-between'>
-                <span className='text-fg-muted'>to</span>
-                <span className='font-mono text-sm truncate max-w-[180px]'>{recipient}</span>
+              <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
+                <span className='text-data text-fg-muted lowercase'>to</span>
+                <span className='truncate font-mono text-data text-fg-high'>
+                  {truncateAddress(recipient)}
+                </span>
               </div>
-              <div className='flex justify-between'>
-                <span className='text-fg-muted'>amount</span>
-                <span className='font-medium tabular-nums'>
+              <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
+                <span className='text-data text-fg-muted lowercase'>amount</span>
+                <span className='text-data tabular-nums text-fg-high'>
                   <Sensitive>{amount} zec</Sensitive>
                 </span>
               </div>
-              <div className='flex justify-between'>
-                <span className='text-fg-muted'>fee</span>
-                <span className='text-sm tabular-nums'>
+              <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
+                <span className='text-data text-fg-muted lowercase'>fee</span>
+                <span className='text-data tabular-nums text-fg-high'>
                   <Sensitive>{fee} zec</Sensitive>
                 </span>
               </div>
-              <div className='border-t border-border-soft pt-2 flex justify-between'>
-                <span className='text-fg-muted'>total</span>
-                <span className='font-medium tabular-nums'>
+              <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
+                <span className='text-data text-fg-muted lowercase'>total</span>
+                <span className='text-data tabular-nums text-fg-high'>
                   <Sensitive>{(Number(amount) + Number(fee)).toFixed(4)} zec</Sensitive>
                 </span>
               </div>
-            </div>
+            </RowGroup>
 
             <div className='flex gap-2 mt-4'>
               <Button variant='secondary' onClick={handleBack} className='flex-1'>
@@ -1702,23 +1784,46 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         );
 
       case 'building':
+      case 'broadcast': {
+        // Broadcasting is the tail of the same operation as building: the
+        // send-progress listener (effect above) already covers both steps,
+        // and sendSteps keeps accumulating straight through
+        // 'broadcasting transaction' -> 'complete'. One "sending" screen
+        // for both, matching the design board, instead of a second near-
+        // identical spinner screen with no step log.
+        const currentStep = sendSteps.at(-1)?.step;
         return (
-          <div className='flex flex-col items-center gap-4 p-6'>
-            <div className='w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center'>
-              <div className='w-8 h-8 border-2 border-zigner-gold border-t-transparent rounded-full animate-spin' />
+          <div className='flex flex-col gap-4 p-6'>
+            <div className='flex flex-col items-center gap-3'>
+              <div className='relative flex h-16 w-16 items-center justify-center rounded-full bg-primary/20'>
+                <div className='h-8 w-8 animate-spin rounded-full border-2 border-zigner-gold border-t-transparent' />
+              </div>
+              <h2 className='text-lg font-medium'>sending</h2>
+              {/* live elapsed timer — ticks every second so the UI never looks frozen */}
+              <LiveTimer startMs={buildStartRef.current} />
             </div>
-            <h2 className='text-lg font-medium'>building transaction</h2>
 
-            {/* live elapsed timer — ticks every second so the UI never looks frozen */}
-            <LiveTimer startMs={buildStartRef.current} />
+            <div className='border border-border-soft bg-elev-1 p-3'>
+              <StepList steps={sendSteps} liveSinceMs={buildStartRef.current} className='w-full' />
+            </div>
 
-            <StepList
-              steps={sendSteps}
-              liveSinceMs={buildStartRef.current}
-              className='w-full max-w-sm'
-            />
+            {currentStep && (
+              <StatusSlot tone='gold' icon='i-ph-shield-check'>
+                {explainSendStep(currentStep)}
+              </StatusSlot>
+            )}
+
+            <div className='flex flex-col items-center gap-2 mt-2'>
+              <p className='text-xs text-fg-muted text-center'>
+                you can close this - it keeps going and shows on home
+              </p>
+              <Button variant='secondary' size='sm' onClick={onClose}>
+                back to wallet
+              </Button>
+            </div>
           </div>
         );
+      }
 
       case 'sign': {
         const truncAddr = (a: string) => (a.length > 22 ? `${a.slice(0, 10)}…${a.slice(-8)}` : a);
@@ -1922,19 +2027,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           </div>
         );
 
-      case 'broadcast':
-        return (
-          <div className='flex flex-col items-center gap-4 p-8'>
-            <div className='w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center animate-pulse'>
-              <div className='w-8 h-8 border-2 border-zigner-gold border-t-transparent rounded-full animate-spin' />
-            </div>
-            <h2 className='text-lg font-medium'>broadcasting transaction</h2>
-            <p className='text-sm text-fg-muted text-center'>
-              sending your transaction to the zcash network...
-            </p>
-          </div>
-        );
-
       case 'complete':
         return (
           <div className='flex flex-col items-center gap-4 p-8'>
@@ -1945,7 +2037,14 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               {amount} zec sent successfully
               {totalElapsedSec !== null && ` in ${totalElapsedSec}s`}
             </p>
-            {txHash && <p className='font-mono text-xs text-fg-muted break-all'>{txHash}</p>}
+            {txHash && (
+              <div className='flex items-center gap-1.5'>
+                <p className='font-mono text-xs text-fg-muted break-all'>
+                  {truncateAddress(txHash)}
+                </p>
+                <CopyButton text={txHash} />
+              </div>
+            )}
 
             {/*
               Cold (zigner) wallet: the balance just changed, so the air-gapped
@@ -1980,7 +2079,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 </div>
                 <div className='flex gap-2'>
                   <Button
-                    variant='primary'
+                    variant='secondary'
                     size='sm'
                     onClick={() => setShowContactModal(true)}
                     className='flex-1'
