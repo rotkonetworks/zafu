@@ -56,6 +56,9 @@ export const useFinalizeOnboarding = () => {
 
   // a watch-only wallet: sealed under the real password, never airgap-only
   const addViewingKey = async (password: string) => {
+    if (!viewingKey) {
+      throw new Error('no viewing key to add');
+    }
     await setPassword(password);
     await zcashOnly();
     await addZignerUnencrypted(await viewingKeyImport(viewingKey), 'viewing key');

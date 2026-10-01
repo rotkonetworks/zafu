@@ -172,11 +172,11 @@ export const createKeyRingSlice =
         const patch = from ? await resealSnapshot(raw, from, fresh.key) : {};
         const vaults = (patch['vaults'] ?? raw['vaults'] ?? []) as EncryptedVault[];
         // a real password ends the empty-password auto-unlock
-        if (password && vaults.some(v => v.insensitive['airgapOnly'])) {
-          patch['vaults'] = vaults.map(({ insensitive: { airgapOnly: _, ...rest }, ...v }) => ({
-            ...v,
-            insensitive: rest,
-          }));
+        if (password && vaults.some(v => v.insensitive?.['airgapOnly'])) {
+          patch['vaults'] = vaults.map(v => {
+            const { airgapOnly: _, ...insensitive } = v.insensitive ?? {};
+            return { ...v, insensitive };
+          });
         }
         await chrome.storage.local.set({ ...patch, passwordKeyPrint: fresh.keyPrint.toJson() });
         committed = true;

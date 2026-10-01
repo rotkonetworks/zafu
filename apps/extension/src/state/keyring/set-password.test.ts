@@ -3,6 +3,8 @@ import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { beforeEach, describe, expect, test } from 'vitest';
 import { create } from 'zustand';
 import { AllSlices, initializeStore, TestStore } from '..';
+import { decryptVault } from './crypto-ops';
+import type { EncryptedVault } from './types';
 
 const localMock = (chrome.storage.local as unknown as { mock: Map<string, unknown> }).mock;
 const sessionMock = (chrome.storage.session as unknown as { mock: Map<string, unknown> }).mock;
@@ -86,5 +88,40 @@ describe('keyRing.setPassword re-seals existing vaults', () => {
     expect(await localExtStorage.get('passwordKeyPrint')).toEqual(printBefore);
     expect(await useStore.getState().keyRing.unlock(password)).toBe(true);
     expect(await useStore.getState().keyRing.getMnemonic(vaultId)).toBeTruthy();
+  });
+});
+
+describe('keyRing.setPassword on an airgap-only profile', () => {
+  beforeEach(() => {
+    localMock.clear();
+    sessionMock.clear();
+  });
+
+  test('moves the empty-password vault to the real password and ends auto-unlock', async () => {
+    const useStore: TestStore = create<AllSlices>()(
+      initializeStore(sessionExtStorage, localExtStorage),
+    );
+    const kr = () => useStore.getState().keyRing;
+    // a fresh profile's first zigner import mints the empty-password key
+    const id = await kr().addZignerUnencrypted(
+      { viewingKey: 'em9yY2hhcmQtZnZr', accountIndex: 0, deviceId: 'dev' },
+      'zigner',
+    );
+    const vault = () =>
+      ((localMock.get('vaults') ?? []) as EncryptedVault[]).find(v => v.id === id)!;
+    expect(vault().insensitive['airgapOnly']).toBe(true);
+
+    await kr().setPassword('a real password');
+    expect(vault().insensitive['airgapOnly']).toBeUndefined();
+    expect(JSON.parse(await decryptVault({ session: sessionExtStorage }, vault()))).toMatchObject({
+      deviceId: 'dev',
+    });
+
+    kr().lock();
+    expect(await kr().unlock('')).toBe(false);
+    expect(await kr().unlock('a real password')).toBe(true);
+    expect(JSON.parse(await decryptVault({ session: sessionExtStorage }, vault()))).toMatchObject({
+      deviceId: 'dev',
+    });
   });
 });

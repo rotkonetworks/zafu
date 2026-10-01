@@ -44,6 +44,10 @@ export const SetPassword = () => {
   if (needsBirthday && birthdayAt) {
     return <Navigate to={birthdayAt} replace />;
   }
+  // the viewing key lives in memory only; after a reload, ask for it again
+  if (origin === SEED_PHRASE_ORIGIN.VIEWING_KEY && !onboarding.viewingKey) {
+    return <Navigate to={PagePath.IMPORT_VIEWING_KEY} replace />;
+  }
 
   const strength = passwordStrength(password);
   const [strengthLabel, strengthColor] = STRENGTH[strength]!;
