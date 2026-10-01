@@ -16,6 +16,7 @@ const PREF_KEYS = [
   'approvalSurface',
   'approvalsInSidePanel',
   'zidDiscovery',
+  'hiddenTransparentChains',
 ] as const;
 
 type PrefKey = (typeof PREF_KEYS)[number];
