@@ -960,7 +960,11 @@ export const derivePassword = (
     for (let i = 0; i < bytes.length && result.length < length; i += 4) {
       let val = 0;
       for (let j = 0; j < 4 && i + j < bytes.length; j++) {
-        val = (val << 8) | bytes[i + j]!;
+        // unsigned: `<<` on a byte >= 0x80 would make val negative after 4
+        // shifts, and `%` keeps the dividend's sign, so B85[val % 85] reads
+        // out of range and returns undefined - a password with the literal
+        // word "undefined" baked in. `>>> 0` forces the unsigned reading.
+        val = ((val << 8) | bytes[i + j]!) >>> 0;
       }
       for (let j = 0; j < 5 && result.length < length; j++) {
         result += B85[val % 85]!;
