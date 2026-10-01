@@ -1,7 +1,7 @@
 import { useStore } from '../state';
 import type { NetworkType } from '../state/keyring';
 import { isIbcNetwork } from '../state/keyring/network-types';
-import { getNetwork } from '../config/networks';
+import { getNetwork, getSubnetworks } from '../config/networks';
 
 /**
  * turning a network on also makes a top-level one the active network; an ibc
@@ -19,6 +19,17 @@ export const useEnableNetwork = () => {
     }
     if (!getNetwork(n).parent) {
       await setActive(n);
+    }
+  };
+};
+
+/** turning a network off also turns off its ibc chains, so none keeps reaching its nodes */
+export const useDisableNetwork = () => {
+  const toggleNetwork = useStore(s => s.keyRing.toggleNetwork);
+  const enabled = useStore(s => s.keyRing.enabledNetworks);
+  return async (n: NetworkType) => {
+    for (const c of [...getSubnetworks(n), n].filter(c => enabled.includes(c))) {
+      await toggleNetwork(c);
     }
   };
 };

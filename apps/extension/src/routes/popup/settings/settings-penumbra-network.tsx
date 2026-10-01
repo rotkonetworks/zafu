@@ -7,7 +7,7 @@ import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { useStore } from '../../../state';
 import { selectEnabledNetworks, type NetworkType } from '../../../state/keyring';
-import { useEnableNetwork } from '../../../hooks/enable-network';
+import { useDisableNetwork, useEnableNetwork } from '../../../hooks/enable-network';
 import { useHiddenChains } from '../../../hooks/cosmos-balance';
 import { getRegistryEndpoints } from '../../../config/penumbra-endpoints';
 import { getSubnetworks } from '../../../config/networks';
@@ -43,7 +43,7 @@ const openFrom = (params: URLSearchParams): Open => {
 /** one ibc chain: on or off, shown on home or not, and the nodes it reads from */
 const ChainSheet = ({ id, onClose }: { id: Chain; onClose: () => void }) => {
   const on = useStore(s => selectEnabledNetworks(s).includes(id));
-  const toggle = useStore(s => s.keyRing.toggleNetwork);
+  const disable = useDisableNetwork();
   const enable = useEnableNetwork();
   const { hidden, setHidden } = useHiddenChains();
   const gone = COSMOS_CHAINS[id].deprecation;
@@ -55,7 +55,7 @@ const ChainSheet = ({ id, onClose }: { id: Chain; onClose: () => void }) => {
           type='toggle'
           label={`use ${chainName(id)}`}
           checked={on}
-          onChange={v => void (v ? enable(id) : toggle(id))}
+          onChange={v => void (v ? enable(id) : disable(id))}
         />
         <Row
           type='toggle'
@@ -76,7 +76,7 @@ export const SettingsPenumbraNetwork = () => {
   const { hidden } = useHiddenChains();
   const endpoint = useStore(s => s.networks.networks.penumbra.endpoint) ?? '';
   const setEndpoint = useStore(s => s.networks.setNetworkEndpoint);
-  const toggle = useStore(s => s.keyRing.toggleNetwork);
+  const disable = useDisableNetwork();
   const navigate = usePopupNav();
 
   const chainsOn = CHAINS.filter(c => enabled.includes(c));
@@ -110,7 +110,7 @@ export const SettingsPenumbraNetwork = () => {
             label='turn off penumbra'
             tone='danger'
             onPress={() =>
-              void toggle('penumbra').then(() =>
+              void disable('penumbra').then(() =>
                 navigate(PopupPath.SETTINGS_NETWORKS, { replace: true }),
               )
             }
