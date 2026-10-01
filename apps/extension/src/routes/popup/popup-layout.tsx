@@ -13,12 +13,13 @@ import { useStore } from '../../state';
 import { selectActiveNetwork, selectPenumbraAccount } from '../../state/keyring';
 
 /**
- * Screens that live outside the app shell: unlock and the approval windows a
+ * Screens that live outside the app shell: welcome, unlock and the approval windows a
  * site or a device opens. Every other screen keeps the header and the tabs,
  * so moving around never changes the frame.
  */
 const bareRoutes = [
   PopupPath.LOGIN,
+  PopupPath.WELCOME,
   PopupPath.TRANSACTION_APPROVAL,
   PopupPath.ORIGIN_APPROVAL,
   PopupPath.SIGN_APPROVAL,
