@@ -13,6 +13,7 @@ import './net/egress-install-lite';
 import {
   AuthorizationData,
   Transaction,
+  TransactionBody,
   TransactionPlan,
   WitnessData,
 } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
@@ -195,86 +196,114 @@ const getRequiredProvingKeys = (txPlan: TransactionPlan): Set<string> => {
 };
 
 /**
- * Reply shape for a refused build. The success reply is the bare transaction
- * JSON - the service worker's client parses it straight into a Transaction - so
- * failures are marked with this key instead of a wrapper.
+ * PROVE_PARALLEL from @penumbrafi/services: prove every action before the user
+ * approves, from viewing data only. Mirrors ParallelBuildRequest without
+ * authData; import it from @penumbrafi/types once zafu moves there.
  */
-const postBuildFailure = (e: unknown): void => {
-  self.postMessage({ __buildError: { message: e instanceof Error ? e.message : String(e) } });
+export interface ParallelProveRequest {
+  transactionPlan: ParallelBuildRequest['transactionPlan'];
+  witness: ParallelBuildRequest['witness'];
+  fullViewingKey: ParallelBuildRequest['fullViewingKey'];
+}
+
+export type ParallelWorkerRequest =
+  | { kind: 'build'; request: ParallelBuildRequest }
+  | { kind: 'prove'; request: ParallelProveRequest };
+
+/**
+ * Reply shape for a refused job. The success reply is the bare JSON result, so
+ * failures are marked with this key instead of a wrapper. `unimplemented` means
+ * this wasm cannot prove without auth data; the caller falls back to a build.
+ */
+export interface ParallelWorkerFailure {
+  __buildError: { message: string; unimplemented?: boolean };
+}
+
+class ProveUnsupportedError extends Error {}
+
+const postFailure = (e: unknown): void => {
+  self.postMessage({
+    __buildError: {
+      message: e instanceof Error ? e.message : String(e),
+      unimplemented: e instanceof ProveUnsupportedError,
+    },
+  } satisfies ParallelWorkerFailure);
 };
 
-// Listen for build requests
-const workerListener = ({ data }: { data: ParallelBuildRequest }) => {
-  try {
-    const {
-      transactionPlan: transactionPlanJson,
-      witness: witnessJson,
-      fullViewingKey: fullViewingKeyJson,
-      authData: authDataJson,
-    } = data;
-
-    // Deserialize payload
-    const transactionPlan = TransactionPlan.fromJson(transactionPlanJson);
-    const witness = WitnessData.fromJson(witnessJson);
-    const fullViewingKey = FullViewingKey.fromJson(fullViewingKeyJson);
-    const authData = AuthorizationData.fromJson(authDataJson);
-
-    // ALWAYS reply. A rejection here - a proving key that fails to fetch, a WASM
-    // trap, a malformed payload - used to vanish into an unhandled rejection, so
-    // no message was ever posted and the offscreen handler's request (and with
-    // it the wallet's send) stayed pending forever.
-    void executeWorker(transactionPlan, witness, fullViewingKey, authData).then(
-      transaction => self.postMessage(transaction),
-      postBuildFailure,
-    );
-  } catch (e) {
-    postBuildFailure(e);
-  }
+// ALWAYS reply. A rejection here - a proving key that fails to fetch, a WASM
+// trap, a malformed payload - used to vanish into an unhandled rejection, so
+// no message was ever posted and the offscreen handler's request (and with
+// it the wallet's send) stayed pending forever.
+const workerListener = ({ data }: MessageEvent<ParallelWorkerRequest>) => {
+  const job = data.kind === 'prove' ? executeProve(data.request) : executeBuild(data.request);
+  void job.then(result => self.postMessage(result), postFailure);
 };
 
 // Listen for all messages - worker is persistent
 self.addEventListener('message', workerListener);
 
-/**
- * Execute the parallel build.
- */
-async function executeWorker(
-  transactionPlan: TransactionPlan,
-  witness: WitnessData,
-  fullViewingKey: FullViewingKey,
-  authData: AuthorizationData,
-): Promise<JsonValue> {
-  // Initialize parallel WASM first
+/** Initialize wasm and load every proving key the plan needs; both stay cached. */
+async function prepare(transactionPlan: TransactionPlan) {
   await initParallelWasm();
 
   // Import parallel WASM module directly - keys must be loaded into the same module that uses them
   const parallelWasm = await import('@rotko/penumbra-wasm/wasm-parallel');
 
-  // Load all required proving keys into the parallel WASM module
-  const requiredKeys = getRequiredProvingKeys(transactionPlan);
-  console.log(`[Parallel Build Worker] Loading ${requiredKeys.size} proving keys`);
-
   await Promise.all(
-    Array.from(requiredKeys).map(actionType =>
+    Array.from(getRequiredProvingKeys(transactionPlan)).map(actionType =>
       loadProvingKeyIfNeeded(actionType, parallelWasm.load_proving_key),
     ),
   );
+  return parallelWasm;
+}
 
-  console.log('[Parallel Build Worker] Building transaction with rayon...');
-  const startTime = performance.now();
+/** wasm-parallel exports added after @rotko/penumbra-wasm@55.0.2 */
+interface ProveOnlyWasm {
+  build_actions_native?: (
+    full_viewing_key: Uint8Array,
+    transaction_plan: Uint8Array,
+    witness_data: Uint8Array,
+  ) => Uint8Array;
+}
 
-  // Build all actions in parallel using rayon's build_parallel_native
-  const result = parallelWasm.build_parallel_native(
-    fullViewingKey.toBinary(),
-    transactionPlan.toBinary(),
-    witness.toBinary(),
-    authData.toBinary(),
+/** Prove all actions without authorization data; returns them in plan order. */
+async function executeProve(req: ParallelProveRequest): Promise<JsonValue> {
+  const transactionPlan = TransactionPlan.fromJson(req.transactionPlan);
+  const parallelWasm = (await prepare(transactionPlan)) as ProveOnlyWasm;
+  if (typeof parallelWasm.build_actions_native !== 'function') {
+    throw new ProveUnsupportedError('wasm-parallel has no build_actions_native');
+  }
+
+  const start = performance.now();
+  const { actions } = TransactionBody.fromBinary(
+    parallelWasm.build_actions_native(
+      FullViewingKey.fromJson(req.fullViewingKey).toBinary(),
+      transactionPlan.toBinary(),
+      WitnessData.fromJson(req.witness).toBinary(),
+    ),
   );
+  console.debug(
+    `[Parallel Build Worker] proved ${actions.length} actions in ${(performance.now() - start).toFixed(0)}ms`,
+  );
+  return actions.map(action => action.toJson());
+}
 
-  const transaction = Transaction.fromBinary(result);
+/** Proofs and authorization in one call (the pre-approval path is executeProve). */
+async function executeBuild(req: ParallelBuildRequest): Promise<JsonValue> {
+  const transactionPlan = TransactionPlan.fromJson(req.transactionPlan);
+  const parallelWasm = await prepare(transactionPlan);
 
-  const elapsed = performance.now() - startTime;
-  console.log(`[Parallel Build Worker] Built transaction in ${elapsed.toFixed(0)}ms`);
-
+  const start = performance.now();
+  const transaction = Transaction.fromBinary(
+    parallelWasm.build_parallel_native(
+      FullViewingKey.fromJson(req.fullViewingKey).toBinary(),
+      transactionPlan.toBinary(),
+      WitnessData.fromJson(req.witness).toBinary(),
+      AuthorizationData.fromJson(req.authData).toBinary(),
+    ),
+  );
+  console.debug(
+    `[Parallel Build Worker] built transaction in ${(performance.now() - start).toFixed(0)}ms`,
+  );
   return transaction.toJson();
 }
