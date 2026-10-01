@@ -42,6 +42,8 @@ export enum PopupPath {
 
   // every transaction (home shows the newest few)
   ACTIVITY = '/activity',
+  // one transaction, opened from an activity row or a send's "view transaction"
+  TX_DETAIL = '/activity/tx',
 
   // Per-pool Zcash notes (orchard legacy vs ironwood); IRONWOOD_MIGRATION-gated
   POOL_NOTES = '/pool-notes',

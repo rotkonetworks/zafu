@@ -144,6 +144,10 @@ export const popupRoutes: RouteObject[] = [
             path: PopupPath.ACTIVITY,
             lazy: lazyScreen('activity'),
           },
+          {
+            path: PopupPath.TX_DETAIL,
+            lazy: lazyScreen('txDetail'),
+          },
 
           // Per-pool notes (orchard legacy vs ironwood). Registered only when the
           // IRONWOOD_MIGRATION flag is ON - the dual-pool UI is dormant otherwise.
