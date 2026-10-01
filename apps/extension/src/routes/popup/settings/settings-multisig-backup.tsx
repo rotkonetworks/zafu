@@ -133,11 +133,13 @@ export const SettingsMultisigBackup = () => {
           <Section title='group seats' aside='not in your recovery phrase'>
             {seats.map(w => {
               const s = seatState(w);
+              // frost share export stays reachable even once a seat is backed
+              // up - only an airgap seat (exported on zigner itself) has none
               return (
                 <Line key={w.id} mark={s.mark} name={w.label} meta={s.meta} warn={s.warn}>
-                  {s.warn && (
+                  {w.multisig?.custody !== 'airgapSigner' && (
                     <Button
-                      variant='primary'
+                      variant={s.warn ? 'primary' : 'secondary'}
                       size='sm'
                       className='h-8'
                       onClick={async () => {
@@ -146,7 +148,7 @@ export const SettingsMultisigBackup = () => {
                         }
                       }}
                     >
-                      back up
+                      {s.warn ? 'back up' : 'export'}
                     </Button>
                   )}
                 </Line>
