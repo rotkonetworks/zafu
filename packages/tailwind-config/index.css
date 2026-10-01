@@ -7,6 +7,14 @@
 @source "../ui/lib/**/*.{ts,tsx}";
 @source "../../apps/extension/src/**/*.{ts,tsx}";
 
+/* inline, so a utility reads --network-accent where it is used: the popup
+   layout rebinds it per [data-network], below the root this block sits on */
+@theme inline {
+  --color-network-accent: var(--network-accent);
+  --color-network-accent-light: var(--network-accent-light);
+  --color-network-accent-foreground: var(--network-accent-foreground);
+}
+
 /* Zafu terminal theme - CSS-first config (Tailwind v4) */
 @theme {
   /* resolve through the runtime var (--zafu-font, owned by globals.css)
@@ -142,11 +150,6 @@
   --color-light-brown: var(--light-brown);
   --color-light-grey: var(--light-grey);
   --color-brown: var(--brown);
-
-  /* network accent */
-  --color-network-accent: var(--network-accent);
-  --color-network-accent-light: var(--network-accent-light);
-  --color-network-accent-foreground: var(--network-accent-foreground);
 
   /* zigner */
   --color-zigner-gold: var(--zigner-gold);
