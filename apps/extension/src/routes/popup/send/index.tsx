@@ -4,7 +4,7 @@
  * cosmos chains use skip go api for routing
  */
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { PopupPath } from '../paths';
 import { ZcashSend } from './zcash-send';
@@ -14,17 +14,18 @@ import { activeAccountIndex } from '../../../state/pockets';
 import { isActiveIbcChain, getNetwork, getActiveIbcSubnetworks } from '../../../config/networks';
 import type { NetworkType } from '../../../state/keyring';
 import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
-import { Button } from '@repo/ui/components/ui/button';
+import { Segmented } from '@repo/ui/components/ui/segmented';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
+import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
+import { NetworkUnavailable } from '../../../shared/components/network-unavailable';
+import { Main } from './send-ui';
 import { ScreenHeader } from '../../../components/screen-header';
 import { isDedicatedWindow } from '../../../utils/popup-detection';
-import {
-  PrivacySwitch,
-  orderTransparentChains,
-  type Privacy,
-} from '../../../components/privacy-switch';
+import { orderTransparentChains } from '../../../components/privacy-switch';
 import { resolveNetworkCosmosChain } from './chain-identity';
 import { CosmosSend } from './cosmos-send';
 import { PenumbraSend } from './penumbra-send';
+import { PenumbraIbcSend } from './ibc-send';
 
 interface SendLocationState {
   prefillMemo?: string;
@@ -113,48 +114,14 @@ export function SendPage() {
       : undefined;
 
   const goBack = () => (inDedicatedWindow ? window.close() : navigate(PopupPath.INDEX));
-  // cosmos chain from route state (burner off-ramp) takes precedence over the
-  // active network - the user is on Penumbra, just routing a send to Noble.
-  // On Penumbra, Send can also spend from a transparent chain (Injective, ...):
-  // same form as the home rows' send/shield buttons open.
-  const sourceChoices =
-    activeNetwork === 'penumbra' && !locationState?.cosmosChain
-      ? orderTransparentChains(getActiveIbcSubnetworks('penumbra') as CosmosChainId[])
-      : [];
-  const [privacy, setPrivacy] = useState<Privacy>('shielded');
-  const [pickedChain, setPickedChain] = useState<CosmosChainId>();
-  const pickedSource = privacy === 'transparent' ? (pickedChain ?? sourceChoices[0]) : undefined;
-  const cosmosChain = locationState?.cosmosChain ?? pickedSource;
-  // the active network may itself be a cosmos IBC destination (noble is the
-  // off-ramp, the rest are the shield ramps) - resolve it through the registry
-  // rather than a hand-maintained allow-list, so every live subnetwork the
-  // receive side offers is classified the same way here.
-  const activeCosmosChain = resolveNetworkCosmosChain(activeNetwork);
-  const sendChain = cosmosChain ?? activeCosmosChain;
-  const isCosmos = sendChain != null;
   // a zcash: payment link (clicked on a website) is a zcash send whatever
   // network is active
   const zcashLink = /^zcash:/i.test(searchParams.get('to') ?? '');
-  const isZcash = !cosmosChain && (activeNetwork === 'zcash' || zcashLink);
-  const isPenumbra = !cosmosChain && !zcashLink && activeNetwork === 'penumbra';
+  // the burner off-ramp (route state) names its chain; otherwise the active
+  // network may itself be a cosmos ibc destination, resolved through the registry
+  const cosmosChain = locationState?.cosmosChain ?? resolveNetworkCosmosChain(activeNetwork);
 
-  const getTitle = () => {
-    if (isPenumbra) {
-      return 'send penumbra';
-    }
-    if (isCosmos) {
-      // the burner "shield" and "send" buttons route here with an intent; name
-      // the screen for what the user set out to do so they are not identical
-      return locationState?.cosmosIntent === 'shield' ? 'shield into penumbra' : 'send';
-    }
-    if (isZcash) {
-      return 'send zcash';
-    }
-    return `send ${activeNetwork}`;
-  };
-
-  // zcash uses full-screen flow
-  if (isZcash) {
+  if (!locationState?.cosmosChain && (zcashLink || activeNetwork === 'zcash')) {
     if (waitingForWallets) {
       return (
         <div className='flex h-full items-center justify-center p-6 text-xs text-fg-muted'>
@@ -166,82 +133,124 @@ export function SendPage() {
       <ZcashSend onClose={goBack} accountIndex={activePocket} mainnet={true} prefill={prefill} />
     );
   }
-
-  return (
-    <div className='flex flex-col'>
-      <ScreenHeader
-        title={getTitle()}
-        backPath={inDedicatedWindow ? false : undefined}
-        onBack={goBack}
+  if (cosmosChain) {
+    return (
+      <TransparentSend
+        chain={cosmosChain}
+        onClose={goBack}
+        accountIndex={locationState?.cosmosAccountIndex}
+        intent={locationState?.cosmosIntent ?? 'send'}
       />
-
-      {/* Content */}
-      <div className='p-4'>
-        {sourceChoices.length > 0 && (
-          <PrivacySwitch
-            privacy={privacy}
-            onPrivacy={setPrivacy}
-            chains={sourceChoices}
-            chain={pickedSource}
-            onChain={setPickedChain}
-          />
-        )}
-        {isPenumbra ? (
-          <PenumbraSend
-            onSuccess={inDedicatedWindow ? () => window.close() : undefined}
-            prefillAsset={locationState?.prefillAsset}
-          />
-        ) : isCosmos ? (
-          isActiveIbcChain(sendChain as NetworkType) ? (
-            <CosmosSend
-              key={sendChain}
-              sourceChainId={sendChain}
-              initialAccountIndex={locationState?.cosmosAccountIndex}
-              intent={locationState?.cosmosIntent ?? 'send'}
-            />
-          ) : (
-            // No live IBC channel to this chain right now (channels close on
-            // network upgrades and reopen later), so deposit/send is unavailable.
-            <div className='flex flex-col gap-2 border border-border-soft bg-elev-1 p-4 text-sm'>
-              <span className='text-fg'>channel unavailable</span>
-              <span className='text-fg-muted'>
-                {getNetwork(sendChain as NetworkType).name} has no open IBC channel with Penumbra
-                right now.
-              </span>
-            </div>
-          )
-        ) : (
-          <div className='flex flex-col gap-4'>
-            <div>
-              <label className='mb-1 block text-xs text-fg-muted'>recipient</label>
-              <input
-                type='text'
-                placeholder='enter address'
-                className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
-              />
-            </div>
-
-            <div>
-              <label className='mb-1 block text-xs text-fg-muted'>amount</label>
-              <input
-                type='text'
-                placeholder='0.00'
-                className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
-              />
-            </div>
-
-            <Button variant='primary' className='mt-4 w-full'>
-              continue
-            </Button>
-
-            <p className='text-center text-xs text-fg-muted'>
-              {activeNetwork === 'polkadot' && 'light client transaction'}
-            </p>
-          </div>
-        )}
-      </div>
+    );
+  }
+  if (activeNetwork === 'penumbra') {
+    return <PenumbraSendScreen onClose={goBack} prefillAsset={locationState?.prefillAsset} />;
+  }
+  return (
+    <div className='flex h-full flex-col'>
+      <ScreenHeader title='send' onBack={goBack} />
+      <NetworkUnavailable feature='sending' iconClass='i-ph-paper-plane-tilt' />
     </div>
   );
+}
+
+/** a send out of a transparent chain, or its calm refusal while no channel is open */
+function TransparentSend({
+  chain,
+  onClose,
+  accountIndex,
+  intent,
+  meta,
+  above,
+}: {
+  chain: CosmosChainId;
+  onClose: () => void;
+  accountIndex?: number;
+  intent: 'send' | 'shield';
+  meta?: ReactNode;
+  above?: ReactNode;
+}) {
+  // channels close on network upgrades and reopen later
+  if (!isActiveIbcChain(chain as NetworkType)) {
+    return (
+      <div className='flex h-full flex-col'>
+        <ScreenHeader title='send' onBack={onClose} meta={meta} />
+        <Main className='gap-[18px] pt-5'>
+          {above}
+          <StatusSlot tone='warn' icon='i-ph-warning'>
+            {getNetwork(chain as NetworkType).name.toLowerCase()} has no open channel with penumbra
+            right now · please try again later
+          </StatusSlot>
+        </Main>
+      </div>
+    );
+  }
+  return (
+    <CosmosSend
+      key={chain}
+      sourceChainId={chain}
+      initialAccountIndex={accountIndex}
+      intent={intent}
+      onClose={onClose}
+      meta={meta}
+      above={above}
+    />
+  );
+}
+
+type PenumbraMode = 'send' | 'withdraw' | 'transparent';
+
+/**
+ * Penumbra's three ways out, picked in the header: a private send, an ibc
+ * withdraw to a cosmos chain, or a send from one of its transparent chains.
+ */
+function PenumbraSendScreen({
+  onClose,
+  prefillAsset,
+}: {
+  onClose: () => void;
+  prefillAsset?: string;
+}) {
+  const chains = orderTransparentChains(getActiveIbcSubnetworks('penumbra') as CosmosChainId[]);
+  const [mode, setMode] = useState<PenumbraMode>('send');
+  const [chain, setChain] = useState<CosmosChainId>();
+  const source = chain ?? chains[0];
+  const meta = (
+    <Segmented
+      label='send mode'
+      value={mode}
+      onChange={setMode}
+      options={[
+        { value: 'send', label: 'send' },
+        { value: 'withdraw', label: 'withdraw' },
+        ...(source ? [{ value: 'transparent' as const, label: 'transparent' }] : []),
+      ]}
+    />
+  );
+  const screens: Record<PenumbraMode, () => ReactNode> = {
+    send: () => <PenumbraSend onClose={onClose} prefillAsset={prefillAsset} meta={meta} />,
+    withdraw: () => <PenumbraIbcSend onClose={onClose} meta={meta} />,
+    transparent: () =>
+      source && (
+        <TransparentSend
+          chain={source}
+          onClose={onClose}
+          intent='send'
+          meta={meta}
+          above={
+            chains.length > 1 && (
+              <Segmented
+                label='network'
+                value={source}
+                onChange={setChain}
+                options={chains.map(c => ({ value: c, label: COSMOS_CHAINS[c].name }))}
+              />
+            )
+          }
+        />
+      ),
+  };
+  return <div className='flex h-full flex-col bg-canvas'>{screens[mode]()}</div>;
 }
 
 export default SendPage;

@@ -31,11 +31,18 @@ export interface PenumbraTransactionResult {
 export const usePenumbraTransaction = () =>
   useMutation({
     mutationFn: (
-      input: TransactionPlannerRequest | { planRequest: TransactionPlannerRequest; label: string },
+      input:
+        | TransactionPlannerRequest
+        | {
+            planRequest: TransactionPlannerRequest;
+            label?: string;
+            /** each step the service worker reports while the op is pending */
+            onStep?: (step: string) => void;
+          },
     ): Promise<PenumbraTransactionResult> => {
-      const { planRequest, label } =
+      const { planRequest, label, onStep } =
         input instanceof TransactionPlannerRequest
-          ? { planRequest: input, label: undefined }
+          ? { planRequest: input, label: undefined, onStep: undefined }
           : input;
       const opId = crypto.randomUUID();
       const key = txOpKey(opId);
@@ -56,7 +63,9 @@ export const usePenumbraTransaction = () =>
           if (!op) {
             return;
           }
-          if (op.status === 'done') {
+          if (op.status === 'pending' && op.step) {
+            onStep?.(op.step);
+          } else if (op.status === 'done') {
             finish(() => resolve({ txId: op.txId ?? 'unknown', memo: op.memo }));
           } else if (op.status === 'failed') {
             finish(() => reject(new Error(op.error ?? 'transaction failed')));

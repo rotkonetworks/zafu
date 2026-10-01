@@ -2,7 +2,7 @@
  * cosmos chain send form (skip-routed transparent sends)
  */
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from 'react';
 import { Sensitive } from '../../../components/sensitive';
 import { PopupPath } from '../paths';
 import { useQueryClient } from '@tanstack/react-query';
@@ -27,7 +27,6 @@ import {
   isValidCosmosAddress,
   getChainFromAddress,
 } from '@repo/wallet/networks/cosmos/chains';
-import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { openInDedicatedWindow } from '../../../utils/navigate';
@@ -41,171 +40,22 @@ import {
   type InjectiveRecipientProblem,
 } from '@repo/wallet/networks/injective/derive';
 import { derivePenumbraEphemeralFromMnemonic } from '../../../hooks/use-address';
-import { RecipientPicker } from '../../../components/recipient-picker';
-
-import { SaveContactPrompt } from './shared';
-import { RegistryIcon } from '../../../shared/components/registry-icon';
-
-/** cosmos asset selector dropdown */
-function AssetSelector({
-  assets,
-  selected,
-  onSelect,
-  loading,
-}: {
-  assets: CosmosAsset[];
-  selected: CosmosAsset | undefined;
-  onSelect: (asset: CosmosAsset) => void;
-  loading?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-
-  if (loading) {
-    return <div className='h-10 bg-elev-2 animate-pulse' />;
-  }
-
-  if (assets.length === 0) {
-    return (
-      <div className='border border-border-soft bg-input px-3 py-2.5 text-sm text-fg-muted'>
-        no assets
-      </div>
-    );
-  }
-
-  return (
-    <div className='relative'>
-      <button
-        onClick={() => setOpen(!open)}
-        className='flex w-full items-center justify-between border border-border-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
-      >
-        {selected ? (
-          <div className='flex items-center gap-2'>
-            <span>{selected.symbol}</span>
-            <span className='text-fg-muted'>
-              <Sensitive>{selected.formatted}</Sensitive>
-            </span>
-          </div>
-        ) : (
-          <span className='text-fg-muted'>select asset</span>
-        )}
-        <span
-          className={cn('i-ph-caret-down h-4 w-4 transition-transform', open && 'rotate-180')}
-        />
-      </button>
-
-      {open && (
-        <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto border border-border-soft bg-canvas shadow-lg'>
-          {assets.map(asset => (
-            <button
-              key={asset.denom}
-              onClick={() => {
-                onSelect(asset);
-                setOpen(false);
-              }}
-              className={cn(
-                'flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-elev-1',
-                selected?.denom === asset.denom && 'bg-elev-2',
-              )}
-            >
-              <span>{asset.symbol}</span>
-              <span className='text-fg-muted'>
-                <Sensitive>{asset.formatted}</Sensitive>
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** cosmos chain selector for skip routing */
-function CosmosChainSelector({
-  chains,
-  selected,
-  onSelect,
-  currentChainId,
-  autoLabel,
-}: {
-  chains: { chainId: string; chainName: string; bech32Prefix?: string; logoUri?: string }[];
-  selected: string | undefined;
-  onSelect: (chainId: string) => void;
-  currentChainId: string;
-  autoLabel?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [manuallySelected, setManuallySelected] = useState(false);
-  const filteredChains = chains.filter(c => c.chainId !== currentChainId);
-
-  const displayName =
-    manuallySelected && selected
-      ? (chains.find(c => c.chainId === selected)?.chainName ?? selected)
-      : selected
-        ? (autoLabel ?? chains.find(c => c.chainId === selected)?.chainName ?? selected)
-        : (autoLabel ?? 'auto-detect from address');
-
-  return (
-    <div className='relative'>
-      <button
-        onClick={() => setOpen(!open)}
-        className='flex w-full items-center justify-between border border-border-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
-      >
-        <span className={!manuallySelected && !selected ? 'text-fg-muted' : ''}>{displayName}</span>
-        <span
-          className={cn('i-ph-caret-down h-4 w-4 transition-transform', open && 'rotate-180')}
-        />
-      </button>
-
-      {open && (
-        <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto border border-border-soft bg-canvas shadow-lg'>
-          {/* auto-detect option */}
-          <button
-            onClick={() => {
-              onSelect('');
-              setManuallySelected(false);
-              setOpen(false);
-            }}
-            className={cn(
-              'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-elev-1',
-              !manuallySelected && 'bg-elev-2',
-            )}
-          >
-            <span className='text-fg-muted'>auto-detect from address</span>
-          </button>
-          {filteredChains.map(chain => (
-            <button
-              key={chain.chainId}
-              onClick={() => {
-                onSelect(chain.chainId);
-                setManuallySelected(true);
-                setOpen(false);
-              }}
-              className={cn(
-                'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-elev-1',
-                manuallySelected && selected === chain.chainId && 'bg-elev-2',
-              )}
-            >
-              <RegistryIcon
-                name={chain.chainName}
-                images={chain.logoUri ? [{ png: chain.logoUri }] : undefined}
-                className='h-5 w-5'
-                size={20}
-              />
-              <span>{chain.chainName}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+import { Input } from '@repo/ui/components/ui/input';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { Segmented } from '@repo/ui/components/ui/segmented';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+import { useCopy } from '@repo/ui/hooks/use-copy';
+import { ScreenHeader } from '../../../components/screen-header';
+import { SaveContactModal } from '../../../components/save-contact-modal';
+import { Done, Footer, Helper, Main, Review, Sending, Stopped } from './send-ui';
+import { AmountField, ContactsSheet, PickSheet, ToField } from './send-fields';
+import { STAGES } from './send-stage';
 
 // Penumbra's Skip/registry chain id. Shielding USDC INTO penumbra is a direct
 // single-hop IBC MsgTransfer over our own relayed channel, NOT a Skip route -
 // so this id is special-cased throughout the cosmos send flow below.
 const PENUMBRA_CHAIN_ID = 'penumbra-1';
 
-/** cosmos send form with skip routing */
 /**
  * Loaded lazily and defensively ON PURPOSE. This module also hosts
  * PenumbraSend, PenumbraNativeSend and ZcashSend, so a module-scope
@@ -271,11 +121,19 @@ export function CosmosSend({
   sourceChainId,
   initialAccountIndex,
   intent = 'send',
+  onClose,
+  meta,
+  above,
 }: {
   sourceChainId: CosmosChainId;
   initialAccountIndex?: number;
   /** 'shield' opens straight on "into my Penumbra wallet" */
   intent?: 'send' | 'shield';
+  onClose: () => void;
+  /** the header's mode switch */
+  meta?: ReactNode;
+  /** first in the form, e.g. which transparent chain */
+  above?: ReactNode;
 }) {
   const sourceChain = COSMOS_CHAINS[sourceChainId];
   // the live chain -> penumbra channel (discovered, never an expired pin);
@@ -335,18 +193,19 @@ export function CosmosSend({
   const [txHash, setTxHash] = useState<string | undefined>();
   const [txError, setTxError] = useState<string | undefined>();
   const [showSavePrompt, setShowSavePrompt] = useState(false);
-  const [contactName, setContactName] = useState('');
   const [showContactModal, setShowContactModal] = useState(false);
   const [txPreview, setTxPreview] = useState<Record<string, unknown> | null>(null);
   const [showRawJson, setShowRawJson] = useState(false);
+  const [pick, setPick] = useState<'asset' | 'from' | 'chain' | 'book'>();
+  const signStartRef = useRef(0);
 
   // detect wallet type
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const isZigner = cosmosKeyFor(selectedKeyInfo, sourceChainId)?.signer === 'zigner';
 
   // recent addresses and contacts
-  const { recordUsage, shouldSuggestSave, dismissSuggestion } = useStore(recentAddressesSelector);
-  const { addContact, addAddress, findByAddress } = useStore(contactsSelector);
+  const { recordUsage, shouldSuggestSave } = useStore(recentAddressesSelector);
+  const { findByAddress } = useStore(contactsSelector);
 
   const { data: skipChains = [], isLoading: chainsLoading } = useSkipChains();
 
@@ -517,7 +376,6 @@ export function CosmosSend({
       setAmount(fullDecimalString(spendable, selectedAsset.decimals));
     }
   }, [topUp, txStatus, selectedAsset, gasDenom, amount, spendable]);
-  const [addrCopied, setAddrCopied] = useState(false);
 
   // convert amount to base units (integer math, no float precision loss)
   const amountInBase = useMemo(() => {
@@ -718,6 +576,7 @@ export function CosmosSend({
       return;
     }
 
+    signStartRef.current = Date.now();
     setTxStatus('signing');
     setTxError(undefined);
 
@@ -842,499 +701,333 @@ export function CosmosSend({
     requestAuth,
   ]);
 
-  return (
-    <div className='flex flex-col gap-4'>
-      {PasswordModal}
+  const { copied, copy } = useCopy();
+  const sym = selectedAsset?.symbol ?? sourceChain.symbol;
+  const unit = sym.toLowerCase();
+  const fee = payWithSponsor
+    ? 'covered by the rotko sponsor'
+    : `${formatBaseUnits(gas.fee, gas.gasAsset.decimals, 6)} ${gas.gasAsset.symbol.toLowerCase()}`;
+  const destName = isPenumbraDest
+    ? 'penumbra'
+    : (skipChains.find(c => c.chainId === effectiveDestChainId)?.chainName ?? effectiveDestChainId);
+  const toName = recipient ? findByAddress(recipient)?.contact.name : undefined;
+  const toLabel =
+    isPenumbraDest && !toName ? 'your penumbra wallet' : (toName ?? shortAddress(toAddress));
+  const verb = isPenumbraDest ? 'shield' : 'send';
+  const sending = (
+    <>
+      {verb} <Sensitive>{`${amount} ${unit}`}</Sensitive> to {toLabel}
+    </>
+  );
+  const toHelper =
+    recipient && !recipientValid
+      ? ethermintRecipient && !ethermintRecipient.ok
+        ? ETHERMINT_RECIPIENT_PROBLEM[ethermintRecipient.problem](ethermintRecipient.prefix)
+        : `that is not a ${isPenumbraDest ? 'penumbra' : 'cosmos'} address · please check it`
+      : ethermintRecipient?.ok && ethermintRecipient.fromHex
+        ? `sends to ${shortAddress(toAddress)}`
+        : sendMode === 'ibc' && detectedChain && !destChainId
+          ? `on ${detectedChain.name}`
+          : toName;
+  const amountHelper = exceeds
+    ? 'a little more than this address holds'
+    : !canPayFee
+      ? `no ${gas.gasAsset.symbol.toLowerCase()} on this address for the fee`
+      : routeError && !isPenumbraDest
+        ? routeError.message.toLowerCase()
+        : route
+          ? `arrives as ${(parseFloat(route.amountOut) / 1e6).toFixed(6)}${route.doesSwap && route.swapVenue ? ` via ${route.swapVenue.name}` : ''}`
+          : routeLoading
+            ? 'finding a route'
+            : `fee ${fee}`;
 
-      {/* two ways out: same-chain (Noble) or cross-chain (IBC) */}
-      {!isShield && (
-        <div className='flex border border-border-soft p-1'>
-          <button
-            type='button'
-            onClick={() => setSendMode('same')}
-            className={cn(
-              'flex-1 py-1.5 text-xs lowercase transition-colors',
-              sendMode === 'same' ? 'bg-elev-2 text-fg-high' : 'text-fg-muted hover:text-fg-high',
-            )}
-          >
-            within {sourceChain.name}
-          </button>
-          <button
-            type='button'
-            onClick={() => setSendMode('ibc')}
-            className={cn(
-              'flex-1 py-1.5 text-xs lowercase transition-colors',
-              sendMode === 'ibc' ? 'bg-elev-2 text-fg-high' : 'text-fg-muted hover:text-fg-high',
-            )}
-          >
-            to another chain
-          </button>
-        </div>
-      )}
-
-      {/* the address being spent; any funded one can be picked */}
-      {assetsData?.address && (
-        <div>
-          <label className='mb-1 block text-xs text-fg-muted'>from</label>
-          {fromOptions.length > 1 ? (
-            <select
-              value={accountIndex}
-              onChange={e => setAccountIndex(Number(e.target.value))}
-              disabled={txStatus !== 'idle'}
-              aria-label='from address'
-              className='w-full border border-border-soft bg-input px-3 py-2.5 font-mono text-sm text-fg focus:border-zigner-gold focus:outline-none'
-            >
-              {fromOptions.map(w => (
-                <option key={w.index} value={w.index}>
-                  #{w.index} {shortAddress(w.address)} - {w.summary}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <span className='block border border-border-soft bg-input px-3 py-2.5 font-mono text-sm text-fg-muted'>
-              {shortAddress(assetsData.address)}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Logical order for someone who doesn't have an address ready: pick the
-          chain, then the asset, then where it goes, then how much. Auto-detect
-          still fills the chain if they paste an address first. */}
-
-      {/* destination chain - IBC mode only; same-chain stays on the source */}
-      {sendMode === 'ibc' && !isShield && (
-        <div>
-          <label className='mb-1 block text-xs text-fg-muted'>destination chain</label>
-          {chainsLoading && !penumbraChannel ? (
-            <div className='h-10 bg-elev-2 animate-pulse' />
-          ) : (
-            <CosmosChainSelector
-              chains={destChains}
-              selected={destChainId ?? detectedChain?.chainId}
-              onSelect={id => {
-                setDestTouched(true);
-                setDestChainId(id || undefined);
-                setRecipient('');
-              }}
-              currentChainId={sourceChain.chainId}
-              autoLabel={
-                destChainId
-                  ? undefined
-                  : detectedChain
-                    ? `auto (${detectedChain.name})`
-                    : 'auto-detect from address'
-              }
+  const steps = {
+    idle: () => (
+      <>
+        <ScreenHeader
+          title={isShield ? 'shield into penumbra' : 'send'}
+          onBack={onClose}
+          meta={meta}
+        />
+        <Main className='gap-[18px] pt-5'>
+          {above}
+          {!isShield && (
+            <Segmented
+              label='send mode'
+              value={sendMode}
+              onChange={setSendMode}
+              options={[
+                { value: 'same', label: `within ${sourceChain.name}` },
+                { value: 'ibc', label: 'to another chain' },
+              ]}
             />
           )}
-          {/* alternative: hand the cross-chain routing off to Skip's own UI */}
-          <button
-            type='button'
-            onClick={() => void chrome.tabs.create({ url: 'https://go.skip.build/' })}
-            className='mt-1.5 flex items-center gap-1 text-label text-network-accent transition-colors hover:text-fg-high'
-          >
-            <span className='i-ph-arrow-square-out h-3 w-3' />
-            or route via Skip (go.skip.build)
-          </button>
-        </div>
-      )}
-
-      {/* asset selector */}
-      <div>
-        <label className='mb-1 block text-xs text-fg-muted'>asset</label>
-        <AssetSelector
-          assets={assetsData?.assets ?? []}
-          selected={selectedAsset}
-          onSelect={setSelectedAsset}
-          loading={assetsLoading}
-        />
-      </div>
-
-      {/* recipient / destination address */}
-      <div>
-        <label className='mb-1 block text-xs text-fg-muted'>destination address</label>
-        <input
-          type='text'
-          value={recipient}
-          onChange={e => setRecipient(e.target.value)}
-          placeholder={
-            sendMode === 'same' ? `${sourceChain.bech32Prefix}1...` : 'destination address'
-          }
-          className={cn(
-            'w-full border bg-input px-3 py-2.5 text-sm text-fg',
-            'placeholder:text-fg-muted transition-colors duration-100',
-            'focus:border-penumbra-purple focus:outline-none',
-            recipient && !recipientValid ? 'border-red-400' : 'border-border-soft',
-          )}
-        />
-        {isPenumbraDest && selectedKeyInfo?.type === 'mnemonic' && (
-          <button
-            type='button'
-            onClick={() => void fillOwnPenumbra()}
-            className='mt-1 text-xs text-zigner-gold hover:underline'
-          >
-            my penumbra wallet
-          </button>
-        )}
-        {recipient && !recipientValid && (
-          <p className='mt-1 text-xs text-red-400'>
-            {ethermintRecipient && !ethermintRecipient.ok
-              ? ETHERMINT_RECIPIENT_PROBLEM[ethermintRecipient.problem](ethermintRecipient.prefix)
-              : isPenumbraDest
-                ? 'invalid penumbra address'
-                : 'invalid cosmos address'}
-          </p>
-        )}
-        {ethermintRecipient?.ok && ethermintRecipient.fromHex && (
-          <p className='mt-1 font-mono text-xs text-fg-muted' title={toAddress}>
-            sends to {shortAddress(toAddress)}
-          </p>
-        )}
-        {sendMode === 'ibc' && detectedChain && !destChainId && (
-          <p className='mt-1 text-xs text-fg-muted'>detected: {detectedChain.name}</p>
-        )}
-        {sendMode === 'same' && !recipient && (deposits?.funded.length ?? 0) > 1 && (
-          <div className='mt-1 flex flex-wrap gap-1'>
-            {(deposits?.funded ?? [])
-              .filter(w => w.index !== accountIndex)
-              .slice(0, 4)
-              .map(w => (
-                <button
-                  key={w.index}
-                  type='button'
-                  onClick={() => setRecipient(w.address)}
-                  title={w.address}
-                  className='border border-border-soft px-2 py-1 font-mono text-label text-fg-muted hover:bg-elev-1 hover:text-fg-high'
-                >
-                  my #{w.index}
-                </button>
-              ))}
-          </div>
-        )}
-        <RecipientPicker network='cosmos' onSelect={setRecipient} show={!recipient} />
-      </div>
-
-      {/* amount */}
-      <div>
-        <div className='mb-1 flex items-center justify-between'>
-          <label className='text-xs text-fg-muted'>
-            amount {selectedAsset ? `(${selectedAsset.symbol})` : ''}
-          </label>
-          {selectedAsset && (
-            <span className='text-xs text-fg-muted'>
-              balance: <Sensitive>{selectedAsset.formatted}</Sensitive>
-            </span>
-          )}
-        </div>
-        <div className='relative'>
-          <input
-            type='text'
-            value={amount}
-            onChange={e => setAmount(e.target.value)}
-            placeholder='0.00'
-            className='w-full border border-border-soft bg-input px-3 py-2.5 pr-14 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
-          />
-          {selectedAsset && spendable > 0n && (
-            <button
-              type='button'
-              onClick={handleSetMax}
-              className='absolute right-2 top-1/2 -translate-y-1/2 bg-elev-2 px-2 py-0.5 text-xs text-fg-muted transition-colors hover:bg-elev-1/80 hover:text-fg-high'
-            >
-              max
-            </button>
-          )}
-        </div>
-      </div>
-
-      {exceeds && <p className='-mt-2 text-xs text-amber-400/90'>more than this address holds</p>}
-      <p className='-mt-2 text-xs text-fg-muted'>
-        {payWithSponsor
-          ? 'fee covered by the rotko sponsor'
-          : `fee ~${formatBaseUnits(gas.fee, gas.gasAsset.decimals, 6)} ${gas.gasAsset.symbol}`}
-        {!canPayFee && <span className='text-amber-400/90'> - none on this address</span>}
-      </p>
-      {!canPayFee && !topUp && assetsData?.address && (
-        <div className='-mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs'>
-          {gasDonors.slice(0, 2).map(w => (
-            <button
-              key={w.index}
-              type='button'
-              onClick={() => startTopUp(w.index)}
-              className='text-zigner-gold hover:underline'
-            >
-              move {gas.gasAsset.symbol} here from #{w.index} (
-              {formatBaseUnits(gasOf(w), gas.gasAsset.decimals, 4)})
-            </button>
-          ))}
-          <button
-            type='button'
-            onClick={() => {
-              void navigator.clipboard.writeText(assetsData.address);
-              setAddrCopied(true);
-              setTimeout(() => setAddrCopied(false), 1500);
-            }}
-            className='text-fg-muted hover:text-fg-high'
-            title={`send ${gas.gasAsset.symbol} to ${assetsData.address}`}
-          >
-            {addrCopied ? 'copied' : `copy this address to top up`}
-          </button>
-        </div>
-      )}
-      {topUp && (
-        <div className='-mt-2 flex items-center justify-between gap-2 border border-border-soft px-3 py-2 text-xs'>
-          <span className='text-fg-muted'>
-            moving {gas.gasAsset.symbol} to {shortAddress(topUp.to)} for gas
-          </span>
-          <button
-            type='button'
-            onClick={finishTopUp}
-            className={
-              txStatus === 'success'
-                ? 'text-zigner-gold hover:underline'
-                : 'text-fg-muted hover:text-fg-high'
-            }
-          >
-            {txStatus === 'success' ? 'continue on that address' : 'cancel'}
-          </button>
-        </div>
-      )}
-
-      {/* memo: exchanges often credit a deposit only with it. Penumbra can't
-          carry one, so this is the only place it can be set. */}
-      {!isPenumbraDest && (
-        <div>
-          <label htmlFor='cosmos-send-memo' className='mb-1 block text-xs text-fg-muted'>
-            memo (optional)
-          </label>
-          <input
-            id='cosmos-send-memo'
-            type='text'
-            value={memo}
-            onChange={e => setMemo(e.target.value)}
-            placeholder='if the exchange needs one'
-            className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
-          />
-          {memoLooksLikeMnemonic(memo) && (
-            <p className='mt-1 text-xs text-red-400'>
-              that looks like a recovery phrase - never put it in a memo
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* route info */}
-      {routeLoading && (
-        <div className='flex items-center gap-2 text-xs text-fg-muted'>
-          <span className='i-ph-arrows-clockwise h-3 w-3 animate-spin' />
-          finding route...
-        </div>
-      )}
-      {route && (
-        <div className='border border-border-soft bg-elev-2/20 p-3'>
-          <div className='flex items-center justify-between text-xs'>
-            <span className='text-fg-muted'>receive</span>
-            <span className='font-mono'>
-              <Sensitive>{(parseFloat(route.amountOut) / Math.pow(10, 6)).toFixed(6)}</Sensitive>
-            </span>
-          </div>
-          {route.doesSwap && route.swapVenue && (
-            <div className='mt-1 flex items-center justify-between text-xs'>
-              <span className='text-fg-muted'>via</span>
-              <span>{route.swapVenue.name}</span>
-            </div>
-          )}
-          {route.txsRequired > 1 && (
-            <div className='mt-1 flex items-center justify-between text-xs'>
-              <span className='text-fg-muted'>transactions</span>
-              <span>{route.txsRequired}</span>
-            </div>
-          )}
-        </div>
-      )}
-      {routeError && !isPenumbraDest && (
-        <p className='text-xs text-red-400'>{routeError.message}</p>
-      )}
-      {sendMode === 'ibc' && isPenumbraDest && (
-        <p className='flex items-center gap-1.5 text-xs text-fg-muted'>
-          <span className='i-ph-shield h-3.5 w-3.5 shrink-0 text-zigner-gold' />
-          arrives shielded
-        </p>
-      )}
-
-      {/* transaction status */}
-      {txStatus === 'success' && txHash && (
-        <div className='border border-green-500/40 bg-green-500/10 p-3'>
-          <p className='text-sm text-green-400'>transaction sent!</p>
-          <p className='text-xs text-fg-muted mt-1 font-mono break-all'>{txHash}</p>
-        </div>
-      )}
-
-      {/* save contact prompt */}
-      {showSavePrompt && recipient && !findByAddress(recipient) && (
-        <SaveContactPrompt
-          address={recipient}
-          network='cosmos'
-          onSave={() => {
-            setShowSavePrompt(false);
-            setShowContactModal(true);
-          }}
-          onDismiss={() => {
-            void dismissSuggestion(recipient);
-            setShowSavePrompt(false);
-          }}
-        />
-      )}
-
-      {/* contact name modal */}
-      {showContactModal && (
-        <div className='border border-border-soft bg-canvas p-3'>
-          <p className='text-sm mb-2'>name this contact</p>
-          <input
-            type='text'
-            value={contactName}
-            onChange={e => setContactName(e.target.value)}
-            placeholder='enter name...'
-            className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm mb-2 focus:border-penumbra-purple focus:outline-none'
-            autoFocus
-          />
-          <div className='flex gap-2'>
-            <button
-              onClick={async () => {
-                if (contactName.trim()) {
-                  const newContact = await addContact({ name: contactName.trim() });
-                  await addAddress(newContact.id, {
-                    network: 'cosmos',
-                    address: recipient,
-                    chainId: sourceChainId,
-                  });
-                  setShowContactModal(false);
-                  setContactName('');
-                }
-              }}
-              disabled={!contactName.trim()}
-              className='flex-1 bg-zigner-gold px-3 py-1.5 text-xs text-zigner-gold-foreground transition-colors disabled:opacity-50'
-            >
-              save
-            </button>
-            <button
-              onClick={() => {
-                setShowContactModal(false);
-                setContactName('');
-              }}
-              className='flex-1 bg-elev-2 px-3 py-1.5 text-xs text-fg-muted transition-colors'
-            >
-              cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* confirmation summary */}
-      {txStatus === 'confirm' && selectedAsset && (
-        <div className='border border-zigner-gold/30 bg-elev-1 p-3'>
-          <p className='kicker mb-2'>confirm transaction</p>
-          <div className='flex flex-col gap-1.5 text-xs'>
-            <div className='flex justify-between'>
-              <span className='text-fg-dim lowercase'>type</span>
-              <span className='text-fg-high'>{isSameChain ? 'send' : 'ibc transfer'}</span>
-            </div>
-            <div className='flex justify-between'>
-              <span className='text-fg-dim lowercase'>chain</span>
-              <span className='text-fg-high'>{sourceChain.name}</span>
-            </div>
-            <div className='flex justify-between gap-2'>
-              <span className='text-fg-dim lowercase shrink-0'>to</span>
-              <span className='tabular text-right break-all text-fg-high'>{recipient}</span>
-            </div>
-            <div className='flex justify-between'>
-              <span className='text-fg-dim lowercase'>amount</span>
-              <span className='tabular text-zigner-gold'>
-                <Sensitive>
-                  {amount} {selectedAsset.symbol}
-                </Sensitive>
-              </span>
-            </div>
-            {!isSameChain && effectiveDestChainId && (
-              <div className='flex justify-between'>
-                <span className='text-fg-dim lowercase'>destination</span>
-                <span className='text-fg-high'>
-                  {skipChains.find(c => c.chainId === effectiveDestChainId)?.chainName ??
-                    effectiveDestChainId}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* raw tx json toggle */}
-          {txPreview && (
-            <div className='mt-2'>
-              <button
-                onClick={() => setShowRawJson(!showRawJson)}
-                className='text-label text-fg-dim hover:text-fg-high transition-colors lowercase'
-              >
-                {showRawJson ? 'hide' : 'view'} raw transaction json
-              </button>
-              {showRawJson && (
-                <pre className='mt-2 max-h-48 overflow-auto bg-canvas p-2 text-label tabular text-fg-muted leading-relaxed'>
-                  {JSON.stringify(txPreview, null, 2)}
-                </pre>
+          {(assetsData?.address || (sendMode === 'ibc' && !isShield)) && (
+            <RowGroup>
+              {assetsData?.address && (
+                <Row
+                  type='value'
+                  label='from'
+                  description={shortAddress(assetsData.address)}
+                  value={
+                    fromOptions.find(w => w.index === accountIndex)?.summary ?? sourceChain.name
+                  }
+                  disabled={fromOptions.length < 2}
+                  onPress={() => setPick('from')}
+                />
               )}
+              {sendMode === 'ibc' && !isShield && (
+                <Row
+                  type='value'
+                  label='to network'
+                  value={
+                    destChainId
+                      ? destName
+                      : detectedChain
+                        ? `auto · ${detectedChain.name}`
+                        : chainsLoading && !penumbraChannel
+                          ? 'reading'
+                          : 'from the address'
+                  }
+                  onPress={() => setPick('chain')}
+                />
+              )}
+            </RowGroup>
+          )}
+          <ToField
+            value={recipient}
+            onChange={setRecipient}
+            placeholder={sendMode === 'same' ? `${sourceChain.bech32Prefix}1…` : 'address'}
+            warn={!!recipient && !recipientValid}
+            helper={toHelper}
+            onContacts={isPenumbraDest ? undefined : () => setPick('book')}
+          >
+            {isPenumbraDest && selectedKeyInfo?.type === 'mnemonic' && (
+              <Button
+                variant='quiet'
+                size='sm'
+                onClick={() => void fillOwnPenumbra()}
+                className='self-start px-0 text-network-accent'
+              >
+                my penumbra wallet
+              </Button>
+            )}
+          </ToField>
+          <AmountField
+            value={amount}
+            onChange={setAmount}
+            unit={unit}
+            onUnit={(assetsData?.assets.length ?? 0) > 1 ? () => setPick('asset') : undefined}
+            available={selectedAsset?.formatted}
+            onMax={handleSetMax}
+            canMax={!!selectedAsset && spendable > 0n}
+            warn={exceeds || !canPayFee}
+            helper={amountHelper}
+            disabled={assetsLoading}
+          />
+          {!canPayFee && !topUp && assetsData?.address && (
+            <div className='-mt-3 flex flex-wrap gap-x-3'>
+              {gasDonors.slice(0, 2).map(w => (
+                <Button
+                  key={w.index}
+                  variant='quiet'
+                  size='sm'
+                  onClick={() => startTopUp(w.index)}
+                  className='px-0 text-network-accent'
+                >
+                  move {gas.gasAsset.symbol.toLowerCase()} here from #{w.index} (
+                  {formatBaseUnits(gasOf(w), gas.gasAsset.decimals, 4)})
+                </Button>
+              ))}
+              <Button
+                variant='quiet'
+                size='sm'
+                onClick={() => copy(assetsData.address)}
+                className='px-0'
+              >
+                {copied ? 'copied' : 'copy this address to top up'}
+              </Button>
             </div>
           )}
-
-          <div className='flex gap-2 mt-3'>
-            <Button variant='primary' onClick={() => void handleConfirm()} className='flex-1'>
-              confirm & sign
+          {topUp && (
+            <Helper>
+              moving {gas.gasAsset.symbol.toLowerCase()} to {shortAddress(topUp.to)} for gas
+            </Helper>
+          )}
+          {/* exchanges often credit a deposit only with a memo; penumbra can't carry one */}
+          {!isPenumbraDest && (
+            <div className='flex flex-col gap-1.5'>
+              <label htmlFor='cosmos-send-memo' className='text-xs text-fg-muted'>
+                memo
+              </label>
+              <Input
+                id='cosmos-send-memo'
+                placeholder='optional, if the exchange needs one'
+                value={memo}
+                onChange={e => setMemo(e.target.value)}
+                variant={memoLooksLikeMnemonic(memo) ? 'warn' : 'default'}
+              />
+              <Helper warn>
+                {memoLooksLikeMnemonic(memo) &&
+                  'that looks like a recovery phrase · please never put it in a memo'}
+              </Helper>
+            </div>
+          )}
+          {sendMode === 'ibc' && !isShield && (
+            <Button
+              variant='quiet'
+              size='sm'
+              onClick={() => void chrome.tabs.create({ url: 'https://go.skip.build/' })}
+              className='self-start px-0'
+            >
+              <span className='i-ph-arrow-square-out size-3' />
+              or route it on go.skip.build
             </Button>
-            <Button variant='secondary' onClick={() => setTxStatus('idle')} className='flex-1'>
-              back
+          )}
+        </Main>
+        <Footer>
+          {topUp && (
+            <Button variant='secondary' onClick={finishTopUp} className='w-[110px]'>
+              cancel
             </Button>
-          </div>
-        </div>
-      )}
-
-      {txStatus === 'error' && txError && (
-        <div className='border border-red-500/40 bg-red-500/10 p-3'>
-          <p className='text-sm text-red-400'>transaction failed</p>
-          <p className='text-xs text-fg-muted mt-1'>{txError}</p>
-        </div>
-      )}
-
-      {/* submit */}
-      <Button
-        variant='primary'
-        onClick={() => {
-          if (txStatus === 'success' || txStatus === 'error') {
-            setTxStatus('idle');
-            setTxHash(undefined);
-            setTxError(undefined);
-            setShowSavePrompt(false);
-            if (txStatus === 'success') {
-              setRecipient('');
-              setAmount('');
-            }
-          } else {
-            handleReview();
-          }
-        }}
-        disabled={
-          (txStatus === 'idle' && !canSubmit) ||
-          txStatus === 'confirm' ||
-          txStatus === 'signing' ||
-          txStatus === 'broadcasting'
+          )}
+          <Button onClick={handleReview} disabled={!canSubmit} className='grow'>
+            {routeLoading ? 'finding a route' : 'review'}
+          </Button>
+        </Footer>
+        <PickSheet
+          title='asset'
+          open={pick === 'asset'}
+          onOpenChange={o => setPick(o ? 'asset' : undefined)}
+          picks={(assetsData?.assets ?? []).map(a => ({
+            key: a.denom,
+            label: a.symbol,
+            value: a.formatted,
+          }))}
+          onPick={d => setSelectedAsset(assetsData?.assets.find(a => a.denom === d))}
+        />
+        <PickSheet
+          title='from'
+          open={pick === 'from'}
+          onOpenChange={o => setPick(o ? 'from' : undefined)}
+          picks={fromOptions.map(w => ({
+            key: w.index,
+            label: `#${w.index} ${shortAddress(w.address)}`,
+            value: w.summary,
+          }))}
+          onPick={setAccountIndex}
+        />
+        <PickSheet
+          title='to network'
+          open={pick === 'chain'}
+          onOpenChange={o => setPick(o ? 'chain' : undefined)}
+          picks={[
+            { key: '', label: 'from the address' },
+            ...destChains
+              .filter(c => c.chainId !== sourceChain.chainId)
+              .map(c => ({ key: c.chainId, label: c.chainName })),
+          ]}
+          onPick={id => {
+            setDestTouched(true);
+            setDestChainId(id || undefined);
+            setRecipient('');
+          }}
+        />
+        <ContactsSheet
+          network='cosmos'
+          open={pick === 'book'}
+          onOpenChange={o => setPick(o ? 'book' : undefined)}
+          onPick={row => setRecipient(row.address)}
+        />
+      </>
+    ),
+    confirm: () => (
+      <Review
+        lead={isPenumbraDest ? 'you shield' : 'you send'}
+        amount={amount}
+        unit={unit}
+        rows={[
+          [
+            'from',
+            `${sourceChain.name.toLowerCase()} · ${shortAddress(assetsData?.address ?? '')}`,
+          ],
+          isPenumbraDest
+            ? ['into', 'penumbra · shielded']
+            : ['to', toName ? `${toName} · ${shortAddress(toAddress)}` : shortAddress(toAddress)],
+          ...(isSameChain || isPenumbraDest ? [] : [['network', destName] as const]),
+          ['fee', fee],
+        ]}
+        privacy={
+          isPenumbraDest
+            ? 'after this, these funds stay private'
+            : 'public · the address and amount are visible to anyone'
         }
-        className={cn('mt-2 w-full', txStatus === 'confirm' && 'hidden')}
+        confirm={isZigner ? 'sign on zigner' : isPenumbraDest ? 'shield' : 'sign & send'}
+        onEdit={() => setTxStatus('idle')}
+        onConfirm={() => void handleConfirm()}
       >
-        {txStatus === 'signing' && 'building transaction...'}
-        {txStatus === 'broadcasting' && 'broadcasting...'}
-        {txStatus === 'idle' && (routeLoading ? 'finding route...' : 'review')}
-        {txStatus === 'success' && 'send another'}
-        {txStatus === 'error' && 'retry'}
-      </Button>
+        {txPreview && (
+          <Button
+            variant='quiet'
+            size='sm'
+            onClick={() => setShowRawJson(true)}
+            className='self-start px-0'
+          >
+            view the raw transaction
+          </Button>
+        )}
+        <Sheet open={showRawJson} onOpenChange={setShowRawJson} title='raw transaction'>
+          <pre className='max-h-[60vh] overflow-auto bg-canvas p-2 text-label text-fg-muted'>
+            {JSON.stringify(txPreview, null, 2)}
+          </pre>
+        </Sheet>
+      </Review>
+    ),
+    signing: () => (
+      <Sending
+        meta={sending}
+        stages={STAGES.cosmos}
+        steps={[]}
+        floor={0}
+        since={signStartRef.current}
+        hot={!isZigner}
+        onClose={onClose}
+      />
+    ),
+    success: () => (
+      <Done line={sending} txHash={txHash} onDone={topUp ? finishTopUp : onClose}>
+        {!topUp && showSavePrompt && !isPenumbraDest && recipient && !findByAddress(toAddress) && (
+          <Button variant='secondary' onClick={() => setShowContactModal(true)} className='px-3'>
+            save contact
+          </Button>
+        )}
+        {showContactModal && (
+          <SaveContactModal
+            address={toAddress}
+            network='cosmos'
+            onDone={() => {
+              setShowContactModal(false);
+              setShowSavePrompt(false);
+            }}
+            onCancel={() => setShowContactModal(false)}
+          />
+        )}
+      </Done>
+    ),
+    error: () => (
+      <Stopped
+        sending={sending}
+        error={txError}
+        onCancel={onClose}
+        onRetry={() => setTxStatus('idle')}
+      />
+    ),
+  };
 
-      {txStatus !== 'confirm' && isZigner && (
-        <p className='text-center text-xs text-fg-muted'>sign with zafu zigner</p>
-      )}
+  return (
+    <div className='flex h-full flex-col bg-canvas'>
+      {PasswordModal}
+      {steps[txStatus === 'broadcasting' ? 'signing' : txStatus]()}
     </div>
   );
 }
