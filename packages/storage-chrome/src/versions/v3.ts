@@ -331,6 +331,9 @@ type LOCAL = {
 
   zafuFont?: 'iosevka' | 'system';
 
+  /** transparent chains the user hid from the penumbra home */
+  hiddenTransparentChains?: string[];
+
   zafuFeeMultiplier?: number;
 
   proLicense?: string;

@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-const store: Record<string, unknown> = { autoLockMinutes: 5, zafuTheme: 'washi' };
+const store: Record<string, unknown> = {
+  autoLockMinutes: 5,
+  zafuTheme: 'washi',
+  hiddenTransparentChains: ['osmosis'],
+};
 vi.mock('@repo/storage-chrome/local', () => ({
   localExtStorage: {
     get: async (k: string) => store[k],
@@ -18,7 +22,11 @@ describe('settings backup', () => {
     const out = await exportSettings({ ...DEFAULT_PRIVACY_SETTINGS, hideBalances: true });
     expect(out.privacy?.hideBalances).toBe(true);
     expect(out.privacy).not.toHaveProperty('proxy');
-    expect(out.prefs).toEqual({ autoLockMinutes: 5, zafuTheme: 'washi' });
+    expect(out.prefs).toEqual({
+      autoLockMinutes: 5,
+      zafuTheme: 'washi',
+      hiddenTransparentChains: ['osmosis'],
+    });
   });
 
   it('restores known keys of the right type and leaves the rest', () => {
@@ -37,8 +45,9 @@ describe('settings backup', () => {
   });
 
   it('writes back only the preferences a backup has', async () => {
-    await importPrefs({ zafuFont: 'system' });
+    await importPrefs({ zafuFont: 'system', hiddenTransparentChains: ['injective'] });
     expect(store['zafuFont']).toBe('system');
+    expect(store['hiddenTransparentChains']).toEqual(['injective']);
     expect(store['autoLockMinutes']).toBe(5);
   });
 });

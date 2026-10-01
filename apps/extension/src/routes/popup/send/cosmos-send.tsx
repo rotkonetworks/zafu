@@ -20,11 +20,7 @@ import {
 } from '../../../hooks/cosmos-signer';
 import { trackTx } from '../../../tx-ops';
 import { parseAmountToBaseUnits } from '@repo/wallet/networks/cosmos/signer';
-import {
-  useCosmosAssets,
-  useCosmosDepositWallets,
-  type CosmosAsset,
-} from '../../../hooks/cosmos-balance';
+import { useChainCheck, useCosmosAssets, type CosmosAsset } from '../../../hooks/cosmos-balance';
 import {
   COSMOS_CHAINS,
   type CosmosChainId,
@@ -303,7 +299,14 @@ export function CosmosSend({
   // The address being spent: the caller's pick, changeable among the funded
   // ones. Locked while a tx is in flight.
   const [accountIndex, setAccountIndex] = useState(initialAccountIndex ?? 0);
-  const { data: deposits } = useCosmosDepositWallets(sourceChainId);
+  const { state: depositState, check: checkDeposits } = useChainCheck(sourceChainId);
+  const deposits = 'check' in depositState ? depositState.check : undefined;
+  // opening the send form is the user asking: check the burners once if never checked
+  useEffect(() => {
+    if (depositState.kind === 'unchecked') {
+      void checkDeposits();
+    }
+  }, [depositState.kind]);
   // opened without a specific address (Send's source tab): start on the
   // address holding the most, once the scan knows
   const [autoPicked, setAutoPicked] = useState(initialAccountIndex !== undefined);
@@ -315,8 +318,10 @@ export function CosmosSend({
     // otherwise outweigh real USDC
     const ramp = (w: (typeof deposits.funded)[number]) =>
       w.assets.find(x => x.denom === sourceChain.denom)?.amount ?? 0n;
+    const total = (w: (typeof deposits.funded)[number]) =>
+      w.assets.reduce((sum, x) => sum + x.amount, 0n);
     const top = [...deposits.funded].sort((a, b) =>
-      ramp(a) !== ramp(b) ? (ramp(b) > ramp(a) ? 1 : -1) : b.balance > a.balance ? 1 : -1,
+      ramp(a) !== ramp(b) ? (ramp(b) > ramp(a) ? 1 : -1) : total(b) > total(a) ? 1 : -1,
     )[0];
     if (top) {
       setAccountIndex(top.index);
@@ -418,9 +423,10 @@ export function CosmosSend({
   // funded addresses (plus the current one) as "from" options
   const fromOptions = useMemo(() => {
     const funded = deposits?.funded ?? [];
-    const rows = funded.some(w => w.index === accountIndex)
-      ? funded
-      : [...funded, ...(deposits?.all ?? []).filter(w => w.index === accountIndex)];
+    const current = assetsData?.address
+      ? [{ index: accountIndex, address: assetsData.address, assets: [] }]
+      : [];
+    const rows = funded.some(w => w.index === accountIndex) ? funded : [...funded, ...current];
     return rows.map(w => ({
       index: w.index,
       address: w.address,
@@ -428,7 +434,7 @@ export function CosmosSend({
         ? `${w.assets[0].formatted}${w.assets.length > 1 ? ` +${w.assets.length - 1}` : ''}`
         : 'empty',
     }));
-  }, [deposits, accountIndex]);
+  }, [deposits, accountIndex, assetsData?.address]);
   const gas = useGasSponsor(
     sourceChainId,
     sendMode === 'same' ? 'send' : 'ibc',
@@ -484,7 +490,7 @@ export function CosmosSend({
     setTopUp(undefined);
     // the gas just landed there: don't show the cached pre-transfer balance
     void queryClient.invalidateQueries({ queryKey: ['cosmosAssets', sourceChainId] });
-    void queryClient.invalidateQueries({ queryKey: ['cosmosDepositWallets', sourceChainId] });
+    void checkDeposits();
     setRecipient('');
     setTxHash(undefined);
     setTxStatus('idle');
