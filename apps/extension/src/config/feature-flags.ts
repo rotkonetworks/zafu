@@ -123,19 +123,23 @@ export const PASSWORD_GENERATOR = false;
 export const SUBSCRIBE_ENABLED = false;
 
 /**
- * Ledger hardware-wallet support (WebHID connect + shielded/transparent
- * account import). Hidden for now - the onboarding "connect Ledger" card, its
- * route, and the connect screen stay in the codebase, just unreachable from the
- * UI. The backing pieces (the `src/ledger` WebHID module and the keyring's
- * `addLedgerUnencrypted`) land ahead of activation; flip to `true` once the
- * Ledger zcash app version we target ships and the flow is fully reviewed.
+ * Ledger SHIELDED support through the Ledger Zcash app (3.9.4+): connect
+ * exports the account's UFVK, sends and shielding are signed on the device
+ * (src/ledger/zcash-app). On in the BETA build only, until a physical device
+ * has signed a real send and a multi-round shield. The beta build differs from
+ * prod only by its manifest, so this reads the manifest name once.
  */
-export const HARDWARE_WALLET_ENABLED = false;
+export const HARDWARE_WALLET_ENABLED = (() => {
+  try {
+    return /\bbeta\b/i.test(chrome.runtime.getManifest().name);
+  } catch {
+    return false;
+  }
+})();
 
 /**
  * Ledger TRANSPARENT support via the legacy Bitcoin-app path (@ledgerhq/hw-app-btc),
- * separate from HARDWARE_WALLET_ENABLED above (which gates the DMK shielded path
- * that is blocked on LedgerHQ's unreleased NU6.3 app). The Bitcoin-app path signs
+ * separate from HARDWARE_WALLET_ENABLED above. The Bitcoin-app path signs
  * transparent Zcash on mainnet TODAY - it is how a Ledger holder can send/receive
  * t-address ZEC in zafu and migrate over.
  *

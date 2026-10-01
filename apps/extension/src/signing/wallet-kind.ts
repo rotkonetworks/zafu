@@ -13,8 +13,8 @@ export type WalletKind =
   | 'hot' // mnemonic vault
   | 'zigner' // zigner-zafu vault, coldSignerType zigner or absent
   | 'keystone'
-  | 'ledger-shielded' // a ledger without a transparent address
-  | 'ledger-transparent' // a ledger with a transparent address (hw-app-btc)
+  | 'ledger-shielded' // the ledger zcash app (custody 'ledger-zcash')
+  | 'ledger-transparent' // the bitcoin app: a transparent address only
   | 'frost-self' // multisig, share held encrypted on zafu
   | 'frost-airgap' // multisig, share held on a zigner
   | 'viewing-key' // sees, never spends
@@ -42,7 +42,9 @@ export const walletKind = (key: WalletFacts, zcash?: ZcashFacts): WalletKind => 
   }
   const cold = key.insensitive?.['coldSignerType'];
   if (key.type === 'ledger' || cold === 'ledger') {
-    return zcash?.transparentAddress ? 'ledger-transparent' : 'ledger-shielded';
+    return zcash?.transparentAddress && key.insensitive?.['custody'] !== 'ledger-zcash'
+      ? 'ledger-transparent'
+      : 'ledger-shielded';
   }
   if (key.type === 'keystone' || cold === 'keystone') {
     return 'keystone';
@@ -84,8 +86,8 @@ export interface SendFlags {
 export interface Caps {
   /** the zcash send implementation under these flags, or why there is none */
   readonly zcash: (f: SendFlags) => ZcashArm | Refusal;
-  /** set when this signer reads orchard PCZTs only: why an ironwood send is refused */
-  readonly orchardOnly?: Refusal;
+  /** the pools this signer cannot spend from, and why */
+  readonly refuses?: Partial<Record<ZcashPool, Refusal>>;
   /** the turnstile migration (an ironwood build on the zigner QR) is offered */
   readonly migrate?: true;
   /** signs a t->t with an OP_RETURN (a thorchain deposit); a signer that can't show the memo can't */
@@ -125,11 +127,19 @@ const LEDGER_OFF: Refusal = {
   body: "sends need a zigner or this wallet's phrase",
 };
 
-const orchardOnly = (device: string, icon: string): Refusal => ({
-  icon,
-  title: `${device} signs orchard only for now`,
+const KEYSTONE_IRONWOOD: Refusal = {
+  icon: 'i-ph-qr-code',
+  title: 'keystone signs orchard only for now',
   body: "ironwood sends need a zigner or this wallet's phrase",
-});
+};
+
+// app 3.9.4 refuses the zero-value spend that pairs post-NU6.3 orchard change,
+// and orchard -> ironwood too (app-zcash src/parser/pczt/orchard.rs)
+const LEDGER_ORCHARD: Refusal = {
+  icon: 'i-ph-usb',
+  title: 'orchard waits for a newer ledger app',
+  body: 'these zec are safe and stay here · ironwood sends work as usual',
+};
 
 const LEDGER_ZID =
   'ledger cannot sign a zafu identity yet. please sign in with a zigner or a phrase wallet.';
@@ -160,7 +170,7 @@ export const CAPS: Record<WalletKind, Caps> = {
   // `ur:zigner-module` envelope, which keystone cannot read.
   keystone: {
     zcash: () => 'zigner',
-    orchardOnly: orchardOnly('keystone', 'i-ph-qr-code'),
+    refuses: { ironwood: KEYSTONE_IRONWOOD },
     unlockToSign: false,
     signLabel: 'sign with keystone',
     zid: 'keystone cannot sign a zafu identity. please sign in with a zigner or a phrase wallet.',
@@ -169,17 +179,12 @@ export const CAPS: Record<WalletKind, Caps> = {
     ...LEDGER,
     zcash: f =>
       f.hardwareWallet ? 'ledger-shielded' : f.ledgerTransparent ? LEDGER_SHIELDED : LEDGER_OFF,
-    orchardOnly: orchardOnly('ledger', 'i-ph-usb'),
+    refuses: { orchard: LEDGER_ORCHARD },
   },
   'ledger-transparent': {
     ...LEDGER,
-    // t->t through the bitcoin app; with only the shielded flag on, the PCZT path
-    zcash: f =>
-      f.ledgerTransparent
-        ? 'ledger-transparent'
-        : f.hardwareWallet
-          ? 'ledger-shielded'
-          : LEDGER_OFF,
+    // t->t through the bitcoin app, which holds no viewing key to build a PCZT
+    zcash: f => (f.ledgerTransparent ? 'ledger-transparent' : LEDGER_OFF),
   },
   'frost-self': {
     zcash: () => 'frost-self',
@@ -209,9 +214,9 @@ export const CAPS: Record<WalletKind, Caps> = {
 /** The zcash send implementation for this wallet from `pool`, or why there is
  *  none. A refused kind is never handed to another device's flow. */
 export const zcashArm = (kind: WalletKind, flags: SendFlags, pool: ZcashPool) => {
-  const { zcash, orchardOnly } = CAPS[kind];
+  const { zcash, refuses } = CAPS[kind];
   const arm = zcash(flags);
-  return typeof arm === 'string' && pool === 'ironwood' && orchardOnly ? orchardOnly : arm;
+  return typeof arm === 'string' ? (refuses?.[pool] ?? arm) : arm;
 };
 
 /** Why this wallet cannot send zcash from `pool`, or null when it can. */

@@ -28,6 +28,12 @@ describe('walletKind', () => {
       { transparentAddress: 't1x' },
       'ledger-transparent',
     ],
+    [
+      'zcash app ledger with a t-address',
+      { type: 'zigner-zafu', insensitive: { coldSignerType: 'ledger', custody: 'ledger-zcash' } },
+      { transparentAddress: 't1x' },
+      'ledger-shielded',
+    ],
     ['frost self-custody', { type: 'frost-multisig' }, { multisig: {} }, 'frost-self'],
     ['frost vault without its zcash record', { type: 'frost-multisig' }, undefined, 'frost-self'],
     [
@@ -68,15 +74,16 @@ describe('zcashSendRefusal', () => {
       zcashSendRefusal(
         'ledger-shielded',
         { hardwareWallet: true, ledgerTransparent: false },
-        'orchard',
+        'ironwood',
       ),
     ).toBeNull();
   });
 
-  it('lets a transparent ledger through when either ledger flag is on', () => {
+  // the bitcoin app holds no viewing key, so the shielded flag never routes it
+  it('lets a transparent ledger through only with the transparent flag', () => {
     for (const f of FLAG_SETS) {
       const r = zcashSendRefusal('ledger-transparent', f, 'orchard');
-      expect(r === null).toBe(f.ledgerTransparent || f.hardwareWallet);
+      expect(r === null).toBe(f.ledgerTransparent);
     }
   });
 
@@ -111,10 +118,12 @@ describe('zcashSendRefusal', () => {
     });
   });
 
-  it('refuses a shielded ledger an ironwood send before any build', () => {
+  // app 3.9.4 signs ironwood and refuses post-NU6.3 orchard spends
+  it('a shielded ledger sends ironwood and is refused orchard before any build', () => {
     const on = { hardwareWallet: true, ledgerTransparent: true };
-    expect(zcashSendRefusal('ledger-shielded', on, 'ironwood')?.title).toBe(
-      'ledger signs orchard only for now',
+    expect(zcashSendRefusal('ledger-shielded', on, 'ironwood')).toBeNull();
+    expect(zcashSendRefusal('ledger-shielded', on, 'orchard')?.title).toBe(
+      'orchard waits for a newer ledger app',
     );
   });
 });
