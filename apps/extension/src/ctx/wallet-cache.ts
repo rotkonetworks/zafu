@@ -12,7 +12,9 @@ import type { WalletJson } from '@repo/wallet';
 
 let resolve: (w: WalletJson) => void;
 let reject: (e: Error) => void;
+let settled = false;
 const fresh = () => {
+  settled = false;
   const p = new Promise<WalletJson>((res, rej) => {
     resolve = res;
     reject = rej;
@@ -26,6 +28,7 @@ let walletReady = fresh();
 
 /** Set the cached wallet  - unblocks all waiting RPC context getters. */
 export const setCachedWallet = (wallet: WalletJson | undefined, reason?: string) => {
+  settled = true;
   if (!wallet) {
     // Never cache `undefined`: getters would throw an opaque
     // "reading 'fullViewingKey' of undefined" to dapps. Fail with the reason.
@@ -35,9 +38,15 @@ export const setCachedWallet = (wallet: WalletJson | undefined, reason?: string)
   resolve(wallet);
 };
 
-/** Reset the cache (wallet switch / reinit). New RPC calls block until setCachedWallet. */
+/**
+ * Reset the cache (wallet switch / reinit). New RPC calls block until setCachedWallet.
+ * A no-op while the cache is still pending: getters already waiting on it must
+ * be woken by the next setCachedWallet, not stranded on a replaced promise.
+ */
 export const resetWalletCache = () => {
-  walletReady = fresh();
+  if (settled) {
+    walletReady = fresh();
+  }
 };
 
 /** Await the decrypted wallet. Used by context getters. */
