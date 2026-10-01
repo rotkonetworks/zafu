@@ -135,7 +135,7 @@ export const PasswordsPage = () => {
 
           <div className='flex h-[52px] items-center gap-2.5 border border-border-hard bg-elev-1 px-3'>
             <span className='flex-1 truncate font-mono text-sm text-zigner-gold tracking-wide'>
-              {password ? (revealed ? password : '•'.repeat(Math.min(length, 24))) : '—'}
+              {password ? (revealed ? password : '•'.repeat(Math.min(length, 24))) : '- -'}
             </span>
             <Button
               variant='secondary'
