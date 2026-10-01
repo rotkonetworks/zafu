@@ -1,9 +1,9 @@
 /**
- * animated QR scanner — reassembles multipart QR frames from camera
+ * animated QR scanner - reassembles multipart QR frames from camera
  *
  * Supports two modes:
- * 1. legacy "P<frameIndex>/<totalFrames>/<urType>/<base64chunk>" — fixed parts
- * 2. BC-UR fountain-coded `ur:<type>/...` — variable parts, decode via WASM
+ * 1. legacy "P<frameIndex>/<totalFrames>/<urType>/<base64chunk>" - fixed parts
+ * 2. BC-UR fountain-coded `ur:<type>/...` - variable parts, decode via WASM
  *
  * Auto-detects mode from the first scanned frame's prefix.
  */
@@ -20,7 +20,7 @@ interface AnimatedQrScannerProps {
   onClose: () => void;
   title?: string;
   description?: string;
-  /** render inline (card) instead of fullscreen overlay — popup contexts trap `fixed` */
+  /** render inline (card) instead of fullscreen overlay - popup contexts trap `fixed` */
   inline?: boolean;
   /**
    * Optional: restrict to a specific UR type. If set and the first scanned
@@ -61,18 +61,18 @@ export const AnimatedQrScanner = ({
   const urTypeRef = useRef('');
 
   // BC-UR fountain mode state. Distinct set from legacy P-frames because
-  // UR fountain parts don't have a fixed total — we keep accumulating until
+  // UR fountain parts don't have a fixed total - we keep accumulating until
   // ur_decode_frames returns a complete payload.
   const urPartsRef = useRef(new Set());
   // 'p' = legacy P-format, 'ur' = BC-UR fountain, '' = undecided
   const modeRef = useRef<'' | 'p' | 'ur'>('');
   // The BC-UR fountain decode (ur_decode_frames) is O(n) per part and O(n^2)
-  // over a scan — running it in the scan callback dropped camera frames and
+  // over a scan - running it in the scan callback dropped camera frames and
   // janked the progress bar. It now lives in a dedicated worker; the scan
   // callback only posts each newly-seen part string. The worker maintains the
   // accumulating decode and posts back { progress | done | error }.
   const workerRef = useRef<Worker | null>(null);
-  // seqLen from UR header — drives honest progress vs the emitter's cycle
+  // seqLen from UR header - drives honest progress vs the emitter's cycle
   const urSeqLenRef = useRef(0);
   // Stall watchdog. A healthy fountain stream always yields *new* unique
   // parts; "need more frames" and "this will never complete" are otherwise
@@ -83,7 +83,7 @@ export const AnimatedQrScanner = ({
   // stream for as long as you hold the phone in the dark. Failing hard here
   // throws away every accumulated part the moment your display sleeps, which
   // is worse than the dead-signer case it exists to catch. So the watchdog
-  // now only *warns* — it keeps the camera and accumulated parts alive so a
+  // now only *warns* - it keeps the camera and accumulated parts alive so a
   // woken screen resumes the scan instead of forcing a restart.
   const lastNewPartAtRef = useRef(0);
   const STALL_MS = 45_000;
@@ -91,7 +91,7 @@ export const AnimatedQrScanner = ({
 
   // Hard caps on the accumulator. The stall watchdog catches "no new unique
   // frames" but is helpless against a hostile or buggy source emitting an
-  // endless stream of unique-but-junk frames — every frame would look healthy
+  // endless stream of unique-but-junk frames - every frame would look healthy
   // to the watchdog while the Set grows until tab OOM. Per-frame length cap
   // stops oversized single payloads.
   const MAX_UR_PARTS = 4096;
@@ -119,7 +119,7 @@ export const AnimatedQrScanner = ({
   }, []);
 
   // Terminate the decode worker. Called only where the scan is truly over
-  // (unmount, completion, cap-abort) — NOT from stopScanning, because the
+  // (unmount, completion, cap-abort) - NOT from stopScanning, because the
   // retry button restarts the camera and the worker's accumulated parts must
   // survive that restart.
   const terminateWorker = useCallback(() => {
@@ -192,7 +192,7 @@ export const AnimatedQrScanner = ({
 
     try {
       setError(null);
-      // TRY_HARDER + QR_CODE-only + tight cadence — animated UR cycles at
+      // TRY_HARDER + QR_CODE-only + tight cadence - animated UR cycles at
       // 4 fps; ZXing default delay (500ms) misses ~half the frames. 30ms
       // is the worker thread's natural budget on a typical webcam.
       const hints = new Map<DecodeHintType, unknown>();
@@ -253,7 +253,7 @@ export const AnimatedQrScanner = ({
             return;
           }
 
-          // type filter — defends against unrelated QR contaminating the stream
+          // type filter - defends against unrelated QR contaminating the stream
           const slashIdx = text.indexOf('/');
           const urType = slashIdx > 3 ? text.slice(3, slashIdx) : '';
           if (urTypeFilter && urType.toLowerCase() !== urTypeFilter.toLowerCase()) {
@@ -272,13 +272,13 @@ export const AnimatedQrScanner = ({
 
           const before = urPartsRef.current.size;
           // Cap the accumulator. Hitting the cap means either a hostile
-          // source or a degenerate (never-completing) fountain — abort
+          // source or a degenerate (never-completing) fountain - abort
           // the scanner the same way the stall watchdog does, otherwise
           // the camera + ZXing pipeline keep running and every new
           // unique frame re-enters this branch.
           if (before >= MAX_UR_PARTS) {
-            const msg = `UR fountain exceeded ${MAX_UR_PARTS} unique frames without completing — aborting scan.`;
-            completedRef.current = true; // latch — report once
+            const msg = `UR fountain exceeded ${MAX_UR_PARTS} unique frames without completing - aborting scan.`;
+            completedRef.current = true; // latch - report once
             stopScanning();
             terminateWorker();
             setError(msg);
@@ -290,9 +290,9 @@ export const AnimatedQrScanner = ({
             return;
           } // duplicate
 
-          // a genuinely new unique part — reset the stall clock
+          // a genuinely new unique part - reset the stall clock
           lastNewPartAtRef.current = Date.now();
-          // stream is alive again — clear any previous stall notice so a
+          // stream is alive again - clear any previous stall notice so a
           // woken/slept scan doesn't keep an obsolete warning on screen
           if (stallNotifiedRef.current) {
             stallNotifiedRef.current = false;
@@ -412,7 +412,7 @@ export const AnimatedQrScanner = ({
 
     // Stall watchdog: fires only once UR accumulation has actually started
     // (>=1 part) and only if no new unique part has arrived for STALL_MS.
-    // It warns but does NOT abort — the camera and accumulated parts stay
+    // It warns but does NOT abort - the camera and accumulated parts stay
     // alive so a woken screen resumes the scan instead of discarding it.
     const stallTimer = setInterval(() => {
       if (completedRef.current) {
@@ -430,9 +430,9 @@ export const AnimatedQrScanner = ({
       }
       stallNotifiedRef.current = true;
       const msg =
-        `scan paused — no new QR frames for ${Math.round(STALL_MS / 1000)}s ` +
+        `scan paused - no new QR frames for ${Math.round(STALL_MS / 1000)}s ` +
         `(${urPartsRef.current.size} parts received). Wake the signer to ` +
-        `continue — the scan is still running and will resume automatically.`;
+        `continue - the scan is still running and will resume automatically.`;
       if (mountedRef.current) {
         setError(msg);
       }
@@ -530,7 +530,7 @@ export const AnimatedQrScanner = ({
         </span>
       </div>
       <p className={`mt-1.5 ${inline ? 'text-label' : 'text-label'} text-white/40 text-center`}>
-        {partsReceived} part{partsReceived !== 1 ? 's' : ''} received — hold camera steady over
+        {partsReceived} part{partsReceived !== 1 ? 's' : ''} received - hold camera steady over
         animated QR
       </p>
     </>

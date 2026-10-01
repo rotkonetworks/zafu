@@ -120,7 +120,7 @@ function getZignerPubkey(insensitive: Record<string, unknown>): Uint8Array | nul
   return bytes;
 }
 
-/** find a keyInfo with cosmos capability — effective first, then any wallet */
+/** find a keyInfo with cosmos capability - effective first, then any wallet */
 function findCosmosKey(
   keyInfos: { id: string; type: string; insensitive: Record<string, unknown> }[],
   effective: { id: string; type: string; insensitive: Record<string, unknown> } | undefined,
@@ -246,7 +246,7 @@ export const useCosmosSend = () => {
 
         const pubkey = getZignerPubkey(insensitive);
         if (!pubkey) {
-          throw new Error('no cosmos public key found — reimport wallet from zigner');
+          throw new Error('no cosmos public key found - reimport wallet from zigner');
         }
 
         const messages: EncodeObject[] = [
@@ -343,7 +343,7 @@ export const useCosmosIbcTransfer = () => {
 
         const pubkey = getZignerPubkey(insensitive);
         if (!pubkey) {
-          throw new Error('no cosmos public key found — reimport wallet from zigner');
+          throw new Error('no cosmos public key found - reimport wallet from zigner');
         }
 
         const messages: EncodeObject[] = [

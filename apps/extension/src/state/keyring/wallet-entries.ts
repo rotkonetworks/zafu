@@ -1,5 +1,5 @@
 /**
- * wallet-entries — side-effectful wallet record creation
+ * wallet-entries - side-effectful wallet record creation
  *
  * these functions write to chrome storage (local.set) to create
  * per-network wallet records linked to a vault. no zustand state updates.
@@ -123,7 +123,7 @@ export async function createZignerWalletEntries(
         // loudly, not get silently dropped and rediscovered at first send
         // (and not poison FVK-equality dedup with garbage).
         throw new Error(
-          'UFVK failed cryptographic validation — refusing to import. ' +
+          'UFVK failed cryptographic validation - refusing to import. ' +
             'The scanned viewing key is structurally plausible but does not ' +
             'decode as a valid Zcash Unified FVK.',
         );
@@ -169,14 +169,14 @@ export async function createZignerWalletEntries(
 /**
  * create the zcash wallet entry for a Ledger cold-signer import (side effect:
  * local.set). clone of the zcash branch of createZignerWalletEntries, trimmed to
- * zcash-only single-signer — no penumbra FVK, no polkadot/cosmos, no ZID.
+ * zcash-only single-signer - no penumbra FVK, no polkadot/cosmos, no ZID.
  *
  * `key` is accepted for signature parity with createZignerWalletEntries (and so
  * future device-metadata sealing can slot in) but is currently unused: a Ledger
  * account stores no secret material, only a watch-only ufvk/address.
  */
 export async function assertLedgerUfvkValid(ufvk: string | undefined): Promise<void> {
-  // Cryptographic UFVK gate — same authoritative decoder the signing path uses.
+  // Cryptographic UFVK gate - same authoritative decoder the signing path uses.
   // Only unified strings (`uview1…`) are validated; a Ledger export is always a
   // unified string when present.
   //
@@ -196,7 +196,7 @@ export async function assertLedgerUfvkValid(ufvk: string | undefined): Promise<v
   }
   if (!zwasm.validate_ufvk(ufvk)) {
     throw new Error(
-      'UFVK failed cryptographic validation — refusing to import. ' +
+      'UFVK failed cryptographic validation - refusing to import. ' +
         'The Ledger-exported viewing key is structurally plausible but does ' +
         'not decode as a valid Zcash Unified FVK.',
     );
@@ -227,8 +227,7 @@ export async function createLedgerWalletEntries(
       orchardFvk: '',
       ...(data.ufvk ? { ufvk: data.ufvk } : {}),
       // If a ufvk is present, address derives free from it; otherwise store the
-      // address directly. NOTE: without a ufvk there is no shielded scanning —
-      // balances/notes require the UFVK to be provided later.
+      // address directly. NOTE: without a ufvk there is no shielded scanning - // balances/notes require the UFVK to be provided later.
       address: data.address,
       // Transparent Ledger (hw-app-btc) account: persist the t-address so the
       // send flow can fetch UTXOs / route change without a device round-trip and
@@ -534,7 +533,7 @@ export async function purgeWalletData(
  * share log (which sites you authenticated to, and when), the ZID pins and
  * generation keys, site labels, known sites, the password key print, the
  * diversified-address referral graph, the contacts and messages ciphertext,
- * and `zignerWallets` — which stores Penumbra and Zcash full viewing keys in
+ * and `zignerWallets` - which stores Penumbra and Zcash full viewing keys in
  * PLAINTEXT, i.e. a complete, permanent read capability over the user's
  * transaction history, surviving the deletion of the wallet that owned it.
  *
@@ -566,7 +565,7 @@ const deleteDatabaseAwaitable = (name: string): Promise<void> =>
       console.warn('[nuke] IDB delete failed:', name, req.error);
       resolve();
     };
-    // An open connection blocks the delete SILENTLY — the request simply
+    // An open connection blocks the delete SILENTLY - the request simply
     // never completes. Surfacing it is the difference between "the data is
     // gone" and "we think the data is gone".
     req.onblocked = () => {
@@ -576,7 +575,7 @@ const deleteDatabaseAwaitable = (name: string): Promise<void> =>
   });
 
 /**
- * nuke all wallet data — called when the last vault is deleted.
+ * nuke all wallet data - called when the last vault is deleted.
  *
  * Terminates the sync workers FIRST. `indexedDB.deleteDatabase` against a
  * database that still has an open connection does not fail; it fires

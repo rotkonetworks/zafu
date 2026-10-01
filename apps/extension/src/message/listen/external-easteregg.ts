@@ -1,5 +1,5 @@
 /**
- * external message listener — handles messages from websites via externally_connectable
+ * external message listener - handles messages from websites via externally_connectable
  *
  * supports:
  * - { type: 'ping' } → responds with { zafu: true, version }
@@ -22,7 +22,7 @@
  * - { type: 'zafu_delete_multisig', multisigLabel, delayMs? }
  *     → schedule (or immediately do) deletion of a multisig vault by name prefix.
  *       used by app-driven multisigs (poker tables) to evaporate themselves after settlement.
- *       no popup — silent operation. delayMs default 0 (immediate).
+ *       no popup - silent operation. delayMs default 0 (immediate).
  * - { type: 'zafu_open_shield', chainId } → show the wallet's own shield-in screen
  *     (dapp handoff, e.g. Veil's "deposit from Injective"); nothing crosses back.
  */
@@ -302,16 +302,16 @@ const createPopupWindow = async (
 /**
  * Uniform capability gate for high-risk external entry points.
  *
- * Any rejection — missing origin, missing perms, missing capability,
- * lookup error — returns the same error shape after a constant minimum
+ * Any rejection - missing origin, missing perms, missing capability,
+ * lookup error - returns the same error shape after a constant minimum
  * latency. Differentiating rejection causes (which the older
  * zafu_passkey_* pattern does) gives a local attacker a fingerprint of
  * which capabilities a user has granted; uniform rejection collapses
  * those distinguishable paths.
  *
  * Callers receive either:
- *   { ok: true, origin: <validated origin> }  — proceed
- *   null                                       — sendResponse has been
+ *   { ok: true, origin: <validated origin> } - proceed
+ *   null - sendResponse has been
  *                                                 called with the denied
  *                                                 shape; caller MUST
  *                                                 early-return.
@@ -345,7 +345,7 @@ async function requireCapability(
   try {
     // Global participation first: a capability the user turned off (or is
     // still undecided about, which prompts once) collapses into the same
-    // uniform rejection as a missing per-origin grant — the caller cannot
+    // uniform rejection as a missing per-origin grant - the caller cannot
     // tell a global refusal from a per-origin one.
     const modeCheck = await ensureCapabilityMode(cap, origin);
     if (!modeCheck.ok) {
@@ -366,8 +366,8 @@ async function requireCapability(
  *
  * The per-origin capability grant answers "may THIS site use this?"; this
  * answers "does the user want zafu to offer this at all?". An undecided
- * capability (absent from storage) is asked ONCE, globally — the question is
- * not about the site, so the screen gets no origin — and the answer is
+ * capability (absent from storage) is asked ONCE, globally - the question is
+ * not about the site, so the screen gets no origin - and the answer is
  * persisted as the mode, so every later site skips straight to its own
  * per-origin consent. A cancelled prompt persists nothing, so a site whose
  * approval window died cannot lock the feature out.
@@ -536,7 +536,7 @@ export const externalMessageListener = (
         return true;
       }
       const params = new URLSearchParams({ to: address });
-      // optional zatoshi amount — zafu's send popup converts to ZEC for display
+      // optional zatoshi amount - zafu's send popup converts to ZEC for display
       const amountZat = Number(msg['amount_zat']);
       if (Number.isFinite(amountZat) && amountZat > 0) {
         params.set('amount_zat', String(Math.floor(amountZat)));
@@ -560,7 +560,7 @@ export const externalMessageListener = (
       const max = Number(msg['max']) || 1;
       const requestId = crypto.randomUUID();
 
-      // store the callback — picker popup will send result via internal message
+      // store the callback - picker popup will send result via internal message
       pendingPicks.set(requestId, sendResponse);
 
       // open picker popup with params
@@ -752,13 +752,13 @@ export const externalMessageListener = (
     }
 
     case 'zafu_frost_sign': {
-      // DISABLED — this was unconditional blind signing.
+      // DISABLED - this was unconditional blind signing.
       //
       // The approval screen for this entry showed only a truncated sighash:
       // no PCZT, no outputs, no verification of any kind. A page holding the
       // 'frost' capability could therefore get a threshold share released over
       // an arbitrary 32 bytes it chose. Worse, the caller's randomizer was set
-      // equal to the message (alphas = [sighashHex]) — an attacker-chosen
+      // equal to the message (alphas = [sighashHex]) - an attacker-chosen
       // randomizer over an attacker-chosen message is exactly the adaptive
       // setting randomized FROST exists to exclude.
       //
@@ -802,7 +802,7 @@ export const externalMessageListener = (
         const relayUrl = String(msg['relayUrl'] || 'wss://zcash.rotko.net');
         const feeZat = Number(msg['feeZat']) || 10_000;
         // Empty is allowed here because the popup falls back to the default
-        // multisigVault; the popup looks up via startsWith — same charset rules.
+        // multisigVault; the popup looks up via startsWith - same charset rules.
         const rawLabel = typeof msg['multisigLabel'] === 'string' ? msg['multisigLabel'] : '';
         const multisigLabel = rawLabel.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64);
         const requestId = crypto.randomUUID();
@@ -840,7 +840,7 @@ export const externalMessageListener = (
         // prefix can't be enumerated. Origin-binding in findVaultByLabelPrefix
         // is the real guard; this is defense in depth. All rejections are the
         // uniform 'denied' shape (and only after the capability gate) so a
-        // caller can't distinguish rejection causes — same contract as
+        // caller can't distinguish rejection causes - same contract as
         // requireCapability.
         const rawLabel = typeof msg['multisigLabel'] === 'string' ? msg['multisigLabel'] : '';
         const multisigLabel = rawLabel.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64);
@@ -852,7 +852,7 @@ export const externalMessageListener = (
         try {
           const { findVaultByLabelPrefix, cancelScheduledDelete } =
             await import('../../state/keyring/scheduled-deletes');
-          // origin-scoped lookup — refuses cross-origin label collisions.
+          // origin-scoped lookup - refuses cross-origin label collisions.
           const vaultId = await findVaultByLabelPrefix(multisigLabel, gate.origin);
           if (!vaultId) {
             sendResponse({ success: false, error: 'denied' });
@@ -860,7 +860,7 @@ export const externalMessageListener = (
           }
           // POLICY (money-safety): a dapp can no longer DESTROY a multisig share. A FROST key is
           // not seed-recoverable and has no auto-backup, and a "settled" table may still receive a
-          // late deposit or hold a not-yet-credited balance — so we RETAIN it (it's already hidden
+          // late deposit or hold a not-yet-credited balance - so we RETAIN it (it's already hidden
           // from the UI) rather than purge. Any prior schedule is cancelled. Removal is exclusively
           // a user-initiated, balance+sync-gated action in the wallet's multisig manager.
           await cancelScheduledDelete(vaultId);
@@ -905,7 +905,7 @@ export const externalMessageListener = (
           // One pure decision over both questions: does zafu offer this
           // capability at all (global mode), and may this site use it? An
           // undecided capability prompts the one-time global question first,
-          // and the decision is then re-made with the answer persisted — so the
+          // and the decision is then re-made with the answer persisted - so the
           // per-site prompt below only ever runs for a feature the user wants.
           let decision = decideCapabilityUse({
             mode: await getCapabilityMode(cap),
@@ -1031,9 +1031,9 @@ export const externalMessageListener = (
       // Gates (in order):
       //   1. valid external sender (rejects iframes and unauthenticated pages)
       //   2. requested chain is a known CosmosChainId
-      //   3. origin holds the 'connect' capability — first call prompts the
+      //   3. origin holds the 'connect' capability - first call prompts the
       //      user like any other connect; subsequent calls succeed silently
-      //   4. per-origin+chain rate limit (100 / 24 h) — a hostile site can't
+      //   4. per-origin+chain rate limit (100 / 24 h) - a hostile site can't
       //      pump the counter into the millions and bomb the user's UX
       //   5. wallet is unlocked and has a mnemonic vault selected
       //
@@ -1179,8 +1179,7 @@ export const externalMessageListener = (
 
     case 'zafu_passkey_create': {
       const { rpId } = msg as { rpId: string };
-      // origin is the browser-attested sender, never a caller-supplied field —
-      // otherwise any site could spoof a connected origin and mint credentials.
+      // origin is the browser-attested sender, never a caller-supplied field - // otherwise any site could spoof a connected origin and mint credentials.
       if (!isValidExternalSender(sender)) {
         sendResponse({ success: false, error: 'not connected' });
         return true;
@@ -1315,8 +1314,7 @@ export const externalMessageListener = (
         clientDataHash: string;
         prfSalts?: { first: string; second?: string };
       };
-      // origin is the browser-attested sender, never a caller-supplied field —
-      // otherwise any site could spoof a connected origin and forge assertions
+      // origin is the browser-attested sender, never a caller-supplied field - // otherwise any site could spoof a connected origin and forge assertions
       // for an arbitrary rpId (account takeover at the relying party).
       if (!isValidExternalSender(sender)) {
         sendResponse({ success: false, error: 'not connected' });

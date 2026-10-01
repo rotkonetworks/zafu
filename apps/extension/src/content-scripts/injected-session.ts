@@ -24,7 +24,7 @@ import { listenWindow, sendWindow } from './message/send-window';
 //
 // `chrome.runtime.id` returns the literal string 'invalid' for orphaned
 // content scripts (i.e. when the extension was reloaded or upgraded
-// while this tab was already open). Don't bridge that — the MAIN script
+// while this tab was already open). Don't bridge that - the MAIN script
 // would otherwise inject `chrome-extension://invalid/manifest.json`
 // into window[PenumbraSymbol], which fails and breaks the page's
 // wallet picker. Bail silently; the user will get a fresh injection

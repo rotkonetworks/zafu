@@ -8,7 +8,7 @@ import {
   type SelectionStrategy,
 } from './endpoint-strategy';
 
-// Minimal preset stub — only needs `id` and `url` per EndpointLike.
+// Minimal preset stub - only needs `id` and `url` per EndpointLike.
 const preset = (id: string, url = `https://${id}.example`) => ({ id, url });
 
 const healthy = (latencyMs: number, behindBy = 0) => ({
@@ -29,7 +29,7 @@ const unhealthy = () => ({
   error: 'boom',
 });
 
-// Cast to Candidate — the real EndpointHealth carries extra service-worker fields
+// Cast to Candidate - the real EndpointHealth carries extra service-worker fields
 // this test doesn't exercise; the ranker only reads ok/latencyMs/behindBy.
 const c = (id: string, health: ReturnType<typeof healthy> | ReturnType<typeof unhealthy> | null) =>
   ({ preset: preset(id), health }) as unknown as Candidate<ReturnType<typeof preset>>;
@@ -50,17 +50,17 @@ describe('endpoint-strategy', () => {
   describe('manual strategy', () => {
     const candidates = [c('a', healthy(50, 0)), c('b', healthy(10, 0)), c('c', healthy(200, 5))];
 
-    it('rankEndpoints returns [] under manual — no auto ranking', () => {
+    it('rankEndpoints returns [] under manual - no auto ranking', () => {
       expect(rankEndpoints(candidates, 'manual')).toEqual([]);
     });
 
-    it('pickEndpoint returns null under manual — signals "keep current"', () => {
+    it('pickEndpoint returns null under manual - signals "keep current"', () => {
       // This is what the UI's smart-pick handler and any store consumer
       // rely on: a null pick means "do not overwrite the user's URL".
       expect(pickEndpoint(candidates, 'manual')).toBeNull();
     });
 
-    it('never falls back to another strategy — even with obviously fast healthy nodes', () => {
+    it('never falls back to another strategy - even with obviously fast healthy nodes', () => {
       // Prove the manual guard runs BEFORE the healthy filter / sort, so no
       // fastest/most-synced logic can accidentally win.
       const sortSpy = vi.spyOn(Array.prototype, 'sort');
@@ -96,7 +96,7 @@ describe('endpoint-strategy', () => {
   describe('switching manual → fastest triggers a re-pick', () => {
     // Simulates the UI flow: while the user's strategy was 'manual' the picker
     // was a no-op. On switching to 'fastest', the panel calls pickEndpoint again
-    // with the new strategy — which must now return a real winner.
+    // with the new strategy - which must now return a real winner.
     it('same candidate set: manual returns null, fastest returns the fastest', () => {
       const candidates = [c('stale', healthy(800, 0)), c('fresh', healthy(20, 0))];
       expect(pickEndpoint(candidates, 'manual')).toBeNull();

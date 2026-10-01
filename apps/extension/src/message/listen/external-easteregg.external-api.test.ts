@@ -117,8 +117,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  // Each test uses a unique origin, so no per-origin storage reset is needed —
-  // and clearing would wipe the shared mock-chrome storage other test files use.
+  // Each test uses a unique origin, so no per-origin storage reset is needed - // and clearing would wipe the shared mock-chrome storage other test files use.
   // The capabilities these suites exercise are marked as already decided: the
   // subject here is the per-origin gate, and the one-time global opt-in
   // question (asked while a capability is `unset`) has its own suite.
@@ -136,7 +135,7 @@ beforeEach(async () => {
   };
 });
 
-describe('gh #19 — same-origin approval-popup dedup', () => {
+describe('gh #19 - same-origin approval-popup dedup', () => {
   it('drops a second dkg_join while one popup is already open for that origin', async () => {
     const origin = 'https://dup.example';
     await grantCapability(origin, 'frost');
@@ -167,7 +166,7 @@ describe('gh #19 — same-origin approval-popup dedup', () => {
   });
 });
 
-describe('zafu_frost_sign_disabled_unreachable — arm removed, no popup', () => {
+describe('zafu_frost_sign_disabled_unreachable - arm removed, no popup', () => {
   it('does not open a popup and responds inertly for the disabled type', async () => {
     // Even with the frost capability granted and a well-formed payload, the
     // removed arm must NOT open an approval popup. The dispatch falls through
@@ -188,7 +187,7 @@ describe('zafu_frost_sign_disabled_unreachable — arm removed, no popup', () =>
   });
 });
 
-describe('gh #18 — zafu_delete_multisig uniform rejection', () => {
+describe('gh #18 - zafu_delete_multisig uniform rejection', () => {
   it('rejects a too-short label with the uniform denied shape (granted origin)', async () => {
     const origin = 'https://del-short.example';
     await grantCapability(origin, 'frost');
@@ -220,7 +219,7 @@ describe('gh #18 — zafu_delete_multisig uniform rejection', () => {
   });
 });
 
-describe('zafu_passkey_create — per-credential consent', () => {
+describe('zafu_passkey_create - per-credential consent', () => {
   // the mint and the signing both need the mnemonic, so every passkey request
   // now waits on the shared unlock gate first; these tests run with a wallet
   // that is already unlocked (the locked cases below clear it).

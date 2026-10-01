@@ -1,15 +1,15 @@
 /**
- * rendezvous-exchange — the human-code alternative to pasting relay keys.
+ * rendezvous-exchange - the human-code alternative to pasting relay keys.
  *
  * Default flow on relays that serve /rendezvous/* (zidecar does): the
  * coordinator shows a short room code (a number + two words), co-signers type
  * exchange plus session-id handoff happens through the rendezvous room.
  * The coordinator still sees every joined key and nothing enters the frostd
- * session without their explicit "create" — the code is discovery, not
+ * session without their explicit "create" - the code is discovery, not
  * admission.
  *
  * The manual flow (paste relay keys, paste the session uuid) stays exactly
- * as it was, behind the "enter keys manually" toggle — and is forced when
+ * as it was, behind the "enter keys manually" toggle - and is forced when
  * the relay has no rendezvous.
  */
 
@@ -64,7 +64,7 @@ export function useRendezvousAvailable(relayUrl: string): boolean | null {
   return available;
 }
 
-/** first 8 hex of a relay key — enough to eyeball against a chat message */
+/** first 8 hex of a relay key - enough to eyeball against a chat message */
 const fingerprint = (pubkey: string) => pubkey.slice(0, 8);
 
 export interface HostRendezvous {
@@ -161,7 +161,7 @@ export function RendezvousHost({
   return (
     <div className='flex flex-col gap-3 rounded-lg border border-border-soft bg-elev-1 p-3'>
       <div>
-        <p className='text-xs text-fg-muted'>room code — send this to your co-signers</p>
+        <p className='text-xs text-fg-muted'>room code - send this to your co-signers</p>
         <div className='mt-1 flex items-center gap-2'>
           <span className='flex-1 rounded bg-input px-2 py-1.5 font-mono text-sm'>
             {code === '' ? 'opening room…' : code}
@@ -188,7 +188,7 @@ export function RendezvousHost({
         ))}
         {peers.length >= maxSigners - 1 && (
           <p className='text-xs text-fg-muted'>
-            check the fingerprints with your co-signers before you create — whoever holds these keys
+            check the fingerprints with your co-signers before you create - whoever holds these keys
             becomes a signer
           </p>
         )}
@@ -295,7 +295,7 @@ export function RendezvousJoin({ relayUrl, prepare, onState }: JoinProps): React
           ) : (
             <>
               <span className='i-ph-circle-notch size-3.5 animate-spin' />
-              in the room with {peerCount} other signer(s) — waiting for the coordinator to start…
+              in the room with {peerCount} other signer(s) - waiting for the coordinator to start…
             </>
           )}
         </div>

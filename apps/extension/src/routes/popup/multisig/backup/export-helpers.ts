@@ -33,12 +33,12 @@ const buildSharePayload = async (
   }
   if (wallet.multisig.custody === 'airgapSigner') {
     throw new Error(
-      `"${wallet.label}" is an airgap wallet — its share lives on zigner. Export from the zigner device.`,
+      `"${wallet.label}" is an airgap wallet - its share lives on zigner. Export from the zigner device.`,
     );
   }
   const secrets = await useStore.getState().keyRing.getMultisigSecrets(wallet.vaultId);
   if (!secrets) {
-    throw new Error(`failed to read share for "${wallet.label}" — is the wallet unlocked?`);
+    throw new Error(`failed to read share for "${wallet.label}" - is the wallet unlocked?`);
   }
   return {
     label: wallet.label,

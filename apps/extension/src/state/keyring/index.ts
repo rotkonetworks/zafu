@@ -1,5 +1,5 @@
 /**
- * keyring store — thin zustand adapter
+ * keyring store - thin zustand adapter
  *
  * follows "your server as a function" (eriksen):
  * each method is a pipeline of read → compute → write → commit.
@@ -105,7 +105,7 @@ export interface KeyRingSlice {
   setMultisigHidden: (vaultId: string, hidden: boolean) => Promise<void>;
   /** Cheap READ-ONLY money view of a multisig table for the manager. `balanceZat` is the worker's
    *  cached balance (a LOWER BOUND when unsynced). `synced` is TRUE only when the caller PROVES this
-   *  vault scanned to a freshly-fetched tip — never derived from stale IDB height. Hidden tables
+   *  vault scanned to a freshly-fetched tip - never derived from stale IDB height. Hidden tables
    *  can't pass that proof, so they return synced:false (fail-closed). Never triggers a sync. */
   getMultisigStatus: (
     vaultId: string,
@@ -153,7 +153,7 @@ export const createKeyRingSlice =
         const selectedId = await local.get('selectedVaultId');
         const enabledNetworks = (await local.get('enabledNetworks')) ?? [];
         const activeNetwork = (await local.get('activeNetwork')) ?? enabledNetworks[0] ?? '';
-        // wallets are encrypted — read via encrypted path if session key available
+        // wallets are encrypted - read via encrypted path if session key available
         const initSessionKey = await session.get('passwordKey');
 
         // migration: check zcashWallets for orphaned multisigs (needs decryption)
@@ -182,7 +182,7 @@ export const createKeyRingSlice =
         const hasOnlyAirgap =
           vaults.length > 0 && vaults.every(v => v.insensitive?.['airgapOnly'] === true);
 
-        // sync penumbra wallet index — only if unlocked (wallets are encrypted)
+        // sync penumbra wallet index - only if unlocked (wallets are encrypted)
         const syncedWalletIndex = (await local.get('activeWalletIndex')) ?? 0;
 
         if (!keyPrint) {
@@ -565,7 +565,7 @@ export const createKeyRingSlice =
         if (data.fullViewingKey) {
           const existingPenumbra = (await local.get('penumbraWallets')) ?? [];
           const fvkB64 = data.fullViewingKey;
-          // penumbra wallets store FVK as JSON string — compare via base64 of inner bytes
+          // penumbra wallets store FVK as JSON string - compare via base64 of inner bytes
           for (const w of existingPenumbra) {
             try {
               const { FullViewingKey } =
@@ -579,7 +579,7 @@ export const createKeyRingSlice =
               if (e instanceof Error && e.message.includes('already exists')) {
                 throw e;
               }
-              // parse error — skip this wallet
+              // parse error - skip this wallet
             }
           }
         }
@@ -659,7 +659,7 @@ export const createKeyRingSlice =
         // Ledger cold-signer account (clone of addZignerUnencrypted, trimmed to
         // zcash-only single-signer). No ZID-merge: a Ledger import carries no
         // ZID key and is not part of the "one device = one wallet" cross-network
-        // merge story — each Ledger account is its own zcash-only vault.
+        // merge story - each Ledger account is its own zcash-only vault.
         const existingVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
 
         // dedup: same device + account = same keys.
@@ -845,7 +845,7 @@ export const createKeyRingSlice =
           await local.set('activeWalletIndex', walletIdx);
         }
 
-        // sync zcash wallet index — -1 means no zcash wallet record (mnemonic derives on-the-fly)
+        // sync zcash wallet index - -1 means no zcash wallet record (mnemonic derives on-the-fly)
         const zcashWallets = (await local.get('zcashWallets')) ?? [];
         const zcashIdx = findWalletIndex(zcashWallets as { vaultId?: string }[], vaultId);
         // only persist a valid index; -1 means "use vault mnemonic, not a zcash wallet record"
@@ -883,8 +883,8 @@ export const createKeyRingSlice =
 
       deleteKeyRing: async (vaultId: string, opts?: { allowAppManaged?: boolean }) => {
         const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-        // CRITICAL money-safety guard: app-managed (hidden) FROST multisig tables — e.g. poker
-        // tables — are NOT seed-recoverable, have no auto-backup, and their on-chain balance cannot
+        // CRITICAL money-safety guard: app-managed (hidden) FROST multisig tables - e.g. poker
+        // tables - are NOT seed-recoverable, have no auto-backup, and their on-chain balance cannot
         // be proven empty from the generic settings UI (only the ACTIVE wallet syncs, and getBalance
         // has no mempool/confirmation-depth margin). So the generic delete surfaces MUST NOT destroy
         // them: that could erase the only copy of a share while a deposit is in flight. Removal is
@@ -897,7 +897,7 @@ export const createKeyRingSlice =
           !opts?.allowAppManaged
         ) {
           throw new Error(
-            'app-managed table (e.g. a poker table): remove it from the multisig manager after backing it up — it is not seed-recoverable',
+            'app-managed table (e.g. a poker table): remove it from the multisig manager after backing it up - it is not seed-recoverable',
           );
         }
         const updatedVaults = vaults.filter(v => v.id !== vaultId);
@@ -914,7 +914,7 @@ export const createKeyRingSlice =
 
         await local.set('vaults', updatedVaults);
 
-        // last vault — nuke everything
+        // last vault - nuke everything
         if (updatedVaults.length === 0) {
           await nukeAllWalletData(session, local);
           set(state => {
@@ -953,7 +953,7 @@ export const createKeyRingSlice =
 
       setMultisigHidden: async (vaultId: string, hidden: boolean) => {
         // flip `hidden` on BOTH records (vault.insensitive + wallet.multisig) so recover/re-hide is
-        // consistent everywhere. Non-destructive — no key material touched.
+        // consistent everywhere. Non-destructive - no key material touched.
         const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
         const updatedVaults = vaults.map(v =>
           v.id === vaultId ? { ...v, insensitive: { ...v.insensitive, hidden } } : v,
@@ -979,7 +979,7 @@ export const createKeyRingSlice =
         vaultId: string,
         opts?: { workerSyncHeight?: number; chainTip?: number },
       ) => {
-        // balance: cached IDB read via the worker — NO network sync triggered. For an unsynced vault
+        // balance: cached IDB read via the worker - NO network sync triggered. For an unsynced vault
         // this is a LOWER BOUND (may read 0 while a deposit is unscanned/mempool); the policy module
         // (app-managed-tables.ts) treats !synced as possibly-funded, so a stale 0 is safe here.
         const { getBalanceInWorker } = await import('./network-worker');
@@ -990,13 +990,13 @@ export const createKeyRingSlice =
           balanceZat = 0n;
         }
 
-        // synced: PROVEN only. ⚠️ MONEY-SAFETY — do NOT "improve" this to derive `synced` from the
+        // synced: PROVEN only. ⚠️ MONEY-SAFETY - do NOT "improve" this to derive `synced` from the
         // worker's persisted IDB scan height: a hidden table is never actively synced, its
-        // syncHeight is stuck at ~tip (its birthday), and getBalance ignores mempool/0-conf — so a
+        // syncHeight is stuck at ~tip (its birthday), and getBalance ignores mempool/0-conf - so a
         // never-scanned FUNDED table would read synced && balance 0 and earn the low-friction delete
         // (permanent loss). We only trust `synced` when the CALLER passes a scan height it knows is
         // this vault's AND a freshly-fetched chain tip. Hidden tables never get those, so they
-        // resolve to synced:false — the fail-closed default the policy module relies on.
+        // resolve to synced:false - the fail-closed default the policy module relies on.
         const synced =
           typeof opts?.workerSyncHeight === 'number' &&
           typeof opts?.chainTip === 'number' &&
@@ -1025,7 +1025,7 @@ export const createKeyRingSlice =
         const vault = vaults.find(v => v.id === vaultId);
 
         if (vault?.type === 'frost-multisig') {
-          // airgapSigner wallets keep the share on zigner — no secrets to surface here
+          // airgapSigner wallets keep the share on zigner - no secrets to surface here
           if (vault.insensitive['custody'] === 'airgapSigner') {
             return null;
           }

@@ -183,8 +183,7 @@ export async function initializeEnabledNetworks(): Promise<void> {
   const enabledNetworks = await localExtStorage.get('enabledNetworks');
 
   if (!enabledNetworks || enabledNetworks.length === 0) {
-    // Use vaults (unencrypted metadata) to detect networks —
-    // wallets/zcashWallets are encrypted, can't read without session key.
+    // Use vaults (unencrypted metadata) to detect networks - // wallets/zcashWallets are encrypted, can't read without session key.
     // Vault insensitive.supportedNetworks tells us which networks exist.
     const vaults = (await localExtStorage.get('vaults')) ?? [];
 

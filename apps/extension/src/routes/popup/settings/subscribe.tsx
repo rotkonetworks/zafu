@@ -48,7 +48,7 @@ type PayState =
   | 'activated'
   | 'error';
 
-/** live elapsed timer — ticks every second so the build screen never looks frozen */
+/** live elapsed timer - ticks every second so the build screen never looks frozen */
 function LiveTimer({ startMs }: { startMs: number }) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
@@ -501,7 +501,7 @@ export const SubscribePage = () => {
           </div>
         )}
 
-        {/* payment flow — works for new subscribers and for extending pro users */}
+        {/* payment flow - works for new subscribers and for extending pro users */}
         <>
           <hr className='border-border-soft' />
 
@@ -538,7 +538,7 @@ export const SubscribePage = () => {
             </span>
           </div>
 
-          {/* pay button — both wallet types go through review first */}
+          {/* pay button - both wallet types go through review first */}
           {payState === 'idle' && memo && (
             <button
               onClick={handleReview}
@@ -552,7 +552,7 @@ export const SubscribePage = () => {
             </button>
           )}
 
-          {/* review step — tx summary. zigner hands off to send page for QR
+          {/* review step - tx summary. zigner hands off to send page for QR
                 signing; mnemonic builds + broadcasts locally after password gate. */}
           {payState === 'review' && (
             <div className='rounded border border-primary/40 bg-primary/5 p-3 flex flex-col gap-2'>
@@ -724,7 +724,7 @@ export const SubscribePage = () => {
             </div>
           )}
 
-          {/* manual copy fallback — shown only when in-wallet pay isn't available
+          {/* manual copy fallback - shown only when in-wallet pay isn't available
                  (e.g. zcash not enabled, or user wants to pay from external wallet) */}
           {isZignerWallet && (
             <div className='rounded border border-border-soft p-3'>

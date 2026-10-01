@@ -7,7 +7,7 @@ export const SettingsHeader = ({
   onBack,
 }: {
   title: string;
-  /** Fallback only — used when this screen is the session's entry point
+  /** Fallback only - used when this screen is the session's entry point
    *  (deep link / dedicated window). With in-app history, back follows
    *  the route the user actually came from. */
   backPath?: PopupPath;

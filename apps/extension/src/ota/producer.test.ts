@@ -1,7 +1,7 @@
 /**
  * Producer (end-to-end delivery) test: prove a REAL multi-MB signed module
  * stream can be produced, verified by the wallet, and round-tripped through
- * the BC-UR fountain — i.e. that "1-3 MB module over QR" actually works in
+ * the BC-UR fountain - i.e. that "1-3 MB module over QR" actually works in
  * zafu, not just the receiving skeleton.
  *
  * Also writes `test-data/dev-stream.json` that a dev server can serve at the
@@ -32,7 +32,7 @@ describe('ota producer end-to-end', () => {
     expect(produced.manifestSig.length).toBe(64);
     expect(produced.imageSig.length).toBe(64);
     // Wallet verifies the produced stream against the *pinned* key (its half
-    // of the contract — the wallet never signs).
+    // of the contract - the wallet never signs).
     const { manifest, imageHeader } = verifyStream(produced.payload, PINNED_OTA_PUBLIC_KEY);
     expect(manifest.version).toBe('0.9.0');
     expect(manifest.payload_size).toBe(2 * 1024 * 1024);

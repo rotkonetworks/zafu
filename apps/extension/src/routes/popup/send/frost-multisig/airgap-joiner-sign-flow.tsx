@@ -143,14 +143,14 @@ export function FrostAirgapJoinerSignFlow({
               setStep(cur => (cur === 'awaiting-sign' ? 'review' : cur));
 
               // Verifier: verify host's claim against the PCZT-derived parse.
-              // Anything unverifiable refuses outright — the host decides whether
+              // Anything unverifiable refuses outright - the host decides whether
               // we can verify, so a soft warning is a bypass it can trigger.
               const fee = assessClaimedFee(captured.feeZat, captured.amountZat);
               if (!captured.pcztHex) {
                 setVerdict({
                   kind: 'refuse',
                   reasons: [
-                    'host did not publish the PCZT bytes — everything shown here would be host-authored text bound to nothing',
+                    'host did not publish the PCZT bytes - everything shown here would be host-authored text bound to nothing',
                     'refusing to release a share against an unverifiable request',
                   ],
                 });

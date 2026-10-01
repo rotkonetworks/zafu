@@ -58,13 +58,13 @@ export const IRONWOOD_MIGRATION = true;
  *
  * REQUIRES the rebuilt wasm carrying the compact_resolvable_fields fix AND the
  * single-part UR decode fix (so the device's 1-frame signatures-only response
- * actually scans back — without it the scanner hangs at "1 part received")
+ * actually scans back - without it the scanner hangs at "1 part received")
  * (packages/zcash-wasm + apps/extension/public/zafu-wasm, sha 6b081213...).
  *
  * COMPATIBILITY: a zigner older than v0.8.2 does not know tx_type 0x05 and
  * fail-closes on the unknown prelude. The device also answers a compact
  * request with a compact (signatures-only) response, which needs the
- * `apply_signature_contributions` wasm export — present since the zcli
+ * `apply_signature_contributions` wasm export - present since the zcli
  * 70722f7 wasm rebuild. Turn this OFF to fall back to the fully
  * backward-compatible 0x03 request and full-PCZT response.
  */

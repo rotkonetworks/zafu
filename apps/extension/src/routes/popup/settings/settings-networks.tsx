@@ -218,7 +218,7 @@ const NetworkToggles = () => {
           >
             {/* network row */}
             <div className='flex items-center p-3'>
-              {/* name — click to set active (if enabled) */}
+              {/* name - click to set active (if enabled) */}
               <button
                 onClick={() => {
                   if (isEnabled) {
@@ -252,7 +252,7 @@ const NetworkToggles = () => {
               </button>
 
               <div className='flex items-center gap-2'>
-                {/* endpoint expand button — only for enabled networks */}
+                {/* endpoint expand button - only for enabled networks */}
                 {isEnabled && (
                   <button
                     onClick={() => handleExpandToggle(networkId)}
@@ -266,7 +266,7 @@ const NetworkToggles = () => {
                   </button>
                 )}
 
-                {/* checkbox — toggles enabled/disabled */}
+                {/* checkbox - toggles enabled/disabled */}
                 <button
                   onClick={() => void handleToggle(networkId)}
                   className={cn(
@@ -288,7 +288,7 @@ const NetworkToggles = () => {
               </div>
             )}
 
-            {/* endpoint config — expanded */}
+            {/* endpoint config - expanded */}
             {isExpanded && isEnabled && (
               <div className='border-t border-border-soft p-3 bg-elev-2/10 flex flex-col gap-3'>
                 {networkId === 'zcash' ? (
@@ -332,7 +332,7 @@ const NetworkToggles = () => {
                         }
                       }}
                       onSaveCustom={() => {
-                        // custom url is an explicit override — pin the
+                        // custom url is an explicit override - pin the
                         // strategy so a later mount doesn't rerank it away.
                         void setEndpointSelectionStrategy('penumbra', 'manual');
                         void handleSaveEndpoint('penumbra');
@@ -420,13 +420,13 @@ const STRATEGY_LABELS: Record<SelectionStrategy, string> = {
  * The zcash node panel, composed around the one thing users come for:
  * picking a working node.
  *
- *   1. node select — latencies measured automatically on mount, shown
+ *   1. node select - latencies measured automatically on mount, shown
  *      inline as `· 23ms`, dead nodes marked unreachable. A "smart pick"
  *      affordance probes every preset (tip + reachability), ranks them by
  *      the chosen selection strategy, and applies the winner.
- *   2. one quiet trust line — derived from the backend, a colored dot
+ *   2. one quiet trust line - derived from the backend, a colored dot
  *      and six words instead of badge + paragraph.
- *   3. "advanced" disclosure — custom url, backend override, memo
+ *   3. "advanced" disclosure - custom url, backend override, memo
  *      privacy, mempool watch. Closed by default; warnings appear as a
  *      single hint line on the selected option, not amber boxes.
  */
@@ -466,7 +466,7 @@ const ZcashEndpointPanel = ({
   const [testing, setTesting] = useState(false);
   const [latencies, setLatencies] = useState<Map<string, EndpointLatency> | null>(null);
   // endpoint-health "smart pick": selection strategy is distinct from the
-  // memo-sync `strategy` above — this ranks *which node* to use, not how
+  // memo-sync `strategy` above - this ranks *which node* to use, not how
   // memos are fetched. Persisted per-network in the store so `manual` sticks
   // across popup opens (otherwise the dropdown would reset to `fastest`
   // and the next smart-pick would silently swap the user's saved node).
@@ -476,7 +476,7 @@ const ZcashEndpointPanel = ({
   const [autoPicking, setAutoPicking] = useState(false);
   const [autoStatus, setAutoStatus] = useState<string | null>(null);
 
-  // Measure once per panel open — ~10 tiny requests; cheap enough that
+  // Measure once per panel open - ~10 tiny requests; cheap enough that
   // discovery is automatic once the user has allowed "other zcash servers".
   // On a first open this silently skips rather than asking: the explicit
   // "retest" button is where the ask-at-the-moment sheet belongs.
@@ -571,7 +571,7 @@ const ZcashEndpointPanel = ({
     }
   };
 
-  // Switching TO manual: pin whatever is currently selected — the URL is
+  // Switching TO manual: pin whatever is currently selected - the URL is
   // already persisted, so nothing to write, just record the strategy.
   // Switching FROM manual to a live strategy: run one immediate re-pick so
   // the user isn't stuck on a stale node they were forced to keep while
@@ -587,7 +587,7 @@ const ZcashEndpointPanel = ({
   };
 
   // Manual + current node marked unreachable by the latency probe (informational
-  // only — probes still run, we just don't act on them). Warn quietly so the
+  // only - probes still run, we just don't act on them). Warn quietly so the
   // user can switch strategy or pick another; never auto-switch on their behalf.
   const currentLatency = latencies?.get(editingEndpoint);
   const currentHealth = matched ? healths?.get(matched.id) : undefined;
@@ -639,7 +639,7 @@ const ZcashEndpointPanel = ({
               onClick={() => void handleAutoPick()}
               disabled={testing || autoPicking || isManual}
               title={
-                isManual ? 'disabled in manual mode — change strategy to auto-pick' : undefined
+                isManual ? 'disabled in manual mode - change strategy to auto-pick' : undefined
               }
               className='text-label text-zigner-gold hover:underline disabled:opacity-50'
             >
@@ -647,7 +647,7 @@ const ZcashEndpointPanel = ({
             </button>
           </div>
         </div>
-        {/* selection strategy for "smart pick" — ranks which node to use */}
+        {/* selection strategy for "smart pick" - ranks which node to use */}
         <div className='flex items-center gap-2 mb-1'>
           <span className='text-label text-fg-muted whitespace-nowrap'>strategy</span>
           <select
@@ -665,7 +665,7 @@ const ZcashEndpointPanel = ({
         </div>
         {showManualWarning && (
           <div className='text-label text-amber-400 mb-1 leading-snug'>
-            your pick is unreachable — switch strategy or pick another
+            your pick is unreachable - switch strategy or pick another
           </div>
         )}
         <select
@@ -820,7 +820,7 @@ const ZcashEndpointPanel = ({
   );
 };
 
-/** Two-option segmented control — radio cards were heavy for binary picks. */
+/** Two-option segmented control - radio cards were heavy for binary picks. */
 const SegmentedPair = ({
   value,
   a,
@@ -857,22 +857,22 @@ interface PenumbraNetworkState {
 }
 
 /**
- * Penumbra node picker — mirrors the Zcash panel's shape:
+ * Penumbra node picker - mirrors the Zcash panel's shape:
  *
- *   1. node select — latencies (`· 23ms`) probed on mount from
+ *   1. node select - latencies (`· 23ms`) probed on mount from
  *      TendermintProxyService.getStatus; presets are the hardcoded
  *      fallback list, extended at runtime with rpcs pulled from
  *      `@penumbrafi/registry` (bundled first for a synchronous first
  *      render, then re-hydrated from remote).
- *   2. smart-pick — reranks against the selected `SelectionStrategy`
+ *   2. smart-pick - reranks against the selected `SelectionStrategy`
  *      (fastest / most-synced / random / manual) and applies the winner,
  *      persisting both the URL and the strategy.
- *   3. advanced disclosure — custom URL field, so users who paste their
+ *   3. advanced disclosure - custom URL field, so users who paste their
  *      own endpoint (the pre-list-mode behavior) keep that path.
  *
  * Persistence uses the same store actions the Zcash panel uses:
  * `setNetworkEndpoint('penumbra', url)` writes `networkEndpoints.penumbra`
- * — the exact key `wallet-services.ts::getPenumbraEndpoint` reads. So
+ * - the exact key `wallet-services.ts::getPenumbraEndpoint` reads. So
  * existing users on `https://penumbra.rotko.net` keep that URL untouched
  * on upgrade.
  */
@@ -895,7 +895,7 @@ const PenumbraEndpointPanel = ({
 }) => {
   // Registry hydration: bundled synchronously for the first render (never
   // blocks), then upgraded to remote once loaded. Both fall back to the
-  // hardcoded list on failure — the panel never bricks.
+  // hardcoded list on failure - the panel never bricks.
   const [presets, setPresets] = useState<readonly PenumbraEndpointPreset[]>(() =>
     getRegistryEndpoints(),
   );
@@ -915,7 +915,7 @@ const PenumbraEndpointPanel = ({
   const initialStrategy: SelectionStrategy =
     state?.endpointSelectionStrategy ??
     // Existing users on a saved endpoint should not have the panel silently
-    // switch them the first time they open it — default to manual if their
+    // switch them the first time they open it - default to manual if their
     // saved URL isn't the shipped default. Fresh installs (no saved URL yet)
     // land on `fastest` so the smart pick runs on first use.
     (state?.endpoint &&
@@ -993,7 +993,7 @@ const PenumbraEndpointPanel = ({
 
   const handleAutoPick = async () => {
     if (isManualStrategy(selectionStrategy)) {
-      setAutoStatus('strategy is manual — keeping current selection');
+      setAutoStatus('strategy is manual - keeping current selection');
       return;
     }
     if (!(await requestEgressOptIn('penumbra-servers'))) {
@@ -1024,7 +1024,7 @@ const PenumbraEndpointPanel = ({
       }));
       const picked = pickEndpoint(candidates, selectionStrategy);
       if (!picked) {
-        setAutoStatus('no healthy endpoint under this strategy — keeping current');
+        setAutoStatus('no healthy endpoint under this strategy - keeping current');
         return;
       }
       setAutoStatus(`picked ${picked.preset.label} (${selectionStrategy})`);
@@ -1075,7 +1075,7 @@ const PenumbraEndpointPanel = ({
             </button>
           </div>
         </div>
-        {/* selection strategy for "smart pick" — persists per-network. */}
+        {/* selection strategy for "smart pick" - persists per-network. */}
         <div className='flex items-center gap-2 mb-1'>
           <span className='text-label text-fg-muted whitespace-nowrap'>strategy</span>
           <select
@@ -1101,7 +1101,7 @@ const PenumbraEndpointPanel = ({
             const preset = presets.find(p => p.id === e.target.value);
             if (preset) {
               onPick(preset.url);
-              // Explicit manual pick — flip strategy so the next mount doesn't
+              // Explicit manual pick - flip strategy so the next mount doesn't
               // silently rerank the user's choice away.
               setSelectionStrategy('manual');
               onSelectionStrategyChange('manual');
@@ -1128,7 +1128,7 @@ const PenumbraEndpointPanel = ({
         )}
       </div>
 
-      {/* 2 · trust line — Penumbra clients trial-decrypt locally; the
+      {/* 2 · trust line - Penumbra clients trial-decrypt locally; the
           server sees encrypted compact blocks either way. Keep the tone
           consistent with the Zcash panel's one-line trust hint. */}
       <div className='flex items-center gap-1.5 text-label lowercase'>
@@ -1137,7 +1137,7 @@ const PenumbraEndpointPanel = ({
         <span className='text-fg-muted'>· compact blocks decrypted locally</span>
       </div>
 
-      {/* 3 · advanced disclosure — custom url */}
+      {/* 3 · advanced disclosure - custom url */}
       <div className='border-t border-border-soft pt-2'>
         <button
           type='button'

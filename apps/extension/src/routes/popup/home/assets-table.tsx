@@ -57,7 +57,7 @@ EquivalentValues.displayName = 'EquivalentValues';
 /**
  * True when this balance represents a synthetic per-position token (LP NFT,
  * delegation/unbonding, auction, governance vote/proposal). These are chain
- * state, not something the user can "send X" or "swap X" — the row-level
+ * state, not something the user can "send X" or "swap X" - the row-level
  * Send/Swap quick actions must not appear on them. The main balance-list
  * filter above already drops the NFT variants; delegation and unbonding
  * tokens still render (they show a Claim affordance instead) so this guard
@@ -237,7 +237,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
   const navigate = useNavigate();
 
   // Quick-action nav handlers. Stable across renders so memo(AssetRow)
-  // stays effective — the row only re-renders on balance changes.
+  // stays effective - the row only re-renders on balance changes.
   // Pre-fill travels via router state (already the mechanism SendPage
   // consumes for inbox compose etc.), keyed by the balance's `base` denom
   // because it is unique across the wallet and unambiguous (IBC base

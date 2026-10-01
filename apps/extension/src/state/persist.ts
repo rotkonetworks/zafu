@@ -29,8 +29,7 @@ type Persist = (f: StateCreator<AllSlices>) => StateCreator<AllSlices>;
 export const customPersistImpl: Persist = f => (set, get, store) => {
   void (async function () {
     // Part 1: load non-encrypted values only.
-    // wallets/zcashWallets are encrypted at rest (contain viewing keys) —
-    // they're loaded later via hydrateEncryptedData() after unlock.
+    // wallets/zcashWallets are encrypted at rest (contain viewing keys) - // they're loaded later via hydrateEncryptedData() after unlock.
     const activeZcashIndex = await localExtStorage.get('activeZcashIndex');
     const activeWalletIndex = await localExtStorage.get('activeWalletIndex');
     const grpcEndpoint = await localExtStorage.get('grpcEndpoint');
@@ -155,7 +154,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
           }
         }),
       );
-      // only unblock writes if we actually decrypted data — if locked (all null),
+      // only unblock writes if we actually decrypted data - if locked (all null),
       // keep blocking so persist() can't wipe storage with empty arrays
       if (decryptedAny) {
         markHydrated();
@@ -177,7 +176,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
     // Initialize keyring from storage (loads vaults, selected key, networks)
     await get().keyRing.init();
 
-    // fresh install (no password set) — nothing to protect, unblock writes immediately
+    // fresh install (no password set) - nothing to protect, unblock writes immediately
     if (get().keyRing.status === 'empty') {
       markHydrated();
     }
@@ -185,7 +184,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
     // hydrate now (works if already unlocked or auto-unlocked)
     await hydrateEncryptedData();
 
-    // subscribe to status changes — re-hydrate when keyring transitions to 'unlocked'
+    // subscribe to status changes - re-hydrate when keyring transitions to 'unlocked'
     // dataflow: react to state change, not imperative wrapping of unlock()
     let prevStatus = get().keyRing.status;
     store.subscribe((state: AllSlices) => {

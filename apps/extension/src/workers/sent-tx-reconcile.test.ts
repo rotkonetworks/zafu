@@ -53,7 +53,7 @@ describe('reconcileSentTxs', () => {
 
   it('reports what left the wallet, not the notes spent as inputs', () => {
     // the real case: a 355,000 zat note spent to pay 50,000 with a 15,000 fee.
-    // 290,000 comes back as change, so the wallet is 65,000 poorer — reporting
+    // 290,000 comes back as change, so the wallet is 65,000 poorer - reporting
     // the 355,000 input total told the user they had spent everything.
     const { txs } = reconcileSentTxs({
       chainTxs: [chain({ height: 3_437_366, amount: '355000' })],
@@ -145,7 +145,7 @@ describe('reconcileSentTxs', () => {
     expect(txs[0]).toMatchObject({ status: 'confirmed', height: 3_437_366 });
   });
 
-  it('emits one row per txid — the local record and the chain entry never double up', () => {
+  it('emits one row per txid - the local record and the chain entry never double up', () => {
     const { txs } = reconcileSentTxs({
       chainTxs: [chain(), chain({ id: 'bb', type: 'receive', height: 3_400_000 })],
       sent: [rec(), rec({ txid: 'aa' })],
@@ -192,7 +192,7 @@ describe('reconcileSentTxs', () => {
         scannedHeight: 3_437_401,
       });
       expect(txs[0]!.status).toBe('failed');
-      // shown, not yet deleted — the user has to be able to read it
+      // shown, not yet deleted - the user has to be able to read it
       expect(prune).toEqual([]);
     });
 

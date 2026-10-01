@@ -16,7 +16,7 @@ import { useLatestBlockHeight } from './latest-block-height';
 
 /**
  * Recognize the ConnectRPC error you get when the MessagePort to the
- * service worker has been closed — happens when Chrome recycles the SW
+ * service worker has been closed - happens when Chrome recycles the SW
  * (~30s idle) or while the popup is being torn down. This is benign;
  * the next 30s tick gets a fresh port and will retry, so we don't want
  * to surface it as an error.
@@ -49,7 +49,7 @@ async function claimUnclaimedSwaps(account: number): Promise<number> {
     }
 
     try {
-      // 1. plan the claim — source account from the swap's claim address
+      // 1. plan the claim - source account from the swap's claim address
       const planRequest = new TransactionPlannerRequest({
         swapClaims: [{ swapCommitment: swap.swapCommitment }],
         source: { account },
@@ -71,7 +71,7 @@ async function claimUnclaimedSwaps(account: number): Promise<number> {
         continue;
       }
 
-      // 3. broadcast (don't await detection — fire and forget)
+      // 3. broadcast (don't await detection - fire and forget)
       for await (const msg of await viewClient.broadcastTransaction({
         transaction,
         awaitDetection: true,

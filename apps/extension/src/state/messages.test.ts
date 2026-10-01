@@ -11,7 +11,7 @@ const sessionMock = (chrome.storage.session as unknown as { mock: Map<string, un
  * The lifecycle of an outgoing record, and specifically what a wallet is
  * allowed to claim about a send whose outcome it did not observe.
  */
-describe('messages — outgoing send lifecycle', () => {
+describe('messages - outgoing send lifecycle', () => {
   let useStore: TestStore;
   const messages = () => useStore.getState().messages;
 
@@ -61,7 +61,7 @@ describe('messages — outgoing send lifecycle', () => {
     await messages().markOutgoingBroadcast('abc123');
     expect(messages().messages[0]!.status).toBe('pending');
 
-    // block scan confirms it — dedup on (txId, direction) promotes in place
+    // block scan confirms it - dedup on (txId, direction) promotes in place
     await messages().addMessage({
       network: 'zcash',
       recipientAddress: '',

@@ -161,7 +161,7 @@ const SEND_STEP_EXPLAINERS: [match: (step: string) => boolean, copy: string][] =
 const explainSendStep = (step: string): string =>
   SEND_STEP_EXPLAINERS.find(([match]) => match(step))?.[1] ?? 'working on your transaction.';
 
-/** live elapsed timer — ticks every second so the build screen never looks frozen */
+/** live elapsed timer - ticks every second so the build screen never looks frozen */
 function LiveTimer({ startMs }: { startMs: number }) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
@@ -263,7 +263,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
   // The store object, captured once. `messages` is an immer slice: EVERY
   // mutation anywhere in the slice replaces it, so depending on it in the
-  // unmount effect below re-ran that cleanup on unrelated store churn — an
+  // unmount effect below re-ran that cleanup on unrelated store churn - an
   // incoming message arriving during a 30s–2min halo2 prove was enough to
   // stamp the live send as over. The actions on the slice are stable, so a ref
   // is the honest way to say "I want the store, not a subscription to it".
@@ -274,8 +274,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // build/prove/broadcast pipeline it started keeps running, so this CANNOT
   // report failure: we simply stop being able to observe the outcome.
   //
-  // 'interrupted' says exactly that. It also leaves the record promotable —
-  // the ref is deliberately NOT cleared, so if this unmount was a navigation
+  // 'interrupted' says exactly that. It also leaves the record promotable - // the ref is deliberately NOT cleared, so if this unmount was a navigation
   // inside a surviving document (tab / side panel) the in-flight
   // promoteToBroadcasted() still rewrites the temp id to the real txid and
   // moves it on to broadcasting → pending.
@@ -287,7 +286,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       if (tempId !== null) {
         void messagesRef.current.markOutgoingInterrupted(
           tempId,
-          'zafu closed while this send was still in progress — it may still have been sent',
+          'zafu closed while this send was still in progress - it may still have been sent',
         );
       }
     };
@@ -362,7 +361,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // Binds the response format handlePcztSignatureScanned is allowed to accept
   // to what was actually sent. Today the outgoing PCZT-sign request always
   // rides the legacy `ur:zcash-pczt` CBOR wrap (see `cborWrapPczt` in
-  // zcash-worker.ts) — zafu does not yet build a compact (tx_type 0x05/0x06)
+  // zcash-worker.ts) - zafu does not yet build a compact (tx_type 0x05/0x06)
   // request via `buildCompactRequest` anywhere in this flow. This stays
   // `false` until that wiring lands; a device offering a compact response
   // (0x07/0x08) while this is `false` is therefore always rejected rather
@@ -432,7 +431,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   //
   // The figure shown here is the balance of the pool this send will actually
   // spend from, not the wallet total. Post-NU6.3 orchard→orchard sends are
-  // consensus-disabled, so orchard funds are real but NOT sendable — a wallet
+  // consensus-disabled, so orchard funds are real but NOT sendable - a wallet
   // holding 5 ZEC orchard and 0.01 ZEC ironwood used to advertise 5.0099 and
   // then die after a full witness build and a two-minute prove. See
   // ./spendable.ts for the arithmetic and the rest of the reasoning.
@@ -451,7 +450,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     () => poolNotes[activePool].filter(n => !n.spent).map(n => BigInt(n.value)),
     [poolNotes, activePool],
   );
-  /** value sitting in the pool that CANNOT be spent — orchard, post-NU6.3 */
+  /** value sitting in the pool that CANNOT be spent - orchard, post-NU6.3 */
   const strandedZat = useMemo(
     () =>
       activePool === 'ironwood'
@@ -520,7 +519,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     );
   }, [zcashContactRows, addressBookQuery]);
 
-  /** the saved contact the recipient currently resolves to — the trust signal */
+  /** the saved contact the recipient currently resolves to - the trust signal */
   const recipientContact = useMemo(() => {
     const trimmed = recipient.trim();
     return trimmed ? findByAddress(trimmed) : undefined;
@@ -597,7 +596,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // Keep the DISPLAYED fee in step with the quote.
   //
   // `fee` was initialised to the literal '0.0001' and only overwritten from the
-  // worker's result — which on the hot path arrives AFTER the transaction has
+  // worker's result - which on the hot path arrives AFTER the transaction has
   // been proved and broadcast. So the number on the review screen, the one the
   // user reads before approving an irreversible send, was a constant that had
   // nothing to do with what they would actually pay: the real ZIP-317 fee
@@ -645,7 +644,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     // to be here: the fee quote three lines down already treats them as
     // transparent via /^(t1|t3|tm|t2)/, and `utest1` is accepted, so without
     // them the form takes a testnet UNIFIED address but rejects a testnet
-    // TRANSPARENT one — t-sends are simply impossible on testnet. zcli accepts
+    // TRANSPARENT one - t-sends are simply impossible on testnet. zcli accepts
     // t1 and tm for the same reason.
     const validPrefix = /^(u1|utest1|t1|t3|tm|t2)/.test(r);
     if (!validPrefix) {
@@ -713,7 +712,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     setSendSteps([]);
     buildStartRef.current = Date.now();
 
-    // optimistic outgoing entry — visible in inbox immediately, before
+    // optimistic outgoing entry - visible in inbox immediately, before
     // any RPC. promoted to the real txid post-build; marked failed in
     // the catch block below if anything throws.
     try {
@@ -844,7 +843,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           true,
         );
         if (!result.pcztHex) {
-          throw new Error('PCZT build succeeded but pcztHex is empty — reload the extension');
+          throw new Error('PCZT build succeeded but pcztHex is empty - reload the extension');
         }
         pcztMultisigRef.current = result;
         setFee((Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, ''));
@@ -868,7 +867,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         if (!ufvk) {
           throw new Error('UFVK required for multisig PCZT build');
         }
-        // frost=true: see the airgap branch above — post-NU6.3 the worker
+        // frost=true: see the airgap branch above - post-NU6.3 the worker
         // refuses rather than build an ironwood PCZT the FROST rounds and
         // complete_orchard_pczt (orchard/v5-only) cannot consume.
         const result = await buildSendTxPcztInWorker(
@@ -951,7 +950,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         // instead of failing halfway through a signing round.
         if (isPopup()) {
           throw new Error(
-            'open zafu in a tab or the side panel to sign with a ledger — usb sessions ' +
+            'open zafu in a tab or the side panel to sign with a ledger - usb sessions ' +
               'are dropped when the toolbar popup loses focus',
           );
         }
@@ -1712,7 +1711,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 <div className='h-8 w-8 animate-spin rounded-full border-2 border-zigner-gold border-t-transparent' />
               </div>
               <h2 className='text-lg font-medium'>sending</h2>
-              {/* live elapsed timer — ticks every second so the UI never looks frozen */}
+              {/* live elapsed timer - ticks every second so the UI never looks frozen */}
               <LiveTimer startMs={buildStartRef.current} />
             </div>
 
@@ -1925,7 +1924,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       case 'complete':
         return (
           <div className='flex flex-col items-center gap-4 p-8'>
-            {/* the receipt gets stamped — a broadcast tx is sealed (封) */}
+            {/* the receipt gets stamped - a broadcast tx is sealed (封) */}
             <HankoSeal glyph='封' size='md' />
             <h2 className='text-lg font-medium'>transaction sent</h2>
             <p className='text-sm text-fg-muted text-center'>

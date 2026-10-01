@@ -1,6 +1,6 @@
 // Standard CompactTxStreamer over native gRPC (public lightwalletd rejects
 // grpc-web with 415). Body framing matches grpc-web so fetch reads it, but the
-// gRPC status sits in unreadable HTTP/2 trailers — so HTTP 200 + data = success.
+// gRPC status sits in unreadable HTTP/2 trailers - so HTTP 200 + data = success.
 // Trusted backend: no zidecar proofs, so the worker skips verification.
 
 import type { ChainTip, CompactAction, CompactBlock, Utxo } from './zidecar-client';
@@ -15,11 +15,11 @@ const UNSUPPORTED = (m: string) =>
 // arbitrarily large bytes via Response.arrayBuffer() and OOM the worker.
 // Sized for the maximum legitimate response on each method.
 const MAX_RESP_BYTES: Record<string, number> = {
-  GetLatestBlock: 1 << 12, // 4 KiB — BlockID is tiny
-  GetTreeState: 1 << 17, // 128 KiB — orchard tree state is hex-encoded
-  GetBlockRange: 64 << 20, // 64 MiB — block stream (legitimate range can be large)
-  GetTransaction: 1 << 20, // 1 MiB — single tx
-  GetMempoolTx: 16 << 20, // 16 MiB — mempool stream
+  GetLatestBlock: 1 << 12, // 4 KiB - BlockID is tiny
+  GetTreeState: 1 << 17, // 128 KiB - orchard tree state is hex-encoded
+  GetBlockRange: 64 << 20, // 64 MiB - block stream (legitimate range can be large)
+  GetTransaction: 1 << 20, // 1 MiB - single tx
+  GetMempoolTx: 16 << 20, // 16 MiB - mempool stream
   GetLatestTreeState: 1 << 17,
   GetLightdInfo: 1 << 12, // 4 KiB - small info struct
 };
@@ -135,7 +135,7 @@ export class LightwalletdClient implements ZcashClient {
     return this.parseBlockStream(resp);
   }
 
-  /** lightwalletd streams full txs here, not trial-decryptable compact blocks — no mempool preview. */
+  /** lightwalletd streams full txs here, not trial-decryptable compact blocks - no mempool preview. */
   async getMempoolStream(): Promise<CompactBlock[]> {
     return [];
   }
@@ -233,7 +233,7 @@ export class LightwalletdClient implements ZcashClient {
     return { txid: new Uint8Array(0), errorCode, errorMessage };
   }
 
-  // Not exposed by lightwalletd — return empty so opt-in features degrade quietly instead of erroring.
+  // Not exposed by lightwalletd - return empty so opt-in features degrade quietly instead of erroring.
 
   async getTaddressTxids(): Promise<Uint8Array[]> {
     return [];
@@ -320,7 +320,7 @@ export class LightwalletdClient implements ZcashClient {
 
     const resp = await fetch(path, {
       method: 'POST',
-      // native gRPC content-type — public lightwalletd rejects grpc-web (415)
+      // native gRPC content-type - public lightwalletd rejects grpc-web (415)
       headers: { 'Content-Type': 'application/grpc' },
       body,
     });
@@ -410,7 +410,7 @@ export class LightwalletdClient implements ZcashClient {
       } // trailer frame
       // `<<24` yields a SIGNED int32: a declared length >= 2^31 parses
       // negative, the bounds check below passes, subarray clamps to empty and
-      // `pos += len` walks BACKWARDS — an unbounded loop that pushes an object
+      // `pos += len` walks BACKWARDS - an unbounded loop that pushes an object
       // every 5 bytes until the worker OOMs. A 9-byte hostile response was
       // enough. Use unsigned arithmetic and reject anything not a sane length.
       const len =
@@ -470,7 +470,7 @@ export class LightwalletdClient implements ZcashClient {
         rawIronwood.push(val as Uint8Array);
       }
     });
-    // CompactTx.hash (field 2) is the txid in INTERNAL / wire byte order — the
+    // CompactTx.hash (field 2) is the txid in INTERNAL / wire byte order - the
     // lightwallet-protocol standard. But the rest of the wallet stores txids in
     // DISPLAY order: resolveBroadcastTxid reverses compute_txid to display, and
     // zidecar's native inline action txid is already display order. So reverse

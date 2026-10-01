@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 import { cn } from '../../lib/utils';
 
 /**
- * Editorial masthead — the section-opening title row used at the top of pages
+ * Editorial masthead - the section-opening title row used at the top of pages
  * and preview sheets. Two columns: identity on the left (kicker + title),
  * meta on the right (timestamps, revision, stats). Bottom-anchored, with a
  * 1px rule below.
@@ -18,7 +18,7 @@ export interface MastheadProps {
   kicker?: ReactNode;
   /** The h1 content. Wrap any accented spans with <Masthead.Accent>. */
   title: ReactNode;
-  /** Right column — typically a stack of <b>label</b> value lines. */
+  /** Right column - typically a stack of <b>label</b> value lines. */
   meta?: ReactNode;
   className?: string;
 }

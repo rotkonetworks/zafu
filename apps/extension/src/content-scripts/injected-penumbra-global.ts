@@ -57,7 +57,7 @@ const extensionId = document.documentElement?.getAttribute('data-zafu-extension-
 const extensionOrigin =
   extensionId && extensionId !== 'invalid' ? `chrome-extension://${extensionId}` : '';
 
-// bail if the bridge wasn't populated — page reloaded with no zafu, we
+// bail if the bridge wasn't populated - page reloaded with no zafu, we
 // raced the ISOLATED script (shouldn't happen given manifest order),
 // or the ISOLATED script saw an orphaned chrome.runtime.id.
 if (!extensionOrigin) {
