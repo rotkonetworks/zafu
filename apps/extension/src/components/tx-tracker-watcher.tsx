@@ -16,7 +16,9 @@ import { messagesSelector } from '../state/messages';
 import { queryInjectiveTx } from '@repo/wallet/networks/injective/client';
 import {
   awaitingConfirmation,
+  claimTxOp,
   isTerminal,
+  isTxOpShown,
   readTxOps,
   removeTxOps,
   sweep,
@@ -34,34 +36,44 @@ export const TxTrackerWatcher = () => {
   const ops = useTxOps();
   const [toast, setToast] = useState<TxOp | undefined>();
   const dismissTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const handled = useRef(new Set<string>());
 
-  // announce each finished op once
+  // announce each finished op once across every open window: the claim has
+  // one winner, and a screen still showing its own outcome keeps the toast quiet
   useEffect(() => {
-    for (const op of ops) {
-      if (!isTerminal(op.status) || op.notified || handled.current.has(op.opId)) {
+    for (const { opId, status, notified } of ops) {
+      if (!isTerminal(status) || notified) {
         continue;
       }
-      handled.current.add(op.opId);
-
-      if (op.status === 'done' && op.network === 'penumbra' && op.memo && op.recipient && op.txId) {
-        // the chain cannot recover a sender's memo; this is our only record
-        void addMessage({
-          network: 'penumbra',
-          recipientAddress: op.recipient,
-          content: op.memo,
-          txId: op.txId,
-          blockHeight: 0,
-          timestamp: Date.now(),
-          direction: 'sent',
-          read: true,
-        });
-      }
-
-      setToast(op);
-      clearTimeout(dismissTimer.current);
-      dismissTimer.current = setTimeout(() => setToast(undefined), TOAST_MS);
-      void writeTxOp(op.opId, { status: op.status, notified: true });
+      void claimTxOp(opId).then(async op => {
+        if (!op) {
+          return;
+        }
+        if (
+          op.status === 'done' &&
+          op.network === 'penumbra' &&
+          op.memo &&
+          op.recipient &&
+          op.txId
+        ) {
+          // the chain cannot recover a sender's memo; this is our only record
+          void addMessage({
+            network: 'penumbra',
+            recipientAddress: op.recipient,
+            content: op.memo,
+            txId: op.txId,
+            blockHeight: 0,
+            timestamp: Date.now(),
+            direction: 'sent',
+            read: true,
+          });
+        }
+        if (await isTxOpShown(opId)) {
+          return;
+        }
+        setToast(op);
+        clearTimeout(dismissTimer.current);
+        dismissTimer.current = setTimeout(() => setToast(undefined), TOAST_MS);
+      });
     }
   }, [ops, addMessage]);
 

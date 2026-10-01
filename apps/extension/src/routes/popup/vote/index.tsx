@@ -124,7 +124,7 @@ function voteIcon(vote: Vote_Vote): string {
 export function VotePage() {
   const activeNetwork = useStore(selectActiveNetwork);
   const penumbraAccount = useStore(selectPenumbraAccount);
-  const penumbraTx = usePenumbraTransaction();
+  const penumbraTx = usePenumbraTransaction({ ownOutcome: false });
   const [showInactive, setShowInactive] = useState(false);
   const [expandedId, setExpandedId] = useState<bigint | null>(null);
   const [rawId, setRawId] = useState<bigint | null>(null);

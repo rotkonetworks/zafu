@@ -5,10 +5,11 @@
  * via the view service
  */
 
+import { useEffect, useRef } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { isPenumbraSendRequest, type PenumbraSendRequest } from '../message/penumbra-send';
-import { txOpKey, writeTxOp, type TxOp } from '../tx-ops';
+import { holdTxOp, txOpKey, writeTxOp, type TxOp } from '../tx-ops';
 
 /** transaction result */
 export interface PenumbraTransactionResult {
@@ -28,8 +29,16 @@ export interface PenumbraTransactionResult {
  * That decoupling is what makes a send survive the side panel reloading to show
  * the approval - the old page-driven flow died with the panel's MessagePort.
  */
-export const usePenumbraTransaction = () =>
-  useMutation({
+export const usePenumbraTransaction = ({
+  /** the calling screen shows the outcome itself, so no toast while it is open */
+  ownOutcome = true,
+}: { ownOutcome?: boolean } = {}) => {
+  const holds = useRef(new Set<() => void>());
+  useEffect(() => {
+    const held = holds.current;
+    return () => held.forEach(release => release());
+  }, []);
+  return useMutation({
     mutationFn: (
       input: TransactionPlannerRequest | { planRequest: TransactionPlannerRequest; label: string },
     ): Promise<PenumbraTransactionResult> => {
@@ -92,8 +101,11 @@ export const usePenumbraTransaction = () =>
           finish(() => reject(new Error('invalid send request')));
           return;
         }
-        // the record lands before the SW's first write, never racing it
-        void recorded
+        const shown = ownOutcome
+          ? holdTxOp(opId).then(release => void holds.current.add(release))
+          : undefined;
+        // the record (and the screen's hold) land before the SW's first write
+        void Promise.all([recorded, shown])
           .then(() => chrome.runtime.sendMessage(request))
           .catch((err: unknown) => {
             const error = err instanceof Error ? err : new Error('failed to reach wallet');
@@ -103,3 +115,4 @@ export const usePenumbraTransaction = () =>
       });
     },
   });
+};
