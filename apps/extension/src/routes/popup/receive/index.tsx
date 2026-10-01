@@ -17,7 +17,7 @@ import { selectActiveNetwork } from '../../../state/keyring';
 import { useActiveAddress } from '../../../hooks/use-address';
 import { rotateShieldedDiversifier } from '../../../state/shielded-receive-index';
 import { routeForChain, usePenumbraRoutes } from '../../../transparent/penumbra-routes';
-import { ReceiveTab } from './receive-tab';
+import { ReceiveTab, type AddrType } from './receive-tab';
 import { TransparentReceive } from './transparent-receive';
 import {
   PrivacySwitch,
@@ -26,6 +26,7 @@ import {
 } from '../../../components/privacy-switch';
 import { getActiveIbcSubnetworks } from '../../../config/networks';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { Segmented } from '@repo/ui/components/ui/segmented';
 
 export function ReceivePage() {
   const activeNetwork = useStore(selectActiveNetwork);
@@ -83,9 +84,29 @@ export function ReceivePage() {
   const receiveOn: 'penumbra' | CosmosChainId =
     privacy === 'transparent' ? (pickedChain ?? transparentChains[0] ?? 'penumbra') : 'penumbra';
 
+  // zcash shielded vs transparent lives in the header, not a full-width row
+  // under the QR.
+  const [addrType, setAddrType] = useState<AddrType>('shielded');
+
   return (
     <div className='flex h-full flex-col'>
-      <ScreenHeader title='receive' backPath={PopupPath.INDEX} />
+      <ScreenHeader
+        title='receive'
+        backPath={PopupPath.INDEX}
+        meta={
+          isZcash ? (
+            <Segmented
+              label='address type'
+              value={addrType}
+              onChange={setAddrType}
+              options={[
+                { value: 'shielded', label: 'shielded' },
+                { value: 'transparent', label: 'transparent' },
+              ]}
+            />
+          ) : undefined
+        }
+      />
 
       <div className='flex flex-1 flex-col p-4'>
         {transparentChains.length > 0 && (
@@ -104,6 +125,7 @@ export function ReceivePage() {
             stale={!fresh}
             activeNetwork={activeNetwork}
             retireShielded={retireShielded}
+            addrType={addrType}
           />
         ) : (
           <TransparentReceive key={receiveOn} chainId={receiveOn} />

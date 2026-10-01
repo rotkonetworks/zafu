@@ -1,6 +1,6 @@
 /**
  * Receive tab - QR + address, for Penumbra (ephemeral-only) and Zcash
- * (shielded default, transparent secondary via Segmented).
+ * (shielded default, transparent secondary - the header picks addrType).
  *
  * Penumbra receive is ephemeral-ONLY: a fresh randomized single-use address
  * that rotates on every copy. The static index address is deliberately not
@@ -22,12 +22,13 @@ import {
   derivePenumbraEphemeralFromFvk,
 } from '../../../hooks/use-address';
 import { QrCode } from '../../../components/qr-code';
-import { Segmented } from '@repo/ui/components/ui/segmented';
-import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Button } from '@repo/ui/components/ui/button';
 import { useCopy } from '@repo/ui/hooks/use-copy';
 import { useTransparentAddress } from './use-transparent-address';
 import { PaymentRequestSheet } from './payment-request';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+
+export type AddrType = 'shielded' | 'transparent';
 
 export function ReceiveTab({
   address,
@@ -35,6 +36,7 @@ export function ReceiveTab({
   stale,
   activeNetwork,
   retireShielded,
+  addrType,
 }: {
   address: string;
   loading: boolean;
@@ -43,6 +45,8 @@ export function ReceiveTab({
   activeNetwork: string;
   /** hand the zcash shielded address on screen out, and move to a fresh one */
   retireShielded: () => void;
+  /** zcash only - chosen in the header, not here */
+  addrType: AddrType;
 }) {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const penumbraAccount = useStore(selectPenumbraAccount);
@@ -52,7 +56,6 @@ export function ReceiveTab({
   const isPenumbra = activeNetwork === 'penumbra';
   const isZcash = activeNetwork === 'zcash';
 
-  const [addrType, setAddrType] = useState<'shielded' | 'transparent'>('shielded');
   const transparent = addrType === 'transparent';
   const t = useTransparentAddress(isZcash && transparent);
 
@@ -140,8 +143,55 @@ export function ReceiveTab({
   const [requestOpen, setRequestOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
+  // one row of copy/colour/rotate per address kind, instead of a ternary per
+  // concern - label, hint, colours and the rotate action all vary on the
+  // same discriminator.
+  const plain = 'border-surface-border-soft bg-surface-elev-2';
+  const kinds = {
+    ephemeral: {
+      label: 'ephemeral address',
+      hint: '',
+      labelColor: 'text-fg-muted',
+      addrColor: 'text-zigner-gold',
+      box: 'border-zigner-gold/40 bg-zigner-gold/5',
+      rotate: () => setEphemeralNonce(n => n + 1),
+    },
+    transparent: {
+      label: 'transparent address · public',
+      hint: 'shield after receiving',
+      labelColor: 'text-hanko-light',
+      addrColor: 'text-hanko-light',
+      box: 'border-hanko/35 bg-hanko/8',
+      rotate: t.advance,
+    },
+    shielded: {
+      label: 'shielded address',
+      hint: 'one address per sender',
+      labelColor: 'text-fg-muted',
+      addrColor: 'text-fg-high',
+      box: plain,
+      rotate: retireShielded,
+    },
+    none: {
+      label: 'address',
+      hint: '',
+      labelColor: 'text-fg-muted',
+      addrColor: 'text-fg-high',
+      box: plain,
+      rotate: undefined as (() => void) | undefined,
+    },
+  } as const;
+  const kind: keyof typeof kinds = showingEphemeral
+    ? 'ephemeral'
+    : isZcash && transparent
+      ? 'transparent'
+      : isZcash
+        ? 'shielded'
+        : 'none';
+  const m = kinds[kind];
+
   return (
-    <div className='flex flex-col items-center gap-4'>
+    <div className='flex flex-1 flex-col items-center gap-4'>
       <div
         className={`border border-surface-border-soft transition-opacity duration-150 ${retired ? 'opacity-30' : ''}`}
       >
@@ -156,67 +206,14 @@ export function ReceiveTab({
         )}
       </div>
 
-      <div className='flex items-center gap-1.5'>
-        <span className='border border-network-accent/30 bg-network-accent/10 px-2.5 py-0.5 text-label text-network-accent lowercase tracking-[0.08em]'>
-          {activeNetwork}
-        </span>
-        {isShielded && (
-          <span
-            className='inline-flex items-center gap-1 border border-zigner-gold/30 bg-zigner-gold/10 px-2 py-0.5 text-label text-zigner-gold lowercase tracking-[0.05em]'
-            title='shielded - senders cannot see your other transactions'
-          >
-            <span className='i-ph-shield-check h-2.5 w-2.5' />
-            shielded
-          </span>
-        )}
-        {isZcash && transparent && (
-          <span
-            className='inline-flex items-center gap-1 border border-hanko/30 bg-hanko/10 px-2 py-0.5 text-label text-hanko-light lowercase tracking-[0.05em]'
-            title='transparent - balance and history publicly visible'
-          >
-            <span className='i-ph-eye h-2.5 w-2.5' />
-            public
-          </span>
-        )}
-      </div>
-
-      {isZcash && (
-        <Segmented
-          label='address type'
-          value={addrType}
-          onChange={setAddrType}
-          options={[
-            { value: 'shielded', label: 'shielded' },
-            { value: 'transparent', label: 'transparent' },
-          ]}
-          className='w-full'
-        />
-      )}
-
       {isZcash && transparent && t.error && (
         <p className='w-full text-label text-hanko-light lowercase'>{t.error}</p>
       )}
 
-      {isZcash && transparent && t.canDerive && !t.error && (
-        <button
-          type='button'
-          onClick={() => setAdvancedOpen(true)}
-          className='flex w-full items-center justify-between px-1 py-1 text-label text-fg-muted lowercase hover:text-fg-high'
-        >
-          <span>advanced - address #{t.index}</span>
-          <span className='i-ph-caret-right size-3.5' />
-        </button>
-      )}
-
       <div className='w-full'>
-        <div className='mb-1 text-label text-fg-muted lowercase'>
-          {showingEphemeral
-            ? 'ephemeral address'
-            : transparent && isZcash
-              ? `transparent address #${t.index} - public`
-              : isZcash
-                ? 'shielded address'
-                : 'address'}
+        <div className='mb-1.5 flex items-center justify-between text-label lowercase'>
+          <span className={m.labelColor}>{m.label}</span>
+          {m.hint && <span className='text-fg-muted'>{m.hint}</span>}
         </div>
         {isZcash && transparent && t.used && (
           <p className='mb-1 flex items-start gap-1.5 text-label text-hanko-light lowercase'>
@@ -225,58 +222,47 @@ export function ReceiveTab({
             fresh one.
           </p>
         )}
-        <div
-          className={`flex items-center gap-2 border p-3 ${
-            showingEphemeral
-              ? 'border-zigner-gold/40 bg-zigner-gold/5'
-              : transparent && isZcash
-                ? 'border-hanko/35 bg-hanko/8'
-                : 'border-surface-border-soft bg-surface-elev-2'
-          }`}
-        >
-          <code
-            className={`flex-1 break-all text-label transition-opacity duration-150 ${
-              showingEphemeral
-                ? 'text-zigner-gold'
-                : transparent && isZcash
-                  ? 'text-hanko-light'
-                  : ''
-            } ${retired ? 'opacity-30' : ''}`}
-          >
-            {isLoading ? 'generating...' : displayAddress || 'no wallet selected'}
-          </code>
-          {showingEphemeral && (
-            <button
-              onClick={() => setEphemeralNonce(n => n + 1)}
-              className='flex shrink-0 items-center text-fg-muted transition-colors hover:text-fg-high'
-              title='rotate to a fresh address'
-              aria-label='rotate to a fresh ephemeral address'
+        <div className='flex gap-1.5'>
+          <div className={`flex h-14 min-w-0 flex-1 items-center border p-3 ${m.box}`}>
+            <code
+              title={displayAddress || undefined}
+              className={`w-full truncate text-label transition-opacity duration-150 ${m.addrColor} ${retired ? 'opacity-30' : ''}`}
             >
-              <span className='i-ph-arrows-clockwise size-4' />
-            </button>
-          )}
-          {isZcash && transparent && (
+              {isLoading ? 'generating...' : displayAddress || 'no wallet selected'}
+            </code>
+          </div>
+          {m.rotate && (
             <button
-              onClick={t.advance}
-              className='flex shrink-0 items-center text-fg-muted transition-colors hover:text-fg-high'
+              onClick={m.rotate}
+              disabled={retired}
+              className='grid size-14 shrink-0 place-items-center border border-surface-border-soft bg-surface-elev-1 text-fg-muted transition-colors hover:text-fg-high disabled:cursor-not-allowed disabled:opacity-50'
               title='new address'
-              aria-label='new transparent address'
+              aria-label='new address'
             >
-              <span className='i-ph-arrows-clockwise size-4' />
+              <span className='i-ph-arrows-clockwise size-4.5' />
             </button>
           )}
         </div>
       </div>
 
-      {!showingEphemeral && transparent && (
-        <p className='text-center text-label text-fg-muted leading-snug lowercase'>
-          public on-chain - one index per sender, then shield into your private pool.
-        </p>
+      {isZcash && transparent && t.canDerive && !t.error && (
+        <button
+          type='button'
+          onClick={() => setAdvancedOpen(true)}
+          className='flex w-full items-center justify-between px-1 py-1 text-label text-fg-muted lowercase hover:text-fg-high'
+        >
+          <span>address index</span>
+          <span className='i-ph-caret-right size-3.5' />
+        </button>
       )}
 
-      <div className='flex w-full gap-2'>
+      <div className='-mx-4 mt-auto flex gap-2 border-t border-surface-border-soft px-4 pt-4'>
         {isZcash && displayAddress && (
-          <Button variant='secondary' onClick={() => setRequestOpen(true)} className='flex-1'>
+          <Button
+            variant='secondary'
+            onClick={() => setRequestOpen(true)}
+            className='w-[150px] shrink-0'
+          >
             request amount
           </Button>
         )}
