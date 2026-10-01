@@ -25,17 +25,8 @@ import { PenumbraContent } from './penumbra-home';
 import { ZcashContent } from './zcash-home';
 import { CosmosContent, NetworkPlaceholder } from './other-networks';
 
-export interface PopupLoaderData {
-  fullSyncHeight?: number;
-}
-
-export const popupIndexLoader = async (): Promise<Response | PopupLoaderData> => {
-  const redirect = (await needsOnboard()) ?? (await needsLogin());
-  if (redirect) {
-    return redirect;
-  }
-  return { fullSyncHeight: await localExtStorage.get('fullSyncHeight') };
-};
+export const popupIndexLoader = async (): Promise<Response | null> =>
+  (await needsOnboard()) ?? (await needsLogin()) ?? null;
 
 const ZcashHome = ({ nudge }: { nudge?: ReactNode }) => {
   const key = useStore(selectEffectiveKeyInfo);

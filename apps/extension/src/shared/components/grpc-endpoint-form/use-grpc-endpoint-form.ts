@@ -14,8 +14,7 @@ const useSaveGrpcEndpointSelector = (state: AllSlices) => ({
   grpcEndpoint: state.network.grpcEndpoint,
   chainId: state.network.chainId,
   setGrpcEndpoint: state.network.setGRPCEndpoint,
-  clearWalletCreationHeight: state.network.clearWalletCreationHeight,
-  clearCompactFrontierBlockHeight: state.network.clearCompactFrontierBlockHeight,
+  clearPenumbraStarts: state.network.clearPenumbraStarts,
   setChainId: state.network.setChainId,
 });
 
@@ -33,14 +32,8 @@ export const useGrpcEndpointForm = (isOnboarding: boolean) => {
   const grpcEndpointsQuery = useRpcs();
 
   // Get the rpc set in storage (if present)
-  const {
-    grpcEndpoint,
-    chainId,
-    setGrpcEndpoint,
-    setChainId,
-    clearWalletCreationHeight,
-    clearCompactFrontierBlockHeight,
-  } = useStoreShallow(useSaveGrpcEndpointSelector);
+  const { grpcEndpoint, chainId, setGrpcEndpoint, setChainId, clearPenumbraStarts } =
+    useStoreShallow(useSaveGrpcEndpointSelector);
 
   const [originalChainId, setOriginalChainId] = useState<string | undefined>();
   const [grpcEndpointInput, setGrpcEndpointInput] = useState('');
@@ -145,9 +138,8 @@ export const useGrpcEndpointForm = (isOnboarding: boolean) => {
         setConfirmChangedChainIdPromise(undefined);
       }
 
-      // changing chain id means the wallet birthday and frontier are no longer valid
-      await clearWalletCreationHeight();
-      await clearCompactFrontierBlockHeight();
+      // another chain: no wallet's start height means anything there
+      await clearPenumbraStarts();
 
       await setGrpcEndpoint(grpcEndpointInput);
       void chrome.runtime.sendMessage(ServicesMessage.ClearCache).catch(() => {});

@@ -19,8 +19,9 @@ export const SyncStrip = ({
   synced,
   failure,
   onRetry,
+  notice,
   ...sync
-}: Omit<SyncStatusProps, 'notice'> & {
+}: SyncStatusProps & {
   network: 'zcash' | 'penumbra';
   rebuilds?: boolean;
   synced: boolean;
@@ -36,7 +37,7 @@ export const SyncStrip = ({
     rebuildLeft: rebuilds && sending ? rebuildLeft : undefined,
     failure,
   });
-  if (synced && !spec) {
+  if (synced && !spec && !notice) {
     return null;
   }
   const run = {
@@ -48,10 +49,11 @@ export const SyncStrip = ({
     <SyncStatus
       {...sync}
       notice={
-        spec && {
+        notice ??
+        (spec && {
           ...spec,
           action: spec.action && { label: spec.action.label, onClick: run[spec.action.kind] },
-        }
+        })
       }
     />
   );

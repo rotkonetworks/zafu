@@ -11,6 +11,9 @@ import { Sensitive } from '../../../components/sensitive';
 import { usePenumbraRowsInUsd, usePenumbraTotalIn } from '../../../hooks/penumbra-total-in';
 import { useFixedPrices } from '../../../hooks/penumbra-prices';
 import { useSyncProgress } from '../../../hooks/full-sync-height';
+import { CAUGHT_UP_BLOCKS } from '../../../hooks/latest-block-height';
+import { runPercent } from '../../../penumbra/start';
+import { PenumbraStartSheet } from '../../../components/wallet/penumbra-start-sheet';
 import { balancesQueryOptions, balancesQueryKey } from '../../../hooks/penumbra-balances';
 import { classifySyncFailure } from '../../../state/sync-failure';
 import { PopupPath } from '../paths';
@@ -204,7 +207,8 @@ const AssetRow = ({
 /** penumbra home: the shared home, read from the view service */
 export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: ReactNode }) => {
   const queryClient = useQueryClient();
-  const { latestBlockHeight, fullSyncHeight, error: syncError } = useSyncProgress();
+  const { tip, height, from, ask, walletId, error: syncError } = useSyncProgress();
+  const [later, setLater] = useState(false);
   // the shared RAW balances cache (preload, send, swap read it too); this
   // screen's view of it is the fungible rows
   const { data, isLoading, error, refetch } = useQuery({
@@ -216,17 +220,16 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
   const [open, setOpen] = useState<Asset>();
 
   // refresh when the synced height advances (no flicker)
-  const prevHeight = useRef(fullSyncHeight);
+  const prevHeight = useRef(height);
   useEffect(() => {
-    if (fullSyncHeight && fullSyncHeight !== prevHeight.current) {
-      prevHeight.current = fullSyncHeight;
+    if (height && height !== prevHeight.current) {
+      prevHeight.current = height;
       void queryClient.invalidateQueries({ queryKey: balancesQueryKey(account) });
     }
-  }, [fullSyncHeight, account, queryClient]);
+  }, [height, account, queryClient]);
 
-  const tip = latestBlockHeight ?? 0;
-  const synced = fullSyncHeight ?? 0;
-  const caughtUp = tip > 0 && tip - synced <= 10;
+  const synced = height ?? 0;
+  const caughtUp = tip > 0 && height !== undefined && tip - height <= CAUGHT_UP_BLOCKS;
   const { totalIn, setTotalIn } = usePenumbraTotalIn();
   // recorded prices first; the fixed dex pass (same for every wallet) once read to the tip
   const fixed = useFixedPrices(caughtUp);
@@ -236,8 +239,9 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
       : undefined;
   const hero = heroOf(assets ?? [], book?.[totalIn], totalIn);
   const funded = (assets ?? []).some(a => a.amount > 0);
-  const view: BalanceView =
-    error && !assets
+  const view: BalanceView = ask
+    ? 'unknown'
+    : error && !assets
       ? 'error'
       : isLoading
         ? 'loading'
@@ -256,11 +260,20 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
           network='penumbra'
           synced={caughtUp}
           failure={syncError ? classifySyncFailure(syncError) : null}
-          percent={tip ? Math.min(100, (synced / tip) * 100) : 0}
-          connecting={!tip}
+          percent={runPercent(synced, from, tip)}
+          connecting={!tip || height === undefined}
           currentHeight={synced}
           targetHeight={tip}
-          startBlock={0}
+          startBlock={from}
+          notice={
+            ask
+              ? {
+                  tone: 'gold',
+                  text: 'sync waits to hear where to start',
+                  action: { label: 'choose', onClick: () => setLater(false) },
+                }
+              : undefined
+          }
           onRetry={() => void queryClient.invalidateQueries({ queryKey: ['latestBlockHeight'] })}
         />
       }
@@ -325,6 +338,7 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
 
       <AssetSheet asset={open} book={book} onClose={() => setOpen(undefined)} />
       <AskHistorySheet hasFunds={funded} />
+      <PenumbraStartSheet walletId={walletId} open={ask && !later} onClose={() => setLater(true)} />
     </HomeScreen>
   );
 };

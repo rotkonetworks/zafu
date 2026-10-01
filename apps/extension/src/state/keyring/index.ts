@@ -102,7 +102,8 @@ export interface KeyRingSlice {
   lock: () => void;
   checkPassword: (password: string) => Promise<boolean>;
 
-  newMnemonicKey: (mnemonic: string, name: string) => Promise<string>;
+  /** `generated`: zafu made this phrase just now (its penumbra sync starts at the tip) */
+  newMnemonicKey: (mnemonic: string, name: string, generated?: boolean) => Promise<string>;
   newZignerZafuKey: (data: ZignerZafuImport, name: string) => Promise<string>;
   addZignerUnencrypted: (data: ZignerZafuImport, name: string) => Promise<string>;
   /** add a Ledger cold-signer account (flag-gated hardware-wallet scaffolding).
@@ -410,7 +411,7 @@ export const createKeyRingSlice =
 
       // ── vault creation ──
 
-      newMnemonicKey: async (mnemonic: string, name: string) => {
+      newMnemonicKey: async (mnemonic: string, name: string, generated = false) => {
         // Per-seed identity. deriveZid(mnemonic) is deterministic from the
         // mnemonic (HMAC-SHA512 root -> ed25519), so the same seed always yields
         // the same zid publicKey. It is stored in the vault's insensitive
@@ -453,9 +454,14 @@ export const createKeyRingSlice =
         // penumbra wallet entry (non-fatal)
         const key = await requireKey(ctx).catch(() => undefined);
         if (key) {
-          await createPenumbraWalletForMnemonic(mnemonic, name, vaultId, key, local).catch(e =>
-            console.warn('[keyring] failed to create prax-compatible wallet:', e),
-          );
+          await createPenumbraWalletForMnemonic(
+            mnemonic,
+            name,
+            vaultId,
+            key,
+            local,
+            generated,
+          ).catch(e => console.warn('[keyring] failed to create prax-compatible wallet:', e));
         }
 
         const keyInfos = vaultsToKeyInfos(newVaults, vaultId);

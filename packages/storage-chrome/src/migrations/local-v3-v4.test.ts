@@ -237,4 +237,26 @@ describe('local-v3-v4 migration (drop polkadot/kusama)', () => {
     expect(await v4ExtStorage.get('zignerWallets')).toEqual(sealed);
     expect(await v4ExtStorage.get('enabledNetworks')).toEqual(['zcash']);
   });
+
+  test('a sealed wallet list and the per-wallet penumbra starts come through as stored', async () => {
+    const sealed = { encrypted: { nonce: 'bm9uY2U=', cipherText: 'c2VhbGVk' } };
+    const starts = { a: 'tip', b: { since: 0 }, c: { creation: 12_000_000 } };
+    const legacy = { walletCreationBlockHeight: 4_200_000, compactFrontierBlockHeight: 4_200_000 };
+    await storageArea.set({
+      [VERSION_FIELD]: 3,
+      penumbraWallets: sealed,
+      knownSites: [],
+      numeraires: [],
+      penumbraStarts: starts,
+      penumbraSync: { walletId: 'a', ask: true },
+      ...legacy,
+    });
+
+    expect(await v4ExtStorage.get('penumbraWallets')).toEqual(sealed);
+    expect(await v4ExtStorage.get('penumbraStarts')).toEqual(starts);
+    expect(await v4ExtStorage.get('penumbraSync')).toEqual({ walletId: 'a', ask: true });
+    // the legacy pair is the worker's to adopt per wallet once it can decrypt
+    expect(await v4ExtStorage.get('walletCreationBlockHeight')).toBe(4_200_000);
+    expect(await v4ExtStorage.get('compactFrontierBlockHeight')).toBe(4_200_000);
+  });
 });

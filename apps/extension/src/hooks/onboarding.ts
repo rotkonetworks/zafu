@@ -24,6 +24,6 @@ export const useAddWallet = () => {
     await setPassword(plaintextPassword);
 
     // store mnemonic in encrypted vault (network-agnostic)
-    await newMnemonicKey(mnemonic, 'Wallet 1');
+    await newMnemonicKey(mnemonic, 'Wallet 1', origin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED);
   };
 };

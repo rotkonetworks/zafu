@@ -4,11 +4,12 @@ import { AllSlices, SliceCreator } from '.';
 
 export interface NetworkSlice {
   grpcEndpoint: string | undefined;
-  fullSyncHeight?: number;
+  /** what the worker's penumbra sync last published, for whichever wallet it runs */
+  penumbraSync?: LocalStorageState['penumbraSync'];
   chainId?: string;
   setGRPCEndpoint: (endpoint: string) => Promise<void>;
-  clearWalletCreationHeight: () => Promise<void>;
-  clearCompactFrontierBlockHeight: () => Promise<void>;
+  /** every wallet's sync start, for a chain that is no longer the same */
+  clearPenumbraStarts: () => Promise<void>;
   setChainId: (chainId: string) => void;
 }
 
@@ -17,7 +18,7 @@ export const createNetworkSlice =
   set => {
     return {
       grpcEndpoint: undefined,
-      fullSyncHeight: undefined,
+      penumbraSync: undefined,
       chainId: undefined,
       setGRPCEndpoint: async (endpoint: string) => {
         set(state => {
@@ -26,11 +27,8 @@ export const createNetworkSlice =
 
         await local.set('grpcEndpoint', endpoint);
       },
-      clearWalletCreationHeight: async () => {
-        await local.remove('walletCreationBlockHeight');
-      },
-      clearCompactFrontierBlockHeight: async () => {
-        await local.remove('compactFrontierBlockHeight');
+      clearPenumbraStarts: async () => {
+        await local.remove('penumbraStarts');
       },
       setChainId: (chainId: string) => {
         set(state => {

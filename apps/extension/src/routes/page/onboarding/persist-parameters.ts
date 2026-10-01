@@ -2,7 +2,7 @@ import { ChainRegistryClient } from '@penumbrafi/registry';
 import { createClient } from '@connectrpc/connect';
 import { createGrpcWebTransport } from '@connectrpc/connect-web';
 import { localExtStorage } from '@repo/storage-chrome/local';
-import { AppService, SctService } from '@penumbra-zone/protobuf';
+import { AppService } from '@penumbra-zone/protobuf';
 import { fetchBlockHeightWithFallback } from '../../../hooks/latest-block-height';
 import { SEED_PHRASE_ORIGIN } from './password/types';
 import { DEFAULT_FRONTEND, DEFAULT_TRANSPORT_OPTS } from './constants';
@@ -24,29 +24,11 @@ export const setOnboardingValuesInStorage = async (seedPhraseOrigin: SEED_PHRASE
   const chainRegistryClient = new ChainRegistryClient();
   const { rpcs } = await chainRegistryClient.remote.globals();
 
-  // Queries for block height regardless of 'SEED_PHRASE_ORIGIN' as a means of testing endpoint for liveness.
-  const { blockHeight, rpc } = await fetchBlockHeightWithFallback(rpcs.map(r => r.url));
+  // a block height query as a liveness test of the endpoint
+  const { rpc } = await fetchBlockHeightWithFallback(rpcs.map(r => r.url));
 
   // Persist the RPC to LS storage.
   await localExtStorage.set('grpcEndpoint', rpc);
-
-  if (seedPhraseOrigin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED) {
-    // Penumbra's birthday for a fresh wallet, unless something set it already.
-    const existingCreationHeight = await localExtStorage.get('walletCreationBlockHeight');
-    if (!existingCreationHeight) {
-      await localExtStorage.set('walletCreationBlockHeight', blockHeight);
-
-      try {
-        const compactFrontier = await createClient(
-          SctService,
-          createGrpcWebTransport({ baseUrl: rpc }),
-        ).sctFrontier({ withProof: false }, DEFAULT_TRANSPORT_OPTS);
-        await localExtStorage.set('compactFrontierBlockHeight', Number(compactFrontier.height));
-      } catch (error) {
-        await localExtStorage.set('compactFrontierBlockHeight', blockHeight);
-      }
-    }
-  }
 
   try {
     // Fetch registry and persist the numeraires to LS storage.

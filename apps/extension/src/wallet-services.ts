@@ -1,10 +1,11 @@
 import { AppParameters } from '@penumbra-zone/protobuf/penumbra/core/app/v1/app_pb';
-import { AppService } from '@penumbra-zone/protobuf';
+import { AppService, TendermintProxyService } from '@penumbra-zone/protobuf';
 import { createGrpcWebTransport } from '@connectrpc/connect-web';
 import { createClient } from '@connectrpc/connect';
+import { backOff } from 'exponential-backoff';
 import { FullViewingKey, WalletId } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import { localExtStorage } from '@repo/storage-chrome/local';
-import { getWalletFromStorage } from '@repo/storage-chrome/onboard';
+import { getWalletFromStorage, getWalletsFromStorage } from '@repo/storage-chrome/onboard';
 import type { WalletJson } from '@repo/wallet';
 import { Services } from '@repo/context';
 import { WalletServices } from '@rotko/penumbra-types/services';
@@ -17,6 +18,14 @@ import { ChainRegistryClient } from '@penumbrafi/registry';
 import { SENTINEL_U64_MAX } from './utils/sentinel';
 import { base64ToUint8Array } from '@rotko/penumbra-types/base64';
 import { USDC_INJ_ID } from './penumbra/quotes';
+import {
+  adoptLegacyStart,
+  isResolved,
+  resolveStart,
+  startsOf,
+  type PenumbraStart,
+  type ResolvedStart,
+} from './penumbra/start';
 
 /**
  * check if penumbra network is enabled
@@ -81,13 +90,10 @@ export const startWalletServices = async (
     return stubServices(gate.reason);
   }
 
-  console.log('[sync] starting wallet services...');
-
   // Try to load wallet - may be encrypted and locked.
   // If locked, wait for unlock (session key appears in storage).
   let wallet = await getWalletFromStorage();
   if (!wallet) {
-    console.log('[sync] wallet locked or missing, waiting for unlock...');
     wallet = await new Promise<WalletJson>(resolve => {
       // listen for session key (unlock) or wallet creation
       const sessionListener = () => void check();
@@ -110,39 +116,111 @@ export const startWalletServices = async (
       chrome.storage.session.onChanged.addListener(sessionListener);
     });
   }
-  console.log('[sync] wallet loaded:', wallet.id.slice(0, 20) + '...');
+
+  await adoptLegacy();
+  const asked = startsOf(await localExtStorage.get('penumbraStarts'))?.[wallet.id];
+  if (!asked) {
+    // nothing is read (or asked of the node) until the home asks once where
+    // this wallet starts; its addresses still work from the viewing key
+    if (!signal?.aborted) {
+      await localExtStorage.set('penumbraSync', { walletId: wallet.id, ask: true });
+    }
+    return { ...stubServices(PENUMBRA_START_NEEDED), wallet };
+  }
 
   const grpcEndpoint = await resolvePenumbraEndpoint();
-  console.log('[sync] grpc endpoint:', grpcEndpoint);
-
-  console.log('[sync] getting chainId from endpoint...');
   const chainId = await getChainId(grpcEndpoint);
-  console.log('[sync] chainId:', chainId);
   const numeraires = await numerairesFor(chainId);
+  const start = isResolved(asked) ? asked : await resolveAt(wallet.id, asked, grpcEndpoint, signal);
+  console.log(`[sync] starting from ${grpcEndpoint}, decrypting from ${start.creation}`);
 
-  const walletCreationBlockHeight = await localExtStorage.get('walletCreationBlockHeight');
-  const compactFrontierBlockHeight = await localExtStorage.get('compactFrontierBlockHeight');
-  console.log('[sync] walletCreationBlockHeight:', walletCreationBlockHeight);
-  console.log('[sync] compactFrontierBlockHeight:', compactFrontierBlockHeight);
-
-  console.log('[sync] creating Services instance...');
   const services = new Services({
     grpcEndpoint,
     chainId,
     walletId: WalletId.fromJsonString(wallet.id),
     fullViewingKey: FullViewingKey.fromJsonString(wallet.fullViewingKey),
     numeraires: numeraires.map(n => AssetId.fromJsonString(n)),
-    walletCreationBlockHeight,
-    compactFrontierBlockHeight,
+    walletCreationBlockHeight: start.creation,
+    compactFrontierBlockHeight: start.frontier,
   });
 
-  console.log('[sync] getting wallet services (this starts syncing)...');
   const walletServices = await services.getWalletServices();
-  console.log('[sync] wallet services ready, starting block sync subscription...');
-
-  void syncLastBlockToStorage(walletServices, signal);
+  if (start.frontier !== undefined) {
+    // the snapshot is taken; were this database ever lost, a second one at a
+    // later tip would hide what arrived in between, so the chain is read instead
+    await setStart(wallet.id, { creation: start.creation });
+  }
+  void publishSyncHeight(wallet.id, walletServices, signal);
 
   return { services, wallet };
+};
+
+/** why the services are a stub while the wallet's start is not chosen */
+export const PENUMBRA_START_NEEDED = 'penumbra start not chosen yet';
+
+/**
+ * A start the ui asked for (the tip, a date), resolved against the node's tip
+ * once and stored, so every later start reads the same height. The wait is
+ * the block processor's own for its first height: a node that is down delays
+ * the start, it never guesses one.
+ */
+const resolveAt = async (
+  walletId: string,
+  asked: PenumbraStart,
+  grpcEndpoint: string,
+  signal?: AbortSignal,
+) => {
+  const tip = await backOff(() => chainTip(grpcEndpoint), {
+    startingDelay: 5_000,
+    maxDelay: 20_000,
+    numOfAttempts: Infinity,
+    retry: () => !signal?.aborted,
+  });
+  const resolved = resolveStart(asked, tip, Date.now());
+  await setStart(walletId, resolved);
+  return resolved;
+};
+
+const setStart = async (walletId: string, start: ResolvedStart) =>
+  localExtStorage.set('penumbraStarts', {
+    ...startsOf(await localExtStorage.get('penumbraStarts')),
+    [walletId]: start,
+  });
+
+/** the global birthday older builds kept, moved onto its wallet once (see adoptLegacyStart) */
+const adoptLegacy = async () => {
+  const creation = await localExtStorage.get('walletCreationBlockHeight');
+  const frontier = await localExtStorage.get('compactFrontierBlockHeight');
+  if (creation === undefined && frontier === undefined) {
+    return;
+  }
+  const ids = (await getWalletsFromStorage()).map(w => w.id);
+  if (!ids.length) {
+    return;
+  }
+  const next = adoptLegacyStart(
+    ids,
+    { creation, frontier },
+    await localExtStorage.get('penumbraStarts'),
+  );
+  if (next) {
+    await localExtStorage.set('penumbraStarts', next);
+  }
+  await localExtStorage.remove('walletCreationBlockHeight');
+  await localExtStorage.remove('compactFrontierBlockHeight');
+  await localExtStorage.remove('fullSyncHeight');
+};
+
+const chainTip = async (baseUrl: string) => {
+  const { syncInfo } = await createClient(
+    TendermintProxyService,
+    createGrpcWebTransport({ baseUrl }),
+  ).getStatus({});
+  const tip = Number(syncInfo?.latestBlockHeight ?? 0);
+  if (!tip) {
+    throw new Error('the penumbra node did not say its height');
+  }
+  return tip;
 };
 
 /**
@@ -172,31 +250,28 @@ const getChainId = async (baseUrl: string) => {
 };
 
 /**
- * Sync the last block known by indexedDb with `chrome.storage.local`
- *
- * Later used in Zustand store. Returns an abort function to stop the subscription.
+ * Publish this wallet's synced height for the home, with the height the run
+ * started from. Every write names the wallet and none follows a stop, so a
+ * home never shows one wallet's height under another.
  */
-const syncLastBlockToStorage = async (
+export const publishSyncHeight = async (
+  walletId: string,
   { indexedDb }: Pick<WalletServices, 'indexedDb'>,
   signal?: AbortSignal,
 ) => {
-  const dbHeight = await indexedDb.getFullSyncHeight();
-  console.log('[sync] initial dbHeight from indexedDb:', dbHeight);
-
-  if (dbHeight != null && dbHeight !== SENTINEL_U64_MAX) {
-    await localExtStorage.set('fullSyncHeight', Number(dbHeight));
-    console.log('[sync] saved initial fullSyncHeight:', Number(dbHeight));
-  }
-
-  console.log('[sync] subscribing to FULL_SYNC_HEIGHT updates...');
-  const sub = indexedDb.subscribe('FULL_SYNC_HEIGHT');
-  for await (const { value } of sub) {
+  const known = (h: bigint | undefined) =>
+    h == null || h === SENTINEL_U64_MAX ? undefined : Number(h);
+  const from = known(await indexedDb.getFullSyncHeight()) ?? 0;
+  const publish = (height: number) =>
+    signal?.aborted ? undefined : localExtStorage.set('penumbraSync', { walletId, height, from });
+  await publish(from);
+  for await (const { value } of indexedDb.subscribe('FULL_SYNC_HEIGHT')) {
     if (signal?.aborted) {
       break;
     }
-    if (value !== SENTINEL_U64_MAX) {
-      await localExtStorage.set('fullSyncHeight', Number(value));
-      console.log('[sync] fullSyncHeight updated:', Number(value));
+    const height = known(value);
+    if (height !== undefined) {
+      await publish(height);
     }
   }
 };

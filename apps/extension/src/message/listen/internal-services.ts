@@ -53,12 +53,9 @@ async function clearPenumbraCache(walletServices: Promise<Services>): Promise<vo
   completed++;
 
   broadcastProgress('clearing-sync-state', completed, steps.length);
-  // wipe local-storage sync markers so the UI shows 0% during the brief window
-  // between "reloading" and the startup delete
-  await Promise.all([
-    localExtStorage.remove('fullSyncHeight'),
-    localExtStorage.remove('compactFrontierBlockHeight'),
-  ]);
+  // the home shows no height during the brief window between "reloading" and
+  // the startup delete
+  await localExtStorage.remove('penumbraSync');
   completed++;
 
   await localExtStorage.remove('clearingCache');
