@@ -18,7 +18,7 @@ describe('Network Slice', () => {
 
   test('the default is empty, false or undefined', () => {
     expect(useStore.getState().network.grpcEndpoint).toBeUndefined();
-    expect(useStore.getState().network.fullSyncHeight).toBeUndefined();
+    expect(useStore.getState().network.penumbraSync).toBeUndefined();
   });
 
   describe('setGRPCEndpoint', () => {

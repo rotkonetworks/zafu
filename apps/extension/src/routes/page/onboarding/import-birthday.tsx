@@ -14,6 +14,7 @@ import { useStore } from '../../../state';
 import { validateSeedPhrase } from '../../../state/seed-phrase/mnemonic';
 import { usePageNav } from '../../../utils/navigate';
 import { PagePath } from '../paths';
+import { StartPresets } from '../../../components/wallet/start-presets';
 import {
   dateToBlock,
   describeZcashHeight,
@@ -95,27 +96,11 @@ export const ImportBirthday = () => {
       </h1>
       <p className='text-body text-fg-muted'>roughly is fine. it only sets where syncing starts.</p>
 
-      <div className='grid grid-cols-3 gap-2.5'>
-        {options.map((p, i) => {
-          const on = pick === i;
-          return (
-            <button
-              key={p.label}
-              type='button'
-              aria-pressed={on}
-              onClick={() => setPick(i)}
-              className={cn(
-                'h-[52px] border text-body text-fg-high transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zigner-gold',
-                on
-                  ? 'border-zigner-gold bg-zigner-gold/10'
-                  : 'border-border-soft bg-elev-1 hover:bg-elev-2',
-              )}
-            >
-              {p.label}
-            </button>
-          );
-        })}
-      </div>
+      <StartPresets
+        labels={options.map(p => p.label)}
+        pick={typeof pick === 'number' ? pick : undefined}
+        onPick={setPick}
+      />
 
       <div className='flex h-12 items-center gap-2.5 border border-border-soft bg-elev-1 px-4'>
         <span className='i-zafu-enso size-[15px] shrink-0 text-zigner-gold' aria-hidden='true' />

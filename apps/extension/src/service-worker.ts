@@ -79,8 +79,11 @@ import { internalTransportOptions } from './transport-options';
 // idb, querier, block processor
 import { walletIdCtx } from '@rotko/penumbra-services/ctx/wallet-id';
 import type { Services } from '@repo/context';
-import { startWalletServices, penumbraGate } from './wallet-services';
+import { startWalletServices, penumbraGate, PENUMBRA_START_NEEDED } from './wallet-services';
+import { getWalletFromStorage } from '@repo/storage-chrome/onboard';
+import type { WalletJson } from '@repo/wallet';
 import { createRebuildScheduler } from './rebuild-scheduler';
+import { sameTarget, settledTarget, type PenumbraTarget } from './penumbra/start';
 import { finishPendingWipe, performPendingClears } from './clear-cache-startup';
 
 import { backOff } from 'exponential-backoff';
@@ -155,7 +158,7 @@ trackUiOpenPresence(
 
 let walletServicesResult: Promise<{
   services: Services;
-  wallet: import('@repo/wallet').WalletJson;
+  wallet: WalletJson;
   reason?: string;
 }>;
 // Undefined until `initHandler` creates the boot services. Any awaited use must
@@ -163,7 +166,6 @@ let walletServicesResult: Promise<{
 // state, not just a typing nicety (see the blockSync alarm and the internal
 // service listener).
 let walletServices: Promise<Services> | undefined;
-let currentWalletIndex: number | undefined;
 let currentSyncAbort: AbortController | undefined;
 
 /**
@@ -173,23 +175,17 @@ let currentSyncAbort: AbortController | undefined;
  * into wasm and re-fetches genesis, which on a large wallet (hundreds of LP
  * positions) takes a long time, and dapps see empty/zero state meanwhile.
  */
-interface PenumbraTarget {
-  walletIndex: number;
-  run: boolean;
-}
-
 const desiredPenumbraTarget = async (): Promise<PenumbraTarget> => ({
-  walletIndex: (await localExtStorage.get('activeWalletIndex')) ?? 0,
+  walletId: (await getWalletFromStorage())?.id,
   run: (await penumbraGate()).run,
 });
 
+const settle = (r: { wallet?: WalletJson; reason?: string }, target: PenumbraTarget) =>
+  rebuilds.setRunning(settledTarget(target, r.wallet?.id, r.reason === PENUMBRA_START_NEEDED));
+
 /** Tear down the current services and start fresh ones for `target`. */
-const rebuildServices = async (
-  target: PenumbraTarget,
-  previous: PenumbraTarget | undefined,
-  why: string,
-) => {
-  // tear down old services: stop block processor + cancel fullSyncHeight subscription
+const rebuildServices = async (target: PenumbraTarget, _previous: unknown, why: string) => {
+  // tear down old services: stop block processor + its height publishing
   if (currentSyncAbort) {
     currentSyncAbort.abort();
   }
@@ -208,29 +204,21 @@ const rebuildServices = async (
   // new RPC requests will block on getWalletReady() until the new wallet is cached
   resetWalletCache();
 
-  // Only a WALLET change makes the stored height wrong. For the same wallet the
-  // IndexedDB still holds its real sync height, so resetting to 0 just made
-  // every rebuild look like a from-scratch resync with zero balances.
-  if (previous && previous.walletIndex !== target.walletIndex) {
-    await localExtStorage.set('fullSyncHeight', 0);
-  }
-
   currentSyncAbort = new AbortController();
   walletServicesResult = startWalletServices(currentSyncAbort.signal);
   walletServices = walletServicesResult.then(r => r.services);
   // fresh services start syncing at once; with every window closed they wait
   void walletServices.then(() => !uiOpen && penumbraSync('pause'));
-  const { services, wallet, reason } = await walletServicesResult;
+  const result = await walletServicesResult;
+  const { services, wallet, reason } = result;
   setCachedWallet(wallet, reason);
+  settle(result, target);
   try {
     const ws = await services.getWalletServices();
-    void ws.blockProcessor.sync().catch((e: unknown) => {
-      // terminal rejection after an intentional stop is expected teardown;
-      // anything else deserves the console
-      if (!String(e).includes('Sync stop')) {
-        console.error('[sync] block processor terminated:', e);
-      }
-    });
+    // an intentional stop ends a run quietly; anything else deserves the console
+    void ws.blockProcessor
+      .sync()
+      .catch((e: unknown) => console.error('[sync] block processor terminated:', e));
   } catch {
     // stub services (penumbra gated off): nothing to sync
   }
@@ -241,7 +229,7 @@ const rebuildServices = async (
 // is already running does nothing.
 const rebuilds = createRebuildScheduler<PenumbraTarget>({
   desired: desiredPenumbraTarget,
-  same: (a, b) => a.walletIndex === b.walletIndex && a.run === b.run,
+  same: sameTarget,
   rebuild: rebuildServices,
   onError: e => console.error('[sync] rebuild failed:', e),
 });
@@ -297,16 +285,10 @@ const currentWalletServices = () =>
 
 // Listen for wallet and network changes
 localExtStorage.addListener(changes => {
-  // Reinitialize when active wallet changes
-  if (changes.activeWalletIndex !== undefined) {
-    const newIndex = changes.activeWalletIndex.newValue ?? 0;
-    if (currentWalletIndex !== undefined && currentWalletIndex !== newIndex) {
-      console.log(`Switching wallet from ${currentWalletIndex} to ${newIndex}`);
-      currentWalletIndex = newIndex;
-      void reinitializeServices('wallet switch');
-    } else {
-      currentWalletIndex = newIndex;
-    }
+  // a switch, a new wallet (prepended, so the index alone may not change) or
+  // a chosen start; the scheduler skips whatever leaves the target as it is
+  if (changes.activeWalletIndex || changes.penumbraWallets || changes.penumbraStarts) {
+    void reinitializeServices('wallet or start changed');
   }
 
   // Reinitialize when first vault is created (wallets are encrypted, use vaults as signal)
@@ -349,18 +331,20 @@ const initHandler = async () => {
   await finishPendingWipe().catch(e => console.warn('[clear-startup] erase finish failed', e));
   await performPendingClears();
 
-  // Track initial wallet index
-  currentWalletIndex = (await localExtStorage.get('activeWalletIndex')) ?? 0;
   // record what the boot services are for, so a later request that would
   // produce the same thing is skipped instead of rebuilding
-  rebuilds.setRunning(await desiredPenumbraTarget());
+  const bootTarget = await desiredPenumbraTarget();
+  rebuilds.setRunning(bootTarget);
   currentSyncAbort = new AbortController();
   walletServicesResult = startWalletServices(currentSyncAbort.signal);
   walletServices = walletServicesResult.then(r => r.services);
   // fresh services start syncing at once; with every window closed they wait
   void walletServices.then(() => !uiOpen && penumbraSync('pause'));
   // cache decrypted wallet as soon as it's available - unblocks RPC context getters
-  void walletServicesResult.then(({ wallet, reason }) => setCachedWallet(wallet, reason));
+  void walletServicesResult.then(r => {
+    setCachedWallet(r.wallet, r.reason);
+    settle(r, bootTarget);
+  });
   const rpcImpls = await getRpcImpls();
 
   let custodyClient: Client<typeof CustodyService> | undefined;
@@ -683,13 +667,10 @@ chrome.alarms.onAlarm.addListener(async alarm => {
     try {
       const services = await booting;
       const ws = await services.getWalletServices();
-      void ws.blockProcessor.sync().catch((e: unknown) => {
-        // terminal rejection after an intentional stop is expected teardown;
-        // anything else deserves the console
-        if (!String(e).includes('Sync stop')) {
-          console.error('[sync] block processor terminated:', e);
-        }
-      });
+      // an intentional stop ends a run quietly; anything else deserves the console
+      void ws.blockProcessor
+        .sync()
+        .catch((e: unknown) => console.error('[sync] block processor terminated:', e));
     } catch (e) {
       // services not initialized or network not enabled - this is expected
       if (globalThis.__DEV__) {

@@ -171,11 +171,7 @@ export const performPendingClears = async (): Promise<void> => {
     } catch (e) {
       console.warn('[clear-startup] penumbra enumerate error:', e);
     }
-    await Promise.all([
-      localExtStorage.remove('fullSyncHeight'),
-      localExtStorage.remove('compactFrontierBlockHeight'),
-      localExtStorage.remove('params'),
-    ]);
+    await Promise.all([localExtStorage.remove('penumbraSync'), localExtStorage.remove('params')]);
   }
 
   if (pending.includes('zcash')) {

@@ -86,7 +86,7 @@ export const HistoryContent = ({
   const isMainnet = !zidecarUrl.includes('testnet');
   const { tAddresses } = useTransparentAddresses(isMainnet);
   const { workerSyncHeight } = useZcashSyncStatus();
-  const { latestBlockHeight } = useSyncProgress();
+  const latestBlockHeight = useSyncProgress().tip;
   const queryClient = useQueryClient();
 
   // build txId→memo lookup from messages store (for zcash)

@@ -33,6 +33,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
     const activeZcashIndex = await localExtStorage.get('activeZcashIndex');
     const activeWalletIndex = await localExtStorage.get('activeWalletIndex');
     const grpcEndpoint = await localExtStorage.get('grpcEndpoint');
+    const penumbraSync = await localExtStorage.get('penumbraSync');
     const frontendUrl = await localExtStorage.get('frontendUrl');
     const numeraires = await localExtStorage.get('numeraires');
     const zignerCameraEnabled = await localExtStorage.get('zignerCameraEnabled');
@@ -50,6 +51,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         state.wallets.activeZcashIndex = activeZcashIndex ?? 0;
         state.wallets.activeIndex = activeWalletIndex ?? 0;
         state.network.grpcEndpoint = grpcEndpoint;
+        state.network.penumbraSync = penumbraSync;
         state.defaultFrontend.url = frontendUrl;
         state.numeraires.selectedNumeraires = numeraires;
         state.zigner.cameraEnabled = zignerCameraEnabled ?? false;
@@ -241,11 +243,11 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         }
       }
 
-      if (changes.fullSyncHeight) {
-        const stored = changes.fullSyncHeight.newValue;
+      if (changes.penumbraSync) {
+        const stored = changes.penumbraSync.newValue;
         set(
           produce((state: AllSlices) => {
-            state.network.fullSyncHeight = stored ?? 0;
+            state.network.penumbraSync = stored;
           }),
         );
       }

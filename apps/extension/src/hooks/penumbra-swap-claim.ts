@@ -11,8 +11,8 @@
 import { useEffect, useRef } from 'react';
 import { viewClient } from '../clients';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
-import { useStore } from '../state';
-import { useLatestBlockHeight } from './latest-block-height';
+import { CAUGHT_UP_BLOCKS, useLatestBlockHeight } from './latest-block-height';
+import { usePenumbraSync } from './full-sync-height';
 
 /**
  * Recognize the ConnectRPC error you get when the MessagePort to the
@@ -100,9 +100,7 @@ export function usePenumbraSwapClaim(
   penumbraAccount: number,
 ) {
   const claimingRef = useRef(false);
-  const fullSyncHeight = useStore(
-    (state: { network: { fullSyncHeight?: number } }) => state.network.fullSyncHeight,
-  );
+  const fullSyncHeight = usePenumbraSync()?.height;
   const { data: latestBlockHeight } = useLatestBlockHeight();
 
   // track sync state in a ref so the interval callback always sees latest values
@@ -120,7 +118,7 @@ export function usePenumbraSwapClaim(
 
     const isSynced = () => {
       const { fullSyncHeight: fsh, latestBlockHeight: lbh } = syncRef.current;
-      return fsh !== undefined && lbh !== undefined && lbh - fsh <= 10;
+      return fsh !== undefined && lbh !== undefined && lbh - fsh <= CAUGHT_UP_BLOCKS;
     };
 
     const tryClaimOnce = () => {

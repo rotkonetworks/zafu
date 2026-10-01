@@ -92,12 +92,29 @@ type LOCAL = {
   customNetworks?: unknown[];
   /** bounded audit trail (who zafu called, when, why); see `net/destination.ts` */
   netEgressLog?: unknown[];
+  /** legacy global penumbra birthday; adopted per wallet into `penumbraStarts` */
   compactFrontierBlockHeight?: number;
   frontendUrl?: string;
+  /** legacy global penumbra height; superseded by `penumbraSync` */
   fullSyncHeight?: number;
+  /**
+   * Where each penumbra wallet's sync starts, by stringified WalletId (already
+   * plaintext in its IndexedDB name). `tip` and `since` (ms epoch, 0 = the
+   * start of the chain) are what the ui asks for; the worker resolves them
+   * against the node's tip into `creation` (no trial decryption below it) and
+   * `frontier` (a fresh wallet may start from the tip snapshot). Absent: not
+   * known yet, the worker waits and the home asks once.
+   */
+  penumbraStarts?: Record<
+    string,
+    'tip' | { since: number } | { creation: number; frontier?: number }
+  >;
+  /** what the running penumbra sync publishes for the home: one wallet at a time */
+  penumbraSync?: { walletId: string; ask?: true; height?: number; from?: number };
   grpcEndpoint?: string;
   params?: string;
   passwordKeyPrint?: { hash: string; salt: string };
+  /** legacy global penumbra birthday; adopted per wallet into `penumbraStarts` */
   walletCreationBlockHeight?: number;
   zignerCameraEnabled?: boolean;
   cosmosAddressIndex?: number;

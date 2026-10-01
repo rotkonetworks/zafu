@@ -85,6 +85,9 @@ export const SyncStatus = ({
   const [open, setOpen] = useState(false);
   const eta = useEta(currentHeight, targetHeight, !connecting && !notice);
   const pct = Math.floor(percent);
+  const behind = targetHeight - currentHeight;
+  // until the rate settles into an eta, the plain distance
+  const left = eta || (behind > 0 ? `${behind.toLocaleString()} blocks behind` : '');
   const warn = notice?.tone === 'warn';
 
   return (
@@ -111,7 +114,7 @@ export const SyncStatus = ({
           </span>
           {(notice ? notice.meta : !connecting) && (
             <span className='truncate text-fg-muted tabular'>
-              {notice ? notice.meta : `${pct}%${eta && ` · ${eta}`}`}
+              {notice ? notice.meta : `${pct}%${left && ` · ${left}`}`}
             </span>
           )}
         </button>

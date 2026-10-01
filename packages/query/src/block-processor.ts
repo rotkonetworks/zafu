@@ -109,6 +109,8 @@ export class BlockProcessor implements BlockProcessorInterface {
   private readonly viewServer: ViewServerInterface;
   private abortController: AbortController = new AbortController();
   private paused = false;
+  /** stopped for good (wallet switch, shutdown): nothing may start it again */
+  private stopped = false;
   private numeraires: AssetId[];
   private readonly stakingAssetId: AssetId;
   private syncPromise: Promise<void> | undefined;
@@ -142,10 +144,12 @@ export class BlockProcessor implements BlockProcessorInterface {
   // If sync() is called multiple times concurrently, they'll all wait for
   // the same promise rather than each starting their own sync process.
   public sync = (): Promise<void> =>
-    // paused: nobody is looking, so a view call poking sync() starts nothing
-    this.paused
+    // paused: nobody is looking, so a view call poking sync() starts nothing;
+    // stopped: a view call through old services must not revive a wallet
+    // the user switched away from
+    this.paused || this.stopped
       ? Promise.resolve()
-      : (this.syncPromise ??= backOff(() => this.syncAndStore(), {
+      : (this.syncPromise ??= backOff(() => this.syncAndStore().catch(this.endIfStopped), {
           delayFirstAttempt: false,
           startingDelay: 5_000, // 5 seconds
           numOfAttempts: Infinity,
@@ -188,16 +192,26 @@ export class BlockProcessor implements BlockProcessorInterface {
           () => (this.syncPromise = undefined),
         );
 
-  public stop = (r: string) => this.abortController.abort(`Sync stop ${r}`);
+  /** an intentional stop or pause ends a run; it is not a failure anyone should log */
+  private endIfStopped = (e: unknown) => {
+    if (!this.abortController.signal.aborted) {
+      throw e;
+    }
+  };
+
+  public stop = (r: string) => {
+    this.stopped = true;
+    this.abortController.abort(`Sync stop ${r}`);
+  };
 
   /** stop network activity while no one is looking; resume() picks it up again */
   public pause = () => {
     this.paused = true;
-    this.stop('paused');
+    this.abortController.abort('Sync stop paused');
   };
 
   public resume = () => {
-    if (!this.paused) {
+    if (!this.paused || this.stopped) {
       return;
     }
     this.paused = false;

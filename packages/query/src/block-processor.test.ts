@@ -17,43 +17,46 @@ import { FullViewingKey } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/ke
 
 type BlockProcessorDeps = ConstructorParameters<typeof BlockProcessor>[0];
 
-describe('BlockProcessor sync loop', () => {
-  it('reopens the compact block stream when it ends cleanly', async () => {
-    let streamsOpened = 0;
-    const querier = {
+/** `onStream` counts streams that reach the network: an aborted signal never does */
+const makeProcessor = (onStream: () => void) =>
+  // partial doubles: only what syncAndStore touches before the stream loop
+  new BlockProcessor({
+    querier: {
       tendermint: { latestBlockHeight: () => Promise.resolve(100n) },
       compactBlock: {
         // ends immediately, without yielding a block: the dropped-stream case
-        compactBlockRange: () => {
-          streamsOpened++;
+        compactBlockRange: ({ abortSignal }: { abortSignal: AbortSignal }) => {
+          if (abortSignal.aborted) {
+            throw new Error('aborted');
+          }
+          onStream();
           return (async function* () {
             /* no blocks: the node has nothing to send and closed the stream */
           })();
         },
       },
-    };
-    const indexedDb = {
+    },
+    indexedDb: {
       getFullSyncHeight: () => Promise.resolve(99n),
       getFmdParams: () => Promise.resolve({}),
       getAppParams: () => Promise.resolve({ chainId: 'penumbra-1', sctParams: {} }),
       // a stored validator keeps the (fire-and-forget) validator repair out of
       // this test - it would otherwise fetch the validator list
       iterateValidatorInfos: () => ({ next: () => Promise.resolve({ done: false, value: {} }) }),
-    };
-    const viewServer = { resetTreeToStored: () => Promise.resolve(undefined) };
+    },
+    viewServer: { resetTreeToStored: () => Promise.resolve(undefined) },
+    numeraires: [],
+    stakingAssetId: new AssetId({}),
+    genesisBlock: undefined,
+    walletCreationBlockHeight: undefined,
+    compactFrontierBlockHeight: undefined,
+    fullViewingKey: new FullViewingKey({}),
+  } as unknown as BlockProcessorDeps);
 
-    // partial doubles: only what syncAndStore touches before the stream loop
-    const processor = new BlockProcessor({
-      querier,
-      indexedDb,
-      viewServer,
-      numeraires: [],
-      stakingAssetId: new AssetId({}),
-      genesisBlock: undefined,
-      walletCreationBlockHeight: undefined,
-      compactFrontierBlockHeight: undefined,
-      fullViewingKey: new FullViewingKey({}),
-    } as unknown as BlockProcessorDeps);
+describe('BlockProcessor sync loop', () => {
+  it('reopens the compact block stream when it ends cleanly', async () => {
+    let streamsOpened = 0;
+    const processor = makeProcessor(() => streamsOpened++);
 
     // never settles by design (the loop is indefinite); stop() ends it, and the
     // abort surfaces as a rejection we are not asserting on here
@@ -61,5 +64,22 @@ describe('BlockProcessor sync loop', () => {
 
     await vi.waitFor(() => expect(streamsOpened).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
     processor.stop('test done');
+  });
+
+  it('stays stopped: a later sync or resume through old services opens nothing', async () => {
+    let streamsOpened = 0;
+    const processor = makeProcessor(() => streamsOpened++);
+    void processor.sync().catch(() => undefined);
+    await vi.waitFor(() => expect(streamsOpened).toBeGreaterThanOrEqual(1));
+
+    processor.pause();
+    processor.stop('wallet switch');
+    const before = streamsOpened;
+    await processor.sync();
+    processor.resume();
+    await new Promise(r => {
+      setTimeout(r, 1_500);
+    });
+    expect(streamsOpened).toBe(before);
   });
 });

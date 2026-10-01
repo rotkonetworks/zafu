@@ -15,14 +15,20 @@ import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/
 import { shownIndicesKey, fundedIndicesKey } from '../../transparent/hd';
 import { isStoreOfWallet } from '../pocket-id';
 import { PENDING_WIPE_KEY } from '../../clear-cache-startup';
+import { startsOf } from '../../penumbra/start';
 
-/** create penumbra wallet entry for a mnemonic vault (side effect: local.set) */
+/**
+ * create penumbra wallet entry for a mnemonic vault (side effect: local.set).
+ * A phrase zafu just generated has nothing on penumbra yet, so its sync starts
+ * at the tip whenever penumbra first runs for it; an imported one is asked.
+ */
 export async function createPenumbraWalletForMnemonic(
   mnemonic: string,
   name: string,
   vaultId: string,
   key: Key,
   local: ExtensionStorage<LocalStorageState>,
+  generated = false,
 ): Promise<void> {
   const { generateSpendKey, getFullViewingKey, getWalletId } =
     await import('@rotko/penumbra-wasm/keys');
@@ -55,6 +61,10 @@ export async function createPenumbraWalletForMnemonic(
     vaultId,
   };
 
+  if (generated) {
+    const starts = startsOf(await local.get('penumbraStarts'));
+    await local.set('penumbraStarts', { ...starts, [walletIdStr]: 'tip' });
+  }
   await local.set('penumbraWallets', [praxWallet, ...(Array.isArray(wallets) ? wallets : [])]);
   await local.set('activeWalletIndex', 0);
 }
@@ -282,6 +292,15 @@ export async function removeLinkedWallets(
   const updatedWallets = wallets.filter((w: { vaultId?: string }) => w.vaultId !== vaultId);
   if (updatedWallets.length !== wallets.length) {
     await local.set('penumbraWallets', updatedWallets);
+    // nothing of a removed wallet stays behind, its sync start included
+    const starts = startsOf(await local.get('penumbraStarts'));
+    if (starts) {
+      const gone = new Set(removedPenumbra.map((w: { id: string }) => w.id));
+      await local.set(
+        'penumbraStarts',
+        Object.fromEntries(Object.entries(starts).filter(([id]) => !gone.has(id))),
+      );
+    }
     const activeWalletIndex = (await local.get('activeWalletIndex')) ?? 0;
     if (activeWalletIndex >= updatedWallets.length) {
       await local.set('activeWalletIndex', Math.max(0, updatedWallets.length - 1));
