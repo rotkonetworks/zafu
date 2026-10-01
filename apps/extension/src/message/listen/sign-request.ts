@@ -32,6 +32,7 @@ import type { EncryptedVault } from '../../state/keyring/types';
 import type { ZidShareRecord } from '../../state/identity';
 import type { ZafuSignRequest, ZafuSignResponse } from '@zafu/protocol';
 import { SIGN_REQUEST_TYPE } from './zafu-method-names';
+import { walletKind, zidRefusal } from '../../signing/wallet-kind';
 
 // request/response shapes come from the shared @zafu/protocol contract, so any
 // drift from the wallet<->dapp wire (and from the @zafu/zid SDK that builds
@@ -87,10 +88,16 @@ const handleSignRequest = async (
   }
 
   try {
-    // detect wallet type for mnemonic vs zigner signing flow
+    // who holds the key: a phrase signs here, a zigner answers a QR, and a
+    // device that cannot sign a ZID is told so before any popup opens.
     const vaults = ((await localExtStorage.get('vaults')) ?? []) as EncryptedVault[];
     const selectedId = await localExtStorage.get('selectedVaultId');
     const selectedVault = vaults.find(v => v.id === selectedId);
+    const kind = selectedVault && walletKind(selectedVault);
+    const refusal = kind && zidRefusal(kind);
+    if (refusal) {
+      return { success: false, error: refusal, code: 'not_available' };
+    }
     const isAirgap = selectedVault?.type === 'zigner-zafu';
     const zidPubkey = isAirgap
       ? (selectedVault?.insensitive?.['zid'] as string | undefined)

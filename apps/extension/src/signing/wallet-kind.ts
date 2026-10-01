@@ -89,3 +89,17 @@ const REFUSALS: Partial<Record<WalletKind, (f: SendFlags) => Refusal | null>> = 
  *  refused kind is never handed to another device's flow. */
 export const zcashSendRefusal = (kind: WalletKind, flags: SendFlags): Refusal | null =>
   REFUSALS[kind]?.(flags) ?? null;
+
+const ZID_REFUSALS: Partial<Record<WalletKind, string>> = {
+  keystone:
+    'keystone cannot sign a zafu identity. please sign in with a zigner or a phrase wallet.',
+  'ledger-shielded':
+    'ledger cannot sign a zafu identity yet. please sign in with a zigner or a phrase wallet.',
+  'ledger-transparent':
+    'ledger cannot sign a zafu identity yet. please sign in with a zigner or a phrase wallet.',
+  'viewing-key': 'this wallet is a viewing key and holds no identity key to sign with.',
+};
+
+/** Why this wallet cannot sign a ZID challenge, or null when it can. Only a
+ *  zigner answers the ZID QR; other devices are never offered it. */
+export const zidRefusal = (kind: WalletKind): string | null => ZID_REFUSALS[kind] ?? null;
