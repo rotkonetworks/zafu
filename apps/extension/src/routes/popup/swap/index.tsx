@@ -14,7 +14,6 @@ import { Button } from '@repo/ui/components/ui/button';
 import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import { QrCode } from '../../../components/qr-code';
 import { Sensitive } from '../../../components/sensitive';
-import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { useStore } from '../../../state';
 import {
   selectActiveNetwork,
@@ -33,16 +32,10 @@ import {
   getAssetIdFromValueView,
   getDisplayDenomExponentFromValueView,
 } from '@penumbra-zone/getters/value-view';
-import { AssetIcon } from '@repo/ui/components/ui/asset-icon';
 import { symbolFromMetadata } from '../../../utils/asset-display';
 import { fromValueView } from '@rotko/penumbra-types/amount';
-import {
-  isFungibleMetadata,
-  positionLabel,
-  selectPickerBuckets,
-} from '../../../utils/is-fungible-asset';
+import { isFungibleMetadata, selectPickerBuckets } from '../../../utils/is-fungible-asset';
 import { balancesQueryOptions } from '../../../hooks/penumbra-balances';
-import { AssetBucketToggle, type AssetBucket } from '../../../components/asset-bucket-toggle';
 import { cn } from '@repo/ui/lib/utils';
 import { useActiveAddress } from '../../../hooks/use-address';
 import {
@@ -79,6 +72,12 @@ import {
 } from '@repo/wallet/networks';
 import { selectActiveZcashWallet } from '../../../state/wallets';
 import { useBackNav } from '../../../utils/navigate';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { ScreenHeader } from '../../../components/screen-header';
+import { PenumbraFlow } from '../send/penumbra-flow';
+import { Footer, Main } from '../send/send-ui';
+import { AmountField, PickSheet } from '../send/send-fields';
+import { BalanceSheet } from '../send/balance-sheet';
 import { PopupPath } from '../paths';
 import { useLocation } from 'react-router-dom';
 import { hasFeature } from '../../../config/networks';
@@ -1076,17 +1075,9 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
   const goBack = useBackNav(PopupPath.INDEX);
   const penumbraAccount = useStore(selectPenumbraAccount);
   const [amountIn, setAmountIn] = useState('');
-  const [assetInOpen, setAssetInOpen] = useState(false);
-  const [assetOutOpen, setAssetOutOpen] = useState(false);
+  const [pick, setPick] = useState<'in' | 'out'>();
   const [selectedIn, setSelectedIn] = useState<InputAsset | undefined>();
   const [selectedOut, setSelectedOut] = useState<OutputAsset | undefined>();
-  const [txStatus, setTxStatus] = useState<
-    'idle' | 'planning' | 'signing' | 'broadcasting' | 'success' | 'error'
-  >('idle');
-  const [txHash, setTxHash] = useState<string | undefined>();
-  const [txError, setTxError] = useState<string | undefined>();
-
-  const penumbraTx = usePenumbraTransaction();
 
   // fetch balances
   // The ['balances', account] cache holds the RAW list (the home screen
@@ -1102,16 +1093,6 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
     select: selectPickerBuckets,
   });
   const balances = buckets?.assets ?? EMPTY_BALANCES;
-  const positions = buckets?.positions ?? EMPTY_BALANCES;
-  const [bucketIn, setBucketIn] = useState<AssetBucket>('assets');
-
-  // the picker always reopens on the fungible list
-  useEffect(() => {
-    if (!assetInOpen) {
-      setBucketIn('assets');
-    }
-  }, [assetInOpen]);
-
   const { data: allAssets = [], isLoading: assetsLoading } = useQuery({
     queryKey: ['assets'],
     staleTime: 300_000,
@@ -1262,362 +1243,141 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
     }
   }, [selectedIn, selectedOut, inputAssets, outputAssets]);
 
-  const canSubmit =
-    selectedIn && selectedOut && parseFloat(amountIn) > 0 && simulation && txStatus === 'idle';
+  const canReview = !!selectedIn && !!selectedOut && parseFloat(amountIn) > 0 && !!simulation;
 
-  const handleSubmit = useCallback(async () => {
-    if (!canSubmit || !selectedIn || !selectedOut) {
-      return;
-    }
+  const plan = async () => {
+    const baseAmount = BigInt(Math.floor(parseFloat(amountIn) * 10 ** selectedIn!.exponent));
+    const { address: claimAddress } = await viewClient.addressByIndex({
+      addressIndex: { account: penumbraAccount },
+    });
+    return new TransactionPlannerRequest({
+      swaps: [
+        {
+          targetAsset: { inner: selectedOut!.assetId },
+          value: new Value({
+            amount: new Amount({ lo: baseAmount, hi: 0n }),
+            assetId: { inner: selectedIn!.assetId },
+          }),
+          claimAddress,
+        },
+      ],
+      source: { account: penumbraAccount },
+    });
+  };
 
-    setTxStatus('planning');
-    setTxError(undefined);
-
-    try {
-      const multiplier = 10 ** selectedIn.exponent;
-      const baseAmount = BigInt(Math.floor(parseFloat(amountIn) * multiplier));
-
-      const { address: claimAddress } = await viewClient.addressByIndex({
-        addressIndex: { account: penumbraAccount },
-      });
-
-      const planRequest = new TransactionPlannerRequest({
-        swaps: [
-          {
-            targetAsset: { inner: selectedOut.assetId },
-            value: new Value({
-              amount: new Amount({ lo: baseAmount, hi: 0n }),
-              assetId: { inner: selectedIn.assetId },
-            }),
-            claimAddress,
-          },
-        ],
-        source: { account: penumbraAccount },
-      });
-
-      setTxStatus('signing');
-      const result = await penumbraTx.mutateAsync(planRequest);
-
-      setTxStatus('success');
-      setTxHash(result.txId);
-      void refetchBalances();
-    } catch (err) {
-      setTxStatus('error');
-      setTxError(err instanceof Error ? err.message : 'swap failed');
-    }
-  }, [canSubmit, selectedIn, selectedOut, amountIn, penumbraTx, refetchBalances]);
-
-  const handleReset = useCallback(() => {
-    setTxStatus('idle');
-    setTxHash(undefined);
-    setTxError(undefined);
-    setAmountIn('');
-  }, []);
+  const unitIn = (selectedIn?.symbol ?? 'asset').toLowerCase();
+  const unitOut = (selectedOut?.symbol ?? 'asset').toLowerCase();
+  const rate =
+    simulation?.rate &&
+    `1 ${unitIn} = ${
+      simulation.rate < 0.001
+        ? simulation.rate.toPrecision(3)
+        : simulation.rate.toLocaleString(undefined, { maximumFractionDigits: 6 })
+    } ${unitOut}`;
+  const line = (
+    <>
+      <Sensitive>{`${amountIn} ${unitIn}`}</Sensitive> for about{' '}
+      <Sensitive>{`${simulation?.outputAmount ?? '0'} ${unitOut}`}</Sensitive>
+    </>
+  );
+  const sameAsIn = (a: OutputAsset) =>
+    !!selectedIn?.assetId &&
+    !!a.assetId &&
+    selectedIn.assetId.length === a.assetId.length &&
+    selectedIn.assetId.every((v, i) => v === a.assetId![i]);
+  const outChoices = outputAssets.filter(a => !sameAsIn(a));
 
   return (
-    <div className='flex flex-col gap-4 p-4'>
-      <div className='flex items-center gap-3 -mx-4 -mt-4 border-b border-border-soft px-4 py-3 mb-1'>
-        <button onClick={goBack} className='text-fg-muted transition-colors hover:text-fg-high'>
-          <span className='i-ph-arrow-left h-5 w-5' />
-        </button>
-        <h1 className='text-lg'>swap</h1>
-      </div>
-
-      {/* input asset */}
-      <div className='border border-border-soft bg-elev-2/20 p-3'>
-        <div className='flex items-center justify-between mb-2'>
-          <span className='text-xs text-fg-muted'>you pay</span>
-          {selectedIn && (
-            <span className='text-xs text-fg-muted'>balance: {selectedIn.amount}</span>
-          )}
-        </div>
-        <div className='flex items-center gap-2'>
-          <input
-            type='text'
-            value={amountIn}
-            onChange={e => setAmountIn(e.target.value)}
-            placeholder='0.00'
-            disabled={txStatus !== 'idle'}
-            // Row-level "Swap USDC" preselected the FROM leg for us; land
-            // the cursor in the amount field so the user picks the TO leg
-            // as a deliberate next click, not as the first input decision.
-            autoFocus={!!prefillFromAsset}
-            className='flex-1 bg-transparent text-lg text-fg placeholder:text-fg-muted focus:outline-none disabled:opacity-50'
+    <PenumbraFlow
+      onClose={goBack}
+      tx={{
+        sending: <>swap {line}</>,
+        label: `swap ${amountIn} ${selectedIn?.symbol ?? ''} for ${selectedOut?.symbol ?? ''}`,
+        plan,
+        onSent: () => {
+          void refetchBalances();
+          setAmountIn('');
+        },
+        review: {
+          lead: 'you swap',
+          amount: amountIn,
+          unit: unitIn,
+          rows: [
+            ['you get about', `${simulation?.outputAmount ?? '0'} ${unitOut}`],
+            ...(rate ? [['rate', rate] as const] : []),
+            ['fee', 'shown before you approve'],
+          ],
+          privacy: 'shielded · the dex sees the batch, not you',
+          confirm: 'swap',
+        },
+        done: <>{line} · it lands once the claim is processed</>,
+      }}
+    >
+      {review => (
+        <>
+          <ScreenHeader title='swap' onBack={goBack} />
+          <Main className='gap-[18px] pt-5'>
+            <AmountField
+              label='you pay'
+              value={amountIn}
+              onChange={setAmountIn}
+              unit={balancesLoading ? 'reading' : unitIn}
+              onUnit={() => setPick('in')}
+              available={selectedIn?.amount}
+              onMax={handleMax}
+              canMax={!!selectedIn}
+              autoFocus={!!prefillFromAsset}
+              warn={!!simError}
+              helper={
+                simError
+                  ? 'the dex could not price this right now · please try again'
+                  : simulation?.unfilled
+                    ? `only part fills at this price · ${simulation.unfilled.amount} ${simulation.unfilled.symbol.toLowerCase()} comes back`
+                    : simLoading
+                      ? 'pricing'
+                      : rate
+              }
+            />
+            <RowGroup>
+              <Row
+                type='value'
+                label='you get'
+                description={
+                  selectedIn && selectedOut
+                    ? `${simulation?.outputAmount ?? '0'} ${unitOut}`
+                    : undefined
+                }
+                value={assetsLoading ? 'reading' : selectedOut ? unitOut : 'choose'}
+                onPress={() => setPick('out')}
+              />
+            </RowGroup>
+            {selectedIn && selectedOut && (
+              <Button variant='quiet' size='sm' onClick={handleFlip} className='self-start px-0'>
+                <span className='i-lucide-arrow-up-down size-3.5' />
+                flip
+              </Button>
+            )}
+          </Main>
+          <Footer>
+            <Button onClick={review} disabled={!canReview} className='w-full'>
+              {simLoading ? 'pricing' : 'review swap'}
+            </Button>
+          </Footer>
+          <BalanceSheet
+            open={pick === 'in'}
+            onOpenChange={o => setPick(o ? 'in' : undefined)}
+            assets={balances}
+            onPick={b => setSelectedIn(inputAssets.find(a => a.balance === b))}
           />
-          <button
-            onClick={handleMax}
-            disabled={txStatus !== 'idle' || !selectedIn}
-            className='text-xs text-zigner-gold hover:text-zigner-gold-light disabled:opacity-50'
-          >
-            max
-          </button>
-        </div>
-        <div className='mt-2 relative'>
-          <button
-            onClick={() => setAssetInOpen(!assetInOpen)}
-            disabled={txStatus !== 'idle' || balancesLoading}
-            className='flex items-center gap-2 bg-background/50 px-3 py-1.5 text-sm transition-colors hover:bg-canvas disabled:opacity-50'
-          >
-            {balancesLoading ? (
-              <span className='text-fg-muted'>loading...</span>
-            ) : selectedIn ? (
-              <span className='flex items-center gap-1.5'>
-                <AssetIcon metadata={selectedIn.metadata} size='xs' />
-                {selectedIn.symbol}
-              </span>
-            ) : (
-              <span className='text-fg-muted'>select</span>
-            )}
-            <span
-              className={cn(
-                'i-ph-caret-down h-4 w-4 transition-transform',
-                assetInOpen && 'rotate-180',
-              )}
-            />
-          </button>
-
-          {assetInOpen && (
-            <div className='absolute top-full left-0 right-0 z-50 mt-1 border border-border-soft bg-canvas shadow-lg'>
-              <div className='border-b border-border-soft p-1.5'>
-                <AssetBucketToggle
-                  bucket={bucketIn}
-                  onChange={setBucketIn}
-                  positionCount={positions.length}
-                />
-              </div>
-              <div className='max-h-48 overflow-y-auto'>
-                {bucketIn === 'assets' ? (
-                  <>
-                    {inputAssets.map((item, i) => (
-                      <button
-                        key={i}
-                        onClick={() => {
-                          setSelectedIn(item);
-                          setAssetInOpen(false);
-                        }}
-                        className={cn(
-                          'flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-elev-1',
-                          selectedIn === item && 'bg-elev-2',
-                        )}
-                      >
-                        <span className='flex items-center gap-1.5'>
-                          <AssetIcon metadata={item.metadata} size='xs' />
-                          {item.symbol}
-                        </span>
-                        <span className='text-fg-muted'>{item.amount}</span>
-                      </button>
-                    ))}
-                    {inputAssets.length === 0 && (
-                      <div className='px-3 py-2 text-sm text-fg-muted'>no assets</div>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    {/* inspect-only: an LP NFT can't be market-swapped */}
-                    {positions.length > 0 && (
-                      <div className='px-3 py-1.5 text-[11px] text-fg-muted'>
-                        positions can&apos;t be swapped - close them from the dex
-                      </div>
-                    )}
-                    {positions.map((balance, i) => {
-                      const meta = getMetadataFromBalancesResponse.optional(balance);
-                      const amt = balance.balanceView ? fromValueView(balance.balanceView) : 0;
-                      return (
-                        <div
-                          key={i}
-                          className='flex w-full items-center justify-between px-3 py-2 text-sm text-fg-muted'
-                        >
-                          <span className='flex min-w-0 items-center gap-1.5'>
-                            <AssetIcon metadata={meta} size='xs' />
-                            <span className='truncate'>
-                              {positionLabel(meta) ?? symbolFromMetadata(meta)}
-                            </span>
-                          </span>
-                          <span>{typeof amt === 'string' ? amt : amt.toString()}</span>
-                        </div>
-                      );
-                    })}
-                    {positions.length === 0 && (
-                      <div className='px-3 py-2 text-sm text-fg-muted'>no open positions</div>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* swap direction */}
-      <div className='flex justify-center -my-2'>
-        <button
-          onClick={handleFlip}
-          disabled={txStatus !== 'idle' || !selectedIn || !selectedOut}
-          className='border border-border-soft bg-canvas p-2 shadow-sm transition-colors hover:bg-elev-1 disabled:opacity-50'
-        >
-          <span className='i-ph-arrow-down h-4 w-4' />
-        </button>
-      </div>
-
-      {/* output asset */}
-      <div className='border border-border-soft bg-elev-2/20 p-3'>
-        <div className='flex items-center justify-between mb-2'>
-          <span className='text-xs text-fg-muted'>you receive</span>
-          {simLoading && (
-            <span className='flex items-center gap-1 text-xs text-fg-muted'>
-              <span className='i-ph-arrows-clockwise h-3 w-3 animate-spin' />
-              simulating...
-            </span>
-          )}
-        </div>
-        <div className='flex items-center gap-2'>
-          <div className='flex-1 text-lg text-fg'>{simulation?.outputAmount ?? '0.00'}</div>
-        </div>
-        <div className='mt-2 relative'>
-          <button
-            onClick={() => setAssetOutOpen(!assetOutOpen)}
-            disabled={txStatus !== 'idle' || assetsLoading}
-            className='flex items-center gap-2 bg-background/50 px-3 py-1.5 text-sm transition-colors hover:bg-canvas disabled:opacity-50'
-          >
-            {assetsLoading ? (
-              <span className='text-fg-muted'>loading...</span>
-            ) : selectedOut ? (
-              <span className='flex items-center gap-1.5'>
-                <AssetIcon metadata={selectedOut.metadata} size='xs' />
-                {selectedOut.symbol}
-              </span>
-            ) : (
-              <span className='text-fg-muted'>select</span>
-            )}
-            <span
-              className={cn(
-                'i-ph-caret-down h-4 w-4 transition-transform',
-                assetOutOpen && 'rotate-180',
-              )}
-            />
-          </button>
-
-          {assetOutOpen && (
-            <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto border border-border-soft bg-canvas shadow-lg'>
-              {outputAssets
-                .filter(a => {
-                  if (!selectedIn?.assetId || !a.assetId) {
-                    return true;
-                  }
-                  if (selectedIn.assetId.length !== a.assetId.length) {
-                    return true;
-                  }
-                  return !selectedIn.assetId.every((v, i) => v === a.assetId![i]);
-                })
-                .map((item, i) => (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      setSelectedOut(item);
-                      setAssetOutOpen(false);
-                    }}
-                    className={cn(
-                      'flex w-full items-center px-3 py-2 text-sm transition-colors hover:bg-elev-1',
-                      selectedOut?.symbol === item.symbol && 'bg-elev-2',
-                    )}
-                  >
-                    <span className='flex items-center gap-1.5'>
-                      <AssetIcon metadata={item.metadata} size='xs' />
-                      {item.symbol}
-                    </span>
-                  </button>
-                ))}
-              {outputAssets.length === 0 && (
-                <div className='px-3 py-2 text-sm text-fg-muted'>no assets</div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {simulation?.rate && selectedIn && selectedOut && (
-        <div className='flex items-center justify-between px-1 text-xs text-fg-muted'>
-          <span>rate</span>
-          <span className='font-mono'>
-            1 {selectedIn.symbol} ={' '}
-            {simulation.rate < 0.001
-              ? simulation.rate.toPrecision(3)
-              : simulation.rate.toLocaleString(undefined, { maximumFractionDigits: 6 })}{' '}
-            {selectedOut.symbol}
-          </span>
-        </div>
+          <PickSheet
+            title='you get'
+            open={pick === 'out'}
+            onOpenChange={o => setPick(o ? 'out' : undefined)}
+            picks={outChoices.map((a, i) => ({ key: i, label: a.symbol }))}
+            onPick={i => setSelectedOut(outChoices[i])}
+          />
+        </>
       )}
-
-      {simulation?.unfilled && (
-        <div className='border border-yellow-500/30 bg-yellow-500/10 p-2'>
-          <p className='text-xs text-yellow-400'>
-            Only part of this swap fills at the current price - {simulation.unfilled.amount}{' '}
-            {simulation.unfilled.symbol} will be returned to you.
-          </p>
-        </div>
-      )}
-
-      {simError && (
-        <p className='text-xs text-red-400'>{simError.message || 'failed to simulate swap'}</p>
-      )}
-
-      {txStatus === 'success' && txHash && (
-        <div className='border border-green-500/30 bg-green-500/5 p-3'>
-          <div className='flex items-center gap-2'>
-            <span className='i-ph-check h-4 w-4 text-green-400' />
-            <p className='text-sm text-fg'>Swap submitted</p>
-          </div>
-          <button
-            type='button'
-            onClick={() => void navigator.clipboard.writeText(txHash)}
-            title='Copy transaction hash'
-            className='mt-2 flex w-full items-center gap-1.5 bg-elev-2 px-2 py-1.5 transition-colors hover:bg-elev-1'
-          >
-            <span className='i-ph-copy h-3 w-3 shrink-0 text-fg-muted' />
-            <span className='truncate font-mono text-xs text-fg-muted'>{txHash}</span>
-          </button>
-          <p className='mt-2 text-xs text-fg-muted'>
-            Outputs arrive once the claim transaction is processed.
-          </p>
-        </div>
-      )}
-
-      {txStatus === 'error' && txError && (
-        <div className='border border-red-500/40 bg-red-500/10 p-3'>
-          <p className='text-sm text-red-400'>swap failed</p>
-          <p className='text-xs text-fg-muted mt-1'>{txError}</p>
-        </div>
-      )}
-
-      <button
-        onClick={() => {
-          if (txStatus === 'success' || txStatus === 'error') {
-            handleReset();
-          } else {
-            void handleSubmit();
-          }
-        }}
-        disabled={
-          (txStatus === 'idle' && !canSubmit) ||
-          txStatus === 'planning' ||
-          txStatus === 'signing' ||
-          txStatus === 'broadcasting'
-        }
-        className={cn(
-          'mt-2 w-full bg-zigner-gold py-3 text-sm text-zigner-gold-foreground',
-          'transition-colors hover:bg-zigner-gold-light',
-          'disabled:opacity-50 disabled:cursor-not-allowed',
-        )}
-      >
-        {txStatus === 'planning' && 'building swap...'}
-        {txStatus === 'signing' && 'signing...'}
-        {txStatus === 'broadcasting' && 'broadcasting...'}
-        {txStatus === 'idle' && (simLoading ? 'simulating...' : 'swap')}
-        {txStatus === 'success' && 'swap again'}
-        {txStatus === 'error' && 'retry'}
-      </button>
-
-      <p className='text-center text-xs text-fg-muted'>private swap using penumbra dex</p>
-    </div>
+    </PenumbraFlow>
   );
 };
