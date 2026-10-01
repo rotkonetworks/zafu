@@ -220,7 +220,7 @@ export const ThorDeposit = ({
           amount={zec(amountZat)}
           unit='zec'
           rows={[
-            ['fee', <Sensitive key='fee'>{`${zec(phase.plan.fee)} zec`}</Sensitive>],
+            ['network fee in', <Sensitive key='fee'>{`${zec(phase.plan.fee)} zec`}</Sensitive>],
             [
               'refunds to',
               <span key='refund' className='font-mono'>

@@ -32,6 +32,34 @@ export interface QuoteRequest {
   signsOpReturn?: boolean;
 }
 
+/** one part of what a swap costs: a share of what is paid, and its worth in the destination asset */
+export interface CostPart {
+  label: string;
+  bps: number;
+  /** destination base units */
+  out: bigint;
+  /** said in the source asset instead, for a fee paid on the source chain */
+  inText?: string;
+  /** zafu's own fee, shown against the rate production charges */
+  zafu?: true;
+}
+
+/** an estimate of everything a swap costs, each part listed */
+export interface Cost {
+  parts: CostPart[];
+  bps: number;
+  out: bigint;
+}
+
+export const costOf = (parts: CostPart[]): Cost => ({
+  parts,
+  bps: parts.reduce((n, p) => n + p.bps, 0),
+  out: parts.reduce((n, p) => n + p.out, 0n),
+});
+
+/** a share in bps as a short percent: 62 -> 0.62%, 0 -> 0% */
+export const pct = (bps: number): string => `${(bps / 100).toFixed(2).replace(/\.?0+$/, '')}%`;
+
 export interface Quote {
   route: RouteId;
   /** destination base units, after every fee the route takes */
@@ -40,7 +68,12 @@ export interface Quote {
   amountOutText: string;
   /** display, in the source asset */
   amountInText: string;
-  feeText?: string;
+  /** the estimated cost, every fee the route and zafu take, and the source fee where known */
+  cost?: Cost;
+  /** what a refund would cost, when one is a real possibility */
+  refundLine?: string;
+  /** the fee rate to set when paying from another wallet */
+  gasLine?: string;
   timeText?: string;
   /** ms epoch */
   expiresAt?: number;
@@ -104,3 +137,9 @@ export const rank = (quotes: readonly Quote[]): Quote[] =>
         : -1
       : Number(b.amountOut > a.amountOut) - Number(a.amountOut > b.amountOut),
   );
+
+/** how much more the best sendable route pays than the next, in destination base units */
+export const lead = (ranked: readonly Quote[]): bigint | undefined => {
+  const [best, next] = ranked.filter(q => !q.notYet);
+  return best && next ? best.amountOut - next.amountOut : undefined;
+};
