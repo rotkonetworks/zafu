@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Button } from '@repo/ui/components/ui/button';
+import { Input } from '@repo/ui/components/ui/input';
 import { useStore } from '../state';
 import { selectEffectiveKeyInfo } from '../state/keyring';
 import { MAX_POCKETS, pocketOwner, pocketsOf } from '../state/pockets';
@@ -103,19 +104,13 @@ export const NewPocketSheet = ({
           <label htmlFor='new-pocket-name' className='text-label text-fg-muted lowercase'>
             name
           </label>
-          <input
+          <Input
             id='new-pocket-name'
             type='text'
             value={name}
             onChange={e => setName(e.target.value)}
             placeholder={rename ? undefined : `pocket ${nextAccount}`}
-            className='h-11 border border-surface-border bg-surface-elev-2 px-3 text-data text-fg-high placeholder:text-fg-dim focus:outline-none focus-visible:ring-1 focus-visible:ring-zigner-gold'
           />
-          {!rename && (
-            <p className='text-label text-fg-muted lowercase'>
-              its own addresses and balance - same recovery phrase
-            </p>
-          )}
           {error && <p className='text-label text-hanko-light lowercase'>{error}</p>}
           <Button onClick={() => void handleSubmit()} loading={busy} disabled={!owner}>
             {rename ? 'rename pocket' : 'create pocket'}

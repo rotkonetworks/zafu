@@ -1575,6 +1575,34 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   save contact
                 </Button>
               )}
+              {txHash && (
+                <Button
+                  variant='secondary'
+                  onClick={() =>
+                    navigate(PopupPath.TX_DETAIL, {
+                      state: {
+                        network: 'zcash',
+                        tx: {
+                          id: txHash,
+                          height: 0,
+                          timestamp: null,
+                          sentAt: Date.now(),
+                          type: 'send',
+                          description: 'sent',
+                          amount,
+                          memo,
+                          feeAmount: fee,
+                          recipient,
+                          status: 'pending',
+                        },
+                      },
+                    })
+                  }
+                  className='px-3'
+                >
+                  view transaction
+                </Button>
+              )}
               <Button onClick={handleClose} className='grow'>
                 done
               </Button>

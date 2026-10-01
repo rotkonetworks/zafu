@@ -94,6 +94,7 @@ export const popupScreens = {
   noteSync: () => import('./note-sync').then(m => m.NoteSyncPage),
   poolNotes: () => import('./pool-notes').then(m => m.PoolNotesPage),
   activity: () => import('./home/activity').then(m => m.ActivityPage),
+  txDetail: () => import('./home/tx-detail').then(m => m.TxDetailPage),
   identity: () => import('./identity').then(m => m.IdentityPage),
   passwords: () => import('./identity/passwords').then(m => m.PasswordsPage),
   contactPicker: () => import('./pick-contacts').then(m => m.ContactPicker),
