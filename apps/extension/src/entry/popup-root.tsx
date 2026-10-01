@@ -17,6 +17,7 @@ import { AppErrorBoundary, reportRenderError } from '../components/error-boundar
 import { loadBalancesSnapshot } from '../hooks/balances-snapshot';
 import { balancesQueryKey } from '../hooks/penumbra-balances';
 import { EgressAskSheet } from '../net/egress-ask-sheet';
+import { installRegistryIcons } from '../shared/components/registry-icons';
 
 import '@repo/ui/styles/globals.css';
 import '@repo/ui/styles/icons.css';
@@ -29,6 +30,7 @@ import '../styles/view-transitions.css';
 // those to console.debug; every other rejection still surfaces loudly, so
 // real bugs are not hidden. Installed before first render on purpose.
 installGracefulNetworkErrorHandler();
+installRegistryIcons();
 
 // A popup left open across an extension reload/auto-update is alive but dead:
 // `runtime.id` is gone and every call throws "Extension context invalidated".

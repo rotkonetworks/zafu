@@ -23,9 +23,10 @@ describe('a fresh zcash-only wallet', () => {
       ['https://zcash.rotko.net/rendezvous/open', 'opt-in'],
       // networks the user did not enable
       ['https://penumbra.rotko.net/penumbra.core.app.v1.QueryService/AppParameters', 'network-off'],
+      // the registry is bundled at build time - no destination owns this host any more
       [
         'https://raw.githubusercontent.com/penumbrafi/registry/main/registry/globals.json',
-        'network-off',
+        'unknown',
       ],
       ['https://noble-rpc.polkachu.com/status', 'network-off'],
       ['https://paritytech.github.io/chainspecs/polkadot.json', 'network-off'],
@@ -92,8 +93,9 @@ describe('the required endpoint follows settings', () => {
     };
     expect(outcome(picked, 'https://picked.example/x')).toBe('allow');
     expect(outcome(picked, 'https://legacy.example/x')).toBe('unknown');
+    // the registry is bundled at build time, not a network destination any more
     expect(outcome(on, 'https://raw.githubusercontent.com/penumbrafi/registry/main/x.json')).toBe(
-      'allow',
+      'unknown',
     );
   });
 

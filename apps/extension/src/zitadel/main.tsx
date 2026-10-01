@@ -13,8 +13,6 @@
 import '../net/egress-install';
 import { requestEgressOptIn } from '../net/egress-opt-in';
 import { installEgressAskSheet } from './egress-ask';
-
-installEgressAskSheet();
 import { ed25519 } from '@noble/curves/ed25519';
 // eslint-disable-next-line import/no-relative-packages -- @zafu/zid publishes no subpath exports for these; the suggested specifiers do not resolve
 import { createNoiseChannel, type ZidChannel } from '../../../../packages/zid/src';
@@ -24,6 +22,8 @@ import type { SessionKey } from '../../../../packages/zid/src/noise-channel';
 import { isLicenseValid, type License } from '../../../../packages/wallet/src/license';
 import { createCallUi, MEDIA_SIGNAL_TAG, type CallUi } from './call-ui';
 import { createLockedPreview } from './locked-preview';
+
+installEgressAskSheet();
 
 // ─── zid-auth-v1: signed nick claims ────────────────────────────────────
 //

@@ -13,6 +13,7 @@ import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-er
 import { noteContextInvalidated } from '../utils/reload-notice';
 import { AppErrorBoundary, reportRenderError } from '../components/error-boundary';
 import { EgressAskSheet } from '../net/egress-ask-sheet';
+import { installRegistryIcons } from '../shared/components/registry-icons';
 
 import '@repo/ui/styles/globals.css';
 import '@repo/ui/styles/icons.css';
@@ -21,6 +22,7 @@ import '@repo/ui/styles/icons.css';
 // AbortError unhandled rejections to console.debug, leave everything else
 // loud. See utils/graceful-network-errors.ts.
 installGracefulNetworkErrorHandler();
+installRegistryIcons();
 
 // This page survives an extension reload/auto-update with its chrome.* bindings
 // gone: `runtime.id` disappears and every call throws "Extension context

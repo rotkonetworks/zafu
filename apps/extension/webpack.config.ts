@@ -333,6 +333,16 @@ export default ({
             filename: 'videos/[hash][ext][query]',
           },
         },
+        {
+          // bundled registry/skip/chain icons: shipped in the build, never
+          // fetched at runtime (see shared/components/registry-icons.ts)
+          test: /\.(png|svg)$/,
+          include: path.resolve(__dirname, 'src/assets/registry-icons'),
+          type: 'asset/resource',
+          generator: {
+            filename: 'icons/[hash][ext]',
+          },
+        },
       ],
     },
     resolve: {

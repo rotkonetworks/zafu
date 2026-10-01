@@ -5,6 +5,7 @@ import { SelectList } from '@repo/ui/components/ui/select';
 import { bech32mAssetId } from '@penumbra-zone/bech32m/passet';
 import { getAssetId } from '@penumbra-zone/getters/metadata';
 import { Button } from '@repo/ui/components/ui/button';
+import { AssetIcon } from '@repo/ui/components/ui/asset-icon';
 import { useNumeraires } from '../../hooks/numeraires-query';
 
 const useNumerairesSelector = (state: AllSlices) => {
@@ -49,29 +50,16 @@ export const NumeraireForm = ({
     <div className='flex flex-col gap-2'>
       <form className='flex flex-col gap-4' onSubmit={handleSubmit}>
         <SelectList>
-          {numeraires.map(metadata => {
-            // Image default is "" and thus cannot do nullish-coalescing
-
-            const icon = metadata.images[0]?.png || metadata.images[0]?.svg;
-            return (
-              <SelectList.Option
-                key={bech32mAssetId(getAssetId(metadata))}
-                value={getAssetId(metadata).toJsonString()}
-                label={metadata.symbol}
-                isSelected={selectedNumeraires.includes(getAssetId(metadata).toJsonString())}
-                onSelect={() => selectNumeraire(getAssetId(metadata).toJsonString())}
-                image={
-                  !!icon && (
-                    <img
-                      src={icon}
-                      className='size-full object-contain'
-                      alt='rpc endpoint brand image'
-                    />
-                  )
-                }
-              />
-            );
-          })}
+          {numeraires.map(metadata => (
+            <SelectList.Option
+              key={bech32mAssetId(getAssetId(metadata))}
+              value={getAssetId(metadata).toJsonString()}
+              label={metadata.symbol}
+              isSelected={selectedNumeraires.includes(getAssetId(metadata).toJsonString())}
+              onSelect={() => selectNumeraire(getAssetId(metadata).toJsonString())}
+              image={<AssetIcon metadata={metadata} size='sm' />}
+            />
+          ))}
 
           <Button
             className='my-5'

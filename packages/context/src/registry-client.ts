@@ -1,34 +1,37 @@
 /**
- * A penumbra chain-registry client that cannot fail on a missing network.
+ * A penumbra chain-registry client that reads from the copy bundled in the
+ * extension first, never the network, for every chain the build already
+ * ships metadata for.
+ *
+ * The registry JSON used to be fetched from raw.githubusercontent.com on
+ * every cold read (`IndexedDb.initialize`'s pre-population, the IBC
+ * destination list, numeraires, the settings forms) - a request zafu's
+ * egress policy had to special-case, and one more host in the "everything
+ * zafu talks to" list for data this package already ships. `@penumbrafi/
+ * registry` vendors the same JSON as `client.bundled`, so there is no reason
+ * to ask the network for it: this wrapper tries the bundled copy first and
+ * only reaches for `remote` when a chain is not in the bundled set at all
+ * (shipped after this package was last bumped) - forward-compatible, not the
+ * default path.
  *
  * `IndexedDb.initialize` pre-populates asset metadata by calling
- * `registryClient.remote.get(chainId)`, and the storage package catches that
- * failure internally with a raw
+ * `registryClient.remote.get(chainId)`, and the storage package catches a
+ * rejection internally with a raw
  * `console.error('Failed pre-population of assets from the registry', error)`.
- * The failure is expected in normal operation - a service worker wakes offline,
- * the registry is a public CDN - and because the catch lives inside
- * `@penumbra-zone/storage`, a caller has no way to downgrade or silence that
- * line: the only lever is to hand it a client that does not throw.
- *
- * `remote.getWithBundledBackup` exists for that purpose but warns on every
- * fallback, which is the same noise one level down. This wrapper falls back to
- * the copy of the registry bundled in the extension *silently*: an offline boot
- * or an offline page load simply resolves from data already shipped in the
- * build. The trade-off is accepted deliberately - a genuine remote-registry bug
- * (a parse error, say) is no longer distinguishable from being offline - because
- * asset metadata is advisory, the bundled copy covers the chains we ship, and
- * call sites that need a hard registry failure (onboarding parameter
- * persistence, transaction approval, endpoint hydration) keep their own client
- * and surface it themselves.
+ * Because that catch lives inside `@penumbra-zone/storage`, a caller has no
+ * way to downgrade or silence that line: the only lever is to hand it a
+ * client that does not throw. Resolving from the bundled copy first also
+ * means that line can no longer fire in normal operation - there is nothing
+ * left to fail.
  */
 import { ChainRegistryClient } from '@penumbrafi/registry';
 
 export type RegistryClient = InstanceType<typeof ChainRegistryClient>;
 
 /**
- * Wrap `client` so the remote reads the pages need offline (`remote.get` for a
- * chain, `remote.globals` for the default endpoints) resolve from the bundled
- * copy when the remote fetch fails. Every other member (`bundled`, …) is the
+ * Wrap `client` so `remote.get`/`remote.globals` resolve from the bundled
+ * registry first, falling back to the network only when the bundled copy
+ * does not have the chain. Every other member (`bundled`, …) is the
  * original, inherited unchanged.
  */
 export const withBundledFallback = (
@@ -46,24 +49,23 @@ export const withBundledFallback = (
   Object.defineProperty(wrapped.remote, 'get', {
     value: async (chainId: string) => {
       try {
-        return await client.remote.get(chainId);
-      } catch {
         return client.bundled.get(chainId);
+      } catch {
+        return client.remote.get(chainId);
       }
     },
     writable: true,
     enumerable: true,
     configurable: true,
   });
-  // `globals` backs the settings and endpoint forms: offline they should render
-  // the endpoints shipped in the build, not an error state, for the same reason
-  // as asset metadata.
+  // `globals` backs the settings and endpoint forms: resolve from the build,
+  // never the network, for the same reason as asset metadata.
   Object.defineProperty(wrapped.remote, 'globals', {
     value: async () => {
       try {
-        return await client.remote.globals();
-      } catch {
         return client.bundled.globals();
+      } catch {
+        return client.remote.globals();
       }
     },
     writable: true,

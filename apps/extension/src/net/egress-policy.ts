@@ -147,18 +147,10 @@ export const DESTINATIONS: readonly DestinationSpec[] = [
     gate: { kind: 'network', networks: ['penumbra'] },
     urls: i => [penumbraEndpoint(i)],
   },
-  {
-    id: 'penumbra-registry',
-    label: 'penumbra asset registry',
-    purpose: 'registry',
-    gate: { kind: 'network', networks: ['penumbra'] },
-    // the registry json, and the asset icons it points at
-    urls: () => [
-      'https://raw.githubusercontent.com/penumbrafi/registry/',
-      'https://raw.githubusercontent.com/prax-wallet/registry/',
-      'https://raw.githubusercontent.com/cosmos/chain-registry/',
-    ],
-  },
+  // the penumbra asset registry (json + icons) is bundled at build time
+  // (@penumbrafi/registry, see packages/context/src/registry-client.ts and
+  // shared/components/registry-icons.ts) - there is no runtime destination
+  // for it any more, so raw.githubusercontent.com is simply unknown.
   ...Object.values(COSMOS_CHAINS).map(
     (chain): DestinationSpec => ({
       id: chain.id,

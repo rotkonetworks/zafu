@@ -18,6 +18,7 @@ import { fromValueView } from '@rotko/penumbra-types/amount';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { trackUnshieldOut } from '../../../state/ibc-transfer-probes';
 import { IbcTransferStatusLine } from '../ibc-transfer-status';
+import { RegistryIcon } from '../../../shared/components/registry-icon';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
@@ -73,9 +74,12 @@ function ChainSelector({
                 selected?.chainId === chain.chainId && 'bg-elev-2',
               )}
             >
-              {chain.images[0]?.png && (
-                <img src={chain.images[0].png} alt='' className='h-5 w-5 rounded-full' />
-              )}
+              <RegistryIcon
+                name={chain.displayName}
+                images={chain.images}
+                className='h-5 w-5 rounded-full'
+                size={20}
+              />
               <span>{chain.displayName}</span>
             </button>
           ))}
