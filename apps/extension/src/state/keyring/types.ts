@@ -274,3 +274,13 @@ export const getNetworkActivation = (
     shouldLoadFeatures: isEnabled,
   };
 };
+
+/**
+ * What the zcash worker needs to unseal one mnemonic vault itself: the sealed
+ * box as stored, and a decrypt-only, non-extractable copy of the session key.
+ * The page passes this instead of the phrase, so it never holds the plaintext.
+ */
+export interface VaultUnlock {
+  box: string;
+  key: CryptoKey;
+}

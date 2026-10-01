@@ -26,6 +26,15 @@ export const requireKey = async (ctx: CryptoCtx): Promise<Key> => {
   return Key.fromJson(keyJson);
 };
 
+/** a decrypt-only, non-extractable copy of the session key, or throw */
+export const requireDecryptOnlyKey = async (ctx: CryptoCtx): Promise<CryptoKey> => {
+  const keyJson = await ctx.session.get('passwordKey');
+  if (!keyJson) {
+    throw new Error('keyring locked');
+  }
+  return Key.decryptOnly(keyJson);
+};
+
 /** encrypt plaintext with the session key */
 export const encrypt = async (ctx: CryptoCtx, plaintext: string): Promise<string> => {
   const key = await requireKey(ctx);
