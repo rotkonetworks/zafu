@@ -650,7 +650,7 @@ export const ZcashContent = ({
         title='your first payment arrived.'
       >
         <div className='flex flex-col gap-3'>
-          <p className='-mt-3 mb-1.5 font-display text-xl text-fg-high'>
+          <p className='-mt-6 mb-1.5 font-display text-xl text-fg-high'>
             keep a history on this computer?
           </p>
           <Button onClick={() => answerHistory(true)}>keep history</Button>
