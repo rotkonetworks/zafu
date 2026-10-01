@@ -3,7 +3,9 @@ import { getDisplayDenomFromView, getEquivalentValues } from '@penumbra-zone/get
 import { asValueView } from '@penumbra-zone/getters/equivalent-value';
 import { bech32mAssetId } from '@penumbra-zone/bech32m/passet';
 import { fromValueView } from '@rotko/penumbra-types/amount';
+import { uint8ArrayToBase64 } from '@rotko/penumbra-types/base64';
 import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
+import type { Metadata } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { filterFungibleBalances } from '../../../utils/is-fungible-asset';
 import { symbolFromMetadata } from '../../../utils/asset-display';
 
@@ -15,6 +17,13 @@ import { symbolFromMetadata } from '../../../utils/asset-display';
  * request of its own and no third party ever sees what is held.
  */
 export const USDC_INJ = 'transfer/channel-18/erc20:0xa00C59fF5a080D2b954d0c75e46E22a0c371235a';
+/** its asset id, the key the view service files prices under */
+const USDC_INJ_ID = '16ztCNRCyQZYu3cNN7DNMevUt0v2pERpUBflNfwP+wc=';
+
+const isUsdcInj = (m?: Metadata) =>
+  m?.penumbraAssetId?.inner.length
+    ? uint8ArrayToBase64(m.penumbraAssetId.inner) === USDC_INJ_ID
+    : m?.base === USDC_INJ;
 
 /** one fungible balance, as the home row and its sheet read it */
 export interface Asset {
@@ -43,11 +52,11 @@ const rawIdOf = (b: BalancesResponse, base?: string, symbol?: string) => {
   return symbol ? undefined : base;
 };
 
-const usdOf = (b: BalancesResponse, base: string | undefined, amount: number) => {
-  if (base === USDC_INJ) {
+const usdOf = (b: BalancesResponse, meta: Metadata | undefined, amount: number) => {
+  if (isUsdcInj(meta)) {
     return amount;
   }
-  const eq = getEquivalentValues.optional(b.balanceView)?.find(e => e.numeraire?.base === USDC_INJ);
+  const eq = getEquivalentValues.optional(b.balanceView)?.find(e => isUsdcInj(e.numeraire));
   return eq && Number(fromValueView(asValueView(eq)));
 };
 
@@ -63,7 +72,7 @@ const assetOf = (b: BalancesResponse, i: number): Asset => {
     name: meta?.name || symbol,
     um: ['penumbra', 'UM'].includes(b.balanceView ? getDisplayDenomFromView(b.balanceView) : ''),
     amount,
-    usd: usdOf(b, base, amount),
+    usd: usdOf(b, meta, amount),
     rawId: rawIdOf(b, base, meta?.symbol),
   };
 };

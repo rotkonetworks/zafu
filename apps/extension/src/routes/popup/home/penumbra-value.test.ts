@@ -1,16 +1,19 @@
 import { describe, expect, test } from 'vitest';
 import { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import {
+  AssetId,
   DenomUnit,
   EquivalentValue,
   Metadata,
   ValueView,
 } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
+import { base64ToUint8Array } from '@rotko/penumbra-types/base64';
 import { USDC_INJ, heroOf, selectAssets } from './penumbra-value';
 
-const meta = (base: string, symbol: string, display: string, exponent: number) =>
+const meta = (base: string, symbol: string, display: string, exponent: number, id?: string) =>
   new Metadata({
+    penumbraAssetId: id ? new AssetId({ inner: base64ToUint8Array(id) }) : undefined,
     base,
     display,
     symbol,
@@ -22,7 +25,21 @@ const meta = (base: string, symbol: string, display: string, exponent: number) =
   });
 
 const UM = meta('upenumbra', 'UM', 'penumbra', 6);
-const USDC = meta(USDC_INJ, 'USDC.inj', 'transfer/channel-18/usdc', 6);
+const USDC = meta(
+  USDC_INJ,
+  'USDC.inj',
+  'transfer/channel-18/usdc',
+  6,
+  '16ztCNRCyQZYu3cNN7DNMevUt0v2pERpUBflNfwP+wc=',
+);
+// the same numeraire as the view service may describe it: the id, a base spelled differently
+const USDC_BY_ID = meta(
+  'transfer/channel-18/erc20:0xA00C59FF5A080D2B954D0C75E46E22A0C371235A',
+  'USDC.inj',
+  'transfer/channel-18/usdc',
+  6,
+  '16ztCNRCyQZYu3cNN7DNMevUt0v2pERpUBflNfwP+wc=',
+);
 const OSMO = meta('transfer/channel-4/uosmo', 'OSMO', 'transfer/channel-4/osmo', 6);
 const NOBLE = meta('transfer/channel-2/uusdc', 'USDC', 'transfer/channel-2/usdc', 6);
 
@@ -51,7 +68,7 @@ describe('penumbra portfolio value', () => {
     const assets = selectAssets([
       balance(UM, 10, [
         [NOBLE, 41],
-        [USDC, 40],
+        [USDC_BY_ID, 40],
       ]),
       balance(USDC, 5),
       balance(OSMO, 3, [[NOBLE, 1]]),

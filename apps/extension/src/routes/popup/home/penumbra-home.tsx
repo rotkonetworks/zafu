@@ -7,6 +7,7 @@ import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { InFlightCard } from '../../../components/in-flight-card';
+import { Sensitive } from '../../../components/sensitive';
 import { usePenumbraTotalIn } from '../../../hooks/penumbra-total-in';
 import { useSyncProgress } from '../../../hooks/full-sync-height';
 import { balancesQueryOptions, balancesQueryKey } from '../../../hooks/penumbra-balances';
@@ -161,9 +162,11 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
                 tag={a.symbol.toLowerCase()}
                 amount={fmtAmount(a.amount)}
                 note={
-                  <span className='text-[11px] text-fg-muted'>
-                    {a.usd === undefined ? 'no price' : fmtUsd(a.usd)}
-                  </span>
+                  a.usd === undefined ? (
+                    <span className='text-[11px] text-fg-muted'>no price</span>
+                  ) : (
+                    <Sensitive className='text-[11px] text-fg-muted'>{fmtUsd(a.usd)}</Sensitive>
+                  )
                 }
                 onPress={() => setOpen(a)}
               />
