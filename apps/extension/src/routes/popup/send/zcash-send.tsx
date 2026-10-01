@@ -851,9 +851,19 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 onStep: s => s === 'saving' && onSigned(),
               });
               if (out.status === 'uncertain') {
-                throw new Error(
-                  'this may already have been sent · zafu is confirming it from the chain, so please do not send it again yet',
-                );
+                // it may be on chain: the records say so, never "failed"
+                const reason =
+                  'this may already have been sent · zafu is confirming it from the chain, so please do not send it again yet';
+                const tempId = pendingTempTxIdRef.current;
+                pendingTempTxIdRef.current = null;
+                if (tempId) {
+                  void messages.markOutgoingInterrupted(tempId, reason);
+                }
+                if (trackOpRef.current) {
+                  void writeTxOp(trackOpRef.current, { status: 'unknown', step: undefined });
+                  trackOpRef.current = null;
+                }
+                throw new Error(reason);
               }
               finish(out.txid);
             } catch (e) {
