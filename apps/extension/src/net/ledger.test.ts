@@ -14,6 +14,7 @@ describe('egress choices in the personal-data backup', () => {
     await setDestinationDecision('asked.example', 'pending');
     await setDestinationOptIn('zcash-me', 'allowed');
     await setDestinationOptIn('near-swap', 'blocked');
+    await setDestinationOptIn('thorname', 'allowed');
 
     const backup = await exportEgressChoices();
     expect(backup.hosts).toMatchObject({
@@ -21,7 +22,11 @@ describe('egress choices in the personal-data backup', () => {
       'allowed.example': 'allowed',
     });
     expect(backup.hosts['asked.example']).toBeUndefined();
-    expect(backup.optIns).toMatchObject({ 'zcash-me': 'allowed', 'near-swap': 'blocked' });
+    expect(backup.optIns).toMatchObject({
+      'zcash-me': 'allowed',
+      'near-swap': 'blocked',
+      thorname: 'allowed',
+    });
 
     await chrome.storage.local.remove('netEgress');
     await importEgressChoices(JSON.parse(JSON.stringify(backup)) as typeof backup);
