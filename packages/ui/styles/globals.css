@@ -332,9 +332,6 @@
       repeating-linear-gradient(0deg, rgb(226 209 182 / 0.023) 0 1px, transparent 1px 3px),
       repeating-linear-gradient(90deg, rgb(226 209 182 / 0.016) 0 1px, transparent 1px 3px);
     color: hsl(var(--foreground));
-    font-family: var(--font-mono);
-    font-size: 13px;
-    line-height: 1.5;
   }
 
   h1,
@@ -387,22 +384,6 @@
     word-break: break-all;
   }
 
-  /* custom fonts - fallback to system */
-  @font-face {
-    font-family: 'Inter';
-    font-weight: 400;
-    src: local('Inter'), local('Inter-Regular');
-  }
-  @font-face {
-    font-family: 'Inter';
-    font-weight: 500;
-    src: local('Inter Medium'), local('Inter-Medium');
-  }
-  @font-face {
-    font-family: 'Inter';
-    font-weight: 600;
-    src: local('Inter SemiBold'), local('Inter-SemiBold');
-  }
   @font-face {
     font-family: 'Iosevka Term';
     font-weight: 400;
@@ -431,6 +412,15 @@
     font-weight: 600;
     src: url('../fonts/shippori-mincho-600.woff2') format('woff2');
   }
+}
+
+/* Unlayered on purpose: Chromium injects an unlayered `body { font-family:
+   <system ui font>; font-size: 75% }` into every chrome-extension:// page,
+   which beats anything inside @layer base. */
+html body {
+  font-family: var(--zafu-font);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 /* custom utilities */

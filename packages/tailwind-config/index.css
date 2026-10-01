@@ -15,6 +15,7 @@
   --font-body: var(--zafu-font);
   --font-headline: var(--zafu-font);
   --font-mono: var(--zafu-font);
+  --default-font-family: var(--zafu-font);
 
   --radius-sm: 0;
   --radius-md: 0;
