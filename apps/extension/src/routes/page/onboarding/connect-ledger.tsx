@@ -23,7 +23,6 @@
 
 import { useCallback, useState } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
-import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { Input } from '@repo/ui/components/ui/input';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { localExtStorage } from '@repo/storage-chrome/local';
@@ -34,7 +33,6 @@ import { isPopup } from '../../../utils/popup-detection';
 import { PagePath } from '../paths';
 import { setOnboardingValuesInStorage } from './persist-parameters';
 import { SEED_PHRASE_ORIGIN } from './password/types';
-import { OnboardingBack, OnboardingShell } from './onboarding-shell';
 import {
   connectLedgerBtc,
   getLedgerZcashTransparentAddress,
@@ -73,8 +71,6 @@ export const ConnectLedger = () => {
   // a popup - bail with guidance instead of a cryptic HID failure.
   const inPopup = isPopup();
   const supported = isLedgerBtcSupported();
-
-  const handleBack = () => navigate(-1);
 
   const handleConnect = useCallback(async () => {
     setError(null);
@@ -136,139 +132,133 @@ export const ConnectLedger = () => {
   }, [account, addLedgerUnencrypted, walletLabel, navigate]);
 
   return (
-    <OnboardingShell art='enso'>
-      <FadeTransition>
-        <div className='flex flex-col gap-5'>
-          <OnboardingBack onClick={handleBack} />
-          <h1 className='font-display text-[38px] text-fg-high'>connect ledger</h1>
-          <p className='text-body text-fg-muted lowercase'>
-            plug in your ledger and open the zcash app to add a watch-only wallet.
-          </p>
+    <div className='flex flex-col gap-5'>
+      <h1 className='font-display text-[38px] text-fg-high'>connect ledger</h1>
+      <p className='text-body text-fg-muted lowercase'>
+        plug in your ledger and open the zcash app to add a watch-only wallet.
+      </p>
 
+      <div className='flex flex-col gap-4'>
+        {inPopup && (
+          <StatusSlot tone='warn' icon='i-ph-arrow-square-out'>
+            open zafu in the side panel or a full tab to connect a ledger. usb sessions are dropped
+            when the popup loses focus.
+          </StatusSlot>
+        )}
+
+        {!inPopup && !supported && (
+          <StatusSlot tone='warn' icon='i-ph-warning'>
+            this browser does not support webhid. use a chromium browser to connect a ledger.
+          </StatusSlot>
+        )}
+
+        {/* idle - connect button */}
+        {!inPopup && supported && phase !== 'connected' && phase !== 'importing' && (
+          <div className='flex flex-col gap-2.5'>
+            <Button
+              variant='primary'
+              className='w-full'
+              disabled={phase === 'connecting'}
+              onClick={handleConnect}
+            >
+              {phase === 'connecting' ? (
+                <>
+                  <span className='i-ph-circle-notch mr-2 h-4 w-4 animate-spin' />
+                  connecting...
+                </>
+              ) : (
+                <>
+                  <span className='i-ph-usb mr-2 h-4 w-4' />
+                  connect ledger
+                </>
+              )}
+            </Button>
+            {error && (
+              <StatusSlot tone='danger' icon='i-ph-warning'>
+                {error}
+              </StatusSlot>
+            )}
+          </div>
+        )}
+
+        {/* connected - account detail + import */}
+        {(phase === 'connected' || phase === 'importing') && account && (
           <div className='flex flex-col gap-4'>
-            {inPopup && (
-              <StatusSlot tone='warn' icon='i-ph-arrow-square-out'>
-                open zafu in the side panel or a full tab to connect a ledger. usb sessions are
-                dropped when the popup loses focus.
-              </StatusSlot>
-            )}
-
-            {!inPopup && !supported && (
-              <StatusSlot tone='warn' icon='i-ph-warning'>
-                this browser does not support webhid. use a chromium browser to connect a ledger.
-              </StatusSlot>
-            )}
-
-            {/* idle - connect button */}
-            {!inPopup && supported && phase !== 'connected' && phase !== 'importing' && (
-              <div className='flex flex-col gap-2.5'>
-                <Button
-                  variant='primary'
-                  className='w-full'
-                  disabled={phase === 'connecting'}
-                  onClick={handleConnect}
-                >
-                  {phase === 'connecting' ? (
-                    <>
-                      <span className='i-ph-circle-notch mr-2 h-4 w-4 animate-spin' />
-                      connecting...
-                    </>
-                  ) : (
-                    <>
-                      <span className='i-ph-usb mr-2 h-4 w-4' />
-                      connect ledger
-                    </>
-                  )}
-                </Button>
-                {error && (
-                  <StatusSlot tone='danger' icon='i-ph-warning'>
-                    {error}
-                  </StatusSlot>
-                )}
+            <div className='flex flex-col gap-1'>
+              <div className='text-title text-fg-high lowercase tracking-[-0.005em]'>
+                ledger connected
               </div>
-            )}
+              <div className='font-mono text-xs text-fg-muted break-all'>
+                account #0
+                <span className='ml-2'>(mainnet)</span>
+              </div>
+              <div className='mt-1 font-mono text-xs text-fg-muted break-all'>
+                <span className='text-fg-muted/70'>transparent: </span>
+                {account.transparentAddress}
+              </div>
+            </div>
 
-            {/* connected - account detail + import */}
-            {(phase === 'connected' || phase === 'importing') && account && (
-              <div className='flex flex-col gap-4'>
-                <div className='flex flex-col gap-1'>
-                  <div className='text-title text-fg-high lowercase tracking-[-0.005em]'>
-                    ledger connected
-                  </div>
-                  <div className='font-mono text-xs text-fg-muted break-all'>
-                    account #0
-                    <span className='ml-2'>(mainnet)</span>
-                  </div>
-                  <div className='mt-1 font-mono text-xs text-fg-muted break-all'>
-                    <span className='text-fg-muted/70'>transparent: </span>
-                    {account.transparentAddress}
-                  </div>
-                </div>
+            <Input
+              placeholder='wallet label'
+              value={walletLabel}
+              onChange={e => setWalletLabel(e.target.value)}
+            />
 
-                <Input
-                  placeholder='wallet label'
-                  value={walletLabel}
-                  onChange={e => setWalletLabel(e.target.value)}
-                />
-
-                {/* Update-app alert. hw-app-btc signs against the Zcash app on the
+            {/* Update-app alert. hw-app-btc signs against the Zcash app on the
                   device; an app that predates NU6.3 does not know the current
                   consensus branch id and REJECTS every send (6a80). Tell the user
                   to update before they try to send, or it fails on-device. */}
-                <StatusSlot tone='warn' icon='i-ph-arrows-clockwise'>
-                  update your ledger zcash app to the latest version in ledger live first. an older
-                  app does not recognise the current zcash network and will reject transparent
-                  sends.
-                </StatusSlot>
+            <StatusSlot tone='warn' icon='i-ph-arrows-clockwise'>
+              update your ledger zcash app to the latest version in ledger live first. an older app
+              does not recognise the current zcash network and will reject transparent sends.
+            </StatusSlot>
 
-                {/* TRANSPARENT-ONLY. zafu signs Ledger via the Bitcoin app (the only
+            {/* TRANSPARENT-ONLY. zafu signs Ledger via the Bitcoin app (the only
                   path that works on mainnet today); the dedicated shielded app is
                   not published yet, so shielded on Ledger is unavailable REGARDLESS
                   of app version. State that plainly - do not imply shielded works. */}
-                <StatusSlot tone='warn' icon='i-ph-shield-slash'>
-                  ledger is transparent-only in zafu right now. you can send and receive transparent
-                  zec (t-addresses). shielded on ledger needs a newer zcash app from ledger and is
-                  coming later - keep long-term savings in a shielded zafu wallet.
-                </StatusSlot>
+            <StatusSlot tone='warn' icon='i-ph-shield-slash'>
+              ledger is transparent-only in zafu right now. you can send and receive transparent zec
+              (t-addresses). shielded on ledger needs a newer zcash app from ledger and is coming
+              later - keep long-term savings in a shielded zafu wallet.
+            </StatusSlot>
 
-                <StatusSlot tone='info' icon='i-ph-usb'>
-                  watch-only + transparent. view your t-address balance and sign transparent sends
-                  with the ledger plugged in.
-                </StatusSlot>
+            <StatusSlot tone='info' icon='i-ph-usb'>
+              watch-only + transparent. view your t-address balance and sign transparent sends with
+              the ledger plugged in.
+            </StatusSlot>
 
-                {error && (
-                  <StatusSlot tone='danger' icon='i-ph-warning'>
-                    {error}
-                  </StatusSlot>
-                )}
-
-                <div className='flex flex-col gap-2'>
-                  <Button
-                    variant='primary'
-                    className='w-full'
-                    disabled={phase === 'importing'}
-                    onClick={handleImport}
-                  >
-                    {phase === 'importing' ? 'importing...' : 'add wallet'}
-                  </Button>
-                  <Button
-                    variant='quiet'
-                    className='w-full'
-                    disabled={phase === 'importing'}
-                    onClick={() => {
-                      setAccount(null);
-                      setError(null);
-                      setPhase('idle');
-                    }}
-                  >
-                    connect a different ledger
-                  </Button>
-                </div>
-              </div>
+            {error && (
+              <StatusSlot tone='danger' icon='i-ph-warning'>
+                {error}
+              </StatusSlot>
             )}
+
+            <div className='flex flex-col gap-2'>
+              <Button
+                variant='primary'
+                className='w-full'
+                disabled={phase === 'importing'}
+                onClick={handleImport}
+              >
+                {phase === 'importing' ? 'importing...' : 'add wallet'}
+              </Button>
+              <Button
+                variant='quiet'
+                className='w-full'
+                disabled={phase === 'importing'}
+                onClick={() => {
+                  setAccount(null);
+                  setError(null);
+                  setPhase('idle');
+                }}
+              >
+                connect a different ledger
+              </Button>
+            </div>
           </div>
-        </div>
-      </FadeTransition>
-    </OnboardingShell>
+        )}
+      </div>
+    </div>
   );
 };

@@ -1,13 +1,10 @@
 /**
- * Onboarding completion - Onb5Done board. One confidence, one action: it
- * worked, here is the wallet. Discovery happens later from inside it.
+ * Wallet ready - Onb5Done board. The board's sync bar is left out: nothing
+ * syncs until zafu is opened, and a bar here would be a made-up number.
  */
 
-import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { Button } from '@repo/ui/components/ui/button';
-import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { Mark } from '@repo/ui/components/ui/mark';
-import { OnboardingShell } from './onboarding-shell';
 
 const openSidePanel = async () => {
   // The onboarding tab is itself an extension page (page.html). After we
@@ -37,28 +34,29 @@ const openSidePanel = async () => {
   setTimeout(() => window.close(), 250);
 };
 
-export const OnboardingSuccess = () => {
-  return (
-    <OnboardingShell art='castle'>
-      <FadeTransition>
-        <div className='flex flex-col gap-[22px]'>
-          <Mark variant='seal' glyph='済' size={76} className='-rotate-[7deg]' />
-          <h1 className='font-display text-[44px] text-fg-high'>wallet ready</h1>
+export const OnboardingSuccess = () => (
+  <div className='flex flex-col gap-[22px]'>
+    <Mark variant='seal' glyph='済' size={76} className='-rotate-[7deg]' />
+    <h1 className='font-display text-[44px] text-fg-high'>wallet ready</h1>
 
-          <Button
-            variant='primary'
-            className='h-14 w-full text-body'
-            onClick={() => void openSidePanel()}
-          >
-            open zafu
-          </Button>
+    <div className='flex flex-col gap-3 border border-border-soft bg-elev-1 p-[18px]'>
+      <span className='text-data text-fg-high'>pin zafu to your toolbar</span>
+      <div
+        aria-hidden='true'
+        className='flex h-11 items-center gap-3 border border-border-soft bg-canvas px-3'
+      >
+        <span className='h-2.5 flex-1 bg-elev-2' />
+        <span className='grid size-[26px] place-items-center border border-border-hard'>
+          <span className='i-ph-puzzle-piece size-3.5 text-fg-muted' />
+        </span>
+        <span className='i-lucide-arrow-right size-4 text-zigner-gold' />
+        <Mark variant='seal' size={26} />
+      </div>
+      <span className='text-[11px] text-fg-muted'>extensions · then the pin next to zafu</span>
+    </div>
 
-          <StatusSlot tone='info' icon='i-ph-shield-check'>
-            shielded signing, on your terms. syncing continues in the background - you can use zafu
-            now.
-          </StatusSlot>
-        </div>
-      </FadeTransition>
-    </OnboardingShell>
-  );
-};
+    <Button autoFocus className='h-14 w-full text-[15px]' onClick={() => void openSidePanel()}>
+      open zafu
+    </Button>
+  </div>
+);

@@ -1,122 +1,128 @@
 /**
- * Set-password - Onb2Password board. Last user-input step before the
- * wallet is sealed.
+ * Set a password - Onb2Password board. The create path keeps it in memory and
+ * moves on to the phrase; every other path seals the wallet here.
  */
 
-import { FormEvent, useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
-import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
+import { FormEvent, useState } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
+import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
-import { StatusSlot } from '@repo/ui/components/ui/status-slot';
+import { Input } from '@repo/ui/components/ui/input';
 import { usePageNav } from '../../../../utils/navigate';
-import { PasswordInput } from '../../../../shared/components/password-input';
-import { useFinalizeOnboarding } from './hooks';
 import { PagePath } from '../../paths';
-import { SEED_PHRASE_ORIGIN } from './types';
-import { getSeedPhraseOrigin } from './utils';
 import { PENDING_ZCASH_BIRTHDAY_KEY } from '../constants';
-import { OnboardingBack, OnboardingShell, type OnboardingArt } from '../onboarding-shell';
+import { originOf, passwordStrength } from '../flow';
+import { useOnboarding } from '..';
+import { useFinalizeOnboarding } from './hooks';
+import { SEED_PHRASE_ORIGIN } from './types';
 
-const ART_BY_ORIGIN: Record<SEED_PHRASE_ORIGIN, OnboardingArt> = {
-  [SEED_PHRASE_ORIGIN.NEWLY_GENERATED]: 'samurai',
-  [SEED_PHRASE_ORIGIN.IMPORTED]: 'bamboo',
-  [SEED_PHRASE_ORIGIN.ZIGNER]: 'enso',
-  [SEED_PHRASE_ORIGIN.LEDGER]: 'enso',
-};
+const STRENGTH = [
+  ['', ''],
+  ['weak', 'bg-warning'],
+  ['fair', 'bg-zigner-gold'],
+  ['strong', 'bg-green'],
+  ['very strong', 'bg-green'],
+] as const;
 
 export const SetPassword = () => {
   const navigate = usePageNav();
-  const [password, setPassword] = useState('');
-  const [confirmation, setConfirmation] = useState('');
-  const { handleSubmit, error, loading } = useFinalizeOnboarding();
+  const origin = originOf(useLocation().pathname) ?? SEED_PHRASE_ORIGIN.IMPORTED;
+  const onboarding = useOnboarding();
+  const [password, setPassword] = useState(onboarding.password);
+  const [again, setAgain] = useState(onboarding.password);
+  const { finalize, error, loading } = useFinalizeOnboarding();
 
-  const location = useLocation();
-  const origin = getSeedPhraseOrigin(location);
+  // an import always carries a birthday from the step before; reached
+  // without one (a reload, a typed url), go back and ask for it. Read once:
+  // sealing the wallet clears it on the way out.
+  const [needsBirthday] = useState(
+    () =>
+      origin === SEED_PHRASE_ORIGIN.IMPORTED && !sessionStorage.getItem(PENDING_ZCASH_BIRTHDAY_KEY),
+  );
+  if (needsBirthday) {
+    return <Navigate to={PagePath.IMPORT_BIRTHDAY} replace />;
+  }
 
-  // An imported zcash recovery always needs a birthday (imports are zcash-only
-  // - see import-review.tsx); bounce back if this screen is reached without
-  // one stashed (direct URL, or a back-then-forward past the birthday step).
-  useEffect(() => {
-    if (
-      origin === SEED_PHRASE_ORIGIN.IMPORTED &&
-      !sessionStorage.getItem(PENDING_ZCASH_BIRTHDAY_KEY)
-    ) {
-      navigate(PagePath.IMPORT_BIRTHDAY);
+  const strength = passwordStrength(password);
+  const [strengthLabel, strengthColor] = STRENGTH[strength]!;
+  const match = again.length > 0 && again === password;
+  const mismatch = again.length >= password.length && again.length > 0 && !match;
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!match || loading) {
+      return;
     }
-  }, [origin, navigate]);
-
-  const handleFormSubmit = (e: FormEvent) => {
-    void handleSubmit(e, password);
-  };
-
-  const MIN_PASSWORD_LENGTH = 1;
-  const tooShort = password.length > 0 && password.length < MIN_PASSWORD_LENGTH;
-  const canSubmit = password.length >= MIN_PASSWORD_LENGTH && password === confirmation && !loading;
-  const onBack = () => {
     if (origin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED) {
-      navigate(PagePath.WELCOME);
-    } else {
-      navigate(-1);
+      onboarding.setPassword(password);
+      navigate(PagePath.GENERATE_SEED_PHRASE);
+      return;
     }
+    void finalize(origin, password);
   };
 
   return (
-    <OnboardingShell art={ART_BY_ORIGIN[origin]}>
-      <FadeTransition>
-        <div className='flex flex-col gap-[22px]'>
-          <OnboardingBack onClick={onBack} />
-          <h1 className='font-display text-[38px] text-fg-high'>set a password</h1>
-          <p className='text-body text-fg-muted lowercase'>unlocks zafu on this computer</p>
+    <form onSubmit={submit} className='flex flex-col gap-[22px]'>
+      <h1 className='font-display text-[38px] text-fg-high'>set a password</h1>
+      <p className='text-body text-fg-muted'>unlocks zafu on this computer</p>
 
-          <form onSubmit={handleFormSubmit} className='flex flex-col gap-4'>
-            <PasswordInput
-              passwordValue={password}
-              label='password'
-              autoFocus
-              onChange={({ target: { value } }) => setPassword(value)}
-              validations={[
-                {
-                  type: 'warn',
-                  issue: `at least ${MIN_PASSWORD_LENGTH} characters`,
-                  checkFn: () => tooShort,
-                },
-              ]}
-            />
-            <PasswordInput
-              passwordValue={confirmation}
-              label='again'
-              onChange={({ target: { value } }) => setConfirmation(value)}
-              validations={[
-                {
-                  type: 'warn',
-                  issue: "passwords don't match",
-                  checkFn: (txt: string) => password !== txt,
-                },
-              ]}
-            />
-
-            <Button
-              type='submit'
-              variant='primary'
-              disabled={!canSubmit}
-              loading={loading}
-              className='h-14 w-full text-body'
-            >
-              continue
-            </Button>
-
-            {error && (
-              <StatusSlot tone='danger' icon='i-ph-warning'>
-                {error}
-              </StatusSlot>
-            )}
-          </form>
-
-          <span className='text-label text-fg-dim lowercase'>
-            forgot it later? your recovery phrase restores the wallet
-          </span>
+      <div className='flex flex-col gap-2'>
+        <label htmlFor='pw' className='text-label text-fg-muted'>
+          password
+        </label>
+        <Input
+          id='pw'
+          type='password'
+          autoFocus
+          autoComplete='new-password'
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          className='h-[54px] px-4 text-[15px]'
+        />
+        <div className='flex h-[18px] items-center gap-2' aria-live='polite'>
+          {password && (
+            <>
+              <span className='flex gap-[3px]' aria-hidden='true'>
+                {[1, 2, 3, 4].map(i => (
+                  <span
+                    key={i}
+                    className={cn('h-[3px] w-7', i <= strength ? strengthColor : 'bg-border-hard')}
+                  />
+                ))}
+              </span>
+              <span className='text-[11px] text-fg-muted'>{strengthLabel}</span>
+            </>
+          )}
         </div>
-      </FadeTransition>
-    </OnboardingShell>
+      </div>
+
+      <div className='flex flex-col gap-2'>
+        <label htmlFor='pw-again' className='text-label text-fg-muted'>
+          again
+        </label>
+        <Input
+          id='pw-again'
+          type='password'
+          autoComplete='new-password'
+          variant={mismatch ? 'warn' : 'default'}
+          value={again}
+          onChange={e => setAgain(e.target.value)}
+          className='h-[54px] px-4 text-[15px]'
+        />
+        <span
+          className={cn('h-[18px] text-[11px]', match ? 'text-green' : 'text-warning')}
+          aria-live='polite'
+        >
+          {match ? 'they match' : mismatch ? "these don't match yet" : ''}
+        </span>
+      </div>
+
+      <Button type='submit' disabled={!match} loading={loading} className='h-14 w-full text-[15px]'>
+        continue
+      </Button>
+      <span className={cn('text-label', error ? 'text-warning' : 'text-fg-dim')}>
+        {error ?? 'forgot it later? your recovery phrase restores the wallet'}
+      </span>
+    </form>
   );
 };

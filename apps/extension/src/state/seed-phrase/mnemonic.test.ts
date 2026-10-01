@@ -3,6 +3,8 @@ import {
   generateSeedPhrase,
   generateValidationFields,
   isInWordList,
+  isWordPrefix,
+  parsePhrase,
   SeedPhraseLength,
   validateSeedPhrase,
 } from './mnemonic';
@@ -184,6 +186,30 @@ describe('Mnemonic tests', () => {
       invalidWords.forEach(w => {
         expect(isInWordList(w)).toBeFalsy();
       });
+    });
+  });
+
+  describe('parsePhrase()', () => {
+    test('reads a pasted phrase however it is spaced, cased or numbered', () => {
+      expect(parsePhrase('  Abandon\u00a0ART\n\n\tzoo,zone; \u200bwrong  ')).toEqual([
+        'abandon',
+        'art',
+        'zoo',
+        'zone',
+        'wrong',
+      ]);
+      expect(parsePhrase('1. abandon 2) ability\n#3 able 4.about 05 above')).toEqual([
+        'abandon',
+        'ability',
+        'able',
+        'about',
+        'above',
+      ]);
+      expect(parsePhrase(' \n ')).toEqual([]);
+    });
+    test('knows a word still being typed', () => {
+      expect(isWordPrefix('aban')).toBe(true);
+      expect(isWordPrefix('harbou')).toBe(false);
     });
   });
 });

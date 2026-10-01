@@ -2,11 +2,9 @@ import { lazy, Suspense } from 'react';
 import { createHashRouter, Outlet, RouteObject } from 'react-router-dom';
 import { RouteErrorScreen } from '../../components/error-boundary';
 import { PageIndex, pageIndexLoader } from '.';
-import { onboardingRoutes } from './onboarding/routes';
+import { onboardingRoute } from './onboarding/routes';
 import { PagePath } from './paths';
 
-// lazy load onboarding flow (only needed once per install)
-const Onboarding = lazy(() => import('./onboarding').then(m => ({ default: m.Onboarding })));
 const GrantCamera = lazy(() => import('./grant-camera').then(m => ({ default: m.GrantCamera })));
 
 // suspense fallback
@@ -31,15 +29,7 @@ export const pageRoutes: RouteObject[] = [
         element: <PageIndex />,
         loader: pageIndexLoader,
       },
-      {
-        path: PagePath.WELCOME,
-        element: (
-          <Suspense fallback={<LazyFallback />}>
-            <Onboarding />
-          </Suspense>
-        ),
-        children: onboardingRoutes,
-      },
+      onboardingRoute,
       {
         path: PagePath.GRANT_CAMERA,
         element: (
