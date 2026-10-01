@@ -27,14 +27,11 @@ import { activeZcashStoreId } from '../../../state/pockets';
 import {
   buildSendTxInWorker,
   buildSendTxPcztInWorker,
-  completeSendTxInWorker,
-  completeOrchardPcztInWorker,
   applySignatureContributionsInWorker,
   type SignatureContribution,
   getBalanceInWorker,
   getTransparentUtxosInWorker,
   broadcastRawTxInWorker,
-  type SendTxUnsignedResult,
   type SendTxPcztUnsignedResult,
 } from '../../../state/keyring/network-worker';
 import { usePoolNotes } from '../../../hooks/zcash-pool-balances';
@@ -43,7 +40,6 @@ import { nu63ActivationHeight } from '../../../config/feature-flags';
 import { maxSendable, quoteSend } from './spendable';
 import { Button } from '@repo/ui/components/ui/button';
 import { HankoSeal } from '@repo/ui/components/editorial';
-import { QrDisplay } from '../../../shared/components/qr-display';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
@@ -59,6 +55,7 @@ import { parseZcashMeHandle, type ZcashMeProfile } from '../../../services/zcash
 import { directoryProfileByAddress } from '../../../services/zcashme/directory';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { HARDWARE_WALLET_ENABLED, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
+import { walletKind, zcashSendRefusal } from '../../../signing/wallet-kind';
 import { connectLedgerBtc, zcashTransparentPath } from '../../../ledger/hw-btc-signer';
 import { ledgerTransparentSendFlowBtc } from '../../../ledger/hw-btc-flow';
 // connectLedger pairs/opens a WebHID session; ledgerSignerFor wraps the
@@ -67,12 +64,11 @@ import { connectLedger } from '../../../ledger';
 import { ledgerSignerFor } from '../../../signing/ledger-signer';
 import { signAndBroadcast } from '../../../signing/cold-send';
 import { createZignerSigner } from '../../../signing/zigner-signer';
-import { frostSelfCustodySigner } from '../../../signing/frost-signer';
+import { frostAirgapSigner, frostSelfCustodySigner } from '../../../signing/frost-signer';
 import { isPopup } from '../../../utils/popup-detection';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { formatZecAmount, isZip321Uri, parseZip321 } from '@repo/wallet/networks/zcash/zip321';
-import { isZcashSignatureQR, parseZcashSignatureResponse, bytesToHex } from '@repo/wallet/networks'; // self-contained 4-step zigner-mediated multisig sign
 
 import { unwrapCborSinglePczt, parsePreludeSinglePcztResponse } from './zcash-send-cbor-helpers';
 import {
@@ -80,6 +76,11 @@ import {
   mergeContributions,
   SUPPORTED_COMPACT_RESPONSE_VERSION,
 } from '../../../state/keyring/compact-signing';
+
+const SEND_FLAGS = {
+  hardwareWallet: HARDWARE_WALLET_ENABLED,
+  ledgerTransparent: LEDGER_TRANSPARENT_ENABLED,
+};
 
 interface ZcashSendProps {
   onClose: () => void;
@@ -199,7 +200,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     error: signingError,
     startSigning,
     startScanning,
-    processSignature,
     complete,
     setError,
     reset,
@@ -348,13 +348,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     // once, on open
   }, []);
   const [formError, setFormError] = useState<string | null>(null);
-  // legacy single-QR signing path (kept for non-PCZT consumers); the PCZT
-  // path uses pcztSignFrames + AnimatedQrDisplay below. Once every flow is
-  // migrated to PCZT we can drop this entirely.
-  const [signRequestQr] = useState<string | null>(null);
-  // PCZT-mode sign request (zigner single-signer). When set, the sign step
-  // shows AnimatedQrDisplay instead of the legacy single QR, and the scan
-  // step uses AnimatedQrScanner with `ur:zcash-pczt` filter.
+  // zigner sign request: the animated UR frames the sign step shows; the scan
+  // step reads the signed reply with AnimatedQrScanner.
   const [pcztSignFrames, setPcztSignFrames] = useState<string[] | null>(null);
   // Fill the sign surface with as large a QR as fits, so a phone camera can lock.
   const qrSize = useResponsiveQrSize();
@@ -397,9 +392,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     address: string;
   } | null>(null);
   const [showQrScanner, setShowQrScanner] = useState(false);
-  const unsignedTxRef = useRef<SendTxUnsignedResult | null>(null);
-  // airgap FROST multisig now builds a PCZT (gh #17) — separate from the legacy
-  // v5 unsignedTxRef so the cold-sign scan fallback path stays untouched.
+  // airgap FROST multisig builds a PCZT (gh #17)
   const pcztMultisigRef = useRef<SendTxPcztUnsignedResult | null>(null);
   const [sendSteps, setSendSteps] = useState<
     { step: string; detail?: string; elapsedMs: number }[]
@@ -425,25 +418,15 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     activeZcashWallet?.ufvk ??
     (activeZcashWallet?.orchardFvk?.startsWith('uview') ? activeZcashWallet.orchardFvk : undefined);
 
-  // Ledger send branch is flag-gated (HARDWARE_WALLET_ENABLED) AND keyed off the
-  // account actually being a ledger vault. Two shapes can indicate ledger:
-  //   - a full ledger keyvault: selectedKeyInfo.type === 'ledger'
-  //   - a watch-only import whose cold signer is a ledger. This parallels the
-  //     existing zigner-vs-keystone detection: the cold-signer kind is carried
-  //     in the KeyInfo `insensitive` metadata bag as `coldSignerType`
-  //     ('zigner' | 'keystone' | 'ledger'), NOT on the ZcashWalletJson. Read it
-  //     from there (Record<string, unknown>, so compare as string).
+  // which signer this wallet holds; flags decide which arm of handleSign runs,
+  // and a kind without a signer is refused before the form renders.
+  const kind = selectedKeyInfo && walletKind(selectedKeyInfo, activeZcashWallet);
+  const refusal = kind && zcashSendRefusal(kind, SEND_FLAGS);
   const coldSignerType = selectedKeyInfo?.insensitive?.['coldSignerType'] as string | undefined;
   const isLedgerAccount =
-    HARDWARE_WALLET_ENABLED && (selectedKeyInfo?.type === 'ledger' || coldSignerType === 'ledger');
-  // Transparent Ledger (hw-app-btc) account: a Ledger cold signer whose wallet
-  // record carries a transparent address. Routed to a t->t send via the Bitcoin
-  // app, NOT the shielded PCZT path. Gated on its own flag (separate from the
-  // blocked DMK shielded path's HARDWARE_WALLET_ENABLED).
-  const isTransparentLedger =
-    LEDGER_TRANSPARENT_ENABLED &&
-    coldSignerType === 'ledger' &&
-    !!activeZcashWallet?.transparentAddress;
+    HARDWARE_WALLET_ENABLED && (kind === 'ledger-shielded' || kind === 'ledger-transparent');
+  // t->t through the bitcoin app, not the shielded PCZT path
+  const isTransparentLedger = LEDGER_TRANSPARENT_ENABLED && kind === 'ledger-transparent';
 
   // ── what this form is allowed to say about your money ───────────────────
   //
@@ -806,7 +789,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               'are dropped when the toolbar popup loses focus',
           );
         }
-        const fromAddress = activeZcashWallet.transparentAddress!;
+        const fromAddress = activeZcashWallet!.transparentAddress!; // implied by the kind
         // ZIP-317 transparent fee: a conservative fixed estimate covering a few
         // logical actions. A slightly-high fee still confirms; tune on device.
         const feeZat = 20000n;
@@ -1147,78 +1130,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     startScanning();
   };
 
-  const handleSignatureScanned = useCallback(
-    async (data: string) => {
-      if (!isZcashSignatureQR(data)) {
-        const reason = 'invalid signature qr code';
-        void markPendingFailed(reason);
-        setError(reason);
-        setStep('error');
-        return;
-      }
-
-      try {
-        const sigResponse = parseZcashSignatureResponse(data);
-        console.log('signature received:', {
-          orchardSigs: sigResponse.orchardSigs.length,
-          transparentSigs: sigResponse.transparentSigs.length,
-        });
-
-        processSignature(data);
-        setStep('broadcast');
-
-        if (!unsignedTxRef.current || !selectedKeyInfo) {
-          throw new Error('missing unsigned transaction data');
-        }
-
-        // convert signatures to hex strings for worker
-        const signatures = {
-          orchardSigs: sigResponse.orchardSigs.map(s => bytesToHex(s)),
-          transparentSigs: sigResponse.transparentSigs.map(s => bytesToHex(s)),
-        };
-
-        const result = await completeSendTxInWorker(
-          'zcash',
-          selectedKeyInfo.id,
-          zidecarUrl,
-          unsignedTxRef.current.unsignedTx,
-          signatures,
-          unsignedTxRef.current.spendIndices,
-          // lets the worker mark the spent inputs and record the send; without
-          // it the completion sees only signed bytes
-          unsignedTxRef.current.coldSendId,
-        );
-
-        unsignedTxRef.current = null;
-        void promoteToBroadcasted(result.txid);
-        complete(result.txid);
-        setStep('complete');
-        void recordUsage(recipient, 'zcash');
-        if (shouldSuggestSave(recipient)) {
-          setShowSavePrompt(true);
-        }
-      } catch (err) {
-        unsignedTxRef.current = null;
-        const reason = err instanceof Error ? err.message : 'failed to broadcast transaction';
-        void markPendingFailed(reason);
-        setError(reason);
-        setStep('error');
-      }
-    },
-    [
-      processSignature,
-      complete,
-      setError,
-      selectedKeyInfo,
-      zidecarUrl,
-      recipient,
-      recordUsage,
-      shouldSuggestSave,
-      promoteToBroadcasted,
-      markPendingFailed,
-    ],
-  );
-
   /**
    * PCZT-mode receive handler. The animated scanner has already accumulated
    * `ur:zcash-pczt/...` frames and reconstructed the CBOR-wrapped payload via
@@ -1417,17 +1328,16 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     onClose();
   };
 
-  // airgap-flow finished: broadcast with the aggregated orchard sigs.
+  // airgap-flow finished: the shared cold tail injects the aggregated orchard
+  // sigs under the build's store and send id, so the inputs are marked spent.
   const handleAirgapComplete = async (orchardSigs: string[]) => {
-    setStep('broadcast');
     try {
       const result = pcztMultisigRef.current!;
-      const finalResult = await completeOrchardPcztInWorker(
-        selectedKeyInfo!.id,
-        zidecarUrl,
-        result.pcztHex,
-        orchardSigs,
-        result.spendIndices,
+      const finalResult = await signAndBroadcast(
+        frostAirgapSigner(orchardSigs, result),
+        result,
+        { walletId: storeId ?? selectedKeyInfo!.id, zidecarUrl, mainnet },
+        { onSigned: () => setStep('broadcast') },
       );
       void promoteToBroadcasted(finalResult.txid);
       complete(finalResult.txid);
@@ -1851,7 +1761,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             <div className='flex flex-col gap-4 p-4 flex-1 overflow-y-auto'>
               {/* QR */}
               <div className='flex justify-center'>
-                {pcztSignFrames && pcztSignFrames.length > 0 ? (
+                {pcztSignFrames && pcztSignFrames.length > 0 && (
                   <AnimatedQrDisplay
                     urFrames={pcztSignFrames}
                     urSource={
@@ -1870,14 +1780,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     title='scan with zafu zigner'
                     description='hold zigner camera steady; multi-frame transfer'
                   />
-                ) : signRequestQr ? (
-                  <QrDisplay
-                    data={signRequestQr}
-                    size={210}
-                    title='scan with zafu zigner'
-                    description='open zafu zigner and scan this qr'
-                  />
-                ) : null}
+                )}
               </div>
 
               {/* tx summary */}
@@ -1935,7 +1838,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       }
 
       case 'scan':
-        return pcztUnsignedRef.current ? (
+        return (
           <div className='flex flex-col h-full'>
             {/* header */}
             <div className='flex items-center gap-2 px-4 py-3 border-b border-border-soft'>
@@ -1973,17 +1876,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               />
             </div>
           </div>
-        ) : (
-          <QrScanner
-            onScan={handleSignatureScanned}
-            onError={err => {
-              setError(err);
-              setStep('error');
-            }}
-            onClose={() => setStep('sign')}
-            title='scan signature'
-            description="point camera at zafu zigner's signature qr code"
-          />
         );
 
       case 'ledger-sign':
@@ -2212,17 +2104,14 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     }
   };
 
-  // A pasted viewing key has no signer. Say so instead of offering a send
-  // that could never be signed.
-  if (coldSignerType === 'viewing-key') {
+  // A wallet with no signer here (a viewing key, a ledger with its signing
+  // flag off) is told so instead of being offered a send it cannot sign.
+  if (refusal) {
     return (
       <div className='flex h-full flex-col items-center justify-center gap-3 bg-canvas p-6 text-center'>
-        <span className='i-ph-eye size-6 text-fg-muted' />
-        <p className='text-sm text-fg-high lowercase'>this wallet is a viewing key</p>
-        <p className='text-xs text-fg-muted lowercase'>
-          it can see this wallet&apos;s transactions but cannot spend. send from the wallet that
-          holds the keys.
-        </p>
+        <span className={`${refusal.icon} size-6 text-fg-muted`} />
+        <p className='text-sm text-fg-high lowercase'>{refusal.title}</p>
+        <p className='text-xs text-fg-muted lowercase'>{refusal.body}</p>
         <Button variant='secondary' onClick={handleClose}>
           back
         </Button>

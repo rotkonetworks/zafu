@@ -92,8 +92,6 @@ export interface ZignerSigningSlice {
   step: SigningStep;
   /** current transaction being signed */
   transaction: SigningTransaction | null;
-  /** scanned signature qr hex */
-  signatureQr: string | null;
   /** on-chain tx hash after broadcast */
   txHash: string | null;
   /** error message if failed */
@@ -106,8 +104,6 @@ export interface ZignerSigningSlice {
   showSignRequest: () => void;
   /** set step to scanning */
   startScanning: () => void;
-  /** process scanned signature */
-  processSignature: (signatureHex: string) => void;
   /** start broadcasting */
   startBroadcast: () => void;
   /** complete with tx hash */
@@ -125,7 +121,6 @@ export interface ZignerSigningSlice {
 export const createZignerSigningSlice: SliceCreator<ZignerSigningSlice> = set => ({
   step: 'idle',
   transaction: null,
-  signatureQr: null,
   txHash: null,
   error: null,
 
@@ -133,7 +128,6 @@ export const createZignerSigningSlice: SliceCreator<ZignerSigningSlice> = set =>
     set(state => {
       state.zignerSigning.step = 'building';
       state.zignerSigning.transaction = tx;
-      state.zignerSigning.signatureQr = null;
       state.zignerSigning.txHash = null;
       state.zignerSigning.error = null;
     });
@@ -148,13 +142,6 @@ export const createZignerSigningSlice: SliceCreator<ZignerSigningSlice> = set =>
   startScanning: () => {
     set(state => {
       state.zignerSigning.step = 'scanning';
-    });
-  },
-
-  processSignature: signatureHex => {
-    set(state => {
-      state.zignerSigning.signatureQr = signatureHex;
-      state.zignerSigning.step = 'broadcasting';
     });
   },
 
@@ -182,7 +169,6 @@ export const createZignerSigningSlice: SliceCreator<ZignerSigningSlice> = set =>
     set(state => {
       state.zignerSigning.step = 'idle';
       state.zignerSigning.transaction = null;
-      state.zignerSigning.signatureQr = null;
       state.zignerSigning.txHash = null;
       state.zignerSigning.error = null;
     });
