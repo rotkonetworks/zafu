@@ -112,7 +112,7 @@ export const TransparentReceive = ({ chainId }: { chainId: CosmosChainId }) => {
           onClick={() => setShowEarlier(true)}
           className='w-[150px] shrink-0'
         >
-          earlier addresses
+          earlier
         </Button>
         <Button
           onClick={() => current && copy(current.address)}

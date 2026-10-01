@@ -1265,7 +1265,7 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
     });
   };
 
-  const unitIn = (selectedIn?.symbol ?? 'asset').toLowerCase();
+  const unitIn = (selectedIn?.symbol ?? 'um').toLowerCase();
   const unitOut = (selectedOut?.symbol ?? 'asset').toLowerCase();
   const rate =
     simulation?.rate &&

@@ -19,7 +19,8 @@ export const balanceLook = (b: BalancesResponse | undefined) => {
   const amt = b?.balanceView ? fromValueView(b.balanceView) : '0';
   return {
     meta,
-    symbol: b ? (positionLabel(meta) ?? symbolFromMetadata(meta)) : 'asset',
+    // nothing held yet: the staking token is what arrives first
+    symbol: b ? (positionLabel(meta) ?? symbolFromMetadata(meta)) : 'UM',
     amount: typeof amt === 'string' ? amt : amt.toString(),
   };
 };

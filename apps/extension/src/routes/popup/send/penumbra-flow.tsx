@@ -76,42 +76,46 @@ export function PenumbraFlow({
     }
   };
 
-  switch (step.at) {
-    case 'form':
-      return <>{children(() => setStep({ at: 'review' }))}</>;
-    case 'review':
-      return <Review {...tx.review} onEdit={edit} onConfirm={() => void send()} />;
-    case 'sending':
-      return (
-        <Sending
-          meta={step.shown.sending}
-          stages={STAGES.penumbra}
-          steps={step.steps}
-          floor={0}
-          since={step.since}
-          hot
-          onClose={onClose}
-        />
-      );
-    case 'done':
-      return (
-        <Done
-          line={step.shown.done}
-          txHash={step.txId}
-          note={doneNote?.(step.txId)}
-          onDone={onClose}
-        >
-          {doneActions?.(step.txId)}
-        </Done>
-      );
-    case 'error':
-      return (
-        <Stopped
-          sending={step.shown.sending}
-          error={step.error}
-          onCancel={onClose}
-          onRetry={edit}
-        />
-      );
-  }
+  const screen = () => {
+    switch (step.at) {
+      case 'form':
+        return <>{children(() => setStep({ at: 'review' }))}</>;
+      case 'review':
+        return <Review {...tx.review} onEdit={edit} onConfirm={() => void send()} />;
+      case 'sending':
+        return (
+          <Sending
+            meta={step.shown.sending}
+            stages={STAGES.penumbra}
+            steps={step.steps}
+            floor={0}
+            since={step.since}
+            hot
+            onClose={onClose}
+          />
+        );
+      case 'done':
+        return (
+          <Done
+            line={step.shown.done}
+            txHash={step.txId}
+            note={doneNote?.(step.txId)}
+            onDone={onClose}
+          >
+            {doneActions?.(step.txId)}
+          </Done>
+        );
+      case 'error':
+        return (
+          <Stopped
+            sending={step.shown.sending}
+            error={step.error}
+            onCancel={onClose}
+            onRetry={edit}
+          />
+        );
+    }
+  };
+
+  return <div className='flex h-full flex-col bg-canvas'>{screen()}</div>;
 }
