@@ -80,6 +80,9 @@
         "@rotko/penumbra-wasm",
         "@penumbra-labs/registry"
       ]
+    },
+    "patchedDependencies": {
+      "@rotko/penumbra-services@70.0.0": "patches/@rotko__penumbra-services@70.0.0.patch"
     }
   },
   "workspaces": [

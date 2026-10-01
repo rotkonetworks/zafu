@@ -9,6 +9,11 @@ overrides:
 
 pnpmfileChecksum: bwtiqgusdylthorgowhneampme
 
+patchedDependencies:
+  '@rotko/penumbra-services@70.0.0':
+    hash: 2dia6fuu4mei23n6kofuzuleky
+    path: patches/@rotko__penumbra-services@70.0.0.patch
+
 importers:
 
   .:
@@ -205,7 +210,7 @@ importers:
         version: link:../../packages/zcash-wasm
       '@rotko/penumbra-services':
         specifier: 70.0.0
-        version: 70.0.0(tndntcklm2p6cckadbbjhlchru)
+        version: 70.0.0(patch_hash=2dia6fuu4mei23n6kofuzuleky)(tndntcklm2p6cckadbbjhlchru)
       '@rotko/penumbra-types':
         specifier: 37.0.0
         version: 37.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/getters@28.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1))
@@ -429,7 +434,7 @@ importers:
         version: 13.2.0
       '@rotko/penumbra-services':
         specifier: 70.0.0
-        version: 70.0.0(tndntcklm2p6cckadbbjhlchru)
+        version: 70.0.0(patch_hash=2dia6fuu4mei23n6kofuzuleky)(tndntcklm2p6cckadbbjhlchru)
       '@rotko/penumbra-types':
         specifier: 37.0.0
         version: 37.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/getters@28.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1))
@@ -11240,7 +11245,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.62.5':
     optional: true
 
-  '@rotko/penumbra-services@70.0.0(tndntcklm2p6cckadbbjhlchru)':
+  '@rotko/penumbra-services@70.0.0(patch_hash=2dia6fuu4mei23n6kofuzuleky)(tndntcklm2p6cckadbbjhlchru)':
     dependencies:
       '@bufbuild/protobuf': 1.10.1
       '@connectrpc/connect': 1.7.0(@bufbuild/protobuf@1.10.1)
