@@ -24,6 +24,7 @@ import {
   validateAuthorization,
 } from '@repo/wallet/airgap-signer';
 import { QrDisplay } from '../../../../shared/components/qr-display';
+import { zignerCodeChain } from '../../../../shared/zigner-code';
 import { QrScanner } from '../../../../shared/components/qr-scanner';
 import { Button } from '@repo/ui/components/ui/button';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
@@ -153,6 +154,10 @@ export const TransactionApproval = () => {
   };
 
   const handleAirgapScan = (hex: string) => {
+    if (zignerCodeChain(hex) === 'zcash') {
+      setScanError("this code is zigner's zcash code. this request needs its penumbra code.");
+      return;
+    }
     try {
       const authData = parseAuthorizationQR(hex);
       // Validate effect hash and signature counts match the plan
