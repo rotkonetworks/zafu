@@ -9,6 +9,8 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { viewClient, simulationClient } from '../../../clients';
 import { StepList } from '@repo/ui/components/ui/step-list';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+import { Button } from '@repo/ui/components/ui/button';
 import { Sensitive } from '../../../components/sensitive';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { useStore } from '../../../state';
@@ -237,11 +239,14 @@ const ZcashCrosschainSwap = () => {
       .catch(() => {});
   }, [walletId]);
 
-  // fetch supported tokens + resolve ZEC asset ID dynamically
+  // fetch supported tokens + resolve ZEC asset ID dynamically - only once the
+  // user opens the token picker, never merely from opening the swap screen
+  // (that first fetch is also what the egress ask sheet waits on)
   const [zecAssetId, setZecAssetId] = useState<string | undefined>();
   const { data: tokens = [], isLoading: tokensLoading } = useQuery({
     queryKey: ['near-tokens'],
     staleTime: 300_000,
+    enabled: tokenPickerOpen,
     queryFn: async () => {
       const all = await getSupportedTokens();
       setZecAssetId(findZecAssetId(all));
@@ -555,6 +560,24 @@ const ZcashCrosschainSwap = () => {
 
   const canQuote = selectedToken && parseFloat(amountIn) > 0 && zcashAddress && destinationAddress;
 
+  // a quote is only good for a short window - watch for it passing while the
+  // user is still reviewing, so nothing is sent against a stale rate
+  const [quoteExpired, setQuoteExpired] = useState(false);
+  useEffect(() => {
+    setQuoteExpired(false);
+    const deadline = quote?.quote.deadline;
+    if (step !== 'review' || !deadline) {
+      return;
+    }
+    const ms = new Date(deadline).getTime() - Date.now();
+    if (ms <= 0) {
+      setQuoteExpired(true);
+      return;
+    }
+    const id = setTimeout(() => setQuoteExpired(true), ms);
+    return () => clearTimeout(id);
+  }, [step, quote]);
+
   return (
     <div className='flex flex-col gap-3 p-4'>
       {PasswordModal}
@@ -742,36 +765,20 @@ const ZcashCrosschainSwap = () => {
 
           {error && <p className='text-xs text-red-400'>{error}</p>}
 
-          {/* third-party custody risk warning - shown before any funds are committed */}
-          <div className='border border-yellow-500/30 bg-yellow-500/10 p-3'>
-            <div className='flex items-start gap-2'>
-              <span className='i-ph-warning mt-0.5 h-4 w-4 shrink-0 text-yellow-400' />
-              <div className='flex flex-col gap-1.5 text-xs text-yellow-400'>
-                <p>third-party service - not operated by us</p>
-                <p className='text-fg-muted'>
-                  This swap routes through NEAR Intents (Defuse / 1Click), a third-party service we
-                  do not operate or control. We provide no guarantees.
-                </p>
-                <p className='text-fg-muted'>
-                  Funds sent to the deposit address may be delayed, held, frozen, or subject to the
-                  service's own compliance / AML review - potentially for a long time - and we
-                  cannot recover or guarantee them.
-                </p>
-                <p className='text-fg-muted'>
-                  The deposit address may be a custodial address controlled by the service, not a
-                  trustless bridge.
-                </p>
-                <a
-                  href='https://docs.near-intents.org/near-intents/integration/distribution-channels/1click-terms-of-service'
-                  target='_blank'
-                  rel='noopener noreferrer'
-                  className='inline-flex items-center gap-1 text-yellow-400 underline underline-offset-2 hover:text-yellow-300'
-                >
-                  NEAR Intents 1Click terms of service
-                  <span className='i-ph-arrow-square-out h-3 w-3' />
-                </a>
-              </div>
-            </div>
+          {/* third-party custody risk warning - one line, shown before any funds are committed */}
+          <div className='flex items-start gap-2 border border-yellow-500/30 bg-yellow-500/10 p-3'>
+            <span className='i-ph-warning mt-0.5 h-4 w-4 shrink-0 text-yellow-400' />
+            <p className='text-xs text-yellow-400'>
+              a third party (NEAR Intents) briefly holds the funds, not us -{' '}
+              <a
+                href='https://docs.near-intents.org/near-intents/integration/distribution-channels/1click-terms-of-service'
+                target='_blank'
+                rel='noopener noreferrer'
+                className='underline underline-offset-2 hover:text-yellow-300'
+              >
+                terms
+              </a>
+            </p>
           </div>
 
           <label className='flex cursor-pointer items-start gap-2.5 text-xs text-fg'>
@@ -781,8 +788,7 @@ const ZcashCrosschainSwap = () => {
               onChange={e => setRiskAcknowledged(e.target.checked)}
               className='mt-0.5 h-4 w-4 shrink-0 accent-[var(--zigner-gold)]'
             />
-            I understand this is a third-party, potentially custodial service and accept these
-            risks.
+            I accept these risks.
           </label>
 
           <button
@@ -1011,6 +1017,36 @@ const ZcashCrosschainSwap = () => {
           </button>
         </div>
       )}
+
+      <Sheet
+        open={quoteExpired && step === 'review'}
+        onOpenChange={open => {
+          if (!open) {
+            setStep('input');
+          }
+        }}
+        title='quote expired'
+      >
+        <p className='text-sm text-fg-muted'>
+          rates move quickly, so a swap quote is only good for a short window. nothing was sent -
+          your {isFromZec ? 'zec' : selectedToken?.symbol.toLowerCase()} is still yours. get a fresh
+          quote to continue.
+        </p>
+        <div className='mt-2 flex gap-2'>
+          <Button variant='secondary' className='flex-1' onClick={() => setStep('input')}>
+            not now
+          </Button>
+          <Button
+            className='flex-1'
+            onClick={() => {
+              setStep('input');
+              void handleRequestQuote();
+            }}
+          >
+            get a new quote
+          </Button>
+        </div>
+      </Sheet>
     </div>
   );
 };
