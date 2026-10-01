@@ -94,6 +94,48 @@ Reproduce by checking out the zcli rev below and running the commands.
 Verify: rebuild from the rev, sha256sum the outputs,
 diff against the values above. A mismatch means the vendored blob is stale.
 
+## 2026-10-02 rebuild (2) - Ledger Zcash app protocol on top of the OP_RETURN blob
+
+- source repo: zcli, branch `feat/ledger-on-thor` (from `feat/thor-op-return`
+  8923975, the rev of the blob it replaces), rev `092582f`. The three Ledger
+  commits of `feat/ledger-zcash-app` (eaf40a1, b370415, eaa9360, on master
+  e212d03) cherry-picked as 3279742, a74328c, 3da7444; the only conflict was
+  the module list at the top of `src/lib.rs` (both sides kept). 092582f
+  passes the new explicit expiry delta in the ledger stamping test and makes
+  the `only_worker_side_exports_take_wallet_secrets` guard walk `src/ledger/`
+  (it read `src/` flat and stopped on the new directory; no ledger export
+  takes a phrase, seed or private key).
+- new (public data only, nothing takes a key): `ledger_ufvk_plan`,
+  `ledger_ufvk_remaining_bytes`, `ledger_parse_ufvk`, `ledger_validate_pczt`,
+  `ledger_pczt_signing_plan`, `ledger_finalize_pczt_signing`,
+  `ledger_stamp_derivations` (ported from vizor-wallet, Apache-2.0, see
+  crates/zcash-wasm/LICENSE-APACHE-vizor); and a trailing optional
+  `ovk_from_ufvk` on `build_unsigned_shielding_transaction_ironwood` (the
+  Ledger app refuses a shielding output it cannot decrypt).
+- `.d.ts` diff against the previous blob: the seven `ledger_*` exports and
+  the one trailing optional argument; nothing removed or changed. Every
+  export of feat/seed-sign-in-worker (`SpendKeys`) and feat/thor-op-return
+  (`plan_transparent_transaction`, `build_unsigned_transparent_transaction`)
+  is present.
+- `cargo test -p zafu-wasm --lib --tests --release`: all green (lib 90
+  passed, 51 of them `ledger::`; `hot_sign_split` 7 passed). Ignored as
+  before: the Speculos round trip (`ledger::speculos_tests`, needs
+  SPECULOS_URL) and the regtest suites.
+- toolchain: nightly `rustc 1.95.0-nightly (6a979b3e3 2026-02-26)`,
+  wasm-bindgen CLI 0.2.126, wasm-opt (binaryen) version 130
+  (`/nix/store/azhmf1il8da9pps80bk2f4l6ql6bgfg7-binaryen-130`); recipe as in
+  the parallel section above.
+- parallel variant only, copied to both `packages/zcash-wasm/` and
+  `apps/extension/public/zafu-wasm/` (glue, `.d.ts`, `_bg.wasm`,
+  `_bg.wasm.d.ts`). The rayon snippet hash is unchanged
+  (`wasm-bindgen-rayon-38edf6e439f6d70d`), so the patched `workerHelpers.js`
+  (`wbgRayonBase` defined and used) was kept as is.
+- size: pre `wasm-opt` 22,159,484 bytes; post `-Oz` 10,078,678 bytes.
+- sha256(parallel zafu_wasm_bg.wasm) =
+  be68b5d235cf9b410dc5101eeb846b0374418e73bd56ff7983901cea71446ed8
+- shared imported memory confirmed post-bindgen:
+  `(memory $mimport$0 55 32768 shared)`.
+
 ## 2026-10-02 rebuild - unsigned t->t with an OP_RETURN (THORChain deposits)
 
 - source repo: zcli, branch `feat/thor-op-return` (from

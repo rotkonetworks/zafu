@@ -1156,11 +1156,12 @@ export function build_unsigned_shielding_transaction(utxos_json, recipient, amou
  * @param {number} expected_branch_id
  * @param {boolean} mainnet
  * @param {string | null} [memo_hex]
+ * @param {string | null} [ovk_from_ufvk]
  * @returns {string}
  */
-export function build_unsigned_shielding_transaction_ironwood(utxos_json, pubkey_hex, recipient, amount, fee, target_height, expected_branch_id, mainnet, memo_hex) {
-    let deferred6_0;
-    let deferred6_1;
+export function build_unsigned_shielding_transaction_ironwood(utxos_json, pubkey_hex, recipient, amount, fee, target_height, expected_branch_id, mainnet, memo_hex, ovk_from_ufvk) {
+    let deferred7_0;
+    let deferred7_1;
     try {
         const ptr0 = passStringToWasm0(utxos_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
@@ -1170,18 +1171,20 @@ export function build_unsigned_shielding_transaction_ironwood(utxos_json, pubkey
         const len2 = WASM_VECTOR_LEN;
         var ptr3 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         var len3 = WASM_VECTOR_LEN;
-        const ret = wasm.build_unsigned_shielding_transaction_ironwood(ptr0, len0, ptr1, len1, ptr2, len2, amount, fee, target_height, expected_branch_id, mainnet, ptr3, len3);
-        var ptr5 = ret[0];
-        var len5 = ret[1];
+        var ptr4 = isLikeNone(ovk_from_ufvk) ? 0 : passStringToWasm0(ovk_from_ufvk, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len4 = WASM_VECTOR_LEN;
+        const ret = wasm.build_unsigned_shielding_transaction_ironwood(ptr0, len0, ptr1, len1, ptr2, len2, amount, fee, target_height, expected_branch_id, mainnet, ptr3, len3, ptr4, len4);
+        var ptr6 = ret[0];
+        var len6 = ret[1];
         if (ret[3]) {
-            ptr5 = 0; len5 = 0;
+            ptr6 = 0; len6 = 0;
             throw takeFromExternrefTable0(ret[2]);
         }
-        deferred6_0 = ptr5;
-        deferred6_1 = len5;
-        return getStringFromWasm0(ptr5, len5);
+        deferred7_0 = ptr6;
+        deferred7_1 = len6;
+        return getStringFromWasm0(ptr6, len6);
     } finally {
-        wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
+        wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
     }
 }
 
@@ -2716,6 +2719,131 @@ export function initThreadPool(num_threads) {
 }
 
 /**
+ * Validates one response per plan command (status words stripped), verifies
+ * every signature, and returns the signed PCZT bytes.
+ * @param {Uint8Array} pczt
+ * @param {Array<any>} responses
+ * @returns {Uint8Array}
+ */
+export function ledger_finalize_pczt_signing(pczt, responses) {
+    const ptr0 = passArray8ToWasm0(pczt, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.ledger_finalize_pczt_signing(ptr0, len0, responses);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v2;
+}
+
+/**
+ * Reassembles and validates the UFVK export. Returns
+ * `{ ufvk: string, seedFingerprint: Uint8Array(32), accountIndex: number }`.
+ * @param {Array<any>} responses
+ * @param {string} network
+ * @param {number} account_index
+ * @returns {any}
+ */
+export function ledger_parse_ufvk(responses, network, account_index) {
+    const ptr0 = passStringToWasm0(network, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.ledger_parse_ufvk(responses, ptr0, len0, account_index);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * The full ordered APDU exchange that has the device review the PCZT once
+ * and sign every transparent input and real Orchard / Ironwood spend.
+ * `memo_hash_supported` comes from the app version (3.9.4+).
+ * @param {Uint8Array} pczt
+ * @param {boolean} memo_hash_supported
+ * @returns {any}
+ */
+export function ledger_pczt_signing_plan(pczt, memo_hash_supported) {
+    const ptr0 = passArray8ToWasm0(pczt, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.ledger_pczt_signing_plan(ptr0, len0, memo_hash_supported);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Stamps the Ledger account's derivations onto a zafu-built PCZT so the
+ * signing plan can serialize it. `transparent_paths` is an array of
+ * `{ input_index, scope, address_index, pubkey: Uint8Array(33) }`, one per
+ * transparent input. Idempotent; refuses to overwrite a different derivation.
+ * @param {Uint8Array} pczt
+ * @param {Uint8Array} seed_fingerprint
+ * @param {number} account_index
+ * @param {any} transparent_paths
+ * @returns {Uint8Array}
+ */
+export function ledger_stamp_derivations(pczt, seed_fingerprint, account_index, transparent_paths) {
+    const ptr0 = passArray8ToWasm0(pczt, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArray8ToWasm0(seed_fingerprint, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.ledger_stamp_derivations(ptr0, len0, ptr1, len1, account_index, transparent_paths);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v3 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v3;
+}
+
+/**
+ * APDUs that export the UFVK for `account_index`: `[first, continuation]`.
+ * Send `first`, then repeat `continuation` while
+ * [`ledger_ufvk_remaining_bytes`] reports bytes still owed.
+ * @param {number} account_index
+ * @returns {any}
+ */
+export function ledger_ufvk_plan(account_index) {
+    const ret = wasm.ledger_ufvk_plan(account_index);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * UFVK bytes the device still owes after `responses` (status words
+ * stripped). `0` means stop sending continuations and call
+ * [`ledger_parse_ufvk`].
+ * @param {Array<any>} responses
+ * @returns {number}
+ */
+export function ledger_ufvk_remaining_bytes(responses) {
+    const ret = wasm.ledger_ufvk_remaining_bytes(responses);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return ret[0] >>> 0;
+}
+
+/**
+ * Throws `unsupported_transaction: ...` when the Ledger Zcash app cannot sign
+ * this PCZT (limits: 32 transparent inputs, 10 transparent outputs, 32 actions
+ * per shielded pool; legacy Orchard into Ironwood; unsupported shapes).
+ * @param {Uint8Array} pczt
+ */
+export function ledger_validate_pczt(pczt) {
+    const ptr0 = passArray8ToWasm0(pczt, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.ledger_validate_pczt(ptr0, len0);
+    if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+    }
+}
+
+/**
  * Get number of threads available (0 if single-threaded)
  * @returns {number}
  */
@@ -3365,6 +3493,10 @@ function __wbg_get_imports(memory) {
             const ret = typeof(arg0) === 'function';
             return ret;
         },
+        __wbg___wbindgen_is_null_ea9085d691f535d3: function(arg0) {
+            const ret = arg0 === null;
+            return ret;
+        },
         __wbg___wbindgen_is_object_a27215656b807791: function(arg0) {
             const val = arg0;
             const ret = typeof(val) === 'object' && val !== null;
@@ -3474,6 +3606,10 @@ function __wbg_get_imports(memory) {
             const ret = arg0[arg1 >>> 0];
             return ret;
         },
+        __wbg_get_78f252d074a84d0b: function() { return handleError(function (arg0, arg1) {
+            const ret = Reflect.get(arg0, arg1);
+            return ret;
+        }, arguments); },
         __wbg_get_c7eb1f358a7654df: function() { return handleError(function (arg0, arg1) {
             const ret = Reflect.get(arg0, arg1);
             return ret;
@@ -3647,6 +3783,10 @@ function __wbg_get_imports(memory) {
         __wbg_prototypesetcall_4770620bbe4688a0: function(arg0, arg1, arg2) {
             Uint8Array.prototype.set.call(getArrayU8FromWasm0(arg0, arg1), arg2);
         },
+        __wbg_push_d2ae3af0c1217ae6: function(arg0, arg1) {
+            const ret = arg0.push(arg1);
+            return ret;
+        },
         __wbg_queueMicrotask_0ab5b2d2393e99b9: function(arg0) {
             const ret = arg0.queueMicrotask;
             return ret;
@@ -3668,6 +3808,10 @@ function __wbg_get_imports(memory) {
         __wbg_set_6be42768c690e380: function(arg0, arg1, arg2) {
             arg0[arg1] = arg2;
         },
+        __wbg_set_8535240470bf2500: function() { return handleError(function (arg0, arg1, arg2) {
+            const ret = Reflect.set(arg0, arg1, arg2);
+            return ret;
+        }, arguments); },
         __wbg_set_8a16b38e4805b298: function(arg0, arg1, arg2) {
             arg0[arg1 >>> 0] = arg2;
         },
@@ -3738,17 +3882,17 @@ function __wbg_get_imports(memory) {
             return ret;
         },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 139, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 145, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue______true_);
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3702, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3713, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue__core_8266185441cb29e1___result__Result_____wasm_bindgen_aeea2c632802c019___JsError___true_);
             return ret;
         },
         __wbindgen_cast_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3704, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3715, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___futures__task__wait_async_polyfill__MessageEvent______true_);
             return ret;
         },
