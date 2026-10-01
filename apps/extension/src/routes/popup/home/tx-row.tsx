@@ -14,31 +14,8 @@ import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import type { NetworkType } from '../../../state/keyring';
-import { fmtTime } from './format';
+import { fmtTime, fmtZecHero } from './format';
 import type { ParsedTransaction } from './tx-parse';
-
-/**
- * The unsettled-transaction mark: the same ensō the sync line uses, drawn as
- * an open arc that never closes. Deliberately the *same* idiom rather than a
- * new one - "not finished yet" already has a visual language in this wallet,
- * and a spinner would shout where this whispers.
- */
-const PendingMark = ({ className }: { className?: string }) => (
-  <svg width='16' height='16' viewBox='0 0 16 16' className={cn('-rotate-90 shrink-0', className)}>
-    <circle
-      cx='8'
-      cy='8'
-      r='6.4'
-      pathLength='100'
-      fill='none'
-      strokeWidth='1.8'
-      strokeLinecap='round'
-      strokeDasharray='100'
-      strokeDashoffset='45'
-      className='stroke-fg-dim'
-    />
-  </svg>
-);
 
 /** public per-tx explorer URL, per network. Penumbra's contents are shielded,
  *  but the tx hash IS public and penumbra.fi/explore resolves it, so the link is
@@ -97,87 +74,75 @@ export function TxRow({ tx, network }: { tx: ParsedTransaction; network: Network
   // the amount/fee split is worth a line of its own: it is what explains why
   // the balance moved by more than the payment
   const hasBreakdown = !!tx.recipientAmount && !!tx.feeAmount;
+  const recipientName =
+    contactMatch?.contact.name ??
+    directoryName ??
+    (tx.recipient && `${tx.recipient.slice(0, 8)}…${tx.recipient.slice(-4)}`);
+  const counterparty = isIn
+    ? fromNote && `from ${fromNote}`
+    : recipientName && `to ${recipientName}`;
+  // zcash amounts line up at four decimals on home; other assets keep their own
+  const amountText =
+    network === 'zcash' ? fmtZecHero(Number(tx.amount)) : `${tx.amount} ${tx.asset ?? ''}`;
 
   return (
     <>
       {/* summary row - tapping it opens the detail Sheet; nothing expands in
           place here. Its own controls (copy, save, edit note) live in the
-          sheet, where a tap acts on that control rather than closing it. */}
+          sheet. An unsettled transaction shows the open enso instead of a
+          direction - the state matters more than the direction until it lands. */}
       <button
         type='button'
         onClick={() => setOpen(true)}
-        className={cn(
-          'flex items-center gap-3 border bg-elev-1 p-3 text-left transition-colors',
-          isFailed ? 'border-hanko/40' : 'border-border-soft',
-          // pending rows recede rather than flash: they are not an alert, they
-          // are simply not finished
-          isPending && 'border-dashed',
-        )}
+        className='flex h-[54px] items-center gap-3 px-1 text-left transition-colors hover:bg-elev-1'
       >
-        {/* direction reads from the lucide icon, not from color-as-category:
-            shield / arrow-down / arrow-up on a neutral chip. An unsettled
-            transaction shows the open ensō instead - the state matters more
-            than the direction until it lands. */}
-        <div className='flex h-8 w-8 items-center justify-center bg-elev-2'>
-          {isPending ? (
-            <PendingMark />
-          ) : isFailed ? (
-            <span className='i-ph-x h-4 w-4 text-hanko' />
-          ) : isSh ? (
-            <span className='i-ph-shield h-4 w-4 text-fg-muted' />
-          ) : isLp ? (
-            <span className='i-ph-arrows-left-right h-4 w-4 text-fg-muted' />
-          ) : isIn ? (
-            <span className='i-ph-arrow-down h-4 w-4 text-fg-high' />
-          ) : (
-            <span className='i-ph-arrow-up h-4 w-4 text-fg-muted' />
-          )}
-        </div>
-        <div className='flex-1 min-w-0'>
-          <div className='flex items-center justify-between gap-2'>
-            <span className={cn('text-xs', isPending && 'text-fg-muted', isFailed && 'text-hanko')}>
-              {tx.description}
-            </span>
-            {tx.amount && (
-              <Sensitive
-                className={cn(
-                  'text-xs font-mono',
-                  isFailed && 'text-fg-dim line-through',
-                  !isFailed && isIn && 'text-fg-high',
-                  !isFailed && !isIn && 'text-fg-muted',
-                )}
-              >
-                {/* "at most" rather than a confident figure: the change that
-                    came back has not been scanned yet, so the true amount is
-                    somewhere below this. Better vague than five times wrong. */}
-                {tx.amountUpperBound ? '≤ ' : isIn ? '+' : ''}
-                {tx.amount} {tx.asset ?? ''}
-              </Sensitive>
+        <span className='grid size-[30px] shrink-0 place-items-center border border-border-soft bg-elev-1'>
+          <span
+            className={cn(
+              'size-3.5',
+              isPending
+                ? 'i-zafu-enso text-zigner-gold'
+                : isFailed
+                  ? 'i-lucide-x text-hanko'
+                  : isSh
+                    ? 'i-lucide-shield text-fg-muted'
+                    : isLp
+                      ? 'i-lucide-arrow-left-right text-fg-muted'
+                      : isIn
+                        ? 'i-lucide-arrow-down-left text-success'
+                        : 'i-lucide-arrow-up-right text-fg-muted',
             )}
-          </div>
-          <div className='flex items-center justify-between gap-2 mt-0.5'>
-            <span className='text-label text-fg-muted font-mono truncate'>
-              {tx.id.slice(0, 16)}...
-            </span>
-            {/* A row with no height has no block to name. Rather than print a
-                confident-looking `#0`, say plainly what is and is not known:
-                when we broadcast it, and that the chain has not answered. */}
-            <span
-              className={cn(
-                'text-label whitespace-nowrap lowercase',
-                isFailed ? 'text-hanko' : 'text-fg-muted',
-              )}
-            >
-              {tx.height > 0
-                ? `#${tx.height}`
-                : isPending
-                  ? `${fmtTime(tx.timestamp)} · unconfirmed`
-                  : isFailed
-                    ? 'expired'
-                    : fmtTime(tx.timestamp)}
-            </span>
-          </div>
-        </div>
+          />
+        </span>
+        <span className='flex min-w-0 flex-1 flex-col gap-[3px]'>
+          <span className={cn('text-[13px] text-fg-high', isFailed && 'text-hanko')}>
+            {tx.description}
+          </span>
+          <span className='truncate text-[11px] text-fg-muted'>
+            {[
+              counterparty,
+              tx.height > 0 || !isPending
+                ? isFailed
+                  ? 'not mined in time'
+                  : fmtTime(tx.timestamp)
+                : 'waiting for a block',
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </span>
+        </span>
+        {tx.amount && (
+          <Sensitive
+            className={cn(
+              'shrink-0 text-[13px] tabular',
+              isFailed ? 'text-fg-dim line-through' : isIn ? 'text-success' : 'text-fg',
+            )}
+          >
+            {/* "at most": the change that came back has not been scanned yet */}
+            {tx.amountUpperBound ? '≤ ' : isIn ? '+' : isSh ? '' : '−'}
+            {amountText}
+          </Sensitive>
+        )}
       </button>
 
       <Sheet open={open} onOpenChange={setOpen} title={tx.description}>

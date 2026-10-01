@@ -11,7 +11,6 @@ import { selectActiveNetwork, selectEffectiveKeyInfo } from '../state/keyring';
 import { selectActiveZcashWallet } from '../state/wallets';
 import { activeAccountIndex, activePockets } from '../state/pockets';
 import { getNetwork } from '../config/networks';
-import { CustodyBadge } from './custody-badge';
 import { AccountsSheet, type PocketSheetTarget } from './accounts-sheet';
 import { NetworkSheet } from './network-sheet';
 import { AddWalletSheet } from './add-wallet-sheet';
@@ -38,8 +37,10 @@ export const AppHeader = () => {
     activeNetwork === 'zcash' && selectedKeyInfo?.type !== 'mnemonic'
       ? (activeZcashWallet?.label ?? selectedKeyInfo?.name ?? 'no wallet')
       : (selectedKeyInfo?.name ?? 'no wallet');
+  const viewOnly = selectedKeyInfo?.insensitive['coldSignerType'] === 'viewing-key';
   // pockets exist only for the hot wallet - shows which one is active
-  const pocketName = pockets.find(p => p.account === pocketAccount)?.name;
+  const subtitle =
+    pockets.find(p => p.account === pocketAccount)?.name ?? (viewOnly ? 'view only' : undefined);
 
   return (
     <header className='sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border-soft bg-canvas pl-3 pr-2'>
@@ -49,16 +50,21 @@ export const AppHeader = () => {
         aria-label='accounts'
         aria-haspopup='dialog'
       >
-        <Mark variant='seal' size={26} />
+        {viewOnly ? (
+          <span className='grid size-[26px] shrink-0 place-items-center border border-border-soft'>
+            <span className='i-ph-eye size-3.5 text-fg-muted' />
+          </span>
+        ) : (
+          <Mark variant='seal' size={26} />
+        )}
         <span className='flex min-w-0 flex-col items-start leading-tight'>
           <span className='max-w-32 truncate text-sm text-fg-high lowercase'>{walletName}</span>
-          {pocketName && (
+          {subtitle && (
             <span className='max-w-32 truncate text-[11px] text-fg-muted lowercase'>
-              {pocketName}
+              {subtitle}
             </span>
           )}
         </span>
-        {selectedKeyInfo && <CustodyBadge vault={selectedKeyInfo} showLabel={false} />}
         <span className='i-lucide-chevron-down size-3.5 shrink-0 text-fg-muted' />
       </button>
 

@@ -1,8 +1,10 @@
 import { useMemo, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 
 import { useStore } from '../../../state';
-import { selectEffectiveKeyInfo, type NetworkType } from '../../../state/keyring';
+import type { NetworkType } from '../../../state/keyring';
+import { activeZcashStoreId } from '../../../state/pockets';
 import { messagesSelector } from '../../../state/messages';
 import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
@@ -13,19 +15,28 @@ import { getHistoryInWorker } from '../../../state/keyring/network-worker';
 import { zatToZec } from './format';
 import { parsePenumbraTx, type ParsedTransaction } from './tx-parse';
 import { TxRow } from './tx-row';
+import { PopupPath } from '../paths';
 
+/**
+ * Transaction history. Fetched only after the user chose to keep it
+ * (`enableTransactionHistory`, asked once on the first payment); off means
+ * nothing is queried and nothing renders. With `limit`, the home section:
+ * the newest few and "see all".
+ */
 export const HistoryContent = ({
   network,
   penumbraAccount,
+  limit,
 }: {
   network: NetworkType;
   penumbraAccount: number;
+  limit?: number;
 }) => {
-  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const historyEnabled = useStore(s => s.privacy.settings.enableTransactionHistory);
   const messages = useStore(messagesSelector);
-  const walletId = selectedKeyInfo?.id;
+  // the active pocket's own store: account 0 is the bare wallet id
+  const zcashStoreId = useStore(activeZcashStoreId);
   const isMainnet = !zidecarUrl.includes('testnet');
   const { tAddresses } = useTransparentAddresses(isMainnet);
   const { workerSyncHeight } = useZcashSyncStatus();
@@ -42,8 +53,6 @@ export const HistoryContent = ({
     }
     return map;
   }, [messages, network]);
-
-  const setSetting = useStore(s => s.privacy.setSetting);
 
   // hooks must always be called in the same order - queries use `enabled` flag instead
   const penumbraQ = useQuery({
@@ -80,14 +89,14 @@ export const HistoryContent = ({
   });
 
   const zcashQ = useQuery({
-    queryKey: ['homeHistory', 'zcash', walletId, tAddresses.length],
-    enabled: network === 'zcash' && !!walletId && historyEnabled,
+    queryKey: ['homeHistory', 'zcash', zcashStoreId, tAddresses.length],
+    enabled: network === 'zcash' && !!zcashStoreId && historyEnabled,
     staleTime: 10_000,
     queryFn: async () => {
-      if (!walletId) {
+      if (!zcashStoreId) {
         return [];
       }
-      const entries = await getHistoryInWorker('zcash', walletId, zidecarUrl, tAddresses);
+      const entries = await getHistoryInWorker('zcash', zcashStoreId, zidecarUrl, tAddresses);
       return entries.map(e => ({
         id: e.id,
         height: e.height,
@@ -147,18 +156,7 @@ export const HistoryContent = ({
   }, [network, latestBlockHeight, workerSyncHeight, queryClient]);
 
   if (!historyEnabled) {
-    return (
-      <div className='flex items-center justify-center gap-2 px-4 py-4 text-label lowercase'>
-        <span className='text-fg-muted/50'>history off</span>
-        <span className='text-fg-muted/30'>·</span>
-        <button
-          onClick={() => void setSetting('enableTransactionHistory', true)}
-          className='text-zigner-gold/70 transition-colors hover:text-zigner-gold'
-        >
-          enable
-        </button>
-      </div>
-    );
+    return null;
   }
 
   // Cosmos subnetworks (e.g. Noble) have their own transparent-chain activity,
@@ -186,53 +184,39 @@ export const HistoryContent = ({
         )
       : allTxs;
 
-  if (q.isLoading && txs.length === 0) {
-    return (
-      <div className='flex flex-col items-center justify-center gap-3 py-12'>
-        <span className='i-ph-arrows-clockwise h-5 w-5 animate-spin text-fg-muted' />
-        <span className='text-xs text-fg-muted'>loading...</span>
-      </div>
-    );
-  }
-
   if (q.error) {
     return (
-      <div className='flex flex-col items-center justify-center gap-3 py-12'>
-        <span className='text-xs text-hanko'>failed to load</span>
-        <button
-          onClick={() => void q.refetch()}
-          className='text-xs text-zigner-gold hover:underline'
-        >
-          retry
+      <div className='flex items-center justify-center gap-2 py-4 text-xs'>
+        <span className='text-fg-muted'>activity did not load</span>
+        <button onClick={() => void q.refetch()} className='text-zigner-gold hover:underline'>
+          try again
         </button>
       </div>
     );
   }
 
   if (txs.length === 0) {
-    return (
-      <div className='flex flex-col items-center justify-center gap-3 py-12'>
-        <span className='i-ph-clock h-5 w-5 text-fg-muted' />
-        <span className='text-xs text-fg-muted'>no transactions yet</span>
-      </div>
+    return limit || q.isLoading ? null : (
+      <span className='py-6 text-center text-xs text-fg-muted'>nothing here yet</span>
     );
   }
 
-  const recent = txs.slice(0, 20);
-
+  const shown = limit ? txs.slice(0, limit) : txs;
   return (
-    <div className='flex flex-col gap-1'>
-      <div className='mb-1'>
-        <span className='kicker'>recent activity</span>
-      </div>
-      {recent.map(tx => (
-        <TxRow key={tx.id} tx={tx} network={network} />
-      ))}
-      {txs.length > 20 && (
-        <div className='py-2 text-center text-xs text-fg-muted'>
-          {txs.length - 20} more transactions
+    <section className='flex flex-col gap-2'>
+      {limit && (
+        <div className='flex h-[18px] items-center justify-between'>
+          <h2 className='text-xs tracking-[0.04em] text-fg-muted'>activity</h2>
+          <Link to={PopupPath.ACTIVITY} className='text-xs text-network-accent'>
+            see all
+          </Link>
         </div>
       )}
-    </div>
+      <div className='flex flex-col'>
+        {shown.map(tx => (
+          <TxRow key={tx.id} tx={tx} network={network} />
+        ))}
+      </div>
+    </section>
   );
 };

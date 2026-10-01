@@ -140,6 +140,10 @@ export const popupRoutes: RouteObject[] = [
             path: PopupPath.NOTE_SYNC,
             lazy: lazyScreen('noteSync'),
           },
+          {
+            path: PopupPath.ACTIVITY,
+            lazy: lazyScreen('activity'),
+          },
 
           // Per-pool notes (orchard legacy vs ironwood). Registered only when the
           // IRONWOOD_MIGRATION flag is ON - the dual-pool UI is dormant otherwise.

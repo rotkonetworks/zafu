@@ -16,7 +16,6 @@ import { OverlayPortal } from '../../../components/overlay-portal';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { VaultUnlock } from '../../../state/keyring/types';
 import { Button } from '@repo/ui/components/ui/button';
-import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { StepList } from '@repo/ui/components/ui/step-list';
 import { Sensitive } from '../../../components/sensitive';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
@@ -99,50 +98,6 @@ function isPreActivationError(message: string | null): boolean {
     m.includes('nu6.3 is not active') ||
     m.includes('until nu6.3 activates') ||
     m.includes('refusing to build turnstile migration')
-  );
-}
-
-/**
- * Home-screen prompt (Zashi proposeShielding style): shown when the wallet
- * holds orchard balance and the turnstile is available. The caller gates on
- * the IRONWOOD_MIGRATION feature flag.
- *
- * Orchard is framed as a legacy, migrate-only pool: after NU6.3 activates,
- * orchard-to-orchard sends are disabled, so funds are moved one-way to your
- * own ironwood address to keep spending them normally. The funds are never at
- * risk - only the pool changes. When orchardZat is 0 the wallet is fully
- * migrated and the banner renders nothing (the parent also gates on
- * orchardZat > 0, but returning null keeps this component safe on its own).
- */
-export function IronwoodMigrationBanner({
-  orchardZat,
-  onMigrate,
-}: {
-  orchardZat: bigint;
-  onMigrate: () => void;
-}) {
-  // Fully migrated: nothing left in the legacy orchard pool - no prompt.
-  if (orchardZat <= 0n) {
-    return null;
-  }
-  return (
-    <StatusSlot
-      tone='gold'
-      icon='i-ph-arrows-left-right'
-      action={{ label: 'migrate', onClick: onMigrate }}
-    >
-      <span className='text-fg-high'>
-        orchard is now legacy ·{' '}
-        <span className='tabular-nums text-fg-muted'>
-          <Sensitive>{fmtZec(orchardZat)}</Sensitive> ZEC to migrate
-        </span>
-      </span>
-      <span className='text-label leading-snug text-fg-muted'>
-        NU6.3 makes ironwood the active pool. your orchard funds are safe - move them one-way to
-        your own ironwood address to keep spending normally. orchard-to-orchard sends are disabled
-        after activation.
-      </span>
-    </StatusSlot>
   );
 }
 

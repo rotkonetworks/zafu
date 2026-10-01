@@ -81,6 +81,13 @@ export interface PrivacySettings {
   enableTransactionHistory: boolean;
 
   /**
+   * the one-time "keep a history on this computer?" sheet, shown on the first
+   * payment, has been answered. read as `=== true` so legacy stored state
+   * (no field) still gets asked.
+   */
+  historyAsked: boolean;
+
+  /**
    * enable background sync for transparent networks
    * when false (default): no background network activity
    * when true: periodically syncs state with network
@@ -192,6 +199,7 @@ export interface PrivacySlice {
 export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   enableTransparentBalances: false,
   enableTransactionHistory: false,
+  historyAsked: false,
   enableBackgroundSync: false,
   enablePriceFetching: false,
   enableExplorerLinks: false,
