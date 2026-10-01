@@ -62,9 +62,6 @@ export function PaymentRequestSheet({
               zec
             </span>
           </div>
-          <span className='h-4 text-label text-hanko-light lowercase'>
-            {amountInvalid ? 'up to 8 decimals' : ''}
-          </span>
         </div>
         {isShielded && (
           <div className='flex flex-col gap-1.5'>

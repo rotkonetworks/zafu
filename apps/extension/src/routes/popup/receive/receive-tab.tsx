@@ -143,35 +143,52 @@ export function ReceiveTab({
   const [requestOpen, setRequestOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  // right-of-label hint, matching the board's shielded/transparent copy
-  const hint = showingEphemeral
-    ? ''
-    : transparent && isZcash
-      ? 'shield after receiving'
-      : isZcash
-        ? 'one address per sender'
-        : '';
-  const label = showingEphemeral
-    ? 'ephemeral address'
-    : transparent && isZcash
-      ? 'transparent address · public'
-      : isZcash
-        ? 'shielded address'
-        : 'address';
-  const addrColor = showingEphemeral
-    ? 'text-zigner-gold'
-    : transparent && isZcash
-      ? 'text-hanko-light'
-      : 'text-fg-high';
-  // one rotate button for every mode: a fresh ephemeral, the next transparent
-  // index, or a fresh shielded diversifier.
-  const rotate = showingEphemeral
-    ? () => setEphemeralNonce(n => n + 1)
+  // one row of copy/colour/rotate per address kind, instead of a ternary per
+  // concern - label, hint, colours and the rotate action all vary on the
+  // same discriminator.
+  const plain = 'border-surface-border-soft bg-surface-elev-2';
+  const kinds = {
+    ephemeral: {
+      label: 'ephemeral address',
+      hint: '',
+      labelColor: 'text-fg-muted',
+      addrColor: 'text-zigner-gold',
+      box: 'border-zigner-gold/40 bg-zigner-gold/5',
+      rotate: () => setEphemeralNonce(n => n + 1),
+    },
+    transparent: {
+      label: 'transparent address · public',
+      hint: 'shield after receiving',
+      labelColor: 'text-hanko-light',
+      addrColor: 'text-hanko-light',
+      box: 'border-hanko/35 bg-hanko/8',
+      rotate: t.advance,
+    },
+    shielded: {
+      label: 'shielded address',
+      hint: 'one address per sender',
+      labelColor: 'text-fg-muted',
+      addrColor: 'text-fg-high',
+      box: plain,
+      rotate: retireShielded,
+    },
+    none: {
+      label: 'address',
+      hint: '',
+      labelColor: 'text-fg-muted',
+      addrColor: 'text-fg-high',
+      box: plain,
+      rotate: undefined as (() => void) | undefined,
+    },
+  } as const;
+  const kind: keyof typeof kinds = showingEphemeral
+    ? 'ephemeral'
     : isZcash && transparent
-      ? t.advance
+      ? 'transparent'
       : isZcash
-        ? retireShielded
-        : undefined;
+        ? 'shielded'
+        : 'none';
+  const m = kinds[kind];
 
   return (
     <div className='flex flex-1 flex-col items-center gap-4'>
@@ -195,10 +212,8 @@ export function ReceiveTab({
 
       <div className='w-full'>
         <div className='mb-1.5 flex items-center justify-between text-label lowercase'>
-          <span className={transparent && isZcash ? 'text-hanko-light' : 'text-fg-muted'}>
-            {label}
-          </span>
-          {hint && <span className='text-fg-muted'>{hint}</span>}
+          <span className={m.labelColor}>{m.label}</span>
+          {m.hint && <span className='text-fg-muted'>{m.hint}</span>}
         </div>
         {isZcash && transparent && t.used && (
           <p className='mb-1 flex items-start gap-1.5 text-label text-hanko-light lowercase'>
@@ -208,25 +223,17 @@ export function ReceiveTab({
           </p>
         )}
         <div className='flex gap-1.5'>
-          <div
-            className={`flex h-14 min-w-0 flex-1 items-center border p-3 ${
-              showingEphemeral
-                ? 'border-zigner-gold/40 bg-zigner-gold/5'
-                : transparent && isZcash
-                  ? 'border-hanko/35 bg-hanko/8'
-                  : 'border-surface-border-soft bg-surface-elev-2'
-            }`}
-          >
+          <div className={`flex h-14 min-w-0 flex-1 items-center border p-3 ${m.box}`}>
             <code
               title={displayAddress || undefined}
-              className={`w-full truncate text-label transition-opacity duration-150 ${addrColor} ${retired ? 'opacity-30' : ''}`}
+              className={`w-full truncate text-label transition-opacity duration-150 ${m.addrColor} ${retired ? 'opacity-30' : ''}`}
             >
               {isLoading ? 'generating...' : displayAddress || 'no wallet selected'}
             </code>
           </div>
-          {rotate && (
+          {m.rotate && (
             <button
-              onClick={rotate}
+              onClick={m.rotate}
               disabled={retired}
               className='grid size-14 shrink-0 place-items-center border border-surface-border-soft bg-surface-elev-1 text-fg-muted transition-colors hover:text-fg-high disabled:cursor-not-allowed disabled:opacity-50'
               title='new address'

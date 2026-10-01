@@ -17,7 +17,7 @@ import { selectActiveNetwork } from '../../../state/keyring';
 import { useActiveAddress } from '../../../hooks/use-address';
 import { rotateShieldedDiversifier } from '../../../state/shielded-receive-index';
 import { routeForChain, usePenumbraRoutes } from '../../../transparent/penumbra-routes';
-import { ReceiveTab } from './receive-tab';
+import { ReceiveTab, type AddrType } from './receive-tab';
 import { TransparentReceive } from './transparent-receive';
 import {
   PrivacySwitch,
@@ -27,7 +27,6 @@ import {
 import { getActiveIbcSubnetworks } from '../../../config/networks';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { Segmented } from '@repo/ui/components/ui/segmented';
-import type { AddrType } from './receive-tab';
 
 export function ReceivePage() {
   const activeNetwork = useStore(selectActiveNetwork);
