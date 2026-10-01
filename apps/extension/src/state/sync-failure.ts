@@ -89,27 +89,32 @@ const KIND_BY_CODE: Record<SyncErrorCode, SyncFailureKind> = {
 };
 
 /**
- * The copy. Lowercase to match zafu's register (see
- * `components/zcash/sync-status.tsx`). Every line names who acts and whether
- * it self-heals. No heights, no hashes, no hex, no type names.
+ * The copy, one strip line each (boards ErrNode, StOffline). Every line names
+ * who acts and whether it self-heals. No heights, no hashes, no hex, no type
+ * names.
  */
 const MESSAGES: Record<SyncFailureKind, string> = {
-  network: "the network connection dropped. we'll keep trying automatically.",
-  endpoint: "can't reach the zcash node you configured. check your endpoint settings.",
-  consensus:
-    'this node served data the wallet could not verify, so syncing stopped. switch nodes, or try again later.',
-  chainRecovery: "the chain changed while syncing. we'll keep trying to recover.",
-  storageBusy: "wallet data is busy. we'll try syncing again automatically.",
-  storageFatal: 'wallet data could not be read. reload zafu and sync again.',
-  unknown: 'sync stopped and we could not tell why. try again to continue.',
+  network: "the node isn't answering · zafu keeps trying",
+  endpoint: "the node isn't answering · please choose another",
+  consensus: 'this node sent data zafu could not verify · please choose another',
+  chainRecovery: 'the chain moved while syncing · zafu keeps trying',
+  storageBusy: 'wallet data is busy · zafu keeps trying',
+  storageFatal: 'wallet data could not be read · please reload zafu',
+  unknown: 'sync stopped on our side, not yours · please try again',
 };
+
+/** shown in place of any failure while the computer itself has no network */
+export const OFFLINE_MESSAGE = 'no connection · zafu will keep trying on its own';
+
+const CHOOSE: SyncFailureAction = { label: 'choose', kind: 'settings' };
 
 const ACTIONS: Partial<Record<SyncFailureKind, SyncFailureAction>> = {
   // Only failures the node is plausibly responsible for point at the node.
-  endpoint: { label: 'switch node', kind: 'settings' },
-  consensus: { label: 'switch node', kind: 'settings' },
+  network: CHOOSE,
+  endpoint: CHOOSE,
+  consensus: CHOOSE,
   // A local problem must never make the wallet blame the node (vizor's rule).
-  storageFatal: { label: 'reload zafu', kind: 'reload' },
+  storageFatal: { label: 'reload', kind: 'reload' },
   unknown: { label: 'try again', kind: 'retry' },
 };
 

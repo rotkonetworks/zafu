@@ -9,6 +9,9 @@ import { PopupPath } from '../paths';
 import { AssetListSkeleton } from '../../../components/primitives/skeleton';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { useSyncProgress } from '../../../hooks/full-sync-height';
+import { useOnline } from '../../../hooks/use-online';
+import { classifySyncFailure } from '../../../state/sync-failure';
+import { syncNotice } from '../../../components/zcash/sync-notice';
 import { getDisplayDenomFromView } from '@penumbra-zone/getters/value-view';
 import { fromValueView } from '@rotko/penumbra-types/amount';
 import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
@@ -55,6 +58,10 @@ export const PenumbraContent = ({
 }) => {
   const navigate = useNavigate();
   const { latestBlockHeight, fullSyncHeight, error } = useSyncProgress();
+  const notice = syncNotice({
+    online: useOnline(),
+    failure: error ? classifySyncFailure(error) : null,
+  });
 
   const isSyncing = (latestBlockHeight ?? 0) - (fullSyncHeight ?? 0) > 10;
   const syncPct =
@@ -142,25 +149,24 @@ export const PenumbraContent = ({
       {/* single message slot for penumbra: only the backup nudge competes */}
       {nudge}
 
-      {/* sync status - a fixed-height reserved slot, not a growing card.
-          A sync error gets a one-tap link to the network picker so a new
-          user whose Penumbra grpc endpoint is unreachable doesn't have to
-          hunt through settings to switch. */}
-      {(isSyncing || !latestBlockHeight) && (
+      {/* sync status - a fixed-height reserved slot, not a growing card. The
+          same classified line as zcash (state/sync-failure.ts), never the raw
+          error, and offline before anything about the node. */}
+      {(isSyncing || !latestBlockHeight || notice) && (
         <StatusSlot
-          tone={error ? 'danger' : 'gold'}
-          icon={error ? 'i-ph-warning' : 'i-ph-arrows-clockwise'}
-          progress={error ? undefined : syncPct}
+          tone={notice ? 'warn' : 'gold'}
+          icon={notice ? 'i-ph-warning' : 'i-ph-arrows-clockwise'}
+          progress={notice ? undefined : syncPct}
           action={
-            error
+            notice?.action?.kind === 'settings'
               ? {
-                  label: 'switch endpoint',
+                  label: notice.action.label,
                   onClick: () => navigate(`${PopupPath.SETTINGS_NETWORKS}?network=penumbra`),
                 }
               : undefined
           }
         >
-          {error ? String(error) : syncLabel}
+          {notice?.text ?? syncLabel}
         </StatusSlot>
       )}
 

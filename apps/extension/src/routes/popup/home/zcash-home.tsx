@@ -27,7 +27,12 @@ import { rescanStartHeight } from '../../../utils/zcash-blocks';
 import { rescanZcash, retryZcashSync } from '../../../services/zcash-resync';
 import { IronwoodMigrate } from '../send/ironwood-migrate';
 import { cn } from '@repo/ui/lib/utils';
-import { SyncStatus } from '../../../components/zcash/sync-status';
+import { SyncStatus, type SyncStatusProps } from '../../../components/zcash/sync-status';
+import { syncNotice } from '../../../components/zcash/sync-notice';
+import type { SyncFailure } from '../../../state/sync-failure';
+import { useOnline } from '../../../hooks/use-online';
+import { useRebuildLeft, useRebuildSince } from '../../../state/witness-rebuild';
+import { useTxOps } from '../../../tx-ops/use-tx-ops';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
@@ -90,6 +95,47 @@ const PoolRow = ({
   </div>
 );
 
+/**
+ * The strip's own subscriptions (network, a running witness rebuild, the
+ * tracker) live here, so a change re-renders the strip and not the screen.
+ * A rebuild counts only while a zcash send it belongs to is still pending.
+ */
+const SyncStrip = ({
+  synced,
+  failure,
+  onRetry,
+  ...sync
+}: Omit<SyncStatusProps, 'notice'> & {
+  synced: boolean;
+  failure: SyncFailure | null;
+  onRetry: () => void;
+}) => {
+  const navigate = useNavigate();
+  const online = useOnline();
+  const sending = useTxOps().some(op => op.network === 'zcash' && op.status === 'pending');
+  const rebuildLeft = useRebuildLeft(useRebuildSince());
+  const spec = syncNotice({ online, rebuildLeft: sending ? rebuildLeft : undefined, failure });
+  if (synced && !spec) {
+    return null;
+  }
+  const run = {
+    settings: () => navigate(`${PopupPath.SETTINGS_NETWORKS}?network=zcash`),
+    reload: () => window.location.reload(),
+    retry: onRetry,
+  };
+  return (
+    <SyncStatus
+      {...sync}
+      notice={
+        spec && {
+          ...spec,
+          action: spec.action && { label: spec.action.label, onClick: run[spec.action.kind] },
+        }
+      }
+    />
+  );
+};
+
 /** zcash home: sync strip, hero balance, actions, in-flight, pools, activity */
 export const ZcashContent = ({
   hasMnemonic,
@@ -112,6 +158,7 @@ export const ZcashContent = ({
     failure: syncFailure,
   } = useZcashSyncStatus();
   const navigate = useNavigate();
+  const online = useOnline();
 
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   // the turnstile migration is an ironwood build on the zigner QR: offered
@@ -302,34 +349,17 @@ export const ZcashContent = ({
   return (
     <div className='flex min-h-full flex-col overflow-x-hidden'>
       {PasswordModal}
-      {(!allSynced || syncError) && (
-        <SyncStatus
-          percent={overallPct}
-          connecting={chainHeight <= 0}
-          currentHeight={workerSyncHeight}
-          targetHeight={chainHeight}
-          startBlock={effectiveBirthday}
-          // only the classified message is shown; the raw error sits behind
-          // "technical details" (state/sync-failure.ts)
-          error={syncError ? syncFailure?.message : undefined}
-          errorDetail={syncFailure?.raw}
-          // the action comes from the taxonomy, so a local failure never
-          // tells the user to switch nodes
-          errorAction={
-            syncFailure?.action && {
-              label: syncFailure.action.label,
-              onClick: () =>
-                syncFailure.action?.kind === 'settings'
-                  ? navigate(`${PopupPath.SETTINGS_NETWORKS}?network=zcash`)
-                  : syncFailure.action?.kind === 'reload'
-                    ? window.location.reload()
-                    : retry(),
-            }
-          }
-          onRetry={retry}
-          onRescan={h => setRescanConfirmHeight(rescanStartHeight(h))}
-        />
-      )}
+      <SyncStrip
+        synced={allSynced}
+        failure={syncError ? syncFailure : null}
+        percent={overallPct}
+        connecting={chainHeight <= 0}
+        currentHeight={workerSyncHeight}
+        targetHeight={chainHeight}
+        startBlock={effectiveBirthday}
+        onRetry={retry}
+        onRescan={h => setRescanConfirmHeight(rescanStartHeight(h))}
+      />
 
       <div className='flex flex-1 flex-col gap-6 px-4 pb-4 pt-6'>
         <section className='relative flex flex-col gap-[18px]'>
@@ -362,6 +392,11 @@ export const ZcashContent = ({
               )}
             </div>
             <BalanceFigure view={balanceView} zec={Number(totalZat) / 1e8} />
+            {!online && balanceView !== 'loading' && (
+              <span className='text-[11px] text-fg-dim'>
+                last known · while you still had a connection
+              </span>
+            )}
           </div>
           <HomeActions spendable={totalZat > 0n} />
         </section>
