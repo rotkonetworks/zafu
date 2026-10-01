@@ -58,7 +58,7 @@ const BACKENDS = [
 ] as const;
 
 /** the zcash node sheet: picking a preset sets its kind; your own node takes the kind you name */
-const ZcashNodeSheet = ({
+export const ZcashNodeSheet = ({
   open,
   onOpenChange,
 }: {

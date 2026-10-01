@@ -28,6 +28,7 @@ const SCREENS: Partial<Record<string, OnboardingScreen>> = {
   [P.IMPORT_ZIGNER]: { art: 'enso', back: P.CHOOSE, step: [1, 2] },
   [P.ZIGNER_PASSWORD]: { art: 'enso', back: P.IMPORT_ZIGNER, step: [2, 2] },
   [P.CONNECT_LEDGER]: { art: 'enso', back: P.CHOOSE },
+  [P.PERSONALIZE]: { art: 'castle' },
   [P.ONBOARDING_SUCCESS]: { art: 'castle' },
 };
 

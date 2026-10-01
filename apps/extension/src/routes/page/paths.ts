@@ -14,6 +14,7 @@ export enum PagePath {
   IMPORT_ZIGNER = '/welcome/import-zigner',
   ZIGNER_PASSWORD = '/welcome/import-zigner/password',
   CONNECT_LEDGER = '/welcome/connect-ledger',
+  PERSONALIZE = '/welcome/personalize',
   ONBOARDING_SUCCESS = '/welcome/success',
   /** Grant camera permission page - opened from popup, tells user to return */
   GRANT_CAMERA = '/grant-camera',

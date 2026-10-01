@@ -232,7 +232,7 @@ export const ImportZigner = () => {
       }
       await setOnboardingValuesInStorage(SEED_PHRASE_ORIGIN.ZIGNER);
       clearZignerState();
-      navigate(PagePath.ONBOARDING_SUCCESS);
+      navigate(PagePath.PERSONALIZE);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       setError(`failed to import: ${message}`);

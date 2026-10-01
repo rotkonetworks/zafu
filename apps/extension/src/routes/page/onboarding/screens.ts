@@ -7,4 +7,5 @@ export { ImportBirthday } from './import-birthday';
 export { ImportZigner } from './import-zigner';
 export { ImportViewingKey } from './import-viewing-key';
 export { ConnectLedger } from './connect-ledger';
+export { Personalize } from './personalize';
 export { OnboardingSuccess } from './success';

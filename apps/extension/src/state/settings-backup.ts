@@ -16,6 +16,8 @@ const PREF_KEYS = [
   'approvalSurface',
   'approvalsInSidePanel',
   'zidDiscovery',
+  'networkEndpoints',
+  'zcashBackend',
   'hiddenTransparentChains',
   'penumbraTotalIn',
   'penumbraRowsInUsd',
