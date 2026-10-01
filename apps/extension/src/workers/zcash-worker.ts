@@ -53,6 +53,7 @@ import {
   isP2pkhOf,
   pocketWalletKeys,
   tIndexOf,
+  shieldRoundUtxos,
   utxosByTIndex,
   type PocketKeysCtor,
 } from './pocket-keys';
@@ -197,6 +198,10 @@ interface WorkerMessage {
     | 'frost-inspect-pczt-outputs'
     | 'complete-orchard-pczt'
     | 'broadcast-raw-tx'
+    | 'pczt-extract-tx'
+    | 'broadcast-signed-tx'
+    | 'lookup-tx'
+    | 'shield-eligible'
     | 'get-transparent-utxos'
     | 'generate-voting-hotkey'
     | 'build-delegation-pczt'
@@ -7864,13 +7869,26 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           tAddresses: string[];
           mainnet: boolean;
           ufvk: string;
+          /** Ledger: one round of at most this many inputs (32 per approval) */
+          maxInputs?: number;
+          /** Ledger: the account's external ovk on the output, which the app
+           *  needs to review it (it refuses an output it cannot decrypt) */
+          ledgerOvk?: boolean;
         };
 
         const shieldUClient = makeZcashClient(shieldUnsignedPayload.serverUrl);
         const shieldUTip = await shieldUClient.getTip();
         // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe)
         const shieldUBranchIdHex = await fetchBranchIdHex(shieldUClient);
-        const shieldUUtxos = await shieldUClient.getAddressUtxos(shieldUnsignedPayload.tAddresses);
+        const shieldUAll = await shieldUClient.getAddressUtxos(shieldUnsignedPayload.tAddresses);
+        const shieldUUtxos =
+          shieldUnsignedPayload.maxInputs === undefined
+            ? shieldUAll
+            : shieldRoundUtxos(
+                shieldUAll,
+                shieldUnsignedPayload.tAddresses,
+                shieldUnsignedPayload.maxInputs,
+              );
         if (shieldUUtxos.length === 0) {
           throw new Error('no transparent UTXOs to shield');
         }
@@ -7913,6 +7931,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const shieldUPostNu63 =
           shieldUTip.height >= nu63ActivationHeight(shieldUnsignedPayload.mainnet);
         let shieldUResult: string;
+        let shieldUPubkeyHex: string | undefined;
         if (shieldUPostNu63) {
           const shieldUIdxSet = new Set(shieldUAddrIndices);
           if (shieldUIdxSet.size > 1) {
@@ -7937,8 +7956,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               parseInt(shieldUBranchIdHex, 16), // expected_branch_id (numeric)
               shieldUnsignedPayload.mainnet,
               null, // memo_hex
+              shieldUnsignedPayload.ledgerOvk ? shieldUnsignedPayload.ufvk : null,
             ],
           })) as string;
+          shieldUPubkeyHex = shieldUPubkey;
         } else {
           shieldUResult = (await proveViaOffscreen({
             fn: 'build_unsigned_shielding',
@@ -7971,6 +7992,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             summary: shieldUParsed.summary,
             fee: shieldUFee.toString(),
             addressIndices: shieldUAddrIndices,
+            ...(shieldUPubkeyHex ? { transparentPubkeyHex: shieldUPubkeyHex } : {}),
           },
         });
         return;
@@ -8257,6 +8279,108 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           network: 'zcash',
           walletId,
           payload: { txid: bTxid },
+        });
+        return;
+      }
+      case 'pczt-extract-tx': {
+        // the broadcast-ready tx of a signed PCZT and its txid, without the
+        // network: the Ledger flow checkpoints these before it broadcasts, so
+        // an uncertain broadcast is settled by a lookup, never a second approval
+        await initWasm();
+        if (!wasmModule) {
+          throw new Error('wasm not initialized');
+        }
+        const { signedPcztHex: xPczt } = payload as { signedPcztHex: string };
+        const xTxHex = wasmModule.extract_signed_tx_from_pczt(xPczt);
+        // compute_txid is wire order; report display order like resolveBroadcastTxid
+        const xTxid = (wasmModule.compute_txid(xTxHex).match(/../g) ?? []).reverse().join('');
+        workerSelf.postMessage({
+          type: 'result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: { txHex: xTxHex, txid: xTxid },
+        });
+        return;
+      }
+      case 'broadcast-signed-tx': {
+        // a checkpointed signed tx, with the same cold-broadcast bookkeeping as
+        // send-tx-pczt-complete. A node rejection throws "broadcast failed
+        // (code)"; any other throw leaves the outcome unknown.
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
+        const {
+          serverUrl: sUrl,
+          txHex: sTxHex,
+          coldSendId: sColdSendId,
+        } = payload as { serverUrl: string; txHex: string; coldSendId?: string };
+        const sResult = await makeZcashClient(sUrl).sendTransaction(hexDecode(sTxHex));
+        if (sResult.errorCode !== 0) {
+          throw new Error(`broadcast failed (${sResult.errorCode}): ${sResult.errorMessage}`);
+        }
+        const sTxid = await resolveBroadcastTxid(sResult, sTxHex, sUrl);
+        await finalizeColdBroadcast(walletId, sColdSendId, sTxid, sTxHex);
+        workerSelf.postMessage({
+          type: 'tx-result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: { txid: sTxid },
+        });
+        return;
+      }
+      case 'lookup-tx': {
+        // whether the server that was asked to broadcast our own tx has it; a
+        // failure reads as "not seen", never "gone". Backends disagree on the
+        // byte order of TxFilter.hash, so try display order, then wire order.
+        const { serverUrl: lUrl, txid: lTxid } = payload as { serverUrl: string; txid: string };
+        const lClient = makeZcashClient(lUrl);
+        const lDisplay = hexDecode(lTxid);
+        let lFound = false;
+        let lHeight: number | undefined;
+        for (const lHash of [lDisplay, lDisplay.slice().reverse()]) {
+          try {
+            const lRaw = await lClient.getTransaction(lHash);
+            lFound = lRaw.data.length > 0;
+            lHeight = lRaw.height > 0 ? lRaw.height : undefined;
+          } catch {
+            // not in this order, or unreachable
+          }
+          if (lFound) {
+            break;
+          }
+        }
+        workerSelf.postMessage({
+          type: 'result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: { found: lFound, height: lHeight },
+        });
+        return;
+      }
+      case 'shield-eligible': {
+        // what a Ledger shielding run has ahead of it (count + value, no prev-tx
+        // fetch); a failed fetch throws so it never reads as "no funds"
+        const {
+          serverUrl: eUrl,
+          tAddresses: eAddrs,
+          maxInputs: eMax,
+        } = payload as { serverUrl: string; tAddresses: string[]; maxInputs: number };
+        const eUtxos = await makeZcashClient(eUrl).getAddressUtxos(eAddrs);
+        const eRound = shieldRoundUtxos(eUtxos, eAddrs, Math.max(1, eMax));
+        const eRoundZat = eRound.reduce((sum, u) => sum + u.valueZat, 0n);
+        workerSelf.postMessage({
+          type: 'result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: {
+            inputCount: eUtxos.length,
+            totalZat: eUtxos.reduce((sum, u) => sum + u.valueZat, 0n).toString(),
+            belowThreshold: eRound.length > 0 && eRoundZat <= computeShieldFee(eRound.length),
+          },
         });
         return;
       }

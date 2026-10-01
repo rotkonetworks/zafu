@@ -235,8 +235,18 @@ export const ZcashContent = ({
   const ironwoodEligible =
     ironwoodLive && kind !== undefined && CAPS[kind].migrate && pools.orchard > 0n;
 
-  // one message at a time: ironwood move > backup nudge
-  const messageSlot: ReactNode = ironwoodEligible ? (
+  // a signer that cannot spend legacy orchard says so instead of offering the move
+  const orchardRefusal =
+    ironwoodLive && pools.orchard > 0n && kind ? CAPS[kind].refuses?.orchard : undefined;
+
+  // one message at a time: ironwood move > orchard waits > backup nudge
+  const messageSlot: ReactNode = orchardRefusal ? (
+    <StatusSlot icon='i-ph-lock-simple'>
+      <span className='text-fg-high'>
+        {orchardRefusal.title} · <Sensitive className='tabular'>{zec(pools.orchard)}</Sensitive> zec
+      </span>
+    </StatusSlot>
+  ) : ironwoodEligible ? (
     <StatusSlot
       tone='gold'
       icon='i-lucide-arrow-right-left'

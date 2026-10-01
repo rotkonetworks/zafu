@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
 import { ScreenHeader } from '../../../components/screen-header';
-import { Footer, Main, Strip } from './send-ui';
+import type { LedgerSigningPhase } from '../../../ledger/zcash-app/contract';
+import { Footer, Main, Mark, Strip } from './send-ui';
 
 /** the eye line: what the person can rely on while this state lasts */
 const Assure = ({ warn, children }: { warn?: boolean; children: ReactNode }) => (
@@ -53,6 +54,37 @@ export const WitnessRebuild = ({
     </Footer>
   </>
 );
+
+const LEDGER_STEPS = [
+  'ledger connected',
+  'zcash app open',
+  'check the address on the device, then approve',
+] as const;
+const LEDGER_AT: Record<LedgerSigningPhase['phase'], number> = {
+  connecting: 0,
+  open_app: 1,
+  sending: 2,
+  review: 2,
+  done: 2,
+};
+
+/** board SignLedger's steps: the zcash app reports each one; without a
+ *  phase (the bitcoin app) only the step the device is truly on is shown */
+export const LedgerSteps = ({ phase }: { phase?: LedgerSigningPhase['phase'] }) => {
+  const at = phase ? LEDGER_AT[phase] : LEDGER_STEPS.length - 1;
+  return (
+    <ol className='flex w-full flex-col divide-y divide-border-soft border border-border-soft bg-elev-1 text-[13px] text-fg-high'>
+      {LEDGER_STEPS.map((label, i) =>
+        phase || i === at ? (
+          <li key={label} className='flex min-h-12 items-center gap-3 px-3.5 py-2'>
+            <Mark state={i < at ? 'done' : i === at ? 'now' : 'wait'} />
+            {label}
+          </li>
+        ) : null,
+      )}
+    </ol>
+  );
+};
 
 /** board StLedgerGone: the device went away mid-sign; the build is kept */
 export const LedgerGone = ({

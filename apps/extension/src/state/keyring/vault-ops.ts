@@ -113,12 +113,37 @@ export const buildLedgerVault = (
     accountIndex: data.accountIndex,
     supportedNetworks: ['zcash'],
     coldSignerType: 'ledger',
-    address: data.address,
-    ...(data.ufvk ? { ufvk: data.ufvk } : {}),
+    // `vaults` is not encrypted at rest: a shielded account's UFVK and unified
+    // address live only in the sealed payload and the encrypted zcashWallets
+    ...(data.custody
+      ? {
+          custody: data.custody,
+          seedFingerprint: data.seedFingerprint,
+          appVersion: data.appVersion,
+          deviceLabel: data.deviceLabel,
+        }
+      : { address: data.address }),
     ...(data.transparentAddress ? { transparentAddress: data.transparentAddress } : {}),
     ...(opts.airgapOnly ? { airgapOnly: true } : {}),
   },
 });
+
+/** the Ledger vault this import already is: same device and account, or for
+ *  a shielded import the same account fingerprint and account (same keys) */
+export const findLedgerDuplicate = (
+  vaults: EncryptedVault[],
+  data: LedgerImport,
+): EncryptedVault | undefined =>
+  vaults.find(
+    v =>
+      v.type === 'zigner-zafu' &&
+      v.insensitive['coldSignerType'] === 'ledger' &&
+      v.insensitive['accountIndex'] === data.accountIndex &&
+      (v.insensitive['deviceId'] === data.deviceId ||
+        (!!data.seedFingerprint &&
+          typeof v.insensitive['seedFingerprint'] === 'string' &&
+          v.insensitive['seedFingerprint'].toLowerCase() === data.seedFingerprint.toLowerCase())),
+  );
 
 export type FrostCustody = 'self' | 'airgapSigner';
 

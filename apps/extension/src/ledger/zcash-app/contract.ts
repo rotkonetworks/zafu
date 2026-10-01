@@ -76,6 +76,7 @@ export type LedgerFailure =
   | 'rejected' // user rejected on the device
   | 'busy' // another operation holds the device
   | 'unsupported_transaction' // over limits, or a path the app cannot sign
+  | 'change_to_other_account' // 0x6986: a change output does not belong to this account
   | 'cancelled' // host cancelled; the device prompt may still be showing
   | 'protocol_error'; // malformed / unexpected response
 
@@ -91,17 +92,52 @@ export class LedgerError extends Error {
 }
 
 /**
+ * One transparent input's derivation, for stamping a PCZT before planning. The
+ * PCZT does not carry input pubkeys, so the host supplies each one; the wasm
+ * checks it is the key the input's P2PKH script pays.
+ */
+export interface LedgerTransparentPath {
+  readonly inputIndex: number;
+  /** 0 = external (receive), 1 = internal (change) */
+  readonly scope: 0 | 1;
+  readonly addressIndex: number;
+  /** 33-byte compressed secp256k1 pubkey */
+  readonly pubkey: Uint8Array;
+}
+
+/**
  * PROTOCOL half. Implemented by wasm exports added to zcli's zcash-wasm
  * (ported from vizor), wrapped in ./protocol.ts. Pure: no I/O.
  */
 export interface LedgerZcashProtocol {
-  /** APDUs that export the UFVK for `accountIndex` (vizor: first + continuation). */
+  /**
+   * The two UFVK export commands, [first, continuation]. The export length is
+   * not known upfront: send `first`, then repeat `continuation` while
+   * {@link ufvkRemainingBytes} of the responses so far is > 0.
+   */
   ufvkPlan(accountIndex: number): ApduCommand[];
+  /** UFVK bytes the device still owes after `responses`; 0 when complete. */
+  ufvkRemainingBytes(responses: Uint8Array[]): number;
   parseUfvk(
     responses: Uint8Array[],
     network: 'main' | 'test',
     accountIndex: number,
   ): LedgerAccountExport;
+  /**
+   * Stamp the account's derivations into an unsigned PCZT so the app can plan
+   * it: every shielded spend Zip32Derivation(fp, [32', 133', account']), every
+   * transparent input one Bip32Derivation from `transparentPaths` (one entry
+   * per input, none extra). zafu's builders never stamp these themselves.
+   * Idempotent.
+   */
+  stampDerivations(
+    pczt: Uint8Array,
+    opts: {
+      seedFingerprint: Uint8Array;
+      accountIndex: number;
+      transparentPaths: readonly LedgerTransparentPath[];
+    },
+  ): Uint8Array;
   /**
    * Throws LedgerError('unsupported_transaction') when the PCZT exceeds
    * LEDGER_ZCASH_LIMITS or spends legacy Orchard into Ironwood (unsupported by

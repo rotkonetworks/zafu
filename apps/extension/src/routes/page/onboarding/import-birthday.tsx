@@ -29,7 +29,8 @@ import { SEED_PHRASE_ORIGIN } from './password/types';
 const yearStart = (yearsAgo: number) =>
   new Date(Date.UTC(new Date().getUTCFullYear() - yearsAgo, 0, 1));
 
-const presets = () => {
+/** where syncing starts; shared with the ledger connect screen */
+export const presets = () => {
   const year = new Date().getUTCFullYear();
   return [
     { label: 'this month', height: safeBirthdayFloor(dateToBlock(new Date())) },

@@ -341,6 +341,7 @@ async function executeBuild(req: ProveRequest): Promise<unknown> {
         a[6], // expected_branch_id (number)
         a[7], // mainnet
         a[8] ?? null, // memo_hex
+        a[9] ?? null, // ovk_from_ufvk: a Ledger account's UFVK, so the app can review the output
       );
       break;
 

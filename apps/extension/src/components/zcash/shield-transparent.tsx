@@ -9,12 +9,14 @@
  *   - hot wallets: password-gated one-tap shield via the worker
  *   - watch-only (zigner): build unsigned tx -> show sign-request QR ->
  *     scan signature QR -> broadcast
+ *   - ledger (zcash app): rounds of at most 32 inputs, one device approval
+ *     each, checkpointed before broadcast (ledger/zcash-app/shielding-rounds)
  *
  * Self-contained: reads the active vault + keyring from the store and owns
  * its own password gate, so the parent only passes display/network inputs.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useStore } from '../../state';
 import { selectEffectiveKeyInfo, keyRingSelector } from '../../state/keyring';
@@ -36,6 +38,23 @@ import {
 import { QrDisplay } from '../../shared/components/qr-display';
 import { QrScanner } from '../../shared/components/qr-scanner';
 import { Sensitive } from '../sensitive';
+import { HARDWARE_WALLET_ENABLED } from '../../config/feature-flags';
+import { walletKind } from '../../signing/wallet-kind';
+import { isPopup } from '../../utils/popup-detection';
+import type { LedgerSigningPhase, LedgerZcashDevice } from '../../ledger/zcash-app/contract';
+import { openLedger } from '../../ledger/zcash-app/connect';
+import { ledgerGuidance } from '../../ledger/zcash-app/guidance';
+import { loadLedgerZcashProtocol } from '../../ledger/zcash-app/protocol';
+import { recoverLedgerOperations } from '../../ledger/zcash-app/recovery';
+import { LedgerShieldingSession } from '../../ledger/zcash-app/shielding-rounds';
+import {
+  accountStamper,
+  ledgerAccountFromKeyInfo,
+  ledgerNetwork,
+  zafuRecoveryDeps,
+  zafuShieldingDeps,
+} from '../../ledger/zcash-app/zafu-deps';
+import { LedgerSteps } from '../../routes/popup/send/send-states';
 
 /** mirrors home's fmtZec - trim trailing zeros, keep at least 2 decimals */
 const fmtZec = (val: number): string => {
@@ -256,12 +275,49 @@ export const ShieldTransparent = ({
     [unsignedData, selectedKeyInfo, zidecarUrl],
   );
 
+  const ledger = useLedgerShield({ watchOnly, tAddresses, isMainnet, zidecarUrl });
+  const method =
+    HARDWARE_WALLET_ENABLED &&
+    selectedKeyInfo &&
+    walletKind(selectedKeyInfo, {
+      transparentAddress: selectedKeyInfo.insensitive['transparentAddress'] as string | undefined,
+    }) === 'ledger-shielded'
+      ? 'ledger'
+      : hasMnemonic
+        ? 'hot'
+        : 'zigner';
+  const ACTION = {
+    hot: { run: handleShield, label: 'shield' },
+    zigner: { run: handleZignerShield, label: 'shield via zigner' },
+    ledger: { run: ledger.run, label: 'shield with ledger' },
+  }[method];
+
   const tZec = Number(transparentZat) / 1e8;
   const busy =
-    shielding || (zignerStep !== 'idle' && zignerStep !== 'error' && zignerStep !== 'complete');
-  const done = !!shieldTxid || zignerStep === 'complete';
-  const txid = shieldTxid ?? zignerTxid;
-  const error = shieldError ?? (zignerStep === 'error' ? zignerError : null);
+    shielding ||
+    !!ledger.phase ||
+    (zignerStep !== 'idle' && zignerStep !== 'error' && zignerStep !== 'complete');
+  const done = !!shieldTxid || zignerStep === 'complete' || !!ledger.txid;
+  const txid = shieldTxid ?? zignerTxid ?? ledger.txid;
+  const error = shieldError ?? ledger.error ?? (zignerStep === 'error' ? zignerError : null);
+
+  // the device steps take the sheet while a round asks the ledger
+  if (ledger.phase) {
+    return (
+      <div className='flex flex-col gap-4'>
+        {ledger.round && ledger.round.of > 1 && (
+          <p className='text-label text-fg-muted'>
+            transaction {ledger.round.n} of {ledger.round.of} · each is approved and pays its own
+            fee
+          </p>
+        )}
+        <LedgerSteps phase={ledger.phase} />
+        <Button variant='secondary' onClick={ledger.stop} className='w-full'>
+          not now
+        </Button>
+      </div>
+    );
+  }
 
   // zigner's QR round trip takes over the sheet in place of the review -
   // nothing here expands, it swaps.
@@ -359,6 +415,7 @@ export const ShieldTransparent = ({
               setShieldError(null);
               setZignerStep('idle');
               setZignerError(null);
+              ledger.dismiss();
             }}
             className='ml-2 underline'
           >
@@ -368,15 +425,130 @@ export const ShieldTransparent = ({
       )}
 
       <Button
-        onClick={() => void (hasMnemonic ? handleShield() : handleZignerShield())}
+        onClick={() => void ACTION.run()}
         loading={busy}
         disabled={busy || done || transparentZat <= 0n}
         className='w-full'
       >
-        {done ? 'pending...' : hasMnemonic ? 'shield' : 'shield via zigner'}
+        {done ? 'pending...' : ACTION.label}
       </Button>
     </div>
   );
 };
+
+/**
+ * One Ledger shielding session per sheet: a failed round is retried by running
+ * again, reusing its signed bytes; the session ends when it completes or pauses.
+ */
+function useLedgerShield({
+  watchOnly,
+  tAddresses,
+  isMainnet,
+  zidecarUrl,
+}: Pick<ShieldTransparentProps, 'watchOnly' | 'tAddresses' | 'isMainnet' | 'zidecarUrl'>) {
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const storeId = useStore(activeZcashStoreId);
+  const [phase, setPhase] = useState<LedgerSigningPhase['phase'] | null>(null);
+  const [round, setRound] = useState<{ n: number; of: number }>();
+  const [txid, setTxid] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const session = useRef<LedgerShieldingSession | null>(null);
+  const device = useRef<LedgerZcashDevice | null>(null);
+  const abort = useRef<AbortController | null>(null);
+
+  const end = async () => {
+    session.current = null;
+    const d = device.current;
+    device.current = null;
+    await d?.close().catch(() => undefined);
+  };
+  useEffect(
+    () => () => {
+      abort.current?.abort();
+      void end();
+    },
+    [],
+  );
+
+  const run = async () => {
+    const ufvk =
+      watchOnly?.ufvk ??
+      (watchOnly?.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
+    if (!selectedKeyInfo || !ufvk) {
+      return;
+    }
+    setError(null);
+    setPhase('connecting');
+    const ac = new AbortController();
+    abort.current = ac;
+    try {
+      if (isPopup()) {
+        throw new Error(
+          'please open zafu in a tab or the side panel to sign with a ledger · the toolbar popup closes when the device asks for focus',
+        );
+      }
+      // the device picker may need this click, so it is asked first
+      device.current ??= await openLedger();
+      if (!session.current) {
+        const ins = selectedKeyInfo.insensitive;
+        const ctx = { walletId: storeId ?? selectedKeyInfo.id, network: ledgerNetwork(isMainnet) };
+        await spawnNetworkWorker('zcash');
+        await recoverLedgerOperations(zafuRecoveryDeps(zidecarUrl), ctx);
+        const protocol = await loadLedgerZcashProtocol();
+        const account = ledgerAccountFromKeyInfo(ins, Number(ins['accountIndex'] ?? 0));
+        session.current = new LedgerShieldingSession(
+          zafuShieldingDeps({
+            protocol,
+            device: device.current,
+            stampDerivations: accountStamper(protocol, account),
+            ctx,
+            serverUrl: zidecarUrl,
+            isCurrent: () => selectEffectiveKeyInfo(useStore.getState())?.id === selectedKeyInfo.id,
+            ufvk,
+            tAddresses,
+            mainnet: isMainnet,
+          }),
+          ctx,
+        );
+      }
+      const out = await session.current.run({
+        signal: ac.signal,
+        onPhase: p => setPhase(p.phase),
+        onProgress: p => {
+          if (p.step === 'preparing') {
+            setPhase('connecting');
+          }
+          if (p.totalRounds > 0) {
+            setRound({ n: p.round, of: p.totalRounds });
+          }
+        },
+      });
+      await end();
+      setTxid(out.txids.at(-1) ?? null);
+      if (out.status === 'paused') {
+        setError(out.message);
+      }
+    } catch (e) {
+      const g = ledgerGuidance(e);
+      setError(`${g.title} · ${g.action}`);
+      if (!g.retryable) {
+        await end();
+      }
+    } finally {
+      abort.current = null;
+      setPhase(null);
+    }
+  };
+
+  return {
+    run,
+    phase,
+    round,
+    txid,
+    error,
+    stop: () => abort.current?.abort(),
+    dismiss: () => setError(null),
+  };
+}
 
 export default ShieldTransparent;

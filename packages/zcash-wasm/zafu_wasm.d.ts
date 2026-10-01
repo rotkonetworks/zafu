@@ -382,7 +382,7 @@ export function build_unsigned_shielding_transaction(utxos_json: string, recipie
  * * `amount`, `fee`, `target_height`, `expected_branch_id`, `mainnet`, `memo_hex`
  *   - identical semantics to [`build_shielding_transaction_ironwood_core`]
  */
-export function build_unsigned_shielding_transaction_ironwood(utxos_json: string, pubkey_hex: string, recipient: string, amount: bigint, fee: bigint, target_height: number, expected_branch_id: number, mainnet: boolean, memo_hex?: string | null): string;
+export function build_unsigned_shielding_transaction_ironwood(utxos_json: string, pubkey_hex: string, recipient: string, amount: bigint, fee: bigint, target_height: number, expected_branch_id: number, mainnet: boolean, memo_hex?: string | null, ovk_from_ufvk?: string | null): string;
 
 /**
  * Build an unsigned transaction and return the data needed for cold signing.
@@ -824,6 +824,54 @@ export function init(): void;
 export function initThreadPool(num_threads: number): Promise<any>;
 
 /**
+ * Validates one response per plan command (status words stripped), verifies
+ * every signature, and returns the signed PCZT bytes.
+ */
+export function ledger_finalize_pczt_signing(pczt: Uint8Array, responses: Array<any>): Uint8Array;
+
+/**
+ * Reassembles and validates the UFVK export. Returns
+ * `{ ufvk: string, seedFingerprint: Uint8Array(32), accountIndex: number }`.
+ */
+export function ledger_parse_ufvk(responses: Array<any>, network: string, account_index: number): any;
+
+/**
+ * The full ordered APDU exchange that has the device review the PCZT once
+ * and sign every transparent input and real Orchard / Ironwood spend.
+ * `memo_hash_supported` comes from the app version (3.9.4+).
+ */
+export function ledger_pczt_signing_plan(pczt: Uint8Array, memo_hash_supported: boolean): any;
+
+/**
+ * Stamps the Ledger account's derivations onto a zafu-built PCZT so the
+ * signing plan can serialize it. `transparent_paths` is an array of
+ * `{ input_index, scope, address_index, pubkey: Uint8Array(33) }`, one per
+ * transparent input. Idempotent; refuses to overwrite a different derivation.
+ */
+export function ledger_stamp_derivations(pczt: Uint8Array, seed_fingerprint: Uint8Array, account_index: number, transparent_paths: any): Uint8Array;
+
+/**
+ * APDUs that export the UFVK for `account_index`: `[first, continuation]`.
+ * Send `first`, then repeat `continuation` while
+ * [`ledger_ufvk_remaining_bytes`] reports bytes still owed.
+ */
+export function ledger_ufvk_plan(account_index: number): any;
+
+/**
+ * UFVK bytes the device still owes after `responses` (status words
+ * stripped). `0` means stop sending continuations and call
+ * [`ledger_parse_ufvk`].
+ */
+export function ledger_ufvk_remaining_bytes(responses: Array<any>): number;
+
+/**
+ * Throws `unsupported_transaction: ...` when the Ledger Zcash app cannot sign
+ * this PCZT (limits: 32 transparent inputs, 10 transparent outputs, 32 actions
+ * per shielded pool; legacy Orchard into Ironwood; unsupported shapes).
+ */
+export function ledger_validate_pczt(pczt: Uint8Array): void;
+
+/**
  * Get number of threads available (0 if single-threaded)
  */
 export function num_threads(): number;
@@ -1036,7 +1084,7 @@ export interface InitOutput {
     readonly build_turnstile_migration_pczt: (a: number, b: number, c: number, d: number, e: bigint, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number, number];
     readonly build_unsigned_pczt: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number, o: number) => [number, number, number];
     readonly build_unsigned_shielding_transaction: (a: number, b: number, c: number, d: number, e: bigint, f: bigint, g: number, h: number, i: number, j: number) => [number, number, number, number];
-    readonly build_unsigned_shielding_transaction_ironwood: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number) => [number, number, number, number];
+    readonly build_unsigned_shielding_transaction_ironwood: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number, number, number];
     readonly build_unsigned_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number, number];
     readonly build_unsigned_transparent_transaction: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
     readonly build_vote_commitment_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
@@ -1083,6 +1131,13 @@ export interface InitOutput {
     readonly generate_seed_phrase: () => [number, number, number, number];
     readonly generate_voting_hotkey: (a: number, b: number) => [number, number, number, number];
     readonly get_commitment_proof_request: (a: number, b: number) => [number, number, number, number];
+    readonly ledger_finalize_pczt_signing: (a: number, b: number, c: any) => [number, number, number, number];
+    readonly ledger_parse_ufvk: (a: any, b: number, c: number, d: number) => [number, number, number];
+    readonly ledger_pczt_signing_plan: (a: number, b: number, c: number) => [number, number, number];
+    readonly ledger_stamp_derivations: (a: number, b: number, c: number, d: number, e: number, f: any) => [number, number, number, number];
+    readonly ledger_ufvk_plan: (a: number) => [number, number, number];
+    readonly ledger_ufvk_remaining_bytes: (a: any) => [number, number, number];
+    readonly ledger_validate_pczt: (a: number, b: number) => [number, number];
     readonly parse_signature_response: (a: number, b: number) => [number, number, number];
     readonly pczt_has_ironwood_actions: (a: number, b: number) => [number, number, number];
     readonly pir_fetch_imt_proofs: (a: number, b: number, c: number, d: number, e: any) => any;

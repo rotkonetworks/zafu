@@ -10,6 +10,8 @@ import { useNavigate } from 'react-router-dom';
 import { cn } from '@repo/ui/lib/utils';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { PopupPath } from '../routes/popup/paths';
+import { PagePath } from '../routes/page/paths';
+import { openPageInTab } from '../utils/popup-detection';
 import { screenTransition } from '../utils/navigate';
 
 interface AddWalletOption {
@@ -17,6 +19,8 @@ interface AddWalletOption {
   label: string;
   desc: string;
   path?: string;
+  /** a page route that opens in a tab (WebHID dies with the popup) */
+  tab?: true;
 }
 
 const KEYS_ELSEWHERE: AddWalletOption[] = [
@@ -26,9 +30,13 @@ const KEYS_ELSEWHERE: AddWalletOption[] = [
     desc: 'scan its connect code - sign by qr',
     path: PopupPath.SETTINGS_ZIGNER,
   },
-  // ledger has no route in this build yet - an honest disabled row, not a
-  // dead link.
-  { icon: 'i-ph-usb', label: 'ledger', desc: 'hardware wallet - not available yet' },
+  {
+    icon: 'i-ph-usb',
+    label: 'ledger',
+    desc: 'hardware wallet - usb',
+    path: PagePath.CONNECT_LEDGER,
+    tab: true,
+  },
 ];
 
 const WATCH_ONLY: AddWalletOption[] = [
@@ -47,7 +55,7 @@ const OptionGroup = ({
 }: {
   title: string;
   options: AddWalletOption[];
-  onPick: (path: string) => void;
+  onPick: (opt: AddWalletOption) => void;
 }) => (
   <div className='flex flex-col gap-2'>
     <p className='kicker'>{title}</p>
@@ -57,7 +65,7 @@ const OptionGroup = ({
           key={opt.label}
           type='button'
           disabled={!opt.path}
-          onClick={() => opt.path && onPick(opt.path)}
+          onClick={() => opt.path && onPick(opt)}
           className={cn(
             'flex min-h-[52px] items-center gap-3 px-3.5 py-2 text-left transition-colors',
             opt.path ? 'hover:bg-surface-elev-2' : 'opacity-50',
@@ -86,9 +94,13 @@ export const AddWalletSheet = ({
 }) => {
   const navigate = useNavigate();
 
-  const go = (path: string) => {
+  const go = ({ path, tab }: AddWalletOption) => {
     onOpenChange(false);
-    navigate(path, screenTransition('push'));
+    if (tab) {
+      void openPageInTab(path!, true);
+    } else {
+      navigate(path!, screenTransition('push'));
+    }
   };
 
   return (

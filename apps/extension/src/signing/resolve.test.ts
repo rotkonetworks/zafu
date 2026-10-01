@@ -31,7 +31,7 @@ describe('zcashSignerFor', () => {
     ['hot', 'ironwood', 'hot'],
     ['zigner', 'ironwood', 'zigner'],
     ['keystone', 'orchard', 'zigner'],
-    ['ledger-shielded', 'orchard', 'ledger-shielded'],
+    ['ledger-shielded', 'ironwood', 'ledger-shielded'],
     ['ledger-transparent', 'ironwood', 'ledger-transparent'],
     ['frost-self', 'ironwood', 'frost-self'],
     ['frost-airgap', 'ironwood', 'frost-airgap'],
@@ -47,7 +47,7 @@ describe('zcashSignerFor', () => {
   );
 
   // watch-only cannot sign; neither can a flag-off ledger, an unknown signer,
-  // or keystone and ledger on ironwood. None may touch an implementation.
+  // keystone on ironwood, or a ledger on orchard. None may touch an implementation.
   it.each([
     ['viewing-key', ON, /viewing key/],
     ['viewing-key', OFF, /viewing key/],
@@ -62,7 +62,8 @@ describe('zcashSignerFor', () => {
     ['ledger-transparent', OFF, /not ready yet/],
     ['keystone', ON, /keystone signs orchard only/, 'ironwood'],
     ['keystone', OFF, /keystone signs orchard only/, 'ironwood'],
-    ['ledger-shielded', ON, /ledger signs orchard only/, 'ironwood'],
+    ['ledger-shielded', ON, /orchard waits for a newer ledger app/, 'orchard'],
+    ['ledger-transparent', { hardwareWallet: true, ledgerTransparent: false }, /not ready yet/],
   ] as [WalletKind, SendFlags, RegExp, ZcashPool?][])(
     'refuses %s (%o) without calling any signer',
     async (kind, flags, reason, pool = 'orchard') => {
@@ -80,13 +81,6 @@ describe('zcashSignerFor', () => {
     const arms = spies();
     await expect(zcashSignerFor('ledger-shielded', OFF, 'orchard', arms)()).rejects.toThrow();
     expect(arms.zigner).not.toHaveBeenCalled();
-  });
-
-  it('a t-address ledger with only the shielded flag on takes the PCZT path', async () => {
-    const flags = { hardwareWallet: true, ledgerTransparent: false };
-    await expect(zcashSignerFor('ledger-transparent', flags, 'orchard', spies())()).resolves.toBe(
-      'ledger-shielded',
-    );
   });
 });
 

@@ -106,6 +106,10 @@ export interface NetworkWorkerMessage {
     | 'frost-inspect-pczt-outputs'
     | 'complete-orchard-pczt'
     | 'broadcast-raw-tx'
+    | 'pczt-extract-tx'
+    | 'broadcast-signed-tx'
+    | 'lookup-tx'
+    | 'shield-eligible'
     | 'get-transparent-utxos'
     | 'generate-voting-hotkey'
     | 'build-delegation-pczt'
@@ -229,6 +233,7 @@ const SEND_SHAPED_TYPES: ReadonlySet<string> = new Set([
   'shield-complete',
   'complete-orchard-pczt',
   'broadcast-raw-tx',
+  'broadcast-signed-tx',
   'finalize-delegation',
   'cast-vote-hot-wire',
 ]);
@@ -1581,6 +1586,8 @@ export interface ShieldUnsignedResult {
   summary: string;
   fee: string;
   addressIndices: number[];
+  /** the one transparent pubkey that owns every input (ironwood builder only) */
+  transparentPubkeyHex?: string;
 }
 
 /**
@@ -1593,9 +1600,55 @@ export const buildUnsignedShieldInWorker = async (
   tAddresses: string[],
   mainnet: boolean,
   ufvk: string,
+  /** Ledger: one round of at most this many inputs, with the account's ovk */
+  ledger?: { maxInputs: number },
 ): Promise<ShieldUnsignedResult> => {
-  return callWorker(network, 'shield-unsigned', { serverUrl, tAddresses, mainnet, ufvk }, walletId);
+  return callWorker(
+    network,
+    'shield-unsigned',
+    { serverUrl, tAddresses, mainnet, ufvk, ...(ledger && { ...ledger, ledgerOvk: true }) },
+    walletId,
+  );
 };
+
+/** a signed PCZT's broadcast-ready tx and its (display-order) txid; no network */
+export const extractSignedPcztTxInWorker = (
+  signedPcztHex: string,
+): Promise<{ txHex: string; txid: string }> =>
+  callWorker('zcash', 'pczt-extract-tx', { signedPcztHex });
+
+/** broadcast an extracted signed tx with the cold-send bookkeeping for
+ *  `coldSendId`; "broadcast failed (code)" is a node rejection, any other
+ *  throw an unknown outcome */
+export const broadcastSignedTxInWorker = (
+  walletId: string,
+  serverUrl: string,
+  txHex: string,
+  coldSendId?: string,
+): Promise<{ txid: string }> =>
+  callWorker('zcash', 'broadcast-signed-tx', { serverUrl, txHex, coldSendId }, walletId);
+
+/** whether the backend knows a display-order txid; a failure reads as not found */
+export const lookupTxInWorker = (
+  serverUrl: string,
+  txid: string,
+): Promise<{ found: boolean; height?: number }> =>
+  callWorker('zcash', 'lookup-tx', { serverUrl, txid });
+
+export interface ShieldEligibility {
+  inputCount: number;
+  totalZat: string;
+  /** the next round's inputs would not cover its fee */
+  belowThreshold: boolean;
+}
+
+/** shieldable transparent inputs right now; throws on a failed fetch, never 0 */
+export const shieldEligibilityInWorker = (
+  serverUrl: string,
+  tAddresses: string[],
+  maxInputs: number,
+): Promise<ShieldEligibility> =>
+  callWorker('zcash', 'shield-eligible', { serverUrl, tAddresses, maxInputs });
 
 /**
  * complete shielding transaction with signatures and broadcast

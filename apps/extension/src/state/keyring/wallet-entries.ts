@@ -221,11 +221,9 @@ export async function createLedgerWalletEntries(
     const zcashWallet = {
       id: `zcash-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       label: name,
-      // orchardFvk is a required field; a Ledger import stores its UFVK in the
-      // dedicated `ufvk` field, so leave orchardFvk empty. use-address's
-      // watch-only branch reads `ufvk` first, so address/balance derive free
-      // when a ufvk is present.
-      orchardFvk: '',
+      // a shielded import keeps the `uview1...` in both fields, like zigner,
+      // so every reader finds it; a transparent-only account has none
+      orchardFvk: data.ufvk ?? '',
       ...(data.ufvk ? { ufvk: data.ufvk } : {}),
       // If a ufvk is present, address derives free from it; otherwise store the
       // address directly. NOTE: without a ufvk there is no shielded scanning - // balances/notes require the UFVK to be provided later.
