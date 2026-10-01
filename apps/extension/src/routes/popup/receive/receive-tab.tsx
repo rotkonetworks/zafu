@@ -154,7 +154,7 @@ export function ReceiveTab({
   const label = showingEphemeral
     ? 'ephemeral address'
     : transparent && isZcash
-      ? `transparent address #${t.index} - public`
+      ? 'transparent address · public'
       : isZcash
         ? 'shielded address'
         : 'address';
@@ -163,6 +163,15 @@ export function ReceiveTab({
     : transparent && isZcash
       ? 'text-hanko-light'
       : 'text-fg-high';
+  // one rotate button for every mode: a fresh ephemeral, the next transparent
+  // index, or a fresh shielded diversifier.
+  const rotate = showingEphemeral
+    ? () => setEphemeralNonce(n => n + 1)
+    : isZcash && transparent
+      ? t.advance
+      : isZcash
+        ? retireShielded
+        : undefined;
 
   return (
     <div className='flex flex-1 flex-col items-center gap-4'>
@@ -198,39 +207,32 @@ export function ReceiveTab({
             fresh one.
           </p>
         )}
-        <div
-          className={`flex h-14 items-center gap-2 border p-3 ${
-            showingEphemeral
-              ? 'border-zigner-gold/40 bg-zigner-gold/5'
-              : transparent && isZcash
-                ? 'border-hanko/35 bg-hanko/8'
-                : 'border-surface-border-soft bg-surface-elev-2'
-          }`}
-        >
-          <code
-            title={displayAddress || undefined}
-            className={`flex-1 truncate text-label transition-opacity duration-150 ${addrColor} ${retired ? 'opacity-30' : ''}`}
+        <div className='flex gap-1.5'>
+          <div
+            className={`flex h-14 min-w-0 flex-1 items-center border p-3 ${
+              showingEphemeral
+                ? 'border-zigner-gold/40 bg-zigner-gold/5'
+                : transparent && isZcash
+                  ? 'border-hanko/35 bg-hanko/8'
+                  : 'border-surface-border-soft bg-surface-elev-2'
+            }`}
           >
-            {isLoading ? 'generating...' : displayAddress || 'no wallet selected'}
-          </code>
-          {showingEphemeral && (
-            <button
-              onClick={() => setEphemeralNonce(n => n + 1)}
-              className='flex shrink-0 items-center text-fg-muted transition-colors hover:text-fg-high'
-              title='rotate to a fresh address'
-              aria-label='rotate to a fresh ephemeral address'
+            <code
+              title={displayAddress || undefined}
+              className={`w-full truncate text-label transition-opacity duration-150 ${addrColor} ${retired ? 'opacity-30' : ''}`}
             >
-              <span className='i-ph-arrows-clockwise size-4' />
-            </button>
-          )}
-          {isZcash && transparent && (
+              {isLoading ? 'generating...' : displayAddress || 'no wallet selected'}
+            </code>
+          </div>
+          {rotate && (
             <button
-              onClick={t.advance}
-              className='flex shrink-0 items-center text-fg-muted transition-colors hover:text-fg-high'
+              onClick={rotate}
+              disabled={retired}
+              className='grid size-14 shrink-0 place-items-center border border-surface-border-soft bg-surface-elev-1 text-fg-muted transition-colors hover:text-fg-high disabled:cursor-not-allowed disabled:opacity-50'
               title='new address'
-              aria-label='new transparent address'
+              aria-label='new address'
             >
-              <span className='i-ph-arrows-clockwise size-4' />
+              <span className='i-ph-arrows-clockwise size-4.5' />
             </button>
           )}
         </div>
@@ -247,7 +249,7 @@ export function ReceiveTab({
         </button>
       )}
 
-      <div className='mt-auto flex w-full gap-2 border-t border-surface-border-soft pt-4'>
+      <div className='-mx-4 mt-auto flex gap-2 border-t border-surface-border-soft px-4 pt-4'>
         {isZcash && displayAddress && (
           <Button
             variant='secondary'
