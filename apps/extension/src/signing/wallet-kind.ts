@@ -139,7 +139,7 @@ export const CAPS: Record<WalletKind, Caps> = {
   hot: {
     zcash: () => 'hot',
     unlockToSign: true,
-    signLabel: 'sign & send',
+    signLabel: 'confirm and send',
     migrate: true,
     cosmos: 'hot',
     zid: null,
@@ -181,7 +181,7 @@ export const CAPS: Record<WalletKind, Caps> = {
   'frost-self': {
     zcash: () => 'frost-self',
     unlockToSign: true,
-    signLabel: 'sign & send',
+    signLabel: 'confirm and send',
     zid: null,
   },
   'frost-airgap': {
