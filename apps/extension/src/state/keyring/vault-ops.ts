@@ -47,9 +47,6 @@ export const zignerSupportedNetworks = (data: ZignerZafuImport): string[] => {
   if (data.viewingKey) {
     networks.push('zcash');
   }
-  if (data.polkadotSs58) {
-    networks.push('polkadot');
-  }
   if (data.cosmosAddresses?.length) {
     for (const addr of data.cosmosAddresses) {
       if (!networks.includes(addr.chainId)) {
@@ -78,8 +75,6 @@ export const buildZignerVault = (
     deviceId: data.deviceId,
     accountIndex: data.accountIndex,
     supportedNetworks,
-    ...(data.polkadotSs58 ? { polkadotSs58: data.polkadotSs58 } : {}),
-    ...(data.polkadotGenesisHash ? { polkadotGenesisHash: data.polkadotGenesisHash } : {}),
     ...(data.cosmosAddresses?.length ? { cosmosAddresses: data.cosmosAddresses } : {}),
     ...(data.publicKey ? { cosmosPublicKey: data.publicKey } : {}),
     ...(opts.airgapOnly ? { airgapOnly: true } : {}),
@@ -96,7 +91,7 @@ export const buildZignerVault = (
  * matches the Keystone precedent: the vault `type` stays `'zigner-zafu'` so it
  * reuses all existing zigner vault plumbing (unlock, select, delete, wallet
  * linkage). the discriminator lives in `insensitive.coldSignerType` and on the
- * mirrored zcash wallet record. zcash-only for now - no penumbra/polkadot/cosmos
+ * mirrored zcash wallet record. zcash-only for now - no penumbra/cosmos
  * capabilities, so `supportedNetworks` is always `['zcash']`. no seed is stored;
  * `encryptedData` is the sealed watch-only import payload.
  */

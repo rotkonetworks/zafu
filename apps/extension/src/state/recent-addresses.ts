@@ -14,8 +14,6 @@ export type AddressNetwork =
   | 'penumbra'
   | 'zcash'
   | 'cosmos'
-  | 'polkadot'
-  | 'kusama'
   | 'ethereum'
   | 'bitcoin'
   | 'solana'

@@ -1,4 +1,4 @@
-import { EyeOpenIcon, TrashIcon, ExternalLinkIcon, Link2Icon } from '@radix-ui/react-icons';
+import { EyeOpenIcon, TrashIcon, ExternalLinkIcon } from '@radix-ui/react-icons';
 import { useStore } from '../../../state';
 import { zignerConnectSelector } from '../../../state/zigner';
 import { keyRingSelector, type ZignerZafuImport } from '../../../state/keyring';
@@ -6,9 +6,7 @@ import { isPro } from '../../../state/license';
 import { SettingsScreen } from './settings-screen';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
-import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { useState, useRef, useEffect } from 'react';
-import { localExtStorage } from '@repo/storage-chrome/local';
 import { PagePath } from '../../page/paths';
 import { openPageInTab } from '../../../utils/popup-detection';
 import { ZCASH_ORCHARD_ACTIVATION } from '../../../config/networks';
@@ -19,7 +17,6 @@ import { cn } from '@repo/ui/lib/utils';
 const networkColors: Record<string, string> = {
   penumbra: 'text-purple-500',
   zcash: 'text-yellow-500',
-  polkadot: 'text-pink-500',
   cosmos: 'text-pink-500',
   noble: 'text-pink-500',
   cosmoshub: 'text-indigo-500',
@@ -38,7 +35,6 @@ export const SettingsZigner = () => {
     walletLabel,
     walletImport,
     zcashWalletImport,
-    parsedPolkadotExport,
     parsedCosmosExport,
     detectedNetwork,
     errorMessage,
@@ -53,7 +49,6 @@ export const SettingsZigner = () => {
   const [isAdding, setIsAdding] = useState(false);
   const [deletingVaultId, setDeletingVaultId] = useState<string | null>(null);
   const [confirmDeleteVault, setConfirmDeleteVault] = useState<string | null>(null);
-  const [vaultLegacyMode, setVaultLegacyMode] = useState(false);
   // optional zcash start block (birthday) entered at import time. blank = sync
   // from near the chain tip. Stored per-vault as zcashBirthday_<vaultId>.
   const [startBlock, setStartBlock] = useState<string>('');
@@ -67,18 +62,6 @@ export const SettingsZigner = () => {
 
   // Hidden paste mode - activated by clicking icon 10 times
   const manualInputRef = useRef(false);
-
-  // Load polkadot vault settings
-  useEffect(() => {
-    void localExtStorage.get('polkadotVaultSettings').then(settings => {
-      setVaultLegacyMode(settings?.legacyMode ?? false);
-    });
-  }, []);
-
-  const handleVaultLegacyModeChange = async (enabled: boolean) => {
-    setVaultLegacyMode(enabled);
-    await localExtStorage.set('polkadotVaultSettings', { legacyMode: enabled });
-  };
 
   // Clear zigner state on unmount
   useEffect(() => {
@@ -107,7 +90,7 @@ export const SettingsZigner = () => {
   };
 
   const handleAddWallet = async () => {
-    if (!walletImport && !zcashWalletImport && !parsedPolkadotExport && !parsedCosmosExport) {
+    if (!walletImport && !zcashWalletImport && !parsedCosmosExport) {
       setError('please scan a qr code first');
       return;
     }
@@ -157,14 +140,6 @@ export const SettingsZigner = () => {
           deviceId: `cosmos-${Date.now()}`,
         };
         await addZignerUnencrypted(zignerData, walletLabel || 'zigner cosmos');
-      } else if (detectedNetwork === 'polkadot' && parsedPolkadotExport) {
-        const zignerData: ZignerZafuImport = {
-          polkadotSs58: parsedPolkadotExport.address,
-          polkadotGenesisHash: parsedPolkadotExport.genesisHash,
-          accountIndex: 0,
-          deviceId: `polkadot-${Date.now()}`,
-        };
-        await addZignerUnencrypted(zignerData, walletLabel || 'zigner polkadot');
       }
 
       setSuccess(true);
@@ -188,8 +163,7 @@ export const SettingsZigner = () => {
 
   const showManualInput = manualInputRef.current && scanState !== 'scanned';
   const showScannedState =
-    scanState === 'scanned' &&
-    (walletImport || zcashWalletImport || parsedPolkadotExport || parsedCosmosExport);
+    scanState === 'scanned' && (walletImport || zcashWalletImport || parsedCosmosExport);
   const showInitialState = scanState === 'idle' && !showManualInput;
 
   return (
@@ -258,7 +232,6 @@ export const SettingsZigner = () => {
                 const cosmosAddrs = vault.insensitive['cosmosAddresses'] as
                   | { chainId: string; address: string; prefix: string }[]
                   | undefined;
-                const ss58 = vault.insensitive['polkadotSs58'] as string | undefined;
 
                 return (
                   <div
@@ -280,11 +253,6 @@ export const SettingsZigner = () => {
                           {a.chainId}: {a.address.slice(0, 10)}...{a.address.slice(-6)}
                         </span>
                       ))}
-                      {ss58 && (
-                        <span className='text-label tabular text-fg-muted pl-6'>
-                          {ss58.slice(0, 8)}...{ss58.slice(-6)}
-                        </span>
-                      )}
                     </div>
 
                     {confirmDeleteVault === vault.id ? (
@@ -322,41 +290,6 @@ export const SettingsZigner = () => {
                   </div>
                 );
               })}
-            </div>
-          </div>
-        )}
-
-        {/* Polkadot Vault Settings */}
-        {pro && (
-          <div className='border-t border-border-hard pt-4'>
-            <p className='text-sm mb-3'>polkadot vault</p>
-            <div className='flex flex-col gap-3'>
-              <RowGroup>
-                <Row
-                  type='toggle'
-                  label='legacy mode'
-                  description='for older parity signer / polkadot vault devices'
-                  checked={vaultLegacyMode}
-                  onChange={v => void handleVaultLegacyModeChange(v)}
-                />
-              </RowGroup>
-
-              {vaultLegacyMode && (
-                <div className='border border-yellow-500/30 bg-yellow-500/10 p-3'>
-                  <p className='text-xs text-yellow-400 mb-2'>
-                    legacy mode requires up-to-date metadata on your device
-                  </p>
-                  <a
-                    href='https://metadata.novasama.io/'
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    className='flex items-center gap-2 text-xs text-zigner-gold hover:underline'
-                  >
-                    <Link2Icon className='size-3' />
-                    update metadata at novasama.io
-                  </a>
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -401,11 +334,7 @@ export const SettingsZigner = () => {
                     className='flex-1'
                     onClick={handleAddWallet}
                     disabled={
-                      (!walletImport &&
-                        !zcashWalletImport &&
-                        !parsedPolkadotExport &&
-                        !parsedCosmosExport) ||
-                      isAdding
+                      (!walletImport && !zcashWalletImport && !parsedCosmosExport) || isAdding
                     }
                   >
                     {isAdding ? 'adding...' : 'add wallet'}
@@ -429,11 +358,6 @@ export const SettingsZigner = () => {
                       <span className='font-mono'>
                         {parsedCosmosExport.addresses.map(a => a.address.slice(0, 10)).join(', ')}
                         ...
-                      </span>
-                    ) : parsedPolkadotExport ? (
-                      <span className='font-mono'>
-                        {parsedPolkadotExport.address.slice(0, 8)}...
-                        {parsedPolkadotExport.address.slice(-6)}
                       </span>
                     ) : (
                       <>

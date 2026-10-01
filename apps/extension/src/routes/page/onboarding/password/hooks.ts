@@ -77,14 +77,8 @@ export const useFinalizeOnboarding = () => {
   } = useStore(keyRingSelector);
   const { viewingKey } = useOnboarding();
   const { setNetworkEndpoint } = useStore(networksSelector);
-  const {
-    walletImport,
-    zcashWalletImport,
-    parsedPolkadotExport,
-    parsedCosmosExport,
-    walletLabel,
-    clearZignerState,
-  } = useStore(zignerConnectSelector);
+  const { walletImport, zcashWalletImport, parsedCosmosExport, walletLabel, clearZignerState } =
+    useStore(zignerConnectSelector);
 
   // Both fresh and imported wallets are Zcash only out of onboarding - no
   // network-select screen anywhere in this flow. Penumbra (same seed,
@@ -149,15 +143,6 @@ export const useFinalizeOnboarding = () => {
         deviceId: `cosmos-${Date.now()}`,
       };
       await newZignerZafuKey(zignerData, walletLabel || 'zigner cosmos');
-    } else if (parsedPolkadotExport) {
-      // polkadot zigner import
-      const zignerData: ZignerZafuImport = {
-        polkadotSs58: parsedPolkadotExport.address,
-        polkadotGenesisHash: parsedPolkadotExport.genesisHash,
-        accountIndex: 0,
-        deviceId: `polkadot-${Date.now()}`,
-      };
-      await newZignerZafuKey(zignerData, walletLabel || 'zigner polkadot');
     } else {
       throw new Error('no zigner wallet data found');
     }

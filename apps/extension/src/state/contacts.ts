@@ -44,8 +44,6 @@ export type ContactNetwork =
   | 'penumbra'
   | 'zcash'
   | 'cosmos'
-  | 'polkadot'
-  | 'kusama'
   | 'ethereum'
   | 'bitcoin'
   | 'solana'

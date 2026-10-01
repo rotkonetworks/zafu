@@ -94,14 +94,8 @@ const ChainRow = ({ chainId }: { chainId: CosmosChainId }) => {
     });
   };
 
-  const action = {
-    off: { label: 'turn on', run: turnOn },
-    unchecked: { label: 'check', run: check },
-    checking: { label: 'check', run: check },
-    empty: { label: 'check', run: check },
-    unanswered: { label: 'try again', run: check },
-    funded: undefined,
-  }[state.kind];
+  const showRefresh = state.kind !== 'off' && state.kind !== 'funded';
+  const checking = state.kind === 'checking';
 
   return (
     <>
@@ -117,21 +111,27 @@ const ChainRow = ({ chainId }: { chainId: CosmosChainId }) => {
         onPress={() => setSheet('chain')}
         action={
           <>
-            {state.kind === 'unanswered' && (
-              <Button variant='quiet' size='sm' onClick={() => setSheet('pool')}>
-                another node
-              </Button>
-            )}
-            {action && (
+            {state.kind === 'off' && (
               <Button
                 variant='secondary'
                 size='sm'
                 className='min-w-[76px]'
-                loading={state.kind === 'checking'}
-                onClick={() => void action.run()}
+                onClick={() => void turnOn()}
               >
-                {action.label}
+                turn on
               </Button>
+            )}
+            {showRefresh && (
+              <button
+                onClick={() => void check()}
+                disabled={checking}
+                aria-label={`check ${config.name}`}
+                className='grid size-10 shrink-0 place-items-center text-fg-muted transition-colors hover:bg-elev-2 hover:text-fg-high disabled:text-fg-dim'
+              >
+                <span
+                  className={`i-lucide-refresh-cw size-[18px] ${checking ? 'animate-spin' : ''}`}
+                />
+              </button>
             )}
           </>
         }

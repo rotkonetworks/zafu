@@ -6,8 +6,7 @@
  *
  * privacy tiers:
  * 1. shielded (penumbra, zcash) - trial decryption, rpc never learns addresses
- * 2. light client (polkadot) - p2p network, no central rpc, distributed peers
- * 3. transparent (cosmos) - queries specific addresses to centralized rpc
+ * 2. transparent (cosmos) - queries specific addresses to centralized rpc
  */
 
 import type { AllSlices, SliceCreator } from '.';
@@ -36,13 +35,12 @@ export const SHIELDED_NETWORKS: NetworkType[] = ['penumbra', 'zcash'];
 /**
  * networks using light client (p2p, no centralized rpc)
  *
- * uses smoldot embedded light client for trustless verification.
  * connects to p2p network directly, verifies headers cryptographically.
  * queries are distributed across peers - harder to correlate than single rpc.
  *
- * - polkadot: smoldot light client, no rpc option
+ * none currently - zafu ships no light-client network today.
  */
-export const LIGHT_CLIENT_NETWORKS: NetworkType[] = ['polkadot'];
+export const LIGHT_CLIENT_NETWORKS: NetworkType[] = [];
 
 /**
  * networks where queries leak address activity to centralized rpc
@@ -66,7 +64,7 @@ export interface ProxyConfig {
 export interface PrivacySettings {
   /**
    * enable balance fetching for transparent networks
-   * when false (default): no balance queries for polkadot/cosmos
+   * when false (default): no balance queries for cosmos
    * when true: fetches balances (leaks address activity to rpc nodes)
    *
    * note: penumbra and zcash always safe (trial decryption, no leak)
@@ -310,7 +308,6 @@ export const privacySettingsSelector = (state: AllSlices) => state.privacy.setti
 /**
  * check if we can fetch balances for a given network
  * - shielded (penumbra, zcash): always allowed (trial decryption)
- * - light client (polkadot): always allowed (p2p, no central rpc)
  * - transparent (cosmos): only if enableTransparentBalances is true
  */
 export const canFetchBalancesForNetwork = (state: AllSlices, network: NetworkType) => {
@@ -332,7 +329,6 @@ export const canFetchHistory = (state: AllSlices) =>
 /**
  * check if we can background sync for a given network
  * - shielded (penumbra, zcash): always allowed (trial decryption)
- * - light client (polkadot): always allowed (p2p, no central rpc)
  * - transparent (cosmos): only if enableBackgroundSync is true
  */
 /**

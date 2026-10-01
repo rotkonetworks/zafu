@@ -112,10 +112,6 @@ export async function loadNetworkAdapter(network: NetworkType): Promise<NetworkA
       const { ZcashAdapter } = await import('./zcash/adapter');
       return new ZcashAdapter();
 
-    case 'polkadot':
-      const { PolkadotAdapter } = await import('./polkadot/adapter');
-      return new PolkadotAdapter();
-
     case 'cosmos':
       const { CosmosAdapter } = await import('./cosmos/adapter');
       return new CosmosAdapter();

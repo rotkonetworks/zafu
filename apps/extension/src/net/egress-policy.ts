@@ -118,8 +118,6 @@ const customNetworkUrls = (i: EgressInputs): string[] =>
 
 /** Networks zafu has no endpoint preset for: the configured endpoint only, plus what their client fetches. */
 const OTHER_NETWORKS: Record<string, string[]> = {
-  polkadot: ['https://paritytech.github.io/chainspecs/'],
-  kusama: ['https://paritytech.github.io/chainspecs/'],
   ethereum: [],
   bitcoin: [],
 };

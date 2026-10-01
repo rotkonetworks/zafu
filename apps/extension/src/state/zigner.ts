@@ -13,7 +13,7 @@
  * ========================================================================
  *
  * processQrData currently handles: FVK exports (penumbra, zcash),
- * substrate addresses, cosmos accounts, UR formats, and zigner backups.
+ * cosmos accounts, UR formats, and zigner backups.
  *
  * New UR types to add for ZID:
  *   - ur:zid-response - scanned after zigner signs a ZID challenge.
@@ -70,24 +70,7 @@ import {
 export type ZignerScanState = 'idle' | 'scanning' | 'scanned' | 'importing' | 'complete' | 'error';
 
 /** Detected network type from QR code */
-export type DetectedNetwork =
-  | 'penumbra'
-  | 'zcash'
-  | 'polkadot'
-  | 'cosmos'
-  | 'backup'
-  | 'hot-wallet'
-  | 'unknown';
-
-/** Polkadot address import data from Zigner QR */
-export interface PolkadotImportData {
-  /** SS58 encoded address */
-  address: string;
-  /** Genesis hash (hex with 0x prefix) */
-  genesisHash: string;
-  /** Label for the wallet */
-  label: string;
-}
+export type DetectedNetwork = 'penumbra' | 'zcash' | 'cosmos' | 'backup' | 'hot-wallet' | 'unknown';
 
 /** Cosmos accounts import data from Zigner QR */
 export interface CosmosImportData {
@@ -129,8 +112,6 @@ export interface ZignerSlice {
   parsedPenumbraExport?: ZignerFvkExportData;
   /** Parsed Zcash FVK export data from QR code */
   parsedZcashExport?: ZcashFvkExportData;
-  /** Parsed Polkadot address data from QR code */
-  parsedPolkadotExport?: PolkadotImportData;
   /** Parsed Cosmos accounts data from QR code */
   parsedCosmosExport?: CosmosImportData;
   /** Derived hot wallet mnemonic from zigner export */
@@ -191,7 +172,6 @@ export const createZignerSlice =
     detectedNetwork: undefined,
     parsedPenumbraExport: undefined,
     parsedZcashExport: undefined,
-    parsedPolkadotExport: undefined,
     parsedCosmosExport: undefined,
     hotWalletMnemonic: undefined,
     errorMessage: undefined,
@@ -231,7 +211,6 @@ export const createZignerSlice =
               state.zigner.parsedCosmosExport = cosmosData;
               state.zigner.parsedPenumbraExport = undefined;
               state.zigner.parsedZcashExport = undefined;
-              state.zigner.parsedPolkadotExport = undefined;
               state.zigner.walletLabel = cosmosData.label;
               state.zigner.scanState = 'scanned';
               state.zigner.errorMessage = undefined;
@@ -241,44 +220,6 @@ export const createZignerSlice =
         } catch {
           // Not valid JSON, fall through to other checks
         }
-      }
-
-      // Check for Substrate/Polkadot address format: substrate:address:0xgenesishash
-      if (trimmed.startsWith('substrate:')) {
-        const parts = trimmed.split(':');
-        if (parts.length >= 3) {
-          const address = parts[1]!;
-          const genesisHash = parts.slice(2).join(':'); // handle case where genesis has colons
-
-          // Validate the format
-          if (address && genesisHash && genesisHash.startsWith('0x')) {
-            const exportData: PolkadotImportData = {
-              address,
-              genesisHash,
-              label: 'zigner polkadot',
-            };
-
-            set(state => {
-              state.zigner.qrData = trimmed;
-              state.zigner.detectedNetwork = 'polkadot';
-              state.zigner.parsedPolkadotExport = exportData;
-              state.zigner.parsedPenumbraExport = undefined;
-              state.zigner.parsedZcashExport = undefined;
-              state.zigner.walletLabel = 'zigner polkadot';
-              state.zigner.scanState = 'scanned';
-              state.zigner.errorMessage = undefined;
-            });
-            return;
-          }
-        }
-
-        // Invalid substrate format
-        set(state => {
-          state.zigner.scanState = 'error';
-          state.zigner.errorMessage =
-            'invalid substrate qr format. expected: substrate:address:0xgenesishash';
-        });
-        return;
       }
 
       // Check for Cosmos address format: cosmos:address:0xgenesishash
@@ -309,7 +250,6 @@ export const createZignerSlice =
               state.zigner.parsedCosmosExport = cosmosData;
               state.zigner.parsedPenumbraExport = undefined;
               state.zigner.parsedZcashExport = undefined;
-              state.zigner.parsedPolkadotExport = undefined;
               state.zigner.walletLabel = cosmosData.label;
               state.zigner.scanState = 'scanned';
               state.zigner.errorMessage = undefined;
@@ -408,7 +348,6 @@ export const createZignerSlice =
               state.zigner.hotWalletMnemonic = hotWallet.mnemonic;
               state.zigner.parsedPenumbraExport = undefined;
               state.zigner.parsedZcashExport = undefined;
-              state.zigner.parsedPolkadotExport = undefined;
               state.zigner.parsedCosmosExport = undefined;
               state.zigner.walletLabel = 'zigner hot wallet';
               state.zigner.scanState = 'scanned';
@@ -599,7 +538,6 @@ export const createZignerSlice =
         state.zigner.detectedNetwork = undefined;
         state.zigner.parsedPenumbraExport = undefined;
         state.zigner.parsedZcashExport = undefined;
-        state.zigner.parsedPolkadotExport = undefined;
         state.zigner.parsedCosmosExport = undefined;
         state.zigner.hotWalletMnemonic = undefined;
         state.zigner.walletLabel = '';
@@ -643,7 +581,6 @@ export const zignerConnectSelector = (state: AllSlices) => {
     detectedNetwork: slice.detectedNetwork,
     parsedPenumbraExport: slice.parsedPenumbraExport,
     parsedZcashExport: slice.parsedZcashExport,
-    parsedPolkadotExport: slice.parsedPolkadotExport,
     parsedCosmosExport: slice.parsedCosmosExport,
     hotWalletMnemonic: slice.hotWalletMnemonic,
     walletLabel: slice.walletLabel,

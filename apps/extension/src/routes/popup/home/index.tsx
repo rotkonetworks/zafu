@@ -16,7 +16,6 @@ import { needsLogin, needsOnboard } from '../popup-needs';
 import { PopupPath } from '../paths';
 import { AssetListSkeleton } from '../../../components/primitives/skeleton';
 import { usePreloadBalances } from '../../../hooks/use-preload';
-import { usePolkadotPublicKey } from '../../../hooks/use-polkadot-key';
 import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 
 import { BackupNudge } from './notices';
@@ -24,7 +23,7 @@ import { HomeActions } from './actions';
 import { HistoryContent } from './history';
 import { PenumbraContent } from './penumbra-home';
 import { ZcashContent } from './zcash-home';
-import { PolkadotContent, CosmosContent, NetworkPlaceholder } from './other-networks';
+import { CosmosContent, NetworkPlaceholder } from './other-networks';
 
 export interface PopupLoaderData {
   fullSyncHeight?: number;
@@ -65,7 +64,6 @@ export const PopupIndex = () => {
   const activeNetwork = useStore(selectActiveNetwork);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const penumbraAccount = useStore(selectPenumbraAccount);
-  const { publicKey: polkadotPublicKey } = usePolkadotPublicKey();
   const navigate = useNavigate();
 
   // preload balances in background for instant display
@@ -110,11 +108,7 @@ export const PopupIndex = () => {
     <div className='flex min-h-full flex-col gap-3 p-4'>
       <InFlightCard />
       <Suspense fallback={<AssetListSkeleton rows={4} />}>
-        <NetworkContent
-          network={activeNetwork}
-          polkadotPublicKey={polkadotPublicKey}
-          nudge={backupNudge}
-        />
+        <NetworkContent network={activeNetwork} nudge={backupNudge} />
       </Suspense>
       <Suspense fallback={<AssetListSkeleton rows={3} />}>
         <HistoryContent network={activeNetwork} penumbraAccount={penumbraAccount} limit={3} />
@@ -124,24 +118,11 @@ export const PopupIndex = () => {
 };
 
 /** network-specific content - split out to minimize re-renders */
-const NetworkContent = ({
-  network,
-  polkadotPublicKey,
-  nudge,
-}: {
-  network: NetworkType;
-  polkadotPublicKey?: string;
-  nudge?: ReactNode;
-}) => (
+const NetworkContent = ({ network, nudge }: { network: NetworkType; nudge?: ReactNode }) => (
   <>
     {nudge}
     <HomeActions />
-    {network === 'polkadot' || network === 'kusama' ? (
-      <PolkadotContent
-        publicKey={polkadotPublicKey}
-        relay={network === 'kusama' ? 'kusama' : undefined}
-      />
-    ) : network === 'noble' || network === 'cosmoshub' ? (
+    {network === 'noble' || network === 'cosmoshub' ? (
       <CosmosContent chainId={network as CosmosChainId} />
     ) : (
       <NetworkPlaceholder network={network} />

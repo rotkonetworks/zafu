@@ -30,15 +30,6 @@ async function deriveCosmosAddress(mnemonic: string, prefix: string): Promise<st
   return wallet.address;
 }
 
-/** derive polkadot/kusama ed25519 address from mnemonic */
-async function derivePolkadotAddress(
-  mnemonic: string,
-  network: 'polkadot' | 'kusama',
-): Promise<string> {
-  const { derivePolkadotAddress: derive } = await import('@repo/wallet/networks/polkadot/derive');
-  return derive(mnemonic, network, 0);
-}
-
 /** derive penumbra address from mnemonic */
 async function derivePenumbraAddress(mnemonic: string, index = 0): Promise<string> {
   const { generateSpendKey, getFullViewingKey, getAddressByIndex } =
@@ -261,18 +252,6 @@ export function useActiveAddress() {
               return;
             }
 
-            // polkadot/kusama - use ed25519 derivation (ledger compatible)
-            if (activeNetwork === 'polkadot' || activeNetwork === 'kusama') {
-              const addr = await derivePolkadotAddress(mnemonic, activeNetwork);
-              if (!cancelled) {
-                setAddress(addr);
-              }
-              if (!cancelled) {
-                setLoading(false);
-              }
-              return;
-            }
-
             // ethereum - need ethers or viem (not available)
             if (activeNetwork === 'ethereum') {
               if (!cancelled) {
@@ -418,20 +397,6 @@ export function useActiveAddress() {
                 }
               }
             }
-          }
-
-          // check for stored polkadot key
-          if (
-            (activeNetwork === 'polkadot' || activeNetwork === 'kusama') &&
-            insensitive['polkadotSs58']
-          ) {
-            if (!cancelled) {
-              setAddress(insensitive['polkadotSs58'] as string);
-            }
-            if (!cancelled) {
-              setLoading(false);
-            }
-            return;
           }
         }
 

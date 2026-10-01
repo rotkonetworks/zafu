@@ -136,52 +136,6 @@ trackUiOpenPresence(
 // storage-chrome/local.ts) so every realm - SW, popup, options page - has them,
 // not just this worker. No explicit enableMigration call needed here.
 
-/**
- * Load polkadot custom chainspecs - but ONLY when polkadot/kusama is actually
- * enabled. The polkadot light client (smoldot) is heavy and was previously
- * imported statically at service-worker startup, and ran for every user
- * regardless of the networks they use. (The `unhandledrejection` / `error`
- * listeners no longer depend on when the body runs - they register from a sync
- * top-of-file import, see './install-global-error-handlers'.)
- *
- * We are a privacy-preserving wallet: a network the user has not selected must
- * not load code or open connections. So the import is dynamic and gated on the
- * enabled set - zcash-only or penumbra-only users never touch smoldot.
- */
-async function loadCustomChainspecsIfEnabled(): Promise<void> {
-  const enabled = (await localExtStorage.get('enabledNetworks')) ?? [];
-  if (!enabled.includes('polkadot') && !enabled.includes('kusama')) {
-    return;
-  }
-  const { registerCustomChainspec, unregisterCustomChainspec, getCustomChainspecs } = await import(
-    /* webpackChunkName: "polkadot-chainspec" */ '@repo/wallet/networks/polkadot'
-  );
-  const specs = (await localExtStorage.get('customChainspecs')) ?? [];
-  const registered = getCustomChainspecs();
-  for (const spec of specs) {
-    if (!registered.has(spec.id)) {
-      registerCustomChainspec(
-        spec.id,
-        spec.chainspec,
-        spec.relay === 'standalone' ? 'standalone' : spec.relay,
-        spec.name,
-        spec.symbol,
-        spec.decimals,
-      );
-    }
-  }
-  const specIds = new Set(specs.map(s => s.id));
-  for (const [id] of registered) {
-    if (!specIds.has(id)) {
-      unregisterCustomChainspec(id);
-    }
-  }
-  console.log(`[polkadot] loaded ${specs.length} custom chainspecs`);
-}
-
-// gated on enabled networks - a no-op for zcash-only / penumbra-only users
-void loadCustomChainspecsIfEnabled();
-
 let walletServicesResult: Promise<{
   services: Services;
   wallet: import('@repo/wallet').WalletJson;
@@ -334,11 +288,6 @@ localExtStorage.addListener(changes => {
   // penumbra <-> noble, both in the penumbra group).
   if (changes.activeNetwork !== undefined) {
     void reinitializeServices('network switch');
-  }
-
-  // sync custom chainspecs when they change (no-op unless polkadot is enabled)
-  if (changes.customChainspecs !== undefined) {
-    void loadCustomChainspecsIfEnabled();
   }
 });
 
@@ -640,9 +589,9 @@ chrome.alarms.onAlarm.addListener(async alarm => {
   }
 
   if (alarm.name === 'blockSync') {
-    // privacy check: shielded (penumbra, zcash) and light-client (polkadot)
-    // networks always sync - trial decryption / p2p never leak addresses, so
-    // they have no toggle. Only transparent networks honor enableBackgroundSync.
+    // privacy check: shielded (penumbra, zcash) networks always sync - trial
+    // decryption / p2p never leak addresses, so they have no toggle. Only
+    // transparent networks honor enableBackgroundSync.
     // (Gating ALL sync on the raw flag wrongly disabled zcash background sync
     // with no way to re-enable it, since zcash shows no toggle.)
     const privacySettings = await localExtStorage.get('privacySettings');

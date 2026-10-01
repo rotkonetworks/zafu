@@ -1,40 +1,8 @@
-import { lazy, Suspense } from 'react';
-
 import { Sensitive } from '../../../components/sensitive';
 import { AssetListSkeleton } from '../../../components/primitives/skeleton';
 import { useCosmosAssets } from '../../../hooks/cosmos-balance';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import type { NetworkType } from '../../../state/keyring';
-
-const PolkadotAssets = lazy(() =>
-  import('./polkadot-assets').then(m => ({ default: m.PolkadotAssets })),
-);
-
-/** polkadot/kusama content */
-export const PolkadotContent = ({
-  publicKey,
-  relay = 'polkadot',
-}: {
-  publicKey?: string;
-  relay?: 'polkadot' | 'kusama';
-}) => {
-  if (!publicKey) {
-    return (
-      <div className='flex flex-col items-center justify-center py-12 text-center'>
-        <div className='text-sm text-fg-muted'>no {relay} wallet</div>
-        <div className='text-xs text-fg-muted mt-1'>import a polkadot account to get started</div>
-      </div>
-    );
-  }
-
-  return (
-    <div className='flex-1'>
-      <Suspense fallback={<AssetListSkeleton rows={3} />}>
-        <PolkadotAssets publicKey={publicKey} relay={relay} />
-      </Suspense>
-    </div>
-  );
-};
 
 /** cosmos chain content - shows balances from public RPC */
 export const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {

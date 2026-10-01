@@ -6,7 +6,7 @@
  *
  * networks fall into two categories:
  * - privacy: need local sync (zcash, penumbra) - run in isolated workers
- * - transparent: rpc only (polkadot, ethereum) - no local state needed
+ * - transparent: rpc only (ethereum) - no local state needed
  */
 
 // re-export from network-types for convenience
@@ -25,23 +25,16 @@ export type {
   PrivacyNetwork,
   IbcNetwork,
   TransparentNetwork,
-  SubstrateChainConfig,
   EncryptionType,
 } from './network-types';
 export {
   isPrivacyNetwork,
   isIbcNetwork,
   isTransparentNetwork,
-  isSubstrateNetwork,
-  isMultiEncryptionNetwork,
   getNetworkEncryption,
   getSupportedEncryptions,
   NETWORK_CONFIGS,
   NETWORK_DEFAULT_ENCRYPTION,
-  SUBSTRATE_ENCRYPTIONS,
-  SUBSTRATE_CHAINS,
-  getSubstrateChain,
-  getSubstrateChainsByRelay,
 } from './network-types';
 
 // local alias for use in this file
@@ -114,18 +107,6 @@ export const NETWORK_DERIVATIONS: Partial<Record<NetworkType, NetworkDerivation>
     prefix: 'cosmos',
   },
   // transparent networks
-  polkadot: {
-    network: 'polkadot',
-    coinType: 354,
-    pathTemplate: "m/44'/354'/0'/0'/0'",
-    prefix: '1', // polkadot ss58
-  },
-  kusama: {
-    network: 'kusama',
-    coinType: 434,
-    pathTemplate: "m/44'/434'/0'/0'/0'",
-    prefix: 'C', // kusama ss58
-  },
   ethereum: {
     network: 'ethereum',
     coinType: 60,
@@ -159,10 +140,6 @@ export interface ZignerZafuImport {
   viewingKey?: string;
   /** public key for other networks */
   publicKey?: string;
-  /** ss58 address for polkadot/kusama (watch-only) */
-  polkadotSs58?: string;
-  /** genesis hash for the polkadot network */
-  polkadotGenesisHash?: string;
   /** cosmos chain addresses (watch-only) */
   cosmosAddresses?: { chainId: string; address: string; prefix: string }[];
   /**
@@ -203,7 +180,7 @@ export type ColdSignerType = 'zigner' | 'keystone' | 'ledger';
  *
  * unlike a zigner/keystone import (which is a multi-network watch-only FVK
  * bundle), a Ledger account is a single-signer zcash-only cold wallet. it
- * carries no penumbra FVK, no polkadot/cosmos addresses, no ZID key, and no
+ * carries no penumbra FVK, no cosmos addresses, no ZID key, and no
  * FROST share - just enough to watch a single orchard account and hand PCZTs
  * to the device for signing.
  *

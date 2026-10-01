@@ -15,8 +15,6 @@ export type NetworkId =
   | 'cosmoshub'
   | 'osmosis'
   | 'injective'
-  | 'polkadot'
-  | 'kusama'
   | 'ethereum'
   | 'bitcoin';
 
@@ -74,18 +72,6 @@ async function loadAdapter(network: NetworkId): Promise<NetworkAdapter> {
           '@repo/wallet/networks/zcash/adapter'
         );
         adapter = new ZcashAdapter();
-        break;
-      }
-      case 'polkadot':
-      case 'kusama': {
-        // kusama shares the polkadot adapter. Lazily imported here, so the
-        // smoldot light client is only pulled in when polkadot/kusama is
-        // actually selected - never at service-worker startup.
-        const { PolkadotAdapter } = await import(
-          /* webpackChunkName: "adapter-polkadot" */
-          '@repo/wallet/networks/polkadot/adapter'
-        );
-        adapter = new PolkadotAdapter();
         break;
       }
       // IBC chains use a shared cosmos adapter (standard secp256k1 / coin 118)

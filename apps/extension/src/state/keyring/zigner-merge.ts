@@ -56,8 +56,6 @@ export async function mergeZignerCapabilities(
     fullViewingKey: incoming.fullViewingKey ?? existingData.fullViewingKey,
     viewingKey: incoming.viewingKey ?? existingData.viewingKey,
     publicKey: incoming.publicKey ?? existingData.publicKey,
-    polkadotSs58: incoming.polkadotSs58 ?? existingData.polkadotSs58,
-    polkadotGenesisHash: incoming.polkadotGenesisHash ?? existingData.polkadotGenesisHash,
     cosmosAddresses: incoming.cosmosAddresses ?? existingData.cosmosAddresses,
     zidPublicKey: incoming.zidPublicKey ?? existingData.zidPublicKey,
     // accountIndex + deviceId stay as-is (they matched for us to be here)

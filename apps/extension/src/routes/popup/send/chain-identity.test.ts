@@ -33,7 +33,6 @@ describe('resolveNetworkCosmosChain', () => {
   });
 
   it('returns none for an unlaunched or non-IBC network', () => {
-    expect(resolveNetworkCosmosChain('polkadot')).toBeUndefined();
     expect(resolveNetworkCosmosChain('ethereum')).toBeUndefined();
     expect(resolveNetworkCosmosChain('penumbra')).toBeUndefined();
     expect(resolveNetworkCosmosChain('zcash')).toBeUndefined();
