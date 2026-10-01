@@ -22,9 +22,9 @@ import { lazyScreen } from './route-modules';
  */
 const LazyFallback = () => (
   <div className='flex h-full flex-col gap-3 p-4 animate-pulse'>
-    <div className='h-6 w-32 rounded-sm bg-elev-2/50' />
-    <div className='h-24 w-full rounded-md bg-elev-2/30' />
-    <div className='h-16 w-full rounded-md bg-elev-2/20' />
+    <div className='h-6 w-32 bg-elev-2/50' />
+    <div className='h-24 w-full bg-elev-2/30' />
+    <div className='h-16 w-full bg-elev-2/20' />
   </div>
 );
 

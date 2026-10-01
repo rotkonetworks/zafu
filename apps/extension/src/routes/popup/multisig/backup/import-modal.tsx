@@ -70,7 +70,7 @@ export const ImportModal = ({ open, onClose, onImported }: Props) => {
 
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4'>
-      <div className='w-full max-w-sm rounded-lg border border-border-soft bg-elev-1 p-4'>
+      <div className='w-full max-w-sm border border-border-soft bg-elev-1 p-4'>
         <h2 className='text-lg font-medium'>restore multisig backup</h2>
 
         {!envelope ? (
@@ -78,7 +78,7 @@ export const ImportModal = ({ open, onClose, onImported }: Props) => {
             <p className='mt-1 text-label text-fg-muted'>
               Select an encrypted backup file (.json) you created earlier.
             </p>
-            <label className='mt-3 flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed border-border-soft bg-elev-2 px-4 py-6 hover:bg-elev-3 transition-colors'>
+            <label className='mt-3 flex cursor-pointer flex-col items-center gap-2 border border-dashed border-border-soft bg-elev-2 px-4 py-6 hover:bg-elev-3 transition-colors'>
               <span className='i-ph-file-arrow-up size-6 text-fg-muted' />
               <span className='text-xs text-fg-muted'>tap to choose backup file</span>
               <input
@@ -91,7 +91,7 @@ export const ImportModal = ({ open, onClose, onImported }: Props) => {
           </>
         ) : (
           <>
-            <div className='mt-3 rounded-lg border border-border-soft bg-elev-2 p-3 text-body'>
+            <div className='mt-3 border border-border-soft bg-elev-2 p-3 text-body'>
               <p className='kicker'>backup file</p>
               <p className='mt-0.5 font-medium'>{envelope.label}</p>
               {isBatch ? (
@@ -117,14 +117,14 @@ export const ImportModal = ({ open, onClose, onImported }: Props) => {
                 autoComplete='off'
                 value={passphrase}
                 onChange={e => setPassphrase(e.target.value)}
-                className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-sm focus:border-primary/50 focus:outline-none'
+                className='mt-1 w-full border border-border-soft bg-input px-3 py-2 font-mono text-sm focus:border-primary/50 focus:outline-none'
               />
             </label>
           </>
         )}
 
         {error && (
-          <p className='mt-2 rounded-md border border-red-500/40 bg-red-500/5 p-2 text-body text-red-400'>
+          <p className='mt-2 border border-red-500/40 bg-red-500/5 p-2 text-body text-red-400'>
             {error}
           </p>
         )}

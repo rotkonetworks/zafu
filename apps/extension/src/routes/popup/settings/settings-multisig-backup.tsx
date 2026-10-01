@@ -82,13 +82,13 @@ export const SettingsMultisigBackup = () => {
 
       <div className='flex flex-col gap-4'>
         {toast && (
-          <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-2 text-xs text-green-400'>
+          <div className='border border-green-500/40 bg-green-500/5 p-2 text-xs text-green-400'>
             {toast}
           </div>
         )}
 
         {/* batch export */}
-        <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
+        <div className='border border-border-soft bg-elev-1 p-3'>
           <p className='text-sm font-medium'>batch backup</p>
           <p className='mt-1 text-body text-fg-muted'>
             one encrypted file, one passphrase - restore on any zafu install.
@@ -122,7 +122,7 @@ export const SettingsMultisigBackup = () => {
               {selfCustody.map(w => (
                 <div
                   key={w.id}
-                  className='flex items-center justify-between rounded-lg border border-border-soft bg-elev-1 px-3 py-2'
+                  className='flex items-center justify-between border border-border-soft bg-elev-1 px-3 py-2'
                 >
                   <div className='flex flex-col min-w-0'>
                     <span className='text-sm font-medium truncate'>{w.label}</span>
@@ -149,7 +149,7 @@ export const SettingsMultisigBackup = () => {
 
         {/* airgap notice */}
         {airgap.length > 0 && (
-          <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
+          <div className='border border-border-soft bg-elev-1 p-3'>
             <p className='text-body text-fg-muted'>
               <span className='font-medium text-fg'>
                 {airgap.length} airgap wallet

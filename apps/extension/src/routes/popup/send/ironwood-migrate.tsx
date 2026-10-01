@@ -368,7 +368,7 @@ export function IronwoodMigrate({
                 <h2 className='text-lg font-medium'>migrate to ironwood</h2>
               </div>
               <div className='flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6 text-center'>
-                <div className='flex h-16 w-16 items-center justify-center rounded-full bg-green-500/20'>
+                <div className='flex h-16 w-16 items-center justify-center bg-green-500/20'>
                   <span className='i-ph-check h-8 w-8 text-green-400' />
                 </div>
                 <h2 className='text-lg font-medium'>fully migrated</h2>
@@ -431,7 +431,7 @@ export function IronwoodMigrate({
                   Saying nothing here would let someone deanonymise their whole
                   orchard history in one click while believing this is a private
                   shielded-to-shielded move. */}
-              <div className='flex items-start gap-2 rounded-lg border border-hanko/40 bg-elev-1 p-3'>
+              <div className='flex items-start gap-2 border border-hanko/40 bg-elev-1 p-3'>
                 <span className='i-ph-eye mt-0.5 size-3.5 shrink-0 text-hanko' />
                 <p className='text-label text-fg-muted leading-snug'>
                   <span className='text-hanko'>this amount becomes public.</span> moving between
@@ -447,7 +447,7 @@ export function IronwoodMigrate({
                 </p>
               </div>
 
-              <div className='divide-y divide-border-soft rounded-lg border border-border-soft bg-elev-1'>
+              <div className='divide-y divide-border-soft border border-border-soft bg-elev-1'>
                 <div className='flex items-center justify-between px-4 py-3 text-sm'>
                   <span className='text-fg-muted'>destination</span>
                   <span className='font-medium'>your ironwood address</span>
@@ -478,8 +478,8 @@ export function IronwoodMigrate({
       case 'building':
         return (
           <div className='flex flex-col items-center gap-4 p-6'>
-            <div className='w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center'>
-              <div className='w-8 h-8 border-2 border-zigner-gold border-t-transparent rounded-full animate-spin' />
+            <div className='w-16 h-16 bg-primary/20 flex items-center justify-center'>
+              <div className='w-8 h-8 border-2 border-zigner-gold border-t-transparent animate-spin' />
             </div>
             <h2 className='text-lg font-medium'>building migration</h2>
             <StepList steps={progressSteps} className='w-full max-w-sm' />
@@ -500,7 +500,7 @@ export function IronwoodMigrate({
             </div>
 
             {amount !== null && fee !== null && (
-              <div className='rounded bg-elev-2 p-3 text-xs text-fg-muted flex flex-col gap-1'>
+              <div className='bg-elev-2 p-3 text-xs text-fg-muted flex flex-col gap-1'>
                 <div className='flex justify-between'>
                   <span>migrate</span>
                   <span className='tabular-nums text-fg-high'>
@@ -581,8 +581,8 @@ export function IronwoodMigrate({
       case 'broadcast':
         return (
           <div className='flex flex-col items-center gap-4 p-8'>
-            <div className='w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center animate-pulse'>
-              <div className='w-8 h-8 border-2 border-zigner-gold border-t-transparent rounded-full animate-spin' />
+            <div className='w-16 h-16 bg-primary/20 flex items-center justify-center animate-pulse'>
+              <div className='w-8 h-8 border-2 border-zigner-gold border-t-transparent animate-spin' />
             </div>
             <h2 className='text-lg font-medium'>broadcasting migration</h2>
             <p className='text-center text-sm text-fg-muted'>broadcasting to the network</p>
@@ -592,7 +592,7 @@ export function IronwoodMigrate({
       case 'complete':
         return (
           <div className='flex flex-col items-center gap-4 p-8'>
-            <div className='w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center'>
+            <div className='w-16 h-16 bg-green-500/20 flex items-center justify-center'>
               <span className='i-ph-check w-8 h-8 text-green-400' />
             </div>
             <h2 className='text-lg font-medium'>migrated to ironwood</h2>
@@ -615,7 +615,7 @@ export function IronwoodMigrate({
         if (isPreActivationError(error)) {
           return (
             <div className='flex flex-col items-center gap-4 p-8'>
-              <div className='flex h-16 w-16 items-center justify-center rounded-full bg-primary/15'>
+              <div className='flex h-16 w-16 items-center justify-center bg-primary/15'>
                 <span className='i-ph-clock h-8 w-8 text-zigner-gold' />
               </div>
               <h2 className='text-lg font-medium'>migration not available yet</h2>
@@ -631,7 +631,7 @@ export function IronwoodMigrate({
         }
         return (
           <div className='flex flex-col items-center gap-4 p-8'>
-            <div className='w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center'>
+            <div className='w-16 h-16 bg-red-500/20 flex items-center justify-center'>
               <span className='i-ph-x w-8 h-8 text-red-400' />
             </div>
             <h2 className='text-lg font-medium'>migration failed</h2>

@@ -303,7 +303,7 @@ const MultisigCreateZafu = () => {
               signers
               <input
                 type='number'
-                className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-primary/50 focus:outline-none'
+                className='mt-1 w-full border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-primary/50 focus:outline-none'
                 value={maxSigners}
                 onChange={e => setMaxSigners(Number(e.target.value))}
                 min={threshold}
@@ -314,7 +314,7 @@ const MultisigCreateZafu = () => {
               approvals needed
               <input
                 type='number'
-                className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-primary/50 focus:outline-none'
+                className='mt-1 w-full border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-primary/50 focus:outline-none'
                 value={threshold}
                 onChange={e => setThreshold(Number(e.target.value))}
                 min={2}
@@ -384,14 +384,14 @@ const MultisigCreateZafu = () => {
               : 'share this session id with your co-signers - they pick "join" and enter it, along with the relay keys you already swapped'}
           </p>
 
-          <div className='flex items-center gap-2 rounded-lg border border-border-soft bg-elev-1 px-6 py-4'>
+          <div className='flex items-center gap-2 border border-border-soft bg-elev-1 px-6 py-4'>
             {/* a session id is a uuid, not three short words - it needs to wrap
                 rather than run off the popup */}
             <span className='break-all font-mono text-xs'>{rdvRef.current?.code ?? roomCode}</span>
             <CopyButton text={rdvRef.current?.code ?? roomCode} />
           </div>
 
-          <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
+          <div className='border border-border-soft bg-elev-1 p-3'>
             <QrDisplay
               data={Array.from(new TextEncoder().encode(rdvRef.current?.code ?? roomCode))
                 .map(b => b.toString(16).padStart(2, '0'))
@@ -400,7 +400,7 @@ const MultisigCreateZafu = () => {
             />
           </div>
 
-          <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
+          <div className='flex items-center gap-2 bg-elev-2 px-3 py-1.5'>
             <span className='i-ph-users size-3.5 text-fg-muted' />
             <span className='text-xs'>
               <span className='font-medium text-fg'>{participantCount}</span>
@@ -431,7 +431,7 @@ const MultisigCreateZafu = () => {
             {DKG_STEPS.map((s, i) => (
               <div key={s.key} className='flex items-center gap-1.5'>
                 <div
-                  className={`flex size-5 items-center justify-center rounded-full text-label font-medium ${
+                  className={`flex size-5 items-center justify-center text-label font-medium ${
                     i + 1 <= currentRound
                       ? 'bg-zigner-gold text-zigner-gold-foreground'
                       : 'bg-elev-2 text-fg-muted'
@@ -446,7 +446,7 @@ const MultisigCreateZafu = () => {
             ))}
           </div>
 
-          <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
+          <div className='flex items-center gap-2 bg-elev-2 px-3 py-1.5'>
             <span className='i-ph-users size-3.5 text-fg-muted' />
             <span className='text-xs'>
               <span className='font-medium text-fg'>{participantCount}</span>
@@ -455,7 +455,7 @@ const MultisigCreateZafu = () => {
           </div>
 
           {roomCode && (
-            <div className='flex items-center gap-2 rounded-lg border border-border-soft bg-elev-1 px-4 py-2'>
+            <div className='flex items-center gap-2 border border-border-soft bg-elev-1 px-4 py-2'>
               <span className='break-all font-mono text-xs'>{roomCode}</span>
               <CopyButton text={roomCode} />
             </div>
@@ -478,10 +478,10 @@ const MultisigCreateZafu = () => {
 
       {step === 'complete' && (
         <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
+          <div className='border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
             multisig wallet created
           </div>
-          <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
+          <div className='border border-border-soft bg-elev-1 p-3'>
             <p className='text-label text-fg-muted'>address</p>
             <p className='mt-1 break-all font-mono text-xs'>{address}</p>
           </div>
@@ -916,7 +916,7 @@ const MultisigCreateZigner = () => {
               signers
               <input
                 type='number'
-                className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-primary/50 focus:outline-none'
+                className='mt-1 w-full border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-primary/50 focus:outline-none'
                 value={maxSigners}
                 onChange={e => setMaxSigners(Number(e.target.value))}
                 min={threshold}
@@ -927,7 +927,7 @@ const MultisigCreateZigner = () => {
               approvals needed
               <input
                 type='number'
-                className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-primary/50 focus:outline-none'
+                className='mt-1 w-full border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-primary/50 focus:outline-none'
                 value={threshold}
                 onChange={e => setThreshold(Number(e.target.value))}
                 min={2}
@@ -993,7 +993,7 @@ const MultisigCreateZigner = () => {
               : 'share this session id with your co-signers'}
           </p>
           <div className='break-all px-4 font-mono text-xs'>{rdvRef.current?.code ?? roomCode}</div>
-          <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
+          <div className='flex items-center gap-2 bg-elev-2 px-3 py-1.5'>
             <span className='i-ph-users size-3.5 text-fg-muted' />
             <span className='text-xs'>
               <span className='font-medium text-fg'>{participantCount}</span>
@@ -1084,10 +1084,10 @@ const MultisigCreateZigner = () => {
 
       {step === 'complete' && (
         <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
+          <div className='border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
             multisig wallet saved - signing key lives on zigner only
           </div>
-          <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
+          <div className='border border-border-soft bg-elev-1 p-3'>
             <p className='text-label text-fg-muted'>address</p>
             <p className='mt-1 break-all font-mono text-xs'>{address}</p>
           </div>

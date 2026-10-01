@@ -209,7 +209,7 @@ export const CosmosSign = () => {
         <div className='min-h-0 flex-1 overflow-y-auto p-4 flex flex-col gap-4'>
           {/* Transaction summary */}
           {txSummary && (
-            <div className='rounded-md border border-border-soft bg-elev-1 p-3'>
+            <div className='border border-border-soft bg-elev-1 p-3'>
               <p className='kicker mb-2'>transaction summary</p>
               <SummaryRow label='chain' value={txSummary.chainName} />
               {txSummary.msgs.map(
@@ -283,7 +283,7 @@ export const CosmosSign = () => {
   if (step === 'broadcasting') {
     return (
       <div className='flex h-full min-h-0 flex-col items-center justify-center bg-canvas gap-4'>
-        <div className='animate-spin rounded-full h-6 w-6 border-2 border-zigner-gold border-t-transparent' />
+        <div className='animate-spin h-6 w-6 border-2 border-zigner-gold border-t-transparent' />
         <p className='text-data text-fg lowercase'>broadcasting transaction...</p>
       </div>
     );
@@ -293,7 +293,7 @@ export const CosmosSign = () => {
   if (step === 'success') {
     return (
       <div className='flex h-full min-h-0 flex-col items-center justify-center bg-canvas gap-4 p-6'>
-        <div className='w-16 h-16 rounded-full bg-success/20 flex items-center justify-center'>
+        <div className='w-16 h-16 bg-success/20 flex items-center justify-center'>
           <span className='i-ph-check w-8 h-8 text-success' />
         </div>
         <div className='flex flex-col items-center gap-1'>

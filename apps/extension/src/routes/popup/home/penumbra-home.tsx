@@ -103,7 +103,7 @@ export const PenumbraContent = ({
     <div className='flex-1 flex flex-col gap-3'>
       {/* balance card - matches the zcash hero card (accent border, 'balance'
           kicker) so the two networks read as one design, not two. */}
-      <div className='rounded-md border border-network-accent/20 bg-elev-1 p-4'>
+      <div className='border border-network-accent/20 bg-elev-1 p-4'>
         <span className='kicker'>balance</span>
         <div className='mt-1 flex min-w-0 items-baseline gap-1.5'>
           {balanceSyncing ? (

@@ -66,7 +66,7 @@ export const PasskeyApprove = () => {
       <div className='w-full px-[30px]'>
         <div className='flex flex-col gap-2'>
           {/* origin display */}
-          <div className='flex items-center gap-2 rounded-lg bg-canvas p-3'>
+          <div className='flex items-center gap-2 bg-canvas p-3'>
             {origin && (
               <span className='text-xs text-fg-muted truncate'>
                 <SafeOriginURL origin={origin} />
@@ -75,7 +75,7 @@ export const PasskeyApprove = () => {
           </div>
 
           {/* what is being granted */}
-          <div className='rounded-lg border border-orange-500/40 bg-orange-500/10 p-4'>
+          <div className='border border-orange-500/40 bg-orange-500/10 p-4'>
             <div className='text-base font-medium text-orange-400'>sign in as you</div>
             <p className='mt-2 text-sm text-fg-muted'>
               this site is asking zafu to create a passkey for it. if you approve, a site-bound

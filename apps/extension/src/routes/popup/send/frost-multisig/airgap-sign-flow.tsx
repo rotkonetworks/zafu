@@ -252,7 +252,7 @@ export function FrostAirgapSignFlow({
           {sessionRef.current && (
             <RoomCodeChip code={sessionRef.current.friendlyCode ?? sessionRef.current.roomCode} />
           )}
-          <div className='w-full rounded bg-elev-2 p-2 text-body text-fg-muted space-y-0.5'>
+          <div className='w-full bg-elev-2 p-2 text-body text-fg-muted space-y-0.5'>
             <p>
               {ms.threshold}-of-{ms.maxSigners} threshold
             </p>
@@ -308,7 +308,7 @@ export function FrostAirgapSignFlow({
           {sessionRef.current && (
             <RoomCodeChip code={sessionRef.current.friendlyCode ?? sessionRef.current.roomCode} />
           )}
-          <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
+          <div className='flex items-center gap-2 bg-elev-2 px-3 py-1.5'>
             <span className='i-ph-users size-3.5 text-fg-muted' />
             <span className='text-xs'>
               <span className='font-medium text-fg'>{peersReady + 1}</span>

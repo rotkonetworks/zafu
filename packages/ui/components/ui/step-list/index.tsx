@@ -78,7 +78,7 @@ export function StepList({
               {s.detail && <span className='ml-1 text-fg-muted'>({s.detail})</span>}
               {!isLast && Number(dur) >= 0.5 && <span className='ml-1 text-fg-muted'>+{dur}s</span>}
               {isLast && liveSinceMs != null && (
-                <span className='ml-1 inline-block size-1.5 animate-pulse rounded-full bg-zigner-gold align-middle' />
+                <span className='ml-1 inline-block size-1.5 animate-pulse bg-zigner-gold align-middle' />
               )}
             </span>
           </div>

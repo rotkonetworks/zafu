@@ -18,7 +18,7 @@ export const ApproveDeny = ({
   const count = useWindowCountdown(wait ?? 0.5, wait != null ? 1000 : 500);
 
   return (
-    <div className='flex shrink-0 flex-row justify-between gap-4 rounded-lg bg-elev-1 px-4 py-7 shadow-lg'>
+    <div className='flex shrink-0 flex-row justify-between gap-4 bg-elev-1 px-4 py-7 shadow-lg'>
       <Button
         variant='primary'
         className='w-1/2 py-3.5 text-base'

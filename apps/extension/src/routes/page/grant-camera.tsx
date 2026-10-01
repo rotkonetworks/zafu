@@ -47,7 +47,7 @@ export const GrantCamera = () => {
         <div className='flex w-full max-w-sm flex-col items-center gap-6 text-center'>
           <div
             className={cn(
-              'flex size-16 items-center justify-center rounded-full',
+              'flex size-16 items-center justify-center',
               state === 'granted'
                 ? 'bg-green-500/15'
                 : state === 'denied'

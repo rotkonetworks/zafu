@@ -51,7 +51,7 @@ export const RelayTransportField = ({
   const [open, setOpen] = useState(false);
   return (
     <div className='flex flex-col gap-1.5'>
-      <div className='flex items-center justify-between gap-2 rounded-lg border border-border-soft bg-elev-1 px-3 py-2.5'>
+      <div className='flex items-center justify-between gap-2 border border-border-soft bg-elev-1 px-3 py-2.5'>
         <div className='flex min-w-0 items-center gap-2'>
           <span className='i-ph-broadcast size-3.5 shrink-0 text-fg-muted' />
           <span className='shrink-0 text-xs text-fg-muted'>relay</span>
@@ -70,7 +70,7 @@ export const RelayTransportField = ({
         </Button>
       </div>
       {open && (
-        <div className='flex flex-col gap-2 rounded-lg border border-border-soft bg-elev-1 p-3'>
+        <div className='flex flex-col gap-2 border border-border-soft bg-elev-1 p-3'>
           <p className='text-label text-fg-muted'>
             transport: relay (recommended). every message is encrypted to the signer it is for
             before it leaves this device, so the relay carries ciphertext only - it never sees keys,
@@ -79,7 +79,7 @@ export const RelayTransportField = ({
           <label className='text-label text-fg-muted'>
             your own relay
             <input
-              className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-xs focus:border-primary/50 focus:outline-none'
+              className='mt-1 w-full border border-border-soft bg-input px-3 py-2 font-mono text-xs focus:border-primary/50 focus:outline-none'
               value={value}
               onChange={e => onChange(e.target.value)}
               placeholder={DEFAULT_RELAY_URL}

@@ -74,7 +74,7 @@ export const ZcashVotePage = () => {
 
   const tabClass = (on: boolean) =>
     cn(
-      'text-xs px-2 py-1 rounded-md transition-colors',
+      'text-xs px-2 py-1 transition-colors',
       on ? 'text-fg bg-elev-2' : 'text-fg-muted hover:text-fg-high',
     );
 
@@ -109,7 +109,7 @@ export const ZcashVotePage = () => {
 
       {votingQ.isLoading && (
         <div className='flex items-center justify-center py-12'>
-          <div className='h-5 w-5 animate-spin border-2 border-zigner-gold border-t-transparent rounded-full' />
+          <div className='h-5 w-5 animate-spin border-2 border-zigner-gold border-t-transparent' />
         </div>
       )}
 
@@ -179,7 +179,7 @@ const RoundCard = ({
   });
 
   return (
-    <div className='rounded-lg border border-border-soft bg-elev-1'>
+    <div className='border border-border-soft bg-elev-1'>
       <button
         onClick={onToggle}
         className='flex w-full items-start justify-between p-3 text-left transition-colors hover:bg-elev-1'
@@ -240,7 +240,7 @@ const RoundCard = ({
                 <div className='flex items-center gap-2'>
                   <span className='text-data text-fg-high'>{p.title || `proposal ${p.id}`}</span>
                   {p.zipNumber && (
-                    <span className='rounded-sm bg-elev-2 px-1.5 py-0.5 text-label text-fg-muted'>
+                    <span className='bg-elev-2 px-1.5 py-0.5 text-label text-fg-muted'>
                       zip {p.zipNumber}
                     </span>
                   )}

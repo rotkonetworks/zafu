@@ -57,7 +57,7 @@ export const SettingsOta = () => {
   };
 
   const recordInfo = record ? (
-    <div className='rounded-md border border-elev-1 bg-elev-0 p-3 text-data text-fg'>
+    <div className='border border-elev-1 bg-elev-0 p-3 text-data text-fg'>
       <p className='text-fg-muted'>device firmware (verified)</p>
       <p>
         version <span className='font-mono text-fg-high'>{record.fw}</span> · slot {record.slot}
@@ -130,11 +130,11 @@ export const SettingsOta = () => {
         {recordInfo}
 
         {reconciliationNote && (
-          <p className='rounded-md bg-elev-0 p-2 text-label text-fg-muted'>{reconciliationNote}</p>
+          <p className='bg-elev-0 p-2 text-label text-fg-muted'>{reconciliationNote}</p>
         )}
 
         {phase === SessionPhase.Error && (
-          <p className='rounded-md bg-red-500/10 p-2 text-label text-red-300'>
+          <p className='bg-red-500/10 p-2 text-label text-red-300'>
             {session.error ?? 'ota session failed'}
           </p>
         )}
@@ -151,7 +151,7 @@ export const SettingsOta = () => {
         )}
 
         {phase === SessionPhase.Streaming && pendingUpdate && (
-          <div className='flex flex-col gap-3 rounded-md border border-green-500/30 bg-green-500/5 p-3'>
+          <div className='flex flex-col gap-3 border border-green-500/30 bg-green-500/5 p-3'>
             <p className='text-data text-fg-high'>
               signed &amp; verified - upgrade to v{pendingUpdate.manifest.version}?
             </p>
@@ -179,7 +179,7 @@ export const SettingsOta = () => {
         {statusScanner}
 
         {phase === SessionPhase.Recorded && lastResult && (
-          <div className='rounded-md border border-green-500/30 bg-green-500/5 p-3 text-data text-fg'>
+          <div className='border border-green-500/30 bg-green-500/5 p-3 text-data text-fg'>
             <p className='flex items-center gap-1 text-fg-high'>
               update recorded
               <span className='i-ph-check size-4 text-network-accent' />

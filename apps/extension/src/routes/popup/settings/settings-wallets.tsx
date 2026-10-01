@@ -50,10 +50,7 @@ const networkBadge = (network: string) => {
   return (
     <span
       key={network}
-      className={cn(
-        'text-label px-1.5 py-0.5 rounded',
-        colors[network] ?? 'bg-elev-2 text-fg-muted',
-      )}
+      className={cn('text-label px-1.5 py-0.5', colors[network] ?? 'bg-elev-2 text-fg-muted')}
     >
       {network}
     </span>
@@ -341,7 +338,7 @@ export const SettingsWallets = ({
           {/* ── wallet list ── */}
 
           {keyInfos.length > 0 ? (
-            <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border-soft bg-elev-1'>
+            <div className='flex flex-col divide-y divide-border/40 border border-border-soft bg-elev-1'>
               {keyInfos.map(v => {
                 const networks: string[] = [];
                 if (penumbraWallets.some(w => w.vaultId === v.id)) {
@@ -424,7 +421,7 @@ export const SettingsWallets = ({
                     setPasswordError(false);
                   }}
                   placeholder='password'
-                  className='w-full bg-input border border-border-soft px-3 py-2.5 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
+                  className='w-full bg-input border border-border-soft px-3 py-2.5 text-sm focus:outline-none focus:border-zigner-gold'
                 />
                 {passwordError && <span className='text-xs text-red-400'>wrong password</span>}
                 {error && <span className='text-xs text-red-400'>{error}</span>}
@@ -457,10 +454,7 @@ export const SettingsWallets = ({
           <div className='border-t border-border-soft pt-4'>
             <p className='text-label text-fg-muted mb-2'>add wallet</p>
             {/* zigner info box - tap 10x for dev paste mode */}
-            <div
-              className='rounded-lg border border-border-soft bg-elev-1 p-3 mb-3'
-              onClick={handleSecretTap}
-            >
+            <div className='border border-border-soft bg-elev-1 p-3 mb-3' onClick={handleSecretTap}>
               <p className='text-xs text-fg-muted'>
                 zafu zigner keeps spending keys offline - sign by QR.
               </p>
@@ -476,7 +470,7 @@ export const SettingsWallets = ({
             </div>
 
             {addSuccess && (
-              <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 mb-3 text-xs text-green-400'>
+              <div className='border border-green-500/40 bg-green-500/5 p-3 mb-3 text-xs text-green-400'>
                 wallet added successfully
               </div>
             )}
@@ -484,10 +478,10 @@ export const SettingsWallets = ({
             {/* scanned state */}
             {showScannedState && (
               <div className='flex flex-col gap-3'>
-                <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3'>
+                <div className='border border-green-500/40 bg-green-500/5 p-3'>
                   <div className='flex items-center gap-2'>
                     <p className='text-xs text-green-400'>qr code scanned</p>
-                    <span className='text-label px-1 rounded-md bg-elev-2 text-fg-muted'>
+                    <span className='text-label px-1 bg-elev-2 text-fg-muted'>
                       {detectedNetwork}
                     </span>
                   </div>
@@ -573,7 +567,7 @@ export const SettingsWallets = ({
               <div className='flex flex-col gap-2'>
                 <button
                   onClick={() => setScanning(true)}
-                  className='w-full flex items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors'
+                  className='w-full flex items-center justify-center gap-2 border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors'
                 >
                   <span className='i-ph-scan size-4' />
                   scan zigner QR
@@ -581,7 +575,7 @@ export const SettingsWallets = ({
                 {zcashEnabled && (
                   <button
                     onClick={() => setScanningKeystone(true)}
-                    className='w-full flex items-center justify-center gap-2 rounded-lg border border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high transition-colors'
+                    className='w-full flex items-center justify-center gap-2 border border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high transition-colors'
                   >
                     <span className='i-ph-qr-code size-4' />
                     scan keystone QR (zcash)
@@ -591,7 +585,7 @@ export const SettingsWallets = ({
                   <button
                     // WebHID dies with the popup, so the ledger flow runs in a tab
                     onClick={() => void openPageInTab(PagePath.CONNECT_LEDGER, true)}
-                    className='w-full flex items-center justify-center gap-2 rounded-lg border border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high transition-colors'
+                    className='w-full flex items-center justify-center gap-2 border border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high transition-colors'
                   >
                     <span className='i-ph-usb size-4' />
                     connect ledger
@@ -600,7 +594,7 @@ export const SettingsWallets = ({
                 {!hasSeedVault && (
                   <button
                     onClick={() => chrome.runtime.openOptionsPage()}
-                    className='w-full rounded-lg border border-dashed border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high hover:border-border-soft transition-colors'
+                    className='w-full border border-dashed border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high hover:border-border-soft transition-colors'
                   >
                     + import seed phrase
                   </button>
@@ -608,7 +602,7 @@ export const SettingsWallets = ({
                 {zcashEnabled && (
                   <button
                     onClick={() => navigate(PopupPath.SETTINGS_ADD_VIEWING_KEY)}
-                    className='w-full rounded-lg border border-dashed border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high hover:border-border-soft transition-colors'
+                    className='w-full border border-dashed border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high hover:border-border-soft transition-colors'
                   >
                     + add viewing key (watch only)
                   </button>
@@ -843,7 +837,7 @@ const VaultRow = ({
           type='button'
           onClick={() => setBirthdayOpen(true)}
           title='zcash sync start - tap to change'
-          className='mt-2 flex w-full items-center gap-2 rounded-md border border-border-soft/70 px-2.5 py-1.5 text-left transition-colors hover:border-fg-muted'
+          className='mt-2 flex w-full items-center gap-2 border border-border-soft/70 px-2.5 py-1.5 text-left transition-colors hover:border-fg-muted'
         >
           <span className='i-ph-calendar-blank size-3.5 text-fg-muted shrink-0' />
           <span className='text-label text-fg-muted'>
@@ -854,7 +848,7 @@ const VaultRow = ({
       )}
 
       {hasZcash && !(birthdayValid && !birthdayOpen) && (
-        <div className='mt-2 rounded-md border border-border-soft/70 px-2.5 py-2'>
+        <div className='mt-2 border border-border-soft/70 px-2.5 py-2'>
           <div className='flex flex-wrap items-center gap-2'>
             <span
               className='i-ph-calendar-blank size-3.5 text-fg-muted shrink-0'
@@ -872,7 +866,7 @@ const VaultRow = ({
               max={formatDateInput(new Date())}
               value={birthdayValid ? formatDateInput(blockToDate(birthdayNum)) : ''}
               onChange={e => onPickDate(e.target.value)}
-              className='bg-input border border-border-soft px-2 py-1.5 text-label font-mono rounded focus:outline-none focus:border-primary/50'
+              className='bg-input border border-border-soft px-2 py-1.5 text-label font-mono focus:outline-none focus:border-primary/50'
             />
             <button
               type='button'
@@ -912,7 +906,7 @@ const VaultRow = ({
                 onBlur={saveBirthday}
                 onKeyDown={e => e.key === 'Enter' && saveBirthday()}
                 placeholder='auto'
-                className='w-24 bg-input border border-border-soft px-2 py-1.5 text-label font-mono rounded focus:outline-none focus:border-primary/50'
+                className='w-24 bg-input border border-border-soft px-2 py-1.5 text-label font-mono focus:outline-none focus:border-primary/50'
               />
               {birthdayHint && (
                 <span className={cn('text-label', birthdayHint.ok ? 'text-fg-dim' : 'text-hanko')}>
@@ -937,7 +931,7 @@ const VaultRow = ({
         <button
           onClick={() => navigate(PopupPath.NOTE_SYNC)}
           title='scan it on zigner to verify your notes - re-sync after you send'
-          className='flex items-center gap-2 mt-2 w-full rounded-md border border-border-soft px-3 py-2 text-left hover:border-fg-muted'
+          className='flex items-center gap-2 mt-2 w-full border border-border-soft px-3 py-2 text-left hover:border-fg-muted'
         >
           <span className='i-ph-qr-code size-4 text-fg-high shrink-0' />
           <span className='text-xs font-medium text-fg-high'>sync to zigner</span>
@@ -976,7 +970,7 @@ const VaultRow = ({
 /* ── shared ui ── */
 
 const RemovalCard = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <div className='rounded-lg border border-red-500/20 bg-elev-1 p-4'>
+  <div className='border border-red-500/20 bg-elev-1 p-4'>
     <div className='text-sm font-medium text-red-400 mb-2'>{title}</div>
     {children}
   </div>
@@ -1003,7 +997,7 @@ const Btn = ({
     disabled={disabled}
     variant={destructive ? 'danger' : primary ? 'primary' : 'secondary'}
     size='md'
-    className='flex-1 rounded-lg text-xs'
+    className='flex-1 text-xs'
   >
     {children}
   </Button>

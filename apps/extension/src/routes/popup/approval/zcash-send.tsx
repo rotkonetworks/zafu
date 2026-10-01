@@ -182,7 +182,7 @@ export function ZcashSendApproval() {
     <div className='flex h-full min-h-0 flex-col bg-canvas text-fg p-4'>
       {/* header */}
       <header className='flex shrink-0 items-center gap-3 mb-4'>
-        {app !== 'unknown' && <OriginIcon origin={app} size={24} className='rounded-sm' />}
+        {app !== 'unknown' && <OriginIcon origin={app} size={24} />}
         <div>
           <div className='kicker'>zcash transaction</div>
           <div className='text-label text-fg-dim tabular'>{app}</div>
@@ -190,7 +190,7 @@ export function ZcashSendApproval() {
       </header>
 
       {/* warning banner */}
-      <div className='rounded-md border border-zigner-gold/30 bg-zigner-gold/5 p-3 mb-4'>
+      <div className='border border-zigner-gold/30 bg-zigner-gold/5 p-3 mb-4'>
         <div className='kicker mb-1 text-zigner-gold/80'>review carefully</div>
         <div className='text-label text-fg'>
           sending{' '}
@@ -214,16 +214,16 @@ export function ZcashSendApproval() {
         </div>
 
         {outputs.map((o, i) => (
-          <div key={i} className='rounded-md border border-border-soft bg-elev-1 p-3 mb-2'>
+          <div key={i} className='border border-border-soft bg-elev-1 p-3 mb-2'>
             <div className='flex justify-between items-start mb-1'>
               <div className='flex items-center gap-1.5'>
                 <div className='text-label text-fg-dim lowercase'>output {i + 1}</div>
                 {isTransparent(o.address) ? (
-                  <span className='rounded-sm text-label px-1 py-0.5 bg-orange-500/10 text-orange-400 lowercase tracking-[0.08em]'>
+                  <span className='text-label px-1 py-0.5 bg-orange-500/10 text-orange-400 lowercase tracking-[0.08em]'>
                     transparent
                   </span>
                 ) : (
-                  <span className='rounded-sm text-label px-1 py-0.5 bg-success/10 text-success lowercase tracking-[0.08em]'>
+                  <span className='text-label px-1 py-0.5 bg-success/10 text-success lowercase tracking-[0.08em]'>
                     shielded
                   </span>
                 )}
@@ -245,7 +245,7 @@ export function ZcashSendApproval() {
         ))}
 
         {/* fee display */}
-        <div className='rounded-md border border-border-soft bg-elev-1 p-3'>
+        <div className='border border-border-soft bg-elev-1 p-3'>
           <div className='flex justify-between'>
             <div className='text-label text-fg-dim lowercase'>
               {outputs.length === 1 ? 'network fee' : `network fee (per tx × ${outputs.length})`}
@@ -267,13 +267,13 @@ export function ZcashSendApproval() {
 
       {/* progress indicator */}
       {status === 'signing' && progressText && (
-        <div className='rounded-md border border-border-soft bg-elev-1 p-2 mb-3 text-fg-muted text-body'>
+        <div className='border border-border-soft bg-elev-1 p-2 mb-3 text-fg-muted text-body'>
           <div className='flex items-center gap-2'>
-            <div className='h-3 w-3 animate-spin rounded-full border border-zigner-gold border-t-transparent' />
+            <div className='h-3 w-3 animate-spin border border-zigner-gold border-t-transparent' />
             <span className='truncate'>{progressText}</span>
           </div>
           {outputs.length > 1 && (
-            <div className='mt-1 rule overflow-hidden rounded-sm'>
+            <div className='mt-1 rule overflow-hidden'>
               <div
                 className='bg-zigner-gold h-full transition-all duration-500'
                 style={{ width: `${Math.round((completedOutputs / outputs.length) * 100)}%` }}
@@ -285,7 +285,7 @@ export function ZcashSendApproval() {
 
       {/* error display */}
       {error && (
-        <div className='rounded-md border border-red-500/40 bg-red-500/10 p-2 mb-3 text-red-400 text-xs break-words'>
+        <div className='border border-red-500/40 bg-red-500/10 p-2 mb-3 text-red-400 text-xs break-words'>
           {error}
         </div>
       )}
@@ -293,7 +293,7 @@ export function ZcashSendApproval() {
       {/* action buttons */}
       <div className='flex shrink-0 gap-3'>
         <button
-          className='flex-1 py-2.5 rounded-md border border-border-soft bg-elev-1 text-data text-fg-muted hover:text-fg-high hover:bg-elev-2 lowercase'
+          className='flex-1 py-2.5 border border-border-soft bg-elev-1 text-data text-fg-muted hover:text-fg-high hover:bg-elev-2 lowercase'
           onClick={handleDeny}
           disabled={status === 'signing'}
         >
@@ -301,7 +301,7 @@ export function ZcashSendApproval() {
         </button>
         <button
           className={cn(
-            'flex-1 py-2.5 rounded-md text-data lowercase transition-colors',
+            'flex-1 py-2.5 text-data lowercase transition-colors',
             countdown > 0 || status !== 'review'
               ? 'bg-elev-1 text-fg-dim cursor-not-allowed'
               : 'bg-zigner-gold text-zigner-gold-foreground hover:bg-zigner-gold-light',

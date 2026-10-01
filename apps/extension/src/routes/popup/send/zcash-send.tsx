@@ -1269,12 +1269,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                         setRecipient(e.target.value);
                       }
                     }}
-                    className='flex-1 rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none'
+                    className='flex-1 border border-border-soft bg-input px-3 py-2.5 font-mono text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none'
                   />
                   <button
                     type='button'
                     onClick={() => setShowQrScanner(true)}
-                    className='shrink-0 flex h-[42px] w-[42px] items-center justify-center rounded-lg border border-border-soft bg-input text-fg-muted hover:text-fg-high transition-colors'
+                    className='shrink-0 flex h-[42px] w-[42px] items-center justify-center border border-border-soft bg-input text-fg-muted hover:text-fg-high transition-colors'
                     title='scan QR code'
                   >
                     <span className='i-ph-scan h-4 w-4' />
@@ -1282,7 +1282,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   <button
                     type='button'
                     onClick={() => setShowAddressBook(true)}
-                    className='shrink-0 flex h-[42px] w-[42px] items-center justify-center rounded-lg border border-border-soft bg-input text-fg-muted hover:text-fg-high transition-colors'
+                    className='shrink-0 flex h-[42px] w-[42px] items-center justify-center border border-border-soft bg-input text-fg-muted hover:text-fg-high transition-colors'
                     title='contacts'
                   >
                     <span className='i-ph-address-book h-4 w-4' />
@@ -1343,7 +1343,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     recent/wallets/directory, this is the saved address book */}
                 {showAddressBook && (
                   <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
-                    <div className='mx-4 flex max-h-[80vh] w-full max-w-sm flex-col rounded-lg border border-border-soft bg-canvas p-5 shadow-xl'>
+                    <div className='mx-4 flex max-h-[80vh] w-full max-w-sm flex-col border border-border-soft bg-canvas p-5 shadow-xl'>
                       <div className='mb-4 flex items-center gap-2'>
                         <span className='i-ph-address-book h-4 w-4 text-zigner-gold' />
                         <h2 className='text-lg font-medium'>contacts</h2>
@@ -1362,13 +1362,13 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                         value={addressBookQuery}
                         onChange={e => setAddressBookQuery(e.target.value)}
                         autoFocus
-                        className='mb-3 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
+                        className='mb-3 w-full border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
                       />
                       <div className='flex flex-col gap-2 overflow-y-auto'>
                         {addressBookRows.map(({ contact, addresses }) => (
                           <div
                             key={contact.id}
-                            className='rounded-lg border border-border-soft bg-elev-2 p-2.5'
+                            className='border border-border-soft bg-elev-2 p-2.5'
                           >
                             <div className='flex items-center gap-1.5'>
                               <p className='truncate text-sm text-fg-high'>{contact.name}</p>
@@ -1381,7 +1381,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                                 key={addr.id}
                                 type='button'
                                 onClick={() => selectBookAddress(contact.id, addr)}
-                                className='mt-1.5 flex w-full items-center gap-2 rounded-md border border-border-soft bg-input px-2 py-1.5 text-left transition-colors hover:border-zigner-gold'
+                                className='mt-1.5 flex w-full items-center gap-2 border border-border-soft bg-input px-2 py-1.5 text-left transition-colors hover:border-zigner-gold'
                               >
                                 <span className='truncate font-mono text-xs text-fg'>
                                   {truncateAddress(addr.address)}
@@ -1427,7 +1427,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     }}
                     step='0.0001'
                     min='0'
-                    className='flex-1 rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none'
+                    className='flex-1 border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none'
                   />
                   <button
                     type='button'
@@ -1439,7 +1439,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                       setAmount(maxSend.amountZat > 0n ? fmtZecShort(maxSend.amountZat) : '0');
                     }}
                     disabled={maxSend.amountZat <= 0n}
-                    className='shrink-0 h-[42px] rounded-lg border border-border-soft bg-input px-3 text-xs text-fg-muted hover:text-fg-high transition-colors disabled:opacity-50'
+                    className='shrink-0 h-[42px] border border-border-soft bg-input px-3 text-xs text-fg-muted hover:text-fg-high transition-colors disabled:opacity-50'
                   >
                     max
                   </button>
@@ -1489,7 +1489,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     setMemo(e.target.value);
                   }}
                   maxLength={512}
-                  className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none'
+                  className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none'
                 />
               </div>
 
@@ -1586,8 +1586,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         return (
           <div className='flex flex-col gap-4 p-6'>
             <div className='flex flex-col items-center gap-3'>
-              <div className='relative flex h-16 w-16 items-center justify-center rounded-full bg-primary/20'>
-                <div className='h-8 w-8 animate-spin rounded-full border-2 border-zigner-gold border-t-transparent' />
+              <div className='relative flex h-16 w-16 items-center justify-center bg-primary/20'>
+                <div className='h-8 w-8 animate-spin border-2 border-zigner-gold border-t-transparent' />
               </div>
               <h2 className='text-lg font-medium'>sending</h2>
               {/* live elapsed timer - ticks every second so the UI never looks frozen */}
@@ -1630,8 +1630,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               </button>
               <span className='flex-1 text-sm font-medium'>sign with zigner</span>
               <div className='flex items-center gap-1.5'>
-                <div className='h-1 w-5 rounded-full bg-zigner-gold' />
-                <div className='h-1 w-5 rounded-full bg-elev-2' />
+                <div className='h-1 w-5 bg-zigner-gold' />
+                <div className='h-1 w-5 bg-elev-2' />
               </div>
               <DontQuitIcon />
             </div>
@@ -1662,7 +1662,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               </div>
 
               {/* tx summary */}
-              <div className='rounded-md border border-border-soft bg-elev-1 divide-y divide-border-soft text-xs'>
+              <div className='border border-border-soft bg-elev-1 divide-y divide-border-soft text-xs'>
                 <div className='flex items-center justify-between px-3 py-2'>
                   <span className='text-fg-muted'>to</span>
                   <span className='font-mono text-fg-high'>{truncAddr(recipient)}</span>
@@ -1697,7 +1697,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   ] as const
                 ).map((label, i) => (
                   <li key={i} className='flex items-center gap-2.5 text-xs text-fg-muted'>
-                    <span className='flex size-4 shrink-0 items-center justify-center rounded-full bg-zigner-gold/15 text-[9px] text-zigner-gold'>
+                    <span className='flex size-4 shrink-0 items-center justify-center bg-zigner-gold/15 text-[9px] text-zigner-gold'>
                       {i + 1}
                     </span>
                     {label}
@@ -1728,8 +1728,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               </button>
               <span className='flex-1 text-sm font-medium'>scan signature</span>
               <div className='flex items-center gap-1.5'>
-                <div className='h-1 w-5 rounded-full bg-elev-2' />
-                <div className='h-1 w-5 rounded-full bg-zigner-gold' />
+                <div className='h-1 w-5 bg-elev-2' />
+                <div className='h-1 w-5 bg-zigner-gold' />
               </div>
               <DontQuitIcon />
             </div>
@@ -1768,14 +1768,14 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               </button>
               <h2 className='text-lg font-medium'>confirm on your Ledger</h2>
             </div>
-            <div className='w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center'>
+            <div className='w-16 h-16 bg-primary/20 flex items-center justify-center'>
               <span className='i-ph-usb w-8 h-8 text-zigner-gold' />
             </div>
             <p className='text-sm text-fg-muted text-center'>
               review the recipient, amount, and fee on your Ledger device and approve the orchard
               spend to continue.
             </p>
-            <div className='w-full rounded-md border border-border-soft bg-elev-1 divide-y divide-border-soft text-xs'>
+            <div className='w-full border border-border-soft bg-elev-1 divide-y divide-border-soft text-xs'>
               <div className='flex items-center justify-between px-3 py-2'>
                 <span className='text-fg-muted'>to</span>
                 <span className='font-mono text-fg-high truncate max-w-[60%]'>{recipient}</span>
@@ -1794,7 +1794,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               </div>
             </div>
             <div className='flex items-center gap-2 text-xs text-fg-muted'>
-              <div className='h-4 w-4 animate-spin rounded-full border-2 border-zigner-gold border-t-transparent' />
+              <div className='h-4 w-4 animate-spin border-2 border-zigner-gold border-t-transparent' />
               waiting for device confirmation...
             </div>
           </div>
@@ -1833,7 +1833,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   navigate(PopupPath.NOTE_SYNC);
                 }}
                 title='scan on your zigner to re-sync its verified balance after this send'
-                className='flex w-full items-center gap-2 rounded-md border border-border-soft px-3 py-2 text-left hover:border-fg-muted'
+                className='flex w-full items-center gap-2 border border-border-soft px-3 py-2 text-left hover:border-fg-muted'
               >
                 <span className='i-ph-qr-code size-4 text-fg-high shrink-0' />
                 <span className='text-xs font-medium text-fg-high'>
@@ -1845,7 +1845,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
             {/* save contact prompt */}
             {showSavePrompt && recipient && !findByAddress(recipient) && !showContactModal && (
-              <div className='w-full rounded-lg border border-border-soft bg-elev-1 p-3'>
+              <div className='w-full border border-border-soft bg-elev-1 p-3'>
                 <div className='flex items-center gap-2 mb-2'>
                   <span className='i-ph-user h-4 w-4 text-zigner-gold' />
                   <p className='text-sm'>save to contacts?</p>
@@ -1901,7 +1901,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       case 'frost-signing':
         return (
           <div className='flex flex-col items-center gap-6 p-8'>
-            <div className='w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center'>
+            <div className='w-16 h-16 bg-primary/20 flex items-center justify-center'>
               <span className='i-ph-users w-8 h-8 text-zigner-gold' />
             </div>
             <h2 className='text-lg font-medium'>multisig signing</h2>
@@ -1909,16 +1909,16 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             {frostRoomCode && (
               <div className='flex flex-col items-center gap-2'>
                 <p className='text-xs text-fg-muted'>share this session id with co-signers:</p>
-                <div className='rounded bg-elev-2 px-4 py-2 font-mono text-lg'>{frostRoomCode}</div>
+                <div className='bg-elev-2 px-4 py-2 font-mono text-lg'>{frostRoomCode}</div>
               </div>
             )}
 
             <div className='flex flex-col items-center gap-2'>
               <p className='text-sm'>{frostProgress}</p>
-              <div className='h-5 w-5 animate-spin rounded-full border-2 border-zigner-gold border-t-transparent' />
+              <div className='h-5 w-5 animate-spin border-2 border-zigner-gold border-t-transparent' />
             </div>
 
-            <div className='w-full rounded bg-elev-2 p-3 text-xs text-fg-muted'>
+            <div className='w-full bg-elev-2 p-3 text-xs text-fg-muted'>
               <p>
                 {activeZcashWallet?.multisig?.threshold}-of-
                 {activeZcashWallet?.multisig?.maxSigners} threshold
@@ -1959,7 +1959,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       case 'error':
         return (
           <div className='flex flex-col items-center gap-4 p-8'>
-            <div className='w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center'>
+            <div className='w-16 h-16 bg-red-500/20 flex items-center justify-center'>
               <span className='i-ph-x w-8 h-8 text-red-400' />
             </div>
             <h2 className='text-lg font-medium'>transaction failed</h2>

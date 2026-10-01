@@ -79,7 +79,7 @@ export function ZcashMeRecipientResolver({ input, onResolve }: Props) {
     return null;
   }
 
-  const box = 'mt-1.5 rounded-lg border border-border-soft bg-elev-1 p-2';
+  const box = 'mt-1.5 border border-border-soft bg-elev-1 p-2';
 
   if (config.mode === 'off') {
     return <ZcashMeOptIn reason={`pay /${handle}`} respectDismissal={false} className='mt-1.5' />;
@@ -185,7 +185,7 @@ export function ZcashMeRecipientResolver({ input, onResolve }: Props) {
         </p>
       )}
       {needBareConfirm && (
-        <div className='mt-1 rounded border border-amber-400/40 bg-amber-400/10 p-2'>
+        <div className='mt-1 border border-amber-400/40 bg-amber-400/10 p-2'>
           <p className='flex items-start gap-1 text-label text-amber-400'>
             <span className='i-ph-warning mt-0.5 h-3 w-3 shrink-0' />
             decoy cover is on, but there is no directory snapshot to draw decoys from, so this
@@ -196,7 +196,7 @@ export function ZcashMeRecipientResolver({ input, onResolve }: Props) {
             type='button'
             disabled={pending}
             onClick={() => void lookup(true)}
-            className='mt-1.5 rounded border border-border-soft px-2 py-1 text-label text-fg-muted hover:text-fg-high disabled:opacity-50'
+            className='mt-1.5 border border-border-soft px-2 py-1 text-label text-fg-muted hover:text-fg-high disabled:opacity-50'
           >
             look up without cover
           </button>

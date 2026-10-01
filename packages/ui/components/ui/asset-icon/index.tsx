@@ -21,7 +21,6 @@ export const AssetIcon = ({
   // anything else is "unknown" and falls through to the monogram below
   const icon = registryUrl ? resolveBundledIcon(registryUrl) : undefined;
   const className = cn(
-    'rounded-full',
     size === 'xs' && 'size-4',
     size === 'sm' && 'size-6',
     size === 'lg' && 'size-12',

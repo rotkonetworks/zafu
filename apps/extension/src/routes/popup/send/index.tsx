@@ -205,7 +205,7 @@ export function SendPage() {
           ) : (
             // No live IBC channel to this chain right now (channels close on
             // network upgrades and reopen later), so deposit/send is unavailable.
-            <div className='flex flex-col gap-2 rounded-lg border border-border-soft bg-elev-1 p-4 text-sm'>
+            <div className='flex flex-col gap-2 border border-border-soft bg-elev-1 p-4 text-sm'>
               <span className='font-medium text-fg'>channel unavailable</span>
               <span className='text-fg-muted'>
                 {getNetwork(sendChain as NetworkType).name} has no open IBC channel with Penumbra
@@ -220,7 +220,7 @@ export function SendPage() {
               <input
                 type='text'
                 placeholder='enter address'
-                className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
+                className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
               />
             </div>
 
@@ -229,7 +229,7 @@ export function SendPage() {
               <input
                 type='text'
                 placeholder='0.00'
-                className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
+                className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
               />
             </div>
 

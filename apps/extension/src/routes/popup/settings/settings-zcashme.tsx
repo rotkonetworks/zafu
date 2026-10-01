@@ -53,7 +53,7 @@ const MODES: { value: ZcashMeMode; label: string; detail: string }[] = [
 ];
 
 const inputCls =
-  'w-full rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-xs text-fg placeholder:text-fg-muted focus:border-network-accent focus:outline-none';
+  'w-full border border-border-soft bg-input px-3 py-2 font-mono text-xs text-fg placeholder:text-fg-muted focus:border-network-accent focus:outline-none';
 
 const fmtAge = (ms: number): string => {
   const min = Math.round((Date.now() - ms) / 60_000);
@@ -155,7 +155,7 @@ export function SettingsZcashMe() {
                 })
               }
               className={cn(
-                'flex items-start gap-2 rounded-lg border p-2.5 text-left transition-colors',
+                'flex items-start gap-2 border p-2.5 text-left transition-colors',
                 config.mode === m.value
                   ? 'border-network-accent bg-elev-1'
                   : 'border-border-soft hover:bg-elev-1',
@@ -213,7 +213,7 @@ export function SettingsZcashMe() {
         {config.mode !== 'off' && (
           <div className='flex flex-col gap-3'>
             <p className='kicker px-0'>directory snapshot</p>
-            <div className='rounded-lg border border-border-soft p-2.5 text-label'>
+            <div className='border border-border-soft p-2.5 text-label'>
               {index ? (
                 <>
                   <p className='text-fg-high'>
@@ -271,7 +271,7 @@ export function SettingsZcashMe() {
                 type='button'
                 disabled={!!busy}
                 onClick={() => void refresh()}
-                className='flex-1 rounded-lg bg-network-accent py-2 text-xs font-medium text-network-accent-foreground transition-colors hover:opacity-90 disabled:opacity-50'
+                className='flex-1 bg-network-accent py-2 text-xs font-medium text-network-accent-foreground transition-colors hover:opacity-90 disabled:opacity-50'
               >
                 {busy ?? (index ? 'refresh directory' : 'download directory')}
               </button>
@@ -280,7 +280,7 @@ export function SettingsZcashMe() {
                   type='button'
                   disabled={!!busy}
                   onClick={() => void clear()}
-                  className='rounded-lg border border-border-soft px-3 py-2 text-xs text-fg-muted transition-colors hover:text-fg-high disabled:opacity-50'
+                  className='border border-border-soft px-3 py-2 text-xs text-fg-muted transition-colors hover:text-fg-high disabled:opacity-50'
                 >
                   delete
                 </button>

@@ -69,13 +69,13 @@ export function AddContactDialog({ address, network, onClose, onSuccess }: AddCo
       onClick={onClose}
     >
       <div
-        className='w-full max-w-sm mx-4 rounded-lg border border-border-soft bg-canvas shadow-xl'
+        className='w-full max-w-sm mx-4 border border-border-soft bg-canvas shadow-xl'
         onClick={e => e.stopPropagation()}
       >
         {/* header */}
         <div className='flex items-center justify-between border-b border-border-soft px-4 py-3'>
           <h2 className='text-lg font-medium'>add to contacts</h2>
-          <button onClick={onClose} className='rounded-lg p-1 hover:bg-elev-1 transition-colors'>
+          <button onClick={onClose} className='p-1 hover:bg-elev-1 transition-colors'>
             <span className='i-ph-x h-4 w-4' />
           </button>
         </div>
@@ -83,13 +83,11 @@ export function AddContactDialog({ address, network, onClose, onSuccess }: AddCo
         {/* content */}
         <div className='p-4 space-y-4'>
           {/* address preview */}
-          <div className='rounded-lg border border-border-soft bg-elev-2 p-3'>
+          <div className='border border-border-soft bg-elev-2 p-3'>
             <div className='text-xs text-fg-muted mb-1'>address</div>
             <div className='text-sm font-mono break-all'>{address}</div>
             <div className='mt-1'>
-              <span className='rounded-md bg-elev-2 px-1.5 py-0.5 text-label text-fg-muted'>
-                {network}
-              </span>
+              <span className='bg-elev-2 px-1.5 py-0.5 text-label text-fg-muted'>{network}</span>
             </div>
           </div>
 
@@ -118,7 +116,7 @@ export function AddContactDialog({ address, network, onClose, onSuccess }: AddCo
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder={defaultName}
-                className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
+                className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
                 autoFocus
               />
               <p className='text-xs text-fg-muted mt-1'>leave empty to use address as name</p>
@@ -127,7 +125,7 @@ export function AddContactDialog({ address, network, onClose, onSuccess }: AddCo
             /* existing contact selector */
             <div>
               <label className='block text-xs text-fg-muted mb-1'>select contact</label>
-              <div className='max-h-40 overflow-y-auto rounded-lg border border-border-soft'>
+              <div className='max-h-40 overflow-y-auto border border-border-soft'>
                 {existingContacts.map(contact => (
                   <button
                     key={contact.id}
@@ -153,14 +151,14 @@ export function AddContactDialog({ address, network, onClose, onSuccess }: AddCo
         <div className='flex gap-2 border-t border-border-soft px-4 py-3'>
           <button
             onClick={onClose}
-            className='flex-1 rounded-lg border border-border-soft py-3 text-sm font-medium hover:bg-elev-1 transition-colors'
+            className='flex-1 border border-border-soft py-3 text-sm font-medium hover:bg-elev-1 transition-colors'
           >
             cancel
           </button>
           <button
             onClick={() => void handleSubmit()}
             disabled={!canSubmit || isSubmitting}
-            className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
+            className='flex-1 bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
           >
             {isSubmitting ? 'adding...' : 'add contact'}
           </button>

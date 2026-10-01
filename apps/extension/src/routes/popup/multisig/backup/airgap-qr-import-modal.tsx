@@ -118,7 +118,7 @@ export const AirgapQrImportModal = ({ open, onClose, onImported }: Props) => {
 
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4'>
-      <div className='w-full max-w-sm rounded-lg border border-border-soft bg-elev-1 p-4'>
+      <div className='w-full max-w-sm border border-border-soft bg-elev-1 p-4'>
         <h2 className='text-lg font-medium'>import airgap multisig from zigner</h2>
 
         {!payload ? (
@@ -141,9 +141,9 @@ export const AirgapQrImportModal = ({ open, onClose, onImported }: Props) => {
               {payload.length} wallet{payload.length === 1 ? '' : 's'} ready to import as airgap
               multisig.
             </p>
-            <div className='mt-3 max-h-64 overflow-y-auto rounded-lg border border-border-soft bg-elev-2 p-2 flex flex-col gap-1.5'>
+            <div className='mt-3 max-h-64 overflow-y-auto border border-border-soft bg-elev-2 p-2 flex flex-col gap-1.5'>
               {payload.map((w, i) => (
-                <div key={i} className='rounded-md bg-elev-1 p-2 text-body'>
+                <div key={i} className='bg-elev-1 p-2 text-body'>
                   <p className='font-medium'>{w.label}</p>
                   <p className='text-label text-fg-muted'>
                     {w.threshold}-of-{w.maxSigners} · {w.mainnet ? 'mainnet' : 'testnet'}
@@ -158,7 +158,7 @@ export const AirgapQrImportModal = ({ open, onClose, onImported }: Props) => {
         )}
 
         {error && (
-          <p className='mt-2 rounded-md border border-red-500/40 bg-red-500/5 p-2 text-body text-red-400'>
+          <p className='mt-2 border border-red-500/40 bg-red-500/5 p-2 text-body text-red-400'>
             {error}
           </p>
         )}

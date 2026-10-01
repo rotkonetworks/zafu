@@ -25,7 +25,7 @@ export const BalanceFigure = ({
     return (
       <div className='flex items-baseline gap-2 text-hero leading-none'>
         {/* sized to the figure it replaces, so nothing shifts when it arrives */}
-        <span className='inline-block h-[0.7em] w-40 animate-pulse rounded bg-elev-2' />
+        <span className='inline-block h-[0.7em] w-40 animate-pulse bg-elev-2' />
         <span className='text-label text-fg-dim lowercase'>reading balance</span>
       </div>
     );
@@ -39,7 +39,7 @@ export const BalanceFigure = ({
   if (view === 'unknown') {
     return (
       <div className='flex items-center' aria-label='balance syncing'>
-        <span className='inline-block h-[0.9em] w-32 animate-pulse rounded-md bg-elev-2' />
+        <span className='inline-block h-[0.9em] w-32 animate-pulse bg-elev-2' />
       </div>
     );
   }

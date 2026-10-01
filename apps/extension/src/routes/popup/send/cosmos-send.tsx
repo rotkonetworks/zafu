@@ -65,12 +65,12 @@ function AssetSelector({
   const [open, setOpen] = useState(false);
 
   if (loading) {
-    return <div className='h-10 rounded-lg bg-elev-2 animate-pulse' />;
+    return <div className='h-10 bg-elev-2 animate-pulse' />;
   }
 
   if (assets.length === 0) {
     return (
-      <div className='rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg-muted'>
+      <div className='border border-border-soft bg-input px-3 py-2.5 text-sm text-fg-muted'>
         no assets
       </div>
     );
@@ -80,7 +80,7 @@ function AssetSelector({
     <div className='relative'>
       <button
         onClick={() => setOpen(!open)}
-        className='flex w-full items-center justify-between rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
+        className='flex w-full items-center justify-between border border-border-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
       >
         {selected ? (
           <div className='flex items-center gap-2'>
@@ -98,7 +98,7 @@ function AssetSelector({
       </button>
 
       {open && (
-        <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-soft bg-canvas shadow-lg'>
+        <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto border border-border-soft bg-canvas shadow-lg'>
           {assets.map(asset => (
             <button
               key={asset.denom}
@@ -152,7 +152,7 @@ function CosmosChainSelector({
     <div className='relative'>
       <button
         onClick={() => setOpen(!open)}
-        className='flex w-full items-center justify-between rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
+        className='flex w-full items-center justify-between border border-border-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
       >
         <span className={!manuallySelected && !selected ? 'text-fg-muted' : ''}>{displayName}</span>
         <span
@@ -161,7 +161,7 @@ function CosmosChainSelector({
       </button>
 
       {open && (
-        <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-soft bg-canvas shadow-lg'>
+        <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto border border-border-soft bg-canvas shadow-lg'>
           {/* auto-detect option */}
           <button
             onClick={() => {
@@ -192,7 +192,7 @@ function CosmosChainSelector({
               <RegistryIcon
                 name={chain.chainName}
                 images={chain.logoUri ? [{ png: chain.logoUri }] : undefined}
-                className='h-5 w-5 rounded-full'
+                className='h-5 w-5'
                 size={20}
               />
               <span>{chain.chainName}</span>
@@ -901,7 +901,7 @@ export function CosmosSend({
         <div>
           <label className='mb-1 block text-xs text-fg-muted'>destination chain</label>
           {chainsLoading && !penumbraChannel ? (
-            <div className='h-10 rounded-lg bg-elev-2 animate-pulse' />
+            <div className='h-10 bg-elev-2 animate-pulse' />
           ) : (
             <CosmosChainSelector
               chains={destChains}
@@ -955,7 +955,7 @@ export function CosmosSend({
             sendMode === 'same' ? `${sourceChain.bech32Prefix}1...` : 'destination address'
           }
           className={cn(
-            'w-full rounded-lg border bg-input px-3 py-2.5 text-sm text-fg',
+            'w-full border bg-input px-3 py-2.5 text-sm text-fg',
             'placeholder:text-fg-muted transition-colors duration-100',
             'focus:border-penumbra-purple focus:outline-none',
             recipient && !recipientValid ? 'border-red-400' : 'border-border-soft',
@@ -1026,13 +1026,13 @@ export function CosmosSend({
             value={amount}
             onChange={e => setAmount(e.target.value)}
             placeholder='0.00'
-            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 pr-14 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
+            className='w-full border border-border-soft bg-input px-3 py-2.5 pr-14 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
           />
           {selectedAsset && spendable > 0n && (
             <button
               type='button'
               onClick={handleSetMax}
-              className='absolute right-2 top-1/2 -translate-y-1/2 rounded-md bg-elev-2 px-2 py-0.5 text-xs text-fg-muted transition-colors hover:bg-elev-1/80 hover:text-fg-high'
+              className='absolute right-2 top-1/2 -translate-y-1/2 bg-elev-2 px-2 py-0.5 text-xs text-fg-muted transition-colors hover:bg-elev-1/80 hover:text-fg-high'
             >
               max
             </button>
@@ -1106,7 +1106,7 @@ export function CosmosSend({
             value={memo}
             onChange={e => setMemo(e.target.value)}
             placeholder='if the exchange needs one'
-            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
+            className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
           />
           {memoLooksLikeMnemonic(memo) && (
             <p className='mt-1 text-xs text-red-400'>
@@ -1124,7 +1124,7 @@ export function CosmosSend({
         </div>
       )}
       {route && (
-        <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
+        <div className='border border-border-soft bg-elev-2/20 p-3'>
           <div className='flex items-center justify-between text-xs'>
             <span className='text-fg-muted'>receive</span>
             <span className='font-mono'>
@@ -1157,7 +1157,7 @@ export function CosmosSend({
 
       {/* transaction status */}
       {txStatus === 'success' && txHash && (
-        <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
+        <div className='border border-green-500/40 bg-green-500/10 p-3'>
           <p className='text-sm text-green-400'>transaction sent!</p>
           <p className='text-xs text-fg-muted mt-1 font-mono break-all'>{txHash}</p>
         </div>
@@ -1181,14 +1181,14 @@ export function CosmosSend({
 
       {/* contact name modal */}
       {showContactModal && (
-        <div className='rounded-lg border border-border-soft bg-canvas p-3'>
+        <div className='border border-border-soft bg-canvas p-3'>
           <p className='text-sm font-medium mb-2'>name this contact</p>
           <input
             type='text'
             value={contactName}
             onChange={e => setContactName(e.target.value)}
             placeholder='enter name...'
-            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm mb-2 focus:border-penumbra-purple focus:outline-none'
+            className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm mb-2 focus:border-penumbra-purple focus:outline-none'
             autoFocus
           />
           <div className='flex gap-2'>
@@ -1206,7 +1206,7 @@ export function CosmosSend({
                 }
               }}
               disabled={!contactName.trim()}
-              className='flex-1 rounded-md bg-zigner-gold px-3 py-1.5 text-xs font-medium text-zigner-gold-foreground transition-colors disabled:opacity-50'
+              className='flex-1 bg-zigner-gold px-3 py-1.5 text-xs font-medium text-zigner-gold-foreground transition-colors disabled:opacity-50'
             >
               save
             </button>
@@ -1215,7 +1215,7 @@ export function CosmosSend({
                 setShowContactModal(false);
                 setContactName('');
               }}
-              className='flex-1 rounded-md bg-elev-2 px-3 py-1.5 text-xs text-fg-muted transition-colors'
+              className='flex-1 bg-elev-2 px-3 py-1.5 text-xs text-fg-muted transition-colors'
             >
               cancel
             </button>
@@ -1225,7 +1225,7 @@ export function CosmosSend({
 
       {/* confirmation summary */}
       {txStatus === 'confirm' && selectedAsset && (
-        <div className='rounded-md border border-zigner-gold/30 bg-elev-1 p-3'>
+        <div className='border border-zigner-gold/30 bg-elev-1 p-3'>
           <p className='kicker mb-2'>confirm transaction</p>
           <div className='flex flex-col gap-1.5 text-xs'>
             <div className='flex justify-between'>
@@ -1269,7 +1269,7 @@ export function CosmosSend({
                 {showRawJson ? 'hide' : 'view'} raw transaction json
               </button>
               {showRawJson && (
-                <pre className='mt-2 max-h-48 overflow-auto rounded-sm bg-canvas p-2 text-label tabular text-fg-muted leading-relaxed'>
+                <pre className='mt-2 max-h-48 overflow-auto bg-canvas p-2 text-label tabular text-fg-muted leading-relaxed'>
                   {JSON.stringify(txPreview, null, 2)}
                 </pre>
               )}
@@ -1288,7 +1288,7 @@ export function CosmosSend({
       )}
 
       {txStatus === 'error' && txError && (
-        <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
+        <div className='border border-red-500/40 bg-red-500/10 p-3'>
           <p className='text-sm text-red-400'>transaction failed</p>
           <p className='text-xs text-fg-muted mt-1'>{txError}</p>
         </div>

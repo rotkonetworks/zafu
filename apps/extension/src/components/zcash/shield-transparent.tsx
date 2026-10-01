@@ -266,13 +266,13 @@ export const ShieldTransparent = ({
   const tZec = Number(transparentZat) / 1e8;
 
   return (
-    <div className='rounded-md border border-border-soft bg-elev-1 px-4 py-2.5'>
+    <div className='border border-border-soft bg-elev-1 px-4 py-2.5'>
       {PasswordModal}
       <div className='flex items-center justify-between gap-3'>
         <div className='flex min-w-0 items-center gap-2'>
           <span className='i-ph-eye h-3.5 w-3.5 shrink-0 text-fg-muted' />
           <span className='text-xs text-fg-muted lowercase'>transparent</span>
-          <span className='rounded-sm bg-elev-2 px-1.5 py-0.5 text-label text-fg-dim leading-none lowercase'>
+          <span className='bg-elev-2 px-1.5 py-0.5 text-label text-fg-dim leading-none lowercase'>
             public
           </span>
           <Sensitive className='truncate text-xs tabular text-fg-high'>

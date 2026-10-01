@@ -11,7 +11,7 @@ import { cn } from '../../../lib/utils';
  * (`i-ph-*` / `i-lucide-*`), never a React icon component.
  */
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-1.5 rounded-none font-inherit transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zigner-gold disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex items-center justify-center gap-1.5 font-inherit transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zigner-gold disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
       variant: {

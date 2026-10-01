@@ -194,13 +194,13 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
           }}
           onFocus={() => setOpen(true)}
           placeholder={placeholder}
-          className='w-full rounded-lg border border-border-soft bg-input pl-8 pr-3 py-1.5 text-xs focus:border-primary/50 focus:outline-none'
+          className='w-full border border-border-soft bg-input pl-8 pr-3 py-1.5 text-xs focus:border-primary/50 focus:outline-none'
         />
       </div>
 
       {/* dropdown */}
       {open && (filtered.length > 0 || (query.trim() && zcashMe?.mode === 'off')) && (
-        <div className='absolute z-20 left-0 right-0 mt-1 max-h-[240px] overflow-y-auto rounded-lg border border-border-soft bg-elev-1 shadow-lg'>
+        <div className='absolute z-20 left-0 right-0 mt-1 max-h-[240px] overflow-y-auto border border-border-soft bg-elev-1 shadow-lg'>
           {filtered.map((entry, i) => {
             const prevCategory = i > 0 ? filtered[i - 1]!.category : null;
             const showHeader = entry.category !== prevCategory;

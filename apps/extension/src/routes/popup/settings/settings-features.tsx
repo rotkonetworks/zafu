@@ -60,7 +60,7 @@ export const SettingsFeatures = () => {
               return (
                 <div
                   key={cap}
-                  className='flex items-start justify-between gap-3 rounded-lg border border-border-soft bg-elev-1 p-3'
+                  className='flex items-start justify-between gap-3 border border-border-soft bg-elev-1 p-3'
                 >
                   <div className='flex min-w-0 flex-col gap-1'>
                     <span className='flex items-center gap-2 text-sm text-fg-high'>

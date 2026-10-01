@@ -28,7 +28,7 @@ export const Toggle = ({
     disabled={disabled}
     onClick={() => onChange(!checked)}
     className={cn(
-      'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors',
+      'relative inline-flex h-5 w-9 shrink-0 items-center border transition-colors',
       'focus:outline-none focus-visible:ring-1 focus-visible:ring-network-accent',
       checked
         ? 'border-network-accent bg-network-accent'
@@ -39,7 +39,7 @@ export const Toggle = ({
   >
     <span
       className={cn(
-        'block size-3.5 rounded-full transition-transform',
+        'block size-3.5 transition-transform',
         checked
           ? 'translate-x-[19px] bg-network-accent-foreground'
           : 'translate-x-[2px] bg-fg-muted',

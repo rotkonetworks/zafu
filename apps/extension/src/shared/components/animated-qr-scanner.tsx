@@ -467,16 +467,16 @@ export const AnimatedQrScanner = ({
         <div className='absolute inset-0 pointer-events-none flex items-center justify-center'>
           <div className={`relative ${inline ? 'w-44 h-44' : 'w-64 h-64'}`}>
             <div
-              className={`absolute top-0 left-0 w-6 h-6 border-t-[3px] border-l-[3px] ${cornerColor} rounded-tl-lg`}
+              className={`absolute top-0 left-0 w-6 h-6 border-t-[3px] border-l-[3px] ${cornerColor}`}
             />
             <div
-              className={`absolute top-0 right-0 w-6 h-6 border-t-[3px] border-r-[3px] ${cornerColor} rounded-tr-lg`}
+              className={`absolute top-0 right-0 w-6 h-6 border-t-[3px] border-r-[3px] ${cornerColor}`}
             />
             <div
-              className={`absolute bottom-0 left-0 w-6 h-6 border-b-[3px] border-l-[3px] ${cornerColor} rounded-bl-lg`}
+              className={`absolute bottom-0 left-0 w-6 h-6 border-b-[3px] border-l-[3px] ${cornerColor}`}
             />
             <div
-              className={`absolute bottom-0 right-0 w-6 h-6 border-b-[3px] border-r-[3px] ${cornerColor} rounded-br-lg`}
+              className={`absolute bottom-0 right-0 w-6 h-6 border-b-[3px] border-r-[3px] ${cornerColor}`}
             />
           </div>
         </div>
@@ -494,7 +494,7 @@ export const AnimatedQrScanner = ({
       {error && (
         <div className='absolute inset-0 flex items-center justify-center bg-black p-4'>
           <div className='flex flex-col items-center gap-3 text-center'>
-            <div className='rounded-full bg-red-500/20 p-3'>
+            <div className='bg-red-500/20 p-3'>
               <span className='i-ph-camera size-6 text-red-400' />
             </div>
             <p className='text-xs text-red-400'>{error}</p>
@@ -515,11 +515,9 @@ export const AnimatedQrScanner = ({
   const progressBar = (
     <>
       <div className='flex items-center gap-3'>
-        <div
-          className={`flex-1 ${inline ? 'h-1' : 'h-1.5'} rounded-full bg-white/10 overflow-hidden`}
-        >
+        <div className={`flex-1 ${inline ? 'h-1' : 'h-1.5'} bg-white/10 overflow-hidden`}>
           <div
-            className={`h-full rounded-full ${progressColor} transition-all duration-300`}
+            className={`h-full ${progressColor} transition-all duration-300`}
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -548,11 +546,11 @@ export const AnimatedQrScanner = ({
             <span className='i-ph-x h-3.5 w-3.5' />
           </button>
         </div>
-        <div className='relative aspect-square w-full overflow-hidden rounded-lg border border-yellow-500/40 bg-black'>
+        <div className='relative aspect-square w-full overflow-hidden border border-yellow-500/40 bg-black'>
           {cameraView}
         </div>
         {description && <p className='text-label text-fg-muted text-center'>{description}</p>}
-        <div className='rounded-md bg-black/60 p-2'>{progressBar}</div>
+        <div className='bg-black/60 p-2'>{progressBar}</div>
       </div>
     );
   }
@@ -564,10 +562,7 @@ export const AnimatedQrScanner = ({
           <h2 className='text-lg font-medium text-white'>{title}</h2>
           {description && <p className='text-sm text-white/60'>{description}</p>}
         </div>
-        <button
-          onClick={handleClose}
-          className='rounded-full p-2 hover:bg-white/10 transition-colors'
-        >
+        <button onClick={handleClose} className='p-2 hover:bg-white/10 transition-colors'>
           <span className='i-ph-x size-6 text-white' />
         </button>
       </div>

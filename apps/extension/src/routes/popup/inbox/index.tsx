@@ -229,7 +229,7 @@ function ConversationRow({
   return (
     <button
       className={cn(
-        'group relative flex items-start gap-3 rounded-lg border p-3 w-full text-left transition-colors',
+        'group relative flex items-start gap-3 border p-3 w-full text-left transition-colors',
         conversation.unread > 0
           ? 'border-primary/40 bg-primary/5 hover:bg-primary/10'
           : 'border-border-soft bg-elev-1 hover:border-border-soft',
@@ -238,11 +238,11 @@ function ConversationRow({
     >
       {/* unread dot */}
       {conversation.unread > 0 && (
-        <div className='absolute left-1 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full bg-zigner-gold' />
+        <div className='absolute left-1 top-1/2 -translate-y-1/2 h-2 w-2 bg-zigner-gold' />
       )}
 
       {/* icon */}
-      <div className='flex h-10 w-10 items-center justify-center rounded-full shrink-0 bg-elev-2'>
+      <div className='flex h-10 w-10 items-center justify-center shrink-0 bg-elev-2'>
         <span className={cn('h-5 w-5 text-fg-muted', hasFrost ? 'i-ph-key' : 'i-ph-chat')} />
       </div>
 
@@ -254,7 +254,7 @@ function ConversationRow({
           </span>
           <div className='flex items-center gap-1.5 shrink-0'>
             {conversation.unread > 0 && (
-              <span className='rounded-full bg-zigner-gold px-1.5 py-0.5 text-label tabular text-zigner-gold-foreground'>
+              <span className='bg-zigner-gold px-1.5 py-0.5 text-label tabular text-zigner-gold-foreground'>
                 {conversation.unread}
               </span>
             )}
@@ -290,12 +290,7 @@ function MessageBubble({ message }: { message: InboxMessage }) {
 
   return (
     <div className={cn('flex', isOutgoing ? 'justify-end' : 'justify-start')}>
-      <div
-        className={cn(
-          'max-w-[85%] rounded-xl px-3 py-2',
-          isOutgoing ? 'bg-primary/15 rounded-br-sm' : 'bg-elev-2/60 rounded-bl-sm',
-        )}
-      >
+      <div className={cn('max-w-[85%] px-3 py-2', isOutgoing ? 'bg-primary/15' : 'bg-elev-2/60')}>
         {/* type badge for non-text */}
         {message.type !== MemoType.Text && (
           <div className='flex items-center gap-1 mb-1'>
@@ -467,7 +462,7 @@ export function ContactCardBubble({
       ) : (
         <button
           onClick={() => void handleSave()}
-          className='flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-label text-zigner-gold hover:bg-primary/20 transition-colors'
+          className='flex items-center gap-1 bg-primary/10 px-2 py-1 text-label text-zigner-gold hover:bg-primary/20 transition-colors'
         >
           <span className='i-ph-user-plus h-3 w-3' />
           {trust.known ? 'save to contacts' : 'save unverified'}
@@ -527,9 +522,7 @@ function DataBubble({ body }: { body: string }) {
   return (
     <div className='space-y-1'>
       <div className='flex items-center gap-2'>
-        <span className='rounded bg-elev-2 px-1.5 py-0.5 text-label text-fg-muted'>
-          {contentType}
-        </span>
+        <span className='bg-elev-2 px-1.5 py-0.5 text-label text-fg-muted'>{contentType}</span>
         <button
           onClick={() => setExpanded(!expanded)}
           className='text-label text-zigner-gold hover:underline'
@@ -538,7 +531,7 @@ function DataBubble({ body }: { body: string }) {
         </button>
       </div>
       {expanded && (
-        <pre className='text-label font-mono text-fg-muted bg-background/50 rounded p-2 overflow-x-auto max-h-48 whitespace-pre-wrap break-all'>
+        <pre className='text-label font-mono text-fg-muted bg-background/50 p-2 overflow-x-auto max-h-48 whitespace-pre-wrap break-all'>
           {display}
         </pre>
       )}
@@ -565,7 +558,7 @@ function FrostDkgBubble({ message }: { message: InboxMessage }) {
       {message.direction === 'incoming' && (
         <button
           onClick={() => navigate(PopupPath.MULTISIG_JOIN)}
-          className='flex items-center gap-1.5 rounded-md bg-elev-2 border border-border-soft px-2.5 py-1.5 text-xs text-fg-high hover:bg-elev-1 transition-colors'
+          className='flex items-center gap-1.5 bg-elev-2 border border-border-soft px-2.5 py-1.5 text-xs text-fg-high hover:bg-elev-1 transition-colors'
         >
           <span className='i-ph-arrow-right h-3.5 w-3.5' />
           open multisig
@@ -611,7 +604,7 @@ export function FrostSignBubble({ message }: { message: InboxMessage }) {
       {trusted && message.direction === 'incoming' && message.type === MemoType.SignRequest && (
         <button
           onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
-          className='flex items-center gap-1.5 rounded-md bg-elev-2 border border-border-soft px-2.5 py-1.5 text-xs text-fg-high hover:bg-elev-1 transition-colors'
+          className='flex items-center gap-1.5 bg-elev-2 border border-border-soft px-2.5 py-1.5 text-xs text-fg-high hover:bg-elev-1 transition-colors'
         >
           <span className='i-ph-pen-nib h-3.5 w-3.5' />
           sign transaction
@@ -760,12 +753,12 @@ function ConversationCompose({ diversifierIndex }: { diversifierIndex: number })
           }}
           placeholder='write a message...'
           rows={1}
-          className='flex-1 rounded-lg border border-border-soft bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none resize-none'
+          className='flex-1 border border-border-soft bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none resize-none'
         />
         <button
           onClick={handleSend}
           disabled={!message.trim()}
-          className='rounded-lg bg-zigner-gold p-2 text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
+          className='bg-zigner-gold p-2 text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
         >
           <span className='i-ph-paper-plane-right h-4 w-4' />
         </button>
@@ -891,7 +884,7 @@ function ComposeMessage({
             onChange={e => setRecipient(e.target.value)}
             placeholder={network === 'zcash' ? 'z-address or unified address' : 'penumbra1...'}
             disabled={!!replyTo || txStatus !== 'idle'}
-            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-xs font-mono focus:border-zigner-gold focus:outline-none disabled:opacity-50'
+            className='w-full border border-border-soft bg-input px-3 py-2.5 text-xs font-mono focus:border-zigner-gold focus:outline-none disabled:opacity-50'
           />
         </div>
 
@@ -905,7 +898,7 @@ function ComposeMessage({
             onChange={e => setAmount(e.target.value)}
             placeholder='0.00 (optional)'
             disabled={txStatus !== 'idle'}
-            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none disabled:opacity-50'
+            className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none disabled:opacity-50'
           />
           <p className='text-xs text-fg-muted mt-1'>send a payment with your message</p>
         </div>
@@ -919,7 +912,7 @@ function ComposeMessage({
             rows={6}
             maxLength={network === 'zcash' && ownAddress ? 512 - ownAddress.length - 7 : 512}
             disabled={txStatus !== 'idle'}
-            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none resize-none disabled:opacity-50'
+            className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none resize-none disabled:opacity-50'
           />
           <p className='text-xs text-fg-muted mt-1'>
             {message.length}/{network === 'zcash' && ownAddress ? 512 - ownAddress.length - 7 : 512}{' '}
@@ -931,7 +924,7 @@ function ComposeMessage({
         </div>
 
         {txStatus === 'success' && txHash && (
-          <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
+          <div className='border border-border-soft bg-elev-1 p-3'>
             <p className='flex items-center gap-1.5 text-sm text-fg-high'>
               <span className='i-ph-check h-4 w-4' />
               message sent
@@ -958,7 +951,7 @@ function ComposeMessage({
             }
           }}
           disabled={(txStatus === 'idle' && !canSend) || txStatus === 'sending'}
-          className='w-full flex items-center justify-center gap-2 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
+          className='w-full flex items-center justify-center gap-2 bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
         >
           {txStatus === 'sending' ? (
             <>
@@ -1158,14 +1151,14 @@ export function InboxPage() {
               }
             }}
             disabled={isSyncing}
-            className='rounded-lg p-1.5 hover:bg-elev-1 transition-colors disabled:opacity-50'
+            className='p-1.5 hover:bg-elev-1 transition-colors disabled:opacity-50'
             title='sync messages'
           >
             <span className={cn('i-ph-arrows-clockwise h-4 w-4', isSyncing && 'animate-spin')} />
           </button>
           <button
             onClick={() => setShowCompose(true)}
-            className='flex items-center gap-1 rounded-lg bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors'
+            className='flex items-center gap-1 bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors'
           >
             <span className='i-ph-paper-plane-right h-4 w-4' />
             compose
@@ -1206,7 +1199,7 @@ export function InboxPage() {
                 key={w.id}
                 type='button'
                 onClick={() => navigate(`/inbox/group/${w.id}`)}
-                className='flex items-center gap-2 rounded-lg bg-elev-1 px-2.5 py-2 text-left hover:bg-elev-2 transition-colors'
+                className='flex items-center gap-2 bg-elev-1 px-2.5 py-2 text-left hover:bg-elev-2 transition-colors'
               >
                 <span className='i-ph-chat-circle h-4 w-4 shrink-0 text-network-accent' />
                 <span className='truncate text-sm text-fg-high lowercase'>{w.label}</span>
@@ -1237,7 +1230,7 @@ export function InboxPage() {
               placeholder={
                 tab === 'conversations' ? 'search conversations...' : 'search messages...'
               }
-              className='w-full rounded-lg border border-border-soft bg-input pl-9 pr-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
+              className='w-full border border-border-soft bg-input pl-9 pr-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
             />
           </div>
         </div>
@@ -1332,14 +1325,14 @@ function FlatMessageRow({
   return (
     <button
       className={cn(
-        'flex items-start gap-3 rounded-lg border p-3 w-full text-left transition-colors',
+        'flex items-start gap-3 border p-3 w-full text-left transition-colors',
         message.read
           ? 'border-border-soft bg-elev-1 hover:border-border-soft'
           : 'border-primary/40 bg-primary/5 hover:bg-primary/10',
       )}
       onClick={onClick}
     >
-      <div className='flex h-8 w-8 items-center justify-center rounded-full bg-elev-2 shrink-0'>
+      <div className='flex h-8 w-8 items-center justify-center bg-elev-2 shrink-0'>
         <span
           className={cn(
             'h-4 w-4',
@@ -1362,7 +1355,7 @@ function FlatMessageRow({
           {message.content}
         </p>
         {message.amount && (
-          <span className='inline-flex items-center rounded-md bg-elev-2 px-1.5 py-0.5 mt-1 text-label tabular text-fg-high'>
+          <span className='inline-flex items-center bg-elev-2 px-1.5 py-0.5 mt-1 text-label tabular text-fg-high'>
             {message.direction === 'received' ? '+' : '-'}
             {message.amount} {message.asset ?? ''}
           </span>
@@ -1402,11 +1395,7 @@ function OutgoingStatusBadge({
   const s = styles[status] ?? styles.pending;
   return (
     <span
-      className={cn(
-        'inline-flex items-center rounded-md px-1.5 py-0.5 ml-1 mt-1 text-label',
-        s.bg,
-        s.fg,
-      )}
+      className={cn('inline-flex items-center px-1.5 py-0.5 ml-1 mt-1 text-label', s.bg, s.fg)}
       title={status === 'failed' || status === 'interrupted' ? reason : undefined}
     >
       {s.label}
@@ -1425,7 +1414,7 @@ function EmptyState({
 }) {
   return (
     <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
-      <div className='rounded-lg bg-zigner-gold/10 p-4'>
+      <div className='bg-zigner-gold/10 p-4'>
         <span className='i-ph-envelope h-8 w-8 text-zigner-gold' />
       </div>
       <div className='flex flex-col gap-1'>

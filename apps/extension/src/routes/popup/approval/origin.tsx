@@ -51,7 +51,7 @@ const CapabilityItem = ({ cap }: { cap: Capability }) => {
   const style = riskStyles[meta.risk];
 
   return (
-    <div className={cn('rounded-lg border p-3', style.border, style.bg)}>
+    <div className={cn('border p-3', style.border, style.bg)}>
       {style.banner && (
         <div className={cn('mb-2 text-xs font-medium', style.text)}>{style.banner}</div>
       )}
@@ -59,7 +59,7 @@ const CapabilityItem = ({ cap }: { cap: Capability }) => {
         <span className={cn('text-sm font-medium', style.text)}>{meta.label}</span>
         <span
           className={cn(
-            'rounded px-1.5 py-0.5 text-label',
+            'px-1.5 py-0.5 text-label',
             meta.risk === 'low' && 'bg-elev-2 text-fg-muted',
             meta.risk === 'medium' && 'bg-yellow-500/10 text-yellow-400',
             meta.risk === 'high' && 'bg-orange-500/10 text-orange-400',
@@ -138,7 +138,6 @@ export const OriginApproval = () => {
         <div className='flex flex-col gap-2'>
           <div
             className={cn(
-              'rounded-[1em]',
               'border-[1px]',
               'border-transparent',
               'p-2',
@@ -146,13 +145,12 @@ export const OriginApproval = () => {
             )}
           >
             <div className='flex flex-col items-center gap-2'>
-              <div className='flex h-11 max-w-full items-center rounded-lg bg-black p-2 text-fg-muted [z-index:30]'>
+              <div className='flex h-11 max-w-full items-center bg-black p-2 text-fg-muted [z-index:30]'>
                 {!!requestOrigin && (
                   <div
                     className={cn(
                       '-ml-3',
                       'relative',
-                      'rounded-full',
                       'border-[1px]',
                       'border-transparent',
                       '[background:linear-gradient(var(--charcoal),var(--charcoal))_padding-box,_linear-gradient(to_top_right,rgb(139,228,217),rgb(255,144,47))_border-box]',
@@ -171,7 +169,7 @@ export const OriginApproval = () => {
                   )}
                 </div>
               </div>
-              <div className='z-30 flex min-h-11 w-full items-center overflow-x-auto rounded-lg bg-canvas p-2 text-fg-muted'>
+              <div className='z-30 flex min-h-11 w-full items-center overflow-x-auto bg-canvas p-2 text-fg-muted'>
                 <div className='mx-auto items-center p-2 text-center leading-[0.8em]'>
                   {originUrl ? (
                     <DisplayOriginURL url={originUrl} />
@@ -197,7 +195,7 @@ export const OriginApproval = () => {
           {(maxRisk === 'high' || maxRisk === 'critical') && (
             <div
               className={cn(
-                'mt-2 rounded-lg border p-3 text-xs',
+                'mt-2 border p-3 text-xs',
                 maxRisk === 'critical'
                   ? 'border-red-500/50 bg-red-500/10 text-red-400'
                   : 'border-orange-500/40 bg-orange-500/5 text-orange-400',

@@ -77,11 +77,11 @@ const ReceiveCard = ({
   address: string;
   endpoint?: string;
 }) => (
-  <div className='rounded-md border border-border/40 bg-card/40 px-3 py-2'>
+  <div className='border border-border/40 bg-card/40 px-3 py-2'>
     <div className='flex items-center justify-between'>
       <span className='text-label text-fg-muted lowercase'>receive on {chainName}</span>
       <Hint label='fresh single-use address, public until shielded. a new one appears once this is funded.'>
-        <span className='rounded bg-warning/10 px-1.5 py-0.5 text-label leading-none text-warning lowercase'>
+        <span className='bg-warning/10 px-1.5 py-0.5 text-label leading-none text-warning lowercase'>
           transparent
         </span>
       </Hint>
@@ -163,8 +163,8 @@ const DepositRow = memo(
     // there's nothing to send or shield.
     const hasBalance = wallet.balance > 0n;
     return (
-      <div className='flex items-center gap-3 rounded-md border border-border/40 bg-card/40 px-3 py-2'>
-        <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium uppercase'>
+      <div className='flex items-center gap-3 border border-border/40 bg-card/40 px-3 py-2'>
+        <div className='flex h-8 w-8 shrink-0 items-center justify-center bg-muted text-xs font-medium uppercase'>
           {config.symbol.slice(0, 2)}
         </div>
         <div className='flex flex-1 flex-col min-w-0'>
@@ -194,7 +194,7 @@ const DepositRow = memo(
             <button
               type='button'
               onClick={onSend}
-              className='flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-500/15 text-blue-400 transition-colors hover:bg-blue-500/25'
+              className='flex h-8 w-8 shrink-0 items-center justify-center bg-blue-500/15 text-blue-400 transition-colors hover:bg-blue-500/25'
               title='send to an external address'
             >
               <span className='i-ph-arrow-up-right h-4 w-4' />
@@ -202,7 +202,7 @@ const DepositRow = memo(
             <button
               type='button'
               onClick={onShield}
-              className='flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-penumbra-purple/15 text-penumbra-purple transition-colors hover:bg-penumbra-purple/25'
+              className='flex h-8 w-8 shrink-0 items-center justify-center bg-penumbra-purple/15 text-penumbra-purple transition-colors hover:bg-penumbra-purple/25'
               title='shield into Penumbra'
             >
               <span className='i-ph-shield h-4 w-4' />
@@ -242,7 +242,7 @@ const ChainDeposits = ({ chainId, view }: { chainId: CosmosChainId; view: 'home'
   // An unreachable RPC leaves burners looking empty - say so plainly rather than
   // render a silent zero the user reads as lost funds. Non-alarming inline note.
   const staleNote = rpcError ? (
-    <div className='flex items-center gap-1.5 rounded-md border border-border/40 bg-card/40 px-3 py-2 text-label text-fg-muted lowercase'>
+    <div className='flex items-center gap-1.5 border border-border/40 bg-card/40 px-3 py-2 text-label text-fg-muted lowercase'>
       <span className='i-ph-warning-circle h-3.5 w-3.5 shrink-0 text-amber-400/80' />
       <span>couldn't reach {config.name} rpc - balance may be stale</span>
     </div>

@@ -226,7 +226,7 @@ export const PopupIndex = () => {
           </div>
           <div className='flex items-center gap-1.5'>
             {isMultisig && (
-              <span className='shrink-0 rounded-sm bg-zigner-gold/15 px-1.5 py-0.5 text-label text-zigner-gold tabular leading-none'>
+              <span className='shrink-0 bg-zigner-gold/15 px-1.5 py-0.5 text-label text-zigner-gold tabular leading-none'>
                 {selectedMultisigWallet.multisig!.threshold}/
                 {selectedMultisigWallet.multisig!.maxSigners}
               </span>
@@ -256,7 +256,7 @@ export const PopupIndex = () => {
             {effectiveAddress && isPenumbra && (
               <button
                 onClick={() => setEphemeralNonce(n => n + 1)}
-                className='shrink-0 rounded p-1 text-fg-muted transition-colors hover:bg-fg/5 hover:text-fg-high'
+                className='shrink-0 p-1 text-fg-muted transition-colors hover:bg-fg/5 hover:text-fg-high'
                 title='rotate to a fresh address'
               >
                 <span className='i-ph-arrows-clockwise h-3.5 w-3.5' />

@@ -148,27 +148,27 @@ function ProxySection() {
               value={host}
               onChange={e => setHost(e.target.value)}
               placeholder='host'
-              className='flex-1 rounded border border-border-soft bg-transparent px-2 py-1.5 text-xs font-mono'
+              className='flex-1 border border-border-soft bg-transparent px-2 py-1.5 text-xs font-mono'
             />
             <input
               value={port}
               onChange={e => setPort(e.target.value)}
               placeholder='port'
-              className='w-16 rounded border border-border-soft bg-transparent px-2 py-1.5 text-xs font-mono'
+              className='w-16 border border-border-soft bg-transparent px-2 py-1.5 text-xs font-mono'
             />
           </div>
           <div className='flex gap-2'>
             <button
               onClick={apply}
               disabled={!host.trim()}
-              className='flex-1 rounded border border-zigner-gold bg-zigner-gold/10 py-2 text-xs text-zigner-gold disabled:opacity-30'
+              className='flex-1 border border-zigner-gold bg-zigner-gold/10 py-2 text-xs text-zigner-gold disabled:opacity-30'
             >
               connect
             </button>
             {proxy.enabled && (
               <button
                 onClick={disable}
-                className='rounded border border-border-soft px-3 py-2 text-xs text-fg-muted'
+                className='border border-border-soft px-3 py-2 text-xs text-fg-muted'
               >
                 turn off
               </button>
@@ -254,13 +254,13 @@ export function ContactDiscoverySection() {
               value={endpoint}
               onChange={e => setEndpoint(e.target.value)}
               placeholder={DEFAULT_CONTACT_DISCOVERY_RELAY}
-              className='rounded border border-border-soft bg-transparent px-2 py-1.5 text-xs font-mono'
+              className='border border-border-soft bg-transparent px-2 py-1.5 text-xs font-mono'
             />
             <input
               value={token}
               onChange={e => setToken(e.target.value)}
               placeholder='token (only if the relay asks for one)'
-              className='rounded border border-border-soft bg-transparent px-2 py-1.5 text-xs font-mono'
+              className='border border-border-soft bg-transparent px-2 py-1.5 text-xs font-mono'
             />
           </div>
           <button
@@ -269,7 +269,7 @@ export function ContactDiscoverySection() {
               setOpen(false);
             }}
             disabled={!endpointValid}
-            className='rounded border border-zigner-gold bg-zigner-gold/10 py-2 text-xs text-zigner-gold disabled:opacity-30'
+            className='border border-zigner-gold bg-zigner-gold/10 py-2 text-xs text-zigner-gold disabled:opacity-30'
           >
             save
           </button>

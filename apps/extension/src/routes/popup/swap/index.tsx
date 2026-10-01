@@ -121,7 +121,7 @@ export const SwapPage = () => {
   if (!hasFeature(activeNetwork, 'swap')) {
     return (
       <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
-        <div className='rounded-full bg-primary/10 p-4'>
+        <div className='bg-primary/10 p-4'>
           <span className='i-ph-shuffle h-8 w-8 text-zigner-gold' />
         </div>
         <div>
@@ -569,7 +569,7 @@ const ZcashCrosschainSwap = () => {
       {step === 'input' && (
         <>
           {/* FROM card */}
-          <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
+          <div className='border border-border-soft bg-elev-2/20 p-3'>
             <div className='flex items-center justify-between mb-2'>
               <span className='text-xs text-fg-muted'>you send</span>
               {isFromZec && balanceZec && (
@@ -594,14 +594,12 @@ const ZcashCrosschainSwap = () => {
                 className='flex-1 bg-transparent text-xl font-medium text-fg placeholder:text-fg-muted focus:outline-none'
               />
               {isFromZec ? (
-                <div className='shrink-0 rounded-md bg-elev-2 px-3 py-1.5 text-sm font-medium'>
-                  ZEC
-                </div>
+                <div className='shrink-0 bg-elev-2 px-3 py-1.5 text-sm font-medium'>ZEC</div>
               ) : (
                 <button
                   onClick={() => setTokenPickerOpen(!tokenPickerOpen)}
                   disabled={tokensLoading}
-                  className='shrink-0 flex items-center gap-1 rounded-md bg-elev-2 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-elev-1/80 disabled:opacity-50'
+                  className='shrink-0 flex items-center gap-1 bg-elev-2 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-elev-1/80 disabled:opacity-50'
                 >
                   {tokensLoading ? '...' : (selectedToken?.symbol ?? 'select')}
                   <span
@@ -619,7 +617,7 @@ const ZcashCrosschainSwap = () => {
           <div className='flex justify-center -my-1.5 z-10'>
             <button
               onClick={handleFlipDirection}
-              className='rounded-full border border-border-soft bg-canvas p-1.5 shadow-sm transition-colors hover:bg-elev-1'
+              className='border border-border-soft bg-canvas p-1.5 shadow-sm transition-colors hover:bg-elev-1'
               title='flip direction'
             >
               <div className='flex flex-col items-center'>
@@ -629,7 +627,7 @@ const ZcashCrosschainSwap = () => {
           </div>
 
           {/* TO card */}
-          <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
+          <div className='border border-border-soft bg-elev-2/20 p-3'>
             <div className='flex items-center justify-between mb-2'>
               <span className='text-xs text-fg-muted'>you receive</span>
             </div>
@@ -639,7 +637,7 @@ const ZcashCrosschainSwap = () => {
                 <button
                   onClick={() => setTokenPickerOpen(!tokenPickerOpen)}
                   disabled={tokensLoading}
-                  className='shrink-0 flex items-center gap-1 rounded-md bg-elev-2 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-elev-1/80 disabled:opacity-50'
+                  className='shrink-0 flex items-center gap-1 bg-elev-2 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-elev-1/80 disabled:opacity-50'
                 >
                   {tokensLoading ? '...' : (selectedToken?.symbol ?? 'select')}
                   <span
@@ -650,9 +648,7 @@ const ZcashCrosschainSwap = () => {
                   />
                 </button>
               ) : (
-                <div className='shrink-0 rounded-md bg-elev-2 px-3 py-1.5 text-sm font-medium'>
-                  ZEC
-                </div>
+                <div className='shrink-0 bg-elev-2 px-3 py-1.5 text-sm font-medium'>ZEC</div>
               )}
             </div>
             {selectedToken && (
@@ -662,7 +658,7 @@ const ZcashCrosschainSwap = () => {
 
           {/* token picker dropdown */}
           {tokenPickerOpen && (
-            <div className='rounded-lg border border-border-soft bg-canvas max-h-48 overflow-y-auto -mt-2'>
+            <div className='border border-border-soft bg-canvas max-h-48 overflow-y-auto -mt-2'>
               {sortedTokens.map(t => (
                 <button
                   key={t.assetId}
@@ -687,7 +683,7 @@ const ZcashCrosschainSwap = () => {
           )}
 
           {/* destination address */}
-          <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
+          <div className='border border-border-soft bg-elev-2/20 p-3'>
             <div className='flex items-center justify-between mb-1'>
               <span className='text-xs text-fg-muted'>
                 {isFromZec
@@ -727,7 +723,7 @@ const ZcashCrosschainSwap = () => {
                       setDestinationAddress(c.address);
                       setShowContacts(false);
                     }}
-                    className='rounded-md bg-elev-2 px-2 py-1 text-xs text-fg-muted hover:bg-elev-1/80 hover:text-fg-high transition-colors'
+                    className='bg-elev-2 px-2 py-1 text-xs text-fg-muted hover:bg-elev-1/80 hover:text-fg-high transition-colors'
                   >
                     {c.name}
                   </button>
@@ -747,7 +743,7 @@ const ZcashCrosschainSwap = () => {
           {error && <p className='text-xs text-red-400'>{error}</p>}
 
           {/* third-party custody risk warning - shown before any funds are committed */}
-          <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3'>
+          <div className='border border-yellow-500/30 bg-yellow-500/10 p-3'>
             <div className='flex items-start gap-2'>
               <span className='i-ph-warning mt-0.5 h-4 w-4 shrink-0 text-yellow-400' />
               <div className='flex flex-col gap-1.5 text-xs text-yellow-400'>
@@ -816,7 +812,7 @@ const ZcashCrosschainSwap = () => {
 
       {step === 'review' && quote && (
         <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-zigner-gold/30 bg-card/50 p-3'>
+          <div className='border border-zigner-gold/30 bg-card/50 p-3'>
             <p className='mb-2 text-xs font-medium text-zigner-gold'>confirm swap</p>
 
             <div className='flex flex-col gap-1.5 text-xs'>
@@ -850,14 +846,14 @@ const ZcashCrosschainSwap = () => {
             <div className='mt-3 flex gap-2'>
               <button
                 onClick={() => void handleConfirmSwap()}
-                className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground transition-colors hover:bg-zigner-gold-light'
+                className='flex-1 bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground transition-colors hover:bg-zigner-gold-light'
               >
                 confirm & send
               </button>
 
               <button
                 onClick={() => setStep('input')}
-                className='flex-1 rounded-lg border border-border-soft py-3 text-sm text-fg-muted transition-colors hover:text-fg-high'
+                className='flex-1 border border-border-soft py-3 text-sm text-fg-muted transition-colors hover:text-fg-high'
               >
                 back
               </button>
@@ -885,7 +881,7 @@ const ZcashCrosschainSwap = () => {
 
           <button
             onClick={() => setStep('scan')}
-            className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground transition-colors hover:bg-zigner-gold-light'
+            className='w-full bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground transition-colors hover:bg-zigner-gold-light'
           >
             scan signature
           </button>
@@ -907,8 +903,8 @@ const ZcashCrosschainSwap = () => {
 
       {step === 'sending' && (
         <div className='flex flex-col items-center gap-4 p-6'>
-          <div className='w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center'>
-            <div className='w-8 h-8 border-2 border-zigner-gold border-t-transparent rounded-full animate-spin' />
+          <div className='w-16 h-16 bg-primary/20 flex items-center justify-center'>
+            <div className='w-8 h-8 border-2 border-zigner-gold border-t-transparent animate-spin' />
           </div>
           <h2 className='text-lg font-medium'>building transaction</h2>
 
@@ -921,7 +917,7 @@ const ZcashCrosschainSwap = () => {
       {(step === 'deposit' || step === 'polling') && quote && (
         <div className='flex flex-col gap-3'>
           {/* quote summary */}
-          <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
+          <div className='border border-border-soft bg-elev-2/20 p-3'>
             <div className='flex justify-between text-sm'>
               <span className='text-fg-muted'>send</span>
               <span className='font-medium'>
@@ -949,12 +945,12 @@ const ZcashCrosschainSwap = () => {
           </div>
 
           {/* status */}
-          <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
+          <div className='border border-border-soft bg-elev-2/20 p-3'>
             <div className='flex items-center gap-2'>
               {step === 'polling' ? (
                 <span className='i-ph-arrows-clockwise h-4 w-4 animate-spin text-zigner-gold' />
               ) : (
-                <div className='h-2 w-2 rounded-full bg-yellow-500 animate-pulse' />
+                <div className='h-2 w-2 bg-yellow-500 animate-pulse' />
               )}
               <span className='text-sm'>
                 {swapStatus === 'PROCESSING' && 'processing swap...'}
@@ -974,7 +970,7 @@ const ZcashCrosschainSwap = () => {
 
       {step === 'done' && (
         <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
+          <div className='border border-green-500/40 bg-green-500/10 p-3'>
             <p className='text-sm text-green-400'>swap complete</p>
             {quote && (
               <p className='text-xs text-fg-muted mt-1'>
@@ -990,7 +986,7 @@ const ZcashCrosschainSwap = () => {
           </div>
           <button
             onClick={handleReset}
-            className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground transition-colors hover:bg-primary/90'
+            className='w-full bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground transition-colors hover:bg-primary/90'
           >
             swap again
           </button>
@@ -1002,14 +998,14 @@ const ZcashCrosschainSwap = () => {
           {isEgressBlocked(errorCause) ? (
             <EgressBlockedStatus error={errorCause} onAllowed={() => setStep('input')} />
           ) : (
-            <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
+            <div className='border border-red-500/40 bg-red-500/10 p-3'>
               <p className='text-sm text-red-400'>swap failed</p>
               <p className='text-xs text-fg-muted mt-1'>{error}</p>
             </div>
           )}
           <button
             onClick={handleReset}
-            className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground transition-colors hover:bg-primary/90'
+            className='w-full bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground transition-colors hover:bg-primary/90'
           >
             try again
           </button>
@@ -1273,7 +1269,7 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
       </div>
 
       {/* input asset */}
-      <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
+      <div className='border border-border-soft bg-elev-2/20 p-3'>
         <div className='flex items-center justify-between mb-2'>
           <span className='text-xs text-fg-muted'>you pay</span>
           {selectedIn && (
@@ -1305,7 +1301,7 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
           <button
             onClick={() => setAssetInOpen(!assetInOpen)}
             disabled={txStatus !== 'idle' || balancesLoading}
-            className='flex items-center gap-2 rounded-md bg-background/50 px-3 py-1.5 text-sm transition-colors hover:bg-canvas disabled:opacity-50'
+            className='flex items-center gap-2 bg-background/50 px-3 py-1.5 text-sm transition-colors hover:bg-canvas disabled:opacity-50'
           >
             {balancesLoading ? (
               <span className='text-fg-muted'>loading...</span>
@@ -1326,7 +1322,7 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
           </button>
 
           {assetInOpen && (
-            <div className='absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-border-soft bg-canvas shadow-lg'>
+            <div className='absolute top-full left-0 right-0 z-50 mt-1 border border-border-soft bg-canvas shadow-lg'>
               <div className='border-b border-border-soft p-1.5'>
                 <AssetBucketToggle
                   bucket={bucketIn}
@@ -1402,14 +1398,14 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
         <button
           onClick={handleFlip}
           disabled={txStatus !== 'idle' || !selectedIn || !selectedOut}
-          className='rounded-full border border-border-soft bg-canvas p-2 shadow-sm transition-colors hover:bg-elev-1 disabled:opacity-50'
+          className='border border-border-soft bg-canvas p-2 shadow-sm transition-colors hover:bg-elev-1 disabled:opacity-50'
         >
           <span className='i-ph-arrow-down h-4 w-4' />
         </button>
       </div>
 
       {/* output asset */}
-      <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
+      <div className='border border-border-soft bg-elev-2/20 p-3'>
         <div className='flex items-center justify-between mb-2'>
           <span className='text-xs text-fg-muted'>you receive</span>
           {simLoading && (
@@ -1428,7 +1424,7 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
           <button
             onClick={() => setAssetOutOpen(!assetOutOpen)}
             disabled={txStatus !== 'idle' || assetsLoading}
-            className='flex items-center gap-2 rounded-md bg-background/50 px-3 py-1.5 text-sm transition-colors hover:bg-canvas disabled:opacity-50'
+            className='flex items-center gap-2 bg-background/50 px-3 py-1.5 text-sm transition-colors hover:bg-canvas disabled:opacity-50'
           >
             {assetsLoading ? (
               <span className='text-fg-muted'>loading...</span>
@@ -1449,7 +1445,7 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
           </button>
 
           {assetOutOpen && (
-            <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-soft bg-canvas shadow-lg'>
+            <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto border border-border-soft bg-canvas shadow-lg'>
               {outputAssets
                 .filter(a => {
                   if (!selectedIn?.assetId || !a.assetId) {
@@ -1500,7 +1496,7 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
       )}
 
       {simulation?.unfilled && (
-        <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-2'>
+        <div className='border border-yellow-500/30 bg-yellow-500/10 p-2'>
           <p className='text-xs text-yellow-400'>
             Only part of this swap fills at the current price - {simulation.unfilled.amount}{' '}
             {simulation.unfilled.symbol} will be returned to you.
@@ -1513,7 +1509,7 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
       )}
 
       {txStatus === 'success' && txHash && (
-        <div className='rounded-lg border border-green-500/30 bg-green-500/5 p-3'>
+        <div className='border border-green-500/30 bg-green-500/5 p-3'>
           <div className='flex items-center gap-2'>
             <span className='i-ph-check h-4 w-4 text-green-400' />
             <p className='text-sm font-medium text-fg'>Swap submitted</p>
@@ -1522,7 +1518,7 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
             type='button'
             onClick={() => void navigator.clipboard.writeText(txHash)}
             title='Copy transaction hash'
-            className='mt-2 flex w-full items-center gap-1.5 rounded-md bg-elev-2 px-2 py-1.5 transition-colors hover:bg-elev-1'
+            className='mt-2 flex w-full items-center gap-1.5 bg-elev-2 px-2 py-1.5 transition-colors hover:bg-elev-1'
           >
             <span className='i-ph-copy h-3 w-3 shrink-0 text-fg-muted' />
             <span className='truncate font-mono text-xs text-fg-muted'>{txHash}</span>
@@ -1534,7 +1530,7 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
       )}
 
       {txStatus === 'error' && txError && (
-        <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
+        <div className='border border-red-500/40 bg-red-500/10 p-3'>
           <p className='text-sm text-red-400'>swap failed</p>
           <p className='text-xs text-fg-muted mt-1'>{txError}</p>
         </div>
@@ -1555,7 +1551,7 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
           txStatus === 'broadcasting'
         }
         className={cn(
-          'mt-2 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground',
+          'mt-2 w-full bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground',
           'transition-colors hover:bg-zigner-gold-light',
           'disabled:opacity-50 disabled:cursor-not-allowed',
         )}

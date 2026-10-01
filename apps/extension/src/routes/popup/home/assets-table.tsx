@@ -168,7 +168,7 @@ const AssetRow = memo(
                   onClick={() => onSend(base)}
                   aria-label={`Send ${symbol}`}
                   title={`send ${symbol}`}
-                  className='inline-flex h-7 w-7 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-elev-2 hover:text-fg-high focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zigner-gold/60'
+                  className='inline-flex h-7 w-7 items-center justify-center text-fg-muted transition-colors hover:bg-elev-2 hover:text-fg-high focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zigner-gold/60'
                 >
                   <span className='i-ph-arrow-up-right h-4 w-4' />
                 </button>
@@ -179,7 +179,7 @@ const AssetRow = memo(
                   onClick={() => onSwap(base)}
                   aria-label={`Swap ${symbol}`}
                   title={`swap ${symbol}`}
-                  className='inline-flex h-7 w-7 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-elev-2 hover:text-fg-high focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zigner-gold/60'
+                  className='inline-flex h-7 w-7 items-center justify-center text-fg-muted transition-colors hover:bg-elev-2 hover:text-fg-high focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zigner-gold/60'
                 >
                   <span className='i-ph-arrows-left-right h-4 w-4' />
                 </button>
@@ -470,7 +470,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
             'the wallet IBCs it to Penumbra - shield to go private',
           ].map((step, i) => (
             <li key={i} className='flex items-start gap-2 text-xs text-fg-muted'>
-              <span className='mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-elev-2 text-label text-fg-dim'>
+              <span className='mt-px flex h-4 w-4 shrink-0 items-center justify-center bg-elev-2 text-label text-fg-dim'>
                 {i + 1}
               </span>
               {step}
@@ -495,7 +495,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
 
   return (
     <>
-      <div className='rounded-lg border border-border-soft bg-elev-1 overflow-hidden [&_td]:px-3 [&_th]:px-3'>
+      <div className='border border-border-soft bg-elev-1 overflow-hidden [&_td]:px-3 [&_th]:px-3'>
         <Table>
           <TableHeader className='group'>
             <TableRow>
@@ -536,7 +536,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
       {/* claim confirmation modal */}
       {claimBalance && claimStatus !== 'idle' && (
         <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
-          <div className='mx-4 w-full max-w-sm rounded-lg border border-border-soft bg-canvas p-5'>
+          <div className='mx-4 w-full max-w-sm border border-border-soft bg-canvas p-5'>
             <div className='flex items-center justify-between mb-4'>
               <h2 className='text-lg font-medium'>claim unbonding tokens</h2>
               {(claimStatus === 'confirm' ||
@@ -553,7 +553,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
 
             {claimStatus === 'confirm' && claimInfo && (
               <div className='flex flex-col gap-3'>
-                <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
+                <div className='border border-border-soft bg-elev-1 p-3'>
                   <div className='text-xs text-fg-muted'>amount to receive</div>
                   <div className='text-lg font-medium tabular-nums'>
                     <Sensitive>{claimDisplayAmount} UM</Sensitive>
@@ -580,13 +580,13 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
                 <div className='flex gap-2 mt-2'>
                   <button
                     onClick={closeClaim}
-                    className='flex-1 rounded-lg border border-border-soft py-3 text-sm hover:bg-elev-1 transition-colors'
+                    className='flex-1 border border-border-soft py-3 text-sm hover:bg-elev-1 transition-colors'
                   >
                     cancel
                   </button>
                   <button
                     onClick={() => void handleClaim()}
-                    className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors'
+                    className='flex-1 bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors'
                   >
                     confirm claim
                   </button>
@@ -598,7 +598,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
               claimStatus === 'signing' ||
               claimStatus === 'broadcasting') && (
               <div className='flex flex-col items-center gap-3 py-12'>
-                <div className='h-6 w-6 animate-spin rounded-full border-2 border-zigner-gold border-t-transparent' />
+                <div className='h-6 w-6 animate-spin border-2 border-zigner-gold border-t-transparent' />
                 <p className='text-sm text-fg-muted'>
                   {claimStatus === 'planning' && 'building transaction plan...'}
                   {claimStatus === 'signing' && 'signing transaction...'}
@@ -615,7 +615,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
                 )}
                 <button
                   onClick={closeClaim}
-                  className='mt-2 w-full rounded-lg border border-border-soft py-2 text-sm hover:bg-elev-1 transition-colors'
+                  className='mt-2 w-full border border-border-soft py-2 text-sm hover:bg-elev-1 transition-colors'
                 >
                   close
                 </button>
@@ -628,7 +628,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
                 <div className='flex gap-2 mt-2'>
                   <button
                     onClick={closeClaim}
-                    className='flex-1 rounded-lg border border-border-soft py-3 text-sm hover:bg-elev-1 transition-colors'
+                    className='flex-1 border border-border-soft py-3 text-sm hover:bg-elev-1 transition-colors'
                   >
                     close
                   </button>
@@ -637,7 +637,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
                       setClaimStatus('confirm');
                       setClaimError(undefined);
                     }}
-                    className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors'
+                    className='flex-1 bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors'
                   >
                     retry
                   </button>

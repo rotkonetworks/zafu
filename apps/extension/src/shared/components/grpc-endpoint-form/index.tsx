@@ -77,7 +77,7 @@ export const GrpcEndpointForm = ({
                   ref={customGrpcEndpointInput}
                   value={isCustomGrpcEndpoint && !!grpcEndpointInput ? grpcEndpointInput : ''}
                   onChange={e => setGrpcEndpointInput(e.target.value)}
-                  className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm outline-0 transition-colors focus:border-zigner-gold focus:outline-none'
+                  className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm outline-0 transition-colors focus:border-zigner-gold focus:outline-none'
                 />
               }
               onSelect={() => {

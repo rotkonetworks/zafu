@@ -196,14 +196,14 @@ export const SettingsZigner = () => {
     <SettingsScreen title='zafu zigner'>
       <div className='flex flex-col gap-4'>
         {/* Info Box */}
-        <div className='rounded-md border border-border-soft bg-elev-1 p-4'>
+        <div className='border border-border-soft bg-elev-1 p-4'>
           <p className='text-xs text-fg'>cold wallet - keeps spending keys offline, sign by QR.</p>
         </div>
 
         {/* Cold-signing value prop, shown when no zigner is paired yet - markets
             the air-gapped signer itself (security), not a subscription. */}
         {zignerVaults.length === 0 && (
-          <div className='rounded-md border border-zigner-gold/30 bg-zigner-gold/5 p-4 flex flex-col gap-3'>
+          <div className='border border-zigner-gold/30 bg-zigner-gold/5 p-4 flex flex-col gap-3'>
             <div className='flex items-start gap-3'>
               <span className='i-ph-shield-check size-5 text-zigner-gold shrink-0 mt-0.5' />
               <div className='flex flex-col gap-2'>
@@ -263,17 +263,14 @@ export const SettingsZigner = () => {
                 return (
                   <div
                     key={vault.id}
-                    className='flex items-center justify-between rounded-md border border-border-soft bg-elev-1 p-3'
+                    className='flex items-center justify-between border border-border-soft bg-elev-1 p-3'
                   >
                     <div className='flex flex-col gap-2 min-w-0'>
                       <div className='flex items-center gap-2'>
                         <EyeOpenIcon className={`size-4 ${colorClass} flex-shrink-0`} />
                         <span className='text-data text-fg-high truncate'>{vault.name}</span>
                         {networks.map(n => (
-                          <span
-                            key={n}
-                            className='rounded-sm text-label px-1 bg-elev-2 text-fg-dim lowercase'
-                          >
+                          <span key={n} className='text-label px-1 bg-elev-2 text-fg-dim lowercase'>
                             {n}
                           </span>
                         ))}
@@ -366,7 +363,7 @@ export const SettingsZigner = () => {
 
         {/* Success message */}
         {pro && success && (
-          <div className='rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-400'>
+          <div className='border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-400'>
             wallet added successfully!
           </div>
         )}

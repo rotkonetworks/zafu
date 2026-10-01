@@ -25,16 +25,16 @@ export interface HankoSealProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 const SIZE = {
-  sm: 'w-6 h-6 text-[13px] rounded-[4px] border',
-  md: 'w-10 h-10 text-[19px] rounded-md border-[1.5px]',
-  lg: 'w-[74px] h-[74px] text-[30px] rounded-lg border-2',
+  sm: 'w-6 h-6 text-[13px] border',
+  md: 'w-10 h-10 text-[19px] border-[1.5px]',
+  lg: 'w-[74px] h-[74px] text-[30px] border-2',
 } as const;
 
 /** inner keyline inset per size - the double-ring look of a carved seal */
 const INNER = {
-  sm: 'inset-[2px] rounded-[2px]',
-  md: 'inset-[3px] rounded-[4px]',
-  lg: 'inset-[4px] rounded-md',
+  sm: 'inset-[2px]',
+  md: 'inset-[3px]',
+  lg: 'inset-[4px]',
 } as const;
 
 export const HankoSeal = React.forwardRef<HTMLDivElement, HankoSealProps>(

@@ -112,7 +112,7 @@ const UnbondingTooltipContent = ({
             e.stopPropagation();
             onClaim();
           }}
-          className='mt-1 rounded-md bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
+          className='mt-1 bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
         >
           Claim
         </button>
@@ -149,7 +149,7 @@ export const ValueComponent = ({
     <Pill variant={variant === 'default' ? 'default' : 'dashed'}>
       <div className='flex min-w-0 items-center gap-1'>
         {showIcon && (
-          <div className='-ml-2 mr-1 flex shrink-0 items-center justify-center rounded-full'>
+          <div className='-ml-2 mr-1 flex shrink-0 items-center justify-center'>
             <AssetIcon metadata={metadata} size={size === 'default' ? 'sm' : 'xs'} />
           </div>
         )}

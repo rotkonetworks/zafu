@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { PropsWithChildren, ReactNode } from 'react';
 import { cn } from '../../../lib/utils';
 
-const variants = cva('rounded-lg border bg-canvas', {
+const variants = cva('border bg-canvas', {
   variants: {
     spacing: {
       /** Useful for e.g., wrapping around a transparent `<Input />`. */
@@ -27,7 +27,7 @@ const variants = cva('rounded-lg border bg-canvas', {
 });
 
 /**
- * A simple black box with rounded corners and a border.
+ * A simple black box with a border.
  */
 export const Box = ({
   children,
@@ -51,12 +51,6 @@ export const Box = ({
       layout={layout ?? !!layoutId}
       layoutId={layoutId}
       className={cn('flex flex-col gap-4', variants({ spacing, state, overflow }))}
-      /**
-       * Set the border radius via the style prop so it doesn't get distorted by framer-motion.
-       *
-       * @see https://www.framer.com/motion/layout-animations/##scale-correction
-       */
-      style={{ borderRadius: 'var(--radius)' }}
     >
       {(label ?? headerContent) && (
         <div className='flex items-center justify-between'>

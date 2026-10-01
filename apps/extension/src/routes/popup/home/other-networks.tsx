@@ -69,7 +69,7 @@ export const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
       {isLoading ? (
         <AssetListSkeleton rows={2} />
       ) : assetsData?.assets.length === 0 ? (
-        <div className='rounded-lg border border-border-soft bg-elev-1 p-4'>
+        <div className='border border-border-soft bg-elev-1 p-4'>
           <div className='flex items-center justify-between'>
             <div className='flex items-center gap-2'>
               <div className='h-8 w-8 bg-elev-2 flex items-center justify-center'>
@@ -88,7 +88,7 @@ export const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
       ) : (
         <div className='flex flex-col gap-1'>
           {assetsData?.assets.map(asset => (
-            <div key={asset.denom} className='rounded-lg border border-border-soft bg-elev-1 p-4'>
+            <div key={asset.denom} className='border border-border-soft bg-elev-1 p-4'>
               <div className='flex items-center justify-between'>
                 <div className='flex items-center gap-2'>
                   <div className='h-8 w-8 bg-elev-2 flex items-center justify-center'>
