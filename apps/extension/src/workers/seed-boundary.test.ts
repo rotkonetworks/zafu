@@ -43,7 +43,12 @@ describe('seed boundary', () => {
   });
 
   test('every hot build is proven from the signing account UFVK and signed in the worker', () => {
-    const scopes = calls(WORKER, 'withSpendKeys(');
+    const all = calls(WORKER, 'withSpendKeys(');
+    // the transparent deposit has nothing to prove: built from the pubkey, signed here
+    const deposit = all.filter(c => c.includes('sendDeposit('));
+    expect(deposit).toHaveLength(1);
+    expect(deposit[0]).not.toMatch(/proveViaOffscreen\(/);
+    const scopes = all.filter(c => !deposit.includes(c));
     // send-tx (ironwood + orchard), turnstile, send-tx-multi, shield
     expect(scopes).toHaveLength(5);
     for (const scope of scopes) {
@@ -74,7 +79,14 @@ describe('seed boundary', () => {
   });
 
   test('no message to the worker carries a phrase for zcash spends or sync', () => {
-    for (const type of ['send-tx', 'send-tx-multi', 'send-turnstile-migration', 'shield', 'sync']) {
+    for (const type of [
+      'send-tx',
+      'send-tx-multi',
+      'send-turnstile-migration',
+      'shield',
+      'transparent-deposit',
+      'sync',
+    ]) {
       const sent = calls(NETWORK, 'callWorker(').filter(c => c.includes(`'${type}'`));
       expect(sent.length, type).toBeGreaterThan(0);
       for (const call of sent) {
@@ -82,7 +94,9 @@ describe('seed boundary', () => {
       }
       // a hot call's vault is sealed to a key the worker issued for it
       if (type !== 'sync') {
-        expect(sent[0], type).toMatch(/vault: (vault && \()?await sealFor\(network, vault\)/);
+        expect(sent[0], type).toMatch(
+          /vault: (vault && \()?await sealFor\((network|'zcash'), vault\)/,
+        );
       }
     }
     // prove requests stay inside the offscreen document: never on the message bus
@@ -92,7 +106,13 @@ describe('seed boundary', () => {
   });
 
   test('the worker reads a vault, never a mnemonic, from its spend payloads', () => {
-    for (const handler of ['send-tx', 'send-tx-multi', 'send-turnstile-migration', 'shield']) {
+    for (const handler of [
+      'send-tx',
+      'send-tx-multi',
+      'send-turnstile-migration',
+      'shield',
+      'transparent-deposit',
+    ]) {
       const start = WORKER.indexOf(`case '${handler}': {`);
       const body = WORKER.slice(start, WORKER.indexOf('\n      case ', start + 1));
       expect(body, handler).toMatch(/vault\??: SealedVault/);
