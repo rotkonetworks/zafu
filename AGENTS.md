@@ -67,8 +67,10 @@ zafu is a privacy wallet. It contacts only what the user's enabled networks
 strictly need (for a zcash-only user: the zcash light client), and nothing
 else until the user opts in.
 
-- All traffic goes through the egress wrapper (`apps/extension/src/net/`).
-  Never patch around it; never call `fetch` or `WebSocket` outside it.
+- All traffic goes through the egress wrapper (`apps/extension/src/net/`), which
+  guards the global `fetch`, `WebSocket`, `EventSource` and XHR in every realm.
+  Never bypass it: no saved references to the original globals, no
+  `sendBeacon`, no hidden iframes, no new entry point without the guard import.
 - Optional destinations ask first (`requestEgressOptIn`), at the moment of use.
 - No remote images, fonts, icons or favicons. Bundle them, or use a
   generated monogram.
