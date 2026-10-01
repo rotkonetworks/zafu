@@ -18,8 +18,9 @@ import { useCallback, useState } from 'react';
 
 import { useStore } from '../../state';
 import { selectEffectiveKeyInfo, keyRingSelector } from '../../state/keyring';
-import { activeZcashStoreId } from '../../state/pockets';
+import { activeAccountIndex, activePockets, activeZcashStoreId } from '../../state/pockets';
 import { usePasswordGate } from '../../hooks/password-gate';
+import { Button } from '@repo/ui/components/ui/button';
 import {
   shieldInWorker,
   buildUnsignedShieldInWorker,
@@ -87,6 +88,8 @@ export const ShieldTransparent = ({
   const storeId = useStore(activeZcashStoreId);
   const keyRing = useStore(keyRingSelector);
   const { requestAuth, PasswordModal } = usePasswordGate();
+  const account = useStore(activeAccountIndex);
+  const pocketName = useStore(s => activePockets(s).find(p => p.account === account)?.name ?? 'main');
 
   // hot-wallet shielding state
   const [shielding, setShielding] = useState(false);
@@ -264,109 +267,106 @@ export const ShieldTransparent = ({
   );
 
   const tZec = Number(transparentZat) / 1e8;
+  const busy =
+    shielding || (zignerStep !== 'idle' && zignerStep !== 'error' && zignerStep !== 'complete');
+  const done = !!shieldTxid || zignerStep === 'complete';
+  const txid = shieldTxid ?? zignerTxid;
+  const error = shieldError ?? (zignerStep === 'error' ? zignerError : null);
+
+  // zigner's QR round trip takes over the sheet in place of the review -
+  // nothing here expands, it swaps.
+  if (zignerStep === 'show_qr' && signRequestQr) {
+    return (
+      <div className='flex flex-col items-center gap-3'>
+        <QrDisplay
+          data={signRequestQr}
+          size={180}
+          title='scan with zafu zigner'
+          description='scan to sign shielding transaction'
+        />
+        <div className='flex w-full gap-2'>
+          <Button onClick={() => setZignerStep('scanning')} className='flex-1'>
+            scan signature
+          </Button>
+          <Button
+            variant='secondary'
+            onClick={() => {
+              setZignerStep('idle');
+              setSignRequestQr(null);
+            }}
+          >
+            cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (zignerStep === 'scanning') {
+    return (
+      <QrScanner
+        onScan={data => void handleZignerSigScanned(data)}
+        onError={err => {
+          setZignerError(err);
+          setZignerStep('error');
+        }}
+        onClose={() => setZignerStep('show_qr')}
+        title='scan signature'
+        description='point camera at zafu zigner signature qr'
+      />
+    );
+  }
 
   return (
-    <div className='border border-border-soft bg-elev-1 px-4 py-2.5'>
+    <div className='flex flex-col gap-4'>
       {PasswordModal}
-      <div className='flex items-center justify-between gap-3'>
-        <div className='flex min-w-0 items-center gap-2'>
-          <span className='i-ph-eye h-3.5 w-3.5 shrink-0 text-fg-muted' />
-          <span className='text-xs text-fg-muted lowercase'>transparent</span>
-          <span className='bg-elev-2 px-1.5 py-0.5 text-label text-fg-dim leading-none lowercase'>
-            public
-          </span>
-          <Sensitive className='truncate text-xs tabular text-fg-high'>
-            {utxoLoading ? '...' : `${fmtZec(tZec)} ZEC`}
-          </Sensitive>
-        </div>
-        {hasMnemonic ? (
-          <button
-            type='button'
-            onClick={() => void handleShield()}
-            disabled={shielding || !!shieldTxid}
-            className='shrink-0 text-xs text-network-accent transition-colors hover:text-fg-high disabled:opacity-50'
-          >
-            {shielding ? 'shielding...' : shieldTxid ? 'pending...' : 'shield'}
-          </button>
-        ) : (
-          <button
-            type='button'
-            onClick={() => void handleZignerShield()}
-            disabled={zignerStep !== 'idle' && zignerStep !== 'error' && zignerStep !== 'complete'}
-            className='shrink-0 text-xs text-network-accent transition-colors hover:text-fg-high disabled:opacity-50'
-          >
-            {zignerStep === 'building'
-              ? 'building...'
-              : zignerStep === 'broadcasting'
-                ? 'broadcasting...'
-                : zignerStep === 'complete'
-                  ? 'pending...'
-                  : 'shield via zigner'}
-          </button>
-        )}
+      <div className='flex items-center justify-center gap-4 pt-1'>
+        <span className='grid size-11 shrink-0 place-items-center border border-warn text-sm text-warn'>
+          t
+        </span>
+        <span className='i-ph-arrow-right size-5 text-fg-muted' />
+        <span className='grid size-11 shrink-0 place-items-center bg-network-accent text-sm text-zigner-gold-foreground'>
+          z
+        </span>
       </div>
 
-      {shieldTxid && (
-        <div className='mt-1.5 font-mono text-label text-fg-muted'>
-          shielded: {shieldTxid.slice(0, 16)}... (wait for confirmation)
-        </div>
-      )}
-      {shieldError && <div className='mt-1.5 text-label text-warning'>{shieldError}</div>}
+      <div className='text-center'>
+        <Sensitive className='text-3xl tabular-nums text-fg-high'>
+          {utxoLoading ? '...' : fmtZec(tZec)}
+          <span className='ml-1.5 text-base text-zigner-gold'>zec</span>
+        </Sensitive>
+      </div>
 
-      {/* zigner shielding QR flow */}
-      {zignerStep === 'show_qr' && signRequestQr && (
-        <div className='mt-3 flex flex-col items-center gap-2'>
-          <QrDisplay
-            data={signRequestQr}
-            size={180}
-            title='scan with zafu zigner'
-            description='scan to sign shielding transaction'
-          />
-          <div className='flex w-full gap-2'>
-            <button
-              onClick={() => setZignerStep('scanning')}
-              className='flex-1 bg-zigner-gold py-1.5 text-xs text-zigner-gold-foreground transition-colors hover:bg-primary/90'
-            >
-              scan signature
-            </button>
-            <button
-              onClick={() => {
-                setZignerStep('idle');
-                setSignRequestQr(null);
-              }}
-              className='px-2 text-xs text-fg-muted transition-colors hover:text-fg-high'
-            >
-              cancel
-            </button>
-          </div>
+      <div className='divide-y divide-border-soft border border-border-soft bg-elev-1'>
+        <div className='flex items-center justify-between px-4 py-3 text-sm'>
+          <span className='text-fg-muted'>from</span>
+          <span>
+            {tAddresses.length} transparent address{tAddresses.length === 1 ? '' : 'es'}
+          </span>
         </div>
-      )}
+        <div className='flex items-center justify-between px-4 py-3 text-sm'>
+          <span className='text-fg-muted'>into</span>
+          <span>{pocketName} pocket · shielded</span>
+        </div>
+        <div className='flex items-center justify-between px-4 py-3 text-sm'>
+          <span className='text-fg-muted'>fee</span>
+          <span>0.0001 zec</span>
+        </div>
+      </div>
 
-      {zignerStep === 'scanning' && (
-        <div className='mt-3'>
-          <QrScanner
-            onScan={data => void handleZignerSigScanned(data)}
-            onError={err => {
-              setZignerError(err);
-              setZignerStep('error');
-            }}
-            onClose={() => setZignerStep('show_qr')}
-            title='scan signature'
-            description='point camera at zafu zigner signature qr'
-          />
-        </div>
-      )}
+      <p className='text-label text-fg-muted lowercase'>after this, these funds stay private</p>
 
-      {zignerStep === 'complete' && zignerTxid && (
-        <div className='mt-1.5 font-mono text-label text-fg-muted'>
-          shielded: {zignerTxid.slice(0, 16)}... (wait for confirmation)
-        </div>
+      {txid && !error && (
+        <p className='font-mono text-label text-fg-muted'>
+          shielded: {txid.slice(0, 16)}... (wait for confirmation)
+        </p>
       )}
-      {zignerStep === 'error' && zignerError && (
-        <div className='mt-1.5 text-label text-warning'>
-          {zignerError}
+      {error && (
+        <p className='text-label text-warning'>
+          {error}
           <button
             onClick={() => {
+              setShieldError(null);
               setZignerStep('idle');
               setZignerError(null);
             }}
@@ -374,8 +374,17 @@ export const ShieldTransparent = ({
           >
             dismiss
           </button>
-        </div>
+        </p>
       )}
+
+      <Button
+        onClick={() => void (hasMnemonic ? handleShield() : handleZignerShield())}
+        loading={busy}
+        disabled={busy || done || transparentZat <= 0n}
+        className='w-full'
+      >
+        {done ? 'pending...' : hasMnemonic ? 'shield' : 'shield via zigner'}
+      </Button>
     </div>
   );
 };
