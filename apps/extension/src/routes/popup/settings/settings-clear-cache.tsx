@@ -84,7 +84,7 @@ export const SettingsClearCache = () => {
     setClearingState({ inProgress: true, step: 'stopping', completed: 0, total: 4 });
     // fire-and-forget: service worker will reload the extension when done
     chrome.runtime.sendMessage({ type: 'ClearCache', network: 'penumbra' }).catch(() => {
-      // expected — extension reloads before response arrives
+      // expected - extension reloads before response arrives
     });
   };
 

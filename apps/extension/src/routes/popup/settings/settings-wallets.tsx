@@ -116,7 +116,7 @@ export const SettingsWallets = ({
   const [addSuccess, setAddSuccess] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
 
-  // hidden paste mode — activated by tapping info box 10 times
+  // hidden paste mode - activated by tapping info box 10 times
   const clickCountRef = useRef(0);
   const clickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manualInputRef = useRef(false);
@@ -456,7 +456,7 @@ export const SettingsWallets = ({
 
           <div className='border-t border-border-soft pt-4'>
             <p className='text-label text-fg-muted mb-2'>add wallet</p>
-            {/* zigner info box — tap 10x for dev paste mode */}
+            {/* zigner info box - tap 10x for dev paste mode */}
             <div
               className='rounded-lg border border-border-soft bg-elev-1 p-3 mb-3'
               onClick={handleSecretTap}
@@ -662,8 +662,7 @@ const VaultRow = ({
   const ref = useRef<HTMLInputElement>(null);
   const hasZcash = networks.includes('zcash');
 
-  // zcash birthday, held as a height because that is what sync consumes —
-  // but entered as a date, which is the only form a person actually knows.
+  // zcash birthday, held as a height because that is what sync consumes - // but entered as a date, which is the only form a person actually knows.
   const [birthday, setBirthday] = useState<string>('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   // When a birthday is already SET, the full picker is just clutter on every
@@ -834,7 +833,7 @@ const VaultRow = ({
 
           Asked as a date, not a height. "when did you first use this wallet"
           is something a person knows; block 2,910,104 is not, and a bare
-          number gives no clue which chain it belongs to — a seed vault
+          number gives no clue which chain it belongs to - a seed vault
           derives keys for penumbra too, so both badges sit right above this
           field. The height still exists (sync consumes it) but it lives
           under `advanced`, alongside the date it resolves to. */}
@@ -950,7 +949,7 @@ const VaultRow = ({
         <div className='flex items-center gap-2 mt-2'>
           {multisigWallet.multisig?.hidden ? (
             // app-managed (poker) table: the multisig manager hides it, so a plain "manage" link
-            // dead-ends. Offer recovery — unhide it into a normal, selectable, co-signable multisig.
+            // dead-ends. Offer recovery - unhide it into a normal, selectable, co-signable multisig.
             <button
               onClick={() => void setMultisigHidden(vault.id, false)}
               className='inline-flex items-center gap-1 text-label text-zigner-gold hover:underline'

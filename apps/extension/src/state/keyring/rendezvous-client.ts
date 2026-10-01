@@ -1,5 +1,5 @@
 /**
- * rendezvous-client — human room codes in front of frostd sessions.
+ * rendezvous-client - human room codes in front of frostd sessions.
  *
  * zidecar's frostd listener also serves /rendezvous/*: a discovery room,
  * addressed by SHA-256 of a human code, where participants drop their relay
@@ -9,7 +9,7 @@
  * approval puts it in the frostd session, and frostd admits nobody else.
  *
  * The code is a number + two bip39 words (~32 bits) against the old three-of-256
- * (~24 bits), and the server never sees it — only its hash.
+ * (~24 bits), and the server never sees it - only its hash.
  *
  * Stock frostd relays don't have these routes; `hasRendezvous` probes so the
  * UI can fall back to the manual key-exchange + session-id flow.
@@ -112,7 +112,7 @@ export async function pollRoom(relayUrl: string, roomId: string): Promise<RoomVi
 /**
  * Signing-flow convenience: open a fresh room, announce `sessionId` into it,
  * and return the code to show the co-signers. Null when the relay has no
- * rendezvous or the offer fails for any reason — the caller falls back to
+ * rendezvous or the offer fails for any reason - the caller falls back to
  * showing the uuid, which always works.
  *
  * No key collection here: a signing group's relay keys are already on file,

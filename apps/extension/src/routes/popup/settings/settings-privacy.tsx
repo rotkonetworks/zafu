@@ -46,7 +46,7 @@ interface PrivacyRow {
   label: string;
   onLabel: string;
   offLabel: string;
-  /** filter function — return true if this row is visible for the given network */
+  /** filter function - return true if this row is visible for the given network */
   visible?: (network: NetworkType) => boolean;
 }
 

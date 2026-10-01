@@ -5,7 +5,7 @@
 
 import type { NetworkType } from '../state/keyring';
 
-/** orchard pool activation height — no zcash wallet should scan before this */
+/** orchard pool activation height - no zcash wallet should scan before this */
 export const ZCASH_ORCHARD_ACTIVATION = 1_687_104;
 
 export interface NetworkConfig {
@@ -13,7 +13,7 @@ export interface NetworkConfig {
   color: string;
   /** tailwind class for focus border on inputs */
   focusColor: string;
-  /** transparent chains have fully public ledgers — all balances and transactions visible */
+  /** transparent chains have fully public ledgers - all balances and transactions visible */
   transparent: boolean;
   /** whether this network is available for selection in the UI */
   launched: boolean;
@@ -340,7 +340,7 @@ export const isInNetworkGroup = (network: NetworkType, root: NetworkType): boole
 /** check if network is available for selection */
 export const isLaunched = (network: NetworkType): boolean => getNetwork(network).launched;
 
-/** only launched networks — used for network selector UI */
+/** only launched networks - used for network selector UI */
 export const LAUNCHED_NETWORKS = (Object.keys(NETWORKS) as NetworkType[]).filter(
   id => NETWORKS[id].launched,
 );

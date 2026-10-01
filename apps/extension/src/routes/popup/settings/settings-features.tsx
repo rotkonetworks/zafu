@@ -11,9 +11,9 @@ import type { CapabilityMode, CapabilityModeMap } from '../../../utils/capabilit
  * Per-capability participation switch, the settings half of the opt-in asked
  * in the approval popup. Three states, one row each:
  *
- *   ask  (unset)    — first site that asks gets the one-time zafu prompt
- *   on   (enabled)  — sites go straight to their own per-origin consent
- *   off  (disabled) — the wallet refuses, for every site, without asking
+ *   ask  (unset) - first site that asks gets the one-time zafu prompt
+ *   on   (enabled) - sites go straight to their own per-origin consent
+ *   off  (disabled) - the wallet refuses, for every site, without asking
  *
  * `off` is deliberately not a per-origin denial: a per-origin denial is a
  * decision about one site and is reversible from that site's row; this switch

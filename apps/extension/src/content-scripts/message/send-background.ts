@@ -54,7 +54,7 @@ export function listenBackground<R = never>(
     respond: (response: R) => void,
   ): boolean => {
     // Filter to messages from our own extension. chrome.runtime.id is the
-    // canonical runtime value — works for both unpacked and Web Store
+    // canonical runtime value - works for both unpacked and Web Store
     // installs without a build-time constant.
     if (sender.id !== chrome.runtime.id) {
       return false;

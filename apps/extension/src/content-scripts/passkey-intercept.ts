@@ -1,5 +1,5 @@
 /**
- * passkey intercept — wraps navigator.credentials to offer zafu as authenticator.
+ * passkey intercept - wraps navigator.credentials to offer zafu as authenticator.
  *
  * injected at document_start (before page JS can cache the original API).
  * this script runs in the MAIN world, where there is NO chrome.runtime (only
@@ -166,7 +166,7 @@ navigator.credentials.create = async function (
       if (isWalletFailure(response)) {
         throw new WalletFailedError(response?.error);
       }
-      // zafu declined or was unreachable — fall back to the platform authenticator
+      // zafu declined or was unreachable - fall back to the platform authenticator
       return originalCreate(options);
     }
 
@@ -240,7 +240,7 @@ navigator.credentials.get = async function (
   const challenge = bufToHex(pk.challenge);
   const prfSalts = extractPrfSalts(pk.extensions);
 
-  // build clientDataJSON first — the service worker needs its hash to sign
+  // build clientDataJSON first - the service worker needs its hash to sign
   const clientDataJSON = new TextEncoder().encode(
     JSON.stringify({
       type: 'webauthn.get',
@@ -252,7 +252,7 @@ navigator.credentials.get = async function (
       crossOrigin: false,
     }),
   );
-  // SHA-256 hash of clientDataJSON — this is what gets signed
+  // SHA-256 hash of clientDataJSON - this is what gets signed
   const clientDataHash = bufToHex(
     new Uint8Array(await crypto.subtle.digest('SHA-256', clientDataJSON)),
   );

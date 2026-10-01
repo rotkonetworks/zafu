@@ -1,5 +1,5 @@
 /**
- * deterministic password generator — derive passwords from seed + site + username.
+ * deterministic password generator - derive passwords from seed + site + username.
  * nothing stored. same seed always produces the same password.
  */
 

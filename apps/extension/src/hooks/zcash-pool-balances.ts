@@ -124,7 +124,7 @@ export function usePoolNotes(walletId: string | undefined, syncTick?: number): P
   );
 }
 
-/** No sends in flight — the value before the first fetch resolves. */
+/** No sends in flight - the value before the first fetch resolves. */
 const EMPTY_PENDING: HistoryEntry[] = [];
 
 /**
@@ -134,7 +134,7 @@ const EMPTY_PENDING: HistoryEntry[] = [];
  *
  * This exists so the balance can explain itself. `markNotesSpentLocally`
  * already deducts an in-flight send the instant we broadcast, so the figure
- * drops immediately — correct, but unexplained, and an unexplained drop is
+ * drops immediately - correct, but unexplained, and an unexplained drop is
  * indistinguishable from money going missing.
  */
 export function usePendingSends(walletId: string | undefined, syncTick?: number): HistoryEntry[] {

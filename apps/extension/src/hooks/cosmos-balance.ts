@@ -303,7 +303,7 @@ function getZignerCosmosAddress(
   return null;
 }
 
-/** find a keyInfo with cosmos capability — effective first, then any wallet that has cosmos addresses */
+/** find a keyInfo with cosmos capability - effective first, then any wallet that has cosmos addresses */
 function findCosmosCapableKey(
   keyInfos: { id: string; type: string; insensitive: Record<string, unknown> }[],
   effective: { id: string; type: string; insensitive: Record<string, unknown> } | undefined,
@@ -404,7 +404,7 @@ export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
       };
     },
     enabled: burnerEnabled && !!cosmosKey,
-    structuralSharing: false, // CosmosAsset.amount is bigint — not JSON-serializable
+    structuralSharing: false, // CosmosAsset.amount is bigint - not JSON-serializable
     staleTime: 30_000,
     refetchInterval: 60_000,
   });

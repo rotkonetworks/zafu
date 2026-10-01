@@ -1,5 +1,5 @@
 /**
- * recipient picker — search-first dropdown
+ * recipient picker - search-first dropdown
  *
  * single input field. on focus, shows categorized dropdown:
  * my wallets → recent → contacts. typing filters all categories.

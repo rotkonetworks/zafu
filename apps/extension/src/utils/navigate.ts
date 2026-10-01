@@ -70,8 +70,7 @@ export type PopupNav = (to: PopupPath | number, options?: NavigateOptions) => vo
  *
  * Hardcoded back targets teleport: drawer → networks → back used to land
  * on /settings (never visited), identity → contacts → back landed on home.
- * History-back fixes the common case; `fallback` covers direct entry —
- * deep links (`?network=zcash`), dedicated approval windows, and popup
+ * History-back fixes the common case; `fallback` covers direct entry - * deep links (`?network=zcash`), dedicated approval windows, and popup
  * re-opens that start the session directly on a sub-screen and so have
  * no in-app history (React Router marks that first entry key 'default').
  */

@@ -162,7 +162,7 @@ describe('FrostdRelayClient', () => {
   });
 
   /// A message we cannot open must not be handed upward as if it were
-  /// plaintext — that would reintroduce exactly what this replaces.
+  /// plaintext - that would reintroduce exactly what this replaces.
   it('drops undecryptable messages instead of surfacing them raw', async () => {
     const cipher = fakeCipher();
     cipher.decrypt = vi.fn(() => {

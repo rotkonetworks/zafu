@@ -130,5 +130,5 @@ export const useStore = createWithEqualityFn<AllSlices>()(
   shallow,
 );
 
-/** store type for use in test mocks — includes immer middleware signature */
+/** store type for use in test mocks - includes immer middleware signature */
 export type TestStore = typeof useStore;

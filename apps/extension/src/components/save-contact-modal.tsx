@@ -1,5 +1,5 @@
 /**
- * save-to-contacts modal — shown after sending to a new address.
+ * save-to-contacts modal - shown after sending to a new address.
  *
  * offers two options:
  * 1. add address to an existing contact (dropdown)

@@ -63,7 +63,7 @@ export function SendPage() {
   const locationState = location.state as SendLocationState | undefined;
   const searchParams = new URLSearchParams(location.search);
   // `[primary]` expands to the user's oldest non-multisig Zcash wallet (the original onboarding
-  // wallet — new wallets are prepended, so the oldest sits at the END of the array). `[self]`
+  // wallet - new wallets are prepended, so the oldest sits at the END of the array). `[self]`
   // is kept as an alias for backward compatibility. Letting callers reference the address by
   // token saves a "what's my address" round-trip; the user can still edit the memo before send.
   const allZcashWallets = useStore(s => s.wallets.zcashWallets);

@@ -80,7 +80,7 @@ export const startWalletServices = async (
 
   console.log('[sync] starting wallet services...');
 
-  // Try to load wallet — may be encrypted and locked.
+  // Try to load wallet - may be encrypted and locked.
   // If locked, wait for unlock (session key appears in storage).
   let wallet = await getWalletFromStorage();
   if (!wallet) {

@@ -24,7 +24,7 @@ export const usePasswordGate = () => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
 
   // multisig vaults are AES-encrypted with the user's password, same as
-  // mnemonic vaults — only zigner-zafu vaults need the air-gapped QR flow.
+  // mnemonic vaults - only zigner-zafu vaults need the air-gapped QR flow.
   const walletType = selectedKeyInfo?.type === 'zigner-zafu' ? 'zigner' : 'mnemonic';
 
   const requestAuth = useCallback((): Promise<boolean> => {

@@ -38,7 +38,7 @@ export interface PenumbraEndpointPreset {
 /**
  * Hardcoded fallback presets. Order = visual order (within region).
  *
- * Region tags for the community RPCs are best-effort — the operator names
+ * Region tags for the community RPCs are best-effort - the operator names
  * don't cleanly imply a geography (silentvalidator, ghostinnet, crouton,
  * radiantcommons all serve global traffic from single POPs). They ride
  * under `community` so the region bucket in the picker is the honest one.
@@ -145,7 +145,7 @@ function slugify(name: string): string {
  *     synchronously; the caller can later re-hydrate via `remote.globals()`
  *     if a fresher list matters (it doesn't for a first render).
  *
- * Never throws — a broken registry falls back to the hardcoded list.
+ * Never throws - a broken registry falls back to the hardcoded list.
  */
 export function getRegistryEndpoints(): readonly PenumbraEndpointPreset[] {
   try {

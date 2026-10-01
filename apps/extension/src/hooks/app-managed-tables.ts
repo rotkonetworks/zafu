@@ -7,7 +7,7 @@
  * Money-safety: fail-closed. We fetch each hidden table's cheap cached balance (NO network sync) and
  * mark synced:false unless getMultisigStatus can PROVE sync-to-tip for that vaultId. Since
  * workerSyncHeight (hooks/zcash-sync.ts) is active-wallet-only and there is no per-vault sync RPC,
- * hidden tables resolve to synced:false — every one is treated as possibly-funded downstream.
+ * hidden tables resolve to synced:false - every one is treated as possibly-funded downstream.
  */
 
 import { useEffect, useState } from 'react';
@@ -37,7 +37,7 @@ export function useAppManagedTables(): TableView[] {
         const rowId = w.id;
         // NO workerSyncHeight/chainTip passed: those prove sync for the ACTIVE wallet only, and a
         // hidden table is by definition not it. Omitting them makes getMultisigStatus fail-closed
-        // to synced:false — exactly what the policy module wants for an unprovable table.
+        // to synced:false - exactly what the policy module wants for an unprovable table.
         useStore
           .getState()
           .keyRing.getMultisigStatus(w.vaultId)

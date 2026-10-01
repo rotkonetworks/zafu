@@ -94,7 +94,7 @@ describe('withDedup', () => {
     };
     const wrapped = withDedup()(inner);
     const got: MempoolSnapshot[] = [];
-    // Two separate drains — mimic two poll cycles. Same snapshot both
+    // Two separate drains - mimic two poll cycles. Same snapshot both
     // times → dedup should suppress the second.
     for await (const s of wrapped('w', ctx(ctrl.signal))) got.push(s);
     for await (const s of wrapped('w', ctx(ctrl.signal))) got.push(s);

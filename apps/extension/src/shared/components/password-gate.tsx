@@ -85,7 +85,7 @@ export const PasswordGateModal = ({
 
   // Portaled + z-[70]: the auth gate is by definition the topmost surface.
   // Rendered inline it was trapped below body-portaled overlays (e.g. the
-  // ironwood migrate takeover at z-60) — requestAuth() opened an invisible
+  // ironwood migrate takeover at z-60) - requestAuth() opened an invisible
   // modal and the confirm click appeared to do nothing.
   return (
     <OverlayPortal>

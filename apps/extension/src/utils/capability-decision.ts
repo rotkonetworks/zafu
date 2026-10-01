@@ -7,9 +7,9 @@ import type { Capability } from '@repo/storage-chrome/capabilities';
  *
  * Two orthogonal questions, deliberately separated:
  *
- *   1. Does zafu participate in this capability at all? (`mode`) — a global,
+ *   1. Does zafu participate in this capability at all? (`mode`) - a global,
  *      per-capability switch the user sets once, first time a site asks.
- *   2. Has *this site* been granted the capability? (`grantedToOrigin`) — the
+ *   2. Has *this site* been granted the capability? (`grantedToOrigin`) - the
  *      existing per-origin consent, unchanged.
  *
  * `unset` is the state of a fresh install and is not the same as `disabled`:

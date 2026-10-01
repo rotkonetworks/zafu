@@ -1,5 +1,5 @@
 /**
- * crypto-ops — async crypto helpers
+ * crypto-ops - async crypto helpers
  *
  * each function does exactly one thing. no storage writes, no state updates.
  * takes a session handle (to get the password key) + inputs, returns outputs.
@@ -103,7 +103,7 @@ export const reencryptSeedBox = async (
   return (await newKey.seal(plain)).toJson();
 };
 
-/** decrypt multisig secrets — tries vault first, then legacy zcash wallet record */
+/** decrypt multisig secrets - tries vault first, then legacy zcash wallet record */
 export const decryptMultisigSecrets = async (
   ctx: CryptoCtx,
   keyPackage: BoxJson | string,
@@ -132,7 +132,7 @@ export const encryptFrostSecrets = async (
       encEphemeralSeed: (await key.seal(ephemeralSeed)).toJson(),
     };
   } catch {
-    // no session key — store as raw strings
+    // no session key - store as raw strings
     return { encKeyPackage: keyPackage, encEphemeralSeed: ephemeralSeed };
   }
 };

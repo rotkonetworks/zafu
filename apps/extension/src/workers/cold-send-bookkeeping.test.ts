@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
  * an offscreen prover at import time, so its broadcast handlers cannot be
  * exercised in a unit test. What CAN be asserted cheaply is the property that
  * was broken: every handler that broadcasts a cold-signed transaction does the
- * same bookkeeping the hot paths do — mark the inputs spent, record the send.
+ * same bookkeeping the hot paths do - mark the inputs spent, record the send.
  *
  * A wallet that skips it keeps counting spent notes as spendable, re-offers
  * them to the next send, and loses the recipient / memo / fee for good.

@@ -1,5 +1,5 @@
 /**
- * inbox — conversation-oriented view of Zcash memos
+ * inbox - conversation-oriented view of Zcash memos
  *
  * Design principles (à la hdevalence):
  *
@@ -10,14 +10,14 @@
  * 2. Notes ARE messages. A Zcash note is an authenticated encrypted
  *    datagram. The spend authority authenticates the sender.
  *    The diversified address identifies the recipient. We don't
- *    build messaging on top of Zcash — Zcash IS the messaging.
+ *    build messaging on top of Zcash - Zcash IS the messaging.
  *
  * 3. Fragment reassembly is transparent. The UI shows logical
  *    messages, not individual note memos. A 2000-char message
  *    that spans 5 notes appears as one bubble.
  *
  * 4. FROST coordination messages appear inline. DKG rounds,
- *    signing requests, commitments — all visible in the same
+ *    signing requests, commitments - all visible in the same
  *    conversation view with actionable UI.
  */
 
@@ -39,7 +39,7 @@ import {
 
 /** a single logical message (may span multiple notes) */
 export interface InboxMessage {
-  /** unique ID — messageId hex for fragmented, or txid for standalone */
+  /** unique ID - messageId hex for fragmented, or txid for standalone */
   id: string;
   /** memo type */
   type: MemoType;
@@ -62,8 +62,7 @@ export interface InboxMessage {
   /**
    * Raw return/sender address declared by the note that delivered this
    * message (`reply:` line, cf. zcash-memos). A memo body cannot carry a
-   * signature, so this is the only thing an incoming claim can be bound to —
-   * absent when the delivering note declared none.
+   * signature, so this is the only thing an incoming claim can be bound to - * absent when the delivering note declared none.
    */
   senderAddress?: string;
   /**
@@ -77,7 +76,7 @@ export interface InboxMessage {
 
 /** a conversation = all messages to/from one diversified address */
 export interface Conversation {
-  /** diversifier index — the conversation endpoint */
+  /** diversifier index - the conversation endpoint */
   diversifierIndex: number;
   /** optional label set by user */
   label?: string;
@@ -95,7 +94,7 @@ export interface InboxSlice {
   /** set of message IDs that have been read */
   readIds: Set<string>;
 
-  /** ingest raw memos from sync — call after each memo decrypt batch */
+  /** ingest raw memos from sync - call after each memo decrypt batch */
   ingestMemos: (memos: RawMemoNote[]) => void;
   /** mark a conversation as read */
   markRead: (diversifierIndex: number) => void;
@@ -173,7 +172,7 @@ export const createInboxSlice = (): SliceCreator<InboxSlice> => (set, get) => ({
           },
         });
       } else {
-        // fragmented — buffer until complete
+        // fragmented - buffer until complete
         const msgIdHex = bytesToHex(parsed.messageId);
         let buffer = fragmentBuffer.get(msgIdHex);
         if (!buffer) {

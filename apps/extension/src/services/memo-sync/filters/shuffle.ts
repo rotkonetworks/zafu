@@ -1,5 +1,5 @@
 /**
- * withShuffle — randomize bucket fetch order.
+ * withShuffle - randomize bucket fetch order.
  *
  * if buckets were fetched in numerically increasing order, an observer could
  * tell when a wallet started skipping or when its activity clusters lie. by

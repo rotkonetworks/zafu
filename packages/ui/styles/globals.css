@@ -4,7 +4,7 @@
 @layer base {
   :root {
     /* ==============================================================
-     * design system v2 — canonical tokens
+     * design system v2 - canonical tokens
      * source of truth · see packages/ui/docs/design-preview/*.html
      *
      * surfaces:     canvas → elev-1 → elev-2 → border-soft → border
@@ -29,7 +29,7 @@
     --fg-muted: #948a79;
     --fg-dim: #867d6e;
 
-    /* brand — gold (cold side) */
+    /* brand - gold (cold side) */
     --zigner-gold-dark: #b8860b;
     --zigner-gold: #f4b728;
     --zigner-gold-light: #fcd34d;
@@ -38,7 +38,7 @@
     --zigner-dark: #0a0a0a;
     --zigner-darker: #000000;
 
-    /* brand — hanko vermillion. Personality accent, never a button fill:
+    /* brand - hanko vermillion. Personality accent, never a button fill:
        the kicker tick, the sealed-receipt stamp, genuinely destructive acts. */
     --hanko-dark: #9e2f2c;
     --hanko: #c73e3a;
@@ -49,7 +49,7 @@
      * Only the Mark component (packages/ui/components/ui/mark) reads it. */
     --mark-glyph: #f2ecdf;
 
-    /* brand — blue (hot side) */
+    /* brand - blue (hot side) */
     --zafu-blue-dark: #1d4ed8;
     --zafu-blue: #3b82f6;
     --zafu-blue-light: #60a5fa;
@@ -71,14 +71,14 @@
     --radius-lg: 10px;
     --radius-pill: 9999px;
 
-    /* typography stack — monospace is the only stack. --zafu-font is the
+    /* typography stack - monospace is the only stack. --zafu-font is the
        runtime choice (settings → appearance overrides it via data-font);
        --font-mono stays as a compat alias for anything referencing it. */
     --zafu-font: 'Iosevka Term', 'Courier New', Courier, monospace;
     --font-mono: var(--zafu-font);
 
     /* ==============================================================
-     * shadcn / tailwind HSL layer — aliases onto the v2 tokens above.
+     * shadcn / tailwind HSL layer - aliases onto the v2 tokens above.
      * Kept because existing components use hsl(var(--foreground)).
      * Values chosen to match the hex tokens precisely.
      * ============================================================== */
@@ -155,11 +155,11 @@
   }
 
   /* ==============================================================
-   * appearance themes — the default (:root above) is 'sumi': warm ink
+   * appearance themes - the default (:root above) is 'sumi': warm ink
    * on woven cloth. washi below is its light sibling; toggled from
    * settings (zafuTheme in local storage, applied in entry/*-root.tsx).
    * ============================================================== */
-  /* washi — the light sibling: sumi ink on warm unbleached paper.
+  /* washi - the light sibling: sumi ink on warm unbleached paper.
    * Same material logic inverted; gold darkens for AA contrast on paper,
    * hanko vermillion stays (a red seal on paper is the real thing). */
   :root[data-theme='washi'] {
@@ -180,7 +180,7 @@
     --hanko-light: #c14a3f;
     /* gold on paper: brand hue held, lightness dropped for contrast */
     --zigner-gold: #8a6508;
-    /* same treatment for the blue sibling — #3b82f6 only clears ~3.7:1 on
+    /* same treatment for the blue sibling - #3b82f6 only clears ~3.7:1 on
        unbleached paper, which is under AA for small text like badges. */
     --zafu-blue-dark: #1e3a8a;
     --zafu-blue: #1d4ed8;
@@ -325,7 +325,7 @@
 
   body {
     background-color: hsl(var(--background));
-    /* woven-cloth grain — a zafu is fabric. Two crossed 1px rasters at ~4.5%
+    /* woven-cloth grain - a zafu is fabric. Two crossed 1px rasters at ~4.5%
        opacity over the sumi canvas: invisible at a glance, felt as material.
        Inline data-free CSS, zero requests, zero paint cost worth noting. */
     background-image:

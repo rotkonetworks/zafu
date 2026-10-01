@@ -1,5 +1,5 @@
 /**
- * withDedup — drop a snapshot if its entry-hash set is identical to the
+ * withDedup - drop a snapshot if its entry-hash set is identical to the
  * previous one.
  *
  * the mempool changes much slower than the poll interval. without dedup

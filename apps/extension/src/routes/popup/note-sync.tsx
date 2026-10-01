@@ -1,5 +1,5 @@
 /**
- * note sync — transfer spendable notes to zigner via animated QR
+ * note sync - transfer spendable notes to zigner via animated QR
  *
  * builds merkle witnesses, encodes as CBOR (ur:zcash-notes),
  * and displays as UR-encoded animated QR for the air-gapped

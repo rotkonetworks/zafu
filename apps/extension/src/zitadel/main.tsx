@@ -1,7 +1,7 @@
 // zitadel: irc-style public channels + e2ee DMs, served locally from
 // the zafu extension. plain DOM, zero framework deps.
 //
-// rooms are PUBLIC — messages are cleartext to the relay and to anyone
+// rooms are PUBLIC - messages are cleartext to the relay and to anyone
 // it forwards them to. nick claims are signed under zid-auth-v1
 // (ed25519 over canonical bytes); peers verify per-claim. there is no
 // room-level encryption.
@@ -1327,7 +1327,7 @@ function boot() {
         .join('')}
       <div class="me-chip" style="padding:8px 12px;margin-top:auto;border-top:1px solid ${C.border};cursor:pointer;transition:background 0.1s;display:flex;align-items:center;gap:9px;" title="${zidPrivkey ? 'click for /whois (your identity)' : zidPubkey ? 'click to /login' : 'no zafu identity - install zafu first'}">
         ${
-          /* hanko seal — a zid renders as its own personal stamp (nick
+          /* hanko seal - a zid renders as its own personal stamp (nick
              initial, vermillion, pressed slightly askew like a real seal).
              Greyed out until there's a signing identity behind it. */
           `<div style="width:26px;height:26px;flex:none;border:1.5px solid ${zidPrivkey ? '#c73e3a' : C.muted};border-radius:5px;color:${zidPrivkey ? '#c73e3a' : C.muted};display:flex;align-items:center;justify-content:center;font-size:13px;transform:rotate(-5deg);" title="${zidPrivkey ? 'your seal' : 'unsigned'}">${esc(([...nick.trim()][0] ?? '?').toUpperCase())}</div>`

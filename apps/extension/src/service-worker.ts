@@ -326,7 +326,7 @@ const initHandler = async () => {
   currentSyncAbort = new AbortController();
   walletServicesResult = startWalletServices(currentSyncAbort.signal);
   walletServices = walletServicesResult.then(r => r.services);
-  // cache decrypted wallet as soon as it's available — unblocks RPC context getters
+  // cache decrypted wallet as soon as it's available - unblocks RPC context getters
   void walletServicesResult.then(({ wallet, reason }) => setCachedWallet(wallet, reason));
   const rpcImpls = await getRpcImpls();
 
@@ -369,7 +369,7 @@ const initHandler = async () => {
   return handler;
 };
 
-// register message listeners IMMEDIATELY — before wallet services init.
+// register message listeners IMMEDIATELY - before wallet services init.
 // wallet services now wait for unlock (wallets encrypted at rest), but
 // content scripts and dapps need the connect/disconnect/load listeners
 // to be ready as soon as the service worker starts.
@@ -380,8 +380,8 @@ chrome.runtime.onMessage.addListener(internalRevokeListener);
 chrome.runtime.onMessage.addListener(internalZidListener);
 chrome.runtime.onMessage.addListener(zcashLinkListener);
 
-// CRSessionManager must be initialized NOW — before wallet services are
-// ready — so content scripts can establish session ports right after the
+// CRSessionManager must be initialized NOW - before wallet services are
+// ready - so content scripts can establish session ports right after the
 // approval popup. The deferred handler queues RPC requests until the
 // real handler resolves.
 type HandlerFn = (request: never, signal?: AbortSignal, timeoutMs?: number) => Promise<never>;
@@ -395,7 +395,7 @@ const deferredHandler: HandlerFn = (request, signal, timeoutMs) =>
 
 CRSessionManager.init(chrome.runtime.id, deferredHandler as never, validateSessionPort);
 
-// start services in background — resolves handlerReady when done
+// start services in background - resolves handlerReady when done
 void backOff(() => initHandler(), {
   delayFirstAttempt: false,
   startingDelay: 5_000,

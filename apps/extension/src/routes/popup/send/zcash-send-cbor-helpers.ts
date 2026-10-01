@@ -11,7 +11,7 @@
 /**
  * Strip the CBOR `{1: bytes}` envelope wrapping a `zcash-pczt` UR payload.
  * Inverse of the wasm-side `cborWrapPczt`. Mirrors what zigner's signer does
- * internally — the envelope is a fixed shape so we can parse positionally
+ * internally - the envelope is a fixed shape so we can parse positionally
  * without pulling in a generic CBOR decoder.
  */
 export function unwrapCborSinglePczt(cbor: Uint8Array): Uint8Array {
@@ -32,8 +32,7 @@ export function unwrapCborSinglePczt(cbor: Uint8Array): Uint8Array {
   // JS bitwise ops are signed 32-bit, so a 0x5a length with the high bit
   // set (>= 2 GiB) would go negative, slip past the `len > remaining`
   // guard, and yield a silently-truncated PCZT. Multiplication keeps it a
-  // positive JS number. A length that large is bogus for a PCZT anyway —
-  // the size sanity check below rejects it — but we must not let it become
+  // positive JS number. A length that large is bogus for a PCZT anyway - // the size sanity check below rejects it - but we must not let it become
   // negative first.
   const readLen = (nBytes: number): number => {
     if (pos + nBytes > cbor.length) {
@@ -60,7 +59,7 @@ export function unwrapCborSinglePczt(cbor: Uint8Array): Uint8Array {
   }
 
   // Canonical single-PCZT envelope: the byte string must consume the buffer
-  // exactly. Trailing bytes mean a malformed or smuggled payload — reject
+  // exactly. Trailing bytes mean a malformed or smuggled payload - reject
   // rather than silently ignore them.
   if (pos + len !== cbor.length) {
     throw new Error(
@@ -108,7 +107,7 @@ export const ZIGNER_PRELUDE_PCZT_SINGLE = Object.freeze([0x53, 0x04, 0x03] as co
 /**
  * Compact single-PCZT request prelude: [0x53][zcash 0x04][tx_type 0x05].
  *
- * Same body as 0x03 — the difference is that the PCZT has been compact-redacted
+ * Same body as 0x03 - the difference is that the PCZT has been compact-redacted
  * (see `redact_pczt_compact`) and that the device answers with a
  * signatures-only response (0x07) instead of a whole signed PCZT.
  */

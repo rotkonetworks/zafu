@@ -67,7 +67,7 @@ export const useFinalizeOnboarding = () => {
             };
             await newZignerZafuKey(zignerData, walletLabel || 'zigner penumbra');
           } else if (zcashWalletImport) {
-            // zcash zigner import — use ZID as canonical deviceId for dedup
+            // zcash zigner import - use ZID as canonical deviceId for dedup
             const zignerData: ZignerZafuImport = {
               viewingKey: zcashWalletImport.orchardFvk
                 ? btoa(String.fromCharCode(...zcashWalletImport.orchardFvk))
