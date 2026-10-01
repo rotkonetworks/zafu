@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { cn } from '@repo/ui/lib/utils';
-import { HankoSeal } from '@repo/ui/components/editorial';
+import { Mark as StampMark } from '@repo/ui/components/ui/mark';
 import { SEND_STAGES, sendStage, stageExplain, stageMeta, type SendProgress } from './send-stage';
 
 /** board address form: head and tail that identify it, u1v9ga…qrdva */
@@ -74,11 +74,7 @@ export const Sealed = ({ children }: { children: ReactNode }) => (
     >
       <path d={ENSO} />
     </svg>
-    <HankoSeal
-      glyph='済'
-      size='lg'
-      className='mb-0.5 h-[84px] w-[84px] border-[3px] font-display text-[44px]'
-    />
+    <StampMark variant='stamp' glyph='済' size={84} className='mb-0.5' />
     <span className='font-display text-[26px] text-fg-high'>sent</span>
     {children}
   </Main>
