@@ -106,9 +106,9 @@ export enum PopupPath {
   // above this line still resolves to its existing screen.
   SETTINGS_SECURITY = '/settings/security',
   SETTINGS_PRIVACY_HOME = '/settings/privacy/home',
-  SETTINGS_NETWORKS_HOME = '/settings/networks/home',
-  SETTINGS_NETWORKS_ALL = '/settings/networks/all',
   SETTINGS_ZCASH_NETWORK = '/settings/networks/zcash',
+  /** `?sheet=node` opens the node picker, `?chain=<CosmosChainId>` that chain's sheet */
+  SETTINGS_PENUMBRA_NETWORK = '/settings/networks/penumbra',
   SETTINGS_DEVICES = '/settings/devices',
   SETTINGS_DEVICES_ALL = '/settings/devices/all',
   SETTINGS_REMOVE_WALLET = '/settings/remove-wallet',

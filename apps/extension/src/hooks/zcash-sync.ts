@@ -37,16 +37,12 @@ export interface ZcashSyncState {
   failure: SyncFailure | null;
 }
 
-export function useZcashSyncStatus(): ZcashSyncState {
-  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || DEFAULT_ZIDECAR_URL;
-  const backend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
-  // Privacy: never poll the zcash zidecar when zcash is not an enabled network.
-  // Otherwise a penumbra-only wallet still hammered zcash.rotko.net for GetTip /
-  // GetSyncStatus on an interval - a network connection the user never opted in
-  // to (reported: "why do we connect zcash if only penumbra is selected").
-  // Full network isolation: only poll the zidecar when ACTIVELY on zcash, not
-  // merely when zcash is enabled - a wallet viewing penumbra touches no zcash RPC.
-  const zcashActive = useStore(selectActiveNetwork) === 'zcash';
+/**
+ * what the local worker reports - scan height, chain height, last failure -
+ * from its events and the last stored height. asks no node, so a screen that
+ * only shows local progress contacts nothing.
+ */
+export function useZcashWorkerSync() {
   // the worker store of the active pocket (the bare vault id for account 0)
   const activeWalletId = useStore(activeZcashStoreId);
   const [workerSyncHeight, setWorkerSyncHeight] = useState(0);
@@ -133,6 +129,21 @@ export function useZcashSyncStatus(): ZcashSyncState {
       }
     });
   }, [activeWalletId]);
+
+  return { workerSyncHeight, workerChainHeight, workerError, workerFailure };
+}
+
+export function useZcashSyncStatus(): ZcashSyncState {
+  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || DEFAULT_ZIDECAR_URL;
+  const backend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
+  // Privacy: never poll the zcash zidecar when zcash is not an enabled network.
+  // Otherwise a penumbra-only wallet still hammered zcash.rotko.net for GetTip /
+  // GetSyncStatus on an interval - a network connection the user never opted in
+  // to (reported: "why do we connect zcash if only penumbra is selected").
+  // Full network isolation: only poll the zidecar when ACTIVELY on zcash, not
+  // merely when zcash is enabled - a wallet viewing penumbra touches no zcash RPC.
+  const zcashActive = useStore(selectActiveNetwork) === 'zcash';
+  const { workerSyncHeight, workerChainHeight, workerError, workerFailure } = useZcashWorkerSync();
 
   const client = useCallback(
     (): ZcashClient =>

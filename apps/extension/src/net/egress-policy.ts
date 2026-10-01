@@ -198,11 +198,11 @@ export const DESTINATIONS: readonly DestinationSpec[] = [
   },
   {
     id: 'zcash-servers',
-    // the endpoint picker's speed check, and the sync's tip cross-check
+    // the node sheet's speed test
     label: 'other zcash servers',
     purpose: 'indexer',
     gate: { kind: 'optional' },
-    urls: () => [...ZCASH_MAINNET_ENDPOINTS.map(p => p.url), 'https://hosh.zec.rocks'],
+    urls: () => ZCASH_MAINNET_ENDPOINTS.map(p => p.url),
   },
   {
     id: 'penumbra-servers',

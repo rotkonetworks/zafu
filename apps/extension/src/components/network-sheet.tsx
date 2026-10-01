@@ -103,7 +103,7 @@ export const NetworkSheet = ({
         type='button'
         onClick={() => {
           onOpenChange(false);
-          navigate(PopupPath.SETTINGS_NETWORKS_HOME);
+          navigate(PopupPath.SETTINGS_NETWORKS);
         }}
         className='mt-1.5 flex h-11 items-center border-t border-border-soft px-2 text-left text-label text-fg-muted'
       >
