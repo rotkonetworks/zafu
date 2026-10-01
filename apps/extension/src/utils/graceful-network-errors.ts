@@ -22,6 +22,7 @@
  */
 
 import { isContextInvalidated, noteContextInvalidated } from './reload-notice';
+import { isEgressBlockedCause } from '../net/egress';
 
 /** Extension reloaded/updated under a live page: notice once, stop the storm. */
 const handleContextLoss = (reason: unknown): boolean => {
@@ -53,21 +54,27 @@ const messageOf = (reason: unknown): string => {
 // genuine failure still surfaces loudly.
 const BENIGN_PATTERNS = [
   'Failed to fetch',
-  // an egress refusal (net/egress.ts): the policy said no, nothing broke
-  'zafu did not contact',
   'NetworkError',
   'Load failed',
   'Could not establish connection',
   'Receiving end does not exist',
   'penumbra network not active',
   'penumbra network not enabled',
-  'Sync stop wallet switch',
+  // the sync loop's own stop(reason) - any reason (wallet switch, network
+  // switch, endpoint change, shutdown): an intentional abort, not a failure
+  'Sync stop ',
   'BodyStreamBuffer was aborted',
   'Cannot enqueue a chunk into a closed readable stream',
 ];
 
 const isBenignBackgroundError = (reason: unknown): boolean => {
   if (reason instanceof DOMException && reason.name === 'AbortError') {
+    return true;
+  }
+  // an egress refusal (net/egress.ts): the policy said no, nothing broke.
+  // Walked rather than string-matched because a ConnectError wrapper hides
+  // the refusal's own message inside `.cause`.
+  if (isEgressBlockedCause(reason)) {
     return true;
   }
   const m = messageOf(reason);

@@ -34,7 +34,18 @@ export class Services implements ServicesInterface {
       throw e;
     });
 
-    void this.walletServicesPromise.then(({ blockProcessor }) => blockProcessor.sync());
+    // Every call here (one per dapp RPC that needs wallet services, not just
+    // the first) chains its own .then onto the shared, memoized sync()
+    // promise. Uncaught, each one surfaces its own "Uncaught (in promise)"
+    // once blockProcessor.stop(reason) aborts it - one per caller that ever
+    // asked for services during this processor's life, not just one.
+    void this.walletServicesPromise.then(({ blockProcessor }) =>
+      blockProcessor.sync().catch((e: unknown) => {
+        if (!String(e).includes('Sync stop')) {
+          console.error('[penumbra] block processor sync failed:', e);
+        }
+      }),
+    );
     return this.walletServicesPromise;
   }
 

@@ -61,6 +61,10 @@ export type { SentTxRecord } from './sent-tx-reconcile';
 
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
 
+// One line per real worker boot, for counting live instances (should be
+// exactly one, hosted in the offscreen document - see network-worker.ts).
+console.debug('[zcash-worker] module start');
+
 // This worker runs in the popup's console context, so any rejection that is
 // not awaited here surfaces there as "Uncaught (in promise)". First-party
 // call sites all catch, but wasm-bindgen glue (module/pthread fetches) and
@@ -1482,7 +1486,8 @@ const verifySyncProofs = async (
     console.log(`[zcash-worker] actions commitment verified`);
   } else if (!warnedNonGenesisActionsCommitment) {
     warnedNonGenesisActionsCommitment = true;
-    console.warn(
+    // expected for nearly every wallet (birthday/import start, not genesis) - not a warning
+    console.debug(
       '[zcash-worker] actions commitment check skipped: wallet started at a non-genesis ' +
         'height, so the fold is not genesis-anchored (verifying would always mismatch)',
     );

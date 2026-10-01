@@ -27,7 +27,7 @@ export const createConnectedSitesSlice =
 
     discardKnownSite: async (siteToDiscard: { origin: string }) => {
       await revokeOrigin(siteToDiscard.origin);
-      void chrome.runtime.sendMessage({ revoke: siteToDiscard.origin });
+      void chrome.runtime.sendMessage({ revoke: siteToDiscard.origin }).catch(() => {});
     },
 
     toggleCapability: async (origin: string, capability: Capability, enabled: boolean) => {

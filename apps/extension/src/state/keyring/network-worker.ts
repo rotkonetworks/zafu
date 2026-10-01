@@ -12,9 +12,43 @@
  * - own wasm instance
  * - own sync loop
  * - own indexeddb store
+ *
+ * The real worker lives in exactly one place: the offscreen document (the
+ * same long-lived host that already runs the parallel proving worker). Every
+ * other context - the popup, an approval window, settings - is a client that
+ * proxies spawn/call/terminate through chrome.runtime messages and mirrors
+ * the worker's events locally. Before this, every popup document created its
+ * own real Worker (and its own wasm + sync loop), because each popup open is
+ * a fresh page with a fresh copy of this module; closing the popup should
+ * drop that Worker, but a dapp approval window, settings, and the main popup
+ * can all be open at once, each syncing the same wallet independently. One
+ * host, many clients, keeps exactly one zcash/penumbra worker alive.
  */
 
 import type { NetworkType } from './types';
+
+/** true only inside the offscreen document - the one place that owns real Workers */
+const isOffscreenHost = (): boolean =>
+  typeof location !== 'undefined' && location.pathname.includes('offscreen');
+
+/** ensure the offscreen document exists, retrying while the service worker wakes up */
+const ensureOffscreenReady = async (): Promise<boolean> => {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    try {
+      const result = await chrome.runtime.sendMessage({ type: 'ZCASH_ENSURE_OFFSCREEN' });
+      if (result?.ok) {
+        return true;
+      }
+    } catch {
+      // service worker waking up - transient, retry
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  return false;
+};
+
+/** the subset of Worker a client proxy needs; a real Worker satisfies this too */
+type WorkerLike = Pick<Worker, 'postMessage' | 'terminate'>;
 
 /**
  * chrome.storage.local key holding the last scan height the zcash worker
@@ -115,6 +149,7 @@ export interface NetworkWorkerResponse {
     | 'prove-request'
     | 'frost-result'
     | 'voting-result'
+    | 'terminated'
     | 'error';
   id: string;
   network: NetworkType;
@@ -124,7 +159,7 @@ export interface NetworkWorkerResponse {
 }
 
 interface WorkerState {
-  worker: Worker;
+  worker: WorkerLike;
   ready: boolean;
   syncingWallets: Set<string>; // track which wallets are syncing
   pendingCallbacks: Map<
@@ -167,7 +202,276 @@ export const spawnNetworkWorker = async (network: NetworkType): Promise<void> =>
   }
 };
 
+/**
+ * Message types that put a transaction on the wire (build-only steps like
+ * 'send-tx-pczt' or 'shield-unsigned' are not in here - nothing has been
+ * broadcast yet). Tracked host-side only, by request id, so "stop sync on
+ * last UI close" (see stopAllSyncInHost) can wait for one of these to land
+ * before it stops anything - a send must never be cut off mid-flight.
+ */
+const SEND_SHAPED_TYPES: ReadonlySet<string> = new Set([
+  'send-tx',
+  'send-tx-multi',
+  'send-tx-complete',
+  'send-tx-pczt-complete',
+  'send-turnstile-migration-complete',
+  'shield-complete',
+  'complete-orchard-pczt',
+  'broadcast-raw-tx',
+  'finalize-delegation',
+  'cast-vote-hot-wire',
+]);
+
+/** host-only: request ids of sends currently on the wire */
+const inFlightSendIds = new Set<string>();
+
+/**
+ * Shared by the host (reacting to the real worker's onmessage) and every
+ * client (reacting to the host's rebroadcast). Same state shape, same
+ * events, so a client behaves exactly like a page that owned the worker
+ * directly - callers never need to know which side they are on.
+ */
+const handleWorkerMessage = (
+  network: NetworkType,
+  state: WorkerState,
+  msg: NetworkWorkerResponse,
+): void => {
+  if (msg.type === 'ready') {
+    state.ready = true;
+    console.log(`[network-worker] ${network} worker ready`);
+    return;
+  }
+
+  if (msg.type === 'terminated') {
+    // the host tore the real worker down (explicit terminate, or a rescan
+    // from another context) - drop the stale local entry so the next call
+    // respawns instead of calling into nothing.
+    workers.delete(network);
+    return;
+  }
+
+  if (msg.type === 'sync-progress') {
+    // emit progress event with walletId
+    window.dispatchEvent(
+      new CustomEvent('network-sync-progress', {
+        detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
+      }),
+    );
+    // Persist the height for the next popup open. Two places already READ
+    // chrome.storage.local.zcashSyncHeight - the sync hook's mount-time
+    // hydration and the post-error retry's resume point - and nothing has
+    // ever WRITTEN it, so both silently degraded: the bar started every
+    // session at 0% until the worker's first emit landed, and a retry
+    // resumed from `undefined` instead of where it left off.
+    //
+    // IDB remains the source of truth for what has actually been scanned;
+    // this is only a hint so the UI does not have to claim ignorance it
+    // does not have. Keyed PER WALLET: one shared key would let a
+    // fully-synced wallet's height hydrate the bar for a wallet that has
+    // scanned nothing, which is the same lie in the opposite direction.
+    if (network === 'zcash' && msg.walletId) {
+      const { currentHeight } = (msg.payload ?? {}) as { currentHeight?: number };
+      if (typeof currentHeight === 'number' && currentHeight > 0) {
+        void chrome.storage.local
+          .set({ [zcashSyncHeightKey(msg.walletId)]: currentHeight })
+          .catch(() => {});
+      }
+    }
+    return;
+  }
+
+  if (msg.type === 'sync-error' && network === 'zcash') {
+    // forward worker-side sync failures (HTTP 415, GetTip errors, etc) to
+    // the UI via the same event the auto-sync hook uses. The sync bar
+    // listener already picks this up and shows the "switch node" action.
+    // `code` is the worker's own structured classification (see
+    // state/sync-failure.ts). Relayed verbatim so the UI classifies on a
+    // code we emitted rather than on the shape of an error string.
+    const payload = msg.payload as { message?: string; code?: string } | undefined;
+    window.dispatchEvent(
+      new CustomEvent('zcash-sync-error', {
+        detail: {
+          walletId: msg.walletId,
+          message: payload?.message ?? 'sync error',
+          code: payload?.code,
+        },
+      }),
+    );
+    return;
+  }
+
+  if (msg.type === 'send-progress') {
+    window.dispatchEvent(
+      new CustomEvent('zcash-send-progress', {
+        detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
+      }),
+    );
+    return;
+  }
+
+  if (msg.type === 'sync-memos-progress') {
+    window.dispatchEvent(
+      new CustomEvent('zcash-memo-sync-progress', {
+        detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
+      }),
+    );
+    return;
+  }
+
+  if (msg.type === 'mempool-update') {
+    // CONTRACT for consumers (hdevalence audit):
+    //
+    // `zcash-mempool-update` fires only when the worker found at least
+    // one match (pendingIncoming or pendingSpends non-empty). That
+    // means the *receipt* of this event is itself the signal "this
+    // wallet matched something in mempool". Any handler whose
+    // observable behavior differs between "got the event with N
+    // matches" and "got the event with M matches" (or "got the event"
+    // vs "didn't get the event") leaks the trial-decryption result to
+    // any local code/page that can measure the side effect.
+    //
+    // Consumers MUST:
+    //   - never fire a network request as a consequence of receipt;
+    //   - never produce a visible UI change with timing distinguishable
+    //     from the no-match path (use a refresh that already runs on
+    //     other triggers, not one keyed to mempool events);
+    //   - never log/store in a way the page or another extension can
+    //     observe.
+    //
+    // If you find yourself wanting to react conditionally, audit
+    // against the threat model: a co-located content script can read
+    // CustomEvent dispatches in the same realm. There is currently
+    // no consumer; add one only after confirming this discipline.
+    window.dispatchEvent(
+      new CustomEvent('zcash-mempool-update', {
+        detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
+      }),
+    );
+    return;
+  }
+
+  // track sync state per wallet
+  if (msg.type === 'sync-started' && msg.walletId) {
+    state.syncingWallets.add(msg.walletId);
+  }
+  if (msg.type === 'sync-stopped' && msg.walletId) {
+    state.syncingWallets.delete(msg.walletId);
+  }
+
+  // resolve pending callback
+  const callback = state.pendingCallbacks.get(msg.id);
+  if (callback) {
+    state.pendingCallbacks.delete(msg.id);
+    if (msg.error) {
+      callback.reject(new Error(msg.error));
+    } else {
+      callback.resolve(msg.payload);
+    }
+  }
+};
+
+/** fire-and-forget broadcast to every other extension context; nobody may be listening */
+const broadcastWorkerEvent = (network: NetworkType, msg: unknown): void => {
+  void chrome.runtime.sendMessage({ type: 'NW_EVENT', network, msg }).catch(() => {});
+};
+
+// client (popup / settings / approval window): one listener for the whole
+// module, re-dispatching the host's rebroadcast through the same handler a
+// host-side worker.onmessage would use. Installed once; the offscreen host
+// never reaches this branch because it gets events straight from its real
+// Worker instead.
+let clientListenerInstalled = false;
+const ensureClientListener = (): void => {
+  if (clientListenerInstalled || isOffscreenHost()) {
+    return;
+  }
+  clientListenerInstalled = true;
+  chrome.runtime.onMessage.addListener(msg => {
+    if (msg?.type !== 'NW_EVENT' || !msg.network) {
+      return false;
+    }
+    const state = workers.get(msg.network as NetworkType);
+    if (state) {
+      handleWorkerMessage(msg.network as NetworkType, state, msg.msg as NetworkWorkerResponse);
+    }
+    return false;
+  });
+};
+
+// offscreen host: owns the real Workers and answers NW_SPAWN / NW_CALL /
+// NW_TERMINATE from every client. Installed once, only inside the offscreen
+// document.
+let hostListenerInstalled = false;
+/** called once from the offscreen document's own entry point, so the host
+ *  can answer NW_SPAWN before any network's first real spawn happens. */
+export const initNetworkWorkerHost = (): void => ensureHostListener();
+
+const ensureHostListener = (): void => {
+  if (hostListenerInstalled || !isOffscreenHost()) {
+    return;
+  }
+  hostListenerInstalled = true;
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type === 'NW_SPAWN' && msg.network) {
+      void (async () => {
+        try {
+          await spawnNetworkWorker(msg.network as NetworkType);
+        } finally {
+          // covers the case where the worker was already running: the
+          // requester's wait loop only ever hears 'ready' through this
+          // broadcast, never from the (one-time) real worker message.
+          broadcastWorkerEvent(msg.network, { type: 'ready' });
+          sendResponse({ ok: true });
+        }
+      })();
+      return true;
+    }
+    if (msg?.type === 'NW_CALL' && msg.network && msg.message) {
+      const m = msg.message as NetworkWorkerMessage;
+      if (SEND_SHAPED_TYPES.has(m.type) && m.id) {
+        inFlightSendIds.add(m.id);
+      }
+      workers.get(msg.network as NetworkType)?.worker.postMessage(msg.message);
+      sendResponse({ ok: true });
+      return false;
+    }
+    if (msg?.type === 'NW_TERMINATE' && msg.network) {
+      terminateNetworkWorker(msg.network as NetworkType);
+      sendResponse({ ok: true });
+      return false;
+    }
+    if (msg?.type === 'NW_STOP_ALL_SYNC' && msg.network) {
+      void stopAllSyncInHost(msg.network as NetworkType).finally(() => sendResponse({ ok: true }));
+      return true;
+    }
+    return false;
+  });
+};
+
 const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
+  if (!isOffscreenHost()) {
+    ensureClientListener();
+    const okOffscreen = await ensureOffscreenReady();
+    if (!okOffscreen) {
+      throw new Error(`could not activate offscreen document for ${network} worker`);
+    }
+    const state: WorkerState = {
+      worker: {
+        postMessage: m => broadcastToHost('NW_CALL', network, { message: m }),
+        terminate: () => void broadcastToHost('NW_TERMINATE', network, {}),
+      },
+      ready: false,
+      syncingWallets: new Set(),
+      pendingCallbacks: new Map(),
+    };
+    workers.set(network, state);
+    await broadcastToHost('NW_SPAWN', network, {});
+    await waitUntilReady(network, state);
+    return;
+  }
+
+  ensureHostListener();
+
   // each network has its own worker script
   const workerUrl = getWorkerUrl(network);
   if (!workerUrl) {
@@ -186,137 +490,18 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
   worker.onmessage = (e: MessageEvent<NetworkWorkerResponse>) => {
     const msg = e.data;
 
-    if (msg.type === 'ready') {
-      state.ready = true;
-      console.log(`[network-worker] ${network} worker ready`);
-      return;
-    }
-
-    // relay prove requests from zcash-worker to offscreen via service worker
-
+    // relay prove requests from zcash-worker to the parallel-build worker,
+    // both hosted in this same offscreen document
     if (msg.type === 'prove-request' && (msg as any).id && (msg as any).request) {
       void relayProveRequest(worker, (msg as any).id, (msg as any).request);
       return;
     }
 
-    if (msg.type === 'sync-progress') {
-      // emit progress event with walletId
-      window.dispatchEvent(
-        new CustomEvent('network-sync-progress', {
-          detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
-        }),
-      );
-      // Persist the height for the next popup open. Two places already READ
-      // chrome.storage.local.zcashSyncHeight - the sync hook's mount-time
-      // hydration and the post-error retry's resume point - and nothing has
-      // ever WRITTEN it, so both silently degraded: the bar started every
-      // session at 0% until the worker's first emit landed, and a retry
-      // resumed from `undefined` instead of where it left off.
-      //
-      // IDB remains the source of truth for what has actually been scanned;
-      // this is only a hint so the UI does not have to claim ignorance it
-      // does not have. Keyed PER WALLET: one shared key would let a
-      // fully-synced wallet's height hydrate the bar for a wallet that has
-      // scanned nothing, which is the same lie in the opposite direction.
-      if (network === 'zcash' && msg.walletId) {
-        const { currentHeight } = (msg.payload ?? {}) as { currentHeight?: number };
-        if (typeof currentHeight === 'number' && currentHeight > 0) {
-          void chrome.storage.local
-            .set({ [zcashSyncHeightKey(msg.walletId)]: currentHeight })
-            .catch(() => {});
-        }
-      }
-      return;
-    }
-
-    if (msg.type === 'sync-error' && network === 'zcash') {
-      // forward worker-side sync failures (HTTP 415, GetTip errors, etc) to
-      // the UI via the same event the auto-sync hook uses. The sync bar
-      // listener already picks this up and shows the "switch node" action.
-      // `code` is the worker's own structured classification (see
-      // state/sync-failure.ts). Relayed verbatim so the UI classifies on a
-      // code we emitted rather than on the shape of an error string.
-      const payload = msg.payload as { message?: string; code?: string } | undefined;
-      window.dispatchEvent(
-        new CustomEvent('zcash-sync-error', {
-          detail: {
-            walletId: msg.walletId,
-            message: payload?.message ?? 'sync error',
-            code: payload?.code,
-          },
-        }),
-      );
-      return;
-    }
-
-    if (msg.type === 'send-progress') {
-      window.dispatchEvent(
-        new CustomEvent('zcash-send-progress', {
-          detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
-        }),
-      );
-      return;
-    }
-
-    if (msg.type === 'sync-memos-progress') {
-      window.dispatchEvent(
-        new CustomEvent('zcash-memo-sync-progress', {
-          detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
-        }),
-      );
-      return;
-    }
-
-    if (msg.type === 'mempool-update') {
-      // CONTRACT for consumers (hdevalence audit):
-      //
-      // `zcash-mempool-update` fires only when the worker found at least
-      // one match (pendingIncoming or pendingSpends non-empty). That
-      // means the *receipt* of this event is itself the signal "this
-      // wallet matched something in mempool". Any handler whose
-      // observable behavior differs between "got the event with N
-      // matches" and "got the event with M matches" (or "got the event"
-      // vs "didn't get the event") leaks the trial-decryption result to
-      // any local code/page that can measure the side effect.
-      //
-      // Consumers MUST:
-      //   - never fire a network request as a consequence of receipt;
-      //   - never produce a visible UI change with timing distinguishable
-      //     from the no-match path (use a refresh that already runs on
-      //     other triggers, not one keyed to mempool events);
-      //   - never log/store in a way the page or another extension can
-      //     observe.
-      //
-      // If you find yourself wanting to react conditionally, audit
-      // against the threat model: a co-located content script can read
-      // CustomEvent dispatches in the same realm. There is currently
-      // no consumer; add one only after confirming this discipline.
-      window.dispatchEvent(
-        new CustomEvent('zcash-mempool-update', {
-          detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
-        }),
-      );
-      return;
-    }
-
-    // track sync state per wallet
-    if (msg.type === 'sync-started' && msg.walletId) {
-      state.syncingWallets.add(msg.walletId);
-    }
-    if (msg.type === 'sync-stopped' && msg.walletId) {
-      state.syncingWallets.delete(msg.walletId);
-    }
-
-    // resolve pending callback
-    const callback = state.pendingCallbacks.get(msg.id);
-    if (callback) {
-      state.pendingCallbacks.delete(msg.id);
-      if (msg.error) {
-        callback.reject(new Error(msg.error));
-      } else {
-        callback.resolve(msg.payload);
-      }
-    }
+    inFlightSendIds.delete(msg.id);
+    handleWorkerMessage(network, state, msg);
+    // let every other context (popups, an approval window) mirror this
+    // worker's state instead of spawning their own
+    broadcastWorkerEvent(network, msg);
   };
 
   worker.onerror = e => {
@@ -324,8 +509,24 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
   };
 
   workers.set(network, state);
+  await waitUntilReady(network, state);
+};
 
-  // wait for worker to be ready
+/** ask the offscreen host to do something, waiting for the service worker if needed */
+const broadcastToHost = async (
+  type: 'NW_SPAWN' | 'NW_CALL' | 'NW_TERMINATE',
+  network: NetworkType,
+  extra: Record<string, unknown>,
+): Promise<void> => {
+  try {
+    await chrome.runtime.sendMessage({ type, network, ...extra });
+  } catch {
+    // offscreen document not reachable yet/anymore - the caller's own
+    // wait/retry (spawn's 30s loop, or the next call) covers this
+  }
+};
+
+const waitUntilReady = async (network: NetworkType, state: WorkerState): Promise<void> => {
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('worker init timeout')), 30000);
     const check = () => {
@@ -337,6 +538,15 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
       }
     };
     check();
+  }).catch(err => {
+    // Without this, a dead-but-unready entry stays in `workers` forever and
+    // every later spawn call sees `workers.get(network)?.ready === false`
+    // skips the existing-worker fast path, then still finds the same stale
+    // (unready) entry and no-ops instead of retrying - the worker never
+    // comes back without a full extension reload.
+    state.worker.terminate();
+    workers.delete(network);
+    throw err;
   });
 };
 
@@ -349,6 +559,11 @@ export const terminateNetworkWorker = (network: NetworkType): void => {
     state.worker.terminate();
     workers.delete(network);
     console.log(`[network-worker] ${network} worker terminated`);
+    if (isOffscreenHost()) {
+      // the real worker is gone for everyone - tell every other context to
+      // drop its mirrored entry instead of calling into nothing
+      broadcastWorkerEvent(network, { type: 'terminated' });
+    }
   }
 };
 
@@ -464,6 +679,36 @@ export const startWatchOnlySyncInWorker = async (
  */
 export const stopSyncInWorker = async (network: NetworkType, walletId: string): Promise<void> => {
   return callWorker(network, 'stop-sync', {}, walletId);
+};
+
+/**
+ * Host-only: stop every wallet currently syncing on `network`, once nothing
+ * is mid-broadcast. Called when the last zafu UI surface closes (see
+ * ui-open-presence.ts in service-worker.ts) - the offscreen document and its
+ * worker stay alive (proving still needs them), only network activity stops.
+ * The next UI open resumes sync the same way it starts on any fresh popup.
+ */
+const stopAllSyncInHost = async (network: NetworkType): Promise<void> => {
+  const deadline = Date.now() + 60_000;
+  while (inFlightSendIds.size > 0 && Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 250));
+  }
+  if (inFlightSendIds.size > 0) {
+    console.warn(
+      `[network-worker] stopping sync with ${inFlightSendIds.size} send(s) still marked in-flight after 60s`,
+    );
+  }
+  const wallets = [...(workers.get(network)?.syncingWallets ?? [])];
+  await Promise.all(wallets.map(walletId => stopSyncInWorker(network, walletId).catch(() => {})));
+};
+
+/**
+ * Client side: ask the offscreen host to stop all sync for `network`. Fired
+ * from the service worker when the last UI surface disconnects - a no-op if
+ * no worker is running yet (nothing to stop).
+ */
+export const requestStopAllSync = (network: NetworkType): void => {
+  void chrome.runtime.sendMessage({ type: 'NW_STOP_ALL_SYNC', network }).catch(() => {});
 };
 
 /**

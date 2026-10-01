@@ -28,6 +28,8 @@ const REAL_ERRORS = {
     "server integrity check failed: nullifier root mismatch: server=49c3a1b2c3d4e5f6 proven=509f8e7d6c5b4a39. refusing to trust this endpoint's data - switch node or retry",
   broadcast:
     'broadcast failed (-1): zebrad RPC error: RPC error -1: transaction dropped because it is already queued for download',
+  backendDown:
+    'gRPC GetTip: zebrad transport error: error sending request for url (http://127.0.0.1:8232/): connection refused',
 };
 
 describe('classifySyncFailure - structured codes', () => {
@@ -121,6 +123,18 @@ describe('the three failures users actually hit', () => {
     expect(failure.message).toContain('already has this transaction');
     // never phrased as the user's payment having failed
     expect(failure.message).not.toMatch(/fail|error|reject/i);
+  });
+
+  it('a backend transport error is network, not a raw endpoint address', () => {
+    const failure = classifySyncFailure(REAL_ERRORS.backendDown);
+    expect(failure.kind).toBe('network');
+    expect(failure.autoRetries).toBe(true);
+    // the only user-visible string must never contain the node's address -
+    // that lives in `raw`, behind the "technical details" disclosure
+    expect(failure.message).not.toContain('127.0.0.1');
+    expect(failure.message).not.toContain('8232');
+    expect(failure.message).not.toContain('zebrad');
+    expect(failure.raw).toBe(REAL_ERRORS.backendDown);
   });
 });
 

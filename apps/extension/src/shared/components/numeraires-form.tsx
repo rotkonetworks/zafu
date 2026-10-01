@@ -41,7 +41,7 @@ export const NumeraireForm = ({
     setLoading(true);
     void (async function () {
       await saveNumeraires();
-      void chrome.runtime.sendMessage(ServicesMessage.ChangeNumeraires);
+      void chrome.runtime.sendMessage(ServicesMessage.ChangeNumeraires).catch(() => {});
       onSuccess();
     })();
   };

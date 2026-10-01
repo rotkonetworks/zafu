@@ -37,15 +37,21 @@ export const DestinationApproval = () => {
   const origin = params.get('app') || '';
   const detail = params.get('detail') || '';
 
-  const respond = (approved: boolean) => {
+  const respond = async (approved: boolean) => {
     // A missing requestId means the worker cannot match the answer; never send
     // it. Closing the window is treated worker-side as a cancellation.
+    // Await before closing (see passkey.tsx): window.close() tears this popup
+    // down synchronously and can race the send, dropping it unanswered.
     if (requestId) {
-      void chrome.runtime.sendMessage({
-        type: NET_EGRESS_INTERNAL_METHODS[0],
-        requestId,
-        result: { approved },
-      });
+      try {
+        await chrome.runtime.sendMessage({
+          type: NET_EGRESS_INTERNAL_METHODS[0],
+          requestId,
+          result: { approved },
+        });
+      } catch {
+        // service worker unreachable or reloaded - closing is all we can do
+      }
     }
     window.close();
   };

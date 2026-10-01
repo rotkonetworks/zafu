@@ -43,6 +43,23 @@ export class EgressBlockedError extends TypeError {
 export const isEgressBlocked = (e: unknown): e is EgressBlockedError =>
   e instanceof Error && e.name === 'EgressBlockedError';
 
+/**
+ * Same check, but walks a bounded `.cause` chain first. A ConnectError (the
+ * penumbra/zcash transports' own error type) wraps whatever actually threw,
+ * so the refusal is often one level down, not on the error the caller sees.
+ */
+export const isEgressBlockedCause = (e: unknown, depth = 0): boolean => {
+  if (depth > 3 || e == null) {
+    return false;
+  }
+  if (isEgressBlocked(e)) {
+    return true;
+  }
+  return typeof e === 'object' && 'cause' in e
+    ? isEgressBlockedCause((e as { cause: unknown }).cause, depth + 1)
+    : false;
+};
+
 type ChannelMessage =
   | { type: 'request' }
   | { type: 'table'; table: EgressTable }

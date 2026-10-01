@@ -150,7 +150,7 @@ export const useGrpcEndpointForm = (isOnboarding: boolean) => {
       await clearCompactFrontierBlockHeight();
 
       await setGrpcEndpoint(grpcEndpointInput);
-      void chrome.runtime.sendMessage(ServicesMessage.ClearCache);
+      void chrome.runtime.sendMessage(ServicesMessage.ClearCache).catch(() => {});
     } else {
       await setGrpcEndpoint(grpcEndpointInput);
     }

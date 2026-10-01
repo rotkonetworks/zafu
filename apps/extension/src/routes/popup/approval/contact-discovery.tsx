@@ -42,12 +42,18 @@ export const ContactDiscoveryApproval = () => {
   // popup honest if the param is ever missing - never show a relay we're not sure of.
   const relay = params.get('relay') || DEFAULT_CONTACT_DISCOVERY_RELAY;
 
-  const respond = (approved: boolean) => {
-    void chrome.runtime.sendMessage({
-      type: 'zafu_contact_discovery_approval_result',
-      requestId,
-      result: { approved },
-    });
+  const respond = async (approved: boolean) => {
+    // Await before closing (see passkey.tsx): window.close() tears this popup
+    // down synchronously and can race the send, dropping it unanswered.
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'zafu_contact_discovery_approval_result',
+        requestId,
+        result: { approved },
+      });
+    } catch {
+      // service worker unreachable or reloaded - closing is all we can do
+    }
     window.close();
   };
 

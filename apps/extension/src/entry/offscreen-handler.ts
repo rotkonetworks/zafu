@@ -8,6 +8,13 @@ import {
   isParallelBuildRequest,
   isOffscreenRequest,
 } from '@rotko/penumbra-types/internal-msg/offscreen';
+import { initNetworkWorkerHost } from '../state/keyring/network-worker';
+
+// this document is the one long-lived home for the zcash/penumbra sync
+// workers - every popup, settings screen and approval window is a client
+// that asks this host to spawn/call/terminate them instead of each owning
+// a private worker of its own.
+initNetworkWorkerHost();
 
 chrome.runtime.onMessage.addListener((req, _sender, respond) => {
   if (!isOffscreenRequest(req)) {
