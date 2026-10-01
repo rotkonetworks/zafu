@@ -86,6 +86,7 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { networkAllowsBackgroundSync } from './state/privacy';
 import { runPresencePublish } from './state/contact-discovery-service';
 import { trackUiOpenPresence } from './state/ui-open-presence';
+import { requestStopAllSync } from './state/keyring/network-worker';
 
 // count open side panels so approval routing can target the panel only when it
 // is actually open (see popup.ts). Registered once at worker startup.
@@ -107,12 +108,20 @@ trackUiOpenPresence(
   () => {
     void runPresencePublish();
     presencePublishTimer ??= setInterval(() => void runPresencePublish(), 5 * 60_000);
+    // the next popup/page open resumes sync on its own (zcash-auto-sync.ts),
+    // same as any fresh open - nothing to do here.
   },
   () => {
     if (presencePublishTimer) {
       clearInterval(presencePublishTimer);
       presencePublishTimer = undefined;
     }
+    // zafu is fully closed: the offscreen-hosted zcash worker otherwise keeps
+    // syncing (and polling mempool) with nobody watching, calling out while
+    // the user thinks the wallet is shut. Stop network activity only - the
+    // offscreen document and its worker stay up for proving - and resume is
+    // automatic on the next open.
+    requestStopAllSync('zcash');
   },
 );
 

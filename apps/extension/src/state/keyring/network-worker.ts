@@ -203,6 +203,29 @@ export const spawnNetworkWorker = async (network: NetworkType): Promise<void> =>
 };
 
 /**
+ * Message types that put a transaction on the wire (build-only steps like
+ * 'send-tx-pczt' or 'shield-unsigned' are not in here - nothing has been
+ * broadcast yet). Tracked host-side only, by request id, so "stop sync on
+ * last UI close" (see stopAllSyncInHost) can wait for one of these to land
+ * before it stops anything - a send must never be cut off mid-flight.
+ */
+const SEND_SHAPED_TYPES: ReadonlySet<string> = new Set([
+  'send-tx',
+  'send-tx-multi',
+  'send-tx-complete',
+  'send-tx-pczt-complete',
+  'send-turnstile-migration-complete',
+  'shield-complete',
+  'complete-orchard-pczt',
+  'broadcast-raw-tx',
+  'finalize-delegation',
+  'cast-vote-hot-wire',
+]);
+
+/** host-only: request ids of sends currently on the wire */
+const inFlightSendIds = new Set<string>();
+
+/**
  * Shared by the host (reacting to the real worker's onmessage) and every
  * client (reacting to the host's rebroadcast). Same state shape, same
  * events, so a client behaves exactly like a page that owned the worker
@@ -404,6 +427,10 @@ const ensureHostListener = (): void => {
       return true;
     }
     if (msg?.type === 'NW_CALL' && msg.network && msg.message) {
+      const m = msg.message as NetworkWorkerMessage;
+      if (SEND_SHAPED_TYPES.has(m.type) && m.id) {
+        inFlightSendIds.add(m.id);
+      }
       workers.get(msg.network as NetworkType)?.worker.postMessage(msg.message);
       sendResponse({ ok: true });
       return false;
@@ -412,6 +439,10 @@ const ensureHostListener = (): void => {
       terminateNetworkWorker(msg.network as NetworkType);
       sendResponse({ ok: true });
       return false;
+    }
+    if (msg?.type === 'NW_STOP_ALL_SYNC' && msg.network) {
+      void stopAllSyncInHost(msg.network as NetworkType).finally(() => sendResponse({ ok: true }));
+      return true;
     }
     return false;
   });
@@ -466,6 +497,7 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
       return;
     }
 
+    inFlightSendIds.delete(msg.id);
     handleWorkerMessage(network, state, msg);
     // let every other context (popups, an approval window) mirror this
     // worker's state instead of spawning their own
@@ -647,6 +679,36 @@ export const startWatchOnlySyncInWorker = async (
  */
 export const stopSyncInWorker = async (network: NetworkType, walletId: string): Promise<void> => {
   return callWorker(network, 'stop-sync', {}, walletId);
+};
+
+/**
+ * Host-only: stop every wallet currently syncing on `network`, once nothing
+ * is mid-broadcast. Called when the last zafu UI surface closes (see
+ * ui-open-presence.ts in service-worker.ts) - the offscreen document and its
+ * worker stay alive (proving still needs them), only network activity stops.
+ * The next UI open resumes sync the same way it starts on any fresh popup.
+ */
+const stopAllSyncInHost = async (network: NetworkType): Promise<void> => {
+  const deadline = Date.now() + 60_000;
+  while (inFlightSendIds.size > 0 && Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 250));
+  }
+  if (inFlightSendIds.size > 0) {
+    console.warn(
+      `[network-worker] stopping sync with ${inFlightSendIds.size} send(s) still marked in-flight after 60s`,
+    );
+  }
+  const wallets = [...(workers.get(network)?.syncingWallets ?? [])];
+  await Promise.all(wallets.map(walletId => stopSyncInWorker(network, walletId).catch(() => {})));
+};
+
+/**
+ * Client side: ask the offscreen host to stop all sync for `network`. Fired
+ * from the service worker when the last UI surface disconnects - a no-op if
+ * no worker is running yet (nothing to stop).
+ */
+export const requestStopAllSync = (network: NetworkType): void => {
+  void chrome.runtime.sendMessage({ type: 'NW_STOP_ALL_SYNC', network }).catch(() => {});
 };
 
 /**
