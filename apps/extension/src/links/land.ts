@@ -12,6 +12,7 @@ const VIA_WORDS: Record<string, string> = {
   pasted: 'link pasted',
   scanned: 'link scanned',
   message: 'link from a message',
+  typed: 'typed in the address bar',
 };
 
 /** the quiet line a review shows about where its link came from */
