@@ -64,7 +64,9 @@ import { looksLikeLink, toUri } from '../../../links/router';
 import { viaLine, type SwapLinkState } from '../../../links/land';
 import { Footer, Main } from '../send/send-ui';
 import { ThorDeposit } from './thor-deposit';
-import { AmountField, ContactsSheet, PickSheet, ToField } from '../send/send-fields';
+import { AmountField, ContactsSheet, ToField } from '../send/send-fields';
+import { chainName } from '../../../state/swap/tokens';
+import { TokenSheet } from './token-sheet';
 
 type Step =
   | 'input'
@@ -310,15 +312,6 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
       setError(`${symbol} isn't offered for swaps right now · please pick another`);
     }
   }, [linkToken, tokenQuery.data]);
-
-  const popular = ['BTC', 'ETH', 'USDC', 'USDT', 'SOL', 'NEAR'];
-  const rankOf = (t: SwapToken) => {
-    const i = popular.indexOf(t.symbol);
-    return i < 0 ? popular.length : i;
-  };
-  const sortedTokens = [...tokens].sort(
-    (a, b) => rankOf(a) - rankOf(b) || a.symbol.localeCompare(b.symbol),
-  );
 
   const contactNetwork = token
     ? (blockchainToContactNetwork(token.chain) as ContactNetwork | undefined)
@@ -589,25 +582,30 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
             helper={error ?? pinnedRefusal}
             warn={!!(error ?? pinnedRefusal)}
           />
+          <Button
+            variant='secondary'
+            size='sm'
+            onClick={flip}
+            aria-label={isFromZec ? 'swap into zec instead' : 'swap out of zec instead'}
+            className='-my-3 size-11 self-center p-0'
+          >
+            <span className='i-lucide-arrow-up-down size-4' aria-hidden='true' />
+          </Button>
           <RowGroup>
             <Row
               type='value'
               label='you get'
-              description={token && isFromZec ? `on ${token.chain}` : undefined}
+              description={token && isFromZec ? `on ${chainName(token.chain)}` : undefined}
               value={isFromZec ? (tokenQuery.isFetching ? 'reading' : unit) : 'zec'}
               onPress={isFromZec ? () => setPickerOpen(true) : flip}
             />
           </RowGroup>
-          <Button variant='quiet' size='sm' onClick={flip} className='-mt-2 self-start px-0'>
-            <span className='i-lucide-arrow-up-down size-3.5' />
-            flip
-          </Button>
           <ToField
             id='swap-other'
             label={
               isFromZec
-                ? `${token?.chain ?? 'destination'} recipient`
-                : `your ${token?.chain ?? 'source'} address · for refunds`
+                ? `${token ? chainName(token.chain) : 'destination'} recipient`
+                : `your ${token ? chainName(token.chain) : 'source'} address · for refunds`
             }
             value={otherAddress}
             onChange={v => {
@@ -634,20 +632,16 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
             get quote
           </Button>
         </Footer>
-        <PickSheet
+        <TokenSheet
           title={isFromZec ? 'you get' : 'you pay'}
           open={pickerOpen}
           onOpenChange={setPickerOpen}
-          picks={sortedTokens.map((t, i) => ({
-            key: i,
-            label: t.symbol.toLowerCase(),
-            value: t.chain,
-          }))}
-          onPick={i => {
-            setToken(sortedTokens[i]);
+          tokens={tokens}
+          loading={tokenQuery.isFetching}
+          onPick={t => {
+            setToken(t);
             setOtherAddress('');
           }}
-          empty={tokenQuery.isFetching ? 'reading the routes' : 'no tokens available'}
         />
         {contactNetwork && (
           <ContactsSheet
