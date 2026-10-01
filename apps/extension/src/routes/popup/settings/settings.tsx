@@ -48,7 +48,7 @@ const CATEGORIES: readonly {
   {
     id: 'privacy',
     title: 'privacy',
-    href: PopupPath.SETTINGS_PRIVACY_HOME,
+    href: PopupPath.SETTINGS_PRIVACY,
     useStatus: usePrivacyStatus,
   },
   {

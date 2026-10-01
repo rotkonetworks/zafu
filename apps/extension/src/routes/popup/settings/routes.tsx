@@ -47,6 +47,21 @@ export const settingsRoutes: RouteObject[] = [
     path,
     element: <Navigate replace to={PopupPath.SETTINGS_NETWORKS} />,
   })),
+  // security, privacy and devices went through the same flattening: each
+  // category is one screen now, so its old "all controls" (or home) path
+  // just redirects to the category screen.
+  {
+    path: '/settings/security-backup',
+    element: <Navigate replace to={PopupPath.SETTINGS_SECURITY} />,
+  },
+  {
+    path: '/settings/privacy/home',
+    element: <Navigate replace to={PopupPath.SETTINGS_PRIVACY} />,
+  },
+  {
+    path: '/settings/devices/all',
+    element: <Navigate replace to={PopupPath.SETTINGS_DEVICES} />,
+  },
   {
     path: PopupPath.SETTINGS_PRIVACY,
     lazy: lazyScreen('settingsPrivacy'),
@@ -58,10 +73,6 @@ export const settingsRoutes: RouteObject[] = [
   {
     path: PopupPath.SETTINGS_WALLETS,
     lazy: lazyScreen('settingsWalletsNetworks'),
-  },
-  {
-    path: PopupPath.SETTINGS_SECURITY_BACKUP,
-    lazy: lazyScreen('settingsSecurityBackup'),
   },
   {
     path: PopupPath.SETTINGS_ABOUT,
@@ -100,10 +111,6 @@ export const settingsRoutes: RouteObject[] = [
     lazy: lazyScreen('settingsSecurityHome'),
   },
   {
-    path: PopupPath.SETTINGS_PRIVACY_HOME,
-    lazy: lazyScreen('settingsPrivacyHome'),
-  },
-  {
     path: PopupPath.SETTINGS_ZCASH_NETWORK,
     lazy: lazyScreen('settingsZcashNetwork'),
   },
@@ -114,10 +121,6 @@ export const settingsRoutes: RouteObject[] = [
   {
     path: PopupPath.SETTINGS_DEVICES,
     lazy: lazyScreen('settingsDevicesHome'),
-  },
-  {
-    path: PopupPath.SETTINGS_DEVICES_ALL,
-    lazy: lazyScreen('settingsDevicesAll'),
   },
   {
     path: PopupPath.SETTINGS_REMOVE_WALLET,
