@@ -21,13 +21,14 @@ import { PagePath } from '../paths';
 import { useZafuTheme, FontRow, ApprovalsRow } from '../../popup/settings/settings-appearance';
 import { ContactDiscoverySection } from '../../popup/settings/settings-privacy';
 import { ZcashNodeSheet } from '../../popup/settings/settings-zcash-network';
-import { useAutoLock } from '../../popup/settings/use-auto-lock';
+import { useAutoLock, AUTO_LOCK_OPTIONS } from '../../popup/settings/use-auto-lock';
 
-const AUTO_LOCK_CHOICES = [
-  { label: '5 min', value: '5' },
-  { label: '15 min', value: '15' },
-  { label: '60 min', value: '60' },
-] as const;
+// the three choices worth a tap before there is anything to lock; "off" and
+// the finer options stay in settings > security, same list, same storage
+const AUTO_LOCK_CHOICES = AUTO_LOCK_OPTIONS.filter(o => [5, 15, 60].includes(o.value)).map(o => ({
+  label: o.label,
+  value: String(o.value),
+}));
 
 export const Personalize = () => {
   const navigate = usePageNav();
@@ -135,7 +136,7 @@ export const Personalize = () => {
       >
         <div
           onClick={() => setTouched(true)}
-          className='-mx-4 flex flex-col gap-4 overflow-y-auto px-4'
+          className='-mx-4 flex min-h-0 flex-col gap-4 overflow-y-auto px-4'
         >
           <RowGroup>
             <FontRow />
@@ -177,7 +178,11 @@ export const Personalize = () => {
         </div>
       </Sheet>
 
-      <ZcashNodeSheet open={nodeOpen} onOpenChange={setNodeOpen} />
+      <ZcashNodeSheet
+        open={nodeOpen}
+        onOpenChange={setNodeOpen}
+        className='lg:inset-x-auto lg:left-[692px] lg:w-[460px] lg:border-x'
+      />
     </div>
   );
 };

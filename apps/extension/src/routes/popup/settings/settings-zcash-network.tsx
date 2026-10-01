@@ -61,9 +61,11 @@ const BACKENDS = [
 export const ZcashNodeSheet = ({
   open,
   onOpenChange,
+  className,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
+  className?: string;
 }) => {
   const endpoint = useStore(s => s.networks.networks.zcash.endpoint) ?? '';
   const saved = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
@@ -74,6 +76,7 @@ export const ZcashNodeSheet = ({
     <NodeSheet
       open={open}
       onOpenChange={onOpenChange}
+      className={className}
       title='zcash node'
       presets={PRESETS}
       current={endpoint}

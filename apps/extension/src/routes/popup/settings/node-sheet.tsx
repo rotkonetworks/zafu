@@ -60,6 +60,7 @@ export const NodeSheet = ({
   egress,
   measure,
   custom,
+  className,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -72,6 +73,8 @@ export const NodeSheet = ({
   measure: () => Promise<NodeSpeeds>;
   /** extra controls on the your-own-node step */
   custom?: ReactNode;
+  /** column-align the sheet where the page itself isn't full width (onboarding) */
+  className?: string;
 }) => {
   const [step, setStep] = useState<'list' | 'own'>('list');
   const [draft, setDraft] = useState('');
@@ -101,7 +104,12 @@ export const NodeSheet = ({
   };
 
   return (
-    <Sheet open={open} onOpenChange={close} title={step === 'own' ? 'your own node' : title}>
+    <Sheet
+      open={open}
+      onOpenChange={close}
+      title={step === 'own' ? 'your own node' : title}
+      className={className}
+    >
       {step === 'list' ? (
         <>
           <div className='-mx-4 flex min-h-0 flex-col gap-3 overflow-y-auto px-4'>
