@@ -81,23 +81,33 @@ export function ContactPicker() {
       results.push({ handle, displayName: contact.name });
     }
 
-    // send result back to service worker → back to the requesting page
-    chrome.runtime.sendMessage({
-      type: 'zafu_pick_contacts_result',
-      requestId: params.requestId,
-      contacts: results,
-    });
+    // send result back to service worker → back to the requesting page.
+    // Await before closing: window.close() tears this popup down
+    // synchronously and can race the send, dropping it unanswered.
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'zafu_pick_contacts_result',
+        requestId: params.requestId,
+        contacts: results,
+      });
+    } catch {
+      // service worker unreachable or reloaded - closing is all we can do
+    }
 
     // close this popup window
     window.close();
   };
 
-  const handleCancel = () => {
-    chrome.runtime.sendMessage({
-      type: 'zafu_pick_contacts_result',
-      requestId: params.requestId,
-      contacts: [],
-    });
+  const handleCancel = async () => {
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'zafu_pick_contacts_result',
+        requestId: params.requestId,
+        contacts: [],
+      });
+    } catch {
+      // service worker unreachable or reloaded - closing is all we can do
+    }
     window.close();
   };
 

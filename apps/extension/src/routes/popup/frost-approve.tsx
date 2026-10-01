@@ -59,11 +59,16 @@ function waitFor(check: () => boolean, timeoutMs: number): Promise<void> {
 }
 
 function sendResult(requestId: string, result: unknown) {
-  void chrome.runtime.sendMessage({
-    type: 'zafu_frost_result',
-    requestId,
-    result,
-  });
+  // the service worker may already be gone (reloaded, or this popup is
+  // closing right behind the call) - nobody awaits this, so an unhandled
+  // rejection would otherwise surface as "receiving end does not exist"
+  void chrome.runtime
+    .sendMessage({
+      type: 'zafu_frost_result',
+      requestId,
+      result,
+    })
+    .catch(() => {});
 }
 
 export const FrostApprove = () => {
