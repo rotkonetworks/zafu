@@ -78,7 +78,9 @@ import {
   isChainContinuityError,
   rewindDistanceForAttempt,
   syncErrorCodeOf,
+  syncRetryDelayMs,
   MAX_REWINDS_PER_RUN,
+  SYNC_STALL_ERRORS,
   type SyncErrorCode,
 } from '../state/sync-failure';
 import { startRun, stopRun, STOP_WAIT_MS, type RunSlot } from './sync-runs';
@@ -3225,6 +3227,7 @@ const runSync = (...args: SyncArgs): Promise<void> => {
             walletId,
             payload: {
               message: err instanceof Error ? err.message : String(err),
+              stalled: true,
               ...(syncErrorCodeOf(err) ? { code: syncErrorCodeOf(err) } : {}),
             },
           });
@@ -4021,12 +4024,7 @@ const syncLoop = async (
           `[zcash-worker] getCompactBlocks(${batch.start}..${endHeight}) returned 0 blocks, retrying`,
         );
         dropPipeline();
-        const backoff = Math.min(30000, 1000 * Math.pow(2, consecutiveErrors - 1));
-        await sleepUnlessAborted(signal, backoff);
-        if (consecutiveErrors >= 10) {
-          console.error('[zcash-worker] too many errors, stopping sync');
-          break;
-        }
+        await sleepUnlessAborted(signal, syncRetryDelayMs(consecutiveErrors));
         continue;
       }
 
@@ -4676,18 +4674,18 @@ const syncLoop = async (
           walletId,
           payload: {
             message: err instanceof Error ? err.message : String(err),
+            stalled: consecutiveErrors >= SYNC_STALL_ERRORS,
             ...(code ? { code } : {}),
           },
         });
       }
-      // back off exponentially, max 30s
-      const backoff = Math.min(30000, 2000 * Math.pow(2, consecutiveErrors - 1));
-      await sleepUnlessAborted(signal, backoff);
-      // after 10 consecutive errors, give up
-      if (consecutiveErrors >= 10) {
-        console.error('[zcash-worker] too many errors, stopping sync');
-        break;
+      // never give up: only the last window closing stops the loop, so a node
+      // that comes back is picked up from the stored height. Once stalled,
+      // every slow retry is a fresh run's worth of rewinds.
+      if (consecutiveErrors >= SYNC_STALL_ERRORS) {
+        rewindsThisRun = 0;
       }
+      await sleepUnlessAborted(signal, syncRetryDelayMs(consecutiveErrors));
     }
   }
 

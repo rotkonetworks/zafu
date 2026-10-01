@@ -5,9 +5,11 @@ import {
   isEndpointFailoverCandidate,
   rewindDistanceForAttempt,
   syncFailureMessage,
+  syncRetryDelayMs,
   COMMITMENT_TREE_REWIND_DISTANCES,
   MAX_REWINDS_PER_RUN,
   SYNC_ERROR_CODES,
+  SYNC_STALL_ERRORS,
   type SyncFailureKind,
 } from './sync-failure';
 
@@ -258,5 +260,22 @@ describe('chain continuity recovery', () => {
     expect(MAX_REWINDS_PER_RUN).toBeGreaterThanOrEqual(1);
     expect(MAX_REWINDS_PER_RUN).toBeLessThanOrEqual(10);
     expect(COMMITMENT_TREE_REWIND_DISTANCES.length).toBe(MAX_REWINDS_PER_RUN);
+  });
+});
+
+describe('a failing sync never gives up, and never spins', () => {
+  it('doubles from 2s to 30s, then waits 2 minutes once stalled', () => {
+    expect([1, 2, 3, 4, 5, 6].map(syncRetryDelayMs)).toEqual([
+      2000, 4000, 8000, 16000, 30000, 30000,
+    ]);
+    expect(syncRetryDelayMs(SYNC_STALL_ERRORS - 1)).toBe(30_000);
+    expect(syncRetryDelayMs(SYNC_STALL_ERRORS)).toBe(120_000);
+    expect(syncRetryDelayMs(10_000)).toBe(120_000);
+  });
+
+  it('never waits less than 2s, whatever it is handed', () => {
+    for (const n of [-1, 0, 0.5, 1]) {
+      expect(syncRetryDelayMs(n)).toBeGreaterThanOrEqual(2000);
+    }
   });
 });

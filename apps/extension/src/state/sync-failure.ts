@@ -381,6 +381,18 @@ export const COMMITMENT_TREE_REWIND_DISTANCES: readonly number[] = [10, 100, 100
  */
 export const MAX_REWINDS_PER_RUN = 3;
 
+/** consecutive failures after which zcash sync counts as stalled */
+export const SYNC_STALL_ERRORS = 10;
+
+/**
+ * Wait before the next attempt after `failures` consecutive failures:
+ * doubling from 2s to 30s, then every 2 minutes once stalled. The loop never
+ * gives up on its own (only the last window closing stops it), so a node
+ * that comes back is picked up from the stored height, never by a rescan.
+ */
+export const syncRetryDelayMs = (failures: number): number =>
+  Math.min(failures >= SYNC_STALL_ERRORS ? 120_000 : 30_000, 2000 * 2 ** Math.max(0, failures - 1));
+
 export const rewindDistanceForAttempt = (attemptIndex: number): number => {
   const last = COMMITMENT_TREE_REWIND_DISTANCES[COMMITMENT_TREE_REWIND_DISTANCES.length - 1]!;
   if (!Number.isInteger(attemptIndex) || attemptIndex < 0) {
