@@ -166,8 +166,9 @@ export class LightwalletdClient implements ZcashClient {
   }
 
   async getTransaction(txid: Uint8Array): Promise<{ data: Uint8Array; height: number }> {
-    // GetTransaction(TxFilter{ hash=1 }) → RawTransaction { data=1; height=2 }
-    const req = new Uint8Array([0x0a, ...this.lengthDelimited(txid)]);
+    // GetTransaction(TxFilter{ block=1, index=2, hash=3 }) → RawTransaction { data=1; height=2 }.
+    // `txid` is in wire (internal) byte order, as CompactTx.hash and GetAddressUtxos carry it.
+    const req = new Uint8Array([0x1a, ...this.lengthDelimited(txid)]);
     const resp = await this.grpcCall('GetTransaction', req);
     return this.parseRawTransaction(resp);
   }
