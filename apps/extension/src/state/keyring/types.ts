@@ -206,10 +206,21 @@ export interface LedgerImport {
   ufvk?: string;
   /** account index on the ledger device */
   accountIndex: number;
-  /** device identifier */
+  /** `ledger-zcash-<seedFingerprintHex>` for a Zcash-app account,
+   *  `ledger-btc-<t-address>` for a Bitcoin-app one */
   deviceId: string;
   /** mainnet (true) vs testnet (false) */
   mainnet: boolean;
+  /** set for a shielded account exported by the Ledger Zcash app (UFVK);
+   *  absent for a transparent-only Bitcoin-app account */
+  custody?: 'ledger-zcash';
+  /** the Zcash app's account fingerprint (hex, 32 bytes): with accountIndex
+   *  the dedupe key, and stamped into PCZT derivations. Not key material. */
+  seedFingerprint?: string;
+  /** Zcash app version at connect time */
+  appVersion?: string;
+  /** presentation only ("Ledger Nano S Plus") */
+  deviceLabel?: string;
 }
 
 /**

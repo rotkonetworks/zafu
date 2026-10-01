@@ -125,6 +125,8 @@ type LOCAL = {
     mainnet: boolean;
     vaultId?: string;
     coldSignerType?: 'zigner' | 'keystone' | 'ledger' | 'viewing-key';
+    /** `uview1...`: zigner, keystone and shielded Ledger imports */
+    ufvk?: string;
   }[];
   activeZcashIndex?: number;
   zignerWallets?: {
@@ -345,4 +347,29 @@ type LOCAL = {
    * exhaust the HD counter nor loop the derivation function into a DoS.
    */
   cosmosFreshAddressRateLimits?: CosmosFreshAddressRateLimits;
+
+  /**
+   * Ledger-signed transactions not yet settled, by operation id (see
+   * apps/extension src/ledger/zcash-app/operations-store.ts). The signed bytes
+   * are sealed with the vault key; the metadata stays readable so recovery can
+   * list work while locked. A password change re-seals them with the vaults.
+   */
+  zafuLedgerSignedOperations?: Record<
+    string,
+    {
+      meta: {
+        operationId: string;
+        walletId: string;
+        network: 'main' | 'test';
+        kind: 'send' | 'shield';
+        state: 'signed' | 'broadcast_uncertain' | 'broadcast' | 'acknowledged';
+        txid?: string;
+        label?: string;
+        message?: string;
+        createdAt: number;
+        updatedAt: number;
+      };
+      sealed: string;
+    }
+  >;
 };

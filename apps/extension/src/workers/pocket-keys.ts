@@ -48,6 +48,27 @@ export const tIndexOf =
   ({ address }: { address: string }): number =>
     Math.max(0, tAddresses.indexOf(address));
 
+/** One Ledger shielding round: the lowest t-index's UTXOs (one pubkey signs
+ *  them), largest first, at most `max`; the rest wait for the next round. */
+export const shieldRoundUtxos = <
+  U extends { address: string; valueZat: bigint; outputIndex: number },
+>(
+  utxos: U[],
+  tAddresses: string[],
+  max: number,
+): U[] => {
+  const groups = utxosByTIndex(utxos, tAddresses);
+  return [...(groups.get(Math.min(...groups.keys())) ?? [])]
+    .sort((a, b) =>
+      a.valueZat !== b.valueZat
+        ? a.valueZat > b.valueZat
+          ? -1
+          : 1
+        : a.outputIndex - b.outputIndex,
+    )
+    .slice(0, max);
+};
+
 /** UTXOs grouped by t-branch index, so each group signs with one key */
 export const utxosByTIndex = <U extends { address: string }>(
   utxos: U[],

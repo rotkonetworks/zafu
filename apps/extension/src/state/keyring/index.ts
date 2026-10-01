@@ -40,6 +40,7 @@ import {
   findCompatibleVault,
   shouldAutoSelectZigner,
   findWalletIndex,
+  findLedgerDuplicate,
 } from './vault-ops';
 import type { FrostMultisigParams } from './vault-ops';
 
@@ -700,18 +701,38 @@ export const createKeyRingSlice =
         // merge story - each Ledger account is its own zcash-only vault.
         const existingVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
 
-        // dedup: same device + account = same keys.
-        for (const v of existingVaults) {
-          if (v.type !== 'zigner-zafu') {
-            continue;
-          }
-          if (
-            v.insensitive['coldSignerType'] === 'ledger' &&
-            v.insensitive['deviceId'] === data.deviceId &&
-            v.insensitive['accountIndex'] === data.accountIndex
-          ) {
+        // locked is refused before the dedupe: re-selecting reads encrypted
+        // records and must not mark a locked keyring unlocked
+        if ((await local.get('passwordKeyPrint')) && !(await session.get('passwordKey'))) {
+          throw new Error('keyring locked - unlock first or use password flow');
+        }
+        // same keys again: a shielded account is selected, never added twice
+        const duplicate = findLedgerDuplicate(existingVaults, data);
+        if (duplicate) {
+          if (data.custody !== 'ledger-zcash') {
             throw new Error('this ledger account is already imported');
           }
+          const refreshed = existingVaults.map(v =>
+            v.id === duplicate.id
+              ? {
+                  ...v,
+                  insensitive: {
+                    ...v.insensitive,
+                    appVersion: data.appVersion,
+                    deviceLabel: data.deviceLabel,
+                  },
+                }
+              : v,
+          );
+          await local.set('vaults', refreshed);
+          await local.set('activeNetwork', 'zcash' as NetworkType);
+          set(state => {
+            state.keyRing.keyInfos = vaultsToKeyInfos(refreshed, duplicate.id);
+            state.keyRing.status = 'unlocked';
+            state.keyRing.activeNetwork = 'zcash' as NetworkType;
+          });
+          await get().keyRing.selectKeyRing(duplicate.id);
+          return duplicate.id;
         }
         // also catch cross-device UFVK duplicates against existing zcash wallets.
         if (data.ufvk) {
