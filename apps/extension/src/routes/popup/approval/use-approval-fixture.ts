@@ -8,16 +8,16 @@
  * hook calls the SAME `acceptRequest` a real request would, so the rendered
  * screen is the real component on real (if invented) data, not a mock.
  *
- * It never fires once a real request is pending, and no production caller
- * ever adds `?fixture=1` to these URLs, so this path is inert outside the
- * harness.
+ * It never fires once a real request is pending, and only in an unpacked
+ * install: a Web Store install has `update_url` in its manifest, and there
+ * the fixture is ignored whatever the URL says.
  */
 import { useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 export const useApprovalFixture = (hasPending: boolean, seed: () => void) => {
   const [params] = useSearchParams();
-  const wantsFixture = params.get('fixture') === '1';
+  const wantsFixture = params.get('fixture') === '1' && !chrome.runtime.getManifest().update_url;
 
   useEffect(() => {
     if (wantsFixture && !hasPending) {
