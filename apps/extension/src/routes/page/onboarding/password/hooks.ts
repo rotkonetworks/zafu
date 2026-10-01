@@ -15,6 +15,38 @@ import type { ZignerZafuImport } from '../../../../state/keyring/types';
 import { viewingKeyImport } from '../../../../hooks/use-viewing-key';
 import { useOnboarding } from '..';
 import { BIRTHDAY_PATH } from '../flow';
+import { PasswordMismatchError } from '../../../../state/keyring';
+
+/** what an import writes; restored together if it fails */
+const pick = (o: Record<string, unknown>, keys: string[]) =>
+  Object.fromEntries(keys.filter(k => k in o).map(k => [k, o[k]]));
+
+const ROLLBACK_KEYS = [
+  'vaults',
+  'penumbraWallets',
+  'zcashWallets',
+  'passwordKeyPrint',
+  'selectedVaultId',
+];
+
+export const restoreSnapshot = async (snapshot: Record<string, unknown>, key: unknown) => {
+  const now = await chrome.storage.local.get(null);
+  // a first password on an airgap-only profile moved every sealed store, not
+  // only these keys: then the whole profile goes back as it was
+  const rekeyed =
+    JSON.stringify(now['passwordKeyPrint']) !== JSON.stringify(snapshot['passwordKeyPrint']);
+  const keys = rekeyed ? Object.keys(now) : ROLLBACK_KEYS;
+  const restore = rekeyed ? snapshot : pick(snapshot, ROLLBACK_KEYS);
+  const gone = keys.filter(k => !(k in snapshot));
+  await chrome.storage.local.set(restore);
+  if (gone.length) {
+    await chrome.storage.local.remove(gone);
+  }
+  // and the session key that opened it
+  await (key
+    ? chrome.storage.session.set({ passwordKey: key })
+    : chrome.storage.session.remove('passwordKey'));
+};
 
 export const useFinalizeOnboarding = () => {
   const addWallet = useAddWallet();
@@ -143,8 +175,8 @@ export const useFinalizeOnboarding = () => {
     // anything, so a failure rolls back to exactly this state. The old
     // rollback did remove('vaults'), which deleted every wallet on the
     // profile - a failed import must never take out the user's other wallets.
-    const vaultsSnapshot = (await localExtStorage.get('vaults')) ?? [];
-    const penumbraSnapshot = (await localExtStorage.get('penumbraWallets')) ?? [];
+    const snapshot = await chrome.storage.local.get(null);
+    const { passwordKey: keyBefore } = await chrome.storage.session.get('passwordKey');
 
     try {
       setLoading(true);
@@ -191,12 +223,14 @@ export const useFinalizeOnboarding = () => {
       navigate(PagePath.ONBOARDING_SUCCESS, { state: { origin } });
     } catch (e) {
       console.error('[onboarding] finalize failed', e);
-      setError('something broke on our side, not yours · nothing was saved, please try again');
-      // roll back to the pre-import snapshot - restore what was there rather
-      // than wiping everything, so a failed import leaves the user's existing
-      // wallets untouched.
-      await localExtStorage.set('vaults', vaultsSnapshot);
-      await localExtStorage.set('penumbraWallets', penumbraSnapshot);
+      setError(
+        e instanceof PasswordMismatchError
+          ? "that isn't the password zafu already uses here · please try again, slowly"
+          : 'something broke on our side, not yours · nothing was saved, please try again',
+      );
+      // back to exactly the pre-import state, the keyprint with the vaults it
+      // sealed: one write, so a new keyprint never sits over old-key vaults
+      await restoreSnapshot(snapshot, keyBefore);
     } finally {
       setLoading(false);
     }
