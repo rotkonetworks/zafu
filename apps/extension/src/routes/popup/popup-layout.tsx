@@ -66,10 +66,10 @@ export const PopupLayout = () => {
           viewTransitionName: 'popup-screen',
         }}
       >
-        {/* side-panel width rule: content never grows past the popup's own
-            360px, however wide the panel is. the background and header/footer
-            above still stretch full width; only this column is capped. */}
-        <div className='mx-auto h-full max-w-[360px]'>
+        {/* side-panel width rule: content never grows past the popup's own 400px,
+            however wide the panel is. the background, header and tabs still
+            stretch full width; only this column is capped. */}
+        <div className='mx-auto h-full max-w-[400px]'>
           <Outlet />
         </div>
       </div>
