@@ -456,7 +456,7 @@ export const ZcashContent = ({
   return (
     <div className='flex min-h-full flex-col overflow-x-hidden'>
       {PasswordModal}
-      {!allSynced && (
+      {(!allSynced || syncError) && (
         <SyncStatus
           percent={overallPct}
           connecting={chainHeight <= 0}
@@ -567,7 +567,7 @@ export const ZcashContent = ({
 
         {messageSlot}
 
-        {reading ? null : empty ? (
+        {reading || balanceView === 'error' ? null : empty ? (
           <section className='flex flex-1 flex-col items-center justify-center gap-3.5 border border-dashed border-surface-border py-10'>
             <span className='font-display text-xl text-fg-high'>no zec yet</span>
             <Button
