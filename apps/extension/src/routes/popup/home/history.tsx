@@ -27,10 +27,13 @@ export const HistoryContent = ({
   network,
   penumbraAccount,
   limit,
+  filter = 'all',
 }: {
   network: NetworkType;
   penumbraAccount: number;
   limit?: number;
+  /** client-side split of the already-fetched list; no new request per tab */
+  filter?: 'all' | 'sent' | 'received';
 }) => {
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const historyEnabled = useStore(s => s.privacy.settings.enableTransactionHistory);
@@ -174,7 +177,7 @@ export const HistoryContent = ({
   // for penumbra, filter by the selected account index - a tx belongs to an
   // account if any of its visible spend or output notes reference that index
   const allTxs = (q.data ?? []) as ParsedTransaction[];
-  const txs =
+  const byAccount =
     network === 'penumbra'
       ? allTxs.filter(
           tx =>
@@ -183,6 +186,9 @@ export const HistoryContent = ({
             tx.accountIndices.has(penumbraAccount),
         )
       : allTxs;
+  const isReceived = (tx: ParsedTransaction) => tx.type === 'receive' || tx.type === 'deposit';
+  const txs =
+    filter === 'all' ? byAccount : byAccount.filter(tx => isReceived(tx) === (filter === 'received'));
 
   if (q.error) {
     return (
