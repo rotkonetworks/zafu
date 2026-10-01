@@ -11,6 +11,8 @@
 
 /// <reference lib="webworker" />
 
+// egress guard first: nothing may capture fetch or open a socket before it
+import '../net/egress-install-lite';
 import { fixOrchardAddress, encodeOrchardUfvk } from '@repo/wallet/networks/zcash/unified-address';
 import { blockRangeFetcher } from '../services/memo-sync/block-range-fetcher';
 import { buildStrategy } from '../services/memo-sync/strategy';

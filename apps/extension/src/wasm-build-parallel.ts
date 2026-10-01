@@ -8,6 +8,8 @@
  * builds ALL actions concurrently via rayon's par_iter() in a single WASM call.
  */
 
+// egress guard first: nothing may capture fetch or open a socket before it
+import './net/egress-install-lite';
 import {
   AuthorizationData,
   Transaction,

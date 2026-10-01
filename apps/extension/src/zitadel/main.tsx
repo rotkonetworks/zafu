@@ -9,6 +9,10 @@
 // DMs use Noise IK over a separate WebSocket. they are end-to-end
 // encrypted between two ZID keypairs.
 
+// egress guard first: nothing may capture fetch or open a socket before it
+import '../net/egress-install';
+import { requestEgressOptIn } from '../net/egress-opt-in';
+import { installEgressAskSheet } from './egress-ask';
 import { ed25519 } from '@noble/curves/ed25519';
 // eslint-disable-next-line import/no-relative-packages -- @zafu/zid publishes no subpath exports for these; the suggested specifiers do not resolve
 import { createNoiseChannel, type ZidChannel } from '../../../../packages/zid/src';
@@ -18,6 +22,8 @@ import type { SessionKey } from '../../../../packages/zid/src/noise-channel';
 import { isLicenseValid, type License } from '../../../../packages/wallet/src/license';
 import { createCallUi, MEDIA_SIGNAL_TAG, type CallUi } from './call-ui';
 import { createLockedPreview } from './locked-preview';
+
+installEgressAskSheet();
 
 // ─── zid-auth-v1: signed nick claims ────────────────────────────────────
 //
@@ -613,10 +619,6 @@ function boot() {
     return;
   }
   document.body.style.cssText = 'margin:0;padding:0;';
-  const font = document.createElement('link');
-  font.rel = 'stylesheet';
-  font.href = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&display=swap';
-  document.head.appendChild(font);
 
   // init params (must be before state refs)
   const params = new URLSearchParams(location.search);
@@ -781,7 +783,7 @@ function boot() {
   }
 
   // DOM - sidebar + main layout
-  root.style.cssText = `background:${C.bg};color:${C.text};font-family:'IBM Plex Mono',monospace;font-size:14px;height:100vh;display:flex;`;
+  root.style.cssText = `background:${C.bg};color:${C.text};font-family:monospace;font-size:14px;height:100vh;display:flex;`;
   const sidebar = mkEl(
     'div',
     `width:180px;min-width:180px;background:${C.panel};border-right:1px solid ${C.border};display:flex;flex-direction:column;overflow-y:auto;`,
@@ -1688,7 +1690,16 @@ function boot() {
     }, delayMs);
   }
 
-  function connectRelay() {
+  async function connectRelay() {
+    // the chat relay is optional: nothing is contacted until the user allows it
+    if (!(await requestEgressOptIn('chat-relay'))) {
+      addMsg(
+        'zitadel',
+        'zafu has not contacted the chat relay. you can allow it in settings.',
+        true,
+      );
+      return;
+    }
     addMsg('zitadel', `connecting to relay...`, true);
     try {
       ws = new WebSocket(relayUrl);

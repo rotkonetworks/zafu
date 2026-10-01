@@ -13,6 +13,8 @@
  *   4. GET /v0/status?depositAddress=... — poll for completion
  */
 
+import { requestEgressOptIn } from '../net/egress-opt-in';
+
 const API_BASE = 'https://1click.chaindefuser.com';
 
 // 1Click partner JWT — partner_id: rotko-networks (issued via NEAR Intents portal).
@@ -110,6 +112,9 @@ export interface SwapStatusResponse {
 // ── API calls ──
 
 async function nearFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  // asks before the first request; declining still reaches fetch, which the
+  // egress guard refuses with a named EgressBlockedError for the caller to show
+  await requestEgressOptIn('near-swap');
   const resp = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {

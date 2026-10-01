@@ -7,6 +7,7 @@ import { useStoreShallow } from '../../../utils/use-store-shallow';
 import { NewFrontendInput } from './new-frontend-input';
 import { LoadingList } from '../loading-list';
 import { useRegistry } from '../registry';
+import { RegistryIcon } from '../registry-icon';
 
 const useFrontendsList = (selectedRpc?: string) => {
   const { data, isLoading, error } = useRegistry();
@@ -62,28 +63,23 @@ export const DefaultFrontendForm = ({ isOnboarding }: { isOnboarding?: boolean }
 
   return (
     <SelectList>
-      {frontends.map(option => {
-        const imageUrl = option.images[0]?.svg ?? option.images[0]?.png;
-        return (
-          <SelectList.Option
-            key={option.url}
-            value={option.url}
-            secondary={option.url}
-            label={option.name}
-            isSelected={option.url === selectedFrontend}
-            onSelect={selectUrl}
-            image={
-              !!imageUrl && (
-                <img
-                  src={imageUrl}
-                  className='size-full object-contain'
-                  alt='rpc endpoint brand image'
-                />
-              )
-            }
-          />
-        );
-      })}
+      {frontends.map(option => (
+        <SelectList.Option
+          key={option.url}
+          value={option.url}
+          secondary={option.url}
+          label={option.name}
+          isSelected={option.url === selectedFrontend}
+          onSelect={selectUrl}
+          image={
+            <RegistryIcon
+              name={option.name}
+              images={option.images}
+              className='size-full object-contain'
+            />
+          }
+        />
+      ))}
 
       <NewFrontendInput
         key='custom-input'

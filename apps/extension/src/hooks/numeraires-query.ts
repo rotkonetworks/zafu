@@ -2,32 +2,16 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { registryClient } from './ibc-chains';
 
-/** prefetch all asset icon URLs to prevent portfolio timing leak */
-const prefetchAssetIcons = (registry: {
-  getAllAssets: () => Iterable<{ images?: { png?: string; svg?: string }[] }>;
-}) => {
-  try {
-    for (const asset of registry.getAllAssets()) {
-      for (const img of asset.images ?? []) {
-        const url = img.png || img.svg;
-        if (url) {
-          void fetch(url, { mode: 'no-cors', cache: 'force-cache' }).catch(() => {});
-        }
-      }
-    }
-  } catch {
-    /* non-critical */
-  }
-};
-
+/**
+ * `registryClient.remote.get` resolves from the bundled registry copy first,
+ * never the network (see @repo/context/registry-client). Its icon urls are
+ * never fetched: AssetIcon falls back to a generated monogram instead of
+ * asking github for them (packages/ui/components/ui/asset-icon).
+ */
 export const useNumeraires = (chainId?: string) => {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['registry', chainId],
-    queryFn: async () => {
-      const registry = await registryClient.remote.get(chainId!);
-      prefetchAssetIcons(registry);
-      return registry;
-    },
+    queryFn: () => registryClient.remote.get(chainId!),
     retry: 1,
     retryDelay: 0,
     staleTime: Infinity,

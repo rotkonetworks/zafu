@@ -16,6 +16,7 @@ import { useSearchParams } from 'react-router-dom';
 import { ApprovalScreen } from './approval-screen';
 import { ApproveDeny } from './approve-deny';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
+import { OriginIcon } from '../../../shared/components/origin-icon';
 import { LinkGradientIcon } from '../../../icons/link-gradient';
 import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../../../config/contact-discovery-relay';
 
@@ -35,7 +36,6 @@ export const ContactDiscoveryApproval = () => {
   const [params] = useSearchParams();
   const origin = params.get('app') || '';
   const requestId = params.get('requestId') || '';
-  const favIconUrl = params.get('favIconUrl') || '';
   const title = params.get('title') || '';
   // The endpoint the wallet will ACTUALLY use (the worker resolved a configured
   // endpoint, else the built-in default). Falling back to the constant keeps the
@@ -70,7 +70,7 @@ export const ContactDiscoveryApproval = () => {
         <div className='flex flex-col gap-3'>
           {/* requesting app */}
           <div className='flex items-center gap-2 rounded-lg bg-canvas p-3'>
-            {!!favIconUrl && <img src={favIconUrl} alt='' className='size-8 rounded-full' />}
+            {!!origin && <OriginIcon origin={origin} size={32} />}
             <div className='flex flex-col overflow-hidden'>
               {title && <span className='text-sm truncate'>{title}</span>}
               {origin && (

@@ -5,6 +5,7 @@ import { useGrpcEndpointForm } from './use-grpc-endpoint-form';
 import { ConfirmChangedChainIdDialog } from './confirm-changed-chain-id-dialog';
 import { ChainIdOrError } from './chain-id-or-error';
 import { LoadingList } from '../loading-list';
+import { RegistryIcon } from '../registry-icon';
 
 /**
  * Renders all the parts of the gRPC endpoint form that are shared between the
@@ -49,28 +50,23 @@ export const GrpcEndpointForm = ({
       <div className='flex flex-col gap-2'>
         <form className='flex flex-col gap-4 mt-[-8px]' onSubmit={handleSubmit}>
           <SelectList>
-            {grpcEndpointsQuery.rpcs.map(option => {
-              const imageUrl = option.images[0]?.svg ?? option.images[0]?.png;
-              return (
-                <SelectList.Option
-                  key={option.url}
-                  label={option.name}
-                  secondary={option.url}
-                  onSelect={setGrpcEndpointInput}
-                  value={option.url}
-                  isSelected={option.url === grpcEndpointInput}
-                  image={
-                    !!imageUrl && (
-                      <img
-                        src={imageUrl}
-                        className='size-full object-contain'
-                        alt='rpc endpoint brand image'
-                      />
-                    )
-                  }
-                />
-              );
-            })}
+            {grpcEndpointsQuery.rpcs.map(option => (
+              <SelectList.Option
+                key={option.url}
+                label={option.name}
+                secondary={option.url}
+                onSelect={setGrpcEndpointInput}
+                value={option.url}
+                isSelected={option.url === grpcEndpointInput}
+                image={
+                  <RegistryIcon
+                    name={option.name}
+                    images={option.images}
+                    className='size-full object-contain'
+                  />
+                }
+              />
+            ))}
 
             <SelectList.Option
               label='Custom RPC'

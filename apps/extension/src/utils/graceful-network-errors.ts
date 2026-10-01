@@ -53,6 +53,8 @@ const messageOf = (reason: unknown): string => {
 // genuine failure still surfaces loudly.
 const BENIGN_PATTERNS = [
   'Failed to fetch',
+  // an egress refusal (net/egress.ts): the policy said no, nothing broke
+  'zafu did not contact',
   'NetworkError',
   'Load failed',
   'Could not establish connection',

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { generateGradient, generateSolidColor } from './generate';
 import { IdenticonProps } from './types';
+import { cn } from '../../../lib/utils';
 
 export const Identicon = ({ type, ...props }: IdenticonProps & { type: 'gradient' | 'solid' }) => {
   if (type === 'gradient') {
@@ -9,7 +10,7 @@ export const Identicon = ({ type, ...props }: IdenticonProps & { type: 'gradient
   return <IdenticonSolid {...props} />;
 };
 
-const IdenticonGradient = ({ uniqueIdentifier, size = 120 }: IdenticonProps) => {
+const IdenticonGradient = ({ uniqueIdentifier, size = 120, className }: IdenticonProps) => {
   const gradient = useMemo(() => generateGradient(uniqueIdentifier), [uniqueIdentifier]);
   const gradientId = useMemo(() => `gradient-${uniqueIdentifier}`, [uniqueIdentifier]);
 
@@ -20,7 +21,7 @@ const IdenticonGradient = ({ uniqueIdentifier, size = 120 }: IdenticonProps) => 
       viewBox={`0 0 ${size} ${size}`}
       version='1.1'
       xmlns='http://www.w3.org/2000/svg'
-      className='rounded-full'
+      className={cn('rounded-full', className)}
     >
       <g>
         <defs>
@@ -35,7 +36,7 @@ const IdenticonGradient = ({ uniqueIdentifier, size = 120 }: IdenticonProps) => 
   );
 };
 
-const IdenticonSolid = ({ uniqueIdentifier, size = 120 }: IdenticonProps) => {
+const IdenticonSolid = ({ uniqueIdentifier, size = 120, className }: IdenticonProps) => {
   const color = useMemo(() => generateSolidColor(uniqueIdentifier), [uniqueIdentifier]);
 
   return (
@@ -45,7 +46,7 @@ const IdenticonSolid = ({ uniqueIdentifier, size = 120 }: IdenticonProps) => {
       viewBox={`0 0 ${size} ${size}`}
       version='1.1'
       xmlns='http://www.w3.org/2000/svg'
-      className='rounded-full'
+      className={cn('rounded-full', className)}
     >
       <rect fill={color.bg} x='0' y='0' width={size} height={size} />
       <text

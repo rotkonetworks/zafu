@@ -1,3 +1,5 @@
+// egress guard first: nothing may capture fetch or open a socket before it
+import '../net/egress-install-lite';
 import { ConnectError } from '@connectrpc/connect';
 import { errorToJson } from '@connectrpc/connect/protocol-connect';
 import {

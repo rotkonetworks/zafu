@@ -11,6 +11,8 @@
  * We patch the global Worker constructor to fix the URLs before init.
  */
 
+// egress guard first: nothing may capture fetch or open a socket before it
+import './net/egress-install-lite';
 import { assessAmbientRayonIsolation, RAYON_ISOLATION_WARNING } from './perf/rayon-isolation';
 
 type WasmModule = Record<string, any>;

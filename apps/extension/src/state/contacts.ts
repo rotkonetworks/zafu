@@ -15,6 +15,7 @@ import type { KeyPrintJson } from '@repo/encryption/key-print';
 import { readSentRecords, writeSentRecords, readTxNotes, writeTxNotes } from './personal-data';
 import type { SentTxRecord } from '../workers/sent-tx-reconcile';
 import type { ContactCardKey } from './identity';
+import { exportEgressChoices, importEgressChoices, type EgressChoices } from '../net/ledger';
 
 /**
  * Encrypted backup of ALL local, chain-irreplaceable personal data: contacts +
@@ -25,7 +26,7 @@ import type { ContactCardKey } from './identity';
 export interface PersonalDataBackup {
   version: 4;
   exportedAt: number;
-  /** encrypted { contacts, sent, txNotes, pockets } JSON */
+  /** encrypted { contacts, sent, txNotes, pockets, egress } JSON */
   data: BoxJson;
   keyPrint: KeyPrintJson;
 }
@@ -544,9 +545,10 @@ export const createContactsSlice =
         }));
         const sent = await readSentRecords();
         const txNotes = await readTxNotes();
+        const egress = await exportEgressChoices();
 
         const pockets = get().pockets.book;
-        const plaintext = JSON.stringify({ contacts, sent, txNotes, pockets });
+        const plaintext = JSON.stringify({ contacts, sent, txNotes, pockets, egress });
         const { key, keyPrint } = await Key.create(password);
         const box = await key.seal(plaintext);
 
@@ -590,6 +592,8 @@ export const createContactsSlice =
           txNotes: Record<string, string>;
           /** zcash pocket names (absent in backups made before pockets) */
           pockets?: unknown;
+          /** egress choices (absent in backups made before the egress policy) */
+          egress?: Partial<EgressChoices>;
         };
 
         const existingNames = new Set(safeContacts().map(c => c.name.toLowerCase()));
@@ -628,6 +632,7 @@ export const createContactsSlice =
         await writeSentRecords(parsed.sent ?? []);
         await writeTxNotes(parsed.txNotes ?? {}, mode);
         await get().pockets.restore(parsed.pockets, mode);
+        await importEgressChoices(parsed.egress);
 
         return {
           contacts: newContacts.length,

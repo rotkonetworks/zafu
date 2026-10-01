@@ -24,9 +24,10 @@ export interface IbcChain {
 /**
  * Shared penumbra chain-registry client - reused for asset metadata lookups and
  * the IBC destination list, numeraires and the settings forms. `remote.get` and
- * `remote.globals` degrade to the registry bundled in the extension when the
- * remote CDN is unreachable, so an offline or firewalled load still resolves
- * symbols, icons, chain names and default endpoints instead of erroring.
+ * `remote.globals` resolve from the registry bundled in the extension FIRST,
+ * never the network, and only reach for the actual network as a last resort
+ * for a chain the bundled copy does not carry (egress-refused by default,
+ * since zafu no longer has a destination for the registry CDN at all).
  */
 export const registryClient = withBundledFallback();
 

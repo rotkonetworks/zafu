@@ -1,5 +1,4 @@
 import { ChainRegistryClient } from '@penumbrafi/registry';
-import { sample } from 'lodash';
 import { createClient } from '@connectrpc/connect';
 import { createGrpcWebTransport } from '@connectrpc/connect-web';
 import { localExtStorage } from '@repo/storage-chrome/local';
@@ -8,55 +7,22 @@ import { fetchBlockHeightWithFallback } from '../../../hooks/latest-block-height
 import { SEED_PHRASE_ORIGIN } from './password/types';
 import { DEFAULT_FRONTEND, DEFAULT_TRANSPORT_OPTS } from './constants';
 
-/**
- * Set up block height parameters for fresh wallets BEFORE creating the wallet.
- * This ensures the service worker sees compactFrontierBlockHeight when it starts syncing.
- *
- * IMPORTANT: Call this BEFORE creating the wallet to avoid race conditions.
- */
-export const setFreshWalletBlockHeights = async () => {
+export const setOnboardingValuesInStorage = async (seedPhraseOrigin: SEED_PHRASE_ORIGIN) => {
+  await localExtStorage.set('frontendUrl', DEFAULT_FRONTEND);
+
+  if (seedPhraseOrigin === SEED_PHRASE_ORIGIN.IMPORTED) {
+    // Importing means the user typed the phrase from an existing backup -
+    // they demonstrably possess it. Suppress the home backup nudge.
+    await localExtStorage.set('seedPhraseBackedUp', true);
+  }
+
+  // Everything below talks to Penumbra and its registry: only for a wallet
+  // that chose Penumbra. A Zcash-only onboarding contacts nothing else.
+  if (!(await localExtStorage.get('enabledNetworks'))?.includes('penumbra')) {
+    return;
+  }
   const chainRegistryClient = new ChainRegistryClient();
   const { rpcs } = await chainRegistryClient.remote.globals();
-
-  const { blockHeight, rpc } = await fetchBlockHeightWithFallback(rpcs.map(r => r.url));
-
-  // Store RPC endpoint
-  await localExtStorage.set('grpcEndpoint', rpc);
-
-  // Block processor identifier for denoting whether the wallet is freshly generated.
-  await localExtStorage.set('walletCreationBlockHeight', blockHeight);
-
-  // Wallet services identifier for denoting whether the wallet is freshly generated
-  // and should fetch the frontier snapshot.
-  try {
-    const compactFrontier = await createClient(
-      SctService,
-      createGrpcWebTransport({ baseUrl: rpc }),
-    ).sctFrontier({ withProof: false }, DEFAULT_TRANSPORT_OPTS);
-    await localExtStorage.set('compactFrontierBlockHeight', Number(compactFrontier.height));
-    console.log('[onboarding] set compactFrontierBlockHeight:', Number(compactFrontier.height));
-  } catch (error) {
-    // Fallback: use current block height as a reasonable default.
-    await localExtStorage.set('compactFrontierBlockHeight', blockHeight);
-    console.log('[onboarding] set compactFrontierBlockHeight (fallback):', blockHeight);
-  }
-
-  return { blockHeight, rpc };
-};
-
-export const setOnboardingValuesInStorage = async (seedPhraseOrigin: SEED_PHRASE_ORIGIN) => {
-  const chainRegistryClient = new ChainRegistryClient();
-  const { rpcs, frontends } = await chainRegistryClient.remote.globals();
-
-  // If the default frontend is not present, randomly sample a frontend from the chain registry.
-  const defaultFrontend = frontends.find(frontend => frontend.name === 'Radiant Commons');
-  const selectedFrontend = defaultFrontend ?? sample(frontends);
-  if (!selectedFrontend) {
-    throw new Error('Registry missing frontends.');
-  }
-
-  // Persist the frontend to LS storage.
-  await localExtStorage.set('frontendUrl', DEFAULT_FRONTEND);
 
   // Queries for block height regardless of 'SEED_PHRASE_ORIGIN' as a means of testing endpoint for liveness.
   const { blockHeight, rpc } = await fetchBlockHeightWithFallback(rpcs.map(r => r.url));
@@ -64,15 +30,8 @@ export const setOnboardingValuesInStorage = async (seedPhraseOrigin: SEED_PHRASE
   // Persist the RPC to LS storage.
   await localExtStorage.set('grpcEndpoint', rpc);
 
-  if (seedPhraseOrigin === SEED_PHRASE_ORIGIN.IMPORTED) {
-    // Importing means the user typed the phrase from an existing backup —
-    // they demonstrably possess it. Suppress the home backup nudge.
-    await localExtStorage.set('seedPhraseBackedUp', true);
-  }
-
   if (seedPhraseOrigin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED) {
-    // NOTE: walletCreationBlockHeight and compactFrontierBlockHeight should already be set
-    // by setFreshWalletBlockHeights() BEFORE wallet creation. Only set them here as fallback.
+    // Penumbra's birthday for a fresh wallet, unless something set it already.
     const existingCreationHeight = await localExtStorage.get('walletCreationBlockHeight');
     if (!existingCreationHeight) {
       await localExtStorage.set('walletCreationBlockHeight', blockHeight);

@@ -1,135 +1,202 @@
 /**
- * "everything zafu talks to" - a core privacy screen (founder decision,
- * 2026-10), not a folded-away directory. Every known destination gets its
- * own allow/block control, grouped by purpose, tagged "needed for <network>"
- * when it is a shipped chain endpoint for a network the user has enabled,
- * "optional" otherwise (price feeds, the contact-discovery relay, zafu's own
- * relay/license/sponsor hosts, ...). The goal a zcash-only user should reach:
- * nothing optional allowed unless they opted in.
+ * "everything zafu talks to": the egress policy (net/egress-policy.ts), one
+ * row per destination.
  *
- * This screen only reads/writes the EXISTING egress ledger (net/ledger.ts)
- * and inventory (net/inventory.ts) - the same ones settings-networks-
- * directory.tsx already used for the IBC chains' shipped-host decisions. It
- * does not add enforcement: "needed"/"optional" here is a display label
- * (network membership does not gate the ledger), and the "off by default,
- * opt-in only" rule described above is enforcement a separate change (the
- * egress gate in net/) would need to implement - not built by this screen.
+ *  - in use: what the enabled networks need. Blocking one asks first, since
+ *    that network stops syncing.
+ *  - optional: off until the user turns it on (here, or when a feature asks).
+ *  - hosts the user answered one by one (a site's endpoint, a voting server).
+ *  - networks not turned on: folded into a sheet, for reference.
  *
- * Known gap: destinations this screen cannot show, because they are not in
- * the trusted-destination inventory at all (SHIPPED / configuredDestinations
- * in net/inventory.ts) - zcash.me's live-lookup host, and the default voting
- * server (only a user-set OVERRIDE is tracked, not the shipped default). See
- * the task report for the full list.
+ * The screen only reads the policy and writes choices to the ledger; the
+ * guard in every realm follows the change on its own.
  */
-import { useStore } from '../../../state';
-import { selectEnabledNetworks } from '../../../state/keyring';
-import { hostOf } from '../../../net/destination';
-import type { DestinationState } from '../../../net/destination';
-import type { TrustedDestination } from '../../../net/inventory';
-import { NET_PURPOSE_LABEL, type NetPurpose } from '../../../net/purpose';
-import { ZCASH_MAINNET_ENDPOINTS } from '../../../config/zcash-endpoints';
-import { PENUMBRA_MAINNET_ENDPOINTS } from '../../../config/penumbra-endpoints';
-import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
-import { useDirectoryState } from './settings-networks-directory';
+import { useEffect, useState } from 'react';
+import { Button } from '@repo/ui/components/ui/button';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+import { EGRESS_INPUT_KEYS, type DestinationView } from '../../../net/egress-policy';
+import { readEgressView } from '../../../net/egress-opt-in';
+import type { NetEgressState } from '../../../net/destination';
+import { readNetEgress, setDestinationDecision, setDestinationOptIn } from '../../../net/ledger';
 import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
-import { Segmented } from '@repo/ui/components/ui/segmented';
-import { cn } from '@repo/ui/lib/utils';
 
-const ZCASH_HOSTS = new Set(
-  ZCASH_MAINNET_ENDPOINTS.map(p => hostOf(p.url)).filter((h): h is string => Boolean(h)),
-);
-const PENUMBRA_HOSTS = new Set(
-  [
-    ...PENUMBRA_MAINNET_ENDPOINTS.map(p => p.url),
-    ...Object.values(COSMOS_CHAINS).flatMap(c => [c.rpcEndpoint, c.restEndpoint]),
-  ]
-    .map(u => (u ? hostOf(u) : undefined))
-    .filter((h): h is string => Boolean(h)),
-);
+interface Connections {
+  destinations: DestinationView[];
+  ledger: NetEgressState;
+}
 
-/** display-only: which enabled network this host is shipped for, if any.
- *  Everything else - price feeds, relays, zafu's own service hosts, license,
- *  voting, ota - reads "optional". */
-const neededFor = (host: string, enabledNetworks: readonly string[]): string | null => {
-  if (ZCASH_HOSTS.has(host) && enabledNetworks.includes('zcash')) {
-    return 'zcash';
-  }
-  if (PENUMBRA_HOSTS.has(host) && enabledNetworks.includes('penumbra')) {
-    return 'penumbra';
-  }
-  return null;
+/** The policy view and the ledger, re-read whenever one of their inputs changes. */
+const useConnections = (): Connections | undefined => {
+  const [state, setState] = useState<Connections>();
+  useEffect(() => {
+    const keys = new Set<string>(EGRESS_INPUT_KEYS);
+    const load = () =>
+      void Promise.all([readEgressView(), readNetEgress()]).then(([destinations, ledger]) =>
+        setState({ destinations, ledger }),
+      );
+    const onChanged = (changes: Record<string, unknown>, area: string) => {
+      if (area === 'local' && Object.keys(changes).some(k => keys.has(k))) {
+        load();
+      }
+    };
+    load();
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => chrome.storage.onChanged.removeListener(onChanged);
+  }, []);
+  return state;
 };
 
-export const SettingsConnections = () => {
-  const enabledNetworks = useStore(selectEnabledNetworks) as string[];
-  const { egress, destinations, decide } = useDirectoryState();
+/** `zcash.rotko.net`, or `noble-rpc.polkachu.com +3` */
+const hostsLine = (hosts: string[]) => {
+  const names = [...new Set(hosts.map(h => h.split('/')[0]!))];
+  return names.length > 1 ? `${names[0]} +${names.length - 1}` : (names[0] ?? '');
+};
 
-  const grouped = destinations.reduce<Map<NetPurpose, TrustedDestination[]>>((acc, dest) => {
-    for (const purpose of dest.purposes.length ? dest.purposes : (['other'] as NetPurpose[])) {
-      const list = acc.get(purpose) ?? [];
-      list.push(dest);
-      acc.set(purpose, list);
+const DestinationRow = ({
+  dest,
+  onToggle,
+}: {
+  dest: DestinationView;
+  onToggle: (dest: DestinationView, next: boolean) => void;
+}) => (
+  <Row
+    type='toggle'
+    label={dest.label}
+    description={hostsLine(dest.hosts)}
+    checked={dest.on}
+    onChange={next => onToggle(dest, next)}
+  />
+);
+
+export const SettingsConnections = () => {
+  const data = useConnections();
+  const [confirm, setConfirm] = useState<DestinationView>();
+  const [unusedOpen, setUnusedOpen] = useState(false);
+
+  if (!data) {
+    return (
+      <SettingsScreen title='everything zafu talks to' backPath={PopupPath.SETTINGS_PRIVACY}>
+        {null}
+      </SettingsScreen>
+    );
+  }
+
+  const listed = data.destinations.filter(d => d.hosts.length > 0);
+  const inUse = listed.filter(d => d.needed);
+  const optional = listed.filter(d => d.kind === 'optional');
+  const unused = listed.filter(d => !d.needed && d.kind !== 'optional');
+  const answered = Object.entries(data.ledger.destinations).filter(
+    ([, r]) => r.state === 'allowed' || r.state === 'blocked',
+  );
+
+  const toggle = (dest: DestinationView, next: boolean) => {
+    if (!next && dest.needed) {
+      setConfirm(dest);
+      return;
     }
-    return acc;
-  }, new Map());
+    // a needed destination turned back on returns to its default; an optional
+    // one is an explicit yes or no
+    void setDestinationOptIn(dest.id, next ? (dest.needed ? undefined : 'allowed') : 'blocked');
+  };
 
   return (
     <SettingsScreen title='everything zafu talks to' backPath={PopupPath.SETTINGS_PRIVACY}>
       <div className='flex flex-col gap-5'>
-        <p className='text-label text-fg-muted'>
-          allow or block each host zafu may contact. needed hosts run the networks you enabled;
-          optional ones are relays, price feeds and the like.
-        </p>
-        {[...grouped.entries()].map(([purpose, list]) => (
-          <div key={purpose}>
-            <p className='kicker mb-2'>{NET_PURPOSE_LABEL[purpose]}</p>
-            <div className='flex flex-col gap-2'>
-              {list.map(dest => {
-                const state: DestinationState = egress?.destinations[dest.host]?.state ?? 'pending';
-                const need = neededFor(dest.host, enabledNetworks);
-                return (
-                  <div
-                    key={`${purpose}-${dest.host}`}
-                    className='flex flex-col gap-2 border border-surface-border-soft bg-surface-elev-1 p-3'
-                  >
-                    <div className='flex items-start justify-between gap-2'>
-                      <div className='flex min-w-0 flex-col'>
-                        <span className='truncate text-data text-fg-high lowercase'>
-                          {dest.label}
-                        </span>
-                        <span className='truncate font-mono text-label text-fg-dim'>
-                          {dest.host}
-                        </span>
-                      </div>
-                      <span
-                        className={cn(
-                          'shrink-0 text-label lowercase',
-                          need ? 'text-fg-muted' : 'text-zigner-gold',
-                        )}
-                      >
-                        {need ? `needed for ${need}` : 'optional'}
-                      </span>
-                    </div>
-                    <Segmented
-                      value={state}
-                      onChange={next =>
-                        void decide(dest.host, dest.label, next, dest.purposes[0] ?? 'other')
-                      }
-                      options={[
-                        { value: 'pending', label: 'not decided' },
-                        { value: 'allowed', label: 'allow' },
-                        { value: 'blocked', label: 'block' },
-                      ]}
-                      label={`${dest.host} decision`}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+        <section>
+          <p className='kicker mb-2'>in use</p>
+          <RowGroup>
+            {inUse.map(d => (
+              <DestinationRow key={d.id} dest={d} onToggle={toggle} />
+            ))}
+          </RowGroup>
+        </section>
+
+        <section>
+          <p className='kicker mb-2'>optional, off until you ask</p>
+          <RowGroup>
+            {optional.map(d => (
+              <DestinationRow key={d.id} dest={d} onToggle={toggle} />
+            ))}
+          </RowGroup>
+        </section>
+
+        {answered.length > 0 && (
+          <section>
+            <p className='kicker mb-2'>hosts you answered</p>
+            <RowGroup>
+              {answered.map(([host, record]) => (
+                <Row
+                  key={host}
+                  type='toggle'
+                  label={host}
+                  description={record.label || undefined}
+                  checked={record.state === 'allowed'}
+                  onChange={next => void setDestinationDecision(host, next ? 'allowed' : 'blocked')}
+                />
+              ))}
+            </RowGroup>
+          </section>
+        )}
+
+        {unused.length > 0 && (
+          <RowGroup>
+            <Row
+              type='value'
+              label='networks you have not turned on'
+              value={String(unused.length)}
+              onPress={() => setUnusedOpen(true)}
+            />
+          </RowGroup>
+        )}
       </div>
+
+      <Sheet open={unusedOpen} onOpenChange={setUnusedOpen} title='not turned on'>
+        <p className='text-label text-fg-muted lowercase'>
+          zafu contacts these only once you turn their network on.
+        </p>
+        <div className='flex flex-col gap-3 overflow-y-auto'>
+          {unused.map(d => (
+            <div key={d.id} className='flex flex-col gap-0.5'>
+              <span className='text-data text-fg-high lowercase'>{d.label}</span>
+              {d.hosts.map(h => (
+                <span key={h} className='break-all font-mono text-label text-fg-dim'>
+                  {h}
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      </Sheet>
+
+      <Sheet
+        open={confirm !== undefined}
+        onOpenChange={open => !open && setConfirm(undefined)}
+        title={`block ${confirm?.label ?? ''}?`}
+      >
+        <p className='text-body text-fg-muted lowercase'>
+          {confirm?.networks.length
+            ? `${confirm.networks.join(' and ')} cannot sync while this is blocked.`
+            : 'your network cannot be reached while this is blocked.'}
+        </p>
+        <div className='flex flex-col gap-2'>
+          <Button
+            variant='danger'
+            onClick={() => {
+              if (confirm) {
+                void setDestinationOptIn(confirm.id, 'blocked');
+              }
+              setConfirm(undefined);
+            }}
+          >
+            block
+          </Button>
+          <Button variant='secondary' onClick={() => setConfirm(undefined)}>
+            not now
+          </Button>
+        </div>
+      </Sheet>
     </SettingsScreen>
   );
 };

@@ -4,6 +4,7 @@ import { Button } from '@repo/ui/components/ui/button';
 import { Toggle } from '@repo/ui/components/ui/toggle';
 import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import { DisplayOriginURL } from '../../../../shared/components/display-origin-url';
+import { OriginIcon } from '../../../../shared/components/origin-icon';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../../../../state';
 import {
@@ -188,21 +189,24 @@ export const KnownSite = ({
   return (
     <div key={site.origin} role='listitem' className='flex flex-col gap-1'>
       <div className='flex items-center justify-between'>
-        {isApproved && (
-          <a href={site.origin} target='_blank' rel='noreferrer' className='truncate'>
-            <DisplayOriginURL url={new URL(site.origin)} />
-          </a>
-        )}
-        {site.choice === UserChoice.Denied && (
-          <span className='truncate brightness-75'>
-            <DisplayOriginURL url={new URL(site.origin)} />
-          </span>
-        )}
-        {site.choice === UserChoice.Ignored && (
-          <span className='truncate line-through decoration-red decoration-wavy brightness-75'>
-            <DisplayOriginURL url={new URL(site.origin)} />
-          </span>
-        )}
+        <div className='flex min-w-0 items-center gap-2'>
+          <OriginIcon origin={site.origin} size={20} className='shrink-0' />
+          {isApproved && (
+            <a href={site.origin} target='_blank' rel='noreferrer' className='truncate'>
+              <DisplayOriginURL url={new URL(site.origin)} />
+            </a>
+          )}
+          {site.choice === UserChoice.Denied && (
+            <span className='truncate brightness-75'>
+              <DisplayOriginURL url={new URL(site.origin)} />
+            </span>
+          )}
+          {site.choice === UserChoice.Ignored && (
+            <span className='truncate line-through decoration-red decoration-wavy brightness-75'>
+              <DisplayOriginURL url={new URL(site.origin)} />
+            </span>
+          )}
+        </div>
 
         <div className='flex items-center gap-1'>
           <Button

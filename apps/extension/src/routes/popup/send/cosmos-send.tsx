@@ -47,6 +47,7 @@ import { derivePenumbraEphemeralFromMnemonic } from '../../../hooks/use-address'
 import { RecipientPicker } from '../../../components/recipient-picker';
 
 import { SaveContactPrompt } from './shared';
+import { RegistryIcon } from '../../../shared/components/registry-icon';
 
 /** cosmos asset selector dropdown */
 function AssetSelector({
@@ -187,7 +188,12 @@ function CosmosChainSelector({
                 manuallySelected && selected === chain.chainId && 'bg-elev-2',
               )}
             >
-              {chain.logoUri && <img src={chain.logoUri} alt='' className='h-5 w-5 rounded-full' />}
+              <RegistryIcon
+                name={chain.chainName}
+                images={chain.logoUri ? [{ png: chain.logoUri }] : undefined}
+                className='h-5 w-5 rounded-full'
+                size={20}
+              />
               <span>{chain.chainName}</span>
             </button>
           ))}

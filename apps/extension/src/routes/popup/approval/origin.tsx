@@ -4,6 +4,7 @@ import { ApprovalScreen } from './approval-screen';
 import { ApproveDeny } from './approve-deny';
 import { LinkGradientIcon } from '../../../icons/link-gradient';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
+import { OriginIcon } from '../../../shared/components/origin-icon';
 import { cn } from '@repo/ui/lib/utils';
 import { UserChoice } from '@repo/storage-chrome/records';
 import { exitApprovalSurface, usePopupNav } from '../../../utils/navigate';
@@ -75,15 +76,8 @@ const CapabilityItem = ({ cap }: { cap: Capability }) => {
 
 export const OriginApproval = () => {
   const navigate = usePopupNav();
-  const {
-    requestOrigin,
-    favIconUrl,
-    title,
-    lastRequest,
-    requestedCapabilities,
-    setChoice,
-    sendResponse,
-  } = useStore(originApprovalSelector);
+  const { requestOrigin, title, lastRequest, requestedCapabilities, setChoice, sendResponse } =
+    useStore(originApprovalSelector);
 
   const approve = () => {
     setChoice(UserChoice.Approved);
@@ -153,7 +147,7 @@ export const OriginApproval = () => {
           >
             <div className='flex flex-col items-center gap-2'>
               <div className='flex h-11 max-w-full items-center rounded-lg bg-black p-2 text-fg-muted [z-index:30]'>
-                {!!favIconUrl && (
+                {!!requestOrigin && (
                   <div
                     className={cn(
                       '-ml-3',
@@ -164,11 +158,7 @@ export const OriginApproval = () => {
                       '[background:linear-gradient(var(--charcoal),var(--charcoal))_padding-box,_linear-gradient(to_top_right,rgb(139,228,217),rgb(255,144,47))_border-box]',
                     )}
                   >
-                    <img
-                      src={favIconUrl}
-                      alt='requesting website icon'
-                      className='size-20 min-w-20 rounded-full'
-                    />
+                    <OriginIcon origin={requestOrigin} size={80} />
                   </div>
                 )}
                 <div className='-ml-3 w-full truncate p-2 pl-6 text-title text-fg-high tracking-[-0.005em]'>

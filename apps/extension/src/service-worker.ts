@@ -8,17 +8,13 @@
  * - session manager for rpc entry
  */
 
-// Register the global error / unhandledrejection listeners FIRST, from a sync
-// module, so MV3 sees them on the worker's initial synchronous evaluation. This
-// import MUST stay above every wasm-backed import below (see the file's note on
-// asyncWebAssembly deferring the entry body).
+// The egress guard patches fetch/WebSocket/EventSource before any module can
+// capture them. Then the global error / unhandledrejection listeners, from a
+// sync module, so MV3 sees them on the worker's initial synchronous
+// evaluation. Both MUST stay above every wasm-backed import below (see the
+// file's note on asyncWebAssembly deferring the entry body).
+import './net/egress-install';
 import './install-global-error-handlers';
-
-// Patch `fetch` to run the egress gate on every outbound request. Sync and
-// dependency-free by design (the gate itself loads lazily on first request), so
-// it can sit here with the error handlers and cannot defer listener
-// registration.
-import { installEgressGuard } from './net/install-egress-guard';
 
 // listeners
 import { contentScriptConnectListener } from './message/listen/content-script-connect';
@@ -35,6 +31,7 @@ import {
   contactDiscoveryRequestResultListener,
 } from './message/listen/contact-discovery-request';
 import { destinationConsentResultListener } from './net/prompt';
+import { runNetEgressMigration } from './net/egress-migrate';
 import { internalZidListener } from './message/listen/internal-zid';
 import { NET_EGRESS_INTERNAL_METHODS } from './message/listen/zafu-method-names';
 import { zcashLinkListener } from './message/listen/zcash-link';
@@ -88,8 +85,6 @@ import { backOff } from 'exponential-backoff';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { networkAllowsBackgroundSync } from './state/privacy';
 import { runPresencePublish } from './state/contact-discovery-service';
-
-installEgressGuard();
 
 // count open side panels so approval routing can target the panel only when it
 // is actually open (see popup.ts). Registered once at worker startup.
@@ -316,6 +311,9 @@ localExtStorage.addListener(changes => {
 });
 
 const initHandler = async () => {
+  // v1 egress ledger -> default deny, once (see net/egress-migrate.ts)
+  await runNetEgressMigration().catch(() => undefined);
+
   // run any pending IDB clears requested before the previous reload,
   // BEFORE wallet services open new connections (which would block deletion)
   await performPendingClears();

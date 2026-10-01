@@ -9,6 +9,8 @@
  * browser, so a local app that handles more still gets it.
  */
 
+// egress guard first: nothing may capture fetch or open a socket before it
+import '../net/egress-install-lite';
 import { isZip321Uri, parseZip321 } from '@repo/wallet/networks/zcash/zip321';
 
 const OPEN_ZCASH_URI = 'zafu_open_zcash_uri';

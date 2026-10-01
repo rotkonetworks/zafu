@@ -1,5 +1,7 @@
 // Must be the first import: its side effect runs in webpack's hoisted,
 // synchronous require phase, ahead of this entry's wasm-backed deps.
+// egress guard first: nothing may capture fetch or open a socket before it
+import '../net/egress-install';
 import '../install-console-quieting';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode, useState, useEffect } from 'react';
@@ -14,6 +16,8 @@ import { noteContextInvalidated } from '../utils/reload-notice';
 import { AppErrorBoundary, reportRenderError } from '../components/error-boundary';
 import { loadBalancesSnapshot } from '../hooks/balances-snapshot';
 import { balancesQueryKey } from '../hooks/penumbra-balances';
+import { EgressAskSheet } from '../net/egress-ask-sheet';
+import { installRegistryIcons } from '../shared/components/registry-icons';
 
 import '@repo/ui/styles/globals.css';
 import '@repo/ui/styles/icons.css';
@@ -26,6 +30,7 @@ import '../styles/view-transitions.css';
 // those to console.debug; every other rejection still surfaces loudly, so
 // real bugs are not hidden. Installed before first render on purpose.
 installGracefulNetworkErrorHandler();
+installRegistryIcons();
 
 // A popup left open across an extension reload/auto-update is alive but dead:
 // `runtime.id` is gone and every call throws "Extension context invalidated".
@@ -102,6 +107,7 @@ const MainPopup = () => {
     <StrictMode>
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={popupRouter} />
+        <EgressAskSheet />
       </QueryClientProvider>
     </StrictMode>
   );

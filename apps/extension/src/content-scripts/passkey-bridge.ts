@@ -9,6 +9,8 @@
  * from anything here) and checks the rpId against it, so a page cannot use the
  * bridge to act for another origin.
  */
+// egress guard first: nothing may capture fetch or open a socket before it
+import '../net/egress-install-lite';
 
 export {}; // module scope - keeps CHANNEL out of the shared ISOLATED-world global
 

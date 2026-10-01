@@ -115,6 +115,29 @@ export default [
   },
 
   {
+    // The egress guard patches the network globals once per realm
+    // (net/egress.ts); nothing else may replace them or reach around them.
+    // The other half of this guard is net/egress-entries.test.ts.
+    name: 'egress-guard',
+    files: ['src/**/*.ts', 'src/**/*.tsx'],
+    ignores: ['src/net/egress.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'AssignmentExpression[left.property.name=/^(fetch|WebSocket|EventSource|XMLHttpRequest)$/]',
+          message: 'only net/egress.ts replaces network globals',
+        },
+        {
+          selector: "CallExpression[callee.property.name='sendBeacon']",
+          message: 'sendBeacon bypasses the egress guard',
+        },
+      ],
+    },
+  },
+
+  {
     // test files are outside the tsconfig project, so type-aware parsing
     // fails on them; vitest runs them - eslint skips them
     name: 'ignore-out-of-project-tests',

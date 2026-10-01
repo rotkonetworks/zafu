@@ -1,4 +1,6 @@
 // Must be the first import: see install-console-quieting.ts.
+// egress guard first: nothing may capture fetch or open a socket before it
+import '../net/egress-install-lite';
 import '../install-console-quieting';
 import { PenumbraRequestFailure } from '@penumbra-zone/client/error';
 import { CRSessionClient } from '@penumbra-zone/transport-chrome/session-client';

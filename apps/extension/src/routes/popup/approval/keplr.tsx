@@ -10,6 +10,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useStore } from '../../../state';
 import { keyRingSelector, selectEffectiveKeyInfo } from '../../../state/keyring';
 import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
+import { OriginIcon } from '../../../shared/components/origin-icon';
 import {
   deriveKeplrWireKey,
   signKeplrAmino,
@@ -153,7 +154,7 @@ export const KeplrApproval = () => {
 
       <div className='flex-1 overflow-y-auto p-4'>
         <div className='flex items-center gap-2 rounded-lg bg-canvas p-3'>
-          {!!req.favIconUrl && <img src={req.favIconUrl} alt='' className='size-8 rounded-full' />}
+          {!!req.origin && <OriginIcon origin={req.origin} size={32} />}
           <div className='flex flex-col overflow-hidden'>
             {req.title && <span className='truncate text-sm'>{req.title}</span>}
             <span className='truncate text-xs text-fg-muted'>{req.origin ?? ''}</span>

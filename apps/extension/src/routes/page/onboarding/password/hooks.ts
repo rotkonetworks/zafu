@@ -6,7 +6,7 @@ import { getSeedPhraseOrigin } from './utils';
 import { SEED_PHRASE_ORIGIN } from './types';
 import { PagePath } from '../../paths';
 import { localExtStorage } from '@repo/storage-chrome/local';
-import { setOnboardingValuesInStorage, setFreshWalletBlockHeights } from '../persist-parameters';
+import { setOnboardingValuesInStorage } from '../persist-parameters';
 import { PENDING_ZCASH_BIRTHDAY_KEY } from '../constants';
 import { useStore } from '../../../../state';
 import { keyRingSelector } from '../../../../state/keyring';
@@ -115,10 +115,6 @@ export const useFinalizeOnboarding = () => {
             await setNetworkEndpoint('zcash', preset.url);
           }
 
-          // For fresh wallets, set block heights BEFORE creating wallet to avoid race condition
-          if (origin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED) {
-            await setFreshWalletBlockHeights();
-          }
           // Recover/import is idempotent by walletId: recovering the same seed
           // derives the same key, and the wallet layer must NOT create a second
           // record for it (that was the "same wallet appears multiple times"

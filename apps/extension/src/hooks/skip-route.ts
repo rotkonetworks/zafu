@@ -10,6 +10,7 @@ import {
   type RouteResponse,
   type MessagesResponse,
 } from '@penumbra-zone/query/skip/index';
+import { requestEgressOptIn } from '../net/egress-opt-in';
 
 const skipClient = new SkipClient();
 
@@ -39,6 +40,10 @@ export const useSkipRoute = (options: UseSkipRouteOptions) => {
       if (!amount || amount === '0') {
         throw new Error('amount required');
       }
+
+      // asks before skip's first request; a decline still reaches the
+      // client, which the egress guard refuses with a named error
+      await requestEgressOptIn('skip');
 
       const request: RouteRequest = {
         sourceAssetChainId: sourceChainId,
