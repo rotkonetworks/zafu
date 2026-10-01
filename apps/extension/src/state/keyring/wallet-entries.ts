@@ -591,13 +591,8 @@ export async function nukeAllWalletData(
   await session.remove('signGraceUntil');
 
   // drop worker-held IDB connections before attempting any delete
-  try {
-    const { terminateNetworkWorker } = await import('./network-worker');
-    terminateNetworkWorker('zcash');
-    terminateNetworkWorker('penumbra');
-  } catch {
-    // workers may not be running
-  }
+  const { stopNetworkWorker } = await import('./network-worker');
+  await Promise.all((['zcash', 'penumbra'] as const).map(stopNetworkWorker));
 
   const allLocalKeys = await chrome.storage.local.get(null);
   const keysToRemove = Object.keys(allLocalKeys).filter(k => !NUKE_SURVIVORS.has(k));
@@ -632,4 +627,17 @@ export async function nukeAllWalletData(
   await local.remove('selectedVaultId');
   await local.set('activeWalletIndex', 0);
   await local.set('activeZcashIndex', 0);
+
+  // a blocked delete resolves above without deleting; say so, never "done"
+  const left = await remainingDatabases();
+  if (left.length) {
+    throw new Error(`[nuke] databases still on this computer: ${left.join(', ')}`);
+  }
 }
+
+const remainingDatabases = async (): Promise<string[]> => {
+  if (typeof indexedDB === 'undefined' || !indexedDB.databases) {
+    return [];
+  }
+  return (await indexedDB.databases()).map(d => d.name).filter((n): n is string => !!n);
+};

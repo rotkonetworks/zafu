@@ -12,6 +12,7 @@ import { markHydrated, readEncrypted, writeEncryptedDirect } from '../encrypted-
 import { getDiversifiedAddresses, setDiversifiedAddresses } from '../diversified-addresses';
 import { Key } from '@repo/encryption/key';
 import type { EncryptedVault } from './types';
+import { nukeAllWalletData } from './wallet-entries';
 
 const localMock = (chrome.storage.local as unknown as { mock: Map<string, unknown> }).mock;
 const sessionMock = (chrome.storage.session as unknown as { mock: Map<string, unknown> }).mock;
@@ -147,5 +148,34 @@ describe('password change races', () => {
     expect(await readEncrypted(localExtStorage, sessionExtStorage, 'contacts' as LK)).toEqual([
       { id: 'a' },
     ]);
+  });
+});
+
+describe('erase', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete (globalThis as { indexedDB?: unknown }).indexedDB;
+  });
+
+  test('asks the offscreen host to stop the workers, and waits for it', async () => {
+    const send = vi.fn(async () => ({ ok: true }));
+    vi.spyOn(chrome.runtime, 'sendMessage').mockImplementation(send as never);
+    await nukeAllWalletData(sessionExtStorage, localExtStorage);
+    expect(send).toHaveBeenCalledWith({ type: 'NW_TERMINATE', network: 'zcash' });
+    expect(send).toHaveBeenCalledWith({ type: 'NW_TERMINATE', network: 'penumbra' });
+  });
+
+  test('says so when a database survives the delete', async () => {
+    (globalThis as { indexedDB?: unknown }).indexedDB = {
+      databases: async () => [{ name: 'zafu-zcash' }],
+      deleteDatabase: () => {
+        const req = {} as IDBOpenDBRequest;
+        queueMicrotask(() => req.onblocked?.(new Event('blocked') as IDBVersionChangeEvent));
+        return req;
+      },
+    };
+    await expect(nukeAllWalletData(sessionExtStorage, localExtStorage)).rejects.toThrow(
+      'zafu-zcash',
+    );
   });
 });
