@@ -88,6 +88,10 @@ export const settingsRoutes: RouteObject[] = [
     lazy: lazyScreen('settingsZcashMe'),
   },
   {
+    path: PopupPath.SETTINGS_CHANGE_PASSWORD,
+    lazy: lazyScreen('settingsChangePassword'),
+  },
+  {
     path: PopupPath.SETTINGS_ADD_VIEWING_KEY,
     lazy: lazyScreen('settingsAddViewingKey'),
   },

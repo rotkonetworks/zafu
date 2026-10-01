@@ -88,6 +88,11 @@ export const SecurityBackup = () => {
             onPress={() => navigate(PopupPath.SETTINGS_RECOVERY_PASSPHRASE)}
           />
           {zcashOn && <BackupsRow label='multisig backup (frost shares)' />}
+          <Row
+            type='screen'
+            label='change password'
+            onPress={() => navigate(PopupPath.SETTINGS_CHANGE_PASSWORD)}
+          />
         </Section>
         <Section title='locking'>
           <AutoLockRow />

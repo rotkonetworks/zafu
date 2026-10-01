@@ -25,6 +25,8 @@ export const popupScreens = {
     import('./settings/settings-wallets-networks').then(m => m.SettingsWalletsNetworks),
   settingsPrivacy: () => import('./settings/settings-privacy').then(m => m.SettingsPrivacy),
   settingsFeatures: () => import('./settings/settings-features').then(m => m.SettingsFeatures),
+  settingsChangePassword: () =>
+    import('./settings/settings-change-password').then(m => m.SettingsChangePassword),
   settingsAddViewingKey: () =>
     import('./settings/settings-add-viewing-key').then(m => m.SettingsAddViewingKey),
   // Security & Backup tab. SecurityBackup (authored by another engineer) brings
