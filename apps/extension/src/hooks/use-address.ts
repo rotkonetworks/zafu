@@ -235,8 +235,14 @@ export function useActiveAddress() {
                   }
                 }
               }
-              // all retries failed — don't fall through to zigner wallet
+              // All retries failed - never fall through to zigner wallet, and
+              // never leave the PREVIOUS pocket's address on screen. Without
+              // this, switching to a pocket the wasm can't derive yet (see
+              // workers/pocket-keys.ts) silently kept showing the address it
+              // last derived - a real address, just the wrong pocket's - as
+              // if it were current.
               if (!cancelled) {
+                setAddress('');
                 setLoading(false);
               }
               return;

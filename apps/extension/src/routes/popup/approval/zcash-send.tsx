@@ -15,6 +15,7 @@ import { cn } from '@repo/ui/lib/utils';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
 import { selectActiveZcashWallet } from '../../../state/wallets';
+import { activeAccountIndex, activeZcashStoreId } from '../../../state/pockets';
 import { buildMultiSendTxInWorker } from '../../../state/keyring/network-worker';
 
 interface Output {
@@ -42,6 +43,8 @@ export function ZcashSendApproval() {
   const getMnemonic = useStore(selectGetMnemonic);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const activeZcashWallet = useStore(selectActiveZcashWallet);
+  const storeId = useStore(activeZcashStoreId);
+  const pocketAccount = useStore(activeAccountIndex);
 
   useEffect(() => {
     try {
@@ -139,10 +142,8 @@ export function ZcashSendApproval() {
     setProgressText('initializing...');
 
     try {
-      const walletId = selectedKeyInfo.id;
-      const mnemonic = await getMnemonic(walletId);
+      const mnemonic = await getMnemonic(selectedKeyInfo.id);
       const mainnet = activeZcashWallet?.mainnet !== false;
-      const accountIndex = activeZcashWallet?.accountIndex ?? 0;
 
       // convert outputs to worker format (amount as string in zatoshis)
       const workerOutputs = outputs.map(o => ({
@@ -153,10 +154,10 @@ export function ZcashSendApproval() {
 
       const result = await buildMultiSendTxInWorker(
         'zcash',
-        walletId,
+        storeId ?? selectedKeyInfo.id,
         zidecarUrl,
         workerOutputs,
-        accountIndex,
+        pocketAccount,
         mainnet,
         mnemonic,
       );

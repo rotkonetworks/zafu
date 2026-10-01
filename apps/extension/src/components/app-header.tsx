@@ -5,23 +5,31 @@
  */
 
 import { useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '../state';
 import { selectActiveNetwork, selectEffectiveKeyInfo } from '../state/keyring';
 import { selectActiveZcashWallet } from '../state/wallets';
+import { activeAccountIndex, activePockets } from '../state/pockets';
 import { getNetwork } from '../config/networks';
 import { CustodyBadge } from './custody-badge';
-import { AccountsSheet } from './accounts-sheet';
+import { AccountsSheet, type PocketSheetTarget } from './accounts-sheet';
 import { NetworkSheet } from './network-sheet';
 import { AddWalletSheet } from './add-wallet-sheet';
+import { NewPocketSheet } from './new-pocket-sheet';
 import { cn } from '@repo/ui/lib/utils';
 
-type OpenSheet = 'accounts' | 'network' | 'add-wallet' | null;
+type OpenSheet = 'accounts' | 'network' | 'add-wallet' | 'new-pocket' | null;
 
 export const AppHeader = () => {
   const activeNetwork = useStore(selectActiveNetwork);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
+  const pockets = useStore(useShallow(activePockets));
+  const pocketAccount = useStore(activeAccountIndex);
   const [openSheet, setOpenSheet] = useState<OpenSheet>(null);
+  // set when the new-pocket sheet is opened to rename an existing pocket
+  // instead of creating one
+  const [renameTarget, setRenameTarget] = useState<PocketSheetTarget>();
 
   const networkInfo = getNetwork(activeNetwork);
   // mnemonic vaults derive zcash keys directly - no zcash wallet record
@@ -29,6 +37,8 @@ export const AppHeader = () => {
     activeNetwork === 'zcash' && selectedKeyInfo?.type !== 'mnemonic'
       ? (activeZcashWallet?.label ?? selectedKeyInfo?.name ?? 'no wallet')
       : (selectedKeyInfo?.name ?? 'no wallet');
+  // pockets exist only for the hot wallet - shows which one is active
+  const pocketName = pockets.find(p => p.account === pocketAccount)?.name;
 
   return (
     <header className='sticky top-0 z-40 flex h-11 shrink-0 items-center justify-between gap-2 border-b border-border-soft bg-canvas/80 px-3 backdrop-blur-sm'>
@@ -38,7 +48,14 @@ export const AppHeader = () => {
         aria-label='accounts'
         aria-haspopup='dialog'
       >
-        <span className='max-w-32 truncate text-data text-fg-high lowercase'>{walletName}</span>
+        <span className='flex min-w-0 flex-col items-start leading-tight'>
+          <span className='max-w-32 truncate text-data text-fg-high lowercase'>{walletName}</span>
+          {pocketName && (
+            <span className='max-w-32 truncate text-label text-fg-muted lowercase'>
+              {pocketName}
+            </span>
+          )}
+        </span>
         {selectedKeyInfo && <CustodyBadge vault={selectedKeyInfo} showLabel={false} />}
         <span className='i-ph-caret-down h-3 w-3 shrink-0 text-fg-muted' />
       </button>
@@ -67,6 +84,10 @@ export const AppHeader = () => {
         open={openSheet === 'accounts'}
         onOpenChange={next => setOpenSheet(next ? 'accounts' : null)}
         onAddWallet={() => setOpenSheet('add-wallet')}
+        onNewPocket={rename => {
+          setRenameTarget(rename);
+          setOpenSheet('new-pocket');
+        }}
       />
       <NetworkSheet
         open={openSheet === 'network'}
@@ -75,6 +96,11 @@ export const AppHeader = () => {
       <AddWalletSheet
         open={openSheet === 'add-wallet'}
         onOpenChange={next => setOpenSheet(next ? 'add-wallet' : null)}
+      />
+      <NewPocketSheet
+        open={openSheet === 'new-pocket'}
+        onOpenChange={next => setOpenSheet(next ? 'new-pocket' : null)}
+        rename={renameTarget}
       />
     </header>
   );

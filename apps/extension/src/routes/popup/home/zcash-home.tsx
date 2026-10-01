@@ -1,10 +1,18 @@
 import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useShallow } from 'zustand/react/shallow';
 
 import { useStore } from '../../../state';
 import { privacySelector } from '../../../state/privacy';
 import { selectEffectiveKeyInfo, keyRingSelector } from '../../../state/keyring';
+import {
+  activeAccountIndex,
+  activeZcashStoreId,
+  activePockets,
+  activePocketBirthday,
+} from '../../../state/pockets';
+import { pocketStoreId } from '../../../state/pocket-id';
 import { Sensitive } from '../../../components/sensitive';
 import { PopupPath } from '../paths';
 import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
@@ -61,6 +69,13 @@ export const ZcashContent = ({
   const navigate = useNavigate();
 
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  // the active pocket's own worker store and zip32 account
+  const storeId = useStore(activeZcashStoreId);
+  const pocketAccount = useStore(activeAccountIndex);
+  const pockets = useStore(useShallow(activePockets));
+  // a pocket's own birthday (the chain tip when it was created); undefined
+  // for account 0 or a pocket that recorded none, meaning "use the wallet's"
+  const pocketBirthday = useStore(activePocketBirthday);
   const keyRing = useStore(keyRingSelector);
   const { requestAuth, PasswordModal } = usePasswordGate();
   // must sit with the other hooks: there is an early return for the
@@ -94,13 +109,12 @@ export const ZcashContent = ({
 
   // fetch orchard balance from worker — re-fetch on sync progress and height changes
   useEffect(() => {
-    if (!selectedKeyInfo) {
+    if (!storeId) {
       return;
     }
-    const walletId = selectedKeyInfo.id;
 
     const fetchBalance = () => {
-      getBalanceInWorker('zcash', walletId)
+      getBalanceInWorker('zcash', storeId)
         .then(bal => {
           setOrchardZat(BigInt(bal));
           setBalanceState('ready');
@@ -117,7 +131,7 @@ export const ZcashContent = ({
       if (detail?.network !== 'zcash') {
         return;
       }
-      if (detail.walletId && detail.walletId !== walletId) {
+      if (detail.walletId && detail.walletId !== storeId) {
         return;
       }
       fetchBalance();
@@ -126,7 +140,7 @@ export const ZcashContent = ({
     window.addEventListener('network-sync-progress', handler);
     fetchBalance();
     return () => window.removeEventListener('network-sync-progress', handler);
-  }, [selectedKeyInfo?.id, workerSyncHeight]);
+  }, [storeId, workerSyncHeight]);
 
   // derive transparent addresses for UTXO lookup (shared hook with caching)
   const { tAddresses } = useTransparentAddresses(isMainnet);
@@ -135,13 +149,13 @@ export const ZcashContent = ({
 
   // per-pool split (orchard legacy / ironwood active) - a permanent
   // RowGroup below the hero balance (board: "balances" section)
-  const pools = usePoolBalances(selectedKeyInfo?.id, workerSyncHeight);
+  const pools = usePoolBalances(storeId, workerSyncHeight);
 
   // Sends we have broadcast that the chain has not confirmed. Their inputs are
   // already deducted from the figure above (markNotesSpentLocally runs at
   // broadcast), so without this line the balance simply drops with nothing to
   // account for it.
-  const pendingSends = usePendingSends(selectedKeyInfo?.id, workerSyncHeight);
+  const pendingSends = usePendingSends(storeId, workerSyncHeight);
 
   // NU6.3 turnstile migration flow (feature-flagged; see feature-flags.ts)
   const [showIronwoodMigrate, setShowIronwoodMigrate] = useState(false);
@@ -170,6 +184,7 @@ export const ZcashContent = ({
 
       try {
         const walletId = selectedKeyInfo.id;
+        const activeStoreId = pocketStoreId(walletId, pocketAccount);
         const birthdayKey = `zcashBirthday_${walletId}`;
 
         // terminate worker so in-memory commitment tree is dropped
@@ -185,8 +200,13 @@ export const ZcashContent = ({
         // update birthday and clear persisted sync height
         await chrome.storage.local.set({ [birthdayKey]: height });
         // legacy global key kept in the removal list so an old install's
-        // stale value cannot outlive a rescan
-        await chrome.storage.local.remove(['zcashSyncHeight', zcashSyncHeightKey(walletId)]);
+        // stale value cannot outlive a rescan. Clears EVERY pocket's store,
+        // not just the active one - a rescan drops the shared commitment
+        // tree, so a stale hint for an inactive pocket would resume it from
+        // a height the tree no longer has.
+        const storeIds =
+          pockets.length > 0 ? pockets.map(p => pocketStoreId(walletId, p.account)) : [walletId];
+        await chrome.storage.local.remove(['zcashSyncHeight', ...storeIds.map(zcashSyncHeightKey)]);
         setWalletBirthday(height);
         setOrchardZat(0n);
         setBalanceState('loading');
@@ -195,13 +215,20 @@ export const ZcashContent = ({
         // auto-sync hook from racing with a duplicate sync
         await new Promise(r => setTimeout(r, 500));
         await spawnNetworkWorker('zcash');
-        markWalletSyncing('zcash', walletId);
+        markWalletSyncing('zcash', activeStoreId);
 
         if (hasMnemonic && selectedKeyInfo.type === 'mnemonic') {
           const mnemonic = await keyRing.getMnemonic(walletId);
           // pass the configured backend - defaulting to zidecar here would
           // point a zidecar client at a lightwalletd endpoint (HTTP 415s)
-          await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, height, zcashBackend);
+          await startSyncInWorker(
+            'zcash',
+            activeStoreId,
+            mnemonic,
+            zidecarUrl,
+            height,
+            zcashBackend,
+          );
         } else if (watchOnly) {
           const ufvkStr =
             watchOnly.ufvk ??
@@ -209,7 +236,7 @@ export const ZcashContent = ({
           if (ufvkStr) {
             await startWatchOnlySyncInWorker(
               'zcash',
-              walletId,
+              activeStoreId,
               ufvkStr,
               zidecarUrl,
               height,
@@ -232,9 +259,10 @@ export const ZcashContent = ({
           if (!walletId) {
             return;
           }
+          const activeStoreId = pocketStoreId(walletId, pocketAccount);
           await spawnNetworkWorker('zcash');
-          markWalletSyncing('zcash', walletId);
-          const resumeKey = zcashSyncHeightKey(walletId);
+          markWalletSyncing('zcash', activeStoreId);
+          const resumeKey = zcashSyncHeightKey(activeStoreId);
           const resumeAt = (await chrome.storage.local.get(resumeKey))[resumeKey] as
             | number
             | undefined;
@@ -242,7 +270,7 @@ export const ZcashContent = ({
             const mnemonic = await keyRing.getMnemonic(walletId);
             await startSyncInWorker(
               'zcash',
-              walletId,
+              activeStoreId,
               mnemonic,
               zidecarUrl,
               resumeAt,
@@ -255,7 +283,7 @@ export const ZcashContent = ({
             if (ufvkStr) {
               await startWatchOnlySyncInWorker(
                 'zcash',
-                walletId,
+                activeStoreId,
                 ufvkStr,
                 zidecarUrl,
                 resumeAt,
@@ -283,6 +311,8 @@ export const ZcashContent = ({
     keyRing,
     zidecarUrl,
     zcashBackend,
+    pocketAccount,
+    pockets,
   ]);
 
   if (!hasWallet) {
@@ -316,8 +346,14 @@ export const ZcashContent = ({
       : gigaproofStatus === 1
         ? 50
         : 0;
-  const scanRange = Math.max(1, chainHeight - walletBirthday);
-  const scanProgress = Math.max(0, workerSyncHeight - walletBirthday);
+  // A pocket's own birthday (the chain tip when it was created) is the right
+  // scan floor once it has one: rescanning it from the wallet's own, much
+  // older birthday would be both wasteful and wrong - the pocket's notes
+  // cannot predate its own creation. Account 0 and a pocket recorded before
+  // this field existed fall back to the wallet's birthday, exactly as before.
+  const effectiveBirthday = pocketBirthday ?? walletBirthday;
+  const scanRange = Math.max(1, chainHeight - effectiveBirthday);
+  const scanProgress = Math.max(0, workerSyncHeight - effectiveBirthday);
   // FLOOR, not round. Rounding declared "synced" at 99.5%, which with a
   // birthday a million blocks back is ~5,000 unscanned blocks presented as a
   // final balance — and it gated the "get your first zec" prompt, so a wallet
@@ -352,15 +388,15 @@ export const ZcashContent = ({
   // the wallet claiming to be done while admitting it had scanned nothing.
   // Whatever the server has proven about blocks this wallet never read says
   // nothing about this wallet's balance, so it must not drive this bar.
-  const scanNotStarted = workerSyncHeight <= walletBirthday;
+  const scanNotStarted = workerSyncHeight <= effectiveBirthday;
   // Ranges for the stage tooltips. A stage that says what it does but not
   // what it covers leaves the obvious question unanswered - "verified from
   // where to where?" - and these numbers are already on hand.
   const hgt = (n: number) => n.toLocaleString();
   const serverIndexHeight = syncStatus?.currentHeight ?? 0;
   const scanRangeHint = scanNotStarted
-    ? `nothing scanned yet. will cover blocks ${hgt(walletBirthday)} to ${hgt(chainHeight)}.`
-    : `covered blocks ${hgt(walletBirthday)} to ${hgt(workerSyncHeight)}` +
+    ? `nothing scanned yet. will cover blocks ${hgt(effectiveBirthday)} to ${hgt(chainHeight)}.`
+    : `covered blocks ${hgt(effectiveBirthday)} to ${hgt(workerSyncHeight)}` +
       (chainHeight > 0 ? ` of ${hgt(chainHeight)}.` : '.');
   const nomtRangeHint =
     serverIndexHeight > 0 ? ` its index reaches block ${hgt(serverIndexHeight)}.` : '';
@@ -659,14 +695,17 @@ export const ZcashContent = ({
             <span className='text-fg-dim'>·</span>
             <button
               type='button'
-              // Never the chain tip. The old fallback (`walletBirthday ||
+              // Never the chain tip. The old fallback (`effectiveBirthday ||
               // chainHeight`) meant that a wallet with no stored birthday —
               // the default for every import that did not supply one — asked
               // to rescan FROM NOW, and the handler then wrote that as the new
               // birthday: every note the wallet already held became invisible
               // forever. Orchard activation is the earliest height that can
-              // hold a note, so it can never hide one.
-              onClick={() => setRescanConfirmHeight(rescanStartHeight(walletBirthday || null))}
+              // hold a note, so it can never hide one. Uses the active
+              // pocket's own birthday when it has one - this rescan drops
+              // and re-reads that pocket's store, so there is nothing before
+              // its own birthday to lose.
+              onClick={() => setRescanConfirmHeight(rescanStartHeight(effectiveBirthday || null))}
               className='text-zigner-gold underline-offset-2 hover:underline'
               // not "release the funds": the inputs are held until the chain
               // is re-read, and re-reading it is not free
@@ -736,7 +775,7 @@ export const ZcashContent = ({
           connecting={chainHeight <= 0}
           currentHeight={workerSyncHeight}
           targetHeight={chainHeight}
-          startBlock={walletBirthday}
+          startBlock={effectiveBirthday}
           stages={syncStages}
           firstSync={totalZat === 0n}
           // Only the classified message is ever shown; the raw error goes
@@ -843,11 +882,11 @@ export const ZcashContent = ({
         selectedKeyInfo && (
           <IronwoodMigrate
             onClose={() => setShowIronwoodMigrate(false)}
-            walletId={selectedKeyInfo.id}
+            walletId={storeId ?? selectedKeyInfo.id}
             serverUrl={zidecarUrl}
             backend={zcashBackend}
             mainnet={isMainnet}
-            accountIndex={0}
+            accountIndex={pocketAccount}
             ufvk={
               watchOnly?.ufvk ??
               (watchOnly?.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined)

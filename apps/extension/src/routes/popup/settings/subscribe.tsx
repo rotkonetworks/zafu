@@ -10,6 +10,7 @@ import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
 import { isPro, selectDaysRemaining, selectPending, licenseSelector } from '../../../state/license';
 import { selectActiveZcashWallet } from '../../../state/wallets';
+import { activeZcashStoreId } from '../../../state/pockets';
 import {
   ROTKO_LICENSE_ADDRESS,
   PRO_RATE_ZAT_PER_30_DAYS,
@@ -64,6 +65,7 @@ function LiveTimer({ startMs }: { startMs: number }) {
 
 export const SubscribePage = () => {
   const keyInfo = useStore(selectEffectiveKeyInfo);
+  const storeId = useStore(activeZcashStoreId);
   const getMnemonic = useStore(selectGetMnemonic);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const pro = useStore(isPro);
@@ -282,7 +284,7 @@ export const SubscribePage = () => {
       setPayState('broadcasting');
       const result = await buildSendTxInWorker(
         'zcash',
-        keyInfo.id,
+        storeId ?? keyInfo.id,
         zidecarUrl,
         ROTKO_LICENSE_ADDRESS,
         amountZat.toString(),
@@ -310,6 +312,7 @@ export const SubscribePage = () => {
     }
   }, [
     keyInfo?.id,
+    storeId,
     memo,
     activeZcashWallet,
     getMnemonic,
@@ -347,7 +350,7 @@ export const SubscribePage = () => {
 
       const result = await buildSendTxInWorker(
         'zcash',
-        keyInfo.id,
+        storeId ?? keyInfo.id,
         zidecarUrl,
         ROTKO_LICENSE_ADDRESS,
         amountZat.toString(),
@@ -382,6 +385,7 @@ export const SubscribePage = () => {
     }
   }, [
     keyInfo?.id,
+    storeId,
     memo,
     activeZcashWallet,
     zidecarUrl,

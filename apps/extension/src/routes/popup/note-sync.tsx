@@ -10,7 +10,7 @@ import { useState, useEffect } from 'react';
 import { Sensitive } from '../../components/sensitive';
 import { useStore } from '../../state';
 import { selectActiveZcashWallet } from '../../state/wallets';
-import { selectEffectiveKeyInfo } from '../../state/keyring';
+import { activeZcashStoreId } from '../../state/pockets';
 import { encodeNoteSyncInWorker } from '../../state/keyring/network-worker';
 import type { NoteSyncEncoded } from '../../state/keyring/network-worker';
 import { AnimatedQrDisplay } from '../../shared/components/animated-qr-display';
@@ -21,12 +21,11 @@ type Step = 'loading' | 'building' | 'display' | 'error';
 
 export const NoteSyncPage = () => {
   const activeWallet = useStore(selectActiveZcashWallet);
-  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const [step, setStep] = useState<Step>('loading');
   const [encoded, setEncoded] = useState<NoteSyncEncoded | null>(null);
   const [error, setError] = useState('');
 
-  const walletId = selectedKeyInfo?.id;
+  const walletId = useStore(activeZcashStoreId);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
 
   useEffect(() => {

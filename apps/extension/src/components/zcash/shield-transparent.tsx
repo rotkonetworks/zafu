@@ -18,6 +18,7 @@ import { useCallback, useState } from 'react';
 
 import { useStore } from '../../state';
 import { selectEffectiveKeyInfo, keyRingSelector } from '../../state/keyring';
+import { activeZcashStoreId } from '../../state/pockets';
 import { usePasswordGate } from '../../hooks/password-gate';
 import {
   shieldInWorker,
@@ -83,6 +84,7 @@ export const ShieldTransparent = ({
   zidecarUrl,
 }: ShieldTransparentProps) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const storeId = useStore(activeZcashStoreId);
   const keyRing = useStore(keyRingSelector);
   const { requestAuth, PasswordModal } = usePasswordGate();
 
@@ -117,7 +119,6 @@ export const ShieldTransparent = ({
 
     try {
       const mnemonic = await keyRing.getMnemonic(selectedKeyInfo.id);
-      const walletId = selectedKeyInfo.id;
       // map each address to its BIP44 derivation index so the worker signs with the correct key
       const addressIndexMap: Record<string, number> = {};
       tAddresses.forEach((addr, i) => {
@@ -125,7 +126,7 @@ export const ShieldTransparent = ({
       });
       const result = await shieldInWorker(
         'zcash',
-        walletId,
+        storeId ?? selectedKeyInfo.id,
         mnemonic,
         zidecarUrl,
         tAddresses,
@@ -141,6 +142,7 @@ export const ShieldTransparent = ({
   }, [
     hasMnemonic,
     selectedKeyInfo,
+    storeId,
     keyRing,
     shielding,
     transparentZat,

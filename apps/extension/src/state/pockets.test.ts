@@ -246,6 +246,28 @@ describe('pocket selectors', () => {
     expect(activePocketBirthday(s)).toBe(3_100_000);
   });
 
+  test('switching pockets changes what the home balance hook and the send builder read', () => {
+    // these two selectors are exactly what routes/popup/home/zcash-home.tsx and
+    // routes/popup/send pass to getBalanceInWorker / usePoolBalances /
+    // buildSendTxInWorker - this pins that a pocket switch actually changes the
+    // worker store and the zip32 account those calls build against.
+    const readSiteInputs = (s: AllSlices) => ({
+      storeId: activeZcashStoreId(s),
+      account: activeAccountIndex(s),
+    });
+
+    let book = addPocket({}, 'zid-abc', 'savings', 3_100_000);
+    expect(readSiteInputs(stateWith(hot, book))).toEqual({ storeId: 'vault-1', account: 0 });
+
+    book = selectPocket(book, 'zid-abc', 1);
+    expect(readSiteInputs(stateWith(hot, book))).toEqual({ storeId: 'vault-1#1', account: 1 });
+
+    // switching back restores the original store and account - a pocket
+    // switch is a pure selection, not a one-way migration.
+    book = selectPocket(book, 'zid-abc', 0);
+    expect(readSiteInputs(stateWith(hot, book))).toEqual({ storeId: 'vault-1', account: 0 });
+  });
+
   test('viewing-key and zigner wallets use the key account and never split their store', () => {
     // a pocket book entry under their id must not leak into them
     const book = selectPocket(addPocket({}, 'vault-2', 'x'), 'vault-2', 1);
