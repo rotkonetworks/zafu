@@ -16,17 +16,24 @@ import { readSentRecords, writeSentRecords, readTxNotes, writeTxNotes } from './
 import type { SentTxRecord } from '../workers/sent-tx-reconcile';
 import type { ContactCardKey } from './identity';
 import { exportEgressChoices, importEgressChoices, type EgressChoices } from '../net/ledger';
+import {
+  exportSettings,
+  importPrefs,
+  restoredPrivacy,
+  type SettingsBackup,
+} from './settings-backup';
+import type { PrivacySettings } from './privacy';
 
 /**
  * Encrypted backup of ALL local, chain-irreplaceable personal data: contacts +
- * send history + per-tx "from" notes + zcash pocket names. Same password-derived-key envelope as the
+ * send history + per-tx "from" notes + zcash pocket names + settings. Same password-derived-key envelope as the
  * contacts-only export, one version up. This is the "carry it across devices /
  * recover after a full wipe" layer for data the chain can never give back.
  */
 export interface PersonalDataBackup {
   version: 4;
   exportedAt: number;
-  /** encrypted { contacts, sent, txNotes, pockets, egress } JSON */
+  /** encrypted { contacts, sent, txNotes, pockets, egress, settings } JSON */
   data: BoxJson;
   keyPrint: KeyPrintJson;
 }
@@ -548,7 +555,8 @@ export const createContactsSlice =
         const egress = await exportEgressChoices();
 
         const pockets = get().pockets.book;
-        const plaintext = JSON.stringify({ contacts, sent, txNotes, pockets, egress });
+        const settings = await exportSettings(get().privacy.settings);
+        const plaintext = JSON.stringify({ contacts, sent, txNotes, pockets, egress, settings });
         const { key, keyPrint } = await Key.create(password);
         const box = await key.seal(plaintext);
 
@@ -594,6 +602,8 @@ export const createContactsSlice =
           pockets?: unknown;
           /** egress choices (absent in backups made before the egress policy) */
           egress?: Partial<EgressChoices>;
+          /** privacy settings + preferences (absent in older backups) */
+          settings?: SettingsBackup;
         };
 
         const existingNames = new Set(safeContacts().map(c => c.name.toLowerCase()));
@@ -633,6 +643,14 @@ export const createContactsSlice =
         await writeTxNotes(parsed.txNotes ?? {}, mode);
         await get().pockets.restore(parsed.pockets, mode);
         await importEgressChoices(parsed.egress);
+        const current = get().privacy.settings;
+        const privacy = restoredPrivacy(current, parsed.settings?.privacy);
+        for (const key of Object.keys(privacy) as (keyof PrivacySettings)[]) {
+          if (privacy[key] !== current[key]) {
+            await get().privacy.setSetting(key, privacy[key] as never);
+          }
+        }
+        await importPrefs(parsed.settings?.prefs);
 
         return {
           contacts: newContacts.length,
