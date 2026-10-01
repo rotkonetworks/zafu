@@ -17,6 +17,7 @@ export const HomeScreen = ({
   strip,
   view,
   amount,
+  unit = look.unit,
   sub,
   spendable,
   watermark,
@@ -26,6 +27,8 @@ export const HomeScreen = ({
   strip?: ReactNode;
   view: BalanceView;
   amount: string;
+  /** when the figure is not in the network's own unit (penumbra's dollars) */
+  unit?: string;
   sub?: ReactNode;
   spendable: boolean;
   watermark: boolean;
@@ -37,7 +40,7 @@ export const HomeScreen = ({
       <BalanceHero
         view={view}
         amount={amount}
-        unit={look.unit}
+        unit={unit}
         sub={sub}
         watermark={watermark ? look.watermark : undefined}
       >

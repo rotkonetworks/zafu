@@ -2,12 +2,6 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
-import { getDisplayDenomFromView, getEquivalentValues } from '@penumbra-zone/getters/value-view';
-import { asValueView } from '@penumbra-zone/getters/equivalent-value';
-import { bech32mAssetId } from '@penumbra-zone/bech32m/passet';
-import { fromValueView } from '@rotko/penumbra-types/amount';
-import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
@@ -16,11 +10,10 @@ import { InFlightCard } from '../../../components/in-flight-card';
 import { useSyncProgress } from '../../../hooks/full-sync-height';
 import { balancesQueryOptions, balancesQueryKey } from '../../../hooks/penumbra-balances';
 import { classifySyncFailure } from '../../../state/sync-failure';
-import { filterFungibleBalances } from '../../../utils/is-fungible-asset';
-import { symbolFromMetadata } from '../../../utils/asset-display';
 import { PopupPath } from '../paths';
 import { AskHistorySheet, HistoryContent } from './history';
 import { HOME_LOOK } from './look';
+import { fmtAmount, fmtUsd, heroOf, selectAssets, type Asset } from './penumbra-value';
 import { SyncStrip } from '../../../components/wallet/sync-strip';
 import { EmptyBox, HomeScreen } from './home-screen';
 import { BalanceGroup, BalanceRow, Tile } from '../../../components/wallet/balance-rows';
@@ -32,64 +25,6 @@ const CosmosSubwallets = lazy(() =>
 );
 
 const look = HOME_LOOK.penumbra;
-
-const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 6 });
-
-/** one fungible balance, as the home row and its sheet read it */
-interface Asset {
-  key: string;
-  base?: string;
-  symbol: string;
-  name: string;
-  /** the staking token, the hero's figure */
-  um: boolean;
-  amount: number;
-  /** the view service's own price estimate, if it has one */
-  worth?: string;
-  /** the identifier of an asset with no registry symbol, to look it up */
-  rawId?: string;
-}
-
-const rawIdOf = (b: BalancesResponse, base?: string, symbol?: string) => {
-  const vv = b.balanceView?.valueView;
-  if (vv?.case === 'unknownAssetId' && vv.value.assetId) {
-    try {
-      return bech32mAssetId(vv.value.assetId);
-    } catch {
-      return undefined;
-    }
-  }
-  return symbol ? undefined : base;
-};
-
-const assetOf = (b: BalancesResponse, i: number): Asset => {
-  const meta = getMetadataFromBalancesResponse.optional(b);
-  const base = typeof meta?.base === 'string' ? meta.base : undefined;
-  const symbol = symbolFromMetadata(meta);
-  const eq = getEquivalentValues.optional(b.balanceView)?.[0];
-  return {
-    key: base ?? String(i),
-    base,
-    symbol,
-    name: meta?.name || symbol,
-    um: ['penumbra', 'UM'].includes(b.balanceView ? getDisplayDenomFromView(b.balanceView) : ''),
-    amount: b.balanceView ? Number(fromValueView(b.balanceView)) : 0,
-    worth:
-      eq && `${fmt(Number(fromValueView(asValueView(eq))))} ${symbolFromMetadata(eq.numeraire)}`,
-    rawId: rawIdOf(b, base, meta?.symbol),
-  };
-};
-
-/** module-level so react-query's select is stable: fungible only, highest priority first */
-const selectAssets = (balances: BalancesResponse[]): Asset[] =>
-  filterFungibleBalances(balances)
-    .sort((a, b) =>
-      Number(
-        (getMetadataFromBalancesResponse.optional(b)?.priorityScore ?? 0n) -
-          (getMetadataFromBalancesResponse.optional(a)?.priorityScore ?? 0n),
-      ),
-    )
-    .map(assetOf);
 
 /** send or swap one asset, or copy the id of one zafu cannot name */
 const AssetSheet = ({ asset, onClose }: { asset?: Asset; onClose: () => void }) => {
@@ -163,7 +98,7 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
   const tip = latestBlockHeight ?? 0;
   const synced = fullSyncHeight ?? 0;
   const caughtUp = tip > 0 && tip - synced <= 10;
-  const um = (assets ?? []).filter(a => a.um).reduce((t, a) => t + a.amount, 0);
+  const hero = heroOf(assets ?? []);
   const funded = (assets ?? []).some(a => a.amount > 0);
   const view: BalanceView =
     error && !assets
@@ -194,11 +129,14 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
         />
       }
       view={view}
-      amount={fmt(um)}
+      amount={'usd' in hero ? fmtUsd(hero.usd) : fmtAmount(hero.um)}
+      unit={'usd' in hero ? 'usd' : undefined}
       sub={
-        assets?.length
-          ? `${assets.length} ${assets.length === 1 ? 'asset' : 'assets'} · shielded`
-          : undefined
+        'usd' in hero
+          ? 'in usdc.inj on penumbra'
+          : assets?.length
+            ? `${assets.length} ${assets.length === 1 ? 'asset' : 'assets'} · shielded`
+            : undefined
       }
       spendable={funded}
       watermark={!empty}
@@ -226,8 +164,12 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
                 tile={<Tile tone={a.um ? 'accent' : 'quiet'}>{a.symbol.slice(0, 2)}</Tile>}
                 label={a.name}
                 tag={a.symbol.toLowerCase()}
-                amount={fmt(a.amount)}
-                note={a.worth && <span className='text-[11px] text-fg-muted'>{a.worth}</span>}
+                amount={fmtAmount(a.amount)}
+                note={
+                  <span className='text-[11px] text-fg-muted'>
+                    {a.usd === undefined ? 'no price' : fmtUsd(a.usd)}
+                  </span>
+                }
                 onPress={() => setOpen(a)}
               />
             ))}
