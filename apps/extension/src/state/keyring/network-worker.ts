@@ -35,9 +35,7 @@ const isOffscreenHost = (): boolean =>
 const ensureOffscreenReady = async (): Promise<boolean> => {
   for (let attempt = 0; attempt < 6; attempt++) {
     try {
-      const result = (await chrome.runtime.sendMessage({ type: 'ZCASH_ENSURE_OFFSCREEN' })) as
-        | { ok?: boolean }
-        | undefined;
+      const result = await chrome.runtime.sendMessage({ type: 'ZCASH_ENSURE_OFFSCREEN' });
       if (result?.ok) {
         return true;
       }
