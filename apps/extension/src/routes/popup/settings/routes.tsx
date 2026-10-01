@@ -1,4 +1,4 @@
-import type { RouteObject } from 'react-router-dom';
+import { Navigate, type RouteObject } from 'react-router-dom';
 import { PopupPath } from '../paths';
 import { lazyScreen } from '../route-modules';
 
@@ -38,11 +38,15 @@ export const settingsRoutes: RouteObject[] = [
     lazy: lazyScreen('settingsZigner'),
   },
   {
-    // networks deep-links (?network=zcash) still land here; the merged screen
-    // keeps the ?network auto-expand + scroll-into-view.
+    // ?network=zcash|penumbra (the home "switch node" links) opens that network's node sheet
     path: PopupPath.SETTINGS_NETWORKS,
-    lazy: lazyScreen('settingsWalletsNetworks'),
+    lazy: lazyScreen('settingsNetworks'),
   },
+  // the old two-level networks menu; kept so saved back stacks still land
+  ...['/settings/networks/home', '/settings/networks/all'].map(path => ({
+    path,
+    element: <Navigate replace to={PopupPath.SETTINGS_NETWORKS} />,
+  })),
   {
     path: PopupPath.SETTINGS_PRIVACY,
     lazy: lazyScreen('settingsPrivacy'),
@@ -96,16 +100,12 @@ export const settingsRoutes: RouteObject[] = [
     lazy: lazyScreen('settingsPrivacyHome'),
   },
   {
-    path: PopupPath.SETTINGS_NETWORKS_HOME,
-    lazy: lazyScreen('settingsNetworksHome'),
-  },
-  {
-    path: PopupPath.SETTINGS_NETWORKS_ALL,
-    lazy: lazyScreen('settingsNetworksAll'),
-  },
-  {
     path: PopupPath.SETTINGS_ZCASH_NETWORK,
     lazy: lazyScreen('settingsZcashNetwork'),
+  },
+  {
+    path: PopupPath.SETTINGS_PENUMBRA_NETWORK,
+    lazy: lazyScreen('settingsPenumbraNetwork'),
   },
   {
     path: PopupPath.SETTINGS_DEVICES,

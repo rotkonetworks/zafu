@@ -21,10 +21,8 @@ export const popupScreens = {
     import('./settings/settings-passphrase').then(m => m.SettingsPassphrase),
   settingsDefaultFrontend: () =>
     import('./settings/settings-default-frontend').then(m => m.SettingsDefaultFrontend),
-  // wallets + networks are one merged screen (SettingsWallets supplies the
-  // header/back chrome; the network toggles render below it).
   settingsWalletsNetworks: () =>
-    import('./settings/settings-networks').then(m => m.SettingsWalletsNetworks),
+    import('./settings/settings-wallets-networks').then(m => m.SettingsWalletsNetworks),
   settingsPrivacy: () => import('./settings/settings-privacy').then(m => m.SettingsPrivacy),
   settingsFeatures: () => import('./settings/settings-features').then(m => m.SettingsFeatures),
   settingsAddViewingKey: () =>
@@ -48,12 +46,11 @@ export const popupScreens = {
     import('./settings/settings-security-home').then(m => m.SettingsSecurityHome),
   settingsPrivacyHome: () =>
     import('./settings/settings-privacy-home').then(m => m.SettingsPrivacyHome),
-  settingsNetworksHome: () =>
-    import('./settings/settings-networks-home').then(m => m.SettingsNetworksHome),
-  settingsNetworksAll: () =>
-    import('./settings/settings-networks-home').then(m => m.SettingsNetworksAll),
+  settingsNetworks: () => import('./settings/settings-networks').then(m => m.SettingsNetworks),
   settingsZcashNetwork: () =>
     import('./settings/settings-zcash-network').then(m => m.SettingsZcashNetwork),
+  settingsPenumbraNetwork: () =>
+    import('./settings/settings-penumbra-network').then(m => m.SettingsPenumbraNetwork),
   settingsDevicesHome: () =>
     import('./settings/settings-devices-home').then(m => m.SettingsDevicesHome),
   settingsDevicesAll: () =>

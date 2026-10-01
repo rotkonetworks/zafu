@@ -1,8 +1,12 @@
 import { useStore } from '../state';
 import type { NetworkType } from '../state/keyring';
 import { isIbcNetwork } from '../state/keyring/network-types';
+import { getNetwork } from '../config/networks';
 
-/** turning a network on also makes it the active one; an ibc chain needs its transparent balances on */
+/**
+ * turning a network on also makes a top-level one the active network; an ibc
+ * chain lives inside its parent, so it only needs its transparent balances on
+ */
 export const useEnableNetwork = () => {
   const toggleNetwork = useStore(s => s.keyRing.toggleNetwork);
   const setActive = useStore(s => s.keyRing.setActiveNetwork);
@@ -13,6 +17,8 @@ export const useEnableNetwork = () => {
     if (isIbcNetwork(n) && !transparentOn) {
       await setSetting('enableTransparentBalances', true);
     }
-    await setActive(n);
+    if (!getNetwork(n).parent) {
+      await setActive(n);
+    }
   };
 };

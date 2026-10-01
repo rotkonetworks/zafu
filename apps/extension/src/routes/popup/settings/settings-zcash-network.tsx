@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useStore } from '../../../state';
-import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
+import { useZcashWorkerSync } from '../../../hooks/zcash-sync';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { formatBlockMonth, rescanStartHeight } from '../../../utils/zcash-blocks';
 import { rescanZcash } from '../../../services/zcash-resync';
@@ -11,11 +11,17 @@ import {
   rescanHeightOf,
   rescanHeightOk,
 } from '../../../components/zcash/sync-status';
+import { ZCASH_MAINNET_ENDPOINTS, findPresetByUrl } from '../../../config/zcash-endpoints';
+import { measurePresetLatencies } from '../../../state/keyring/endpoint-latency';
+import type { ZcashBackend } from '../../../state/keyring/zcash-backend';
+import { hostOf } from '../../../net/destination';
 import { PopupPath } from '../paths';
 import { Section, SettingsScreen } from './settings-screen';
+import { NodeSheet } from './node-sheet';
 import { Row } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Button } from '@repo/ui/components/ui/button';
+import { Segmented } from '@repo/ui/components/ui/segmented';
 import { cn } from '@repo/ui/lib/utils';
 
 /** the wallet's stored birthday (an external system, read once per wallet) */
@@ -39,21 +45,72 @@ const useBirthday = (vaultId: string | undefined) => {
   return [h, setH] as const;
 };
 
+const speedTest = async () =>
+  new Map([...(await measurePresetLatencies())].map(([url, l]) => [url, l.rttMs]));
+
+/** a node zafu has no preset for says nothing about its kind, so the user says it */
+const BACKENDS = [
+  { value: 'zidecar', label: 'zidecar' },
+  { value: 'lightwalletd', label: 'lightwalletd' },
+] as const;
+
+/** the zcash node sheet: picking a preset sets its kind; your own node takes the kind you name */
+const ZcashNodeSheet = ({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+}) => {
+  const endpoint = useStore(s => s.networks.networks.zcash.endpoint) ?? '';
+  const saved = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
+  const setEndpoint = useStore(s => s.networks.setNetworkEndpoint);
+  const setBackend = useStore(s => s.networks.setZcashBackend);
+  const [backend, setDraftBackend] = useState<ZcashBackend>(saved);
+  return (
+    <NodeSheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title='zcash node'
+      presets={ZCASH_MAINNET_ENDPOINTS}
+      current={endpoint}
+      egress='zcash-servers'
+      measure={speedTest}
+      onPick={async url => {
+        await setEndpoint('zcash', url);
+        if (!findPresetByUrl(url)) {
+          await setBackend(backend);
+        }
+      }}
+      custom={
+        <Segmented
+          label='node kind'
+          value={backend}
+          onChange={setDraftBackend}
+          options={BACKENDS}
+        />
+      }
+    />
+  );
+};
+
 /**
- * zcash network screen (SetSync.dc.html). heights come from the zcash worker
- * and the zcash node the home screen already asks. this screen owns rescan:
+ * zcash network screen (SetSync.dc.html). heights come from the zcash worker. this screen owns rescan:
  * from a date (starts from) or from the wallet's start; both run the same
  * rescan service as the home sync strip. the note database is shared, so
  * either one resyncs every wallet on this computer.
  */
 export const SettingsZcashNetwork = () => {
-  const rawNavigate = useNavigate();
   const vaultId = useStore(selectEffectiveKeyInfo)?.id;
   const endpoint = useStore(s => s.networks.networks.zcash.endpoint);
-  const { workerSyncHeight, workerChainHeight, chainTip, failure } = useZcashSyncStatus();
+  // local progress only: opening this screen asks no node
+  const { workerSyncHeight, workerChainHeight: tip, workerFailure: failure } = useZcashWorkerSync();
   const [birthday, setBirthday] = useBirthday(vaultId);
 
-  const [sheet, setSheet] = useState<'start' | 'date' | null>(null);
+  const [params] = useSearchParams();
+  const [sheet, setSheet] = useState<'start' | 'date' | 'node' | null>(() =>
+    params.get('sheet') === 'node' ? 'node' : null,
+  );
   const [date, setDate] = useState('');
   const [resyncing, setResyncing] = useState(false);
   const fromDate = rescanHeightOf(date);
@@ -73,7 +130,6 @@ export const SettingsZcashNetwork = () => {
     }
   };
 
-  const tip = chainTip?.height || workerChainHeight;
   const behind = tip && workerSyncHeight ? Math.max(0, tip - workerSyncHeight) : null;
   const syncing = resyncing || (behind != null && behind > 10);
   const pct =
@@ -90,7 +146,7 @@ export const SettingsZcashNetwork = () => {
           : 'up to date';
 
   return (
-    <SettingsScreen title='zcash' category='networks' backPath={PopupPath.SETTINGS_NETWORKS_HOME}>
+    <SettingsScreen title='zcash' category='networks' backPath={PopupPath.SETTINGS_NETWORKS}>
       <div className='flex flex-col gap-4'>
         <Section title='sync'>
           <div className='relative flex h-[58px] items-center gap-3 px-3.5'>
@@ -133,8 +189,8 @@ export const SettingsZcashNetwork = () => {
           <Row
             type='value'
             label='node'
-            value={endpoint ? endpoint.replace(/^\w+:\/\//, '').replace(/\/.*$/, '') : 'auto'}
-            onPress={() => rawNavigate(`${PopupPath.SETTINGS_NETWORKS}?network=zcash`)}
+            value={(endpoint && hostOf(endpoint)) || 'auto'}
+            onPress={() => setSheet('node')}
           />
         </Section>
 
@@ -148,6 +204,8 @@ export const SettingsZcashNetwork = () => {
           />
         </Section>
       </div>
+
+      <ZcashNodeSheet open={sheet === 'node'} onOpenChange={o => setSheet(o ? 'node' : null)} />
 
       <Sheet
         open={sheet === 'start'}

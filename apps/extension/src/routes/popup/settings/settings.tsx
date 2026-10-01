@@ -54,7 +54,7 @@ const CATEGORIES: readonly {
   {
     id: 'networks',
     title: 'networks',
-    href: PopupPath.SETTINGS_NETWORKS_HOME,
+    href: PopupPath.SETTINGS_NETWORKS,
     useStatus: useNetworksStatus,
   },
   {

@@ -42,6 +42,33 @@ export function ZcashMeRow() {
   );
 }
 
+/** what the zcash node learns: memo decoys, and the mempool watch (zidecar nodes only) */
+function ZcashWireRows() {
+  const memo = useStore(s => s.networks.networks.zcash.memoSyncStrategy ?? 'private');
+  const mempool = useStore(s => s.networks.networks.zcash.mempoolWatch ?? 'off');
+  const zidecar = useStore(s => (s.networks.networks.zcash.backend ?? 'zidecar') === 'zidecar');
+  const setMemo = useStore(s => s.networks.setMemoSyncStrategy);
+  const setMempool = useStore(s => s.networks.setMempoolWatch);
+  return (
+    <>
+      <Row
+        type='toggle'
+        label='zcash: memo decoys'
+        checked={memo === 'private'}
+        onChange={v => void setMemo('zcash', v ? 'private' : 'fast')}
+      />
+      <Row
+        type='toggle'
+        label='zcash: instant pending'
+        description={zidecar ? undefined : 'needs a zidecar node'}
+        disabled={!zidecar}
+        checked={zidecar && mempool === 'on'}
+        onChange={v => void setMempool('zcash', v ? 'on' : 'off')}
+      />
+    </>
+  );
+}
+
 type Group = 'on screen' | 'network' | 'people';
 
 /** the boolean privacy settings, in board order. `visible` hides a row the active network has no use for. */
@@ -209,6 +236,7 @@ export function SettingsPrivacy() {
         <Section title='on screen'>{rows('on screen')}</Section>
         <Section title='network'>
           {rows('network')}
+          {hasFeature(activeNetwork, 'zcash') && <ZcashWireRows />}
           <Row
             type='screen'
             label='everything zafu talks to'
