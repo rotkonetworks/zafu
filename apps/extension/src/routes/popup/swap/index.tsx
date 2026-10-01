@@ -769,7 +769,7 @@ const ZcashCrosschainSwap = () => {
           <div className='flex items-start gap-2 border border-yellow-500/30 bg-yellow-500/10 p-3'>
             <span className='i-ph-warning mt-0.5 h-4 w-4 shrink-0 text-yellow-400' />
             <p className='text-xs text-yellow-400'>
-              a third party (NEAR Intents) briefly holds the funds, not us -{' '}
+              near intents · a solver holds funds briefly ·{' '}
               <a
                 href='https://docs.near-intents.org/near-intents/integration/distribution-channels/1click-terms-of-service'
                 target='_blank'
@@ -788,7 +788,7 @@ const ZcashCrosschainSwap = () => {
               onChange={e => setRiskAcknowledged(e.target.checked)}
               className='mt-0.5 h-4 w-4 shrink-0 accent-[var(--zigner-gold)]'
             />
-            I accept these risks.
+            i accept these risks.
           </label>
 
           <button
@@ -802,10 +802,6 @@ const ZcashCrosschainSwap = () => {
           >
             get quote
           </button>
-
-          <p className='text-center text-label text-fg-dim'>
-            via NEAR 1Click - swap details shared with third-party API
-          </p>
         </>
       )}
 
