@@ -145,7 +145,7 @@
     /* legacy compat */
     --charcoal: #131009;
     --charcoal-secondary: #000000;
-    --teal: #629994;
+    --teal: #3fc1b0;
     --sand: #847a5b;
     --rust: #8d5728;
     --green: #8fbf73;
@@ -164,6 +164,7 @@
    * Same material logic inverted; gold darkens for AA contrast on paper,
    * hanko vermillion stays (a red seal on paper is the real thing). */
   :root[data-theme='washi'] {
+    --teal: #1f8a7c;
     --surface-canvas: #efe9dc;
     --surface-elev-1: #f6f2e8;
     --surface-elev-2: #fbf8f1;

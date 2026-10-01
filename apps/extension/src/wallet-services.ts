@@ -13,6 +13,7 @@ import { resolvePenumbraEndpoint } from './config/penumbra-endpoints';
 import type { NetworkType } from './state/keyring';
 import { hasLiveDappSession } from './dapp-session-presence';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
+import { ChainRegistryClient } from '@penumbrafi/registry';
 import { SENTINEL_U64_MAX } from './utils/sentinel';
 
 /**
@@ -112,10 +113,10 @@ export const startWalletServices = async (
   const grpcEndpoint = await resolvePenumbraEndpoint();
   console.log('[sync] grpc endpoint:', grpcEndpoint);
 
-  const numeraires = await localExtStorage.get('numeraires');
   console.log('[sync] getting chainId from endpoint...');
   const chainId = await getChainId(grpcEndpoint);
   console.log('[sync] chainId:', chainId);
+  const numeraires = await numerairesFor(chainId);
 
   const walletCreationBlockHeight = await localExtStorage.get('walletCreationBlockHeight');
   const compactFrontierBlockHeight = await localExtStorage.get('compactFrontierBlockHeight');
@@ -195,5 +196,28 @@ const syncLastBlockToStorage = async (
       await localExtStorage.set('fullSyncHeight', Number(value));
       console.log('[sync] fullSyncHeight updated:', Number(value));
     }
+  }
+};
+
+/**
+ * The assets prices are recorded against. Onboarding stores them, but a wallet
+ * that turned penumbra on later never got any, so its balances could never be
+ * valued: fall back to the bundled registry (no network) and keep the result.
+ */
+const numerairesFor = async (chainId: string): Promise<string[]> => {
+  const stored = await localExtStorage.get('numeraires');
+  if (stored.length) {
+    return stored;
+  }
+  try {
+    const bundled = new ChainRegistryClient().bundled
+      .get(chainId)
+      .numeraires.map(n => n.toJsonString());
+    if (bundled.length) {
+      await localExtStorage.set('numeraires', bundled);
+    }
+    return bundled;
+  } catch {
+    return stored;
   }
 };

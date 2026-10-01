@@ -1,3 +1,5 @@
+import { resolvePenumbraEndpoint } from '../config/penumbra-endpoints';
+import { selectEnabledNetworks } from '../state/keyring';
 import { useQuery } from '@tanstack/react-query';
 import { sample } from 'lodash';
 import { createClient, Transport } from '@connectrpc/connect';
@@ -78,15 +80,14 @@ export const fetchBlockHeight = async (grpcEndpoint: string): Promise<number> =>
 
 export const useLatestBlockHeight = () => {
   const { grpcEndpoint } = useStore(networkSelector);
+  // only while penumbra is on; the endpoint comes from the same resolver the
+  // service worker uses (the node menu writes networkEndpoints, not the legacy
+  // grpcEndpoint key, so reading that alone left the home waiting forever)
+  const penumbraOn = useStore(selectEnabledNetworks).includes('penumbra');
 
   return useQuery({
-    queryKey: ['latestBlockHeight'],
-    queryFn: async () => {
-      if (!grpcEndpoint) {
-        return;
-      }
-      return await fetchBlockHeight(grpcEndpoint);
-    },
-    enabled: Boolean(grpcEndpoint),
+    queryKey: ['latestBlockHeight', grpcEndpoint],
+    queryFn: async () => fetchBlockHeight(await resolvePenumbraEndpoint()),
+    enabled: penumbraOn,
   });
 };
