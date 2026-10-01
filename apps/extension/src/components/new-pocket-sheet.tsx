@@ -59,8 +59,8 @@ export const NewPocketSheet = ({
   // a hideable pocket may hold funds: say so in one line rather than silently
   // hiding money away
   useEffect(() => {
+    setHolds(undefined);
     if (!open || !rename?.pocket || !selectedKeyInfo || !target.balance) {
-      setHolds(undefined);
       return;
     }
     let cancelled = false;

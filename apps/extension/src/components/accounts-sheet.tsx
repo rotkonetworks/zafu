@@ -52,7 +52,7 @@ const CUSTODY_ICON: Record<Custody, string> = {
  * pockets; zcash moves its own pocket (a ZIP 32 account with its own worker
  * store and balance), penumbra its view-service account index.
  */
-interface PocketTarget {
+export interface PocketTarget {
   active: (s: AllSlices) => number;
   pick: (s: AllSlices, owner: string, account: number) => unknown;
   balance?: (keyId: string, account: number) => Promise<bigint>;
@@ -74,6 +74,25 @@ const POCKET_TARGET: Partial<Record<NetworkType, PocketTarget>> = {
 
 export const pocketTarget = (network: NetworkType): PocketTarget =>
   POCKET_TARGET[network] ?? ZCASH_POCKET;
+
+/**
+ * Switch every network whose active pocket is the one about to be hidden
+ * away to main first. A pocket is one list shared across networks (zcash and
+ * penumbra each keep their own "active" elsewhere), so hiding it has to
+ * release whichever of them has it active, not just the network in view.
+ */
+export const releaseActive = async (
+  state: AllSlices,
+  owner: string,
+  account: number,
+  targets: PocketTarget[] = [ZCASH_POCKET, ...Object.values(POCKET_TARGET)],
+): Promise<void> => {
+  for (const target of targets) {
+    if (target.active(state) === account) {
+      await target.pick(state, owner, 0);
+    }
+  }
+};
 
 /** what the rename/new-pocket sheet should do: create a fresh pocket, or
  * rename something that already has a name (a pocket or the wallet itself).
@@ -287,13 +306,7 @@ export const AccountsSheet = ({
                       : {
                           account: p.account,
                           hide: async () => {
-                            // the book's own active account is zcash's; a
-                            // hidden network's active pocket (penumbra's
-                            // account index) lives outside the book, so the
-                            // UI switches it away here before hiding
-                            if (p.account === activeAccount) {
-                              await target.pick(useStore.getState(), owner, 0);
-                            }
+                            await releaseActive(useStore.getState(), owner, p.account);
                             await hidePocket(owner, p.account);
                           },
                         },
@@ -315,7 +328,7 @@ export const AccountsSheet = ({
             <button
               type='button'
               onClick={onHiddenPockets}
-              className='flex h-9 items-center px-2 text-left text-[11px] text-fg-muted transition-colors hover:text-fg-high'
+              className='flex h-11 items-center px-2 text-left text-[11px] text-fg-muted transition-colors hover:text-fg-high'
             >
               hidden · {hiddenCount}
             </button>

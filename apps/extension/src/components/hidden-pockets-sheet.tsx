@@ -4,6 +4,7 @@
  * balance), so the only action here is bringing it back into view.
  */
 
+import { useEffect } from 'react';
 import { useStore } from '../state';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import type { Pocket } from '../state/pockets';
@@ -20,6 +21,14 @@ export const HiddenPocketsSheet = ({
   pockets: Pocket[];
 }) => {
   const unhide = useStore(s => s.pockets.unhide);
+
+  // the last one unhidden leaves nothing to show here; close quietly rather
+  // than sit open on an empty list
+  useEffect(() => {
+    if (open && pockets.length === 0) {
+      onOpenChange(false);
+    }
+  }, [open, pockets.length, onOpenChange]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title='hidden pockets'>
