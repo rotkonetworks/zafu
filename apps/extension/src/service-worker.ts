@@ -276,9 +276,15 @@ setDappSessionHooks({
     const started = reinitializeServices('dapp session started');
     if (stubbed) {
       dappStart = started;
-      void started.finally(() => {
+      void started.finally(async () => {
         if (dappStart === started) {
           dappStart = undefined;
+        }
+        // the scheduler skipped (gate still closed, e.g. penumbra disabled):
+        // no rebuild settled the cache reset above, so fail it like the stub would
+        if (rebuilds.getRunning()?.run === false) {
+          const gate = await penumbraGate();
+          setCachedWallet(undefined, gate.run ? undefined : gate.reason);
         }
       });
     }

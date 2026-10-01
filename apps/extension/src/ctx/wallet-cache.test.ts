@@ -27,3 +27,13 @@ describe('wallet-cache', () => {
     await expect(next).resolves.toBe(wallet);
   });
 });
+
+describe('wallet-cache stub after a pending reset', () => {
+  it('a reset while pending, then a failed set, rejects waiting getters', async () => {
+    const cache = await load();
+    const waiting = cache.getWalletReady();
+    cache.resetWalletCache();
+    cache.setCachedWallet(undefined, 'penumbra network not enabled');
+    await expect(waiting).rejects.toThrow('penumbra network not enabled');
+  });
+});
