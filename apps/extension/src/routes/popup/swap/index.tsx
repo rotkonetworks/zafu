@@ -11,6 +11,8 @@ import { viewClient, simulationClient } from '../../../clients';
 import { StepList } from '@repo/ui/components/ui/step-list';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Button } from '@repo/ui/components/ui/button';
+import { CopyButton } from '@repo/ui/components/ui/copy-button';
+import { QrCode } from '../../../components/qr-code';
 import { Sensitive } from '../../../components/sensitive';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { useStore } from '../../../state';
@@ -372,8 +374,15 @@ const ZcashCrosschainSwap = () => {
 
     setError(undefined);
 
+    // into zcash: the user pays the deposit address from their other wallet;
+    // zafu only shows it and watches for the swap to land
+    if (!isFromZec) {
+      setStep('deposit');
+      return;
+    }
+
     try {
-      if (isFromZec && selectedKeyInfo.type === 'mnemonic') {
+      if (selectedKeyInfo.type === 'mnemonic') {
         const ok = await requestAuth();
         if (!ok) {
           setStep('review');
@@ -408,7 +417,6 @@ const ZcashCrosschainSwap = () => {
         return;
       }
 
-      // setStep('deposit');
       // zigner flow
       const walletId = selectedKeyInfo.id;
       const amountZat = toBaseUnits(amountIn, 8);
@@ -848,7 +856,7 @@ const ZcashCrosschainSwap = () => {
                 disabled={!riskAcknowledged}
                 className='flex-1 bg-zigner-gold py-3 text-sm text-zigner-gold-foreground transition-colors hover:bg-zigner-gold-light disabled:cursor-not-allowed disabled:opacity-50'
               >
-                confirm & send
+                {isFromZec ? 'confirm & send' : 'show deposit address'}
               </button>
 
               <button
@@ -943,6 +951,23 @@ const ZcashCrosschainSwap = () => {
               </div>
             )}
           </div>
+
+          {/* into zcash: pay this address from the other wallet */}
+          {!isFromZec && step === 'deposit' && (
+            <div className='flex flex-col items-center gap-3 border border-border-soft bg-elev-2/20 p-3'>
+              <p className='text-xs text-fg-muted'>
+                send exactly {quote.quote.amountInFormatted} {selectedToken?.symbol} on{' '}
+                {selectedToken?.blockchain} to
+              </p>
+              <QrCode value={quote.quote.depositAddress} size={160} label='deposit address' />
+              <div className='flex w-full items-center gap-2'>
+                <span className='min-w-0 flex-1 break-all font-mono text-xs'>
+                  {quote.quote.depositAddress}
+                </span>
+                <CopyButton text={quote.quote.depositAddress} label='copy' />
+              </div>
+            </div>
+          )}
 
           {/* status */}
           <div className='border border-border-soft bg-elev-2/20 p-3'>
