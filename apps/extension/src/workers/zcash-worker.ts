@@ -78,9 +78,12 @@ import {
   isChainContinuityError,
   rewindDistanceForAttempt,
   syncErrorCodeOf,
+  syncRetryDelayMs,
   MAX_REWINDS_PER_RUN,
+  SYNC_STALL_ERRORS,
   type SyncErrorCode,
 } from '../state/sync-failure';
+import { startRun, stopRun, STOP_WAIT_MS, type RunSlot } from './sync-runs';
 
 export type { SentTxRecord } from './sent-tx-reconcile';
 
@@ -287,10 +290,8 @@ interface DecryptedNote {
 /** Pool of a note; records persisted pre-ironwood default to orchard. */
 const poolOf = (note: DecryptedNote): NotePool => note.pool ?? 'orchard';
 
-interface WalletState {
+interface WalletState extends RunSlot {
   keys: ScannerKeys | null;
-  syncing: boolean;
-  syncAbort: boolean;
   notes: DecryptedNote[];
   spentNullifiers: Set<string>;
   /**
@@ -300,8 +301,8 @@ interface WalletState {
    */
   mempoolAbort?: AbortController;
   /**
-   * Promise of the watcher's IIFE. waitForSyncStop awaits this alongside
-   * `syncing` so a follow-up runSync can't race a still-alive watcher.
+   * Promise of the watcher's IIFE. stopSync awaits this alongside the run
+   * so a follow-up runSync can't race a still-alive watcher.
    */
   mempoolTask?: Promise<void>;
 }
@@ -687,54 +688,24 @@ const patchBranchId = (buf: Uint8Array): void => {
   }
 };
 
-/**
- * Wait for both the sync loop AND the mempool watcher to stop after the
- * caller has set syncAbort=true (or otherwise signaled shutdown). Polls
- * state.syncing every 50ms up to timeoutMs, then explicitly awaits the
- * watcher task if one was running - this matters because a freshly-spawned
- * runSync race can otherwise have two watchers contending against the same
- * walletId.
- */
-const waitForSyncStop = async (state: WalletState, timeoutMs = 2000): Promise<void> => {
-  // Abort the watcher (idempotent) so any in-flight fetch / sleep wakes up.
+/** stop the wallet's sync and wait until its loop and mempool watcher have ended */
+const stopSync = async (state: WalletState): Promise<void> => {
   state.mempoolAbort?.abort();
-
-  if (state.syncing) {
-    await new Promise<void>(resolve => {
-      const start = Date.now();
-      const check = () => {
-        if (!state.syncing || Date.now() - start > timeoutMs) {
-          resolve();
-        } else {
-          setTimeout(check, 50);
-        }
-      };
-      check();
-    });
-  }
-  // Wait for the watcher's promise to settle so we know the IIFE finished.
-  // Bounded by the same timeout - if the watcher is wedged inside a fetch
-  // that ignored the signal, we still return after timeoutMs.
-  if (state.mempoolTask) {
-    await Promise.race([
-      state.mempoolTask.catch(() => undefined),
-      new Promise(resolve => setTimeout(resolve, timeoutMs)),
-    ]);
-    state.mempoolTask = undefined;
-    state.mempoolAbort = undefined;
-  }
+  await Promise.all([
+    stopRun(state),
+    Promise.race([
+      state.mempoolTask?.catch(() => undefined),
+      new Promise(resolve => setTimeout(resolve, STOP_WAIT_MS)),
+    ]),
+  ]);
+  state.mempoolTask = undefined;
+  state.mempoolAbort = undefined;
 };
 
-/**
- * Sleep that wakes early when the sync loop is asked to stop. The loop's
- * idle wait (10s at tip) and error backoff (up to 30s) are much longer than
- * waitForSyncStop's 2s budget - a plain setTimeout sleep would let a stale
- * loop outlive the teardown and race a freshly-started sync (e.g. after an
- * endpoint switch, the old loop keeps its old client).
- */
-const sleepUnlessAborted = async (state: WalletState, ms: number): Promise<void> => {
+/** a sleep that wakes the moment the run is stopped */
+const sleepUnlessAborted = async (signal: AbortSignal, ms: number): Promise<void> => {
   const deadline = Date.now() + ms;
-  while (!state.syncAbort) {
+  while (!signal.aborted) {
     const remaining = deadline - Date.now();
     if (remaining <= 0) {
       return;
@@ -746,7 +717,7 @@ const sleepUnlessAborted = async (state: WalletState, ms: number): Promise<void>
 const getOrCreateWalletState = (walletId: string): WalletState => {
   let state = walletStates.get(walletId);
   if (!state) {
-    state = { keys: null, syncing: false, syncAbort: false, notes: [], spentNullifiers: new Set() };
+    state = { keys: null, notes: [], spentNullifiers: new Set() };
     walletStates.set(walletId, state);
   }
   return state;
@@ -3224,7 +3195,53 @@ function handleMempoolSnapshot(
 
 // ── sync ──
 
-const runSync = async (
+type SyncArgs = [
+  walletId: string,
+  mnemonic: string,
+  serverUrl: string,
+  startHeight?: number,
+  ufvk?: string,
+  backend?: ZcashBackend,
+  mempoolWatch?: 'off' | 'on',
+];
+
+/** start (or restart) a wallet's sync; it resumes from what the run before it saved */
+const runSync = (...args: SyncArgs): Promise<void> => {
+  const walletId = args[0];
+  const state = getOrCreateWalletState(walletId);
+  return startRun(
+    state,
+    async signal => {
+      try {
+        await syncLoop(state, signal, ...args);
+      } catch (err) {
+        // everything outside the batch loop's own retries: opening the store,
+        // deriving keys, sizing the stored frontier. The window offers to try
+        // again, which resumes from the stored height.
+        console.error('[zcash-worker] runSync fatal:', err);
+        if (!signal.aborted) {
+          workerSelf.postMessage({
+            type: 'sync-error',
+            id: '',
+            network: 'zcash',
+            walletId,
+            payload: {
+              message: err instanceof Error ? err.message : String(err),
+              stalled: true,
+              ...(syncErrorCodeOf(err) ? { code: syncErrorCodeOf(err) } : {}),
+            },
+          });
+        }
+      }
+      console.log(`[zcash-worker] sync stopped wallet=${walletId}`);
+    },
+    () => workerSelf.postMessage({ type: 'sync-stopped', id: '', network: 'zcash', walletId }),
+  );
+};
+
+const syncLoop = async (
+  state: WalletState,
+  signal: AbortSignal,
   walletId: string,
   mnemonic: string,
   serverUrl: string,
@@ -3235,14 +3252,6 @@ const runSync = async (
 ): Promise<void> => {
   if (!wasmModule) {
     throw new Error('wasm not initialized');
-  }
-
-  const state = getOrCreateWalletState(walletId);
-
-  // abort existing sync if running - prevents concurrent loops
-  if (state.syncing) {
-    state.syncAbort = true;
-    await waitForSyncStop(state);
   }
 
   // free old keys if re-syncing
@@ -3298,6 +3307,10 @@ const runSync = async (
     !!runningFrontier &&
     frontierSize === orchardTreeSize &&
     runningFrontierHeight === currentHeight;
+  // a stop that lands while the store opens must not be followed by a fetch
+  if (signal.aborted) {
+    return;
+  }
   if (!frontierValid && currentHeight > 0) {
     try {
       const ts = await client.getTreeState(currentHeight);
@@ -3335,7 +3348,7 @@ const runSync = async (
   let ironwoodTreeSize = await getIronwoodTreeSize(walletId);
   let ironwoodFrontier: string = (await getIronwoodTreeFrontier(walletId)) ?? '';
   let ironwoodFrontierHeight = await getIronwoodTreeFrontierHeight(walletId);
-  if (iwSupported && iwSizeFn) {
+  if (iwSupported && iwSizeFn && !signal.aborted) {
     // Same unguarded-throw hazard as the orchard frontier above: this runs
     // before the first sync-progress emit, so a frontier the blob cannot read
     // silently ended the sync loop instead of triggering a rebootstrap.
@@ -3389,7 +3402,7 @@ const runSync = async (
   // buildWitnessesIronwood persists + attaches them (so loadState finds them
   // next run) - a healthy wallet does no work. Non-fatal on failure: a send
   // still self-heals via its own replay.
-  if (iwSupported && ironwoodFrontier) {
+  if (iwSupported && ironwoodFrontier && !signal.aborted) {
     const strandedIronwood = state.notes.filter(
       n =>
         poolOf(n) === 'ironwood' &&
@@ -3445,8 +3458,6 @@ const runSync = async (
     },
   });
 
-  state.syncing = true;
-  state.syncAbort = false;
   let consecutiveErrors = 0;
 
   // ── chain-continuity recovery ──
@@ -3563,7 +3574,7 @@ const runSync = async (
   // endpoint (lightwalletd has no compact-action mempool RPC, so the watcher
   // would yield nothing). Lifecycle is owned by `state.mempoolAbort`/
   // `state.mempoolTask` so stop-sync / reset-sync can abort the watcher
-  // directly, and waitForSyncStop can await the task before declaring the
+  // directly, and stopSync can await the task before declaring the
   // wallet idle. This avoids a class of races where a fresh runSync raced
   // a still-alive watcher attached to the previous client.
   state.mempoolAbort?.abort();
@@ -3634,7 +3645,7 @@ const runSync = async (
     fetch: (start, end) => client.getCompactBlocks(start, end),
     batchSize: SYNC_BATCH_SIZE,
     depth: SYNC_PREFETCH_DEPTH,
-    isAborted: () => state.syncAbort,
+    isAborted: () => signal.aborted,
   });
 
   // Cached chain tip; see TIP_CACHE_MS. Invalidated by setting cachedTipAt to
@@ -3659,7 +3670,7 @@ const runSync = async (
     cachedTipAt = 0;
   };
 
-  while (!state.syncAbort) {
+  while (!signal.aborted) {
     try {
       const chainHeight = await getChainTip();
 
@@ -3981,7 +3992,7 @@ const runSync = async (
           walletId,
           payload: { currentHeight, chainHeight, notesFound: state.notes.length, blocksScanned: 0 },
         });
-        await sleepUnlessAborted(state, 10000);
+        await sleepUnlessAborted(signal, 10000);
         continue;
       }
 
@@ -4013,12 +4024,7 @@ const runSync = async (
           `[zcash-worker] getCompactBlocks(${batch.start}..${endHeight}) returned 0 blocks, retrying`,
         );
         dropPipeline();
-        const backoff = Math.min(30000, 1000 * Math.pow(2, consecutiveErrors - 1));
-        await sleepUnlessAborted(state, backoff);
-        if (consecutiveErrors >= 10) {
-          console.error('[zcash-worker] too many errors, stopping sync');
-          break;
-        }
+        await sleepUnlessAborted(signal, syncRetryDelayMs(consecutiveErrors));
         continue;
       }
 
@@ -4593,7 +4599,7 @@ const runSync = async (
       // RPCs can fail once teardown begins. That's not a sync failure - no
       // error count, no sync-error to the UI. Mirrors the abort handling in
       // packages/query block-processor retry.
-      if (state.syncAbort) {
+      if (signal.aborted) {
         dropPipeline();
         break;
       }
@@ -4668,35 +4674,24 @@ const runSync = async (
           walletId,
           payload: {
             message: err instanceof Error ? err.message : String(err),
+            stalled: consecutiveErrors >= SYNC_STALL_ERRORS,
             ...(code ? { code } : {}),
           },
         });
       }
-      // back off exponentially, max 30s
-      const backoff = Math.min(30000, 2000 * Math.pow(2, consecutiveErrors - 1));
-      await sleepUnlessAborted(state, backoff);
-      // after 10 consecutive errors, give up
-      if (consecutiveErrors >= 10) {
-        console.error('[zcash-worker] too many errors, stopping sync');
-        break;
+      // never give up: only the last window closing stops the loop, so a node
+      // that comes back is picked up from the stored height. Once stalled,
+      // every slow retry is a fresh run's worth of rewinds.
+      if (consecutiveErrors >= SYNC_STALL_ERRORS) {
+        rewindsThisRun = 0;
       }
+      await sleepUnlessAborted(signal, syncRetryDelayMs(consecutiveErrors));
     }
   }
 
   // Nothing in flight may be applied after the loop ends, however it ended.
   prefetcher.reset();
-  state.syncing = false;
-  // mempool watcher lifecycle is owned by state.mempoolAbort; abort here
-  // so the watcher tears down even if the sync loop exits via a path that
-  // skips waitForSyncStop. Safe to call repeatedly.
   state.mempoolAbort?.abort();
-  console.log(`[zcash-worker] sync stopped wallet=${walletId}`);
-  // The loop can exit on its own (10 consecutive errors) with nobody having
-  // sent 'stop-sync'. Without this the main thread's syncingWallets set keeps
-  // the wallet listed as syncing forever and the auto-sync hook never
-  // restarts it - a wallet that has silently stopped scanning looks exactly
-  // like one that is up to date.
-  workerSelf.postMessage({ type: 'sync-stopped', id: '', network: 'zcash', walletId });
 };
 
 const getBalance = async (walletId: string): Promise<bigint> => {
@@ -4910,7 +4905,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // Seed the registry so subsequent operations (send, history, memo
         // fetch) construct the right client without re-receiving backend.
         registerBackend(serverUrl, effectiveBackend);
-        runSync(
+        void runSync(
           walletId,
           ufvk ? '' : await unsealVault(vault),
           serverUrl,
@@ -4918,32 +4913,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           ufvk,
           effectiveBackend,
           mempoolWatch,
-        ).catch(err => {
-          // A rejection here is everything that happens OUTSIDE the batch
-          // loop's own try/catch: opening IndexedDB, loading state, deriving
-          // keys, sizing the stored frontier. Those all run BEFORE the first
-          // sync-progress is emitted, so the popup never learns a height and
-          // renders "scanning notes 0%" forever.
-          //
-          // 'sync-started' has already been posted by the time we get here, so
-          // network-worker has this wallet in syncingWallets and the auto-sync
-          // hook's isWalletSyncing() guard will refuse to ever start it again.
-          // Logging to a console nobody has open made that permanent and
-          // invisible. Report the failure and retract the started claim so the
-          // UI can surface it and a retry is possible.
-          console.error('[zcash-worker] runSync fatal:', err);
-          workerSelf.postMessage({
-            type: 'sync-error',
-            id: '',
-            network: 'zcash',
-            walletId,
-            payload: {
-              message: err instanceof Error ? err.message : String(err),
-              ...(syncErrorCodeOf(err) ? { code: syncErrorCodeOf(err) } : {}),
-            },
-          });
-          workerSelf.postMessage({ type: 'sync-stopped', id: '', network: 'zcash', walletId });
-        });
+        );
         workerSelf.postMessage({ type: 'sync-started', id, network: 'zcash', walletId });
         return;
       }
@@ -4952,15 +4922,22 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (!walletId) {
           throw new Error('walletId required');
         }
+        // answered once the loop has ended, so a start after it resumes from
+        // what the stopped run saved instead of racing it
         const state = walletStates.get(walletId);
+        const stopped = state?.stop;
         if (state) {
-          state.syncAbort = true;
-          // Abort the mempool watcher directly. Without this, the watcher
-          // keeps polling for up to one full sync-loop backoff (≈30s) after
-          // stop-sync returns.
-          state.mempoolAbort?.abort();
+          await stopSync(state);
         }
-        workerSelf.postMessage({ type: 'sync-stopped', id, network: 'zcash', walletId });
+        // a sync asked for while this stop waited owns the wallet now: answer
+        // the call without marking the wallet idle under it
+        const superseded = state?.stop !== stopped;
+        workerSelf.postMessage({
+          type: 'sync-stopped',
+          id,
+          network: 'zcash',
+          walletId: superseded ? undefined : walletId,
+        });
         return;
       }
 
@@ -4968,26 +4945,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (!walletId) {
           throw new Error('walletId required');
         }
-        const resetState = walletStates.get(walletId);
-        if (resetState) {
-          resetState.syncAbort = true;
-          resetState.mempoolAbort?.abort();
-          if (resetState.keys) {
-            resetState.keys.free();
-            resetState.keys = null;
-          }
-        }
-        await waitForSyncStop(resetState ?? getOrCreateWalletState(walletId));
+        const resetState = getOrCreateWalletState(walletId);
+        await stopSync(resetState);
+        resetState.keys?.free();
+        resetState.keys = null;
         // clear IDB data for this wallet
         await deleteWallet(walletId);
         // re-register so future sync can start clean
         await registerWallet(walletId);
-        // reset in-memory state
-        const freshState = getOrCreateWalletState(walletId);
-        freshState.notes = [];
-        freshState.spentNullifiers = new Set();
-        freshState.syncing = false;
-        freshState.syncAbort = false;
+        resetState.notes = [];
+        resetState.spentNullifiers = new Set();
         workerSelf.postMessage({ type: 'sync-reset', id, network: 'zcash', walletId });
         return;
       }
@@ -5106,9 +5073,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
         for (const storeId of ownStores) {
           const state = walletStates.get(storeId);
-          if (state?.syncing) {
-            state.syncAbort = true;
-            await waitForSyncStop(state);
+          if (state) {
+            await stopSync(state);
           }
           if (state?.keys) {
             state.keys.free();

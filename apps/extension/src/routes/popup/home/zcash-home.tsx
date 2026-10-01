@@ -180,8 +180,6 @@ export const ZcashContent = ({
         }
       })
       .catch(err => console.error('[zcash] rescan failed:', err));
-  const retry = () =>
-    void retryZcashSync().catch(err => console.error('[zcash] sync retry failed:', err));
 
   // pending shielded change (our own unconfirmed sends, a pending migrate) is
   // held, not spendable, and not gone - so it counts in the figure
@@ -274,7 +272,7 @@ export const ZcashContent = ({
           currentHeight={workerSyncHeight}
           targetHeight={chainHeight}
           startBlock={effectiveBirthday}
-          onRetry={retry}
+          onRetry={retryZcashSync}
           onRescan={h => setRescanConfirmHeight(rescanStartHeight(h))}
         />
       }
