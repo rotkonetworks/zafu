@@ -4,27 +4,12 @@
  * chats as often as QR codes. A link zafu can't open stays plain text.
  */
 
-import { formatZecAmount } from '@repo/wallet/networks/zcash/zip321';
-import { notYet, parseLink, type Intent } from '../links/router';
+import { describeIntent } from '../links/describe';
+import { notYet, parseLink } from '../links/router';
 import { PopupPath } from '../routes/popup/paths';
 import { usePopupNav } from '../utils/navigate';
 
 const LINK = /(?:zcash|zafu):[^\s<>"']+/gi;
-
-const CHIP: { [K in Intent['kind']]: (i: Extract<Intent, { kind: K }>) => string } = {
-  pay: ({ payments: [p] }) =>
-    [
-      p?.amountZat !== undefined ? `pay ${formatZecAmount(p.amountZat)} ZEC` : 'pay',
-      p?.label ?? p?.message,
-    ]
-      .filter(Boolean)
-      .join(' - '),
-  swap: ({ swap }) =>
-    swap.direction === 'into_zec' ? `swap ${swap.token} into zec` : `swap zec into ${swap.token}`,
-  screen: ({ screen }) => `open ${screen}`,
-  contact: () => 'contact',
-  join: ({ code }) => `join ${code}`,
-};
 
 const LinkChip = ({ uri }: { uri: string }) => {
   const navigate = usePopupNav();
@@ -40,7 +25,7 @@ const LinkChip = ({ uri }: { uri: string }) => {
       className='my-0.5 inline-flex items-center gap-1 border border-zigner-gold/40 bg-zigner-gold/10 px-2 py-0.5 text-xs text-zigner-gold hover:bg-zigner-gold/20'
     >
       <span className='i-ph-coins h-3 w-3' />
-      {(CHIP[parsed.intent.kind] as (i: Intent) => string)(parsed.intent)}
+      {describeIntent(parsed.intent)}
     </button>
   );
 };

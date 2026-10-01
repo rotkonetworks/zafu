@@ -35,6 +35,9 @@ import { runNetEgressMigration } from './net/egress-migrate';
 import { internalZidListener } from './message/listen/internal-zid';
 import { NET_EGRESS_INTERNAL_METHODS } from './message/listen/zafu-method-names';
 import { linkListener } from './message/listen/links';
+import { openWalletRoute } from './message/listen/external-easteregg';
+import { omniboxDescription, omniboxUri, escapeOmniboxXml } from './links/omnibox';
+import { PopupPath } from './routes/popup/paths';
 import { keplrMessageListener } from './message/listen/keplr';
 import { createPenumbraSendListener } from './message/listen/penumbra-send';
 import { TX_OP_PREFIX, isTxOp, type TxOp } from './tx-ops';
@@ -784,4 +787,16 @@ chrome.contextMenus.onClicked.addListener((_info, _tab) => {
   if (_info.menuItemId === 'open-popup-window') {
     void openApprovalPopup(chrome.runtime.getURL('popup.html'));
   }
+});
+
+// `zafu <intent>` in the address bar: same router as a clicked link, landing
+// on the same prefilled review. One window at a time, like every other
+// wallet-initiated popup - typing enter twice never stacks windows.
+chrome.omnibox.onInputChanged.addListener((text, suggest) => {
+  suggest([{ content: text, description: escapeOmniboxXml(omniboxDescription(text)) }]);
+});
+
+chrome.omnibox.onInputEntered.addListener(text => {
+  const route = `${PopupPath.LINK}?uri=${encodeURIComponent(omniboxUri(text))}&via=typed`;
+  void openWalletRoute('omnibox', route);
 });
