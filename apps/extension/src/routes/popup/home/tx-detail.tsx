@@ -82,10 +82,8 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
   const contactNet: ContactNetwork =
     network === 'zcash' ? 'zcash' : network === 'penumbra' ? 'penumbra' : 'cosmos';
   const hasBreakdown = !!tx.recipientAmount && !!tx.feeAmount;
-  const recipientName =
-    contactMatch?.contact.name ??
-    directoryName ??
-    (tx.recipient && `${tx.recipient.slice(0, 8)}…${tx.recipient.slice(-4)}`);
+  const shortRecipient = tx.recipient && `${tx.recipient.slice(0, 8)}…${tx.recipient.slice(-4)}`;
+  const recipientName = contactMatch?.contact.name ?? directoryName ?? shortRecipient;
   const title = isIn
     ? 'received'
     : isSh
@@ -98,69 +96,68 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
       ? fmtZecHero(Number(tx.amount ?? 0))
       : `${tx.amount ?? ''} ${tx.asset ?? ''}`;
 
-  // What we can honestly say about progress: a history record only ever
-  // carries one status (pending/confirmed/failed), not a timestamped sub-step
-  // log, so the checklist below is the coarsest truthful read of it - not the
-  // per-step timeline the board sketches, since that data isn't stored.
-  const steps: { label: string; done: boolean; failed?: boolean }[] = isFailed
-    ? [
-        { label: 'sent to the network', done: true },
-        { label: 'did not confirm', done: true, failed: true },
-      ]
-    : isPending
+  // What we can honestly say about progress: a history record carries one
+  // status and the broadcast time, not a per-step log, so only the rows that
+  // status proves are drawn (board StTxReturned). An expired send's inputs
+  // stay marked spent until the chain is read again (sent-tx-reconcile.ts),
+  // so "returned to your wallet" is not claimed.
+  const sentAt = fmtTime(tx.sentAt ?? tx.timestamp);
+  const steps: { label: string; mark: 'done' | 'warn' | 'wait'; at?: string }[] =
+    isFailed || isPending
       ? [
-          { label: 'sent to the network', done: true },
-          { label: 'waiting for a block', done: false },
+          ...(network === 'zcash'
+            ? [{ label: 'proved on this computer', mark: 'done' as const, at: sentAt }]
+            : []),
+          { label: 'sent to the network', mark: 'done', at: sentAt },
+          isFailed
+            ? { label: 'expired before a block found it', mark: 'warn' }
+            : { label: 'waiting for a block', mark: 'wait' },
         ]
       : [];
 
   return (
     <div className='flex min-h-full flex-col'>
       <ScreenHeader title={title} backPath={PopupPath.ACTIVITY} />
-      <div className='flex flex-col gap-4 px-4 py-4'>
+      <div className='flex flex-1 flex-col gap-4 px-4 py-5'>
         {tx.amount && (
-          <div className='text-center'>
-            <Sensitive
-              className={cn(
-                'text-3xl tabular-nums',
-                isFailed ? 'text-fg-dim line-through' : 'text-fg-high',
-              )}
-            >
-              {tx.amountUpperBound ? '≤ ' : ''}
-              {amountText}
-            </Sensitive>
-          </div>
+          <Sensitive className='font-display text-[38px] leading-none text-fg-high'>
+            {tx.amountUpperBound ? '≤ ' : ''}
+            {amountText}
+            {network === 'zcash' && <span className='text-base text-zigner-gold'> zec</span>}
+          </Sensitive>
         )}
 
         {steps.length > 0 && (
-          <div className='flex flex-col gap-2'>
-            {steps.map((s, i) => (
-              <div key={i} className='flex items-center gap-2 text-sm'>
+          <ol className='flex flex-col divide-y divide-border-soft border border-border-soft bg-elev-1'>
+            {steps.map(s => (
+              <li
+                key={s.label}
+                className={cn(
+                  'flex h-11 items-center gap-2.5 px-3.5 text-[13px]',
+                  s.mark === 'warn' ? 'text-warn' : 'text-fg-high',
+                )}
+              >
                 <span
                   className={cn(
-                    'size-3 shrink-0 border',
-                    s.failed
-                      ? 'border-hanko bg-hanko/30'
-                      : s.done
-                        ? 'border-zigner-gold bg-zigner-gold'
-                        : 'border-fg-muted',
+                    'size-3 shrink-0',
+                    s.mark === 'done' && 'bg-zigner-gold',
+                    s.mark === 'warn' && 'bg-warn',
+                    s.mark === 'wait' && 'border border-zigner-gold',
                   )}
                 />
-                <span className={s.failed ? 'text-hanko' : 'text-fg-high'}>{s.label}</span>
-                <span className='ml-auto text-label text-fg-muted'>
-                  {fmtTime(tx.sentAt ?? tx.timestamp)}
-                </span>
-              </div>
+                {s.label}
+                <span className='ml-auto text-[11px] text-fg-muted'>{s.at}</span>
+              </li>
             ))}
-          </div>
+          </ol>
         )}
 
         {isFailed && (
-          <div className='flex items-start gap-2 border border-success/40 bg-elev-1 p-3'>
-            <span className='i-ph-check mt-0.5 size-3.5 shrink-0 text-success' />
-            <p className='text-label text-fg-muted leading-snug'>
+          <div className='flex min-h-[58px] items-center gap-2.5 border border-success/40 bg-success/5 px-3.5 py-2.5'>
+            <span className='i-ph-check size-4 shrink-0 text-success' />
+            <p className='text-xs leading-normal text-fg'>
               {recipientName ? `${recipientName} never received this. ` : ''}nothing left your
-              wallet - you can send it again whenever you like.
+              wallet - its zec is held until the chain is read again.
             </p>
           </div>
         )}
@@ -176,102 +173,124 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
           </p>
         )}
 
-        <RowGroup>
-          {tx.recipient &&
-            (contactMatch ? (
-              <Row
-                type='screen'
-                icon='i-ph-user'
-                label={`to ${contactMatch.contact.name}`}
-                onPress={() => navigate(`${PopupPath.CONTACTS}?open=${contactMatch.contact.id}`)}
-              />
-            ) : (
-              <div className='flex items-center'>
+        {isFailed ? (
+          <div className='flex flex-col divide-y divide-border-soft border border-border-soft bg-elev-1'>
+            {tx.recipient && (
+              <div className='flex h-[46px] items-center justify-between gap-3 px-3.5'>
+                <span className='text-xs text-fg-muted'>to</span>
+                <span className='truncate text-[13px] text-fg-high'>
+                  {recipientName && recipientName !== shortRecipient
+                    ? `${recipientName} · ${shortRecipient}`
+                    : shortRecipient}
+                </span>
+              </div>
+            )}
+            <div className='flex h-[46px] items-center justify-between px-3.5'>
+              <span className='text-xs text-fg-muted'>fee</span>
+              <span className='text-[13px] text-fg-high'>not charged</span>
+            </div>
+          </div>
+        ) : (
+          <RowGroup>
+            {tx.recipient &&
+              (contactMatch ? (
                 <Row
                   type='screen'
-                  icon='i-ph-arrow-up-right'
-                  label={
-                    directoryName ??
-                    (tx.recipient.length > 20
-                      ? `${tx.recipient.slice(0, 10)}…${tx.recipient.slice(-6)}`
-                      : tx.recipient)
-                  }
-                  description={directoryName ? 'zcash.me' : 'to'}
-                  className='flex-1 min-w-0'
-                  onPress={() => setShowSave(true)}
+                  icon='i-ph-user'
+                  label={`to ${contactMatch.contact.name}`}
+                  onPress={() => navigate(`${PopupPath.CONTACTS}?open=${contactMatch.contact.id}`)}
                 />
-                <CopyButton text={tx.recipient} className='mr-3.5' />
-              </div>
-            ))}
+              ) : (
+                <div className='flex items-center'>
+                  <Row
+                    type='screen'
+                    icon='i-ph-arrow-up-right'
+                    label={
+                      directoryName ??
+                      (tx.recipient.length > 20
+                        ? `${tx.recipient.slice(0, 10)}…${tx.recipient.slice(-6)}`
+                        : tx.recipient)
+                    }
+                    description={directoryName ? 'zcash.me' : 'to'}
+                    className='flex-1 min-w-0'
+                    onPress={() => setShowSave(true)}
+                  />
+                  <CopyButton text={tx.recipient} className='mr-3.5' />
+                </div>
+              ))}
 
-          {isIn &&
-            (editingNote ? (
-              <div className='flex items-center gap-1 px-3.5 py-2'>
-                <input
-                  autoFocus
-                  value={noteDraft}
-                  onChange={e => setNoteDraft(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
+            {isIn &&
+              (editingNote ? (
+                <div className='flex items-center gap-1 px-3.5 py-2'>
+                  <input
+                    autoFocus
+                    value={noteDraft}
+                    onChange={e => setNoteDraft(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        void saveFromNote(noteDraft);
+                        setEditingNote(false);
+                      }
+                      if (e.key === 'Escape') {
+                        setEditingNote(false);
+                      }
+                    }}
+                    placeholder='who was this from?'
+                    className='min-w-0 flex-1 border border-border-soft bg-transparent px-1.5 py-0.5 text-label'
+                  />
+                  <button
+                    type='button'
+                    onClick={() => {
                       void saveFromNote(noteDraft);
                       setEditingNote(false);
-                    }
-                    if (e.key === 'Escape') {
-                      setEditingNote(false);
-                    }
+                    }}
+                    className='text-label text-network-accent'
+                  >
+                    save
+                  </button>
+                </div>
+              ) : (
+                <Row
+                  type='screen'
+                  icon='i-ph-note-pencil'
+                  label={fromNote ? `from ${fromNote}` : 'note who this was from'}
+                  onPress={() => {
+                    setNoteDraft(fromNote ?? '');
+                    setEditingNote(true);
                   }}
-                  placeholder='who was this from?'
-                  className='min-w-0 flex-1 border border-border-soft bg-transparent px-1.5 py-0.5 text-label'
                 />
-                <button
-                  type='button'
-                  onClick={() => {
-                    void saveFromNote(noteDraft);
-                    setEditingNote(false);
-                  }}
-                  className='text-label text-network-accent'
+              ))}
+
+            <div className='flex min-h-[52px] items-center gap-3 px-3.5 py-2'>
+              <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
+                <span className='truncate text-data text-fg-high font-mono'>{tx.id}</span>
+                <span className='text-label text-fg-muted lowercase'>transaction</span>
+              </span>
+              <CopyButton text={tx.id} />
+              {explorer && (
+                <a
+                  href={explorer}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  className='mr-3.5 shrink-0 text-fg-muted transition-colors hover:text-fg-high'
+                  title='open in block explorer (reveals your ip)'
                 >
-                  save
-                </button>
-              </div>
-            ) : (
-              <Row
-                type='screen'
-                icon='i-ph-note-pencil'
-                label={fromNote ? `from ${fromNote}` : 'note who this was from'}
-                onPress={() => {
-                  setNoteDraft(fromNote ?? '');
-                  setEditingNote(true);
-                }}
-              />
-            ))}
+                  <span className='i-ph-arrow-square-out h-3.5 w-3.5' />
+                </a>
+              )}
+            </div>
+            <div className='flex items-center justify-between px-3.5 py-2 text-sm'>
+              <span className='text-fg-muted'>fee</span>
+              <span>{tx.feeAmount ?? '—'}</span>
+            </div>
+          </RowGroup>
+        )}
+      </div>
 
-          <div className='flex min-h-[52px] items-center gap-3 px-3.5 py-2'>
-            <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
-              <span className='truncate text-data text-fg-high font-mono'>{tx.id}</span>
-              <span className='text-label text-fg-muted lowercase'>transaction</span>
-            </span>
-            <CopyButton text={tx.id} />
-            {explorer && (
-              <a
-                href={explorer}
-                target='_blank'
-                rel='noopener noreferrer'
-                className='mr-3.5 shrink-0 text-fg-muted transition-colors hover:text-fg-high'
-                title='open in block explorer (reveals your ip)'
-              >
-                <span className='i-ph-arrow-square-out h-3.5 w-3.5' />
-              </a>
-            )}
-          </div>
-          <div className='flex items-center justify-between px-3.5 py-2 text-sm'>
-            <span className='text-fg-muted'>fee</span>
-            <span>{isFailed ? 'not charged' : (tx.feeAmount ?? '—')}</span>
-          </div>
-        </RowGroup>
-
-        {isFailed && !isIn && (
+      {isFailed && !isIn && (
+        <footer className='shrink-0 border-t border-border-soft px-4 pb-4 pt-3'>
           <Button
+            className='w-full'
             onClick={() =>
               navigate(PopupPath.SEND, {
                 state: { prefillRecipient: tx.recipient, prefillMemo: tx.memo },
@@ -280,8 +299,8 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
           >
             send again
           </Button>
-        )}
-      </div>
+        </footer>
+      )}
 
       {showSave && tx.recipient && (
         <SaveContactModal
