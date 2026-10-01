@@ -100,7 +100,6 @@
      values. Existing components using hsl(var(--foreground)) etc. still
      work. Prefer the new tokens above for new code. */
   --color-border: hsl(var(--border));
-  --color-border-secondary: var(--border-secondary);
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
   --color-background: hsl(var(--background));
@@ -165,6 +164,29 @@
   --color-warning: var(--warning);
   --color-error: var(--error);
   --color-info: var(--info);
+  --color-warn: var(--warn);
+  --color-gold-line: var(--gold-line);
+
+  /* the stock palette's status families collapse onto the board's three
+     status inks, so a stray red-400 or yellow-500/10 still lands on-theme.
+     Chain identity hues (blue, teal, purple, ...) keep the stock palette. */
+  --color-red-300: var(--red);
+  --color-red-400: var(--red);
+  --color-red-500: var(--red);
+  --color-red-600: var(--red);
+  --color-red-900: var(--red);
+  --color-green-300: var(--green);
+  --color-green-400: var(--green);
+  --color-green-500: var(--green);
+  --color-yellow-300: var(--warn);
+  --color-yellow-400: var(--warn);
+  --color-yellow-500: var(--warn);
+  --color-yellow-600: var(--warn);
+  --color-amber-300: var(--warn);
+  --color-amber-400: var(--warn);
+  --color-amber-500: var(--warn);
+  --color-orange-400: var(--warn);
+  --color-orange-500: var(--warn);
 
   /* animations */
   --animate-accordion-down: accordion-down 0.2s ease-out;

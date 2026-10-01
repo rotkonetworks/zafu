@@ -93,8 +93,8 @@
     --card-foreground: 39 28% 82%; /* --fg                  #ded5c4 */
 
     /* border */
-    --border: 32 20% 16%; /* --surface-border      #322a21 */
-    --border-secondary: 35 20% 12%; /* --surface-border-soft #241f18 */
+    /* bare `border` is the board's --line; border-border-hard is --line2 */
+    --border: 35 20% 12%; /* --surface-border-soft #241f18 */
     --input: 33 21% 8%; /* --surface-elev-2      #1a1611 */
 
     /* primary - zcash gold */
@@ -127,11 +127,13 @@
     --penumbra-teal: #2dd4bf;
     --penumbra-teal-dark: #0d9488;
 
-    /* semantic colors */
-    --success: #5f5;
-    --warning: #f4b728;
-    --error: #f55;
+    /* semantic colors - the board's green / warn / red */
+    --success: #8fbf73;
+    --warning: #d9773f;
+    --error: #c73e3a;
     --info: #f4b728;
+    --warn: #d9773f;
+    --gold-line: #3a2f14;
 
     /* legacy compat */
     --charcoal: #131009;
@@ -139,8 +141,8 @@
     --teal: #629994;
     --sand: #847a5b;
     --rust: #8d5728;
-    --green: #5f5;
-    --red: #f55;
+    --green: #8fbf73;
+    --red: #c73e3a;
     --light-brown: #131009;
     --light-grey: #ccc;
     --brown: rgba(0, 0, 0, 0.8);
@@ -188,8 +190,7 @@
     --popover-foreground: 26 18% 8%;
     --card: 43 44% 94%;
     --card-foreground: 32 21% 14%;
-    --border: 39 24% 72%;
-    --border-secondary: 39 30% 81%;
+    --border: 39 30% 81%;
     --input: 43 56% 95%;
     --primary: 42 89% 29%;
     --primary-foreground: 43 44% 96%;
@@ -198,11 +199,13 @@
     --accent: 42 40% 85%;
     --accent-foreground: 26 18% 12%;
     --ring: 42 89% 29%;
-    --success: #3d7a2a;
-    --green: #3d7a2a;
-    --error: #b03030;
-    --red: #b03030;
-    --warning: #8a6508;
+    --success: #4b7a33;
+    --green: #4b7a33;
+    --error: #b3322e;
+    --red: #b3322e;
+    --warning: #b0561d;
+    --warn: #b0561d;
+    --gold-line: #dcc488;
     --info: #8a6508;
     --charcoal: #f6f2e8;
     --charcoal-secondary: #efe9dc;
@@ -298,17 +301,17 @@
     height: 6px;
   }
   ::-webkit-scrollbar-track {
-    background: #0a0a0a;
+    background: var(--surface-canvas);
   }
   ::-webkit-scrollbar-thumb {
-    background: #332a00;
+    background: var(--surface-border);
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #f4b728;
+    background: var(--zigner-gold);
   }
   * {
     scrollbar-width: thin;
-    scrollbar-color: #332a00 #0a0a0a;
+    scrollbar-color: var(--surface-border) var(--surface-canvas);
   }
 
   * {
@@ -367,8 +370,8 @@
     color: var(--zigner-gold);
   }
   pre {
-    background: #0a0a0a;
-    border: 1px solid #222;
+    background: var(--surface-elev-1);
+    border: 1px solid var(--surface-border-soft);
     padding: 0.8em;
     margin: 0.5em 0;
     overflow-x: auto;
