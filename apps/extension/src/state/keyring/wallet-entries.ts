@@ -294,6 +294,15 @@ export async function removeLinkedWallets(
   const updatedWallets = wallets.filter((w: { vaultId?: string }) => w.vaultId !== vaultId);
   if (updatedWallets.length !== wallets.length) {
     await local.set('penumbraWallets', updatedWallets);
+    // nothing of a removed wallet stays behind, its sync start included
+    const starts = startsOf(await local.get('penumbraStarts'));
+    if (starts) {
+      const gone = new Set(removedPenumbra.map((w: { id: string }) => w.id));
+      await local.set(
+        'penumbraStarts',
+        Object.fromEntries(Object.entries(starts).filter(([id]) => !gone.has(id))),
+      );
+    }
     const activeWalletIndex = (await local.get('activeWalletIndex')) ?? 0;
     if (activeWalletIndex >= updatedWallets.length) {
       await local.set('activeWalletIndex', Math.max(0, updatedWallets.length - 1));

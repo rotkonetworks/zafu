@@ -145,9 +145,12 @@ export const startWalletServices = async (
   });
 
   const walletServices = await services.getWalletServices();
-  if (start.frontier !== undefined) {
-    // the snapshot is taken; were this database ever lost, a second one at a
-    // later tip would hide what arrived in between, so the chain is read instead
+  // the frontier is good only while nothing is read yet: once the database
+  // holds a height (the snapshot, or a genesis read after a failed one), a
+  // lost database must be read again, since a snapshot at a later tip would
+  // hide what arrived in between
+  const read = knownHeight(await walletServices.indexedDb.getFullSyncHeight());
+  if (start.frontier !== undefined && read !== undefined) {
     await setStart(wallet.id, { creation: start.creation });
   }
   void publishSyncHeight(wallet.id, walletServices, signal);
@@ -249,6 +252,9 @@ const getChainId = async (baseUrl: string) => {
   return params.chainId;
 };
 
+const knownHeight = (h: bigint | undefined) =>
+  h == null || h === SENTINEL_U64_MAX ? undefined : Number(h);
+
 /**
  * Publish this wallet's synced height for the home, with the height the run
  * started from. Every write names the wallet and none follows a stop, so a
@@ -259,9 +265,7 @@ export const publishSyncHeight = async (
   { indexedDb }: Pick<WalletServices, 'indexedDb'>,
   signal?: AbortSignal,
 ) => {
-  const known = (h: bigint | undefined) =>
-    h == null || h === SENTINEL_U64_MAX ? undefined : Number(h);
-  const from = known(await indexedDb.getFullSyncHeight()) ?? 0;
+  const from = knownHeight(await indexedDb.getFullSyncHeight()) ?? 0;
   const publish = (height: number) =>
     signal?.aborted ? undefined : localExtStorage.set('penumbraSync', { walletId, height, from });
   await publish(from);
@@ -269,7 +273,7 @@ export const publishSyncHeight = async (
     if (signal?.aborted) {
       break;
     }
-    const height = known(value);
+    const height = knownHeight(value);
     if (height !== undefined) {
       await publish(height);
     }
