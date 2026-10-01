@@ -27,6 +27,7 @@
 
 import type { NetworkType, VaultUnlock } from './types';
 import type { SealedVault, WorkerKey } from '../../shared/vault-seal';
+import type { DepositPlan, DepositRequest } from '../../workers/transparent-deposit';
 
 /** true only inside the offscreen document - the one place that owns real Workers */
 const isOffscreenHost = (): boolean =>
@@ -80,6 +81,8 @@ export interface NetworkWorkerMessage {
     | 'shield'
     | 'shield-unsigned'
     | 'shield-complete'
+    | 'transparent-deposit-plan'
+    | 'transparent-deposit'
     | 'list-wallets'
     | 'delete-wallet'
     | 'get-notes'
@@ -1140,6 +1143,26 @@ export const shieldInWorker = async (
     walletId,
   );
 };
+
+/** what a t->t deposit with an OP_RETURN costs from this address, priced with no key */
+export const planTransparentDepositInWorker = (
+  serverUrl: string,
+  req: DepositRequest,
+): Promise<DepositPlan> => callWorker('zcash', 'transparent-deposit-plan', { serverUrl, ...req });
+
+/** build, sign (the worker opens the vault) and broadcast the reviewed deposit */
+export const sendTransparentDepositInWorker = async (
+  storeId: string,
+  serverUrl: string,
+  req: DepositRequest & { reviewedFee: string },
+  vault: VaultUnlock,
+): Promise<{ txid: string; fee: string }> =>
+  callWorker(
+    'zcash',
+    'transparent-deposit',
+    { serverUrl, ...req, vault: await sealFor('zcash', vault) },
+    storeId,
+  );
 
 /** result of building an unsigned send transaction */
 export interface SendTxUnsignedResult {

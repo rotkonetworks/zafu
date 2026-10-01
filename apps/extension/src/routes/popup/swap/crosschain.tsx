@@ -21,6 +21,8 @@ import { ScreenHeader } from '../../../components/screen-header';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectGetVaultUnlock } from '../../../state/keyring';
 import { selectActiveZcashWallet } from '../../../state/wallets';
+import { activeAccountIndex, activeZcashStoreId } from '../../../state/pockets';
+import { CAPS, walletKind } from '../../../signing/wallet-kind';
 import { isEgressBlocked } from '../../../net/egress';
 import { EgressBlockedStatus } from '../../../shared/components/egress-blocked-status';
 import { useActiveAddress } from '../../../hooks/use-address';
@@ -35,7 +37,7 @@ import {
 } from '../../../state/keyring/network-worker';
 import { blockchainToContactNetwork, toBaseUnits } from '../../../state/near-swap';
 import { PROVIDERS, quoteRoutes, routeTokens, type RouteResult } from '../../../state/swap';
-import type { SwapStatusView, SwapToken } from '../../../state/swap/provider';
+import { toUnits, type SwapStatusView, type SwapToken } from '../../../state/swap/provider';
 import {
   candidates,
   pairKey,
@@ -61,12 +63,14 @@ import { PopupPath } from '../paths';
 import { looksLikeLink, toUri } from '../../../links/router';
 import { viaLine, type SwapLinkState } from '../../../links/land';
 import { Footer, Main } from '../send/send-ui';
+import { ThorDeposit } from './thor-deposit';
 import { AmountField, ContactsSheet, PickSheet, ToField } from '../send/send-fields';
 
 type Step =
   | 'input'
   | 'quoting'
   | 'routes'
+  | 'thor-out'
   | 'sign'
   | 'scan'
   | 'sending'
@@ -87,8 +91,7 @@ const NOTE: Record<RouteId, Record<SwapPair['direction'], string>> = {
   thor: {
     into_zec:
       'thorchain pays transparent addresses only. the zec lands at your t-address, ready to shield.',
-    from_zec:
-      'leaves the shielded pool through a one-time transparent address. that step is public.',
+    from_zec: 'leaves the shielded pool through your transparent address. that step is public.',
   },
   penumbra: { into_zec: '', from_zec: '' },
 };
@@ -192,6 +195,9 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const getVaultUnlock = useStore(selectGetVaultUnlock);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const activeZcashWallet = useStore(selectActiveZcashWallet);
+  const storeId = useStore(activeZcashStoreId);
+  const pocket = useStore(activeAccountIndex);
+  const kind = selectedKeyInfo && walletKind(selectedKeyInfo, activeZcashWallet);
   const ufvk =
     activeZcashWallet?.ufvk ??
     (activeZcashWallet?.orchardFvk?.startsWith('uview') ? activeZcashWallet.orchardFvk : undefined);
@@ -214,6 +220,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [riskAcknowledged, setRiskAcknowledged] = useState(false);
   const [status, setStatus] = useState<SwapStatusView>();
+  const [depositTxid, setDepositTxid] = useState<string>();
   const [error, setError] = useState<string>();
   // kept alongside the message so a blocked destination can offer an inline allow
   const [errorCause, setErrorCause] = useState<unknown>();
@@ -247,6 +254,9 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const left = useDeadlineCountdown(step === 'routes' ? (view?.expiresAt ?? null) : null);
   const expired = step === 'routes' && !!view?.expiresAt && view.expiresAt <= Date.now();
   const provider = quote && PROVIDERS[quote.route];
+  const watchable =
+    !!provider?.status &&
+    (quote?.watch === 'deposit' || (quote?.watch === 'txid' && !!depositTxid));
 
   // zcash-send-progress
   useEffect(() => {
@@ -335,6 +345,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
         zcashAddress,
         zcashTransparent: tAddresses[0],
         otherAddress,
+        signsOpReturn: !!kind && !!CAPS[kind].opReturn,
       });
       const failed = got.find(r => 'error' in r);
       if (!got.some(r => 'quote' in r)) {
@@ -376,8 +387,12 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
       setStep('deposit');
       return;
     }
-    // a memo deposit is never a shielded send; nothing here can build it yet
-    if (quote.memo || quote.notYet) {
+    if (quote.notYet) {
+      return;
+    }
+    // a memo deposit is never a shielded send: a t->t with an OP_RETURN, its own steps
+    if (quote.memo) {
+      setStep('thor-out');
       return;
     }
 
@@ -395,12 +410,12 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
         const vault = await getVaultUnlock(walletId);
         const result = await buildSendTxInWorker(
           'zcash',
-          walletId,
+          storeId ?? walletId,
           zidecarUrl,
           quote.depositAddress,
           amountZat,
           '',
-          0,
+          pocket,
           true,
           vault,
         );
@@ -491,13 +506,13 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
 
   // watch the swap while the deposit is out, on routes that can be watched
   useEffect(() => {
-    if ((step !== 'deposit' && step !== 'polling') || !quote || !provider?.status) {
+    if ((step !== 'deposit' && step !== 'polling') || !quote || !watchable) {
       return;
     }
-    const watch = provider.status;
+    const watch = provider.status!;
     const interval = setInterval(async () => {
       try {
-        const next = await watch(quote);
+        const next = await watch(quote, depositTxid);
         setStatus(next);
         if (next.phase === 'done') {
           setStep('done');
@@ -512,12 +527,13 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
       }
     }, 5000);
     return () => clearInterval(interval);
-  }, [step, quote, provider]);
+  }, [step, quote, provider, watchable, depositTxid]);
 
   const reset = () => {
     setStep('input');
     setResults([]);
     setStatus(undefined);
+    setDepositTxid(undefined);
     setError(undefined);
     setAmountIn('');
   };
@@ -645,6 +661,21 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
     );
   }
 
+  if (step === 'thor-out' && quote) {
+    return (
+      <ThorDeposit
+        quote={quote}
+        amountZat={toUnits(amountIn, 8)}
+        onSent={txid => {
+          setDepositTxid(txid);
+          setStep('polling');
+        }}
+        onBack={() => setStep('routes')}
+        onExpired={() => void requestQuotes()}
+      />
+    );
+  }
+
   if (step === 'routes' && view) {
     const note = quote && NOTE[quote.route][direction];
     return (
@@ -762,7 +793,8 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
                 onClick={() => void confirm()}
                 disabled={!riskAcknowledged || expired}
               >
-                {isFromZec ? 'confirm & send' : 'show deposit address'}
+                {/* a memo deposit has its own reviews next; nothing is signed here */}
+                {isFromZec ? (quote.memo ? 'continue' : 'confirm & send') : 'show deposit address'}
               </Button>
             </div>
           </Sheet>
@@ -860,7 +892,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
                 </div>
               </>
             )}
-            {provider?.status ? (
+            {watchable ? (
               <StatusSlot tone='info' icon='i-ph-arrows-clockwise'>
                 {status?.line ?? 'waiting for the deposit'}
               </StatusSlot>
@@ -893,7 +925,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
           </Button>
         )}
         {(step === 'deposit' || step === 'polling') &&
-          (provider?.status ? (
+          (watchable ? (
             <Button variant='secondary' className='w-full' onClick={reset}>
               cancel
             </Button>

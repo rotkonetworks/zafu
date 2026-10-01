@@ -57,6 +57,13 @@ import {
   type PocketKeysCtor,
 } from './pocket-keys';
 import { unsealVault, withSpendKeys, type SpendKeysCtor } from './hot-sign';
+import {
+  planDeposit,
+  sendDeposit,
+  type DepositChain,
+  type DepositRequest,
+  type DepositWasm,
+} from './transparent-deposit';
 import { assertProveRequest, type ProveRequest } from '../shared/prove-guard';
 import { issueWorkerKey, type SealedVault } from '../shared/vault-seal';
 import {
@@ -162,6 +169,8 @@ interface WorkerMessage {
     | 'shield'
     | 'shield-unsigned'
     | 'shield-complete'
+    | 'transparent-deposit-plan'
+    | 'transparent-deposit'
     | 'list-wallets'
     | 'delete-wallet'
     | 'get-notes'
@@ -297,7 +306,7 @@ interface WalletState {
   mempoolTask?: Promise<void>;
 }
 
-interface WasmModule {
+interface WasmModule extends DepositWasm {
   WalletKeys: PocketKeysCtor<WalletKeys>;
   /** hot spend authority, built per send from the phrase this worker unsealed */
   SpendKeys: SpendKeysCtor;
@@ -2316,6 +2325,20 @@ const backfillWitnesses = async (
  *            ironwood equivalent of build_witnesses_and_paths, so nothing
  *            is persisted on this path - sync repopulates witnesses).
  */
+/** the zcash backend as the deposit service sees it */
+const depositChain = (client: ZcashClient, serverUrl: string): DepositChain => ({
+  utxos: address => client.getAddressUtxos([address]),
+  tip: async () => (await client.getTip()).height,
+  branchId: async () => parseInt(await fetchBranchIdHex(client), 16),
+  broadcast: async txHex => {
+    const r = await client.sendTransaction(hexDecode(txHex));
+    if (r.errorCode !== 0) {
+      throw new Error(`broadcast failed (${r.errorCode}): ${r.errorMessage}`);
+    }
+    return resolveBroadcastTxid(r, txHex, serverUrl);
+  },
+});
+
 /**
  * Record an outgoing transaction the moment it is broadcast.
  *
@@ -5049,7 +5072,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const pendSent = await idbGetAllByIndex<SentTxRecord>('sent', 'byWallet', walletId);
         const pendResult = reconcileSentTxs({
           chainTxs: pendChainTxs,
-          sent: pendSent,
+          // the scan never sees a transparent-only tx, so from local state one
+          // is never failed; get-history asks the node and decides
+          sent: pendSent.map(s => (s.pool === 'transparent' ? { ...s, expiryHeight: 0 } : s)),
           scannedHeight: await getSyncHeight(walletId),
         });
         workerSelf.postMessage({
@@ -8023,6 +8048,68 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           network: 'zcash',
           walletId,
           payload: { txid: shieldCompleteTxid },
+        });
+        return;
+      }
+
+      case 'transparent-deposit-plan': {
+        await initWasm();
+        if (!wasmModule) {
+          throw new Error('wasm not initialized');
+        }
+        const { serverUrl, ...req } = payload as DepositRequest & { serverUrl: string };
+        const chain = depositChain(await makeZcashClient(serverUrl), serverUrl);
+        workerSelf.postMessage({
+          type: 'result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: await planDeposit(wasmModule, chain, req),
+        });
+        return;
+      }
+
+      case 'transparent-deposit': {
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
+        await initWasm();
+        const wasm = wasmModule;
+        if (!wasm) {
+          throw new Error('wasm not initialized');
+        }
+        const { vault, serverUrl, ...req } = payload as DepositRequest & {
+          vault: SealedVault;
+          serverUrl: string;
+          reviewedFee: string;
+        };
+        const chain = depositChain(await makeZcashClient(serverUrl), serverUrl);
+        // signs with this pocket's t-branch, index 0: the address that funds it
+        const sent = await withSpendKeys(
+          wasm.SpendKeys,
+          vault,
+          hotSpendAccount(walletId),
+          req.mainnet,
+          keys => sendDeposit(wasm, chain, keys, req),
+        );
+        await recordSentTx({
+          walletId,
+          txid: sent.txid,
+          amount: req.amountZat,
+          fee: sent.fee,
+          recipient: req.to,
+          pool: 'transparent',
+          kind: 'send',
+          memo: req.memo,
+          sentAt: Date.now(),
+          expiryHeight: parseExpiryHeight(sent.txHex),
+        });
+        workerSelf.postMessage({
+          type: 'tx-result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: { txid: sent.txid, fee: sent.fee },
         });
         return;
       }

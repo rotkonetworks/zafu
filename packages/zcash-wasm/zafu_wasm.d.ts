@@ -47,8 +47,10 @@ export class SpendKeys {
      */
     sign_pczt(pczt_hex: string): string;
     /**
-     * Sign an unsigned shielding tx (raw V5 or PCZT carrier) whose every input
-     * is locked to transparent address `index`, and return the signed tx hex.
+     * Sign an unsigned tx with transparent inputs (a shielding tx as raw V5 or
+     * PCZT, or a t->t PCZT from `build_unsigned_transparent_transaction`) whose
+     * every input is locked to transparent address `index`, and return the
+     * signed tx hex.
      * `sighashes_json` is the builder's `sighashes` array; the PCZT completion
      * re-verifies each signature against the carrier's own sighash.
      */
@@ -395,6 +397,16 @@ export function build_unsigned_shielding_transaction_ironwood(utxos_json: string
  * - summary: human-readable transaction summary
  */
 export function build_unsigned_transaction(ufvk_str: string, notes_json: any, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: any, _account_index: number, mainnet: boolean, memo_hex?: string | null, branch_id_hex?: string | null): any;
+
+/**
+ * Build an UNSIGNED t->t transaction from public data only: the UTXOs of one
+ * address and its 33-byte compressed `pubkey_hex`. Outputs are
+ * [recipient, OP_RETURN(`null_data_hex`, at most 80 bytes), change to the same
+ * address]. Returns JSON
+ * `{sighashes, unsigned_tx_hex, inputs, total_in, fee, change, short}`, where
+ * `unsigned_tx_hex` is a PCZT for `SpendKeys.sign_shielding`.
+ */
+export function build_unsigned_transparent_transaction(utxos_json: string, pubkey_hex: string, recipient: string, amount: bigint, target_height: number, expected_branch_id: number, mainnet: boolean, null_data_hex?: string | null): string;
 
 /**
  * Build the `POST /cast-vote` body ([`VoteCommitmentWire`]) for one HOT vote.
@@ -845,6 +857,14 @@ export function pczt_has_ironwood_actions(pczt_hex: string): boolean;
 export function pir_fetch_imt_proofs(pir_base_url: string, nullifiers_json: string, js_fetch: Function): Promise<string>;
 
 /**
+ * Plan a t->t spend from an address's UTXOs (`[{txid, vout, value, script}]`)
+ * without any key: what the review shows. Returns JSON
+ * `{inputs, total_in, fee, change, short}`; `short > 0` means the address
+ * needs that much more first.
+ */
+export function plan_transparent_transaction(utxos_json: string, amount: bigint, null_data_hex?: string | null): string;
+
+/**
  * Compact a PCZT for transmission to a signer by redacting per-action cv_net,
  * v6 bundle anchors, output cmx, and replacing enc_ciphertext with memo plaintext
  * (trimmed to last nonzero byte). Builds on the existing signer redaction.
@@ -1018,6 +1038,7 @@ export interface InitOutput {
     readonly build_unsigned_shielding_transaction: (a: number, b: number, c: number, d: number, e: bigint, f: bigint, g: number, h: number, i: number, j: number) => [number, number, number, number];
     readonly build_unsigned_shielding_transaction_ironwood: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number) => [number, number, number, number];
     readonly build_unsigned_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number, number];
+    readonly build_unsigned_transparent_transaction: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
     readonly build_vote_commitment_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
     readonly build_vote_shares_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: bigint) => [number, number, number, number];
     readonly build_witnesses_and_paths: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
@@ -1065,6 +1086,7 @@ export interface InitOutput {
     readonly parse_signature_response: (a: number, b: number) => [number, number, number];
     readonly pczt_has_ironwood_actions: (a: number, b: number) => [number, number, number];
     readonly pir_fetch_imt_proofs: (a: number, b: number, c: number, d: number, e: any) => any;
+    readonly plan_transparent_transaction: (a: number, b: number, c: bigint, d: number, e: number) => [number, number, number, number];
     readonly redact_pczt_compact: (a: number, b: number) => [number, number, number, number];
     readonly shielding_pool_for_height: (a: number, b: number) => [number, number];
     readonly spendkeys_new: (a: number, b: number, c: number, d: number) => [number, number, number];
