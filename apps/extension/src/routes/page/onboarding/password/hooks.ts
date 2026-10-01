@@ -16,11 +16,14 @@ import { viewingKeyImport } from '../../../../hooks/use-viewing-key';
 import { useOnboarding } from '..';
 import { BIRTHDAY_PATH } from '../flow';
 import { PasswordMismatchError } from '../../../../state/keyring';
+import { resealSnapshot } from '../../../../state/keyring/reseal';
+import { keySwap } from '../../../../state/keyring-lock';
+import { Key, type KeyJson } from '@repo/encryption/key';
 
-/** what an import writes; restored together if it fails */
 const pick = (o: Record<string, unknown>, keys: string[]) =>
   Object.fromEntries(keys.filter(k => k in o).map(k => [k, o[k]]));
 
+/** what an import writes; restored together if it fails */
 const ROLLBACK_KEYS = [
   'vaults',
   'penumbraWallets',
@@ -29,24 +32,35 @@ const ROLLBACK_KEYS = [
   'selectedVaultId',
 ];
 
-export const restoreSnapshot = async (snapshot: Record<string, unknown>, key: unknown) => {
-  const now = await chrome.storage.local.get(null);
-  // a first password on an airgap-only profile moved every sealed store, not
-  // only these keys: then the whole profile goes back as it was
-  const rekeyed =
-    JSON.stringify(now['passwordKeyPrint']) !== JSON.stringify(snapshot['passwordKeyPrint']);
-  const keys = rekeyed ? Object.keys(now) : ROLLBACK_KEYS;
-  const restore = rekeyed ? snapshot : pick(snapshot, ROLLBACK_KEYS);
-  const gone = keys.filter(k => !(k in snapshot));
-  await chrome.storage.local.set(restore);
-  if (gone.length) {
-    await chrome.storage.local.remove(gone);
-  }
-  // and the session key that opened it
-  await (key
-    ? chrome.storage.session.set({ passwordKey: key })
-    : chrome.storage.session.remove('passwordKey'));
-};
+export const restoreSnapshot = async (snapshot: Record<string, unknown>, keyBefore: unknown) =>
+  // under the exclusive keyring lock, so no other context reads or writes
+  // sealed data while the import is undone
+  keySwap(async () => {
+    const now = await chrome.storage.local.get(null);
+    const { passwordKey: keyNow } = await chrome.storage.session.get('passwordKey');
+    // a first password on an airgap-only profile moved every sealed store:
+    // move them back to the key they had, leaving other writes standing
+    const rekeyed =
+      JSON.stringify(now['passwordKeyPrint']) !== JSON.stringify(snapshot['passwordKeyPrint']);
+    const back =
+      rekeyed && keyNow && keyBefore
+        ? await resealSnapshot(
+            now,
+            await Key.fromJson(keyNow as KeyJson),
+            await Key.fromJson(keyBefore as KeyJson),
+          )
+        : {};
+    const gone = ROLLBACK_KEYS.filter(k => !(k in snapshot));
+    await chrome.storage.local.set({ ...back, ...pick(snapshot, ROLLBACK_KEYS) });
+    if (gone.length) {
+      await chrome.storage.local.remove(gone);
+    }
+    // and the session key that opened it; no retired key outlives the undo
+    await chrome.storage.session.remove('retiredPasswordKey');
+    await (keyBefore
+      ? chrome.storage.session.set({ passwordKey: keyBefore })
+      : chrome.storage.session.remove('passwordKey'));
+  });
 
 export const useFinalizeOnboarding = () => {
   const addWallet = useAddWallet();
@@ -175,7 +189,7 @@ export const useFinalizeOnboarding = () => {
     // anything, so a failure rolls back to exactly this state. The old
     // rollback did remove('vaults'), which deleted every wallet on the
     // profile - a failed import must never take out the user's other wallets.
-    const snapshot = await chrome.storage.local.get(null);
+    const snapshot = await chrome.storage.local.get(ROLLBACK_KEYS);
     const { passwordKey: keyBefore } = await chrome.storage.session.get('passwordKey');
 
     try {

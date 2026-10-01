@@ -22,7 +22,7 @@ describe('onboarding rollback', () => {
     markHydrated();
   });
 
-  test('a first password on an airgap-only profile is undone with everything it moved', async () => {
+  test('a first password on an airgap-only profile is undone, other writes kept', async () => {
     const store = create<AllSlices>()(initializeStore(sessionExtStorage, localExtStorage));
     const kr = () => store.getState().keyRing;
     const id = await kr().addZignerUnencrypted(
@@ -34,6 +34,11 @@ describe('onboarding rollback', () => {
     const { passwordKey } = await chrome.storage.session.get('passwordKey');
 
     await kr().setPassword('the first real password'); // moves every store
+    // another context writes meanwhile; the undo must leave that standing
+    await writeEncryptedDirect(localExtStorage, sessionExtStorage, 'contacts' as LK, [
+      { id: 'a' },
+      { id: 'b' },
+    ]);
     await kr().newMnemonicKey(
       'advance twist canal impact field normal depend pink sick horn world broccoli',
       'hot',
@@ -47,6 +52,7 @@ describe('onboarding rollback', () => {
     expect(((await localExtStorage.get('vaults')) ?? []).map(v => v.id)).toEqual([id]);
     expect(await readEncrypted(localExtStorage, sessionExtStorage, 'contacts' as LK)).toEqual([
       { id: 'a' },
+      { id: 'b' },
     ]);
   });
 
