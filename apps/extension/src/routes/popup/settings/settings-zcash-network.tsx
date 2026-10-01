@@ -19,7 +19,7 @@ import { Button } from '@repo/ui/components/ui/button';
 import { cn } from '@repo/ui/lib/utils';
 
 /** the wallet's stored birthday (an external system, read once per wallet) */
-const useBirthday = (vaultId: string | undefined): number | null => {
+const useBirthday = (vaultId: string | undefined) => {
   const [h, setH] = useState<number | null>(null);
   useEffect(() => {
     if (!vaultId) {
@@ -36,7 +36,7 @@ const useBirthday = (vaultId: string | undefined): number | null => {
       live = false;
     };
   }, [vaultId]);
-  return h;
+  return [h, setH] as const;
 };
 
 /**
@@ -51,7 +51,7 @@ export const SettingsZcashNetwork = () => {
   const vaultId = useStore(selectEffectiveKeyInfo)?.id;
   const endpoint = useStore(s => s.networks.networks.zcash.endpoint);
   const { workerSyncHeight, workerChainHeight, chainTip, failure } = useZcashSyncStatus();
-  const birthday = useBirthday(vaultId);
+  const [birthday, setBirthday] = useBirthday(vaultId);
 
   const [sheet, setSheet] = useState<'start' | 'date' | null>(null);
   const [date, setDate] = useState('');
@@ -62,7 +62,10 @@ export const SettingsZcashNetwork = () => {
     setSheet(null);
     setResyncing(true);
     try {
-      await rescanZcash(h);
+      const height = await rescanZcash(h);
+      if (height !== undefined) {
+        setBirthday(height);
+      }
     } catch (err) {
       console.error('[zcash] rescan failed:', err);
     } finally {
@@ -125,6 +128,7 @@ export const SettingsZcashNetwork = () => {
               setDate(dateOfBlock(birthday ?? 0));
               setSheet('date');
             }}
+            disabled={resyncing}
           />
           <Row
             type='value'
