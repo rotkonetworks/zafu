@@ -1,28 +1,20 @@
-/**
- * zcash send transaction flow with zigner signing
- *
- * steps:
- * 1. enter recipient and amount
- * 2. review transaction details
- * 3. display sign request qr for zigner
- * 4. scan signature qr from zigner
- * 5. broadcast transaction
- */
+/** zcash send: form, review, then the wallet's own signer (resolve.ts), then done */
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { StepList } from '@repo/ui/components/ui/step-list';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
-import { RowGroup } from '@repo/ui/components/ui/row';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+import { cn } from '@repo/ui/lib/utils';
 import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import { Sensitive } from '../../../components/sensitive';
 import { removeTxOps, writeTxOp } from '../../../tx-ops';
 import { useStore } from '../../../state';
 import { zignerSigningSelector } from '../../../state/zigner-signing';
 import { recentAddressesSelector } from '../../../state/recent-addresses';
-import { contactsSelector, type Contact, type ContactAddress } from '../../../state/contacts';
+import { contactsSelector, type Contact } from '../../../state/contacts';
 import { messagesSelector } from '../../../state/messages';
 import { selectEffectiveKeyInfo, selectGetVaultUnlock } from '../../../state/keyring';
-import { selectActiveZcashWallet } from '../../../state/wallets';
+import { selectActiveZcashWallet, selectZcashWallets } from '../../../state/wallets';
 import { activeZcashStoreId } from '../../../state/pockets';
 import {
   buildSendTxInWorker,
@@ -41,23 +33,19 @@ import { maxSendable, quoteSend } from './spendable';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { ScreenHeader } from '../../../components/screen-header';
-import { HankoSeal } from '@repo/ui/components/editorial';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
 import { FrostAirgapSignFlow } from './frost-multisig';
 import { DontQuitIcon } from './frost-multisig/helpers';
-import { RecipientPicker } from '../../../components/recipient-picker';
 import { SaveContactModal } from '../../../components/save-contact-modal';
-import {
-  ProfileBadge,
-  ZcashMeRecipientResolver,
-} from '../../../components/zcashme-recipient-resolver';
+import { ZcashMeRecipientResolver } from '../../../components/zcashme-recipient-resolver';
 import { parseZcashMeHandle, type ZcashMeProfile } from '../../../services/zcashme/api';
+import { zcashMeLabel } from '../../../services/zcashme/label';
 import { directoryProfileByAddress } from '../../../services/zcashme/directory';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { HARDWARE_WALLET_ENABLED, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
-import { CAPS, walletKind, zcashSendRefusal } from '../../../signing/wallet-kind';
+import { CAPS, walletKind, zcashSendRefusal, type WalletKind } from '../../../signing/wallet-kind';
 import { persistentSurface, zcashSignerFor } from '../../../signing/resolve';
 import { connectLedgerBtc, zcashTransparentPath } from '../../../ledger/hw-btc-signer';
 import { ledgerTransparentSendFlowBtc } from '../../../ledger/hw-btc-flow';
@@ -71,6 +59,17 @@ import { frostAirgapSigner, frostSelfCustodySigner } from '../../../signing/fros
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { formatZecAmount, isZip321Uri, parseZip321 } from '@repo/wallet/networks/zcash/zip321';
+import {
+  Footer,
+  Helper,
+  Main,
+  Mark,
+  Proving,
+  Sealed,
+  Strip,
+  isTransparentAddress,
+  shortAddress,
+} from './send-ui';
 
 import { unwrapCborSinglePczt, parsePreludeSinglePcztResponse } from './zcash-send-cbor-helpers';
 import {
@@ -111,90 +110,17 @@ type SendStep =
   | 'airgap-flow';
 
 /** zatoshi → ZEC, trailing zeros trimmed. Matches the formatting used inline. */
-const fmtZecShort = (zat: bigint | string): string =>
+const fmtZecShort = (zat: bigint | string | number): string =>
   (Number(zat) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
 
-/** address-book rows: keep the head/tail that actually identify the address. */
-const truncateAddress = (address: string): string =>
-  address.length > 22 ? `${address.slice(0, 12)}…${address.slice(-8)}` : address;
-
-/**
- * One calm sentence explaining what the worker is doing right now, for the
- * StatusSlot under the proving StepList. Keyed on the worker's own `step`
- * labels (see zcash-worker.ts emitProgress calls) - a step this table
- * doesn't match falls back to plain "working" copy rather than nothing.
- *
- * The one exception to "no time estimate" is the witness-tree rebuild: the
- * worker itself reports that case takes about three minutes (zcash-worker.ts
- * ~line 3047, step 'witness corrupt - rebuilding' - the worker's own string
- * uses an em dash there), so this is the one place a duration is shown. The
- * display copy here does not repeat that verbatim.
- */
-const SEND_STEP_EXPLAINERS: [match: (step: string) => boolean, copy: string][] = [
-  [
-    s => s.startsWith('witness corrupt'),
-    'rebuilding the merkle witnesses from a checkpoint. this takes about 3 min.',
-  ],
-  [
-    s => s === 'loading wallet state' || s === 'fetching chain tip',
-    'reading your wallet and the current chain tip.',
-  ],
-  [s => s === 'selecting notes' || s === 'notes selected', 'choosing which notes to spend from.'],
-  [
-    s => s === 'building merkle witnesses' || s === 'witnesses built',
-    'building the merkle witnesses this spend needs.',
-  ],
-  [
-    s => s === 'checking NU6.3 activation' || s === 'NU6.3 active',
-    'checking which zcash pool is active on the network.',
-  ],
-  [
-    s => s.startsWith('proving'),
-    'your computer proves the payment is valid and signs it with your key. the network learns nothing about sender, amount or memo.',
-  ],
-  [
-    s => s.includes('signed') || s.includes('proved') || s.startsWith('PCZT'),
-    'the transaction is proved and signed.',
-  ],
-  [s => s.startsWith('broadcasting'), 'sending the transaction to the zcash network.'],
-  [s => s.includes('complete'), 'done.'],
-];
-
-const explainSendStep = (step: string): string =>
-  SEND_STEP_EXPLAINERS.find(([match]) => match(step))?.[1] ?? 'working on your transaction.';
-
-/** live elapsed timer - ticks every second so the build screen never looks frozen */
-function LiveTimer({ startMs }: { startMs: number }) {
-  const [elapsed, setElapsed] = useState(0);
-  useEffect(() => {
-    if (!startMs) {
-      return;
-    }
-    const tick = () => setElapsed(Math.round((Date.now() - startMs) / 1000));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [startMs]);
-  return <div className='font-mono text-2xl tabular-nums text-zigner-gold'>{elapsed}s</div>;
-}
-
-// The zigner sign QR must be as LARGE as the surface allows so a phone camera
-// can lock onto it - the previous fixed 210px was too small to scan reliably.
-// Fill the available width (minus page padding), capped so it stays square and
-// doesn't overflow a wide side-panel. Recomputes on resize.
-function useResponsiveQrSize(min = 240, max = 420, padding = 40): number {
-  const [size, setSize] = useState(min);
-  useEffect(() => {
-    const compute = () => {
-      const w = typeof window !== 'undefined' ? window.innerWidth : min + padding;
-      setSize(Math.max(min, Math.min(max, w - padding)));
-    };
-    compute();
-    window.addEventListener('resize', compute);
-    return () => window.removeEventListener('resize', compute);
-  }, [min, max, padding]);
-  return size;
-}
+/** who holds the key, for the sign and done screens */
+const DEVICE: Partial<Record<WalletKind, string>> = {
+  zigner: 'zigner',
+  keystone: 'keystone',
+  'frost-airgap': 'zigner',
+  'ledger-shielded': 'ledger',
+  'ledger-transparent': 'ledger',
+};
 
 export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSendProps) {
   const {
@@ -208,7 +134,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   } = useStore(zignerSigningSelector);
 
   // recent addresses and contacts
-  const { recordUsage, shouldSuggestSave, dismissSuggestion } = useStore(recentAddressesSelector);
+  const { recordUsage, shouldSuggestSave, getRecent } = useStore(recentAddressesSelector);
   const { findByAddress, contacts, getFavorites, markAddressUsed } = useStore(contactsSelector);
   const messages = useStore(messagesSelector);
   // tempTxId for the optimistic outgoing record created on send-click;
@@ -353,8 +279,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // zigner sign request: the animated UR frames the sign step shows; the scan
   // step reads the signed reply with AnimatedQrScanner.
   const [pcztSignFrames, setPcztSignFrames] = useState<string[] | null>(null);
-  // Fill the sign surface with as large a QR as fits, so a phone camera can lock.
-  const qrSize = useResponsiveQrSize();
   // The signed PCZT returns under the SAME UR type the unsigned display frames
   // carry: orchard uses `zcash-pczt`; an ironwood (NU6.3) send uses the
   // zigner-module prelude envelope. Derive the signed-scan filter from the
@@ -383,7 +307,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // save-contact prefill after a successful send.
   const [resolvedProfile, setResolvedProfile] = useState<ZcashMeProfile | null>(null);
   const [fee, setFee] = useState('0.0001');
-  // the real contact book: an in-page drawer over the recipient field.
+  // the address book: saved contacts, this wallet's siblings, recent payees
   const [showAddressBook, setShowAddressBook] = useState(false);
   const [addressBookQuery, setAddressBookQuery] = useState('');
   // the address the user picked from the book: kept so the send-time lastUsedAt
@@ -399,7 +323,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const [sendSteps, setSendSteps] = useState<
     { step: string; detail?: string; elapsedMs: number }[]
   >([]);
-  const [totalElapsedSec, setTotalElapsedSec] = useState<number | null>(null);
   const buildStartRef = useRef(0);
 
   // self-custody multisig (mnemonic FROST) state
@@ -506,30 +429,37 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     return [...favorites, ...rest];
   }, [contacts, getFavorites]);
 
-  const addressBookRows = useMemo(() => {
-    const q = addressBookQuery.trim().toLowerCase();
-    if (!q) {
-      return zcashContactRows;
-    }
-    return zcashContactRows.filter(
-      ({ contact, addresses }) =>
-        contact.name.toLowerCase().includes(q) ||
-        addresses.some(a => a.address.toLowerCase().includes(q)),
+  const zcashWallets = useStore(selectZcashWallets);
+  const recentPayees = getRecent('zcash', 10);
+  const bookRows = (() => {
+    const seen = new Set<string>();
+    const rows: { label: string; address: string; contactId?: string; addressId?: string }[] = [];
+    const add = (row: (typeof rows)[number]) => {
+      if (row.address && !seen.has(row.address)) {
+        seen.add(row.address);
+        rows.push(row);
+      }
+    };
+    zcashContactRows.forEach(({ contact, addresses }) =>
+      addresses.forEach(a =>
+        add({ label: contact.name, address: a.address, contactId: contact.id, addressId: a.id }),
+      ),
     );
-  }, [zcashContactRows, addressBookQuery]);
+    zcashWallets
+      .filter(w => w.vaultId !== selectedKeyInfo?.id)
+      .forEach(w => add({ label: w.label, address: w.address }));
+    recentPayees.forEach(r => add({ label: shortAddress(r.address), address: r.address }));
+    const q = addressBookQuery.trim().toLowerCase();
+    return rows.filter(
+      r => !q || r.label.toLowerCase().includes(q) || r.address.toLowerCase().includes(q),
+    );
+  })();
 
   /** the saved contact the recipient currently resolves to - the trust signal */
   const recipientContact = useMemo(() => {
     const trimmed = recipient.trim();
     return trimmed ? findByAddress(trimmed) : undefined;
   }, [recipient, findByAddress]);
-
-  const selectBookAddress = useCallback((contactId: string, addr: ContactAddress) => {
-    setRecipient(addr.address);
-    setPickedContact({ contactId, addressId: addr.id, address: addr.address });
-    setShowAddressBook(false);
-    setAddressBookQuery('');
-  }, []);
 
   // A completed send is the moment a saved address is "used": stamp lastUsedAt
   // so the book can rank it, alongside the existing save-contact prompt.
@@ -551,7 +481,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     }
   }, [step, recipient, findByAddress, markAddressUsed, pickedContact]);
 
-  const recipientIsTransparent = /^(t1|t3|tm|t2)/.test(recipient.trim());
+  const recipientIsTransparent = isTransparentAddress(recipient);
   // The real max: spends every note in the pool, priced with the ZIP-317 fee
   // that transaction would actually pay. Recomputed when the recipient type
   // changes, because a transparent output is priced differently.
@@ -577,20 +507,36 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     });
   }, [amount, spendableNotes, recipientIsTransparent, notesLoaded]);
 
-  /**
-   * Dims the "continue" button - the same cheap synchronous checks
-   * validateForm runs, so it never disagrees with the click handler. Real
-   * validation (zcash.me handles, exact error copy) still happens in
-   * validateForm on click; this only decides whether the button looks
-   * pressable.
-   */
-  const canReview =
-    !!recipient.trim() &&
-    /^(u1|utest1|t1|t3|tm|t2)/.test(recipient.trim()) &&
-    !!amount.trim() &&
-    !isNaN(Number(amount)) &&
-    Number(amount) > 0 &&
-    (amountQuote === null || amountQuote.ok);
+  // What the form says about the recipient and the amount, derived as typed.
+  // `tm`/`t2` are the testnet transparent prefixes; `utest1` the testnet
+  // unified one. Sapling (zs) is not a supported recipient.
+  const to = recipient.trim();
+  const toValid = /^(u1|utest1|t1|t3|tm|t2)/.test(to);
+  const toName =
+    recipientContact?.contact.name ??
+    (resolvedProfile?.address === to ? zcashMeLabel(resolvedProfile) : undefined);
+  const toLabel = toName ?? shortAddress(to);
+  const toHelper: [warn: boolean, text: string] = requestError
+    ? [true, requestError]
+    : to && !toValid && !parseZcashMeHandle(to)
+      ? [true, 'please check the address · zafu pays u1 and t1 addresses']
+      : toValid
+        ? [
+            false,
+            [
+              toName ?? requestNote,
+              shortAddress(to),
+              recipientIsTransparent ? 'public' : 'shielded',
+            ]
+              .filter(Boolean)
+              .join(' · '),
+          ]
+        : [false, ''];
+  // Priced here, not after a witness build and a halo2 prove: the worker
+  // applies the same ZIP-317 arithmetic. Unknown balance (notes not loaded
+  // yet) is never read as "too little".
+  const overLimit = amountQuote !== null && !amountQuote.ok;
+  const canReview = toValid && Number(amount) > 0 && !overLimit;
 
   // Keep the DISPLAYED fee in step with the quote.
   //
@@ -628,65 +574,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     window.addEventListener('zcash-send-progress', handler);
     return () => window.removeEventListener('zcash-send-progress', handler);
   }, [step]);
-
-  const validateForm = (): boolean => {
-    if (!recipient.trim()) {
-      setFormError('recipient address is required');
-      return false;
-    }
-    const r = recipient.trim();
-    if (parseZcashMeHandle(r)) {
-      setFormError('resolve the zcash.me username to an address first');
-      return false;
-    }
-    // `tm`/`t2` are the TESTNET transparent prefixes (P2PKH / P2SH). They have
-    // to be here: the fee quote three lines down already treats them as
-    // transparent via /^(t1|t3|tm|t2)/, and `utest1` is accepted, so without
-    // them the form takes a testnet UNIFIED address but rejects a testnet
-    // TRANSPARENT one - t-sends are simply impossible on testnet. zcli accepts
-    // t1 and tm for the same reason.
-    const validPrefix = /^(u1|utest1|t1|t3|tm|t2)/.test(r);
-    if (!validPrefix) {
-      setFormError(
-        'invalid zcash address - expected unified (u1) or transparent (t1/t3). sapling (zs) is not supported.',
-      );
-      return false;
-    }
-    if (!amount.trim() || isNaN(Number(amount)) || Number(amount) <= 0) {
-      setFormError('enter a valid amount');
-      return false;
-    }
-    // Price it here, not after a witness build and a halo2 prove. The worker
-    // applies the same ZIP-317 arithmetic; reaching it with an amount this
-    // check rejects means waiting minutes for a raw zatoshi error.
-    if (notesLoaded) {
-      const quote = quoteSend(spendableNotes, BigInt(Math.round(Number(amount) * 1e8)), {
-        transparentRecipient: /^(t1|t3|tm|t2)/.test(r),
-      });
-      if (!quote.ok) {
-        const maxForThis = maxSendable(spendableNotes, {
-          transparentRecipient: /^(t1|t3|tm|t2)/.test(r),
-        });
-        setFormError(
-          `a little more than you have - up to ${fmtZecShort(maxForThis.amountZat)} zec ` +
-            `after a ${fmtZecShort(quote.feeZat)} zec fee` +
-            (strandedZat > 0n
-              ? ` - ${fmtZecShort(strandedZat)} zec is held in the legacy orchard pool and cannot ` +
-                'be spent until it is migrated to ironwood.'
-              : ''),
-        );
-        return false;
-      }
-    }
-    setFormError(null);
-    return true;
-  };
-
-  const handleReview = () => {
-    if (validateForm()) {
-      setStep('review');
-    }
-  };
 
   const handleSign = async () => {
     if (!selectedKeyInfo) {
@@ -745,7 +632,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       const finish = (txid: string) => {
         void promoteToBroadcasted(txid);
         complete(txid);
-        setTotalElapsedSec(Math.round((Date.now() - buildStartRef.current) / 1000));
         setStep('complete');
         void recordUsage(recipient, 'zcash');
         if (shouldSuggestSave(recipient)) {
@@ -1225,7 +1111,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       );
       void promoteToBroadcasted(finalResult.txid);
       complete(finalResult.txid);
-      setTotalElapsedSec(Math.round((Date.now() - buildStartRef.current) / 1000));
       setStep('complete');
       void recordUsage(recipient, 'zcash');
       if (shouldSuggestSave(recipient)) {
@@ -1239,625 +1124,467 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     }
   };
 
+  const device = (kind && DEVICE[kind]) ?? 'zigner';
+  const sending = (
+    <>
+      send <Sensitive>{amount} zec</Sensitive> to {toLabel}
+    </>
+  );
+
   // render based on current step
   const renderContent = () => {
     switch (step) {
       case 'form':
         return (
           <>
-            <ScreenHeader title='send zcash' onBack={onClose} />
-            <div className='flex flex-col gap-4 p-4'>
-              <div className='flex flex-col gap-3'>
-                <div>
-                  <label className='mb-1 block text-xs text-fg-muted'>recipient address</label>
-                  <div className='flex gap-1'>
-                    {/* No `zs...` in the placeholder: sapling is not a supported
-                      recipient and the validator rejects it, so advertising it
-                      here invited an address the form then refuses. */}
-                    <Input
-                      type='text'
-                      placeholder='u1... / t1...'
-                      value={recipient}
-                      onChange={e => {
-                        if (!applyZcashUri(e.target.value)) {
-                          setRecipient(e.target.value);
-                        }
-                      }}
-                      className='min-w-0 flex-1'
-                    />
-                    <button
-                      type='button'
-                      onClick={() => setShowQrScanner(true)}
-                      className='flex size-12 shrink-0 items-center justify-center border border-border-soft bg-input text-fg-muted transition-colors hover:text-fg-high'
-                      title='scan QR code'
-                    >
-                      <span className='i-ph-scan h-4 w-4' />
-                    </button>
-                    <button
-                      type='button'
-                      onClick={() => setShowAddressBook(true)}
-                      className='flex size-12 shrink-0 items-center justify-center border border-border-soft bg-input text-fg-muted transition-colors hover:text-fg-high'
-                      title='contacts'
-                    >
-                      <span className='i-ph-address-book h-4 w-4' />
-                    </button>
-                  </div>
-                  {/* the payoff of the book: a pasted/picked address that is a
-                    saved contact is called by name, not by its u1... prefix */}
-                  {recipientContact && (
-                    <p className='mt-1.5 flex items-center gap-1.5 truncate text-label text-fg-muted'>
-                      <span className='i-ph-address-book h-3.5 w-3.5 shrink-0 text-zigner-gold' />
-                      <span className='truncate'>→ {recipientContact.contact.name}</span>
-                    </p>
-                  )}
-                  {requestError && (
-                    <StatusSlot tone='warn' icon='i-ph-warning' className='mt-1.5'>
-                      {requestError}
-                    </StatusSlot>
-                  )}
-                  {requestNote && (
-                    <p className='mt-1 truncate text-xs text-fg-muted' title={requestNote}>
-                      request: {requestNote}
-                    </p>
-                  )}
-                  <ZcashMeRecipientResolver
-                    input={recipient}
-                    onResolve={p => {
-                      setResolvedProfile(p);
-                      setRecipient(p.address);
-                    }}
-                  />
-                  {resolvedProfile && resolvedProfile.address === recipient.trim() && (
-                    <div className='mt-1.5 flex items-center gap-1.5 text-label text-fg-muted'>
-                      <ProfileBadge profile={resolvedProfile} />
-                    </div>
-                  )}
-                  {showQrScanner && (
-                    <QrScanner
-                      onScan={data => {
-                        if (!applyZcashUri(data)) {
-                          setRecipient(data);
-                        }
-                        setShowQrScanner(false);
-                      }}
-                      onClose={() => setShowQrScanner(false)}
-                      title='scan address'
-                      description='scan a zcash address QR code'
-                      inline
-                    />
-                  )}
-                  <RecipientPicker
-                    network='zcash'
-                    onSelect={addr => {
-                      setRecipient(addr);
-                    }}
-                    show={!recipient}
-                  />
-                  {/* contact book over the form: the picker above still covers
-                    recent/wallets/directory, this is the saved address book */}
-                  {showAddressBook && (
-                    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
-                      <div className='mx-4 flex max-h-[80vh] w-full max-w-sm flex-col border border-border-soft bg-canvas p-5 shadow-xl'>
-                        <div className='mb-4 flex items-center gap-2'>
-                          <span className='i-ph-address-book h-4 w-4 text-zigner-gold' />
-                          <h2 className='text-lg'>contacts</h2>
-                          <button
-                            type='button'
-                            onClick={() => setShowAddressBook(false)}
-                            className='ml-auto text-fg-muted hover:text-fg-high transition-colors'
-                            title='close'
-                          >
-                            <span className='i-ph-x h-4 w-4' />
-                          </button>
-                        </div>
-                        <input
-                          type='text'
-                          placeholder='search name or address'
-                          value={addressBookQuery}
-                          onChange={e => setAddressBookQuery(e.target.value)}
-                          autoFocus
-                          className='mb-3 w-full border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
-                        />
-                        <div className='flex flex-col gap-2 overflow-y-auto'>
-                          {addressBookRows.map(({ contact, addresses }) => (
-                            <div
-                              key={contact.id}
-                              className='border border-border-soft bg-elev-2 p-2.5'
-                            >
-                              <div className='flex items-center gap-1.5'>
-                                <p className='truncate text-sm text-fg-high'>{contact.name}</p>
-                                {contact.favorite && (
-                                  <span className='i-ph-star-fill h-3 w-3 shrink-0 text-zigner-gold' />
-                                )}
-                              </div>
-                              {addresses.map(addr => (
-                                <button
-                                  key={addr.id}
-                                  type='button'
-                                  onClick={() => selectBookAddress(contact.id, addr)}
-                                  className='mt-1.5 flex w-full items-center gap-2 border border-border-soft bg-input px-2 py-1.5 text-left transition-colors hover:border-zigner-gold'
-                                >
-                                  <span className='truncate font-mono text-xs text-fg'>
-                                    {truncateAddress(addr.address)}
-                                  </span>
-                                  <span className='i-ph-caret-right ml-auto h-3.5 w-3.5 shrink-0 text-fg-dim' />
-                                </button>
-                              ))}
-                            </div>
-                          ))}
-                          {addressBookRows.length === 0 && (
-                            <p className='py-6 text-center text-xs text-fg-muted'>
-                              {addressBookQuery.trim()
-                                ? 'no contacts match that search'
-                                : 'no zcash contacts yet - add one to save addresses for next time'}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <div className='flex items-center justify-between mb-1'>
-                    <label className='text-xs text-fg-muted'>amount (zec)</label>
-                    {balanceZat !== null && (
-                      // named "spendable", not "balance": this is the active
-                      // pool only, and it deliberately differs from the home
-                      // screen's total, which includes orchard and transparent
-                      <span className='text-xs text-fg-muted tabular-nums'>
-                        spendable: <Sensitive>{fmtZecShort(balanceZat)} ZEC</Sensitive>
-                      </span>
-                    )}
-                  </div>
-                  <div className='flex gap-1.5'>
-                    <Input
-                      type='number'
-                      placeholder='0.0'
-                      value={amount}
-                      onChange={e => {
-                        filledByRequest.current.amount = false;
-                        setAmount(e.target.value);
-                      }}
-                      step='0.0001'
-                      min='0'
-                      className='h-14 min-w-0 flex-1 font-display text-2xl'
-                    />
-                    <button
-                      type='button'
-                      // MAX is the amount a transaction can actually be BUILT
-                      // for: every note in the pool, minus the ZIP-317 fee that
-                      // transaction really pays. Not balance minus a flat 10,000.
-                      onClick={() => {
-                        filledByRequest.current.amount = false;
-                        setAmount(maxSend.amountZat > 0n ? fmtZecShort(maxSend.amountZat) : '0');
-                      }}
-                      disabled={maxSend.amountZat <= 0n}
-                      className='h-14 shrink-0 border border-border-soft bg-input px-3 text-xs text-zigner-gold transition-colors hover:bg-elev-2 disabled:text-fg-dim'
-                    >
-                      max
-                    </button>
-                  </div>
-                  {/* Reserved-height slot, all of it computed from the same fee
-                    arithmetic the worker will use at build time - this never
-                    grows/shrinks the layout as the user types, it only swaps
-                    which message (if any) sits in the reserved row. */}
-                  <div className='mt-1.5 min-h-[3.5rem]'>
-                    {strandedZat > 0n ? (
-                      // Orchard funds are real but consensus-disabled post-NU6.3.
-                      // Silently folding them into "your balance" is what
-                      // produced a send that failed after a two-minute prove.
-                      // Name them, and say what actually releases them.
-                      <StatusSlot tone='info' icon='i-ph-info'>
-                        <Sensitive>{fmtZecShort(strandedZat)} zec</Sensitive> is in the legacy
-                        orchard pool and cannot be sent - migrate it to ironwood from the home
-                        screen to spend it.
-                      </StatusSlot>
-                    ) : amountQuote !== null && !amountQuote.ok ? (
-                      <StatusSlot tone='warn' icon='i-ph-warning'>
-                        a little more than you have - up to{' '}
-                        <Sensitive>{fmtZecShort(maxSend.amountZat)} zec</Sensitive> after a{' '}
-                        <Sensitive>{fmtZecShort(maxSend.feeZat)} zec</Sensitive> fee
-                      </StatusSlot>
-                    ) : amountQuote !== null && amountQuote.ok ? (
-                      <StatusSlot tone='info'>
-                        fee <Sensitive>{fmtZecShort(amountQuote.feeZat)} zec</Sensitive> ·{' '}
-                        {amountQuote.nSpends} note{amountQuote.nSpends === 1 ? '' : 's'} spent
-                      </StatusSlot>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div>
-                  <label className='mb-1 block text-xs text-fg-muted'>memo (optional)</label>
+            <ScreenHeader title='send zec' onBack={onClose} meta='1 / 2' />
+            <Main className='gap-[18px] pt-5'>
+              <div className='flex flex-col gap-1.5'>
+                <label htmlFor='send-to' className='text-xs text-fg-muted'>
+                  to
+                </label>
+                <div className='flex gap-1.5'>
                   <Input
-                    type='text'
-                    placeholder='private message'
-                    value={memo}
+                    id='send-to'
+                    placeholder='address or contact'
+                    value={recipient}
                     onChange={e => {
-                      filledByRequest.current.memo = false;
-                      setMemo(e.target.value);
+                      if (!applyZcashUri(e.target.value)) {
+                        setRecipient(e.target.value);
+                      }
                     }}
-                    maxLength={512}
+                    variant={toHelper[0] ? 'warn' : 'default'}
+                    className='min-w-0 flex-1'
                   />
+                  <Button
+                    variant='secondary'
+                    onClick={() => setShowAddressBook(true)}
+                    aria-label='contacts'
+                    className='size-12 shrink-0 bg-elev-1 px-0 text-fg-muted'
+                  >
+                    <span className='i-lucide-user size-4' />
+                  </Button>
+                  <Button
+                    variant='secondary'
+                    onClick={() => setShowQrScanner(true)}
+                    aria-label='scan a code'
+                    className='size-12 shrink-0 bg-elev-1 px-0 text-fg-muted'
+                  >
+                    <span className='i-lucide-scan size-4' />
+                  </Button>
                 </div>
-
-                {formError && (
-                  <StatusSlot tone='warn' icon='i-ph-warning'>
-                    {formError}
-                  </StatusSlot>
-                )}
+                <ZcashMeRecipientResolver
+                  input={recipient}
+                  onResolve={p => {
+                    setResolvedProfile(p);
+                    setRecipient(p.address);
+                  }}
+                />
+                <Helper warn={toHelper[0]}>{toHelper[1]}</Helper>
               </div>
 
-              {/* single full-width action - the header back-arrow (onClose)
-                already covers "leave the form", a redundant cancel button
-                next to it just split the one gold action in two. */}
-              <Button
-                variant='primary'
-                onClick={handleReview}
-                disabled={!canReview}
-                className='mt-4'
-              >
+              <div className='flex flex-col gap-1.5'>
+                <div className='flex items-baseline justify-between'>
+                  <label htmlFor='send-amount' className='text-xs text-fg-muted'>
+                    amount
+                  </label>
+                  {/* the active pool only, so it can differ from home's total */}
+                  {balanceZat !== null && (
+                    <span className='text-[11px] text-fg-muted'>
+                      available <Sensitive>{fmtZecShort(balanceZat)}</Sensitive>
+                    </span>
+                  )}
+                </div>
+                <div className='relative'>
+                  <Input
+                    id='send-amount'
+                    inputMode='decimal'
+                    placeholder='0'
+                    value={amount}
+                    onChange={e => {
+                      filledByRequest.current.amount = false;
+                      setAmount(e.target.value);
+                    }}
+                    variant={overLimit ? 'warn' : 'default'}
+                    className={cn(
+                      'h-14 pr-[110px] font-display text-2xl',
+                      overLimit && 'focus-visible:border-warn',
+                    )}
+                  />
+                  <span className='pointer-events-none absolute right-16 top-0 flex h-14 items-center text-[13px] text-fg-muted'>
+                    zec
+                  </span>
+                  {/* every note in the pool, minus the ZIP-317 fee that
+                    transaction really pays */}
+                  <Button
+                    variant='secondary'
+                    size='sm'
+                    onClick={() => {
+                      filledByRequest.current.amount = false;
+                      setAmount(maxSend.amountZat > 0n ? fmtZecShort(maxSend.amountZat) : '0');
+                    }}
+                    disabled={maxSend.amountZat <= 0n}
+                    className='absolute right-2 top-3 h-8 border-border-hard text-zigner-gold'
+                  >
+                    max
+                  </Button>
+                </div>
+                {/* orchard funds are real but consensus-disabled post-NU6.3:
+                  name them rather than fold them into what can be sent */}
+                <Helper warn={overLimit}>
+                  {overLimit ? (
+                    <>
+                      a little more than you have · up to{' '}
+                      <Sensitive>{fmtZecShort(maxSend.amountZat)}</Sensitive>
+                    </>
+                  ) : (
+                    strandedZat > 0n && (
+                      <>
+                        <Sensitive>{fmtZecShort(strandedZat)} zec</Sensitive> waits in orchard ·
+                        migrate it on home to send it
+                      </>
+                    )
+                  )}
+                </Helper>
+              </div>
+
+              <div className='flex flex-col gap-1.5'>
+                <label htmlFor='send-memo' className='text-xs text-fg-muted'>
+                  memo
+                </label>
+                <Input
+                  id='send-memo'
+                  placeholder={`optional, only ${toName ?? 'they'} can read it`}
+                  value={memo}
+                  onChange={e => {
+                    filledByRequest.current.memo = false;
+                    setMemo(e.target.value);
+                  }}
+                  maxLength={512}
+                />
+              </div>
+            </Main>
+            <Footer>
+              <Button onClick={() => setStep('review')} disabled={!canReview} className='w-full'>
                 review
               </Button>
-            </div>
+            </Footer>
+
+            {showQrScanner && (
+              <QrScanner
+                onScan={data => {
+                  if (!applyZcashUri(data)) {
+                    setRecipient(data);
+                  }
+                  setShowQrScanner(false);
+                }}
+                onClose={() => setShowQrScanner(false)}
+                title='scan an address'
+              />
+            )}
+            <Sheet
+              open={showAddressBook}
+              onOpenChange={open => {
+                setShowAddressBook(open);
+                setAddressBookQuery('');
+              }}
+              title='contacts'
+            >
+              <Input
+                placeholder='search name or address'
+                value={addressBookQuery}
+                onChange={e => setAddressBookQuery(e.target.value)}
+              />
+              <div className='min-h-0 overflow-y-auto'>
+                {bookRows.length > 0 ? (
+                  <RowGroup>
+                    {bookRows.map(row => (
+                      <Row
+                        key={row.address}
+                        type='screen'
+                        label={row.label}
+                        description={shortAddress(row.address)}
+                        onPress={() => {
+                          setRecipient(row.address);
+                          setPickedContact(
+                            row.contactId && row.addressId
+                              ? {
+                                  contactId: row.contactId,
+                                  addressId: row.addressId,
+                                  address: row.address,
+                                }
+                              : null,
+                          );
+                          setShowAddressBook(false);
+                          setAddressBookQuery('');
+                        }}
+                      />
+                    ))}
+                  </RowGroup>
+                ) : (
+                  <p className='py-6 text-center text-xs text-fg-muted'>
+                    {addressBookQuery.trim() ? 'nothing matches that' : 'no saved addresses yet'}
+                  </p>
+                )}
+              </div>
+            </Sheet>
           </>
         );
 
       case 'review':
         return (
           <>
-            <ScreenHeader title='review transaction' onBack={handleBack} />
-            <div className='flex flex-col gap-4 p-4'>
-              {/* All five rows are static display, not <Row>: Row's value type
-                renders a clickable button with a hover state and a trailing
-                chevron (it's meant to open a Sheet), which would draw a fake
-                affordance on network/to that does nothing. RowGroup still
-                gives the bordered 1px box the design wants. amount/fee/total
-                additionally wrap their value in <Sensitive> for privacy-mode
-                blur, which Row's string-only `value` prop can't carry either
-                way. */}
-              <RowGroup>
-                <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
-                  <span className='text-data text-fg-muted lowercase'>network</span>
-                  <span className='text-data text-fg-high'>
-                    zcash {mainnet ? 'mainnet' : 'testnet'}
+            <ScreenHeader title='review' onBack={handleBack} meta='2 / 2' />
+            <Main className='gap-[22px] pt-6'>
+              <div className='flex flex-col items-center gap-1.5 pb-1 pt-2'>
+                <span className='text-xs text-fg-muted'>you send</span>
+                <Sensitive>
+                  <span className='font-display text-[40px] leading-tight text-fg-high'>
+                    {amount} <span className='text-lg text-zigner-gold'>zec</span>
                   </span>
-                </div>
-                <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
-                  <span className='text-data text-fg-muted lowercase'>to</span>
-                  <span className='truncate font-mono text-data text-fg-high'>
-                    {truncateAddress(recipient)}
-                  </span>
-                </div>
-                <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
-                  <span className='text-data text-fg-muted lowercase'>amount</span>
-                  <span className='text-data tabular-nums text-fg-high'>
-                    <Sensitive>{amount} zec</Sensitive>
-                  </span>
-                </div>
-                <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
-                  <span className='text-data text-fg-muted lowercase'>fee</span>
-                  <span className='text-data tabular-nums text-fg-high'>
-                    <Sensitive>{fee} zec</Sensitive>
-                  </span>
-                </div>
-                <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
-                  <span className='text-data text-fg-muted lowercase'>total</span>
-                  <span className='text-data tabular-nums text-fg-high'>
-                    <Sensitive>{(Number(amount) + Number(fee)).toFixed(4)} zec</Sensitive>
-                  </span>
-                </div>
-              </RowGroup>
-
-              <div className='flex gap-2 mt-4'>
-                <Button variant='secondary' onClick={handleBack} className='flex-1'>
-                  back
-                </Button>
-                <Button variant='primary' onClick={() => void handleSign()} className='flex-1'>
-                  {kind && CAPS[kind].signLabel}
-                </Button>
+                </Sensitive>
               </div>
-            </div>
+              <RowGroup>
+                {(
+                  [
+                    ['to', toName ? `${toName} · ${shortAddress(to)}` : shortAddress(to)],
+                    ['fee', <Sensitive key='fee'>{fee} zec</Sensitive>],
+                    [
+                      'total',
+                      <Sensitive key='total'>
+                        {fmtZecShort(Math.round((Number(amount) + Number(fee)) * 1e8))} zec
+                      </Sensitive>,
+                    ],
+                  ] as const
+                ).map(([k, v]) => (
+                  <div key={k} className='flex h-12 items-center justify-between gap-3 px-3.5'>
+                    <span className='text-xs text-fg-muted'>{k}</span>
+                    <span className='truncate text-[13px] text-fg-high'>{v}</span>
+                  </div>
+                ))}
+              </RowGroup>
+              <div className='flex h-10 items-center gap-2 border border-border-soft px-3'>
+                <span className='i-lucide-shield size-3.5 shrink-0 text-zigner-gold' />
+                <span className='text-xs text-fg'>
+                  {recipientIsTransparent
+                    ? 'public · the address and amount are visible to anyone'
+                    : 'shielded · amount and memo stay private'}
+                </span>
+              </div>
+            </Main>
+            <Footer>
+              <Button variant='secondary' onClick={handleBack} className='w-[110px]'>
+                edit
+              </Button>
+              <Button onClick={() => void handleSign()} className='grow'>
+                {kind && CAPS[kind].signLabel}
+              </Button>
+            </Footer>
           </>
         );
 
+      // broadcasting is the tail of the same operation: one sending screen
       case 'building':
-      case 'broadcast': {
-        // Broadcasting is the tail of the same operation as building: the
-        // send-progress listener (effect above) already covers both steps,
-        // and sendSteps keeps accumulating straight through
-        // 'broadcasting transaction' -> 'complete'. One "sending" screen
-        // for both, matching the design board, instead of a second near-
-        // identical spinner screen with no step log.
-        const currentStep = sendSteps.at(-1)?.step;
+      case 'broadcast':
         return (
-          <div className='flex flex-col gap-4 p-6'>
-            <div className='flex flex-col items-center gap-3'>
-              <div className='relative flex h-16 w-16 items-center justify-center bg-primary/20'>
-                <div className='h-8 w-8 animate-spin border-2 border-zigner-gold border-t-transparent' />
-              </div>
-              <h2 className='text-lg'>sending</h2>
-              {/* live elapsed timer - ticks every second so the UI never looks frozen */}
-              <LiveTimer startMs={buildStartRef.current} />
-            </div>
-
-            <div className='border border-border-soft bg-elev-1 p-3'>
-              <StepList steps={sendSteps} liveSinceMs={buildStartRef.current} className='w-full' />
-            </div>
-
-            {currentStep && (
-              <StatusSlot tone='gold' icon='i-ph-shield-check'>
-                {explainSendStep(currentStep)}
-              </StatusSlot>
-            )}
-
-            <div className='flex flex-col items-center gap-2 mt-2'>
-              <p className='text-xs text-fg-muted text-center'>
-                you can close this - it keeps going and shows on home
-              </p>
-              <Button variant='secondary' size='sm' onClick={onClose}>
+          <>
+            <ScreenHeader
+              title='sending'
+              backPath={false}
+              meta={
+                <span>
+                  <Sensitive>{amount} zec</Sensitive> to {toLabel}
+                </span>
+              }
+            />
+            <Proving
+              steps={sendSteps}
+              floor={step === 'broadcast' ? 3 : 0}
+              since={buildStartRef.current}
+              hot={kind === 'hot'}
+            />
+            <Footer className='flex-col'>
+              <span className='flex h-[18px] items-center justify-center text-[11px] text-fg-muted'>
+                you can close this · it keeps going and shows on home
+              </span>
+              <Button variant='secondary' onClick={onClose} className='h-11'>
                 back to wallet
               </Button>
-            </div>
-          </div>
+            </Footer>
+          </>
         );
-      }
 
-      case 'sign': {
-        const truncAddr = (a: string) => (a.length > 22 ? `${a.slice(0, 10)}…${a.slice(-8)}` : a);
-        return (
-          <div className='flex flex-col h-full'>
-            <ScreenHeader
-              title='sign with zigner'
-              onBack={handleBack}
-              meta={
-                <>
-                  1 / 2
-                  <DontQuitIcon />
-                </>
-              }
-            />
-
-            <div className='flex flex-col gap-4 p-4 flex-1 overflow-y-auto'>
-              {/* QR */}
-              <div className='flex justify-center'>
-                {pcztSignFrames && pcztSignFrames.length > 0 && (
-                  <AnimatedQrDisplay
-                    urFrames={pcztSignFrames}
-                    urSource={
-                      pcztUnsignedRef.current?.cborData
-                        ? {
-                            bytes: pcztUnsignedRef.current.cborData,
-                            urType:
-                              pcztSignFrames[0]?.split('/')[0]?.replace(/^ur:/i, '') ||
-                              'zcash-pczt',
-                          }
-                        : undefined
-                    }
-                    totalBytes={pcztUnsignedRef.current?.cborBytes}
-                    size={qrSize}
-                    frameInterval={200}
-                    title='scan with zafu zigner'
-                    description='hold zigner camera steady; multi-frame transfer'
-                  />
-                )}
-              </div>
-
-              {/* tx summary */}
-              <div className='border border-border-soft bg-elev-1 divide-y divide-border-soft text-xs'>
-                <div className='flex items-center justify-between px-3 py-2'>
-                  <span className='text-fg-muted'>to</span>
-                  <span className='font-mono text-fg-high'>{truncAddr(recipient)}</span>
-                </div>
-                <div className='flex items-center justify-between px-3 py-2'>
-                  <span className='text-fg-muted'>amount</span>
-                  <span className='tabular text-fg-high'>
-                    <Sensitive>{amount} ZEC</Sensitive>
-                  </span>
-                </div>
-                <div className='flex items-center justify-between px-3 py-2'>
-                  <span className='text-fg-muted'>fee</span>
-                  <span className='tabular text-fg-dim'>
-                    <Sensitive>{fee} ZEC</Sensitive>
-                  </span>
-                </div>
-                {memo && (
-                  <div className='flex items-center justify-between px-3 py-2'>
-                    <span className='text-fg-muted'>memo</span>
-                    <span className='text-fg-high truncate max-w-[60%]'>{memo}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* steps */}
-              <ol className='space-y-2'>
-                {(
-                  [
-                    'open zafu zigner on your phone',
-                    'scan this QR code',
-                    'review and approve',
-                  ] as const
-                ).map((label, i) => (
-                  <li key={i} className='flex items-center gap-2.5 text-xs text-fg-muted'>
-                    <span className='flex size-4 shrink-0 items-center justify-center bg-zigner-gold/15 text-[9px] text-zigner-gold'>
-                      {i + 1}
-                    </span>
-                    {label}
-                  </li>
-                ))}
-              </ol>
-            </div>
-
-            <div className='px-4 py-3 border-t border-border-soft'>
-              <Button variant='primary' onClick={handleScanSignature} className='w-full'>
-                scan signature from zigner
-              </Button>
-            </div>
-          </div>
-        );
-      }
-
+      case 'sign':
       case 'scan':
         return (
-          <div className='flex flex-col h-full'>
+          <>
             <ScreenHeader
-              title='scan signature'
-              onBack={() => setStep('sign')}
+              title={`sign on ${device}`}
+              onBack={step === 'sign' ? handleBack : () => setStep('sign')}
               meta={
                 <>
-                  2 / 2
+                  {step === 'sign' ? '1 / 2' : '2 / 2'}
                   <DontQuitIcon />
                 </>
               }
             />
-
-            <div className='flex flex-col gap-3 p-4 flex-1'>
-              <p className='text-xs text-fg-muted'>
-                point camera at the animated QR shown on your zigner device
-              </p>
-              <AnimatedQrScanner
-                inline
-                onComplete={bytes => {
-                  void handlePcztSignatureScanned(bytes);
-                }}
-                onError={err => {
-                  setError(err);
-                  setStep('error');
-                }}
-                onClose={() => setStep('sign')}
-                title='scan signed PCZT'
-                description='hold camera steady on the animated QR'
-                urTypeFilter={pcztSignedUrType}
-              />
-            </div>
-          </div>
+            <Strip icon='i-lucide-asterisk' right={<Sensitive>fee {fee}</Sensitive>}>
+              {sending}
+            </Strip>
+            <Main className='items-center gap-4 px-5 pt-6'>
+              {step === 'scan' ? (
+                <>
+                  <AnimatedQrScanner
+                    inline
+                    onComplete={bytes => {
+                      void handlePcztSignatureScanned(bytes);
+                    }}
+                    onError={err => {
+                      setError(err);
+                      setStep('error');
+                    }}
+                    onClose={() => setStep('sign')}
+                    title={`${device}'s answer`}
+                    urTypeFilter={pcztSignedUrType}
+                  />
+                  <span className='text-[13px] text-fg-high'>
+                    hold {device}'s signed qr up to the camera
+                  </span>
+                </>
+              ) : (
+                <>
+                  {pcztSignFrames && pcztSignFrames.length > 0 && (
+                    <AnimatedQrDisplay
+                      bare
+                      urFrames={pcztSignFrames}
+                      urSource={
+                        pcztUnsignedRef.current?.cborData
+                          ? {
+                              bytes: pcztUnsignedRef.current.cborData,
+                              urType:
+                                pcztSignFrames[0]?.split('/')[0]?.replace(/^ur:/i, '') ||
+                                'zcash-pczt',
+                            }
+                          : undefined
+                      }
+                      totalBytes={pcztUnsignedRef.current?.cborBytes}
+                      // as large as the surface allows, so a phone camera locks on
+                      size={300}
+                      frameInterval={200}
+                    />
+                  )}
+                  <span className='text-[13px] text-fg-high'>
+                    scan this with {device}, approve there
+                  </span>
+                </>
+              )}
+            </Main>
+            <Footer>
+              {step === 'sign' ? (
+                <Button onClick={handleScanSignature} className='w-full'>
+                  scan {device}'s answer
+                </Button>
+              ) : (
+                <Button disabled className='w-full'>
+                  waiting for signature
+                </Button>
+              )}
+            </Footer>
+          </>
         );
 
+      // nothing reports "connected" or "app open" yet, so only the step the
+      // device is truly on is shown
       case 'ledger-sign':
         return (
-          <div className='flex flex-col items-center gap-4 p-8'>
-            <div className='flex items-center gap-2 self-start'>
-              <button
-                onClick={handleBack}
-                className='text-fg-muted hover:text-fg-high transition-colors'
-              >
-                <span className='i-ph-arrow-left w-5 h-5' />
-              </button>
-              <h2 className='text-lg'>confirm on your Ledger</h2>
-            </div>
-            <div className='w-16 h-16 bg-primary/20 flex items-center justify-center'>
-              <span className='i-ph-usb w-8 h-8 text-zigner-gold' />
-            </div>
-            <p className='text-sm text-fg-muted text-center'>
-              review the recipient, amount, and fee on your Ledger device and approve the orchard
-              spend to continue.
-            </p>
-            <div className='w-full border border-border-soft bg-elev-1 divide-y divide-border-soft text-xs'>
-              <div className='flex items-center justify-between px-3 py-2'>
-                <span className='text-fg-muted'>to</span>
-                <span className='font-mono text-fg-high truncate max-w-[60%]'>{recipient}</span>
-              </div>
-              <div className='flex items-center justify-between px-3 py-2'>
-                <span className='text-fg-muted'>amount</span>
-                <span className='tabular text-fg-high'>
-                  <Sensitive>{amount} ZEC</Sensitive>
+          <>
+            <ScreenHeader title='confirm on ledger' backPath={false} />
+            <Strip right={recipientIsTransparent ? 'transparent · public' : 'shielded'}>
+              {sending}
+            </Strip>
+            <Main className='items-center gap-[26px] px-6 pt-[34px]'>
+              <div className='relative flex h-[76px] w-[250px] shrink-0 items-center gap-3.5 border border-border-hard bg-elev-2 px-4'>
+                <span className='flex h-[42px] w-[150px] flex-col justify-center gap-0.5 border border-border-soft bg-canvas px-2.5'>
+                  <span className='text-[10px] text-fg-high'>review transaction</span>
+                  <span className='truncate text-[9px] text-fg-muted'>
+                    <Sensitive>{amount} zec</Sensitive> · {shortAddress(to)}
+                  </span>
                 </span>
+                <span className='size-[22px] border-2 border-fg-muted' />
+                <span className='absolute -right-[26px] top-8 h-2.5 w-[26px] bg-border-hard' />
               </div>
-              <div className='flex items-center justify-between px-3 py-2'>
-                <span className='text-fg-muted'>fee</span>
-                <span className='tabular text-fg-dim'>
-                  <Sensitive>{fee} ZEC</Sensitive>
-                </span>
+              <div className='flex h-12 w-full items-center gap-3 border border-border-soft bg-elev-1 px-3.5 text-[13px] text-fg-high'>
+                <Mark state='now' />
+                check the address on the device, then approve
               </div>
-            </div>
-            <div className='flex items-center gap-2 text-xs text-fg-muted'>
-              <div className='h-4 w-4 animate-spin border-2 border-zigner-gold border-t-transparent' />
-              waiting for device confirmation...
-            </div>
-          </div>
+            </Main>
+            <Footer>
+              <Button variant='secondary' onClick={handleBack} className='w-[110px]'>
+                not now
+              </Button>
+              <Button disabled className='grow'>
+                waiting for ledger
+              </Button>
+            </Footer>
+          </>
         );
 
-      case 'complete':
+      case 'complete': {
+        const offerSave =
+          showSavePrompt && !!recipient && !findByAddress(recipient) && !showContactModal;
         return (
-          <div className='flex flex-col items-center gap-4 p-8'>
-            {/* the receipt gets stamped - a broadcast tx is sealed (封) */}
-            <HankoSeal glyph='封' size='md' />
-            <h2 className='text-lg'>transaction sent</h2>
-            <p className='text-sm text-fg-muted text-center'>
-              {amount} zec sent successfully
-              {totalElapsedSec !== null && ` in ${totalElapsedSec}s`}
-            </p>
-            {txHash && (
-              <div className='flex items-center gap-1.5'>
-                <p className='font-mono text-xs text-fg-muted break-all'>
-                  {truncateAddress(txHash)}
-                </p>
-                <CopyButton text={txHash} />
-              </div>
-            )}
-
-            {/*
-              Cold (zigner) wallet: the balance just changed, so the air-gapped
-              device's offline view is now stale. Offer a one-tap jump to the
-              existing note-sync flow (Settings > Wallets > "sync to zigner") so
-              the user can re-sync the zigner's verified balance right here,
-              instead of hunting for it in settings after every send.
-            */}
-            {kind && CAPS[kind].afterSend === 'sync-zigner' && (
-              <button
-                onClick={() => {
-                  onClose();
-                  navigate(PopupPath.NOTE_SYNC);
-                }}
-                title='scan on your zigner to re-sync its verified balance after this send'
-                className='flex w-full items-center gap-2 border border-border-soft px-3 py-2 text-left hover:border-fg-muted'
-              >
-                <span className='i-ph-qr-code size-4 text-fg-high shrink-0' />
-                <span className='text-xs text-fg-high'>sync balance to your zigner</span>
-                <span className='i-ph-caret-right size-3.5 text-fg-dim ml-auto shrink-0' />
-              </button>
-            )}
-
-            {/* save contact prompt */}
-            {showSavePrompt && recipient && !findByAddress(recipient) && !showContactModal && (
-              <div className='w-full border border-border-soft bg-elev-1 p-3'>
-                <div className='flex items-center gap-2 mb-2'>
-                  <span className='i-ph-user h-4 w-4 text-zigner-gold' />
-                  <p className='text-sm'>save to contacts?</p>
-                </div>
-                <div className='flex gap-2'>
-                  <Button
-                    variant='secondary'
-                    size='sm'
-                    onClick={() => setShowContactModal(true)}
-                    className='flex-1'
-                  >
-                    save
-                  </Button>
-                  <Button
-                    variant='secondary'
-                    size='sm'
-                    onClick={() => {
-                      void dismissSuggestion(recipient);
-                      setShowSavePrompt(false);
-                    }}
-                    className='flex-1'
-                  >
-                    skip
-                  </Button>
-                </div>
-              </div>
-            )}
-
+          <>
+            <ScreenHeader title='done' onBack={handleClose} />
+            <Sealed>
+              <span className='text-[13px] text-fg-muted'>
+                {kind && DEVICE[kind] ? (
+                  `signed on ${device} · key never left it`
+                ) : (
+                  <>
+                    <Sensitive>{amount} zec</Sensitive> to {toLabel}
+                  </>
+                )}
+              </span>
+              {txHash && (
+                <span className='flex items-center gap-1.5 text-xs text-fg-muted'>
+                  {shortAddress(txHash)}
+                  <CopyButton text={txHash} />
+                </span>
+              )}
+            </Sealed>
+            <Footer>
+              {/* a cold device's offline view is stale after a send */}
+              {kind && CAPS[kind].afterSend === 'sync-zigner' && (
+                <Button
+                  variant='secondary'
+                  onClick={() => {
+                    onClose();
+                    navigate(PopupPath.NOTE_SYNC);
+                  }}
+                  className='px-3'
+                >
+                  sync zigner
+                </Button>
+              )}
+              {offerSave && (
+                <Button
+                  variant='secondary'
+                  onClick={() => setShowContactModal(true)}
+                  className='px-3'
+                >
+                  save contact
+                </Button>
+              )}
+              <Button onClick={handleClose} className='grow'>
+                done
+              </Button>
+            </Footer>
             {showContactModal && (
               <SaveContactModal
                 address={recipient}
                 network='zcash'
                 zcashme={
-                  resolvedProfile?.address === recipient.trim()
-                    ? resolvedProfile
-                    : directoryProfileByAddress(recipient.trim())
+                  resolvedProfile?.address === to ? resolvedProfile : directoryProfileByAddress(to)
                 }
                 onDone={() => {
                   setShowContactModal(false);
@@ -1866,51 +1593,43 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 onCancel={() => setShowContactModal(false)}
               />
             )}
-
-            <Button variant='primary' onClick={handleClose} className='w-full mt-4'>
-              done
-            </Button>
-          </div>
+          </>
         );
+      }
 
       case 'frost-room':
-      case 'frost-signing':
+      case 'frost-signing': {
+        const ms = activeZcashWallet?.multisig;
         return (
-          <div className='flex flex-col items-center gap-6 p-8'>
-            <div className='w-16 h-16 bg-primary/20 flex items-center justify-center'>
-              <span className='i-ph-users w-8 h-8 text-zigner-gold' />
-            </div>
-            <h2 className='text-lg'>multisig signing</h2>
-
-            {frostRoomCode && (
-              <div className='flex flex-col items-center gap-2'>
-                <p className='text-xs text-fg-muted'>share this session id with co-signers:</p>
-                <div className='bg-elev-2 px-4 py-2 font-mono text-lg'>{frostRoomCode}</div>
-              </div>
-            )}
-
-            <div className='flex flex-col items-center gap-2'>
-              <p className='text-sm'>{frostProgress}</p>
-              <div className='h-5 w-5 animate-spin border-2 border-zigner-gold border-t-transparent' />
-            </div>
-
-            <div className='w-full bg-elev-2 p-3 text-xs text-fg-muted'>
-              <p>
-                {activeZcashWallet?.multisig?.threshold}-of-
-                {activeZcashWallet?.multisig?.maxSigners} threshold
-              </p>
-              <p className='mt-1'>
-                send <Sensitive>{amount} ZEC</Sensitive> to {recipient.slice(0, 16)}...
-                {recipient.slice(-8)}
-              </p>
-              <p className='mt-1'>fee: {fee} ZEC</p>
-            </div>
-
-            <Button variant='secondary' onClick={handleClose} className='w-full mt-2'>
-              cancel
-            </Button>
-          </div>
+          <>
+            <ScreenHeader
+              title='multisig signing'
+              backPath={false}
+              meta={ms && `${ms.threshold} of ${ms.maxSigners}`}
+            />
+            <Strip right={<Sensitive>fee {fee}</Sensitive>}>{sending}</Strip>
+            <Main className='items-center justify-center gap-4'>
+              {frostRoomCode && (
+                <>
+                  <span className='text-xs text-fg-muted'>share this code with co-signers</span>
+                  <span className='border border-border-soft bg-elev-1 px-4 py-2 text-lg text-fg-high'>
+                    {frostRoomCode}
+                  </span>
+                </>
+              )}
+              <span className='flex items-center gap-2 text-[13px] text-fg'>
+                <Mark state='now' />
+                {frostProgress}
+              </span>
+            </Main>
+            <Footer>
+              <Button variant='secondary' onClick={handleClose} className='w-full'>
+                cancel
+              </Button>
+            </Footer>
+          </>
         );
+      }
 
       case 'airgap-flow':
         if (!pcztMultisigRef.current || !activeZcashWallet?.multisig) {
@@ -1920,7 +1639,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           <FrostAirgapSignFlow
             ms={activeZcashWallet.multisig}
             unsigned={pcztMultisigRef.current}
-            recipient={recipient.trim()}
+            recipient={to}
             amount={amount}
             fee={fee}
             onComplete={handleAirgapComplete}
@@ -1934,23 +1653,23 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
       case 'error':
         return (
-          <div className='flex flex-col items-center gap-4 p-8'>
-            <div className='w-16 h-16 bg-red-500/20 flex items-center justify-center'>
-              <span className='i-ph-x w-8 h-8 text-red-400' />
-            </div>
-            <h2 className='text-lg'>transaction failed</h2>
-            <p className='text-sm text-red-400 text-center'>
-              {formError || signingError || 'an error occurred'}
-            </p>
-            <div className='flex gap-2 w-full mt-4'>
-              <Button variant='secondary' onClick={handleClose} className='flex-1'>
+          <>
+            <ScreenHeader title='send stopped' onBack={handleBack} />
+            <Strip>{sending}</Strip>
+            <Main className='pt-5'>
+              <StatusSlot tone='warn' icon='i-ph-warning'>
+                {formError || signingError || 'something broke on our side, not yours'}
+              </StatusSlot>
+            </Main>
+            <Footer>
+              <Button variant='secondary' onClick={handleClose} className='w-[110px]'>
                 cancel
               </Button>
-              <Button variant='primary' onClick={handleBack} className='flex-1'>
+              <Button onClick={handleBack} className='grow'>
                 try again
               </Button>
-            </div>
-          </div>
+            </Footer>
+          </>
         );
 
       default:
@@ -1974,7 +1693,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   }
 
   return (
-    <div className='h-full bg-canvas'>
+    <div className='flex h-full flex-col bg-canvas'>
       {PasswordModal}
       {renderContent()}
     </div>
