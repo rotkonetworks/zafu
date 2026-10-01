@@ -23,6 +23,7 @@ import { getActiveIbcSubnetworks } from '../../../config/networks';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectEnabledNetworks } from '../../../state/keyring';
 import { RpcPoolSheet } from '../settings/transparent-chain-endpoints';
+import { BalanceGroup, BalanceRow, Tile } from '../../../components/wallet/balance-rows';
 import { PopupPath } from '../paths';
 
 const truncate = (addr: string) =>
@@ -104,43 +105,37 @@ const ChainRow = ({ chainId }: { chainId: CosmosChainId }) => {
 
   return (
     <>
-      <div className='flex min-h-[52px] items-center gap-3 px-3.5 py-2'>
-        <button
-          type='button'
-          onClick={() => setSheet('chain')}
-          className='flex min-w-0 flex-1 items-center gap-3 text-left'
-        >
-          <span className='flex size-8 shrink-0 items-center justify-center bg-surface-elev-2 text-xs text-fg-muted lowercase'>
-            {config.name.slice(0, 2)}
-          </span>
-          <span className='flex min-w-0 flex-col gap-0.5'>
-            <span className='truncate text-sm text-fg-high lowercase'>{config.name}</span>
-            <span className='truncate text-[11px] text-fg-muted'>{sub}</span>
-          </span>
-          {state.kind === 'funded' && (
-            <Sensitive className='ml-auto shrink-0 text-sm tabular-nums text-fg-high'>
-              {funded[0]?.assets[0]?.formatted}
-              {funded.length > 1 ? ` +${funded.length - 1}` : ''}
-            </Sensitive>
-          )}
-        </button>
-        {state.kind === 'unanswered' && (
-          <Button variant='quiet' size='sm' onClick={() => setSheet('pool')}>
-            another node
-          </Button>
-        )}
-        {action && (
-          <Button
-            variant='secondary'
-            size='sm'
-            className='min-w-[76px]'
-            loading={state.kind === 'checking'}
-            onClick={() => void action.run()}
-          >
-            {action.label}
-          </Button>
-        )}
-      </div>
+      <BalanceRow
+        tile={<Tile tone='quiet'>{config.name.slice(0, 2)}</Tile>}
+        label={config.name}
+        tag={sub}
+        amount={
+          state.kind === 'funded'
+            ? `${funded[0]?.assets[0]?.formatted ?? ''}${funded.length > 1 ? ` +${funded.length - 1}` : ''}`
+            : undefined
+        }
+        onPress={() => setSheet('chain')}
+        action={
+          <>
+            {state.kind === 'unanswered' && (
+              <Button variant='quiet' size='sm' onClick={() => setSheet('pool')}>
+                another node
+              </Button>
+            )}
+            {action && (
+              <Button
+                variant='secondary'
+                size='sm'
+                className='min-w-[76px]'
+                loading={state.kind === 'checking'}
+                onClick={() => void action.run()}
+              >
+                {action.label}
+              </Button>
+            )}
+          </>
+        }
+      />
 
       <Sheet
         open={sheet === 'chain'}
@@ -215,13 +210,10 @@ export const CosmosSubwallets = () => {
     return null;
   }
   return (
-    <div className='mt-4 flex flex-col'>
-      <div className='kicker mb-2'>transparent chains</div>
-      <RowGroup>
-        {chains.map(chainId => (
-          <ChainRow key={chainId} chainId={chainId} />
-        ))}
-      </RowGroup>
-    </div>
+    <BalanceGroup heading='transparent chains'>
+      {chains.map(chainId => (
+        <ChainRow key={chainId} chainId={chainId} />
+      ))}
+    </BalanceGroup>
   );
 };

@@ -328,6 +328,9 @@ type LOCAL = {
   /** transparent chains the user hid from the penumbra home */
   hiddenTransparentChains?: string[];
 
+  /** what the penumbra home's total is shown in; absent = usd */
+  penumbraTotalIn?: 'usd' | 'um';
+
   zafuFeeMultiplier?: number;
 
   proLicense?: string;

@@ -9,6 +9,7 @@ import { useStore } from '../../../state';
 import { selectEnabledNetworks, type NetworkType } from '../../../state/keyring';
 import { useDisableNetwork, useEnableNetwork } from '../../../hooks/enable-network';
 import { useHiddenChains } from '../../../hooks/cosmos-balance';
+import { usePenumbraTotalIn } from '../../../hooks/penumbra-total-in';
 import { getRegistryEndpoints } from '../../../config/penumbra-endpoints';
 import { getSubnetworks } from '../../../config/networks';
 import { probeAllPenumbra } from '../../../state/keyring/penumbra-endpoint-latency';
@@ -78,6 +79,7 @@ export const SettingsPenumbraNetwork = () => {
   const setEndpoint = useStore(s => s.networks.setNetworkEndpoint);
   const disable = useDisableNetwork();
   const navigate = usePopupNav();
+  const { totalIn, setTotalIn } = usePenumbraTotalIn();
 
   const chainsOn = CHAINS.filter(c => enabled.includes(c));
   const sheet = (o: Open) => (next: boolean) => setOpen(next ? o : null);
@@ -103,6 +105,12 @@ export const SettingsPenumbraNetwork = () => {
                   : `${chainsOn.map(chainName).join(', ')} on`
             }
             onPress={() => setOpen('ibc')}
+          />
+          <Row
+            type='value'
+            label='total in'
+            value={totalIn}
+            onPress={() => void setTotalIn(totalIn === 'usd' ? 'um' : 'usd')}
           />
         </RowGroup>
         <RowGroup>

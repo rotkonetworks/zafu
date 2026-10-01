@@ -1,93 +1,94 @@
-import { lazy, Suspense, useEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-
-import { PenumbraAccountPicker } from '../../../components/penumbra-account-picker';
-import { Sensitive } from '../../../components/sensitive';
-import { PopupPath } from '../paths';
-import { AssetListSkeleton } from '../../../components/primitives/skeleton';
-import { StatusSlot } from '@repo/ui/components/ui/status-slot';
-import { useSyncProgress } from '../../../hooks/full-sync-height';
-import { useOnline } from '../../../hooks/use-online';
-import { classifySyncFailure } from '../../../state/sync-failure';
-import { syncNotice } from '../../../components/zcash/sync-notice';
-import { getDisplayDenomFromView } from '@penumbra-zone/getters/value-view';
-import { fromValueView } from '@rotko/penumbra-types/amount';
-import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
-import { balancesQueryOptions, balancesQueryKey } from '../../../hooks/penumbra-balances';
+import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
-import { AskHistorySheet } from './history';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
+import { InFlightCard } from '../../../components/in-flight-card';
+import { Sensitive } from '../../../components/sensitive';
+import { usePenumbraTotalIn } from '../../../hooks/penumbra-total-in';
+import { useSyncProgress } from '../../../hooks/full-sync-height';
+import { balancesQueryOptions, balancesQueryKey } from '../../../hooks/penumbra-balances';
+import { classifySyncFailure } from '../../../state/sync-failure';
+import { PopupPath } from '../paths';
+import { AskHistorySheet, HistoryContent } from './history';
+import { HOME_LOOK } from './look';
+import { fmtAmount, fmtUsd, heroOf, selectAssets, type Asset } from './penumbra-value';
+import { SyncStrip } from '../../../components/wallet/sync-strip';
+import { EmptyBox, HomeScreen } from './home-screen';
+import { BalanceGroup, BalanceRow, Tile } from '../../../components/wallet/balance-rows';
+import type { BalanceView } from '../../../components/wallet/balance-hero';
 
-/** lazy load network-specific content - only load when needed */
-const AssetsTable = lazy(() => import('./assets-table').then(m => ({ default: m.AssetsTable })));
-
-// Cosmos sub-wallets render under the Penumbra view to surface
-// unshielded balances the user can shield. Lazy so non-Penumbra views
-// don't pay the chunk.
+// the transparent chains under penumbra; lazy so other homes don't pay the chunk
 const CosmosSubwallets = lazy(() =>
   import('./cosmos-subwallets').then(m => ({ default: m.CosmosSubwallets })),
 );
 
-/** UM total across balances; module-level so react-query's select is stable. */
-const selectUmTotal = (balances: BalancesResponse[]): number => {
-  let total = 0;
-  for (const b of balances) {
-    if (!b.balanceView) {
-      continue;
-    }
-    const denom = getDisplayDenomFromView(b.balanceView);
-    if (denom === 'penumbra' || denom === 'UM') {
-      total += Number(fromValueView(b.balanceView));
-    }
-  }
-  return total;
+const look = HOME_LOOK.penumbra;
+
+/** send or swap one asset, or copy the id of one zafu cannot name */
+const AssetSheet = ({ asset, onClose }: { asset?: Asset; onClose: () => void }) => {
+  const navigate = useNavigate();
+  const base = asset?.base;
+  return (
+    <Sheet
+      open={!!asset}
+      onOpenChange={o => !o && onClose()}
+      title={asset?.name.toLowerCase() ?? ''}
+    >
+      {asset && (
+        <RowGroup>
+          {base && (
+            <>
+              <Row
+                type='screen'
+                icon='i-lucide-arrow-up'
+                label={`send ${asset.symbol.toLowerCase()}`}
+                onPress={() => navigate(PopupPath.SEND, { state: { prefillAsset: base } })}
+              />
+              <Row
+                type='screen'
+                icon='i-lucide-arrow-left-right'
+                label={`swap ${asset.symbol.toLowerCase()}`}
+                onPress={() => navigate(PopupPath.SWAP, { state: { prefillFromAsset: base } })}
+              />
+            </>
+          )}
+          {asset.rawId && (
+            <div className='flex min-h-12 items-center gap-2 px-3.5'>
+              <span className='min-w-0 flex-1 truncate font-mono text-[11px] text-fg-muted'>
+                {asset.rawId}
+              </span>
+              <CopyButton text={asset.rawId} className='h-8 px-1' />
+            </div>
+          )}
+        </RowGroup>
+      )}
+    </Sheet>
+  );
 };
 
-/** penumbra-specific content - balance card + sync bar + account picker + assets */
-export const PenumbraContent = ({
-  account,
-  onAccountChange,
-  actions,
-  nudge,
-}: {
-  account: number;
-  onAccountChange: (n: number) => void;
-  actions?: ReactNode;
-  nudge?: ReactNode;
-}) => {
-  const navigate = useNavigate();
-  const { latestBlockHeight, fullSyncHeight, error } = useSyncProgress();
-  const notice = syncNotice({
-    online: useOnline(),
-    failure: error ? classifySyncFailure(error) : null,
-  });
-
-  const isSyncing = (latestBlockHeight ?? 0) - (fullSyncHeight ?? 0) > 10;
-  const syncPct =
-    latestBlockHeight && fullSyncHeight
-      ? Math.min(100, Math.round((Number(fullSyncHeight) / Number(latestBlockHeight)) * 100))
-      : 0;
-
-  const syncLabel = !latestBlockHeight
-    ? 'connecting...'
-    : isSyncing
-      ? `syncing ${syncPct}%`
-      : `block ${(fullSyncHeight ?? latestBlockHeight).toLocaleString()}`;
-
-  // UM total for the balance card, derived from the SAME cached balances stream
-  // the assets table uses (react-query `select` runs on the shared cache). It
-  // used to run its own full viewClient.balances stream - over every note,
-  // hundreds of LP NFTs on a big wallet - so every block paid for two.
-  const { data: umBalance } = useQuery({
+/** penumbra home: the shared home, read from the view service */
+export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: ReactNode }) => {
+  const queryClient = useQueryClient();
+  const { latestBlockHeight, fullSyncHeight, error: syncError } = useSyncProgress();
+  // the shared RAW balances cache (preload, send, swap read it too); this
+  // screen's view of it is the fungible rows
+  const {
+    data: assets,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
     ...balancesQueryOptions(account),
     staleTime: 5_000,
-    select: selectUmTotal,
+    select: selectAssets,
   });
+  const [open, setOpen] = useState<Asset>();
 
-  // refresh balances when sync height advances (no flicker). Same key as the
-  // assets table's refresh, so concurrent invalidations share ONE fetch.
-  const queryClient = useQueryClient();
+  // refresh when the synced height advances (no flicker)
   const prevHeight = useRef(fullSyncHeight);
   useEffect(() => {
     if (fullSyncHeight && fullSyncHeight !== prevHeight.current) {
@@ -96,87 +97,83 @@ export const PenumbraContent = ({
     }
   }, [fullSyncHeight, account, queryClient]);
 
-  // Amount and unit kept apart so the unit can be set subordinate, the same
-  // as the zcash hero. Concatenating them forced both to one size, which is
-  // what made the figure read flat.
-  const balanceAmount =
-    umBalance != null && umBalance > 0
-      ? umBalance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })
-      : umBalance != null
-        ? '0'
-        : null;
-  const balanceSyncing = balanceAmount == null && isSyncing;
+  const tip = latestBlockHeight ?? 0;
+  const synced = fullSyncHeight ?? 0;
+  const caughtUp = tip > 0 && tip - synced <= 10;
+  const hero = heroOf(assets ?? [], usePenumbraTotalIn().totalIn);
+  const funded = (assets ?? []).some(a => a.amount > 0);
+  const view: BalanceView =
+    error && !assets
+      ? 'error'
+      : isLoading
+        ? 'loading'
+        : caughtUp
+          ? 'ready'
+          : funded
+            ? 'partial'
+            : 'unknown';
+  const empty = view === 'ready' && !funded;
 
   return (
-    <div className='flex-1 flex flex-col gap-3'>
-      {/* balance card - matches the zcash hero card (accent border, 'balance'
-          kicker) so the two networks read as one design, not two. */}
-      <div className='border border-network-accent/20 bg-elev-1 p-4'>
-        <span className='kicker'>balance</span>
-        <div className='mt-1 flex min-w-0 items-baseline gap-1.5'>
-          {balanceSyncing ? (
-            <span className='text-hero leading-none text-fg-dim tabular lowercase'>syncing…</span>
-          ) : (
-            <>
-              <span className='min-w-0 truncate text-hero leading-none tracking-tight text-network-accent tabular'>
-                <Sensitive>{balanceAmount ?? '0'}</Sensitive>
-              </span>
-              <span className='shrink-0 text-title leading-none text-network-accent/60 tabular'>
-                UM
-              </span>
-            </>
-          )}
-        </div>
-        <div className='mt-1 text-label text-fg-dim tabular'>{syncLabel}</div>
-      </div>
-
-      {/* action row directly under the balance - Zashi placement */}
-      {actions}
-
-      {/* Trade entry - the shielded DEX was only reachable from the apps grid
-          and the menu footer; surface it on the Penumbra home next to the swap
-          action. Opens in a new tab, same as the apps grid. */}
-      <RowGroup>
-        <Row
-          type='screen'
-          icon='i-ph-chart-line-up'
-          label='trade on penumbra'
-          description='shielded swaps & liquidity positions'
-          onPress={() => window.open('https://penumbra.fi', '_blank', 'noopener,noreferrer')}
+    <HomeScreen
+      look={look}
+      strip={
+        <SyncStrip
+          network='penumbra'
+          synced={caughtUp}
+          failure={syncError ? classifySyncFailure(syncError) : null}
+          percent={tip ? Math.min(100, (synced / tip) * 100) : 0}
+          connecting={!tip}
+          currentHeight={synced}
+          targetHeight={tip}
+          startBlock={0}
+          onRetry={() => void queryClient.invalidateQueries({ queryKey: ['latestBlockHeight'] })}
         />
-      </RowGroup>
-
-      {/* single message slot for penumbra: only the backup nudge competes */}
+      }
+      view={view}
+      amount={hero.unit === 'usd' ? fmtUsd(hero.amount) : fmtAmount(hero.amount)}
+      unit={hero.unit}
+      hint={hero.unit === 'usd' ? 'in usdc.inj on penumbra' : undefined}
+      spendable={funded}
+      watermark={!empty}
+    >
+      <InFlightCard />
       {nudge}
 
-      {/* sync status - a fixed-height reserved slot, not a growing card. The
-          same classified line as zcash (state/sync-failure.ts), never the raw
-          error, and offline before anything about the node. */}
-      {(isSyncing || !latestBlockHeight || notice) && (
+      {view === 'error' ? (
         <StatusSlot
-          tone={notice ? 'warn' : 'gold'}
-          icon={notice ? 'i-ph-warning' : 'i-ph-arrows-clockwise'}
-          progress={notice ? undefined : syncPct}
-          action={
-            notice?.action?.kind === 'settings'
-              ? {
-                  label: notice.action.label,
-                  onClick: () => navigate(`${PopupPath.SETTINGS_NETWORKS}?network=penumbra`),
-                }
-              : undefined
-          }
+          tone='warn'
+          icon='i-ph-warning'
+          action={{ label: 'try again', onClick: () => void refetch() }}
         >
-          {notice?.text ?? syncLabel}
+          your balances did not load · nothing is lost
         </StatusSlot>
+      ) : view === 'loading' ? null : empty ? (
+        <EmptyBox look={look} />
+      ) : (
+        assets &&
+        assets.length > 0 && (
+          <BalanceGroup heading={look.heading}>
+            {assets.map(a => (
+              <BalanceRow
+                key={a.key}
+                tile={<Tile tone={a.um ? 'accent' : 'quiet'}>{a.symbol.slice(0, 2)}</Tile>}
+                label={a.name}
+                tag={a.symbol.toLowerCase()}
+                amount={fmtAmount(a.amount)}
+                note={
+                  a.usd === undefined ? (
+                    <span className='text-[11px] text-fg-muted'>no price</span>
+                  ) : (
+                    <Sensitive className='text-[11px] text-fg-muted'>{fmtUsd(a.usd)}</Sensitive>
+                  )
+                }
+                onPress={() => setOpen(a)}
+              />
+            ))}
+          </BalanceGroup>
+        )
       )}
-
-      {/* account picker - between sync bar and assets */}
-      <PenumbraAccountPicker account={account} onChange={onAccountChange} />
-
-      <div className='kicker mb-2'>assets</div>
-      <Suspense fallback={<AssetListSkeleton rows={4} />}>
-        <AssetsTable account={account} />
-      </Suspense>
 
       {/* the transparent chains tied to the same key, checked only on request.
           Not split by Penumbra account: burners use the wallet's own derivation. */}
@@ -184,7 +181,19 @@ export const PenumbraContent = ({
         <CosmosSubwallets />
       </Suspense>
 
-      <AskHistorySheet hasFunds={(umBalance ?? 0) > 0} />
-    </div>
+      <HistoryContent network='penumbra' penumbraAccount={account} limit={3} />
+
+      <RowGroup>
+        <Row
+          type='screen'
+          icon='i-ph-chart-line-up'
+          label='trade on penumbra.fi'
+          onPress={() => window.open('https://penumbra.fi', '_blank', 'noopener,noreferrer')}
+        />
+      </RowGroup>
+
+      <AssetSheet asset={open} onClose={() => setOpen(undefined)} />
+      <AskHistorySheet hasFunds={funded} />
+    </HomeScreen>
   );
 };

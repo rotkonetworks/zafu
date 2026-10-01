@@ -8,13 +8,15 @@ import { useNavigate } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { cn } from '@repo/ui/lib/utils';
 import { Sheet } from '@repo/ui/components/ui/sheet';
-import { useStore } from '../state';
+import { useStore, type AllSlices } from '../state';
 import {
+  selectActiveNetwork,
   selectEffectiveKeyInfo,
   selectKeyInfosForActiveNetwork,
   selectSelectKeyRing,
   selectRenameKeyRing,
   selectLock,
+  type NetworkType,
 } from '../state/keyring';
 import { MAX_POCKETS, activeAccountIndex, activePockets, pocketOwner } from '../state/pockets';
 import { pocketStoreId } from '../state/pocket-id';
@@ -38,6 +40,34 @@ const CUSTODY_ICON: Record<Custody, string> = {
   cold: 'i-zafu-kori text-device-blue',
   shared: 'i-zafu-torii text-fg-muted',
 };
+
+/**
+ * What a pocket row stands for on each network. Both list the same named
+ * pockets; zcash moves its own pocket (a ZIP 32 account with its own worker
+ * store and balance), penumbra its view-service account index.
+ */
+interface PocketTarget {
+  active: (s: AllSlices) => number;
+  pick: (s: AllSlices, owner: string, account: number) => unknown;
+  balance?: (keyId: string, account: number) => Promise<bigint>;
+}
+
+const ZCASH_POCKET: PocketTarget = {
+  active: activeAccountIndex,
+  pick: (s, owner, account) => s.pockets.select(owner, account),
+  balance: async (keyId, account) =>
+    BigInt(await getBalanceInWorker('zcash', pocketStoreId(keyId, account))),
+};
+
+const POCKET_TARGET: Partial<Record<NetworkType, PocketTarget>> = {
+  penumbra: {
+    active: s => s.keyRing.penumbraAccount,
+    pick: (s, _owner, account) => s.keyRing.setPenumbraAccount(account),
+  },
+};
+
+export const pocketTarget = (network: NetworkType): PocketTarget =>
+  POCKET_TARGET[network] ?? ZCASH_POCKET;
 
 /** what the rename/new-pocket sheet should do: create a fresh pocket, or
  * rename something that already has a name (a pocket or the wallet itself) */
@@ -126,22 +156,23 @@ export const AccountsSheet = ({
   // nothing (it is already selected).
   const otherKeyInfos = isHotWallet ? keyInfos.filter(k => k.id !== selectedKeyInfo?.id) : keyInfos;
   const pockets = useStore(useShallow(activePockets));
-  const activeAccount = useStore(activeAccountIndex);
-  const selectPocket = useStore(s => s.pockets.select);
+  const target = pocketTarget(useStore(selectActiveNetwork));
+  const activeAccount = useStore(target.active);
   const renamePocket = useStore(s => s.pockets.rename);
   const renameKeyRing = useStore(selectRenameKeyRing);
   const owner = selectedKeyInfo ? pocketOwner(selectedKeyInfo) : undefined;
   const [activeBalanceZat, setActiveBalanceZat] = useState<bigint>();
 
   useEffect(() => {
-    if (!open || !isHotWallet || !selectedKeyInfo) {
+    if (!open || !isHotWallet || !selectedKeyInfo || !target.balance) {
       return;
     }
     let cancelled = false;
-    getBalanceInWorker('zcash', pocketStoreId(selectedKeyInfo.id, activeAccount))
+    target
+      .balance(selectedKeyInfo.id, activeAccount)
       .then(bal => {
         if (!cancelled) {
-          setActiveBalanceZat(BigInt(bal));
+          setActiveBalanceZat(bal);
         }
       })
       .catch(() => {
@@ -152,7 +183,7 @@ export const AccountsSheet = ({
     return () => {
       cancelled = true;
     };
-  }, [open, isHotWallet, selectedKeyInfo, activeAccount]);
+  }, [open, isHotWallet, selectedKeyInfo, activeAccount, target]);
 
   const pickWallet = (id: string) => {
     if (id !== selectedKeyInfo?.id) {
@@ -165,7 +196,7 @@ export const AccountsSheet = ({
     if (!owner) {
       return;
     }
-    void selectPocket(owner, account);
+    void target.pick(useStore.getState(), owner, account);
     onOpenChange(false);
   };
 
@@ -223,7 +254,7 @@ export const AccountsSheet = ({
               name={p.name}
               account={p.account}
               active={p.account === activeAccount}
-              balanceZat={activeBalanceZat}
+              balanceZat={target.balance && activeBalanceZat}
               onPick={() => pickPocket(p.account)}
               onRename={() =>
                 owner && onNewPocket({ name: p.name, save: n => renamePocket(owner, p.account, n) })

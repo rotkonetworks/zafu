@@ -17,6 +17,7 @@ const PREF_KEYS = [
   'approvalsInSidePanel',
   'zidDiscovery',
   'hiddenTransparentChains',
+  'penumbraTotalIn',
 ] as const;
 
 type PrefKey = (typeof PREF_KEYS)[number];

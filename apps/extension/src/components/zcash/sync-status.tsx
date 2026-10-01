@@ -7,7 +7,7 @@ import { blockToDate, dateToBlock, formatDateInput } from '../../utils/zcash-blo
 import { isSidePanel, isDedicatedWindow } from '../../utils/popup-detection';
 
 /**
- * The zcash sync strip under the header (board HomeSync): 32px of progress
+ * The sync strip under the header (board HomeSync): 32px of progress
  * while the wallet is not caught up, or a 44px notice in its place - offline,
  * a node that isn't answering, a witness rebuild (boards StOffline, ErrNode,
  * StWitness). Tapping it opens a sheet with the heights, the raw error and
@@ -32,7 +32,8 @@ export interface SyncStatusProps {
   targetHeight: number;
   startBlock: number;
   notice?: SyncNotice;
-  onRescan: (height: number) => void;
+  /** a chain that can be read again from a date (zcash); absent hides it */
+  onRescan?: (height: number) => void;
 }
 
 /** humanize a remaining-time estimate; empty when not worth showing */
@@ -103,7 +104,7 @@ export const SyncStatus = ({
           {warn ? (
             <span className='size-2 shrink-0 bg-warn' />
           ) : (
-            <span className='i-zafu-enso size-3.5 shrink-0 text-zigner-gold' />
+            <span className='i-zafu-enso size-3.5 shrink-0 text-network-accent' />
           )}
           <span className={notice ? 'line-clamp-2 leading-snug text-fg' : 'truncate text-fg'}>
             {notice?.text ?? (connecting ? 'connecting' : 'syncing')}
@@ -125,7 +126,7 @@ export const SyncStatus = ({
         )}
         {!notice && !connecting && (
           <span
-            className='absolute bottom-[-1px] left-0 h-0.5 bg-zigner-gold transition-[width] duration-500'
+            className='absolute bottom-[-1px] left-0 h-0.5 bg-network-accent transition-[width] duration-500'
             style={{ width: `${Math.max(pct, 2)}%` }}
           />
         )}
@@ -138,10 +139,13 @@ export const SyncStatus = ({
           currentHeight={currentHeight}
           targetHeight={targetHeight}
           startBlock={startBlock}
-          onRescan={h => {
-            setOpen(false);
-            onRescan(h);
-          }}
+          onRescan={
+            onRescan &&
+            (h => {
+              setOpen(false);
+              onRescan(h);
+            })
+          }
         />
       </Sheet>
     </>
@@ -158,7 +162,7 @@ const SyncDetail = ({
 }: Pick<SyncStatusProps, 'currentHeight' | 'targetHeight' | 'startBlock'> & {
   error?: string;
   errorDetail?: string;
-  onRescan: (h: number) => void;
+  onRescan?: (h: number) => void;
 }) => {
   const [date, setDate] = useState(() => dateOfBlock(startBlock));
   const [showDetail, setShowDetail] = useState(false);
@@ -175,10 +179,12 @@ const SyncDetail = ({
             {targetHeight > 0 && ` of ${targetHeight.toLocaleString()}`}
           </span>
         </div>
-        <label className='flex h-12 items-center justify-between gap-3 px-3.5'>
-          <span className='text-fg-muted'>starts from</span>
-          <RescanDateInput value={date} onChange={setDate} />
-        </label>
+        {onRescan && (
+          <label className='flex h-12 items-center justify-between gap-3 px-3.5'>
+            <span className='text-fg-muted'>starts from</span>
+            <RescanDateInput value={date} onChange={setDate} />
+          </label>
+        )}
       </div>
 
       {error && (
@@ -201,19 +207,22 @@ const SyncDetail = ({
         </div>
       )}
 
-      <Button
-        variant='secondary'
-        disabled={!rescanHeightOk(rescanAt)}
-        onClick={() => onRescan(rescanAt)}
-      >
-        sync again from {isNaN(rescanAt) ? 'a date' : `block ${rescanAt.toLocaleString()}`}
-      </Button>
-
-      <span className='text-label text-fg-dim'>
-        {persists
-          ? 'scanning continues while this stays open'
-          : 'the scan pauses when the popup closes and resumes where it left off'}
-      </span>
+      {onRescan && (
+        <>
+          <Button
+            variant='secondary'
+            disabled={!rescanHeightOk(rescanAt)}
+            onClick={() => onRescan(rescanAt)}
+          >
+            sync again from {isNaN(rescanAt) ? 'a date' : `block ${rescanAt.toLocaleString()}`}
+          </Button>
+          <span className='text-label text-fg-dim'>
+            {persists
+              ? 'scanning continues while this stays open'
+              : 'the scan pauses when the popup closes and resumes where it left off'}
+          </span>
+        </>
+      )}
     </div>
   );
 };

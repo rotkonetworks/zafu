@@ -3,7 +3,6 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useStore } from '../../../state';
-import { privacySelector } from '../../../state/privacy';
 import { contactsSelector } from '../../../state/contacts';
 import { selectEffectiveKeyInfo, keyRingSelector } from '../../../state/keyring';
 import { selectActiveZcashWallet } from '../../../state/wallets';
@@ -26,21 +25,17 @@ import { IRONWOOD_MIGRATION, nu63ActivationHeight } from '../../../config/featur
 import { rescanStartHeight } from '../../../utils/zcash-blocks';
 import { rescanZcash, retryZcashSync } from '../../../services/zcash-resync';
 import { IronwoodMigrate } from '../send/ironwood-migrate';
-import { cn } from '@repo/ui/lib/utils';
-import { SyncStatus, type SyncStatusProps } from '../../../components/zcash/sync-status';
-import { syncNotice } from '../../../components/zcash/sync-notice';
-import type { SyncFailure } from '../../../state/sync-failure';
-import { useOnline } from '../../../hooks/use-online';
-import { useRebuildLeft, useRebuildSince } from '../../../state/witness-rebuild';
-import { useTxOps } from '../../../tx-ops/use-tx-ops';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { Button } from '@repo/ui/components/ui/button';
 import { fmtZecHero } from './format';
-import { BalanceFigure } from './balance-figure';
-import { HomeActions } from './actions';
 import { HistoryContent, AskHistorySheet } from './history';
+import { HOME_LOOK } from './look';
+import { SyncStrip } from '../../../components/wallet/sync-strip';
+import { EmptyBox, HomeScreen } from './home-screen';
+import { BalanceGroup, BalanceRow, Tile } from '../../../components/wallet/balance-rows';
+import type { BalanceView } from '../../../components/wallet/balance-hero';
 import { MultisigOverview } from './multisig-overview';
 
 const zec = (zat: bigint) => fmtZecHero(Number(zat) / 1e8);
@@ -59,81 +54,6 @@ const PENDING_VERB: Record<NonNullable<HistoryEntry['kind']>, string> = {
   send: 'sending',
   shield: 'shielding',
   migrate: 'moving to ironwood',
-};
-
-/** a pool row: tile, name over a quiet tag, amount, optional action */
-const PoolRow = ({
-  tile,
-  label,
-  tag,
-  amount,
-  onPress,
-  action,
-}: {
-  tile: ReactNode;
-  label: string;
-  tag: ReactNode;
-  amount: bigint;
-  onPress?: () => void;
-  action?: ReactNode;
-}) => (
-  <div className='flex h-[58px] items-center gap-3 bg-elev-1 px-3 transition-colors hover:bg-elev-2'>
-    <button
-      type='button'
-      onClick={onPress}
-      disabled={!onPress}
-      className='flex min-w-0 flex-1 items-center gap-3 text-left'
-    >
-      {tile}
-      <span className='flex min-w-0 flex-1 flex-col gap-[3px]'>
-        <span className='text-sm text-fg-high'>{label}</span>
-        {tag}
-      </span>
-      <Sensitive className='shrink-0 text-sm text-fg-high tabular'>{zec(amount)}</Sensitive>
-    </button>
-    {action}
-  </div>
-);
-
-/**
- * The strip's own subscriptions (network, a running witness rebuild, the
- * tracker) live here, so a change re-renders the strip and not the screen.
- * A rebuild counts only while a zcash send it belongs to is still pending.
- */
-const SyncStrip = ({
-  synced,
-  failure,
-  onRetry,
-  ...sync
-}: Omit<SyncStatusProps, 'notice'> & {
-  synced: boolean;
-  failure: SyncFailure | null;
-  onRetry: () => void;
-}) => {
-  const navigate = useNavigate();
-  const online = useOnline();
-  const sending = useTxOps().some(op => op.network === 'zcash' && op.status === 'pending');
-  const rebuildLeft = useRebuildLeft(useRebuildSince());
-  const spec = syncNotice({ online, rebuildLeft: sending ? rebuildLeft : undefined, failure });
-  if (synced && !spec) {
-    return null;
-  }
-  const run = {
-    settings: () => navigate(`${PopupPath.SETTINGS_NETWORKS}?network=zcash`),
-    reload: () => window.location.reload(),
-    retry: onRetry,
-  };
-  return (
-    <SyncStatus
-      {...sync}
-      notice={
-        spec && {
-          ...spec,
-          action: spec.action && { label: spec.action.label, onClick: run[spec.action.kind] },
-        }
-      }
-    />
-  );
 };
 
 /** zcash home: sync strip, hero balance, actions, in-flight, pools, activity */
@@ -158,7 +78,6 @@ export const ZcashContent = ({
     failure: syncFailure,
   } = useZcashSyncStatus();
   const navigate = useNavigate();
-  const online = useOnline();
 
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   // the turnstile migration is an ironwood build on the zigner QR: offered
@@ -174,7 +93,6 @@ export const ZcashContent = ({
   const keyRing = useStore(keyRingSelector);
   const { requestAuth, PasswordModal } = usePasswordGate();
   // hooks stay above the no-wallet early return below
-  const { settings: privacySettings, setSetting: setPrivacySetting } = useStore(privacySelector);
   const { findByAddress } = useStore(contactsSelector);
   const [shieldOpen, setShieldOpen] = useState(false);
 
@@ -296,11 +214,7 @@ export const ZcashContent = ({
   // server's own pipeline says nothing about this wallet's balance.
   const overallPct = caughtUp ? 100 : Math.min(100, (scanProgress / scanRange) * 100);
 
-  // What the hero figure is allowed to claim:
-  //   loading - not read yet; error - the read failed, nothing to fall back on;
-  //   unknown - zero while still scanning ("nothing found YET");
-  //   partial - positive while scanning (a floor); ready - scanned to the tip.
-  const balanceView: 'loading' | 'error' | 'unknown' | 'partial' | 'ready' =
+  const balanceView: BalanceView =
     balanceState === 'error' && totalZat === 0n
       ? 'error'
       : balanceState === 'loading' && totalZat === 0n
@@ -347,177 +261,117 @@ export const ZcashContent = ({
     addr && (findByAddress(addr)?.contact.name ?? `${addr.slice(0, 8)}…${addr.slice(-4)}`);
 
   return (
-    <div className='flex min-h-full flex-col overflow-x-hidden'>
+    <HomeScreen
+      look={HOME_LOOK.zcash}
+      strip={
+        <SyncStrip
+          network='zcash'
+          rebuilds
+          synced={allSynced}
+          failure={syncError ? syncFailure : null}
+          percent={overallPct}
+          connecting={chainHeight <= 0}
+          currentHeight={workerSyncHeight}
+          targetHeight={chainHeight}
+          startBlock={effectiveBirthday}
+          onRetry={retry}
+          onRescan={h => setRescanConfirmHeight(rescanStartHeight(h))}
+        />
+      }
+      view={balanceView}
+      amount={zec(totalZat)}
+      spendable={totalZat > 0n}
+      watermark={!empty}
+    >
       {PasswordModal}
-      <SyncStrip
-        synced={allSynced}
-        failure={syncError ? syncFailure : null}
-        percent={overallPct}
-        connecting={chainHeight <= 0}
-        currentHeight={workerSyncHeight}
-        targetHeight={chainHeight}
-        startBlock={effectiveBirthday}
-        onRetry={retry}
-        onRescan={h => setRescanConfirmHeight(rescanStartHeight(h))}
-      />
-
-      <div className='flex flex-1 flex-col gap-6 px-4 pb-4 pt-6'>
-        <section className='relative flex flex-col gap-[18px]'>
-          {!empty && (
-            <span
-              aria-hidden='true'
-              className='i-zafu-enso pointer-events-none absolute -right-[54px] -top-[46px] size-[210px] text-network-accent opacity-[0.09]'
-            />
-          )}
-          <div className='flex flex-col gap-1.5'>
-            <div className='flex h-5 items-center gap-1.5'>
-              <span className='text-xs tracking-[0.04em] text-fg-muted'>total balance</span>
-              {/* the global hide-balances control, same state as settings >
-                  privacy - shown once there is a figure to hide */}
-              {(balanceView === 'ready' || balanceView === 'partial') && (
-                <button
-                  onClick={() =>
-                    void setPrivacySetting('hideBalances', !privacySettings.hideBalances)
-                  }
-                  aria-label={privacySettings.hideBalances ? 'show balances' : 'hide balances'}
-                  className='grid size-5 place-items-center text-fg-muted hover:text-fg-high'
-                >
-                  <span
-                    className={cn(
-                      'size-3.5',
-                      privacySettings.hideBalances ? 'i-lucide-eye-off' : 'i-lucide-eye',
-                    )}
-                  />
-                </button>
-              )}
-            </div>
-            <BalanceFigure view={balanceView} zec={Number(totalZat) / 1e8} />
-            {!online && balanceView !== 'loading' && (
-              <span className='text-[11px] text-fg-dim'>
-                last known · while you still had a connection
-              </span>
+      <InFlightCard>
+        {(inFlight.length > 0 || failedSends.length > 0) && (
+          <>
+            {inFlight.map(t => (
+              <PendingLine
+                key={t.id}
+                tone='gold'
+                icon='i-zafu-enso'
+                title={
+                  <>
+                    {PENDING_VERB[t.kind ?? 'send']}{' '}
+                    <Sensitive className='tabular'>
+                      {zec(zatOf(t.recipientAmount ?? t.amount))}
+                    </Sensitive>
+                    {t.kind !== 'migrate' && t.recipient && ` to ${nameOf(t.recipient)}`}
+                  </>
+                }
+                status='waiting for a block'
+              />
+            ))}
+            {failedSends.length > 0 && (
+              // the inputs were marked spent at broadcast and are held until
+              // the chain is re-read; saying "your funds are back" would be a lie
+              <PendingLine
+                tone='danger'
+                icon='i-ph-warning'
+                title={
+                  failedSends.length === 1
+                    ? 'a payment was not mined in time'
+                    : `${failedSends.length} payments were not mined in time`
+                }
+                status='its zec is held until the chain is read again'
+                // never the chain tip: orchard activation (or the pocket's own
+                // birthday) can never hide a note
+                action={{
+                  label: 'read again',
+                  onClick: () =>
+                    setRescanConfirmHeight(rescanStartHeight(effectiveBirthday || null)),
+                }}
+              />
             )}
-          </div>
-          <HomeActions spendable={totalZat > 0n} />
-        </section>
-
-        <InFlightCard>
-          {(inFlight.length > 0 || failedSends.length > 0) && (
-            <>
-              {inFlight.map(t => (
-                <PendingLine
-                  key={t.id}
-                  tone='gold'
-                  icon='i-zafu-enso'
-                  title={
-                    <>
-                      {PENDING_VERB[t.kind ?? 'send']}{' '}
-                      <Sensitive className='tabular'>
-                        {zec(zatOf(t.recipientAmount ?? t.amount))}
-                      </Sensitive>
-                      {t.kind !== 'migrate' && t.recipient && ` to ${nameOf(t.recipient)}`}
-                    </>
-                  }
-                  status='waiting for a block'
-                />
-              ))}
-              {failedSends.length > 0 && (
-                // the inputs were marked spent at broadcast and are held until
-                // the chain is re-read; saying "your funds are back" would be a lie
-                <PendingLine
-                  tone='danger'
-                  icon='i-ph-warning'
-                  title={
-                    failedSends.length === 1
-                      ? 'a payment was not mined in time'
-                      : `${failedSends.length} payments were not mined in time`
-                  }
-                  status='its zec is held until the chain is read again'
-                  // never the chain tip: orchard activation (or the pocket's own
-                  // birthday) can never hide a note
-                  action={{
-                    label: 'read again',
-                    onClick: () =>
-                      setRescanConfirmHeight(rescanStartHeight(effectiveBirthday || null)),
-                  }}
-                />
-              )}
-            </>
-          )}
-        </InFlightCard>
-
-        {messageSlot}
-
-        {reading || balanceView === 'error' ? null : empty ? (
-          <section className='flex flex-1 flex-col items-center justify-center gap-3.5 border border-dashed border-surface-border py-10'>
-            <span className='font-display text-xl text-fg-high'>no zec yet</span>
-            <div className='flex gap-2'>
-              <Button
-                className='h-10 px-[18px] text-[13px]'
-                onClick={() => navigate(PopupPath.RECEIVE)}
-              >
-                receive zec
-              </Button>
-              <Button
-                variant='secondary'
-                className='h-10 px-[18px] text-[13px]'
-                onClick={() => navigate(PopupPath.SWAP)}
-              >
-                swap into zec
-              </Button>
-            </div>
-          </section>
-        ) : (
-          <section className='flex flex-col gap-2'>
-            <h2 className='text-xs tracking-[0.04em] text-fg-muted'>balances</h2>
-            <div className='flex flex-col divide-y divide-border-soft border border-border-soft'>
-              <PoolRow
-                tile={
-                  <span className='grid size-[30px] shrink-0 place-items-center bg-network-accent text-[15px] text-zigner-gold-foreground'>
-                    z
-                  </span>
-                }
-                label='shielded'
-                tag={
-                  <span className='flex items-center gap-1 text-[11px] text-fg-muted'>
-                    <span className='i-lucide-shield size-[11px]' />
-                    private
-                  </span>
-                }
-                amount={shieldedTotal}
-                onPress={openPoolNotes('ironwood')}
-              />
-              <PoolRow
-                tile={
-                  <span className='grid size-[30px] shrink-0 place-items-center border border-warn text-[15px] text-warn'>
-                    t
-                  </span>
-                }
-                label='transparent'
-                tag={<span className='text-[11px] text-warn'>public</span>}
-                amount={transparentZat}
-                onPress={openPoolNotes('transparent')}
-                action={
-                  transparentZat > 0n && (
-                    <Button
-                      variant='secondary'
-                      size='sm'
-                      className='shrink-0 border-surface-border text-network-accent'
-                      onClick={() => setShieldOpen(true)}
-                    >
-                      shield
-                    </Button>
-                  )
-                }
-              />
-            </div>
-          </section>
+          </>
         )}
+      </InFlightCard>
 
-        <MultisigOverview />
+      {messageSlot}
 
-        <HistoryContent network='zcash' penumbraAccount={0} limit={3} />
-      </div>
+      {reading || balanceView === 'error' ? null : empty ? (
+        <EmptyBox look={HOME_LOOK.zcash} />
+      ) : (
+        <BalanceGroup heading={HOME_LOOK.zcash.heading}>
+          <BalanceRow
+            tile={<Tile tone='accent'>z</Tile>}
+            label='shielded'
+            tag={
+              <span className='flex items-center gap-1 text-[11px] text-fg-muted'>
+                <span className='i-lucide-shield size-[11px]' />
+                private
+              </span>
+            }
+            amount={zec(shieldedTotal)}
+            onPress={openPoolNotes('ironwood')}
+          />
+          <BalanceRow
+            tile={<Tile tone='warn'>t</Tile>}
+            label='transparent'
+            tag={<span className='text-[11px] text-warn'>public</span>}
+            amount={zec(transparentZat)}
+            onPress={openPoolNotes('transparent')}
+            action={
+              transparentZat > 0n && (
+                <Button
+                  variant='secondary'
+                  size='sm'
+                  className='shrink-0 border-surface-border text-network-accent'
+                  onClick={() => setShieldOpen(true)}
+                >
+                  shield
+                </Button>
+              )
+            }
+          />
+        </BalanceGroup>
+      )}
+
+      <MultisigOverview />
+
+      <HistoryContent network='zcash' penumbraAccount={0} limit={3} />
 
       {/* the shield flow (hot one-tap or zigner QR) rises in a sheet - the
           transparent row never grows */}
@@ -597,6 +451,6 @@ export const ZcashContent = ({
           }
         />
       )}
-    </div>
+    </HomeScreen>
   );
 };
