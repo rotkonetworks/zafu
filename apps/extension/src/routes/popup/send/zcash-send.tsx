@@ -714,7 +714,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           // few logical actions. A slightly-high fee still confirms.
           const feeZat = 20000n;
           setFee(fmtZecShort(feeZat));
-          await runLedgerRound(async () => {
+          await runLedgerRound(async onSigned => {
             setStep('ledger-sign');
             const transport = await connectLedgerBtc();
             // a pending read never settles on unplug; the transport's own
@@ -737,11 +737,17 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     mainnet,
                     blockHeight: sendChainHeight,
                   },
-                  { fetchUtxos: getTransparentUtxosInWorker, broadcast: broadcastRawTxInWorker },
+                  {
+                    fetchUtxos: getTransparentUtxosInWorker,
+                    // the device has signed by the time the flow broadcasts
+                    broadcast: (...args) => {
+                      onSigned();
+                      return broadcastRawTxInWorker(...args);
+                    },
+                  },
                 ),
                 unplugged,
               ]);
-              setStep('broadcast');
               finish(txid);
             } finally {
               await transport.close().catch(() => undefined);

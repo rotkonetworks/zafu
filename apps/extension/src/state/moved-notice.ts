@@ -30,9 +30,9 @@ const cmpVersion = (a: string, b: string) => {
   return 0;
 };
 
-/** whether someone who last saw `seen` is told what moved */
-export const showMoved = (seen: unknown) =>
-  typeof seen === 'string' && cmpVersion(seen, LAST_BEFORE_MOVES) <= 0;
+/** whether someone who last saw `seen`, now on `current`, is told what moved */
+export const showMoved = (seen: unknown, current: string) =>
+  typeof seen === 'string' && seen !== current && cmpVersion(seen, LAST_BEFORE_MOVES) <= 0;
 
 /** the service worker's half: remember which release the person came from */
 export const stampSeenVersion = async (reason: string, previousVersion?: string) => {

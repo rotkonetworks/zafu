@@ -36,7 +36,7 @@ export const AppHeader = () => {
   // the first open after the redesign update says what moved, once
   useEffect(() => {
     void chrome.storage.local.get(LAST_SEEN_VERSION).then(r => {
-      if (showMoved(r[LAST_SEEN_VERSION])) {
+      if (showMoved(r[LAST_SEEN_VERSION], chrome.runtime.getManifest().version)) {
         setOpenSheet(open => open ?? 'moved');
       }
     });
