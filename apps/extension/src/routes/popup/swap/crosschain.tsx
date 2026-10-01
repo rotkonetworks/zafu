@@ -793,7 +793,8 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
                 onClick={() => void confirm()}
                 disabled={!riskAcknowledged || expired}
               >
-                {isFromZec ? 'confirm & send' : 'show deposit address'}
+                {/* a memo deposit has its own reviews next; nothing is signed here */}
+                {isFromZec ? (quote.memo ? 'continue' : 'confirm & send') : 'show deposit address'}
               </Button>
             </div>
           </Sheet>

@@ -5101,7 +5101,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const pendSent = await idbGetAllByIndex<SentTxRecord>('sent', 'byWallet', walletId);
         const pendResult = reconcileSentTxs({
           chainTxs: pendChainTxs,
-          sent: pendSent,
+          // the scan never sees a transparent-only tx, so from local state one
+          // is never failed; get-history asks the node and decides
+          sent: pendSent.map(s => (s.pool === 'transparent' ? { ...s, expiryHeight: 0 } : s)),
           scannedHeight: await getSyncHeight(walletId),
         });
         workerSelf.postMessage({
