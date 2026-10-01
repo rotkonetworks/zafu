@@ -49,7 +49,7 @@ const STYLE: Record<Custody, { icon: string; tint: string; title: string }> = {
   },
   cold: {
     icon: 'i-zafu-kori',
-    tint: 'text-zafu-blue bg-zafu-blue/10',
+    tint: 'text-device-blue bg-device-blue/10',
     title: 'cold - the spending key never touches this browser; signing happens on your device',
   },
   shared: {

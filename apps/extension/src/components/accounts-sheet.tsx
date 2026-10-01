@@ -34,7 +34,7 @@ const CUSTODY_META: Record<Custody, string> = {
 
 const CUSTODY_ICON: Record<Custody, string> = {
   hot: 'i-zafu-hi text-zigner-gold',
-  cold: 'i-zafu-kori text-zafu-blue',
+  cold: 'i-zafu-kori text-device-blue',
   shared: 'i-zafu-torii text-fg-muted',
 };
 

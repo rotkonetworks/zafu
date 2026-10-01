@@ -14,14 +14,14 @@ const BRING = [
     shown: true,
   },
   {
-    icon: 'i-zafu-kori text-fg-muted',
+    icon: 'i-zafu-kori text-device-blue',
     label: 'zigner or keystone',
     hint: 'scan its connect code',
     to: PagePath.IMPORT_ZIGNER,
     shown: true,
   },
   {
-    icon: 'i-ph-usb text-fg-muted',
+    icon: 'i-ph-usb text-device-blue',
     label: 'ledger',
     hint: 'plug in over usb',
     to: PagePath.CONNECT_LEDGER,

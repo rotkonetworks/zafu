@@ -54,6 +54,12 @@
     --zafu-blue: #3b82f6;
     --zafu-blue-light: #60a5fa;
 
+    /* device blue - cold custody (zigner, keystone, ledger). A different
+     * blue from the hot zafu-blue above: steel, not electric, for metal in
+     * hand rather than a connection in software. */
+    --device-blue: #7fb3d5;
+    --device-blue-line: #2a3a44;
+
     /* spacing */
     --space-1: 4px;
     --space-2: 8px;
@@ -180,6 +186,8 @@
     --zafu-blue-dark: #1e3a8a;
     --zafu-blue: #1d4ed8;
     --zafu-blue-light: #2563eb;
+    --device-blue: #386a8d;
+    --device-blue-line: #bcd0de;
     --zigner-gold-light: #b8860b;
     --zigner-gold-dark: #6b4e06;
     --zigner-gold-foreground: #f6efe2;
