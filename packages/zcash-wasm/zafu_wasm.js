@@ -170,8 +170,10 @@ export class SpendKeys {
         }
     }
     /**
-     * Sign an unsigned shielding tx (raw V5 or PCZT carrier) whose every input
-     * is locked to transparent address `index`, and return the signed tx hex.
+     * Sign an unsigned tx with transparent inputs (a shielding tx as raw V5 or
+     * PCZT, or a t->t PCZT from `build_unsigned_transparent_transaction`) whose
+     * every input is locked to transparent address `index`, and return the
+     * signed tx hex.
      * `sighashes_json` is the builder's `sighashes` array; the PCZT completion
      * re-verifies each signature against the carrier's own sighash.
      * @param {number} index
@@ -1223,6 +1225,50 @@ export function build_unsigned_transaction(ufvk_str, notes_json, recipient, amou
         throw takeFromExternrefTable0(ret[1]);
     }
     return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Build an UNSIGNED t->t transaction from public data only: the UTXOs of one
+ * address and its 33-byte compressed `pubkey_hex`. Outputs are
+ * [recipient, OP_RETURN(`null_data_hex`, at most 80 bytes), change to the same
+ * address]. Returns JSON
+ * `{sighashes, unsigned_tx_hex, inputs, total_in, fee, change, short}`, where
+ * `unsigned_tx_hex` is a PCZT for `SpendKeys.sign_shielding`.
+ * @param {string} utxos_json
+ * @param {string} pubkey_hex
+ * @param {string} recipient
+ * @param {bigint} amount
+ * @param {number} target_height
+ * @param {number} expected_branch_id
+ * @param {boolean} mainnet
+ * @param {string | null} [null_data_hex]
+ * @returns {string}
+ */
+export function build_unsigned_transparent_transaction(utxos_json, pubkey_hex, recipient, amount, target_height, expected_branch_id, mainnet, null_data_hex) {
+    let deferred6_0;
+    let deferred6_1;
+    try {
+        const ptr0 = passStringToWasm0(utxos_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(pubkey_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        var ptr3 = isLikeNone(null_data_hex) ? 0 : passStringToWasm0(null_data_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len3 = WASM_VECTOR_LEN;
+        const ret = wasm.build_unsigned_transparent_transaction(ptr0, len0, ptr1, len1, ptr2, len2, amount, target_height, expected_branch_id, mainnet, ptr3, len3);
+        var ptr5 = ret[0];
+        var len5 = ret[1];
+        if (ret[3]) {
+            ptr5 = 0; len5 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred6_0 = ptr5;
+        deferred6_1 = len5;
+        return getStringFromWasm0(ptr5, len5);
+    } finally {
+        wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
+    }
 }
 
 /**
@@ -2738,6 +2784,39 @@ export function pir_fetch_imt_proofs(pir_base_url, nullifiers_json, js_fetch) {
 }
 
 /**
+ * Plan a t->t spend from an address's UTXOs (`[{txid, vout, value, script}]`)
+ * without any key: what the review shows. Returns JSON
+ * `{inputs, total_in, fee, change, short}`; `short > 0` means the address
+ * needs that much more first.
+ * @param {string} utxos_json
+ * @param {bigint} amount
+ * @param {string | null} [null_data_hex]
+ * @returns {string}
+ */
+export function plan_transparent_transaction(utxos_json, amount, null_data_hex) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(utxos_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(null_data_hex) ? 0 : passStringToWasm0(null_data_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ret = wasm.plan_transparent_transaction(ptr0, len0, amount, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
  * Compact a PCZT for transmission to a signer by redacting per-action cv_net,
  * v6 bundle anchors, output cmx, and replacing enc_ciphertext with memo plaintext
  * (trimmed to last nonzero byte). Builds on the existing signer redaction.
@@ -3664,12 +3743,12 @@ function __wbg_get_imports(memory) {
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3700, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3702, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue__core_8266185441cb29e1___result__Result_____wasm_bindgen_aeea2c632802c019___JsError___true_);
             return ret;
         },
         __wbindgen_cast_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3702, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3704, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___futures__task__wait_async_polyfill__MessageEvent______true_);
             return ret;
         },

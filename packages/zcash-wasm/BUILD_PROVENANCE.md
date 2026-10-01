@@ -94,6 +94,40 @@ Reproduce by checking out the zcli rev below and running the commands.
 Verify: rebuild from the rev, sha256sum the outputs,
 diff against the values above. A mismatch means the vendored blob is stale.
 
+## 2026-10-02 rebuild - unsigned t->t with an OP_RETURN (THORChain deposits)
+
+- source repo: zcli, branch `feat/thor-op-return` (from
+  `feat/seed-sign-in-worker` f94dd39, the rev of the blob it replaces), rev
+  `8923975`. One change: `src/transparent_send.rs`.
+- new (public data only, nothing takes a key):
+  `plan_transparent_transaction(utxos_json, amount, null_data_hex)` ->
+  `{inputs, total_in, fee, change, short}`, and
+  `build_unsigned_transparent_transaction(utxos_json, pubkey_hex, recipient,
+amount, target_height, expected_branch_id, mainnet, null_data_hex)` -> the
+  plan plus `{sighashes, unsigned_tx_hex}` (a V5 PCZT, outputs [recipient,
+  OP_RETURN, change to the same address], ZIP-317 fee). Signed in the worker
+  with the existing `SpendKeys.sign_shielding` (doc widened, API unchanged).
+- `.d.ts` diff against the previous blob: the two exports above and the
+  `sign_shielding` doc comment; nothing removed or changed.
+- `cargo test -p zafu-wasm --lib --tests --release`: all green, including the
+  new `tests/transparent_op_return.rs`; the ignored
+  `tests/regtest_transparent_op_return.rs` mined the deposit on zebrad 6.2.3
+  regtest (NU6.3 from block 1) as a V5 tx at exactly the ZIP-317 fee.
+- toolchain: nightly `rustc 1.95.0-nightly (6a979b3e3 2026-02-26)`,
+  wasm-bindgen CLI 0.2.126, wasm-opt (binaryen) version 130
+  (`/nix/store/azhmf1il8da9pps80bk2f4l6ql6bgfg7-binaryen-130`); recipe as in
+  the parallel section above.
+- parallel variant only, copied to both `packages/zcash-wasm/` and
+  `apps/extension/public/zafu-wasm/` (glue, `.d.ts`, `_bg.wasm`,
+  `_bg.wasm.d.ts`). The rayon snippet hash is unchanged
+  (`wasm-bindgen-rayon-38edf6e439f6d70d`), so the patched `workerHelpers.js`
+  (`wbgRayonBase` defined and used) was kept as is.
+- size: pre `wasm-opt` 22,008,563 bytes; post `-Oz` 9,955,743 bytes.
+- sha256(parallel zafu_wasm_bg.wasm) =
+  4ed7ef7a18819a610ad51eb4b953ea2369c38d1feabba301e94bc56e7c9fdfce
+- shared imported memory confirmed post-bindgen:
+  `(memory $mimport$0 55 32768 shared)`.
+
 ## 2026-10-01 rebuild (2) - hot sends signed in the worker, proven seed-free
 
 - source repo: zcli, branch `feat/seed-sign-in-worker` (from
