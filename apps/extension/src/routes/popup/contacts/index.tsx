@@ -28,14 +28,13 @@ import {
   setDiversifiedAddresses,
 } from '../../../state/diversified-addresses';
 import { selectActiveZcashWallet, selectMyWalletsAsContacts } from '../../../state/wallets';
-import { ZcashMeOptIn } from '../../../components/zcashme-opt-in';
+import { ZcashMeOptInRow } from '../../../components/zcashme-opt-in';
+import { useExplain } from '../settings/settings-explain';
 
 const NETWORK_LABELS: Record<ContactNetwork, string> = {
   penumbra: 'penumbra',
   zcash: 'zcash',
   cosmos: 'cosmos',
-  polkadot: 'polkadot',
-  kusama: 'kusama',
   ethereum: 'ethereum',
   bitcoin: 'bitcoin',
   solana: 'solana',
@@ -50,8 +49,6 @@ const NETWORK_COLORS: Record<ContactNetwork, string> = {
   penumbra: 'bg-teal-400/20 text-teal-300',
   zcash: 'bg-yellow-500/20 text-yellow-400',
   cosmos: 'bg-blue-500/20 text-blue-400',
-  polkadot: 'bg-pink-500/20 text-pink-400',
-  kusama: 'bg-red-500/20 text-red-400',
   ethereum: 'bg-indigo-500/20 text-indigo-400',
   bitcoin: 'bg-orange-500/20 text-orange-400',
   solana: 'bg-violet-500/20 text-violet-400',
@@ -508,6 +505,7 @@ export function ContactsPage() {
   const keyInfo = useStore(selectEffectiveKeyInfo);
   const zcashWallet = useStore(selectActiveZcashWallet);
   const getMnemonic = useStore(s => s.keyRing.getMnemonic);
+  const { explainProps, sheet: explainSheet } = useExplain();
 
   /** share a contact card with per-contact diversified address + zid */
   const shareContactCard = async (contact: Contact, recipientZcashAddr: string) => {
@@ -830,7 +828,10 @@ export function ContactsPage() {
         </div>
       </div>
 
-      <ZcashMeOptIn reason='find people and name addresses you paid' className='mx-4 mt-2' />
+      <div className='mx-4 mt-2 border border-border-soft'>
+        <ZcashMeOptInRow onExplain={explainProps('zcash.me').onExplain} />
+      </div>
+      {explainSheet}
 
       {/* import status toast */}
       {importStatus && (
