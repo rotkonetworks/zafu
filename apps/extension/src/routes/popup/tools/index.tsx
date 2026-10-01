@@ -29,11 +29,11 @@ export const ToolsPage = () => {
   const go = (path: string) => navigate(path, screenTransition('push'));
 
   const tiles: Tile[] = [
-    identityEnabled && {
-      icon: 'i-ph-password',
-      label: 'passwords',
-      desc: 'sign in with zafu',
-      path: PopupPath.PASSWORDS,
+    hasFeature(activeNetwork, 'zcash') && {
+      icon: 'i-ph-arrows-left-right',
+      label: 'sync to zigner',
+      desc: 'zcash',
+      path: PopupPath.NOTE_SYNC,
     },
     hasFeature(activeNetwork, 'vote') && {
       icon: 'i-zafu-sensu',
@@ -69,17 +69,17 @@ export const ToolsPage = () => {
   ].filter(Boolean) as Tile[];
 
   const everywhere: Tile[] = [
+    identityEnabled && {
+      icon: 'i-ph-password',
+      label: 'passwords',
+      desc: '',
+      path: PopupPath.PASSWORDS,
+    },
     {
       icon: 'i-ph-plug',
       label: 'connected sites',
       desc: '',
       path: PopupPath.SETTINGS_CONNECTED_SITES,
-    },
-    hasFeature(activeNetwork, 'zcash') && {
-      icon: 'i-ph-arrows-left-right',
-      label: 'sync to zigner',
-      desc: '',
-      path: PopupPath.NOTE_SYNC,
     },
   ].filter(Boolean) as Tile[];
 
