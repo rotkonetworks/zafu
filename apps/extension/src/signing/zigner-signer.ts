@@ -64,12 +64,8 @@
  *
  * ========================================================================
  *
- * This module is fully self-contained and UNWIRED: nothing imports it yet. It is
- * the target for a LATER zcash-send.tsx migration that will thread this Deferred
- * through the signing surface in place of the hand-rolled
- * build+display / handlePcztSignatureScanned two-phase flow. Migrating touches a
- * working mainnet path, so it is a deliberate, separately-verified step - not
- * done here.
+ * Wired: zcash-send.tsx's zigner arm parks on `signAndBroadcast` with this
+ * signer, and handlePcztSignatureScanned resolves it via `deliver`.
  */
 
 import type { ExternalSigner, SignRequest, SignResult } from './external-signer';

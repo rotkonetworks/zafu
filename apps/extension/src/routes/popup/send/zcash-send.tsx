@@ -27,14 +27,12 @@ import { activeZcashStoreId } from '../../../state/pockets';
 import {
   buildSendTxInWorker,
   buildSendTxPcztInWorker,
-  completeSendTxInWorker,
   completeOrchardPcztInWorker,
   applySignatureContributionsInWorker,
   type SignatureContribution,
   getBalanceInWorker,
   getTransparentUtxosInWorker,
   broadcastRawTxInWorker,
-  type SendTxUnsignedResult,
   type SendTxPcztUnsignedResult,
 } from '../../../state/keyring/network-worker';
 import { usePoolNotes } from '../../../hooks/zcash-pool-balances';
@@ -43,7 +41,6 @@ import { nu63ActivationHeight } from '../../../config/feature-flags';
 import { maxSendable, quoteSend } from './spendable';
 import { Button } from '@repo/ui/components/ui/button';
 import { HankoSeal } from '@repo/ui/components/editorial';
-import { QrDisplay } from '../../../shared/components/qr-display';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
@@ -72,7 +69,6 @@ import { isPopup } from '../../../utils/popup-detection';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { formatZecAmount, isZip321Uri, parseZip321 } from '@repo/wallet/networks/zcash/zip321';
-import { isZcashSignatureQR, parseZcashSignatureResponse, bytesToHex } from '@repo/wallet/networks'; // self-contained 4-step zigner-mediated multisig sign
 
 import { unwrapCborSinglePczt, parsePreludeSinglePcztResponse } from './zcash-send-cbor-helpers';
 import {
@@ -199,7 +195,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     error: signingError,
     startSigning,
     startScanning,
-    processSignature,
     complete,
     setError,
     reset,
@@ -348,13 +343,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     // once, on open
   }, []);
   const [formError, setFormError] = useState<string | null>(null);
-  // legacy single-QR signing path (kept for non-PCZT consumers); the PCZT
-  // path uses pcztSignFrames + AnimatedQrDisplay below. Once every flow is
-  // migrated to PCZT we can drop this entirely.
-  const [signRequestQr] = useState<string | null>(null);
-  // PCZT-mode sign request (zigner single-signer). When set, the sign step
-  // shows AnimatedQrDisplay instead of the legacy single QR, and the scan
-  // step uses AnimatedQrScanner with `ur:zcash-pczt` filter.
+  // zigner sign request: the animated UR frames the sign step shows; the scan
+  // step reads the signed reply with AnimatedQrScanner.
   const [pcztSignFrames, setPcztSignFrames] = useState<string[] | null>(null);
   // Fill the sign surface with as large a QR as fits, so a phone camera can lock.
   const qrSize = useResponsiveQrSize();
@@ -397,9 +387,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     address: string;
   } | null>(null);
   const [showQrScanner, setShowQrScanner] = useState(false);
-  const unsignedTxRef = useRef<SendTxUnsignedResult | null>(null);
-  // airgap FROST multisig now builds a PCZT (gh #17) — separate from the legacy
-  // v5 unsignedTxRef so the cold-sign scan fallback path stays untouched.
+  // airgap FROST multisig builds a PCZT (gh #17)
   const pcztMultisigRef = useRef<SendTxPcztUnsignedResult | null>(null);
   const [sendSteps, setSendSteps] = useState<
     { step: string; detail?: string; elapsedMs: number }[]
@@ -1147,78 +1135,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     startScanning();
   };
 
-  const handleSignatureScanned = useCallback(
-    async (data: string) => {
-      if (!isZcashSignatureQR(data)) {
-        const reason = 'invalid signature qr code';
-        void markPendingFailed(reason);
-        setError(reason);
-        setStep('error');
-        return;
-      }
-
-      try {
-        const sigResponse = parseZcashSignatureResponse(data);
-        console.log('signature received:', {
-          orchardSigs: sigResponse.orchardSigs.length,
-          transparentSigs: sigResponse.transparentSigs.length,
-        });
-
-        processSignature(data);
-        setStep('broadcast');
-
-        if (!unsignedTxRef.current || !selectedKeyInfo) {
-          throw new Error('missing unsigned transaction data');
-        }
-
-        // convert signatures to hex strings for worker
-        const signatures = {
-          orchardSigs: sigResponse.orchardSigs.map(s => bytesToHex(s)),
-          transparentSigs: sigResponse.transparentSigs.map(s => bytesToHex(s)),
-        };
-
-        const result = await completeSendTxInWorker(
-          'zcash',
-          selectedKeyInfo.id,
-          zidecarUrl,
-          unsignedTxRef.current.unsignedTx,
-          signatures,
-          unsignedTxRef.current.spendIndices,
-          // lets the worker mark the spent inputs and record the send; without
-          // it the completion sees only signed bytes
-          unsignedTxRef.current.coldSendId,
-        );
-
-        unsignedTxRef.current = null;
-        void promoteToBroadcasted(result.txid);
-        complete(result.txid);
-        setStep('complete');
-        void recordUsage(recipient, 'zcash');
-        if (shouldSuggestSave(recipient)) {
-          setShowSavePrompt(true);
-        }
-      } catch (err) {
-        unsignedTxRef.current = null;
-        const reason = err instanceof Error ? err.message : 'failed to broadcast transaction';
-        void markPendingFailed(reason);
-        setError(reason);
-        setStep('error');
-      }
-    },
-    [
-      processSignature,
-      complete,
-      setError,
-      selectedKeyInfo,
-      zidecarUrl,
-      recipient,
-      recordUsage,
-      shouldSuggestSave,
-      promoteToBroadcasted,
-      markPendingFailed,
-    ],
-  );
-
   /**
    * PCZT-mode receive handler. The animated scanner has already accumulated
    * `ur:zcash-pczt/...` frames and reconstructed the CBOR-wrapped payload via
@@ -1851,7 +1767,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             <div className='flex flex-col gap-4 p-4 flex-1 overflow-y-auto'>
               {/* QR */}
               <div className='flex justify-center'>
-                {pcztSignFrames && pcztSignFrames.length > 0 ? (
+                {pcztSignFrames && pcztSignFrames.length > 0 && (
                   <AnimatedQrDisplay
                     urFrames={pcztSignFrames}
                     urSource={
@@ -1870,14 +1786,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     title='scan with zafu zigner'
                     description='hold zigner camera steady; multi-frame transfer'
                   />
-                ) : signRequestQr ? (
-                  <QrDisplay
-                    data={signRequestQr}
-                    size={210}
-                    title='scan with zafu zigner'
-                    description='open zafu zigner and scan this qr'
-                  />
-                ) : null}
+                )}
               </div>
 
               {/* tx summary */}
@@ -1935,7 +1844,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       }
 
       case 'scan':
-        return pcztUnsignedRef.current ? (
+        return (
           <div className='flex flex-col h-full'>
             {/* header */}
             <div className='flex items-center gap-2 px-4 py-3 border-b border-border-soft'>
@@ -1973,17 +1882,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               />
             </div>
           </div>
-        ) : (
-          <QrScanner
-            onScan={handleSignatureScanned}
-            onError={err => {
-              setError(err);
-              setStep('error');
-            }}
-            onClose={() => setStep('sign')}
-            title='scan signature'
-            description="point camera at zafu zigner's signature qr code"
-          />
         );
 
       case 'ledger-sign':
