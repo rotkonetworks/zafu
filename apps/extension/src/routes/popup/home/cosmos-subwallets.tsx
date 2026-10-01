@@ -21,7 +21,7 @@ import { useChainCheck, useHiddenChains } from '../../../hooks/cosmos-balance';
 import { ago, type DepositWallet } from '../../../transparent/chain-check';
 import { getActiveIbcSubnetworks } from '../../../config/networks';
 import { useStore } from '../../../state';
-import { selectEffectiveKeyInfo } from '../../../state/keyring';
+import { selectEffectiveKeyInfo, selectEnabledNetworks } from '../../../state/keyring';
 import { RpcPoolSheet } from '../settings/transparent-chain-endpoints';
 import { PopupPath } from '../paths';
 
@@ -200,13 +200,16 @@ const ChainRow = ({ chainId }: { chainId: CosmosChainId }) => {
   );
 };
 
-/** Home: one row per transparent chain the user has not hidden. */
+/** Home: one row per transparent chain the user has turned on and not hidden. */
 export const CosmosSubwallets = () => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const enabledNetworks = useStore(selectEnabledNetworks) as string[];
   const { hidden } = useHiddenChains();
-  // only hot (mnemonic) wallets derive burner addresses here
+  // only hot (mnemonic) wallets derive burner addresses here; a chain the
+  // user has not turned on (settings > networks > penumbra > ibc chains)
+  // gets no row at all
   const chains = (getActiveIbcSubnetworks('penumbra') as CosmosChainId[]).filter(
-    c => COSMOS_CHAINS[c] && !hidden.includes(c),
+    c => COSMOS_CHAINS[c] && enabledNetworks.includes(c) && !hidden.includes(c),
   );
   if (selectedKeyInfo?.type !== 'mnemonic' || chains.length === 0) {
     return null;
