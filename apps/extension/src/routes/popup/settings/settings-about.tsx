@@ -14,7 +14,7 @@ export const SettingsAbout = () => {
             shielded signing
           </span>
           <p className='text-xs text-fg-muted leading-relaxed mt-2'>
-            privacy-first browser wallet for penumbra, zcash, and cosmos IBC chains.
+            privacy-first browser wallet for zcash and penumbra.
           </p>
           <p className='text-xs text-fg-muted mt-1'>
             version{' '}
@@ -25,9 +25,9 @@ export const SettingsAbout = () => {
         <div>
           <h3 className='kicker mb-1'>networks</h3>
           <ul className='text-xs text-fg-muted space-y-0.5'>
-            <li>zcash - orchard + ironwood: encrypted money</li>
-            <li>penumbra - encrypted defi</li>
-            <li>cosmos IBC - noble</li>
+            <li>zcash - shielded zec</li>
+            <li>penumbra - private defi</li>
+            <li>burners - one-time transparent addresses for moving funds in and out</li>
           </ul>
         </div>
 
