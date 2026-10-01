@@ -2,6 +2,8 @@
  * cosmos chain send form (skip-routed transparent sends)
  */
 
+import { ThorNameResolver } from '../../../components/thorname-resolver';
+import { isThorName, thorChainOf } from '../../../services/thorname';
 import { useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from 'react';
 import { Sensitive } from '../../../components/sensitive';
 import { PopupPath } from '../paths';
@@ -719,16 +721,18 @@ export function CosmosSend({
       {verb} <Sensitive>{`${amount} ${unit}`}</Sensitive> to {toLabel}
     </>
   );
-  const toHelper =
-    recipient && !recipientValid
-      ? ethermintRecipient && !ethermintRecipient.ok
-        ? ETHERMINT_RECIPIENT_PROBLEM[ethermintRecipient.problem](ethermintRecipient.prefix)
-        : `that is not a ${isPenumbraDest ? 'penumbra' : 'cosmos'} address · please check it`
-      : ethermintRecipient?.ok && ethermintRecipient.fromHex
-        ? `sends to ${shortAddress(toAddress)}`
-        : sendMode === 'ibc' && detectedChain && !destChainId
-          ? `on ${detectedChain.name}`
-          : toName;
+  const thorChain = thorChainOf('cosmos', effectiveDestChainId);
+  const badRecipient =
+    !!recipient && !recipientValid && !(thorChain && isThorName(recipient.trim()));
+  const toHelper = badRecipient
+    ? ethermintRecipient && !ethermintRecipient.ok
+      ? ETHERMINT_RECIPIENT_PROBLEM[ethermintRecipient.problem](ethermintRecipient.prefix)
+      : `that is not a ${isPenumbraDest ? 'penumbra' : 'cosmos'} address · please check it`
+    : ethermintRecipient?.ok && ethermintRecipient.fromHex
+      ? `sends to ${shortAddress(toAddress)}`
+      : sendMode === 'ibc' && detectedChain && !destChainId
+        ? `on ${detectedChain.name}`
+        : toName;
   const amountHelper = exceeds
     ? 'a little more than this address holds'
     : !canPayFee
@@ -798,10 +802,11 @@ export function CosmosSend({
             value={recipient}
             onChange={setRecipient}
             placeholder={sendMode === 'same' ? `${sourceChain.bech32Prefix}1…` : 'address'}
-            warn={!!recipient && !recipientValid}
+            warn={badRecipient}
             helper={toHelper}
             onContacts={isPenumbraDest ? undefined : () => setPick('book')}
           >
+            <ThorNameResolver input={recipient} chain={thorChain} onResolve={setRecipient} />
             {isPenumbraDest && selectedKeyInfo?.type === 'mnemonic' && (
               <Button
                 variant='quiet'

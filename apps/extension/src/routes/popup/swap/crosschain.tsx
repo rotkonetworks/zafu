@@ -67,6 +67,7 @@ import { ThorDeposit } from './thor-deposit';
 import { AmountField, ContactsSheet, ToField } from '../send/send-fields';
 import { chainName } from '../../../state/swap/tokens';
 import { TokenSheet } from './token-sheet';
+import { ThorNameResolver } from '../../../components/thorname-resolver';
 
 type Step =
   | 'input'
@@ -217,6 +218,9 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const [pickerOpen, setPickerOpen] = useState(!!link);
   const [contactsOpen, setContactsOpen] = useState(false);
   const [otherAddress, setOtherAddress] = useState(link?.link.address ?? '');
+  // the THORName the address was resolved from; it counts only while that address is still in the field
+  const [resolvedName, setResolvedName] = useState<{ name: string; address: string }>();
+  const otherName = resolvedName?.address === otherAddress ? resolvedName.name : undefined;
   const [results, setResults] = useState<RouteResult[]>([]);
   const [picked, setPicked] = useState<RouteId>();
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -253,6 +257,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   // only routes zafu can't send yet: shown for comparison, nothing to review
   const view = quote ?? quotes[0];
   const carrier = pair && thorAsset(pair)?.carrier;
+  const aliasChain = pair && thorAsset(pair)?.asset.split('.')[0];
   const left = useDeadlineCountdown(step === 'routes' ? (view?.expiresAt ?? null) : null);
   const expired = step === 'routes' && !!view?.expiresAt && view.expiresAt <= Date.now();
   const provider = quote && PROVIDERS[quote.route];
@@ -338,6 +343,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
         zcashAddress,
         zcashTransparent: tAddresses[0],
         otherAddress,
+        otherName,
         signsOpReturn: !!kind && !!CAPS[kind].opReturn,
       });
       const failed = got.find(r => 'error' in r);
@@ -617,7 +623,16 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
             }}
             placeholder={isFromZec ? 'recipient address' : 'your address'}
             onContacts={contactNetwork ? () => setContactsOpen(true) : undefined}
-          />
+          >
+            <ThorNameResolver
+              input={otherAddress}
+              chain={aliasChain}
+              onResolve={(address, name) => {
+                setResolvedName({ name, address });
+                setOtherAddress(address);
+              }}
+            />
+          </ToField>
           {shareLink && (
             <CopyButton text={shareLink} label='copy swap link' className='self-start px-0' />
           )}
@@ -738,7 +753,10 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
                   ['you send', `${quote.amountInText || amountIn} ${inUnit}`],
                   ['you receive', `${quote.amountOutText} ${outUnit}`],
                   ['route', ROUTES[quote.route].label],
-                  ['recipient', quote.recipient],
+                  [
+                    'recipient',
+                    isFromZec && otherName ? `${otherName} · ${quote.recipient}` : quote.recipient,
+                  ],
                   [isFromZec ? 'deposit address' : 'pay to', quote.depositAddress],
                   ...(quote.memo ? [['memo', quote.memo]] : []),
                 ] as [string, string][]
