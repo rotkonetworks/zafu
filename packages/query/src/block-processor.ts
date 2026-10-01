@@ -142,48 +142,51 @@ export class BlockProcessor implements BlockProcessorInterface {
   // If sync() is called multiple times concurrently, they'll all wait for
   // the same promise rather than each starting their own sync process.
   public sync = (): Promise<void> =>
-    (this.syncPromise ??= backOff(() => this.syncAndStore(), {
-      delayFirstAttempt: false,
-      startingDelay: 5_000, // 5 seconds
-      numOfAttempts: Infinity,
-      maxDelay: 20_000, // 20 seconds
-      retry: async (e, attemptNumber) => {
-        // Intentional stop (wallet switch, shutdown): in-flight RPCs reject
-        // with the abort reason. That's teardown, not a sync failure - no
-        // scary log, no tree reset, no retry.
-        if (this.abortController.signal.aborted) {
-          return false;
-        }
-        // Retrying is the policy here, not a failure: an endpoint that is down
-        // produces one of these every backoff interval, forever, which buries
-        // the errors that actually need attention under hundreds of identical
-        // lines. Log the first few attempts and then every tenth; the recovery
-        // below still runs on every attempt either way.
-        const shouldLog = attemptNumber <= 3 || attemptNumber % 10 === 0;
-        if (shouldLog) {
-          console.error(`Sync failure #${attemptNumber}: `, e);
-        }
-        // The tree reset is best-effort recovery, NOT a precondition for
-        // retrying: when it threw, backOff gave up and cleared the sync promise,
-        // so the wallet stopped syncing until some unrelated view RPC poked
-        // sync() again - which restarted a doomed sync, failed the same way, and
-        // left the worker looping on GetStatus with no block ever processed.
-        // A stale tree still syncs (blocks are re-scanned from stored height),
-        // so a failed reset must not end the loop.
-        try {
-          await this.viewServer.resetTreeToStored();
-        } catch (resetError) {
-          if (shouldLog) {
-            console.error('Sync tree reset failed; retrying anyway:', resetError);
-          }
-        }
-        return true;
-      },
-    })).finally(
-      // if the above promise completes, exponential backoff has ended (aborted).
-      // reset the rejected promise to allow for a new sync to be started.
-      () => (this.syncPromise = undefined),
-    );
+    // paused: nobody is looking, so a view call poking sync() starts nothing
+    this.paused
+      ? Promise.resolve()
+      : (this.syncPromise ??= backOff(() => this.syncAndStore(), {
+          delayFirstAttempt: false,
+          startingDelay: 5_000, // 5 seconds
+          numOfAttempts: Infinity,
+          maxDelay: 20_000, // 20 seconds
+          retry: async (e, attemptNumber) => {
+            // Intentional stop (wallet switch, shutdown): in-flight RPCs reject
+            // with the abort reason. That's teardown, not a sync failure - no
+            // scary log, no tree reset, no retry.
+            if (this.abortController.signal.aborted) {
+              return false;
+            }
+            // Retrying is the policy here, not a failure: an endpoint that is down
+            // produces one of these every backoff interval, forever, which buries
+            // the errors that actually need attention under hundreds of identical
+            // lines. Log the first few attempts and then every tenth; the recovery
+            // below still runs on every attempt either way.
+            const shouldLog = attemptNumber <= 3 || attemptNumber % 10 === 0;
+            if (shouldLog) {
+              console.error(`Sync failure #${attemptNumber}: `, e);
+            }
+            // The tree reset is best-effort recovery, NOT a precondition for
+            // retrying: when it threw, backOff gave up and cleared the sync promise,
+            // so the wallet stopped syncing until some unrelated view RPC poked
+            // sync() again - which restarted a doomed sync, failed the same way, and
+            // left the worker looping on GetStatus with no block ever processed.
+            // A stale tree still syncs (blocks are re-scanned from stored height),
+            // so a failed reset must not end the loop.
+            try {
+              await this.viewServer.resetTreeToStored();
+            } catch (resetError) {
+              if (shouldLog) {
+                console.error('Sync tree reset failed; retrying anyway:', resetError);
+              }
+            }
+            return true;
+          },
+        })).finally(
+          // if the above promise completes, exponential backoff has ended (aborted).
+          // reset the rejected promise to allow for a new sync to be started.
+          () => (this.syncPromise = undefined),
+        );
 
   public stop = (r: string) => this.abortController.abort(`Sync stop ${r}`);
 

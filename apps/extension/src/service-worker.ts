@@ -215,6 +215,8 @@ const rebuildServices = async (
   currentSyncAbort = new AbortController();
   walletServicesResult = startWalletServices(currentSyncAbort.signal);
   walletServices = walletServicesResult.then(r => r.services);
+  // fresh services start syncing at once; with every window closed they wait
+  void walletServices.then(() => !uiOpen && penumbraSync('pause'));
   const { services, wallet, reason } = await walletServicesResult;
   setCachedWallet(wallet, reason);
   try {
@@ -322,6 +324,8 @@ const initHandler = async () => {
   currentSyncAbort = new AbortController();
   walletServicesResult = startWalletServices(currentSyncAbort.signal);
   walletServices = walletServicesResult.then(r => r.services);
+  // fresh services start syncing at once; with every window closed they wait
+  void walletServices.then(() => !uiOpen && penumbraSync('pause'));
   // cache decrypted wallet as soon as it's available - unblocks RPC context getters
   void walletServicesResult.then(({ wallet, reason }) => setCachedWallet(wallet, reason));
   const rpcImpls = await getRpcImpls();
