@@ -105,11 +105,6 @@ export const SecurityBackup = () => {
             value='keys kept'
             onPress={() => navigate(PopupPath.SETTINGS_CLEAR_CACHE)}
           />
-          <Row
-            type='screen'
-            label='forgot password - restore from phrase'
-            onPress={() => navigate(PopupPath.FORGOT_PASSWORD)}
-          />
         </Section>
         <RemoveWalletRow />
       </div>

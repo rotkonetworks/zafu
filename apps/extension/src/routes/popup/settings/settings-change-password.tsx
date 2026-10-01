@@ -9,11 +9,12 @@ import { useStore } from '../../../state';
 import { useBackNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 
-type Outcome = 'wrong' | 'broke' | 'done';
+type Outcome = 'wrong' | 'same' | 'broke' | 'done';
 
 const NOTE: Record<Outcome | 'mismatch', [string, string]> = {
   wrong: ["that doesn't match · please try again, slowly", 'text-warning'],
   mismatch: ["these don't match yet", 'text-warning'],
+  same: ['that is the password already · please choose a new one', 'text-warning'],
   broke: ['something broke on our side, not yours. nothing was changed.', 'text-warning'],
   done: ['your new password is set', 'text-green'],
 };
@@ -45,6 +46,10 @@ export const SettingsChangePassword = () => {
     if (!ready || busy) {
       return;
     }
+    if (form.next === form.current) {
+      setOutcome('same');
+      return;
+    }
     setBusy(true);
     void changePassword(form.current, form.next)
       .then(ok => setOutcome(ok ? 'done' : 'wrong'))
@@ -72,7 +77,9 @@ export const SettingsChangePassword = () => {
               autoComplete={autoComplete}
               disabled={outcome === 'done'}
               variant={
-                (name === 'current' && outcome === 'wrong') || (name === 'again' && mismatch)
+                (name === 'current' && outcome === 'wrong') ||
+                (name === 'next' && outcome === 'same') ||
+                (name === 'again' && mismatch)
                   ? 'warn'
                   : 'default'
               }
