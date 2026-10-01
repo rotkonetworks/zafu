@@ -7,6 +7,7 @@ import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { InFlightCard } from '../../../components/in-flight-card';
+import { usePenumbraTotalIn } from '../../../hooks/penumbra-total-in';
 import { useSyncProgress } from '../../../hooks/full-sync-height';
 import { balancesQueryOptions, balancesQueryKey } from '../../../hooks/penumbra-balances';
 import { classifySyncFailure } from '../../../state/sync-failure';
@@ -98,7 +99,7 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
   const tip = latestBlockHeight ?? 0;
   const synced = fullSyncHeight ?? 0;
   const caughtUp = tip > 0 && tip - synced <= 10;
-  const hero = heroOf(assets ?? []);
+  const hero = heroOf(assets ?? [], usePenumbraTotalIn().totalIn);
   const funded = (assets ?? []).some(a => a.amount > 0);
   const view: BalanceView =
     error && !assets
@@ -129,15 +130,9 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
         />
       }
       view={view}
-      amount={'usd' in hero ? fmtUsd(hero.usd) : fmtAmount(hero.um)}
-      unit={'usd' in hero ? 'usd' : undefined}
-      sub={
-        'usd' in hero
-          ? 'in usdc.inj on penumbra'
-          : assets?.length
-            ? `${assets.length} ${assets.length === 1 ? 'asset' : 'assets'} · shielded`
-            : undefined
-      }
+      amount={hero.unit === 'usd' ? fmtUsd(hero.amount) : fmtAmount(hero.amount)}
+      unit={hero.unit}
+      hint={hero.unit === 'usd' ? 'in usdc.inj on penumbra' : undefined}
       spendable={funded}
       watermark={!empty}
     >

@@ -18,7 +18,7 @@ export const HomeScreen = ({
   view,
   amount,
   unit = look.unit,
-  sub,
+  hint,
   spendable,
   watermark,
   children,
@@ -29,7 +29,7 @@ export const HomeScreen = ({
   amount: string;
   /** when the figure is not in the network's own unit (penumbra's dollars) */
   unit?: string;
-  sub?: ReactNode;
+  hint?: string;
   spendable: boolean;
   watermark: boolean;
   children: ReactNode;
@@ -41,7 +41,7 @@ export const HomeScreen = ({
         view={view}
         amount={amount}
         unit={unit}
-        sub={sub}
+        hint={hint}
         watermark={watermark ? look.watermark : undefined}
       >
         <HomeActions spendable={spendable} />

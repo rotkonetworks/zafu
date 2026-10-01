@@ -4,6 +4,7 @@ const store: Record<string, unknown> = {
   autoLockMinutes: 5,
   zafuTheme: 'washi',
   hiddenTransparentChains: ['osmosis'],
+  penumbraTotalIn: 'um',
 };
 vi.mock('@repo/storage-chrome/local', () => ({
   localExtStorage: {
@@ -26,6 +27,7 @@ describe('settings backup', () => {
       autoLockMinutes: 5,
       zafuTheme: 'washi',
       hiddenTransparentChains: ['osmosis'],
+      penumbraTotalIn: 'um',
     });
   });
 
@@ -45,9 +47,14 @@ describe('settings backup', () => {
   });
 
   it('writes back only the preferences a backup has', async () => {
-    await importPrefs({ zafuFont: 'system', hiddenTransparentChains: ['injective'] });
+    await importPrefs({
+      zafuFont: 'system',
+      hiddenTransparentChains: ['injective'],
+      penumbraTotalIn: 'usd',
+    });
     expect(store['zafuFont']).toBe('system');
     expect(store['hiddenTransparentChains']).toEqual(['injective']);
+    expect(store['penumbraTotalIn']).toBe('usd');
     expect(store['autoLockMinutes']).toBe(5);
   });
 });

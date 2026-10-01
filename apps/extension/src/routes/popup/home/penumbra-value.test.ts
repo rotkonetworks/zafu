@@ -61,10 +61,17 @@ describe('penumbra portfolio value', () => {
       ['USDC.inj', 5],
       ['OSMO', undefined],
     ]);
-    expect(heroOf(assets)).toEqual({ usd: 45 });
+    expect(heroOf(assets, 'usd')).toEqual({ amount: 45, unit: 'usd' });
+    // 45 dollars at 4 dollars an um
+    expect(heroOf(assets, 'um')).toEqual({ amount: 11.25, unit: 'um' });
   });
 
-  test('falls back to the um figure when nothing has a price', () => {
-    expect(heroOf(selectAssets([balance(UM, 2.5), balance(OSMO, 3)]))).toEqual({ um: 2.5 });
+  test('falls back to the um held when nothing has a price', () => {
+    const assets = selectAssets([balance(UM, 2.5), balance(OSMO, 3)]);
+    expect(heroOf(assets, 'usd')).toEqual({ amount: 2.5, unit: 'um' });
+  });
+
+  test('stays in dollars when um itself has no price', () => {
+    expect(heroOf(selectAssets([balance(USDC, 7)]), 'um')).toEqual({ amount: 7, unit: 'usd' });
   });
 });

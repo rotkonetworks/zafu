@@ -79,16 +79,27 @@ export const selectAssets = (balances: BalancesResponse[]): Asset[] =>
     )
     .map(assetOf);
 
+/** what the penumbra total is shown in (settings > networks > penumbra) */
+export type TotalIn = 'usd' | 'um';
+
+const sum = (xs: number[]) => xs.reduce((t, x) => t + x, 0);
+
 /**
  * The hero's figure: the dollar total of every asset with a route to
- * USDC.inj (the rest are left out and say "no price" on their row), or the
- * UM figure when nothing has a price yet.
+ * USDC.inj (the rest are left out and say "no price" on their row), or that
+ * total in UM at UM's own USDC.inj price. With nothing priced it is the UM
+ * held; with UM unpriced it stays in dollars rather than guess.
  */
-export const heroOf = (assets: Asset[]): { usd: number } | { um: number } => {
+export const heroOf = (assets: Asset[], totalIn: TotalIn): { amount: number; unit: TotalIn } => {
   const priced = assets.filter(a => a.usd !== undefined);
-  return priced.length > 0
-    ? { usd: priced.reduce((t, a) => t + a.usd!, 0) }
-    : { um: assets.filter(a => a.um).reduce((t, a) => t + a.amount, 0) };
+  if (priced.length === 0) {
+    return { amount: sum(assets.filter(a => a.um).map(a => a.amount)), unit: 'um' };
+  }
+  const usd = sum(priced.map(a => a.usd!));
+  const um = priced.find(a => a.um && a.amount > 0);
+  return totalIn === 'um' && um
+    ? { amount: usd / (um.usd! / um.amount), unit: 'um' }
+    : { amount: usd, unit: 'usd' };
 };
 
 export const fmtAmount = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 6 });

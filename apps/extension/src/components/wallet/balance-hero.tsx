@@ -17,12 +17,14 @@ const BalanceFigure = ({
   view,
   amount,
   unit,
+  hint,
 }: {
   view: BalanceView;
   amount: string;
   unit: string;
+  hint?: string;
 }) => (
-  <div className='flex h-11 min-w-0 items-baseline gap-2.5'>
+  <div className='flex h-11 min-w-0 items-baseline gap-2.5' title={hint}>
     {view === 'loading' || view === 'unknown' ? (
       <span className='h-9 w-[170px] self-center bg-elev-2' aria-label='reading balance' />
     ) : view === 'error' ? (
@@ -65,21 +67,22 @@ const LastKnown = () =>
 
 /**
  * The unboxed balance hero (boards Main, HomePenumbra): label and the
- * hide-balances eye, the Mincho figure with its accent unit, a quiet line
- * under it, a faint watermark behind, and the screen's actions as children.
+ * hide-balances eye, the Mincho figure with its accent unit, a faint
+ * watermark behind, and the screen's actions as children.
  */
 export const BalanceHero = ({
   view,
   amount,
   unit,
-  sub,
+  hint,
   watermark,
   children,
 }: {
   view: BalanceView;
   amount: string;
   unit: string;
-  sub?: ReactNode;
+  /** what the figure is measured in, when the unit alone does not say */
+  hint?: string;
   /** an icon class (i-zafu-*), painted in the network accent; omit for none */
   watermark?: string;
   children?: ReactNode;
@@ -99,8 +102,7 @@ export const BalanceHero = ({
         <span className='text-xs tracking-[0.04em] text-fg-muted'>total balance</span>
         {(view === 'ready' || view === 'partial') && <HideToggle />}
       </div>
-      <BalanceFigure view={view} amount={amount} unit={unit} />
-      {sub && <span className='text-[13px] text-fg-muted'>{sub}</span>}
+      <BalanceFigure view={view} amount={amount} unit={unit} hint={hint} />
       {view !== 'loading' && <LastKnown />}
     </div>
     {children}
