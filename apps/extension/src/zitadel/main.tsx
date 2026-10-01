@@ -12,6 +12,9 @@
 // egress guard first: nothing may capture fetch or open a socket before it
 import '../net/egress-install';
 import { requestEgressOptIn } from '../net/egress-opt-in';
+import { installEgressAskSheet } from './egress-ask';
+
+installEgressAskSheet();
 import { ed25519 } from '@noble/curves/ed25519';
 // eslint-disable-next-line import/no-relative-packages -- @zafu/zid publishes no subpath exports for these; the suggested specifiers do not resolve
 import { createNoiseChannel, type ZidChannel } from '../../../../packages/zid/src';

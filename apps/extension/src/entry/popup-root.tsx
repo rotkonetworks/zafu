@@ -16,6 +16,7 @@ import { noteContextInvalidated } from '../utils/reload-notice';
 import { AppErrorBoundary, reportRenderError } from '../components/error-boundary';
 import { loadBalancesSnapshot } from '../hooks/balances-snapshot';
 import { balancesQueryKey } from '../hooks/penumbra-balances';
+import { EgressAskSheet } from '../net/egress-ask-sheet';
 
 import '@repo/ui/styles/globals.css';
 import '@repo/ui/styles/icons.css';
@@ -104,6 +105,7 @@ const MainPopup = () => {
     <StrictMode>
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={popupRouter} />
+        <EgressAskSheet />
       </QueryClientProvider>
     </StrictMode>
   );

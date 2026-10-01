@@ -12,6 +12,7 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
 import { noteContextInvalidated } from '../utils/reload-notice';
 import { AppErrorBoundary, reportRenderError } from '../components/error-boundary';
+import { EgressAskSheet } from '../net/egress-ask-sheet';
 
 import '@repo/ui/styles/globals.css';
 import '@repo/ui/styles/icons.css';
@@ -57,6 +58,7 @@ const MainPage = () => {
     <StrictMode>
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={pageRouter} />
+        <EgressAskSheet />
       </QueryClientProvider>
     </StrictMode>
   );
