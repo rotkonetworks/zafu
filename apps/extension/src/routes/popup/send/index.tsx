@@ -15,6 +15,7 @@ import { isActiveIbcChain, getNetwork, getActiveIbcSubnetworks } from '../../../
 import type { NetworkType } from '../../../state/keyring';
 import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { Button } from '@repo/ui/components/ui/button';
+import { ScreenHeader } from '../../../components/screen-header';
 import { isDedicatedWindow } from '../../../utils/popup-detection';
 import {
   PrivacySwitch,
@@ -168,15 +169,11 @@ export function SendPage() {
 
   return (
     <div className='flex flex-col'>
-      {/* Header */}
-      <div className='flex items-center gap-3 border-b border-border-soft px-4 py-3'>
-        {!inDedicatedWindow && (
-          <button onClick={goBack} className='text-fg-muted transition-colors hover:text-fg-high'>
-            <span className='i-ph-arrow-left h-5 w-5' />
-          </button>
-        )}
-        <h1 className='text-lg text-fg'>{getTitle()}</h1>
-      </div>
+      <ScreenHeader
+        title={getTitle()}
+        backPath={inDedicatedWindow ? false : undefined}
+        onBack={goBack}
+      />
 
       {/* Content */}
       <div className='p-4'>

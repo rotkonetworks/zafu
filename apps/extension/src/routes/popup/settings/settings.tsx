@@ -38,7 +38,7 @@ export const Settings = () => {
   const { clearSessionPassword } = useStore(passwordSelector);
 
   return (
-    <SettingsScreen title='settings' backPath={PopupPath.INDEX}>
+    <SettingsScreen title='settings' backPath={false}>
       <div className='flex grow flex-col justify-between'>
         <RowGroup>
           {CATEGORIES.map(c => (
