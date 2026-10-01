@@ -10,14 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { rpcEndpointPool, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
-
-/** storage key per chain; noble + injective keep the keys they shipped with */
-const keyFor = (chainId: CosmosChainId): string =>
-  chainId === 'injective'
-    ? 'injectiveRpcPool'
-    : chainId === 'noble'
-      ? 'nobleRpcEndpoints'
-      : `${chainId}RpcEndpoints`;
+import { rpcPoolKey as keyFor } from '../net/egress-policy';
 
 const clean = (list: string[]): string[] => list.map(u => u.trim()).filter(Boolean);
 

@@ -14,7 +14,7 @@
  * realms and the patched globals live in `./egress`.
  */
 
-import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
+import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { ZCASHME_BASE_URL } from '../services/zcashme/api';
 import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../config/contact-discovery-relay';
 import { PENUMBRA_MAINNET_ENDPOINTS, defaultPenumbraEndpoint } from '../config/penumbra-endpoints';
@@ -26,8 +26,16 @@ import type { NetPurpose } from './purpose';
 
 export type { EgressDecision, EgressRealm, EgressReason, EgressTable } from './egress-table';
 
+/** where a chain's user-edited rpc pool is stored; noble + injective keep the keys they shipped with */
+export const rpcPoolKey = (chainId: CosmosChainId): string =>
+  chainId === 'injective'
+    ? 'injectiveRpcPool'
+    : chainId === 'noble'
+      ? 'nobleRpcEndpoints'
+      : `${chainId}RpcEndpoints`;
+
 /** The storage keys the policy reads. A change to any of them recompiles the table. */
-export const EGRESS_INPUT_KEYS = [
+export const EGRESS_INPUT_KEYS: readonly string[] = [
   'enabledNetworks',
   'networkEndpoints',
   'grpcEndpoint',
@@ -39,7 +47,8 @@ export const EGRESS_INPUT_KEYS = [
   'votingConfigOverride',
   'zitadelRelayUrl',
   'zcashWallets',
-] as const;
+  ...(Object.keys(COSMOS_CHAINS) as CosmosChainId[]).map(rpcPoolKey),
+];
 
 /** What those keys hold, read loosely: storage is written by older builds too. */
 export interface EgressInputs {
@@ -84,6 +93,12 @@ export interface DestinationSpec {
   /** shelved service: not listed in settings, never on by default */
   hidden?: boolean;
 }
+
+/** the user's own rpc pool for a chain: what its balance checks rotate across */
+const rpcPool = (i: EgressInputs, chainId: CosmosChainId): string[] => {
+  const pool = (i as Record<string, unknown>)[rpcPoolKey(chainId)];
+  return Array.isArray(pool) ? pool.filter((u): u is string => typeof u === 'string') : [];
+};
 
 const endpoint = (i: EgressInputs, network: string): string | undefined =>
   i.networkEndpoints?.[network]?.trim() || undefined;
@@ -161,6 +176,7 @@ export const DESTINATIONS: readonly DestinationSpec[] = [
         chain.rpcEndpoint,
         chain.restEndpoint,
         ...(chain.rpcEndpoints ?? []),
+        ...rpcPool(i, chain.id),
       ],
     }),
   ),

@@ -105,6 +105,17 @@ describe('the required endpoint follows settings', () => {
     expect(outcome(noble, 'https://rpc.cosmos.directory/cosmoshub/status')).toBe('network-off');
     expect(outcome(noble, 'https://noble-api.polkachu.com/cosmos/bank')).toBe('allow');
   });
+
+  it('opens the nodes the user added to a chain pool, with the chain', () => {
+    const pool = { cosmoshubRpcEndpoints: ['https://my-hub.example'] } as EgressInputs;
+    expect(outcome({ ...pool, enabledNetworks: ['cosmoshub'] }, 'https://my-hub.example/')).toBe(
+      'allow',
+    );
+    expect(outcome({ ...pool, enabledNetworks: ['penumbra'] }, 'https://my-hub.example/')).toBe(
+      'network-off',
+    );
+    expect(outcome({ enabledNetworks: ['cosmoshub'] }, 'https://my-hub.example/')).toBe('unknown');
+  });
 });
 
 describe('optional services', () => {
