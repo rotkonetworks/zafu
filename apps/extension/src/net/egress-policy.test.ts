@@ -30,8 +30,8 @@ describe('a fresh zcash-only wallet', () => {
       ],
       ['https://noble-rpc.polkachu.com/status', 'network-off'],
       ['https://paritytech.github.io/chainspecs/polkadot.json', 'network-off'],
-      // the independent cross-check peer: part of the zcash allowance, not optional
-      ['https://us.zec.stardust.rest:443/x', 'allow'],
+      // the independent cross-check peer: a node the user did not choose, so opt-in
+      ['https://us.zec.stardust.rest:443/x', 'opt-in'],
       // optional services, off until asked
       ['https://hosh.zec.rocks/api/v0/zec.json', 'opt-in'],
       ['https://zcash.me/api/lookup', 'opt-in'],
@@ -68,10 +68,10 @@ describe('the required endpoint follows settings', () => {
   it('moves with the configured zcash endpoint', () => {
     const inputs = { ...ZCASH_ONLY, networkEndpoints: { zcash: 'https://eu.zec.rocks:443' } };
     expect(outcome(inputs, 'https://eu.zec.rocks/x')).toBe('allow');
-    // the old default is now reached only as the independent tip-check peer,
-    // never as "the" light client
+    // the old default is reached only as the independent tip-check peer, and
+    // only once the user opts in - never as "the" light client
     const decision = decide(inputs, 'https://zcash.rotko.net/zidecar.v1.Zidecar/GetTip');
-    expect(decision).toMatchObject({ allow: true, destination: 'zcash-tip-check' });
+    expect(decision).toMatchObject({ allow: false, destination: 'zcash-tip-check' });
   });
 
   it('a non-default port is its own destination', () => {
@@ -245,7 +245,7 @@ describe('describeEgress', () => {
       'near-swap': 'you-blocked',
       'zcash-servers': 'default-off',
       'custom-networks': 'configured',
-      'zcash-tip-check': 'network',
+      'zcash-tip-check': 'default-off',
     });
     expect(view.find(d => d.id === 'zcash')?.hosts).toEqual(['zcash.rotko.net']);
     expect(view.find(d => d.id === 'chat-relay')?.hosts).toContain('zcash.rotko.net/ws');
@@ -260,22 +260,35 @@ describe('describeEgress', () => {
     expect(byId['zcash-servers']!.hosts).not.toContain('us.zec.stardust.rest');
     expect(byId['zcash-tip-check']!.hosts).toEqual(['us.zec.stardust.rest']);
     expect(byId['zcash']).toMatchObject({ needed: true, networks: ['zcash'] });
-    expect(byId['zcash-tip-check']).toMatchObject({ needed: true, networks: ['zcash'] });
+    expect(byId['zcash-tip-check']).toMatchObject({ needed: false });
     expect(byId['penumbra']).toMatchObject({ needed: false, networks: [] });
-    expect(view.filter(d => d.needed).map(d => d.id)).toEqual(['zcash', 'zcash-tip-check']);
+    expect(view.filter(d => d.needed).map(d => d.id)).toEqual(['zcash']);
   });
 });
 
 describe('the zcash tip cross-check', () => {
-  it('is allowed by default alongside the light client, pointed at one independent preset', () => {
+  it('is off until the user opts in: zafu talks to no node the user did not choose', () => {
     const view = describeEgress(ZCASH_ONLY);
     const check = view.find(d => d.id === 'zcash-tip-check');
-    expect(check).toMatchObject({ on: true, why: 'network', needed: true });
+    expect(check).toMatchObject({ on: false, why: 'default-off', needed: false });
     expect(check?.hosts).toEqual(['us.zec.stardust.rest']);
+    expect(outcome(ZCASH_ONLY, 'https://us.zec.stardust.rest/x')).not.toBe('allow');
+  });
+
+  it('once opted in, it is pointed at one independent preset', () => {
+    const inputs = {
+      ...ZCASH_ONLY,
+      netEgress: { optIns: { 'zcash-tip-check': 'allowed' as const } },
+    };
+    expect(outcome(inputs, 'https://us.zec.stardust.rest/x')).toBe('allow');
   });
 
   it('moves with the configured zcash endpoint, same helper the worker calls', () => {
-    const inputs = { ...ZCASH_ONLY, networkEndpoints: { zcash: 'https://eu.zec.rocks:443' } };
+    const inputs = {
+      ...ZCASH_ONLY,
+      networkEndpoints: { zcash: 'https://eu.zec.rocks:443' },
+      netEgress: { optIns: { 'zcash-tip-check': 'allowed' as const } },
+    };
     // the configured endpoint is no longer the primary's own domain, so the
     // default rotko preset becomes the independent peer
     expect(outcome(inputs, 'https://zcash.rotko.net/zidecar.v1.Zidecar/GetTip')).toBe('allow');

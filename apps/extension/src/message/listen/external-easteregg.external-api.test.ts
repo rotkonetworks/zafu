@@ -617,7 +617,7 @@ describe('zafu_passkey_get - expired or legacy grants re-ask instead of failing 
   });
 });
 
-describe('zafu_zcash_send — top-frame gate and same-origin popup dedup', () => {
+describe('zafu_zcash_send - top-frame gate and same-origin popup dedup', () => {
   const outputs = [{ address: 'u1test', amount: 1000 }];
 
   /** any approval-popup url opened for `origin`, whatever path it is under */

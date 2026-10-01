@@ -130,14 +130,13 @@ export const DESTINATIONS: readonly DestinationSpec[] = [
   },
   {
     id: 'zcash-tip-check',
-    // the founder's call: cross-checking the tip against one independent
-    // operator is part of zcash's own light-client allowance, not an
-    // optional extra - without it the "right network" check never runs.
+    // opt-in: zafu talks to no node the user did not choose. Turning this on
+    // asks one independent operator for the tip as a "right network" check.
     // Same helper the worker calls (workers/cross-verify.ts), so the peer
     // the policy allows is always the one the sync actually asks.
     label: 'zcash tip cross-check',
     purpose: 'indexer',
-    gate: { kind: 'network', networks: ['zcash'] },
+    gate: { kind: 'optional' },
     urls: i => [pickIndependentPeer(zcashEndpoint(i))],
   },
   {
