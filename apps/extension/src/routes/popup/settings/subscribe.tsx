@@ -7,7 +7,11 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { StepList } from '@repo/ui/components/ui/step-list';
 import { Sensitive } from '../../../components/sensitive';
 import { useStore } from '../../../state';
-import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
+import {
+  selectEffectiveKeyInfo,
+  selectGetMnemonic,
+  selectGetVaultUnlock,
+} from '../../../state/keyring';
 import { isPro, selectDaysRemaining, selectPending, licenseSelector } from '../../../state/license';
 import { selectActiveZcashWallet } from '../../../state/wallets';
 import { activeZcashStoreId } from '../../../state/pockets';
@@ -67,6 +71,7 @@ export const SubscribePage = () => {
   const keyInfo = useStore(selectEffectiveKeyInfo);
   const storeId = useStore(activeZcashStoreId);
   const getMnemonic = useStore(selectGetMnemonic);
+  const getVaultUnlock = useStore(selectGetVaultUnlock);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const pro = useStore(isPro);
   const days = useStore(selectDaysRemaining);
@@ -277,7 +282,7 @@ export const SubscribePage = () => {
     buildStartRef.current = Date.now();
     setPayState('building');
     try {
-      const mnemonic = await getMnemonic(keyInfo.id);
+      const vault = await getVaultUnlock(keyInfo.id);
       const accountIndex = activeZcashWallet?.accountIndex ?? 0;
       const mainnet = activeZcashWallet?.mainnet ?? true;
 
@@ -291,7 +296,7 @@ export const SubscribePage = () => {
         memo,
         accountIndex,
         mainnet,
-        mnemonic,
+        vault,
       );
 
       if ('txid' in result) {
@@ -315,7 +320,7 @@ export const SubscribePage = () => {
     storeId,
     memo,
     activeZcashWallet,
-    getMnemonic,
+    getVaultUnlock,
     zidecarUrl,
     amountZat,
     amountZec,

@@ -8,22 +8,17 @@ import {
   isParallelBuildRequest,
   isOffscreenRequest,
 } from '@rotko/penumbra-types/internal-msg/offscreen';
+import { assertProveRequest } from '../shared/prove-guard';
 import { initNetworkWorkerHost } from '../state/keyring/network-worker';
 
 // this document is the one long-lived home for the zcash/penumbra sync
 // workers - every popup, settings screen and approval window is a client
 // that asks this host to spawn/call/terminate them instead of each owning
 // a private worker of its own.
-initNetworkWorkerHost();
+initNetworkWorkerHost(proveInBuildWorker);
 
 chrome.runtime.onMessage.addListener((req, _sender, respond) => {
   if (!isOffscreenRequest(req)) {
-    // check for zcash build requests (from zcash-worker)
-    if (req?.type === 'ZCASH_BUILD' && req?.request?.fn) {
-      console.log('[Offscreen] Received ZCASH_BUILD request:', req.request.fn);
-      void handleZcashBuild(req.request, respond);
-      return true;
-    }
     return false;
   }
   const { type, request } = req;
@@ -210,46 +205,26 @@ const getOrCreateZcashWorker = (): Worker => {
   return zcashWorker;
 };
 
-interface ZcashBuildRequest {
-  fn: string;
-  args: unknown[];
-}
-
-async function handleZcashBuild(
-  req: ZcashBuildRequest,
-  respond: (response: { type: string; data?: unknown; error?: unknown }) => void,
-): Promise<void> {
-  try {
-    const { promise, resolve, reject } = Promise.withResolvers<unknown>();
-    const worker = getOrCreateZcashWorker();
-
-    worker.addEventListener(
-      'message',
-      (e: MessageEvent) => {
-        const msg = e.data as { data?: unknown; error?: { message: string } };
-        if (msg.error) {
-          reject(new Error(msg.error.message));
-        } else {
-          resolve(msg.data);
-        }
-      },
-      { once: true },
-    );
-    worker.addEventListener(
-      'error',
-      ({ message }: ErrorEvent) => {
-        reject(new Error(message));
-      },
-      { once: true },
-    );
-
-    worker.postMessage(req);
-    const data = await promise;
-    respond({ type: 'ZCASH_BUILD', data });
-  } catch (e) {
-    respond({
-      type: 'ZCASH_BUILD',
-      error: { message: e instanceof Error ? e.message : String(e) },
-    });
-  }
+/** run one prove request from this document's zcash worker on the build worker */
+async function proveInBuildWorker(raw: unknown): Promise<unknown> {
+  const req = assertProveRequest(raw);
+  const { promise, resolve, reject } = Promise.withResolvers<unknown>();
+  const worker = getOrCreateZcashWorker();
+  worker.addEventListener(
+    'message',
+    (e: MessageEvent) => {
+      const msg = e.data as { data?: unknown; error?: { message: string } };
+      if (msg.error) {
+        reject(new Error(msg.error.message));
+      } else {
+        resolve(msg.data);
+      }
+    },
+    { once: true },
+  );
+  worker.addEventListener('error', ({ message }: ErrorEvent) => reject(new Error(message)), {
+    once: true,
+  });
+  worker.postMessage(req);
+  return promise;
 }

@@ -25,7 +25,8 @@
  * host, many clients, keeps exactly one zcash/penumbra worker alive.
  */
 
-import type { NetworkType } from './types';
+import type { NetworkType, VaultUnlock } from './types';
+import type { SealedVault, WorkerKey } from '../../shared/vault-seal';
 
 /** true only inside the offscreen document - the one place that owns real Workers */
 const isOffscreenHost = (): boolean =>
@@ -67,6 +68,7 @@ export interface NetworkWorkerMessage {
     | 'reset-sync'
     | 'get-balance'
     | 'get-pool-balances'
+    | 'vault-key'
     | 'send-tx'
     | 'send-tx-multi'
     | 'send-tx-complete'
@@ -128,6 +130,7 @@ export interface NetworkWorkerResponse {
     | 'sync-reset'
     | 'balance'
     | 'pool-balances'
+    | 'vault-key'
     | 'tx-result'
     | 'tx-multi-result'
     | 'send-tx-unsigned'
@@ -402,9 +405,16 @@ const ensureClientListener = (): void => {
 // NW_TERMINATE from every client. Installed once, only inside the offscreen
 // document.
 let hostListenerInstalled = false;
+/** the host's own prover: the zcash worker and the build worker share this document */
+let hostProver: ((request: unknown) => Promise<unknown>) | undefined;
+
 /** called once from the offscreen document's own entry point, so the host
- *  can answer NW_SPAWN before any network's first real spawn happens. */
-export const initNetworkWorkerHost = (): void => ensureHostListener();
+ *  can answer NW_SPAWN before any network's first real spawn happens, and
+ *  prove without messaging itself (runtime messages never reach the sender). */
+export const initNetworkWorkerHost = (prove: (request: unknown) => Promise<unknown>): void => {
+  hostProver = prove;
+  ensureHostListener();
+};
 
 const ensureHostListener = (): void => {
   if (hostListenerInstalled || !isOffscreenHost()) {
@@ -609,6 +619,12 @@ const callWorker = async <T>(
   });
 };
 
+/** the vault with the session key wrapped to a key the worker issued for this one call */
+const sealFor = async (network: NetworkType, vault: VaultUnlock): Promise<SealedVault> => ({
+  box: vault.box,
+  seal: await vault.sealTo(await callWorker<WorkerKey>(network, 'vault-key')),
+});
+
 /**
  * derive address for a network (runs in worker)
  */
@@ -630,7 +646,7 @@ export const deriveAddressInWorker = async (
 export const startSyncInWorker = async (
   network: NetworkType,
   walletId: string,
-  mnemonic: string,
+  vault: VaultUnlock,
   serverUrl: string,
   startHeight?: number,
   backend: 'zidecar' | 'lightwalletd' = 'zidecar',
@@ -645,7 +661,13 @@ export const startSyncInWorker = async (
   return callWorker(
     network,
     'sync',
-    { mnemonic, serverUrl, startHeight, backend, mempoolWatch: effectiveMempoolWatch },
+    {
+      vault: await sealFor(network, vault),
+      serverUrl,
+      startHeight,
+      backend,
+      mempoolWatch: effectiveMempoolWatch,
+    },
     walletId,
   );
 };
@@ -669,7 +691,7 @@ export const startWatchOnlySyncInWorker = async (
   return callWorker(
     network,
     'sync',
-    { mnemonic: '', serverUrl, startHeight, ufvk, backend, mempoolWatch: effectiveMempoolWatch },
+    { serverUrl, startHeight, ufvk, backend, mempoolWatch: effectiveMempoolWatch },
     walletId,
   );
 };
@@ -1035,12 +1057,12 @@ export interface ShieldResult {
 }
 
 /**
- * shield transparent funds to orchard (runs in worker with halo 2 proving)
+ * shield transparent funds (the worker opens the vault, proves offscreen, signs itself)
  */
 export const shieldInWorker = async (
   network: NetworkType,
   walletId: string,
-  mnemonic: string,
+  vault: VaultUnlock,
   serverUrl: string,
   tAddresses: string[],
   mainnet: boolean,
@@ -1049,7 +1071,7 @@ export const shieldInWorker = async (
   return callWorker(
     network,
     'shield',
-    { mnemonic, serverUrl, tAddresses, mainnet, addressIndexMap },
+    { vault: await sealFor(network, vault), serverUrl, tAddresses, mainnet, addressIndexMap },
     walletId,
   );
 };
@@ -1081,8 +1103,8 @@ export interface SendTxUnsignedResult {
 /**
  * build a send transaction (runs in worker with witness building)
  *
- * if mnemonic is provided: builds fully signed tx + broadcasts, returns { txid, fee }
- * if no mnemonic: builds unsigned tx for cold signing via QR (requires ufvk)
+ * hot (vault passed): the worker opens the vault, signs, broadcasts, returns { txid, fee }
+ * cold (no vault): builds unsigned tx for cold signing via QR (requires ufvk)
  */
 export const buildSendTxInWorker = async (
   network: NetworkType,
@@ -1093,13 +1115,22 @@ export const buildSendTxInWorker = async (
   memo: string,
   accountIndex: number,
   mainnet: boolean,
-  mnemonic?: string,
+  vault?: VaultUnlock,
   ufvk?: string,
 ): Promise<SendTxUnsignedResult | { txid: string; fee: string }> => {
   return callWorker(
     network,
     'send-tx',
-    { serverUrl, recipient, amount, memo, accountIndex, mainnet, mnemonic, ufvk },
+    {
+      serverUrl,
+      recipient,
+      amount,
+      memo,
+      accountIndex,
+      mainnet,
+      vault: vault && (await sealFor(network, vault)),
+      ufvk,
+    },
     walletId,
   );
 };
@@ -1122,12 +1153,12 @@ export const buildMultiSendTxInWorker = async (
   outputs: { address: string; amount: string; memo?: string }[],
   accountIndex: number,
   mainnet: boolean,
-  mnemonic: string,
+  vault: VaultUnlock,
 ): Promise<MultiSendResult> => {
   return callWorker(
     network,
     'send-tx-multi',
-    { serverUrl, outputs, accountIndex, mainnet, mnemonic },
+    { serverUrl, outputs, accountIndex, mainnet, vault: await sealFor(network, vault) },
     walletId,
   );
 };
@@ -1315,11 +1346,10 @@ export interface TurnstileMigrationUnsignedResult {
  * balance to its OWN ironwood address (derived inside the wasm) in a single V6
  * transaction. Feature-flagged (IRONWOOD_MIGRATION) at the UI layer.
  *
- * Two modes, selected by which secret is provided:
- * - HOT (mnemonic passed): the worker builds + proves + SIGNS the tx inside the
- *   wasm and broadcasts it directly, resolving to `{ txid, fee }`. No PCZT is
- *   produced or transmitted. `ufvk` is ignored.
- * - COLD (mnemonic omitted, ufvk passed): the worker builds an UNSIGNED PCZT
+ * Two modes, selected by which key access is provided:
+ * - HOT (vault passed): the worker opens the vault, has the PCZT proven, SIGNS
+ *   it and broadcasts directly, resolving to `{ txid, fee }`. `ufvk` is ignored.
+ * - COLD (vault omitted, ufvk passed): the worker builds an UNSIGNED PCZT
  *   for the zigner cold-sign QR machine, resolving to
  *   `TurnstileMigrationUnsignedResult` (frames etc.).
  */
@@ -1331,13 +1361,21 @@ export const buildTurnstileMigrationInWorker = async (
   mainnet: boolean,
   ufvk: string | undefined,
   backend: 'zidecar' | 'lightwalletd' = 'zidecar',
-  mnemonic?: string,
+  vault?: VaultUnlock,
   fragmentSize = 400,
 ): Promise<TurnstileMigrationUnsignedResult | { txid: string; fee: string }> => {
   return callWorker(
     network,
     'send-turnstile-migration',
-    { serverUrl, accountIndex, mainnet, ufvk, backend, mnemonic, fragmentSize },
+    {
+      serverUrl,
+      accountIndex,
+      mainnet,
+      ufvk,
+      backend,
+      vault: vault && (await sealFor(network, vault)),
+      fragmentSize,
+    },
     walletId,
   );
 };
@@ -1437,51 +1475,17 @@ export const isNetworkWorkerRunning = (network: NetworkType): boolean => {
 };
 
 /**
- * relay a prove request from zcash-worker (Web Worker, no chrome APIs)
- * through to the service worker → offscreen document for parallel proving.
+ * answer a prove request from the zcash worker with the host's own prover.
+ * Both workers live in the offscreen document, so the request (UFVK and
+ * public data only, checked by prove-guard on each side) never touches the
+ * extension message bus.
  */
 async function relayProveRequest(worker: Worker, id: string, request: unknown): Promise<void> {
   try {
-    // 1. ensure offscreen document exists. The MV3 service worker may be asleep
-    // or have just been KILLED (e.g. by a long witness rebuild that outran its
-    // ~30s idle timeout), so the first ensure can come back empty or reject
-    // ("Could not establish connection") while the SW wakes and re-registers
-    // its listeners + creates the offscreen doc. Retry a few times before
-    // giving up, so a slow pre-proving step can't take down the whole send.
-    let ensureResult: { ok?: boolean; error?: string } | undefined;
-    for (let attempt = 0; attempt < 6; attempt++) {
-      try {
-        ensureResult = await chrome.runtime.sendMessage({ type: 'ZCASH_ENSURE_OFFSCREEN' });
-      } catch {
-        // SW waking up; the connection error is transient - retry.
-        ensureResult = undefined;
-      }
-      if (ensureResult?.ok) {
-        break;
-      }
-      await new Promise(resolve => setTimeout(resolve, 500));
+    if (!hostProver) {
+      throw new Error('the prover is not running in this document');
     }
-    if (!ensureResult?.ok) {
-      worker.postMessage({
-        type: 'prove-response',
-        id,
-        error: `failed to activate offscreen: ${ensureResult?.error ?? 'service worker unavailable after retries'}`,
-      });
-      return;
-    }
-    // 2. send build request to offscreen handler
-    const response = await chrome.runtime.sendMessage({ type: 'ZCASH_BUILD', request });
-    if (response?.error) {
-      worker.postMessage({
-        type: 'prove-response',
-        id,
-        error: response.error.message ?? JSON.stringify(response.error),
-      });
-    } else if (response?.data === undefined) {
-      worker.postMessage({ type: 'prove-response', id, error: 'offscreen returned no data' });
-    } else {
-      worker.postMessage({ type: 'prove-response', id, data: response.data });
-    }
+    worker.postMessage({ type: 'prove-response', id, data: await hostProver(request) });
   } catch (e) {
     worker.postMessage({
       type: 'prove-response',

@@ -11,6 +11,7 @@
 
 // re-export from network-types for convenience
 import type { NetworkType as NetworkTypeImport } from './network-types';
+import type { KeySeal, WorkerKey } from '../../shared/vault-seal';
 
 export type KeyType =
   | 'mnemonic'
@@ -274,3 +275,15 @@ export const getNetworkActivation = (
     shouldLoadFeatures: isEnabled,
   };
 };
+
+/**
+ * A mnemonic vault, ready for the zcash worker to open itself: the sealed box
+ * as stored, and a way to wrap the session key to a single-use key the worker
+ * issues (shared/vault-seal.ts). The page passes this instead of the phrase,
+ * so it never holds the plaintext. Page-side only; what crosses to the worker
+ * is a SealedVault.
+ */
+export interface VaultUnlock {
+  box: string;
+  sealTo: (to: WorkerKey) => Promise<KeySeal>;
+}

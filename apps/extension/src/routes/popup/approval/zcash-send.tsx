@@ -14,7 +14,7 @@ import { Sensitive } from '../../../components/sensitive';
 import { OriginIcon } from '../../../shared/components/origin-icon';
 import { cn } from '@repo/ui/lib/utils';
 import { useStore } from '../../../state';
-import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
+import { selectEffectiveKeyInfo, selectGetVaultUnlock } from '../../../state/keyring';
 import { selectActiveZcashWallet } from '../../../state/wallets';
 import { activeAccountIndex, activeZcashStoreId } from '../../../state/pockets';
 import { buildMultiSendTxInWorker } from '../../../state/keyring/network-worker';
@@ -40,7 +40,7 @@ export function ZcashSendApproval() {
   const feePerOutput = Number(params.get('fee')) || 10_000;
 
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
-  const getMnemonic = useStore(selectGetMnemonic);
+  const getVaultUnlock = useStore(selectGetVaultUnlock);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const storeId = useStore(activeZcashStoreId);
@@ -142,7 +142,7 @@ export function ZcashSendApproval() {
     setProgressText('initializing...');
 
     try {
-      const mnemonic = await getMnemonic(selectedKeyInfo.id);
+      const vault = await getVaultUnlock(selectedKeyInfo.id);
       const mainnet = activeZcashWallet?.mainnet !== false;
 
       // convert outputs to worker format (amount as string in zatoshis)
@@ -159,7 +159,7 @@ export function ZcashSendApproval() {
         workerOutputs,
         pocketAccount,
         mainnet,
-        mnemonic,
+        vault,
       );
 
       setStatus('done');

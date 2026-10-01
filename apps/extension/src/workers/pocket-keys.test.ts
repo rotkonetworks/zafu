@@ -3,9 +3,10 @@ import { resolve } from 'node:path';
 import { beforeAll, describe, expect, test, vi } from 'vitest';
 import { sha256 } from '@noble/hashes/sha256';
 import { ripemd160 } from '@noble/hashes/ripemd160';
-import { secp256k1 } from '@noble/curves/secp256k1';
+import { hexToBytes } from '@noble/hashes/utils';
 import { deriveZcashTransparentAddress } from '@repo/wallet/networks/zcash/derive';
 import { isP2pkhOf, pocketWalletKeys, type PocketKeysCtor } from './pocket-keys';
+import type { SpendKeysCtor } from './hot-sign';
 
 const SEED =
   'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
@@ -48,12 +49,22 @@ describe('pocketWalletKeys', () => {
 interface Wasm {
   initSync(opts: { module: Uint8Array }): void;
   WalletKeys: PocketKeysCtor<{ get_fvk_hex(): string; free(): void }>;
-  derive_transparent_privkey(seed: string, account: number, index: number): string;
+  SpendKeys: SpendKeysCtor;
 }
 
+/** the hot signer's pubkey for a pocket's t-address, freed straight away */
+const pubkeyOf = (wasm: Wasm, account: number, index: number) => {
+  const keys = new wasm.SpendKeys(SEED, account, true);
+  try {
+    return keys.transparent_pubkey(index);
+  } finally {
+    keys.free();
+  }
+};
+
 const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-const tAddressOf = (privHex: string) => {
-  const hash = ripemd160(sha256(secp256k1.getPublicKey(privHex, true)));
+const tAddressOf = (pubkeyHex: string) => {
+  const hash = ripemd160(sha256(hexToBytes(pubkeyHex)));
   const payload = new Uint8Array([0x1c, 0xb8, ...hash]);
   const full = new Uint8Array([...payload, ...sha256(sha256(payload)).slice(0, 4)]);
   let n = full.reduce((acc, b) => acc * 256n + BigInt(b), 0n);
@@ -111,7 +122,7 @@ describe('with the real zafu-wasm', () => {
     for (const account of [0, 1, 2]) {
       for (const index of [0, 3]) {
         const shown = deriveZcashTransparentAddress(SEED, account, index, true);
-        expect(tAddressOf(wasm.derive_transparent_privkey(SEED, account, index))).toBe(shown);
+        expect(tAddressOf(pubkeyOf(wasm, account, index))).toBe(shown);
         seen.add(shown);
       }
     }
@@ -120,10 +131,10 @@ describe('with the real zafu-wasm', () => {
 
   test("shielding accepts only inputs locked to the pocket's own key", () => {
     const script = scriptOf(deriveZcashTransparentAddress(SEED, 1, 3, true));
-    expect(isP2pkhOf(script, wasm.derive_transparent_privkey(SEED, 1, 3))).toBe(true);
+    expect(isP2pkhOf(script, pubkeyOf(wasm, 1, 3))).toBe(true);
     // pocket 0 (or another index) can never sign pocket 1's coins
-    expect(isP2pkhOf(script, wasm.derive_transparent_privkey(SEED, 0, 3))).toBe(false);
-    expect(isP2pkhOf(script, wasm.derive_transparent_privkey(SEED, 1, 0))).toBe(false);
-    expect(isP2pkhOf(new Uint8Array(0), wasm.derive_transparent_privkey(SEED, 1, 3))).toBe(false);
+    expect(isP2pkhOf(script, pubkeyOf(wasm, 0, 3))).toBe(false);
+    expect(isP2pkhOf(script, pubkeyOf(wasm, 1, 0))).toBe(false);
+    expect(isP2pkhOf(new Uint8Array(0), pubkeyOf(wasm, 1, 3))).toBe(false);
   });
 });

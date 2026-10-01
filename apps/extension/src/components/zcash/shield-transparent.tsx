@@ -118,7 +118,7 @@ export const ShieldTransparent = ({
     setShieldError(null);
 
     try {
-      const mnemonic = await keyRing.getMnemonic(selectedKeyInfo.id);
+      const vault = await keyRing.getVaultUnlock(selectedKeyInfo.id);
       // map each address to its BIP44 derivation index so the worker signs with the correct key
       const addressIndexMap: Record<string, number> = {};
       tAddresses.forEach((addr, i) => {
@@ -127,7 +127,7 @@ export const ShieldTransparent = ({
       const result = await shieldInWorker(
         'zcash',
         storeId ?? selectedKeyInfo.id,
-        mnemonic,
+        vault,
         zidecarUrl,
         tAddresses,
         isMainnet,

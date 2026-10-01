@@ -12,6 +12,7 @@ import { KeyPrint, type KeyPrintJson } from '@repo/encryption/key-print';
 import { Box } from '@repo/encryption/box';
 import type { BoxJson } from '@repo/encryption/box';
 import type { EncryptedVault } from './types';
+import { sealKeyTo, type KeySeal, type WorkerKey } from '../../shared/vault-seal';
 
 export interface CryptoCtx {
   session: ExtensionStorage<SessionStorageState>;
@@ -24,6 +25,15 @@ export const requireKey = async (ctx: CryptoCtx): Promise<Key> => {
     throw new Error('keyring locked');
   }
   return Key.fromJson(keyJson);
+};
+
+/** the session key wrapped to a key the zcash worker issued, or throw */
+export const sealSessionKeyTo = async (ctx: CryptoCtx, to: WorkerKey): Promise<KeySeal> => {
+  const keyJson = await ctx.session.get('passwordKey');
+  if (!keyJson) {
+    throw new Error('keyring locked');
+  }
+  return sealKeyTo(keyJson, to);
 };
 
 /** encrypt plaintext with the session key */

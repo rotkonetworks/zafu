@@ -10,7 +10,12 @@
 import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useStore } from '../state';
-import { selectActiveNetwork, selectEffectiveKeyInfo, selectGetMnemonic } from '../state/keyring';
+import {
+  selectActiveNetwork,
+  selectEffectiveKeyInfo,
+  selectGetMnemonic,
+  selectGetVaultUnlock,
+} from '../state/keyring';
 import { selectActiveZcashWallet } from '../state/wallets';
 import { activePocketBirthday, activeZcashStoreId } from '../state/pockets';
 import {
@@ -61,6 +66,7 @@ export function useZcashAutoSync() {
   const activeNetwork = useStore(selectActiveNetwork);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const getMnemonic = useStore(selectGetMnemonic);
+  const getVaultUnlock = useStore(selectGetVaultUnlock);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const zcashBackend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
@@ -161,7 +167,7 @@ export function useZcashAutoSync() {
               return;
             }
           }
-          const mnemonic = await getMnemonic(walletId);
+          const vault = await getVaultUnlock(walletId);
           if (cancelled) {
             return;
           }
@@ -174,10 +180,11 @@ export function useZcashAutoSync() {
           if (cancelled) {
             return;
           }
-          // generate ring VRF session proof for pro priority sync
+          // generate ring VRF session proof for pro priority sync (this still
+          // opens the phrase in the page; it moves with the ZID signers)
           if (isPro(useStore.getState())) {
             try {
-              const seed = deriveRingVrfSeed(mnemonic);
+              const seed = deriveRingVrfSeed(await getMnemonic(walletId));
               await useStore.getState().ringVrf.refreshRing(zidecarUrl, seed);
               await useStore.getState().ringVrf.newSessionProof();
               // inject proof headers into all ZidecarClient requests
@@ -193,7 +200,7 @@ export function useZcashAutoSync() {
           await startSyncInWorker(
             'zcash',
             storeId,
-            mnemonic,
+            vault,
             zidecarUrl,
             startHeight,
             zcashBackend,
@@ -231,6 +238,7 @@ export function useZcashAutoSync() {
     storeId,
     pocketBirthday,
     getMnemonic,
+    getVaultUnlock,
     zidecarUrl,
     zcashBackend,
     mempoolWatch,

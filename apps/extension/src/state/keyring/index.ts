@@ -20,6 +20,7 @@ import type {
   DerivedKey,
   ZignerZafuImport,
   LedgerImport,
+  VaultUnlock,
 } from './types';
 import type { ZcashWalletJson } from '../wallets';
 
@@ -48,6 +49,7 @@ import {
   requireKey,
   encrypt,
   decryptVault,
+  sealSessionKeyTo,
   createMasterKey,
   recreateMasterKey,
   reencryptVault,
@@ -113,6 +115,8 @@ export interface KeyRingSlice {
   ) => Promise<{ balanceZat: bigint; synced: boolean }>;
 
   getMnemonic: (vaultId: string) => Promise<string>;
+  /** a mnemonic vault, sealed, for the zcash worker to open itself (see VaultUnlock) */
+  getVaultUnlock: (vaultId: string) => Promise<VaultUnlock>;
   getMultisigSecrets: (
     vaultId: string,
   ) => Promise<{ keyPackage: string; ephemeralSeed: string } | null>;
@@ -132,6 +136,18 @@ export const createKeyRingSlice =
   ): SliceCreator<KeyRingSlice> =>
   (set, get) => {
     const ctx: CryptoCtx = { session };
+
+    const mnemonicVault = async (vaultId: string): Promise<EncryptedVault> => {
+      const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+      const vault = vaults.find(v => v.id === vaultId);
+      if (!vault) {
+        throw new Error('vault not found');
+      }
+      if (vault.type !== 'mnemonic') {
+        throw new Error('not a mnemonic vault');
+      }
+      return vault;
+    };
 
     return {
       status: 'not-loaded',
@@ -1008,17 +1024,12 @@ export const createKeyRingSlice =
 
       // ── secrets ──
 
-      getMnemonic: async (vaultId: string) => {
-        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-        const vault = vaults.find(v => v.id === vaultId);
-        if (!vault) {
-          throw new Error('vault not found');
-        }
-        if (vault.type !== 'mnemonic') {
-          throw new Error('not a mnemonic vault');
-        }
-        return decryptVault(ctx, vault);
-      },
+      getMnemonic: async (vaultId: string) => decryptVault(ctx, await mnemonicVault(vaultId)),
+
+      getVaultUnlock: async (vaultId: string) => ({
+        box: (await mnemonicVault(vaultId)).encryptedData,
+        sealTo: to => sealSessionKeyTo(ctx, to),
+      }),
 
       getMultisigSecrets: async (vaultId: string) => {
         const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
@@ -1151,6 +1162,7 @@ export const selectSelectKeyRing = (state: AllSlices) => state.keyRing.selectKey
 export const selectPenumbraAccount = (state: AllSlices) => state.keyRing.penumbraAccount;
 export const selectSetPenumbraAccount = (state: AllSlices) => state.keyRing.setPenumbraAccount;
 export const selectGetMnemonic = (state: AllSlices) => state.keyRing.getMnemonic;
+export const selectGetVaultUnlock = (state: AllSlices) => state.keyRing.getVaultUnlock;
 export const selectDeriveKey = (state: AllSlices) => state.keyRing.deriveKey;
 export const selectToggleNetwork = (state: AllSlices) => state.keyRing.toggleNetwork;
 export const selectDeleteKeyRing = (state: AllSlices) => state.keyRing.deleteKeyRing;

@@ -41,6 +41,9 @@ import { assessAmbientRayonIsolation, RAYON_ISOLATION_WARNING } from '../perf/ra
 import { loadVotingWasm } from '../state/voting-wasm';
 import { hotSpendAccount, isStoreOfWallet, parsePocketStoreId } from '../state/pocket-id';
 import { isP2pkhOf, pocketWalletKeys, type PocketKeysCtor } from './pocket-keys';
+import { unsealVault, withSpendKeys, type SpendKeysCtor } from './hot-sign';
+import { assertProveRequest, type ProveRequest } from '../shared/prove-guard';
+import { issueWorkerKey, type SealedVault } from '../shared/vault-seal';
 import {
   parseExpiryHeight,
   reconcileSentTxs,
@@ -147,6 +150,7 @@ const makeZcashClient = async (serverUrl: string, backend?: ZcashBackend): Promi
 interface WorkerMessage {
   type:
     | 'init'
+    | 'vault-key'
     | 'derive-address'
     | 'sync'
     | 'stop-sync'
@@ -301,22 +305,13 @@ interface WalletState {
 
 interface WasmModule {
   WalletKeys: PocketKeysCtor<WalletKeys>;
+  /** hot spend authority, built per send from the phrase this worker unsealed */
+  SpendKeys: SpendKeysCtor;
   WatchOnlyWallet: {
     from_ufvk(ufvk: string): WatchOnlyWallet;
     from_qr_hex(qrHex: string): WatchOnlyWallet;
     new (fvkBytes: Uint8Array, accountIndex: number, mainnet: boolean): WatchOnlyWallet;
   };
-  build_shielding_transaction(
-    utxos_json: string,
-    privkey_hex: string,
-    recipient: string,
-    amount: bigint,
-    fee: bigint,
-    anchor_height: number,
-    mainnet: boolean,
-    // live consensus branch id (hex, e.g. "37a5165b"); null/'' -> WASM NU6.2 fallback
-    branch_id_hex?: string | null,
-  ): string;
   build_unsigned_transaction(
     ufvk_str: string,
     notes_json: unknown,
@@ -331,20 +326,6 @@ interface WasmModule {
     // live consensus branch id (hex, e.g. "37a5165b"); null/'' -> WASM NU6.2 fallback
     branch_id_hex?: string | null,
   ): unknown;
-  build_signed_spend_transaction(
-    seed_phrase: string,
-    notes_json: unknown,
-    recipient: string,
-    amount: bigint,
-    fee: bigint,
-    anchor_hex: string,
-    merkle_paths_json: unknown,
-    account_index: number,
-    mainnet: boolean,
-    memo_hex?: string | null,
-    // live consensus branch id (hex, e.g. "37a5165b"); null/'' -> WASM NU6.2 fallback
-    branch_id_hex?: string | null,
-  ): string;
   complete_transaction(
     unsigned_tx_hex: string,
     signatures: unknown,
@@ -390,7 +371,6 @@ interface WasmModule {
     branch_id_hex?: string | null,
   ): string;
   complete_shielding_transaction(unsigned_tx_hex: string, signatures_json: string): string;
-  derive_transparent_privkey(seed_phrase: string, account: number, index: number): string;
   /** 33-byte compressed secp256k1 pubkey for a UFVK's transparent address index */
   transparent_pubkey_from_ufvk(ufvk_str: string, address_index: number): string;
   build_merkle_paths(
@@ -457,55 +437,6 @@ interface WasmModule {
     mainnet: boolean,
     memo_hex?: string | null,
   ) => unknown;
-
-  /**
-   * NU6.3 turnstile migration HOT (mnemonic) path: same as
-   * build_turnstile_migration_pczt but takes the SEED PHRASE and returns the
-   * final SIGNED V6 tx hex directly - no intermediate PCZT is produced. The
-   * account_index MUST be the account the orchard notes were scanned under, and
-   * expected_branch_id MUST be the live GetLightdInfo branch id (never the
-   * 0xffffffff placeholder); the producer refuses to build otherwise. Invoked
-   * via the offscreen prover (proveViaOffscreen), declared here for completeness.
-   */
-  build_signed_turnstile_migration?: (
-    seed_phrase: string,
-    orchard_notes_json: string,
-    fee: bigint,
-    orchard_anchor_hex: string,
-    orchard_merkle_paths_json: string,
-    account_index: number,
-    target_height: number,
-    expected_branch_id: number,
-    mainnet: boolean,
-    memo_hex?: string | null,
-  ) => string;
-
-  /**
-   * NU6.3 general IRONWOOD hot send: spends the given IRONWOOD notes to an
-   * arbitrary recipient and returns the final SIGNED V6 tx hex directly (no
-   * intermediate PCZT). Post-NU6.3 this is the only shielded spend path, since
-   * orchard-to-orchard sends are consensus-disabled. Same fail-closed contract
-   * as build_signed_turnstile_migration: account_index MUST be the account the
-   * ironwood notes were scanned under and expected_branch_id MUST be the live
-   * GetLightdInfo branch id (never the 0xffffffff placeholder); the producer
-   * refuses to build otherwise. Invoked via the offscreen prover
-   * (proveViaOffscreen), declared here (optional) for feature detection - the
-   * export lands with the NU6.3 blob.
-   */
-  build_signed_ironwood_send?: (
-    seed_phrase: string,
-    ironwood_notes_json: string,
-    recipient: string,
-    amount: bigint,
-    fee: bigint,
-    ironwood_anchor_hex: string,
-    ironwood_merkle_paths_json: string,
-    account_index: number,
-    target_height: number,
-    expected_branch_id: number,
-    mainnet: boolean,
-    memo_hex?: string | null,
-  ) => string;
 
   // FROST multisig
   frost_dealer_keygen(min_signers: number, max_signers: number): string;
@@ -1991,27 +1922,6 @@ const verifyHeaderProof = async (
 // the offscreen document which has a persistent rayon thread pool, so MSM/FFT
 // runs in parallel across all cores. The offscreen survives popup close.
 
-interface ZcashBuildRequest {
-  fn:
-    | 'build_signed_spend'
-    | 'build_unsigned'
-    | 'build_unsigned_pczt'
-    | 'build_turnstile_migration_pczt'
-    | 'build_signed_turnstile_migration'
-    | 'build_signed_ironwood_send'
-    | 'build_ironwood_send_pczt'
-    | 'build_shielding'
-    | 'build_unsigned_shielding'
-    | 'build_unsigned_shielding_ironwood'
-    // shielded-voting proving fns - routed to the standalone voting-wasm
-    // module + its own rayon pool in the offscreen document. See
-    // zcash-build-parallel.ts's VOTING_FNS / initParallelVotingWasm.
-    | 'build_delegation_pczt'
-    | 'finalize_delegation'
-    | 'cast_vote_hot_wire';
-  args: unknown[];
-}
-
 // pending prove requests waiting for parent (network-worker) to relay response
 const pendingProveRequests = new Map<
   string,
@@ -2019,7 +1929,8 @@ const pendingProveRequests = new Map<
 >();
 let proveRequestCounter = 0;
 
-const proveViaOffscreen = async (req: ZcashBuildRequest): Promise<unknown> => {
+const proveViaOffscreen = async (req: ProveRequest): Promise<unknown> => {
+  assertProveRequest(req);
   // web workers don't have chrome.runtime - relay through parent (network-worker/popup)
   // which has chrome APIs and can forward to service worker → offscreen document
   const id = `prove-${++proveRequestCounter}`;
@@ -4928,6 +4839,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         workerSelf.postMessage({ type: 'ready', id, network: 'zcash' });
         return;
 
+      case 'vault-key':
+        // a single-use key the page wraps the session key to for the next call
+        workerSelf.postMessage({
+          type: 'vault-key',
+          id,
+          network: 'zcash',
+          payload: await issueWorkerKey(),
+        });
+        return;
+
       case 'derive-address': {
         await initWasm();
         const { mnemonic, accountIndex, diversifierHex, pocket } = payload as {
@@ -4953,8 +4874,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           throw new Error('walletId required');
         }
         await initWasm();
-        const { mnemonic, serverUrl, startHeight, ufvk, backend, mempoolWatch } = payload as {
-          mnemonic: string;
+        const { vault, serverUrl, startHeight, ufvk, backend, mempoolWatch } = payload as {
+          /** hot wallet: the sealed vault this worker opens itself; watch-only sends ufvk */
+          vault?: SealedVault;
           serverUrl: string;
           startHeight?: number;
           ufvk?: string;
@@ -4990,7 +4912,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         registerBackend(serverUrl, effectiveBackend);
         runSync(
           walletId,
-          mnemonic,
+          ufvk ? '' : await unsealVault(vault),
           serverUrl,
           startHeight,
           ufvk,
@@ -6098,11 +6020,12 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           memo: string;
           accountIndex: number;
           mainnet: boolean;
-          mnemonic?: string;
+          /** hot wallet: the sealed vault this worker opens itself */
+          vault?: SealedVault;
           ufvk?: string;
         };
         // a hot build signs with the account of the store its notes come from
-        const spendAccount = sendPayload.mnemonic
+        const spendAccount = sendPayload.vault
           ? hotSpendAccount(walletId, sendPayload.accountIndex)
           : sendPayload.accountIndex;
 
@@ -6243,16 +6166,12 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const witnessDuration = ((performance.now() - witnessStart) / 1000).toFixed(1);
         emitProgress('witnesses built', `${witnessDuration}s`);
 
-        // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe).
-        // Shared by both the mnemonic (signed) and zigner (unsigned) build paths below.
-        const sendBranchIdHex = await fetchBranchIdHex(sendClient);
-
-        if (sendPayload.mnemonic) {
+        if (sendPayload.vault) {
           // ── NU6.3 IRONWOOD hot send ─────────────────────────────────────
           // Post-activation shielded spend path. Fail-closed branch-id guard
-          // (copied verbatim from send-turnstile-migration), then build + prove
-          // + SIGN the V6 ironwood tx inside the wasm with the seed phrase and
-          // broadcast the returned tx hex directly. No PCZT is produced.
+          // (copied verbatim from send-turnstile-migration), then the prover
+          // builds + proves from this account's UFVK and the PCZT is signed
+          // here, in this worker, and broadcast.
           if (sendActivePool === 'ironwood') {
             emitProgress('checking NU6.3 activation');
             const iwLightdInfo = await sendClient.getLightdInfo();
@@ -6309,36 +6228,38 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             }, 2000);
             let iwTxHex: string;
             try {
-              // arg order matches the build_signed_ironwood_send producer:
-              // [seed, ironwood_notes_json, recipient, amount, fee,
-              //  ironwood_anchor_hex, ironwood_merkle_paths_json, account_index,
-              //  target_height, expected_branch_id, mainnet, memo_hex].
               // expected_branch_id is the live value validated above; the
               // producer refuses to build unless the branch id it binds equals it.
-              iwTxHex = (await proveViaOffscreen({
-                fn: 'build_signed_ironwood_send',
-                args: [
-                  sendPayload.mnemonic,
-                  JSON.stringify(iwNotesJson),
-                  sendPayload.recipient,
-                  amountZat.toString(),
-                  fee.toString(),
-                  anchorHex,
-                  JSON.stringify(iwPathsForWasm),
-                  spendAccount,
-                  sendTip.height,
-                  NU63_CONSENSUS_BRANCH_ID,
-                  sendPayload.mainnet,
-                  memoHex,
-                ],
-              })) as string;
+              iwTxHex = await withSpendKeys(
+                wasmModule.SpendKeys,
+                sendPayload.vault,
+                spendAccount,
+                sendPayload.mainnet,
+                async keys => {
+                  const built = (await proveViaOffscreen({
+                    fn: 'build_ironwood_send_pczt',
+                    args: [
+                      keys.ufvk(),
+                      JSON.stringify(iwNotesJson),
+                      sendPayload.recipient,
+                      amountZat.toString(),
+                      fee.toString(),
+                      anchorHex,
+                      JSON.stringify(iwPathsForWasm),
+                      spendAccount,
+                      sendTip.height,
+                      NU63_CONSENSUS_BRANCH_ID,
+                      sendPayload.mainnet,
+                      memoHex,
+                    ],
+                  })) as { retained_pczt_hex: string };
+                  return keys.sign_pczt(built.retained_pczt_hex);
+                },
+              );
             } catch (e) {
-              // do NOT log the seed or the caught args; message only. The
-              // message is what tells us WHY the build failed (bad anchor,
-              // path/position mismatch, diversifier reconstruction, an offscreen
-              // RPC drop) - logging it without a reason was undebuggable.
+              // message only, never the caught args
               console.error(
-                '[zcash-worker] build_signed_ironwood_send failed:',
+                '[zcash-worker] ironwood hot send failed:',
                 e instanceof Error ? e.message : String(e),
               );
               throw e;
@@ -6382,7 +6303,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             return;
           }
 
-          // mnemonic wallet: build fully signed transaction and broadcast directly
+          // hot wallet before NU6.3: the orchard PCZT the cold path builds, signed here
           const notesJson = selected.map(n => ({
             value: Number(n.value),
             nullifier: n.nullifier,
@@ -6413,24 +6334,35 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
           let txHex: string;
           try {
-            txHex = (await proveViaOffscreen({
-              fn: 'build_signed_spend',
-              args: [
-                sendPayload.mnemonic,
-                notesJson,
-                sendPayload.recipient,
-                amountZat.toString(),
-                fee.toString(),
-                anchorHex,
-                merklePathsForWasm,
-                spendAccount,
-                sendPayload.mainnet,
-                memoHex,
-                sendBranchIdHex,
-              ],
-            })) as string;
+            txHex = await withSpendKeys(
+              wasmModule.SpendKeys,
+              sendPayload.vault,
+              spendAccount,
+              sendPayload.mainnet,
+              async keys => {
+                const built = (await proveViaOffscreen({
+                  fn: 'build_unsigned_pczt',
+                  args: [
+                    keys.ufvk(),
+                    notesJson,
+                    sendPayload.recipient,
+                    amountZat.toString(),
+                    fee.toString(),
+                    anchorHex,
+                    merklePathsForWasm,
+                    sendTip.height,
+                    sendPayload.mainnet,
+                    memoHex,
+                  ],
+                })) as { pczt_hex: string };
+                return keys.sign_pczt(built.pczt_hex);
+              },
+            );
           } catch (e) {
-            console.error('[zcash-worker] build_signed_spend_transaction failed:', e);
+            console.error(
+              '[zcash-worker] orchard hot send failed:',
+              e instanceof Error ? e.message : String(e),
+            );
             throw e;
           } finally {
             clearInterval(provingTicker);
@@ -6521,6 +6453,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           path: p.path.map(e => e.hash),
           position: p.position,
         }));
+
+        // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe)
+        const sendBranchIdHex = await fetchBranchIdHex(sendClient);
 
         // build unsigned transaction with real Halo 2 proofs (parallel via offscreen)
         const unsignedResult = await proveViaOffscreen({
@@ -7171,7 +7106,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           accountIndex: number;
           mainnet: boolean;
           ufvk?: string;
-          mnemonic?: string;
+          /** hot wallet: the sealed vault this worker opens itself */
+          vault?: SealedVault;
           backend?: ZcashBackend;
           /** UR fragment-size override; falls back to 200 for back-compat */
           fragmentSize?: number;
@@ -7179,15 +7115,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (migratePayload.backend) {
           registerBackend(migratePayload.serverUrl, migratePayload.backend);
         }
-        // HOT (mnemonic) vs COLD (zigner/UFVK) turnstile. A hot/self-custody
-        // wallet supplies the seed phrase in-worker and signs the V6 tx with
-        // the NU6.3 signer wasm (build_signed_turnstile_migration), returning a
-        // ready-to-broadcast tx - no PCZT/QR round trip. A watch-only/zigner
-        // wallet supplies a UFVK and takes the cold PCZT cold-sign machine.
-        // Prefer the seed when present; fall back to the UFVK cold path.
-        const isHotMigration = !!migratePayload.mnemonic;
+        // HOT vs COLD turnstile: both build the same seed-free PCZT. A hot
+        // wallet sends its sealed vault and this worker signs and broadcasts -
+        // no QR round trip. A watch-only/zigner wallet supplies a UFVK and takes
+        // the cold PCZT cold-sign machine.
+        const isHotMigration = !!migratePayload.vault;
         if (!isHotMigration && !migratePayload.ufvk) {
-          throw new Error('turnstile migration requires a mnemonic (hot) or UFVK (cold) wallet');
+          throw new Error('turnstile migration requires a hot wallet or a UFVK (cold) wallet');
         }
 
         const migrateStart = performance.now();
@@ -7286,16 +7220,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           position: p.position,
         }));
 
-        // ── HOT (mnemonic) path ───────────────────────────────────────────
-        // Self-custody wallet: build + prove + SIGN the V6 turnstile tx inside
-        // the wasm with the seed phrase, then broadcast the returned tx hex
-        // directly. No PCZT is produced, persisted, or transmitted - the wasm
-        // returns only the final signed tx. Reuses the EXACT same params the
-        // cold path passes (notes, fee, anchor, merkle paths, accountIndex,
-        // target height, expected branch id, mainnet), so nullifier derivation
-        // and the fail-closed branch-id guard match the cold path bit for bit.
+        // ── HOT path ──────────────────────────────────────────────────────
+        // Self-custody wallet: the prover builds + proves the same PCZT the
+        // cold path does, from this account's UFVK; it is signed here and
+        // broadcast. The PCZT is never persisted. Same params as the cold path
+        // (notes, fee, anchor, merkle paths, target height, expected branch id,
+        // mainnet), so the fail-closed branch-id guard matches bit for bit.
         if (isHotMigration) {
-          const migrateSeed = migratePayload.mnemonic!;
           const migrateAccount = hotSpendAccount(walletId, migratePayload.accountIndex);
           emitProgress(
             'building, proving & signing turnstile tx (halo2)',
@@ -7311,29 +7242,40 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           try {
             // target_height = live tip; at/after NU6.3 activation this selects
             // TxVersion::V6 (orchard spends + ironwood outputs) in the builder.
-            // account_index MUST be the account the orchard notes were scanned
-            // under (same as the cold path) or the wasm's nullifier check
-            // rejects every spend. NU63_CONSENSUS_BRANCH_ID is the live value
+            // The keys MUST be the account the orchard notes were scanned under
+            // or no spend accepts them. NU63_CONSENSUS_BRANCH_ID is the live value
             // validated from GetLightdInfo above (never the placeholder); the
             // producer refuses to build unless the branch id it binds equals it.
-            migrateTxHex = (await proveViaOffscreen({
-              fn: 'build_signed_turnstile_migration',
-              args: [
-                migrateSeed,
-                JSON.stringify(notesForWasm),
-                fee.toString(),
-                anchorHex,
-                JSON.stringify(pathsForWasm),
-                migrateAccount,
-                migrateTip.height,
-                NU63_CONSENSUS_BRANCH_ID,
-                migratePayload.mainnet,
-                null,
-              ],
-            })) as string;
+            migrateTxHex = await withSpendKeys(
+              wasmModule.SpendKeys,
+              migratePayload.vault,
+              migrateAccount,
+              migratePayload.mainnet,
+              async keys => {
+                const built = (await proveViaOffscreen({
+                  fn: 'build_turnstile_migration_pczt',
+                  args: [
+                    keys.ufvk(),
+                    JSON.stringify(notesForWasm),
+                    fee.toString(),
+                    anchorHex,
+                    JSON.stringify(pathsForWasm),
+                    migrateAccount,
+                    migrateTip.height,
+                    NU63_CONSENSUS_BRANCH_ID,
+                    migratePayload.mainnet,
+                    null,
+                  ],
+                })) as { pczt_hex: string };
+                return keys.sign_pczt(built.pczt_hex);
+              },
+            );
           } catch (e) {
-            // do NOT log the seed or the caught args; message only
-            console.error('[zcash-worker] build_signed_turnstile_migration failed');
+            // message only, never the caught args
+            console.error(
+              '[zcash-worker] turnstile hot migration failed:',
+              e instanceof Error ? e.message : String(e),
+            );
             throw e;
           } finally {
             clearInterval(hotProvingTicker);
@@ -7550,14 +7492,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           outputs: { address: string; amount: string; memo?: string }[];
           accountIndex: number;
           mainnet: boolean;
-          mnemonic: string;
+          vault: SealedVault;
         };
 
         if (!multiPayload.outputs || multiPayload.outputs.length === 0) {
           throw new Error('outputs array required');
-        }
-        if (!multiPayload.mnemonic) {
-          throw new Error('mnemonic required for multi-output send');
         }
         const multiAccount = hotSpendAccount(walletId, multiPayload.accountIndex);
 
@@ -7601,15 +7540,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         const txids: string[] = [];
         const fees: string[] = [];
-        // live consensus branch id (NU6.3-safe); resolved once, reused for every output
-        let multiBranchIdHex: string | null = null;
 
         // FAIL-CLOSED (NU6.3): multi-send only builds orchard txs today, which
         // are consensus-disabled post-activation, and there is no ironwood
         // multi-send path yet. Refuse up front rather than build invalid
         // orchard txs per output.
         // TODO(ironwood multi-send): route the ironwood pool through
-        // build_signed_ironwood_send per output.
+        // build_ironwood_send_pczt per output.
         {
           const multiGuardClient = await makeZcashClient(multiPayload.serverUrl);
           const multiGuardTip = await multiGuardClient.getTip();
@@ -7653,7 +7590,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           const nTOutputs = isTransparent ? 1 : 0;
 
           // Estimate fee and select notes. The pool is pinned to orchard to
-          // match the build_signed_spend / buildWitnesses('orchard') calls
+          // match the build_unsigned_pczt / buildWitnesses('orchard') calls
           // below; the NU6.3 guard above already refused post-activation, so
           // orchard is the only reachable pool here. Passed explicitly rather
           // than leaning on selectNotes' legacy default.
@@ -7684,9 +7621,6 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // build merkle witnesses
           const multiClient = await makeZcashClient(multiPayload.serverUrl);
           const multiTip = await multiClient.getTip();
-          if (multiBranchIdHex === null) {
-            multiBranchIdHex = await fetchBranchIdHex(multiClient);
-          }
 
           const multiAnchorHeight = await resolveAnchorHeight(walletId, multiTip.height);
           emitMultiProgress(
@@ -7733,22 +7667,30 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
           let txHex: string;
           try {
-            txHex = (await proveViaOffscreen({
-              fn: 'build_signed_spend',
-              args: [
-                multiPayload.mnemonic,
-                notesJson,
-                recipient,
-                amountZat.toString(),
-                fee.toString(),
-                multiAnchor,
-                merklePathsForWasm,
-                multiAccount,
-                multiPayload.mainnet,
-                memoHex,
-                multiBranchIdHex,
-              ],
-            })) as string;
+            txHex = await withSpendKeys(
+              wasmModule.SpendKeys,
+              multiPayload.vault,
+              multiAccount,
+              multiPayload.mainnet,
+              async keys => {
+                const built = (await proveViaOffscreen({
+                  fn: 'build_unsigned_pczt',
+                  args: [
+                    keys.ufvk(),
+                    notesJson,
+                    recipient,
+                    amountZat.toString(),
+                    fee.toString(),
+                    multiAnchor,
+                    merklePathsForWasm,
+                    multiTip.height,
+                    multiPayload.mainnet,
+                    memoHex,
+                  ],
+                })) as { pczt_hex: string };
+                return keys.sign_pczt(built.pczt_hex);
+              },
+            );
           } finally {
             clearInterval(provingTicker);
           }
@@ -7805,8 +7747,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           throw new Error('wasm not initialized');
         }
 
-        const { mnemonic, serverUrl, tAddresses, mainnet, addressIndexMap } = payload as {
-          mnemonic: string;
+        const { vault, serverUrl, tAddresses, mainnet, addressIndexMap } = payload as {
+          /** the sealed vault this worker opens itself */
+          vault: SealedVault;
           serverUrl: string;
           tAddresses: string[];
           mainnet: boolean;
@@ -7844,84 +7787,100 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           group.push(utxo);
         }
 
-        // the pocket's own orchard address: transparent funds shield only into
-        // the pocket they belong to, and sign with that pocket's t-branch
-        const shieldAccount = hotSpendAccount(walletId);
-        const keys = walletKeysFor(mnemonic, shieldAccount);
-        let rawRecipient: string;
-        try {
-          rawRecipient = keys.get_receiving_address(mainnet);
-        } finally {
-          keys.free();
-        }
-        const recipient = fixOrchardAddress(rawRecipient, mainnet);
-
         // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe)
         const shieldBranchIdHex = await fetchBranchIdHex(client);
+        // the same unsigned builders the cold path uses: ironwood from NU6.3,
+        // where an orchard output would strand the funds
+        const shieldIntoIronwood = tip.height >= nu63ActivationHeight(mainnet);
 
-        // shield each group with its matching privkey
         let totalShielded = 0n;
         let totalFee = 0n;
         let totalUtxos = 0;
         let lastTxid = '';
 
-        for (const [addrIndex, utxos] of byIndex) {
-          const groupZat = utxos.reduce((sum, u) => sum + u.valueZat, 0n);
-          const fee = computeShieldFee(utxos.length);
-          if (groupZat <= fee) {
-            console.warn(
-              `[zcash-worker] skipping index ${addrIndex}: ${groupZat} zat <= ${fee} fee`,
+        // transparent funds shield only into the pocket they belong to, and
+        // sign with that pocket's t-branch
+        const shieldAccount = hotSpendAccount(walletId);
+        await withSpendKeys(wasmModule.SpendKeys, vault, shieldAccount, mainnet, async keys => {
+          const recipient = fixOrchardAddress(keys.receiving_address(), mainnet);
+
+          // shield each group with its matching key
+          for (const [addrIndex, utxos] of byIndex) {
+            const groupZat = utxos.reduce((sum, u) => sum + u.valueZat, 0n);
+            const fee = computeShieldFee(utxos.length);
+            if (groupZat <= fee) {
+              console.warn(
+                `[zcash-worker] skipping index ${addrIndex}: ${groupZat} zat <= ${fee} fee`,
+              );
+              continue;
+            }
+
+            const shieldAmount = groupZat - fee;
+            const pubkeyHex = keys.transparent_pubkey(addrIndex);
+            // every input must be locked to this key: this pocket's own t-branch
+            // at this index. Anything else is not this pocket's money.
+            if (!utxos.every(u => isP2pkhOf(u.script, pubkeyHex))) {
+              throw new Error(
+                `transparent input is not on pocket ${shieldAccount} index ${addrIndex}`,
+              );
+            }
+
+            const utxosJson = JSON.stringify(
+              utxos.map(u => ({
+                txid: hexEncode(u.txid),
+                vout: u.outputIndex,
+                value: Number(u.valueZat),
+                script: hexEncode(u.script),
+              })),
             );
-            continue;
-          }
 
-          const shieldAmount = groupZat - fee;
-          const privkeyHex = wasmModule.derive_transparent_privkey(
-            mnemonic,
-            shieldAccount,
-            addrIndex,
-          );
-          // every input must be locked to this key: this pocket's own t-branch
-          // at this index. Anything else is not this pocket's money.
-          if (!utxos.every(u => isP2pkhOf(u.script, privkeyHex))) {
-            throw new Error(
-              `transparent input is not on pocket ${shieldAccount} index ${addrIndex}`,
+            const built = JSON.parse(
+              (await proveViaOffscreen(
+                shieldIntoIronwood
+                  ? {
+                      fn: 'build_unsigned_shielding_ironwood',
+                      args: [
+                        utxosJson,
+                        pubkeyHex,
+                        recipient,
+                        shieldAmount.toString(),
+                        fee.toString(),
+                        tip.height,
+                        parseInt(shieldBranchIdHex, 16),
+                        mainnet,
+                        null,
+                      ],
+                    }
+                  : {
+                      fn: 'build_unsigned_shielding',
+                      args: [
+                        utxosJson,
+                        recipient,
+                        shieldAmount.toString(),
+                        fee.toString(),
+                        tip.height,
+                        mainnet,
+                        shieldBranchIdHex,
+                      ],
+                    },
+              )) as string,
+            ) as { sighashes: string[]; unsigned_tx_hex: string };
+            const txHex = keys.sign_shielding(
+              addrIndex,
+              built.unsigned_tx_hex,
+              JSON.stringify(built.sighashes),
             );
+            const result = await client.sendTransaction(hexDecode(txHex));
+            if (result.errorCode !== 0) {
+              throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
+            }
+
+            lastTxid = await resolveBroadcastTxid(result, txHex, serverUrl);
+            totalShielded += shieldAmount;
+            totalFee += fee;
+            totalUtxos += utxos.length;
           }
-
-          const utxosJson = JSON.stringify(
-            utxos.map(u => ({
-              txid: hexEncode(u.txid),
-              vout: u.outputIndex,
-              value: Number(u.valueZat),
-              script: hexEncode(u.script),
-            })),
-          );
-
-          const txHex = (await proveViaOffscreen({
-            fn: 'build_shielding',
-            args: [
-              utxosJson,
-              privkeyHex,
-              recipient,
-              shieldAmount.toString(),
-              fee.toString(),
-              tip.height,
-              mainnet,
-              shieldBranchIdHex,
-            ],
-          })) as string;
-          const txData = hexDecode(txHex);
-          const result = await client.sendTransaction(txData);
-          if (result.errorCode !== 0) {
-            throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
-          }
-
-          lastTxid = await resolveBroadcastTxid(result, txHex, serverUrl);
-          totalShielded += shieldAmount;
-          totalFee += fee;
-          totalUtxos += utxos.length;
-        }
+        });
 
         if (totalUtxos === 0) {
           throw new Error('all UTXO groups too small to cover fees');

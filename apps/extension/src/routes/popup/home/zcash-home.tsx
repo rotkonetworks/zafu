@@ -224,17 +224,10 @@ export const ZcashContent = ({
         markWalletSyncing('zcash', activeStoreId);
 
         if (hasMnemonic && selectedKeyInfo.type === 'mnemonic') {
-          const mnemonic = await keyRing.getMnemonic(walletId);
+          const vault = await keyRing.getVaultUnlock(walletId);
           // pass the configured backend - defaulting to zidecar here would
           // point a zidecar client at a lightwalletd endpoint (HTTP 415s)
-          await startSyncInWorker(
-            'zcash',
-            activeStoreId,
-            mnemonic,
-            zidecarUrl,
-            height,
-            zcashBackend,
-          );
+          await startSyncInWorker('zcash', activeStoreId, vault, zidecarUrl, height, zcashBackend);
         } else if (watchOnly) {
           const ufvkStr =
             watchOnly.ufvk ??
@@ -273,11 +266,11 @@ export const ZcashContent = ({
             | number
             | undefined;
           if (hasMnemonic && selectedKeyInfo.type === 'mnemonic') {
-            const mnemonic = await keyRing.getMnemonic(walletId);
+            const vault = await keyRing.getVaultUnlock(walletId);
             await startSyncInWorker(
               'zcash',
               activeStoreId,
-              mnemonic,
+              vault,
               zidecarUrl,
               resumeAt,
               zcashBackend,
@@ -912,17 +905,17 @@ export const ZcashContent = ({
             }
             orchardZat={pools.orchard > 0n ? pools.orchard : orchardZat}
             isHotWallet={kind === 'hot'}
-            getMnemonic={
+            getVaultUnlock={
               kind === 'hot'
                 ? async () => {
-                    // gate the seed behind the password prompt, exactly like
+                    // gate behind the password prompt, exactly like
                     // handleShield / zcash-send. Returns null on cancel so the
                     // migrate flow returns to review instead of building.
                     const authorized = await requestAuth();
                     if (!authorized) {
                       return null;
                     }
-                    return keyRing.getMnemonic(selectedKeyInfo.id);
+                    return keyRing.getVaultUnlock(selectedKeyInfo.id);
                   }
                 : undefined
             }
