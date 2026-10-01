@@ -48,6 +48,8 @@ describe('zafu_sign: only a signer that can sign a ZID is offered it', () => {
     ['ledger cold import', 'zigner-zafu', { coldSignerType: 'ledger' }, /ledger cannot sign/],
     ['ledger vault', 'ledger', {}, /ledger cannot sign/],
     ['viewing key', 'zigner-zafu', { coldSignerType: 'viewing-key' }, /viewing key/],
+    ['foreign cold signer', 'zigner-zafu', { coldSignerType: 'abacus' }, /does not recognise/],
+    ['trezor vault', 'trezor', {}, /does not recognise/],
   ])('refuses a %s without opening a popup', async (_, type, insensitive, reason) => {
     await selectVault(type, insensitive);
     const res = await ask();

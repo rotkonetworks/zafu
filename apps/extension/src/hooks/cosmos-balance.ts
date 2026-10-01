@@ -10,13 +10,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useStore } from '../state';
 import { selectEffectiveKeyInfo, keyRingSelector, selectActiveNetwork } from '../state/keyring';
 import { getRootNetwork } from '../config/networks';
-import { deriveChainAddress } from '@repo/wallet/networks/cosmos/signer';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { getRpcPool } from './transparent-rpc';
 import { shortSymbol } from '../utils/asset-display';
 import { conduitFor } from '@repo/wallet/networks/transparent/conduit';
 import { peekHdIndex } from '@repo/storage-chrome/cosmos-chain-counters';
 import { knownAssets } from '../transparent/assets';
+import { cosmosKeyFor } from '../signing/cosmos-key';
 import {
   readFundedIndices,
   readShownIndices,
@@ -272,98 +272,30 @@ export interface CosmosAsset {
   isNative: boolean;
 }
 
-/** get cosmos address from zigner vault insensitive data */
-function getZignerCosmosAddress(
-  keyInfo: { insensitive: Record<string, unknown> },
-  chainId: CosmosChainId,
-): string | null {
-  // zigner holds coin-118 cosmos keys; any address it has for an Ethermint
-  // chain would be the wrong one
-  if (COSMOS_CHAINS[chainId].keyAlgo === 'eth_secp256k1') {
-    return null;
-  }
-  const addrs = keyInfo.insensitive['cosmosAddresses'] as
-    | { chainId: string; address: string; prefix: string }[]
-    | undefined;
-  if (!addrs) {
-    return null;
-  }
-  const match = addrs.find(a => a.chainId === chainId);
-  if (match) {
-    return match.address;
-  }
-  // try to derive from any stored address using bech32 prefix swap
-  if (addrs.length > 0) {
-    try {
-      return deriveChainAddress(addrs[0]!.address, chainId);
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
-/** find a keyInfo with cosmos capability - effective first, then any wallet that has cosmos addresses */
-function findCosmosCapableKey(
-  keyInfos: { id: string; type: string; insensitive: Record<string, unknown> }[],
-  effective: { id: string; type: string; insensitive: Record<string, unknown> } | undefined,
-  chainId: CosmosChainId,
-): { id: string; type: string; insensitive: Record<string, unknown> } | null {
-  // try effective first
-  if (effective) {
-    if (effective.type === 'mnemonic') {
-      return effective;
-    }
-    if (effective.type === 'zigner-zafu' && getZignerCosmosAddress(effective, chainId)) {
-      return effective;
-    }
-  }
-  // fallback: search all keyInfos for one with cosmos capability
-  for (const ki of keyInfos) {
-    if (ki === effective) {
-      continue;
-    }
-    if (ki.type === 'mnemonic') {
-      return ki;
-    }
-    if (ki.type === 'zigner-zafu' && getZignerCosmosAddress(ki, chainId)) {
-      return ki;
-    }
-  }
-  return null;
-}
-
 /** hook to get all assets (native + IBC tokens) for a cosmos chain */
 export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
-  const allKeyInfos = useStore(state => state.keyRing.keyInfos);
   const { getMnemonic } = useStore(keyRingSelector);
 
-  // find a wallet with cosmos capability (may differ from effective when active network is penumbra)
-  const cosmosKey = findCosmosCapableKey(allKeyInfos, selectedKeyInfo, chainId);
+  // the selected wallet's own key only; another wallet's balance is never shown
+  const cosmosKey = cosmosKeyFor(selectedKeyInfo, chainId);
   const burnerEnabled = useBurnerPollingEnabled();
 
   return useQuery({
-    queryKey: ['cosmosAssets', chainId, cosmosKey?.id ?? null, accountIndex],
+    queryKey: ['cosmosAssets', chainId, cosmosKey?.key.id ?? null, accountIndex],
     queryFn: async () => {
       if (!cosmosKey) {
         return null;
       }
-
-      let address: string;
-
-      if (cosmosKey.type === 'zigner-zafu') {
-        const storedAddr = getZignerCosmosAddress(cosmosKey, chainId);
-        if (!storedAddr) {
-          return null;
-        }
-        address = storedAddr;
-      } else if (cosmosKey.type === 'mnemonic') {
-        const mnemonic = await getMnemonic(cosmosKey.id);
-        address = await deriveCached(cosmosKey.id, chainId, mnemonic, accountIndex);
-      } else {
-        return null;
-      }
+      const address =
+        cosmosKey.signer === 'zigner'
+          ? cosmosKey.address
+          : await deriveCached(
+              cosmosKey.key.id,
+              chainId,
+              await getMnemonic(cosmosKey.key.id),
+              accountIndex,
+            );
 
       const config = COSMOS_CHAINS[chainId];
       const balances = await conduitFor(chainId).queryBalances(address);

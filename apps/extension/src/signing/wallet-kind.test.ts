@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { walletKind, zcashSendRefusal, type SendFlags } from './wallet-kind';
+import { CAPS, walletKind, zcashSendRefusal, type SendFlags } from './wallet-kind';
 
 const cold = (coldSignerType?: string) => ({
   type: 'zigner-zafu',
@@ -36,6 +36,10 @@ describe('walletKind', () => {
       { multisig: { custody: 'airgapSigner' } },
       'frost-airgap',
     ],
+    // an unrecognised record refuses; it is never guessed to be a zigner
+    ['trezor vault', { type: 'trezor' }, undefined, 'unknown'],
+    ['a vault type zafu has never seen', { type: 'satchel' }, undefined, 'unknown'],
+    ['zigner-zafu with a foreign cold signer', cold('abacus'), undefined, 'unknown'],
   ] as const)('%s', (_, key, zcash, want) => {
     expect(walletKind(key, zcash)).toBe(want);
   });
@@ -49,7 +53,11 @@ describe('zcashSendRefusal', () => {
     key => {
       const kind = walletKind(key, {});
       expect(kind).not.toBe('zigner');
-      const r = zcashSendRefusal(kind, { hardwareWallet: false, ledgerTransparent: true });
+      const r = zcashSendRefusal(
+        kind,
+        { hardwareWallet: false, ledgerTransparent: true },
+        'orchard',
+      );
       expect(r?.title).toBe('ledger signs transparent zcash only for now');
       expect(r?.body).toBe("shielded sends need a zigner or this wallet's phrase");
     },
@@ -57,24 +65,88 @@ describe('zcashSendRefusal', () => {
 
   it('lets a shielded ledger through only when hardware signing is on', () => {
     expect(
-      zcashSendRefusal('ledger-shielded', { hardwareWallet: true, ledgerTransparent: false }),
+      zcashSendRefusal(
+        'ledger-shielded',
+        { hardwareWallet: true, ledgerTransparent: false },
+        'orchard',
+      ),
     ).toBeNull();
   });
 
   it('lets a transparent ledger through when either ledger flag is on', () => {
     for (const f of FLAG_SETS) {
-      const r = zcashSendRefusal('ledger-transparent', f);
+      const r = zcashSendRefusal('ledger-transparent', f, 'orchard');
       expect(r === null).toBe(f.ledgerTransparent || f.hardwareWallet);
     }
   });
 
   it.each(FLAG_SETS)('always refuses a viewing key (%o)', f => {
-    expect(zcashSendRefusal('viewing-key', f)?.title).toBe('this wallet is a viewing key');
+    expect(zcashSendRefusal('viewing-key', f, 'orchard')?.title).toBe(
+      'this wallet is a viewing key',
+    );
   });
 
-  it.each(FLAG_SETS)('never refuses a kind that has a signer (%o)', f => {
-    for (const k of ['hot', 'zigner', 'keystone', 'frost-self', 'frost-airgap'] as const) {
-      expect(zcashSendRefusal(k, f)).toBeNull();
+  it.each(FLAG_SETS)('always refuses an unknown signer, calmly (%o)', f => {
+    expect(zcashSendRefusal('unknown', f, 'orchard')).toMatchObject({
+      title: "zafu does not recognise this wallet's signer",
+      body: 'nothing was sent · please send from a zigner or a phrase wallet',
+    });
+  });
+
+  it.each(FLAG_SETS)('never refuses a kind that has a signer for both pools (%o)', f => {
+    for (const k of ['hot', 'zigner', 'frost-self', 'frost-airgap'] as const) {
+      expect(zcashSendRefusal(k, f, 'orchard')).toBeNull();
+      expect(zcashSendRefusal(k, f, 'ironwood')).toBeNull();
+    }
+  });
+
+  // founder decision: keystone stays orchard-only after NU6.3. An ironwood
+  // build rides zigner's ur:zigner-module envelope, which keystone cannot read.
+  it.each(FLAG_SETS)('keystone signs orchard, and is refused an ironwood send (%o)', f => {
+    expect(zcashSendRefusal('keystone', f, 'orchard')).toBeNull();
+    expect(zcashSendRefusal('keystone', f, 'ironwood')).toEqual({
+      icon: 'i-ph-qr-code',
+      title: 'keystone signs orchard only for now',
+      body: "ironwood sends need a zigner or this wallet's phrase",
+    });
+  });
+
+  it('refuses a shielded ledger an ironwood send before any build', () => {
+    const on = { hardwareWallet: true, ledgerTransparent: true };
+    expect(zcashSendRefusal('ledger-shielded', on, 'ironwood')?.title).toBe(
+      'ledger signs orchard only for now',
+    );
+  });
+});
+
+describe('CAPS', () => {
+  it('offers the ironwood migration only to kinds that sign ironwood on its QR', () => {
+    const offered = Object.entries(CAPS)
+      .filter(([, c]) => c.migrate)
+      .map(([k]) => k);
+    expect(offered).toEqual(['hot', 'zigner']);
+  });
+
+  it('asks for a password only where zafu holds the secret', () => {
+    expect(CAPS.hot.unlockToSign).toBe(true);
+    expect(CAPS['frost-self'].unlockToSign).toBe(true);
+    for (const k of ['zigner', 'keystone', 'frost-airgap', 'ledger-shielded'] as const) {
+      expect(CAPS[k].unlockToSign).toBe(false);
+    }
+  });
+
+  it('refuses a zafu identity for every kind but hot, zigner and frost', () => {
+    for (const k of [
+      'keystone',
+      'ledger-shielded',
+      'ledger-transparent',
+      'viewing-key',
+      'unknown',
+    ] as const) {
+      expect(CAPS[k].zid).toEqual(expect.any(String));
+    }
+    for (const k of ['hot', 'zigner', 'frost-self', 'frost-airgap'] as const) {
+      expect(CAPS[k].zid).toBeNull();
     }
   });
 });

@@ -13,6 +13,7 @@ import { useState, useCallback, useRef, createElement } from 'react';
 import { PasswordGateModal } from '../shared/components/password-gate';
 import { useStore } from '../state';
 import { selectEffectiveKeyInfo } from '../state/keyring';
+import { CAPS, walletKind } from '../signing/wallet-kind';
 
 interface GateCallbacks {
   resolve: (authorized: boolean) => void;
@@ -23,9 +24,10 @@ export const usePasswordGate = () => {
   const callbacksRef = useRef<GateCallbacks | null>(null);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
 
-  // multisig vaults are AES-encrypted with the user's password, same as
-  // mnemonic vaults - only zigner-zafu vaults need the air-gapped QR flow.
-  const walletType = selectedKeyInfo?.type === 'zigner-zafu' ? 'zigner' : 'mnemonic';
+  // a password unlocks what zafu holds (a phrase, a multisig share); a device
+  // signs on its own, so the gate only confirms.
+  const walletType =
+    selectedKeyInfo && !CAPS[walletKind(selectedKeyInfo)].unlockToSign ? 'zigner' : 'mnemonic';
 
   const requestAuth = useCallback((): Promise<boolean> => {
     return new Promise<boolean>(resolve => {

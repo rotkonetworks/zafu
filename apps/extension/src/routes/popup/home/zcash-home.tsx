@@ -6,6 +6,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '../../../state';
 import { privacySelector } from '../../../state/privacy';
 import { selectEffectiveKeyInfo, keyRingSelector } from '../../../state/keyring';
+import { selectActiveZcashWallet } from '../../../state/wallets';
+import { CAPS, walletKind } from '../../../signing/wallet-kind';
 import {
   activeAccountIndex,
   activeZcashStoreId,
@@ -70,6 +72,10 @@ export const ZcashContent = ({
   const navigate = useNavigate();
 
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  // the turnstile migration is an ironwood build on the zigner QR: offered
+  // only to a signer that reads it (not keystone, ledger, frost or a viewing key)
+  const zcashWallet = useStore(selectActiveZcashWallet);
+  const kind = selectedKeyInfo && walletKind(selectedKeyInfo, zcashWallet);
   // the active pocket's own worker store and zip32 account
   const storeId = useStore(activeZcashStoreId);
   const pocketAccount = useStore(activeAccountIndex);
@@ -554,6 +560,8 @@ export const ZcashContent = ({
   // and legacy orchard funds remain (per-pool split from the worker)
   const ironwoodEligible =
     IRONWOOD_MIGRATION &&
+    kind !== undefined &&
+    CAPS[kind].migrate &&
     (chainTip?.height ?? 0) >= nu63ActivationHeight(isMainnet) &&
     pools.orchard > 0n;
 
@@ -903,9 +911,9 @@ export const ZcashContent = ({
               (watchOnly?.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined)
             }
             orchardZat={pools.orchard > 0n ? pools.orchard : orchardZat}
-            isHotWallet={selectedKeyInfo.type === 'mnemonic'}
+            isHotWallet={kind === 'hot'}
             getMnemonic={
-              selectedKeyInfo.type === 'mnemonic'
+              kind === 'hot'
                 ? async () => {
                     // gate the seed behind the password prompt, exactly like
                     // handleShield / zcash-send. Returns null on cancel so the

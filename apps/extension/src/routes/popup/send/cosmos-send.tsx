@@ -7,6 +7,7 @@ import { Sensitive } from '../../../components/sensitive';
 import { PopupPath } from '../paths';
 import { useQueryClient } from '@tanstack/react-query';
 import { useStore } from '../../../state';
+import { cosmosKeyFor } from '../../../signing/cosmos-key';
 import { selectPenumbraAccount } from '../../../state/keyring';
 import { recentAddressesSelector } from '../../../state/recent-addresses';
 import { contactsSelector } from '../../../state/contacts';
@@ -336,7 +337,7 @@ export function CosmosSend({
 
   // detect wallet type
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
-  const isZigner = selectedKeyInfo?.type === 'zigner-zafu';
+  const isZigner = cosmosKeyFor(selectedKeyInfo, sourceChainId)?.signer === 'zigner';
 
   // recent addresses and contacts
   const { recordUsage, shouldSuggestSave, dismissSuggestion } = useStore(recentAddressesSelector);

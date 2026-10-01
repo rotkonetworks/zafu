@@ -32,7 +32,7 @@ import type { EncryptedVault } from '../../state/keyring/types';
 import type { ZidShareRecord } from '../../state/identity';
 import type { ZafuSignRequest, ZafuSignResponse } from '@zafu/protocol';
 import { SIGN_REQUEST_TYPE } from './zafu-method-names';
-import { walletKind, zidRefusal } from '../../signing/wallet-kind';
+import { CAPS, walletKind } from '../../signing/wallet-kind';
 
 // request/response shapes come from the shared @zafu/protocol contract, so any
 // drift from the wallet<->dapp wire (and from the @zafu/zid SDK that builds
@@ -94,11 +94,11 @@ const handleSignRequest = async (
     const selectedId = await localExtStorage.get('selectedVaultId');
     const selectedVault = vaults.find(v => v.id === selectedId);
     const kind = selectedVault && walletKind(selectedVault);
-    const refusal = kind && zidRefusal(kind);
+    const refusal = kind && CAPS[kind].zid;
     if (refusal) {
       return { success: false, error: refusal, code: 'not_available' };
     }
-    const isAirgap = selectedVault?.type === 'zigner-zafu';
+    const isAirgap = kind === 'zigner';
     const zidPubkey = isAirgap
       ? (selectedVault?.insensitive?.['zid'] as string | undefined)
       : undefined;
