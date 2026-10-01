@@ -18,7 +18,14 @@ vi.mock('../near-swap', async orig => ({ ...(await orig<object>()), ...near }));
 
 import { fromUnits, rank, rescale, toUnits, type Quote, type QuoteRequest } from './provider';
 import { candidates, ROUTES } from './routes';
-import { checkQuote, thorProvider, thorStatus, type InboundAddress, type ThorQuote } from './thor';
+import {
+  checkQuote,
+  nameInMemo,
+  thorProvider,
+  thorStatus,
+  type InboundAddress,
+  type ThorQuote,
+} from './thor';
 import { nearProvider } from './near';
 import { quoteRoutes, routeTokens } from '.';
 
@@ -304,6 +311,52 @@ describe('thorchain', () => {
     expect(() =>
       checkQuote(thorQuote(), inbound(), 'BTC', 1_000_000n, true, 't1SomeoneElse', NOW),
     ).toThrow(/another address/);
+  });
+
+  describe('a thorname as the destination', () => {
+    const ETH_ADDR = '0x90A48D5CF7343B08dA12E067680B4C6dbfE551Be';
+    const ETH = { symbol: 'ETH', chain: 'eth', decimals: 18 };
+    const long = `=:ETH.ETH:${ETH_ADDR}:${'9'.repeat(20)}/1/0:zafu-affiliate:15`;
+    const out = (memo: string) =>
+      thornode(thorQuote({ inbound_address: ZEC_VAULT, memo }), [inbound()[0]!]);
+
+    it('names the destination only when the address does not fit the op_return', () => {
+      expect(nameInMemo(long, ETH_ADDR, 'alice')).toBe(
+        `=:ETH.ETH:alice:${'9'.repeat(20)}/1/0:zafu-affiliate:15`,
+      );
+      const short = `=:ETH.ETH:${ETH_ADDR}:0/1/0`;
+      expect(nameInMemo(short, ETH_ADDR, 'alice')).toBe(short);
+      expect(nameInMemo(long, ETH_ADDR)).toBe(long);
+      // never over a memo that pays some other address
+      expect(nameInMemo(long, '0xsomeoneelse', 'alice')).toBe(long);
+    });
+
+    it('quotes the resolved address and carries the name in the memo', async () => {
+      const urls = out(long);
+      const quote = await thorProvider.quote(
+        req({ direction: 'from_zec', token: ETH, otherAddress: ETH_ADDR, otherName: 'alice' }),
+      );
+      // thornode is asked about the address the user saw, never the name
+      expect(urls.find(u => u.includes('/quote/swap'))).toContain(`destination=${ETH_ADDR}`);
+      expect(quote.memo).toBe(`=:ETH.ETH:alice:${'9'.repeat(20)}/1/0:zafu-affiliate:15`);
+      expect(quote.recipient).toBe(ETH_ADDR);
+    });
+
+    it('keeps the address when the memo already fits', async () => {
+      out(`=:ETH.ETH:${ETH_ADDR}:0/1/0`);
+      const quote = await thorProvider.quote(
+        req({ direction: 'from_zec', token: ETH, otherAddress: ETH_ADDR, otherName: 'alice' }),
+      );
+      expect(quote.memo).toBe(`=:ETH.ETH:${ETH_ADDR}:0/1/0`);
+    });
+
+    it('never puts a name in the refund slot: into zec refunds to the resolved address', async () => {
+      const urls = thornode(thorQuote());
+      await thorProvider.quote(req({ otherAddress: 'bc1qrefundexample', otherName: 'alice' }));
+      const asked = urls.find(u => u.includes('/quote/swap'))!;
+      expect(asked).toContain('refund_address=bc1qrefundexample');
+      expect(asked).not.toContain('alice');
+    });
   });
 
   it('lists its tokens without a request', async () => {

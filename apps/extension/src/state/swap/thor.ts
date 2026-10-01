@@ -14,6 +14,7 @@
  */
 
 import { requestEgressOptIn } from '../../net/egress-opt-in';
+import { ThornodeRefusal, thornodeGet } from '../../services/thornode';
 import {
   fromUnits,
   rescale,
@@ -23,11 +24,6 @@ import {
   type SwapStatusView,
 } from './provider';
 import { ROUTES, THOR_ASSETS, thorAsset } from './routes';
-
-const THORNODE_URLS = [
-  'https://thornode.ninerealms.com',
-  'https://gateway.liquify.com/chain/thorchain_api',
-];
 
 export const ZEC_ASSET = 'ZEC.ZEC';
 const THOR_DECIMALS = 8;
@@ -58,28 +54,7 @@ export interface ThorQuote {
 
 const thorFetch = async <T>(path: string): Promise<T> => {
   await requestEgressOptIn(ROUTES.thor.egress);
-  let last: unknown;
-  for (const base of THORNODE_URLS) {
-    try {
-      const resp = await fetch(`${base}${path}`);
-      const body = (await resp.json().catch(() => ({}))) as T & { message?: string };
-      if (resp.ok) {
-        return body;
-      }
-      const err = new Error(body.message ?? `thornode ${resp.status}`);
-      // a 4xx is THORChain answering; asking the next node changes nothing
-      if (resp.status < 500) {
-        throw Object.assign(err, { final: true });
-      }
-      last = err;
-    } catch (e) {
-      if ((e as { final?: boolean }).final) {
-        throw e;
-      }
-      last = e;
-    }
-  }
-  throw last instanceof Error ? last : new Error('thorchain did not answer');
+  return thornodeGet<T>(path);
 };
 
 interface ThorTxStatus {
@@ -120,6 +95,8 @@ export const thorStatus = (s: ThorTxStatus): SwapStatusView => {
   return STATUS[stage];
 };
 
+const memoBytes = (memo: string) => new TextEncoder().encode(memo).length;
+
 const open = (a: InboundAddress | undefined) =>
   !!a && !a.halted && !a.global_trading_paused && !a.chain_trading_paused;
 
@@ -144,7 +121,7 @@ export const checkQuote = (
   if (q.inbound_address !== source?.address) {
     throw new Error('thorchain moved its vault · please get a new quote');
   }
-  if (!q.memo || (opReturn && new TextEncoder().encode(q.memo).length > MAX_MEMO_BYTES)) {
+  if (!q.memo || (opReturn && memoBytes(q.memo) > MAX_MEMO_BYTES)) {
     throw new Error("thorchain's memo doesn't fit this chain · please try another route");
   }
   // `=:ASSET:DEST:...`: the memo must pay where zafu asked, or it is not shown at all
@@ -158,6 +135,21 @@ export const checkQuote = (
   if (amountIn <= min) {
     throw new Error('this amount is below what thorchain swaps');
   }
+};
+
+/**
+ * A from-zec memo too long for the OP_RETURN may name the destination by its
+ * THORName instead, which THORChain resolves to the target chain's alias when
+ * it pays. Only then: an address pins what the user reviewed, while a name
+ * pays wherever its owner points it by the time the swap runs.
+ */
+export const nameInMemo = (memo: string, address: string, name?: string): string => {
+  const parts = memo.split(':');
+  if (!name || parts[2] !== address || memoBytes(memo) <= MAX_MEMO_BYTES) {
+    return memo;
+  }
+  parts[2] = name;
+  return parts.join(':');
 };
 
 const percent = (bps: number) => `fee ${(bps / 100).toFixed(2).replace(/\.?0+$/, '')}%`;
@@ -204,7 +196,16 @@ export const thorProvider: SwapProvider = {
       thorFetch<InboundAddress[]>('/thorchain/inbound_addresses'),
     ]);
     const sourceChain = (into ? pool.asset : ZEC_ASSET).split('.')[0]!;
-    checkQuote(q, inbound, sourceChain, amount, !into || pool.carrier === 'op_return', destination);
+    // a name stands in only for the destination: thorchain never resolves a refund name
+    const memo = into ? q.memo : nameInMemo(q.memo, destination, req.otherName);
+    checkQuote(
+      { ...q, memo },
+      inbound,
+      sourceChain,
+      amount,
+      !into || pool.carrier === 'op_return',
+      memo === q.memo ? destination : req.otherName!,
+    );
     const outDecimals = into ? 8 : pool.decimals;
     const amountOut = rescale(BigInt(q.expected_amount_out), THOR_DECIMALS, outDecimals);
     return {
@@ -218,7 +219,7 @@ export const thorProvider: SwapProvider = {
         : undefined,
       expiresAt: q.expiry * 1000,
       depositAddress: q.inbound_address,
-      memo: q.memo,
+      memo,
       recipient: destination,
       // sending zec in is a t->t transaction with an OP_RETURN output
       notYet: into || req.signsOpReturn ? undefined : 'not available yet',
@@ -234,7 +235,7 @@ export const thorProvider: SwapProvider = {
       );
     } catch (e) {
       // thornode answers 4xx for a tx it hasn't observed yet
-      if ((e as { final?: boolean }).final) {
+      if (e instanceof ThornodeRefusal) {
         return STATUS.unseen;
       }
       throw e;
