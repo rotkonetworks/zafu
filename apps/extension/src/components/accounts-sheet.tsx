@@ -18,7 +18,13 @@ import {
   selectLock,
   type NetworkType,
 } from '../state/keyring';
-import { MAX_POCKETS, activeAccountIndex, activePockets, pocketOwner } from '../state/pockets';
+import {
+  MAX_POCKETS,
+  activeAccountIndex,
+  activePockets,
+  pocketOwner,
+  visiblePockets,
+} from '../state/pockets';
 import { pocketStoreId } from '../state/pocket-id';
 import { getBalanceInWorker } from '../state/keyring/network-worker';
 import { PopupPath } from '../routes/popup/paths';
@@ -70,8 +76,16 @@ export const pocketTarget = (network: NetworkType): PocketTarget =>
   POCKET_TARGET[network] ?? ZCASH_POCKET;
 
 /** what the rename/new-pocket sheet should do: create a fresh pocket, or
- * rename something that already has a name (a pocket or the wallet itself) */
-export type PocketSheetTarget = { name: string; save: (name: string) => Promise<void> } | undefined;
+ * rename something that already has a name (a pocket or the wallet itself).
+ * `pocket` is set only when renaming a pocket (never the wallet itself or
+ * main), and lets the sheet offer "hide this pocket". */
+export type PocketSheetTarget =
+  | {
+      name: string;
+      save: (name: string) => Promise<void>;
+      pocket?: { account: number; hide: () => Promise<void> };
+    }
+  | undefined;
 
 const PocketRow = ({
   name,
@@ -129,6 +143,7 @@ export const AccountsSheet = ({
   onOpenChange,
   onAddWallet,
   onNewPocket,
+  onHiddenPockets,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -140,6 +155,8 @@ export const AccountsSheet = ({
   /** same pattern: the new-pocket sheet replaces this one, in create mode
    * (no argument) or rename mode (the pocket being renamed). */
   onNewPocket: (rename?: PocketSheetTarget) => void;
+  /** same pattern again: the hidden-pockets sheet replaces this one */
+  onHiddenPockets: () => void;
 }) => {
   const navigate = useNavigate();
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
@@ -156,9 +173,12 @@ export const AccountsSheet = ({
   // nothing (it is already selected).
   const otherKeyInfos = isHotWallet ? keyInfos.filter(k => k.id !== selectedKeyInfo?.id) : keyInfos;
   const pockets = useStore(useShallow(activePockets));
+  const shown = visiblePockets(pockets);
+  const hiddenCount = pockets.length - shown.length;
   const target = pocketTarget(useStore(selectActiveNetwork));
   const activeAccount = useStore(target.active);
   const renamePocket = useStore(s => s.pockets.rename);
+  const hidePocket = useStore(s => s.pockets.hide);
   const renameKeyRing = useStore(selectRenameKeyRing);
   const owner = selectedKeyInfo ? pocketOwner(selectedKeyInfo) : undefined;
   const [activeBalanceZat, setActiveBalanceZat] = useState<bigint>();
@@ -248,7 +268,7 @@ export const AccountsSheet = ({
             </button>
             <span className='shrink-0 text-[11px] text-fg-muted'>{CUSTODY_META.hot}</span>
           </div>
-          {pockets.map(p => (
+          {shown.map(p => (
             <PocketRow
               key={p.account}
               name={p.name}
@@ -257,7 +277,15 @@ export const AccountsSheet = ({
               balanceZat={target.balance && activeBalanceZat}
               onPick={() => pickPocket(p.account)}
               onRename={() =>
-                owner && onNewPocket({ name: p.name, save: n => renamePocket(owner, p.account, n) })
+                owner &&
+                onNewPocket({
+                  name: p.name,
+                  save: n => renamePocket(owner, p.account, n),
+                  pocket:
+                    p.account === 0
+                      ? undefined
+                      : { account: p.account, hide: () => hidePocket(owner, p.account) },
+                })
               }
             />
           ))}
@@ -271,6 +299,15 @@ export const AccountsSheet = ({
             disabled={pockets.length >= MAX_POCKETS}
             onClick={() => onNewPocket()}
           />
+          {hiddenCount > 0 && (
+            <button
+              type='button'
+              onClick={onHiddenPockets}
+              className='flex h-9 items-center px-2 text-left text-[11px] text-fg-muted transition-colors hover:text-fg-high'
+            >
+              hidden · {hiddenCount}
+            </button>
+          )}
         </div>
       )}
 

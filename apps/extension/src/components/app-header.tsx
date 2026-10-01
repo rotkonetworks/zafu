@@ -12,18 +12,26 @@ import { selectActiveNetwork, selectEffectiveKeyInfo, selectLock } from '../stat
 import { useNavigate } from 'react-router-dom';
 import { PopupPath } from '../routes/popup/paths';
 import { selectActiveZcashWallet } from '../state/wallets';
-import { activePockets } from '../state/pockets';
+import { activePockets, hiddenPockets, pocketOwner } from '../state/pockets';
 import { getNetwork } from '../config/networks';
 import { AccountsSheet, pocketTarget, type PocketSheetTarget } from './accounts-sheet';
 import { NetworkSheet } from './network-sheet';
 import { AddWalletSheet } from './add-wallet-sheet';
 import { NewPocketSheet } from './new-pocket-sheet';
+import { HiddenPocketsSheet } from './hidden-pockets-sheet';
 import { MovedSheet } from './moved-sheet';
 import { LAST_SEEN_VERSION, showMoved } from '../state/moved-notice';
 import { cn } from '@repo/ui/lib/utils';
 import { Mark } from '@repo/ui/components/ui/mark';
 
-type OpenSheet = 'accounts' | 'network' | 'add-wallet' | 'new-pocket' | 'moved' | null;
+type OpenSheet =
+  | 'accounts'
+  | 'network'
+  | 'add-wallet'
+  | 'new-pocket'
+  | 'hidden-pockets'
+  | 'moved'
+  | null;
 
 export const AppHeader = () => {
   const activeNetwork = useStore(selectActiveNetwork);
@@ -31,6 +39,8 @@ export const AppHeader = () => {
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const pockets = useStore(useShallow(activePockets));
   const pocketAccount = useStore(pocketTarget(activeNetwork).active);
+  const owner = selectedKeyInfo ? pocketOwner(selectedKeyInfo) : undefined;
+  const hidden = hiddenPockets(pockets);
   const [openSheet, setOpenSheet] = useState<OpenSheet>(null);
   const lock = useStore(selectLock);
   const navigate = useNavigate();
@@ -129,6 +139,7 @@ export const AppHeader = () => {
           setRenameTarget(rename);
           setOpenSheet('new-pocket');
         }}
+        onHiddenPockets={() => setOpenSheet('hidden-pockets')}
       />
       <NetworkSheet
         open={openSheet === 'network'}
@@ -142,6 +153,12 @@ export const AppHeader = () => {
         open={openSheet === 'new-pocket'}
         onOpenChange={next => setOpenSheet(next ? 'new-pocket' : null)}
         rename={renameTarget}
+      />
+      <HiddenPocketsSheet
+        open={openSheet === 'hidden-pockets'}
+        onOpenChange={next => setOpenSheet(next ? 'hidden-pockets' : null)}
+        owner={owner}
+        pockets={hidden}
       />
       <MovedSheet
         open={openSheet === 'moved'}

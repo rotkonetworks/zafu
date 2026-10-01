@@ -14,12 +14,16 @@ import {
   activeZcashStoreId,
   addPocket,
   forgetWallet,
+  hiddenPockets,
+  hidePocket,
   MAX_POCKETS,
   mergePocketBooks,
   pocketOwner,
   renamePocket,
   sanitizePocketBook,
   selectPocket,
+  unhidePocket,
+  visiblePockets,
   type PocketBook,
 } from './pockets';
 import type { AllSlices } from '.';
@@ -145,6 +149,52 @@ describe('pocket book', () => {
   });
 });
 
+describe('hide and unhide', () => {
+  test('main can never be hidden', () => {
+    const book = addPocket({}, 'z', 'savings');
+    expect(hidePocket(book, 'z', 0)).toBe(book);
+  });
+
+  test('hiding an unknown pocket is a no-op', () => {
+    const book = addPocket({}, 'z', 'savings');
+    expect(hidePocket(book, 'z', 7)).toBe(book);
+  });
+
+  test('hide marks the pocket, unhide clears it; both keep the pocket (never delete)', () => {
+    let book = addPocket({}, 'z', 'savings');
+    book = hidePocket(book, 'z', 1);
+    expect(visiblePockets(book['z']!.pockets)).toEqual([{ account: 0, name: 'main' }]);
+    expect(hiddenPockets(book['z']!.pockets)).toEqual([
+      { account: 1, name: 'savings', hidden: true },
+    ]);
+    book = unhidePocket(book, 'z', 1);
+    expect(book['z']!.pockets).toEqual([
+      { account: 0, name: 'main' },
+      { account: 1, name: 'savings', hidden: false },
+    ]);
+  });
+
+  test('hiding the active pocket switches the active one to main, the calmer option', () => {
+    let book = selectPocket(addPocket({}, 'z', 'savings'), 'z', 1);
+    expect(book['z']!.active).toBe(1);
+    book = hidePocket(book, 'z', 1);
+    expect(book['z']!.active).toBe(0);
+    expect(book['z']!.pockets.find(p => p.account === 1)?.hidden).toBe(true);
+  });
+
+  test('hiding a pocket that is not active leaves the active one untouched', () => {
+    let book = addPocket(addPocket({}, 'z', 'savings'), 'z', 'rent');
+    book = selectPocket(book, 'z', 1);
+    book = hidePocket(book, 'z', 2);
+    expect(book['z']!.active).toBe(1);
+  });
+
+  test('sanitize strips a hidden flag that somehow landed on main', () => {
+    const raw = { z: { pockets: [{ account: 0, name: 'main', hidden: true }], active: 0 } };
+    expect(sanitizePocketBook(raw)['z']!.pockets).toEqual([{ account: 0, name: 'main' }]);
+  });
+});
+
 describe('pocket backup restore', () => {
   const local = selectPocket(addPocket({}, 'z', 'local name'), 'z', 1);
   const backup = sanitizePocketBook({
@@ -187,6 +237,19 @@ describe('pocket backup restore', () => {
 
   test('a backup made before pockets restores nothing', () => {
     expect(mergePocketBooks(local, sanitizePocketBook(undefined), 'replace')).toEqual(local);
+  });
+
+  test('a hidden pocket round-trips through a backup: name and hidden both survive', () => {
+    // exportPersonalData (contacts.ts) ships pockets.book as-is, so the
+    // round trip here is exactly what a backup file carries and restores.
+    const before = hidePocket(addPocket({}, 'z', 'savings'), 'z', 1);
+    const exported = JSON.parse(JSON.stringify(before)) as unknown;
+    const restored = mergePocketBooks({}, sanitizePocketBook(exported), 'replace');
+    const pocket = restored['z']!.pockets.find(p => p.account === 1);
+    expect(pocket?.name).toBe('savings');
+    expect(pocket?.hidden).toBe(true);
+    // still hidden from a list, still in the book - never deleted
+    expect(visiblePockets(restored['z']!.pockets)).toEqual([{ account: 0, name: 'main' }]);
   });
 });
 
