@@ -27,7 +27,6 @@ import { activeZcashStoreId } from '../../../state/pockets';
 import {
   buildSendTxInWorker,
   buildSendTxPcztInWorker,
-  completeOrchardPcztInWorker,
   applySignatureContributionsInWorker,
   type SignatureContribution,
   getBalanceInWorker,
@@ -65,7 +64,7 @@ import { connectLedger } from '../../../ledger';
 import { ledgerSignerFor } from '../../../signing/ledger-signer';
 import { signAndBroadcast } from '../../../signing/cold-send';
 import { createZignerSigner } from '../../../signing/zigner-signer';
-import { frostSelfCustodySigner } from '../../../signing/frost-signer';
+import { frostAirgapSigner, frostSelfCustodySigner } from '../../../signing/frost-signer';
 import { isPopup } from '../../../utils/popup-detection';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
@@ -1329,17 +1328,16 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     onClose();
   };
 
-  // airgap-flow finished: broadcast with the aggregated orchard sigs.
+  // airgap-flow finished: the shared cold tail injects the aggregated orchard
+  // sigs under the build's store and send id, so the inputs are marked spent.
   const handleAirgapComplete = async (orchardSigs: string[]) => {
-    setStep('broadcast');
     try {
       const result = pcztMultisigRef.current!;
-      const finalResult = await completeOrchardPcztInWorker(
-        selectedKeyInfo!.id,
-        zidecarUrl,
-        result.pcztHex,
-        orchardSigs,
-        result.spendIndices,
+      const finalResult = await signAndBroadcast(
+        frostAirgapSigner(orchardSigs, result),
+        result,
+        { walletId: storeId ?? selectedKeyInfo!.id, zidecarUrl, mainnet },
+        { onSigned: () => setStep('broadcast') },
       );
       void promoteToBroadcasted(finalResult.txid);
       complete(finalResult.txid);
