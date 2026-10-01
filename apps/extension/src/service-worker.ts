@@ -87,6 +87,7 @@ import { networkAllowsBackgroundSync } from './state/privacy';
 import { runPresencePublish } from './state/contact-discovery-service';
 import { trackUiOpenPresence } from './state/ui-open-presence';
 import { requestStopAllSync } from './state/keyring/network-worker';
+import { stampSeenVersion } from './state/moved-notice';
 
 // count open side panels so approval routing can target the panel only when it
 // is actually open (see popup.ts). Registered once at worker startup.
@@ -762,7 +763,8 @@ void (async () => {
 })();
 
 // on install: open onboarding page + create context menu
-chrome.runtime.onInstalled.addListener(({ reason }) => {
+chrome.runtime.onInstalled.addListener(({ reason, previousVersion }) => {
+  void stampSeenVersion(reason, previousVersion).catch(() => undefined);
   chrome.contextMenus.create({
     id: 'open-popup-window',
     title: 'Open Zafu in Popup Window',

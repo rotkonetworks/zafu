@@ -28,6 +28,8 @@ interface AnimatedQrScannerProps {
    * Useful when scanning a known-format response (e.g. zcash-pczt sign).
    */
   urTypeFilter?: string;
+  /** a code this scan is not reading (another UR type, a plain QR), as text */
+  onForeign?: (text: string) => void;
 }
 
 export const AnimatedQrScanner = ({
@@ -38,6 +40,7 @@ export const AnimatedQrScanner = ({
   description,
   inline = false,
   urTypeFilter,
+  onForeign,
 }: AnimatedQrScannerProps) => {
   const [progress, setProgress] = useState(0);
   const [isScanning, setIsScanning] = useState(false);
@@ -99,8 +102,10 @@ export const AnimatedQrScanner = ({
 
   const onCompleteRef = useRef(onComplete);
   const onErrorRef = useRef(onError);
+  const onForeignRef = useRef(onForeign);
   onCompleteRef.current = onComplete;
   onErrorRef.current = onError;
+  onForeignRef.current = onForeign;
 
   const stopScanning = useCallback(() => {
     // invalidate any in-flight startScanning so it aborts after its next await
@@ -257,6 +262,7 @@ export const AnimatedQrScanner = ({
           const slashIdx = text.indexOf('/');
           const urType = slashIdx > 3 ? text.slice(3, slashIdx) : '';
           if (urTypeFilter && urType.toLowerCase() !== urTypeFilter.toLowerCase()) {
+            onForeignRef.current?.(text);
             return;
           }
           if (urTypeRef.current === '') {
@@ -321,15 +327,16 @@ export const AnimatedQrScanner = ({
         }
 
         // ── legacy P-format mode ──
+        // a stray plain QR is reported, and never locks the scan into P mode
+        const match = /^P(\d+)\/(\d+)\/([^/]+)\/(.+)$/.exec(text);
+        if (!match) {
+          onForeignRef.current?.(text);
+          return;
+        }
         if (modeRef.current === '') {
           modeRef.current = 'p';
         }
         if (modeRef.current !== 'p') {
-          return;
-        }
-
-        const match = /^P(\d+)\/(\d+)\/([^/]+)\/(.+)$/.exec(text);
-        if (!match) {
           return;
         }
 

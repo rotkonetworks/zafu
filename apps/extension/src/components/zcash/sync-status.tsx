@@ -7,10 +7,22 @@ import { blockToDate, dateToBlock, formatDateInput } from '../../utils/zcash-blo
 import { isSidePanel, isDedicatedWindow } from '../../utils/popup-detection';
 
 /**
- * The zcash sync strip: one 32px line under the header while the wallet is
- * not caught up (board HomeSync). Tapping it opens a sheet with the heights,
- * the classified error and the rescan-from-a-date control.
+ * The zcash sync strip under the header (board HomeSync): 32px of progress
+ * while the wallet is not caught up, or a 44px notice in its place - offline,
+ * a node that isn't answering, a witness rebuild (boards StOffline, ErrNode,
+ * StWitness). Tapping it opens a sheet with the heights, the raw error and
+ * the rescan-from-a-date control.
  */
+export interface SyncNotice {
+  tone: 'warn' | 'gold';
+  text: string;
+  /** a quiet second part, after the text */
+  meta?: string;
+  /** the raw error, behind "technical details" */
+  detail?: string;
+  action?: { label: string; onClick: () => void };
+}
+
 export interface SyncStatusProps {
   /** 0..100 overall progress */
   percent: number;
@@ -19,12 +31,7 @@ export interface SyncStatusProps {
   currentHeight: number;
   targetHeight: number;
   startBlock: number;
-  /** a classified `SyncFailure.message`, never a raw worker error */
-  error?: string;
-  /** the raw error, behind "technical details" */
-  errorDetail?: string;
-  errorAction?: { label: string; onClick: () => void };
-  onRetry: () => void;
+  notice?: SyncNotice;
   onRescan: (height: number) => void;
 }
 
@@ -71,53 +78,52 @@ export const SyncStatus = ({
   currentHeight,
   targetHeight,
   startBlock,
-  error,
-  errorDetail,
-  errorAction,
-  onRetry,
+  notice,
   onRescan,
 }: SyncStatusProps) => {
   const [open, setOpen] = useState(false);
-  const eta = useEta(currentHeight, targetHeight, !connecting && !error);
+  const eta = useEta(currentHeight, targetHeight, !connecting && !notice);
   const pct = Math.floor(percent);
+  const warn = notice?.tone === 'warn';
 
   return (
     <>
-      <div className='relative flex h-8 shrink-0 items-center gap-2 border-b border-border-soft bg-elev-1 px-4 text-xs'>
+      <div
+        className={cn(
+          'relative flex shrink-0 items-center gap-2 border-b text-xs',
+          notice ? 'h-11 pl-4 pr-2' : 'h-8 px-4',
+          warn ? 'border-warn/40 bg-warn/10' : 'border-border-soft bg-elev-1',
+        )}
+      >
         <button
           type='button'
           onClick={() => setOpen(true)}
-          className='flex min-w-0 flex-1 items-center gap-2 text-left'
+          className='flex h-full min-w-0 flex-1 items-center gap-2 text-left'
         >
-          <span
-            className={cn(
-              'size-3.5 shrink-0',
-              error ? 'i-ph-warning text-hanko' : 'i-zafu-enso text-zigner-gold',
-            )}
-          />
-          {error ? (
-            <span className='truncate text-fg'>{error}</span>
-          ) : connecting ? (
-            <span className='text-fg'>connecting</span>
+          {warn ? (
+            <span className='size-2 shrink-0 bg-warn' />
           ) : (
-            <>
-              <span className='text-fg'>syncing</span>
-              <span className='truncate text-fg-muted tabular'>
-                {pct}%{eta && ` · ${eta}`}
-              </span>
-            </>
+            <span className='i-zafu-enso size-3.5 shrink-0 text-zigner-gold' />
+          )}
+          <span className={notice ? 'line-clamp-2 leading-snug text-fg' : 'truncate text-fg'}>
+            {notice?.text ?? (connecting ? 'connecting' : 'syncing')}
+          </span>
+          {(notice ? notice.meta : !connecting) && (
+            <span className='truncate text-fg-muted tabular'>
+              {notice ? notice.meta : `${pct}%${eta && ` · ${eta}`}`}
+            </span>
           )}
         </button>
-        {error && (
+        {notice?.action && (
           <button
             type='button'
-            onClick={errorAction?.onClick ?? onRetry}
-            className='shrink-0 text-zigner-gold hover:underline'
+            onClick={notice.action.onClick}
+            className='flex h-7 shrink-0 items-center border border-surface-border px-2.5 text-[11px] text-zigner-gold hover:bg-elev-2'
           >
-            {errorAction?.label ?? 'try again'}
+            {notice.action.label}
           </button>
         )}
-        {!error && !connecting && (
+        {!notice && !connecting && (
           <span
             className='absolute bottom-[-1px] left-0 h-0.5 bg-zigner-gold transition-[width] duration-500'
             style={{ width: `${Math.max(pct, 2)}%` }}
@@ -127,8 +133,8 @@ export const SyncStatus = ({
 
       <Sheet open={open} onOpenChange={setOpen} title='sync'>
         <SyncDetail
-          error={error}
-          errorDetail={errorDetail}
+          error={warn ? notice.text : undefined}
+          errorDetail={notice?.detail}
           currentHeight={currentHeight}
           targetHeight={targetHeight}
           startBlock={startBlock}
@@ -149,10 +155,9 @@ const SyncDetail = ({
   targetHeight,
   startBlock,
   onRescan,
-}: Pick<
-  SyncStatusProps,
-  'error' | 'errorDetail' | 'currentHeight' | 'targetHeight' | 'startBlock'
-> & {
+}: Pick<SyncStatusProps, 'currentHeight' | 'targetHeight' | 'startBlock'> & {
+  error?: string;
+  errorDetail?: string;
   onRescan: (h: number) => void;
 }) => {
   const [date, setDate] = useState(() => dateOfBlock(startBlock));

@@ -175,11 +175,11 @@ describe('message copy discipline', () => {
       expect(syncFailureMessage(kind).length).toBeGreaterThan(20);
     }
     // self-healing kinds say so
-    expect(syncFailureMessage('network')).toMatch(/automatically/);
-    expect(syncFailureMessage('storageBusy')).toMatch(/automatically/);
-    expect(syncFailureMessage('chainRecovery')).toMatch(/keep trying/);
+    expect(syncFailureMessage('network')).toMatch(/keeps trying/);
+    expect(syncFailureMessage('storageBusy')).toMatch(/keeps trying/);
+    expect(syncFailureMessage('chainRecovery')).toMatch(/keeps trying/);
     // the rest name an action for the person
-    expect(syncFailureMessage('endpoint')).toMatch(/check your endpoint settings/);
+    expect(syncFailureMessage('endpoint')).toMatch(/choose another/);
     expect(syncFailureMessage('storageFatal')).toMatch(/reload zafu/);
     expect(syncFailureMessage('unknown')).toMatch(/try again/);
   });

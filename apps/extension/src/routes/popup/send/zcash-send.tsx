@@ -72,6 +72,10 @@ import {
 } from './send-ui';
 
 import { unwrapCborSinglePczt, parsePreludeSinglePcztResponse } from './zcash-send-cbor-helpers';
+import { LedgerGone, WitnessRebuild, ZignerWrongCode } from './send-states';
+import { isLedgerGone } from '../../../ledger/disconnect';
+import { zignerCodeChain, type ZignerChain } from '../../../shared/zigner-code';
+import { useRebuildLeft, useRebuildSince } from '../../../state/witness-rebuild';
 import {
   parseCompactResponse,
   mergeContributions,
@@ -105,6 +109,7 @@ type SendStep =
   | 'complete'
   | 'error'
   | 'ledger-sign'
+  | 'ledger-gone'
   | 'frost-room'
   | 'frost-signing'
   | 'airgap-flow';
@@ -318,12 +323,23 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     address: string;
   } | null>(null);
   const [showQrScanner, setShowQrScanner] = useState(false);
+  // a zigner code for the other chain, seen while scanning for this send's
+  const [wrongCode, setWrongCode] = useState<ZignerChain>();
+  // The ledger sign round of the current build (connect, sign, broadcast). A
+  // device that goes away mid-sign leaves it here, so "reconnect" signs the
+  // same build again. Each run is numbered; an older run that settles late
+  // (a hung transport after an unplug) says nothing.
+  const ledgerRoundRef = useRef<((onSigned: () => void) => Promise<void>) | null>(null);
+  const ledgerRunRef = useRef(0);
   // airgap FROST multisig builds a PCZT (gh #17)
   const pcztMultisigRef = useRef<SendTxPcztUnsignedResult | null>(null);
   const [sendSteps, setSendSteps] = useState<
     { step: string; detail?: string; elapsedMs: number }[]
   >([]);
   const buildStartRef = useRef(0);
+  // a witness rebuild the worker reported for this build (board StWitness)
+  const rebuilding = useRebuildSince();
+  const rebuildLeft = useRebuildLeft(rebuilding);
 
   // self-custody multisig (mnemonic FROST) state
   const [frostRoomCode, setFrostRoomCode] = useState('');
@@ -692,34 +708,51 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         'ledger-transparent': persistentSurface(async () => {
           // hw-app-btc t->t send. No PCZT: fetch UTXOs, plan, sign the whole
           // transparent tx on the device's Zcash (Bitcoin-app) path, broadcast.
+          // Nothing is built ahead of the device, so a retry plans again.
           const fromAddress = activeZcashWallet!.transparentAddress!; // implied by the kind
           // ZIP-317 transparent fee: a conservative fixed estimate covering a
           // few logical actions. A slightly-high fee still confirms.
           const feeZat = 20000n;
           setFee(fmtZecShort(feeZat));
-          setStep('ledger-sign');
-          const transport = await connectLedgerBtc();
-          try {
-            const { txid } = await ledgerTransparentSendFlowBtc(
-              transport,
-              {
-                serverUrl: zidecarUrl,
-                fromAddresses: [fromAddress],
-                recipientAddress: recipient.trim(),
-                amountZat: BigInt(amountZat),
-                feeZat,
-                change: { address: fromAddress, path: zcashTransparentPath(0) },
-                accountIndex: 0,
-                mainnet,
-                blockHeight: sendChainHeight,
-              },
-              { fetchUtxos: getTransparentUtxosInWorker, broadcast: broadcastRawTxInWorker },
+          await runLedgerRound(async onSigned => {
+            setStep('ledger-sign');
+            const transport = await connectLedgerBtc();
+            // a pending read never settles on unplug; the transport's own
+            // disconnect event ends the round instead
+            const unplugged = new Promise<never>((_, reject) =>
+              transport.on('disconnect', () => reject(new Error('DisconnectedDevice'))),
             );
-            setStep('broadcast');
-            finish(txid);
-          } finally {
-            await transport.close();
-          }
+            try {
+              const { txid } = await Promise.race([
+                ledgerTransparentSendFlowBtc(
+                  transport,
+                  {
+                    serverUrl: zidecarUrl,
+                    fromAddresses: [fromAddress],
+                    recipientAddress: recipient.trim(),
+                    amountZat: BigInt(amountZat),
+                    feeZat,
+                    change: { address: fromAddress, path: zcashTransparentPath(0) },
+                    accountIndex: 0,
+                    mainnet,
+                    blockHeight: sendChainHeight,
+                  },
+                  {
+                    fetchUtxos: getTransparentUtxosInWorker,
+                    // the device has signed by the time the flow broadcasts
+                    broadcast: (...args) => {
+                      onSigned();
+                      return broadcastRawTxInWorker(...args);
+                    },
+                  },
+                ),
+                unplugged,
+              ]);
+              finish(txid);
+            } finally {
+              await transport.close().catch(() => undefined);
+            }
+          });
         }),
 
         'frost-airgap': async () => {
@@ -809,24 +842,26 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           // Bind the response type to what actually went out on the wire.
           pcztRequestWasCompactRef.current = result.compactRequest === true;
           // show the "confirm on your Ledger" prompt while the device signs.
-          setStep('ledger-sign');
           // TODO(ledger-session): plumb the paired sessionId from the connect
           // step; until then (re)open a session here to sign this round. The
           // feature-flag + app-version gates are filters (ledgerSignerFor); the
           // device returns raw spend-auth sigs, injected by the shared tail.
-          const session = await connectLedger();
-          const finalResult = await signAndBroadcast(
-            ledgerSignerFor(session),
-            {
-              pcztHex: result.pcztHex,
-              spendIndices: result.spendIndices,
-              coldSendId: result.coldSendId,
-            },
-            coldDeps,
-            { onSigned: () => setStep('broadcast') },
-          );
-          pcztUnsignedRef.current = null;
-          finish(finalResult.txid);
+          await runLedgerRound(async onSigned => {
+            setStep('ledger-sign');
+            const session = await connectLedger();
+            const finalResult = await signAndBroadcast(
+              ledgerSignerFor(session),
+              {
+                pcztHex: result.pcztHex,
+                spendIndices: result.spendIndices,
+                coldSendId: result.coldSendId,
+              },
+              coldDeps,
+              { onSigned },
+            );
+            pcztUnsignedRef.current = null;
+            finish(finalResult.txid);
+          });
         }),
 
         // zigner, and keystone on orchard: the PCZT QR round trip ties the
@@ -886,16 +921,52 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         },
       })();
     } catch (err) {
-      frostAbortRef.current?.abort();
-      frostAbortRef.current = null;
-      const reason = err instanceof Error ? err.message : 'failed to build transaction';
-      void markPendingFailed(reason);
-      setFormError(reason);
-      setStep('error');
+      failSend(err);
+    }
+  };
+
+  const failSend = (err: unknown) => {
+    frostAbortRef.current?.abort();
+    frostAbortRef.current = null;
+    const reason = err instanceof Error ? err.message : 'failed to build transaction';
+    void markPendingFailed(reason);
+    setFormError(reason);
+    setStep('error');
+  };
+
+  /** run (or re-run) the ledger round; a device that went away keeps it */
+  const runLedgerRound = async (round: (onSigned: () => void) => Promise<void>) => {
+    ledgerRoundRef.current = round;
+    const run = ++ledgerRunRef.current;
+    let signed = false;
+    try {
+      await round(() => {
+        signed = true;
+        setStep('broadcast');
+      });
+      ledgerRoundRef.current = null;
+    } catch (err) {
+      if (run !== ledgerRunRef.current) {
+        return;
+      }
+      if (!signed && isLedgerGone(err)) {
+        setStep('ledger-gone');
+        return;
+      }
+      ledgerRoundRef.current = null;
+      throw err;
+    }
+  };
+
+  const reconnectLedger = () => {
+    const round = ledgerRoundRef.current;
+    if (round) {
+      runLedgerRound(round).catch(failSend);
     }
   };
 
   const handleScanSignature = () => {
+    setWrongCode(undefined);
     setStep('scan');
     startScanning();
   };
@@ -1072,6 +1143,14 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         // signing is in-flight on the device; back returns to review.
         setStep('review');
         break;
+      case 'ledger-gone':
+        // nothing was signed: let the kept round go, as backing out of zigner does
+        ledgerRoundRef.current = null;
+        ledgerRunRef.current++;
+        pcztUnsignedRef.current = null;
+        dropTrackOp();
+        setStep('review');
+        break;
       case 'frost-room':
       case 'frost-signing':
       case 'airgap-flow':
@@ -1091,7 +1170,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const handleClose = () => {
     frostAbortRef.current?.abort();
     frostAbortRef.current = null;
-    if (['sign', 'scan', 'frost-room', 'frost-signing', 'airgap-flow'].includes(step)) {
+    if (
+      ['sign', 'scan', 'ledger-gone', 'frost-room', 'frost-signing', 'airgap-flow'].includes(step)
+    ) {
       dropTrackOp();
     }
     reset();
@@ -1386,7 +1467,13 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       // broadcasting is the tail of the same operation: one sending screen
       case 'building':
       case 'broadcast':
-        return (
+        return rebuilding !== undefined && step === 'building' ? (
+          <WitnessRebuild
+            step={sendSteps.findLast(p => p.step.startsWith('backfill:'))?.step.slice(10)}
+            left={rebuildLeft}
+            onBackground={onClose}
+          />
+        ) : (
           <>
             <ScreenHeader
               title='sending'
@@ -1416,7 +1503,19 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
       case 'sign':
       case 'scan':
-        return (
+        return step === 'scan' && wrongCode ? (
+          <ZignerWrongCode
+            device={device}
+            shown={wrongCode}
+            wanted='zcash'
+            sending={sending}
+            onBack={() => {
+              setWrongCode(undefined);
+              setStep('sign');
+            }}
+            onScanAgain={() => setWrongCode(undefined)}
+          />
+        ) : (
           <>
             <ScreenHeader
               title={`sign on ${device}`}
@@ -1449,6 +1548,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     onClose={() => setStep('sign')}
                     title={`${device}'s answer`}
                     urTypeFilter={pcztSignedUrType}
+                    onForeign={text => {
+                      const chain = zignerCodeChain(text);
+                      if (chain && chain !== 'zcash') {
+                        setWrongCode(chain);
+                      }
+                    }}
                   />
                   <span className='text-[13px] text-fg-high'>
                     hold {device}'s signed qr up to the camera
@@ -1530,6 +1635,16 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               </Button>
             </Footer>
           </>
+        );
+
+      case 'ledger-gone':
+        return (
+          <LedgerGone
+            sending={sending}
+            pool={recipientIsTransparent ? 'transparent · public' : 'shielded'}
+            onCancel={handleBack}
+            onReconnect={reconnectLedger}
+          />
         );
 
       case 'complete': {
