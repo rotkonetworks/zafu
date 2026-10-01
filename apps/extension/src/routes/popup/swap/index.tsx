@@ -176,7 +176,7 @@ const ZcashCrosschainSwap = () => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { contacts } = useStore(contactsSelector);
   const [step, setStep] = useState<ZcashSwapStep>('input');
-  const [direction, setDirection] = useState<'from_zec' | 'into_zec'>('from_zec');
+  const [direction, setDirection] = useState<'from_zec' | 'into_zec'>('into_zec');
   const [amountIn, setAmountIn] = useState('');
   const [selectedToken, setSelectedToken] = useState<NearToken | undefined>();
   const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
@@ -239,20 +239,20 @@ const ZcashCrosschainSwap = () => {
       .catch(() => {});
   }, [walletId]);
 
-  // fetch supported tokens + resolve ZEC asset ID dynamically - only once the
-  // user opens the token picker, never merely from opening the swap screen
-  // (that first fetch is also what the egress ask sheet waits on)
-  const [zecAssetId, setZecAssetId] = useState<string | undefined>();
-  const { data: tokens = [], isLoading: tokensLoading } = useQuery({
+  // supported tokens + the ZEC asset id, fetched only when the user acts (opens
+  // the token picker or asks for a quote), never merely from opening swap. That
+  // first fetch is what the egress ask sheet waits on.
+  const tokenQuery = useQuery({
     queryKey: ['near-tokens'],
     staleTime: 300_000,
     enabled: tokenPickerOpen,
     queryFn: async () => {
       const all = await getSupportedTokens();
-      setZecAssetId(findZecAssetId(all));
-      return filterSwappableTokens(all);
+      return { swappable: filterSwappableTokens(all), zecAssetId: findZecAssetId(all) };
     },
   });
+  const tokens = tokenQuery.data?.swappable ?? [];
+  const tokensLoading = tokenQuery.isFetching;
 
   // popular tokens first
   const sortedTokens = useMemo(() => {
@@ -320,8 +320,9 @@ const ZcashCrosschainSwap = () => {
       return;
     }
 
+    const zecAssetId = tokenQuery.data?.zecAssetId ?? (await tokenQuery.refetch()).data?.zecAssetId;
     if (!zecAssetId) {
-      setError('ZEC asset metadata still loading');
+      setError('the swap service did not answer · please try again');
       return;
     }
 
@@ -362,7 +363,7 @@ const ZcashCrosschainSwap = () => {
       setError(err instanceof Error ? err.message : 'failed to get quote');
       setStep('error');
     }
-  }, [selectedToken, amountIn, zcashAddress, zecAssetId, destinationAddress, isFromZec]);
+  }, [selectedToken, amountIn, zcashAddress, tokenQuery, destinationAddress, isFromZec]);
 
   const handleConfirmSwap = useCallback(async () => {
     if (!quote || !selectedKeyInfo) {
@@ -765,35 +766,9 @@ const ZcashCrosschainSwap = () => {
 
           {error && <p className='text-xs text-red-400'>{error}</p>}
 
-          {/* third-party custody risk warning - one line, shown before any funds are committed */}
-          <div className='flex items-start gap-2 border border-yellow-500/30 bg-yellow-500/10 p-3'>
-            <span className='i-ph-warning mt-0.5 h-4 w-4 shrink-0 text-yellow-400' />
-            <p className='text-xs text-yellow-400'>
-              near intents · a solver holds funds briefly ·{' '}
-              <a
-                href='https://docs.near-intents.org/near-intents/integration/distribution-channels/1click-terms-of-service'
-                target='_blank'
-                rel='noopener noreferrer'
-                className='underline underline-offset-2 hover:text-yellow-300'
-              >
-                terms
-              </a>
-            </p>
-          </div>
-
-          <label className='flex cursor-pointer items-start gap-2.5 text-xs text-fg'>
-            <input
-              type='checkbox'
-              checked={riskAcknowledged}
-              onChange={e => setRiskAcknowledged(e.target.checked)}
-              className='mt-0.5 h-4 w-4 shrink-0 accent-[var(--zigner-gold)]'
-            />
-            i accept these risks.
-          </label>
-
           <button
             onClick={() => void handleRequestQuote()}
-            disabled={!canQuote || !riskAcknowledged}
+            disabled={!canQuote}
             className={cn(
               'w-full bg-zigner-gold py-3 text-sm text-zigner-gold-foreground',
               'transition-colors hover:bg-primary/90',
@@ -845,10 +820,33 @@ const ZcashCrosschainSwap = () => {
               </div>
             </div>
 
+            {/* third-party custody risk: one quiet line at the moment of commitment */}
+            <p className='mt-3 text-xs text-fg-muted'>
+              near intents · a solver holds funds briefly ·{' '}
+              <a
+                href='https://docs.near-intents.org/near-intents/integration/distribution-channels/1click-terms-of-service'
+                target='_blank'
+                rel='noopener noreferrer'
+                className='underline underline-offset-2 hover:text-fg-high'
+              >
+                terms
+              </a>
+            </p>
+            <label className='mt-2 flex cursor-pointer items-start gap-2.5 text-xs text-fg'>
+              <input
+                type='checkbox'
+                checked={riskAcknowledged}
+                onChange={e => setRiskAcknowledged(e.target.checked)}
+                className='mt-0.5 h-4 w-4 shrink-0 accent-[var(--zigner-gold)]'
+              />
+              i accept these risks.
+            </label>
+
             <div className='mt-3 flex gap-2'>
               <button
                 onClick={() => void handleConfirmSwap()}
-                className='flex-1 bg-zigner-gold py-3 text-sm text-zigner-gold-foreground transition-colors hover:bg-zigner-gold-light'
+                disabled={!riskAcknowledged}
+                className='flex-1 bg-zigner-gold py-3 text-sm text-zigner-gold-foreground transition-colors hover:bg-zigner-gold-light disabled:cursor-not-allowed disabled:opacity-50'
               >
                 confirm & send
               </button>
