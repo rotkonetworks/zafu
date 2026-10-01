@@ -8,32 +8,18 @@
  * signer - so zafu never offers it a send.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { cn } from '@repo/ui/lib/utils';
 import { useStore } from '../../../state';
-import { keyRingSelector, type ZignerZafuImport } from '../../../state/keyring';
+import { keyRingSelector } from '../../../state/keyring';
 import { ZCASH_ORCHARD_ACTIVATION } from '../../../config/networks';
 import { describeZcashHeight } from '../../../utils/zcash-blocks';
-import { classifyViewingKey, viewingKeyDeviceId } from '../../../utils/viewing-key';
+import { useViewingKey, viewingKeyImport } from '../../../hooks/use-viewing-key';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { SettingsScreen } from './settings-screen';
-
-interface Zwasm {
-  default?: (opts?: { module_or_path?: string }) => Promise<unknown>;
-  validate_ufvk: (s: string) => boolean;
-  address_from_ufvk: (s: string, diversifierIndex: number) => string;
-}
-
-const loadZwasm = async (): Promise<Zwasm> => {
-  const zwasm = (await import('@repo/zcash-wasm')) as unknown as Zwasm;
-  if (typeof zwasm.default === 'function') {
-    await zwasm.default();
-  }
-  return zwasm;
-};
 
 const shorten = (a: string) => (a.length <= 26 ? a : `${a.slice(0, 16)}…${a.slice(-8)}`);
 
@@ -44,69 +30,29 @@ export const SettingsAddViewingKey = () => {
   const [input, setInput] = useState('');
   const [label, setLabel] = useState('');
   const [startBlock, setStartBlock] = useState('');
-  const [address, setAddress] = useState<string | null>(null);
-  const [keyError, setKeyError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const detected = useMemo(() => classifyViewingKey(input), [input]);
-
-  // Decode the key for real and derive its address, so the user sees WHICH
-  // wallet this is before adding it.
-  useEffect(() => {
-    setAddress(null);
-    setKeyError(null);
-    if (detected.kind !== 'ufvk') {
-      return;
-    }
-    let cancelled = false;
-    void loadZwasm()
-      .then(zwasm => {
-        if (!zwasm.validate_ufvk(detected.key)) {
-          throw new Error('this key does not decode - check it was copied in full');
-        }
-        return zwasm.address_from_ufvk(detected.key, 0);
-      })
-      .then(addr => {
-        if (!cancelled) {
-          setAddress(addr);
-        }
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) {
-          const msg = e instanceof Error ? e.message : String(e);
-          setKeyError(
-            msg.includes('orchard')
-              ? 'this key has no orchard part, which zafu needs to sync'
-              : msg,
-          );
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [detected]);
+  const { ok, note: verdict } = useViewingKey(input);
+  const address = ok?.address;
 
   const startBlockNum = parseInt(startBlock, 10);
   const startBlockHint = startBlock.trim() ? describeZcashHeight(startBlockNum) : null;
   const startBlockOk = !startBlock.trim() || (startBlockHint?.ok ?? false);
 
-  const canAdd = detected.kind === 'ufvk' && !!address && startBlockOk && !adding;
+  const canAdd = !!ok && startBlockOk && !adding;
 
   const add = async () => {
-    if (detected.kind !== 'ufvk' || !address) {
+    if (!ok) {
       return;
     }
     setAdding(true);
     setError(null);
     try {
-      const data: ZignerZafuImport = {
-        viewingKey: detected.key,
-        accountIndex: 0,
-        deviceId: await viewingKeyDeviceId(detected.key),
-        coldSignerType: 'viewing-key',
-      };
-      const vaultId = await addZignerUnencrypted(data, label.trim() || 'viewing key');
+      const vaultId = await addZignerUnencrypted(
+        await viewingKeyImport(ok.key),
+        label.trim() || 'viewing key',
+      );
       // Blank = the whole history since orchard activation. Slower the first
       // time, but a viewing key is usually for a wallet that already has
       // history, and starting at the tip would silently show it empty.
@@ -121,43 +67,6 @@ export const SettingsAddViewingKey = () => {
       setAdding(false);
     }
   };
-
-  const verdict = (() => {
-    switch (detected.kind) {
-      case 'empty':
-        return null;
-      case 'seed':
-        return {
-          bad: true,
-          text: 'this is a seed phrase, not a viewing key. never paste it here - clear this field.',
-        };
-      case 'spending_key':
-        return {
-          bad: true,
-          text: 'this is a spending key, not a viewing key. never paste it here - clear this field.',
-        };
-      case 'uivk':
-        return {
-          bad: true,
-          text: 'incoming viewing key: it cannot see what the wallet spends, so balances would be wrong. paste the full viewing key (uview1...).',
-        };
-      case 'sapling':
-        return {
-          bad: true,
-          text: 'sapling viewing key: zafu syncs orchard and ironwood. paste a unified viewing key (uview1...).',
-        };
-      case 'unknown':
-        return { bad: true, text: 'not a zcash viewing key.' };
-      case 'ufvk':
-        if (keyError) {
-          return { bad: true, text: keyError };
-        }
-        return {
-          bad: false,
-          text: `unified full viewing key${detected.mainnet ? '' : ' (testnet)'}`,
-        };
-    }
-  })();
 
   return (
     <SettingsScreen title='add viewing key' backPath={PopupPath.SETTINGS_WALLETS}>

@@ -9,6 +9,7 @@ describe('onboarding flow', () => {
       PagePath.CHECK_SEED_PHRASE,
       PagePath.IMPORT_PASSWORD,
       PagePath.ZIGNER_PASSWORD,
+      PagePath.VIEWING_KEY_PASSWORD,
       PagePath.CONNECT_LEDGER,
     ]) {
       let at: PagePath | undefined = start;
@@ -27,6 +28,7 @@ describe('onboarding flow', () => {
     expect(screenFor(PagePath.ONBOARDING_SUCCESS).step).toBeUndefined();
     expect(screenFor(PagePath.CREATE_PASSWORD).step).toEqual([1, 3]);
     expect(screenFor(PagePath.IMPORT_PASSWORD).step).toEqual([3, 3]);
+    expect(screenFor(PagePath.VIEWING_KEY_PASSWORD).step).toEqual([3, 3]);
   });
 
   it('reads the password origin back from its path', () => {

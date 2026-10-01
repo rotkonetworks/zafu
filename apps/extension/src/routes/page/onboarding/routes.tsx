@@ -21,6 +21,9 @@ export const onboardingRoute: RouteObject = {
     { path: P.IMPORT_SEED_PHRASE, lazy: screen('ImportSeedPhrase') },
     { path: P.IMPORT_BIRTHDAY, lazy: screen('ImportBirthday') },
     { path: P.IMPORT_PASSWORD, lazy: screen('SetPassword') },
+    { path: P.IMPORT_VIEWING_KEY, lazy: screen('ImportViewingKey') },
+    { path: P.VIEWING_KEY_BIRTHDAY, lazy: screen('ImportBirthday') },
+    { path: P.VIEWING_KEY_PASSWORD, lazy: screen('SetPassword') },
     { path: P.IMPORT_ZIGNER, lazy: screen('ImportZigner') },
     { path: P.ZIGNER_PASSWORD, lazy: screen('SetPassword') },
     // the ledger entry is flagged in start.tsx; the route stays so it type-checks

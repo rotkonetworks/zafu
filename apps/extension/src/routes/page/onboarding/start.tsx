@@ -27,6 +27,13 @@ const BRING = [
     to: PagePath.CONNECT_LEDGER,
     shown: HARDWARE_WALLET_ENABLED || LEDGER_TRANSPARENT_ENABLED,
   },
+  {
+    icon: 'i-lucide-eye text-fg-muted',
+    label: 'viewing key',
+    hint: 'watch only',
+    to: PagePath.IMPORT_VIEWING_KEY,
+    shown: true,
+  },
 ].filter(o => o.shown);
 
 export const OnboardingStart = () => {

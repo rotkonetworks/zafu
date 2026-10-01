@@ -12,14 +12,24 @@ import { networksSelector } from '../../../../state/networks';
 import { zignerConnectSelector } from '../../../../state/zigner';
 import { ZCASH_MAINNET_ENDPOINTS, defaultZcashEndpoint } from '../../../../config/zcash-endpoints';
 import type { ZignerZafuImport } from '../../../../state/keyring/types';
+import { viewingKeyImport } from '../../../../hooks/use-viewing-key';
+import { useOnboarding } from '..';
+import { BIRTHDAY_PATH } from '../flow';
 
 export const useFinalizeOnboarding = () => {
   const addWallet = useAddWallet();
   const navigate = usePageNav();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(false);
-  const { setPassword, newZignerZafuKey, toggleNetwork, setActiveNetwork, enabledNetworks } =
-    useStore(keyRingSelector);
+  const {
+    setPassword,
+    newZignerZafuKey,
+    addZignerUnencrypted,
+    toggleNetwork,
+    setActiveNetwork,
+    enabledNetworks,
+  } = useStore(keyRingSelector);
+  const { viewingKey } = useOnboarding();
   const { setNetworkEndpoint } = useStore(networksSelector);
   const {
     walletImport,
@@ -29,6 +39,98 @@ export const useFinalizeOnboarding = () => {
     walletLabel,
     clearZignerState,
   } = useStore(zignerConnectSelector);
+
+  // Both fresh and imported wallets are Zcash only out of onboarding - no
+  // network-select screen anywhere in this flow. Penumbra (same seed,
+  // derivable any time) is a settings > networks toggle once the wallet exists.
+  const zcashOnly = async () => {
+    if (!enabledNetworks.includes('zcash')) {
+      await toggleNetwork('zcash');
+    }
+    await setActiveNetwork('zcash');
+    const preset = ZCASH_MAINNET_ENDPOINTS.find(p => p.id === defaultZcashEndpoint().id);
+    if (preset) {
+      await setNetworkEndpoint('zcash', preset.url);
+    }
+  };
+
+  // a watch-only wallet: sealed under the real password, never airgap-only
+  const addViewingKey = async (password: string) => {
+    await setPassword(password);
+    await zcashOnly();
+    await addZignerUnencrypted(await viewingKeyImport(viewingKey), 'viewing key');
+  };
+
+  const addZigner = async (password: string) => {
+    // zigner flow: set password then import watch-only wallet
+    await setPassword(password);
+
+    if (walletImport) {
+      // penumbra zigner import - convert protobuf to base64 strings
+      const fvkInner = walletImport.fullViewingKey.inner;
+      const walletIdInner = walletImport.walletId.inner;
+      const legacyDeviceId = walletIdInner
+        ? btoa(String.fromCharCode(...walletIdInner))
+        : `penumbra-${Date.now()}`;
+      const zignerData: ZignerZafuImport = {
+        fullViewingKey: fvkInner ? btoa(String.fromCharCode(...fvkInner)) : undefined,
+        accountIndex: walletImport.accountIndex,
+        deviceId: walletImport.zidPublicKey ?? legacyDeviceId,
+        zidPublicKey: walletImport.zidPublicKey,
+      };
+      await newZignerZafuKey(zignerData, walletLabel || 'zigner penumbra');
+    } else if (zcashWalletImport) {
+      // zcash zigner import - use ZID as canonical deviceId for dedup
+      const zignerData: ZignerZafuImport = {
+        viewingKey: zcashWalletImport.orchardFvk
+          ? btoa(String.fromCharCode(...zcashWalletImport.orchardFvk))
+          : (zcashWalletImport.ufvk ?? undefined),
+        accountIndex: zcashWalletImport.accountIndex,
+        deviceId: zcashWalletImport.zidPublicKey ?? `zcash-${Date.now()}`,
+        zidPublicKey: zcashWalletImport.zidPublicKey,
+      };
+      await newZignerZafuKey(zignerData, walletLabel || 'zigner zcash');
+    } else if (parsedCosmosExport) {
+      // cosmos zigner import
+      const zignerData: ZignerZafuImport = {
+        cosmosAddresses: parsedCosmosExport.addresses,
+        cosmosXpub: parsedCosmosExport.xpub,
+        publicKey: parsedCosmosExport.publicKey || undefined,
+        accountIndex: parsedCosmosExport.accountIndex,
+        deviceId: `cosmos-${Date.now()}`,
+      };
+      await newZignerZafuKey(zignerData, walletLabel || 'zigner cosmos');
+    } else if (parsedPolkadotExport) {
+      // polkadot zigner import
+      const zignerData: ZignerZafuImport = {
+        polkadotSs58: parsedPolkadotExport.address,
+        polkadotGenesisHash: parsedPolkadotExport.genesisHash,
+        accountIndex: 0,
+        deviceId: `polkadot-${Date.now()}`,
+      };
+      await newZignerZafuKey(zignerData, walletLabel || 'zigner polkadot');
+    } else {
+      throw new Error('no zigner wallet data found');
+    }
+
+    clearZignerState();
+  };
+
+  const addMnemonic = async (password: string, origin: SEED_PHRASE_ORIGIN) => {
+    await zcashOnly();
+    // Recover/import is idempotent by walletId: recovering the same seed
+    // derives the same key, and the wallet layer must NOT create a second
+    // record for it (that was the "same wallet appears multiple times"
+    // bug). Adding an already-present wallet is therefore treated as
+    // success - the existing record is selected rather than duplicated -
+    // so this call must not be made to throw on "already exists".
+    await addWallet(password, origin);
+  };
+
+  const ADD: Partial<Record<SEED_PHRASE_ORIGIN, (password: string) => Promise<void>>> = {
+    [SEED_PHRASE_ORIGIN.ZIGNER]: addZigner,
+    [SEED_PHRASE_ORIGIN.VIEWING_KEY]: addViewingKey,
+  };
 
   const finalize = async (origin: SEED_PHRASE_ORIGIN, password: string) => {
     if (loading) {
@@ -45,91 +147,17 @@ export const useFinalizeOnboarding = () => {
       setLoading(true);
       setError(undefined);
 
-      if (origin === SEED_PHRASE_ORIGIN.ZIGNER) {
-        // zigner flow: set password then import watch-only wallet
-        await setPassword(password);
-
-        if (walletImport) {
-          // penumbra zigner import - convert protobuf to base64 strings
-          const fvkInner = walletImport.fullViewingKey.inner;
-          const walletIdInner = walletImport.walletId.inner;
-          const legacyDeviceId = walletIdInner
-            ? btoa(String.fromCharCode(...walletIdInner))
-            : `penumbra-${Date.now()}`;
-          const zignerData: ZignerZafuImport = {
-            fullViewingKey: fvkInner ? btoa(String.fromCharCode(...fvkInner)) : undefined,
-            accountIndex: walletImport.accountIndex,
-            deviceId: walletImport.zidPublicKey ?? legacyDeviceId,
-            zidPublicKey: walletImport.zidPublicKey,
-          };
-          await newZignerZafuKey(zignerData, walletLabel || 'zigner penumbra');
-        } else if (zcashWalletImport) {
-          // zcash zigner import - use ZID as canonical deviceId for dedup
-          const zignerData: ZignerZafuImport = {
-            viewingKey: zcashWalletImport.orchardFvk
-              ? btoa(String.fromCharCode(...zcashWalletImport.orchardFvk))
-              : (zcashWalletImport.ufvk ?? undefined),
-            accountIndex: zcashWalletImport.accountIndex,
-            deviceId: zcashWalletImport.zidPublicKey ?? `zcash-${Date.now()}`,
-            zidPublicKey: zcashWalletImport.zidPublicKey,
-          };
-          await newZignerZafuKey(zignerData, walletLabel || 'zigner zcash');
-        } else if (parsedCosmosExport) {
-          // cosmos zigner import
-          const zignerData: ZignerZafuImport = {
-            cosmosAddresses: parsedCosmosExport.addresses,
-            cosmosXpub: parsedCosmosExport.xpub,
-            publicKey: parsedCosmosExport.publicKey || undefined,
-            accountIndex: parsedCosmosExport.accountIndex,
-            deviceId: `cosmos-${Date.now()}`,
-          };
-          await newZignerZafuKey(zignerData, walletLabel || 'zigner cosmos');
-        } else if (parsedPolkadotExport) {
-          // polkadot zigner import
-          const zignerData: ZignerZafuImport = {
-            polkadotSs58: parsedPolkadotExport.address,
-            polkadotGenesisHash: parsedPolkadotExport.genesisHash,
-            accountIndex: 0,
-            deviceId: `polkadot-${Date.now()}`,
-          };
-          await newZignerZafuKey(zignerData, walletLabel || 'zigner polkadot');
-        } else {
-          throw new Error('no zigner wallet data found');
-        }
-
-        clearZignerState();
-      } else {
-        // Standard mnemonic flow. Both fresh and imported wallets are Zcash
-        // only out of onboarding - no network-select screen anywhere in this
-        // flow. Penumbra (same seed, derivable any time) is a settings >
-        // networks toggle once the wallet exists.
-        if (!enabledNetworks.includes('zcash')) {
-          await toggleNetwork('zcash');
-        }
-        await setActiveNetwork('zcash');
-        const preset = ZCASH_MAINNET_ENDPOINTS.find(p => p.id === defaultZcashEndpoint().id);
-        if (preset) {
-          await setNetworkEndpoint('zcash', preset.url);
-        }
-
-        // Recover/import is idempotent by walletId: recovering the same seed
-        // derives the same key, and the wallet layer must NOT create a second
-        // record for it (that was the "same wallet appears multiple times"
-        // bug). Adding an already-present wallet is therefore treated as
-        // success - the existing record is selected rather than duplicated -
-        // so this call must not be made to throw on "already exists".
-        await addWallet(password, origin);
-      }
+      await (ADD[origin] ?? (pw => addMnemonic(pw, origin)))(password);
 
       await setOnboardingValuesInStorage(origin);
 
       // apply zcash birthday from onboarding (stored in sessionStorage by the
-      // birthday step). Only imported wallets have one - a fresh wallet syncs
+      // birthday step). Only the import paths have one - a fresh wallet syncs
       // from the tip - so gate on origin so a stale value left behind by an
       // abandoned import (import -> back -> create) can never leak into a new
       // wallet. Always clear the key regardless.
       const pendingBirthday = sessionStorage.getItem(PENDING_ZCASH_BIRTHDAY_KEY);
-      if (pendingBirthday && origin === SEED_PHRASE_ORIGIN.IMPORTED) {
+      if (pendingBirthday && origin in BIRTHDAY_PATH) {
         // Use the selected vault, not vaults[0]. Under dedupe an idempotent
         // re-import lands on an EXISTING vault which is not necessarily first
         // in the list, so anchoring the birthday to index 0 would write it
