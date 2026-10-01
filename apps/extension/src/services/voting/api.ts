@@ -6,34 +6,23 @@
  * endpoint list. Callers (react-query) own caching and retries.
  *
  * Trust model for phase 1 (read-only):
- *   - the static config is integrity-pinned (commit-locked URL + sha256)
- *   - rounds are cross-checked against the pinned dynamic config's
- *     rounds map (`inConfig`); unlisted rounds render with a warning
+ *   - the config (trusted keys, vote servers, pir endpoints) ships bundled
+ *     with the release (./bundled-config.ts) rather than being fetched
+ *   - rounds are cross-checked against the bundled rounds map (`inConfig`);
+ *     unlisted rounds render with a warning
  *   - per-round ed25519 authenticator signatures are NOT yet verified - *     that lands with the phase-2 cast flow where it actually gates
  *     spending-adjacent actions. Display-only data is bounded by the
- *     pinned config's server list.
+ *     bundled config's server list.
  */
 
-import { grantDestinationHosts, requestEgressOptIn } from '../../net/egress-opt-in';
-import { BUNDLED_PINNED_SOURCE } from './types';
-import type {
-  PinnedConfigSource,
-  StaticVotingConfig,
-  TallyResults,
-  VotingRound,
-  VotingServiceConfig,
-  RoundStatus,
-} from './types';
+import { requestEgressOptIn } from '../../net/egress-opt-in';
+import { BUNDLED_SERVICE_CONFIG } from './bundled-config';
+import type { TallyResults, VotingRound, VotingServiceConfig, RoundStatus } from './types';
 
 const ROUNDS_PATH = '/shielded-vote/v1/rounds';
 const tallyPath = (roundIdHex: string) => `/shielded-vote/v1/tally-results/${roundIdHex}`;
 
 const FETCH_TIMEOUT_MS = 10_000;
-
-const sha256Hex = async (data: ArrayBuffer): Promise<string> => {
-  const digest = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
-};
 
 const getJson = async <T>(url: string): Promise<T> => {
   const resp = await fetch(url, {
@@ -63,81 +52,6 @@ const firstReachable = async <T>(
     }
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
-};
-
-/** True only for the hash-pinned default shipped with the extension. */
-const isDefaultSource = (source: PinnedConfigSource): boolean =>
-  source.url === BUNDLED_PINNED_SOURCE.url;
-
-/** Loopback dev addresses - allowed only under an explicit user override. */
-const isLocalDevUrl = (url: string): boolean =>
-  url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1');
-
-/**
- * Fetch + checksum-verify the pinned static config.
- *
- * Security scoping: the DEFAULT source (`BUNDLED_PINNED_SOURCE`) must
- * always be https and always sha256-verified - that path is not relaxed.
- * A user-supplied OVERRIDE source (anything with a different `url`) is
- * additionally allowed to point `dynamic_config_url` at
- * `http://localhost`/`http://127.0.0.1` (for a local dev voting rig), and
- * may omit `sha256` to skip checksum verification (still verified if the
- * user provides one). This relaxation only ever applies to an override
- * the user explicitly typed in - never to the bundled default.
- */
-export const fetchStaticConfig = async (
-  source: PinnedConfigSource,
-): Promise<StaticVotingConfig> => {
-  const isOverride = !isDefaultSource(source);
-
-  const resp = await fetch(source.url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-  if (!resp.ok) {
-    throw new Error(`static voting config: HTTP ${resp.status}`);
-  }
-  const body = await resp.arrayBuffer();
-
-  if (source.sha256) {
-    const actual = await sha256Hex(body);
-    if (actual !== source.sha256) {
-      throw new Error(`static voting config checksum mismatch (got ${actual.slice(0, 12)}…)`);
-    }
-  } else if (!isOverride) {
-    // defense in depth: the default path must always be checksum-pinned.
-    throw new Error('static voting config: missing sha256 pin');
-  }
-
-  const cfg = JSON.parse(new TextDecoder().decode(body)) as StaticVotingConfig;
-  if (cfg.static_config_version !== 1) {
-    throw new Error(`unsupported static_config_version ${cfg.static_config_version}`);
-  }
-  const dynamicUrlOk =
-    !!cfg.dynamic_config_url?.startsWith('https://') ||
-    (isOverride && isLocalDevUrl(cfg.dynamic_config_url ?? ''));
-  if (!dynamicUrlOk) {
-    throw new Error(
-      isOverride
-        ? 'static voting config: dynamic_config_url must be https, or http://localhost / http://127.0.0.1 for a dev override'
-        : 'static voting config: dynamic_config_url must be https',
-    );
-  }
-  if (!cfg.trusted_keys?.length) {
-    throw new Error('static voting config: trusted_keys empty');
-  }
-  return cfg;
-};
-
-/** Fetch the dynamic service config the static config points at. */
-export const fetchServiceConfig = async (
-  staticConfig: StaticVotingConfig,
-): Promise<VotingServiceConfig> => {
-  const cfg = await getJson<VotingServiceConfig>(staticConfig.dynamic_config_url);
-  if (cfg.config_version !== 1) {
-    throw new Error(`unsupported voting config_version ${cfg.config_version}`);
-  }
-  if (!cfg.vote_servers?.length) {
-    throw new Error('voting config: vote_servers empty');
-  }
-  return cfg;
 };
 
 /* wire DTO → domain --------------------------------------------------- */
@@ -267,17 +181,13 @@ export const fetchTally = async (
   };
 };
 
-/** One-call composition for the UI: pinned source → rounds. */
-export const loadVoting = async (source: PinnedConfigSource) => {
-  // optional destination: ask first; a no leaves the fetch below to refuse
+/** One-call composition for the UI: the bundled config's vote servers → rounds. */
+export const loadVoting = async () => {
+  // optional destination: ask first; a no leaves the fetch below to refuse.
+  // the config itself is bundled (see ./bundled-config.ts) - only the vote
+  // servers it names are actually contacted, never github.
   await requestEgressOptIn('voting');
-  const staticConfig = await fetchStaticConfig(source);
-  await grantDestinationHosts('voting', [staticConfig.dynamic_config_url]);
-  const config = await fetchServiceConfig(staticConfig);
-  await grantDestinationHosts(
-    'voting',
-    [...config.vote_servers, ...(config.pir_endpoints ?? [])].map(s => s.url),
-  );
+  const config = BUNDLED_SERVICE_CONFIG;
   const rounds = await fetchRounds(config);
   return { config, rounds };
 };

@@ -119,35 +119,6 @@ export const setDestinationOptIn = async (
 };
 
 /**
- * Allow hosts a destination learned at run time (the vote and PIR servers a
- * voting config names). Only call this after the user opted in to that
- * destination; a host the user blocked stays blocked.
- */
-export const grantHosts = async (
-  hosts: string[],
-  label: string,
-  purpose: NetPurpose,
-): Promise<void> => {
-  const state = await readNetEgress();
-  const fresh = hosts.filter(
-    h => state.destinations[h]?.state !== 'blocked' && state.destinations[h]?.state !== 'allowed',
-  );
-  if (fresh.length === 0) {
-    return;
-  }
-  await mutateNetEgress(s => {
-    for (const host of fresh) {
-      s.destinations[host] = {
-        state: 'allowed',
-        label,
-        purposes: [purpose],
-        firstSeen: Date.now(),
-      };
-    }
-  });
-};
-
-/**
  * Drop a destination entirely - used when the reason for it disappears (the
  * user removed the network they had configured).
  */

@@ -210,12 +210,6 @@ type LOCAL = {
   };
   zcashBackend?: 'zidecar' | 'lightwalletd';
 
-  votingConfigOverride?: {
-    enabled: boolean;
-    url: string;
-    sha256: string | null;
-  };
-
   zcashMeConfig?: {
     mode: 'off' | 'directory' | 'live';
     mirrorUrl: string;

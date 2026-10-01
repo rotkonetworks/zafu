@@ -42,10 +42,14 @@ describe('a fresh zcash-only wallet', () => {
       ['https://api.skip.build/v2/info/chains', 'opt-in'],
       ['https://sponsor.zafu.pro/v1/injective/granter', 'opt-in'],
       ['https://license.zafu.pro/license', 'opt-in'],
+      // the voting config is bundled at build time - no destination owns this host any more
       [
         'https://raw.githubusercontent.com/valargroup/token-holder-voting-config/2785311/prod/x.json',
-        'opt-in',
+        'unknown',
       ],
+      // the bundled config's own vote + pir servers are still contacted live
+      ['https://prod.vote-chain-primary.valargroup.org/shielded-vote/v1/rounds', 'opt-in'],
+      ['https://lb-pir-primary.valargroup.org/query', 'opt-in'],
       // hosts no destination owns
       ['https://api.coingecko.com/api/v3/simple/price', 'unknown'],
       ['https://fonts.googleapis.com/css2', 'unknown'],
