@@ -87,6 +87,8 @@ export interface Caps {
   readonly signLabel: string;
   /** after a send, offer to re-sync the device's offline view */
   readonly afterSend?: 'sync-zigner';
+  /** who signs for cosmos chains; absent when this kind holds no cosmos key */
+  readonly cosmos?: 'hot' | 'zigner';
   /** why this kind cannot sign a zafu identity, or null when it can */
   readonly zid: string | null;
 }
@@ -122,12 +124,19 @@ const LEDGER = { unlockToSign: false, signLabel: 'sign with ledger', zid: LEDGER
 const NEVER = { unlockToSign: false, signLabel: '' } as const;
 
 export const CAPS: Record<WalletKind, Caps> = {
-  hot: { zcash: () => 'hot', unlockToSign: true, signLabel: 'sign & send', zid: null },
+  hot: {
+    zcash: () => 'hot',
+    unlockToSign: true,
+    signLabel: 'sign & send',
+    cosmos: 'hot',
+    zid: null,
+  },
   zigner: {
     zcash: () => 'zigner',
     unlockToSign: false,
     signLabel: 'sign with zafu zigner',
     afterSend: 'sync-zigner',
+    cosmos: 'zigner',
     zid: null,
   },
   keystone: {
