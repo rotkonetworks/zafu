@@ -117,8 +117,7 @@ fn parse_scope_retention(raw: &str, cap: i64) -> Vec<ScopeRetention> {
 
 impl Config {
     pub fn from_env() -> Self {
-        let max_scope_retention_seconds =
-            var_i64("MINIRELAY_MAX_SCOPE_RETENTION_SECONDS", 172_800); // 48h
+        let max_scope_retention_seconds = var_i64("MINIRELAY_MAX_SCOPE_RETENTION_SECONDS", 172_800); // 48h
         let scope_retention = env::var("MINIRELAY_SCOPE_RETENTION")
             .ok()
             .map(|raw| parse_scope_retention(&raw, max_scope_retention_seconds))

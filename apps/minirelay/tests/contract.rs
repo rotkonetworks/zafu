@@ -52,7 +52,15 @@ fn policy_config() -> Config {
 
 /// A relay whose policy came from configuration, exactly as the binary builds it.
 fn with_policy(config: &Config) -> axum::Router {
-    let store = Arc::new(Store::open(":memory:", config.max_entries_per_coord, 3600, config.scope_retention.clone()).unwrap());
+    let store = Arc::new(
+        Store::open(
+            ":memory:",
+            config.max_entries_per_coord,
+            3600,
+            config.scope_retention.clone(),
+        )
+        .unwrap(),
+    );
     let (service, _enforced) = strategy::build(config, store);
     app(AppState {
         service,
@@ -230,6 +238,48 @@ async fn rejects_malformed_requests() {
         ))
         .unwrap();
     assert_eq!(send(&router, empty_scope).await.0, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn accepts_a_sealed_group_room_record_but_refuses_one_byte_more_than_the_ceiling() {
+    // Pinning BLOB_MAX_BYTES in server.rs: a `@zafu/zirc` group room's sealed
+    // blob at GROUP_ROOM_PLAINTEXT_BYTES (4096) is 1 + 12 + 4096 + 16 = 4125
+    // bytes. The relay must accept it - the old 4096-byte ceiling rejected it
+    // outright, which is exactly what blocker 1's end-to-end check caught
+    // against a real local minirelay before this ceiling was raised.
+    let router = fresh(1000, 4096);
+    let group_sized = Request::builder()
+        .method("POST")
+        .uri("/bucket")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({
+                "appScope": "zafu-group-v1",
+                "epoch": 1,
+                "entries": [{ "tag": B64.encode([1u8; 16]), "blob": B64.encode(vec![7u8; 4125]) }],
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    assert_eq!(send(&router, group_sized).await.0, StatusCode::NO_CONTENT);
+
+    // the ceiling itself (8192) is a bound, not an invitation to grow further -
+    // one byte past it is still a clear client error, not a silent truncation.
+    let router = fresh(1000, 4096);
+    let one_over = Request::builder()
+        .method("POST")
+        .uri("/bucket")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({
+                "appScope": "zafu-group-v1",
+                "epoch": 1,
+                "entries": [{ "tag": B64.encode([1u8; 16]), "blob": B64.encode(vec![7u8; 8193]) }],
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    assert_eq!(send(&router, one_over).await.0, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

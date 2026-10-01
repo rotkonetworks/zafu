@@ -404,9 +404,20 @@ mod tests {
 
         let removed = s.gc().unwrap();
 
-        assert_eq!(removed, 1, "only the default-retention scope's row is past its cutoff");
-        assert_eq!(s.get(&coord("zafu-group-v1", 100)).unwrap().len(), 1, "the group row survives");
-        assert_eq!(s.get(&coord("zid-discovery", 100)).unwrap().len(), 0, "the default-retention row is gone");
+        assert_eq!(
+            removed, 1,
+            "only the default-retention scope's row is past its cutoff"
+        );
+        assert_eq!(
+            s.get(&coord("zafu-group-v1", 100)).unwrap().len(),
+            1,
+            "the group row survives"
+        );
+        assert_eq!(
+            s.get(&coord("zid-discovery", 100)).unwrap().len(),
+            0,
+            "the default-retention row is gone"
+        );
     }
 
     #[test]
@@ -454,7 +465,10 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(1100));
 
         let removed = s.gc().unwrap();
-        assert_eq!(removed, 1, "an exact rule must not accidentally act as a prefix");
+        assert_eq!(
+            removed, 1,
+            "an exact rule must not accidentally act as a prefix"
+        );
     }
 
     #[test]
@@ -477,7 +491,15 @@ mod tests {
 
         s.gc().unwrap();
 
-        assert_eq!(s.get(&coord("a_bcde", 100)).unwrap().len(), 1, "real prefix kept");
-        assert_eq!(s.get(&coord("axbyc", 100)).unwrap().len(), 0, "unrelated scope swept by default");
+        assert_eq!(
+            s.get(&coord("a_bcde", 100)).unwrap().len(),
+            1,
+            "real prefix kept"
+        );
+        assert_eq!(
+            s.get(&coord("axbyc", 100)).unwrap().len(),
+            0,
+            "unrelated scope swept by default"
+        );
     }
 }

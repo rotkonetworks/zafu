@@ -1019,6 +1019,74 @@ describe("room: plaintextBytes (blocker 1 - zirc rooms need more than chat's 1 K
     expect(synced.dropped).toHaveLength(0);
   });
 
+  it("plaintextBytes and relayLimitsFor work the same way for a PUBLIC room (zitadel's replacement)", async () => {
+    // the coordinator asked explicitly: size and retention changes must not be
+    // sealed-room-only. A public room's coordinate comes from the channel
+    // NAME instead of the secret (RoomConfig.public), but the record size and
+    // the transport limits it needs are the same arithmetic either way - this
+    // is the same real-transport harness as the sealed case above, just with
+    // `public: true` and an unsealed (`plain`) send, since a public room's
+    // whole point is that a keyless visitor can read it.
+    const coords = new Map<string, { tag: string; blob: string }[]>();
+    const key = (appScope: string, epoch: number, shard: string) => `${appScope}|${epoch}|${shard}`;
+    const fetchMock = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = asUrl(input);
+      if (init?.method === 'POST') {
+        const req = JSON.parse(asText(init?.body)) as {
+          appScope: string;
+          epoch: number;
+          shard: string;
+          entries: { tag: string; blob: string }[];
+        };
+        const k = key(req.appScope, req.epoch, req.shard);
+        const existing = coords.get(k) ?? [];
+        const byTag = new Map(existing.map(e => [e.tag, e] as const));
+        for (const e of req.entries) {
+          byTag.set(e.tag, e);
+        }
+        coords.set(k, [...byTag.values()]);
+        return new Response(null, { status: 204 });
+      }
+      const u = new URL(url);
+      const entries =
+        coords.get(
+          key(
+            u.searchParams.get('appScope') ?? '',
+            Number(u.searchParams.get('epoch')),
+            u.searchParams.get('shard') ?? '',
+          ),
+        ) ?? [];
+      return new Response(JSON.stringify({ entries }), { status: 200 });
+    }) as typeof fetch;
+
+    const relay = createHttpRelayTransport({
+      endpoint: 'https://relay.example/public-group',
+      fetch: fetchMock,
+      ...relayLimitsFor(GROUP_ROOM_PLAINTEXT_BYTES),
+    });
+
+    const secret = createRoomSecret(); // irrelevant to the coordinate here, still needed to seal DMs
+    const alice = openRoom(asIdentity(guest(1), 'alice'), {
+      relay,
+      roomSecret: secret,
+      plaintextBytes: GROUP_ROOM_PLAINTEXT_BYTES,
+      public: true,
+    });
+    // a visitor with no room secret at all - the point of a public room -
+    // still reads it, as long as it was built with the same size and limits.
+    const visitor = openRoom(asIdentity(guest(2), 'bob'), {
+      relay,
+      roomSecret: createRoomSecret(),
+      plaintextBytes: GROUP_ROOM_PLAINTEXT_BYTES,
+      public: true,
+    });
+
+    await alice.send('a public group-sized announcement', { plain: true });
+    const synced = await visitor.sync(1);
+    expect(synced.messages.map(m => m.body)).toEqual(['a public group-sized announcement']);
+    expect(synced.dropped).toHaveLength(0);
+  });
+
   it('an oversize record is reported in `dropped`, never silently missing', async () => {
     // a transport built with discovery's unchanged defaults cannot carry this
     // room's 4 KiB records - every entry is refused, and the room must say so.

@@ -37,6 +37,18 @@ config:
 No code in this PR is deployed by writing this file. Do not restart the
 production relay as part of landing this change.
 
+**The binary must be rebuilt from this commit (or later), not just restarted
+with the new env var.** This PR also raises the server's own per-entry size
+ceiling (`BLOB_MAX_BYTES` in `src/server.rs`, 4096 -> 8192 bytes) - a sealed
+4 KiB group room record is 4125 bytes, over the old ceiling. On the currently
+deployed binary, setting `MINIRELAY_SCOPE_RETENTION` alone gets a group's rows
+kept 25h but every `PUT` of a group-sized record still fails with HTTP 400
+(a loud rejection at write time, not a silent drop - recognisable in the
+relay's access logs as 400s on `/bucket` from zafu clients, not as a quiet
+absence of messages). Both changes - the retention env var and the rebuilt
+binary - are needed together before group rooms work end to end against this
+relay.
+
 ## Storage-growth estimate
 
 Per-scope retention changes how long a scope's rows survive the 60s sweep, not
