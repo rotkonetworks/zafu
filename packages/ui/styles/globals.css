@@ -44,6 +44,11 @@
     --hanko: #c73e3a;
     --hanko-light: #d95b4e;
 
+    /* the seal glyph's cream, fixed - a real hanko's paper ground never
+     * changes colour with the room, so this never flips with the theme.
+     * Only the Mark component (packages/ui/components/ui/mark) reads it. */
+    --mark-glyph: #f2ecdf;
+
     /* brand — blue (hot side) */
     --zafu-blue-dark: #1d4ed8;
     --zafu-blue: #3b82f6;
@@ -167,6 +172,12 @@
     --fg: #2b241c;
     --fg-muted: #6f6555;
     --fg-dim: #6a6957;
+    /* hanko on paper: darkened so a red seal reads as ink-on-paper, not
+     * the sumi neon; --mark-glyph is deliberately NOT overridden here -
+     * the seal's cream ground is fixed across both themes. */
+    --hanko-dark: #7e211e;
+    --hanko: #b3322e;
+    --hanko-light: #c14a3f;
     /* gold on paper: brand hue held, lightness dropped for contrast */
     --zigner-gold: #8a6508;
     /* same treatment for the blue sibling — #3b82f6 only clears ~3.7:1 on
@@ -405,11 +416,11 @@
   }
   /* Shippori Mincho - display headings only (onboarding + wherever else picks
    * it up later). SIL OFL, self-hosted, subset to ASCII + the kanji the
-   * product uses so far - the 匿 brand seal, and the settings category
-   * glyphs 守 道 器 秘 票 済 - so MV3's no-remote-fonts rule holds and the
-   * file stays small. A non-ASCII heading outside that subset falls back to
-   * the system serif; extend the subset (see mnemonic of glyphs above) if a
-   * new screen needs another one. */
+   * product uses so far - the 匿 brand seal, the settings category glyphs
+   * 守 道 器 秘 票 済, and the watermark glyph 間 - so MV3's no-remote-fonts
+   * rule holds and the file stays small. A non-ASCII heading outside that
+   * subset falls back to the system serif; extend the subset (see mnemonic
+   * of glyphs above) if a new screen needs another one. */
   @font-face {
     font-family: 'Shippori Mincho';
     font-weight: 500;

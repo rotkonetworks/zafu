@@ -87,6 +87,9 @@
   --color-hanko-light: var(--hanko-light);
   --color-hanko-dark: var(--hanko-dark);
 
+  /* the seal glyph's cream - fixed, never a theme token. Mark component only. */
+  --color-mark-glyph: var(--mark-glyph);
+
   /* zafu-blue triplet (sibling of zigner-gold below) */
   --color-zafu-blue: var(--zafu-blue);
   --color-zafu-blue-light: var(--zafu-blue-light);
