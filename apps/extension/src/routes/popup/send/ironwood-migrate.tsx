@@ -17,6 +17,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { VaultUnlock } from '../../../state/keyring/types';
 import { Button } from '@repo/ui/components/ui/button';
 import { StepList } from '@repo/ui/components/ui/step-list';
+import { ScreenHeader } from '../../../components/screen-header';
+import { PopupPath } from '../paths';
 import { Sensitive } from '../../../components/sensitive';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
@@ -312,15 +314,7 @@ export function IronwoodMigrate({
         if (orchardZat <= 0n) {
           return (
             <div className='flex h-full min-h-0 flex-col'>
-              <div className='flex shrink-0 items-center gap-3 p-4'>
-                <button
-                  onClick={onClose}
-                  className='text-fg-muted hover:text-fg-high transition-colors'
-                >
-                  <span className='i-ph-arrow-left h-5 w-5' />
-                </button>
-                <h2 className='text-lg'>migrate to ironwood</h2>
-              </div>
+              <ScreenHeader title='move to ironwood' onBack={onClose} backPath={PopupPath.INDEX} />
               <div className='flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6 text-center'>
                 <div className='flex h-16 w-16 items-center justify-center bg-green-500/20'>
                   <span className='i-ph-check h-8 w-8 text-green-400' />
@@ -341,89 +335,58 @@ export function IronwoodMigrate({
         }
         return (
           <div className='flex h-full min-h-0 flex-col'>
-            <div className='flex shrink-0 items-center gap-3 p-4'>
-              <button
-                onClick={onClose}
-                className='text-fg-muted hover:text-fg-high transition-colors'
-              >
-                <span className='i-ph-arrow-left h-5 w-5' />
-              </button>
-              <h2 className='text-lg'>migrate to ironwood</h2>
-            </div>
+            <ScreenHeader title='move to ironwood' onBack={onClose} backPath={PopupPath.INDEX} />
 
-            <div className='flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4'>
-              <div className='flex items-center justify-center gap-4 pt-2'>
-                <div className='flex flex-col items-center gap-1'>
-                  <span className='i-ph-shield h-7 w-7 text-fg-muted' />
-                  <span className='text-xs text-fg-muted'>orchard</span>
-                </div>
-                <span className='i-ph-arrow-right h-5 w-5 text-zigner-gold' />
-                <div className='flex flex-col items-center gap-1'>
-                  <span className='i-ph-shield-check h-7 w-7 text-fg-high' />
-                  <span className='text-xs'>ironwood</span>
-                </div>
-              </div>
-
-              <div className='text-center'>
-                <div className='text-3xl tabular-nums'>
-                  <Sensitive>{fmtZec(orchardZat)}</Sensitive>
-                </div>
-                <div className='text-sm text-fg-muted'>ZEC to migrate</div>
-              </div>
-
-              <p className='text-center text-xs text-fg-muted leading-snug'>
-                orchard is now a legacy pool. this moves your full orchard balance to your own
-                ironwood address so you can keep spending it normally.
+            <div className='flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 pt-3'>
+              <p className='text-xs text-fg-muted leading-snug'>
+                orchard is closing. move your zec into ironwood, the new private pool.
               </p>
 
-              {/* The privacy cost, stated before the user commits.
-                  A turnstile migration moves value BETWEEN pools, so the amount
-                  is a cleartext consensus field (valueBalance) - not shielded.
-                  And because this sweeps every orchard note at once, the number
-                  published is the user's entire orchard balance, which also
-                  links their pre- and post-NU6.3 activity at that txid.
-                  Saying nothing here would let someone deanonymise their whole
-                  orchard history in one click while believing this is a private
-                  shielded-to-shielded move. */}
-              <div className='flex items-start gap-2 border border-hanko/40 bg-elev-1 p-3'>
-                <span className='i-ph-eye mt-0.5 size-3.5 shrink-0 text-hanko' />
-                <p className='text-label text-fg-muted leading-snug'>
-                  <span className='text-hanko'>this amount becomes public.</span> moving between
-                  pools publishes the value on-chain in the clear, and this migrates your whole
-                  orchard balance at once - so the figure above, and the link between your orchard
-                  and ironwood activity, are visible to anyone.
-                  <br />
-                  <span className='text-fg-dim'>
-                    your orchard funds stay spendable until you move them. if you would rather not
-                    publish this, you can wait - but note that spending orchard directly leaks value
-                    the same way.
-                  </span>
-                </p>
+              <div className='text-center'>
+                <Sensitive className='text-3xl tabular-nums text-fg-high'>
+                  {fmtZec(orchardZat)}
+                  <span className='ml-1.5 text-base text-zigner-gold'>zec</span>
+                </Sensitive>
               </div>
 
               <div className='divide-y divide-border-soft border border-border-soft bg-elev-1'>
                 <div className='flex items-center justify-between px-4 py-3 text-sm'>
-                  <span className='text-fg-muted'>destination</span>
-                  <span>your ironwood address</span>
+                  <span className='text-fg-muted'>from</span>
+                  <span>orchard · legacy</span>
                 </div>
                 <div className='flex items-center justify-between px-4 py-3 text-sm'>
-                  <span className='text-fg-muted'>network fee</span>
+                  <span className='text-fg-muted'>into</span>
+                  <span>ironwood</span>
+                </div>
+                <div className='flex items-center justify-between px-4 py-3 text-sm'>
+                  <span className='text-fg-muted'>fee</span>
                   <span className='text-fg-muted'>computed at build</span>
                 </div>
               </div>
 
-              <div className='flex items-center gap-2 text-xs text-fg-muted'>
-                <span className='i-ph-arrow-right h-4 w-4 shrink-0' />
-                <span>one-way - your funds stay yours, they just cannot move back to orchard</span>
+              {/* The privacy cost, stated before the user commits.
+                  A turnstile migration moves value BETWEEN pools, so the amount
+                  is a cleartext consensus field (valueBalance) - not shielded,
+                  and it sweeps the full orchard balance in one go. */}
+              <div className='flex items-start gap-2 border border-hanko/40 bg-elev-1 p-3'>
+                <span className='i-ph-eye mt-0.5 size-3.5 shrink-0 text-hanko' />
+                <p className='text-label text-fg-muted leading-snug'>
+                  the amount moved is visible on the chain. who sent it and where it goes stay
+                  private.
+                </p>
               </div>
+
+              <p className='text-label text-fg-dim leading-snug'>
+                tip: moving in a few smaller steps makes the amounts harder to link
+              </p>
             </div>
 
             <div className='flex shrink-0 gap-2 p-4'>
               <Button variant='secondary' onClick={onClose} className='flex-1'>
-                not now
+                later
               </Button>
               <Button variant='primary' onClick={() => void handleBuild()} className='flex-1'>
-                migrate
+                move to ironwood
               </Button>
             </div>
           </div>
