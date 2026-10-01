@@ -116,7 +116,6 @@ export const SettingsPenumbraNetwork = () => {
         <RowGroup>
           <TintedRow
             label='turn off penumbra'
-            tone='danger'
             onPress={() =>
               void disable('penumbra').then(() =>
                 navigate(PopupPath.SETTINGS_NETWORKS, { replace: true }),
