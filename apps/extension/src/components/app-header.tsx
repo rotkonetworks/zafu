@@ -2,12 +2,15 @@
  * persistent app header - minimal
  * tap the wallet name  -> Accounts sheet (accounts, cold signers, add wallet, lock)
  * tap the network chip -> Network sheet (switch network, turn one on)
+ * lock                 -> locks now, one tap from every screen
  */
 
 import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '../state';
-import { selectActiveNetwork, selectEffectiveKeyInfo } from '../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo, selectLock } from '../state/keyring';
+import { useNavigate } from 'react-router-dom';
+import { PopupPath } from '../routes/popup/paths';
 import { selectActiveZcashWallet } from '../state/wallets';
 import { activePockets } from '../state/pockets';
 import { getNetwork } from '../config/networks';
@@ -29,6 +32,8 @@ export const AppHeader = () => {
   const pockets = useStore(useShallow(activePockets));
   const pocketAccount = useStore(pocketTarget(activeNetwork).active);
   const [openSheet, setOpenSheet] = useState<OpenSheet>(null);
+  const lock = useStore(selectLock);
+  const navigate = useNavigate();
   // set when the new-pocket sheet is opened to rename an existing pocket
   // instead of creating one
   const [renameTarget, setRenameTarget] = useState<PocketSheetTarget>();
@@ -83,25 +88,38 @@ export const AppHeader = () => {
         <span className='i-lucide-chevron-down size-3.5 shrink-0 text-fg-muted' />
       </button>
 
-      <button
-        onClick={() => setOpenSheet('network')}
-        className='flex h-8 shrink-0 items-center gap-2 border border-border-soft bg-elev-1 px-2.5 transition-colors hover:bg-elev-2'
-        aria-label='switch network'
-        aria-haspopup='dialog'
-      >
-        <span className={cn('size-2', networkInfo.color)} />
-        <span className='text-[13px] text-fg-high lowercase'>{networkInfo.name}</span>
-        {networkInfo.transparent && (
-          <span
-            className='flex items-center gap-0.5 bg-hanko/15 px-1.5 py-0.5 text-label leading-none text-hanko'
-            title='transparent network - balances and transactions are PUBLIC, not shielded'
-          >
-            <span className='i-ph-eye h-3 w-3' />
-            unshielded
-          </span>
-        )}
-        <span className='i-lucide-chevron-down size-3 text-fg-muted' />
-      </button>
+      <div className='flex shrink-0 items-center gap-1'>
+        <button
+          onClick={() => setOpenSheet('network')}
+          className='flex h-8 shrink-0 items-center gap-2 border border-border-soft bg-elev-1 px-2.5 transition-colors hover:bg-elev-2'
+          aria-label='switch network'
+          aria-haspopup='dialog'
+        >
+          <span className={cn('size-2', networkInfo.color)} />
+          <span className='text-[13px] text-fg-high lowercase'>{networkInfo.name}</span>
+          {networkInfo.transparent && (
+            <span
+              className='flex items-center gap-0.5 bg-hanko/15 px-1.5 py-0.5 text-label leading-none text-hanko'
+              title='transparent network - balances and transactions are PUBLIC, not shielded'
+            >
+              <span className='i-ph-eye h-3 w-3' />
+              unshielded
+            </span>
+          )}
+          <span className='i-lucide-chevron-down size-3 text-fg-muted' />
+        </button>
+        <button
+          onClick={() => {
+            lock();
+            navigate(PopupPath.LOGIN);
+          }}
+          className='grid size-10 place-items-center text-fg-muted transition-colors hover:bg-elev-2 hover:text-fg-high'
+          aria-label='lock'
+          title='lock'
+        >
+          <span className='i-lucide-lock size-4' />
+        </button>
+      </div>
 
       <AccountsSheet
         open={openSheet === 'accounts'}
