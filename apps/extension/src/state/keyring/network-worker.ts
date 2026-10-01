@@ -168,6 +168,8 @@ interface WorkerState {
   worker: WorkerLike;
   ready: boolean;
   syncingWallets: Set<string>; // track which wallets are syncing
+  /** client only: when the host last said anything about this network */
+  heardAt: number;
   pendingCallbacks: Map<
     string,
     {
@@ -255,7 +257,7 @@ const handleWorkerMessage = (
     // the host tore the real worker down (explicit terminate, or a rescan
     // from another context) - drop the stale local entry so the next call
     // respawns instead of calling into nothing.
-    workers.delete(network);
+    dropMirror(network, state);
     return;
   }
 
@@ -297,13 +299,16 @@ const handleWorkerMessage = (
     // `code` is the worker's own structured classification (see
     // state/sync-failure.ts). Relayed verbatim so the UI classifies on a
     // code we emitted rather than on the shape of an error string.
-    const payload = msg.payload as { message?: string; code?: string } | undefined;
+    const payload = msg.payload as
+      | { message?: string; code?: string; stalled?: boolean }
+      | undefined;
     window.dispatchEvent(
       new CustomEvent('zcash-sync-error', {
         detail: {
           walletId: msg.walletId,
           message: payload?.message ?? 'sync error',
           code: payload?.code,
+          stalled: payload?.stalled,
         },
       }),
     );
@@ -402,10 +407,78 @@ const ensureClientListener = (): void => {
     }
     const state = workers.get(msg.network as NetworkType);
     if (state) {
+      state.heardAt = Date.now();
       handleWorkerMessage(msg.network as NetworkType, state, msg.msg as NetworkWorkerResponse);
     }
     return false;
   });
+};
+
+/** forget a mirror and fail its calls now, instead of leaving them to hang */
+const dropMirror = (network: NetworkType, state: WorkerState): void => {
+  if (workers.get(network) === state) {
+    workers.delete(network);
+  }
+  for (const { reject } of state.pendingCallbacks.values()) {
+    reject(new Error(`${network} worker went away`));
+  }
+  state.pendingCallbacks.clear();
+};
+
+/**
+ * The host lost the worker without anyone asking (Chrome closed or crashed
+ * the offscreen document, and a new one came back empty). Drop the mirror
+ * and say so: the auto-sync hook starts sync again, from the stored height.
+ */
+const loseHost = (network: NetworkType): void => {
+  const state = workers.get(network);
+  if (!state) {
+    return;
+  }
+  dropMirror(network, state);
+  window.dispatchEvent(new CustomEvent('network-sync-lost', { detail: { network } }));
+};
+
+/** a client call the host could not take fails at once instead of hanging */
+const forwardToHost = async (network: NetworkType, message: unknown): Promise<void> => {
+  const reply = await chrome.runtime
+    .sendMessage({ type: 'NW_CALL', network, message, sentAt: Date.now() })
+    .catch(() => undefined);
+  if (!(reply as { ok?: boolean } | undefined)?.ok) {
+    loseHost(network);
+  }
+};
+
+/**
+ * A host that dies sends nothing, so a window whose sync went quiet asks
+ * whether the host still has the worker and what it is syncing. Local
+ * messages only, and only while this window believes something is syncing.
+ */
+const HOST_SILENCE_MS = 30_000;
+let hostWatch: ReturnType<typeof setInterval> | undefined;
+const watchHost = (): void => {
+  hostWatch ??= setInterval(() => {
+    for (const [network, state] of workers) {
+      if (state.syncingWallets.size === 0 || Date.now() - state.heardAt < HOST_SILENCE_MS) {
+        continue;
+      }
+      state.heardAt = Date.now();
+      void chrome.runtime
+        .sendMessage({ type: 'NW_PING', network })
+        .catch(() => undefined)
+        .then((reply?: { ok?: boolean; syncing?: string[] }) => {
+          if (!reply?.ok) {
+            loseHost(network);
+            return;
+          }
+          const syncing = new Set(reply.syncing);
+          if ([...state.syncingWallets].some(w => !syncing.has(w))) {
+            state.syncingWallets = syncing;
+            window.dispatchEvent(new CustomEvent('network-sync-lost', { detail: { network } }));
+          }
+        });
+    }
+  }, HOST_SILENCE_MS / 2);
 };
 
 // offscreen host: owns the real Workers and answers NW_SPAWN / NW_CALL /
@@ -450,11 +523,21 @@ const ensureHostListener = (): void => {
       if (m.type === 'sync' && typeof msg.sentAt === 'number' && msg.sentAt > lastStopAt) {
         stopGeneration++;
       }
+      const host = workers.get(msg.network as NetworkType);
+      if (!host) {
+        sendResponse({ ok: false });
+        return false;
+      }
       if (SEND_SHAPED_TYPES.has(m.type) && m.id) {
         inFlightSendIds.add(m.id);
       }
-      workers.get(msg.network as NetworkType)?.worker.postMessage(msg.message);
+      host.worker.postMessage(msg.message);
       sendResponse({ ok: true });
+      return false;
+    }
+    if (msg?.type === 'NW_PING' && msg.network) {
+      const host = workers.get(msg.network as NetworkType);
+      sendResponse({ ok: !!host?.ready, syncing: [...(host?.syncingWallets ?? [])] });
       return false;
     }
     if (msg?.type === 'NW_TERMINATE' && msg.network) {
@@ -483,16 +566,18 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
     }
     const state: WorkerState = {
       worker: {
-        postMessage: m => broadcastToHost('NW_CALL', network, { message: m, sentAt: Date.now() }),
+        postMessage: m => void forwardToHost(network, m),
         terminate: () => void broadcastToHost('NW_TERMINATE', network, {}),
       },
       ready: false,
       syncingWallets: new Set(),
+      heardAt: Date.now(),
       pendingCallbacks: new Map(),
     };
     workers.set(network, state);
     await broadcastToHost('NW_SPAWN', network, {});
     await waitUntilReady(network, state);
+    watchHost();
     return;
   }
 
@@ -510,6 +595,7 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
     worker,
     ready: false,
     syncingWallets: new Set(),
+    heardAt: Date.now(),
     pendingCallbacks: new Map(),
   };
 
@@ -540,7 +626,7 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
 
 /** ask the offscreen host to do something, waiting for the service worker if needed */
 const broadcastToHost = async (
-  type: 'NW_SPAWN' | 'NW_CALL' | 'NW_TERMINATE',
+  type: 'NW_SPAWN' | 'NW_TERMINATE',
   network: NetworkType,
   extra: Record<string, unknown>,
 ): Promise<void> => {

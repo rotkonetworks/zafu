@@ -7,7 +7,7 @@
  * use in PopupLayout, not in individual page components.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useStore } from '../state';
 import {
@@ -92,6 +92,18 @@ export function useZcashAutoSync() {
   const syncEndpointRef = useRef<{ endpoint: string; backend: ZcashBackend } | null>(null);
   // track in-flight stop promise so the start effect can await it on quick network switches
   const stopPromiseRef = useRef<Promise<void> | null>(null);
+
+  // a host that lost its worker: start again from the stored height
+  const [restarts, setRestarts] = useState(0);
+  useEffect(() => {
+    const restart = (e: Event) => {
+      if ((e as CustomEvent).detail?.network === 'zcash') {
+        setRestarts(n => n + 1);
+      }
+    };
+    window.addEventListener('network-sync-lost', restart);
+    return () => window.removeEventListener('network-sync-lost', restart);
+  }, []);
 
   // eagerly pre-spawn the zcash worker while zcash is on
   // decouples WASM loading from wallet data hydration so the worker
@@ -239,6 +251,7 @@ export function useZcashAutoSync() {
     zidecarUrl,
     zcashBackend,
     mempoolWatch,
+    restarts,
   ]);
 
   // watch-only wallet sync
@@ -352,5 +365,6 @@ export function useZcashAutoSync() {
     zidecarUrl,
     zcashBackend,
     mempoolWatch,
+    restarts,
   ]);
 }
