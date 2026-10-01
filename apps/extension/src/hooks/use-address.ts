@@ -100,7 +100,10 @@ async function loadZcashWasm() {
  * derive zcash address from UFVK string (for watch-only wallets) at an 11-byte
  * diversifier index (22 hex chars)
  */
-async function deriveZcashAddressFromUfvk(ufvk: string, diversifierHex: string): Promise<string> {
+export async function deriveZcashAddressFromUfvk(
+  ufvk: string,
+  diversifierHex: string,
+): Promise<string> {
   const zcashWasm = await loadZcashWasm();
   if (ufvk.startsWith('uview')) {
     const raw = zcashWasm.address_from_ufvk_at_index(ufvk, diversifierHex);
