@@ -4,19 +4,18 @@ import { useStore } from '../../../state';
 import { selectKeyInfos } from '../../../state/keyring';
 import { selectZcashWallets } from '../../../state/wallets';
 import { networksSelector } from '../../../state/networks';
-import { findPresetByUrl } from '../../../config/zcash-endpoints';
 import { terminateNetworkWorker, spawnNetworkWorker } from '../../../state/keyring/network-worker';
 import { deleteZcashDatabases } from '../../../clear-cache-startup';
 import { getClearCacheStepLabel, type ClearCacheProgress } from '../../../message/services';
-import { useSyncProgress } from '../../../hooks/full-sync-height';
+import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
 import { formatBlockMonth } from '../../../utils/zcash-blocks';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
-import { SettingsScreen } from './settings-screen';
-import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { Section, SettingsScreen } from './settings-screen';
+import { Row } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Button } from '@repo/ui/components/ui/button';
-import { StatusSlot } from '@repo/ui/components/ui/status-slot';
+import { cn } from '@repo/ui/lib/utils';
 
 /** the lowest set birthday across zcash vaults - "auto" reads from the tip
  *  and misses nothing a fresh vault needs, so it is a fine default, not a
@@ -42,10 +41,9 @@ const useEarliestBirthday = (vaultIds: readonly string[]): number | null => {
 };
 
 /**
- * Zcash network screen (SetSync.dc.html): status, starts-from, node, then
- * one honest resync action. "sync again from the start" resyncs zcash for
- * every wallet on this computer (the note database is shared across
- * vaults) - the confirm Sheet says so plainly.
+ * zcash network screen (SetSync.dc.html). heights come from the zcash worker
+ * and the zcash node the home screen already asks; "sync again from the
+ * start" resyncs every wallet on this computer (the note database is shared).
  */
 export const SettingsZcashNetwork = () => {
   const navigate = usePopupNav();
@@ -53,7 +51,7 @@ export const SettingsZcashNetwork = () => {
   const keyInfos = useStore(selectKeyInfos);
   const zcashWallets = useStore(selectZcashWallets);
   const { networks } = useStore(networksSelector);
-  const { latestBlockHeight, fullSyncHeight, error } = useSyncProgress();
+  const { workerSyncHeight, workerChainHeight, chainTip, failure } = useZcashSyncStatus();
 
   const zcashVaultIds = keyInfos
     .filter(v => v.type === 'mnemonic' || zcashWallets.some(w => w.vaultId === v.id))
@@ -61,7 +59,6 @@ export const SettingsZcashNetwork = () => {
   const birthday = useEarliestBirthday(zcashVaultIds);
 
   const endpoint = networks.zcash?.endpoint;
-  const preset = endpoint ? findPresetByUrl(endpoint) : undefined;
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [progress, setProgress] = useState<ClearCacheProgress | null>(null);
@@ -98,68 +95,78 @@ export const SettingsZcashNetwork = () => {
     }
   };
 
-  const behind =
-    latestBlockHeight != null && fullSyncHeight != null
-      ? Math.max(0, Number(latestBlockHeight) - Number(fullSyncHeight))
-      : null;
+  const tip = chainTip?.height || workerChainHeight;
+  const behind = tip && workerSyncHeight ? Math.max(0, tip - workerSyncHeight) : null;
   const syncing = resyncing || (behind != null && behind > 10);
   const pct =
-    latestBlockHeight && fullSyncHeight
-      ? Math.min(100, Math.round((Number(fullSyncHeight) / Number(latestBlockHeight)) * 100))
-      : undefined;
+    syncing && tip ? Math.min(100, Math.round((workerSyncHeight / tip) * 100)) : undefined;
 
-  const statusLabel = error
-    ? 'sync error'
-    : resyncing
-      ? progress
-        ? getClearCacheStepLabel(progress.step)
-        : 'resyncing'
-      : syncing
-        ? 'syncing'
-        : fullSyncHeight != null
-          ? 'up to date'
-          : 'connecting';
-
-  const statusMeta =
-    fullSyncHeight != null ? `block ${Number(fullSyncHeight).toLocaleString()}` : '';
+  const status = resyncing
+    ? progress
+      ? getClearCacheStepLabel(progress.step)
+      : 'resyncing'
+    : failure
+      ? failure.message
+      : !workerSyncHeight
+        ? 'connecting'
+        : syncing
+          ? 'syncing'
+          : 'up to date';
 
   return (
-    <SettingsScreen title='zcash' backPath={PopupPath.SETTINGS_NETWORKS_HOME}>
-      <div className='flex flex-col gap-5'>
-        <div>
-          <p className='kicker mb-2'>sync</p>
-          <StatusSlot tone={error ? 'danger' : syncing ? 'gold' : 'info'} progress={pct}>
-            <span className='text-fg-high'>{statusLabel}</span>
-            {statusMeta && <span className='text-fg-muted'>{statusMeta}</span>}
-          </StatusSlot>
-          <RowGroup className='mt-2'>
-            <Row
-              type='value'
-              label='starts from'
-              value={birthday != null ? formatBlockMonth(birthday) : 'auto'}
-              onPress={() => navigate(PopupPath.SETTINGS_WALLETS)}
+    <SettingsScreen title='zcash' category='networks' backPath={PopupPath.SETTINGS_NETWORKS_HOME}>
+      <div className='flex flex-col gap-4'>
+        <Section title='sync'>
+          <div className='relative flex h-[58px] items-center gap-3 px-3.5'>
+            <span
+              className={cn(
+                'size-2 shrink-0',
+                failure ? 'bg-hanko' : status === 'up to date' ? 'bg-success' : 'bg-zigner-gold',
+              )}
             />
-            <Row
-              type='value'
-              label='node'
-              value={preset?.label ?? (endpoint ? 'custom' : 'auto')}
-              onPress={() => rawNavigate(`${PopupPath.SETTINGS_NETWORKS}?network=zcash`)}
-            />
-          </RowGroup>
-        </div>
+            <span className='flex min-w-0 grow flex-col gap-[3px]'>
+              <span className='truncate text-sm text-fg-high'>{status}</span>
+              {workerSyncHeight > 0 && (
+                <span className='text-[11px] text-fg-muted'>
+                  block {workerSyncHeight.toLocaleString()}
+                </span>
+              )}
+            </span>
+            {pct != null && <span className='text-label text-fg-muted'>{pct}%</span>}
+            {pct != null && (
+              <span
+                className='absolute bottom-0 left-0 h-0.5 bg-zigner-gold transition-[width]'
+                style={{ width: `${pct}%` }}
+              />
+            )}
+          </div>
+          <Row
+            type='value'
+            label='starts from'
+            value={
+              birthday != null
+                ? `block ${birthday.toLocaleString()} · ${formatBlockMonth(birthday)}`
+                : 'auto'
+            }
+            onPress={() => navigate(PopupPath.SETTINGS_WALLETS)}
+          />
+          <Row
+            type='value'
+            label='node'
+            value={endpoint ? endpoint.replace(/^\w+:\/\//, '').replace(/\/.*$/, '') : 'auto'}
+            onPress={() => rawNavigate(`${PopupPath.SETTINGS_NETWORKS}?network=zcash`)}
+          />
+        </Section>
 
-        <div>
-          <p className='kicker mb-2'>if something looks wrong</p>
-          <RowGroup>
-            <Row
-              type='value'
-              label='sync again from the start'
-              description='for a missing payment or a wrong balance'
-              onPress={() => !resyncing && setConfirmOpen(true)}
-              disabled={resyncing}
-            />
-          </RowGroup>
-        </div>
+        <Section title='if something looks wrong'>
+          <Row
+            type='screen'
+            label='sync again from the start'
+            description='for a missing payment or a wrong balance'
+            onPress={() => setConfirmOpen(true)}
+            disabled={resyncing}
+          />
+        </Section>
       </div>
 
       <Sheet open={confirmOpen} onOpenChange={setConfirmOpen} title='sync zcash again?'>
