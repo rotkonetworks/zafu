@@ -120,6 +120,34 @@ export const deleteZcashDatabases = async (): Promise<void> => {
   );
 };
 
+/** set by an erase whose database deletes were blocked; finished at startup */
+export const PENDING_WIPE_KEY = 'pendingWipe';
+
+/**
+ * Finish an erase that had to restart the extension: delete every database
+ * before anything opens one, then open the onboarding page the erase was
+ * headed for. A delete still blocked here is reported as finishing, not as
+ * a failure - storage is already gone, and the next start tries again.
+ */
+export const finishPendingWipe = async (): Promise<void> => {
+  const { [PENDING_WIPE_KEY]: pending } = await chrome.storage.local.get(PENDING_WIPE_KEY);
+  if (!pending) {
+    return;
+  }
+  const names = (await indexedDB.databases()).map(d => d.name).filter((n): n is string => !!n);
+  await Promise.all(names.map(name => deleteDb(name).catch(() => undefined)));
+  const left = (await indexedDB.databases()).map(d => d.name).filter(Boolean);
+  if (left.length) {
+    console.warn('[clear-startup] erase still finishing:', left.join(', '));
+    return;
+  }
+  await chrome.storage.local.remove(PENDING_WIPE_KEY);
+  const then = (pending as { then?: string | null }).then;
+  if (then) {
+    await chrome.tabs.create({ url: chrome.runtime.getURL(`page.html#${then}`) });
+  }
+};
+
 /**
  * Run any pending IDB clears requested via the clear-cache UI before wallet
  * services start. Must be awaited prior to the first call to startWalletServices,

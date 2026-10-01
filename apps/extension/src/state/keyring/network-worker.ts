@@ -646,10 +646,8 @@ const callWorker = async <T>(
 };
 
 /** the vault with the session key wrapped to a key the worker issued for this one call */
-const sealFor = async (network: NetworkType, vault: VaultUnlock): Promise<SealedVault> => ({
-  box: vault.box,
-  seal: await vault.sealTo(await callWorker<WorkerKey>(network, 'vault-key')),
-});
+const sealFor = async (network: NetworkType, vault: VaultUnlock): Promise<SealedVault> =>
+  vault.sealTo(await callWorker<WorkerKey>(network, 'vault-key'));
 
 /**
  * derive address for a network (runs in worker)

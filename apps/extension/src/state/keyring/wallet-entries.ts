@@ -14,6 +14,7 @@ import type { Key } from '@repo/encryption/key';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { shownIndicesKey, fundedIndicesKey } from '../../transparent/hd';
 import { isStoreOfWallet } from '../pocket-id';
+import { PENDING_WIPE_KEY } from '../../clear-cache-startup';
 
 /** create penumbra wallet entry for a mnemonic vault (side effect: local.set) */
 export async function createPenumbraWalletForMnemonic(
@@ -548,6 +549,9 @@ const NUKE_SURVIVORS: ReadonlySet<string> = new Set<string>([
   'zafuTheme',
   'zafuFont',
   'autoLockMinutes',
+  // the storage schema version: without it the next start re-runs every
+  // migration over what is left and drops the keys above with it
+  'dbVersion',
 ]);
 
 /** delete an IndexedDB database, resolving even if the delete is blocked. */
@@ -585,6 +589,8 @@ const deleteDatabaseAwaitable = (name: string): Promise<void> =>
 export async function nukeAllWalletData(
   session: ExtensionStorage<SessionStorageState>,
   local: ExtensionStorage<LocalStorageState>,
+  /** an onboarding page to open once the erase has finished */
+  then?: string,
 ): Promise<void> {
   await session.remove('passwordKey');
   // grace must never outlive the unlock
@@ -628,10 +634,17 @@ export async function nukeAllWalletData(
   await local.set('activeWalletIndex', 0);
   await local.set('activeZcashIndex', 0);
 
-  // a blocked delete resolves above without deleting; say so, never "done"
+  // A blocked delete resolves above without deleting: the service worker's
+  // penumbra services or a respawned worker still hold it open. Restart the
+  // extension, which closes every connection, and let startup finish the
+  // deletes before anything opens them again (clear-cache-startup).
   const left = await remainingDatabases();
   if (left.length) {
-    throw new Error(`[nuke] databases still on this computer: ${left.join(', ')}`);
+    await chrome.storage.local.set({ [PENDING_WIPE_KEY]: { then: then ?? null } });
+    console.warn('[nuke] finishing after a restart:', left.join(', '));
+    chrome.runtime.reload();
+    // this context is going away; nothing after the erase may run in it
+    await new Promise<never>(() => undefined);
   }
 }
 

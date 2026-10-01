@@ -37,7 +37,9 @@ export const ForgotPassword = () => {
   const erase = () => {
     setBusy(true);
     setBroke(false);
-    void eraseAll()
+    // when a database stays open, the erase restarts zafu to finish and
+    // startup opens the import page itself
+    void eraseAll(PagePath.IMPORT_SEED_PHRASE)
       .then(() => openOnboarding(PagePath.IMPORT_SEED_PHRASE))
       .catch(() => {
         setBroke(true);

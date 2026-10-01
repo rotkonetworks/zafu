@@ -11,7 +11,7 @@ import { AllSlices, SliceCreator } from '..';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { SessionStorageState } from '@repo/storage-chrome/session';
-import { Key } from '@repo/encryption/key';
+import { Key, type KeyJson } from '@repo/encryption/key';
 import type {
   KeyInfo,
   KeyRingStatus,
@@ -114,7 +114,8 @@ export interface KeyRingSlice {
   renameKeyRing: (vaultId: string, newName: string) => Promise<void>;
   deleteKeyRing: (vaultId: string, opts?: { allowAppManaged?: boolean }) => Promise<void>;
   /** every wallet and its data off this computer (forgot password, last wallet removed) */
-  eraseAll: () => Promise<void>;
+  /** `then`: the onboarding page to open once the erase has finished */
+  eraseAll: (then?: string) => Promise<void>;
   /** recover/take-control of (or re-hide) an app-managed multisig table by flipping `hidden` on
    *  both the vault and its mirror wallet. Unhiding makes a stuck poker table a normal, selectable,
    *  co-signable multisig. Non-destructive. */
@@ -174,11 +175,11 @@ export const createKeyRingSlice =
      * key is swapped, never removed, so nothing sees a lock in between. A last
      * pass moves anything a writer outside the lock left under the old key.
      */
-    const rekey = async (from: Key, password: string) => {
+    const rekey = async (from: { key: Key; keyJson: KeyJson }, password: string) => {
       const fresh = await createMasterKey(password);
       await keySwap(async () => {
         const raw = await chrome.storage.local.get(null);
-        const patch = await resealSnapshot(raw, from, fresh.key);
+        const patch = await resealSnapshot(raw, from.key, fresh.key);
         const vaults = (patch['vaults'] ?? raw['vaults'] ?? []) as EncryptedVault[];
         // a real password ends the empty-password auto-unlock
         if (password && vaults.some(v => v.insensitive?.['airgapOnly'])) {
@@ -188,10 +189,17 @@ export const createKeyRingSlice =
           });
         }
         await chrome.storage.local.set({ ...patch, passwordKeyPrint: fresh.keyPrint.toJson() });
+        // a context still holding wallet records from before the swap writes
+        // their old-key inner boxes back; writeEncrypted moves them while this
+        // retired key lasts (state/encrypted-storage)
+        await session.set('retiredPasswordKey', {
+          key: from.keyJson,
+          until: Date.now() + RETIRED_KEY_MS,
+        });
         await session.set('passwordKey', fresh.keyJson);
         const stragglers = await resealSnapshot(
           await chrome.storage.local.get(null),
-          from,
+          from.key,
           fresh.key,
         );
         if (Object.keys(stragglers).length) {
@@ -337,13 +345,17 @@ export const createKeyRingSlice =
           });
           return;
         }
-        // An airgap-only profile has no password yet (its key is made from
-        // ''), and this is its first: move its secrets to it.
-        const unprotected = password ? await recreateMasterKey('', existingKeyPrint) : null;
+        // An airgap-only profile (every vault airgapOnly, key made from '')
+        // has no password yet, and this is its first: move its secrets to it.
+        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+        const airgapOnly =
+          vaults.length > 0 && vaults.every(v => v.insensitive?.['airgapOnly'] === true);
+        const unprotected =
+          password && airgapOnly ? await recreateMasterKey('', existingKeyPrint) : null;
         if (!unprotected) {
           throw new PasswordMismatchError();
         }
-        await rekey(unprotected.key, password);
+        await rekey(unprotected, password);
       },
 
       changePassword: async (current: string, next: string) => {
@@ -352,7 +364,7 @@ export const createKeyRingSlice =
         if (!old) {
           return false;
         }
-        await rekey(old.key, next);
+        await rekey(old, next);
         return true;
       },
 
@@ -380,6 +392,7 @@ export const createKeyRingSlice =
 
       lock: () => {
         void session.remove('passwordKey');
+        void session.remove('retiredPasswordKey');
         // grace must never outlive the unlock
         void session.remove('signGraceUntil');
         set(state => {
@@ -906,8 +919,8 @@ export const createKeyRingSlice =
         });
       },
 
-      eraseAll: async () => {
-        await nukeAllWalletData(session, local);
+      eraseAll: async (then?: string) => {
+        await nukeAllWalletData(session, local, then);
         set(state => {
           state.keyRing.keyInfos = [];
           state.keyRing.selectedKeyInfo = undefined;
@@ -1039,10 +1052,17 @@ export const createKeyRingSlice =
 
       getMnemonic: async (vaultId: string) => decryptVault(ctx, await mnemonicVault(vaultId)),
 
-      getVaultUnlock: async (vaultId: string) => ({
-        box: (await mnemonicVault(vaultId)).encryptedData,
-        sealTo: to => keyUse(() => sealSessionKeyTo(ctx, to)),
-      }),
+      getVaultUnlock: async (vaultId: string) => {
+        await mnemonicVault(vaultId);
+        // the box and the key it opens with are read together, never across a swap
+        return {
+          sealTo: to =>
+            keyUse(async () => ({
+              box: (await mnemonicVault(vaultId)).encryptedData,
+              seal: await sealSessionKeyTo(ctx, to),
+            })),
+        };
+      },
 
       getMultisigSecrets: async (vaultId: string) => {
         const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
@@ -1166,6 +1186,9 @@ export const createKeyRingSlice =
     }
     return slice;
   };
+
+/** how long a replaced key stays to move boxes a stale context writes back */
+const RETIRED_KEY_MS = 60_000;
 
 const KEY_USERS = [
   'init',

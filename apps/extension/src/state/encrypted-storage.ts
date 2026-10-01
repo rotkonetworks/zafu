@@ -12,6 +12,7 @@ import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { SessionStorageState } from '@repo/storage-chrome/session';
 import { keyUse } from './keyring-lock';
+import { resealSnapshot } from './keyring/reseal';
 
 interface EncryptedWrapper {
   encrypted: BoxJson;
@@ -63,6 +64,25 @@ function waitForHydration(): Promise<void> {
   return hydratePromise;
 }
 
+/**
+ * A context that held wallet records from before a password change writes
+ * them back with inner boxes (a penumbra seed, a FROST share) the old key
+ * sealed. While the change's retired key lasts, move those to the current key
+ * so the outer box and what it holds always open together.
+ */
+async function moveRetiredBoxes(
+  session: ExtensionStorage<SessionStorageState>,
+  data: unknown,
+  key: Key,
+): Promise<unknown> {
+  const retired = await session.get('retiredPasswordKey');
+  if (!retired || retired.until < Date.now()) {
+    return data;
+  }
+  const { v } = await resealSnapshot({ v: data }, await Key.fromJson(retired.key), key);
+  return v === undefined ? data : v;
+}
+
 /** read an encrypted value from local storage. returns plaintext data or null. */
 export async function readEncrypted<T>(
   local: ExtensionStorage<LocalStorageState>,
@@ -107,7 +127,7 @@ export async function writeEncrypted(
       console.warn(`[encrypted-storage] skipping write of '${storageKey}'  - wallet is locked`);
       return false;
     }
-    const box = await key.seal(JSON.stringify(data));
+    const box = await key.seal(JSON.stringify(await moveRetiredBoxes(session, data, key)));
     await local.set(storageKey, { encrypted: box.toJson() } as never);
     return true;
   });
@@ -153,16 +173,15 @@ export const isEncryptedKey = (key: string): boolean => ENCRYPTED_KEYS.has(key);
  * existing record vanish silently. Instead a plaintext value is detected,
  * re-written sealed, and returned.
  *
- * Its callers read, change and write back the whole value, so it never
- * answers "nothing" for something it could not open: null means absent, and
- * a locked wallet or a box that does not open throws. Treating either as
- * empty is how a read-modify-write wipes a list.
+ * Its callers read, change and write back the whole value, so a locked
+ * wallet throws rather than answering empty - that is how a
+ * read-modify-write wipes a list. A box that does not open with the current
+ * key (orphaned by an older password change) is moved aside to
+ * `<key>.unopened`, kept, and read as absent.
  */
 export class SealedReadError extends Error {
-  constructor(storageKey: string, why: 'locked' | 'unopened') {
-    super(
-      `'${storageKey}' could not be read: ${why === 'locked' ? 'wallet is locked' : 'it does not open with this key'}`,
-    );
+  constructor(storageKey: string) {
+    super(`'${storageKey}' could not be read: wallet is locked`);
     this.name = 'SealedReadError';
   }
 }
@@ -179,12 +198,17 @@ export async function readEncryptedWithMigration<T>(
     }
     const key = await getKey(session);
     if (!key) {
-      throw new SealedReadError(String(storageKey), 'locked');
+      throw new SealedReadError(String(storageKey));
     }
     if (isEncryptedWrapper(raw)) {
       const plaintext = await key.unseal(Box.fromJson(raw.encrypted));
       if (plaintext === null) {
-        throw new SealedReadError(String(storageKey), 'unopened');
+        // orphaned by an older password change: keep it aside, untouched, and
+        // let the feature start fresh rather than stay broken for good
+        await chrome.storage.local.set({ [`${String(storageKey)}.unopened`]: raw });
+        await local.remove(storageKey);
+        console.warn(`[encrypted-storage] '${String(storageKey)}' does not open; kept aside`);
+        return null;
       }
       return JSON.parse(plaintext) as T;
     }
