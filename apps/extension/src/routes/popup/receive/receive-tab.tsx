@@ -244,7 +244,7 @@ export function ReceiveTab({
           onClick={() => setAdvancedOpen(true)}
           className='flex w-full items-center justify-between px-1 py-1 text-label text-fg-muted lowercase hover:text-fg-high'
         >
-          <span>earlier addresses</span>
+          <span>address index</span>
           <span className='i-ph-caret-right size-3.5' />
         </button>
       )}

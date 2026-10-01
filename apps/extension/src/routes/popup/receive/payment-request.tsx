@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Button } from '@repo/ui/components/ui/button';
+import { Input } from '@repo/ui/components/ui/input';
 import { useCopy } from '@repo/ui/hooks/use-copy';
 import { buildZip321, parseZecAmount } from '@repo/wallet/networks/zcash/zip321';
 
@@ -46,15 +47,21 @@ export function PaymentRequestSheet({
           <label htmlFor='request-amount' className='text-label text-fg-muted lowercase'>
             amount
           </label>
-          <input
-            id='request-amount'
-            type='text'
-            inputMode='decimal'
-            value={amount}
-            onChange={e => setAmount(e.target.value)}
-            placeholder='0.00'
-            className='h-11 border border-surface-border bg-surface-elev-2 px-3 text-sm text-fg-high focus:border-zigner-gold focus:outline-none'
-          />
+          <div className='relative'>
+            <Input
+              id='request-amount'
+              type='text'
+              inputMode='decimal'
+              value={amount}
+              onChange={e => setAmount(e.target.value)}
+              placeholder='0.00'
+              variant={amountInvalid ? 'error' : 'default'}
+              className='h-14 pr-14 font-display text-2xl'
+            />
+            <span className='pointer-events-none absolute right-3.5 top-0 flex h-14 items-center text-label text-fg-muted'>
+              zec
+            </span>
+          </div>
           <span className='h-4 text-label text-hanko-light lowercase'>
             {amountInvalid ? 'up to 8 decimals' : ''}
           </span>
@@ -64,14 +71,13 @@ export function PaymentRequestSheet({
             <label htmlFor='request-memo' className='text-label text-fg-muted lowercase'>
               memo
             </label>
-            <input
+            <Input
               id='request-memo'
               type='text'
               value={memo}
               onChange={e => setMemo(e.target.value)}
               maxLength={512}
               placeholder='optional'
-              className='h-11 border border-surface-border bg-surface-elev-2 px-3 text-sm text-fg-high focus:border-zigner-gold focus:outline-none'
             />
           </div>
         )}
