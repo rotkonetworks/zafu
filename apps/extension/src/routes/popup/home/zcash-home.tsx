@@ -358,7 +358,13 @@ export const ZcashContent = ({
   // birthday a million blocks back is ~5,000 unscanned blocks presented as a
   // final balance — and it gated the "get your first zec" prompt, so a wallet
   // with unscanned receipts told the user they had none.
-  const scanPct = chainHeight > 0 ? Math.min(100, Math.floor((scanProgress / scanRange) * 100)) : 0;
+  // caught up to the tip: done, even for a pocket born at the tip (range 0)
+  const caughtUp = chainHeight > 0 && workerSyncHeight >= chainHeight;
+  const scanPct = caughtUp
+    ? 100
+    : chainHeight > 0
+      ? Math.min(100, Math.floor((scanProgress / scanRange) * 100))
+      : 0;
   // "synced" must mean every block was read, not 100 after rounding.
   const scanComplete = chainHeight > 0 && scanProgress >= scanRange;
 
@@ -479,8 +485,11 @@ export const ZcashContent = ({
         ];
 
   // overall sync percentage (0-100) with 1 decimal — zashi style
-  const overallPct =
-    scanPct > 0
+  // guard on the raw progress, not the floored percent: below 1% scanPct is 0
+  // and the fallback would show the (complete) proof stage as 100%
+  const overallPct = caughtUp
+    ? 100
+    : scanProgress > 0
       ? Math.min(100, (scanProgress / scanRange) * 100)
       : scanNotStarted
         ? 0
