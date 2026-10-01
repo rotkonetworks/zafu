@@ -70,6 +70,75 @@ post-quantum (X-Wing) whenever they advertise a `pq_pubkey` - which means the
 transport carrying it does not have to be trusted with the key to a room it
 must never read.
 
+### Record size is a `RoomConfig` field, and so is a bigger transport
+
+Chat pads every entry to `ROOM_PLAINTEXT_BYTES` (1 KiB) by default. A room that
+carries more than a chat line - a group's seals, signature shares, or a sealed
+invite - sets `plaintextBytes: GROUP_ROOM_PLAINTEXT_BYTES` (4 KiB) instead.
+Every entry in **one** room is still one fixed size, so a window's entries stay
+indistinguishable by length within that room; different rooms may choose
+different sizes.
+
+```ts
+import { GROUP_ROOM_PLAINTEXT_BYTES, Room, relayLimitsFor } from '@zafu/zirc/room';
+import { createHttpRelayTransport } from '@zafu/zid';
+
+const plaintextBytes = GROUP_ROOM_PLAINTEXT_BYTES;
+const relay = createHttpRelayTransport({ endpoint, ...relayLimitsFor(plaintextBytes) });
+const room = new Room(identity, { appScope, roomSecret, relay, plaintextBytes });
+```
+
+**This is not optional.** `createHttpRelayTransport`'s own ceiling on one
+entry's base64 length (`MAX_RELAY_ENTRY_BASE64`) defaults to 1024 characters -
+sized for contact discovery's 64-byte presence blobs. A sealed room record,
+even at chat's default 1 KiB plaintext, is already 1053 bytes (1404 base64
+characters): bigger than that default. A room built against a transport that
+was not sized for it has every one of its entries refused by the transport
+before `Room` ever sees them - which is exactly the bug that made every zirc
+room unreadable (the entries were there; the client silently would not look at
+them). `relayLimitsFor(plaintextBytes)` computes the `maxEntryBase64`,
+`maxEntries` and `maxBodyBytes` a room of that size needs; pass its result into
+`createHttpRelayTransport`, and nothing else about contact discovery's own
+defaults changes - they are a separate caller with its own options.
+
+The refusal is never silent on the read side either: `Room.sync`/`syncSince`
+report it in `RoomSync.dropped` with `kind: 'oversize'` when the transport they
+were handed turns out to be too small, so a misconfigured room is a visible
+count, not a quiet absence of messages.
+
+### Catching up: `sync`, `syncSince`, and no polling on its own
+
+`Room.sync(historyWindows)` reads the relay's own short retention (12 windows =
+5 min each = the discovery default's 1 h). A room kept longer by the relay's
+own per-scope retention (see `apps/minirelay`'s `MINIRELAY_SCOPE_RETENTION`)
+needs `Room.syncSince(sinceEpoch, maxWindows = 288)` instead: it walks from
+`sinceEpoch` (or `maxWindows` back, whichever is closer) to now, so a member
+back after a day of being offline pays a bounded number of requests once,
+rather than missing everything past the first hour. Persist the epoch you last
+synced to (a chat thread's own state, not something `Room` tracks for you) and
+pass it back in as `sinceEpoch` next time.
+
+**Nothing here connects by itself.** Constructing or restoring a `Room` - even
+with a persisted `head` or a room secret from storage - makes no network
+request. Neither does any method except the one a caller explicitly invokes:
+`sync`, `syncSince`, `send`, `announce`. There is no constructor-time fetch, no
+background timer, and no poll loop inside this package. Wiring "read this room
+every N seconds while its thread is open" or "catch it up on an alarm" is the
+caller's job, one layer up, gated behind that room's own egress opt-in and
+triggered by the user actually opening it - never by extension start, unlock,
+or popup open. `room.test.ts` asserts the zero-calls-until-invoked property
+directly.
+
+Both `plaintextBytes` and the relay's retention are independent of
+`RoomConfig.public`: a public room (zitadel's replacement - named-shard,
+unsealed-by-default entries) can set `plaintextBytes: GROUP_ROOM_PLAINTEXT_BYTES`
+the same way a sealed group room does, and still wants `relayLimitsFor` sized to
+match. Retention is a relay-side policy keyed by `appScope` (see
+`apps/minirelay`'s `MINIRELAY_SCOPE_RETENTION`), not by `public`, so a public
+room's scope stays on the relay's default (1 h) unless its design asks for
+more - a public room's history is cheap to re-derive by asking any member, so
+nothing here raises it by default.
+
 ## Worked example
 
 ```ts

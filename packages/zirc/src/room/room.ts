@@ -73,7 +73,16 @@
  *     `roomShardFromSecret`.
  */
 
-import { concat, lpText, PresenceEntry, presenceEpoch, RelayTransport, u32be } from '@zafu/zid';
+import {
+  concat,
+  lpText,
+  MAX_RELAY_BODY_BYTES,
+  MAX_RELAY_ENTRIES,
+  PresenceEntry,
+  presenceEpoch,
+  RelayTransport,
+  u32be,
+} from '@zafu/zid';
 
 // ---------------------------------------------------------------------------
 // wire format
@@ -132,6 +141,61 @@ const BLOB_PLAIN = 0x02;
  * rather than silently truncated (see {@link encodeRecord}).
  */
 export const ROOM_PLAINTEXT_BYTES = 1024;
+
+/**
+ * Plaintext size for a group-purse or door room (see
+ * `design-groups-on-zirc.md` 1.3): a seal, a share record, or a split PCZT
+ * chunk needs more body than chat's 1 KiB. Still one fixed size per room, so a
+ * window's entries stay indistinguishable by length within that room.
+ */
+export const GROUP_ROOM_PLAINTEXT_BYTES = 4096;
+
+/** the 1-hour door room bootstrapping an invite uses the same size as a group room. */
+export const DOOR_ROOM_PLAINTEXT_BYTES = GROUP_ROOM_PLAINTEXT_BYTES;
+
+/**
+ * The relay `appScope` a group-purse room uses (`design-groups-on-zirc.md`
+ * 1.1). Exported so a relay operator's per-scope retention config
+ * (`MINIRELAY_SCOPE_RETENTION`, see `apps/minirelay`) and this package agree on
+ * the exact string without either side hardcoding the other's constant.
+ */
+export const ZAFU_GROUP_APP_SCOPE = 'zafu-group-v1';
+
+/** version(1) + nonce(12) + ciphertext(plaintextBytes) + GCM tag(16). */
+export const sealedBlobBytes = (plaintextBytes: number): number => 1 + 12 + plaintextBytes + 16;
+
+/**
+ * The `createHttpRelayTransport` limits a room of this plaintext size needs.
+ *
+ * `MAX_RELAY_ENTRY_BASE64` in `@zafu/zid` defaults to 1024 base64 chars, sized
+ * for contact discovery's 64-byte presence blobs - far smaller than ANY sealed
+ * room record (even the default 1 KiB chat room seals to 1053 bytes, 1404
+ * base64 chars, already over that ceiling). A room that does not pass its own
+ * limit has every one of its entries silently refused by the transport - the
+ * bug this function exists to make impossible to repeat. Every `Room` built
+ * against a real relay MUST wire these into {@link RelayTransport}'s
+ * constructor options (`createHttpRelayTransport({ ...opts, ...relayLimitsFor(plaintextBytes) })`).
+ */
+export const relayLimitsFor = (
+  plaintextBytes: number,
+): { maxEntryBase64: number; maxEntries: number; maxBodyBytes: number } => {
+  const sealed = sealedBlobBytes(plaintextBytes);
+  const rawBase64 = Math.ceil(sealed / 3) * 4;
+  // Rounded up to the next KiB: headroom so a reader on an older/newer record
+  // version (different fixed-field widths, same plaintext budget) is never
+  // pushed just over the line.
+  const maxEntryBase64 = Math.ceil(rawBase64 / 1024) * 1024;
+  const maxEntries = MAX_RELAY_ENTRIES; // unchanged: one padded batch per publisher
+  // Two base64 fields (tag + blob) per entry; rounded up to a whole MiB so a
+  // hostile relay still cannot make a reader buffer unboundedly, just a larger
+  // bound than discovery's.
+  const worstCase = maxEntries * maxEntryBase64 * 2;
+  const maxBodyBytes = Math.max(
+    MAX_RELAY_BODY_BYTES,
+    Math.ceil(worstCase / (1024 * 1024)) * 1024 * 1024,
+  );
+  return { maxEntryBase64, maxEntries, maxBodyBytes };
+};
 
 /** hex ed25519 public key and signature lengths, as the SDK carries them. */
 const PUBKEY_HEX = 64;
@@ -240,6 +304,16 @@ export interface RoomConfig {
    * records stay readable by whoever holds the board.
    */
   public?: boolean;
+  /**
+   * Fixed plaintext size this room's entries pad to - {@link ROOM_PLAINTEXT_BYTES}
+   * (chat) by default, {@link GROUP_ROOM_PLAINTEXT_BYTES} for a group or door
+   * room. Every entry in one room is still one size (so the relay cannot tell
+   * lengths apart within it), but different rooms may choose different sizes.
+   * Pass the matching {@link relayLimitsFor} output to whatever built this
+   * room's `relay` transport, or its own entries will be the ones silently
+   * refused.
+   */
+  plaintextBytes?: number;
   /** injectable clock, seconds. Defaults to `Date.now()`. Tests pass one. */
   now?: () => number;
   /**
@@ -292,7 +366,7 @@ export interface RoomPresence {
 
 /** what {@link Room.sync} found, and what it refused. */
 /** why a record was not taken at face value. */
-export type DropKind = 'invalid' | 'unsupported' | 'unreachable';
+export type DropKind = 'invalid' | 'unsupported' | 'unreachable' | 'oversize';
 
 export interface RoomSync {
   messages: RoomMessage[];
@@ -628,8 +702,13 @@ const recordBytes = (
   ]);
 
 /** max body bytes that still fit one record. Callers get a clear error, not a cut. */
-export const maxBodyBytes = (name: string, to = '', version: number = ROOM_VERSION): number =>
-  ROOM_PLAINTEXT_BYTES -
+export const maxBodyBytes = (
+  name: string,
+  to = '',
+  version: number = ROOM_VERSION,
+  plaintextBytes: number = ROOM_PLAINTEXT_BYTES,
+): number =>
+  plaintextBytes -
   (recordBytes(
     {
       kind: 'msg',
@@ -653,6 +732,7 @@ export class Room {
   private readonly shardHash: Uint8Array;
   private readonly channel: string;
   private readonly historyWindows: number;
+  private readonly plaintextBytes: number;
   private readonly now: () => number;
   private readonly relay: RelayTransport;
   private readonly shardPin: string | undefined;
@@ -690,6 +770,10 @@ export class Room {
     this.appScopeHash = new Uint8Array(SHA256_BYTES);
     this.shardHash = new Uint8Array(SHA256_BYTES);
     this.historyWindows = config.historyWindows ?? 12;
+    this.plaintextBytes = config.plaintextBytes ?? ROOM_PLAINTEXT_BYTES;
+    if (this.plaintextBytes < 256) {
+      throw new Error(`room: plaintextBytes must be at least 256, got ${this.plaintextBytes}`);
+    }
     this.now = config.now ?? (() => Math.floor(Date.now() / 1000));
     this.relay = config.relay;
     this.shardPin = config.shard;
@@ -802,7 +886,12 @@ export class Room {
     const name = opts.name ?? this.identity.name ?? this.identity.pubkey.slice(0, 8);
     const to = opts.to ?? '';
     const bytes = enc.encode(body);
-    const room = maxBodyBytes(name, to, opts.plain ? ROOM_PLAIN_VERSION : ROOM_VERSION);
+    const room = maxBodyBytes(
+      name,
+      to,
+      opts.plain ? ROOM_PLAIN_VERSION : ROOM_VERSION,
+      this.plaintextBytes,
+    );
     if (bytes.length > room) {
       throw new Error(`room: message is ${bytes.length} bytes, the limit is ${room}`);
     }
@@ -819,7 +908,7 @@ export class Room {
 
     const hash = toHex(await sha256(concat([signed, fromHex(sig)])));
     const sigBytes = fromHex(sig);
-    const plaintext = new Uint8Array(ROOM_PLAINTEXT_BYTES);
+    const plaintext = new Uint8Array(this.plaintextBytes);
     plaintext.set(concat([signed, sigBytes]));
     // the remaining bytes are the pad; zeroes are inside the AEAD, so they leak
     // nothing an attacker can use, and the size is constant either way.
@@ -895,7 +984,7 @@ export class Room {
       name: display,
       body: '',
     };
-    const plaintext = new Uint8Array(ROOM_PLAINTEXT_BYTES);
+    const plaintext = new Uint8Array(this.plaintextBytes);
     plaintext.set(recordBytes(rec, opts.plain ? ROOM_PLAIN_VERSION : ROOM_VERSION, win));
     const blob = opts.plain
       ? plainBlob(plaintext)
@@ -921,14 +1010,50 @@ export class Room {
    * Read the last `historyWindows` windows, oldest first, and verify everything.
    * Records that do not authenticate are dropped - not shown as "unknown", not
    * trusted - and reported so a caller can say how many were refused.
+   *
+   * This never runs by itself: constructing or restoring a `Room` makes no
+   * network request, and neither does any other method here - only a caller
+   * invoking `sync`/`syncSince`/`send`/`announce` does. A member who has not
+   * opened this room, or who has not opted into its relay, generates no
+   * traffic for it. Wire the alarm, the poll loop and the egress opt-in one
+   * layer up, scoped to the room the user is actually looking at.
    */
   async sync(epochs = this.historyWindows): Promise<RoomSync> {
-    const { shardHash, appScopeHash } = await this.coords();
     const current = this.currentEpoch();
     const windows = Array.from({ length: epochs }, (_, i) => current - (epochs - 1 - i)).filter(
       e => e >= 0,
     );
+    return this.syncWindows(windows);
+  }
 
+  /**
+   * Catch up from `sinceEpoch` (inclusive) to now, capped at `maxWindows` so a
+   * member who has been away a very long time still pays a bounded number of
+   * requests rather than one per window since the beginning of time.
+   *
+   * This is what a returning member calls instead of `sync(historyWindows)`:
+   * `historyWindows` only covers the relay's own retention (12 x 5 min = the
+   * discovery default's 1 h), so a room kept 25 h by a per-scope retention
+   * entry (see minirelay's `MINIRELAY_SCOPE_RETENTION`) needs every window the
+   * relay still holds, not just the last 12. Persist the returned sync's
+   * latest window (the caller's own `lastSyncedEpoch`, not tracked here - a
+   * room has no durable storage of its own) and pass it back next time so a
+   * second catch-up does not re-read windows already read.
+   *
+   * Like {@link sync}, this makes no network request on its own: it runs only
+   * when a caller invokes it, which should be "the user opened this room" or
+   * "this room's alarm fired because the user opted in", never on extension
+   * start, unlock, or popup open.
+   */
+  async syncSince(sinceEpoch: number, maxWindows = 288): Promise<RoomSync> {
+    const current = this.currentEpoch();
+    const floor = Math.max(sinceEpoch, current - maxWindows + 1, 0);
+    const windows = Array.from({ length: current - floor + 1 }, (_, i) => floor + i);
+    return this.syncWindows(windows);
+  }
+
+  private async syncWindows(windows: number[]): Promise<RoomSync> {
+    const { shardHash, appScopeHash } = await this.coords();
     const keysFor = new Map<number, { msg: CryptoKey; presence: CryptoKey; dm: CryptoKey }>();
     const dropped: { hash: string; reason: string; kind: DropKind }[] = [];
     const messages: RoomMessage[] = [];
@@ -951,6 +1076,19 @@ export class Room {
           kind: 'unreachable',
         });
         continue;
+      }
+      // a relay transport that enforces its own base64 ceiling (see
+      // `relayLimitsFor`) reports what it refused instead of swallowing it; a
+      // mis-sized transport (this room's `plaintextBytes` outgrew the limit it
+      // was built with) shows up here as a hard count, never a silent gap.
+      const oversize = (entries as unknown as Partial<{ droppedOversize: { index: number }[] }>)
+        .droppedOversize;
+      if (oversize && oversize.length > 0) {
+        dropped.push({
+          hash: `window:${epoch}`,
+          reason: `relay transport refused ${oversize.length} oversized entr${oversize.length === 1 ? 'y' : 'ies'} - its maxEntryBase64 is smaller than this room needs`,
+          kind: 'oversize',
+        });
       }
       let keys = keysFor.get(epoch);
       if (!keys) {

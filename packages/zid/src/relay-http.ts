@@ -85,6 +85,20 @@ export interface HttpRelayTransportOptions {
   fetch?: typeof fetch;
   /** extra request headers (auth, etc.). Merged over the JSON default. */
   headers?: Record<string, string>;
+  /**
+   * Client-side ceiling on one entry's base64 `tag`/`blob` length. Defaults to
+   * {@link MAX_RELAY_ENTRY_BASE64}, which fits contact discovery's 32 B tags and
+   * 64 B blobs. A caller with bigger fixed-size records (a `@zafu/zirc` room,
+   * whose record size is a `RoomConfig` field) MUST pass its own ceiling here, or
+   * every one of its entries is silently invisible past the default - the bug
+   * that left zirc rooms unreadable in the first place. See
+   * {@link GetBucketResult.droppedOversize}.
+   */
+  maxEntryBase64?: number;
+  /** Client-side ceiling on entries per coordinate. Defaults to {@link MAX_RELAY_ENTRIES}. */
+  maxEntries?: number;
+  /** Client-side ceiling on a response body, in bytes. Defaults to {@link MAX_RELAY_BODY_BYTES}. */
+  maxBodyBytes?: number;
 }
 
 // -- base64 (browser btoa/atob; chunked so a large bucket cannot blow the
@@ -123,14 +137,14 @@ export const MAX_RELAY_ENTRY_BASE64 = 1024;
  */
 export const MAX_RELAY_BODY_BYTES = 1024 * 1024;
 
-/** read a relay response body, refusing to buffer more than the ceiling above. */
-async function readBoundedBody(res: Response): Promise<string> {
+/** read a relay response body, refusing to buffer more than `maxBodyBytes`. */
+async function readBoundedBody(res: Response, maxBodyBytes: number): Promise<string> {
   const reader = res.body?.getReader();
   if (!reader) {
     // a Response without a stream (an exotic implementation or a test double)
     const text = await res.text();
-    if (text.length > MAX_RELAY_BODY_BYTES) {
-      throw new Error(`relay: response body exceeds ${MAX_RELAY_BODY_BYTES} bytes`);
+    if (text.length > maxBodyBytes) {
+      throw new Error(`relay: response body exceeds ${maxBodyBytes} bytes`);
     }
     return text;
   }
@@ -143,16 +157,40 @@ async function readBoundedBody(res: Response): Promise<string> {
       return text + decoder.decode();
     }
     bytes += value.byteLength;
-    if (bytes > MAX_RELAY_BODY_BYTES) {
+    if (bytes > maxBodyBytes) {
       await reader.cancel();
-      throw new Error(`relay: response body exceeds ${MAX_RELAY_BODY_BYTES} bytes`);
+      throw new Error(`relay: response body exceeds ${maxBodyBytes} bytes`);
     }
     text += decoder.decode(value, { stream: true });
   }
 }
 
+/**
+ * An entry too large for this caller's ceiling, reported rather than silently
+ * dropped - see {@link GetBucketResult.droppedOversize}.
+ */
+export interface DroppedOversizeEntry {
+  /** 0-based index in the server's `entries` array. */
+  index: number;
+  /** the longer of `tag.length`/`blob.length`, in base64 characters. */
+  base64Length: number;
+}
+
+/** `getBucket`'s result: the entries this caller's limits accepted, plus what they refused. */
+export interface GetBucketResult extends Array<PresenceEntry> {
+  /**
+   * Entries the relay returned whose base64 `tag` or `blob` exceeded
+   * `maxEntryBase64` - refused rather than decoded, and counted here instead of
+   * vanishing. A caller whose record size does not match its `maxEntryBase64`
+   * will see this climb instead of silently losing every entry (the bug that
+   * made zirc rooms unreadable: a 1404-char room record dropped against a 1024
+   * discovery ceiling, with nothing to report it).
+   */
+  droppedOversize: DroppedOversizeEntry[];
+}
+
 /** parse the `{ entries: [{ tag, blob }] }` body, rejecting anything else loudly. */
-function parseEntries(body: unknown): PresenceEntry[] {
+function parseEntries(body: unknown, maxEntries: number, maxEntryBase64: number): GetBucketResult {
   if (typeof body !== 'object' || body === null) {
     throw new Error('relay: response is not a JSON object');
   }
@@ -163,10 +201,12 @@ function parseEntries(body: unknown): PresenceEntry[] {
   if (!Array.isArray(entries)) {
     throw new Error('relay: response has no `entries` array');
   }
-  // DEFECT C: never decode an unbounded batch from untrusted relay output - cap
-  // the count and drop any entry whose encoded fields exceed the ceiling.
+  // never decode an unbounded batch from untrusted relay output - cap the count
+  // and refuse (not silently drop) any entry whose encoded fields exceed the
+  // ceiling this caller configured.
   const parsed: PresenceEntry[] = [];
-  for (let i = 0; i < entries.length && parsed.length < MAX_RELAY_ENTRIES; i++) {
+  const droppedOversize: DroppedOversizeEntry[] = [];
+  for (let i = 0; i < entries.length && parsed.length < maxEntries; i++) {
     const raw: unknown = entries[i];
     if (typeof raw !== 'object' || raw === null) {
       throw new Error(`relay: entry ${i} is not an object`);
@@ -179,8 +219,10 @@ function parseEntries(body: unknown): PresenceEntry[] {
     if (typeof tag !== 'string' || typeof blob !== 'string') {
       throw new Error(`relay: entry ${i} must carry base64 strings for tag and blob`);
     }
-    if (tag.length > MAX_RELAY_ENTRY_BASE64 || blob.length > MAX_RELAY_ENTRY_BASE64) {
-      continue; // discard an oversized entry rather than decode it
+    const base64Length = Math.max(tag.length, blob.length);
+    if (base64Length > maxEntryBase64) {
+      droppedOversize.push({ index: i, base64Length });
+      continue; // refused, not decoded - and reported above, not swallowed
     }
     try {
       parsed.push({ tag: base64ToBytes(tag), blob: base64ToBytes(blob) });
@@ -188,7 +230,7 @@ function parseEntries(body: unknown): PresenceEntry[] {
       throw new Error(`relay: entry ${i} carries invalid base64`);
     }
   }
-  return parsed;
+  return Object.assign(parsed, { droppedOversize }) as GetBucketResult;
 }
 
 /** the relay transport from the wire contract above. */
@@ -197,6 +239,9 @@ export function createHttpRelayTransport(opts: HttpRelayTransportOptions): Relay
   const base = opts.endpoint.replace(/\/+$/, '');
   const bucketUrl = `${base}/bucket`;
   const headers = { 'content-type': 'application/json', ...opts.headers };
+  const maxEntries = opts.maxEntries ?? MAX_RELAY_ENTRIES;
+  const maxEntryBase64 = opts.maxEntryBase64 ?? MAX_RELAY_ENTRY_BASE64;
+  const maxBodyBytes = opts.maxBodyBytes ?? MAX_RELAY_BODY_BYTES;
 
   return {
     async putBucket(req) {
@@ -224,14 +269,14 @@ export function createHttpRelayTransport(opts: HttpRelayTransportOptions): Relay
       if (!res.ok) {
         throw new Error(`relay: getBucket failed with HTTP ${res.status}`);
       }
-      const raw = await readBoundedBody(res);
+      const raw = await readBoundedBody(res, maxBodyBytes);
       let body: unknown;
       try {
         body = JSON.parse(raw);
       } catch {
         throw new Error('relay: response body is not JSON');
       }
-      return parseEntries(body);
+      return parseEntries(body, maxEntries, maxEntryBase64);
     },
   };
 }
