@@ -59,7 +59,8 @@ import { Button } from '@repo/ui/components/ui/button';
 import { KeplrCompatToggle } from './keplr-compat-toggle';
 import { SettingsWallets } from './settings-wallets';
 import { PenumbraIbcDirectory } from './settings-networks-directory';
-import { useEnableNetwork } from './settings-networks-home';
+import { useEnableNetwork } from '../../../hooks/enable-network';
+import { NETWORK_BLURB } from '../../../components/network-sheet';
 
 // Bundled registry, resolved once per realm (not per render): getRegistryEndpoints()
 // builds a fresh array every call, so recomputing it in the component body gave
@@ -83,13 +84,6 @@ const NETWORK_COLORS: Record<string, string> = {
 };
 
 const getColorHex = (color: string): string => NETWORK_COLORS[color] ?? '#6B7280';
-
-/** one-line "what is this network" copy, shown under each top-level toggle so
-    a user can tell the pools apart without opening docs. */
-const NETWORK_DESCRIPTIONS: Record<string, string> = {
-  zcash: 'encrypted money',
-  penumbra: 'encrypted defi',
-};
 
 export const SettingsWalletsNetworks = () => (
   // networks fold into the wallets screen via appendSlot, so both share one header and scroll column
@@ -250,11 +244,9 @@ const NetworkToggles = () => {
             </div>
 
             {/* one-line "what is this" copy, so pools read apart at a glance */}
-            {NETWORK_DESCRIPTIONS[networkId] && (
+            {NETWORK_BLURB[networkId] && (
               <div className='-mt-1 px-3 pb-3'>
-                <p className='text-label text-fg-dim leading-snug'>
-                  {NETWORK_DESCRIPTIONS[networkId]}
-                </p>
+                <p className='text-label text-fg-dim leading-snug'>{NETWORK_BLURB[networkId]}</p>
               </div>
             )}
 

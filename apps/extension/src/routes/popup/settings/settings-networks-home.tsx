@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../../state';
 import { selectEnabledNetworks, type NetworkType } from '../../../state/keyring';
-import { isIbcNetwork } from '../../../state/keyring/network-types';
+import { useEnableNetwork } from '../../../hooks/enable-network';
 import { NETWORKS, getTopLevelNetworks } from '../../../config/networks';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
@@ -14,21 +14,6 @@ import { ZcashMeRow } from './settings-privacy';
 const NETWORK_SCREEN: Partial<Record<NetworkType, string>> = {
   zcash: PopupPath.SETTINGS_ZCASH_NETWORK,
   penumbra: `${PopupPath.SETTINGS_NETWORKS}?network=penumbra`,
-};
-
-/** turning a network on also makes it the active one, as the full toggle list does */
-export const useEnableNetwork = () => {
-  const toggleNetwork = useStore(s => s.keyRing.toggleNetwork);
-  const setActive = useStore(s => s.keyRing.setActiveNetwork);
-  const setSetting = useStore(s => s.privacy.setSetting);
-  const transparentOn = useStore(s => s.privacy.settings.enableTransparentBalances);
-  return async (n: NetworkType) => {
-    await toggleNetwork(n);
-    if (isIbcNetwork(n) && !transparentOn) {
-      await setSetting('enableTransparentBalances', true);
-    }
-    await setActive(n);
-  };
 };
 
 /** one row per top-level network: open it when on, turn it on when off.

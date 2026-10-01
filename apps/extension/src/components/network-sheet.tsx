@@ -7,15 +7,22 @@
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@repo/ui/lib/utils';
 import { Sheet } from '@repo/ui/components/ui/sheet';
+import { Button } from '@repo/ui/components/ui/button';
 import { useStore } from '../state';
 import {
   selectActiveNetwork,
   selectEnabledNetworks,
   selectSetActiveNetwork,
 } from '../state/keyring';
-import { isIbcNetwork } from '../state/keyring/network-types';
+import { useEnableNetwork } from '../hooks/enable-network';
 import { getNetwork, getTopLevelNetworks } from '../config/networks';
 import { PopupPath } from '../routes/popup/paths';
+
+/** one line per network, so the pools read apart at a glance */
+export const NETWORK_BLURB: Partial<Record<string, string>> = {
+  zcash: 'encrypted money',
+  penumbra: 'private defi · same recovery phrase',
+};
 
 export const NetworkSheet = ({
   open,
@@ -28,9 +35,7 @@ export const NetworkSheet = ({
   const activeNetwork = useStore(selectActiveNetwork);
   const enabledNetworks = useStore(selectEnabledNetworks);
   const setActiveNetwork = useStore(selectSetActiveNetwork);
-  const toggleNetwork = useStore(s => s.keyRing.toggleNetwork);
-  const privacySetSetting = useStore(s => s.privacy.setSetting);
-  const transparentEnabled = useStore(s => s.privacy.settings.enableTransparentBalances);
+  const enable = useEnableNetwork();
 
   const pick = (n: (typeof enabledNetworks)[number]) => {
     onOpenChange(false);
@@ -43,27 +48,30 @@ export const NetworkSheet = ({
   };
 
   const turnOn = async (n: (typeof enabledNetworks)[number]) => {
-    await toggleNetwork(n);
-    if (isIbcNetwork(n) && !transparentEnabled) {
-      await privacySetSetting('enableTransparentBalances', true);
-    }
-    void setActiveNetwork(n);
+    await enable(n);
     onOpenChange(false);
     navigate(PopupPath.INDEX);
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} title='networks'>
-      <div className='flex flex-col divide-y divide-surface-border-soft border border-surface-border-soft bg-surface-elev-1'>
-        {getTopLevelNetworks().map(n => {
-          const info = getNetwork(n);
-          const enabled = enabledNetworks.includes(n);
-          const active = activeNetwork === n;
-          return (
-            <div key={n} className='flex min-h-[52px] items-center gap-3 px-3.5 py-2'>
+    <Sheet open={open} onOpenChange={onOpenChange} title='networks' className='gap-0 px-3 pb-4'>
+      {getTopLevelNetworks().map(n => {
+        const info = getNetwork(n);
+        const enabled = enabledNetworks.includes(n);
+        const active = activeNetwork === n;
+        return (
+          <div key={n} className='flex h-[60px] items-center gap-3.5 px-2'>
+            <button
+              type='button'
+              disabled={!enabled}
+              onClick={() => pick(n)}
+              aria-label={`use ${info.name}`}
+              className='flex min-w-0 flex-1 items-center gap-3.5 text-left disabled:cursor-default'
+            >
               <span
                 className={cn(
-                  'flex size-[18px] shrink-0 items-center justify-center border',
+                  'flex size-[18px] shrink-0 items-center justify-center',
+                  enabled && 'border',
                   active ? 'border-zigner-gold' : 'border-surface-border',
                 )}
                 aria-hidden='true'
@@ -71,34 +79,33 @@ export const NetworkSheet = ({
                 {active && <span className='size-2 bg-zigner-gold' />}
               </span>
               <span className={cn('size-2.5 shrink-0', info.color)} aria-hidden='true' />
-              <button
-                type='button'
-                disabled={!enabled}
-                onClick={() => pick(n)}
-                className='min-w-0 flex-1 text-left disabled:cursor-default'
+              <span className='flex min-w-0 flex-col gap-[3px]'>
+                <span className='truncate text-[15px] text-fg-high lowercase'>{info.name}</span>
+                {NETWORK_BLURB[n] && (
+                  <span className='truncate text-[11px] text-fg-muted'>{NETWORK_BLURB[n]}</span>
+                )}
+              </span>
+            </button>
+            {!enabled && (
+              <Button
+                variant='secondary'
+                size='sm'
+                className='h-8 border-surface-border px-3 text-zigner-gold'
+                onClick={() => void turnOn(n)}
               >
-                <span className='block truncate text-data text-fg-high lowercase'>{info.name}</span>
-              </button>
-              {!enabled && (
-                <button
-                  type='button'
-                  onClick={() => void turnOn(n)}
-                  className='h-8 shrink-0 border border-surface-border bg-surface-elev-2 px-3 text-label text-zigner-gold transition-colors hover:bg-surface-border-soft'
-                >
-                  turn on
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                turn on
+              </Button>
+            )}
+          </div>
+        );
+      })}
       <button
         type='button'
         onClick={() => {
           onOpenChange(false);
-          navigate(PopupPath.SETTINGS_NETWORKS);
+          navigate(PopupPath.SETTINGS_NETWORKS_HOME);
         }}
-        className='mt-1 flex h-11 items-center px-1 text-left text-label text-fg-muted'
+        className='mt-1.5 flex h-11 items-center border-t border-border-soft px-2 text-left text-label text-fg-muted'
       >
         manage networks
       </button>
