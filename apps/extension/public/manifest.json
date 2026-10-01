@@ -87,6 +87,6 @@
     "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://[::1]/*"]
   },
   "content_security_policy": {
-    "extension_pages": "object-src 'self'; script-src 'self' 'wasm-unsafe-eval'"
+    "extension_pages": "object-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:"
   }
 }
