@@ -1,6 +1,6 @@
 import { ExtensionStorage, ExtensionStorageDefaults } from './base';
 import { localMigrations } from './migrations';
-import { VERSION as LocalStorageVersion, LOCAL as LocalStorageState } from './versions/v3';
+import { VERSION as LocalStorageVersion, LOCAL as LocalStorageState } from './versions/v4';
 
 const localDefaults: ExtensionStorageDefaults<LocalStorageState> = {
   penumbraWallets: [],
@@ -19,7 +19,7 @@ const localDefaults: ExtensionStorageDefaults<LocalStorageState> = {
 export const localExtStorage = new ExtensionStorage<LocalStorageState, LocalStorageVersion>(
   chrome.storage.local,
   localDefaults,
-  3,
+  4,
   localMigrations,
 );
 
