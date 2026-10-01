@@ -88,6 +88,10 @@ export const ROUTES: Record<RouteId, RouteMeta> = {
   },
 };
 
+/** a route as the router names it: the best is said to be the best */
+export const routeLabel = (id: RouteId, best: boolean): string =>
+  best ? `best price · ${ROUTES[id].label}` : ROUTES[id].label;
+
 /** the routes that may carry a pair: the pinned one, or every route that can */
 export const candidates = (pair: SwapPair, pinned?: RouteId): RouteId[] =>
   pinned ? [pinned] : ROUTE_IDS.filter(id => !ROUTES[id].refuses(pair));

@@ -37,12 +37,20 @@ import {
 } from '../../../state/keyring/network-worker';
 import { blockchainToContactNetwork, toBaseUnits } from '../../../state/near-swap';
 import { PROVIDERS, quoteRoutes, routeTokens, type RouteResult } from '../../../state/swap';
-import { toUnits, type SwapStatusView, type SwapToken } from '../../../state/swap/provider';
+import {
+  fromUnits,
+  lead,
+  toUnits,
+  type SwapStatusView,
+  type SwapToken,
+} from '../../../state/swap/provider';
+import { BelowMinimum } from '../../../state/swap/thor';
 import {
   candidates,
   pairKey,
   ROUTES,
   ROUTE_IDS,
+  routeLabel,
   thorAsset,
   type MemoCarrier,
   type RouteId,
@@ -67,6 +75,7 @@ import { ThorDeposit } from './thor-deposit';
 import { AmountField, ContactsSheet, ToField } from '../send/send-fields';
 import { chainName } from '../../../state/swap/tokens';
 import { TokenSheet } from './token-sheet';
+import { CostList, CostMeta } from './cost-lines';
 import { ThorNameResolver } from '../../../components/thorname-resolver';
 
 type Step =
@@ -125,11 +134,18 @@ const RouteChoice = ({
   result,
   unit,
   on,
+  best,
+  more,
+  decimals,
   onPick,
 }: {
   result: RouteResult;
   unit: string;
+  decimals: number;
   on: boolean;
+  best: boolean;
+  /** how much more than the next route, on the best one */
+  more?: string;
   onPick: () => void;
 }) => {
   const quote = 'quote' in result ? result.quote : undefined;
@@ -155,7 +171,7 @@ const RouteChoice = ({
         >
           {on && <span className='size-2 bg-zigner-gold' />}
         </span>
-        <span className='grow text-sm text-fg-high'>{ROUTES[result.route].label}</span>
+        <span className='grow text-sm text-fg-high'>{routeLabel(result.route, best)}</span>
         {quote && (
           <span className='text-sm text-fg-high'>
             <Sensitive>{`${quote.amountOutText} ${unit}`}</Sensitive>
@@ -166,7 +182,12 @@ const RouteChoice = ({
         {quote ? (
           <>
             {quote.timeText && <span>{quote.timeText}</span>}
-            {quote.feeText && <span>{quote.feeText}</span>}
+            {more && (
+              <span>
+                <Sensitive className='text-success'>{`${more} ${unit}`}</Sensitive> more
+              </span>
+            )}
+            {quote.cost && <CostMeta cost={quote.cost} unit={unit} decimals={decimals} />}
             <span
               className={
                 quote.notYet
@@ -228,6 +249,8 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const [status, setStatus] = useState<SwapStatusView>();
   const [depositTxid, setDepositTxid] = useState<string>();
   const [error, setError] = useState<string>();
+  // a route's minimum, kept when it was the only thing in the way
+  const [minimum, setMinimum] = useState<{ key: string; min: bigint; line: string }>();
   // kept alongside the message so a blocked destination can offer an inline allow
   const [errorCause, setErrorCause] = useState<unknown>();
   const [balanceZec, setBalanceZec] = useState<string>();
@@ -254,6 +277,10 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const best = quotes.find(q => !q.notYet);
   const live = (id?: RouteId) => quotes.find(q => q.route === id && !q.notYet);
   const quote = live(picked) ?? live(key ? chosen[key] : undefined) ?? best;
+  const outDecimals = isFromZec ? (token?.decimals ?? 8) : 8;
+  const ahead = lead(quotes);
+  const more = ahead ? fromUnits(ahead, outDecimals) : undefined;
+  const belowMin = !!minimum && minimum.key === key && toUnits(amountIn, 8) < minimum.min;
   // only routes zafu can't send yet: shown for comparison, nothing to review
   const view = quote ?? quotes[0];
   const carrier = pair && thorAsset(pair)?.carrier;
@@ -348,6 +375,14 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
       });
       const failed = got.find(r => 'error' in r);
       if (!got.some(r => 'quote' in r)) {
+        const below = got.flatMap(r =>
+          'error' in r && r.error instanceof BelowMinimum ? [r.error] : [],
+        )[0];
+        if (below && key) {
+          setMinimum({ key, min: below.min, line: below.message });
+          setStep('input');
+          return;
+        }
         const cause = failed && 'error' in failed ? failed.error : undefined;
         setErrorCause(cause);
         setError(
@@ -538,7 +573,12 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   };
 
   const canQuote =
-    !!token && parseFloat(amountIn) > 0 && !!zcashAddress && !!otherAddress && !pinnedRefusal;
+    !!token &&
+    parseFloat(amountIn) > 0 &&
+    !!zcashAddress &&
+    !!otherAddress &&
+    !pinnedRefusal &&
+    !belowMin;
   // what this form would fill for someone else: never this wallet's own refund
   // address, and a route only when the user pinned one
   const sharedRoute = pinned ?? (key ? chosen[key] : undefined);
@@ -585,8 +625,8 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
                   }
                 : undefined
             }
-            helper={error ?? pinnedRefusal}
-            warn={!!(error ?? pinnedRefusal)}
+            helper={error ?? pinnedRefusal ?? (belowMin ? minimum.line : undefined)}
+            warn={!!(error ?? pinnedRefusal) || belowMin}
           />
           <Button
             variant='secondary'
@@ -727,6 +767,9 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
               result={r}
               unit={outUnit}
               on={r.route === quote?.route}
+              best={r.route === best?.route}
+              more={r.route === best?.route ? more : undefined}
+              decimals={outDecimals}
               onPick={() => pickRoute(r.route)}
             />
           ))}
@@ -748,10 +791,11 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
         {quote && (
           <Sheet open={reviewOpen} onOpenChange={setReviewOpen} title='review swap'>
             <div className='flex flex-col gap-1.5 text-xs'>
+              {/* only the amounts hide; the addresses and memo are what gets reviewed */}
               {(
                 [
-                  ['you send', `${quote.amountInText || amountIn} ${inUnit}`],
-                  ['you receive', `${quote.amountOutText} ${outUnit}`],
+                  ['you send', `${quote.amountInText || amountIn} ${inUnit}`, true],
+                  ['you receive', `${quote.amountOutText} ${outUnit}`, true],
                   ['route', ROUTES[quote.route].label],
                   [
                     'recipient',
@@ -759,17 +803,24 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
                   ],
                   [isFromZec ? 'deposit address' : 'pay to', quote.depositAddress],
                   ...(quote.memo ? [['memo', quote.memo]] : []),
-                ] as [string, string][]
-              ).map(([k, v], i) => (
+                ] as [string, string, boolean?][]
+              ).map(([k, v, amount]) => (
                 <div key={k} className='flex justify-between gap-3'>
                   <span className='shrink-0 text-fg-muted'>{k}</span>
-                  {/* only the amounts hide; the addresses and memo are what gets reviewed */}
                   <span className='break-all text-right font-mono'>
-                    {i < 2 ? <Sensitive>{v}</Sensitive> : v}
+                    {amount ? <Sensitive>{v}</Sensitive> : v}
                   </span>
                 </div>
               ))}
+              {quote.cost && <CostList cost={quote.cost} unit={outUnit} decimals={outDecimals} />}
             </div>
+            {quote.route === best?.route && more && (
+              <p className='text-xs text-fg-muted'>
+                you get <Sensitive className='text-success'>{`${more} ${outUnit}`}</Sensitive> more
+                than the next route
+              </p>
+            )}
+            {quote.refundLine && <p className='text-xs text-fg-muted'>{quote.refundLine}</p>}
             <p className='text-xs text-fg-muted'>
               {ROUTES[quote.route].label} · {ROUTES[quote.route].custody}
               {quote.route === 'near' && (
@@ -895,6 +946,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
                     {token?.chain} to
                   </p>
                   <QrCode value={quote.depositAddress} size={160} label='deposit address' />
+                  {quote.gasLine && <p className='text-xs text-fg-muted'>{quote.gasLine}</p>}
                   <div className='flex w-full items-center gap-2'>
                     <span className='min-w-0 flex-1 break-all font-mono text-xs'>
                       {quote.depositAddress}
@@ -921,6 +973,11 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
             swap complete ·{' '}
             <Sensitive>{`${quote?.amountInText ?? ''} ${inUnit} - ${quote?.amountOutText ?? ''} ${outUnit}`}</Sensitive>
           </StatusSlot>
+        )}
+        {step === 'done' && quote?.cost && (
+          <div className='flex flex-col gap-1.5 text-xs'>
+            <CostList cost={quote.cost} unit={outUnit} decimals={outDecimals} />
+          </div>
         )}
 
         {step === 'error' &&

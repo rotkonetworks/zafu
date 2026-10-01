@@ -9,6 +9,17 @@ vi.mock('../../net/egress-opt-in', () => ({
   },
 }));
 
+const fee = vi.hoisted(() => ({ beta: false, recipient: '' }));
+vi.mock('../../config/swap-fee', async orig => {
+  const real = await orig<typeof import('../../config/swap-fee')>();
+  return {
+    ...real,
+    zafuListBps: () => real.zafuListBps(fee.recipient),
+    zafuFeeBps: (route: string) =>
+      real.zafuFeeBps(route, fee.beta, real.zafuListBps(fee.recipient)),
+  };
+});
+
 const near = vi.hoisted(() => ({
   getSupportedTokens: vi.fn(),
   requestQuote: vi.fn(),
@@ -16,23 +27,37 @@ const near = vi.hoisted(() => ({
 }));
 vi.mock('../near-swap', async orig => ({ ...(await orig<object>()), ...near }));
 
-import { fromUnits, rank, rescale, toUnits, type Quote, type QuoteRequest } from './provider';
-import { candidates, ROUTES } from './routes';
 import {
+  costOf,
+  fromUnits,
+  lead,
+  pct,
+  rank,
+  rescale,
+  toUnits,
+  type Quote,
+  type QuoteRequest,
+} from './provider';
+import { candidates, routeLabel, ROUTES } from './routes';
+import {
+  BelowMinimum,
   checkQuote,
   nameInMemo,
+  thorCost,
   thorProvider,
   thorStatus,
   type InboundAddress,
   type ThorQuote,
 } from './thor';
-import { nearProvider } from './near';
+import { nearCost, nearProvider } from './near';
 import { quoteRoutes, routeTokens } from '.';
 
 const NOW = 1_790_000_000;
 const T = 't1PTs8DQifJxg6HmUq7AgYYFNkbyQa1zjgf';
 const ZEC_VAULT = 't1ZecVaultxxxxxxxxxxxxxxxxxxxxxxxx';
 const BTC_VAULT = 'bc1qbtcvaultxxxxxxxxxxxxxxxxxxxxxxxxxx';
+// shapes recorded from gateway.liquify.com/chain/thorchain_api on 2026-10-02.
+// mainnet lists no ZEC pool or vault yet, so the ZEC side mirrors BTC's.
 const inbound = (over: Partial<InboundAddress> = {}): InboundAddress[] => [
   {
     chain: 'ZEC',
@@ -40,6 +65,8 @@ const inbound = (over: Partial<InboundAddress> = {}): InboundAddress[] => [
     halted: false,
     global_trading_paused: false,
     chain_trading_paused: false,
+    dust_threshold: '10000',
+    outbound_fee: '20000',
   },
   {
     chain: 'BTC',
@@ -48,17 +75,32 @@ const inbound = (over: Partial<InboundAddress> = {}): InboundAddress[] => [
     global_trading_paused: false,
     chain_trading_paused: false,
     dust_threshold: '1000',
+    outbound_fee: '1042',
     ...over,
   },
 ];
+/** BTC.BTC -> ETH.ETH as recorded, its output relabelled zec */
 const thorQuote = (over: Partial<ThorQuote> = {}): ThorQuote => ({
   inbound_address: BTC_VAULT,
   expiry: NOW + 600,
-  memo: '=:ZEC.ZEC:t1PTs8DQifJxg6HmUq7AgYYFNkbyQa1zjgf:0/1/0',
+  memo: `=:ZEC.ZEC:${T}/bc1qrefundexample:0/1/0`,
   expected_amount_out: '412000000',
-  recommended_min_amount_in: '20000',
+  recommended_min_amount_in: '6123',
+  dust_threshold: '1000',
+  recommended_gas_rate: '3',
+  gas_rate_units: 'satsperbyte',
+  max_streaming_quantity: 1,
+  streaming_swap_blocks: 1,
   total_swap_seconds: 720,
-  fees: { asset: 'ZEC.ZEC', total: '1200000', total_bps: 30 },
+  fees: {
+    asset: 'ZEC.ZEC',
+    affiliate: '0',
+    outbound: '9246',
+    liquidity: '62579',
+    total: '71825',
+    slippage_bps: 19,
+    total_bps: 30,
+  },
   ...over,
 });
 
@@ -103,14 +145,18 @@ const nearQuote = {
   },
 };
 
-/** answers thornode paths, records each url asked */
-const thornode = (quote: ThorQuote, inb = inbound()) => {
+/** answers thornode paths, records each url asked; `withFee` answers a quote carrying an affiliate */
+const thornode = (quote: ThorQuote, inb = inbound(), withFee?: ThorQuote) => {
   const urls: string[] = [];
   vi.stubGlobal(
     'fetch',
     vi.fn((url: string) => {
       urls.push(url);
-      const body = url.includes('/quote/swap') ? quote : inb;
+      const body = !url.includes('/quote/swap')
+        ? inb
+        : withFee && url.includes('affiliate_bps')
+          ? withFee
+          : quote;
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
     }),
   );
@@ -118,6 +164,8 @@ const thornode = (quote: ThorQuote, inb = inbound()) => {
 };
 
 beforeEach(() => {
+  fee.beta = false;
+  fee.recipient = '';
   asked.length = 0;
   allow.clear();
   vi.useFakeTimers({ now: NOW * 1000, toFake: ['Date'] });
@@ -185,11 +233,10 @@ describe('thorchain', () => {
       amountOut: 412_000_000n,
       amountOutText: '4.12',
       amountInText: '0.01',
-      feeText: 'fee 0.3%',
       timeText: '~12 min',
       expiresAt: (NOW + 600) * 1000,
       depositAddress: BTC_VAULT,
-      memo: '=:ZEC.ZEC:t1PTs8DQifJxg6HmUq7AgYYFNkbyQa1zjgf:0/1/0',
+      memo: `=:ZEC.ZEC:${T}/bc1qrefundexample:0/1/0`,
       recipient: 't1PTs8DQifJxg6HmUq7AgYYFNkbyQa1zjgf',
     });
     expect(quote.notYet).toBeUndefined();
@@ -273,44 +320,94 @@ describe('thorchain', () => {
   });
 
   it('refuses unsafe quotes', () => {
-    const ok = () => checkQuote(thorQuote(), inbound(), 'BTC', 1_000_000n, true, T, NOW);
-    expect(ok).not.toThrow();
-    expect(() =>
-      checkQuote(thorQuote(), inbound().slice(1), 'BTC', 1_000_000n, true, T, NOW),
-    ).toThrow(/zec isn't open/);
-    expect(() =>
-      checkQuote(thorQuote(), inbound({ halted: true }), 'BTC', 1_000_000n, true, T, NOW),
-    ).toThrow(/paused btc/);
-    expect(() =>
-      checkQuote(
-        thorQuote({ inbound_address: 'bc1qold' }),
-        inbound(),
-        'BTC',
-        1_000_000n,
-        true,
-        T,
-        NOW,
-      ),
-    ).toThrow(/moved its vault/);
-    expect(() =>
-      checkQuote(
-        thorQuote({ memo: `=:ZEC.ZEC:${'t'.repeat(80)}` }),
-        inbound(),
-        'BTC',
-        1_000_000n,
-        true,
-        T,
-        NOW,
-      ),
-    ).toThrow(/memo/);
-    expect(() =>
-      checkQuote(thorQuote({ expiry: NOW }), inbound(), 'BTC', 1_000_000n, true, T, NOW),
-    ).toThrow(/expired/);
-    expect(() => checkQuote(thorQuote(), inbound(), 'BTC', 20_000n, true, T, NOW)).toThrow(/below/);
+    const check = (quote = thorQuote(), inb = inbound(), dest = T) =>
+      checkQuote(quote, inb, 'BTC', true, dest, NOW);
+    expect(() => check()).not.toThrow();
+    expect(() => check(thorQuote({ inbound_address: 'bc1qold' }))).toThrow(/moved its vault/);
+    expect(() => check(thorQuote({ memo: `=:ZEC.ZEC:${'t'.repeat(80)}` }))).toThrow(/memo/);
+    expect(() => check(thorQuote({ expiry: NOW }))).toThrow(/expired/);
     // a node answering with a memo that pays someone else is never shown
-    expect(() =>
-      checkQuote(thorQuote(), inbound(), 'BTC', 1_000_000n, true, 't1SomeoneElse', NOW),
-    ).toThrow(/another address/);
+    expect(() => check(thorQuote(), inbound(), 't1SomeoneElse')).toThrow(/another address/);
+  });
+
+  it('says plainly when thorchain is not taking a chain, before reading the quote', async () => {
+    const check = (inb: InboundAddress[]) => () =>
+      checkQuote(thorQuote(), inb, 'BTC', true, T, NOW);
+    expect(check(inbound().slice(1))).toThrow("thorchain isn't taking zec right now");
+    expect(check(inbound({ halted: true }))).toThrow("thorchain isn't taking btc right now");
+    expect(check(inbound({ chain_trading_paused: true }))).toThrow(/isn't taking btc/);
+    expect(check(inbound({ global_trading_paused: true }))).toThrow(/isn't taking btc/);
+    // the quote may answer anything for a halted chain; the halt is what is said
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) =>
+        Promise.resolve(
+          url.includes('/quote/swap')
+            ? new Response('{"message":"trading is halted"}', { status: 400 })
+            : new Response(JSON.stringify(inbound({ halted: true })), { status: 200 }),
+        ),
+      ),
+    );
+    await expect(thorProvider.quote(req())).rejects.toThrow("thorchain isn't taking btc right now");
+  });
+
+  it('holds back an amount below the recommended minimum, and names the minimum', async () => {
+    thornode(thorQuote());
+    const below = thorProvider.quote(req({ amountIn: '0.00005' }));
+    await expect(below).rejects.toThrow('thorchain swaps 0.00006123 btc or more');
+    await expect(below).rejects.toMatchObject({ min: 6123n });
+    await expect(thorProvider.quote(req({ amountIn: '0.00006123' }))).resolves.toBeTruthy();
+    // zec out: at or under the zec vault's dust nothing is observed
+    thornode(
+      thorQuote({
+        inbound_address: ZEC_VAULT,
+        memo: '=:BTC.BTC:bc1qdestexample:0/1/0',
+        recommended_min_amount_in: '5000',
+        dust_threshold: undefined,
+      }),
+    );
+    const dust = thorProvider.quote(
+      req({ direction: 'from_zec', amountIn: '0.0001', otherAddress: 'bc1qdestexample' }),
+    );
+    await expect(dust).rejects.toBeInstanceOf(BelowMinimum);
+    await expect(dust).rejects.toThrow('thorchain swaps 0.00010001 zec or more');
+  });
+
+  it('costs a swap from the quote: the fee in, thorchain, and zafu at 0', async () => {
+    thornode(thorQuote());
+    const quote = await thorProvider.quote(req());
+    // 750 sat of 0.01 btc is 7 bps, worth 750 x 412 zec / btc; liquidity + outbound = 71825
+    expect(quote.cost).toEqual({
+      parts: [
+        {
+          label: 'network fee in',
+          bps: 7,
+          out: 309_000n,
+          inText: '~0.0000075 btc',
+        },
+        { label: 'thorchain', bps: 30, out: 71_825n },
+        { label: 'zafu fee', bps: 0, out: 0n, zafu: true },
+      ],
+      bps: 37,
+      out: 380_825n,
+    });
+    expect(quote.gasLine).toBe('use a fast fee · 3 sat/byte');
+    expect(quote.refundLine).toBeUndefined();
+    // no affiliate is ever asked for
+    const urls = thornode(thorQuote());
+    await thorProvider.quote(req());
+    expect(urls.join()).not.toContain('affiliate');
+
+    // zec out: zafu's own zip-317 fee is priced on the deposit step, not here
+    expect(thorCost(thorQuote(), false, 'zec', 100_000_000n, 8).parts.map(p => p.label)).toEqual([
+      'thorchain',
+      'zafu fee',
+    ]);
+    // a streamed swap can be refunded part way: the source chain's outbound fee comes off
+    thornode(thorQuote({ max_streaming_quantity: 4 }));
+    expect((await thorProvider.quote(req())).refundLine).toBe(
+      'if refunded, thorchain keeps 0.00001042 btc to send it back',
+    );
   });
 
   describe('a thorname as the destination', () => {
@@ -376,6 +473,7 @@ describe('near intents', () => {
       destinationAsset: 'nep141:zec.omft.near',
       recipient: 'u1shieldedexample',
       refundTo: 'bc1qrefundexample',
+      appFeeBps: 0,
     });
     expect(quote).toMatchObject({
       route: 'near',
@@ -396,6 +494,29 @@ describe('near intents', () => {
     );
   });
 
+  it("charges zafu's app fee in production once a recipient is set, never in beta", async () => {
+    fee.recipient = 'zafu.near';
+    const quote = await nearProvider.quote(req());
+    expect(near.requestQuote).toHaveBeenLastCalledWith(expect.objectContaining({ appFeeBps: 10 }));
+    expect(quote.cost?.parts.at(-1)).toMatchObject({ label: 'zafu fee', bps: 10, zafu: true });
+    fee.beta = true;
+    await nearProvider.quote(req());
+    expect(near.requestQuote).toHaveBeenLastCalledWith(expect.objectContaining({ appFeeBps: 0 }));
+  });
+
+  it("splits a 1click quote's cost into near's and zafu's, from its own prices", () => {
+    // $100 in, $99.40 out: 60 bps lost, 10 of them zafu's, on 4.15 zec arriving
+    const cost = nearCost(415_000_000n, 100, 99.4, 10)!;
+    expect(cost.bps).toBe(60);
+    expect(cost.parts).toEqual([
+      { label: 'near intents', bps: 50, out: 2_087_525n },
+      { label: 'zafu fee', bps: 10, out: 417_505n, zafu: true },
+    ]);
+    // gross 4.17505 zec: the parts add up to what did not arrive
+    expect(cost.out).toBe(2_505_030n);
+    expect(nearCost(415_000_000n, 0, 99.4, 10)).toBeUndefined();
+  });
+
   it('reads 1click status as a phase and a line', async () => {
     near.checkSwapStatus.mockResolvedValue({ status: 'PROCESSING' });
     expect(await nearProvider.status!(q('near', 0n))).toEqual({
@@ -406,6 +527,39 @@ describe('near intents', () => {
     expect((await nearProvider.status!(q('near', 0n))).phase).toBe('waiting');
     near.checkSwapStatus.mockResolvedValue({ status: 'REFUNDED' });
     expect((await nearProvider.status!(q('near', 0n))).phase).toBe('failed');
+  });
+});
+
+describe("zafu's fee", () => {
+  it('is the production near rate, inert without a recipient, and 0 in beta and on thorchain', async () => {
+    const { zafuFeeBps, zafuListBps } =
+      await vi.importActual<typeof import('../../config/swap-fee')>('../../config/swap-fee');
+    expect(zafuListBps('', 10)).toBe(0);
+    expect(zafuListBps('zafu.near', 10)).toBe(10);
+    expect(zafuFeeBps('near', false, 10)).toBe(10);
+    expect(zafuFeeBps('near', true, 10)).toBe(0);
+    expect(zafuFeeBps('thor', false, 10)).toBe(0);
+    expect(zafuFeeBps('near', false, 0)).toBe(0);
+  });
+
+  it('adds every part into an estimated total', () => {
+    const total = costOf([
+      { label: 'network fee in', bps: 7, out: 300n },
+      { label: 'thorchain', bps: 45, out: 1_900n },
+      { label: 'zafu fee', bps: 10, out: 400n, zafu: true },
+    ]);
+    expect([total.bps, total.out]).toEqual([62, 2_600n]);
+    expect([pct(62), pct(0), pct(10), pct(150)]).toEqual(['0.62%', '0%', '0.1%', '1.5%']);
+  });
+});
+
+describe('router', () => {
+  it('labels the best price, and says how far ahead it is', () => {
+    expect(routeLabel('thor', true)).toBe('best price · thorchain');
+    expect(routeLabel('near', true)).toBe('best price · near intents');
+    expect(routeLabel('near', false)).toBe('near intents');
+    expect(lead(rank([q('near', 100n), q('thor', 142n)]))).toBe(42n);
+    expect(lead([q('thor', 142n), q('near', 999n, 'not available yet')])).toBeUndefined();
   });
 });
 
@@ -434,6 +588,22 @@ describe('best route', () => {
     expect(results.map(r => r.route)).toEqual(['near']);
     expect(asked).toEqual(['near-swap']);
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('ranks by what arrives after every fee, zafu near fee included', async () => {
+    allow.add('near-swap').add('thorchain');
+    fee.recipient = 'zafu.near';
+    // 1click nets its app fee into amountOut: 4.15 zec here beats thorchain's 4.12
+    thornode(thorQuote());
+    expect((await quoteRoutes(['near', 'thor'], req())).map(r => r.route)).toEqual([
+      'near',
+      'thor',
+    ]);
+    thornode(thorQuote({ expected_amount_out: '416000000' }));
+    expect((await quoteRoutes(['near', 'thor'], req())).map(r => r.route)).toEqual([
+      'thor',
+      'near',
+    ]);
   });
 
   it('merges the pickers, one row per token and chain', async () => {

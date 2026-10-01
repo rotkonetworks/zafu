@@ -14,6 +14,7 @@
  */
 
 import { requestEgressOptIn } from '../net/egress-opt-in';
+import { NEAR_APP_FEE_RECIPIENT } from '../config/swap-fee';
 
 const API_BASE = 'https://1click.chaindefuser.com';
 
@@ -27,9 +28,6 @@ const API_BASE = 'https://1click.chaindefuser.com';
 // builds read apps/extension/.env.local (gitignored). Empty => unauthenticated
 // 1Click request (degrades the fee-free partner path only).
 const AUTH_TOKEN = process.env['NEAR_1CLICK_JWT'] ?? '';
-
-const AFFILIATE_ADDRESS = 'bdb384d8c6273bf4e40757d57d49ff7931c12b4ddaa838c323e4f93a7263744f';
-const AFFILIATE_FEE_BPS = 67;
 
 // ── types ──
 
@@ -55,7 +53,7 @@ export interface SwapQuoteRequest {
   recipientType: 'DESTINATION_CHAIN';
   deadline: string; // ISO 8601
   quoteWaitingTimeMs?: number;
-  appFees: { recipient: string; fee: number }[];
+  appFees?: { recipient: string; fee: number }[];
   referral?: string;
 }
 
@@ -162,6 +160,8 @@ export async function requestQuote(params: {
   // VALID destination-chain recipient is still required (the API validates it
   // even when dry), so callers pass a placeholder for the estimate.
   dry?: boolean;
+  /** zafu's app fee in bps, taken from the amount out; 0 = none */
+  appFeeBps?: number;
 }): Promise<SwapQuoteResponse> {
   const deadline = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 
@@ -179,7 +179,9 @@ export async function requestQuote(params: {
     recipientType: 'DESTINATION_CHAIN',
     deadline,
     quoteWaitingTimeMs: 3000,
-    appFees: [{ recipient: AFFILIATE_ADDRESS, fee: AFFILIATE_FEE_BPS }],
+    appFees: params.appFeeBps
+      ? [{ recipient: NEAR_APP_FEE_RECIPIENT, fee: params.appFeeBps }]
+      : undefined,
     referral: 'zafu',
   };
 

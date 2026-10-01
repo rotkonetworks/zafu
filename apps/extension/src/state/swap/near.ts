@@ -1,5 +1,6 @@
 /** near intents 1click as a swap route; the requests are near-swap's, unchanged */
 
+import { zafuFeeBps } from '../../config/swap-fee';
 import {
   checkSwapStatus,
   filterSwappableTokens,
@@ -11,7 +12,7 @@ import {
   type SwapQuoteResponse,
   type SwapStatus,
 } from '../near-swap';
-import type { Quote, SwapProvider, SwapStatusView } from './provider';
+import { costOf, type Cost, type Quote, type SwapProvider, type SwapStatusView } from './provider';
 
 const TOKENS_FOR_MS = 300_000;
 let list: { at: number; tokens: Promise<NearToken[]> } | undefined;
@@ -37,6 +38,38 @@ const STATUS: Record<SwapStatus | 'none', SwapStatusView> = {
   none: { phase: 'waiting', line: 'waiting for the deposit' },
 };
 
+/**
+ * What a 1click swap costs, implied by its own prices: the value lost between
+ * what is paid and what arrives, less zafu's app fee, is near's spread and
+ * fees. undefined when the quote carries no prices to tell.
+ */
+export const nearCost = (
+  amountOut: bigint,
+  inUsd: number,
+  outUsd: number,
+  zafuBps: number,
+): Cost | undefined => {
+  if (!(inUsd > 0 && outUsd > 0)) {
+    return undefined;
+  }
+  const lost = Math.max(0, 1 - outUsd / inUsd);
+  const gross = Number(amountOut) / (1 - lost);
+  const zafuOut = BigInt(Math.round((gross * zafuBps) / 10_000));
+  const totalOut = BigInt(Math.round(gross)) - amountOut;
+  return costOf([
+    {
+      label: 'near intents',
+      bps: Math.max(0, Math.round(lost * 10_000) - zafuBps),
+      out: totalOut > zafuOut ? totalOut - zafuOut : 0n,
+    },
+    { label: 'zafu fee', bps: zafuBps, out: zafuOut, zafu: true },
+  ]);
+};
+
+/** a decimal amount in usd from base units and a unit price */
+const usd = (units: string, decimals: number, price: number | null) =>
+  price ? (Number(units) / 10 ** decimals) * price : 0;
+
 export const nearProvider: SwapProvider = {
   id: 'near',
   tokens: async () =>
@@ -56,6 +89,7 @@ export const nearProvider: SwapProvider = {
       throw new Error(`near intents doesn't offer ${req.token.symbol.toLowerCase()} right now`);
     }
     const fromZec = req.direction === 'from_zec';
+    const zafuBps = zafuFeeBps('near');
     const resp: SwapQuoteResponse = await requestQuote({
       swapType: 'EXACT_INPUT',
       amount: toBaseUnits(req.amountIn, fromZec ? 8 : token.decimals),
@@ -63,13 +97,25 @@ export const nearProvider: SwapProvider = {
       destinationAsset: fromZec ? token.assetId : zecAssetId,
       recipient: fromZec ? req.otherAddress : req.zcashAddress,
       refundTo: fromZec ? req.zcashAddress : req.otherAddress,
+      appFeeBps: zafuBps,
     });
     const q = resp.quote;
+    const zec = all.find(t => t.assetId === zecAssetId);
+    const [from, to] = fromZec ? [zec, token] : [token, zec];
+    const amountOut = BigInt(q.amountOut || '0');
     return {
       route: 'near',
-      amountOut: BigInt(q.amountOut || '0'),
+      amountOut,
       amountOutText: q.amountOutFormatted,
       amountInText: q.amountInFormatted,
+      // 1click folds every fee into the amount out; its usd figures, or the
+      // listed prices, tell how much that was
+      cost: nearCost(
+        amountOut,
+        Number(q.amountInUsd) || usd(q.amountIn, from?.decimals ?? 8, from?.price ?? null),
+        Number(q.amountOutUsd) || usd(q.amountOut, to?.decimals ?? 8, to?.price ?? null),
+        zafuBps,
+      ),
       timeText: q.timeEstimate ? `~${Math.max(1, Math.round(q.timeEstimate / 60))} min` : undefined,
       expiresAt: q.deadline ? new Date(q.deadline).getTime() : undefined,
       depositAddress: q.depositAddress,

@@ -137,6 +137,9 @@ export const HARDWARE_WALLET_ENABLED = (() => {
   }
 })();
 
+/** the beta build, by its manifest name, as HARDWARE_WALLET_ENABLED reads it */
+export const IS_BETA_BUILD = HARDWARE_WALLET_ENABLED;
+
 /**
  * Ledger TRANSPARENT support via the legacy Bitcoin-app path (@ledgerhq/hw-app-btc),
  * separate from HARDWARE_WALLET_ENABLED above. The Bitcoin-app path signs

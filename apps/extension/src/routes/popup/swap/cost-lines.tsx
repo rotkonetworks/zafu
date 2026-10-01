@@ -1,0 +1,61 @@
+/** what a swap costs, as the route row, the review and the receipt show it */
+
+import { Sensitive } from '../../../components/sensitive';
+import { zafuListBps } from '../../../config/swap-fee';
+import { fromUnits, pct, type Cost, type CostPart } from '../../../state/swap/provider';
+
+/** zafu's rate; a zero beside a real production rate shows that rate struck through */
+const ZafuRate = ({ bps }: { bps: number }) => {
+  const list = zafuListBps();
+  return bps === 0 && list > 0 ? (
+    <>
+      <s>{pct(list)}</s> <span className='text-success'>0%</span>
+    </>
+  ) : (
+    <>{pct(bps)}</>
+  );
+};
+
+const Rate = ({ part }: { part: CostPart }) =>
+  part.zafu ? <ZafuRate bps={part.bps} /> : <>{pct(part.bps)}</>;
+
+/** route row: the total, then every part on one line */
+export const CostMeta = ({ cost, unit, decimals }: Units & { cost: Cost }) => (
+  <>
+    <span>
+      total ≈ {pct(cost.bps)} · <Sensitive>{`${fromUnits(cost.out, decimals)} ${unit}`}</Sensitive>
+    </span>
+    {cost.parts.map(p => (
+      <span key={p.label}>
+        {p.label} <Rate part={p} />
+      </span>
+    ))}
+  </>
+);
+
+interface Units {
+  unit: string;
+  decimals: number;
+}
+
+/** review and receipt: the total, each part listed under it */
+export const CostList = ({ cost, unit, decimals }: Units & { cost: Cost }) => {
+  const worth = (p: { out: bigint; inText?: string }) =>
+    p.inText ?? `${fromUnits(p.out, decimals)} ${unit}`;
+  return (
+    <>
+      {[{ label: 'total ≈', bps: cost.bps, out: cost.out } as CostPart, ...cost.parts].map(
+        (p, i) => (
+          <div key={p.label} className='flex justify-between gap-3'>
+            <span className={i ? 'shrink-0 pl-3 text-fg-muted' : 'shrink-0 text-fg-muted'}>
+              {p.label}
+            </span>
+            <span className='text-right font-mono'>
+              <Rate part={p} /> · <Sensitive>{worth(p)}</Sensitive>
+            </span>
+          </div>
+        ),
+      )}
+    </>
+  );
+};
