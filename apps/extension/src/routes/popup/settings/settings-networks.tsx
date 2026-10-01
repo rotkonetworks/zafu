@@ -64,6 +64,12 @@ import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 
+// Bundled registry, resolved once per realm (not per render): getRegistryEndpoints()
+// builds a fresh array every call, so recomputing it in the component body gave
+// every render a new `presets` identity, which an effect keyed on [presets]
+// re-ran forever (probe -> setState -> re-render -> new presets -> probe...).
+const PENUMBRA_PRESETS: readonly PenumbraEndpointPreset[] = getRegistryEndpoints();
+
 /** color map for network indicators */
 const NETWORK_COLORS: Record<string, string> = {
   'bg-purple-500': '#8B5CF6',
@@ -892,9 +898,9 @@ const PenumbraEndpointPanel = ({
   readonly onSaveCustom: () => void;
   readonly onSelectionStrategyChange: (s: SelectionStrategy) => void;
 }) => {
-  // Bundled registry only - hydrated at build time, no runtime fetch. A
-  // remote re-fetch here would be a prefetch the user never asked for.
-  const presets: readonly PenumbraEndpointPreset[] = getRegistryEndpoints();
+  // Bundled registry only - hydrated at build time, no runtime fetch, and
+  // resolved once at module scope (not per render - see PENUMBRA_PRESETS).
+  const presets = PENUMBRA_PRESETS;
 
   const matched = findPenumbraPresetByUrl(editingEndpoint, presets);
   const initialStrategy: SelectionStrategy =
@@ -916,10 +922,10 @@ const PenumbraEndpointPanel = ({
   const [autoPicking, setAutoPicking] = useState(false);
   const [autoStatus, setAutoStatus] = useState<string | null>(null);
 
-  // Measure once per panel open, and again whenever the preset list grows
-  // (e.g. after remote registry hydration adds more rpcs). Silently skips
-  // while "other penumbra nodes" is off - the explicit "retest" button is
-  // where the ask-at-the-moment sheet belongs.
+  // Measure once per panel open. Silently skips while "other penumbra
+  // nodes" is off - the explicit "retest" button is where the
+  // ask-at-the-moment sheet belongs. `presets` is the module-level bundled
+  // list (stable identity), so this runs once, not on every render.
   useEffect(() => {
     let cancelled = false;
     void readEgressView().then(async view => {
@@ -948,7 +954,8 @@ const PenumbraEndpointPanel = ({
     return () => {
       cancelled = true;
     };
-  }, [presets]);
+    // presets is the stable module-level bundled list - run once per mount.
+  }, []);
 
   const handleTest = async () => {
     if (!(await requestEgressOptIn('penumbra-servers'))) {
