@@ -217,4 +217,24 @@ describe('local-v3-v4 migration (drop polkadot/kusama)', () => {
     const second = await again.get('enabledNetworks');
     expect(second).toEqual(['zcash']);
   });
+
+  test('sealed (encrypted) lists pass through untouched instead of failing the migration', async () => {
+    const sealed = { encrypted: { nonce: 'bm9uY2U=', cipherText: 'c2VhbGVk' } };
+    await storageArea.set({
+      [VERSION_FIELD]: 3,
+      penumbraWallets: [],
+      knownSites: [],
+      numeraires: [],
+      enabledNetworks: ['zcash', 'polkadot'],
+      contacts: sealed,
+      recentAddresses: sealed,
+      zignerWallets: sealed,
+      networkEndpoints: sealed,
+    });
+
+    await expect(v4ExtStorage.get('recentAddresses')).resolves.toEqual(sealed);
+    expect(await v4ExtStorage.get('contacts')).toEqual(sealed);
+    expect(await v4ExtStorage.get('zignerWallets')).toEqual(sealed);
+    expect(await v4ExtStorage.get('enabledNetworks')).toEqual(['zcash']);
+  });
 });

@@ -7,6 +7,16 @@ type MIGRATION = Migration<FROM.VERSION, FROM.LOCAL, TO.VERSION, TO.LOCAL>;
 const POLKADOT_NETWORKS = new Set(['polkadot', 'kusama']);
 
 /**
+ * Contacts, recent addresses and wallet lists are usually sealed at rest
+ * ({ encrypted } boxes the migration cannot open). Only a plain array is
+ * filtered; anything else is passed through untouched, never mapped.
+ */
+const filterList = <T>(v: unknown, keep: (x: T) => boolean): unknown =>
+  Array.isArray(v) ? (v as T[]).filter(keep) : v;
+const mapList = <T>(v: unknown, f: (x: T) => T): unknown =>
+  Array.isArray(v) ? (v as T[]).map(f) : v;
+
+/**
  * v3 -> v4: drop Polkadot/Kusama/Substrate support.
  *
  * This is a filter, not a vault deletion: a zigner vault that also holds
@@ -34,32 +44,43 @@ export default {
       old.activeNetwork && POLKADOT_NETWORKS.has(old.activeNetwork) ? undefined : old.activeNetwork
     ) as TO.LOCAL['activeNetwork'];
 
-    const enabledNetworks = old.enabledNetworks?.filter(
+    const enabledNetworks = filterList<string>(
+      old.enabledNetworks,
       n => !POLKADOT_NETWORKS.has(n),
     ) as TO.LOCAL['enabledNetworks'];
 
-    const networkEndpoints = old.networkEndpoints
-      ? ({
-          ...old.networkEndpoints,
-          polkadot: undefined,
-          kusama: undefined,
-        } as TO.LOCAL['networkEndpoints'])
-      : old.networkEndpoints;
+    const networkEndpoints =
+      old.networkEndpoints && typeof old.networkEndpoints === 'object'
+        ? ({
+            ...old.networkEndpoints,
+            polkadot: undefined,
+            kusama: undefined,
+          } as TO.LOCAL['networkEndpoints'])
+        : old.networkEndpoints;
 
-    const contacts = old.contacts?.map(c => ({
+    const contacts = mapList<{ addresses?: { network: string }[] }>(old.contacts, c => ({
       ...c,
-      addresses: c.addresses.filter(a => !POLKADOT_NETWORKS.has(a.network)),
+      addresses: filterList<{ network: string }>(
+        c.addresses,
+        a => !POLKADOT_NETWORKS.has(a.network),
+      ) as {
+        network: string;
+      }[],
     })) as TO.LOCAL['contacts'];
 
-    const recentAddresses = old.recentAddresses?.filter(
+    const recentAddresses = filterList<{ network: string }>(
+      old.recentAddresses,
       a => !POLKADOT_NETWORKS.has(a.network),
     ) as TO.LOCAL['recentAddresses'];
 
-    const zignerWallets = old.zignerWallets?.map(w => {
+    const zignerWallets = mapList<{ networks?: Record<string, unknown> }>(old.zignerWallets, w => {
+      if (!w?.networks || typeof w.networks !== 'object') {
+        return w;
+      }
       const { polkadot, ...networks } = w.networks;
       void polkadot;
       return { ...w, networks };
-    });
+    }) as TO.LOCAL['zignerWallets'];
 
     return {
       ...(rest as unknown as TO.LOCAL),
