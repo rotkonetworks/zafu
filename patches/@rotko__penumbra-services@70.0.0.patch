@@ -1,0 +1,18 @@
+diff --git a/dist/offscreen-client.js b/dist/offscreen-client.js
+index a2c26887ffb89da4f222a4b81faa96b8d4a720b6..fda9a67dc341791b101df6f21c3af2348a71e566 100644
+--- a/dist/offscreen-client.js
++++ b/dist/offscreen-client.js
+@@ -26,10 +26,10 @@ const activateOffscreen = async () => {
+ /**
+  * Decrement and close if there is no remaining activity.
+  */
++// zafu: never close. The document also hosts the zcash/penumbra sync workers
++// and keeps the penumbra prover (wasm, rayon pool, proving keys) warm.
+ const releaseOffscreen = async () => {
+-    if (!--active) {
+-        await chrome.offscreen.closeDocument();
+-    }
++    --active;
+ };
+ const sendOffscreenMessage = async (req) => chrome.runtime.sendMessage(req).then(res => {
+     if ('error' in res) {

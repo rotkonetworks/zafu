@@ -496,6 +496,9 @@ let hostProver: ((request: unknown) => Promise<unknown>) | undefined;
 /** called once from the offscreen document's own entry point, so the host
  *  can answer NW_SPAWN before any network's first real spawn happens, and
  *  prove without messaging itself (runtime messages never reach the sender). */
+/** workers this realm hosts; non-zero only in the offscreen document */
+export const hostedWorkerCount = (): number => workers.size;
+
 export const initNetworkWorkerHost = (prove: (request: unknown) => Promise<unknown>): void => {
   hostProver = prove;
   ensureHostListener();

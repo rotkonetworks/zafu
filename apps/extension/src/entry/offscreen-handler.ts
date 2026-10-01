@@ -1,15 +1,19 @@
 // egress guard first: nothing may capture fetch or open a socket before it
 import '../net/egress-install-lite';
-import { ConnectError } from '@connectrpc/connect';
+import { Code, ConnectError } from '@connectrpc/connect';
 import { errorToJson } from '@connectrpc/connect/protocol-connect';
 import {
-  ParallelBuildRequest,
   ParallelBuildResponse,
   isParallelBuildRequest,
   isOffscreenRequest,
 } from '@rotko/penumbra-types/internal-msg/offscreen';
 import { assertProveRequest } from '../shared/prove-guard';
-import { initNetworkWorkerHost } from '../state/keyring/network-worker';
+import { hostedWorkerCount, initNetworkWorkerHost } from '../state/keyring/network-worker';
+import type {
+  ParallelProveRequest,
+  ParallelWorkerFailure,
+  ParallelWorkerRequest,
+} from '../wasm-build-parallel';
 
 // this document is the one long-lived home for the zcash/penumbra sync
 // workers - every popup, settings screen and approval window is a client
@@ -17,7 +21,49 @@ import { initNetworkWorkerHost } from '../state/keyring/network-worker';
 // a private worker of its own.
 initNetworkWorkerHost(proveInBuildWorker);
 
-chrome.runtime.onMessage.addListener((req, _sender, respond) => {
+// The penumbra offscreen client closes this document only when idle, and asks
+// here first: hosted sync workers and zcash proves never pass through it.
+let jobsInFlight = 0;
+let lastJobAt = Date.now();
+const trackJob = async <T>(job: () => Promise<T>): Promise<T> => {
+  jobsInFlight++;
+  lastJobAt = Date.now();
+  try {
+    return await job();
+  } finally {
+    jobsInFlight--;
+    lastJobAt = Date.now();
+  }
+};
+
+const isProveParallel = (
+  req: unknown,
+): req is { type: 'PROVE_PARALLEL'; request: ParallelProveRequest } =>
+  typeof req === 'object' &&
+  req !== null &&
+  'type' in req &&
+  req.type === 'PROVE_PARALLEL' &&
+  'request' in req &&
+  typeof req.request === 'object' &&
+  req.request !== null &&
+  !('authData' in req.request);
+
+chrome.runtime.onMessage.addListener((req: unknown, _sender, respond) => {
+  if (typeof req === 'object' && req !== null && 'type' in req && req.type === 'OFFSCREEN_STATUS') {
+    respond({
+      inFlight: jobsInFlight + (hostedWorkerCount() > 0 ? 1 : 0),
+      idleMs: Date.now() - lastJobAt,
+    });
+    return false;
+  }
+  if (isProveParallel(req)) {
+    void handleBuildRequest(
+      () => trackJob(() => runParallelJob({ kind: 'prove', request: req.request })),
+      req.type,
+      respond,
+    );
+    return true;
+  }
   if (!isOffscreenRequest(req)) {
     return false;
   }
@@ -25,8 +71,11 @@ chrome.runtime.onMessage.addListener((req, _sender, respond) => {
 
   // Handle parallel build (rayon-based, single WASM call)
   if (type === 'BUILD_PARALLEL' && isParallelBuildRequest(request)) {
-    console.log('[Offscreen] Received BUILD_PARALLEL request');
-    void handleBuildRequest(() => runParallelBuild(request), type, respond);
+    void handleBuildRequest(
+      () => trackJob(() => runParallelJob<ParallelBuildResponse>({ kind: 'build', request })),
+      type,
+      respond,
+    );
     return true;
   }
 
@@ -101,12 +150,12 @@ const getOrCreateParallelWorker = (): Worker => {
  * - One reply per request. The wire shape carries no request id, so a second
  *   build in flight (the wallet's send plus the 30s swap-claim sweep) could have
  *   its reply taken as the other request's answer - and two rayon builds would
- *   interleave inside one WASM instance. `runParallelBuild` serializes them.
+ *   interleave inside one WASM instance. `runParallelJob` serializes them.
  */
 const PARALLEL_BUILD_TIMEOUT_MS = 5 * 60_000;
 
-const spawnParallelBuildWorker = (req: ParallelBuildRequest) => {
-  const { promise, resolve, reject } = Promise.withResolvers<ParallelBuildResponse>();
+const spawnParallelWorker = <T>(job: ParallelWorkerRequest) => {
+  const { promise, resolve, reject } = Promise.withResolvers<T>();
 
   const worker = getOrCreateParallelWorker();
   let settled = false;
@@ -125,20 +174,16 @@ const spawnParallelBuildWorker = (req: ParallelBuildRequest) => {
 
   const onWorkerMessage = (e: MessageEvent) => {
     const reply: unknown = e.data;
-    // A refused build replies `{ __buildError: { message } }`; a successful one
-    // replies with the bare transaction JSON (wasm-build-parallel.ts).
+    // A refused job replies `{ __buildError }`; a successful one replies with
+    // the bare JSON result (wasm-build-parallel.ts).
     if (typeof reply === 'object' && reply !== null && '__buildError' in reply) {
-      const failure: unknown = reply.__buildError;
-      const message =
-        typeof failure === 'object' &&
-        failure !== null &&
-        'message' in failure &&
-        typeof failure.message === 'string'
-          ? failure.message
-          : 'parallel build failed';
-      settle(() => reject(new Error(message)));
+      const { message, unimplemented } = (reply as ParallelWorkerFailure).__buildError;
+      // Unimplemented tells the services client to fall back to BUILD_PARALLEL
+      settle(() =>
+        reject(unimplemented ? new ConnectError(message, Code.Unimplemented) : new Error(message)),
+      );
     } else {
-      settle(() => resolve(reply as ParallelBuildResponse));
+      settle(() => resolve(reply as T));
     }
   };
 
@@ -172,19 +217,18 @@ const spawnParallelBuildWorker = (req: ParallelBuildRequest) => {
     settle(() => reject(new Error('parallel build timed out')));
   }, PARALLEL_BUILD_TIMEOUT_MS);
 
-  // Send data to web worker
-  worker.postMessage(req);
+  worker.postMessage(job);
 
   return promise;
 };
 
 /**
- * Serialize parallel builds: one at a time, in arrival order. A failed build
+ * Serialize parallel builds and proves: one at a time, in arrival order. A failed build
  * must not poison the queue for the next one.
  */
 let parallelBuildQueue: Promise<unknown> = Promise.resolve();
-const runParallelBuild = (req: ParallelBuildRequest): Promise<ParallelBuildResponse> => {
-  const run = parallelBuildQueue.then(() => spawnParallelBuildWorker(req));
+const runParallelJob = <T>(job: ParallelWorkerRequest): Promise<T> => {
+  const run = parallelBuildQueue.then(() => spawnParallelWorker<T>(job));
   parallelBuildQueue = run.catch(() => undefined);
   return run;
 };
@@ -206,7 +250,11 @@ const getOrCreateZcashWorker = (): Worker => {
 };
 
 /** run one prove request from this document's zcash worker on the build worker */
-async function proveInBuildWorker(raw: unknown): Promise<unknown> {
+function proveInBuildWorker(raw: unknown): Promise<unknown> {
+  return trackJob(() => proveZcash(raw));
+}
+
+async function proveZcash(raw: unknown): Promise<unknown> {
   const req = assertProveRequest(raw);
   const { promise, resolve, reject } = Promise.withResolvers<unknown>();
   const worker = getOrCreateZcashWorker();
