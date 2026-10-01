@@ -451,12 +451,21 @@ export const ZcashContent = ({
         {reading || balanceView === 'error' ? null : empty ? (
           <section className='flex flex-1 flex-col items-center justify-center gap-3.5 border border-dashed border-surface-border py-10'>
             <span className='font-display text-xl text-fg-high'>no zec yet</span>
-            <Button
-              className='h-10 px-[18px] text-[13px]'
-              onClick={() => navigate(PopupPath.RECEIVE)}
-            >
-              receive zec
-            </Button>
+            <div className='flex gap-2'>
+              <Button
+                className='h-10 px-[18px] text-[13px]'
+                onClick={() => navigate(PopupPath.RECEIVE)}
+              >
+                receive zec
+              </Button>
+              <Button
+                variant='secondary'
+                className='h-10 px-[18px] text-[13px]'
+                onClick={() => navigate(PopupPath.SWAP)}
+              >
+                swap into zec
+              </Button>
+            </div>
           </section>
         ) : (
           <section className='flex flex-col gap-2'>

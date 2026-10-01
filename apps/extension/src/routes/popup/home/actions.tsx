@@ -7,7 +7,8 @@ import { PopupPath } from '../paths';
 /**
  * receive / swap / send under the balance. A viewing key can never sign, so
  * it gets receive and a quiet "watching" slot instead of dead buttons; an
- * empty wallet keeps receive and greys the rest.
+ * empty wallet keeps receive and swap (swapping into zec needs none) and
+ * greys send.
  */
 export const HomeActions = ({ spendable = true }: { spendable?: boolean }) => {
   const navigate = useNavigate();
@@ -16,7 +17,7 @@ export const HomeActions = ({ spendable = true }: { spendable?: boolean }) => {
   );
   const receive = (
     <Button variant='secondary' className='flex-1' onClick={() => navigate(PopupPath.RECEIVE)}>
-      {spendable && <span className='i-lucide-arrow-down size-[15px]' />}
+      <span className='i-lucide-arrow-down size-[15px]' />
       receive
     </Button>
   );
@@ -34,13 +35,8 @@ export const HomeActions = ({ spendable = true }: { spendable?: boolean }) => {
   return (
     <div className='flex gap-2'>
       {receive}
-      <Button
-        variant='secondary'
-        className='flex-1'
-        disabled={!spendable}
-        onClick={() => navigate(PopupPath.SWAP)}
-      >
-        {spendable && <span className='i-lucide-arrow-left-right size-[15px]' />}
+      <Button variant='secondary' className='flex-1' onClick={() => navigate(PopupPath.SWAP)}>
+        <span className='i-lucide-arrow-left-right size-[15px]' />
         swap
       </Button>
       <Button
