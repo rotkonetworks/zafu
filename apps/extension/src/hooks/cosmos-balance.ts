@@ -57,6 +57,7 @@ export const useChainCheck = (chainId: CosmosChainId) => {
   const keyId = queryKey?.[2];
   const { getMnemonic } = useStore(keyRingSelector);
   const toggleNetwork = useStore(s => s.keyRing.toggleNetwork);
+  const setPrivacy = useStore(s => s.privacy.setSetting);
   const enabled = useStore(s => (s.keyRing.enabledNetworks as string[]).includes(chainId));
   const queryClient = useQueryClient();
   const { data: check } = useQuery({
@@ -71,7 +72,8 @@ export const useChainCheck = (chainId: CosmosChainId) => {
     mutationFn: () => runCheck(keyId!, chainId, () => getMnemonic(keyId!)),
     onSuccess: next => queryClient.setQueryData(queryKey!, next),
   });
-  const checking = useIsMutating({ mutationKey: queryKey }) > 0;
+  // an undefined key would match every mutation in the app
+  const checking = useIsMutating({ mutationKey: queryKey ?? ['chainCheck', chainId, null] }) > 0;
   // a phrase or storage failure leaves the last result standing; nodes that
   // don't answer are counted inside the check itself
   const ask = () => (keyId ? run.mutateAsync().then(noop, noop) : Promise.resolve());
@@ -81,6 +83,8 @@ export const useChainCheck = (chainId: CosmosChainId) => {
     /** the chain's nodes are allowed only while it is on: turn it on, then check */
     turnOn: async () => {
       await toggleNetwork(chainId as NetworkType);
+      // the privacy summary lists cosmos balances as on from here
+      await setPrivacy('enableTransparentBalances', true);
       await refreshEgress();
       await ask();
     },
