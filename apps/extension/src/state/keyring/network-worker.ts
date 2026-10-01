@@ -405,9 +405,16 @@ const ensureClientListener = (): void => {
 // NW_TERMINATE from every client. Installed once, only inside the offscreen
 // document.
 let hostListenerInstalled = false;
+/** the host's own prover: the zcash worker and the build worker share this document */
+let hostProver: ((request: unknown) => Promise<unknown>) | undefined;
+
 /** called once from the offscreen document's own entry point, so the host
- *  can answer NW_SPAWN before any network's first real spawn happens. */
-export const initNetworkWorkerHost = (): void => ensureHostListener();
+ *  can answer NW_SPAWN before any network's first real spawn happens, and
+ *  prove without messaging itself (runtime messages never reach the sender). */
+export const initNetworkWorkerHost = (prove: (request: unknown) => Promise<unknown>): void => {
+  hostProver = prove;
+  ensureHostListener();
+};
 
 const ensureHostListener = (): void => {
   if (hostListenerInstalled || !isOffscreenHost()) {
@@ -1468,51 +1475,17 @@ export const isNetworkWorkerRunning = (network: NetworkType): boolean => {
 };
 
 /**
- * relay a prove request from zcash-worker (Web Worker, no chrome APIs)
- * through to the service worker → offscreen document for parallel proving.
+ * answer a prove request from the zcash worker with the host's own prover.
+ * Both workers live in the offscreen document, so the request (UFVK and
+ * public data only, checked by prove-guard on each side) never touches the
+ * extension message bus.
  */
 async function relayProveRequest(worker: Worker, id: string, request: unknown): Promise<void> {
   try {
-    // 1. ensure offscreen document exists. The MV3 service worker may be asleep
-    // or have just been KILLED (e.g. by a long witness rebuild that outran its
-    // ~30s idle timeout), so the first ensure can come back empty or reject
-    // ("Could not establish connection") while the SW wakes and re-registers
-    // its listeners + creates the offscreen doc. Retry a few times before
-    // giving up, so a slow pre-proving step can't take down the whole send.
-    let ensureResult: { ok?: boolean; error?: string } | undefined;
-    for (let attempt = 0; attempt < 6; attempt++) {
-      try {
-        ensureResult = await chrome.runtime.sendMessage({ type: 'ZCASH_ENSURE_OFFSCREEN' });
-      } catch {
-        // SW waking up; the connection error is transient - retry.
-        ensureResult = undefined;
-      }
-      if (ensureResult?.ok) {
-        break;
-      }
-      await new Promise(resolve => setTimeout(resolve, 500));
+    if (!hostProver) {
+      throw new Error('the prover is not running in this document');
     }
-    if (!ensureResult?.ok) {
-      worker.postMessage({
-        type: 'prove-response',
-        id,
-        error: `failed to activate offscreen: ${ensureResult?.error ?? 'service worker unavailable after retries'}`,
-      });
-      return;
-    }
-    // 2. send build request to offscreen handler
-    const response = await chrome.runtime.sendMessage({ type: 'ZCASH_BUILD', request });
-    if (response?.error) {
-      worker.postMessage({
-        type: 'prove-response',
-        id,
-        error: response.error.message ?? JSON.stringify(response.error),
-      });
-    } else if (response?.data === undefined) {
-      worker.postMessage({ type: 'prove-response', id, error: 'offscreen returned no data' });
-    } else {
-      worker.postMessage({ type: 'prove-response', id, data: response.data });
-    }
+    worker.postMessage({ type: 'prove-response', id, data: await hostProver(request) });
   } catch (e) {
     worker.postMessage({
       type: 'prove-response',

@@ -73,7 +73,7 @@ describe('seed boundary', () => {
     );
   });
 
-  test('no message to the worker or the service worker carries a phrase for zcash spends or sync', () => {
+  test('no message to the worker carries a phrase for zcash spends or sync', () => {
     for (const type of ['send-tx', 'send-tx-multi', 'send-turnstile-migration', 'shield', 'sync']) {
       const sent = calls(NETWORK, 'callWorker(').filter(c => c.includes(`'${type}'`));
       expect(sent.length, type).toBeGreaterThan(0);
@@ -85,8 +85,10 @@ describe('seed boundary', () => {
         expect(sent[0], type).toMatch(/vault: (vault && \()?await sealFor\(network, vault\)/);
       }
     }
-    // the service-worker relay forwards the prove request and nothing else
-    expect(NETWORK).toMatch(/chrome\.runtime\.sendMessage\(\{ type: 'ZCASH_BUILD', request \}\)/);
+    // prove requests stay inside the offscreen document: never on the message bus
+    expect(NETWORK).not.toMatch(/ZCASH_BUILD/);
+    expect(OFFSCREEN).not.toMatch(/ZCASH_BUILD/);
+    expect(NETWORK).toMatch(/data: await hostProver\(request\)/);
   });
 
   test('the worker reads a vault, never a mnemonic, from its spend payloads', () => {
