@@ -60,12 +60,7 @@ export const EgressAskSheet = () => {
           </p>
           <p className='text-xs text-fg-dim'>{NET_PURPOSE_LABEL[pending.view.purpose]}</p>
           <div className='flex gap-2 pt-1'>
-            <Button
-              variant='secondary'
-              size='md'
-              className='flex-1'
-              onClick={() => respond(false)}
-            >
+            <Button variant='secondary' size='md' className='flex-1' onClick={() => respond(false)}>
               not now
             </Button>
             <Button variant='primary' size='md' className='flex-1' onClick={() => respond(true)}>

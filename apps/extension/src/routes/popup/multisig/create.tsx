@@ -41,6 +41,7 @@ import { hexToBytes } from '@repo/wallet/networks';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
+import { requestEgressOptIn } from '../../../net/egress-opt-in';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
 import { useBackNav } from '../../../utils/navigate';
@@ -119,6 +120,10 @@ const MultisigCreateZafu = () => {
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const handleCreate = async () => {
+    if (!(await requestEgressOptIn('multisig-relay'))) {
+      setError('not now - allow the multisig relay to create a room');
+      return;
+    }
     abortRef.current = new AbortController();
     const abortController = abortRef.current;
     const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
@@ -596,6 +601,10 @@ const MultisigCreateZigner = () => {
   });
 
   const handleStart = async () => {
+    if (!(await requestEgressOptIn('multisig-relay'))) {
+      setError('not now - allow the multisig relay to create a room');
+      return;
+    }
     try {
       const url = relayUrl || DEFAULT_RELAY_URL;
       const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;

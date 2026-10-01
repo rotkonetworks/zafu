@@ -47,6 +47,7 @@ import {
   probeAllPenumbra,
   peerMedianTipPenumbra,
 } from '../../../state/keyring/penumbra-endpoint-latency';
+import { readEgressView, requestEgressOptIn } from '../../../net/egress-opt-in';
 import {
   pickEndpoint,
   DEFAULT_STRATEGY,
@@ -476,11 +477,16 @@ const ZcashEndpointPanel = ({
   const [autoStatus, setAutoStatus] = useState<string | null>(null);
 
   // Measure once per panel open — ~10 tiny requests; cheap enough that
-  // discovery is automatic. The explicit "retest" button below just
-  // re-runs this on demand.
+  // discovery is automatic once the user has allowed "other zcash servers".
+  // On a first open this silently skips rather than asking: the explicit
+  // "retest" button is where the ask-at-the-moment sheet belongs.
   useEffect(() => {
     let cancelled = false;
-    void measurePresetLatencies().then(m => {
+    void readEgressView().then(async view => {
+      if (cancelled || !view.find(d => d.id === 'zcash-servers')?.on) {
+        return;
+      }
+      const m = await measurePresetLatencies();
       if (!cancelled) {
         setLatencies(m);
       }
@@ -491,6 +497,9 @@ const ZcashEndpointPanel = ({
   }, []);
 
   const handleTest = async () => {
+    if (!(await requestEgressOptIn('zcash-servers'))) {
+      return;
+    }
     setTesting(true);
     try {
       setLatencies(await measurePresetLatencies());
@@ -513,6 +522,10 @@ const ZcashEndpointPanel = ({
     const effectiveStrategy = overrideStrategy ?? selectionStrategy;
     if (isManualStrategy(effectiveStrategy)) {
       setAutoStatus('manual mode - keeping your selection');
+      return;
+    }
+    if (!(await requestEgressOptIn('zcash-servers'))) {
+      setAutoStatus('not now - zafu kept your current endpoint');
       return;
     }
     setAutoPicking(true);
@@ -919,10 +932,16 @@ const PenumbraEndpointPanel = ({
   const [autoStatus, setAutoStatus] = useState<string | null>(null);
 
   // Measure once per panel open, and again whenever the preset list grows
-  // (e.g. after remote registry hydration adds more rpcs).
+  // (e.g. after remote registry hydration adds more rpcs). Silently skips
+  // while "other penumbra nodes" is off - the explicit "retest" button is
+  // where the ask-at-the-moment sheet belongs.
   useEffect(() => {
     let cancelled = false;
-    void probeAllPenumbra(presets).then(results => {
+    void readEgressView().then(async view => {
+      if (cancelled || !view.find(d => d.id === 'penumbra-servers')?.on) {
+        return;
+      }
+      const results = await probeAllPenumbra(presets);
       if (cancelled) {
         return;
       }
@@ -947,6 +966,9 @@ const PenumbraEndpointPanel = ({
   }, [presets]);
 
   const handleTest = async () => {
+    if (!(await requestEgressOptIn('penumbra-servers'))) {
+      return;
+    }
     setTesting(true);
     try {
       const results = await probeAllPenumbra(presets);
@@ -972,6 +994,10 @@ const PenumbraEndpointPanel = ({
   const handleAutoPick = async () => {
     if (isManualStrategy(selectionStrategy)) {
       setAutoStatus('strategy is manual — keeping current selection');
+      return;
+    }
+    if (!(await requestEgressOptIn('penumbra-servers'))) {
+      setAutoStatus('not now - zafu kept your current endpoint');
       return;
     }
     setAutoPicking(true);

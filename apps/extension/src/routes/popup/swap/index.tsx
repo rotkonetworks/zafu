@@ -19,6 +19,8 @@ import {
   selectGetMnemonic,
 } from '../../../state/keyring';
 import { contactsSelector, type ContactNetwork } from '../../../state/contacts';
+import { isEgressBlocked } from '../../../net/egress';
+import { EgressBlockedStatus } from '../../../shared/components/egress-blocked-status';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { Value, Metadata } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
@@ -182,6 +184,9 @@ const ZcashCrosschainSwap = () => {
   const [quote, setQuote] = useState<SwapQuoteResponse | undefined>();
   const [swapStatus, setSwapStatus] = useState<SwapStatus | null>(null);
   const [error, setError] = useState<string | undefined>();
+  // kept alongside the message so a blocked destination can offer an inline
+  // allow instead of a generic "swap failed" (see EgressBlockedStatus below)
+  const [errorCause, setErrorCause] = useState<unknown>();
   const [balanceZec, setBalanceZec] = useState<string | undefined>();
   const getMnemonic = useStore(selectGetMnemonic);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
@@ -348,6 +353,7 @@ const ZcashCrosschainSwap = () => {
       setQuote(resp);
       setStep('review');
     } catch (err) {
+      setErrorCause(err);
       setError(err instanceof Error ? err.message : 'failed to get quote');
       setStep('error');
     }
@@ -441,6 +447,7 @@ const ZcashCrosschainSwap = () => {
       setStep('sign');
     } catch (err) {
       console.error('[swap] send failed', err);
+      setErrorCause(err);
       setError(err instanceof Error ? err.message : 'failed to send deposit');
       setStep('error');
     }
@@ -992,10 +999,14 @@ const ZcashCrosschainSwap = () => {
 
       {step === 'error' && (
         <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
-            <p className='text-sm text-red-400'>swap failed</p>
-            <p className='text-xs text-fg-muted mt-1'>{error}</p>
-          </div>
+          {isEgressBlocked(errorCause) ? (
+            <EgressBlockedStatus error={errorCause} onAllowed={() => setStep('input')} />
+          ) : (
+            <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
+              <p className='text-sm text-red-400'>swap failed</p>
+              <p className='text-xs text-fg-muted mt-1'>{error}</p>
+            </div>
+          )}
           <button
             onClick={handleReset}
             className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground transition-colors hover:bg-primary/90'

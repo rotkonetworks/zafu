@@ -38,6 +38,7 @@ import {
 } from '../../../state/keyring/relay-identity';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
+import { requestEgressOptIn } from '../../../net/egress-opt-in';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
 import { useBackNav } from '../../../utils/navigate';
@@ -107,6 +108,10 @@ const MultisigJoinZafu = () => {
     const room = (roomArg ?? roomCode).trim();
     const keys = peersArg ?? peerKeys;
     if (!room) {
+      return;
+    }
+    if (!(await requestEgressOptIn('multisig-relay'))) {
+      setError('not now - allow the multisig relay to join a room');
       return;
     }
 
@@ -500,6 +505,10 @@ const MultisigJoinZigner = () => {
     const room = (roomArg ?? roomCode).trim();
     const keys = peersArg ?? peerKeys;
     if (!room) {
+      return;
+    }
+    if (!(await requestEgressOptIn('multisig-relay'))) {
+      setError('not now - allow the multisig relay to join a room');
       return;
     }
     try {

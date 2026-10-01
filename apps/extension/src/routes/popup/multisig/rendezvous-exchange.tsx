@@ -48,6 +48,10 @@ export function useRendezvousAvailable(relayUrl: string): boolean | null {
   useEffect(() => {
     let cancelled = false;
     setAvailable(null);
+    // a plain probe, not a feature request: while the relay is off this
+    // resolves false (egress-blocked) and the screen settles into the
+    // manual flow. The actual ask happens at "create"/"join", where the
+    // user's intent is explicit.
     void hasRendezvous(relayUrl).then(ok => {
       if (!cancelled) {
         setAvailable(ok);
