@@ -1,6 +1,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export const __wbg_frostrelaycipher_free: (a: number, b: number) => void;
+export const __wbg_spendkeys_free: (a: number, b: number) => void;
 export const __wbg_walletkeys_free: (a: number, b: number) => void;
 export const __wbg_watchonlywallet_free: (a: number, b: number) => void;
 export const address_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
@@ -9,12 +10,6 @@ export const apply_signature_contributions: (a: number, b: number, c: number, d:
 export const build_delegation_pczt: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number) => [number, number, number, number];
 export const build_ironwood_send_pczt: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number, s: number) => [number, number, number];
 export const build_merkle_paths: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
-export const build_shielding_transaction: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number) => [number, number, number, number];
-export const build_shielding_transaction_auto: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number, n: number) => [number, number, number, number];
-export const build_shielding_transaction_ironwood: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number) => [number, number, number, number];
-export const build_signed_ironwood_send: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number) => [number, number, number, number];
-export const build_signed_spend_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number, number, number];
-export const build_signed_turnstile_migration: (a: number, b: number, c: number, d: number, e: bigint, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number, number, number];
 export const build_turnstile_migration_pczt: (a: number, b: number, c: number, d: number, e: bigint, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number, number];
 export const build_unsigned_pczt: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number, o: number) => [number, number, number];
 export const build_unsigned_shielding_transaction: (a: number, b: number, c: number, d: number, e: bigint, f: bigint, g: number, h: number, i: number, j: number) => [number, number, number, number];
@@ -31,7 +26,6 @@ export const complete_shielding_transaction: (a: number, b: number, c: number, d
 export const complete_transaction: (a: number, b: number, c: any, d: any) => [number, number, number, number];
 export const compute_txid: (a: number, b: number) => [number, number, number, number];
 export const create_sign_request: (a: number, b: number, c: number, d: any, e: number, f: number) => [number, number, number, number];
-export const derive_transparent_privkey: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const describe_pczt_for_ledger: (a: number, b: number, c: number) => [number, number, number, number];
 export const encode_notes_bundle: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
 export const estimate_compact_savings: (a: number, b: number) => [number, number, number, number];
@@ -70,6 +64,12 @@ export const pczt_has_ironwood_actions: (a: number, b: number) => [number, numbe
 export const pir_fetch_imt_proofs: (a: number, b: number, c: number, d: number, e: any) => any;
 export const redact_pczt_compact: (a: number, b: number) => [number, number, number, number];
 export const shielding_pool_for_height: (a: number, b: number) => [number, number];
+export const spendkeys_new: (a: number, b: number, c: number, d: number) => [number, number, number];
+export const spendkeys_receiving_address: (a: number) => [number, number, number, number];
+export const spendkeys_sign_pczt: (a: number, b: number, c: number) => [number, number, number, number];
+export const spendkeys_sign_shielding: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+export const spendkeys_transparent_pubkey: (a: number, b: number) => [number, number, number, number];
+export const spendkeys_ufvk: (a: number) => [number, number, number, number];
 export const transparent_address_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
 export const transparent_pubkey_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
 export const tree_root_hex: (a: number, b: number) => [number, number, number, number];

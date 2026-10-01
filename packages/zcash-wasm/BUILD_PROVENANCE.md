@@ -94,6 +94,42 @@ Reproduce by checking out the zcli rev below and running the commands.
 Verify: rebuild from the rev, sha256sum the outputs,
 diff against the values above. A mismatch means the vendored blob is stale.
 
+## 2026-10-01 rebuild (2) - hot sends signed in the worker, proven seed-free
+
+- source repo: zcli, branch `feat/seed-sign-in-worker` (from
+  `integ/zafu-wasm-2026-10` f9eb264), rev `e668a00` (`1f18e24` on top adds
+  tests only; `src/` is identical).
+- new: the `SpendKeys` class (`new SpendKeys(phrase, account, mainnet)`,
+  `ufvk()`, `receiving_address()`, `sign_pczt(pczt_hex)`,
+  `transparent_pubkey(index)`, `sign_shielding(index, unsigned_tx_hex,
+sighashes_json)`, `free()`). The zcash worker builds it from the vault it
+  unsealed; the offscreen prover only ever gets the UFVK.
+- removed (they took the phrase or a transparent private key, and rode the
+  prover relay): `build_signed_spend_transaction`, `build_signed_ironwood_send`,
+  `build_signed_turnstile_migration`, `build_shielding_transaction`,
+  `build_shielding_transaction_ironwood`, `build_shielding_transaction_auto`,
+  `derive_transparent_privkey`. Hot sends now use the cold builders
+  (`build_ironwood_send_pczt`, `build_turnstile_migration_pczt`,
+  `build_unsigned_pczt`, `build_unsigned_shielding(_ironwood)`) and sign in
+  the worker.
+- `cargo test -p zafu-wasm --lib --tests --release`: all green, including the
+  new `tests/hot_sign_split.rs`.
+- toolchain: nightly `rustc 1.95.0-nightly (6a979b3e3 2026-02-26)`,
+  wasm-bindgen CLI 0.2.126, wasm-opt (binaryen) version 130; recipe as in the
+  parallel section above (`cargo wasm-parallel`, `wasm-bindgen --target web`,
+  `wasm-opt -Oz --enable-threads --enable-bulk-memory --enable-simd
+--enable-mutable-globals --enable-nontrapping-float-to-int`).
+- parallel variant only, copied to both `packages/zcash-wasm/` and
+  `apps/extension/public/zafu-wasm/` (glue, `.d.ts`, `_bg.wasm`,
+  `_bg.wasm.d.ts`). The rayon snippet hash is unchanged
+  (`wasm-bindgen-rayon-38edf6e439f6d70d`), so the patched `workerHelpers.js`
+  (`wbgRayonBase` defined and used) was kept as is.
+- size: pre `wasm-opt` 21,911,695 bytes; post `-Oz` 9,872,934 bytes.
+- sha256(parallel zafu_wasm_bg.wasm) =
+  5d91e1ff7f1e5332c831597b31964fe2e44d970038bdac129c360b4db9a0b18d
+- shared imported memory confirmed post-bindgen:
+  `(memory $mimport$0 55 32768 shared)`.
+
 ## 2026-10-01 rebuild - explicit PCZT expiry + inspection fields + per-account WalletKeys
 
 - source repo: zcli, integration branch `integ/zafu-wasm-2026-10`, rev

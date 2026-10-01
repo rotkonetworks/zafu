@@ -14,6 +14,7 @@
 
 import { OverlayPortal } from '../../../components/overlay-portal';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { VaultUnlock } from '../../../state/keyring/types';
 import { Button } from '@repo/ui/components/ui/button';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { StepList } from '@repo/ui/components/ui/step-list';
@@ -158,18 +159,16 @@ interface IronwoodMigrateProps {
   ufvk?: string;
   orchardZat: bigint;
   /**
-   * Hot (self-custody / mnemonic) wallet: the wasm signs the V6 tx in-worker
-   * and broadcasts directly - no zigner QR round trip. When true, `getMnemonic`
-   * MUST be provided.
+   * Hot (self-custody / mnemonic) wallet: the zcash worker signs the V6 tx
+   * and broadcasts directly - no zigner QR round trip. When true,
+   * `getVaultUnlock` MUST be provided.
    */
   isHotWallet?: boolean;
   /**
-   * Fetch the decrypted seed phrase (behind the password gate) for the hot
-   * path. Returns null if the user cancels auth. Only called for hot wallets,
-   * only at build time; the returned seed is handed straight to the worker and
-   * never retained in component state.
+   * The sealed vault (behind the password gate) for the hot path; the zcash
+   * worker opens it, never this page. Returns null if the user cancels auth.
    */
-  getMnemonic?: () => Promise<string | null>;
+  getVaultUnlock?: () => Promise<VaultUnlock | null>;
 }
 
 /** Full-screen turnstile migration flow, reusing the send PCZT UI machine. */
@@ -183,7 +182,7 @@ export function IronwoodMigrate({
   ufvk,
   orchardZat,
   isHotWallet,
-  getMnemonic,
+  getVaultUnlock,
 }: IronwoodMigrateProps) {
   const [step, setStep] = useState<MigrateStep>('review');
   const [error, setError] = useState<string | null>(null);
@@ -217,24 +216,24 @@ export function IronwoodMigrate({
     // broadcast, so we stay on 'building' (which shows live worker progress)
     // and jump straight to 'complete' - no 'sign'/'scan' zigner steps.
     if (isHotWallet) {
-      if (!getMnemonic) {
+      if (!getVaultUnlock) {
         setError('hot-wallet signing unavailable (missing key access)');
         setStep('error');
         return;
       }
       setError(null);
       setProgressSteps([]);
-      // pull the seed behind the password gate BEFORE showing the building
-      // screen; a cancelled/failed unlock returns to review without building.
-      let seed: string | null;
+      // unlock behind the password gate BEFORE showing the building screen; a
+      // cancelled/failed unlock returns to review without building.
+      let vault: VaultUnlock | null;
       try {
-        seed = await getMnemonic();
+        vault = await getVaultUnlock();
       } catch {
         setError('could not unlock wallet');
         setStep('error');
         return;
       }
-      if (!seed) {
+      if (!vault) {
         // user cancelled the password prompt
         setStep('review');
         return;
@@ -250,7 +249,7 @@ export function IronwoodMigrate({
           mainnet,
           ufvk,
           backend,
-          seed,
+          vault,
         );
         // hot path resolves to { txid, fee } (tx already broadcast in-worker)
         if (!('txid' in result)) {
@@ -297,7 +296,7 @@ export function IronwoodMigrate({
       setError(err instanceof Error ? err.message : 'failed to build migration transaction');
       setStep('error');
     }
-  }, [isHotWallet, getMnemonic, ufvk, walletId, serverUrl, accountIndex, mainnet, backend]);
+  }, [isHotWallet, getVaultUnlock, ufvk, walletId, serverUrl, accountIndex, mainnet, backend]);
 
   const handleSignedScanned = useCallback(
     async (envelopeBytes: Uint8Array) => {

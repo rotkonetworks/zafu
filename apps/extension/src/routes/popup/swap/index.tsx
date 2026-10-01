@@ -16,7 +16,7 @@ import {
   selectActiveNetwork,
   selectPenumbraAccount,
   selectEffectiveKeyInfo,
-  selectGetMnemonic,
+  selectGetVaultUnlock,
 } from '../../../state/keyring';
 import { contactsSelector, type ContactNetwork } from '../../../state/contacts';
 import { isEgressBlocked } from '../../../net/egress';
@@ -188,7 +188,7 @@ const ZcashCrosschainSwap = () => {
   // allow instead of a generic "swap failed" (see EgressBlockedStatus below)
   const [errorCause, setErrorCause] = useState<unknown>();
   const [balanceZec, setBalanceZec] = useState<string | undefined>();
-  const getMnemonic = useStore(selectGetMnemonic);
+  const getVaultUnlock = useStore(selectGetVaultUnlock);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const { requestAuth, PasswordModal } = usePasswordGate();
   const [signRequestQr, setSignRequestQr] = useState<string | null>(null);
@@ -380,7 +380,7 @@ const ZcashCrosschainSwap = () => {
 
         const walletId = selectedKeyInfo.id;
         const amountZat = toBaseUnits(amountIn, 8);
-        const mnemonic = await getMnemonic(walletId);
+        const vault = await getVaultUnlock(walletId);
 
         const result = await buildSendTxInWorker(
           'zcash',
@@ -391,7 +391,7 @@ const ZcashCrosschainSwap = () => {
           '',
           0,
           true,
-          mnemonic,
+          vault,
         );
 
         if (!('txid' in result)) {
@@ -451,7 +451,7 @@ const ZcashCrosschainSwap = () => {
       setError(err instanceof Error ? err.message : 'failed to send deposit');
       setStep('error');
     }
-  }, [quote, selectedKeyInfo, amountIn, getMnemonic, zidecarUrl, isFromZec, requestAuth]);
+  }, [quote, selectedKeyInfo, amountIn, getVaultUnlock, zidecarUrl, isFromZec, requestAuth]);
 
   const handleSignatureScanned = useCallback(
     async (data: string) => {

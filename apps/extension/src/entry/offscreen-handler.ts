@@ -8,6 +8,7 @@ import {
   isParallelBuildRequest,
   isOffscreenRequest,
 } from '@rotko/penumbra-types/internal-msg/offscreen';
+import { assertProveRequest } from '../shared/prove-guard';
 import { initNetworkWorkerHost } from '../state/keyring/network-worker';
 
 // this document is the one long-lived home for the zcash/penumbra sync
@@ -210,16 +211,12 @@ const getOrCreateZcashWorker = (): Worker => {
   return zcashWorker;
 };
 
-interface ZcashBuildRequest {
-  fn: string;
-  args: unknown[];
-}
-
 async function handleZcashBuild(
-  req: ZcashBuildRequest,
+  raw: unknown,
   respond: (response: { type: string; data?: unknown; error?: unknown }) => void,
 ): Promise<void> {
   try {
+    const req = assertProveRequest(raw);
     const { promise, resolve, reject } = Promise.withResolvers<unknown>();
     const worker = getOrCreateZcashWorker();
 

@@ -25,7 +25,7 @@
  * host, many clients, keeps exactly one zcash/penumbra worker alive.
  */
 
-import type { NetworkType } from './types';
+import type { NetworkType, VaultUnlock } from './types';
 
 /** true only inside the offscreen document - the one place that owns real Workers */
 const isOffscreenHost = (): boolean =>
@@ -630,7 +630,7 @@ export const deriveAddressInWorker = async (
 export const startSyncInWorker = async (
   network: NetworkType,
   walletId: string,
-  mnemonic: string,
+  vault: VaultUnlock,
   serverUrl: string,
   startHeight?: number,
   backend: 'zidecar' | 'lightwalletd' = 'zidecar',
@@ -645,7 +645,7 @@ export const startSyncInWorker = async (
   return callWorker(
     network,
     'sync',
-    { mnemonic, serverUrl, startHeight, backend, mempoolWatch: effectiveMempoolWatch },
+    { vault, serverUrl, startHeight, backend, mempoolWatch: effectiveMempoolWatch },
     walletId,
   );
 };
@@ -669,7 +669,7 @@ export const startWatchOnlySyncInWorker = async (
   return callWorker(
     network,
     'sync',
-    { mnemonic: '', serverUrl, startHeight, ufvk, backend, mempoolWatch: effectiveMempoolWatch },
+    { serverUrl, startHeight, ufvk, backend, mempoolWatch: effectiveMempoolWatch },
     walletId,
   );
 };
@@ -1035,12 +1035,12 @@ export interface ShieldResult {
 }
 
 /**
- * shield transparent funds to orchard (runs in worker with halo 2 proving)
+ * shield transparent funds (the worker opens the vault, proves offscreen, signs itself)
  */
 export const shieldInWorker = async (
   network: NetworkType,
   walletId: string,
-  mnemonic: string,
+  vault: VaultUnlock,
   serverUrl: string,
   tAddresses: string[],
   mainnet: boolean,
@@ -1049,7 +1049,7 @@ export const shieldInWorker = async (
   return callWorker(
     network,
     'shield',
-    { mnemonic, serverUrl, tAddresses, mainnet, addressIndexMap },
+    { vault, serverUrl, tAddresses, mainnet, addressIndexMap },
     walletId,
   );
 };
@@ -1081,8 +1081,8 @@ export interface SendTxUnsignedResult {
 /**
  * build a send transaction (runs in worker with witness building)
  *
- * if mnemonic is provided: builds fully signed tx + broadcasts, returns { txid, fee }
- * if no mnemonic: builds unsigned tx for cold signing via QR (requires ufvk)
+ * hot (vault passed): the worker opens the vault, signs, broadcasts, returns { txid, fee }
+ * cold (no vault): builds unsigned tx for cold signing via QR (requires ufvk)
  */
 export const buildSendTxInWorker = async (
   network: NetworkType,
@@ -1093,13 +1093,13 @@ export const buildSendTxInWorker = async (
   memo: string,
   accountIndex: number,
   mainnet: boolean,
-  mnemonic?: string,
+  vault?: VaultUnlock,
   ufvk?: string,
 ): Promise<SendTxUnsignedResult | { txid: string; fee: string }> => {
   return callWorker(
     network,
     'send-tx',
-    { serverUrl, recipient, amount, memo, accountIndex, mainnet, mnemonic, ufvk },
+    { serverUrl, recipient, amount, memo, accountIndex, mainnet, vault, ufvk },
     walletId,
   );
 };
@@ -1122,12 +1122,12 @@ export const buildMultiSendTxInWorker = async (
   outputs: { address: string; amount: string; memo?: string }[],
   accountIndex: number,
   mainnet: boolean,
-  mnemonic: string,
+  vault: VaultUnlock,
 ): Promise<MultiSendResult> => {
   return callWorker(
     network,
     'send-tx-multi',
-    { serverUrl, outputs, accountIndex, mainnet, mnemonic },
+    { serverUrl, outputs, accountIndex, mainnet, vault },
     walletId,
   );
 };
@@ -1315,11 +1315,10 @@ export interface TurnstileMigrationUnsignedResult {
  * balance to its OWN ironwood address (derived inside the wasm) in a single V6
  * transaction. Feature-flagged (IRONWOOD_MIGRATION) at the UI layer.
  *
- * Two modes, selected by which secret is provided:
- * - HOT (mnemonic passed): the worker builds + proves + SIGNS the tx inside the
- *   wasm and broadcasts it directly, resolving to `{ txid, fee }`. No PCZT is
- *   produced or transmitted. `ufvk` is ignored.
- * - COLD (mnemonic omitted, ufvk passed): the worker builds an UNSIGNED PCZT
+ * Two modes, selected by which key access is provided:
+ * - HOT (vault passed): the worker opens the vault, has the PCZT proven, SIGNS
+ *   it and broadcasts directly, resolving to `{ txid, fee }`. `ufvk` is ignored.
+ * - COLD (vault omitted, ufvk passed): the worker builds an UNSIGNED PCZT
  *   for the zigner cold-sign QR machine, resolving to
  *   `TurnstileMigrationUnsignedResult` (frames etc.).
  */
@@ -1331,13 +1330,13 @@ export const buildTurnstileMigrationInWorker = async (
   mainnet: boolean,
   ufvk: string | undefined,
   backend: 'zidecar' | 'lightwalletd' = 'zidecar',
-  mnemonic?: string,
+  vault?: VaultUnlock,
   fragmentSize = 400,
 ): Promise<TurnstileMigrationUnsignedResult | { txid: string; fee: string }> => {
   return callWorker(
     network,
     'send-turnstile-migration',
-    { serverUrl, accountIndex, mainnet, ufvk, backend, mnemonic, fragmentSize },
+    { serverUrl, accountIndex, mainnet, ufvk, backend, vault, fragmentSize },
     walletId,
   );
 };

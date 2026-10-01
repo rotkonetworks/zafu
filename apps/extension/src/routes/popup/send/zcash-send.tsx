@@ -21,7 +21,7 @@ import { zignerSigningSelector } from '../../../state/zigner-signing';
 import { recentAddressesSelector } from '../../../state/recent-addresses';
 import { contactsSelector, type Contact, type ContactAddress } from '../../../state/contacts';
 import { messagesSelector } from '../../../state/messages';
-import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
+import { selectEffectiveKeyInfo, selectGetVaultUnlock } from '../../../state/keyring';
 import { selectActiveZcashWallet } from '../../../state/wallets';
 import { activeZcashStoreId } from '../../../state/pockets';
 import {
@@ -411,7 +411,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   // the pocket's own worker store - account 0 uses the bare wallet id
   const storeId = useStore(activeZcashStoreId);
-  const getMnemonic = useStore(selectGetMnemonic);
+  const getVaultUnlock = useStore(selectGetVaultUnlock);
   const { requestAuth, PasswordModal } = usePasswordGate();
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const activeZcashWallet = useStore(selectActiveZcashWallet);
@@ -785,7 +785,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             setStep('review');
             return;
           }
-          const mnemonic = await getMnemonic(walletId);
+          const vault = await getVaultUnlock(walletId);
           const result = await buildSendTxInWorker(
             'zcash',
             storeId ?? walletId,
@@ -795,7 +795,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             memo,
             accountIndex,
             mainnet,
-            mnemonic,
+            vault,
           );
           if ('txid' in result) {
             setFee(fmtZecShort(result.fee));
