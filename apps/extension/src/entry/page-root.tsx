@@ -14,6 +14,7 @@ import { noteContextInvalidated } from '../utils/reload-notice';
 import { AppErrorBoundary, reportRenderError } from '../components/error-boundary';
 import { EgressAskSheet } from '../net/egress-ask-sheet';
 import { installRegistryIcons } from '../shared/components/registry-icons';
+import { announceUiOpenPresence } from '../state/ui-open-presence';
 
 import '@repo/ui/styles/globals.css';
 import '@repo/ui/styles/icons.css';
@@ -35,6 +36,12 @@ if (!chrome.runtime?.id) {
 const MainPage = () => {
   const [queryClient] = useState(() => new QueryClient());
   const [wasmReady, setWasmReady] = useState(false);
+
+  // announce that a zafu UI surface is open, for the duration of this
+  // document - see entry/popup-root.tsx.
+  useEffect(() => {
+    announceUiOpenPresence();
+  }, []);
 
   useEffect(() => {
     // initialize standard wasm module for keys, addresses

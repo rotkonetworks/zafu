@@ -85,6 +85,7 @@ import { backOff } from 'exponential-backoff';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { networkAllowsBackgroundSync } from './state/privacy';
 import { runPresencePublish } from './state/contact-discovery-service';
+import { trackUiOpenPresence } from './state/ui-open-presence';
 
 // count open side panels so approval routing can target the panel only when it
 // is actually open (see popup.ts). Registered once at worker startup.
@@ -94,6 +95,26 @@ trackSidePanelPresence();
 // decide to open the side panel without an awaited storage read (which would
 // lose the user gesture chrome.sidePanel.open requires).
 initSidePanelPref();
+
+// private contact discovery: beacon this wallet's presence once per presence
+// epoch (5 min), but only while some zafu UI surface (popup, side panel, or a
+// page tab) is actually open. A connected presence port keeps this worker
+// alive for exactly that long, so the ticker needs no alarm and leaves no
+// trace once the last surface closes. Strict no-op unless the user opted in
+// AND configured a relay AND the wallet is unlocked - see runPresencePublish.
+let presencePublishTimer: ReturnType<typeof setInterval> | undefined;
+trackUiOpenPresence(
+  () => {
+    void runPresencePublish();
+    presencePublishTimer ??= setInterval(() => void runPresencePublish(), 5 * 60_000);
+  },
+  () => {
+    if (presencePublishTimer) {
+      clearInterval(presencePublishTimer);
+      presencePublishTimer = undefined;
+    }
+  },
+);
 
 // The graceful network-error handler (unhandledrejection + error) is registered
 // by the top-of-file './install-global-error-handlers' import - it must run on
@@ -575,21 +596,7 @@ void chrome.alarms.create('ibcTransferPoll', {
   delayInMinutes: 1,
 });
 
-// private contact discovery: beacon this wallet's presence once per presence
-// epoch (5 min), so friends' apps can find it. Strict no-op unless the user
-// opted in AND configured a relay AND the wallet is unlocked; the per-scope
-// scheduler makes over-ticking idempotent within an epoch.
-void chrome.alarms.create('zidPresencePublish', {
-  periodInMinutes: 5,
-  delayInMinutes: 1,
-});
-
 chrome.alarms.onAlarm.addListener(async alarm => {
-  if (alarm.name === 'zidPresencePublish') {
-    await runPresencePublish();
-    return;
-  }
-
   if (alarm.name === 'ibcTransferPoll') {
     await runIbcTransferSweep().catch(e => console.warn('[ibc-tracker] poll failed', e));
     return;

@@ -7,7 +7,9 @@
  * This module owns the pieces that need chrome/storage: the settings read, the
  * lock check, the encrypted contacts read, the mnemonic/identity lookup, and the
  * relay transport, plus the fixed-cadence presence publisher the service
- * worker's alarm drives.
+ * worker drives only while a zafu UI surface is open (see
+ * state/ui-open-presence.ts) - never from a background alarm while zafu is
+ * closed.
  *
  * Everything here is a STRICT NO-OP unless the user opted in AND the wallet is
  * unlocked. A wallet that never opted in never reads a contact, never derives a
@@ -169,10 +171,11 @@ const scopeStates = new Map<string, ScopeState>();
 
 /**
  * Publish this wallet's presence once per epoch, for every app scope it serves.
- * Driven by the `zidPresencePublish` alarm; idempotent within an epoch (the
- * per-scope `createPresenceScheduler` claims the epoch before publishing), so
- * over-ticking is harmless. A strict no-op when disabled, unconfigured, or
- * locked. Never throws.
+ * Driven by the service worker's UI-open ticker (see ui-open-presence.ts) -
+ * runs only while some zafu surface is open, never from a background alarm.
+ * Idempotent within an epoch (the per-scope `createPresenceScheduler` claims
+ * the epoch before publishing), so over-ticking is harmless. A strict no-op
+ * when disabled, unconfigured, or locked. Never throws.
  */
 export const runPresencePublish = async (
   deps: ContactDiscoveryDeps = contactDiscoveryDeps,
