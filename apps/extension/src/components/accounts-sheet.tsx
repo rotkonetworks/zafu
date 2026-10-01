@@ -18,7 +18,13 @@ import {
   selectLock,
   type NetworkType,
 } from '../state/keyring';
-import { MAX_POCKETS, activeAccountIndex, activePockets, pocketOwner } from '../state/pockets';
+import {
+  MAX_POCKETS,
+  activeAccountIndex,
+  activePockets,
+  pocketOwner,
+  visiblePockets,
+} from '../state/pockets';
 import { pocketStoreId } from '../state/pocket-id';
 import { getBalanceInWorker } from '../state/keyring/network-worker';
 import { PopupPath } from '../routes/popup/paths';
@@ -46,7 +52,7 @@ const CUSTODY_ICON: Record<Custody, string> = {
  * pockets; zcash moves its own pocket (a ZIP 32 account with its own worker
  * store and balance), penumbra its view-service account index.
  */
-interface PocketTarget {
+export interface PocketTarget {
   active: (s: AllSlices) => number;
   pick: (s: AllSlices, owner: string, account: number) => unknown;
   balance?: (keyId: string, account: number) => Promise<bigint>;
@@ -69,9 +75,36 @@ const POCKET_TARGET: Partial<Record<NetworkType, PocketTarget>> = {
 export const pocketTarget = (network: NetworkType): PocketTarget =>
   POCKET_TARGET[network] ?? ZCASH_POCKET;
 
+/**
+ * Switch every network whose active pocket is the one about to be hidden
+ * away to main first. A pocket is one list shared across networks (zcash and
+ * penumbra each keep their own "active" elsewhere), so hiding it has to
+ * release whichever of them has it active, not just the network in view.
+ */
+export const releaseActive = async (
+  state: AllSlices,
+  owner: string,
+  account: number,
+  targets: PocketTarget[] = [ZCASH_POCKET, ...Object.values(POCKET_TARGET)],
+): Promise<void> => {
+  for (const target of targets) {
+    if (target.active(state) === account) {
+      await target.pick(state, owner, 0);
+    }
+  }
+};
+
 /** what the rename/new-pocket sheet should do: create a fresh pocket, or
- * rename something that already has a name (a pocket or the wallet itself) */
-export type PocketSheetTarget = { name: string; save: (name: string) => Promise<void> } | undefined;
+ * rename something that already has a name (a pocket or the wallet itself).
+ * `pocket` is set only when renaming a pocket (never the wallet itself or
+ * main), and lets the sheet offer "hide this pocket". */
+export type PocketSheetTarget =
+  | {
+      name: string;
+      save: (name: string) => Promise<void>;
+      pocket?: { account: number; hide: () => Promise<void> };
+    }
+  | undefined;
 
 const PocketRow = ({
   name,
@@ -129,6 +162,7 @@ export const AccountsSheet = ({
   onOpenChange,
   onAddWallet,
   onNewPocket,
+  onHiddenPockets,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -140,6 +174,8 @@ export const AccountsSheet = ({
   /** same pattern: the new-pocket sheet replaces this one, in create mode
    * (no argument) or rename mode (the pocket being renamed). */
   onNewPocket: (rename?: PocketSheetTarget) => void;
+  /** same pattern again: the hidden-pockets sheet replaces this one */
+  onHiddenPockets: () => void;
 }) => {
   const navigate = useNavigate();
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
@@ -156,9 +192,12 @@ export const AccountsSheet = ({
   // nothing (it is already selected).
   const otherKeyInfos = isHotWallet ? keyInfos.filter(k => k.id !== selectedKeyInfo?.id) : keyInfos;
   const pockets = useStore(useShallow(activePockets));
+  const shown = visiblePockets(pockets);
+  const hiddenCount = pockets.length - shown.length;
   const target = pocketTarget(useStore(selectActiveNetwork));
   const activeAccount = useStore(target.active);
   const renamePocket = useStore(s => s.pockets.rename);
+  const hidePocket = useStore(s => s.pockets.hide);
   const renameKeyRing = useStore(selectRenameKeyRing);
   const owner = selectedKeyInfo ? pocketOwner(selectedKeyInfo) : undefined;
   const [activeBalanceZat, setActiveBalanceZat] = useState<bigint>();
@@ -248,7 +287,7 @@ export const AccountsSheet = ({
             </button>
             <span className='shrink-0 text-[11px] text-fg-muted'>{CUSTODY_META.hot}</span>
           </div>
-          {pockets.map(p => (
+          {shown.map(p => (
             <PocketRow
               key={p.account}
               name={p.name}
@@ -257,7 +296,21 @@ export const AccountsSheet = ({
               balanceZat={target.balance && activeBalanceZat}
               onPick={() => pickPocket(p.account)}
               onRename={() =>
-                owner && onNewPocket({ name: p.name, save: n => renamePocket(owner, p.account, n) })
+                owner &&
+                onNewPocket({
+                  name: p.name,
+                  save: n => renamePocket(owner, p.account, n),
+                  pocket:
+                    p.account === 0
+                      ? undefined
+                      : {
+                          account: p.account,
+                          hide: async () => {
+                            await releaseActive(useStore.getState(), owner, p.account);
+                            await hidePocket(owner, p.account);
+                          },
+                        },
+                })
               }
             />
           ))}
@@ -271,6 +324,15 @@ export const AccountsSheet = ({
             disabled={pockets.length >= MAX_POCKETS}
             onClick={() => onNewPocket()}
           />
+          {hiddenCount > 0 && (
+            <button
+              type='button'
+              onClick={onHiddenPockets}
+              className='flex h-11 items-center px-2 text-left text-[11px] text-fg-muted transition-colors hover:text-fg-high'
+            >
+              hidden · {hiddenCount}
+            </button>
+          )}
         </div>
       )}
 

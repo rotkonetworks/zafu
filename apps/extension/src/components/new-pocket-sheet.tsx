@@ -16,6 +16,7 @@ import { selectActiveNetwork, selectEffectiveKeyInfo } from '../state/keyring';
 import { MAX_POCKETS, pocketOwner, pocketsOf } from '../state/pockets';
 import { zcashClient } from '../state/keyring/zcash-backend';
 import { pocketTarget, type PocketSheetTarget } from './accounts-sheet';
+import { fmtZec } from '../routes/popup/home/format';
 
 export const NewPocketSheet = ({
   open,
@@ -42,6 +43,7 @@ export const NewPocketSheet = ({
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [holds, setHolds] = useState<string>();
 
   // reset the form each time the sheet opens, prefilling the current name
   // when renaming
@@ -52,6 +54,43 @@ export const NewPocketSheet = ({
       setError(null);
     }
   }, [open, rename]);
+
+  // a hideable pocket may hold funds: say so in one line rather than silently
+  // hiding money away
+  useEffect(() => {
+    setHolds(undefined);
+    if (!open || !rename?.pocket || !selectedKeyInfo || !target.balance) {
+      return;
+    }
+    let cancelled = false;
+    target
+      .balance(selectedKeyInfo.id, rename.pocket.account)
+      .then(bal => {
+        if (!cancelled && bal > 0n) {
+          setHolds(fmtZec(Number(bal) / 1e8));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [open, rename, selectedKeyInfo, target]);
+
+  const handleHide = async () => {
+    if (!rename?.pocket || busy) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await rename.pocket.hide();
+      onOpenChange(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'could not hide this pocket');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (busy) {
@@ -130,6 +169,18 @@ export const NewPocketSheet = ({
           >
             {rename ? 'rename' : 'create pocket'}
           </Button>
+          {rename?.pocket && (
+            <>
+              {holds && (
+                <p className='text-label text-fg-muted lowercase'>
+                  it still holds {holds} zec · it stays yours
+                </p>
+              )}
+              <Button variant='quiet' onClick={() => void handleHide()} disabled={busy}>
+                hide this pocket
+              </Button>
+            </>
+          )}
         </div>
       )}
     </Sheet>
