@@ -41,6 +41,23 @@ const TabButton = memo(
 );
 TabButton.displayName = 'TabButton';
 
+/** screens opened from a tab keep that tab lit */
+const OWNER: [string, string][] = [
+  [PopupPath.SETTINGS, PopupPath.SETTINGS],
+  [PopupPath.INBOX, PopupPath.INBOX],
+  [PopupPath.CONTACTS, PopupPath.INBOX],
+  [PopupPath.IDENTITY, PopupPath.INBOX],
+  [PopupPath.MULTISIG, PopupPath.INBOX],
+  [PopupPath.TOOLS, PopupPath.TOOLS],
+  [PopupPath.SWAP, PopupPath.TOOLS],
+  [PopupPath.STAKE, PopupPath.TOOLS],
+  [PopupPath.VOTE, PopupPath.TOOLS],
+  [PopupPath.NOTE_SYNC, PopupPath.TOOLS],
+];
+const tabOf = (pathname: string): string =>
+  OWNER.find(([prefix]) => pathname === prefix || pathname.startsWith(prefix + '/'))?.[1] ??
+  PopupPath.INDEX;
+
 export const BottomTabs = memo(() => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -66,9 +83,7 @@ export const BottomTabs = memo(() => {
     >
       <div className='flex h-14 items-stretch'>
         {TABS.map(tab => {
-          const isActive =
-            location.pathname === tab.path ||
-            (tab.path !== PopupPath.INDEX && location.pathname.startsWith(tab.path));
+          const isActive = tabOf(location.pathname) === tab.path;
           return (
             <TabButton key={tab.path} tab={tab} isActive={isActive} onNavigate={handleNavigate} />
           );
