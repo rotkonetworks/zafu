@@ -1,6 +1,6 @@
 import { InFlightCard } from '../../../components/in-flight-card';
 import { Suspense, useState, useCallback, useEffect } from 'react';
-import type { ReactNode } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useStore } from '../../../state';
@@ -8,7 +8,6 @@ import {
   selectActiveNetwork,
   selectEffectiveKeyInfo,
   selectPenumbraAccount,
-  selectSetPenumbraAccount,
   type NetworkType,
 } from '../../../state/keyring';
 import { selectActiveZcashWallet } from '../../../state/wallets';
@@ -39,12 +38,33 @@ export const popupIndexLoader = async (): Promise<Response | PopupLoaderData> =>
   return { fullSyncHeight: await localExtStorage.get('fullSyncHeight') };
 };
 
+const ZcashHome = ({ nudge }: { nudge?: ReactNode }) => {
+  const key = useStore(selectEffectiveKeyInfo);
+  const wallet = useStore(selectActiveZcashWallet);
+  return (
+    <ZcashContent
+      hasMnemonic={key?.type === 'mnemonic'}
+      // mnemonic vaults derive zcash keys directly - no zcash wallet record
+      watchOnly={key?.type === 'mnemonic' ? undefined : wallet}
+      nudge={nudge}
+    />
+  );
+};
+
+const PenumbraHome = ({ nudge }: { nudge?: ReactNode }) => (
+  <PenumbraContent account={useStore(selectPenumbraAccount)} nudge={nudge} />
+);
+
+/** the shielded networks share one home (home-screen.tsx), each reading its own state */
+const HOME: Partial<Record<NetworkType, ComponentType<{ nudge?: ReactNode }>>> = {
+  zcash: ZcashHome,
+  penumbra: PenumbraHome,
+};
+
 export const PopupIndex = () => {
   const activeNetwork = useStore(selectActiveNetwork);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const penumbraAccount = useStore(selectPenumbraAccount);
-  const setPenumbraAccount = useStore(selectSetPenumbraAccount);
-  const activeZcashWallet = useStore(selectActiveZcashWallet);
   const { publicKey: polkadotPublicKey } = usePolkadotPublicKey();
   const navigate = useNavigate();
 
@@ -77,16 +97,11 @@ export const PopupIndex = () => {
     />
   ) : null;
 
-  // zcash lays out its own screen (sync strip, hero, pools, activity)
-  if (activeNetwork === 'zcash') {
+  const Home = HOME[activeNetwork];
+  if (Home) {
     return (
       <Suspense fallback={<AssetListSkeleton rows={4} />}>
-        <ZcashContent
-          hasMnemonic={selectedKeyInfo?.type === 'mnemonic'}
-          // mnemonic vaults derive zcash keys directly - no zcash wallet record
-          watchOnly={selectedKeyInfo?.type === 'mnemonic' ? undefined : activeZcashWallet}
-          nudge={backupNudge}
-        />
+        <Home nudge={backupNudge} />
       </Suspense>
     );
   }
@@ -97,8 +112,6 @@ export const PopupIndex = () => {
       <Suspense fallback={<AssetListSkeleton rows={4} />}>
         <NetworkContent
           network={activeNetwork}
-          penumbraAccount={penumbraAccount}
-          setPenumbraAccount={setPenumbraAccount}
           polkadotPublicKey={polkadotPublicKey}
           nudge={backupNudge}
         />
@@ -113,41 +126,25 @@ export const PopupIndex = () => {
 /** network-specific content - split out to minimize re-renders */
 const NetworkContent = ({
   network,
-  penumbraAccount,
-  setPenumbraAccount,
   polkadotPublicKey,
   nudge,
 }: {
   network: NetworkType;
-  penumbraAccount: number;
-  setPenumbraAccount: (n: number) => void;
   polkadotPublicKey?: string;
   nudge?: ReactNode;
-}) => {
-  if (network === 'penumbra') {
-    return (
-      <PenumbraContent
-        account={penumbraAccount}
-        onAccountChange={setPenumbraAccount}
-        actions={<HomeActions />}
-        nudge={nudge}
+}) => (
+  <>
+    {nudge}
+    <HomeActions />
+    {network === 'polkadot' || network === 'kusama' ? (
+      <PolkadotContent
+        publicKey={polkadotPublicKey}
+        relay={network === 'kusama' ? 'kusama' : undefined}
       />
-    );
-  }
-  return (
-    <>
-      {nudge}
-      <HomeActions />
-      {network === 'polkadot' || network === 'kusama' ? (
-        <PolkadotContent
-          publicKey={polkadotPublicKey}
-          relay={network === 'kusama' ? 'kusama' : undefined}
-        />
-      ) : network === 'noble' || network === 'cosmoshub' ? (
-        <CosmosContent chainId={network as CosmosChainId} />
-      ) : (
-        <NetworkPlaceholder network={network} />
-      )}
-    </>
-  );
-};
+    ) : network === 'noble' || network === 'cosmoshub' ? (
+      <CosmosContent chainId={network as CosmosChainId} />
+    ) : (
+      <NetworkPlaceholder network={network} />
+    )}
+  </>
+);
