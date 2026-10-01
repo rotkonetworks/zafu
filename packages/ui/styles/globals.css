@@ -249,12 +249,6 @@
     --primary: 174 30% 48%;
     --ring: 174 30% 48%;
   }
-  [data-network='polkadot'],
-  [data-network='kusama'] {
-    --network-accent: #6b7280;
-    --network-accent-light: #9ca3af;
-    --network-accent-foreground: #ffffff;
-  }
   [data-network='osmosis'] {
     --network-accent: #a78bfa;
     --network-accent-light: #c4b5fd;
