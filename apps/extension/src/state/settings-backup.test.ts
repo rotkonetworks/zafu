@@ -61,4 +61,12 @@ describe('settings backup', () => {
     expect(store['penumbraTotalIn']).toBe('usd');
     expect(store['autoLockMinutes']).toBe(5);
   });
+
+  it('leaves a never-chosen total out of the backup, so a restore keeps the default', async () => {
+    delete store['penumbraTotalIn'];
+    const out = await exportSettings(DEFAULT_PRIVACY_SETTINGS);
+    expect(out.prefs).not.toHaveProperty('penumbraTotalIn');
+    await importPrefs(out.prefs);
+    expect(store['penumbraTotalIn']).toBeUndefined();
+  });
 });

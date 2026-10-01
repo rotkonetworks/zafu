@@ -4,12 +4,15 @@ import type { TotalIn } from '../routes/popup/home/penumbra-value';
 
 const KEY = ['penumbraTotalIn'];
 
-/** what the penumbra home's total is shown in: usd (default) or um */
+/** never chosen (undefined) reads as um; a stored pick, usd included, is kept */
+export const totalInOf = (stored?: TotalIn): TotalIn => stored ?? 'um';
+
+/** what the penumbra home's total is shown in: um (default) or usd */
 export const usePenumbraTotalIn = () => {
   const queryClient = useQueryClient();
-  const { data: totalIn = 'usd' } = useQuery({
+  const { data: totalIn = totalInOf() } = useQuery({
     queryKey: KEY,
-    queryFn: async (): Promise<TotalIn> => (await localExtStorage.get('penumbraTotalIn')) ?? 'usd',
+    queryFn: async (): Promise<TotalIn> => totalInOf(await localExtStorage.get('penumbraTotalIn')),
   });
   const setTotalIn = async (next: TotalIn) => {
     queryClient.setQueryData(KEY, next);
