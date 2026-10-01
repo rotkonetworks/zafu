@@ -1,0 +1,50 @@
+import { PagePath } from '../paths';
+import { SEED_PHRASE_ORIGIN } from './password/types';
+
+export type OnboardingArt = 'samurai' | 'enso' | 'castle' | 'bamboo';
+
+export interface OnboardingScreen {
+  readonly art: OnboardingArt;
+  readonly back?: PagePath;
+  /** 1-based position and length of the path this screen sits on. */
+  readonly step?: readonly [number, number];
+}
+
+const P = PagePath;
+
+/** Every onboarding screen's chrome, so the shell never guesses from history. */
+const SCREENS: Partial<Record<string, OnboardingScreen>> = {
+  [P.WELCOME]: { art: 'samurai' },
+  [P.CHOOSE]: { art: 'bamboo', back: P.WELCOME },
+  [P.CREATE_PASSWORD]: { art: 'samurai', back: P.WELCOME, step: [1, 3] },
+  [P.GENERATE_SEED_PHRASE]: { art: 'enso', back: P.CREATE_PASSWORD, step: [2, 3] },
+  [P.CHECK_SEED_PHRASE]: { art: 'enso', back: P.GENERATE_SEED_PHRASE, step: [3, 3] },
+  [P.IMPORT_SEED_PHRASE]: { art: 'bamboo', back: P.CHOOSE, step: [1, 3] },
+  [P.IMPORT_BIRTHDAY]: { art: 'bamboo', back: P.IMPORT_SEED_PHRASE, step: [2, 3] },
+  [P.IMPORT_PASSWORD]: { art: 'bamboo', back: P.IMPORT_BIRTHDAY, step: [3, 3] },
+  [P.IMPORT_ZIGNER]: { art: 'enso', back: P.CHOOSE, step: [1, 2] },
+  [P.ZIGNER_PASSWORD]: { art: 'enso', back: P.IMPORT_ZIGNER, step: [2, 2] },
+  [P.CONNECT_LEDGER]: { art: 'enso', back: P.CHOOSE },
+  [P.ONBOARDING_SUCCESS]: { art: 'castle' },
+};
+
+export const screenFor = (pathname: string): OnboardingScreen =>
+  SCREENS[pathname] ?? { art: 'samurai' };
+
+/** Where each path sets its password; the password screen reads its origin back from this. */
+export const PASSWORD_PATH = {
+  [SEED_PHRASE_ORIGIN.NEWLY_GENERATED]: P.CREATE_PASSWORD,
+  [SEED_PHRASE_ORIGIN.IMPORTED]: P.IMPORT_PASSWORD,
+  [SEED_PHRASE_ORIGIN.ZIGNER]: P.ZIGNER_PASSWORD,
+} as const;
+
+export type PasswordOrigin = keyof typeof PASSWORD_PATH;
+
+export const originOf = (pathname: string): PasswordOrigin | undefined =>
+  (Object.keys(PASSWORD_PATH) as PasswordOrigin[]).find(o => PASSWORD_PATH[o] === pathname);
+
+/** 0-4 bars for the password meter: length first, then variety. */
+export const passwordStrength = (pw: string): number => {
+  const variety = [/[a-z]/, /[A-Z]/, /\d/, /[^a-zA-Z\d]/].filter(r => r.test(pw)).length;
+  return [8, 12, 16].filter(n => pw.length >= n).length + (pw.length >= 8 && variety >= 2 ? 1 : 0);
+};

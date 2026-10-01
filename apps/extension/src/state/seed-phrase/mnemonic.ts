@@ -20,6 +20,9 @@ export const isInWordList = (word: string): boolean => {
   return wordlist.includes(word);
 };
 
+/** a word still being typed: the start of some recovery word. */
+export const isWordPrefix = (start: string): boolean => wordlist.some(w => w.startsWith(start));
+
 /** plain levenshtein distance - small inputs only (bip39 words, <= ~10 chars). */
 const editDistance = (a: string, b: string): number => {
   const rows = a.length + 1;
@@ -80,3 +83,15 @@ export const generateValidationFields = (
   const pickWords = shuffleWords.slice(0, amount);
   return pickWords.sort((a, b) => a.index - b.index);
 };
+
+/**
+ * Words out of whatever a person pastes: any whitespace or commas between
+ * words, any case, and the "1." / "2)" / "#3" numbering other wallets print
+ * beside each word.
+ */
+export const parsePhrase = (text: string): string[] =>
+  text
+    .toLowerCase()
+    .split(/[\s,;\u200b\ufeff]+/u)
+    .map(w => w.replace(/^#?\d+[.):]?/u, ''))
+    .filter(Boolean);

@@ -16,6 +16,8 @@ export enum PopupPath {
 
   // Auth
   LOGIN = '/login',
+  /** no wallet yet: the ways in, each opening the full-tab onboarding */
+  WELCOME = '/welcome',
 
   // Approvals
   TRANSACTION_APPROVAL = '/approval/tx',

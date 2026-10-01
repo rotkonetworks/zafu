@@ -32,8 +32,7 @@ export interface PopupLoaderData {
 }
 
 export const popupIndexLoader = async (): Promise<Response | PopupLoaderData> => {
-  await needsOnboard();
-  const redirect = await needsLogin();
+  const redirect = (await needsOnboard()) ?? (await needsLogin());
   if (redirect) {
     return redirect;
   }

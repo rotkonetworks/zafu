@@ -3,6 +3,7 @@ import { RouteErrorScreen } from '../../components/error-boundary';
 import { PopupIndex, popupIndexLoader } from './home';
 import { lockedScreenGuard } from './popup-needs';
 import { Login, popupLoginLoader } from './login';
+import { PopupWelcome } from './welcome';
 import { PopupPath } from './paths';
 import { PopupLayout } from './popup-layout';
 import { settingsRoutes } from './settings/routes';
@@ -180,6 +181,7 @@ export const popupRoutes: RouteObject[] = [
             element: <Login />,
             loader: popupLoginLoader,
           },
+          { path: PopupPath.WELCOME, element: <PopupWelcome /> },
 
           // Approvals
           {

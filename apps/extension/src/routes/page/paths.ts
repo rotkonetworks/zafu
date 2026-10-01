@@ -1,16 +1,17 @@
 export enum PagePath {
   INDEX = '/',
   WELCOME = '/welcome',
+  CHOOSE = '/welcome/choose',
+  CREATE_PASSWORD = '/welcome/create',
   GENERATE_SEED_PHRASE = '/welcome/generate',
+  CHECK_SEED_PHRASE = '/welcome/generate/check',
   IMPORT_SEED_PHRASE = '/welcome/import',
-  /** Import: read-only confirm of the entered phrase before finalizing. */
-  IMPORT_REVIEW = '/welcome/import/review',
-  /** Import: guided wallet-birthday (sync start) step. */
   IMPORT_BIRTHDAY = '/welcome/import/birthday',
+  IMPORT_PASSWORD = '/welcome/import/password',
   IMPORT_ZIGNER = '/welcome/import-zigner',
+  ZIGNER_PASSWORD = '/welcome/import-zigner/password',
   CONNECT_LEDGER = '/welcome/connect-ledger',
   ONBOARDING_SUCCESS = '/welcome/success',
-  SET_PASSWORD = '/welcome/set-password',
   /** Grant camera permission page - opened from popup, tells user to return */
   GRANT_CAMERA = '/grant-camera',
 }

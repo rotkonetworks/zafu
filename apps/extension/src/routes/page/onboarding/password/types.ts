@@ -4,7 +4,3 @@ export enum SEED_PHRASE_ORIGIN {
   ZIGNER = 'ZIGNER',
   LEDGER = 'LEDGER',
 }
-
-export interface LocationState {
-  origin?: SEED_PHRASE_ORIGIN;
-}

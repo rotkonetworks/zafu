@@ -1,7 +1,8 @@
 import { Component, type ReactNode } from 'react';
-import { isRouteErrorResponse, useRouteError, useNavigate } from 'react-router-dom';
+import { useRouteError } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
 import { CopyButton } from '@repo/ui/components/ui/copy-button';
+import { Mark } from '@repo/ui/components/ui/mark';
 
 /**
  * App-wide crash recovery.
@@ -66,62 +67,57 @@ const isApprovalHash = (): boolean =>
     typeof location === 'undefined' ? '' : location.hash,
   );
 
-interface ErrorScreenProps {
-  error: unknown;
-  notFound?: boolean;
-  onGoHome: () => void;
-}
+// set once the guarded auto-reload has run, so the screen can say so
+const triedOnce = (): boolean => {
+  try {
+    return !!sessionStorage.getItem(RELOAD_GUARD);
+  } catch {
+    return false;
+  }
+};
 
-const ErrorScreen = ({ error, notFound, onGoHome }: ErrorScreenProps) => {
-  const message =
-    error instanceof Error
-      ? error.message
-      : typeof error === 'string'
-        ? error
-        : 'an unexpected error occurred';
+// a fresh load of the default route: clears router errors and stale chunks alike
+const beginAgain = () => {
+  window.location.hash = '';
+  window.location.reload();
+};
 
-  const approval = isApprovalHash();
-
+/** The ErrReload board: one calm pause, one way forward, details on request. */
+const ErrorScreen = ({ error }: { error: unknown }) => {
+  const message = error instanceof Error ? error.message : String(error);
   const details = [
     `message: ${message}`,
     `stack: ${error instanceof Error ? error.stack : 'n/a'}`,
     `version: ${chrome.runtime.getManifest().version}`,
     `hash: ${location.hash}`,
   ].join('\n');
+  const approval = isApprovalHash();
 
   return (
-    <div className='flex h-full flex-col items-center justify-center gap-4 p-6 text-center bg-canvas text-fg'>
-      <span
-        className={`${notFound ? 'i-lucide-compass' : 'i-lucide-alert-triangle'} h-8 w-8 text-fg-dim`}
+    <div className='relative isolate mx-auto flex h-full min-h-[628px] w-full max-w-[400px] flex-col justify-center gap-4 bg-canvas px-7 text-fg'>
+      <img
+        src='/media/emblem.webp'
+        alt=''
+        aria-hidden='true'
+        className='pointer-events-none absolute left-1/2 top-[70px] -z-10 size-[280px] -translate-x-1/2 opacity-[0.08]'
       />
-      <div className='flex flex-col gap-1'>
-        <p className='text-fg-high lowercase'>{notFound ? 'page not found' : 'something broke'}</p>
-        <p className='text-data text-fg-dim break-words'>{message}</p>
-      </div>
-      <div className='flex flex-wrap items-center justify-center gap-2'>
-        {approval && !notFound ? (
-          <Button size='sm' variant='secondary' onClick={() => window.close()}>
-            <span className='i-lucide-x mr-1 h-3 w-3' /> close
-          </Button>
-        ) : (
-          <Button size='sm' variant='secondary' onClick={onGoHome}>
-            <span className='i-lucide-home mr-1 h-3 w-3' /> go home
-          </Button>
-        )}
-        <Button size='sm' variant='secondary' onClick={() => window.location.reload()}>
-          <span className='i-lucide-refresh-cw mr-1 h-3 w-3' /> reload
-        </Button>
-        {!notFound && <CopyButton size='sm' variant='quiet' text={details} label='copy details' />}
-      </div>
-      {!notFound && (
-        <button
-          type='button'
-          className='text-data text-fg-dim underline-offset-4 hover:underline lowercase'
-          onClick={() => chrome.runtime.reload()}
-        >
-          restart extension
-        </button>
-      )}
+      <Mark variant='seal' glyph='間' size={50} className='-rotate-6' />
+      <h1 className='font-display text-[28px] text-fg-high'>a brief pause</h1>
+      <p className='text-data leading-[1.6] text-fg-muted'>
+        something broke on our side, not yours.
+        <br />
+        nothing was lost.
+      </p>
+      <Button
+        className='mt-2 h-[52px] text-[15px]'
+        onClick={approval ? () => window.close() : beginAgain}
+      >
+        {approval ? 'close' : 'begin again'}
+      </Button>
+      <span className='h-[18px] text-[11px] text-fg-dim'>
+        {triedOnce() ? 'zafu already tried once on its own' : ''}
+      </span>
+      <CopyButton text={details} label='send us what happened' className='self-center' />
     </div>
   );
 };
@@ -133,16 +129,13 @@ const ErrorScreen = ({ error, notFound, onGoHome }: ErrorScreenProps) => {
  */
 export const RouteErrorScreen = () => {
   const error = useRouteError();
-  const navigate = useNavigate();
 
   if (reloadOnceForStaleChunk(error)) {
     return null; // reloading for a stale chunk
   }
 
   reportRenderError(error);
-  const notFound = isRouteErrorResponse(error) && error.status === 404;
-  // navigating clears the RR route error without a full reload
-  return <ErrorScreen error={error} notFound={notFound} onGoHome={() => navigate('/')} />;
+  return <ErrorScreen error={error} />;
 };
 
 /**
@@ -166,15 +159,7 @@ export class AppErrorBoundary extends Component<{ children: ReactNode }, { error
 
   override render() {
     if (this.state.error) {
-      return (
-        <ErrorScreen
-          error={this.state.error}
-          onGoHome={() => {
-            window.location.hash = '';
-            window.location.reload();
-          }}
-        />
-      );
+      return <ErrorScreen error={this.state.error} />;
     }
     return this.props.children;
   }
