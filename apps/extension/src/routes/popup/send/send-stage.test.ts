@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { sendStage, stageExplain, stageMeta } from './send-stage';
+import { STAGES, sendStage as stageAt, stageMeta as metaAt, type SendProgress } from './send-stage';
+
+const z = STAGES.zcash;
+const sendStage = (s: SendProgress[], floor?: number) => stageAt(z, s, floor);
+const stageMeta = (s: SendProgress[], i: number, a: number) => metaAt(z, s, i, a);
+const stageExplain = z.explain;
 
 const hot = [
   { step: 'loading wallet state' },
@@ -47,5 +52,21 @@ describe('stageMeta', () => {
 
   it('says nothing it does not know', () => {
     expect(stageMeta([{ step: 'notes selected' }], 0, 0)).toBe('');
+  });
+});
+
+describe('penumbra stages', () => {
+  const p = STAGES.penumbra;
+  it('follows the service worker op through planning, approval and broadcast', () => {
+    const at = (step: string) => stageAt(p, [{ step }]);
+    expect(['sending to the wallet', 'preparing', 'planning'].map(at)).toEqual([0, 0, 0]);
+    expect(at('approve and build')).toBe(1);
+    expect(at('broadcasting')).toBe(2);
+  });
+
+  it('points at the approval window only while it is open', () => {
+    expect(metaAt(p, [{ step: 'approve and build' }], 1, 1)).toBe('in the approval window');
+    expect(metaAt(p, [{ step: 'broadcasting' }], 1, 2)).toBe('done');
+    expect(p.explain([], 1, true)).toMatch(/approval window/);
   });
 });

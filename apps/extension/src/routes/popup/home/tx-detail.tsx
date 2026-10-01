@@ -19,20 +19,46 @@ import { fmtTime, fmtZecHero } from './format';
 import { isIncoming, type ParsedTransaction } from './tx-parse';
 import { penumbraRefs } from '../../../history/penumbra-describe';
 
-const txExplorerUrl = (network: NetworkType, txid: string): string | undefined => {
-  switch (network) {
-    case 'zcash':
-      return `https://cipherscan.app/tx/${txid}`;
-    case 'penumbra':
-      return `https://penumbra.fi/explore/tx/${txid}`;
-    case 'noble':
-      return `https://www.mintscan.io/noble/tx/${txid}`;
-    case 'injective':
-      return `https://explorer.injective.network/transaction/${txid}`;
-    default:
-      return undefined;
-  }
+interface TxLook {
+  explorer?: (txid: string) => string;
+  /** the hero: figure and unit */
+  hero: (tx: ParsedTransaction) => { amount: string; unit: string };
+  /** a build step this network proves locally before sending */
+  proved?: string;
+  contact: ContactNetwork;
+}
+
+const asset = (tx: ParsedTransaction) => ({
+  amount: tx.entry?.amounts[0]?.exact ?? tx.amount ?? '',
+  unit: (tx.asset ?? '').toLowerCase(),
+});
+
+/** what one transaction looks like per network */
+const LOOK: Partial<Record<NetworkType, TxLook>> = {
+  zcash: {
+    explorer: id => `https://cipherscan.app/tx/${id}`,
+    hero: tx => ({ amount: fmtZecHero(Number(tx.amount ?? 0)), unit: 'zec' }),
+    proved: 'proved on this computer',
+    contact: 'zcash',
+  },
+  penumbra: {
+    explorer: id => `https://penumbra.fi/explore/tx/${id}`,
+    hero: asset,
+    proved: 'proved on this computer',
+    contact: 'penumbra',
+  },
+  noble: {
+    explorer: id => `https://www.mintscan.io/noble/tx/${id}`,
+    hero: asset,
+    contact: 'cosmos',
+  },
+  injective: {
+    explorer: id => `https://explorer.injective.network/transaction/${id}`,
+    hero: asset,
+    contact: 'cosmos',
+  },
 };
+const PLAIN: TxLook = { hero: asset, contact: 'cosmos' };
 
 interface TxDetailState {
   tx: ParsedTransaction;
@@ -66,7 +92,8 @@ export const TxDetailPage = () => {
 const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: NetworkType }) => {
   const navigate = useNavigate();
   const explorerEnabled = useStore(s => s.privacy.settings.enableExplorerLinks);
-  const explorer = explorerEnabled ? txExplorerUrl(network, tx.id) : undefined;
+  const look = LOOK[network] ?? PLAIN;
+  const explorer = explorerEnabled ? look.explorer?.(tx.id) : undefined;
   const isIn = isIncoming(tx);
   const isSh = tx.type === 'shield' || tx.type === 'unshield';
   const isPending = tx.status === 'pending';
@@ -80,8 +107,6 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
   const { note: fromNote, save: saveFromNote } = useTxNote(tx.id);
   const [editingNote, setEditingNote] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
-  const contactNet: ContactNetwork =
-    network === 'zcash' ? 'zcash' : network === 'penumbra' ? 'penumbra' : 'cosmos';
   // an expired send charged no fee, so it has no breakdown to give
   const hasBreakdown = !isFailed && !!tx.recipientAmount && !!tx.feeAmount;
   const shortRecipient = tx.recipient && `${tx.recipient.slice(0, 8)}…${tx.recipient.slice(-4)}`;
@@ -93,10 +118,7 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
       : recipientName
         ? `sent to ${recipientName}`
         : tx.description;
-  const amountText =
-    network === 'zcash'
-      ? fmtZecHero(Number(tx.amount ?? 0))
-      : `${tx.entry?.amounts[0]?.exact ?? tx.amount ?? ''} ${tx.asset ?? ''}`;
+  const hero = look.hero(tx);
 
   // What we can honestly say about progress: a history record carries one
   // status and the broadcast time, not a per-step log, so only the rows that
@@ -107,9 +129,7 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
   const steps: { label: string; mark: 'done' | 'warn' | 'wait'; at?: string }[] =
     isFailed || isPending
       ? [
-          ...(network === 'zcash'
-            ? [{ label: 'proved on this computer', mark: 'done' as const, at: sentAt }]
-            : []),
+          ...(look.proved ? [{ label: look.proved, mark: 'done' as const, at: sentAt }] : []),
           { label: 'sent to the network', mark: 'done', at: sentAt },
           isFailed
             ? { label: 'expired before a block found it', mark: 'warn' }
@@ -124,8 +144,8 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
         {tx.amount && (
           <Sensitive className='font-display text-[38px] leading-none text-fg-high'>
             {tx.amountUpperBound ? '≤ ' : ''}
-            {amountText}
-            {network === 'zcash' && <span className='ml-2.5 text-base text-zigner-gold'>zec</span>}
+            {hero.amount}
+            {hero.unit && <span className='ml-2.5 text-base text-network-accent'>{hero.unit}</span>}
           </Sensitive>
         )}
 
@@ -142,9 +162,9 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
                 <span
                   className={cn(
                     'size-3 shrink-0',
-                    s.mark === 'done' && 'bg-zigner-gold',
+                    s.mark === 'done' && 'bg-network-accent',
                     s.mark === 'warn' && 'bg-warn',
-                    s.mark === 'wait' && 'border border-zigner-gold',
+                    s.mark === 'wait' && 'border border-network-accent',
                   )}
                 />
                 {s.label}
@@ -318,7 +338,7 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
       {showSave && tx.recipient && (
         <SaveContactModal
           address={tx.recipient}
-          network={contactNet}
+          network={look.contact}
           zcashme={directoryProfile}
           onDone={() => setShowSave(false)}
           onCancel={() => setShowSave(false)}

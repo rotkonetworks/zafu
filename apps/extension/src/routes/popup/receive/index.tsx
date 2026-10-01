@@ -8,7 +8,7 @@
  * rotating ephemeral address (the static index address is never exposed).
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ScreenHeader } from '../../../components/screen-header';
 import { useLocation } from 'react-router-dom';
 import { PopupPath } from '../paths';
@@ -18,13 +18,9 @@ import { selectActiveZcashWallet } from '../../../state/wallets';
 import { useActiveAddress } from '../../../hooks/use-address';
 import { rotateShieldedDiversifier } from '../../../state/shielded-receive-index';
 import { routeForChain, usePenumbraRoutes } from '../../../transparent/penumbra-routes';
-import { ReceiveTab, type AddrType } from './receive-tab';
+import { PenumbraReceive, PlainReceive, ZcashReceive, type AddrType } from './receive-tab';
 import { TransparentReceive } from './transparent-receive';
-import {
-  PrivacySwitch,
-  orderTransparentChains,
-  type Privacy,
-} from '../../../components/privacy-switch';
+import { orderTransparentChains, type Privacy } from '../../../components/privacy-switch';
 import { getActiveIbcSubnetworks } from '../../../config/networks';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { Segmented } from '@repo/ui/components/ui/segmented';
@@ -87,53 +83,61 @@ export function ReceivePage() {
     privacy === 'transparent' ? (pickedChain ?? transparentChains[0] ?? 'penumbra') : 'penumbra';
 
   // zcash shielded vs transparent lives in the header, not a full-width row
-  // under the QR.
+  // under the QR; a multisig purse is shielded-only
   const [addrType, setAddrType] = useState<AddrType>('shielded');
+  const toggle = <T extends string>(value: T, onChange: (v: T) => void, label: string) => (
+    <Segmented
+      label={label}
+      value={value}
+      onChange={onChange}
+      options={[
+        { value: 'shielded' as T, label: 'shielded' },
+        { value: 'transparent' as T, label: 'transparent' },
+      ]}
+    />
+  );
+  // what each network puts in the header and offers as its shielded address
+  const looks: Partial<Record<string, { meta: ReactNode; shielded: () => ReactNode }>> = {
+    zcash: {
+      meta: !isMultisig && toggle(addrType, setAddrType, 'address type'),
+      shielded: () => (
+        <ZcashReceive
+          address={fresh || shownFresh ? address : ''}
+          loading={loading || (!fresh && !shownFresh)}
+          stale={!fresh}
+          retireShielded={retireShielded}
+          addrType={addrType}
+        />
+      ),
+    },
+    penumbra: {
+      meta: transparentChains.length > 0 && toggle(privacy, setPrivacy, 'privacy'),
+      shielded: () => <PenumbraReceive />,
+    },
+  };
+  const look = looks[activeNetwork];
+  const body =
+    receiveOn === 'penumbra' ? (
+      (look?.shielded() ?? <PlainReceive address={address} loading={loading} />)
+    ) : (
+      <>
+        {transparentChains.length > 1 && (
+          <Segmented
+            label='network'
+            value={receiveOn}
+            onChange={setPickedChain}
+            options={transparentChains.map(c => ({ value: c, label: COSMOS_CHAINS[c].name }))}
+            className='mb-4 w-full'
+          />
+        )}
+        <TransparentReceive key={receiveOn} chainId={receiveOn} />
+      </>
+    );
 
   return (
     <div className='flex h-full flex-col'>
-      <ScreenHeader
-        title='receive'
-        backPath={PopupPath.INDEX}
-        meta={
-          // a multisig purse is shielded-only: no transparent address to offer
-          isZcash && !isMultisig ? (
-            <Segmented
-              label='address type'
-              value={addrType}
-              onChange={setAddrType}
-              options={[
-                { value: 'shielded', label: 'shielded' },
-                { value: 'transparent', label: 'transparent' },
-              ]}
-            />
-          ) : undefined
-        }
-      />
-
-      <div className='flex flex-1 flex-col p-4'>
-        {transparentChains.length > 0 && (
-          <PrivacySwitch
-            privacy={privacy}
-            onPrivacy={setPrivacy}
-            chains={transparentChains}
-            chain={receiveOn === 'penumbra' ? undefined : receiveOn}
-            onChain={setPickedChain}
-          />
-        )}
-        {receiveOn === 'penumbra' ? (
-          <ReceiveTab
-            address={fresh || shownFresh ? address : ''}
-            loading={loading || (!fresh && !shownFresh)}
-            stale={!fresh}
-            activeNetwork={activeNetwork}
-            retireShielded={retireShielded}
-            addrType={addrType}
-          />
-        ) : (
-          <TransparentReceive key={receiveOn} chainId={receiveOn} />
-        )}
-      </div>
+      <ScreenHeader title='receive' backPath={PopupPath.INDEX} meta={look?.meta || undefined} />
+      <div className='flex flex-1 flex-col p-4'>{body}</div>
     </div>
   );
 }

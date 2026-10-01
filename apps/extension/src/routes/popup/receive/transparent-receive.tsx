@@ -4,12 +4,17 @@
  * since an exchange often keeps paying a whitelisted address.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { conduitFor } from '@repo/wallet/networks/transparent/conduit';
-import { QrCode } from '../../../components/qr-code';
+import { Button } from '@repo/ui/components/ui/button';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
+import { useCopy } from '@repo/ui/hooks/use-copy';
 import { useStore } from '../../../state';
 import { keyRingSelector, selectEffectiveKeyInfo } from '../../../state/keyring';
+import { AddressView } from './address-view';
 import {
   allocateTransparentAddress,
   readShownIndices,
@@ -27,7 +32,6 @@ export const TransparentReceive = ({ chainId }: { chainId: CosmosChainId }) => {
 
   const [nonce, setNonce] = useState(0);
   const [current, setCurrent] = useState<{ index: number; address: string }>();
-  const [copied, setCopied] = useState(false);
   const [showEarlier, setShowEarlier] = useState(false);
   const [earlier, setEarlier] = useState<{ index: number; address: string }[]>();
 
@@ -83,83 +87,62 @@ export const TransparentReceive = ({ chainId }: { chainId: CosmosChainId }) => {
     };
   }, [showEarlier, keyId, chainId, current?.index, earlier, getMnemonic]);
 
-  const copy = useCallback((address: string) => {
-    void navigator.clipboard.writeText(address);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }, []);
+  const { copied, copy } = useCopy();
 
   if (!keyId) {
     return (
-      <div className='border border-border-soft bg-elev-1 p-4 text-sm text-fg-muted lowercase'>
-        cold wallets can't derive a {cfg.name} address in-app yet.
-      </div>
+      <StatusSlot icon='i-ph-info'>
+        cold wallets can&apos;t derive a {cfg.name.toLowerCase()} address here yet
+      </StatusSlot>
     );
   }
 
   return (
-    <div className='flex flex-col items-center gap-3'>
-      {current ? (
-        <QrCode value={current.address} size={176} label={`${cfg.name} address QR`} />
-      ) : (
-        <div className='h-[176px] w-[176px] animate-pulse bg-elev-2' />
-      )}
-      <div className='flex w-full items-center gap-2 border border-border-soft px-3 py-2'>
-        <span className='truncate font-mono text-xs' title={current?.address}>
-          {current?.address ?? 'deriving...'}
-        </span>
-        <button
-          type='button'
-          onClick={() => setNonce(n => n + 1)}
-          className='flex shrink-0 items-center text-fg-muted hover:text-fg-high'
-          title='new address'
-          aria-label='new address'
+    <>
+      <AddressView
+        address={current?.address ?? ''}
+        loading={!current}
+        label={`${cfg.name.toLowerCase()} address · public`}
+        hint='a new one each time'
+        tone='public'
+        onRotate={() => setNonce(n => n + 1)}
+      >
+        <Button
+          variant='secondary'
+          onClick={() => setShowEarlier(true)}
+          className='w-[150px] shrink-0'
         >
-          <span className='i-ph-arrows-clockwise h-4 w-4' />
-        </button>
-        <button
-          type='button'
+          earlier
+        </Button>
+        <Button
           onClick={() => current && copy(current.address)}
           disabled={!current}
-          className='shrink-0 text-label text-fg-muted hover:text-fg-high disabled:opacity-40'
+          className='flex-1'
         >
-          {copied ? 'copied' : 'copy'}
-        </button>
-      </div>
-
-      <div className='w-full'>
-        <button
-          type='button'
-          onClick={() => setShowEarlier(v => !v)}
-          className='flex items-center gap-1 text-label text-fg-muted lowercase hover:text-fg-high'
-        >
-          <span className={`h-3 w-3 ${showEarlier ? 'i-ph-caret-down' : 'i-ph-caret-right'}`} />
-          earlier addresses
-        </button>
-        {showEarlier && (
-          <div className='mt-1 flex flex-col'>
-            {earlier === undefined ? (
-              <span className='px-1.5 py-1 text-label text-fg-dim'>deriving...</span>
-            ) : earlier.length === 0 ? (
-              <span className='px-1.5 py-1 text-label text-fg-dim'>none yet</span>
-            ) : (
-              earlier.map(r => (
-                <button
+          {copied ? 'copied' : 'copy address'}
+        </Button>
+      </AddressView>
+      <Sheet open={showEarlier} onOpenChange={setShowEarlier} title='earlier addresses'>
+        <div className='min-h-0 overflow-y-auto'>
+          {earlier === undefined || earlier.length === 0 ? (
+            <p className='py-6 text-center text-xs text-fg-muted'>
+              {earlier === undefined ? 'deriving' : 'none yet'}
+            </p>
+          ) : (
+            <RowGroup>
+              {earlier.map(r => (
+                <Row
                   key={r.index}
-                  type='button'
-                  onClick={() => copy(r.address)}
-                  title={r.address}
-                  className='flex items-center gap-2 px-1.5 py-1 text-left font-mono text-label text-fg-muted hover:bg-elev-2'
-                >
-                  <span className='w-8 shrink-0'>#{r.index}</span>
-                  <span className='truncate'>{shortAddress(r.address)}</span>
-                  <span className='i-ph-copy ml-auto h-3 w-3 shrink-0' />
-                </button>
-              ))
-            )}
-          </div>
-        )}
-      </div>
-    </div>
+                  type='value'
+                  label={`#${r.index} ${shortAddress(r.address)}`}
+                  value='copy'
+                  onPress={() => copy(r.address)}
+                />
+              ))}
+            </RowGroup>
+          )}
+        </div>
+      </Sheet>
+    </>
   );
 };

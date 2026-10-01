@@ -1,17 +1,12 @@
 /** zcash send: form, review, then the wallet's own signer (resolve.ts), then done */
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { StatusSlot } from '@repo/ui/components/ui/status-slot';
-import { Row, RowGroup } from '@repo/ui/components/ui/row';
-import { Sheet } from '@repo/ui/components/ui/sheet';
-import { cn } from '@repo/ui/lib/utils';
-import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import { Sensitive } from '../../../components/sensitive';
 import { removeTxOps, writeTxOp } from '../../../tx-ops';
 import { useStore } from '../../../state';
 import { zignerSigningSelector } from '../../../state/zigner-signing';
 import { recentAddressesSelector } from '../../../state/recent-addresses';
-import { contactsSelector, type Contact } from '../../../state/contacts';
+import { contactsSelector } from '../../../state/contacts';
 import { messagesSelector } from '../../../state/messages';
 import { selectEffectiveKeyInfo, selectGetVaultUnlock } from '../../../state/keyring';
 import { selectActiveZcashWallet, selectZcashWallets } from '../../../state/wallets';
@@ -62,16 +57,19 @@ import { formatZecAmount } from '@repo/wallet/networks/zcash/zip321';
 import { looksLikeLink, notYet, parseLink } from '../../../links/router';
 import { viaLine } from '../../../links/land';
 import {
+  Done,
   Footer,
-  Helper,
   Main,
   Mark,
-  Proving,
-  Sealed,
+  Review,
+  Sending,
+  Stopped,
   Strip,
   isTransparentAddress,
   shortAddress,
 } from './send-ui';
+import { AmountField, ContactsSheet, ToField } from './send-fields';
+import { STAGES } from './send-stage';
 
 import { unwrapCborSinglePczt, parsePreludeSinglePcztResponse } from './zcash-send-cbor-helpers';
 import { LedgerGone, WitnessRebuild, ZignerWrongCode } from './send-states';
@@ -143,8 +141,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   } = useStore(zignerSigningSelector);
 
   // recent addresses and contacts
-  const { recordUsage, shouldSuggestSave, getRecent } = useStore(recentAddressesSelector);
-  const { findByAddress, contacts, getFavorites, markAddressUsed } = useStore(contactsSelector);
+  const { recordUsage, shouldSuggestSave } = useStore(recentAddressesSelector);
+  const { findByAddress, markAddressUsed } = useStore(contactsSelector);
   const messages = useStore(messagesSelector);
   // tempTxId for the optimistic outgoing record created on send-click;
   // promoted to the real txid once the build step returns one.
@@ -323,7 +321,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const [fee, setFee] = useState('0.0001');
   // the address book: saved contacts, this wallet's siblings, recent payees
   const [showAddressBook, setShowAddressBook] = useState(false);
-  const [addressBookQuery, setAddressBookQuery] = useState('');
   // the address the user picked from the book: kept so the send-time lastUsedAt
   // stamp can fall back to it (findByAddress at send time stays authoritative).
   const [pickedContact, setPickedContact] = useState<{
@@ -427,57 +424,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
   const balanceZat = notesLoaded ? spendableNotes.reduce((s, v) => s + v, 0n) : null;
 
-  // ── contact book ────────────────────────────────────────────────────────
-  //
-  // Only contacts with at least one zcash address appear in the send flow.
-  // Favorites first, then most-recently-used (lastUsedAt), then store order.
-  const zcashContactRows = useMemo(() => {
-    const all = Array.isArray(contacts) ? contacts : [];
-    const favoriteIds = new Set(getFavorites().map(c => c.id));
-    const rowsFor = (list: Contact[]) =>
-      list
-        .map(contact => ({
-          contact,
-          addresses: contact.addresses.filter(a => a.network === 'zcash'),
-        }))
-        .filter(row => row.addresses.length > 0);
-    const lastUsed = (contact: Contact) =>
-      contact.addresses.reduce(
-        (max, a) => (a.network === 'zcash' ? Math.max(max, a.lastUsedAt ?? 0) : max),
-        0,
-      );
-    const favorites = rowsFor(all.filter(c => favoriteIds.has(c.id)));
-    const rest = rowsFor(all.filter(c => !favoriteIds.has(c.id))).sort(
-      (a, b) => lastUsed(b.contact) - lastUsed(a.contact),
-    );
-    return [...favorites, ...rest];
-  }, [contacts, getFavorites]);
-
+  // this wallet's siblings, offered in the contacts sheet after saved contacts
   const zcashWallets = useStore(selectZcashWallets);
-  const recentPayees = getRecent('zcash', 10);
-  const bookRows = (() => {
-    const seen = new Set<string>();
-    const rows: { label: string; address: string; contactId?: string; addressId?: string }[] = [];
-    const add = (row: (typeof rows)[number]) => {
-      if (row.address && !seen.has(row.address)) {
-        seen.add(row.address);
-        rows.push(row);
-      }
-    };
-    zcashContactRows.forEach(({ contact, addresses }) =>
-      addresses.forEach(a =>
-        add({ label: contact.name, address: a.address, contactId: contact.id, addressId: a.id }),
-      ),
-    );
-    zcashWallets
-      .filter(w => w.vaultId !== selectedKeyInfo?.id)
-      .forEach(w => add({ label: w.label, address: w.address }));
-    recentPayees.forEach(r => add({ label: shortAddress(r.address), address: r.address }));
-    const q = addressBookQuery.trim().toLowerCase();
-    return rows.filter(
-      r => !q || r.label.toLowerCase().includes(q) || r.address.toLowerCase().includes(q),
-    );
-  })();
+  const ownWallets = zcashWallets
+    .filter(w => w.vaultId !== selectedKeyInfo?.id)
+    .map(w => ({ label: w.label, address: w.address }));
 
   /** the saved contact the recipient currently resolves to - the trust signal */
   const recipientContact = useMemo(() => {
@@ -1228,41 +1179,19 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           <>
             <ScreenHeader title='send zec' onBack={onClose} meta='1 / 2' />
             <Main className='gap-[18px] pt-5'>
-              <div className='flex flex-col gap-1.5'>
-                <label htmlFor='send-to' className='text-xs text-fg-muted'>
-                  to
-                </label>
-                <div className='flex gap-1.5'>
-                  <Input
-                    id='send-to'
-                    placeholder='address or contact'
-                    value={recipient}
-                    onChange={e => {
-                      if (!applyLink(e.target.value, 'pasted')) {
-                        setLinkVia(undefined);
-                        setRecipient(e.target.value);
-                      }
-                    }}
-                    variant={toHelper[0] ? 'warn' : 'default'}
-                    className='min-w-0 flex-1'
-                  />
-                  <Button
-                    variant='secondary'
-                    onClick={() => setShowAddressBook(true)}
-                    aria-label='contacts'
-                    className='size-12 shrink-0 bg-elev-1 px-0 text-fg-muted'
-                  >
-                    <span className='i-lucide-user size-4' />
-                  </Button>
-                  <Button
-                    variant='secondary'
-                    onClick={() => setShowQrScanner(true)}
-                    aria-label='scan a code'
-                    className='size-12 shrink-0 bg-elev-1 px-0 text-fg-muted'
-                  >
-                    <span className='i-lucide-scan size-4' />
-                  </Button>
-                </div>
+              <ToField
+                value={recipient}
+                onChange={v => {
+                  if (!applyLink(v, 'pasted')) {
+                    setLinkVia(undefined);
+                    setRecipient(v);
+                  }
+                }}
+                warn={toHelper[0]}
+                helper={toHelper[1]}
+                onContacts={() => setShowAddressBook(true)}
+                onScan={() => setShowQrScanner(true)}
+              >
                 <ZcashMeRecipientResolver
                   input={recipient}
                   onResolve={p => {
@@ -1270,73 +1199,42 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     setRecipient(p.address);
                   }}
                 />
-                <Helper warn={toHelper[0]}>{toHelper[1]}</Helper>
-              </div>
+              </ToField>
 
-              <div className='flex flex-col gap-1.5'>
-                <div className='flex items-baseline justify-between'>
-                  <label htmlFor='send-amount' className='text-xs text-fg-muted'>
-                    amount
-                  </label>
-                  {/* the active pool only, so it can differ from home's total */}
-                  {balanceZat !== null && (
-                    <span className='text-[11px] text-fg-muted'>
-                      available <Sensitive>{fmtZecShort(balanceZat)}</Sensitive>
-                    </span>
-                  )}
-                </div>
-                <div className='relative'>
-                  <Input
-                    id='send-amount'
-                    inputMode='decimal'
-                    placeholder='0'
-                    value={amount}
-                    onChange={e => {
-                      filledByRequest.current.amount = false;
-                      setAmount(e.target.value);
-                    }}
-                    variant={overLimit ? 'warn' : 'default'}
-                    className={cn(
-                      'h-14 pr-[110px] font-display text-2xl',
-                      overLimit && 'focus-visible:border-warn',
-                    )}
-                  />
-                  <span className='pointer-events-none absolute right-16 top-0 flex h-14 items-center text-[13px] text-fg-muted'>
-                    zec
-                  </span>
-                  {/* every note in the pool, minus the ZIP-317 fee that
-                    transaction really pays */}
-                  <Button
-                    variant='secondary'
-                    size='sm'
-                    onClick={() => {
-                      filledByRequest.current.amount = false;
-                      setAmount(maxSend.amountZat > 0n ? fmtZecShort(maxSend.amountZat) : '0');
-                    }}
-                    disabled={maxSend.amountZat <= 0n}
-                    className='absolute right-2 top-3 h-8 border-border-hard text-zigner-gold'
-                  >
-                    max
-                  </Button>
-                </div>
-                {/* orchard funds are real but consensus-disabled post-NU6.3:
-                  name them rather than fold them into what can be sent */}
-                <Helper warn={overLimit}>
-                  {overLimit ? (
+              {/* the active pool only, so it can differ from home's total; max is
+                every note in the pool minus the ZIP-317 fee that transaction pays */}
+              <AmountField
+                value={amount}
+                onChange={v => {
+                  filledByRequest.current.amount = false;
+                  setAmount(v);
+                }}
+                unit='zec'
+                available={balanceZat !== null ? fmtZecShort(balanceZat) : undefined}
+                onMax={() => {
+                  filledByRequest.current.amount = false;
+                  setAmount(fmtZecShort(maxSend.amountZat));
+                }}
+                canMax={maxSend.amountZat > 0n}
+                warn={overLimit}
+                helper={
+                  overLimit ? (
                     <>
                       a little more than you have · up to{' '}
                       <Sensitive>{fmtZecShort(maxSend.amountZat)}</Sensitive>
                     </>
                   ) : (
+                    // orchard funds are real but consensus-disabled post-NU6.3:
+                    // name them rather than fold them into what can be sent
                     strandedZat > 0n && (
                       <>
                         <Sensitive>{fmtZecShort(strandedZat)} zec</Sensitive> waits in orchard ·
                         migrate it on home to send it
                       </>
                     )
-                  )}
-                </Helper>
-              </div>
+                  )
+                }
+              />
 
               <div className='flex flex-col gap-1.5'>
                 <label htmlFor='send-memo' className='text-xs text-fg-muted'>
@@ -1373,108 +1271,51 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 title='scan an address'
               />
             )}
-            <Sheet
+            <ContactsSheet
+              network='zcash'
               open={showAddressBook}
-              onOpenChange={open => {
-                setShowAddressBook(open);
-                setAddressBookQuery('');
+              onOpenChange={setShowAddressBook}
+              own={ownWallets}
+              onPick={row => {
+                setRecipient(row.address);
+                setPickedContact(
+                  row.contactId && row.addressId
+                    ? { contactId: row.contactId, addressId: row.addressId, address: row.address }
+                    : null,
+                );
               }}
-              title='contacts'
-            >
-              <Input
-                placeholder='search name or address'
-                value={addressBookQuery}
-                onChange={e => setAddressBookQuery(e.target.value)}
-              />
-              <div className='min-h-0 overflow-y-auto'>
-                {bookRows.length > 0 ? (
-                  <RowGroup>
-                    {bookRows.map(row => (
-                      <Row
-                        key={row.address}
-                        type='screen'
-                        label={row.label}
-                        description={shortAddress(row.address)}
-                        onPress={() => {
-                          setRecipient(row.address);
-                          setPickedContact(
-                            row.contactId && row.addressId
-                              ? {
-                                  contactId: row.contactId,
-                                  addressId: row.addressId,
-                                  address: row.address,
-                                }
-                              : null,
-                          );
-                          setShowAddressBook(false);
-                          setAddressBookQuery('');
-                        }}
-                      />
-                    ))}
-                  </RowGroup>
-                ) : (
-                  <p className='py-6 text-center text-xs text-fg-muted'>
-                    {addressBookQuery.trim() ? 'nothing matches that' : 'no saved addresses yet'}
-                  </p>
-                )}
-              </div>
-            </Sheet>
+            />
           </>
         );
 
       case 'review':
         return (
-          <>
-            <ScreenHeader title='review' onBack={handleBack} meta='2 / 2' />
-            <Main className='gap-[22px] pt-6'>
-              <div className='flex flex-col items-center gap-1.5 pb-1 pt-2'>
-                <span className='text-xs text-fg-muted'>you send</span>
-                <Sensitive>
-                  <span className='font-display text-[40px] leading-tight text-fg-high'>
-                    {amount} <span className='text-lg text-zigner-gold'>zec</span>
-                  </span>
-                </Sensitive>
-              </div>
-              <RowGroup>
-                {(
-                  [
-                    ['to', toName ? `${toName} · ${shortAddress(to)}` : shortAddress(to)],
-                    ['fee', <Sensitive key='fee'>{fee} zec</Sensitive>],
-                    [
-                      'total',
-                      <Sensitive key='total'>
-                        {fmtZecShort(Math.round((Number(amount) + Number(fee)) * 1e8))} zec
-                      </Sensitive>,
-                    ],
-                  ] as const
-                ).map(([k, v]) => (
-                  <div key={k} className='flex h-12 items-center justify-between gap-3 px-3.5'>
-                    <span className='text-xs text-fg-muted'>{k}</span>
-                    <span className='truncate text-[13px] text-fg-high'>{v}</span>
-                  </div>
-                ))}
-              </RowGroup>
-              <div className='flex h-10 items-center gap-2 border border-border-soft px-3'>
-                <span className='i-lucide-shield size-3.5 shrink-0 text-zigner-gold' />
-                <span className='text-xs text-fg'>
-                  {recipientIsTransparent
-                    ? 'public · the address and amount are visible to anyone'
-                    : 'shielded · amount and memo stay private'}
-                </span>
-              </div>
-              {linkVia && (
-                <span className='text-center text-[11px] text-fg-muted'>{viaLine(linkVia)}</span>
-              )}
-            </Main>
-            <Footer>
-              <Button variant='secondary' onClick={handleBack} className='w-[110px]'>
-                edit
-              </Button>
-              <Button onClick={() => void handleSign()} className='grow'>
-                {kind && CAPS[kind].signLabel}
-              </Button>
-            </Footer>
-          </>
+          <Review
+            amount={amount}
+            unit='zec'
+            rows={[
+              ['to', toName ? `${toName} · ${shortAddress(to)}` : shortAddress(to)],
+              ['fee', <Sensitive key='fee'>{fee} zec</Sensitive>],
+              [
+                'total',
+                <Sensitive key='total'>
+                  {fmtZecShort(Math.round((Number(amount) + Number(fee)) * 1e8))} zec
+                </Sensitive>,
+              ],
+            ]}
+            privacy={
+              recipientIsTransparent
+                ? 'public · the address and amount are visible to anyone'
+                : 'shielded · amount and memo stay private'
+            }
+            confirm={kind ? CAPS[kind].signLabel : ''}
+            onEdit={handleBack}
+            onConfirm={() => void handleSign()}
+          >
+            {linkVia && (
+              <span className='text-center text-[11px] text-fg-muted'>{viaLine(linkVia)}</span>
+            )}
+          </Review>
         );
 
       // broadcasting is the tail of the same operation: one sending screen
@@ -1487,31 +1328,19 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             onBackground={onClose}
           />
         ) : (
-          <>
-            <ScreenHeader
-              title='sending'
-              backPath={false}
-              meta={
-                <span>
-                  <Sensitive>{amount} zec</Sensitive> to {toLabel}
-                </span>
-              }
-            />
-            <Proving
-              steps={sendSteps}
-              floor={step === 'broadcast' ? 3 : 0}
-              since={buildStartRef.current}
-              hot={kind === 'hot'}
-            />
-            <Footer className='flex-col'>
-              <span className='flex h-[18px] items-center justify-center text-[11px] text-fg-muted'>
-                you can close this · it keeps going and shows on home
+          <Sending
+            meta={
+              <span>
+                <Sensitive>{amount} zec</Sensitive> to {toLabel}
               </span>
-              <Button variant='secondary' onClick={onClose} className='h-11'>
-                back to wallet
-              </Button>
-            </Footer>
-          </>
+            }
+            stages={STAGES.zcash}
+            steps={sendSteps}
+            floor={step === 'broadcast' ? 3 : 0}
+            since={buildStartRef.current}
+            hot={kind === 'hot'}
+            onClose={onClose}
+          />
         );
 
       case 'sign':
@@ -1665,25 +1494,19 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           showSavePrompt && !!recipient && !findByAddress(recipient) && !showContactModal;
         return (
           <>
-            <ScreenHeader title='done' onBack={handleClose} />
-            <Sealed>
-              <span className='text-[13px] text-fg-muted'>
-                {kind && DEVICE[kind] ? (
+            <Done
+              line={
+                kind && DEVICE[kind] ? (
                   `signed on ${device} · key never left it`
                 ) : (
                   <>
                     <Sensitive>{amount} zec</Sensitive> to {toLabel}
                   </>
-                )}
-              </span>
-              {txHash && (
-                <span className='flex items-center gap-1.5 text-xs text-fg-muted'>
-                  {shortAddress(txHash)}
-                  <CopyButton text={txHash} />
-                </span>
-              )}
-            </Sealed>
-            <Footer>
+                )
+              }
+              txHash={txHash ?? undefined}
+              onDone={handleClose}
+            >
               {/* a cold device's offline view is stale after a send */}
               {kind && CAPS[kind].afterSend === 'sync-zigner' && (
                 <Button
@@ -1734,10 +1557,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   view transaction
                 </Button>
               )}
-              <Button onClick={handleClose} className='grow'>
-                done
-              </Button>
-            </Footer>
+            </Done>
             {showContactModal && (
               <SaveContactModal
                 address={recipient}
@@ -1812,23 +1632,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
       case 'error':
         return (
-          <>
-            <ScreenHeader title='send stopped' onBack={handleBack} />
-            <Strip>{sending}</Strip>
-            <Main className='pt-5'>
-              <StatusSlot tone='warn' icon='i-ph-warning'>
-                {formError || signingError || 'something broke on our side, not yours'}
-              </StatusSlot>
-            </Main>
-            <Footer>
-              <Button variant='secondary' onClick={handleClose} className='w-[110px]'>
-                cancel
-              </Button>
-              <Button onClick={handleBack} className='grow'>
-                try again
-              </Button>
-            </Footer>
-          </>
+          <Stopped
+            sending={sending}
+            error={formError || signingError}
+            onCancel={handleClose}
+            onRetry={handleBack}
+          />
         );
 
       default:

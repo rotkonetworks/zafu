@@ -1,95 +1,38 @@
-/**
- * penumbra IBC withdraw form
- */
+/** penumbra ibc withdraw: out of the shielded pool to a cosmos chain, on the shared send steps */
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
-import { Sensitive } from '../../../components/sensitive';
+import { useState, useMemo, useEffect, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
+import { getDisplayDenomExponent } from '@penumbra-zone/getters/metadata';
+import { fromValueView } from '@rotko/penumbra-types/amount';
+import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { Button } from '@repo/ui/components/ui/button';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { useStore } from '../../../state';
-import { selectPenumbraAccount } from '../../../state/keyring';
+import {
+  selectPenumbraAccount,
+  keyRingSelector,
+  selectEffectiveKeyInfo,
+} from '../../../state/keyring';
 import { recentAddressesSelector } from '../../../state/recent-addresses';
 import { contactsSelector } from '../../../state/contacts';
 import { selectIbcWithdraw } from '../../../state/ibc-withdraw';
 import { isValidWithdrawAmount } from '../../../state/ibc-withdraw-amount';
-import { useIbcChains, isValidIbcAddress, type IbcChain } from '../../../hooks/ibc-chains';
-import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
-import { getDisplayDenomExponent } from '@penumbra-zone/getters/metadata';
-import { fromValueView } from '@rotko/penumbra-types/amount';
-import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
+import { useIbcChains, isValidIbcAddress } from '../../../hooks/ibc-chains';
 import { trackUnshieldOut } from '../../../state/ibc-transfer-probes';
-import { IbcTransferStatusLine } from '../ibc-transfer-status';
-import { RegistryIcon } from '../../../shared/components/registry-icon';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
-import { cn } from '@repo/ui/lib/utils';
-import { Button } from '@repo/ui/components/ui/button';
-import { AssetIcon } from '@repo/ui/components/ui/asset-icon';
-import { symbolFromMetadata } from '../../../utils/asset-display';
 import { selectWithdrawableBalances } from '../../../utils/is-fungible-asset';
 import { balancesQueryOptions } from '../../../hooks/penumbra-balances';
-import { keyRingSelector, selectEffectiveKeyInfo } from '../../../state/keyring';
 import { allocateTransparentAddress } from '../../../transparent/hd';
-import { RecipientPicker } from '../../../components/recipient-picker';
+import { ScreenHeader } from '../../../components/screen-header';
+import { Sensitive } from '../../../components/sensitive';
+import { SaveContactModal } from '../../../components/save-contact-modal';
+import { IbcTransferStatusLine } from '../ibc-transfer-status';
+import { EMPTY_BALANCES } from './shared';
+import { Footer, Main, shortAddress } from './send-ui';
+import { AmountField, ContactsSheet, PickSheet, ToField } from './send-fields';
+import { BalanceSheet, balanceLook } from './balance-sheet';
+import { PenumbraFlow } from './penumbra-flow';
 
-import { EMPTY_BALANCES, SaveContactPrompt } from './shared';
-
-/** IBC chain selector dropdown */
-function ChainSelector({
-  chains,
-  selected,
-  onSelect,
-}: {
-  chains: IbcChain[];
-  selected: IbcChain | undefined;
-  onSelect: (chain: IbcChain) => void;
-}) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className='relative'>
-      <button
-        onClick={() => setOpen(!open)}
-        className='flex w-full items-center justify-between border border-border-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
-      >
-        {selected ? (
-          <span>{selected.displayName}</span>
-        ) : (
-          <span className='text-fg-muted'>select chain</span>
-        )}
-        <span
-          className={cn('i-ph-caret-down h-4 w-4 transition-transform', open && 'rotate-180')}
-        />
-      </button>
-
-      {open && (
-        <div className='absolute top-full left-0 right-0 z-50 mt-1 border border-border-soft bg-canvas shadow-lg overflow-hidden'>
-          {chains.map(chain => (
-            <button
-              key={chain.chainId}
-              onClick={() => {
-                onSelect(chain);
-                setOpen(false);
-              }}
-              className={cn(
-                'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-elev-1',
-                selected?.chainId === chain.chainId && 'bg-elev-2',
-              )}
-            >
-              <RegistryIcon
-                name={chain.displayName}
-                images={chain.images}
-                className='h-5 w-5'
-                size={20}
-              />
-              <span>{chain.displayName}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Penumbra IBC send form */
 /** filter balances to assets withdrawable through a given IBC channel */
 const filterWithdrawableAssets = <T,>(balances: T[], channelId: string | undefined): T[] => {
   if (!channelId) {
@@ -116,28 +59,13 @@ const filterWithdrawableAssets = <T,>(balances: T[], channelId: string | undefin
  */
 const MIN_NOBLE_USDC_UNSHIELD = 0.2;
 
-export function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
+export function PenumbraIbcSend({ onClose, meta }: { onClose: () => void; meta?: ReactNode }) {
   const { data: chains = [], isLoading: chainsLoading } = useIbcChains();
   const ibcState = useStore(selectIbcWithdraw);
   const penumbraAccount = useStore(selectPenumbraAccount);
-  const [txStatus, setTxStatus] = useState<
-    'idle' | 'planning' | 'signing' | 'broadcasting' | 'success' | 'error'
-  >('idle');
-  const [txHash, setTxHash] = useState<string | undefined>();
-  const [txError, setTxError] = useState<string | undefined>();
-  const [showSavePrompt, setShowSavePrompt] = useState(false);
-  const [contactName, setContactName] = useState('');
-  const [showContactModal, setShowContactModal] = useState(false);
-  const [sentToAddress, setSentToAddress] = useState<string | undefined>();
-  const [sentToChainId, setSentToChainId] = useState<string | undefined>();
-  const [assetOpen, setAssetOpen] = useState(false);
-  // id of the pending IBC transfer this success view is tracking (undefined once reset)
-  const [trackedTransferId, setTrackedTransferId] = useState<string | undefined>();
   // opt-in: send to a hand-entered address instead of our own burner deposit
   // address. Off by default - unshielding lands in our transparent burner.
   const [overrideAddress, setOverrideAddress] = useState(false);
-
-  const penumbraTx = usePenumbraTransaction();
 
   // fetch balances for asset selection
   // Shared RAW ['balances', account] cache; `select` excludes non-fungible
@@ -189,8 +117,8 @@ export function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   }, [ibcState.chain?.channelId, withdrawableAssets.length]);
 
   // recent addresses and contacts
-  const { recordUsage, shouldSuggestSave, dismissSuggestion } = useStore(recentAddressesSelector);
-  const { addContact, addAddress, findByAddress } = useStore(contactsSelector);
+  const { recordUsage, shouldSuggestSave } = useStore(recentAddressesSelector);
+  const { findByAddress } = useStore(contactsSelector);
 
   const addressValid = useMemo(
     () => isValidIbcAddress(ibcState.chain, ibcState.destinationAddress),
@@ -289,7 +217,7 @@ export function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
     return typeof val === 'string' ? val : val.toString();
   }, [selectedAsset]);
 
-  const handleMax = useCallback(() => {
+  const handleMax = () => {
     // Fill the FULL spendable balance of the selected asset, mirroring the max in
     // native-send and cosmos-send. No fee is reserved here on purpose: Penumbra
     // fees are a separate spend the planner adds (normally from UM), so maxing a
@@ -302,7 +230,7 @@ export function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
     // isValidWithdrawAmount rejects (its grammar has no exponent). Harmless while
     // only 6-decimal assets (UM, USDC) are live; revisit if an 18-dec asset ships.
     ibcState.setAmount(selectedBalance);
-  }, [selectedBalance, ibcState]);
+  };
 
   // Amount must be expressible in the asset's own base units: more fractional
   // digits than the exponent allows is a user error we surface up front rather
@@ -310,391 +238,198 @@ export function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   const amountValid =
     ibcState.exponent !== undefined && isValidWithdrawAmount(ibcState.amount, ibcState.exponent);
 
-  const canSubmit =
-    ibcState.chain && addressValid && amountValid && !belowNobleMin && txStatus === 'idle';
+  const canReview = !!ibcState.chain && addressValid && amountValid && !belowNobleMin;
 
-  const handleSubmit = useCallback(async () => {
-    if (!canSubmit) {
-      return;
-    }
+  const [assetOpen, setAssetOpen] = useState(false);
+  const [chainOpen, setChainOpen] = useState(false);
+  const [bookOpen, setBookOpen] = useState(false);
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [sent, setSent] = useState<{ address: string; chainId?: string }>();
 
-    setTxStatus('planning');
-    setTxError(undefined);
-
-    try {
-      const planRequest = await ibcState.buildPlanRequest();
-      setTxStatus('signing');
-
-      const result = await penumbraTx.mutateAsync(planRequest);
-
-      setTxStatus('success');
-      setTxHash(result.txId);
-
-      // record address usage
-      const destAddr = ibcState.destinationAddress;
-      const chainId = ibcState.chain?.chainId;
-      setSentToAddress(destAddr);
-      setSentToChainId(chainId);
-      void recordUsage(destAddr, 'cosmos', chainId);
-      // check if we should prompt to save as contact
-      if (shouldSuggestSave(destAddr)) {
-        setShowSavePrompt(true);
-      }
-
-      // start tracking arrival on the destination cosmos chain (the relayer has
-      // no status API, so we poll the burner/recipient balance). Capture the
-      // fields BEFORE ibcState.reset() clears them. Best-effort + non-blocking.
-      if (result.txId && trackChainId) {
-        const meta = selectedAsset
-          ? getMetadataFromBalancesResponse.optional(selectedAsset)
-          : undefined;
-        void trackUnshieldOut({
-          srcTxHash: result.txId,
-          amount: ibcState.amount,
-          // the ASSET's decimals: INJ is 18, USDC.inj 6 - the chain's native
-          // decimals mis-sized the expected arrival for anything else
-          decimals: ibcState.exponent ?? COSMOS_CHAINS[trackChainId].decimals,
-          symbol: meta?.symbol ?? meta?.display ?? ibcState.denom,
-          destChainId: trackChainId,
-          destAddress: destAddr,
-          isNative: isNobleUsdc,
-        })
-          .then(() => setTrackedTransferId(result.txId))
-          .catch(err => console.warn('failed to track unshield transfer:', err));
-      }
-
-      // reset form after success
-      ibcState.reset();
-    } catch (err) {
-      setTxStatus('error');
-      const msg = err instanceof Error ? err.message : 'transaction failed';
-      setTxError(
-        msg.includes('expired')
-          ? `${ibcState.chain?.displayName ?? 'IBC'} channel unavailable - client expired`
-          : msg,
-      );
-    }
-  }, [
-    canSubmit,
-    ibcState,
-    penumbraTx,
-    recordUsage,
-    shouldSuggestSave,
-    cosmosChainId,
-    selectedAsset,
-    isNobleUsdc,
-  ]);
-
-  const handleReset = useCallback(() => {
-    setTxStatus('idle');
-    setTxHash(undefined);
-    setTxError(undefined);
-    setShowSavePrompt(false);
-    setSentToAddress(undefined);
-    setSentToChainId(undefined);
-    setTrackedTransferId(undefined);
-  }, []);
+  const chainName = ibcState.chain?.displayName ?? 'cosmos';
+  const to = ibcState.destinationAddress;
+  const own = !!ownAddress && to === ownAddress;
+  const toName = to ? findByAddress(to)?.contact.name : undefined;
+  const { symbol } = balanceLook(selectedAsset);
+  const unit = symbol.toLowerCase();
+  const sending = (
+    <>
+      withdraw <Sensitive>{`${ibcState.amount} ${unit}`}</Sensitive> to {chainName}
+    </>
+  );
+  const amountHelper = belowNobleMin
+    ? `at least ${MIN_NOBLE_USDC_UNSHIELD} usdc, so noble's fee never strands it`
+    : !!ibcState.amount && !amountValid
+      ? ibcState.exponent === undefined
+        ? 'no decimals known for this asset · please pick it again'
+        : `up to ${ibcState.exponent} decimal places, please`
+      : withdrawableAssets.length === 0 && ibcState.chain
+        ? `nothing here can go to ${chainName} yet`
+        : undefined;
 
   return (
-    <div className='flex flex-col gap-4'>
-      {/* chain selector */}
-      <div>
-        <label className='mb-1 block text-xs text-fg-muted'>destination chain</label>
-        {chainsLoading ? (
-          <div className='h-10 bg-elev-2 animate-pulse' />
-        ) : (
-          <ChainSelector chains={chains} selected={ibcState.chain} onSelect={ibcState.setChain} />
-        )}
-      </div>
-
-      {/* destination address - our burner deposit address by default */}
-      <div>
-        <label className='mb-1 block text-xs text-fg-muted'>
-          recipient {ibcState.chain && `(${ibcState.chain.addressPrefix}1...)`}
-        </label>
-        {ownAddress && !overrideAddress ? (
-          <div className='border border-border-soft bg-input px-3 py-2.5'>
-            <div className='flex items-center justify-between gap-2'>
-              <span className='text-label text-fg-muted lowercase'>your deposit address</span>
-              <span className='bg-red-500/10 px-1.5 py-0.5 text-label leading-none text-red-400 lowercase'>
-                transparent
-              </span>
-            </div>
-            <p className='mt-1 break-all font-mono text-xs text-fg' title={ownAddress}>
-              {ownAddress}
-            </p>
-            <button
-              type='button'
-              onClick={() => {
-                setOverrideAddress(true);
-                ibcState.setDestinationAddress('');
-              }}
-              disabled={txStatus !== 'idle'}
-              className='mt-1.5 text-label text-network-accent transition-colors hover:text-fg-high disabled:opacity-50'
-            >
-              send to a different address
-            </button>
-          </div>
-        ) : (
+    <PenumbraFlow
+      onClose={onClose}
+      tx={{
+        sending,
+        label: `withdraw ${ibcState.amount} ${symbol} to ${chainName}`,
+        plan: () => ibcState.buildPlanRequest(),
+        explainError: msg =>
+          msg.includes('expired')
+            ? `the ${chainName} channel is closed for now · nothing was sent`
+            : msg,
+        onSent: txId => {
+          const destAddr = ibcState.destinationAddress;
+          const chainId = ibcState.chain?.chainId;
+          void recordUsage(destAddr, 'cosmos', chainId);
+          setSent({ address: destAddr, chainId });
+          // the relayer has no status api, so arrival is watched on the
+          // destination balance; fields are read before reset() clears them
+          if (trackChainId) {
+            const meta = selectedAsset
+              ? getMetadataFromBalancesResponse.optional(selectedAsset)
+              : undefined;
+            void trackUnshieldOut({
+              srcTxHash: txId,
+              amount: ibcState.amount,
+              // the asset's decimals: INJ is 18, USDC.inj 6
+              decimals: ibcState.exponent ?? COSMOS_CHAINS[trackChainId].decimals,
+              symbol: meta?.symbol ?? meta?.display ?? ibcState.denom,
+              destChainId: trackChainId,
+              destAddress: destAddr,
+              isNative: isNobleUsdc,
+            }).catch(err => console.warn('failed to track unshield transfer:', err));
+          }
+          ibcState.reset();
+        },
+        review: {
+          lead: 'you withdraw',
+          amount: ibcState.amount,
+          unit,
+          rows: [
+            [
+              'to',
+              own
+                ? `your ${chainName} address`
+                : toName
+                  ? `${toName} · ${shortAddress(to)}`
+                  : shortAddress(to),
+            ],
+            ['network', chainName],
+            ['fee', 'shown before you approve'],
+          ],
+          privacy: `public on ${chainName} · the address and amount are visible`,
+          confirm: 'sign & send',
+        },
+        done: sending,
+      }}
+      doneNote={txId => <IbcTransferStatusLine transferId={txId} />}
+      doneActions={() =>
+        sent &&
+        shouldSuggestSave(sent.address) &&
+        !findByAddress(sent.address) && (
           <>
-            <input
-              type='text'
-              value={ibcState.destinationAddress}
-              onChange={e => ibcState.setDestinationAddress(e.target.value)}
-              placeholder={
-                ibcState.chain ? `${ibcState.chain.addressPrefix}1...` : 'select chain first'
-              }
-              disabled={!ibcState.chain || txStatus !== 'idle'}
-              className={cn(
-                'w-full border bg-input px-3 py-2.5 text-sm text-fg',
-                'placeholder:text-fg-muted transition-colors duration-100',
-                'focus:border-penumbra-purple focus:outline-none disabled:opacity-50',
-                ibcState.destinationAddress && !addressValid
-                  ? 'border-red-400'
-                  : 'border-border-soft',
-              )}
-            />
-            {ibcState.destinationAddress && !addressValid && (
-              <p className='mt-1 text-xs text-red-400'>
-                invalid address for {ibcState.chain?.displayName}
-              </p>
-            )}
-            <RecipientPicker
-              network='cosmos'
-              onSelect={ibcState.setDestinationAddress}
-              show={!ibcState.destinationAddress}
-            />
-            {ownAddress && (
-              <button
-                type='button'
-                onClick={() => {
-                  setOverrideAddress(false);
-                  ibcState.setDestinationAddress(ownAddress);
-                }}
-                disabled={txStatus !== 'idle'}
-                className='mt-1.5 text-label text-network-accent transition-colors hover:text-fg-high disabled:opacity-50'
-              >
-                use my deposit address
-              </button>
+            <Button variant='secondary' onClick={() => setSaveOpen(true)} className='px-3'>
+              save contact
+            </Button>
+            {saveOpen && (
+              <SaveContactModal
+                address={sent.address}
+                network='cosmos'
+                onDone={() => setSaveOpen(false)}
+                onCancel={() => setSaveOpen(false)}
+              />
             )}
           </>
-        )}
-      </div>
-
-      {/* asset selector */}
-      {ibcState.chain && (
-        <div>
-          <label className='mb-1 block text-xs text-fg-muted'>asset</label>
-          {withdrawableAssets.length === 0 ? (
-            <p className='text-xs text-fg-dim py-2'>
-              no withdrawable assets for {ibcState.chain.displayName}
-            </p>
-          ) : (
-            <div className='relative'>
-              <button
-                onClick={() => setAssetOpen(!assetOpen)}
-                disabled={txStatus !== 'idle'}
-                className='flex w-full items-center gap-1.5 border border-border-soft bg-input px-3 py-2.5 text-sm text-fg text-left disabled:opacity-50'
-              >
-                {selectedAsset ? (
-                  <>
-                    <AssetIcon
-                      metadata={getMetadataFromBalancesResponse.optional(selectedAsset)}
-                      size='xs'
-                    />
-                    {symbolFromMetadata(getMetadataFromBalancesResponse.optional(selectedAsset))}
-                  </>
-                ) : (
-                  'select asset'
-                )}
-              </button>
-              {assetOpen && (
-                <div className='absolute z-10 mt-1 w-full border border-border-soft bg-canvas shadow-lg max-h-48 overflow-y-auto'>
-                  {withdrawableAssets.map((b, i) => {
-                    const meta = getMetadataFromBalancesResponse.optional(b);
-                    const display = symbolFromMetadata(meta);
-                    return (
-                      <button
-                        key={i}
-                        onClick={() => {
-                          setSelectedAsset(b);
-                          if (meta?.base) {
-                            ibcState.setDenom(meta.base, getDisplayDenomExponent.optional(meta));
-                          }
-                          setAssetOpen(false);
-                        }}
-                        className='w-full px-3 py-2 text-left text-sm hover:bg-elev-1 flex justify-between items-center'
-                      >
-                        <span className='flex items-center gap-1.5'>
-                          <AssetIcon metadata={meta} size='xs' />
-                          {display}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+        )
+      }
+    >
+      {review => (
+        <>
+          <ScreenHeader title='withdraw' onBack={onClose} meta={meta} />
+          <Main className='gap-[18px] pt-5'>
+            <RowGroup>
+              <Row
+                type='value'
+                label='to network'
+                value={chainsLoading ? 'reading' : (ibcState.chain?.displayName ?? 'choose')}
+                disabled={chainsLoading}
+                onPress={() => setChainOpen(true)}
+              />
+            </RowGroup>
+            <ToField
+              value={own ? shortAddress(to) : to}
+              onChange={ibcState.setDestinationAddress}
+              placeholder={ibcState.chain ? `${ibcState.chain.addressPrefix}1…` : 'address'}
+              disabled={own || !ibcState.chain}
+              warn={!!to && !addressValid}
+              helper={
+                own
+                  ? `your own ${chainName} address · transparent`
+                  : to && !addressValid
+                    ? `that is not a ${chainName} address · please check it`
+                    : toName
+              }
+              onContacts={own ? undefined : () => setBookOpen(true)}
+            >
+              {ownAddress && (
+                <Button
+                  variant='quiet'
+                  size='sm'
+                  onClick={() => {
+                    setOverrideAddress(own);
+                    ibcState.setDestinationAddress(own ? '' : ownAddress);
+                  }}
+                  className='self-start px-0 text-network-accent'
+                >
+                  {own ? 'send to another address' : 'use my own address'}
+                </Button>
               )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* amount */}
-      <div>
-        <div className='mb-1 flex items-center justify-between'>
-          <label className='text-xs text-fg-muted'>amount</label>
-          {selectedAsset && (
-            <div className='flex items-center gap-2'>
-              <span className='text-xs text-fg-muted'>
-                balance: <Sensitive>{selectedBalance}</Sensitive>
-              </span>
-              <button
-                type='button'
-                onClick={handleMax}
-                disabled={txStatus !== 'idle'}
-                className='text-xs text-zigner-gold hover:text-zigner-gold-light disabled:opacity-50'
-              >
-                max
-              </button>
-            </div>
-          )}
-        </div>
-        <input
-          type='text'
-          value={ibcState.amount}
-          onChange={e => ibcState.setAmount(e.target.value)}
-          placeholder='0.00'
-          disabled={txStatus !== 'idle'}
-          className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
-        />
-        {belowNobleMin && (
-          <p className='mt-1 text-xs text-red-400'>
-            minimum {MIN_NOBLE_USDC_UNSHIELD} USDC - Noble's ~0.16 USDC fee would otherwise strand
-            the balance
-          </p>
-        )}
-        {!belowNobleMin && !!ibcState.amount && !amountValid && (
-          <p className='mt-1 text-xs text-red-400'>
-            {ibcState.exponent === undefined
-              ? 'no decimals known for this asset - pick it again'
-              : `enter a positive amount with at most ${ibcState.exponent} decimal places`}
-          </p>
-        )}
-      </div>
-
-      {/* transaction status */}
-      {txStatus === 'success' && txHash && (
-        <div className='border border-green-500/40 bg-green-500/10 p-3'>
-          <p className='text-sm text-green-400'>transaction sent!</p>
-          <p className='text-xs text-fg-muted mt-1 font-mono break-all'>{txHash}</p>
-          <IbcTransferStatusLine transferId={trackedTransferId} />
-        </div>
-      )}
-
-      {/* save contact prompt */}
-      {showSavePrompt && sentToAddress && !findByAddress(sentToAddress) && !showContactModal && (
-        <SaveContactPrompt
-          address={sentToAddress}
-          network='cosmos'
-          onSave={() => {
-            setShowSavePrompt(false);
-            setShowContactModal(true);
-          }}
-          onDismiss={() => {
-            void dismissSuggestion(sentToAddress);
-            setShowSavePrompt(false);
-          }}
-        />
-      )}
-
-      {/* contact name modal */}
-      {showContactModal && sentToAddress && (
-        <div className='border border-border-soft bg-canvas p-3'>
-          <p className='text-sm mb-2'>name this contact</p>
-          <input
-            type='text'
-            value={contactName}
-            onChange={e => setContactName(e.target.value)}
-            placeholder='enter name...'
-            className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm mb-2 focus:border-penumbra-purple focus:outline-none'
-            autoFocus
+            </ToField>
+            <AmountField
+              value={ibcState.amount}
+              onChange={ibcState.setAmount}
+              unit={unit}
+              onUnit={() => setAssetOpen(true)}
+              available={selectedAsset ? selectedBalance : undefined}
+              onMax={handleMax}
+              canMax={!!selectedAsset}
+              warn={belowNobleMin || (!!ibcState.amount && !amountValid)}
+              helper={amountHelper}
+            />
+          </Main>
+          <Footer>
+            <Button onClick={review} disabled={!canReview} className='w-full'>
+              review
+            </Button>
+          </Footer>
+          <PickSheet
+            title='to network'
+            open={chainOpen}
+            onOpenChange={setChainOpen}
+            picks={chains.map(c => ({ key: c.chainId, label: c.displayName }))}
+            onPick={id => ibcState.setChain(chains.find(c => c.chainId === id))}
           />
-          <div className='flex gap-2'>
-            <button
-              onClick={async () => {
-                if (contactName.trim()) {
-                  const newContact = await addContact({ name: contactName.trim() });
-                  await addAddress(newContact.id, {
-                    network: 'cosmos',
-                    address: sentToAddress,
-                    chainId: sentToChainId,
-                  });
-                  setShowContactModal(false);
-                  setContactName('');
-                }
-              }}
-              disabled={!contactName.trim()}
-              className='flex-1 bg-zigner-gold px-3 py-1.5 text-xs text-zigner-gold-foreground transition-colors disabled:opacity-50'
-            >
-              save
-            </button>
-            <button
-              onClick={() => {
-                setShowContactModal(false);
-                setContactName('');
-              }}
-              className='flex-1 bg-elev-2 px-3 py-1.5 text-xs text-fg-muted transition-colors'
-            >
-              cancel
-            </button>
-          </div>
-        </div>
+          <BalanceSheet
+            open={assetOpen}
+            onOpenChange={setAssetOpen}
+            assets={withdrawableAssets}
+            onPick={b => {
+              const meta = getMetadataFromBalancesResponse.optional(b);
+              setSelectedAsset(b);
+              if (meta?.base) {
+                ibcState.setDenom(meta.base, getDisplayDenomExponent.optional(meta));
+              }
+            }}
+          />
+          <ContactsSheet
+            network='cosmos'
+            open={bookOpen}
+            onOpenChange={setBookOpen}
+            onPick={row => ibcState.setDestinationAddress(row.address)}
+          />
+        </>
       )}
-
-      {txStatus === 'error' && txError && (
-        <div className='border border-red-500/40 bg-red-500/10 p-3'>
-          <p className='text-sm text-red-400'>transaction failed</p>
-          <p className='text-xs text-fg-muted mt-1'>{txError}</p>
-        </div>
-      )}
-
-      {/* submit */}
-      <Button
-        variant='primary'
-        onClick={() => {
-          if (txStatus === 'success') {
-            onSuccess ? onSuccess() : handleReset();
-          } else if (txStatus === 'error') {
-            handleReset();
-          } else {
-            void handleSubmit();
-          }
-        }}
-        disabled={
-          (txStatus === 'idle' && !canSubmit) ||
-          txStatus === 'planning' ||
-          txStatus === 'signing' ||
-          txStatus === 'broadcasting'
-        }
-        className='mt-2 w-full'
-      >
-        {txStatus === 'planning' && 'building plan...'}
-        {txStatus === 'signing' && 'signing...'}
-        {txStatus === 'broadcasting' && 'broadcasting...'}
-        {txStatus === 'idle' && 'send via ibc'}
-        {txStatus === 'success' && (onSuccess ? 'close' : 'send another')}
-        {txStatus === 'error' && 'retry'}
-      </Button>
-
-      {ibcState.error && txStatus === 'idle' && (
-        <p className='text-center text-xs text-red-400'>{ibcState.error}</p>
-      )}
-
-      <p className='text-center text-xs text-fg-muted'>
-        ibc withdrawal from penumbra to {ibcState.chain?.displayName ?? 'cosmos chain'}
-      </p>
-    </div>
+    </PenumbraFlow>
   );
 }
-
-/** location state for prefilling forms from inbox */
