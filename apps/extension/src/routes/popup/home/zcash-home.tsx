@@ -6,7 +6,12 @@ import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '../../../state';
 import { privacySelector } from '../../../state/privacy';
 import { selectEffectiveKeyInfo, keyRingSelector } from '../../../state/keyring';
-import { activeAccountIndex, activeZcashStoreId, activePockets } from '../../../state/pockets';
+import {
+  activeAccountIndex,
+  activeZcashStoreId,
+  activePockets,
+  activePocketBirthday,
+} from '../../../state/pockets';
 import { pocketStoreId } from '../../../state/pocket-id';
 import { Sensitive } from '../../../components/sensitive';
 import { PopupPath } from '../paths';
@@ -34,7 +39,6 @@ import { usePasswordGate } from '../../../hooks/password-gate';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Button } from '@repo/ui/components/ui/button';
-import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { fmtZec } from './format';
 import { BalanceFigure } from './balance-figure';
 import { GetZecHint } from './notices';
@@ -69,6 +73,9 @@ export const ZcashContent = ({
   const storeId = useStore(activeZcashStoreId);
   const pocketAccount = useStore(activeAccountIndex);
   const pockets = useStore(useShallow(activePockets));
+  // a pocket's own birthday (the chain tip when it was created); undefined
+  // for account 0 or a pocket that recorded none, meaning "use the wallet's"
+  const pocketBirthday = useStore(activePocketBirthday);
   const keyRing = useStore(keyRingSelector);
   const { requestAuth, PasswordModal } = usePasswordGate();
   // must sit with the other hooks: there is an early return for the
@@ -319,24 +326,6 @@ export const ZcashContent = ({
     );
   }
 
-  // hot-wallet pockets other than the main one (account 0) can't scan yet -
-  // the worker refuses to derive their keys until a newer zafu-wasm ships
-  // pocket derivation (see workers/pocket-keys.ts). A watch-only or zigner
-  // wallet's own accountIndex is unrelated (it scans by ufvk, not a seed
-  // pocket), so this only gates the hot-wallet case. Say so calmly instead
-  // of running the balance/sync machinery below against a call that always
-  // throws, which would otherwise surface as an unclassified sync error
-  // telling the user to "try again" - advice that can never help here.
-  if (hasMnemonic && pocketAccount > 0) {
-    return (
-      <div className='flex-1 flex flex-col gap-3'>
-        <StatusSlot icon='i-ph-hourglass' tone='info'>
-          this pocket starts syncing once zafu updates.
-        </StatusSlot>
-      </div>
-    );
-  }
-
   // sync progress
   const chainHeight = chainTip?.height ?? syncStatus?.currentHeight ?? 0;
   const gigaproofStatus = syncStatus?.gigaproofStatus ?? 0;
@@ -357,8 +346,14 @@ export const ZcashContent = ({
       : gigaproofStatus === 1
         ? 50
         : 0;
-  const scanRange = Math.max(1, chainHeight - walletBirthday);
-  const scanProgress = Math.max(0, workerSyncHeight - walletBirthday);
+  // A pocket's own birthday (the chain tip when it was created) is the right
+  // scan floor once it has one: rescanning it from the wallet's own, much
+  // older birthday would be both wasteful and wrong - the pocket's notes
+  // cannot predate its own creation. Account 0 and a pocket recorded before
+  // this field existed fall back to the wallet's birthday, exactly as before.
+  const effectiveBirthday = pocketBirthday ?? walletBirthday;
+  const scanRange = Math.max(1, chainHeight - effectiveBirthday);
+  const scanProgress = Math.max(0, workerSyncHeight - effectiveBirthday);
   // FLOOR, not round. Rounding declared "synced" at 99.5%, which with a
   // birthday a million blocks back is ~5,000 unscanned blocks presented as a
   // final balance — and it gated the "get your first zec" prompt, so a wallet
@@ -393,15 +388,15 @@ export const ZcashContent = ({
   // the wallet claiming to be done while admitting it had scanned nothing.
   // Whatever the server has proven about blocks this wallet never read says
   // nothing about this wallet's balance, so it must not drive this bar.
-  const scanNotStarted = workerSyncHeight <= walletBirthday;
+  const scanNotStarted = workerSyncHeight <= effectiveBirthday;
   // Ranges for the stage tooltips. A stage that says what it does but not
   // what it covers leaves the obvious question unanswered - "verified from
   // where to where?" - and these numbers are already on hand.
   const hgt = (n: number) => n.toLocaleString();
   const serverIndexHeight = syncStatus?.currentHeight ?? 0;
   const scanRangeHint = scanNotStarted
-    ? `nothing scanned yet. will cover blocks ${hgt(walletBirthday)} to ${hgt(chainHeight)}.`
-    : `covered blocks ${hgt(walletBirthday)} to ${hgt(workerSyncHeight)}` +
+    ? `nothing scanned yet. will cover blocks ${hgt(effectiveBirthday)} to ${hgt(chainHeight)}.`
+    : `covered blocks ${hgt(effectiveBirthday)} to ${hgt(workerSyncHeight)}` +
       (chainHeight > 0 ? ` of ${hgt(chainHeight)}.` : '.');
   const nomtRangeHint =
     serverIndexHeight > 0 ? ` its index reaches block ${hgt(serverIndexHeight)}.` : '';
@@ -700,14 +695,17 @@ export const ZcashContent = ({
             <span className='text-fg-dim'>·</span>
             <button
               type='button'
-              // Never the chain tip. The old fallback (`walletBirthday ||
+              // Never the chain tip. The old fallback (`effectiveBirthday ||
               // chainHeight`) meant that a wallet with no stored birthday —
               // the default for every import that did not supply one — asked
               // to rescan FROM NOW, and the handler then wrote that as the new
               // birthday: every note the wallet already held became invisible
               // forever. Orchard activation is the earliest height that can
-              // hold a note, so it can never hide one.
-              onClick={() => setRescanConfirmHeight(rescanStartHeight(walletBirthday || null))}
+              // hold a note, so it can never hide one. Uses the active
+              // pocket's own birthday when it has one - this rescan drops
+              // and re-reads that pocket's store, so there is nothing before
+              // its own birthday to lose.
+              onClick={() => setRescanConfirmHeight(rescanStartHeight(effectiveBirthday || null))}
               className='text-zigner-gold underline-offset-2 hover:underline'
               // not "release the funds": the inputs are held until the chain
               // is re-read, and re-reading it is not free
@@ -777,7 +775,7 @@ export const ZcashContent = ({
           connecting={chainHeight <= 0}
           currentHeight={workerSyncHeight}
           targetHeight={chainHeight}
-          startBlock={walletBirthday}
+          startBlock={effectiveBirthday}
           stages={syncStages}
           firstSync={totalZat === 0n}
           // Only the classified message is ever shown; the raw error goes

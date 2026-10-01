@@ -13,12 +13,10 @@ import { useBackNav } from '../../../utils/navigate';
 import { useLocation } from 'react-router-dom';
 import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
-import { selectActiveNetwork, selectEffectiveKeyInfo } from '../../../state/keyring';
+import { selectActiveNetwork } from '../../../state/keyring';
 import { useActiveAddress } from '../../../hooks/use-address';
 import { rotateShieldedDiversifier } from '../../../state/shielded-receive-index';
 import { routeForChain, usePenumbraRoutes } from '../../../transparent/penumbra-routes';
-import { activeAccountIndex } from '../../../state/pockets';
-import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { ReceiveTab } from './receive-tab';
 import { TransparentReceive } from './transparent-receive';
 import {
@@ -33,12 +31,6 @@ export function ReceivePage() {
   const activeNetwork = useStore(selectActiveNetwork);
   const { address, loading, shieldedIndex } = useActiveAddress();
   const isPenumbra = activeNetwork === 'penumbra';
-  // a hot-wallet pocket other than main can't derive an address yet - see
-  // the same guard and reasoning in routes/popup/home/zcash-home.tsx
-  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
-  const pocketAccount = useStore(activeAccountIndex);
-  const pocketNotReady =
-    activeNetwork === 'zcash' && selectedKeyInfo?.type === 'mnemonic' && pocketAccount > 0;
   // zcash shielded addresses are single-use. Opening receive retires whatever
   // was on offer (it may have been shown or copied elsewhere), and so do each
   // copy and leaving. A retired address never lands on the clipboard twice.
@@ -111,11 +103,7 @@ export function ReceivePage() {
             onChain={setPickedChain}
           />
         )}
-        {pocketNotReady ? (
-          <StatusSlot icon='i-ph-hourglass' tone='info'>
-            this pocket starts syncing once zafu updates.
-          </StatusSlot>
-        ) : receiveOn === 'penumbra' ? (
+        {receiveOn === 'penumbra' ? (
           <ReceiveTab
             address={fresh || shownFresh ? address : ''}
             loading={loading || (!fresh && !shownFresh)}

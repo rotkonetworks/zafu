@@ -33,7 +33,6 @@ const PocketRow = ({
   name,
   account,
   active,
-  canSync,
   balanceZat,
   onPick,
   onRename,
@@ -41,8 +40,6 @@ const PocketRow = ({
   name: string;
   account: number;
   active: boolean;
-  /** only account 0 can scan until a newer zafu-wasm ships pocket derivation */
-  canSync: boolean;
   balanceZat: bigint | undefined;
   onPick: () => void;
   onRename: () => void;
@@ -64,11 +61,9 @@ const PocketRow = ({
       </span>
       <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
         <span className='truncate text-data text-fg-high lowercase'>{name}</span>
-        <span className='truncate text-label text-fg-muted lowercase'>
-          {canSync ? `account ${account}` : `account ${account} - starts syncing once zafu updates`}
-        </span>
+        <span className='truncate text-label text-fg-muted lowercase'>account {account}</span>
       </span>
-      {active && canSync && balanceZat !== undefined && (
+      {active && balanceZat !== undefined && (
         <Sensitive className='shrink-0 tabular-nums text-data text-fg-high'>
           {fmtZec(Number(balanceZat) / 1e8)} ZEC
         </Sensitive>
@@ -78,7 +73,7 @@ const PocketRow = ({
       type='button'
       onClick={onRename}
       aria-label={`rename ${name}`}
-      className='flex size-11 shrink-0 items-center justify-center text-fg-dim transition-colors hover:text-fg-high'
+      className='flex size-11 shrink-0 items-center justify-center text-fg-muted transition-colors hover:text-fg-high'
     >
       <span className='i-ph-pencil-simple size-4' aria-hidden='true' />
     </button>
@@ -202,7 +197,6 @@ export const AccountsSheet = ({
                   name={p.name}
                   account={p.account}
                   active={p.account === activeAccount}
-                  canSync={p.account === 0}
                   balanceZat={activeBalanceZat}
                   onPick={() => pickPocket(p.account)}
                   onRename={() => onNewPocket({ account: p.account, name: p.name })}
