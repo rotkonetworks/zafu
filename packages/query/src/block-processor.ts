@@ -107,7 +107,8 @@ export class BlockProcessor implements BlockProcessorInterface {
   private readonly querier: RootQuerier;
   private readonly indexedDb: IndexedDbInterface;
   private readonly viewServer: ViewServerInterface;
-  private readonly abortController: AbortController = new AbortController();
+  private abortController: AbortController = new AbortController();
+  private paused = false;
   private numeraires: AssetId[];
   private readonly stakingAssetId: AssetId;
   private syncPromise: Promise<void> | undefined;
@@ -185,6 +186,23 @@ export class BlockProcessor implements BlockProcessorInterface {
     );
 
   public stop = (r: string) => this.abortController.abort(`Sync stop ${r}`);
+
+  /** stop network activity while no one is looking; resume() picks it up again */
+  public pause = () => {
+    this.paused = true;
+    this.stop('paused');
+  };
+
+  public resume = () => {
+    if (!this.paused) {
+      return;
+    }
+    this.paused = false;
+    this.abortController = new AbortController();
+    // the paused loop clears its promise once it has wound down
+    const winding = this.syncPromise?.catch(() => undefined) ?? Promise.resolve();
+    void winding.then(() => (this.paused ? undefined : this.sync().catch(() => undefined)));
+  };
 
   setNumeraires(numeraires: AssetId[]): void {
     this.numeraires = numeraires;

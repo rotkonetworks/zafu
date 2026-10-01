@@ -11,7 +11,7 @@ import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useStore } from '../state';
 import {
-  selectActiveNetwork,
+  selectEnabledNetworks,
   selectEffectiveKeyInfo,
   selectGetMnemonic,
   selectGetVaultUnlock,
@@ -63,7 +63,9 @@ async function resolveBirthday(
 
 export function useZcashAutoSync() {
   const location = useLocation();
-  const activeNetwork = useStore(selectActiveNetwork);
+  // zcash keeps syncing while any zafu window is open and zcash is on, whatever
+  // network is on screen: switching to penumbra must not stop it
+  const zcashOn = useStore(selectEnabledNetworks).includes('zcash');
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const getMnemonic = useStore(selectGetMnemonic);
   const getVaultUnlock = useStore(selectGetVaultUnlock);
@@ -96,22 +98,22 @@ export function useZcashAutoSync() {
   // track in-flight stop promise so the start effect can await it on quick network switches
   const stopPromiseRef = useRef<Promise<void> | null>(null);
 
-  // eagerly pre-spawn zcash worker when on zcash network
+  // eagerly pre-spawn the zcash worker while zcash is on
   // decouples WASM loading from wallet data hydration so the worker
   // is ready by the time mnemonic or watch-only sync needs it
   useEffect(() => {
-    if (activeNetwork !== 'zcash') {
+    if (!zcashOn) {
       return;
     }
     if (onLoginPage) {
       return;
     }
     void spawnNetworkWorker('zcash').catch(() => {});
-  }, [activeNetwork, onLoginPage]);
+  }, [zcashOn, onLoginPage]);
 
   // mnemonic wallet sync
   useEffect(() => {
-    if (activeNetwork !== 'zcash') {
+    if (!zcashOn) {
       return;
     }
     if (onLoginPage) {
@@ -231,7 +233,7 @@ export function useZcashAutoSync() {
       clearTimeout(timer);
     };
   }, [
-    activeNetwork,
+    zcashOn,
     onLoginPage,
     hasMnemonic,
     walletId,
@@ -246,7 +248,7 @@ export function useZcashAutoSync() {
 
   // watch-only wallet sync
   useEffect(() => {
-    if (activeNetwork !== 'zcash') {
+    if (!zcashOn) {
       return;
     }
     if (onLoginPage) {
@@ -345,7 +347,7 @@ export function useZcashAutoSync() {
       cancelled = true;
     };
   }, [
-    activeNetwork,
+    zcashOn,
     onLoginPage,
     hasMnemonic,
     watchOnly?.id,
@@ -356,17 +358,4 @@ export function useZcashAutoSync() {
     zcashBackend,
     mempoolWatch,
   ]);
-
-  // stop sync when switching away from zcash network
-  useEffect(() => {
-    if (activeNetwork === 'zcash') {
-      return;
-    }
-    const syncedWallet = syncingWalletRef.current;
-    if (syncedWallet && isWalletSyncing('zcash', syncedWallet)) {
-      console.log('[zcash-sync] stopping sync (switched away from zcash)');
-      stopPromiseRef.current = stopSyncInWorker('zcash', syncedWallet).catch(() => {});
-      syncingWalletRef.current = null;
-    }
-  }, [activeNetwork]);
 }

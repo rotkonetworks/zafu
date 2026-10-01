@@ -442,6 +442,11 @@ const ensureHostListener = (): void => {
     }
     if (msg?.type === 'NW_CALL' && msg.network && msg.message) {
       const m = msg.message as NetworkWorkerMessage;
+      // a sync asked for after the last stop comes from a window that is
+      // open now: end any stop-on-close sweep so it can't kill this one
+      if (m.type === 'sync' && typeof msg.sentAt === 'number' && msg.sentAt > lastStopAt) {
+        stopGeneration++;
+      }
       if (SEND_SHAPED_TYPES.has(m.type) && m.id) {
         inFlightSendIds.add(m.id);
       }
@@ -455,6 +460,7 @@ const ensureHostListener = (): void => {
       return false;
     }
     if (msg?.type === 'NW_STOP_ALL_SYNC' && msg.network) {
+      lastStopAt = typeof msg.at === 'number' ? msg.at : Date.now();
       void stopAllSyncInHost(msg.network as NetworkType).then(
         stopped => sendResponse({ ok: true, stopped }),
         () => sendResponse({ ok: false }),
@@ -474,7 +480,7 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
     }
     const state: WorkerState = {
       worker: {
-        postMessage: m => broadcastToHost('NW_CALL', network, { message: m }),
+        postMessage: m => broadcastToHost('NW_CALL', network, { message: m, sentAt: Date.now() }),
         terminate: () => void broadcastToHost('NW_TERMINATE', network, {}),
       },
       ready: false,
@@ -734,9 +740,16 @@ export const stopSyncInWorker = async (network: NetworkType, walletId: string): 
  * worker stay alive (proving still needs them), only network activity stops.
  * The next UI open resumes sync the same way it starts on any fresh popup.
  */
+/** when the last window closed (sender's clock), and a counter bumped by any
+ *  sync a window asks for after that - a sweep ends the moment it moves */
+let lastStopAt = 0;
+let stopGeneration = 0;
+
 const stopAllSyncInHost = async (network: NetworkType): Promise<string[]> => {
+  const generation = ++stopGeneration;
+  const reopened = () => stopGeneration !== generation;
   const deadline = Date.now() + 60_000;
-  while (inFlightSendIds.size > 0 && Date.now() < deadline) {
+  while (inFlightSendIds.size > 0 && Date.now() < deadline && !reopened()) {
     await new Promise(r => setTimeout(r, 250));
   }
   if (inFlightSendIds.size > 0) {
@@ -752,6 +765,9 @@ const stopAllSyncInHost = async (network: NetworkType): Promise<string[]> => {
     return wallets.length;
   };
 
+  if (reopened()) {
+    return [];
+  }
   await stopOnce();
   // A popup's own 'sync' call can already be in flight (dispatched to the
   // host, not yet processed) the instant it closes - closing the page
@@ -763,6 +779,9 @@ const stopAllSyncInHost = async (network: NetworkType): Promise<string[]> => {
   let quietChecks = 0;
   while (quietChecks < 2) {
     await new Promise(r => setTimeout(r, 500));
+    if (reopened()) {
+      break;
+    }
     quietChecks = (await stopOnce()) === 0 ? quietChecks + 1 : 0;
   }
   return [...stopped];
@@ -775,7 +794,7 @@ const stopAllSyncInHost = async (network: NetworkType): Promise<string[]> => {
  */
 export const requestStopAllSync = (network: NetworkType): void => {
   void chrome.runtime
-    .sendMessage({ type: 'NW_STOP_ALL_SYNC', network })
+    .sendMessage({ type: 'NW_STOP_ALL_SYNC', network, at: Date.now() })
     .then((r: unknown) => console.log(`[network-worker] requestStopAllSync(${network}) ->`, r))
     .catch(() => {});
 };

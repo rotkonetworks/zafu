@@ -105,8 +105,20 @@ initSidePanelPref();
 // trace once the last surface closes. Strict no-op unless the user opted in
 // AND configured a relay AND the wallet is unlocked - see runPresencePublish.
 let presencePublishTimer: ReturnType<typeof setInterval> | undefined;
+/** penumbra's block processor runs in this worker: pause it with the last
+ *  window and resume with the next, like the zcash worker */
+const penumbraSync = (act: 'pause' | 'resume') =>
+  void walletServices
+    ?.then(s => s.getWalletServices())
+    // pause/resume live on zafu's block processor, not the shared interface
+    .then(ws => (ws.blockProcessor as { pause?: () => void; resume?: () => void })[act]?.())
+    .catch(() => undefined);
+let uiOpen = false;
+
 trackUiOpenPresence(
   () => {
+    uiOpen = true;
+    penumbraSync('resume');
     void runPresencePublish();
     presencePublishTimer ??= setInterval(() => void runPresencePublish(), 5 * 60_000);
     // the next popup/page open resumes sync on its own (zcash-auto-sync.ts),
@@ -123,7 +135,9 @@ trackUiOpenPresence(
     // offscreen document and its worker stay up for proving - and resume is
     // automatic on the next open.
     console.log('[sw] last UI surface closed, requesting zcash sync stop');
+    uiOpen = false;
     requestStopAllSync('zcash');
+    penumbraSync('pause');
   },
 );
 
@@ -589,6 +603,10 @@ chrome.alarms.onAlarm.addListener(async alarm => {
   }
 
   if (alarm.name === 'blockSync') {
+    // nothing syncs while every zafu window is closed
+    if (!uiOpen) {
+      return;
+    }
     // privacy check: shielded (penumbra, zcash) networks always sync - trial
     // decryption / p2p never leak addresses, so they have no toggle. Only
     // transparent networks honor enableBackgroundSync.

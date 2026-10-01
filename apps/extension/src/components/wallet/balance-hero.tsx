@@ -87,19 +87,20 @@ export const BalanceHero = ({
   watermark?: string;
   children?: ReactNode;
 }) => (
-  <section className='relative flex flex-col gap-[18px]'>
+  // isolate + -z-10: the watermark sits behind the figure and the buttons
+  <section className='relative isolate flex flex-col gap-[18px]'>
     {watermark && (
       <span
         aria-hidden='true'
         className={cn(
           watermark,
-          'pointer-events-none absolute -right-[54px] -top-[46px] size-[210px] text-network-accent opacity-[0.09]',
+          'pointer-events-none absolute -right-[54px] -top-[46px] -z-10 size-[210px] text-network-accent opacity-[0.09]',
         )}
       />
     )}
     <div className='flex flex-col gap-1.5'>
       <div className='flex h-5 items-center gap-1.5'>
-        <span className='text-xs tracking-[0.04em] text-fg-muted'>total balance</span>
+        <span className='text-xs tracking-[0.04em] text-fg-muted'>balance</span>
         {(view === 'ready' || view === 'partial') && <HideToggle />}
       </div>
       <BalanceFigure view={view} amount={amount} unit={unit} hint={hint} />
