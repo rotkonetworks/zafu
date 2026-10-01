@@ -83,6 +83,8 @@ interface AnimatedQrDisplayProps {
   description?: string;
   /** total bytes for display (when using urFrames, data.length isn't available) */
   totalBytes?: number;
+  /** the QR alone: no controls or captions around it (tap still enlarges) */
+  bare?: boolean;
 }
 
 /** split payload into numbered frames: P<idx>/<total>/<type>/<base64> (legacy) */
@@ -143,6 +145,7 @@ export function AnimatedQrDisplay({
   title,
   description,
   totalBytes,
+  bare = false,
 }: AnimatedQrDisplayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -422,7 +425,7 @@ export function AnimatedQrDisplay({
 
       {qrBlock}
 
-      {!fullscreen && (
+      {!bare && !fullscreen && (
         <button
           type='button'
           onClick={() => setFullscreen(true)}
@@ -433,7 +436,7 @@ export function AnimatedQrDisplay({
         </button>
       )}
 
-      {frames.length > 1 && (
+      {!bare && frames.length > 1 && (
         <div className='flex items-center gap-2 text-label text-fg-muted'>
           <span className='i-ph-circle-notch size-3 animate-spin' />
           scanning - hold camera steady
@@ -441,7 +444,7 @@ export function AnimatedQrDisplay({
       )}
 
       {/* ── QR speed (ms/frame) ── */}
-      {showSpeedControl && frames.length > 1 && (
+      {!bare && showSpeedControl && frames.length > 1 && (
         <label className='flex w-full max-w-xs flex-col gap-1 text-label text-fg-muted'>
           <div className='flex items-center justify-between'>
             <span className='flex items-center gap-1'>
@@ -472,7 +475,7 @@ export function AnimatedQrDisplay({
       )}
 
       {/* ── QR density (payload bytes / frame) ── */}
-      {showDensityControl && frames.length > 1 && canReDensify && (
+      {!bare && showDensityControl && frames.length > 1 && canReDensify && (
         <div className='flex w-full max-w-xs flex-col gap-1 text-label text-fg-muted'>
           <div className='flex items-center justify-between'>
             <span className='flex items-center gap-1'>
@@ -514,10 +517,12 @@ export function AnimatedQrDisplay({
 
       {description && <p className='text-xs text-fg-muted text-center max-w-xs'>{description}</p>}
 
-      <p className='text-label text-fg-muted'>
-        {byteCount.toLocaleString()} bytes · {frames.length} frame
-        {frames.length !== 1 ? 's' : ''}
-      </p>
+      {!bare && (
+        <p className='text-label text-fg-muted'>
+          {byteCount.toLocaleString()} bytes · {frames.length} frame
+          {frames.length !== 1 ? 's' : ''}
+        </p>
+      )}
     </div>
   );
 }
