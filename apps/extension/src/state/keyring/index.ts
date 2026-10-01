@@ -104,6 +104,8 @@ export interface KeyRingSlice {
   selectKeyRing: (vaultId: string) => Promise<void>;
   renameKeyRing: (vaultId: string, newName: string) => Promise<void>;
   deleteKeyRing: (vaultId: string, opts?: { allowAppManaged?: boolean }) => Promise<void>;
+  /** every wallet and its data off this computer (forgot password, last wallet removed) */
+  eraseAll: () => Promise<void>;
   /** recover/take-control of (or re-hide) an app-managed multisig table by flipping `hidden` on
    *  both the vault and its mirror wallet. Unhiding makes a stuck poker table a normal, selectable,
    *  co-signable multisig. Non-destructive. */
@@ -895,6 +897,19 @@ export const createKeyRingSlice =
         });
       },
 
+      eraseAll: async () => {
+        await nukeAllWalletData(session, local);
+        set(state => {
+          state.keyRing.keyInfos = [];
+          state.keyRing.selectedKeyInfo = undefined;
+          state.keyRing.status = 'empty';
+          state.wallets.all = [];
+          state.wallets.activeIndex = 0;
+          state.wallets.zcashWallets = [];
+          state.wallets.activeZcashIndex = 0;
+        });
+      },
+
       deleteKeyRing: async (vaultId: string, opts?: { allowAppManaged?: boolean }) => {
         const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
         // CRITICAL money-safety guard: app-managed (hidden) FROST multisig tables - e.g. poker
@@ -930,16 +945,7 @@ export const createKeyRingSlice =
 
         // last vault - nuke everything
         if (updatedVaults.length === 0) {
-          await nukeAllWalletData(session, local);
-          set(state => {
-            state.keyRing.keyInfos = [];
-            state.keyRing.selectedKeyInfo = undefined;
-            state.keyRing.status = 'empty';
-            state.wallets.all = [];
-            state.wallets.activeIndex = 0;
-            state.wallets.zcashWallets = [];
-            state.wallets.activeZcashIndex = 0;
-          });
+          await get().keyRing.eraseAll();
           return;
         }
 

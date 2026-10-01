@@ -11,6 +11,7 @@ import { sessionExtStorage } from '@repo/storage-chrome/session';
 const OWN_LOGIN_HANDLING = [
   PopupPath.INDEX,
   PopupPath.LOGIN,
+  PopupPath.FORGOT_PASSWORD,
   PopupPath.WELCOME,
   PopupPath.COSMOS_SIGN,
   PopupPath.MULTISIG_SIGN,

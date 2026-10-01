@@ -16,7 +16,7 @@ const ART_FADE = {
     'linear-gradient(to bottom, #000 calc(100% - 150px), rgb(0 0 0 / 0.15) 90%, transparent)',
 };
 
-const openOnboarding = async (path: PagePath) => {
+export const openOnboarding = async (path: PagePath) => {
   const url = chrome.runtime.getURL(`page.html#${path}`);
   const contexts = await chrome.runtime.getContexts({
     contextTypes: [chrome.runtime.ContextType.TAB],

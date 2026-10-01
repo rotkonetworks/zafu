@@ -16,6 +16,8 @@ export enum PopupPath {
 
   // Auth
   LOGIN = '/login',
+  /** the honest path: erase and restore from the recovery phrase */
+  FORGOT_PASSWORD = '/forgot-password',
   /** no wallet yet: the ways in, each opening the full-tab onboarding */
   WELCOME = '/welcome',
 

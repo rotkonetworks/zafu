@@ -19,6 +19,7 @@ import { selectActiveNetwork, selectPenumbraAccount } from '../../state/keyring'
  */
 const bareRoutes = [
   PopupPath.LOGIN,
+  PopupPath.FORGOT_PASSWORD,
   PopupPath.WELCOME,
   PopupPath.TRANSACTION_APPROVAL,
   PopupPath.ORIGIN_APPROVAL,
