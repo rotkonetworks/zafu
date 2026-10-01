@@ -1,6 +1,6 @@
 /**
  * Receive tab - QR + address, for Penumbra (ephemeral-only) and Zcash
- * (shielded default, transparent secondary via Segmented).
+ * (shielded default, transparent secondary - the header picks addrType).
  *
  * Penumbra receive is ephemeral-ONLY: a fresh randomized single-use address
  * that rotates on every copy. The static index address is deliberately not
@@ -22,12 +22,13 @@ import {
   derivePenumbraEphemeralFromFvk,
 } from '../../../hooks/use-address';
 import { QrCode } from '../../../components/qr-code';
-import { Segmented } from '@repo/ui/components/ui/segmented';
-import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Button } from '@repo/ui/components/ui/button';
 import { useCopy } from '@repo/ui/hooks/use-copy';
 import { useTransparentAddress } from './use-transparent-address';
 import { PaymentRequestSheet } from './payment-request';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+
+export type AddrType = 'shielded' | 'transparent';
 
 export function ReceiveTab({
   address,
@@ -35,6 +36,7 @@ export function ReceiveTab({
   stale,
   activeNetwork,
   retireShielded,
+  addrType,
 }: {
   address: string;
   loading: boolean;
@@ -43,6 +45,8 @@ export function ReceiveTab({
   activeNetwork: string;
   /** hand the zcash shielded address on screen out, and move to a fresh one */
   retireShielded: () => void;
+  /** zcash only - chosen in the header, not here */
+  addrType: AddrType;
 }) {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const penumbraAccount = useStore(selectPenumbraAccount);
@@ -52,7 +56,6 @@ export function ReceiveTab({
   const isPenumbra = activeNetwork === 'penumbra';
   const isZcash = activeNetwork === 'zcash';
 
-  const [addrType, setAddrType] = useState<'shielded' | 'transparent'>('shielded');
   const transparent = addrType === 'transparent';
   const t = useTransparentAddress(isZcash && transparent);
 
@@ -140,8 +143,29 @@ export function ReceiveTab({
   const [requestOpen, setRequestOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
+  // right-of-label hint, matching the board's shielded/transparent copy
+  const hint = showingEphemeral
+    ? ''
+    : transparent && isZcash
+      ? 'shield after receiving'
+      : isZcash
+        ? 'one address per sender'
+        : '';
+  const label = showingEphemeral
+    ? 'ephemeral address'
+    : transparent && isZcash
+      ? `transparent address #${t.index} - public`
+      : isZcash
+        ? 'shielded address'
+        : 'address';
+  const addrColor = showingEphemeral
+    ? 'text-zigner-gold'
+    : transparent && isZcash
+      ? 'text-hanko-light'
+      : 'text-fg-high';
+
   return (
-    <div className='flex flex-col items-center gap-4'>
+    <div className='flex flex-1 flex-col items-center gap-4'>
       <div
         className={`border border-surface-border-soft transition-opacity duration-150 ${retired ? 'opacity-30' : ''}`}
       >
@@ -156,67 +180,16 @@ export function ReceiveTab({
         )}
       </div>
 
-      <div className='flex items-center gap-1.5'>
-        <span className='border border-network-accent/30 bg-network-accent/10 px-2.5 py-0.5 text-label text-network-accent lowercase tracking-[0.08em]'>
-          {activeNetwork}
-        </span>
-        {isShielded && (
-          <span
-            className='inline-flex items-center gap-1 border border-zigner-gold/30 bg-zigner-gold/10 px-2 py-0.5 text-label text-zigner-gold lowercase tracking-[0.05em]'
-            title='shielded - senders cannot see your other transactions'
-          >
-            <span className='i-ph-shield-check h-2.5 w-2.5' />
-            shielded
-          </span>
-        )}
-        {isZcash && transparent && (
-          <span
-            className='inline-flex items-center gap-1 border border-hanko/30 bg-hanko/10 px-2 py-0.5 text-label text-hanko-light lowercase tracking-[0.05em]'
-            title='transparent - balance and history publicly visible'
-          >
-            <span className='i-ph-eye h-2.5 w-2.5' />
-            public
-          </span>
-        )}
-      </div>
-
-      {isZcash && (
-        <Segmented
-          label='address type'
-          value={addrType}
-          onChange={setAddrType}
-          options={[
-            { value: 'shielded', label: 'shielded' },
-            { value: 'transparent', label: 'transparent' },
-          ]}
-          className='w-full'
-        />
-      )}
-
       {isZcash && transparent && t.error && (
         <p className='w-full text-label text-hanko-light lowercase'>{t.error}</p>
       )}
 
-      {isZcash && transparent && t.canDerive && !t.error && (
-        <button
-          type='button'
-          onClick={() => setAdvancedOpen(true)}
-          className='flex w-full items-center justify-between px-1 py-1 text-label text-fg-muted lowercase hover:text-fg-high'
-        >
-          <span>advanced - address #{t.index}</span>
-          <span className='i-ph-caret-right size-3.5' />
-        </button>
-      )}
-
       <div className='w-full'>
-        <div className='mb-1 text-label text-fg-muted lowercase'>
-          {showingEphemeral
-            ? 'ephemeral address'
-            : transparent && isZcash
-              ? `transparent address #${t.index} - public`
-              : isZcash
-                ? 'shielded address'
-                : 'address'}
+        <div className='mb-1.5 flex items-center justify-between text-label lowercase'>
+          <span className={transparent && isZcash ? 'text-hanko-light' : 'text-fg-muted'}>
+            {label}
+          </span>
+          {hint && <span className='text-fg-muted'>{hint}</span>}
         </div>
         {isZcash && transparent && t.used && (
           <p className='mb-1 flex items-start gap-1.5 text-label text-hanko-light lowercase'>
@@ -226,7 +199,7 @@ export function ReceiveTab({
           </p>
         )}
         <div
-          className={`flex items-center gap-2 border p-3 ${
+          className={`flex h-14 items-center gap-2 border p-3 ${
             showingEphemeral
               ? 'border-zigner-gold/40 bg-zigner-gold/5'
               : transparent && isZcash
@@ -235,13 +208,8 @@ export function ReceiveTab({
           }`}
         >
           <code
-            className={`flex-1 break-all text-label transition-opacity duration-150 ${
-              showingEphemeral
-                ? 'text-zigner-gold'
-                : transparent && isZcash
-                  ? 'text-hanko-light'
-                  : ''
-            } ${retired ? 'opacity-30' : ''}`}
+            title={displayAddress || undefined}
+            className={`flex-1 truncate text-label transition-opacity duration-150 ${addrColor} ${retired ? 'opacity-30' : ''}`}
           >
             {isLoading ? 'generating...' : displayAddress || 'no wallet selected'}
           </code>
@@ -268,15 +236,24 @@ export function ReceiveTab({
         </div>
       </div>
 
-      {!showingEphemeral && transparent && (
-        <p className='text-center text-label text-fg-muted leading-snug lowercase'>
-          public on-chain - one index per sender, then shield into your private pool.
-        </p>
+      {isZcash && transparent && t.canDerive && !t.error && (
+        <button
+          type='button'
+          onClick={() => setAdvancedOpen(true)}
+          className='flex w-full items-center justify-between px-1 py-1 text-label text-fg-muted lowercase hover:text-fg-high'
+        >
+          <span>earlier addresses</span>
+          <span className='i-ph-caret-right size-3.5' />
+        </button>
       )}
 
-      <div className='flex w-full gap-2'>
+      <div className='mt-auto flex w-full gap-2 border-t border-surface-border-soft pt-4'>
         {isZcash && displayAddress && (
-          <Button variant='secondary' onClick={() => setRequestOpen(true)} className='flex-1'>
+          <Button
+            variant='secondary'
+            onClick={() => setRequestOpen(true)}
+            className='w-[150px] shrink-0'
+          >
             request amount
           </Button>
         )}

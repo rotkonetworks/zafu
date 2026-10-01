@@ -1,6 +1,6 @@
 /**
- * The one QR code zafu draws: ink dots on warm paper, rounded finder squares,
- * the zafu mark in the middle.
+ * The one QR code zafu draws: square ink modules on warm paper, square
+ * finder patterns, the zafu mark in the middle.
  *
  * Built from the `qrcode` module matrix and rendered as SVG, so it is sharp
  * at any size and styled like the rest of the wallet instead of a stock
@@ -73,7 +73,7 @@ export const QrCode = ({ value, size = 176, className, label }: QrCodeProps) => 
       <rect width={view} height={view} fill={PAPER} />
       <g transform={`translate(${quiet} ${quiet})`} fill={INK}>
         {dots.map(([r, c]) => (
-          <circle key={`${r}-${c}`} cx={c + 0.5} cy={r + 0.5} r={0.42} />
+          <rect key={`${r}-${c}`} x={c} y={r} width={1} height={1} />
         ))}
         {finders.map(([r, c]) => (
           <g key={`f-${r}-${c}`}>
@@ -82,12 +82,11 @@ export const QrCode = ({ value, size = 176, className, label }: QrCodeProps) => 
               y={r + 0.5}
               width={6}
               height={6}
-              rx={1.6}
               fill='none'
               stroke={INK}
               strokeWidth={1}
             />
-            <rect x={c + 2} y={r + 2} width={3} height={3} rx={0.8} />
+            <rect x={c + 2} y={r + 2} width={3} height={3} />
           </g>
         ))}
         <rect
@@ -95,7 +94,6 @@ export const QrCode = ({ value, size = 176, className, label }: QrCodeProps) => 
           y={logoCells.start}
           width={logoCells.size}
           height={logoCells.size}
-          rx={1}
           fill={PAPER}
         />
         <image
