@@ -31,7 +31,7 @@ export function Row(props: RowProps) {
   const { icon, label, description, disabled, className } = props;
 
   const rowClass = cn(
-    'flex min-h-[52px] w-full items-center gap-3 px-3.5 py-2 text-left transition-colors',
+    'flex min-h-[50px] w-full items-center gap-3 px-3.5 py-2 text-left transition-colors',
     props.type !== 'toggle' && 'hover:bg-surface-elev-2',
     disabled && 'pointer-events-none opacity-50',
     className,
@@ -41,9 +41,9 @@ export function Row(props: RowProps) {
     <>
       {icon && <span className={cn(icon, 'size-5 shrink-0 text-fg-muted')} aria-hidden='true' />}
       <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
-        <span className='truncate text-data text-fg-high lowercase'>{label}</span>
+        <span className='truncate text-sm text-fg-high lowercase'>{label}</span>
         {description && (
-          <span className='truncate text-label text-fg-muted lowercase'>{description}</span>
+          <span className='truncate text-[11px] text-fg-muted lowercase'>{description}</span>
         )}
       </span>
       {props.type === 'value' && props.value != null && (

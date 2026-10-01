@@ -95,7 +95,7 @@
     /* border */
     /* bare `border` is the board's --line; border-border-hard is --line2 */
     --border: 35 20% 12%; /* --surface-border-soft #241f18 */
-    --input: 33 21% 8%; /* --surface-elev-2      #1a1611 */
+    --input: 42 36% 5%; /* --surface-elev-1      #131009, the board's input ground */
 
     /* primary - zcash gold */
     --primary: 42 91% 55%;
@@ -134,6 +134,7 @@
     --info: #f4b728;
     --warn: #d9773f;
     --gold-line: #3a2f14;
+    --scrim: rgb(6 5 4 / 0.72);
 
     /* legacy compat */
     --charcoal: #131009;
@@ -191,7 +192,7 @@
     --card: 43 44% 94%;
     --card-foreground: 32 21% 14%;
     --border: 39 30% 81%;
-    --input: 43 56% 95%;
+    --input: 43 44% 94%;
     --primary: 42 89% 29%;
     --primary-foreground: 43 44% 96%;
     --secondary: 42 80% 25%;
@@ -206,6 +207,7 @@
     --warning: #b0561d;
     --warn: #b0561d;
     --gold-line: #dcc488;
+    --scrim: rgb(46 38 28 / 0.34);
     --info: #8a6508;
     --charcoal: #f6f2e8;
     --charcoal-secondary: #efe9dc;

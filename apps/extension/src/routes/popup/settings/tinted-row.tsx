@@ -16,10 +16,10 @@ export const TintedRow = ({
   <button
     type='button'
     onClick={onPress}
-    className='flex min-h-[52px] w-full items-center gap-3 px-3.5 py-2 text-left transition-colors hover:bg-surface-elev-2'
+    className='flex min-h-[50px] w-full items-center gap-3 px-3.5 py-2 text-left transition-colors hover:bg-surface-elev-2'
   >
     <span
-      className={`flex-1 text-data lowercase ${tone === 'gold' ? 'text-zigner-gold' : 'text-hanko-light'}`}
+      className={`flex-1 text-sm lowercase ${tone === 'gold' ? 'text-zigner-gold' : 'text-hanko-light'}`}
     >
       {label}
     </span>

@@ -166,6 +166,7 @@
   --color-info: var(--info);
   --color-warn: var(--warn);
   --color-gold-line: var(--gold-line);
+  --color-scrim: var(--scrim);
 
   /* the stock palette's status families collapse onto the board's three
      status inks, so a stray red-400 or yellow-500/10 still lands on-theme.
