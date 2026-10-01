@@ -214,7 +214,7 @@ export function ContactDiscoverySection({ onExplain }: { onExplain?: () => void 
   );
 }
 
-/** "all privacy controls" (SetPrivacyAll.dc.html). proxy is shelved, so it has no row. */
+/** privacy: one screen, no nested "all controls" (SetPrivacy.dc.html). proxy is shelved, so it has no row. */
 export function SettingsPrivacy() {
   const { settings, setSetting } = useStore(privacySelector);
   const activeNetwork = useStore(selectActiveNetwork);
@@ -237,11 +237,7 @@ export function SettingsPrivacy() {
     );
 
   return (
-    <SettingsScreen
-      title='all privacy controls'
-      category='privacy'
-      backPath={PopupPath.SETTINGS_PRIVACY_HOME}
-    >
+    <SettingsScreen title='privacy' category='privacy' backPath={PopupPath.SETTINGS}>
       <div className='flex flex-col gap-4'>
         <Section title='on screen'>{rows('on screen')}</Section>
         <Section title='network'>

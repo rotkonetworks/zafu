@@ -30,10 +30,6 @@ export const popupScreens = {
   forgotPassword: () => import('./forgot-password').then(m => m.ForgotPassword),
   settingsAddViewingKey: () =>
     import('./settings/settings-add-viewing-key').then(m => m.SettingsAddViewingKey),
-  // Security & Backup tab. SecurityBackup (authored by another engineer) brings
-  // its own SettingsScreen chrome, so mount it directly - no extra wrapper.
-  settingsSecurityBackup: () =>
-    import('./settings/settings-security-backup').then(m => m.SecurityBackup),
   settingsAbout: () => import('./settings/settings-about').then(m => m.SettingsAbout),
   settingsMultisig: () => import('./settings/settings-multisig').then(m => m.SettingsMultisig),
   settingsMultisigBackup: () =>
@@ -44,11 +40,10 @@ export const popupScreens = {
   settingsZcashMe: () => import('./settings/settings-zcashme').then(m => m.SettingsZcashMe),
   subscribe: () => import('./settings/subscribe').then(m => m.SubscribePage),
 
-  // four category homes (settings IA rework) + the screens their rows need
+  // four category homes (settings IA rework), each the one screen for its
+  // category, + the screens their rows need
   settingsSecurityHome: () =>
     import('./settings/settings-security-home').then(m => m.SettingsSecurityHome),
-  settingsPrivacyHome: () =>
-    import('./settings/settings-privacy-home').then(m => m.SettingsPrivacyHome),
   settingsNetworks: () => import('./settings/settings-networks').then(m => m.SettingsNetworks),
   settingsZcashNetwork: () =>
     import('./settings/settings-zcash-network').then(m => m.SettingsZcashNetwork),
@@ -56,8 +51,6 @@ export const popupScreens = {
     import('./settings/settings-penumbra-network').then(m => m.SettingsPenumbraNetwork),
   settingsDevicesHome: () =>
     import('./settings/settings-devices-home').then(m => m.SettingsDevicesHome),
-  settingsDevicesAll: () =>
-    import('./settings/settings-devices-all').then(m => m.SettingsDevicesAll),
   settingsRemoveWallet: () =>
     import('./settings/settings-remove-wallet').then(m => m.SettingsRemoveWallet),
   settingsConnections: () =>

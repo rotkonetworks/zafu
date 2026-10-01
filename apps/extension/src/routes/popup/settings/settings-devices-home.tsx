@@ -1,10 +1,13 @@
 import { useStore } from '../../../state';
+import { selectEnabledNetworks } from '../../../state/keyring';
+import { HARDWARE_WALLET_ENABLED, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
+import { openPageInTab } from '../../../utils/popup-detection';
+import { PagePath } from '../../page/paths';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
-import { SettingsScreen } from './settings-screen';
-import { Row, RowGroup } from '@repo/ui/components/ui/row';
-import { TintedRow } from './tinted-row';
-import { ThemeRow } from './settings-appearance';
+import { Section, SettingsScreen } from './settings-screen';
+import { Row } from '@repo/ui/components/ui/row';
+import { ApprovalsRow, FontRow, ThemeRow } from './settings-appearance';
 import { selectZignerPaired } from './settings-status';
 
 export const ZignerRow = () => {
@@ -32,24 +35,49 @@ export const AboutRow = () => {
   );
 };
 
-/** devices and app category home (SetDevices.dc.html) */
+/** devices and app: one screen, no nested "all controls" (SetDevices.dc.html).
+ *  pro is shelved, so it has no row. */
 export const SettingsDevicesHome = () => {
   const navigate = usePopupNav();
+  const zcashOn = useStore(selectEnabledNetworks).includes('zcash');
+
   return (
     <SettingsScreen title='devices and app' category='devices' backPath={PopupPath.SETTINGS}>
       <div className='flex flex-col gap-4'>
-        <RowGroup>
+        <Section title='devices'>
           <ZignerRow />
-          <ThemeRow />
-          <AboutRow />
-        </RowGroup>
-        <RowGroup>
-          <TintedRow
-            label='all device and app controls'
-            tone='gold'
-            onPress={() => navigate(PopupPath.SETTINGS_DEVICES_ALL)}
+          {zcashOn && (HARDWARE_WALLET_ENABLED || LEDGER_TRANSPARENT_ENABLED) && (
+            <Row
+              type='screen'
+              label='ledger'
+              onPress={() => void openPageInTab(PagePath.CONNECT_LEDGER, true)}
+            />
+          )}
+          <Row
+            type='screen'
+            label='device update'
+            onPress={() => navigate(PopupPath.SETTINGS_OTA)}
           />
-        </RowGroup>
+        </Section>
+        <Section title='app'>
+          <ThemeRow />
+          <FontRow />
+          <ApprovalsRow />
+          <Row
+            type='screen'
+            label='features'
+            onPress={() => navigate(PopupPath.SETTINGS_FEATURES)}
+          />
+          <AboutRow />
+        </Section>
+        {/* the accounts sheet switches wallets; renaming, importing and removing any of them lives here */}
+        <Section title='wallets'>
+          <Row
+            type='screen'
+            label='wallets & networks'
+            onPress={() => navigate(PopupPath.SETTINGS_WALLETS)}
+          />
+        </Section>
       </div>
     </SettingsScreen>
   );

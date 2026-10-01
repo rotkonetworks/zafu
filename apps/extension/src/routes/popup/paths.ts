@@ -94,7 +94,6 @@ export enum PopupPath {
   SETTINGS_CONNECTED_SITES = '/settings/connected-sites',
   SETTINGS_CLEAR_CACHE = '/settings/clear-cache',
   SETTINGS_RECOVERY_PASSPHRASE = '/settings/recovery-passphrase',
-  SETTINGS_SECURITY_BACKUP = '/settings/security-backup',
   SETTINGS_ZIGNER = '/settings/zigner',
   SETTINGS_NETWORKS = '/settings/networks',
   SETTINGS_PRIVACY = '/settings/privacy',
@@ -107,16 +106,15 @@ export enum PopupPath {
   SETTINGS_ADD_VIEWING_KEY = '/settings/add-viewing-key',
   SETTINGS_CHANGE_PASSWORD = '/settings/change-password',
 
-  // Settings IA rework: four category homes + a couple of new screens the
+  // Settings IA rework: four category homes, each the one screen for its
+  // category (no nested "all controls"), + a couple of new screens the
   // category rows need (see routes/popup/settings/AGENTS scope). Every path
   // above this line still resolves to its existing screen.
   SETTINGS_SECURITY = '/settings/security',
-  SETTINGS_PRIVACY_HOME = '/settings/privacy/home',
   SETTINGS_ZCASH_NETWORK = '/settings/networks/zcash',
   /** `?sheet=node` opens the node picker, `?chain=<CosmosChainId>` that chain's sheet */
   SETTINGS_PENUMBRA_NETWORK = '/settings/networks/penumbra',
   SETTINGS_DEVICES = '/settings/devices',
-  SETTINGS_DEVICES_ALL = '/settings/devices/all',
   SETTINGS_REMOVE_WALLET = '/settings/remove-wallet',
   /** "everything zafu talks to" - every known destination, grouped by
    *  purpose, with an allow/block control per host. */

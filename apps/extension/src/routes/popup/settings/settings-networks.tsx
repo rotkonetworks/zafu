@@ -8,7 +8,6 @@ import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { Section, SettingsScreen } from './settings-screen';
 import { Row } from '@repo/ui/components/ui/row';
-import { ZcashMeRow } from './settings-privacy';
 
 /** each chain's own screen, and its label here */
 const CHAINS = [
@@ -50,16 +49,8 @@ export const SettingsNetworks = () => {
             <ChainRow key={c.id} chain={c} />
           ))}
         </Section>
-        <Section title='privacy over the wire'>
-          <Row
-            type='screen'
-            label='everything zafu talks to'
-            onPress={() => navigate(PopupPath.SETTINGS_CONNECTIONS)}
-          />
-        </Section>
         {zcashOn && (
-          <Section title='people and services'>
-            <ZcashMeRow />
+          <Section title='services'>
             <Row
               type='screen'
               label='voting endpoints'

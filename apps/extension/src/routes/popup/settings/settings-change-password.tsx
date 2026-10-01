@@ -27,7 +27,7 @@ const FIELDS = [
 
 export const SettingsChangePassword = () => {
   const changePassword = useStore(s => s.keyRing.changePassword);
-  const back = useBackNav(PopupPath.SETTINGS_SECURITY_BACKUP);
+  const back = useBackNav(PopupPath.SETTINGS_SECURITY);
   const [form, setForm] = useState({ current: '', next: '', again: '' });
   const [outcome, setOutcome] = useState<Outcome>();
   const [busy, setBusy] = useState(false);
@@ -59,7 +59,7 @@ export const SettingsChangePassword = () => {
 
   return (
     <form onSubmit={submit} className='flex min-h-full flex-col'>
-      <ScreenHeader title='change password' backPath={PopupPath.SETTINGS_SECURITY_BACKUP} />
+      <ScreenHeader title='change password' backPath={PopupPath.SETTINGS_SECURITY} />
       <div className='flex grow flex-col gap-3.5 px-4 pt-[18px]'>
         <p className='text-xs/[1.6] text-fg-muted'>
           this only protects this wallet on this computer. it never touches your zec or your
