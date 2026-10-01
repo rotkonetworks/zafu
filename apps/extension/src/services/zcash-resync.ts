@@ -89,18 +89,10 @@ export const rescanZcash = async (requested: number): Promise<number | undefined
 };
 
 /**
- * Resume after a transient backend error (node restart, 503) from the height
- * already reached. Unlike a rescan it keeps the notes and the resume hint: a
- * blip should cost seconds, not a full scan from the birthday.
+ * Resume after a failure from the height already reached. Unlike a rescan it
+ * keeps the notes: the auto-sync hook stops the running loop and starts it
+ * again with the same birthday and store it always uses.
  */
-export const retryZcashSync = async (): Promise<void> => {
-  const t = target();
-  if (!t) {
-    return;
-  }
-  await spawnNetworkWorker('zcash');
-  markWalletSyncing('zcash', t.storeId);
-  const key = zcashSyncHeightKey(t.storeId);
-  const resumeAt = (await chrome.storage.local.get(key))[key] as number | undefined;
-  await t.start(resumeAt);
+export const retryZcashSync = (): void => {
+  window.dispatchEvent(new Event('zcash-sync-retry'));
 };

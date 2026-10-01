@@ -93,16 +93,26 @@ export function useZcashAutoSync() {
   // track in-flight stop promise so the start effect can await it on quick network switches
   const stopPromiseRef = useRef<Promise<void> | null>(null);
 
-  // a host that lost its worker: start again from the stored height
+  // "try again", or a host that lost its worker: start again from the stored
+  // height. A retry stops the running loop first, so it ends before the new one
   const [restarts, setRestarts] = useState(0);
   useEffect(() => {
     const restart = (e: Event) => {
-      if ((e as CustomEvent).detail?.network === 'zcash') {
-        setRestarts(n => n + 1);
+      if (e.type === 'network-sync-lost' && (e as CustomEvent).detail?.network !== 'zcash') {
+        return;
       }
+      const running = syncingWalletRef.current;
+      if (e.type === 'zcash-sync-retry' && running) {
+        stopPromiseRef.current = stopSyncInWorker('zcash', running).catch(() => {});
+      }
+      setRestarts(n => n + 1);
     };
+    window.addEventListener('zcash-sync-retry', restart);
     window.addEventListener('network-sync-lost', restart);
-    return () => window.removeEventListener('network-sync-lost', restart);
+    return () => {
+      window.removeEventListener('zcash-sync-retry', restart);
+      window.removeEventListener('network-sync-lost', restart);
+    };
   }, []);
 
   // eagerly pre-spawn the zcash worker while zcash is on
@@ -227,6 +237,7 @@ export function useZcashAutoSync() {
                 detail: {
                   walletId: storeId,
                   message: err instanceof Error ? err.message : String(err),
+                  stalled: true,
                 },
               }),
             );
@@ -345,6 +356,7 @@ export function useZcashAutoSync() {
             detail: {
               walletId,
               message: err instanceof Error ? err.message : String(err),
+              stalled: true,
             },
           }),
         );

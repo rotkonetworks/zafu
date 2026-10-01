@@ -107,6 +107,7 @@ const MESSAGES: Record<SyncFailureKind, string> = {
 export const OFFLINE_MESSAGE = 'no connection · zafu will keep trying on its own';
 
 const CHOOSE: SyncFailureAction = { label: 'choose', kind: 'settings' };
+const TRY_AGAIN: SyncFailureAction = { label: 'try again', kind: 'retry' };
 
 const ACTIONS: Partial<Record<SyncFailureKind, SyncFailureAction>> = {
   // Only failures the node is plausibly responsible for point at the node.
@@ -115,7 +116,7 @@ const ACTIONS: Partial<Record<SyncFailureKind, SyncFailureAction>> = {
   consensus: CHOOSE,
   // A local problem must never make the wallet blame the node (vizor's rule).
   storageFatal: { label: 'reload', kind: 'reload' },
-  unknown: { label: 'try again', kind: 'retry' },
+  unknown: TRY_AGAIN,
 };
 
 const AUTO_RETRIES: Record<SyncFailureKind, boolean> = {
@@ -392,6 +393,14 @@ export const SYNC_STALL_ERRORS = 10;
  */
 export const syncRetryDelayMs = (failures: number): number =>
   Math.min(failures >= SYNC_STALL_ERRORS ? 120_000 : 30_000, 2000 * 2 ** Math.max(0, failures - 1));
+
+/** a stalled or stopped sync offers to try again now, from where it stopped
+ *  (a reload, offered when local data could not be read, does that too) */
+export const stalledFailure = (failure: SyncFailure): SyncFailure => ({
+  ...failure,
+  action: failure.action?.kind === 'reload' ? failure.action : TRY_AGAIN,
+  autoRetries: false,
+});
 
 export const rewindDistanceForAttempt = (attemptIndex: number): number => {
   const last = COMMITMENT_TREE_REWIND_DISTANCES[COMMITMENT_TREE_REWIND_DISTANCES.length - 1]!;

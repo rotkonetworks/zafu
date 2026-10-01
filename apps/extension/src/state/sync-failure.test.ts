@@ -4,6 +4,7 @@ import {
   isChainContinuityError,
   isEndpointFailoverCandidate,
   rewindDistanceForAttempt,
+  stalledFailure,
   syncFailureMessage,
   syncRetryDelayMs,
   COMMITMENT_TREE_REWIND_DISTANCES,
@@ -277,5 +278,20 @@ describe('a failing sync never gives up, and never spins', () => {
     for (const n of [-1, 0, 0.5, 1]) {
       expect(syncRetryDelayMs(n)).toBeGreaterThanOrEqual(2000);
     }
+  });
+
+  it('a stalled sync offers to try again, whatever the node did', () => {
+    for (const code of SYNC_ERROR_CODES.filter(c => c !== 'storage-fatal')) {
+      const stalled = stalledFailure(classifySyncFailure('x', code));
+      expect(stalled.action).toEqual({ label: 'try again', kind: 'retry' });
+      expect(stalled.autoRetries).toBe(false);
+    }
+    const node = stalledFailure(classifySyncFailure(REAL_ERRORS.backendDown));
+    expect(node.message).toBe(syncFailureMessage('network'));
+    expect(node.action?.kind).toBe('retry');
+  });
+
+  it('unreadable local data still offers the reload, which resumes too', () => {
+    expect(stalledFailure(classifySyncFailure('x', 'storage-fatal')).action?.kind).toBe('reload');
   });
 });

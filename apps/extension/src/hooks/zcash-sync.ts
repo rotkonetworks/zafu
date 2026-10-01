@@ -13,7 +13,7 @@ import { useStore } from '../state';
 import { selectActiveNetwork } from '../state/keyring';
 import { activeZcashStoreId } from '../state/pockets';
 import { zcashSyncHeightKey } from '../state/keyring/network-worker';
-import { classifySyncFailure, type SyncFailure } from '../state/sync-failure';
+import { classifySyncFailure, stalledFailure, type SyncFailure } from '../state/sync-failure';
 
 const DEFAULT_ZIDECAR_URL = 'https://zcash.rotko.net';
 const POLL_INTERVAL = 10_000;
@@ -67,8 +67,9 @@ export function useZcashWorkerSync() {
   // dispatched by the auto-sync hook on start failures
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ walletId?: string; message?: string; code?: string }>)
-        .detail;
+      const detail = (
+        e as CustomEvent<{ walletId?: string; message?: string; code?: string; stalled?: boolean }>
+      ).detail;
       if (activeWalletId && detail?.walletId && detail.walletId !== activeWalletId) {
         return;
       }
@@ -76,7 +77,8 @@ export function useZcashWorkerSync() {
         setWorkerError(new Error(detail.message));
         // Classify here, once, at the boundary - so no view is ever tempted
         // to render the raw worker text.
-        setWorkerFailure(classifySyncFailure(detail.message, detail.code));
+        const failure = classifySyncFailure(detail.message, detail.code);
+        setWorkerFailure(detail.stalled ? stalledFailure(failure) : failure);
       }
     };
     window.addEventListener('zcash-sync-error', handler);
