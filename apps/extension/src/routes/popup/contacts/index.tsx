@@ -2,6 +2,8 @@
  * contacts page - multi-network address book with expandable cards
  */
 
+import { ThorNameResolver } from '../../../components/thorname-resolver';
+import { isThorName, thorChainOf } from '../../../services/thorname';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Segmented } from '@repo/ui/components/ui/segmented';
@@ -193,7 +195,9 @@ function AddressModal({
   const [chainId, setChainId] = useState(editAddress?.chainId ?? '');
   const [notes, setNotes] = useState(editAddress?.notes ?? '');
 
-  const canSave = address.trim().length > 0;
+  const thorChain = thorChainOf(network, chainId.trim());
+  // a name is saved as the address it resolves to, never as itself
+  const canSave = address.trim().length > 0 && !(thorChain && isThorName(address.trim()));
 
   const handleSave = () => {
     if (!canSave) {
@@ -251,6 +255,9 @@ function AddressModal({
               placeholder='paste address...'
               className='w-full border border-border-soft bg-input px-3 py-2.5 text-xs font-mono focus:border-zigner-gold focus:outline-none'
             />
+            <div className='mt-1.5 empty:hidden'>
+              <ThorNameResolver input={address} chain={thorChain} onResolve={setAddress} />
+            </div>
           </div>
 
           <div>

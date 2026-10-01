@@ -61,6 +61,12 @@ export const PRIVACY_EXPLAIN: Record<string, Explain> = {
     on: 'zafu asks zcash.me about the names you look up',
     off: 'zafu never contacts zcash.me',
   },
+  'thorchain names': {
+    blurb: 'pay a thorchain name instead of an address.',
+    on: 'zafu asks a thorchain node about the names you type, from your ip',
+    off: 'zafu asks you before it looks one up',
+    footer: 'only names you type are looked up · an address is never turned back into a name',
+  },
 };
 
 /** one label open at a time, so every row in a screen shares one sheet */

@@ -16,6 +16,7 @@
 
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { ZCASHME_BASE_URL } from '../services/zcashme/api';
+import { THORNAME_PATH, THORNODE_URLS } from '../services/thornode';
 import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../config/contact-discovery-relay';
 import { PENUMBRA_MAINNET_ENDPOINTS, defaultPenumbraEndpoint } from '../config/penumbra-endpoints';
 import { ZCASH_MAINNET_ENDPOINTS, defaultZcashEndpoint } from '../config/zcash-endpoints';
@@ -278,10 +279,15 @@ export const DESTINATIONS: readonly DestinationSpec[] = [
     label: 'thorchain swap',
     purpose: 'swap',
     gate: { kind: 'optional' },
-    urls: () => [
-      'https://thornode.ninerealms.com',
-      'https://gateway.liquify.com/chain/thorchain_api',
-    ],
+    urls: () => THORNODE_URLS,
+  },
+  {
+    id: 'thorname',
+    // the lookup path only (longest prefix wins): a swap opt-in is not a name opt-in
+    label: 'thorchain names',
+    purpose: 'registry',
+    gate: { kind: 'optional' },
+    urls: () => THORNODE_URLS.map(u => `${u}${THORNAME_PATH}`),
   },
   {
     id: 'skip',
