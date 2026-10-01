@@ -44,10 +44,24 @@ import { CAPS, walletKind, zcashSendRefusal, type WalletKind } from '../../../si
 import { persistentSurface, zcashSignerFor } from '../../../signing/resolve';
 import { connectLedgerBtc, zcashTransparentPath } from '../../../ledger/hw-btc-signer';
 import { ledgerTransparentSendFlowBtc } from '../../../ledger/hw-btc-flow';
-// connectLedger pairs/opens a WebHID session; ledgerSignerFor wraps the
-// PCZT-signing service in the feature-flag + app-version gates.
-import { connectLedger } from '../../../ledger';
-import { ledgerSignerFor } from '../../../signing/ledger-signer';
+import type { LedgerSigningPhase } from '../../../ledger/zcash-app/contract';
+import { openLedger } from '../../../ledger/zcash-app/connect';
+import { ledgerGuidance } from '../../../ledger/zcash-app/guidance';
+import {
+  LedgerOperation,
+  assertNoUnresolvedLedgerOperation,
+} from '../../../ledger/zcash-app/operation';
+import { loadLedgerZcashProtocol } from '../../../ledger/zcash-app/protocol';
+import { recoverLedgerOperations } from '../../../ledger/zcash-app/recovery';
+import {
+  accountStamper,
+  buildLedgerSendPczt,
+  ledgerAccountFromKeyInfo,
+  ledgerNetwork,
+  ledgerOperationStore,
+  zafuLedgerDeps,
+  zafuRecoveryDeps,
+} from '../../../ledger/zcash-app/zafu-deps';
 import { signAndBroadcast } from '../../../signing/cold-send';
 import { createZignerSigner } from '../../../signing/zigner-signer';
 import { frostAirgapSigner, frostSelfCustodySigner } from '../../../signing/frost-signer';
@@ -72,7 +86,7 @@ import { AmountField, ContactsSheet, ToField } from './send-fields';
 import { STAGES } from './send-stage';
 
 import { unwrapCborSinglePczt, parsePreludeSinglePcztResponse } from './zcash-send-cbor-helpers';
-import { LedgerGone, WitnessRebuild, ZignerWrongCode } from './send-states';
+import { LedgerGone, LedgerSteps, WitnessRebuild, ZignerWrongCode } from './send-states';
 import { isLedgerGone } from '../../../ledger/disconnect';
 import { zignerCodeChain, type ZignerChain } from '../../../shared/zigner-code';
 import { useRebuildLeft, useRebuildSince } from '../../../state/witness-rebuild';
@@ -337,6 +351,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // (a hung transport after an unplug) says nothing.
   const ledgerRoundRef = useRef<((onSigned: () => void) => Promise<void>) | null>(null);
   const ledgerRunRef = useRef(0);
+  // what the ledger zcash app last reported, and the way to stop asking it
+  const [ledgerPhase, setLedgerPhase] = useState<LedgerSigningPhase['phase'] | null>(null);
+  const ledgerAbortRef = useRef<AbortController | null>(null);
   // airgap FROST multisig builds a PCZT (gh #17)
   const pcztMultisigRef = useRef<SendTxPcztUnsignedResult | null>(null);
   const [sendSteps, setSendSteps] = useState<
@@ -782,44 +799,73 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         },
 
         'ledger-shielded': persistentSurface(async () => {
-          // WebHID PCZT signing: the same orchard PCZT as zigner, SpendAuth sigs
-          // signed on-device, injected via complete_orchard_pczt.
-          const result = await buildPczt();
-          // Ironwood (NU6.3 / V6) is not implemented for ledger; CAPS refuses an
-          // ironwood send before the build, and this MUST still fail closed: an
-          // absent or unrecognised tag must never reach the orchard-V5 translator.
-          const buildUrType = result.urFrames[0]?.split('/')[0]?.replace(/^ur:/i, '');
-          if (buildUrType !== 'zcash-pczt') {
-            throw new Error(
-              `ledger signing supports orchard (V5) PCZTs only; this build is ` +
-                `"${buildUrType ?? 'untagged'}". note that NU6.3 disabled orchard→orchard ` +
-                `sends on mainnet, so ledger shielded sends are unavailable until ` +
-                `ironwood (V6) support lands.`,
-            );
+          // the zcash app signs the whole PCZT once; the signed tx is
+          // checkpointed before it is broadcast, so nothing after the approval
+          // ever asks the device again (ledger/zcash-app/operation.ts)
+          const ins = selectedKeyInfo.insensitive;
+          const account = ledgerAccountFromKeyInfo(ins, Number(ins['accountIndex'] ?? 0));
+          const ctx = { walletId: storeId ?? walletId, network: ledgerNetwork(mainnet) };
+          await recoverLedgerOperations(zafuRecoveryDeps(zidecarUrl), ctx);
+          await assertNoUnresolvedLedgerOperation(ledgerOperationStore(), ctx);
+          if (!ufvk) {
+            throw new Error('this wallet has no viewing key to build with · please re-import it');
           }
-          pcztUnsignedRef.current = result;
-          // Bind the response type to what actually went out on the wire.
-          pcztRequestWasCompactRef.current = result.compactRequest === true;
-          // show the "confirm on your Ledger" prompt while the device signs.
-          // TODO(ledger-session): plumb the paired sessionId from the connect
-          // step; until then (re)open a session here to sign this round. The
-          // feature-flag + app-version gates are filters (ledgerSignerFor); the
-          // device returns raw spend-auth sigs, injected by the shared tail.
+          const built = await buildLedgerSendPczt({
+            walletId: ctx.walletId,
+            serverUrl: zidecarUrl,
+            recipient: recipient.trim(),
+            amountZat,
+            memo,
+            mainnet,
+            ufvk,
+          });
+          setFee(fmtZecShort(built.fee));
+          const protocol = await loadLedgerZcashProtocol();
+          const stillHere = () => selectEffectiveKeyInfo(useStore.getState())?.id === walletId;
           await runLedgerRound(async onSigned => {
+            setLedgerPhase(null);
             setStep('ledger-sign');
-            const session = await connectLedger();
-            const finalResult = await signAndBroadcast(
-              ledgerSignerFor(session),
-              {
-                pcztHex: result.pcztHex,
-                spendIndices: result.spendIndices,
-                coldSendId: result.coldSendId,
-              },
-              coldDeps,
-              { onSigned },
-            );
-            pcztUnsignedRef.current = null;
-            finish(finalResult.txid);
+            const device = await openLedger();
+            const abort = new AbortController();
+            ledgerAbortRef.current = abort;
+            try {
+              const out = await new LedgerOperation(
+                zafuLedgerDeps({
+                  protocol,
+                  device,
+                  stampDerivations: accountStamper(protocol, account),
+                  ctx,
+                  serverUrl: zidecarUrl,
+                  isCurrent: stillHere,
+                }),
+                ctx,
+                {
+                  kind: 'send',
+                  pcztHex: built.pcztHex,
+                  ...(built.coldSendId ? { coldSendId: built.coldSendId } : {}),
+                  label: `send ${amount} ZEC`,
+                },
+              ).run({
+                signal: abort.signal,
+                onPhase: p => setLedgerPhase(p.phase),
+                onStep: s => s === 'saving' && onSigned(),
+              });
+              if (out.status === 'uncertain') {
+                throw new Error(
+                  'this may already have been sent · zafu is confirming it from the chain, so please do not send it again yet',
+                );
+              }
+              finish(out.txid);
+            } catch (e) {
+              if (isLedgerGone(e)) {
+                throw e;
+              }
+              const g = ledgerGuidance(e);
+              throw new Error(`${g.title} · ${g.action}`);
+            } finally {
+              ledgerAbortRef.current = null;
+              await device.close().catch(() => undefined);
+            }
           });
         }),
 
@@ -1099,7 +1145,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         setStep('sign');
         break;
       case 'ledger-sign':
-        // signing is in-flight on the device; back returns to review.
+        // nothing is signed while the device still asks: let the round go
+        ledgerRunRef.current++;
+        ledgerRoundRef.current = null;
+        ledgerAbortRef.current?.abort();
+        dropTrackOp();
         setStep('review');
         break;
       case 'ledger-gone':
@@ -1443,8 +1493,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           </>
         );
 
-      // nothing reports "connected" or "app open" yet, so only the step the
-      // device is truly on is shown
+      // the zcash app reports each step; the bitcoin app only the last
       case 'ledger-sign':
         return (
           <>
@@ -1463,10 +1512,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 <span className='size-[22px] border-2 border-fg-muted' />
                 <span className='absolute -right-[26px] top-8 h-2.5 w-[26px] bg-border-hard' />
               </div>
-              <div className='flex h-12 w-full items-center gap-3 border border-border-soft bg-elev-1 px-3.5 text-[13px] text-fg-high'>
-                <Mark state='now' />
-                check the address on the device, then approve
-              </div>
+              <LedgerSteps
+                phase={kind === 'ledger-shielded' ? (ledgerPhase ?? 'connecting') : undefined}
+              />
             </Main>
             <Footer>
               <Button variant='secondary' onClick={handleBack} className='w-[110px]'>

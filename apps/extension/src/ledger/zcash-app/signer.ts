@@ -26,6 +26,7 @@ import {
   MIN_ZCASH_APP_VERSION_FOR_SIGNING,
   type LedgerFailure,
   type LedgerSigningPhase,
+  type LedgerTransparentPath,
   type LedgerZcashDevice,
   type LedgerZcashProtocol,
 } from './contract';
@@ -34,8 +35,7 @@ import {
 export const ZCASH_APP_NAME = 'Zcash';
 
 /** A transparent input's BIP44 tail under the account (one per input, with its pubkey). */
-export type { LedgerTransparentPath } from './contract';
-import type { LedgerTransparentPath } from './contract';
+export type { LedgerTransparentPath };
 
 /**
  * Stamp the Ledger account's derivations into an unsigned PCZT: every shielded
