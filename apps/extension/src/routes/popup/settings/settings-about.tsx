@@ -27,7 +27,7 @@ export const SettingsAbout = () => {
           <ul className='text-xs text-fg-muted space-y-0.5'>
             <li>zcash - shielded zec</li>
             <li>penumbra - private defi</li>
-            <li>burners - one-time transparent addresses for moving funds in and out</li>
+            <li>transparent interoperability burners - noble, cosmos hub, osmosis, injective</li>
           </ul>
         </div>
 
