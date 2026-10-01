@@ -121,6 +121,7 @@ trackUiOpenPresence(
     // the user thinks the wallet is shut. Stop network activity only - the
     // offscreen document and its worker stay up for proving - and resume is
     // automatic on the next open.
+    console.log('[sw] last UI surface closed, requesting zcash sync stop');
     requestStopAllSync('zcash');
   },
 );

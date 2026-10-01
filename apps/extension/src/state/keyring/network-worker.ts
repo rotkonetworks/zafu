@@ -455,7 +455,10 @@ const ensureHostListener = (): void => {
       return false;
     }
     if (msg?.type === 'NW_STOP_ALL_SYNC' && msg.network) {
-      void stopAllSyncInHost(msg.network as NetworkType).finally(() => sendResponse({ ok: true }));
+      void stopAllSyncInHost(msg.network as NetworkType).then(
+        stopped => sendResponse({ ok: true, stopped }),
+        () => sendResponse({ ok: false }),
+      );
       return true;
     }
     return false;
@@ -714,7 +717,7 @@ export const stopSyncInWorker = async (network: NetworkType, walletId: string): 
  * worker stay alive (proving still needs them), only network activity stops.
  * The next UI open resumes sync the same way it starts on any fresh popup.
  */
-const stopAllSyncInHost = async (network: NetworkType): Promise<void> => {
+const stopAllSyncInHost = async (network: NetworkType): Promise<string[]> => {
   const deadline = Date.now() + 60_000;
   while (inFlightSendIds.size > 0 && Date.now() < deadline) {
     await new Promise(r => setTimeout(r, 250));
@@ -724,8 +727,28 @@ const stopAllSyncInHost = async (network: NetworkType): Promise<void> => {
       `[network-worker] stopping sync with ${inFlightSendIds.size} send(s) still marked in-flight after 60s`,
     );
   }
-  const wallets = [...(workers.get(network)?.syncingWallets ?? [])];
-  await Promise.all(wallets.map(walletId => stopSyncInWorker(network, walletId).catch(() => {})));
+  const stopped = new Set<string>();
+  const stopOnce = async (): Promise<number> => {
+    const wallets = [...(workers.get(network)?.syncingWallets ?? [])];
+    wallets.forEach(w => stopped.add(w));
+    await Promise.all(wallets.map(walletId => stopSyncInWorker(network, walletId).catch(() => {})));
+    return wallets.length;
+  };
+
+  await stopOnce();
+  // A popup's own 'sync' call can already be in flight (dispatched to the
+  // host, not yet processed) the instant it closes - closing the page
+  // cannot retract a message already sent. That call still lands here and
+  // starts a fresh loop, silently undoing the stop above (runSync's own
+  // restart guard resets syncAbort unconditionally). Re-check for a few
+  // seconds and stop again if one lands late; stop sweeping once two
+  // checks in a row find nothing left running.
+  let quietChecks = 0;
+  while (quietChecks < 2) {
+    await new Promise(r => setTimeout(r, 500));
+    quietChecks = (await stopOnce()) === 0 ? quietChecks + 1 : 0;
+  }
+  return [...stopped];
 };
 
 /**
@@ -734,7 +757,10 @@ const stopAllSyncInHost = async (network: NetworkType): Promise<void> => {
  * no worker is running yet (nothing to stop).
  */
 export const requestStopAllSync = (network: NetworkType): void => {
-  void chrome.runtime.sendMessage({ type: 'NW_STOP_ALL_SYNC', network }).catch(() => {});
+  void chrome.runtime
+    .sendMessage({ type: 'NW_STOP_ALL_SYNC', network })
+    .then((r: unknown) => console.log(`[network-worker] requestStopAllSync(${network}) ->`, r))
+    .catch(() => {});
 };
 
 /**
