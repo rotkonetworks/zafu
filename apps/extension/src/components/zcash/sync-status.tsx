@@ -8,7 +8,7 @@ import { isSidePanel, isDedicatedWindow } from '../../utils/popup-detection';
 
 /**
  * The zcash sync strip under the header (board HomeSync): 32px of progress
- * while the wallet is not caught up, or a 40px notice in its place - offline,
+ * while the wallet is not caught up, or a 44px notice in its place - offline,
  * a node that isn't answering, a witness rebuild (boards StOffline, ErrNode,
  * StWitness). Tapping it opens a sheet with the heights, the raw error and
  * the rescan-from-a-date control.
@@ -91,7 +91,7 @@ export const SyncStatus = ({
       <div
         className={cn(
           'relative flex shrink-0 items-center gap-2 border-b text-xs',
-          notice ? 'h-10 pl-4 pr-2' : 'h-8 px-4',
+          notice ? 'h-11 pl-4 pr-2' : 'h-8 px-4',
           warn ? 'border-warn/40 bg-warn/10' : 'border-border-soft bg-elev-1',
         )}
       >
@@ -105,7 +105,7 @@ export const SyncStatus = ({
           ) : (
             <span className='i-zafu-enso size-3.5 shrink-0 text-zigner-gold' />
           )}
-          <span className='truncate text-fg'>
+          <span className={notice ? 'line-clamp-2 leading-snug text-fg' : 'truncate text-fg'}>
             {notice?.text ?? (connecting ? 'connecting' : 'syncing')}
           </span>
           {(notice ? notice.meta : !connecting) && (
