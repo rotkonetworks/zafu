@@ -274,7 +274,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // build/prove/broadcast pipeline it started keeps running, so this CANNOT
   // report failure: we simply stop being able to observe the outcome.
   //
-  // 'interrupted' says exactly that. It also leaves the record promotable - // the ref is deliberately NOT cleared, so if this unmount was a navigation
+  // 'interrupted' says exactly that. It also leaves the record promotable -
+  // the ref is deliberately NOT cleared, so if this unmount was a navigation
   // inside a surviving document (tab / side panel) the in-flight
   // promoteToBroadcasted() still rewrites the temp id to the real txid and
   // moves it on to broadcasting → pending.
