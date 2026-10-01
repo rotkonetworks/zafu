@@ -26,7 +26,8 @@ import {
   ZIGNER_PCZT_SIGN_UR_TYPE,
 } from '../routes/popup/send/zcash-send-cbor-helpers';
 import { nu63ActivationHeight } from '../config/feature-flags';
-import { crossCheckTip } from './cross-verify';
+import { crossCheckTip, pickIndependentPeer } from './cross-verify';
+import { checkEgress } from '../net/egress';
 import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
 import {
   CommitmentReservoir,
@@ -3742,31 +3743,42 @@ const runSync = async (
       // anything we can verify locally; cross-verification is the design's
       // own stated mitigation and had zero call sites. Advisory, not fatal:
       // a lagging or unreachable peer is far more common than an attack.
+      //
+      // Gated on the user's own "zcash tip cross-check" opt-in BEFORE the
+      // attempt, not just left to the egress guard to refuse: egress still
+      // refuses it either way, but a refused call is still a call the user
+      // never asked for, and it still logs. pickIndependentPeer is pure (no
+      // network), so checking its result against the compiled table costs
+      // nothing extra. The "once per catch-up" flag is still set when the
+      // opt-in is off, so a disabled check doesn't re-evaluate every tick.
       if (currentHeight >= chainHeight && !crossCheckedThisRun) {
         crossCheckedThisRun = true;
-        void crossCheckTip(serverUrl, chainHeight, async (peerUrl, timeoutMs) => {
-          const peer = await makeZcashClient(peerUrl);
-          return await Promise.race([
-            peer.getTip(),
-            new Promise<never>((_, rej) =>
-              setTimeout(() => rej(new Error('peer tip timeout')), timeoutMs),
-            ),
-          ]);
-        })
-          .then(res => {
-            if (res.disagreed) {
-              console.error(`[zcash-worker] CROSS-CHECK DISAGREEMENT: ${res.detail}`);
-              workerSelf.postMessage({
-                type: 'cross-check-warning',
-                network: 'zcash',
-                walletId,
-                payload: { detail: res.detail, peerUrl: res.peerUrl },
-              });
-            } else {
-              console.log(`[zcash-worker] cross-check: ${res.detail}`);
-            }
+        const crossCheckPeer = pickIndependentPeer(serverUrl);
+        if (crossCheckPeer && checkEgress(crossCheckPeer).allow) {
+          void crossCheckTip(serverUrl, chainHeight, async (peerUrl, timeoutMs) => {
+            const peer = await makeZcashClient(peerUrl);
+            return await Promise.race([
+              peer.getTip(),
+              new Promise<never>((_, rej) =>
+                setTimeout(() => rej(new Error('peer tip timeout')), timeoutMs),
+              ),
+            ]);
           })
-          .catch(e => console.warn('[zcash-worker] cross-check failed:', e));
+            .then(res => {
+              if (res.disagreed) {
+                console.error(`[zcash-worker] CROSS-CHECK DISAGREEMENT: ${res.detail}`);
+                workerSelf.postMessage({
+                  type: 'cross-check-warning',
+                  network: 'zcash',
+                  walletId,
+                  payload: { detail: res.detail, peerUrl: res.peerUrl },
+                });
+              } else {
+                console.log(`[zcash-worker] cross-check: ${res.detail}`);
+              }
+            })
+            .catch(e => console.warn('[zcash-worker] cross-check failed:', e));
+        }
       }
 
       if (currentHeight >= chainHeight) {

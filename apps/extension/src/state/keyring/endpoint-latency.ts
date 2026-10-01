@@ -5,8 +5,10 @@
  * lightwalletd implement. Avoids the fingerprinting beacon problem
  * of probing zidecar-only RPCs against arbitrary endpoints.
  *
- * Manual trigger only: settings UI calls measurePresetLatencies()
- * on user click; no background polling, no probe on settings entry.
+ * No background polling, ever. The settings UI calls measurePresetLatencies()
+ * on the "retest" click, and once on expanding a network's endpoint picker
+ * row (and only then if the user already opted in to "other zcash
+ * servers") - both are the user opening the picker, never a timer.
  */
 
 import { zcashClientFor, isZidecarEndpoint } from './zcash-backend';

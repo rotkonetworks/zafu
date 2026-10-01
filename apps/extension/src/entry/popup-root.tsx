@@ -10,6 +10,7 @@ import { RouterProvider } from 'react-router-dom';
 import { popupRouter } from '../routes/popup/router';
 import { isSidePanel } from '../utils/popup-detection';
 import { announceSidePanelPresence } from '../side-panel-presence';
+import { announceUiOpenPresence } from '../state/ui-open-presence';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
 import { noteContextInvalidated } from '../utils/reload-notice';
@@ -70,6 +71,13 @@ const MainPopup = () => {
         console.error('failed to init wasm:', err);
         setWasmReady(true); // continue anyway, some routes don't need wasm
       });
+  }, []);
+
+  // announce that a zafu UI surface is open, for the duration of this
+  // document - lets the worker run surface-only background work (e.g. the
+  // contact-discovery presence beacon) exactly while zafu is in use.
+  useEffect(() => {
+    announceUiOpenPresence();
   }, []);
 
   // check for pending side panel navigation
