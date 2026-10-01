@@ -228,17 +228,16 @@ describe('keyRing.changePassword', () => {
     await openEverything(fresh, ids);
   });
 
-  test('nothing is sealed under the old key while the swap runs', async () => {
+  test('the session key is swapped, never absent, so nothing sees a lock mid-change', async () => {
     await seedEverything(store);
+    const seen: unknown[] = [];
     const set = chrome.storage.local.set.bind(chrome.storage.local);
-    let sessionDuringCommit: unknown = 'unset';
     vi.spyOn(chrome.storage.local, 'set').mockImplementation((async (items: object) => {
-      if ('passwordKeyPrint' in items) {
-        sessionDuringCommit = await sessionExtStorage.get('passwordKey');
-      }
+      seen.push(await sessionExtStorage.get('passwordKey'));
       return set(items as Record<string, unknown>);
     }) as typeof chrome.storage.local.set);
     await store.getState().keyRing.changePassword(OLD, NEW);
-    expect(sessionDuringCommit).toBeUndefined();
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every(Boolean)).toBe(true);
   });
 });

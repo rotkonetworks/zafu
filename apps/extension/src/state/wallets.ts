@@ -7,6 +7,7 @@ import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { SessionStorageState } from '@repo/storage-chrome/session';
 import { AllSlices, SliceCreator } from '.';
+import { keyUse } from './keyring-lock';
 import type { Contact } from './contacts';
 
 /** Zcash wallet stored in extension */
@@ -90,7 +91,7 @@ export const createWalletsSlice =
     local: ExtensionStorage<LocalStorageState>,
   ): SliceCreator<WalletsSlice> =>
   (set, get) => {
-    return {
+    const slice: WalletsSlice = {
       all: [],
       zcashWallets: [],
       activeIndex: 0,
@@ -295,6 +296,11 @@ export const createWalletsSlice =
         return phrase.split(' ');
       },
     };
+    // both seal or open a seed with the session key: key users (state/keyring-lock)
+    const { addWallet, getSeedPhrase } = slice;
+    slice.addWallet = a => keyUse(() => addWallet(a));
+    slice.getSeedPhrase = () => keyUse(getSeedPhrase);
+    return slice;
   };
 
 /** coarse selector - use sparingly */

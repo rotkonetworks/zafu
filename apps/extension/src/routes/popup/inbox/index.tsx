@@ -1054,7 +1054,7 @@ export function InboxPage() {
   useEffect(() => {
     // read through the encrypted accessor, which also migrates any legacy
     // plaintext value written before this key was actually encrypted.
-    void getDiversifiedAddresses().then(setAddressRecords);
+    void getDiversifiedAddresses().then(setAddressRecords, () => undefined);
   }, []);
 
   // filter conversations by search

@@ -1,3 +1,4 @@
+import { keyUse } from '../state/keyring-lock';
 import { Code, ConnectError } from '@connectrpc/connect';
 import {
   AuthorizationData,
@@ -91,9 +92,13 @@ const getAirgapAuthorization = async (
   return AuthorizationData.fromJson(response.authorizationData);
 };
 
+// the key and the seed box are read together, as a key user (state/keyring-lock)
 const openWallet = async () => {
   await throwIfNeedsLogin();
+  return keyUse(openWalletUnlocked);
+};
 
+const openWalletUnlocked = async () => {
   const passKey = sessionExtStorage
     .get('passwordKey')
     .then(passKeyJson => Key.fromJson(passKeyJson!));

@@ -68,6 +68,7 @@ import {
 
 // password change
 import { resealSnapshot } from './reseal';
+import { keySwap, keyUse } from '../keyring-lock';
 
 // migration
 import { migrateOrphanedMultisigs, hasOrphanedMultisigs } from './migration';
@@ -77,6 +78,14 @@ import { mergeZignerCapabilities } from './zigner-merge';
 
 export * from './types';
 export * from './network-loader';
+
+/** a profile with a password was given a different one; nothing changed */
+export class PasswordMismatchError extends Error {
+  constructor() {
+    super('that is not the password this profile already uses');
+    this.name = 'PasswordMismatchError';
+  }
+}
 
 export interface KeyRingSlice {
   status: KeyRingStatus;
@@ -156,20 +165,20 @@ export const createKeyRingSlice =
 
     /**
      * Move every secret from `from` to a key made from `password`, all or
-     * nothing. The single multi-key storage write is the commit point: it is
-     * one write batch, so a crash before it leaves the old password opening
-     * everything, and after it the new one does. Writers seal with the session
-     * key and skip while there is none, as when locked, so while the snapshot
-     * is re-sealed nothing new lands under the old key.
+     * nothing. It runs under the exclusive keyring lock (state/keyring-lock),
+     * so every reader and writer of sealed data has finished and the next
+     * ones wait: no box is read mid-move, sealed under the old key after the
+     * snapshot, or overwritten by it. The single multi-key storage write is
+     * the commit point - one write batch, so a crash before it leaves the old
+     * password opening everything, and after it the new one does. The session
+     * key is swapped, never removed, so nothing sees a lock in between. A last
+     * pass moves anything a writer outside the lock left under the old key.
      */
-    const rekey = async (from: Key | null, password: string) => {
+    const rekey = async (from: Key, password: string) => {
       const fresh = await createMasterKey(password);
-      const before = await session.get('passwordKey');
-      await session.remove('passwordKey');
-      let committed = false;
-      try {
+      await keySwap(async () => {
         const raw = await chrome.storage.local.get(null);
-        const patch = from ? await resealSnapshot(raw, from, fresh.key) : {};
+        const patch = await resealSnapshot(raw, from, fresh.key);
         const vaults = (patch['vaults'] ?? raw['vaults'] ?? []) as EncryptedVault[];
         // a real password ends the empty-password auto-unlock
         if (password && vaults.some(v => v.insensitive?.['airgapOnly'])) {
@@ -179,13 +188,16 @@ export const createKeyRingSlice =
           });
         }
         await chrome.storage.local.set({ ...patch, passwordKeyPrint: fresh.keyPrint.toJson() });
-        committed = true;
-      } finally {
-        if (!committed && before) {
-          await session.set('passwordKey', before);
+        await session.set('passwordKey', fresh.keyJson);
+        const stragglers = await resealSnapshot(
+          await chrome.storage.local.get(null),
+          from,
+          fresh.key,
+        );
+        if (Object.keys(stragglers).length) {
+          await chrome.storage.local.set(stragglers);
         }
-      }
-      await session.set('passwordKey', fresh.keyJson);
+      });
 
       // the in-memory wallet records hold inner boxes the old key sealed
       const [vaultList, all, zcash, selectedId] = await Promise.all([
@@ -208,7 +220,7 @@ export const createKeyRingSlice =
       });
     };
 
-    return {
+    const slice: KeyRingSlice = {
       status: 'not-loaded',
       keyInfos: [],
       selectedKeyInfo: undefined,
@@ -299,7 +311,6 @@ export const createKeyRingSlice =
       // ── password / unlock / lock ──
 
       setPassword: async (password: string) => {
-        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
         const existingKeyPrint = await local.get('passwordKeyPrint');
 
         // Fresh profile - no key material yet. Mint a new master key. This is
@@ -315,26 +326,24 @@ export const createKeyRingSlice =
           return;
         }
 
-        // A keyprint already exists, so secrets are sealed under its key: move
-        // them all rather than orphan them under a fresh salt (a "set password"
-        // step run on an existing wallet once lost every seed that way). The
-        // airgap-only case is sealed under the empty-password key; anything hot
-        // needs the live session key, and while locked we refuse.
-        const penumbra = (await local.get('penumbraWallets')) ?? [];
-        const hasHot =
-          vaults.some(v => v.insensitive?.['airgapOnly'] !== true) ||
-          penumbra.some(w => 'encryptedSeedPhrase' in w.custody);
-        const airgapOnly = vaults.length > 0 && !hasHot;
-        const oldKey = airgapOnly
-          ? ((await recreateMasterKey('', existingKeyPrint))?.key ?? null)
-          : await requireKey(ctx).catch(() => null);
-        if (!oldKey && airgapOnly) {
-          throw new Error('failed to decrypt existing vaults for migration');
+        // A profile that has a password keeps it: an onboarding "set a
+        // password" step on it (adding a zigner or a phrase later) must be
+        // given that password, and only changePassword replaces it.
+        const typed = await recreateMasterKey(password, existingKeyPrint);
+        if (typed) {
+          await session.set('passwordKey', typed.keyJson);
+          set(state => {
+            state.keyRing.status = 'unlocked';
+          });
+          return;
         }
-        if (!oldKey && hasHot) {
-          throw new Error('cannot change password while locked - unlock first');
+        // An airgap-only profile has no password yet (its key is made from
+        // ''), and this is its first: move its secrets to it.
+        const unprotected = password ? await recreateMasterKey('', existingKeyPrint) : null;
+        if (!unprotected) {
+          throw new PasswordMismatchError();
         }
-        await rekey(oldKey, password);
+        await rekey(unprotected.key, password);
       },
 
       changePassword: async (current: string, next: string) => {
@@ -1032,7 +1041,7 @@ export const createKeyRingSlice =
 
       getVaultUnlock: async (vaultId: string) => ({
         box: (await mnemonicVault(vaultId)).encryptedData,
-        sealTo: to => sealSessionKeyTo(ctx, to),
+        sealTo: to => keyUse(() => sealSessionKeyTo(ctx, to)),
       }),
 
       getMultisigSecrets: async (vaultId: string) => {
@@ -1148,7 +1157,32 @@ export const createKeyRingSlice =
         });
       },
     };
+
+    // every method that reads, seals or rewrites the vaults runs as a key
+    // user, so a password change waits for it and it waits for the change
+    for (const name of KEY_USERS) {
+      const run = slice[name] as (...a: unknown[]) => Promise<unknown>;
+      (slice[name] as unknown) = (...a: unknown[]) => keyUse(() => run(...a));
+    }
+    return slice;
   };
+
+const KEY_USERS = [
+  'init',
+  'newMnemonicKey',
+  'newZignerZafuKey',
+  'addZignerUnencrypted',
+  'addLedgerUnencrypted',
+  'newFrostMultisigKey',
+  'selectKeyRing',
+  'renameKeyRing',
+  'eraseAll',
+  'deleteKeyRing',
+  'setMultisigHidden',
+  'getMnemonic',
+  'getMultisigSecrets',
+  'deriveKey',
+] as const satisfies readonly (keyof KeyRingSlice)[];
 
 // ── selectors ──
 

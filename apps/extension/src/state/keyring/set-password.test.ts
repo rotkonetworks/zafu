@@ -4,23 +4,19 @@ import { beforeEach, describe, expect, test } from 'vitest';
 import { create } from 'zustand';
 import { AllSlices, initializeStore, TestStore } from '..';
 import { decryptVault } from './crypto-ops';
+import { PasswordMismatchError } from '.';
 import type { EncryptedVault } from './types';
 
 const localMock = (chrome.storage.local as unknown as { mock: Map<string, unknown> }).mock;
 const sessionMock = (chrome.storage.session as unknown as { mock: Map<string, unknown> }).mock;
 
-// Regression: keyRing.setPassword must never orphan an already-sealed vault.
-// Onboarding create/import/zigner flows call setPassword unconditionally; when a
-// wallet already existed, the old code minted a fresh random salt and overwrote
-// the keyprint WITHOUT re-encrypting the existing vaults - so the seed could no
-// longer be decrypted ("failed to decrypt vault") even with the right password,
-// while FVK sync kept working. This locks in the re-seal behavior.
-describe('keyRing.setPassword re-seals existing vaults', () => {
+// keyRing.setPassword on a profile that already has a password confirms it and
+// never replaces it: the onboarding "set a password" step (a zigner or phrase
+// added later) used to re-key to whatever was typed, and its rollback then
+// restored vaults sealed under the old key beneath the new keyprint.
+describe('keyRing.setPassword on an existing profile', () => {
   const password = 's0meUs3rP@ssword';
-  const newPassword = 'a-completely-different-passw0rd';
-  const seedPhrase = [
-    'advance twist canal impact field normal depend pink sick horn world broccoli',
-  ];
+  const seedPhrase = 'advance twist canal impact field normal depend pink sick horn world broccoli';
 
   let useStore: TestStore;
 
@@ -30,64 +26,33 @@ describe('keyRing.setPassword re-seals existing vaults', () => {
     useStore = create<AllSlices>()(initializeStore(sessionExtStorage, localExtStorage));
   });
 
-  test('a sealed mnemonic vault still decrypts after setPassword runs again', async () => {
-    // fresh profile -> seal a hot wallet the way onboarding does (newMnemonicKey)
+  test('the same password unlocks and changes nothing', async () => {
     await useStore.getState().keyRing.setPassword(password);
-    const vaultId = await useStore
-      .getState()
-      .keyRing.newMnemonicKey(seedPhrase.join(' '), 'Wallet 1');
-
-    const before = await useStore.getState().keyRing.getMnemonic(vaultId);
-    expect(before).toBe(seedPhrase.join(' '));
-
-    // the bug trigger: a second setPassword on an existing wallet (e.g. the
-    // "set password" step of a zigner import / re-run onboarding).
-    await useStore.getState().keyRing.setPassword(newPassword);
-
-    // previously threw "failed to decrypt vault"
-    const after = await useStore.getState().keyRing.getMnemonic(vaultId);
-    expect(after).toBe(before);
-
-    // and the password is now the new one, consistently
+    const id = await useStore.getState().keyRing.newMnemonicKey(seedPhrase, 'Wallet 1');
+    const print = await localExtStorage.get('passwordKeyPrint');
     useStore.getState().keyRing.lock();
-    expect(await useStore.getState().keyRing.unlock(newPassword)).toBe(true);
-    expect(await useStore.getState().keyRing.getMnemonic(vaultId)).toBe(before);
 
-    useStore.getState().keyRing.lock();
-    expect(await useStore.getState().keyRing.unlock(password)).toBe(false);
+    await useStore.getState().keyRing.setPassword(password);
+    expect(await localExtStorage.get('passwordKeyPrint')).toEqual(print);
+    expect(await useStore.getState().keyRing.getMnemonic(id)).toBe(seedPhrase);
   });
 
-  test('a penumbra hot wallet seed still reveals after setPassword runs again', async () => {
+  test('a different password is refused, and the old one still opens everything', async () => {
     await useStore.getState().keyRing.setPassword(password);
-    // wallets.addWallet stores the penumbra seed in penumbraWallets custody,
-    // sealed under the master key (a different store from the vault list).
-    await useStore.getState().wallets.addWallet({ label: 'Account #1', seedPhrase });
+    const id = await useStore.getState().keyRing.newMnemonicKey(seedPhrase, 'Wallet 1');
+    await useStore.getState().wallets.addWallet({ label: 'p', seedPhrase: seedPhrase.split(' ') });
+    const before = Object.fromEntries(localMock);
 
-    const before = await useStore.getState().wallets.getSeedPhrase();
-    expect(before.join(' ')).toBe(seedPhrase.join(' '));
+    await expect(useStore.getState().keyRing.setPassword('something else')).rejects.toThrow(
+      PasswordMismatchError,
+    );
+    expect(Object.fromEntries(localMock)).toEqual(before);
 
-    // the bug trigger again - previously orphaned the penumbra seed too
-    await useStore.getState().keyRing.setPassword(newPassword);
-
-    const after = await useStore.getState().wallets.getSeedPhrase();
-    expect(after).toEqual(before);
-  });
-
-  test('setPassword refuses to re-seal hot vaults while locked (no orphaning)', async () => {
-    await useStore.getState().keyRing.setPassword(password);
-    const vaultId = await useStore
-      .getState()
-      .keyRing.newMnemonicKey(seedPhrase.join(' '), 'Wallet 1');
-    const printBefore = await localExtStorage.get('passwordKeyPrint');
-
-    // lock, then attempt a password reset with no session key available
     useStore.getState().keyRing.lock();
-    await expect(useStore.getState().keyRing.setPassword(newPassword)).rejects.toThrow();
-
-    // keyprint untouched -> the original password still opens the vault
-    expect(await localExtStorage.get('passwordKeyPrint')).toEqual(printBefore);
+    expect(await useStore.getState().keyRing.unlock('something else')).toBe(false);
     expect(await useStore.getState().keyRing.unlock(password)).toBe(true);
-    expect(await useStore.getState().keyRing.getMnemonic(vaultId)).toBeTruthy();
+    expect(await useStore.getState().keyRing.getMnemonic(id)).toBe(seedPhrase);
+    expect((await useStore.getState().wallets.getSeedPhrase()).join(' ')).toBe(seedPhrase);
   });
 });
 

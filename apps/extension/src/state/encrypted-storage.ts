@@ -11,6 +11,7 @@ import { Box, type BoxJson } from '@repo/encryption/box';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { SessionStorageState } from '@repo/storage-chrome/session';
+import { keyUse } from './keyring-lock';
 
 interface EncryptedWrapper {
   encrypted: BoxJson;
@@ -68,24 +69,18 @@ export async function readEncrypted<T>(
   session: ExtensionStorage<SessionStorageState>,
   storageKey: keyof LocalStorageState,
 ): Promise<T | null> {
-  const raw = await local.get(storageKey);
-  if (!raw) {
-    return null;
-  }
-
-  if (!isEncryptedWrapper(raw)) {
-    return null;
-  } // not encrypted  - ignore stale data
-
-  const key = await getKey(session);
-  if (!key) {
-    return null;
-  } // locked  - can't decrypt
-  const plaintext = await key.unseal(Box.fromJson(raw.encrypted));
-  if (!plaintext) {
-    return null;
-  }
-  return JSON.parse(plaintext) as T;
+  return keyUse(async () => {
+    const raw = await local.get(storageKey);
+    if (!raw || !isEncryptedWrapper(raw)) {
+      return null; // absent, or not encrypted - ignore stale data
+    }
+    const key = await getKey(session);
+    if (!key) {
+      return null; // locked - can't decrypt
+    }
+    const plaintext = await key.unseal(Box.fromJson(raw.encrypted));
+    return plaintext ? (JSON.parse(plaintext) as T) : null;
+  });
 }
 
 /**
@@ -106,16 +101,16 @@ export async function writeEncrypted(
   // existing encrypted data with empty/partial in-memory state during startup
   await waitForHydration();
 
-  const key = await getKey(session);
-  if (!key) {
-    console.warn(`[encrypted-storage] skipping write of '${storageKey}'  - wallet is locked`);
-    return false;
-  }
-
-  const plaintext = JSON.stringify(data);
-  const box = await key.seal(plaintext);
-  await local.set(storageKey, { encrypted: box.toJson() } as never);
-  return true;
+  return keyUse(async () => {
+    const key = await getKey(session);
+    if (!key) {
+      console.warn(`[encrypted-storage] skipping write of '${storageKey}'  - wallet is locked`);
+      return false;
+    }
+    const box = await key.seal(JSON.stringify(data));
+    await local.set(storageKey, { encrypted: box.toJson() } as never);
+    return true;
+  });
 }
 
 /** keys encrypted at rest  - decrypted on-demand via session key.
@@ -156,30 +151,48 @@ export const isEncryptedKey = (key: string): boolean => ENCRYPTED_KEYS.has(key);
  * The migration matters: `readEncrypted` returns null for an unwrapped
  * value, so simply switching the read path over would have made every
  * existing record vanish silently. Instead a plaintext value is detected,
- * re-written sealed, and returned. It cannot be migrated while locked (there
- * is no key), so a locked read returns null and leaves the plaintext alone
- * to be migrated on the next unlocked read.
+ * re-written sealed, and returned.
+ *
+ * Its callers read, change and write back the whole value, so it never
+ * answers "nothing" for something it could not open: null means absent, and
+ * a locked wallet or a box that does not open throws. Treating either as
+ * empty is how a read-modify-write wipes a list.
  */
+export class SealedReadError extends Error {
+  constructor(storageKey: string, why: 'locked' | 'unopened') {
+    super(
+      `'${storageKey}' could not be read: ${why === 'locked' ? 'wallet is locked' : 'it does not open with this key'}`,
+    );
+    this.name = 'SealedReadError';
+  }
+}
+
 export async function readEncryptedWithMigration<T>(
   local: ExtensionStorage<LocalStorageState>,
   session: ExtensionStorage<SessionStorageState>,
   storageKey: keyof LocalStorageState,
 ): Promise<T | null> {
-  const raw = await local.get(storageKey);
-  if (raw === undefined || raw === null) {
-    return null;
-  }
-  if (isEncryptedWrapper(raw)) {
-    return readEncrypted<T>(local, session, storageKey);
-  }
-  // legacy plaintext - seal it now, if we can.
-  const key = await getKey(session);
-  if (!key) {
-    return null;
-  }
-  await writeEncrypted(local, session, storageKey, raw);
-  console.log(`[encrypted-storage] migrated plaintext '${String(storageKey)}' to encrypted`);
-  return raw as T;
+  return keyUse(async () => {
+    const raw = await local.get(storageKey);
+    if (raw === undefined || raw === null) {
+      return null;
+    }
+    const key = await getKey(session);
+    if (!key) {
+      throw new SealedReadError(String(storageKey), 'locked');
+    }
+    if (isEncryptedWrapper(raw)) {
+      const plaintext = await key.unseal(Box.fromJson(raw.encrypted));
+      if (plaintext === null) {
+        throw new SealedReadError(String(storageKey), 'unopened');
+      }
+      return JSON.parse(plaintext) as T;
+    }
+    // legacy plaintext - seal it now
+    await writeEncrypted(local, session, storageKey, raw);
+    console.log(`[encrypted-storage] migrated plaintext '${String(storageKey)}' to encrypted`);
+    return raw as T;
+  });
 }
 
 /** Write an encrypted key from outside the zustand store. Returns whether it landed. */
