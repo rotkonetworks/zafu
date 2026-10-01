@@ -34,7 +34,13 @@ if (!chrome.runtime?.id) {
 }
 
 const MainPage = () => {
-  const [queryClient] = useState(() => new QueryClient());
+  const [queryClient] = useState(
+    // refetch only when a screen asks: never on focus or reconnect
+    () =>
+      new QueryClient({
+        defaultOptions: { queries: { refetchOnWindowFocus: false, refetchOnReconnect: false } },
+      }),
+  );
   const [wasmReady, setWasmReady] = useState(false);
 
   // announce that a zafu UI surface is open, for the duration of this

@@ -41,7 +41,13 @@ if (!chrome.runtime?.id) {
 }
 
 const MainPopup = () => {
-  const [queryClient] = useState(() => new QueryClient());
+  const [queryClient] = useState(
+    // refetch only when a screen asks: never on focus or reconnect
+    () =>
+      new QueryClient({
+        defaultOptions: { queries: { refetchOnWindowFocus: false, refetchOnReconnect: false } },
+      }),
+  );
   const [wasmReady, setWasmReady] = useState(false);
   const [cacheSeeded, setCacheSeeded] = useState(false);
 
