@@ -100,6 +100,11 @@ export const popupRoutes: RouteObject[] = [
             lazy: lazyScreen('passwords'),
           },
 
+          {
+            path: PopupPath.LINK,
+            lazy: lazyScreen('link'),
+          },
+
           // Send/Receive
           {
             path: PopupPath.SEND,

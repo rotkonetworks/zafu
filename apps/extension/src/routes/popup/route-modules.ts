@@ -83,6 +83,7 @@ export const popupScreens = {
   inbox: () => import('./inbox').then(m => m.InboxPage),
   groupChatThread: () => import('./inbox/group-chat-thread').then(m => m.GroupChatThread),
   contacts: () => import('./contacts').then(m => m.ContactsPage),
+  link: () => import('./link').then(m => m.LinkPage),
   send: () => import('./send').then(m => m.SendPage),
   receive: () => import('./receive').then(m => m.ReceivePage),
   injective: () => import('./injective').then(m => m.InjectivePage),

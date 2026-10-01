@@ -26,6 +26,9 @@ export enum PopupPath {
   ORIGIN_APPROVAL = '/approval/origin',
   SIGN_APPROVAL = '/approval/sign',
 
+  /** a zcash: or zafu: link, read and handed to the screen it fills (`?uri=&via=` or route state) */
+  LINK = '/link',
+
   // Send/Receive
   SEND = '/send',
   RECEIVE = '/receive',
