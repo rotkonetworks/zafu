@@ -10,14 +10,14 @@ import { cn } from '@repo/ui/lib/utils';
 import { PopupPath } from '../paths';
 import type { NetworkType } from '../../../state/keyring';
 import { fmtTime, fmtZecHero } from './format';
-import type { ParsedTransaction } from './tx-parse';
+import { isIncoming, type ParsedTransaction } from './tx-parse';
 
 /** summary row - tapping it opens the TxDetail screen with the already-
  *  fetched record, never a refetch. The sheet this used to open now lives
  *  there, shared with the send-done screen's "view transaction". */
 export function TxRow({ tx, network }: { tx: ParsedTransaction; network: NetworkType }) {
   const navigate = useNavigate();
-  const isIn = tx.type === 'receive' || tx.type === 'deposit';
+  const isIn = isIncoming(tx);
   const isSh = tx.type === 'shield' || tx.type === 'unshield';
   const isLp = tx.type === 'liquidity';
   const isPending = tx.status === 'pending';
@@ -35,6 +35,8 @@ export function TxRow({ tx, network }: { tx: ParsedTransaction; network: Network
   const counterparty = isIn
     ? fromNote && `from ${fromNote}`
     : recipientName && `to ${recipientName}`;
+  const detail = tx.entry?.detail;
+  const sign = { in: '+', out: '−', neutral: '' }[tx.entry?.amounts[0]?.direction ?? 'neutral'];
   const amountText =
     network === 'zcash' ? fmtZecHero(Number(tx.amount)) : `${tx.amount} ${tx.asset ?? ''}`;
 
@@ -63,12 +65,13 @@ export function TxRow({ tx, network }: { tx: ParsedTransaction; network: Network
         />
       </span>
       <span className='flex min-w-0 flex-1 flex-col gap-[3px]'>
-        <span className={cn('text-[13px] text-fg-high', isFailed && 'text-hanko')}>
+        <span className={cn('truncate text-[13px] text-fg-high', isFailed && 'text-hanko')}>
           {tx.description}
         </span>
-        <span className='truncate text-[11px] text-fg-muted'>
+        <span className='truncate text-[11px] text-fg-muted' title={detail?.raw}>
           {[
             counterparty,
+            detail?.display,
             tx.height > 0 || !isPending
               ? isFailed
                 ? 'not mined in time'
@@ -87,7 +90,7 @@ export function TxRow({ tx, network }: { tx: ParsedTransaction; network: Network
           )}
         >
           {/* "at most": the change that came back has not been scanned yet */}
-          {tx.amountUpperBound ? '≤ ' : isIn ? '+' : isSh ? '' : '−'}
+          {tx.amountUpperBound ? '≤ ' : tx.entry ? sign : isIn ? '+' : isSh ? '' : '−'}
           {amountText}
         </Sensitive>
       )}

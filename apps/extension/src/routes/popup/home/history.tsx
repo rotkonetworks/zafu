@@ -14,7 +14,8 @@ import { getRootNetwork, getNetwork } from '../../../config/networks';
 import { viewClient, sctClient } from '../../../clients';
 import { getHistoryInWorker } from '../../../state/keyring/network-worker';
 import { zatToZec } from './format';
-import { parsePenumbraTx, type ParsedTransaction } from './tx-parse';
+import { describePenumbraHistory } from '../../../history/penumbra-describe';
+import { isIncoming, penumbraRow, type ParsedTransaction } from './tx-parse';
 import { TxRow } from './tx-row';
 import { PopupPath } from '../paths';
 import { Sheet } from '@repo/ui/components/ui/sheet';
@@ -105,12 +106,13 @@ export const HistoryContent = ({
     enabled: getRootNetwork(network) === 'penumbra' && historyEnabled,
     staleTime: 10_000,
     queryFn: async () => {
-      const txs: ParsedTransaction[] = [];
+      const infos = [];
       for await (const r of viewClient.transactionInfo({})) {
         if (r.txInfo) {
-          txs.push(parsePenumbraTx(r.txInfo));
+          infos.push(r.txInfo);
         }
       }
+      const txs = describePenumbraHistory(infos).map(penumbraRow);
       const heights = [...new Set(txs.map(t => t.height))];
       const tsMap = new Map<number, number>();
       await Promise.all(
@@ -128,7 +130,6 @@ export const HistoryContent = ({
       for (const t of txs) {
         t.timestamp = tsMap.get(t.height) ?? null;
       }
-      txs.sort((a, b) => b.height - a.height);
       return txs;
     },
   });
@@ -228,11 +229,10 @@ export const HistoryContent = ({
             tx.accountIndices.has(penumbraAccount),
         )
       : allTxs;
-  const isReceived = (tx: ParsedTransaction) => tx.type === 'receive' || tx.type === 'deposit';
   const txs =
     filter === 'all'
       ? byAccount
-      : byAccount.filter(tx => isReceived(tx) === (filter === 'received'));
+      : byAccount.filter(tx => isIncoming(tx) === (filter === 'received'));
 
   if (q.error) {
     return (

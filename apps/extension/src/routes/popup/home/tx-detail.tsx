@@ -16,7 +16,8 @@ import { Button } from '@repo/ui/components/ui/button';
 import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import type { NetworkType } from '../../../state/keyring';
 import { fmtTime, fmtZecHero } from './format';
-import type { ParsedTransaction } from './tx-parse';
+import { isIncoming, type ParsedTransaction } from './tx-parse';
+import { penumbraRefs } from '../../../history/penumbra-describe';
 
 const txExplorerUrl = (network: NetworkType, txid: string): string | undefined => {
   switch (network) {
@@ -66,7 +67,7 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
   const navigate = useNavigate();
   const explorerEnabled = useStore(s => s.privacy.settings.enableExplorerLinks);
   const explorer = explorerEnabled ? txExplorerUrl(network, tx.id) : undefined;
-  const isIn = tx.type === 'receive' || tx.type === 'deposit';
+  const isIn = isIncoming(tx);
   const isSh = tx.type === 'shield' || tx.type === 'unshield';
   const isPending = tx.status === 'pending';
   const isFailed = tx.status === 'failed';
@@ -95,7 +96,7 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
   const amountText =
     network === 'zcash'
       ? fmtZecHero(Number(tx.amount ?? 0))
-      : `${tx.amount ?? ''} ${tx.asset ?? ''}`;
+      : `${tx.entry?.amounts[0]?.exact ?? tx.amount ?? ''} ${tx.asset ?? ''}`;
 
   // What we can honestly say about progress: a history record carries one
   // status and the broadcast time, not a per-step log, so only the rows that
@@ -262,6 +263,17 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
                 />
               ))}
 
+            {penumbraRefs(tx.entry, tx.recipient).map(r => (
+              <div key={r.raw} className='flex min-h-[52px] items-center gap-3 px-3.5 py-2'>
+                <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
+                  <span className='truncate text-data text-fg-high' title={r.raw}>
+                    {r.display}
+                  </span>
+                  <span className='text-label text-fg-muted lowercase'>{r.label}</span>
+                </span>
+                <CopyButton text={r.raw} className='mr-3.5' />
+              </div>
+            ))}
             <div className='flex min-h-[52px] items-center gap-3 px-3.5 py-2'>
               <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
                 <span className='truncate text-data text-fg-high font-mono'>{tx.id}</span>
