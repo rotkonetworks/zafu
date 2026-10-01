@@ -11,6 +11,8 @@ import { selectPenumbraAccount } from '../../../state/keyring';
 import { recentAddressesSelector } from '../../../state/recent-addresses';
 import { contactsSelector } from '../../../state/contacts';
 import { selectPenumbraSend } from '../../../state/penumbra-send';
+import { usePopupNav } from '../../../utils/navigate';
+import { PopupPath } from '../paths';
 import { isPositionBalance, selectPickerBuckets } from '../../../utils/is-fungible-asset';
 import { balancesQueryOptions } from '../../../hooks/penumbra-balances';
 import { ScreenHeader } from '../../../components/screen-header';
@@ -34,6 +36,7 @@ export function PenumbraSend({
   /** the header's mode switch */
   meta?: ReactNode;
 }) {
+  const navigate = usePopupNav();
   const sendState = useStore(selectPenumbraSend);
   const penumbraAccount = useStore(selectPenumbraAccount);
   const { recordUsage, shouldSuggestSave } = useStore(recentAddressesSelector);
@@ -42,7 +45,7 @@ export function PenumbraSend({
   const [bookOpen, setBookOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
-  const [sentTo, setSentTo] = useState<string>();
+  const [sent, setSent] = useState<{ to: string; amount: string; unit: string; memo: string }>();
 
   // the ['balances', account] cache holds the raw list (home preloads it);
   // `select` buckets it per observer
@@ -84,7 +87,7 @@ export function PenumbraSend({
         plan: () => sendState.buildPlanRequest(asset!),
         onSent: () => {
           void recordUsage(to, 'penumbra');
-          setSentTo(to);
+          setSent({ to, amount: sendState.amount, unit, memo: sendState.memo });
           sendState.reset();
         },
         review: {
@@ -99,25 +102,51 @@ export function PenumbraSend({
         },
         done: sending,
       }}
-      doneActions={() =>
-        sentTo &&
-        shouldSuggestSave(sentTo) &&
-        !findByAddress(sentTo) && (
-          <>
-            <Button variant='secondary' onClick={() => setSaveOpen(true)} className='px-3'>
-              save contact
-            </Button>
-            {saveOpen && (
-              <SaveContactModal
-                address={sentTo}
-                network='penumbra'
-                onDone={() => setSaveOpen(false)}
-                onCancel={() => setSaveOpen(false)}
-              />
-            )}
-          </>
-        )
-      }
+      doneActions={txId => (
+        <>
+          {sent && shouldSuggestSave(sent.to) && !findByAddress(sent.to) && (
+            <>
+              <Button variant='secondary' onClick={() => setSaveOpen(true)} className='px-3'>
+                save contact
+              </Button>
+              {saveOpen && (
+                <SaveContactModal
+                  address={sent.to}
+                  network='penumbra'
+                  onDone={() => setSaveOpen(false)}
+                  onCancel={() => setSaveOpen(false)}
+                />
+              )}
+            </>
+          )}
+          <Button
+            variant='secondary'
+            onClick={() =>
+              navigate(PopupPath.TX_DETAIL, {
+                state: {
+                  network: 'penumbra',
+                  tx: {
+                    id: txId,
+                    height: 0,
+                    timestamp: null,
+                    sentAt: Date.now(),
+                    type: 'send',
+                    description: 'sent',
+                    amount: sent?.amount,
+                    asset: sent?.unit,
+                    memo: sent?.memo,
+                    recipient: sent?.to,
+                    status: 'pending',
+                  },
+                },
+              })
+            }
+            className='px-3'
+          >
+            view transaction
+          </Button>
+        </>
+      )}
     >
       {review => (
         <>

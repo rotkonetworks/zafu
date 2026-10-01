@@ -1,18 +1,32 @@
 /**
- * Zcash multi-output transaction approval popup.
- *
- * Flow:
- *   1. Parses outputs from URL params, shows them for review (3s safety delay)
- *   2. User clicks Approve - builds + signs each output via zcash worker
- *   3. Worker builds witness, proves (halo2), broadcasts each output
- *   4. Returns txids to the requesting dapp via zafu_zcash_send_result
+ * Zcash multi-output transaction approval: a site (poker escrow) asks to
+ * send one or more outputs. Presentation only - what is approved, signed
+ * and returned is the outputs the site sent, unchanged. Walks the same
+ * review / sending / done / stopped steps as every other send, on the
+ * shared send-ui primitives, with the site's monogram and host shown the
+ * way every other approval shows them.
  */
 
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Sensitive } from '../../../components/sensitive';
-import { OriginIcon } from '../../../shared/components/origin-icon';
-import { cn } from '@repo/ui/lib/utils';
+import { OriginIcon, hostnameOf } from '../../../shared/components/origin-icon';
+import { ApproveDeny } from './approve-deny';
+import { ScreenHeader } from '../../../components/screen-header';
+import {
+  Main,
+  Facts,
+  Figure,
+  PrivacyLine,
+  Done,
+  Sending,
+  Stopped,
+  shortAddress,
+  isTransparentAddress,
+  type Fact,
+} from '../send/send-ui';
+import { STAGES, type SendProgress } from '../send/send-stage';
+import { RowGroup } from '@repo/ui/components/ui/row';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectGetVaultUnlock } from '../../../state/keyring';
 import { selectActiveZcashWallet } from '../../../state/wallets';
@@ -25,17 +39,34 @@ interface Output {
   memo?: string;
 }
 
+type Status =
+  | { at: 'review' }
+  | { at: 'signing'; since: number; steps: SendProgress[]; completed: number }
+  | { at: 'done'; txids: string[] }
+  | { at: 'error'; message: string };
+
+const fmtZec = (zat: number) => (zat / 1e8).toFixed(4);
+
+/** this output's own progress, stripped of its "output N: " prefix so it
+ * reads against send-stage's per-stage regexes like a single send does */
+const outputSteps = (steps: readonly SendProgress[], index: number): SendProgress[] =>
+  steps.reduce<SendProgress[]>((acc, s) => {
+    const m = /^output (\d+):\s*(.*)$/.exec(s.step);
+    if (!m) {
+      acc.push(s);
+    } else if (Number(m[1]) - 1 === index) {
+      acc.push({ step: m[2]!, detail: s.detail });
+    }
+    return acc;
+  }, []);
+
 export function ZcashSendApproval() {
   const [params] = useSearchParams();
-  const [countdown, setCountdown] = useState(3);
-  const [status, setStatus] = useState<'review' | 'signing' | 'done' | 'error'>('review');
+  const [status, setStatus] = useState<Status>({ at: 'review' });
   const [outputs, setOutputs] = useState<Output[]>([]);
-  const [error, setError] = useState('');
-  const [progressText, setProgressText] = useState('');
-  const [completedOutputs, setCompletedOutputs] = useState(0);
   const resultSentRef = useRef(false);
 
-  const app = params.get('app') || 'unknown';
+  const app = params.get('app') || '';
   const requestId = params.get('requestId') || '';
   const feePerOutput = Number(params.get('fee')) || 10_000;
 
@@ -49,109 +80,85 @@ export function ZcashSendApproval() {
   useEffect(() => {
     try {
       const parsed = JSON.parse(decodeURIComponent(params.get('outputsJson') || '[]')) as Output[];
-      // validate outputs at the boundary
-      const validated = parsed.filter(
-        o =>
-          o.address &&
-          typeof o.address === 'string' &&
-          typeof o.amount === 'number' &&
-          o.amount > 0,
+      setOutputs(
+        parsed.filter(
+          o =>
+            o.address &&
+            typeof o.address === 'string' &&
+            typeof o.amount === 'number' &&
+            o.amount > 0,
+        ),
       );
-      setOutputs(validated);
     } catch {
       setOutputs([]);
     }
-
-    const timer = setInterval(() => {
-      setCountdown(c => {
-        if (c <= 1) {
-          clearInterval(timer);
-          return 0;
-        }
-        return c - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
   }, []);
 
-  // listen for send progress from worker
   useEffect(() => {
-    if (status !== 'signing') {
+    if (status.at !== 'signing') {
       return;
     }
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail as { step: string; detail?: string };
-      setProgressText(`${detail.step}${detail.detail ? ' - ' + detail.detail : ''}`);
-      // track completed outputs from progress messages
-      const match = /output (\d+).*complete/i.exec(detail.step);
-      if (match) {
-        setCompletedOutputs(Number(match[1]));
-      }
+      setStatus(cur => {
+        if (cur.at !== 'signing') {
+          return cur;
+        }
+        const steps = [...cur.steps, detail];
+        const match = /^output (\d+): complete/i.exec(detail.step);
+        return match ? { ...cur, steps, completed: Number(match[1]) } : { ...cur, steps };
+      });
     };
     window.addEventListener('zcash-send-progress', handler);
     return () => window.removeEventListener('zcash-send-progress', handler);
-  }, [status]);
+  }, [status.at]);
 
-  // fee estimate: one fee per output (each is a separate tx)
   const totalFeeZat = feePerOutput * outputs.length;
   const totalOutputZat = outputs.reduce((s, o) => s + o.amount, 0);
-  const totalZat = totalOutputZat + totalFeeZat;
-  const fmtZec = (z: number) => (z / 1e8).toFixed(4);
-  const shortAddr = (a: string) => (a.length > 24 ? `${a.slice(0, 12)}...${a.slice(-8)}` : a);
 
   const sendResult = (result: unknown) => {
     if (resultSentRef.current) {
       return;
     }
     resultSentRef.current = true;
-    void chrome.runtime.sendMessage({
-      type: 'zafu_zcash_send_result',
-      requestId,
-      result,
-    });
-    // slight delay so user sees the final state
+    void chrome.runtime.sendMessage({ type: 'zafu_zcash_send_result', requestId, result });
     setTimeout(() => window.close(), 500);
   };
 
-  const handleDeny = () => {
+  const deny = () => {
     sendResult({ success: false, denied: true });
   };
 
-  const handleApprove = async () => {
+  const approve = async () => {
     if (!selectedKeyInfo) {
-      setStatus('error');
-      setError('no wallet selected - open zafu and select a wallet first');
+      setStatus({
+        at: 'error',
+        message: 'no wallet selected - open zafu and select a wallet first',
+      });
       return;
     }
-
     if (selectedKeyInfo.type !== 'mnemonic') {
-      setStatus('error');
-      setError(
-        'multi-output send requires a mnemonic (hot) wallet - zigner/watch-only not supported',
-      );
+      setStatus({
+        at: 'error',
+        message:
+          'multi-output send requires a mnemonic (hot) wallet - zigner/watch-only not supported',
+      });
       return;
     }
-
     if (outputs.length === 0) {
-      setStatus('error');
-      setError('no valid outputs');
+      setStatus({ at: 'error', message: 'no valid outputs' });
       return;
     }
 
-    setStatus('signing');
-    setProgressText('initializing...');
-
+    setStatus({ at: 'signing', since: Date.now(), steps: [], completed: 0 });
     try {
       const vault = await getVaultUnlock(selectedKeyInfo.id);
       const mainnet = activeZcashWallet?.mainnet !== false;
-
-      // convert outputs to worker format (amount as string in zatoshis)
       const workerOutputs = outputs.map(o => ({
         address: o.address.trim(),
         amount: String(o.amount),
         memo: o.memo,
       }));
-
       const result = await buildMultiSendTxInWorker(
         'zcash',
         storeId ?? selectedKeyInfo.id,
@@ -161,165 +168,121 @@ export function ZcashSendApproval() {
         mainnet,
         vault,
       );
-
-      setStatus('done');
-      setCompletedOutputs(outputs.length);
-      sendResult({
-        success: true,
-        txids: result.txids,
-        fees: result.fees,
-      });
+      setStatus({ at: 'done', txids: result.txids });
+      sendResult({ success: true, txids: result.txids, fees: result.fees });
     } catch (e: unknown) {
-      setStatus('error');
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
+      setStatus({ at: 'error', message: e instanceof Error ? e.message : String(e) });
     }
   };
 
-  const isTransparent = (addr: string) => addr.startsWith('t1') || addr.startsWith('tm');
+  const host = hostnameOf(app);
+  const sending = (
+    <>
+      send <Sensitive>{fmtZec(totalOutputZat)} zec</Sensitive>
+      {outputs.length > 1 && ` across ${outputs.length} payments`} to {host}
+    </>
+  );
+
+  if (status.at === 'signing') {
+    const index = Math.min(status.completed, outputs.length - 1);
+    return (
+      <Sending
+        meta={outputs.length > 1 ? `payment ${index + 1}/${outputs.length}` : host}
+        stages={STAGES.zcash}
+        steps={outputSteps(status.steps, index)}
+        floor={0}
+        since={status.since}
+        hot
+        onClose={() => window.close()}
+      />
+    );
+  }
+
+  if (status.at === 'done') {
+    return (
+      <Done
+        line={sending}
+        txHash={status.txids[0]}
+        note={status.txids.length > 1 && `${status.txids.length} transactions sent`}
+        onDone={() => window.close()}
+      />
+    );
+  }
+
+  if (status.at === 'error') {
+    return (
+      <Stopped
+        sending={sending}
+        error={status.message}
+        onCancel={deny}
+        onRetry={() => setStatus({ at: 'review' })}
+      />
+    );
+  }
+
+  const rows: Fact[] =
+    outputs.length === 1
+      ? [
+          ['to', shortAddress(outputs[0]!.address)],
+          ...(outputs[0]!.memo ? ([['memo', outputs[0]!.memo]] as Fact[]) : []),
+          ['network fee', <Sensitive key='fee'>{fmtZec(totalFeeZat)} zec</Sensitive>],
+        ]
+      : [
+          ['payments', `${outputs.length}`],
+          ['network fee', <Sensitive key='fee'>~{fmtZec(totalFeeZat)} zec</Sensitive>],
+        ];
 
   return (
-    <div className='flex h-full min-h-0 flex-col bg-canvas text-fg p-4'>
-      {/* header */}
-      <header className='flex shrink-0 items-center gap-3 mb-4'>
-        {app !== 'unknown' && <OriginIcon origin={app} size={24} />}
-        <div>
-          <div className='kicker'>zcash transaction</div>
-          <div className='text-label text-fg-dim tabular'>{app}</div>
-        </div>
-      </header>
-
-      {/* warning banner */}
-      <div className='border border-zigner-gold/30 bg-zigner-gold/5 p-3 mb-4'>
-        <div className='kicker mb-1 text-zigner-gold/80'>review carefully</div>
-        <div className='text-label text-fg'>
-          sending{' '}
-          <span className='tabular text-zigner-gold'>
-            <Sensitive>{fmtZec(totalOutputZat)} ZEC</Sensitive>
-          </span>
-          {outputs.length > 1 && ` across ${outputs.length} outputs`} (+ ~
-          <span className='tabular text-fg-muted'>
-            <Sensitive>{fmtZec(totalFeeZat)}</Sensitive>
-          </span>{' '}
-          fee)
-        </div>
+    <div className='flex h-full min-h-0 flex-col bg-canvas'>
+      <ScreenHeader title='review' backPath={false} meta='zcash' />
+      <div className='flex shrink-0 items-center gap-2 border-b border-border-soft px-4 py-3'>
+        <OriginIcon origin={app} size={28} />
+        <span className='truncate text-sm text-fg-high'>{host}</span>
       </div>
-
-      {/* outputs list */}
-      <div className='min-h-0 flex-1 overflow-y-auto mb-4'>
-        <div className='kicker mb-2'>
-          {outputs.length === 1
-            ? 'recipient'
-            : `${outputs.length} outputs - each sent as a separate transaction`}
+      <Main className='gap-[22px] pt-6'>
+        <p className='text-xs text-fg-muted'>
+          {host} is asking you to send this. once sent, it can&apos;t be undone.
+        </p>
+        <div className='flex flex-col items-center gap-1.5 pb-1 pt-2'>
+          <span className='text-xs text-fg-muted'>you send</span>
+          <Figure amount={fmtZec(totalOutputZat)} unit='zec' />
         </div>
-
-        {outputs.map((o, i) => (
-          <div key={i} className='border border-border-soft bg-elev-1 p-3 mb-2'>
-            <div className='flex justify-between items-start mb-1'>
-              <div className='flex items-center gap-1.5'>
-                <div className='text-label text-fg-dim lowercase'>output {i + 1}</div>
-                {isTransparent(o.address) ? (
-                  <span className='text-label px-1 py-0.5 bg-orange-500/10 text-orange-400 lowercase tracking-[0.08em]'>
-                    transparent
+        <Facts rows={rows} />
+        {outputs.length > 1 && (
+          <RowGroup>
+            {outputs.map((o, i) => (
+              <div key={i} className='flex flex-col gap-1 px-3.5 py-2.5'>
+                <div className='flex items-center justify-between gap-2'>
+                  <span className='flex items-center gap-1.5 text-xs text-fg-muted'>
+                    payment {i + 1}
+                    <span
+                      className={
+                        isTransparentAddress(o.address)
+                          ? 'bg-warn/10 px-1 py-0.5 text-[10px] text-warn lowercase'
+                          : 'bg-success/10 px-1 py-0.5 text-[10px] text-success lowercase'
+                      }
+                    >
+                      {isTransparentAddress(o.address) ? 'transparent' : 'shielded'}
+                    </span>
                   </span>
-                ) : (
-                  <span className='text-label px-1 py-0.5 bg-success/10 text-success lowercase tracking-[0.08em]'>
-                    shielded
+                  <span className='text-[13px] text-network-accent'>
+                    <Sensitive>{fmtZec(o.amount)} zec</Sensitive>
                   </span>
-                )}
-                {status === 'signing' && i < completedOutputs && (
-                  <span className='text-label text-success lowercase'>sent</span>
-                )}
+                </div>
+                <span className='truncate text-[11px] text-fg-muted'>
+                  {shortAddress(o.address)}
+                </span>
               </div>
-              <div className='text-data tabular text-zigner-gold'>
-                <Sensitive>{fmtZec(o.amount)} ZEC</Sensitive>
-              </div>
-            </div>
-            <div className='text-label tabular text-fg-muted break-all'>{shortAddr(o.address)}</div>
-            {o.memo && (
-              <div className='text-label text-fg-dim mt-1 italic truncate' title={o.memo}>
-                {o.memo.length > 80 ? o.memo.slice(0, 80) + '...' : o.memo}
-              </div>
-            )}
-          </div>
-        ))}
-
-        {/* fee display */}
-        <div className='border border-border-soft bg-elev-1 p-3'>
-          <div className='flex justify-between'>
-            <div className='text-label text-fg-dim lowercase'>
-              {outputs.length === 1 ? 'network fee' : `network fee (per tx × ${outputs.length})`}
-            </div>
-            <div className='text-label tabular text-fg-muted'>
-              ~<Sensitive>{fmtZec(totalFeeZat)} ZEC</Sensitive>
-            </div>
-          </div>
-        </div>
-
-        {/* total */}
-        <div className='mt-3 pt-3 border-t border-border-soft flex justify-between items-baseline'>
-          <div className='kicker'>total (incl. fees)</div>
-          <div className='text-title tabular text-zigner-gold'>
-            <Sensitive>{fmtZec(totalZat)} ZEC</Sensitive>
-          </div>
-        </div>
-      </div>
-
-      {/* progress indicator */}
-      {status === 'signing' && progressText && (
-        <div className='border border-border-soft bg-elev-1 p-2 mb-3 text-fg-muted text-body'>
-          <div className='flex items-center gap-2'>
-            <div className='h-3 w-3 animate-spin border border-zigner-gold border-t-transparent' />
-            <span className='truncate'>{progressText}</span>
-          </div>
-          {outputs.length > 1 && (
-            <div className='mt-1 rule overflow-hidden'>
-              <div
-                className='bg-zigner-gold h-full transition-all duration-500'
-                style={{ width: `${Math.round((completedOutputs / outputs.length) * 100)}%` }}
-              />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* error display */}
-      {error && (
-        <div className='border border-red-500/40 bg-red-500/10 p-2 mb-3 text-red-400 text-xs break-words'>
-          {error}
-        </div>
-      )}
-
-      {/* action buttons */}
-      <div className='flex shrink-0 gap-3'>
-        <button
-          className='flex-1 py-2.5 border border-border-soft bg-elev-1 text-data text-fg-muted hover:text-fg-high hover:bg-elev-2 lowercase'
-          onClick={handleDeny}
-          disabled={status === 'signing'}
-        >
-          deny
-        </button>
-        <button
-          className={cn(
-            'flex-1 py-2.5 text-data lowercase transition-colors',
-            countdown > 0 || status !== 'review'
-              ? 'bg-elev-1 text-fg-dim cursor-not-allowed'
-              : 'bg-zigner-gold text-zigner-gold-foreground hover:bg-zigner-gold-light',
-          )}
-          disabled={countdown > 0 || status !== 'review'}
-          onClick={handleApprove}
-        >
-          {countdown > 0
-            ? `approve (${countdown})`
-            : status === 'signing'
-              ? `signing ${completedOutputs}/${outputs.length}...`
-              : status === 'done'
-                ? 'sent'
-                : status === 'error'
-                  ? 'failed'
-                  : 'approve & send'}
-        </button>
-      </div>
+            ))}
+          </RowGroup>
+        )}
+        <PrivacyLine>
+          {outputs.some(o => isTransparentAddress(o.address))
+            ? 'transparent outputs are public · shielded ones stay private'
+            : 'shielded · amount and memo stay private'}
+        </PrivacyLine>
+      </Main>
+      <ApproveDeny approve={() => void approve()} deny={deny} approveLabel='send' wait={3} />
     </div>
   );
 }
