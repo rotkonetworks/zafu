@@ -89,7 +89,13 @@ export interface VotingRound {
 
 export interface OptionTally {
   optionId: number;
-  /** raw total_value from the tally server (relative weight) */
+  /**
+   * Raw `total_value` from the tally server: a count of 0.125-zec ballots,
+   * not zec and not zatoshi (`zcash_voting::governance::BALLOT_DIVISOR` =
+   * 12,500,000 zatoshi per ballot - confirmed against valargroup's own
+   * reference UI, which renders finalized `total_value` the same way).
+   * Convert with the vote screen's `ballotsToZec` before showing it as zec.
+   */
   weight: number;
 }
 

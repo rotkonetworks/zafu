@@ -9,7 +9,7 @@
  * active rounds carry one honest line instead of dead buttons.
  */
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@repo/ui/lib/utils';
 import { Segmented } from '@repo/ui/components/ui/segmented';
@@ -52,10 +52,24 @@ const formatEnd = (round: VotingRound): string => {
   return `ended ${new Date(round.votingEnd * 1000).toISOString().slice(0, 10)}`;
 };
 
-// weight arrives as a plain number (relative zec weight); show every
-// significant digit we were sent, zec's own precision (8dp) as the ceiling.
-const formatWeight = (weight: number): string =>
-  weight.toLocaleString(undefined, { maximumFractionDigits: 8 });
+/**
+ * `OptionTally.weight` is `total_value` off the tally-results wire - a count
+ * of 0.125-zec ballots, not zec and not zatoshi. Confirmed against the
+ * protocol: `zcash_voting::governance::BALLOT_DIVISOR = 12_500_000` zatoshi
+ * (one ballot), and valargroup's own reference UI (vote-sdk `ui/src/App.tsx`,
+ * `ballotsToZEC`) renders finalized `total_value` the same way: `ballots *
+ * BALLOT_DIVISOR / 1e8`. Converting here, once, keeps every number this
+ * screen shows honest zec rather than a raw protocol count mislabeled.
+ */
+const BALLOT_ZATOSHI = 12_500_000;
+const ballotsToZec = (ballots: number): number => (ballots * BALLOT_ZATOSHI) / 1e8;
+
+// show every significant digit the conversion produces, zec's own precision
+// (8dp) as the ceiling.
+const formatZec = (zec: number): string =>
+  zec.toLocaleString(undefined, { maximumFractionDigits: 8 });
+
+const formatBallots = (ballots: number): string => ballots.toLocaleString();
 
 const shortRoundId = (id: string): string => `${id.slice(0, 10)}…`;
 
@@ -260,7 +274,7 @@ const RoundCard = ({
                 </div>
                 {showTally && total > 0 && (
                   <span className='text-label text-fg-dim tabular'>
-                    {formatWeight(total)} zec tallied
+                    {formatZec(ballotsToZec(total))} zec tallied · {formatBallots(total)} ballots
                   </span>
                 )}
                 {p.options.map(opt => {
@@ -321,33 +335,56 @@ const TallyBar = ({
   proposal,
   optionId,
   optionLabel,
-  weight,
-  total,
+  weight: ballots,
+  total: totalBallots,
 }: {
   pct: number;
   round: VotingRound;
   proposal: VotingProposal;
   optionId: number;
   optionLabel: string;
+  /** ballot count (0.125 zec each) from the wire - see `ballotsToZec`. */
   weight: number;
   total: number;
 }) => {
-  const [open, setOpen] = useState(false);
+  // Radix's own TooltipTrigger always closes on click (it composes our click
+  // handler with an unconditional `context.onClose()` right after it, and
+  // closes again, synchronously, on pointerdown if it was already open) - by
+  // design, so that clicking a trigger never leaves a stale tooltip over
+  // whatever the click did. We want the opposite here: the bar does nothing
+  // but show its figures, so a tap should toggle them. `wasOpenRef` captures
+  // the state on pointerdown, before Radix's own dismiss logic can touch it;
+  // the click handler defers its toggle with a macrotask so it always lands
+  // after Radix's synchronous close, instead of being overwritten by it.
+  const [open, setOpenState] = useState(false);
+  const openRef = useRef(false);
+  const wasOpenRef = useRef(false);
+  const setOpen = (next: boolean) => {
+    openRef.current = next;
+    setOpenState(next);
+  };
+  const zec = ballotsToZec(ballots);
   return (
     <TooltipProvider>
       <Tooltip open={open} onOpenChange={setOpen}>
         <TooltipTrigger asChild>
           <button
             type='button'
-            onClick={() => setOpen(o => !o)}
-            aria-label={`${optionLabel}: ${formatWeight(weight)} zec, ${pct.toFixed(2)}%`}
+            onPointerDown={() => {
+              wasOpenRef.current = openRef.current;
+            }}
+            onClick={() => {
+              const wasOpen = wasOpenRef.current;
+              setTimeout(() => setOpen(!wasOpen), 0);
+            }}
+            aria-label={`${optionLabel}: ${formatZec(zec)} zec, ${pct.toFixed(2)}%`}
             className='flex flex-1 items-center gap-2 text-left'
           >
             <div className='h-1.5 flex-1 bg-elev-2'>
               <div className='h-full bg-zigner-gold/70' style={{ width: `${pct.toFixed(1)}%` }} />
             </div>
             <span className='w-12 shrink-0 text-right text-label text-fg-dim tabular'>
-              {total > 0 ? `${pct.toFixed(1)}%` : '-'}
+              {totalBallots > 0 ? `${pct.toFixed(1)}%` : '-'}
             </span>
           </button>
         </TooltipTrigger>
@@ -358,9 +395,12 @@ const TallyBar = ({
         >
           <span className='text-fg-high'>{optionLabel}</span>
           <span className='tabular'>
-            {formatWeight(weight)} zec · {total > 0 ? `${pct.toFixed(2)}%` : 'no votes yet'}
+            {formatZec(zec)} zec · {totalBallots > 0 ? `${pct.toFixed(2)}%` : 'no votes yet'}
           </span>
-          <span className='text-fg-muted tabular'>{formatWeight(total)} zec tallied total</span>
+          <span className='text-fg-muted tabular'>{formatBallots(ballots)} ballots</span>
+          <span className='text-fg-muted tabular'>
+            {formatZec(ballotsToZec(totalBallots))} zec tallied total
+          </span>
           <span className='text-fg-dim'>
             proposal {proposal.id} · option {optionId} · round {shortRoundId(round.id)}
           </span>
