@@ -94,7 +94,7 @@ const ErrorScreen = ({ error }: { error: unknown }) => {
   const approval = isApprovalHash();
 
   return (
-    <div className='relative isolate flex h-full min-h-[628px] flex-col justify-center gap-4 bg-canvas px-7 text-fg'>
+    <div className='relative isolate mx-auto flex h-full min-h-[628px] w-full max-w-[400px] flex-col justify-center gap-4 bg-canvas px-7 text-fg'>
       <img
         src='/media/emblem.webp'
         alt=''

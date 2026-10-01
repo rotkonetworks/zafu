@@ -28,8 +28,10 @@ export const SetPassword = () => {
   const navigate = usePageNav();
   const origin = originOf(useLocation().pathname) ?? SEED_PHRASE_ORIGIN.IMPORTED;
   const onboarding = useOnboarding();
-  const [password, setPassword] = useState(onboarding.password);
-  const [again, setAgain] = useState(onboarding.password);
+  // only the create path keeps a password to come back to
+  const kept = origin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED ? onboarding.password : '';
+  const [password, setPassword] = useState(kept);
+  const [again, setAgain] = useState(kept);
   const { finalize, error, loading } = useFinalizeOnboarding();
 
   // an import always carries a birthday from the step before; reached

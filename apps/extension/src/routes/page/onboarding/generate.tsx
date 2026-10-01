@@ -5,7 +5,7 @@
  * stays until the phrase is shown again).
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
@@ -34,6 +34,7 @@ export const GenerateSeedPhrase = () => {
   const phrase = useStore(s => s.seedPhrase.generate.phrase);
   const generate = useStore(s => s.seedPhrase.generate.generateRandomSeedPhrase);
   const [revealed, setRevealed] = useState(false);
+  const wroteIt = useRef<HTMLButtonElement>(null);
   const { password, error, loading, seal } = useSeal();
 
   useEffect(() => {
@@ -66,7 +67,11 @@ export const GenerateSeedPhrase = () => {
           <button
             type='button'
             autoFocus
-            onClick={() => setRevealed(true)}
+            onClick={() => {
+              setRevealed(true);
+              // the cover unmounts; keep the keyboard on the next step
+              requestAnimationFrame(() => wroteIt.current?.focus());
+            }}
             className='absolute inset-0 flex flex-col items-center justify-center gap-2.5 border-0 bg-elev-1 text-body text-fg-high focus-visible:outline-none'
           >
             <span className='i-ph-eye size-[22px] text-zigner-gold' aria-hidden='true' />
@@ -77,7 +82,7 @@ export const GenerateSeedPhrase = () => {
       </div>
 
       <Button
-        autoFocus={revealed}
+        ref={wroteIt}
         disabled={!revealed}
         className='h-14 w-full text-[15px]'
         onClick={() => navigate(PagePath.CHECK_SEED_PHRASE)}
@@ -130,10 +135,13 @@ export const CheckSeedPhrase = () => {
       return;
     }
     setWrong(false);
-    setDone(done + 1);
-    if (done === 2) {
+    // the last word seals; after a failed seal, tapping it again retries
+    if (done >= 2) {
+      setDone(3);
       void localExtStorage.set('seedPhraseBackedUp', true).then(seal);
+      return;
     }
+    setDone(done + 1);
   };
 
   const note = error ?? (wrong ? "that one doesn't match · please check your paper once more" : '');
@@ -150,7 +158,7 @@ export const CheckSeedPhrase = () => {
             key={word}
             type='button'
             autoFocus={i === 0}
-            disabled={loading || done > 2}
+            disabled={loading}
             onClick={() => pick(word)}
             className='h-14 border border-border-soft bg-elev-1 text-[15px] text-fg-high transition-colors hover:border-border-hard hover:bg-elev-2 focus-visible:border-zigner-gold focus-visible:outline-none'
           >
