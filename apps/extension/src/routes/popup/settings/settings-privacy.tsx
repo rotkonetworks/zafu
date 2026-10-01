@@ -16,6 +16,7 @@ import {
 } from '../../../config/contact-discovery-relay';
 import { usePopupNav } from '../../../utils/navigate';
 import { readZcashMeConfig, type ZcashMeMode } from '../../../services/zcashme/config';
+import { useExplain } from './settings-explain';
 
 const ZCASHME_MODE_LABEL: Record<ZcashMeMode, string> = {
   off: 'off',
@@ -26,7 +27,7 @@ const ZCASHME_MODE_LABEL: Record<ZcashMeMode, string> = {
 /** zcash.me - a Row(value) reading the persisted mode (an external system,
  *  so this is a plain effect, not derived state); the detail screen owns
  *  the mode picker itself (settings-zcashme.tsx). */
-export function ZcashMeRow() {
+export function ZcashMeRow({ onExplain }: { onExplain?: () => void }) {
   const navigate = usePopupNav();
   const [mode, setMode] = useState<ZcashMeMode>('off');
   useEffect(() => {
@@ -38,6 +39,7 @@ export function ZcashMeRow() {
       label='zcash.me'
       value={ZCASHME_MODE_LABEL[mode]}
       onPress={() => navigate(PopupPath.SETTINGS_ZCASHME)}
+      onExplain={onExplain}
     />
   );
 }
@@ -119,7 +121,7 @@ const PRIVACY_ROWS: readonly {
  * is a standalone section rather than a boolean privacy-slice row. Default OFF:
  * absent/false means `zafu_discover_contacts` refuses with `not_available`.
  */
-export function ContactDiscoverySection() {
+export function ContactDiscoverySection({ onExplain }: { onExplain?: () => void }) {
   const [saved, setSaved] = useState<{
     enabled: boolean;
     relayEndpoint: string;
@@ -167,6 +169,7 @@ export function ContactDiscoverySection() {
         label='private contact discovery'
         checked={saved.enabled}
         onChange={next => (next ? save(true, endpoint, token) : save(false, endpoint, token))}
+        onExplain={onExplain}
       />
       <Row
         type='value'
@@ -212,6 +215,7 @@ export function SettingsPrivacy() {
   const activeNetwork = useStore(selectActiveNetwork);
   const sites = useStore(selectConnectedSiteCount);
   const navigate = usePopupNav();
+  const { explainProps, sheet } = useExplain();
 
   const rows = (group: Group) =>
     PRIVACY_ROWS.filter(r => r.group === group && (!r.visible || r.visible(activeNetwork))).map(
@@ -222,6 +226,7 @@ export function SettingsPrivacy() {
           label={r.label}
           checked={settings[r.key] as boolean}
           onChange={v => setSetting(r.key, v as never)}
+          {...explainProps(r.label)}
         />
       ),
     );
@@ -245,8 +250,10 @@ export function SettingsPrivacy() {
         </Section>
         <Section title='people'>
           {/* discovery derives from the zid contact layer; hide it when zid is off */}
-          {settings.enableIdentity && <ContactDiscoverySection />}
-          {hasFeature(activeNetwork, 'zcash') && <ZcashMeRow />}
+          {settings.enableIdentity && (
+            <ContactDiscoverySection {...explainProps('private contact discovery')} />
+          )}
+          {hasFeature(activeNetwork, 'zcash') && <ZcashMeRow {...explainProps('zcash.me')} />}
           {rows('people')}
         </Section>
         <Section title='sites'>
@@ -258,6 +265,7 @@ export function SettingsPrivacy() {
           />
         </Section>
       </div>
+      {sheet}
     </SettingsScreen>
   );
 }
