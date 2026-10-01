@@ -16,6 +16,8 @@ export enum PopupPath {
 
   // Auth
   LOGIN = '/login',
+  /** the honest path: erase and restore from the recovery phrase */
+  FORGOT_PASSWORD = '/forgot-password',
   /** no wallet yet: the ways in, each opening the full-tab onboarding */
   WELCOME = '/welcome',
 
@@ -100,6 +102,7 @@ export enum PopupPath {
   SETTINGS_VOTING = '/settings/voting',
   SETTINGS_ZCASHME = '/settings/zcashme',
   SETTINGS_ADD_VIEWING_KEY = '/settings/add-viewing-key',
+  SETTINGS_CHANGE_PASSWORD = '/settings/change-password',
 
   // Settings IA rework: four category homes + a couple of new screens the
   // category rows need (see routes/popup/settings/AGENTS scope). Every path

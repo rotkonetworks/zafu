@@ -585,6 +585,25 @@ export const terminateNetworkWorker = (network: NetworkType): void => {
 };
 
 /**
+ * Stop a network's worker wherever it runs, and wait until it has stopped.
+ * The real worker lives in the offscreen host; a client's terminate is a
+ * fire-and-forget broadcast, and a fresh popup may not even have a mirror
+ * entry to send it from, so erasing data asks the host directly.
+ */
+export const stopNetworkWorker = async (network: NetworkType): Promise<void> => {
+  if (isOffscreenHost()) {
+    terminateNetworkWorker(network);
+    return;
+  }
+  workers.delete(network);
+  try {
+    await chrome.runtime.sendMessage({ type: 'NW_TERMINATE', network });
+  } catch {
+    // no offscreen host is running, so no worker holds anything open
+  }
+};
+
+/**
  * send message to network worker and await response
  */
 const callWorker = async <T>(
@@ -627,10 +646,8 @@ const callWorker = async <T>(
 };
 
 /** the vault with the session key wrapped to a key the worker issued for this one call */
-const sealFor = async (network: NetworkType, vault: VaultUnlock): Promise<SealedVault> => ({
-  box: vault.box,
-  seal: await vault.sealTo(await callWorker<WorkerKey>(network, 'vault-key')),
-});
+const sealFor = async (network: NetworkType, vault: VaultUnlock): Promise<SealedVault> =>
+  vault.sealTo(await callWorker<WorkerKey>(network, 'vault-key'));
 
 /**
  * derive address for a network (runs in worker)

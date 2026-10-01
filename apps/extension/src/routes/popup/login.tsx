@@ -128,6 +128,13 @@ export const Login = () => {
           <Button type='submit' loading={unlocking} className='h-[52px] text-[15px]'>
             unlock
           </Button>
+          <button
+            type='button'
+            onClick={() => navigate(PopupPath.FORGOT_PASSWORD)}
+            className='self-center bg-transparent text-label text-fg-muted transition-colors hover:text-fg-high'
+          >
+            forgot it? restore with your recovery phrase
+          </button>
         </form>
       )}
     </div>

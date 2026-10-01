@@ -23,8 +23,8 @@ import type { DiversifiedAddressRecord } from '@repo/wallet/networks/zcash/diver
 /**
  * Read the records, migrating any legacy plaintext value to ciphertext.
  *
- * Returns [] when the wallet is locked - there is no key to decrypt with.
- * Callers must not treat that as "no records exist" and overwrite.
+ * Throws when the wallet is locked or the records do not open, so a caller
+ * that appends and writes back can never write back an empty list.
  */
 export const getDiversifiedAddresses = async (): Promise<DiversifiedAddressRecord[]> =>
   (await readEncryptedWithMigration<DiversifiedAddressRecord[]>(

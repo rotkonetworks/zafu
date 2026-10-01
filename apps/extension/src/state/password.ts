@@ -57,6 +57,7 @@ export const createPasswordSlice =
       },
       clearSessionPassword: () => {
         void session.remove('passwordKey');
+        void session.remove('retiredPasswordKey');
         // grace must never outlive the unlock
         void session.remove('signGraceUntil');
       },

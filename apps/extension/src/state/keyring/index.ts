@@ -11,7 +11,7 @@ import { AllSlices, SliceCreator } from '..';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { SessionStorageState } from '@repo/storage-chrome/session';
-import { Key } from '@repo/encryption/key';
+import { Key, type KeyJson } from '@repo/encryption/key';
 import type {
   KeyInfo,
   KeyRingStatus,
@@ -52,8 +52,6 @@ import {
   sealSessionKeyTo,
   createMasterKey,
   recreateMasterKey,
-  reencryptVault,
-  reencryptSeedBox,
   decryptMultisigSecrets,
   encryptFrostSecrets,
 } from './crypto-ops';
@@ -68,6 +66,10 @@ import {
   nukeAllWalletData,
 } from './wallet-entries';
 
+// password change
+import { resealSnapshot } from './reseal';
+import { keySwap, keyUse } from '../keyring-lock';
+
 // migration
 import { migrateOrphanedMultisigs, hasOrphanedMultisigs } from './migration';
 
@@ -76,6 +78,14 @@ import { mergeZignerCapabilities } from './zigner-merge';
 
 export * from './types';
 export * from './network-loader';
+
+/** a profile with a password was given a different one; nothing changed */
+export class PasswordMismatchError extends Error {
+  constructor() {
+    super('that is not the password this profile already uses');
+    this.name = 'PasswordMismatchError';
+  }
+}
 
 export interface KeyRingSlice {
   status: KeyRingStatus;
@@ -86,6 +96,8 @@ export interface KeyRingSlice {
 
   init: () => Promise<void>;
   setPassword: (password: string) => Promise<void>;
+  /** re-seal every secret under a new password, all or nothing; false when `current` is wrong */
+  changePassword: (current: string, next: string) => Promise<boolean>;
   unlock: (password: string) => Promise<boolean>;
   lock: () => void;
   checkPassword: (password: string) => Promise<boolean>;
@@ -101,6 +113,9 @@ export interface KeyRingSlice {
   selectKeyRing: (vaultId: string) => Promise<void>;
   renameKeyRing: (vaultId: string, newName: string) => Promise<void>;
   deleteKeyRing: (vaultId: string, opts?: { allowAppManaged?: boolean }) => Promise<void>;
+  /** every wallet and its data off this computer (forgot password, last wallet removed) */
+  /** `then`: the onboarding page to open once the erase has finished */
+  eraseAll: (then?: string) => Promise<void>;
   /** recover/take-control of (or re-hide) an app-managed multisig table by flipping `hidden` on
    *  both the vault and its mirror wallet. Unhiding makes a stuck poker table a normal, selectable,
    *  co-signable multisig. Non-destructive. */
@@ -149,7 +164,71 @@ export const createKeyRingSlice =
       return vault;
     };
 
-    return {
+    /**
+     * Move every secret from `from` to a key made from `password`, all or
+     * nothing. It runs under the exclusive keyring lock (state/keyring-lock),
+     * so every reader and writer of sealed data has finished and the next
+     * ones wait: no box is read mid-move, sealed under the old key after the
+     * snapshot, or overwritten by it. The single multi-key storage write is
+     * the commit point - one write batch, so a crash before it leaves the old
+     * password opening everything, and after it the new one does. The session
+     * key is swapped, never removed, so nothing sees a lock in between. A last
+     * pass moves anything a writer outside the lock left under the old key.
+     */
+    const rekey = async (from: { key: Key; keyJson: KeyJson }, password: string) => {
+      const fresh = await createMasterKey(password);
+      await keySwap(async () => {
+        const raw = await chrome.storage.local.get(null);
+        const patch = await resealSnapshot(raw, from.key, fresh.key);
+        const vaults = (patch['vaults'] ?? raw['vaults'] ?? []) as EncryptedVault[];
+        // a real password ends the empty-password auto-unlock
+        if (password && vaults.some(v => v.insensitive?.['airgapOnly'])) {
+          patch['vaults'] = vaults.map(v => {
+            const { airgapOnly: _, ...insensitive } = v.insensitive ?? {};
+            return { ...v, insensitive };
+          });
+        }
+        await chrome.storage.local.set({ ...patch, passwordKeyPrint: fresh.keyPrint.toJson() });
+        // a context still holding wallet records from before the swap writes
+        // their old-key inner boxes back; writeEncrypted moves them while this
+        // retired key lasts (state/encrypted-storage)
+        await session.set('retiredPasswordKey', {
+          key: from.keyJson,
+          until: Date.now() + RETIRED_KEY_MS,
+        });
+        await session.set('passwordKey', fresh.keyJson);
+        const stragglers = await resealSnapshot(
+          await chrome.storage.local.get(null),
+          from.key,
+          fresh.key,
+        );
+        if (Object.keys(stragglers).length) {
+          await chrome.storage.local.set(stragglers);
+        }
+      });
+
+      // the in-memory wallet records hold inner boxes the old key sealed
+      const [vaultList, all, zcash, selectedId] = await Promise.all([
+        local.get('vaults'),
+        local.get('penumbraWallets'),
+        local.get('zcashWallets'),
+        local.get('selectedVaultId'),
+      ]);
+      const keyInfos = vaultsToKeyInfos((vaultList ?? []) as EncryptedVault[], selectedId);
+      set(state => {
+        state.keyRing.status = 'unlocked';
+        state.keyRing.keyInfos = keyInfos;
+        state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+        if (all) {
+          state.wallets.all = all.map(w => ({ ...w, vaultId: w.vaultId ?? '' }));
+        }
+        if (zcash) {
+          state.wallets.zcashWallets = zcash.map(w => ({ ...w, vaultId: w.vaultId ?? '' }));
+        }
+      });
+    };
+
+    const slice: KeyRingSlice = {
       status: 'not-loaded',
       keyInfos: [],
       selectedKeyInfo: undefined,
@@ -240,7 +319,6 @@ export const createKeyRingSlice =
       // ── password / unlock / lock ──
 
       setPassword: async (password: string) => {
-        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
         const existingKeyPrint = await local.get('passwordKeyPrint');
 
         // Fresh profile - no key material yet. Mint a new master key. This is
@@ -256,95 +334,38 @@ export const createKeyRingSlice =
           return;
         }
 
-        // A keyprint ALREADY exists. createMasterKey mints a NEW random salt, so
-        // just overwriting the keyprint would orphan every secret sealed under the
-        // old salt: they fail to decrypt forever ("failed to decrypt vault") even
-        // with the correct password, while FVK-based sync keeps working. That was
-        // a real data-loss bug (a "set password" step in an onboarding/import flow
-        // run on an existing wallet). Instead we re-seal every existing secret from
-        // the OLD key to the new one.
-        //
-        // Two stores hold seeds sealed under the master key: the vault list
-        // (`vaults`) and penumbra hot wallets (`penumbraWallets[].custody
-        // .encryptedSeedPhrase`). Re-seal BOTH or a password change orphans
-        // whichever one we miss.
-        const penumbra = (await local.get('penumbraWallets')) ?? [];
-        const hasHotPenumbra = penumbra.some(w => 'encryptedSeedPhrase' in w.custody);
-        const hasHotVault = vaults.some(v => v.insensitive?.['airgapOnly'] !== true);
-        // airgap-only means: some vaults, none hot, and no hot penumbra seed - the
-        // only case whose secrets are sealed under the empty-password key.
-        const airgapOnly = vaults.length > 0 && !hasHotVault && !hasHotPenumbra;
-
-        // Resolve the OLD key the secrets were sealed under:
-        //  - airgap-only: the empty-password key;
-        //  - any hot secret: the live session key (wallet must be unlocked, else
-        //    we refuse rather than orphan it).
-        let oldKey: Key | null = null;
-        if (airgapOnly) {
-          const oldResult = await recreateMasterKey('', existingKeyPrint);
-          if (!oldResult) {
-            throw new Error('failed to decrypt existing vaults for migration');
-          }
-          oldKey = oldResult.key;
-        } else if (hasHotVault || hasHotPenumbra) {
-          try {
-            oldKey = await requireKey(ctx);
-          } catch {
-            throw new Error('cannot change password while locked - unlock first');
-          }
+        // A profile that has a password keeps it: an onboarding "set a
+        // password" step on it (adding a zigner or a phrase later) must be
+        // given that password, and only changePassword replaces it.
+        const typed = await recreateMasterKey(password, existingKeyPrint);
+        if (typed) {
+          await session.set('passwordKey', typed.keyJson);
+          set(state => {
+            state.keyRing.status = 'unlocked';
+          });
+          return;
         }
-
-        const {
-          key: newKey,
-          keyPrint: newKeyPrint,
-          keyJson: newKeyJson,
-        } = await createMasterKey(password);
-
-        const migratedVaults = oldKey
-          ? await Promise.all(vaults.map(v => reencryptVault(v, oldKey, newKey)))
-          : vaults;
-
-        let penumbraChanged = false;
-        const migratedPenumbra = oldKey
-          ? await Promise.all(
-              penumbra.map(async w => {
-                if ('encryptedSeedPhrase' in w.custody) {
-                  penumbraChanged = true;
-                  return {
-                    ...w,
-                    custody: {
-                      encryptedSeedPhrase: await reencryptSeedBox(
-                        w.custody.encryptedSeedPhrase,
-                        oldKey,
-                        newKey,
-                      ),
-                    },
-                  };
-                }
-                return w; // airgapSigner (watch-only) - nothing sealed under the key
-              }),
-            )
-          : penumbra;
-
-        await local.set('vaults', migratedVaults);
-        if (penumbraChanged) {
-          await local.set('penumbraWallets', migratedPenumbra);
+        // An airgap-only profile (every vault airgapOnly, key made from '')
+        // has no password yet, and this is its first: move its secrets to it.
+        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+        const airgapOnly =
+          vaults.length > 0 && vaults.every(v => v.insensitive?.['airgapOnly'] === true);
+        const unprotected =
+          password && airgapOnly ? await recreateMasterKey('', existingKeyPrint) : null;
+        if (!unprotected) {
+          throw new PasswordMismatchError();
         }
-        await local.set('passwordKeyPrint', newKeyPrint.toJson());
-        await session.set('passwordKey', newKeyJson);
+        await rekey(unprotected, password);
+      },
 
-        const selectedId = await local.get('selectedVaultId');
-        const keyInfos = vaultsToKeyInfos(migratedVaults, selectedId);
-        set(state => {
-          state.keyRing.status = 'unlocked';
-          state.keyRing.keyInfos = keyInfos;
-          state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
-          // keep the in-memory penumbra wallets in sync so a same-session reveal
-          // uses the freshly re-sealed boxes, not the ones the new key can't open.
-          if (penumbraChanged) {
-            state.wallets.all = migratedPenumbra as typeof state.wallets.all;
-          }
-        });
+      changePassword: async (current: string, next: string) => {
+        const keyPrint = await local.get('passwordKeyPrint');
+        const old = keyPrint ? await recreateMasterKey(current, keyPrint) : null;
+        if (!old) {
+          return false;
+        }
+        await rekey(old, next);
+        return true;
       },
 
       unlock: async (password: string) => {
@@ -371,6 +392,7 @@ export const createKeyRingSlice =
 
       lock: () => {
         void session.remove('passwordKey');
+        void session.remove('retiredPasswordKey');
         // grace must never outlive the unlock
         void session.remove('signGraceUntil');
         set(state => {
@@ -897,6 +919,19 @@ export const createKeyRingSlice =
         });
       },
 
+      eraseAll: async (then?: string) => {
+        await nukeAllWalletData(session, local, then);
+        set(state => {
+          state.keyRing.keyInfos = [];
+          state.keyRing.selectedKeyInfo = undefined;
+          state.keyRing.status = 'empty';
+          state.wallets.all = [];
+          state.wallets.activeIndex = 0;
+          state.wallets.zcashWallets = [];
+          state.wallets.activeZcashIndex = 0;
+        });
+      },
+
       deleteKeyRing: async (vaultId: string, opts?: { allowAppManaged?: boolean }) => {
         const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
         // CRITICAL money-safety guard: app-managed (hidden) FROST multisig tables - e.g. poker
@@ -932,16 +967,7 @@ export const createKeyRingSlice =
 
         // last vault - nuke everything
         if (updatedVaults.length === 0) {
-          await nukeAllWalletData(session, local);
-          set(state => {
-            state.keyRing.keyInfos = [];
-            state.keyRing.selectedKeyInfo = undefined;
-            state.keyRing.status = 'empty';
-            state.wallets.all = [];
-            state.wallets.activeIndex = 0;
-            state.wallets.zcashWallets = [];
-            state.wallets.activeZcashIndex = 0;
-          });
+          await get().keyRing.eraseAll();
           return;
         }
 
@@ -1026,10 +1052,17 @@ export const createKeyRingSlice =
 
       getMnemonic: async (vaultId: string) => decryptVault(ctx, await mnemonicVault(vaultId)),
 
-      getVaultUnlock: async (vaultId: string) => ({
-        box: (await mnemonicVault(vaultId)).encryptedData,
-        sealTo: to => sealSessionKeyTo(ctx, to),
-      }),
+      getVaultUnlock: async (vaultId: string) => {
+        await mnemonicVault(vaultId);
+        // the box and the key it opens with are read together, never across a swap
+        return {
+          sealTo: to =>
+            keyUse(async () => ({
+              box: (await mnemonicVault(vaultId)).encryptedData,
+              seal: await sealSessionKeyTo(ctx, to),
+            })),
+        };
+      },
 
       getMultisigSecrets: async (vaultId: string) => {
         const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
@@ -1144,7 +1177,35 @@ export const createKeyRingSlice =
         });
       },
     };
+
+    // every method that reads, seals or rewrites the vaults runs as a key
+    // user, so a password change waits for it and it waits for the change
+    for (const name of KEY_USERS) {
+      const run = slice[name] as (...a: unknown[]) => Promise<unknown>;
+      (slice[name] as unknown) = (...a: unknown[]) => keyUse(() => run(...a));
+    }
+    return slice;
   };
+
+/** how long a replaced key stays to move boxes a stale context writes back */
+const RETIRED_KEY_MS = 60_000;
+
+const KEY_USERS = [
+  'init',
+  'newMnemonicKey',
+  'newZignerZafuKey',
+  'addZignerUnencrypted',
+  'addLedgerUnencrypted',
+  'newFrostMultisigKey',
+  'selectKeyRing',
+  'renameKeyRing',
+  'eraseAll',
+  'deleteKeyRing',
+  'setMultisigHidden',
+  'getMnemonic',
+  'getMultisigSecrets',
+  'deriveKey',
+] as const satisfies readonly (keyof KeyRingSlice)[];
 
 // ── selectors ──
 

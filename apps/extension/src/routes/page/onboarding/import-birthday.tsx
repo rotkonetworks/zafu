@@ -5,7 +5,7 @@
  */
 
 import { FormEvent, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
@@ -22,6 +22,9 @@ import {
 } from '../../../utils/zcash-blocks';
 import { ZCASH_ORCHARD_ACTIVATION } from '../../../config/networks';
 import { PENDING_ZCASH_BIRTHDAY_KEY } from './constants';
+import { birthdayOriginOf, PASSWORD_PATH } from './flow';
+import { useOnboarding } from '.';
+import { SEED_PHRASE_ORIGIN } from './password/types';
 
 const yearStart = (yearsAgo: number) =>
   new Date(Date.UTC(new Date().getUTCFullYear() - yearsAgo, 0, 1));
@@ -40,15 +43,23 @@ const presets = () => {
 
 export const ImportBirthday = () => {
   const navigate = usePageNav();
-  const phrase = useStore(s => s.seedPhrase.import.phrase);
+  const origin = birthdayOriginOf(useLocation().pathname) ?? SEED_PHRASE_ORIGIN.IMPORTED;
+  const phraseOk = useStore(s => validateSeedPhrase(s.seedPhrase.import.phrase));
+  const { viewingKey } = useOnboarding();
+  // each path's birthday follows the screen that holds its wallet; reached
+  // without it (a reload, a typed url), go back there
+  const source = {
+    [SEED_PHRASE_ORIGIN.IMPORTED]: { ok: phraseOk, at: PagePath.IMPORT_SEED_PHRASE },
+    [SEED_PHRASE_ORIGIN.VIEWING_KEY]: { ok: !!viewingKey, at: PagePath.IMPORT_VIEWING_KEY },
+  }[origin];
   const [options] = useState(presets);
   // a preset index, or an exact height from the sheet
   const [pick, setPick] = useState<number | { exact: number }>(1);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [draft, setDraft] = useState('');
 
-  if (!validateSeedPhrase(phrase)) {
-    return <Navigate to={PagePath.IMPORT_SEED_PHRASE} replace />;
+  if (!source.ok) {
+    return <Navigate to={source.at} replace />;
   }
 
   const exact = typeof pick === 'object';
@@ -61,7 +72,7 @@ export const ImportBirthday = () => {
 
   const proceed = () => {
     sessionStorage.setItem(PENDING_ZCASH_BIRTHDAY_KEY, String(height));
-    navigate(PagePath.IMPORT_PASSWORD);
+    navigate(PASSWORD_PATH[origin]);
   };
 
   const draftNum = Number(draft);

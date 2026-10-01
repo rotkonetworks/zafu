@@ -11,7 +11,7 @@
 
 // re-export from network-types for convenience
 import type { NetworkType as NetworkTypeImport } from './network-types';
-import type { KeySeal, WorkerKey } from '../../shared/vault-seal';
+import type { SealedVault, WorkerKey } from '../../shared/vault-seal';
 
 export type KeyType =
   | 'mnemonic'
@@ -284,6 +284,6 @@ export const getNetworkActivation = (
  * is a SealedVault.
  */
 export interface VaultUnlock {
-  box: string;
-  sealTo: (to: WorkerKey) => Promise<KeySeal>;
+  /** the box and the session key wrapped to `to`, read together */
+  sealTo: (to: WorkerKey) => Promise<SealedVault>;
 }

@@ -5,5 +5,6 @@ export { GenerateSeedPhrase, CheckSeedPhrase } from './generate';
 export { ImportSeedPhrase } from './import';
 export { ImportBirthday } from './import-birthday';
 export { ImportZigner } from './import-zigner';
+export { ImportViewingKey } from './import-viewing-key';
 export { ConnectLedger } from './connect-ledger';
 export { OnboardingSuccess } from './success';

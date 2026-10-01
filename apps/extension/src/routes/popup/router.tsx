@@ -182,6 +182,7 @@ export const popupRoutes: RouteObject[] = [
             loader: popupLoginLoader,
           },
           { path: PopupPath.WELCOME, element: <PopupWelcome /> },
+          { path: PopupPath.FORGOT_PASSWORD, lazy: lazyScreen('forgotPassword') },
 
           // Approvals
           {

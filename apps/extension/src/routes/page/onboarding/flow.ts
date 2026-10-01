@@ -22,6 +22,9 @@ const SCREENS: Partial<Record<string, OnboardingScreen>> = {
   [P.IMPORT_SEED_PHRASE]: { art: 'bamboo', back: P.CHOOSE, step: [1, 3] },
   [P.IMPORT_BIRTHDAY]: { art: 'bamboo', back: P.IMPORT_SEED_PHRASE, step: [2, 3] },
   [P.IMPORT_PASSWORD]: { art: 'bamboo', back: P.IMPORT_BIRTHDAY, step: [3, 3] },
+  [P.IMPORT_VIEWING_KEY]: { art: 'bamboo', back: P.CHOOSE, step: [1, 3] },
+  [P.VIEWING_KEY_BIRTHDAY]: { art: 'bamboo', back: P.IMPORT_VIEWING_KEY, step: [2, 3] },
+  [P.VIEWING_KEY_PASSWORD]: { art: 'bamboo', back: P.VIEWING_KEY_BIRTHDAY, step: [3, 3] },
   [P.IMPORT_ZIGNER]: { art: 'enso', back: P.CHOOSE, step: [1, 2] },
   [P.ZIGNER_PASSWORD]: { art: 'enso', back: P.IMPORT_ZIGNER, step: [2, 2] },
   [P.CONNECT_LEDGER]: { art: 'enso', back: P.CHOOSE },
@@ -36,7 +39,19 @@ export const PASSWORD_PATH = {
   [SEED_PHRASE_ORIGIN.NEWLY_GENERATED]: P.CREATE_PASSWORD,
   [SEED_PHRASE_ORIGIN.IMPORTED]: P.IMPORT_PASSWORD,
   [SEED_PHRASE_ORIGIN.ZIGNER]: P.ZIGNER_PASSWORD,
+  [SEED_PHRASE_ORIGIN.VIEWING_KEY]: P.VIEWING_KEY_PASSWORD,
 } as const;
+
+/** The paths that ask when the wallet began: the screen it follows, and the origin it serves. */
+export const BIRTHDAY_PATH = {
+  [SEED_PHRASE_ORIGIN.IMPORTED]: P.IMPORT_BIRTHDAY,
+  [SEED_PHRASE_ORIGIN.VIEWING_KEY]: P.VIEWING_KEY_BIRTHDAY,
+} as const;
+
+export type BirthdayOrigin = keyof typeof BIRTHDAY_PATH;
+
+export const birthdayOriginOf = (pathname: string): BirthdayOrigin | undefined =>
+  (Object.keys(BIRTHDAY_PATH) as BirthdayOrigin[]).find(o => BIRTHDAY_PATH[o] === pathname);
 
 export type PasswordOrigin = keyof typeof PASSWORD_PATH;
 

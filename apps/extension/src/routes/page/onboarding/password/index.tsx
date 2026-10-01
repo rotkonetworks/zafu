@@ -11,7 +11,7 @@ import { Input } from '@repo/ui/components/ui/input';
 import { usePageNav } from '../../../../utils/navigate';
 import { PagePath } from '../../paths';
 import { PENDING_ZCASH_BIRTHDAY_KEY } from '../constants';
-import { originOf, passwordStrength } from '../flow';
+import { BIRTHDAY_PATH, originOf, passwordStrength } from '../flow';
 import { useOnboarding } from '..';
 import { useFinalizeOnboarding } from './hooks';
 import { SEED_PHRASE_ORIGIN } from './types';
@@ -37,12 +37,16 @@ export const SetPassword = () => {
   // an import always carries a birthday from the step before; reached
   // without one (a reload, a typed url), go back and ask for it. Read once:
   // sealing the wallet clears it on the way out.
+  const birthdayAt = (BIRTHDAY_PATH as Partial<Record<string, PagePath>>)[origin];
   const [needsBirthday] = useState(
-    () =>
-      origin === SEED_PHRASE_ORIGIN.IMPORTED && !sessionStorage.getItem(PENDING_ZCASH_BIRTHDAY_KEY),
+    () => !!birthdayAt && !sessionStorage.getItem(PENDING_ZCASH_BIRTHDAY_KEY),
   );
-  if (needsBirthday) {
-    return <Navigate to={PagePath.IMPORT_BIRTHDAY} replace />;
+  if (needsBirthday && birthdayAt) {
+    return <Navigate to={birthdayAt} replace />;
+  }
+  // the viewing key lives in memory only; after a reload, ask for it again
+  if (origin === SEED_PHRASE_ORIGIN.VIEWING_KEY && !onboarding.viewingKey) {
+    return <Navigate to={PagePath.IMPORT_VIEWING_KEY} replace />;
   }
 
   const strength = passwordStrength(password);

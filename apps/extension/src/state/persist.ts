@@ -196,6 +196,14 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
     });
 
     // Part 2: when chrome.storage changes sync select fields to store
+    // a key set in another realm (an unlock, a password change) re-opens what
+    // this one holds, so no realm keeps boxes the old key sealed
+    sessionExtStorage.addListener(changes => {
+      if (changes.passwordKey?.newValue) {
+        void hydrateEncryptedData();
+      }
+    });
+
     localExtStorage.addListener(changes => {
       // encrypted data re-hydration
       if (changes.penumbraWallets || changes.zcashWallets || changes.contacts || changes.messages) {

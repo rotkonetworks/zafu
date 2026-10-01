@@ -5,6 +5,14 @@ import { sessionExtStorage } from './session';
 import { Key } from '@repo/encryption/key';
 import { Box, type BoxJson } from '@repo/encryption/box';
 
+/** the extension's keyring lock, shared (apps/extension/src/state/keyring-lock.ts):
+ *  the blob and the key are read together, never across a password change */
+const keyUse = <T>(fn: () => Promise<T>): Promise<T> =>
+  navigator.locks.request('zafu-keyring', { mode: 'shared' }, fn) as Promise<T>;
+
+const readWallets = () =>
+  keyUse(async () => decryptWallets(await localExtStorage.get('penumbraWallets')));
+
 /** decrypt wallets from encrypted storage */
 const decryptWallets = async (raw: unknown): Promise<WalletJson[]> => {
   if (!raw) {
@@ -32,8 +40,7 @@ const decryptWallets = async (raw: unknown): Promise<WalletJson[]> => {
 };
 
 export const onboardWallet = async (): Promise<WalletJson> => {
-  const rawWallets = await localExtStorage.get('penumbraWallets');
-  const wallets = await decryptWallets(rawWallets);
+  const wallets = await readWallets();
   const activeIndex = (await localExtStorage.get('activeWalletIndex')) ?? 0;
   const activeWallet = wallets[activeIndex] ?? wallets[0];
 
@@ -66,8 +73,7 @@ export const onboardWallet = async (): Promise<WalletJson> => {
  * Use this for multi-network wallets where penumbra wallet may not exist yet.
  */
 export const getWalletFromStorage = async (): Promise<WalletJson | undefined> => {
-  const rawWallets = await localExtStorage.get('penumbraWallets');
-  const wallets = await decryptWallets(rawWallets);
+  const wallets = await readWallets();
   const activeIndex = (await localExtStorage.get('activeWalletIndex')) ?? 0;
   const w = wallets[activeIndex] ?? wallets[0];
   return w ?? undefined;

@@ -78,7 +78,7 @@ import { walletIdCtx } from '@rotko/penumbra-services/ctx/wallet-id';
 import type { Services } from '@repo/context';
 import { startWalletServices, penumbraGate } from './wallet-services';
 import { createRebuildScheduler } from './rebuild-scheduler';
-import { performPendingClears } from './clear-cache-startup';
+import { finishPendingWipe, performPendingClears } from './clear-cache-startup';
 
 import { backOff } from 'exponential-backoff';
 
@@ -348,6 +348,7 @@ const initHandler = async () => {
 
   // run any pending IDB clears requested before the previous reload,
   // BEFORE wallet services open new connections (which would block deletion)
+  await finishPendingWipe().catch(e => console.warn('[clear-startup] erase finish failed', e));
   await performPendingClears();
 
   // Track initial wallet index
@@ -629,6 +630,7 @@ chrome.alarms.onAlarm.addListener(async alarm => {
         await chrome.storage.session.remove([
           'passwordKey',
           'signGraceUntil',
+          'retiredPasswordKey',
           'penumbraBalancesSnapshot',
         ]);
         chrome.runtime.reload();

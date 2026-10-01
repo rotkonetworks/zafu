@@ -22,10 +22,13 @@ const ART: Record<OnboardingArt, string> = {
 // the art fades into the page over its last 120px, as on the boards
 const ART_FADE = { maskImage: 'linear-gradient(to right, #000 calc(100% - 120px), transparent)' };
 
-/** The create path's password waits here, in memory, until the phrase is checked. */
+/** What a path holds in memory until its password step seals it: the create
+ *  path's password, the watch-only path's viewing key. */
 export interface OnboardingContext {
   readonly password: string;
   readonly setPassword: (password: string) => void;
+  readonly viewingKey: string;
+  readonly setViewingKey: (key: string) => void;
 }
 
 export const useOnboarding = () => useOutletContext<OnboardingContext>();
@@ -35,6 +38,7 @@ export const Onboarding = () => {
   const navigate = usePageNav();
   const { art, back, step } = screenFor(pathname);
   const [password, setPassword] = useState('');
+  const [viewingKey, setViewingKey] = useState('');
 
   return (
     <div className='flex min-h-screen w-full bg-canvas text-fg'>
@@ -102,7 +106,11 @@ export const Onboarding = () => {
             animate={{ opacity: 1, transition: { duration: 0.25, ease: 'easeOut' } }}
             className='w-[460px] max-w-full'
           >
-            <Outlet context={{ password, setPassword } satisfies OnboardingContext} />
+            <Outlet
+              context={
+                { password, setPassword, viewingKey, setViewingKey } satisfies OnboardingContext
+              }
+            />
           </motion.div>
         </div>
       </section>
