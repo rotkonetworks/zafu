@@ -109,6 +109,7 @@ export function SendPage() {
             return (n / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
           })(),
           memo: externalMemo,
+          via: searchParams.get('via') ?? undefined,
         }
       : undefined;
 

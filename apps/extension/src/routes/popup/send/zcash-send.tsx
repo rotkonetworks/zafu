@@ -58,7 +58,9 @@ import { createZignerSigner } from '../../../signing/zigner-signer';
 import { frostAirgapSigner, frostSelfCustodySigner } from '../../../signing/frost-signer';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
-import { formatZecAmount, isZip321Uri, parseZip321 } from '@repo/wallet/networks/zcash/zip321';
+import { formatZecAmount } from '@repo/wallet/networks/zcash/zip321';
+import { looksLikeLink, notYet, parseLink } from '../../../links/router';
+import { viaLine } from '../../../links/land';
 import {
   Footer,
   Helper,
@@ -91,11 +93,13 @@ interface ZcashSendProps {
   onClose: () => void;
   accountIndex: number;
   mainnet: boolean;
-  /** pre-filled values from inbox compose */
+  /** pre-filled values from inbox compose or a link */
   prefill?: {
     recipient?: string;
     amount?: string;
     memo?: string;
+    /** where a link in `recipient` came from (see links/land viaLine) */
+    via?: string;
   };
 }
 
@@ -231,28 +235,33 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const [amount, setAmount] = useState(prefill?.amount ?? '');
   const [memo, setMemo] = useState(prefill?.memo ?? '');
 
-  // ZIP 321: a scanned or pasted `zcash:` link fills the form for review
+  // a scanned or pasted link goes through the link router: a payment request
+  // fills the form for review, any other link moves on to the screen it fills
+  const navigate = usePopupNav();
   const [requestNote, setRequestNote] = useState<string>();
   const [requestError, setRequestError] = useState<string>();
+  const [linkVia, setLinkVia] = useState<string>();
   // which fields the last request filled: a new request clears those it
   // doesn't set, but never touches what the user typed
   const filledByRequest = useRef({ amount: false, memo: false });
-  const applyZcashUri = useCallback((text: string): boolean => {
-    if (!isZip321Uri(text)) {
+  const applyLink = useCallback((text: string, via?: string): boolean => {
+    if (!looksLikeLink(text)) {
       return false;
     }
     setRequestNote(undefined);
     setRequestError(undefined);
-    const r = parseZip321(text);
-    if (!r.ok) {
-      setRequestError(`not a valid payment request: ${r.error}`);
+    const r = parseLink(text);
+    if (r.ok && r.intent.kind !== 'pay') {
+      navigate(PopupPath.LINK, { state: { uri: text, via } });
       return true;
     }
-    const [p, ...more] = r.payments;
-    if (!p || more.length > 0) {
-      setRequestError(`this request pays ${r.payments.length} addresses - zafu pays one at a time`);
+    const refusal = r.ok ? notYet(r.intent) : r.reason;
+    const p = r.ok && r.intent.kind === 'pay' ? r.intent.payments[0] : undefined;
+    if (refusal || !p) {
+      setRequestError(refusal);
       return true;
     }
+    setLinkVia(via);
     setRecipient(p.address);
     const filled = filledByRequest.current;
     if (p.amountZat !== undefined) {
@@ -276,7 +285,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // a `zcash:` link handed in as the prefill recipient (inbox, deep links)
   useEffect(() => {
     if (prefill?.recipient) {
-      applyZcashUri(prefill.recipient);
+      applyLink(prefill.recipient, prefill.via);
     }
     // once, on open
   }, []);
@@ -354,7 +363,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const { requestAuth, PasswordModal } = usePasswordGate();
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const activeZcashWallet = useStore(selectActiveZcashWallet);
-  const navigate = usePopupNav();
   const ufvk =
     activeZcashWallet?.ufvk ??
     (activeZcashWallet?.orchardFvk?.startsWith('uview') ? activeZcashWallet.orchardFvk : undefined);
@@ -1230,7 +1238,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     placeholder='address or contact'
                     value={recipient}
                     onChange={e => {
-                      if (!applyZcashUri(e.target.value)) {
+                      if (!applyLink(e.target.value, 'pasted')) {
+                        setLinkVia(undefined);
                         setRecipient(e.target.value);
                       }
                     }}
@@ -1354,7 +1363,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             {showQrScanner && (
               <QrScanner
                 onScan={data => {
-                  if (!applyZcashUri(data)) {
+                  if (!applyLink(data, 'scanned')) {
+                    setLinkVia(undefined);
                     setRecipient(data);
                   }
                   setShowQrScanner(false);
@@ -1452,6 +1462,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     : 'shielded · amount and memo stay private'}
                 </span>
               </div>
+              {linkVia && (
+                <span className='text-center text-[11px] text-fg-muted'>{viaLine(linkVia)}</span>
+              )}
             </Main>
             <Footer>
               <Button variant='secondary' onClick={handleBack} className='w-[110px]'>
