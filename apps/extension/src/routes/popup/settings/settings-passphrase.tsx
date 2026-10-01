@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { PasswordInput } from '../../../shared/components/password-input';
+import { Input } from '@repo/ui/components/ui/input';
+import { Sheet } from '@repo/ui/components/ui/sheet';
 import { QrCode } from '../../../components/qr-code';
 import { useStore } from '../../../state';
 import { passwordSelector } from '../../../state/password';
-import { walletsSelector } from '../../../state/wallets';
+import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
+import { usePopupNav } from '../../../utils/navigate';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
@@ -15,14 +17,17 @@ import { cn } from '@repo/ui/lib/utils';
 const RECOVER_AFTER_MS = 60_000;
 
 export const SettingsPassphrase = () => {
+  const navigate = usePopupNav();
   const { isPassword } = useStore(passwordSelector);
-  const { getSeedPhrase } = useStore(walletsSelector);
+  const getMnemonic = useStore(selectGetMnemonic);
+  const vault = useStore(selectEffectiveKeyInfo);
 
   const [password, setPassword] = useState('');
   const [wrong, setWrong] = useState(false);
   const [phrase, setPhrase] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
 
   // re-cover automatically; only ticking while actually revealed, and reset
   // whenever the user asks to see the words again.
@@ -36,74 +41,118 @@ export const SettingsPassphrase = () => {
 
   const submit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!vault || !password) {
+      return;
+    }
     setError(null);
     void (async function () {
       try {
         if (await isPassword(password)) {
           setPassword('');
-          setPhrase(await getSeedPhrase());
+          setPhrase((await getMnemonic(vault.id)).trim().split(/\s+/));
           // revealing the phrase counts as possessing it - clear the home nudge
           void localExtStorage.set('seedPhraseBackedUp', true);
         } else {
           setWrong(true);
         }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'failed to retrieve passphrase');
+      } catch {
+        setError('something broke on our side, not yours. nothing was lost.');
       }
     })();
   };
 
   const shown = phrase.length > 0;
+  const hot = vault?.type === 'mnemonic';
+  const note = wrong ? "that doesn't match · please try again, slowly" : error;
 
   return (
-    <SettingsScreen title='recovery phrase' backPath={PopupPath.SETTINGS_SECURITY}>
-      <div className='flex flex-col gap-4'>
-        {!shown ? (
-          <form onSubmit={submit} className='flex flex-col gap-3'>
-            <p className='text-sm text-fg-muted'>
+    <SettingsScreen
+      title='recovery phrase'
+      category='security'
+      meta={vault?.name.toLowerCase()}
+      backPath={PopupPath.SETTINGS_SECURITY}
+    >
+      <form id='phrase' onSubmit={submit} className='flex grow flex-col gap-3.5 pt-0.5'>
+        {!hot ? (
+          <p className='text-[13px]/[1.6] text-fg'>
+            the phrase for {vault?.name ?? 'this wallet'} lives on its own device.
+          </p>
+        ) : !shown ? (
+          <>
+            <p className='text-[13px]/[1.6] text-fg'>
               anyone who sees these words can take the wallet. please make sure you are alone.
             </p>
-            <PasswordInput
-              passwordValue={password}
-              label={<p className='text-sm text-fg-muted'>password</p>}
-              onChange={e => {
-                setPassword(e.target.value);
-                setWrong(false);
-              }}
-              validations={[
-                {
-                  type: 'error',
-                  issue: "that doesn't match - please try again, slowly",
-                  checkFn: (txt: string) => Boolean(txt) && wrong,
-                },
-              ]}
-              autoFocus
-            />
-            {error && <p className='text-xs text-hanko-light'>{error}</p>}
-            <Button type='submit' variant='primary' size='md' disabled={!password}>
+            <label className='flex flex-col gap-1.5'>
+              <span className='text-label text-fg-muted'>password</span>
+              <Input
+                type='password'
+                autoComplete='current-password'
+                variant={wrong ? 'error' : 'default'}
+                value={password}
+                autoFocus
+                onChange={e => {
+                  setPassword(e.target.value);
+                  setWrong(false);
+                }}
+              />
+              <span className='h-4 text-[11px] text-hanko'>{note}</span>
+            </label>
+          </>
+        ) : (
+          <>
+            <PhraseGrid words={phrase} revealed={revealed} onReveal={() => setRevealed(true)} />
+            <div className='flex gap-2'>
+              <Button
+                type='button'
+                variant='secondary'
+                className='flex-1'
+                onClick={() => setRevealed(v => !v)}
+              >
+                {revealed ? 'hide' : 'show'}
+              </Button>
+              {/* the seed goes INTO the air gap, never out */}
+              <Button
+                type='button'
+                variant='secondary'
+                className='flex-1'
+                onClick={() => setQrOpen(true)}
+              >
+                back up to zigner
+              </Button>
+            </div>
+            <span className='h-4 text-[11px] text-fg-muted'>
+              {revealed ? 'zafu covers them again after a minute' : 'blurred until you ask'}
+            </span>
+          </>
+        )}
+      </form>
+
+      <div className='-mx-4 mt-4 flex gap-2 border-t border-border-soft px-4 pt-3'>
+        {hot && !shown ? (
+          <>
+            <Button
+              variant='secondary'
+              className='w-[110px]'
+              onClick={() => navigate(PopupPath.SETTINGS_SECURITY)}
+            >
+              not now
+            </Button>
+            <Button type='submit' form='phrase' className='flex-1' disabled={!password}>
               continue
             </Button>
-          </form>
+          </>
         ) : (
-          <div className='flex flex-col gap-3'>
-            <PhraseGrid words={phrase} revealed={revealed} onReveal={() => setRevealed(true)} />
-            <Button variant='secondary' size='md' onClick={() => setRevealed(v => !v)}>
-              {revealed ? 'hide' : 'show'}
-            </Button>
-            <p className='text-label text-fg-muted'>
-              {revealed ? 'zafu covers them again after a minute' : 'blurred until you ask'}
-            </p>
-
-            {/* backup to zigner - the seed goes INTO the air gap, never out */}
-            <div className='mt-1 border-t border-border-soft pt-3'>
-              <p className='text-label text-fg-dim mb-2'>
-                scan with zigner to back up this seed on your air-gapped device.
-              </p>
-              <QrSeedDisplay phrase={phrase.join(' ')} />
-            </div>
-          </div>
+          <Button className='flex-1' onClick={() => navigate(PopupPath.SETTINGS_SECURITY)}>
+            done
+          </Button>
         )}
       </div>
+
+      <Sheet open={qrOpen} onOpenChange={setQrOpen} title='back up to zigner'>
+        <div className='flex justify-center'>
+          <QrCode value={phrase.join(' ')} size={200} label='seed phrase QR for zigner backup' />
+        </div>
+      </Sheet>
     </SettingsScreen>
   );
 };
@@ -148,30 +197,3 @@ export const PhraseGrid = ({
     )}
   </div>
 );
-
-/** QR code showing seed phrase for zigner backup import - gated behind an
- * explicit show/hide, same as the seed phrase text itself. The phrase is
- * sensitive but displayed only on user action; never a copy affordance. */
-const QrSeedDisplay = ({ phrase }: { phrase: string }) => {
-  const [show, setShow] = useState(false);
-
-  if (!show) {
-    return (
-      <Button variant='secondary' size='md' className='w-full' onClick={() => setShow(true)}>
-        show QR for zigner backup
-      </Button>
-    );
-  }
-
-  return (
-    <div className='flex flex-col items-center gap-2'>
-      <QrCode value={phrase} size={200} label='seed phrase QR for zigner backup' />
-      <p className='text-label text-fg-muted text-center'>
-        scan with zigner camera to import seed. close this screen when done.
-      </p>
-      <Button variant='secondary' size='sm' onClick={() => setShow(false)}>
-        hide QR
-      </Button>
-    </div>
-  );
-};

@@ -53,9 +53,21 @@ export const SettingsScreen = ({
 };
 
 /** a titled group of rows, as on the "all ... controls" boards */
-export const Section = ({ title, children }: { title: string; children: ReactNode }) => (
+export const Section = ({
+  title,
+  aside,
+  children,
+}: {
+  title: string;
+  /** a short warning at the right of the title */
+  aside?: string;
+  children: ReactNode;
+}) => (
   <section className='flex flex-col gap-1.5'>
-    <h2 className='text-[11px]/[14px] tracking-[0.06em] text-fg-muted'>{title}</h2>
+    <h2 className='flex justify-between text-[11px]/[14px] tracking-[0.06em] text-fg-muted'>
+      {title}
+      {aside && <span className='text-warn'>{aside}</span>}
+    </h2>
     <RowGroup>{children}</RowGroup>
   </section>
 );
