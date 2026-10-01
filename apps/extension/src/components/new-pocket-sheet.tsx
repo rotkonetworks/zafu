@@ -14,8 +14,7 @@ import { Input } from '@repo/ui/components/ui/input';
 import { useStore } from '../state';
 import { selectActiveNetwork, selectEffectiveKeyInfo } from '../state/keyring';
 import { MAX_POCKETS, pocketOwner, pocketsOf } from '../state/pockets';
-import { ZidecarClient } from '../state/keyring/zidecar-client';
-import { LightwalletdClient } from '../state/keyring/lightwalletd-client';
+import { zcashClient } from '../state/keyring/zcash-backend';
 import { pocketTarget, type PocketSheetTarget } from './accounts-sheet';
 
 export const NewPocketSheet = ({
@@ -83,13 +82,11 @@ export const NewPocketSheet = ({
     setBusy(true);
     setError(null);
     try {
-      const client =
-        zcashBackend === 'lightwalletd'
-          ? new LightwalletdClient(zidecarUrl)
-          : new ZidecarClient(zidecarUrl);
       // best-effort: a pocket still creates fine without a tip, it just
       // scans from the wallet birthday instead of from now.
-      const tip = await client.getTip().catch(() => undefined);
+      const tip = await zcashClient(zidecarUrl, zcashBackend)
+        .getTip()
+        .catch(() => undefined);
       const account = await add(owner, name, tip?.height);
       await target.pick(useStore.getState(), owner, account);
       onOpenChange(false);

@@ -1,4 +1,4 @@
-import { ZCASH_MAINNET_ENDPOINTS } from '../config/zcash-endpoints';
+import { ZCASH_MAINNET_ENDPOINTS, type ZcashEndpointPreset } from '../config/zcash-endpoints';
 
 /**
  * Cross-endpoint consistency check.
@@ -59,12 +59,10 @@ const registrableDomain = (url: string): string => {
   }
 };
 
-export const pickIndependentPeer = (primaryUrl: string): string | undefined => {
+/** the peer's own preset, so its client speaks the peer's protocol, not the primary's */
+export const pickIndependentPeer = (primaryUrl: string): ZcashEndpointPreset | undefined => {
   const own = registrableDomain(primaryUrl);
-  const candidates = ZCASH_MAINNET_ENDPOINTS.map(e => e.url).filter(
-    u => registrableDomain(u) !== own,
-  );
-  return candidates[0];
+  return ZCASH_MAINNET_ENDPOINTS.find(e => registrableDomain(e.url) !== own);
 };
 
 /**
@@ -78,7 +76,7 @@ export const crossCheckTip = async (
   primaryHeight: number,
   getPeerTip: (url: string, timeoutMs: number) => Promise<{ height: number }>,
 ): Promise<CrossCheckResult> => {
-  const peerUrl = pickIndependentPeer(primaryUrl);
+  const peerUrl = pickIndependentPeer(primaryUrl)?.url;
   if (!peerUrl) {
     return {
       checked: false,

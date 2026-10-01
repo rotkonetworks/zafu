@@ -1,7 +1,7 @@
 import { AllSlices, SliceCreator } from '.';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
-import { isZidecarEndpoint, type ZcashBackend } from './keyring/zcash-backend';
+import { backendOfEndpoint, isZcashBackend, type ZcashBackend } from './keyring/zcash-backend';
 
 /**
  * Supported network ecosystems.
@@ -81,15 +81,14 @@ export interface NetworkConfig {
    * Mempool watch toggle for shielded networks. Off by default - opening
    * a polling subscription reveals to the indexer that this wallet is
    * online and continuously interested in mempool state. See README.
-   * Honored only when backend === 'zidecar' (lightwalletd has no
-   * compact-mempool RPC); UI must hide/disable the toggle otherwise.
+   * Honored only where the backend has zidecar's mempool rpc
+   * (isMempoolWatchEnabled); the UI hides the toggle otherwise.
    */
   mempoolWatch?: MempoolWatchSetting;
   /**
    * Sync backend. NOT auto-detected - declarative per endpoint. Probes
    * leak "this is a zafu client" and are deliberately avoided.
-   *   'zidecar' - trustless verification pipeline (Ligerito + NOMT)
-   *   'lightwalletd' - trusted public indexer (no verification)
+   * What differs per backend lives in ZCASH_BACKENDS.
    */
   backend?: ZcashBackend;
 }
@@ -264,7 +263,7 @@ export const createNetworksSlice =
             }
           }
           // Apply persisted Zcash backend (defensive: only known enum values).
-          if (zcashBackend === 'zidecar' || zcashBackend === 'lightwalletd') {
+          if (isZcashBackend(zcashBackend)) {
             state.networks.networks.zcash.backend = zcashBackend;
           }
         });
@@ -327,31 +326,21 @@ export const createNetworksSlice =
         // a static known-zidecar list instead; users on custom endpoints
         // can override via the backend picker.
         if (id === 'zcash') {
-          const backend: ZcashBackend = isZidecarEndpoint(endpoint) ? 'zidecar' : 'lightwalletd';
+          const backend = backendOfEndpoint(endpoint);
           set(state => {
             state.networks.networks.zcash.backend = backend;
-            // Force-off mempool watch when moving to lightwalletd - the
-            // worker also enforces this, but flipping state here keeps
-            // the UI and any consumers consistent immediately.
-            if (backend === 'lightwalletd') {
-              state.networks.networks.zcash.mempoolWatch = 'off';
-            }
           });
           await local.set('zcashBackend', backend);
         }
       },
 
       setZcashBackend: async (backend: ZcashBackend) => {
-        // explicit override path (advanced settings). same invariant as
-        // setNetworkEndpoint: lightwalletd ⇒ mempool watch off.
-        if (backend !== 'zidecar' && backend !== 'lightwalletd') {
+        // explicit override for a node zafu has no preset for
+        if (!isZcashBackend(backend)) {
           throw new Error(`invalid zcash backend: ${String(backend)}`);
         }
         set(state => {
           state.networks.networks.zcash.backend = backend;
-          if (backend === 'lightwalletd') {
-            state.networks.networks.zcash.mempoolWatch = 'off';
-          }
         });
         await local.set('zcashBackend', backend);
       },
@@ -371,20 +360,14 @@ export const createNetworksSlice =
         if (setting !== 'off' && setting !== 'on') {
           throw new Error(`invalid mempool-watch setting: ${String(setting)}`);
         }
-        // Enforce: mempool watch only makes sense on the zidecar backend.
-        // If the caller asks for 'on' but the network is on lightwalletd,
-        // silently coerce to 'off' - the worker won't run a watcher anyway,
-        // and we keep persisted state consistent with worker behavior.
-        const cfg = get().networks.networks[id];
-        const effective: MempoolWatchSetting =
-          setting === 'on' && cfg?.backend === 'lightwalletd' ? 'off' : setting;
+        // the choice is kept as made; isMempoolWatchEnabled decides per backend
         set(state => {
-          state.networks.networks[id].mempoolWatch = effective;
+          state.networks.networks[id].mempoolWatch = setting;
         });
         const current = (await local.get('mempoolWatchSettings')) || {};
         await local.set('mempoolWatchSettings', {
           ...current,
-          [id]: effective,
+          [id]: setting,
         });
       },
 

@@ -21,26 +21,11 @@ import { withDedup } from './filters/dedup';
 import { withPoll } from './filters/poll';
 import { withReconnect } from './filters/reconnect';
 import type { MempoolFetcher, MempoolWatchStrategy } from './types';
+import { ZCASH_BACKENDS, isZcashBackend } from '../../state/keyring/zcash-backend';
 
-/**
- * Single source of truth for "should the mempool watcher actually run?"
- *
- * Avoids the previous pattern where each layer (auto-sync hook, message
- * shim, worker case-handler, worker runSync) re-implemented the same
- * `setting === 'on' && backend === 'zidecar'` check. Apart from being
- * DRY-ier this also reduces the fingerprint surface: a per-layer
- * rejection log line was a way a local attacker could infer which gate
- * tripped, and centralizing collapses all those code paths into one.
- *
- * Returns true only when both:
- *   - the user has opted in (setting === 'on'), AND
- *   - the active backend has a compact-action mempool RPC (zidecar only).
- *
- * Defensive on inputs: unknown enum values → false.
- */
-export function isMempoolWatchEnabled(setting: unknown, backend: unknown): boolean {
-  return setting === 'on' && backend === 'zidecar';
-}
+/** the mempool watcher runs only when the user opted in and the backend has zidecar's mempool rpc */
+export const isMempoolWatchEnabled = (setting: unknown, backend: unknown): boolean =>
+  setting === 'on' && isZcashBackend(backend) && !!ZCASH_BACKENDS[backend].extras;
 
 export interface StrategyParams {
   /** concrete fetcher to wrap (typically zidecarMempoolFetcher(client)). */

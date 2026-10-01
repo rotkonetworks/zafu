@@ -29,7 +29,7 @@ import { ZCASH_ORCHARD_ACTIVATION } from '../config/networks';
 import { isPro } from '../state/license';
 import { deriveRingVrfSeed } from '../state/identity';
 import { ZidecarClient } from '../state/keyring/zidecar-client';
-import type { ZcashBackend } from '../state/keyring/zcash-backend';
+import { zcashClient, type ZcashBackend } from '../state/keyring/zcash-backend';
 import { isMempoolWatchEnabled } from '../services/mempool-watch/strategy';
 
 /** resolve wallet birthday height from storage or chain tip.
@@ -47,12 +47,7 @@ async function resolveBirthday(
   }
   // no birthday set - default to near chain tip (new wallet = recent)
   try {
-    const tip =
-      backend === 'lightwalletd'
-        ? await new (await import('../state/keyring/lightwalletd-client')).LightwalletdClient(
-            zidecarUrl,
-          ).getTip()
-        : await new ZidecarClient(zidecarUrl).getTip();
+    const tip = await zcashClient(zidecarUrl, backend).getTip();
     const height = Math.floor(Math.max(ZCASH_ORCHARD_ACTIVATION, tip.height - 100) / 10000) * 10000;
     await chrome.storage.local.set({ [birthdayKey]: height });
     return height;

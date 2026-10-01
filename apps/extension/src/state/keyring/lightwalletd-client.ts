@@ -1,15 +1,11 @@
 // Standard CompactTxStreamer over native gRPC (public lightwalletd rejects
 // grpc-web with 415). Body framing matches grpc-web so fetch reads it, but the
 // gRPC status sits in unreadable HTTP/2 trailers - so HTTP 200 + data = success.
-// Trusted backend: no zidecar proofs, so the worker skips verification.
 
 import type { ChainTip, CompactAction, CompactBlock, Utxo } from './zidecar-client';
 import type { ZcashClient } from './zcash-backend';
 
 const SERVICE = 'cash.z.wallet.sdk.rpc.CompactTxStreamer';
-
-const UNSUPPORTED = (m: string) =>
-  new Error(`${m} not available on a public lightwalletd endpoint`);
 
 // Per-method response-size caps. A hostile endpoint can otherwise ship
 // arbitrarily large bytes via Response.arrayBuffer() and OOM the worker.
@@ -135,11 +131,6 @@ export class LightwalletdClient implements ZcashClient {
     return this.parseBlockStream(resp);
   }
 
-  /** lightwalletd streams full txs here, not trial-decryptable compact blocks - no mempool preview. */
-  async getMempoolStream(): Promise<CompactBlock[]> {
-    return [];
-  }
-
   async getAddressUtxos(addresses: string[], startHeight = 0, maxEntries = 0): Promise<Utxo[]> {
     // GetAddressUtxos(GetAddressUtxosArg{ addresses=1, startHeight=2, maxEntries=3 })
     const parts: number[] = [];
@@ -234,43 +225,9 @@ export class LightwalletdClient implements ZcashClient {
     return { txid: new Uint8Array(0), errorCode, errorMessage };
   }
 
-  // Not exposed by lightwalletd - return empty so opt-in features degrade quietly instead of erroring.
-
+  // GetTaddressTxids streams whole RawTransactions, not ids; transparent history is not read from it yet.
   async getTaddressTxids(): Promise<Uint8Array[]> {
     return [];
-  }
-
-  async getBlockTransactions(height: number): Promise<{
-    height: number;
-    hash: Uint8Array;
-    txs: { data: Uint8Array; height: number }[];
-  }> {
-    return { height, hash: new Uint8Array(0), txs: [] };
-  }
-
-  async getHeaderProof(): Promise<{
-    proofBytes: Uint8Array;
-    fromHeight: number;
-    toHeight: number;
-  }> {
-    throw UNSUPPORTED('header proof');
-  }
-
-  async getCommitmentProofs(): Promise<{ proofs: never[]; treeRoot: Uint8Array }> {
-    throw UNSUPPORTED('commitment proofs');
-  }
-
-  async getNullifierProofs(): Promise<{
-    proofs: never[];
-    nullifierRoot: Uint8Array;
-    syncedHeight: number;
-    ironwoodSyncedHeight: number;
-  }> {
-    throw UNSUPPORTED('nullifier proofs');
-  }
-
-  async getSyncStatus(): Promise<never> {
-    throw UNSUPPORTED('sync status');
   }
 
   // ── protobuf / grpc-web helpers ──
