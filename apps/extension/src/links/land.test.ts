@@ -38,6 +38,9 @@ describe('land', () => {
       line: 'this request pays 2 addresses · zafu pays one at a time, for now',
     });
     expect(landOf('zafu:sign?tx=00')).toEqual({ line: "zafu doesn't know this kind of link yet" });
+    expect(landOf('zafu:swap?from=zec&to=btc&xc=penumbra')).toEqual({
+      line: "penumbra's dex doesn't trade zec · thorchain or near intents can, if you like",
+    });
   });
 
   it('never lands on an approval, signing or settings-changing screen', () => {

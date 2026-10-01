@@ -17,6 +17,7 @@ import {
   type Zip321Payment,
 } from '@repo/wallet/networks/zcash/zip321';
 import { PopupPath } from '../routes/popup/paths';
+import { isRouteId, ROUTES, type RouteId } from '../state/swap/routes';
 
 export interface SwapLink {
   direction: 'into_zec' | 'from_zec';
@@ -28,6 +29,8 @@ export interface SwapLink {
   amount?: string;
   /** into zec: the payer's refund address; from zec: where the token goes */
   address?: string;
+  /** `xc=`: the one route to quote, when the link pins it */
+  route?: RouteId;
 }
 
 /** in-app screens a link may open: names, never paths taken from the link */
@@ -138,7 +141,7 @@ const readAmount = (text: string | undefined, zec: boolean): string | undefined 
 };
 
 const readSwap = (query: string): Parsed => {
-  const q = readQuery(query, ['from', 'to', 'into', 'amount', 'refund', 'dest', 'chain']);
+  const q = readQuery(query, ['from', 'to', 'into', 'amount', 'refund', 'dest', 'chain', 'xc']);
   if (!q.ok) {
     return refuse(q.reason);
   }
@@ -174,7 +177,14 @@ const readSwap = (query: string): Parsed => {
   if (amount === false) {
     return refuse('please check the amount in this link · it looks unusual');
   }
+  const route = p.get('xc')?.toLowerCase() || undefined;
+  if (route !== undefined && !isRouteId(route)) {
+    return refuse("this link names a swap route zafu doesn't know");
+  }
   const swap: SwapLink = { direction, token };
+  if (route) {
+    swap.route = route;
+  }
   if (chain) {
     swap.chain = chain;
   }
@@ -267,9 +277,15 @@ export const looksLikeLink = (text: string): boolean =>
 export const notYet = (intent: Intent): string | undefined =>
   intent.kind === 'pay' && intent.payments.length > 1
     ? `this request pays ${intent.payments.length} addresses · zafu pays one at a time, for now`
-    : undefined;
+    : intent.kind === 'swap' && intent.swap.route
+      ? ROUTES[intent.swap.route].refuses({
+          direction: intent.swap.direction,
+          symbol: intent.swap.token,
+          chain: intent.swap.chain,
+        })
+      : undefined;
 
-const swapUri = ({ direction, token, chain, amount, address }: SwapLink): string => {
+const swapUri = ({ direction, token, chain, amount, address, route }: SwapLink): string => {
   const into = direction === 'into_zec';
   const params: [string, string | undefined][] = [
     ['from', into ? token : 'zec'],
@@ -277,6 +293,7 @@ const swapUri = ({ direction, token, chain, amount, address }: SwapLink): string
     ['chain', chain],
     ['amount', amount],
     [into ? 'refund' : 'dest', address],
+    ['xc', route],
   ];
   return `zafu:swap?${params
     .filter((e): e is [string, string] => !!e[1])

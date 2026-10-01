@@ -171,9 +171,36 @@ describe('swap', () => {
       'zafu:swap?from=eth&to=zec&amount=1&refund=0xabc123',
       'zafu:swap?from=zec&to=btc&chain=btc&amount=0.5&dest=bc1qexampleaddr',
       'zafu:swap?from=zec&to=sol',
+      'zafu:swap?from=btc&to=zec&chain=btc&amount=0.1&refund=bc1qexampleaddr&xc=thor',
+      'zafu:swap?from=zec&to=usdc&xc=near',
     ]) {
       expect(toUri(intent(uri))).toBe(uri);
     }
+  });
+
+  it('reads xc as the one route to quote', () => {
+    expect(intent('zafu:swap?from=btc&to=zec&xc=THOR')).toEqual({
+      kind: 'swap',
+      swap: { direction: 'into_zec', token: 'btc', route: 'thor' },
+    });
+    expect(intent('zafu:swap?from=zec&to=btc&xc=')).toEqual({
+      kind: 'swap',
+      swap: { direction: 'from_zec', token: 'btc' },
+    });
+    expect(reason('zafu:swap?from=zec&to=btc&xc=binance')).toMatch(/route zafu doesn't know/);
+    expect(reason('zafu:swap?from=zec&to=btc&xc=near&xc=thor')).toMatch(/can't be read/);
+  });
+
+  it('reads a route that cannot carry the pair, and declines it calmly', () => {
+    const later = (uri: string) => notYet(intent(uri));
+    expect(later('zafu:swap?from=zec&to=btc&xc=penumbra')).toMatch(
+      /penumbra's dex doesn't trade zec/,
+    );
+    expect(later('zafu:swap?from=eth&to=zec&xc=penumbra')).toMatch(/penumbra/);
+    expect(later('zafu:swap?from=zec&to=sol&xc=thor')).toMatch(/thorchain doesn't trade sol/);
+    expect(later('zafu:swap?from=usdc&to=zec&xc=thor')).toMatch(/contract call/);
+    expect(later('zafu:swap?from=btc&to=zec&xc=thor')).toBeUndefined();
+    expect(later('zafu:swap?from=zec&to=sol&xc=near')).toBeUndefined();
   });
 });
 

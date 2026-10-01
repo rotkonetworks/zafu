@@ -266,6 +266,12 @@ export function toBaseUnits(displayAmount: string, decimals: number): string {
 
 /** Map NEAR 1Click blockchain name to our ContactNetwork type. */
 const BLOCKCHAIN_TO_NETWORK: Record<string, string> = {
+  btc: 'bitcoin',
+  eth: 'ethereum',
+  sol: 'solana',
+  arb: 'arbitrum',
+  avax: 'avalanche',
+  pol: 'polygon',
   ethereum: 'ethereum',
   bitcoin: 'bitcoin',
   solana: 'solana',

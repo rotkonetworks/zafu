@@ -271,6 +271,16 @@ export const DESTINATIONS: readonly DestinationSpec[] = [
     urls: () => ['https://1click.chaindefuser.com'],
   },
   {
+    id: 'thorchain',
+    label: 'thorchain swap',
+    purpose: 'swap',
+    gate: { kind: 'optional' },
+    urls: () => [
+      'https://thornode.ninerealms.com',
+      'https://gateway.liquify.com/chain/thorchain_api',
+    ],
+  },
+  {
     id: 'skip',
     label: 'skip ibc routing',
     purpose: 'swap',
