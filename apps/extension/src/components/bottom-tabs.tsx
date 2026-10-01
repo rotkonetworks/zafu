@@ -46,6 +46,10 @@ const OWNER: [string, string][] = [
   [PopupPath.SETTINGS, PopupPath.SETTINGS],
   [PopupPath.INBOX, PopupPath.INBOX],
   [PopupPath.CONTACTS, PopupPath.INBOX],
+  // an everywhere tool reached from the tools tab, nested under /identity
+  // for its storage/derivation context - must keep "tools" lit, not
+  // "people", so this goes before the /identity prefix below.
+  [PopupPath.PASSWORDS, PopupPath.TOOLS],
   [PopupPath.IDENTITY, PopupPath.INBOX],
   [PopupPath.MULTISIG, PopupPath.INBOX],
   [PopupPath.TOOLS, PopupPath.TOOLS],

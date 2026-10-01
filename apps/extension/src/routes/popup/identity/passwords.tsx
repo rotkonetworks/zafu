@@ -1,153 +1,200 @@
 /**
- * deterministic password generator - derive passwords from seed + site + username.
- * nothing stored. same seed always produces the same password.
+ * deterministic password generator - derive passwords from seed + site +
+ * username. nothing stored. same seed, site, username, length and rotation
+ * always derive the same password (see state/identity.ts: derivePassword).
+ *
+ * only a mnemonic wallet can derive - a zigner, viewing-key, ledger or
+ * multisig wallet has no phrase on this device, so the form stays disabled
+ * with one calm line instead of failing silently.
+ *
+ * TODO(seed exposure): getMnemonic decrypts the phrase here, in the popup.
+ * state/shared/vault-seal.ts + getVaultUnlock already move a decrypt like
+ * this into the zcash worker for sends, so it never touches the popup - but
+ * that worker only exists when zcash is enabled, and passwords is an
+ * everywhere tool (a penumbra-only wallet has no zcash worker to host it
+ * in). Moving this derivation there would make an everywhere tool secretly
+ * depend on a zcash-only process. Needs its own always-on host (or a
+ * network-agnostic seal target) before this can move out of the popup.
  */
 
-import { useState, useCallback } from 'react';
-import { useCopy } from '@repo/ui/hooks/use-copy';
+import { useEffect, useState } from 'react';
+import { Input } from '@repo/ui/components/ui/input';
+import { Button } from '@repo/ui/components/ui/button';
+import { CopyButton } from '@repo/ui/components/ui/copy-button';
+import { Segmented } from '@repo/ui/components/ui/segmented';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { useStore } from '../../../state';
-import { selectEffectiveKeyInfo } from '../../../state/keyring';
+import { selectSelectedKeyInfo, selectGetMnemonic } from '../../../state/keyring';
 import { derivePassword, normalizeOrigin, DEFAULT_IDENTITY } from '../../../state/identity';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
 
+// the seed feeding the encoder is 32 bytes, 8 groups of at most 5 base85
+// characters each - 40 is the real ceiling (see derive-password.test.ts).
+const LENGTHS = [16, 24, 32, 40] as const;
+
 export const PasswordsPage = () => {
-  const keyInfo = useStore(selectEffectiveKeyInfo);
-  const getMnemonic = useStore(s => s.keyRing.getMnemonic);
-  const [origin, setOrigin] = useState('');
+  const keyInfo = useStore(selectSelectedKeyInfo);
+  const getMnemonic = useStore(selectGetMnemonic);
+  const canDerive = keyInfo?.type === 'mnemonic';
+
+  const [site, setSite] = useState('');
   const [username, setUsername] = useState('');
-  const [length, setLength] = useState(32);
-  const [index, setIndex] = useState(0);
+  const [length, setLength] = useState<(typeof LENGTHS)[number]>(32);
+  const [rotation, setRotation] = useState(0);
+  const [revealed, setRevealed] = useState(false);
   const [password, setPassword] = useState<string | null>(null);
-  const { copied, copy: copyText } = useCopy(2000);
-  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [deriving, setDeriving] = useState(false);
 
-  const generate = useCallback(async () => {
-    if (!origin.trim() || !keyInfo) {
+  useEffect(() => {
+    setPassword(null);
+    setError(null);
+    if (!canDerive || !keyInfo || !site.trim()) {
       return;
     }
-    setGenerating(true);
-    try {
-      const mnemonic = await getMnemonic(keyInfo.id);
-      const result = derivePassword(
-        mnemonic,
-        DEFAULT_IDENTITY,
-        origin.trim(),
-        username.trim(),
-        length,
-        index,
-      );
-      setPassword(result);
-    } catch (e) {
-      setPassword(null);
-    }
-    setGenerating(false);
-  }, [origin, username, length, index, keyInfo, getMnemonic]);
-
-  const copy = () => {
-    if (!password) {
-      return;
-    }
-    copyText(password);
-  };
+    let cancelled = false;
+    setDeriving(true);
+    void (async () => {
+      try {
+        const mnemonic = await getMnemonic(keyInfo.id);
+        if (cancelled) {
+          return;
+        }
+        setPassword(
+          derivePassword(
+            mnemonic,
+            DEFAULT_IDENTITY,
+            site.trim(),
+            username.trim(),
+            length,
+            rotation,
+          ),
+        );
+      } catch {
+        if (!cancelled) {
+          setError('something broke on our side, not yours. nothing was lost.');
+        }
+      } finally {
+        if (!cancelled) {
+          setDeriving(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [canDerive, keyInfo, site, username, length, rotation, getMnemonic]);
 
   return (
-    <SettingsScreen title='passwords' backPath={PopupPath.IDENTITY}>
+    <SettingsScreen title='passwords' backPath={PopupPath.TOOLS}>
       <div className='flex flex-col gap-4'>
-        <p className='text-label text-fg-dim font-mono'>
-          deterministic. nothing stored. same seed = same password.
-        </p>
+        {!canDerive && (
+          <StatusSlot tone='info' icon='i-ph-info'>
+            <span>
+              {keyInfo
+                ? 'this wallet has no recovery phrase on this device, so it cannot make passwords.'
+                : 'no wallet to derive from yet.'}
+            </span>
+          </StatusSlot>
+        )}
 
         <div className='flex flex-col gap-3'>
-          <input
-            type='text'
-            value={origin}
-            onChange={e => {
-              setOrigin(e.target.value);
-              setPassword(null);
-            }}
-            placeholder='site (e.g. github.com)'
-            className='w-full border border-border-soft bg-transparent px-3 py-2 text-xs font-mono outline-none focus:border-muted-foreground/60'
-          />
-          {origin.trim() && normalizeOrigin(origin) !== origin.trim().toLowerCase() && (
-            <span className='text-label text-fg-muted/50 font-mono'>
-              → {normalizeOrigin(origin)}
-            </span>
-          )}
-          <input
-            type='text'
-            value={username}
-            onChange={e => {
-              setUsername(e.target.value);
-              setPassword(null);
-            }}
-            placeholder='username (optional)'
-            className='w-full border border-border-soft bg-transparent px-3 py-2 text-xs font-mono outline-none focus:border-muted-foreground/60'
-          />
-          <div className='flex items-center gap-2'>
-            <span className='text-label text-fg-dim font-mono'>length</span>
-            <input
-              type='range'
-              min={16}
-              max={64}
-              value={length}
-              onChange={e => {
-                setLength(Number(e.target.value));
-                setPassword(null);
-              }}
+          <div className='flex gap-2'>
+            <Input
+              aria-label='site'
+              placeholder='site (e.g. github.com)'
+              value={site}
+              onChange={e => setSite(e.target.value)}
+              disabled={!canDerive}
               className='flex-1'
             />
-            <span className='text-label text-fg-muted font-mono w-6 text-right'>{length}</span>
+            <Input
+              aria-label='username'
+              placeholder='username'
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              disabled={!canDerive}
+              className='w-28'
+            />
           </div>
-          <div className='flex items-center gap-2'>
-            <span className='text-label text-fg-dim font-mono'>rotation</span>
-            <button
-              onClick={() => {
-                setIndex(Math.max(0, index - 1));
-                setPassword(null);
-              }}
-              disabled={index === 0}
-              className='text-xs font-mono text-fg-muted hover:text-fg-high disabled:opacity-30 px-1'
+          {site.trim() && normalizeOrigin(site) !== site.trim().toLowerCase() && (
+            <span className='text-label text-fg-dim'>-&gt; {normalizeOrigin(site)}</span>
+          )}
+
+          <Segmented
+            label='password length'
+            value={String(length)}
+            onChange={v => setLength(Number(v) as (typeof LENGTHS)[number])}
+            options={LENGTHS.map(l => ({
+              value: String(l),
+              label: String(l),
+              disabled: !canDerive,
+            }))}
+          />
+
+          <div className='flex h-[52px] items-center gap-2.5 border border-border-hard bg-elev-1 px-3'>
+            <span className='flex-1 truncate font-mono text-sm text-zigner-gold tracking-wide'>
+              {password ? (revealed ? password : '•'.repeat(Math.min(length, 24))) : '- -'}
+            </span>
+            <Button
+              variant='secondary'
+              size='sm'
+              disabled={!password}
+              onClick={() => setRevealed(r => !r)}
             >
-              -
-            </button>
-            <span className='text-label text-fg-muted font-mono w-6 text-center'>#{index}</span>
-            <button
-              onClick={() => {
-                setIndex(index + 1);
-                setPassword(null);
-              }}
-              className='text-xs font-mono text-fg-muted hover:text-fg-high px-1'
-            >
-              +
-            </button>
-            {index > 0 && (
-              <span className='text-label text-fg-muted/40 font-mono'>
-                password was rotated {index} time{index !== 1 ? 's' : ''}
-              </span>
+              {revealed ? 'hide' : 'show'}
+            </Button>
+            <CopyButton
+              text={password ?? ''}
+              variant='primary'
+              size='sm'
+              label='copy'
+              disabled={!password}
+            />
+          </div>
+
+          <div className='flex items-center justify-between text-label text-fg-muted'>
+            <span>
+              {rotation === 0 ? 'original version' : `version ${rotation}`}
+              {deriving ? ' · deriving...' : ''}
+            </span>
+            <div className='flex items-center gap-1.5'>
+              <Button
+                variant='quiet'
+                size='sm'
+                disabled={!canDerive || rotation === 0}
+                onClick={() => setRotation(r => Math.max(0, r - 1))}
+                aria-label='previous version'
+              >
+                <span className='i-ph-minus size-3.5' />
+              </Button>
+              <Button
+                variant='quiet'
+                size='sm'
+                disabled={!canDerive}
+                onClick={() => setRotation(r => r + 1)}
+                aria-label='new version'
+              >
+                <span className='i-ph-plus size-3.5' />
+                new version
+              </Button>
+            </div>
+          </div>
+
+          <div className='min-h-[1.25rem]'>
+            {error && (
+              <StatusSlot tone='danger' icon='i-ph-warning'>
+                {error}
+              </StatusSlot>
             )}
           </div>
+
+          <span className='text-label text-fg-dim'>
+            made from your recovery phrase · the same inputs always give the same password · nothing
+            is stored
+          </span>
         </div>
-
-        <button
-          onClick={() => void generate()}
-          disabled={!origin.trim() || generating}
-          className='border border-border-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high hover:border-muted-foreground/60 disabled:opacity-30 transition-colors'
-        >
-          {generating ? 'deriving...' : 'generate'}
-        </button>
-
-        {password && (
-          <button
-            onClick={copy}
-            className='w-full border border-border-soft p-3 text-left hover:bg-elev-1 transition-colors'
-          >
-            <div className='font-mono text-xs break-all select-all leading-relaxed'>{password}</div>
-            <div className='text-label text-fg-muted/50 font-mono mt-2'>
-              {copied ? 'copied' : 'tap to copy'}
-            </div>
-          </button>
-        )}
       </div>
     </SettingsScreen>
   );
