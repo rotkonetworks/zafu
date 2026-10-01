@@ -30,7 +30,6 @@ import {
   PENUMBRA_MAINNET_ENDPOINTS,
   findPenumbraPresetByUrl,
   getRegistryEndpoints,
-  getRegistryEndpointsRemote,
   type PenumbraEndpointPreset,
 } from '../../../config/penumbra-endpoints';
 import {
@@ -893,23 +892,9 @@ const PenumbraEndpointPanel = ({
   readonly onSaveCustom: () => void;
   readonly onSelectionStrategyChange: (s: SelectionStrategy) => void;
 }) => {
-  // Registry hydration: bundled synchronously for the first render (never
-  // blocks), then upgraded to remote once loaded. Both fall back to the
-  // hardcoded list on failure — the panel never bricks.
-  const [presets, setPresets] = useState<readonly PenumbraEndpointPreset[]>(() =>
-    getRegistryEndpoints(),
-  );
-  useEffect(() => {
-    let cancelled = false;
-    void getRegistryEndpointsRemote().then(remote => {
-      if (!cancelled) {
-        setPresets(remote);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // Bundled registry only - hydrated at build time, no runtime fetch. A
+  // remote re-fetch here would be a prefetch the user never asked for.
+  const presets: readonly PenumbraEndpointPreset[] = getRegistryEndpoints();
 
   const matched = findPenumbraPresetByUrl(editingEndpoint, presets);
   const initialStrategy: SelectionStrategy =
