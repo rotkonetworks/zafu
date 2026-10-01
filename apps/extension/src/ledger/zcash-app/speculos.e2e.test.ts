@@ -226,9 +226,10 @@ describe.skipIf(!SPECULOS_URL)('Ledger Zcash app on Speculos', () => {
       keys.free();
 
       // Transparent: device UFVK vs BIP44 m/44'/133'/account'/0/0
-      const priv = w.derive_transparent_privkey(SEED, account, 0);
-      const softPub = bytesToHex(secp256k1.getPublicKey(priv, true));
-      expect(w.transparent_pubkey_from_ufvk(ufvk, 0)).toBe(softPub);
+      // (the worker-side SpendKeys: the phrase never leaves the wasm)
+      const spend = new w.SpendKeys(SEED, account, true);
+      expect(w.transparent_pubkey_from_ufvk(ufvk, 0)).toBe(spend.transparent_pubkey(0));
+      spend.free();
     }
   });
 
