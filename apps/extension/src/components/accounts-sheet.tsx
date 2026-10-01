@@ -13,6 +13,7 @@ import {
   selectEffectiveKeyInfo,
   selectKeyInfosForActiveNetwork,
   selectSelectKeyRing,
+  selectRenameKeyRing,
   selectLock,
 } from '../state/keyring';
 import { MAX_POCKETS, activeAccountIndex, activePockets, pocketOwner } from '../state/pockets';
@@ -38,8 +39,9 @@ const CUSTODY_ICON: Record<Custody, string> = {
   shared: 'i-zafu-torii text-fg-muted',
 };
 
-/** what the new-pocket sheet should do: create a fresh pocket, or rename an existing one */
-export type PocketSheetTarget = { account: number; name: string } | undefined;
+/** what the rename/new-pocket sheet should do: create a fresh pocket, or
+ * rename something that already has a name (a pocket or the wallet itself) */
+export type PocketSheetTarget = { name: string; save: (name: string) => Promise<void> } | undefined;
 
 const PocketRow = ({
   name,
@@ -126,6 +128,9 @@ export const AccountsSheet = ({
   const pockets = useStore(useShallow(activePockets));
   const activeAccount = useStore(activeAccountIndex);
   const selectPocket = useStore(s => s.pockets.select);
+  const renamePocket = useStore(s => s.pockets.rename);
+  const renameKeyRing = useStore(selectRenameKeyRing);
+  const owner = selectedKeyInfo ? pocketOwner(selectedKeyInfo) : undefined;
   const [activeBalanceZat, setActiveBalanceZat] = useState<bigint>();
 
   useEffect(() => {
@@ -157,10 +162,10 @@ export const AccountsSheet = ({
   };
 
   const pickPocket = (account: number) => {
-    if (!selectedKeyInfo) {
+    if (!owner) {
       return;
     }
-    void selectPocket(pocketOwner(selectedKeyInfo), account);
+    void selectPocket(owner, account);
     onOpenChange(false);
   };
 
@@ -189,12 +194,28 @@ export const AccountsSheet = ({
     <Sheet open={open} onOpenChange={onOpenChange} title='accounts' className='gap-0 pb-0'>
       {isHotWallet && selectedKeyInfo && (
         <div className='-mx-4 flex flex-col px-3 pb-2'>
-          <div className='flex items-center gap-2 px-2 pb-1.5'>
+          <div className='flex items-center gap-2 px-2'>
             <Mark variant='seal' size={20} />
-            <span className='truncate text-[13px] text-fg-high lowercase'>
-              {selectedKeyInfo.name}
-            </span>
-            <span className='text-[11px] text-fg-muted'>{CUSTODY_META.hot}</span>
+            <button
+              type='button'
+              onClick={() =>
+                onNewPocket({
+                  name: selectedKeyInfo.name,
+                  save: n => renameKeyRing(selectedKeyInfo.id, n),
+                })
+              }
+              aria-label={`rename ${selectedKeyInfo.name}`}
+              className='flex min-h-11 min-w-0 flex-1 items-center gap-1.5 text-left transition-colors hover:text-zigner-gold'
+            >
+              <span className='truncate text-[13px] text-fg-high lowercase'>
+                {selectedKeyInfo.name}
+              </span>
+              <span
+                className='i-ph-pencil-simple size-3 shrink-0 text-fg-muted'
+                aria-hidden='true'
+              />
+            </button>
+            <span className='shrink-0 text-[11px] text-fg-muted'>{CUSTODY_META.hot}</span>
           </div>
           {pockets.map(p => (
             <PocketRow
@@ -204,7 +225,9 @@ export const AccountsSheet = ({
               active={p.account === activeAccount}
               balanceZat={activeBalanceZat}
               onPick={() => pickPocket(p.account)}
-              onRename={() => onNewPocket({ account: p.account, name: p.name })}
+              onRename={() =>
+                owner && onNewPocket({ name: p.name, save: n => renamePocket(owner, p.account, n) })
+              }
             />
           ))}
           <Plus

@@ -14,7 +14,6 @@ import { useQuery } from '@tanstack/react-query';
 import { cn } from '@repo/ui/lib/utils';
 import { Segmented } from '@repo/ui/components/ui/segmented';
 import { loadVoting, fetchTally } from '../../../services/voting/api';
-import { resolveVotingConfigSource } from '../../../services/voting/resolve';
 import type { VotingRound, RoundStatus } from '../../../services/voting/types';
 
 // round status is a category, not an alarm - fg tokens only (DESIGN.md).
@@ -59,7 +58,7 @@ export const ZcashVotePage = () => {
   const votingQ = useQuery({
     queryKey: ['zcash-vote', 'rounds'],
     staleTime: 60_000,
-    queryFn: () => resolveVotingConfigSource().then(loadVoting),
+    queryFn: loadVoting,
   });
 
   const allRounds = votingQ.data?.rounds ?? [];
@@ -167,7 +166,7 @@ const RoundCard = ({
   const config = useQuery({
     queryKey: ['zcash-vote', 'rounds'],
     staleTime: 60_000,
-    queryFn: () => resolveVotingConfigSource().then(loadVoting),
+    queryFn: loadVoting,
   }).data?.config;
 
   const showTally = expanded && (round.status === 'tallying' || round.status === 'completed');

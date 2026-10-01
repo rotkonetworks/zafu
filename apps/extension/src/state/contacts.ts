@@ -14,6 +14,7 @@ import { Box, type BoxJson } from '@repo/encryption/box';
 import type { KeyPrintJson } from '@repo/encryption/key-print';
 import { readSentRecords, writeSentRecords, readTxNotes, writeTxNotes } from './personal-data';
 import type { SentTxRecord } from '../workers/sent-tx-reconcile';
+import { pocketOwner } from './pockets';
 import type { ContactCardKey } from './identity';
 import { exportEgressChoices, importEgressChoices, type EgressChoices } from '../net/ledger';
 import {
@@ -26,14 +27,15 @@ import type { PrivacySettings } from './privacy';
 
 /**
  * Encrypted backup of ALL local, chain-irreplaceable personal data: contacts +
- * send history + per-tx "from" notes + zcash pocket names + settings. Same password-derived-key envelope as the
- * contacts-only export, one version up. This is the "carry it across devices /
- * recover after a full wipe" layer for data the chain can never give back.
+ * send history + per-tx "from" notes + zcash pocket names + wallet labels +
+ * settings. Same password-derived-key envelope as the contacts-only export,
+ * one version up. This is the "carry it across devices / recover after a
+ * full wipe" layer for data the chain can never give back.
  */
 export interface PersonalDataBackup {
   version: 4;
   exportedAt: number;
-  /** encrypted { contacts, sent, txNotes, pockets, egress, settings } JSON */
+  /** encrypted { contacts, sent, txNotes, pockets, egress, settings, walletNames } JSON */
   data: BoxJson;
   keyPrint: KeyPrintJson;
 }
@@ -556,7 +558,20 @@ export const createContactsSlice =
 
         const pockets = get().pockets.book;
         const settings = await exportSettings(get().privacy.settings);
-        const plaintext = JSON.stringify({ contacts, sent, txNotes, pockets, egress, settings });
+        // wallet labels, keyed by zid (survives a reinstall) falling back to
+        // the vault id, same scheme pockets use for their owner key.
+        const walletNames = Object.fromEntries(
+          get().keyRing.keyInfos.map(k => [pocketOwner(k), k.name]),
+        );
+        const plaintext = JSON.stringify({
+          contacts,
+          sent,
+          txNotes,
+          pockets,
+          egress,
+          settings,
+          walletNames,
+        });
         const { key, keyPrint } = await Key.create(password);
         const box = await key.seal(plaintext);
 
@@ -604,6 +619,8 @@ export const createContactsSlice =
           egress?: Partial<EgressChoices>;
           /** privacy settings + preferences (absent in older backups) */
           settings?: SettingsBackup;
+          /** wallet labels by owner key (absent in older backups) */
+          walletNames?: Record<string, string>;
         };
 
         const existingNames = new Set(safeContacts().map(c => c.name.toLowerCase()));
@@ -642,6 +659,14 @@ export const createContactsSlice =
         await writeSentRecords(parsed.sent ?? []);
         await writeTxNotes(parsed.txNotes ?? {}, mode);
         await get().pockets.restore(parsed.pockets, mode);
+        for (const [owner, name] of Object.entries(parsed.walletNames ?? {})) {
+          const key = get().keyRing.keyInfos.find(k => pocketOwner(k) === owner);
+          if (key && key.name !== name) {
+            await get()
+              .keyRing.renameKeyRing(key.id, name)
+              .catch(() => {});
+          }
+        }
         await importEgressChoices(parsed.egress);
         const current = get().privacy.settings;
         const privacy = restoredPrivacy(current, parsed.settings?.privacy);

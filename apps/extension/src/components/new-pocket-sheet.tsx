@@ -1,8 +1,10 @@
 /**
- * new pocket / rename pocket - one small sheet, two modes. Creating names a
- * fresh ZIP 32 account and gives it the chain tip as its birthday (a pocket
- * has no history to scan back through, so starting it at "now" keeps first
- * sync fast - see state/pockets.ts). Renaming only ever touches the name.
+ * new pocket / rename - one small sheet, two modes. Creating names a fresh
+ * ZIP 32 account and gives it the chain tip as its birthday (a pocket has no
+ * history to scan back through, so starting it at "now" keeps first sync
+ * fast - see state/pockets.ts). Renaming only ever touches a name, and the
+ * caller decides whose: a pocket's or the active wallet's (accounts-sheet.tsx
+ * passes `save`, so this sheet stays agnostic to what it is renaming).
  */
 
 import { useEffect, useState } from 'react';
@@ -23,14 +25,13 @@ export const NewPocketSheet = ({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** set to rename that pocket instead of creating a new one */
+  /** set to rename instead of creating a pocket */
   rename?: PocketSheetTarget;
 }) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const book = useStore(s => s.pockets.book);
   const add = useStore(s => s.pockets.add);
   const select = useStore(s => s.pockets.select);
-  const renamePocket = useStore(s => s.pockets.rename);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const zcashBackend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
 
@@ -51,26 +52,32 @@ export const NewPocketSheet = ({
       setBusy(false);
       setError(null);
     }
-  }, [open, rename?.account, rename?.name]);
+  }, [open, rename]);
 
   const handleSubmit = async () => {
-    if (!owner || busy) {
+    if (busy) {
       return;
     }
     if (rename) {
+      // empty restores the old name: just close without saving
+      const trimmed = name.trim();
+      if (!trimmed || trimmed === rename.name) {
+        onOpenChange(false);
+        return;
+      }
       setBusy(true);
       setError(null);
       try {
-        await renamePocket(owner, rename.account, name);
+        await rename.save(trimmed);
         onOpenChange(false);
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'could not rename this pocket');
+        setError(e instanceof Error ? e.message : 'could not rename this');
       } finally {
         setBusy(false);
       }
       return;
     }
-    if (atLimit) {
+    if (!owner || atLimit) {
       return;
     }
     setBusy(true);
@@ -94,7 +101,7 @@ export const NewPocketSheet = ({
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} title={rename ? 'rename pocket' : 'new pocket'}>
+    <Sheet open={open} onOpenChange={onOpenChange} title={rename ? 'rename' : 'new pocket'}>
       {atLimit ? (
         <p className='text-label text-fg-muted lowercase'>
           this wallet has {MAX_POCKETS} pockets, the most it can hold.
@@ -109,11 +116,22 @@ export const NewPocketSheet = ({
             type='text'
             value={name}
             onChange={e => setName(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void handleSubmit();
+              }
+            }}
+            autoFocus
             placeholder={rename ? undefined : `pocket ${nextAccount}`}
           />
           {error && <p className='text-label text-hanko-light lowercase'>{error}</p>}
-          <Button onClick={() => void handleSubmit()} loading={busy} disabled={!owner}>
-            {rename ? 'rename pocket' : 'create pocket'}
+          <Button
+            onClick={() => void handleSubmit()}
+            loading={busy}
+            disabled={rename ? busy : !owner}
+          >
+            {rename ? 'rename' : 'create pocket'}
           </Button>
         </div>
       )}

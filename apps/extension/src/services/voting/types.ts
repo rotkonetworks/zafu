@@ -2,11 +2,11 @@
  * Zcash coinholder voting - wire types.
  *
  * Protocol: Valar/ZODL token-holder voting, as shipped in Zashi.
- * Config chain:
- *   pinned static config (sha256-checksummed github raw URL)
- *     → dynamic_config_url (vote servers, pir endpoints, per-round
- *       authenticator signatures)
- *       → vote servers: /shielded-vote/v1/rounds, /tally-results/{id}
+ * The config (trusted keys, vote servers, pir endpoints, per-round
+ * authenticator signatures) rarely changes and ships bundled with the
+ * release (see ./bundled-config.ts) instead of being fetched from github at
+ * run time. Only the vote servers themselves are contacted live:
+ *   vote servers: /shielded-vote/v1/rounds, /tally-results/{id}
  *
  * This module is read-only (phase 1): list rounds, show proposals,
  * show tallies. Casting requires the voting crypto crate (note-bundle
@@ -41,6 +41,12 @@ export interface VotingServiceConfig {
   config_version: number;
   vote_servers: ServiceEndpoint[];
   pir_endpoints: ServiceEndpoint[];
+  pir_layout?: {
+    pir_depth: number;
+    tier0_layers: number;
+    tier1_layers: number;
+    poly_len: number;
+  };
   supported_versions: {
     pir: string[];
     vote_protocol: string;
@@ -102,21 +108,3 @@ export interface TallyResults {
   roundId: string;
   proposals: ProposalTally[];
 }
-
-/**
- * Pinned source for the static config. Mirrors Zashi's bundled pin:
- * commit-locked github raw URL + sha256 of the payload.
- */
-export interface PinnedConfigSource {
-  url: string;
-  /** lowercase hex sha256 of the response body; null disables the check */
-  sha256: string | null;
-}
-
-/** Same pin Zashi ships (valargroup/token-holder-voting-config @ 2785311). */
-export const BUNDLED_PINNED_SOURCE: PinnedConfigSource = {
-  url:
-    'https://raw.githubusercontent.com/valargroup/token-holder-voting-config/' +
-    '2785311d45758e85567d70a1f13709fa01b62c6b/prod/static-voting-config.json',
-  sha256: 'bed0116f961226b256a574b52461ce81d9f5294a57e190987dc155f07eb1e431',
-};

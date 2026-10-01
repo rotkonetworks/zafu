@@ -18,8 +18,7 @@ import {
   type EgressInputs,
 } from './egress-policy';
 import { refreshEgress } from './egress';
-import { hostOf } from './destination';
-import { grantHosts, setDestinationOptIn } from './ledger';
+import { setDestinationOptIn } from './ledger';
 
 export const readEgressInputs = async (): Promise<EgressInputs> =>
   (await chrome.storage.local.get([...EGRESS_INPUT_KEYS])) as EgressInputs;
@@ -61,19 +60,4 @@ export const requestEgressOptIn = async (destination: string): Promise<boolean> 
   await setDestinationOptIn(destination, 'allowed');
   await refreshEgress();
   return true;
-};
-
-/**
- * Allow the hosts an opted-in destination names at run time - the vote and PIR
- * servers a voting config lists. A no-op while the destination is off, so a
- * config can never widen what the user has not turned on.
- */
-export const grantDestinationHosts = async (destination: string, urls: string[]): Promise<void> => {
-  const view = (await readEgressView()).find(d => d.id === destination);
-  if (!view?.on) {
-    return;
-  }
-  const hosts = urls.flatMap(u => hostOf(u) ?? []);
-  await grantHosts(hosts, `named by ${view.label}`, view.purpose);
-  await refreshEgress();
 };

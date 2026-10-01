@@ -19,6 +19,7 @@ import { ZCASHME_BASE_URL } from '../services/zcashme/api';
 import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../config/contact-discovery-relay';
 import { PENUMBRA_MAINNET_ENDPOINTS, defaultPenumbraEndpoint } from '../config/penumbra-endpoints';
 import { ZCASH_MAINNET_ENDPOINTS, defaultZcashEndpoint } from '../config/zcash-endpoints';
+import { BUNDLED_SERVICE_CONFIG } from '../services/voting/bundled-config';
 import { pickIndependentPeer } from '../workers/cross-verify';
 import { hostOf } from './destination';
 import { matchRule, type EgressRule, type EgressTable } from './egress-table';
@@ -44,7 +45,6 @@ export const EGRESS_INPUT_KEYS: readonly string[] = [
   'zidDiscovery',
   'zcashMeConfig',
   'keplrCompat',
-  'votingConfigOverride',
   'zitadelRelayUrl',
   'zcashWallets',
   ...(Object.keys(COSMOS_CHAINS) as CosmosChainId[]).map(rpcPoolKey),
@@ -64,7 +64,6 @@ export interface EgressInputs {
   zidDiscovery?: { enabled?: boolean; relayEndpoint?: string };
   zcashMeConfig?: { mode?: string; mirrorUrl?: string };
   keplrCompat?: boolean;
-  votingConfigOverride?: { enabled?: boolean; url?: string };
   zitadelRelayUrl?: string;
   /** only `multisig.relayUrl` is read: each multisig wallet's own relay */
   zcashWallets?: { multisig?: { relayUrl?: unknown } }[];
@@ -247,15 +246,15 @@ export const DESTINATIONS: readonly DestinationSpec[] = [
   },
   {
     id: 'voting',
-    // the pinned config; the vote and pir servers it names are granted per
-    // host once the user opts in (services/voting/api.ts)
+    // the config (which servers to ask) is bundled with the release, not
+    // fetched - these are the vote and pir hosts it names.
     label: 'zcash voting',
     purpose: 'vote',
     gate: { kind: 'optional' },
-    urls: i => [
-      'https://raw.githubusercontent.com/valargroup/token-holder-voting-config/',
-      i.votingConfigOverride?.enabled ? i.votingConfigOverride.url?.trim() : undefined,
-    ],
+    urls: () =>
+      [...BUNDLED_SERVICE_CONFIG.vote_servers, ...BUNDLED_SERVICE_CONFIG.pir_endpoints].map(
+        s => s.url,
+      ),
   },
   {
     id: 'sponsor',
