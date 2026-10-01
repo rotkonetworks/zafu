@@ -27,13 +27,13 @@ export const PRIVACY_EXPLAIN: Record<string, Explain> = {
   },
   'price display': {
     blurb: 'shows a fiat estimate next to on-chain amounts.',
-    on: 'zafu fetches a price feed to convert the figure shown',
+    on: 'zafu asks a price service to convert the figure shown',
     off: 'amounts show only in the asset itself, no price lookup',
   },
   'background sync': {
-    blurb: 'keeps balances current while the popup is closed.',
-    on: 'zafu polls in the background, so opening it is instant',
-    off: 'zafu checks only while you have it open',
+    blurb: 'keeps cosmos balances current while zafu is closed.',
+    on: 'zafu asks the cosmos nodes now and then, even when closed',
+    off: 'zafu checks only when you ask',
   },
   'explorer links': {
     blurb: 'adds a link from each transaction to a public block explorer.',
@@ -47,14 +47,14 @@ export const PRIVACY_EXPLAIN: Record<string, Explain> = {
     off: 'those links do nothing until you turn this on',
   },
   'private contact discovery': {
-    blurb: 'looks up a zid through a relay, instead of only exact addresses.',
-    on: 'the relay you choose sees the lookups you make',
-    off: 'zafu never asks any relay about a contact',
+    blurb: 'finds which of your contacts also use zafu, without sharing your list.',
+    on: 'while zafu is open, it leaves a sealed sign on the relay you choose',
+    off: 'zafu never contacts the relay for this',
   },
   'zcash.me': {
-    blurb: 'a public username directory for zcash addresses.',
-    on: 'your chosen username resolves for anyone who looks it up',
-    off: 'zafu never publishes or queries the directory',
+    blurb: 'find people by their zcash.me name.',
+    on: 'zafu asks zcash.me about the names you look up',
+    off: 'zafu never contacts zcash.me',
   },
 };
 
