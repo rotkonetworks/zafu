@@ -131,3 +131,21 @@ describe('installEgress', () => {
     expect(nativeFetch).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('isEgressBlockedCause', () => {
+  it('finds a refusal wrapped by a ConnectError, not just a bare one', async () => {
+    const { isEgressBlockedCause, EgressBlockedError } = await import('./egress');
+    const refusal = { allow: false, host: 'api.coingecko.com', destination: 'other' } as const;
+    const bare = new EgressBlockedError(refusal as never);
+    expect(isEgressBlockedCause(bare)).toBe(true);
+
+    const wrapped = new Error('[unknown] network error', { cause: bare });
+    expect(isEgressBlockedCause(wrapped)).toBe(true);
+  });
+
+  it('does not mistake an ordinary network error for a refusal', async () => {
+    const { isEgressBlockedCause } = await import('./egress');
+    expect(isEgressBlockedCause(new Error('network error'))).toBe(false);
+    expect(isEgressBlockedCause(undefined)).toBe(false);
+  });
+});

@@ -79,4 +79,32 @@ describe('installGracefulNetworkErrorHandler', () => {
     expect(preventDefault).not.toHaveBeenCalled();
     expect(document.getElementById('zafu-reload-notice')).toBeNull();
   });
+
+  it('treats any Sync stop reason as benign, not just wallet switch', async () => {
+    const handlers = await setup();
+    const preventDefault = vi.fn();
+
+    handlers['unhandledrejection']?.({
+      reason: new Error('Sync stop network switch'),
+      preventDefault,
+    });
+
+    expect(preventDefault).toHaveBeenCalled();
+  });
+
+  it('treats an egress refusal as benign even wrapped in a ConnectError', async () => {
+    const { EgressBlockedError } = await import('../net/egress');
+    const handlers = await setup();
+    const preventDefault = vi.fn();
+    const refusal = { allow: false, host: 'api.coingecko.com', destination: 'other' } as const;
+
+    handlers['unhandledrejection']?.({
+      reason: new Error('[unknown] network error', {
+        cause: new EgressBlockedError(refusal as never),
+      }),
+      preventDefault,
+    });
+
+    expect(preventDefault).toHaveBeenCalled();
+  });
 });
