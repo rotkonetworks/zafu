@@ -21,6 +21,7 @@ export const HomeScreen = ({
   hint,
   spendable,
   watermark,
+  control,
   children,
 }: {
   look: HomeLook;
@@ -32,6 +33,7 @@ export const HomeScreen = ({
   hint?: string;
   spendable: boolean;
   watermark: boolean;
+  control?: ReactNode;
   children: ReactNode;
 }) => (
   <div className='flex min-h-full flex-col overflow-x-hidden'>
@@ -43,6 +45,7 @@ export const HomeScreen = ({
         unit={unit}
         hint={hint}
         watermark={watermark ? look.watermark : undefined}
+        control={control}
       >
         <HomeActions spendable={spendable} />
       </BalanceHero>

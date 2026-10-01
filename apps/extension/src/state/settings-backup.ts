@@ -18,6 +18,7 @@ const PREF_KEYS = [
   'zidDiscovery',
   'hiddenTransparentChains',
   'penumbraTotalIn',
+  'penumbraRowsInUsd',
   'swapRoutes',
 ] as const;
 

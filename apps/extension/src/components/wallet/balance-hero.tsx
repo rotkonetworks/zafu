@@ -76,6 +76,7 @@ export const BalanceHero = ({
   unit,
   hint,
   watermark,
+  control,
   children,
 }: {
   view: BalanceView;
@@ -85,6 +86,8 @@ export const BalanceHero = ({
   hint?: string;
   /** an icon class (i-zafu-*), painted in the network accent; omit for none */
   watermark?: string;
+  /** a small control at the end of the top line (penumbra's usd | um) */
+  control?: ReactNode;
   children?: ReactNode;
 }) => (
   // isolate + -z-10: the watermark sits behind the figure and the buttons
@@ -102,6 +105,7 @@ export const BalanceHero = ({
       <div className='flex h-5 items-center gap-1.5'>
         <span className='text-xs tracking-[0.04em] text-fg-muted'>balance</span>
         {(view === 'ready' || view === 'partial') && <HideToggle />}
+        {control}
       </div>
       <BalanceFigure view={view} amount={amount} unit={unit} hint={hint} />
       {view !== 'loading' && <LastKnown />}

@@ -5,6 +5,7 @@ const store: Record<string, unknown> = {
   zafuTheme: 'washi',
   hiddenTransparentChains: ['osmosis'],
   penumbraTotalIn: 'um',
+  penumbraRowsInUsd: ['16ztCNRCyQZYu3cNN7DNMevUt0v2pERpUBflNfwP+wc='],
   swapRoutes: { 'into_zec:btc@btc': 'thor' },
 };
 vi.mock('@repo/storage-chrome/local', () => ({
@@ -29,6 +30,7 @@ describe('settings backup', () => {
       zafuTheme: 'washi',
       hiddenTransparentChains: ['osmosis'],
       penumbraTotalIn: 'um',
+      penumbraRowsInUsd: ['16ztCNRCyQZYu3cNN7DNMevUt0v2pERpUBflNfwP+wc='],
       swapRoutes: { 'into_zec:btc@btc': 'thor' },
     });
   });
@@ -60,5 +62,13 @@ describe('settings backup', () => {
     expect(store['hiddenTransparentChains']).toEqual(['injective']);
     expect(store['penumbraTotalIn']).toBe('usd');
     expect(store['autoLockMinutes']).toBe(5);
+  });
+
+  it('leaves a never-chosen total out of the backup, so a restore keeps the default', async () => {
+    delete store['penumbraTotalIn'];
+    const out = await exportSettings(DEFAULT_PRIVACY_SETTINGS);
+    expect(out.prefs).not.toHaveProperty('penumbraTotalIn');
+    await importPrefs(out.prefs);
+    expect(store['penumbraTotalIn']).toBeUndefined();
   });
 });

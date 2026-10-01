@@ -18,6 +18,8 @@ export type SessionStorageState = {
    * with passwordKey.
    */
   retiredPasswordKey?: { key: KeyJson; until: number };
+  /** the last penumbra DEX price pass (prices per quote, then per asset id), with when it ran */
+  penumbraPrices?: { at: number; book: Record<'usd' | 'um', Record<string, number | null>> };
 };
 
 // Meant to be used for short-term persisted data. Holds data in memory for the duration of a browser session.
