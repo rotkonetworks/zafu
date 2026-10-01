@@ -15,7 +15,7 @@
  * costs nothing, and orchard has no gap limit a restore could fall off.
  *
  * Orchard-only: a unified address with a transparent receiver is limited to a
- * 31-bit index. Transparent keeps its own `zcashTransparentIndex`.
+ * 31-bit index. Transparent is one fixed address per pocket, index 0.
  */
 
 export const SHIELDED_DIVERSIFIER_KEY = 'zcashShieldedDiversifier';

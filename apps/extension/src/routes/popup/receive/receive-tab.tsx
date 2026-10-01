@@ -1,6 +1,8 @@
 /**
  * Receive tab - QR + address, for Penumbra (ephemeral-only) and Zcash
  * (shielded default, transparent secondary - the header picks addrType).
+ * A zcash pocket rotates its shielded address but has exactly one
+ * transparent address, index 0 of its own t-branch.
  *
  * Penumbra receive is ephemeral-ONLY: a fresh randomized single-use address
  * that rotates on every copy. The static index address is deliberately not
@@ -16,7 +18,7 @@ import {
   selectPenumbraAccount,
   keyRingSelector,
 } from '../../../state/keyring';
-import { getActiveWalletJson } from '../../../state/wallets';
+import { getActiveWalletJson, selectActiveZcashWallet } from '../../../state/wallets';
 import {
   derivePenumbraEphemeralFromMnemonic,
   derivePenumbraEphemeralFromFvk,
@@ -24,9 +26,17 @@ import {
 import { QrCode } from '../../../components/qr-code';
 import { Button } from '@repo/ui/components/ui/button';
 import { useCopy } from '@repo/ui/hooks/use-copy';
-import { useTransparentAddress } from './use-transparent-address';
+import {
+  useTransparentAddresses,
+  type NoTransparent,
+} from '../../../hooks/use-transparent-addresses';
 import { PaymentRequestSheet } from './payment-request';
-import { Sheet } from '@repo/ui/components/ui/sheet';
+
+const noTransparentCopy: Record<NoTransparent, string> = {
+  undecryptable: 'this wallet cannot be opened here · re-importing it will help',
+  'no-transparent-key':
+    'this key has no transparent part · importing from an updated zigner will add one',
+};
 
 export type AddrType = 'shielded' | 'transparent';
 
@@ -57,7 +67,9 @@ export function ReceiveTab({
   const isZcash = activeNetwork === 'zcash';
 
   const transparent = addrType === 'transparent';
-  const t = useTransparentAddress(isZcash && transparent);
+  const isMainnet = useStore(s => selectActiveZcashWallet(s)?.mainnet ?? true);
+  const t = useTransparentAddresses(isMainnet);
+  const zcashTransparent = isZcash && transparent;
 
   // Penumbra ephemeral address - bumped on each copy to rotate to a fresh one
   // for the next share. Derivation touches the keyring/wasm, so it stays an
@@ -113,9 +125,12 @@ export function ReceiveTab({
     penumbraWallet?.fullViewingKey,
   ]);
 
-  const displayAddress =
-    transparent && isZcash && t.address ? t.address : isPenumbra ? ephemeralAddress : address;
-  const isLoading = transparent && isZcash ? t.loading : isPenumbra ? ephemeralLoading : loading;
+  const displayAddress = zcashTransparent
+    ? (t.tAddresses[0] ?? '')
+    : isPenumbra
+      ? ephemeralAddress
+      : address;
+  const isLoading = zcashTransparent ? t.isLoading : isPenumbra ? ephemeralLoading : loading;
   const showingEphemeral = isPenumbra && !!ephemeralAddress;
   const isShielded = (isZcash && !transparent && displayAddress?.startsWith('u')) || isPenumbra;
   // a retired shielded address stays on screen until its replacement lands,
@@ -141,7 +156,6 @@ export function ReceiveTab({
   }, [displayAddress, retired, showingEphemeral, isZcash, transparent, retireShielded, copy]);
 
   const [requestOpen, setRequestOpen] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // one row of copy/colour/rotate per address kind, instead of a ternary per
   // concern - label, hint, colours and the rotate action all vary on the
@@ -162,7 +176,7 @@ export function ReceiveTab({
       labelColor: 'text-hanko-light',
       addrColor: 'text-hanko-light',
       box: 'border-hanko/35 bg-hanko/8',
-      rotate: t.advance,
+      rotate: undefined,
     },
     shielded: {
       label: 'shielded address',
@@ -206,8 +220,10 @@ export function ReceiveTab({
         )}
       </div>
 
-      {isZcash && transparent && t.error && (
-        <p className='w-full text-label text-hanko-light lowercase'>{t.error}</p>
+      {zcashTransparent && t.missing && (
+        <p className='w-full text-label text-hanko-light lowercase'>
+          {noTransparentCopy[t.missing]}
+        </p>
       )}
 
       <div className='w-full'>
@@ -215,13 +231,6 @@ export function ReceiveTab({
           <span className={m.labelColor}>{m.label}</span>
           {m.hint && <span className='text-fg-muted'>{m.hint}</span>}
         </div>
-        {isZcash && transparent && t.used && (
-          <p className='mb-1 flex items-start gap-1.5 text-label text-hanko-light lowercase'>
-            <span className='i-ph-warning mt-0.5 size-3 shrink-0' />
-            this address was used before - reusing it publicly links your payments. rotate to a
-            fresh one.
-          </p>
-        )}
         <div className='flex gap-1.5'>
           <div className={`flex h-14 min-w-0 flex-1 items-center border p-3 ${m.box}`}>
             <code
@@ -244,17 +253,6 @@ export function ReceiveTab({
           )}
         </div>
       </div>
-
-      {isZcash && transparent && t.canDerive && !t.error && (
-        <button
-          type='button'
-          onClick={() => setAdvancedOpen(true)}
-          className='flex w-full items-center justify-between px-1 py-1 text-label text-fg-muted lowercase hover:text-fg-high'
-        >
-          <span>address index</span>
-          <span className='i-ph-caret-right size-3.5' />
-        </button>
-      )}
 
       <div className='-mx-4 mt-auto flex gap-2 border-t border-surface-border-soft px-4 pt-4'>
         {isZcash && displayAddress && (
@@ -284,29 +282,6 @@ export function ReceiveTab({
             }
           }}
         />
-      )}
-
-      {isZcash && transparent && (
-        <Sheet open={advancedOpen} onOpenChange={setAdvancedOpen} title='address index'>
-          <div className='flex w-full items-center justify-center gap-3 py-2'>
-            <button
-              disabled={t.index <= 0}
-              onClick={() => t.setIndex(i => i - 1)}
-              className='p-1 text-fg-muted transition-colors hover:text-fg-high disabled:opacity-50'
-            >
-              <span className='i-ph-caret-left size-4' />
-            </button>
-            <span className='min-w-[110px] text-center text-label text-fg-muted'>
-              address #{t.index}
-            </span>
-            <button
-              onClick={t.advance}
-              className='p-1 text-fg-muted transition-colors hover:text-fg-high'
-            >
-              <span className='i-ph-caret-right size-4' />
-            </button>
-          </div>
-        </Sheet>
       )}
     </div>
   );
