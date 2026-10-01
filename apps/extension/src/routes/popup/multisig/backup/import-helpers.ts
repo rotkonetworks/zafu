@@ -39,6 +39,15 @@ const importOneShare = async (
     keyPackage: share.keyPackage,
     ephemeralSeed: share.ephemeralSeed,
   });
+  // it came from an encrypted backup file, so that file is its backup
+  const restored = selectMultisigWallets(useStore.getState()).find(
+    w => w.multisig?.publicKeyPackage === share.publicKeyPackage,
+  );
+  if (restored) {
+    await useStore
+      .getState()
+      .wallets.updateMultisigWallet(restored.id, { backedUpAt: share.createdAt || Date.now() });
+  }
   return 'imported';
 };
 

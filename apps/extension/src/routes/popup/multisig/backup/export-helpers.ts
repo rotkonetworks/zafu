@@ -9,7 +9,6 @@ import {
   sealBackup,
   backupFilename,
   type FrostSharePayload,
-  type FrostShareBatchPayload,
 } from '../../../../state/keyring/multisig-backup';
 import type { ZcashWalletJson } from '../../../../state/wallets';
 
@@ -23,6 +22,14 @@ const downloadJson = (filename: string, jsonText: string) => {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+};
+
+const markBackedUp = async (wallets: readonly ZcashWalletJson[]) => {
+  const { updateMultisigWallet } = useStore.getState().wallets;
+  const at = Date.now();
+  for (const w of wallets) {
+    await updateMultisigWallet(w.id, { backedUpAt: at });
+  }
 };
 
 const buildSharePayload = async (
@@ -67,25 +74,5 @@ export const exportSingleBackup = async (
     publicKeyPackage: wallet.multisig!.publicKeyPackage,
   });
   downloadJson(backupFilename(wallet.label, false), JSON.stringify(envelope, null, 2));
-};
-
-/** export every self-custody multisig wallet as `frost-backup-all-<date>.json`. */
-export const exportBatchBackup = async (
-  wallets: ZcashWalletJson[],
-  passphrase: string,
-): Promise<void> => {
-  const selfCustody = wallets.filter(w => w.multisig && w.multisig.custody !== 'airgapSigner');
-  if (selfCustody.length === 0) {
-    throw new Error('no self-custody multisig wallets to export');
-  }
-  const shares = [];
-  for (const w of selfCustody) {
-    shares.push(await buildSharePayload(w));
-  }
-  const payload: FrostShareBatchPayload = { version: 1, type: 'frost-share-batch', shares };
-  const envelope = await sealBackup(payload, passphrase, {
-    label: `${selfCustody.length} multisig wallet${selfCustody.length === 1 ? '' : 's'}`,
-    shareCount: selfCustody.length,
-  });
-  downloadJson(backupFilename('all', true), JSON.stringify(envelope, null, 2));
+  await markBackedUp([wallet]);
 };

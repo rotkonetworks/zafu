@@ -12,21 +12,12 @@ interface Props {
   title: string;
   /** label that ends up in the envelope's plaintext + filename */
   walletLabel: string;
-  /** is this exporting one wallet (false) or many (true)? */
-  batch?: boolean;
   /** receives the passphrase the user typed; should perform the export + download. */
   onConfirm: (passphrase: string) => Promise<void>;
   onClose: () => void;
 }
 
-export const BackupModal = ({
-  open,
-  title,
-  walletLabel,
-  batch = false,
-  onConfirm,
-  onClose,
-}: Props) => {
+export const BackupModal = ({ open, title, walletLabel, onConfirm, onClose }: Props) => {
   const [passphrase, setPassphrase] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -68,9 +59,7 @@ export const BackupModal = ({
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4'>
       <div className='w-full max-w-sm border border-border-soft bg-elev-1 p-4'>
         <h2 className='text-lg'>{title}</h2>
-        <p className='mt-1 text-label text-fg-muted'>
-          {batch ? `Exporting ${walletLabel}.` : `Exporting "${walletLabel}".`}
-        </p>
+        <p className='mt-1 text-label text-fg-muted'>Exporting &quot;{walletLabel}&quot;.</p>
 
         <div className='mt-3 border border-amber-500/40 bg-amber-500/5 p-2 text-label text-amber-300'>
           <span className='i-ph-warning mr-1 inline-block size-3 align-text-bottom' />

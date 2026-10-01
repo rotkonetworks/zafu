@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useStore } from '../../../state';
-import { keyRingSelector } from '../../../state/keyring';
+import { keyRingSelector, selectEffectiveKeyInfo } from '../../../state/keyring';
 import { passwordSelector } from '../../../state/password';
 import { terminateNetworkWorker } from '../../../state/keyring/network-worker';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
-import { SettingsScreen } from './settings-screen';
+import { Section, SettingsScreen } from './settings-screen';
 import { Button } from '@repo/ui/components/ui/button';
 import { PasswordInput } from '../../../shared/components/password-input';
 import { cn } from '@repo/ui/lib/utils';
@@ -24,9 +24,10 @@ type Step = 'what' | 'confirm' | 'gone';
 export const SettingsRemoveWallet = () => {
   const navigate = usePopupNav();
   const [searchParams] = useSearchParams();
-  const id = searchParams.get('id') ?? '';
-
   const { keyInfos, deleteKeyRing } = useStore(keyRingSelector);
+  const inView = useStore(selectEffectiveKeyInfo);
+  // no id means the wallet in view, as the security screen's remove row does
+  const id = searchParams.get('id') ?? inView?.id;
   const { isPassword } = useStore(passwordSelector);
   const vault = keyInfos.find(v => v.id === id);
   const needsPhraseTick = vault?.type === 'mnemonic';
@@ -40,7 +41,11 @@ export const SettingsRemoveWallet = () => {
 
   if (!vault) {
     return (
-      <SettingsScreen title='remove wallet' backPath={PopupPath.SETTINGS_WALLETS}>
+      <SettingsScreen
+        title='remove wallet'
+        category='security'
+        backPath={PopupPath.SETTINGS_SECURITY}
+      >
         <p className='text-sm text-fg-muted'>this wallet is already gone.</p>
       </SettingsScreen>
     );
@@ -73,36 +78,30 @@ export const SettingsRemoveWallet = () => {
   };
 
   return (
-    <SettingsScreen title={`remove ${vault.name}`} backPath={PopupPath.SETTINGS_WALLETS}>
-      <div className='flex flex-col gap-4'>
+    <SettingsScreen
+      title={`remove ${vault.name}`}
+      category='security'
+      backPath={PopupPath.SETTINGS_SECURITY}
+    >
+      <div className='flex grow flex-col gap-4'>
         {step === 'what' && (
           <div className='flex flex-col gap-4'>
-            <div>
-              <p className='kicker mb-2'>leaves this computer</p>
-              <ul className='flex flex-col gap-2 border border-border-soft bg-elev-1 p-3'>
-                <FactRow tone='bg-hanko' text={`keys for ${vault.name}`} meta='on this computer' />
-                <FactRow
-                  tone='bg-hanko'
-                  text='saved history and notes'
-                  meta='rebuilt if you add it back'
-                />
-              </ul>
-              {keyInfos.length <= 1 && (
-                <p className='mt-2 text-label text-warn'>
-                  this is your last wallet - removing it wipes all wallet data from this extension.
-                </p>
-              )}
-            </div>
-            <div>
-              <p className='kicker mb-2'>stays safe</p>
-              <div className='border border-border-soft bg-elev-1 p-3'>
-                <FactRow
-                  tone='bg-green-400'
-                  text='what is on chain'
-                  meta='the phrase brings it back'
-                />
-              </div>
-            </div>
+            <Section title='leaves this computer'>
+              <FactRow tone='bg-hanko' text={`keys for ${vault.name}`} meta='on this computer' />
+              <FactRow
+                tone='bg-hanko'
+                text='saved history and notes'
+                meta='rebuilt if you add it back'
+              />
+            </Section>
+            {keyInfos.length <= 1 && (
+              <p className='-mt-2 text-label text-warn'>
+                this is your last wallet - removing it wipes all wallet data from this extension.
+              </p>
+            )}
+            <Section title='stays safe'>
+              <FactRow tone='bg-success' text='what is on chain' meta='the phrase brings it back' />
+            </Section>
 
             {needsPhraseTick && (
               <button
@@ -112,7 +111,7 @@ export const SettingsRemoveWallet = () => {
                 onClick={() => setTicked(v => !v)}
                 className={cn(
                   'flex min-h-[52px] items-center gap-3 border px-3.5 text-left transition-colors',
-                  ticked ? 'border-zigner-gold bg-zigner-gold/10' : 'border-border-soft',
+                  ticked ? 'border-zigner-gold bg-zigner-gold/10' : 'border-border-soft bg-elev-1',
                 )}
               >
                 <span
@@ -156,7 +155,7 @@ export const SettingsRemoveWallet = () => {
               validations={[
                 {
                   type: 'error',
-                  issue: 'wrong password',
+                  issue: "that doesn't match · please try again, slowly",
                   checkFn: (txt: string) => Boolean(txt) && wrong,
                 },
               ]}
@@ -185,7 +184,7 @@ export const SettingsRemoveWallet = () => {
             size='md'
             className='w-28'
             onClick={() =>
-              step === 'confirm' ? setStep('what') : navigate(PopupPath.SETTINGS_WALLETS)
+              step === 'confirm' ? setStep('what') : navigate(PopupPath.SETTINGS_SECURITY)
             }
           >
             not now
@@ -217,9 +216,9 @@ export const SettingsRemoveWallet = () => {
 };
 
 const FactRow = ({ tone, text, meta }: { tone: string; text: string; meta: string }) => (
-  <li className='flex items-center gap-3'>
+  <div className='flex min-h-11 items-center gap-3 px-3.5 py-2'>
     <span className={cn('size-1.5 shrink-0', tone)} />
-    <span className='flex-1 text-sm text-fg-high'>{text}</span>
-    <span className='text-label text-fg-muted'>{meta}</span>
-  </li>
+    <span className='flex-1 text-sm text-fg-high lowercase'>{text}</span>
+    <span className='max-w-[45%] text-[11px] text-fg-muted'>{meta}</span>
+  </div>
 );

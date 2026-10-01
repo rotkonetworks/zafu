@@ -53,6 +53,8 @@ export interface ZcashWalletJson {
     relayCeremonyId?: string;
     /** hide from main wallet UI (app-driven multisigs e.g. poker); sign-time lookup still works */
     hidden?: boolean;
+    /** when this seat's share was last exported to an encrypted backup file */
+    backedUpAt?: number;
   };
 }
 
@@ -66,10 +68,10 @@ export interface WalletsSlice {
   /** Index of the currently active Zcash wallet */
   activeZcashIndex: number;
   addWallet: (toAdd: { label: string; seedPhrase: string[] }) => Promise<void>;
-  /** Update a multisig wallet's mutable fields (label, relayUrl) */
+  /** Update a multisig wallet's mutable fields (label, relayUrl, backedUpAt) */
   updateMultisigWallet: (
     id: string,
-    updates: { label?: string; relayUrl?: string },
+    updates: { label?: string; relayUrl?: string; backedUpAt?: number },
   ) => Promise<void>;
   /** Remove a wallet by index. Cannot remove the last remaining wallet. */
   removeWallet: (index: number) => Promise<void>;
@@ -170,6 +172,9 @@ export const createWalletsSlice =
           }
           if (updates.relayUrl !== undefined && w.multisig) {
             w.multisig.relayUrl = updates.relayUrl;
+          }
+          if (updates.backedUpAt !== undefined && w.multisig) {
+            w.multisig.backedUpAt = updates.backedUpAt;
           }
         });
 

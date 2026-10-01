@@ -5,19 +5,17 @@ import { PopupPath } from '../paths';
 import { SettingsScreen } from './settings-screen';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { TintedRow } from './tinted-row';
+import { selectConnectedSiteCount } from './settings-status';
 
-/**
- * Privacy category home (SetPrivacy.dc.html): the two on-screen toggles a
- * person actually changes, connected sites, then "all privacy controls" for
- * everything else (network, people, zcash.me - settings-privacy.tsx).
- */
+/** privacy category home (SetPrivacy.dc.html) */
 export const SettingsPrivacyHome = () => {
   const navigate = usePopupNav();
   const { settings, setSetting } = useStore(privacySelector);
+  const sites = useStore(selectConnectedSiteCount);
 
   return (
-    <SettingsScreen title='privacy' backPath={PopupPath.SETTINGS}>
-      <div className='flex flex-col gap-5'>
+    <SettingsScreen title='privacy' category='privacy' backPath={PopupPath.SETTINGS}>
+      <div className='flex flex-col gap-4'>
         <RowGroup>
           <Row
             type='toggle'
@@ -32,8 +30,9 @@ export const SettingsPrivacyHome = () => {
             onChange={v => setSetting('enableTransactionHistory', v)}
           />
           <Row
-            type='screen'
+            type='value'
             label='connected sites'
+            value={String(sites)}
             onPress={() => navigate(PopupPath.SETTINGS_CONNECTED_SITES)}
           />
         </RowGroup>

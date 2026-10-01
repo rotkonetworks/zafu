@@ -155,11 +155,9 @@ const SyncDetail = ({
 > & {
   onRescan: (h: number) => void;
 }) => {
-  const [date, setDate] = useState(() =>
-    startBlock > 0 ? formatDateInput(blockToDate(startBlock)) : '',
-  );
+  const [date, setDate] = useState(() => dateOfBlock(startBlock));
   const [showDetail, setShowDetail] = useState(false);
-  const rescanAt = date ? dateToBlock(new Date(`${date}T00:00:00Z`)) : NaN;
+  const rescanAt = rescanHeightOf(date);
   const persists = isSidePanel() || isDedicatedWindow();
 
   return (
@@ -174,15 +172,7 @@ const SyncDetail = ({
         </div>
         <label className='flex h-12 items-center justify-between gap-3 px-3.5'>
           <span className='text-fg-muted'>starts from</span>
-          <input
-            type='date'
-            min={formatDateInput(blockToDate(ZCASH_ORCHARD_ACTIVATION))}
-            max={formatDateInput(new Date())}
-            value={date}
-            onChange={e => setDate(e.target.value)}
-            aria-label='starts from'
-            className='bg-transparent text-right text-fg-high outline-none'
-          />
+          <RescanDateInput value={date} onChange={setDate} />
         </label>
       </div>
 
@@ -208,7 +198,7 @@ const SyncDetail = ({
 
       <Button
         variant='secondary'
-        disabled={isNaN(rescanAt) || rescanAt < ZCASH_ORCHARD_ACTIVATION}
+        disabled={!rescanHeightOk(rescanAt)}
         onClick={() => onRescan(rescanAt)}
       >
         sync again from {isNaN(rescanAt) ? 'a date' : `block ${rescanAt.toLocaleString()}`}
@@ -222,3 +212,32 @@ const SyncDetail = ({
     </div>
   );
 };
+
+/** the date a scan from `block` starts on, as an <input type=date> value; '' when unknown */
+export const dateOfBlock = (block: number) =>
+  block > 0 ? formatDateInput(blockToDate(block)) : '';
+
+/** the block a rescan from an <input type=date> value starts at; NaN when empty */
+export const rescanHeightOf = (date: string) =>
+  date ? dateToBlock(new Date(`${date}T00:00:00Z`)) : NaN;
+
+export const rescanHeightOk = (h: number) => !isNaN(h) && h >= ZCASH_ORCHARD_ACTIVATION;
+
+/** a date picker bounded by orchard activation and today */
+export const RescanDateInput = ({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (date: string) => void;
+}) => (
+  <input
+    type='date'
+    min={formatDateInput(blockToDate(ZCASH_ORCHARD_ACTIVATION))}
+    max={formatDateInput(new Date())}
+    value={value}
+    onChange={e => onChange(e.target.value)}
+    aria-label='starts from'
+    className='bg-transparent text-right text-fg-high outline-none'
+  />
+);

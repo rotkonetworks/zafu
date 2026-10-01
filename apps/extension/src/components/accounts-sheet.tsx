@@ -1,6 +1,6 @@
 /**
- * accounts sheet - the hot wallet's pockets, other accounts, cold signers,
- * add wallet, lock, open in window.
+ * accounts sheet (Accounts.dc.html) - the hot wallet's pockets, other
+ * wallets and cold signers, add wallet, then lock and open in window.
  */
 
 import { useEffect, useState } from 'react';
@@ -15,16 +15,28 @@ import {
   selectSelectKeyRing,
   selectLock,
 } from '../state/keyring';
-import { isIdentityEnabled } from '../state/privacy';
 import { MAX_POCKETS, activeAccountIndex, activePockets, pocketOwner } from '../state/pockets';
 import { pocketStoreId } from '../state/pocket-id';
 import { getBalanceInWorker } from '../state/keyring/network-worker';
 import { PopupPath } from '../routes/popup/paths';
-import { screenTransition } from '../utils/navigate';
 import { isSidePanel } from '../utils/popup-detection';
-import { CustodyBadge } from './custody-badge';
+import { custodyOf, type Custody } from './custody-badge';
+import { Mark } from '@repo/ui/components/ui/mark';
+import { Button } from '@repo/ui/components/ui/button';
 import { Sensitive } from './sensitive';
 import { fmtZec } from '../routes/popup/home/format';
+
+const CUSTODY_META: Record<Custody, string> = {
+  hot: 'hot · this device',
+  cold: 'cold · signs on its device',
+  shared: 'shared · co-signers approve',
+};
+
+const CUSTODY_ICON: Record<Custody, string> = {
+  hot: 'i-zafu-hi text-zigner-gold',
+  cold: 'i-zafu-kori text-zafu-blue',
+  shared: 'i-zafu-torii text-fg-muted',
+};
 
 /** what the new-pocket sheet should do: create a fresh pocket, or rename an existing one */
 export type PocketSheetTarget = { account: number; name: string } | undefined;
@@ -48,7 +60,7 @@ const PocketRow = ({
     <button
       type='button'
       onClick={onPick}
-      className='flex min-h-[52px] flex-1 items-center gap-3 px-3.5 py-2 text-left transition-colors hover:bg-surface-elev-2'
+      className='flex h-[54px] flex-1 items-center gap-3 px-2 text-left transition-colors hover:bg-surface-elev-2'
     >
       <span
         className={cn(
@@ -59,13 +71,13 @@ const PocketRow = ({
       >
         {active && <span className='size-2 bg-zigner-gold' />}
       </span>
-      <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
-        <span className='truncate text-data text-fg-high lowercase'>{name}</span>
-        <span className='truncate text-label text-fg-muted lowercase'>account {account}</span>
+      <span className='flex min-w-0 flex-1 flex-col gap-[3px]'>
+        <span className='truncate text-sm text-fg-high lowercase'>{name}</span>
+        <span className='truncate text-[11px] text-fg-muted lowercase'>account {account}</span>
       </span>
       {active && balanceZat !== undefined && (
-        <Sensitive className='shrink-0 tabular-nums text-data text-fg-high'>
-          {fmtZec(Number(balanceZat) / 1e8)} ZEC
+        <Sensitive className='shrink-0 tabular-nums text-sm text-fg-high'>
+          {fmtZec(Number(balanceZat) / 1e8)}
         </Sensitive>
       )}
     </button>
@@ -104,7 +116,6 @@ export const AccountsSheet = ({
   const keyInfos = useStore(useShallow(selectKeyInfosForActiveNetwork));
   const selectKeyRing = useStore(selectSelectKeyRing);
   const lock = useStore(selectLock);
-  const identityEnabled = useStore(isIdentityEnabled);
   const inSidePanel = isSidePanel();
 
   const isHotWallet = selectedKeyInfo?.type === 'mnemonic';
@@ -153,11 +164,6 @@ export const AccountsSheet = ({
     onOpenChange(false);
   };
 
-  const go = (path: string) => {
-    onOpenChange(false);
-    navigate(path, screenTransition('push'));
-  };
-
   const handleLock = () => {
     lock();
     onOpenChange(false);
@@ -180,132 +186,105 @@ export const AccountsSheet = ({
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} title='accounts'>
-      <div className='flex flex-col gap-4'>
-        {isHotWallet && selectedKeyInfo && (
-          <div className='flex flex-col gap-2'>
-            <div className='flex items-center gap-2 px-3.5'>
-              <span className='truncate text-label text-fg-muted lowercase'>
-                {selectedKeyInfo.name}
-              </span>
-              <CustodyBadge vault={selectedKeyInfo} showLabel />
-            </div>
-            <div className='flex flex-col divide-y divide-surface-border-soft border border-surface-border-soft bg-surface-elev-1'>
-              {pockets.map(p => (
-                <PocketRow
-                  key={p.account}
-                  name={p.name}
-                  account={p.account}
-                  active={p.account === activeAccount}
-                  balanceZat={activeBalanceZat}
-                  onPick={() => pickPocket(p.account)}
-                  onRename={() => onNewPocket({ account: p.account, name: p.name })}
-                />
-              ))}
-              <button
-                type='button'
-                onClick={() => onNewPocket()}
-                disabled={pockets.length >= MAX_POCKETS}
-                className='flex min-h-[44px] items-center gap-3 px-3.5 py-2 text-left text-zigner-gold disabled:pointer-events-none disabled:opacity-50'
-              >
-                <span className='i-ph-plus size-[18px] shrink-0' aria-hidden='true' />
-                <span className='text-data lowercase'>
-                  {pockets.length >= MAX_POCKETS
-                    ? `this wallet has ${MAX_POCKETS} pockets, the most it can hold`
-                    : 'new pocket'}
-                </span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className='flex flex-col divide-y divide-surface-border-soft border border-surface-border-soft bg-surface-elev-1'>
-          {otherKeyInfos.length === 0 ? (
-            <span className='px-3.5 py-3 text-data text-fg-muted lowercase'>
-              {isHotWallet ? 'no other wallets' : 'no wallets'}
+    <Sheet open={open} onOpenChange={onOpenChange} title='accounts' className='gap-0 pb-0'>
+      {isHotWallet && selectedKeyInfo && (
+        <div className='-mx-4 flex flex-col px-3 pb-2'>
+          <div className='flex items-center gap-2 px-2 pb-1.5'>
+            <Mark variant='seal' size={20} />
+            <span className='truncate text-[13px] text-fg-high lowercase'>
+              {selectedKeyInfo.name}
             </span>
-          ) : (
-            otherKeyInfos.map(k => {
-              const active = k.id === selectedKeyInfo?.id;
-              return (
-                <button
-                  key={k.id}
-                  type='button'
-                  onClick={() => pickWallet(k.id)}
-                  className='flex min-h-[52px] items-center gap-3 px-3.5 py-2 text-left transition-colors hover:bg-surface-elev-2'
-                >
-                  <span
-                    className={cn(
-                      'flex size-[18px] shrink-0 items-center justify-center border',
-                      active ? 'border-zigner-gold' : 'border-surface-border',
-                    )}
-                    aria-hidden='true'
-                  >
-                    {active && <span className='size-2 bg-zigner-gold' />}
-                  </span>
-                  <span className='min-w-0 flex-1 truncate text-data text-fg-high lowercase'>
-                    {k.name}
-                  </span>
-                  <CustodyBadge vault={k} showLabel={false} />
-                </button>
-              );
-            })
-          )}
-        </div>
-
-        {identityEnabled && (
-          <div className='flex flex-col divide-y divide-surface-border-soft border border-surface-border-soft bg-surface-elev-1'>
-            <button
-              type='button'
-              onClick={() => go(PopupPath.IDENTITY)}
-              className='flex min-h-[52px] items-center gap-3 px-3.5 py-2 text-left transition-colors hover:bg-surface-elev-2'
-            >
-              <span className='i-ph-fingerprint size-5 shrink-0 text-fg-muted' aria-hidden='true' />
-              <span className='flex-1 text-data text-fg-high lowercase'>identity</span>
-              <span className='i-ph-caret-right size-3.5 shrink-0 text-fg-dim' aria-hidden='true' />
-            </button>
-            <button
-              type='button'
-              onClick={() => go(PopupPath.CONTACTS)}
-              className='flex min-h-[52px] items-center gap-3 px-3.5 py-2 text-left transition-colors hover:bg-surface-elev-2'
-            >
-              <span className='i-ph-users size-5 shrink-0 text-fg-muted' aria-hidden='true' />
-              <span className='flex-1 text-data text-fg-high lowercase'>contacts</span>
-              <span className='i-ph-caret-right size-3.5 shrink-0 text-fg-dim' aria-hidden='true' />
-            </button>
+            <span className='text-[11px] text-fg-muted'>{CUSTODY_META.hot}</span>
           </div>
-        )}
-
-        <button
-          type='button'
-          onClick={onAddWallet}
-          className='flex min-h-[44px] items-center gap-3 px-1 text-left text-zigner-gold'
-        >
-          <span className='i-ph-plus size-[18px] shrink-0' aria-hidden='true' />
-          <span className='text-data lowercase'>add wallet</span>
-        </button>
-
-        <div className='flex gap-2'>
-          <button
-            type='button'
-            onClick={handleLock}
-            className='flex h-11 flex-1 items-center justify-center gap-2 border border-surface-border bg-surface-elev-2 text-data text-fg-high transition-colors hover:bg-surface-border-soft'
-          >
-            <span className='i-ph-lock size-[15px]' aria-hidden='true' />
-            lock
-          </button>
-          {inSidePanel && (
-            <button
-              type='button'
-              onClick={() => void handleOpenPopupWindow()}
-              className='flex h-11 flex-1 items-center justify-center gap-2 border border-surface-border bg-surface-elev-2 text-data text-fg-high transition-colors hover:bg-surface-border-soft'
-            >
-              <span className='i-ph-arrow-square-out size-[15px]' aria-hidden='true' />
-              open in window
-            </button>
-          )}
+          {pockets.map(p => (
+            <PocketRow
+              key={p.account}
+              name={p.name}
+              account={p.account}
+              active={p.account === activeAccount}
+              balanceZat={activeBalanceZat}
+              onPick={() => pickPocket(p.account)}
+              onRename={() => onNewPocket({ account: p.account, name: p.name })}
+            />
+          ))}
+          <Plus
+            label={
+              pockets.length >= MAX_POCKETS
+                ? `this wallet has ${MAX_POCKETS} pockets, the most it can hold`
+                : 'new pocket'
+            }
+            tone='text-zigner-gold'
+            disabled={pockets.length >= MAX_POCKETS}
+            onClick={() => onNewPocket()}
+          />
         </div>
+      )}
+
+      <div className='-mx-4 flex flex-col border-t border-border-soft px-3 pb-3.5 pt-2.5'>
+        {otherKeyInfos.map(k => {
+          const custody = custodyOf(k.type);
+          return (
+            <button
+              key={k.id}
+              type='button'
+              onClick={() => pickWallet(k.id)}
+              className='flex h-[54px] items-center gap-3 px-2 text-left transition-colors hover:bg-surface-elev-2'
+            >
+              <span
+                className={cn('size-[18px] shrink-0', CUSTODY_ICON[custody])}
+                aria-hidden='true'
+              />
+              <span className='flex min-w-0 flex-1 flex-col gap-[3px]'>
+                <span className='truncate text-sm text-fg-high lowercase'>{k.name}</span>
+                <span className='truncate text-[11px] text-fg-muted'>{CUSTODY_META[custody]}</span>
+              </span>
+            </button>
+          );
+        })}
+        <Plus label='add wallet' tone='text-fg-muted' onClick={onAddWallet} />
+      </div>
+
+      <div className='-mx-4 flex gap-2 border-t border-border-soft px-5 pb-4 pt-3'>
+        <Button variant='secondary' className='h-11 flex-1 text-[13px]' onClick={handleLock}>
+          <span className='i-ph-lock size-[15px]' aria-hidden='true' />
+          lock
+        </Button>
+        {inSidePanel && (
+          <Button
+            variant='secondary'
+            className='h-11 flex-1 text-[13px]'
+            onClick={() => void handleOpenPopupWindow()}
+          >
+            <span className='i-ph-arrow-square-out size-[15px]' aria-hidden='true' />
+            open in window
+          </Button>
+        )}
       </div>
     </Sheet>
   );
 };
+
+const Plus = ({
+  label,
+  tone,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  tone: string;
+  disabled?: boolean;
+  onClick: () => void;
+}) => (
+  <button
+    type='button'
+    onClick={onClick}
+    disabled={disabled}
+    className={cn(
+      'flex h-11 items-center gap-3 px-2 text-left text-[13px] transition-colors hover:bg-surface-elev-2 disabled:pointer-events-none disabled:opacity-50',
+      tone,
+    )}
+  >
+    <span className='i-ph-plus size-[18px] shrink-0' aria-hidden='true' />
+    {label}
+  </button>
+);

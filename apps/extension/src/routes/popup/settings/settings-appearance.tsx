@@ -1,225 +1,110 @@
 import { useEffect, useState } from 'react';
 import { localExtStorage } from '@repo/storage-chrome/local';
-import { cn } from '@repo/ui/lib/utils';
-import { SettingsScreen } from './settings-screen';
-import { PopupPath } from '../paths';
 import { getApprovalSurface, type ApprovalSurface } from '../../../side-panel-pref';
+import { OptionsRow } from './sheet-options';
 
 /**
- * appearance - theme and type, applied instantly, persisted locally.
- *
- * Themes are one material language in two states (see globals.css):
- *   sumi ink - warm ink-stone dark (default)
- *   washi - sumi ink on unbleached paper (light)
+ * appearance - theme, type and where approvals open, each a value row with a
+ * sheet of options, applied instantly and persisted locally.
  */
 
 export type ZafuTheme = 'sumi' | 'washi';
 type ZafuFont = 'iosevka' | 'system';
 
-const THEMES: { id: ZafuTheme; name: string; blurb: string; chip: string; ink: string }[] = [
-  {
-    id: 'sumi',
-    name: 'sumi ink',
-    blurb: 'warm ink on woven cloth',
-    chip: '#0c0a08',
-    ink: '#ded5c4',
-  },
-  { id: 'washi', name: 'washi', blurb: 'ink on unbleached paper', chip: '#efe9dc', ink: '#2b241c' },
-];
-
-const FONTS: { id: ZafuFont; name: string; blurb: string; stack: string }[] = [
-  {
-    id: 'iosevka',
-    name: 'iosevka term',
-    blurb: 'the zafu voice - narrow, confident',
-    stack: "'Iosevka Term', 'Courier New', Courier, monospace",
-  },
-  {
-    id: 'system',
-    name: 'system mono',
-    blurb: 'whatever your OS considers monospace',
-    stack: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
-  },
-];
-
-export const applyTheme = (theme: ZafuTheme) => {
-  if (theme === 'sumi') {
-    delete document.documentElement.dataset['theme'];
+/** sumi and iosevka are the :root defaults, so only the other choice sets a data attribute */
+const applyRootData = (key: 'theme' | 'font', value: string, fallback: string) => {
+  if (value === fallback) {
+    delete document.documentElement.dataset[key];
   } else {
-    document.documentElement.dataset['theme'] = theme;
+    document.documentElement.dataset[key] = value;
   }
 };
 
-/** reads + writes the persisted theme; also used by the devices home's
- *  theme Row(value) so it doesn't duplicate this loader. */
+/** one persisted choice: read once from storage (an external system), written through on pick */
+const useStoredChoice = <T extends string>(
+  initial: T,
+  read: () => Promise<T>,
+  write: (v: T) => void,
+) => {
+  const [value, setValue] = useState<T>(initial);
+  useEffect(() => {
+    void read().then(setValue);
+  }, []);
+  return {
+    value,
+    set: (v: T) => {
+      setValue(v);
+      write(v);
+    },
+  };
+};
+
 export const useZafuTheme = () => {
-  const [theme, setThemeState] = useState<ZafuTheme>('sumi');
-  useEffect(() => {
-    void localExtStorage
-      .get('zafuTheme')
-      .then(v => setThemeState(v === 'washi' ? 'washi' : 'sumi'));
-  }, []);
-  const set = (t: ZafuTheme) => {
-    setThemeState(t);
-    applyTheme(t);
-    void localExtStorage.set('zafuTheme', t);
-  };
-  return { theme, set };
-};
-
-const applyFont = (font: ZafuFont) => {
-  if (font === 'system') {
-    document.documentElement.dataset['font'] = font;
-  } else {
-    delete document.documentElement.dataset['font'];
-  }
-};
-
-export const SettingsAppearance = () => {
-  const [theme, setTheme] = useState<ZafuTheme>('sumi');
-  const [font, setFont] = useState<ZafuFont>('iosevka');
-  const [approvalSurface, setApprovalSurface] = useState<ApprovalSurface>('hybrid');
-
-  useEffect(() => {
+  const { value, set } = useStoredChoice<ZafuTheme>(
+    'sumi',
     // a retired 'terminal' choice falls back to the default
-    void localExtStorage.get('zafuTheme').then(v => setTheme(v === 'washi' ? 'washi' : 'sumi'));
-    void localExtStorage.get('zafuFont').then(v => setFont(v ?? 'iosevka'));
-    void getApprovalSurface().then(setApprovalSurface);
-  }, []);
-
-  const pickApprovalMode = (surface: ApprovalSurface) => {
-    setApprovalSurface(surface);
-    void localExtStorage.set('approvalSurface', surface);
-    // keep the legacy flag in step for anything still reading it
-    void localExtStorage.set('approvalsInSidePanel', surface !== 'popup');
-  };
-
-  const APPROVAL_MODES = [
-    {
-      id: 'hybrid',
-      icon: 'i-ph-sidebar-simple',
-      name: 'hybrid',
-      blurb: 'side panel, or a popup window when the panel cannot open',
+    async () => ((await localExtStorage.get('zafuTheme')) === 'washi' ? 'washi' : 'sumi'),
+    t => {
+      applyRootData('theme', t, 'sumi');
+      void localExtStorage.set('zafuTheme', t);
     },
-    {
-      id: 'sidebar',
-      icon: 'i-ph-sidebar',
-      name: 'side panel only',
-      blurb: 'never a popup; the toolbar icon shows a badge until you open the panel',
-    },
-    {
-      id: 'popup',
-      icon: 'i-ph-app-window',
-      name: 'popup window',
-      blurb: 'approvals always open in a separate window',
-    },
-  ] as const;
+  );
+  return { theme: value, set };
+};
 
-  const pickTheme = (t: ZafuTheme) => {
-    setTheme(t);
-    applyTheme(t);
-    void localExtStorage.set('zafuTheme', t);
-  };
-
-  const pickFont = (f: ZafuFont) => {
-    setFont(f);
-    applyFont(f);
-    void localExtStorage.set('zafuFont', f);
-  };
-
+export const ThemeRow = () => {
+  const { theme, set } = useZafuTheme();
   return (
-    <SettingsScreen title='appearance' backPath={PopupPath.SETTINGS_DEVICES_ALL}>
-      <div className='flex flex-col gap-5 px-4'>
-        <div>
-          <p className='kicker pb-2'>theme</p>
-          <div className='flex flex-col gap-2'>
-            {THEMES.map(t => (
-              <button
-                key={t.id}
-                onClick={() => pickTheme(t.id)}
-                className={cn(
-                  'flex w-full items-center gap-3 border px-3 py-2.5 text-left transition-colors',
-                  theme === t.id
-                    ? 'border-zigner-gold/60 bg-elev-1'
-                    : 'border-border-soft hover:bg-elev-1',
-                )}
-              >
-                {/* material chip: canvas swatch with an ink stroke */}
-                <span
-                  className='flex h-8 w-8 shrink-0 items-center justify-center border border-border-soft text-[13px]'
-                  style={{ background: t.chip, color: t.ink }}
-                >
-                  あ
-                </span>
-                <span className='flex flex-1 flex-col'>
-                  <span className='text-data text-fg lowercase'>{t.name}</span>
-                  <span className='text-label text-fg-dim lowercase'>{t.blurb}</span>
-                </span>
-                {theme === t.id && <span className='i-ph-check size-4 text-zigner-gold' />}
-              </button>
-            ))}
-          </div>
-        </div>
+    <OptionsRow
+      label='theme'
+      value={theme}
+      options={[
+        { value: 'sumi', label: 'sumi', desc: 'warm ink on woven cloth' },
+        { value: 'washi', label: 'washi', desc: 'ink on unbleached paper' },
+      ]}
+      onPick={set}
+    />
+  );
+};
 
-        <div>
-          <p className='kicker pb-2'>type</p>
-          <div className='flex flex-col gap-2'>
-            {FONTS.map(f => (
-              <button
-                key={f.id}
-                onClick={() => pickFont(f.id)}
-                className={cn(
-                  'flex w-full items-center gap-3 border px-3 py-2.5 text-left transition-colors',
-                  font === f.id
-                    ? 'border-zigner-gold/60 bg-elev-1'
-                    : 'border-border-soft hover:bg-elev-1',
-                )}
-              >
-                <span
-                  className='flex h-8 w-8 shrink-0 items-center justify-center border border-border-soft bg-elev-2 text-title text-fg'
-                  style={{ fontFamily: f.stack }}
-                >
-                  Aa
-                </span>
-                <span className='flex flex-1 flex-col'>
-                  <span className='text-data text-fg lowercase'>{f.name}</span>
-                  <span className='text-label text-fg-dim lowercase'>{f.blurb}</span>
-                </span>
-                {font === f.id && <span className='i-ph-check size-4 text-zigner-gold' />}
-              </button>
-            ))}
-          </div>
-        </div>
+export const FontRow = () => {
+  const { value, set } = useStoredChoice<ZafuFont>(
+    'iosevka',
+    async () => (await localExtStorage.get('zafuFont')) ?? 'iosevka',
+    f => {
+      applyRootData('font', f, 'iosevka');
+      void localExtStorage.set('zafuFont', f);
+    },
+  );
+  return (
+    <OptionsRow
+      label='type'
+      value={value}
+      options={[
+        { value: 'iosevka', label: 'iosevka term' },
+        { value: 'system', label: 'system mono' },
+      ]}
+      onPick={set}
+    />
+  );
+};
 
-        <div>
-          <p className='kicker pb-2'>approvals</p>
-          <div className='flex flex-col gap-2'>
-            {APPROVAL_MODES.map(m => (
-              <button
-                key={m.id}
-                onClick={() => pickApprovalMode(m.id)}
-                className={cn(
-                  'flex w-full items-center gap-3 border px-3 py-2.5 text-left transition-colors',
-                  approvalSurface === m.id
-                    ? 'border-zigner-gold/60 bg-elev-1'
-                    : 'border-border-soft hover:bg-elev-1',
-                )}
-              >
-                <span className='flex h-8 w-8 shrink-0 items-center justify-center border border-border-soft bg-elev-2 text-fg'>
-                  <span className={cn(m.icon, 'size-4')} />
-                </span>
-                <span className='flex flex-1 flex-col'>
-                  <span className='text-data text-fg lowercase'>{m.name}</span>
-                  <span className='text-label text-fg-dim lowercase'>{m.blurb}</span>
-                </span>
-                {approvalSurface === m.id && (
-                  <span className='i-ph-check size-4 text-zigner-gold' />
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </SettingsScreen>
+export const ApprovalsRow = () => {
+  const { value, set } = useStoredChoice<ApprovalSurface>('hybrid', getApprovalSurface, s => {
+    void localExtStorage.set('approvalSurface', s);
+    // keep the legacy flag in step for anything still reading it
+    void localExtStorage.set('approvalsInSidePanel', s !== 'popup');
+  });
+  return (
+    <OptionsRow
+      label='approvals open in'
+      value={value}
+      options={[
+        { value: 'hybrid', label: 'side panel or window', desc: 'a window when no panel can open' },
+        { value: 'sidebar', label: 'side panel only' },
+        { value: 'popup', label: 'a window' },
+      ]}
+      onPick={set}
+    />
   );
 };

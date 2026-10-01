@@ -5,31 +5,25 @@ import { openPageInTab } from '../../../utils/popup-detection';
 import { PagePath } from '../../page/paths';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
-import { SettingsScreen } from './settings-screen';
-import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { Section, SettingsScreen } from './settings-screen';
+import { Row } from '@repo/ui/components/ui/row';
+import { ApprovalsRow, FontRow, ThemeRow } from './settings-appearance';
+import { AboutRow, ZignerRow } from './settings-devices-home';
 
-/**
- * "all device and app controls" - the devices-and-app category's power-user
- * list. Wallets & networks lives here too: SetMap moves the wallet list to
- * an account sheet, but that sheet does not exist yet on this base, so the
- * row re-homes here instead of disappearing (see the task report).
- */
+/** "all device and app controls" (SetDevicesAll.dc.html). pro is shelved, so it has no row. */
 export const SettingsDevicesAll = () => {
   const navigate = usePopupNav();
-  const enabledNetworks = useStore(selectEnabledNetworks);
-  const zcashOn = enabledNetworks.includes('zcash');
+  const zcashOn = useStore(selectEnabledNetworks).includes('zcash');
 
   return (
-    <SettingsScreen title='all device and app controls' backPath={PopupPath.SETTINGS_DEVICES}>
-      <div className='flex flex-col gap-5'>
-        <RowGroup>
-          <Row
-            type='screen'
-            label='wallets & networks'
-            description='manage vaults · enable networks'
-            onPress={() => navigate(PopupPath.SETTINGS_WALLETS)}
-          />
-          <Row type='screen' label='zigner' onPress={() => navigate(PopupPath.SETTINGS_ZIGNER)} />
+    <SettingsScreen
+      title='all device and app controls'
+      category='devices'
+      backPath={PopupPath.SETTINGS_DEVICES}
+    >
+      <div className='flex flex-col gap-4'>
+        <Section title='devices'>
+          <ZignerRow />
           {zcashOn && (HARDWARE_WALLET_ENABLED || LEDGER_TRANSPARENT_ENABLED) && (
             <Row
               type='screen'
@@ -42,24 +36,26 @@ export const SettingsDevicesAll = () => {
             label='device update'
             onPress={() => navigate(PopupPath.SETTINGS_OTA)}
           />
-        </RowGroup>
-
-        <RowGroup>
-          <Row
-            type='screen'
-            label='appearance'
-            description='theme · type · where approvals open'
-            onPress={() => navigate(PopupPath.SETTINGS_APPEARANCE)}
-          />
+        </Section>
+        <Section title='app'>
+          <ThemeRow />
+          <FontRow />
+          <ApprovalsRow />
           <Row
             type='screen'
             label='features'
             onPress={() => navigate(PopupPath.SETTINGS_FEATURES)}
           />
-          {/* pro is shelved until there is a critical mass of users - no row,
-              no upsell copy anywhere in settings (founder decision) */}
-          <Row type='screen' label='about' onPress={() => navigate(PopupPath.SETTINGS_ABOUT)} />
-        </RowGroup>
+          <AboutRow />
+        </Section>
+        {/* the accounts sheet switches wallets; renaming, importing and removing any of them lives here */}
+        <Section title='wallets'>
+          <Row
+            type='screen'
+            label='wallets & networks'
+            onPress={() => navigate(PopupPath.SETTINGS_WALLETS)}
+          />
+        </Section>
       </div>
     </SettingsScreen>
   );
