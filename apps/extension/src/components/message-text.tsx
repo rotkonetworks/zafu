@@ -1,43 +1,51 @@
 /**
- * Chat message text where a `zcash:` payment link (ZIP 321) becomes a "pay"
- * chip that opens send, prefilled for review. Payment requests travel through
- * chats as often as QR codes. Anything that isn't a well-formed
- * single-payment link stays plain text.
+ * Chat message text where a `zcash:` or `zafu:` link becomes a chip that
+ * opens the screen it fills, for review. Payment requests travel through
+ * chats as often as QR codes. A link zafu can't open stays plain text.
  */
 
-import { useNavigate } from 'react-router-dom';
-import { formatZecAmount, parseZip321 } from '@repo/wallet/networks/zcash/zip321';
+import { formatZecAmount } from '@repo/wallet/networks/zcash/zip321';
+import { notYet, parseLink, type Intent } from '../links/router';
 import { PopupPath } from '../routes/popup/paths';
+import { usePopupNav } from '../utils/navigate';
 
-const LINK = /zcash:[^\s<>"']+/gi;
+const LINK = /(?:zcash|zafu):[^\s<>"']+/gi;
 
-const PayChip = ({ uri }: { uri: string }) => {
-  const navigate = useNavigate();
-  const parsed = parseZip321(uri);
-  const p = parsed.ok && parsed.payments.length === 1 ? parsed.payments[0] : undefined;
-  if (!p) {
+const CHIP: { [K in Intent['kind']]: (i: Extract<Intent, { kind: K }>) => string } = {
+  pay: ({ payments: [p] }) =>
+    [
+      p?.amountZat !== undefined ? `pay ${formatZecAmount(p.amountZat)} ZEC` : 'pay',
+      p?.label ?? p?.message,
+    ]
+      .filter(Boolean)
+      .join(' - '),
+  swap: ({ swap }) =>
+    swap.direction === 'into_zec' ? `swap ${swap.token} into zec` : `swap zec into ${swap.token}`,
+  screen: ({ screen }) => `open ${screen}`,
+  contact: () => 'contact',
+  join: ({ code }) => `join ${code}`,
+};
+
+const LinkChip = ({ uri }: { uri: string }) => {
+  const navigate = usePopupNav();
+  const parsed = parseLink(uri);
+  if (!parsed.ok || notYet(parsed.intent)) {
     return <>{uri}</>;
   }
-  const what = [
-    p.amountZat !== undefined ? `${formatZecAmount(p.amountZat)} ZEC` : 'pay',
-    p.label ?? p.message,
-  ]
-    .filter(Boolean)
-    .join(' - ');
   return (
     <button
       type='button'
-      onClick={() => navigate(`${PopupPath.SEND}?to=${encodeURIComponent(uri)}`)}
+      onClick={() => navigate(PopupPath.LINK, { state: { uri, via: 'message' } })}
       title={uri}
       className='my-0.5 inline-flex items-center gap-1 border border-zigner-gold/40 bg-zigner-gold/10 px-2 py-0.5 text-xs text-zigner-gold hover:bg-zigner-gold/20'
     >
       <span className='i-ph-coins h-3 w-3' />
-      {p.amountZat !== undefined ? `pay ${what}` : what}
+      {(CHIP[parsed.intent.kind] as (i: Intent) => string)(parsed.intent)}
     </button>
   );
 };
 
-/** text split into plain runs and `zcash:` links (trailing punctuation left out) */
+/** text split into plain runs and `zcash:` / `zafu:` links (trailing punctuation left out) */
 export const splitPaymentLinks = (text: string): (string | { uri: string })[] => {
   const parts: (string | { uri: string })[] = [];
   let last = 0;
@@ -61,7 +69,7 @@ export const MessageText = ({ text }: { text: string }) => {
   return (
     <>
       {parts.map((part, i) =>
-        typeof part === 'string' ? part : <PayChip key={`${i}-${part.uri}`} uri={part.uri} />,
+        typeof part === 'string' ? part : <LinkChip key={`${i}-${part.uri}`} uri={part.uri} />,
       )}
     </>
   );

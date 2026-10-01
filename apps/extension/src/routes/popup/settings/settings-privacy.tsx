@@ -112,6 +112,7 @@ const PRIVACY_ROWS: readonly {
     group: 'people',
     visible: n => hasFeature(n, 'zcash'),
   },
+  { key: 'openZafuLinks', label: 'zafu: links', group: 'people' },
   { key: 'enableIdentity', label: 'zid identity', group: 'people' },
 ];
 

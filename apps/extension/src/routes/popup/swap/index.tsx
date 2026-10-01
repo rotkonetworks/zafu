@@ -82,12 +82,15 @@ import { useBackNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { useLocation } from 'react-router-dom';
 import { hasFeature } from '../../../config/networks';
+import { looksLikeLink, toUri } from '../../../links/router';
+import { viaLine, type SwapLinkState } from '../../../links/land';
+import { usePopupNav } from '../../../utils/navigate';
 
 /**
  * Router state accepted by the swap page. Set from the row-level "Swap X"
  * quick-action on the home asset list so the from-leg boots pre-selected.
  */
-interface SwapLocationState {
+interface SwapLocationState extends Partial<SwapLinkState> {
   /** Base denom of the asset to preselect as the FROM leg. Falls back to
    *  top-priority balance when the denom is not found. */
   prefillFromAsset?: string;
@@ -137,7 +140,20 @@ export const SwapPage = () => {
   }
 
   if (activeNetwork === 'zcash') {
-    return <ZcashCrosschainSwap />;
+    // a new link remounts the form, filled in afresh
+    return (
+      <ZcashCrosschainSwap
+        key={location.key}
+        link={swapState?.link ? { link: swapState.link, via: swapState.via } : undefined}
+      />
+    );
+  }
+  if (swapState?.link) {
+    return (
+      <p className='px-4 py-12 text-center text-sm text-fg-muted'>
+        swap links open with zcash · please switch to zcash, then open the link again
+      </p>
+    );
   }
   return <PenumbraSwap prefillFromAsset={swapState?.prefillFromAsset} />;
 };
@@ -172,17 +188,23 @@ function LiveTimer({ startMs }: { startMs: number }) {
   return <div className='font-mono text-2xl tabular-nums text-zigner-gold'>{elapsed}s</div>;
 }
 
-const ZcashCrosschainSwap = () => {
+const ZcashCrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const goBack = useBackNav(PopupPath.INDEX);
+  const navigate = usePopupNav();
   const { address: zcashAddress } = useActiveAddress();
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { contacts } = useStore(contactsSelector);
   const [step, setStep] = useState<ZcashSwapStep>('input');
-  const [direction, setDirection] = useState<'from_zec' | 'into_zec'>('into_zec');
-  const [amountIn, setAmountIn] = useState('');
+  const [direction, setDirection] = useState<'from_zec' | 'into_zec'>(
+    link?.link.direction ?? 'into_zec',
+  );
+  const [amountIn, setAmountIn] = useState(link?.link.amount ?? '');
   const [selectedToken, setSelectedToken] = useState<NearToken | undefined>();
-  const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
-  const [destinationAddress, setDestinationAddress] = useState('');
+  // a link names its token by symbol: the picker opens (its list is the
+  // fetch the egress sheet asks about) and picks it once the list is here
+  const [linkToken, setLinkToken] = useState(link?.link);
+  const [tokenPickerOpen, setTokenPickerOpen] = useState(!!link);
+  const [destinationAddress, setDestinationAddress] = useState(link?.link.address ?? '');
   const [showContacts, setShowContacts] = useState(false);
   const [riskAcknowledged, setRiskAcknowledged] = useState(false);
   const [quote, setQuote] = useState<SwapQuoteResponse | undefined>();
@@ -255,6 +277,22 @@ const ZcashCrosschainSwap = () => {
   });
   const tokens = tokenQuery.data?.swappable ?? [];
   const tokensLoading = tokenQuery.isFetching;
+  useEffect(() => {
+    if (!linkToken || !tokenQuery.data) {
+      return;
+    }
+    const { token, chain } = linkToken;
+    const t = tokenQuery.data.swappable.find(
+      t => t.symbol.toLowerCase() === token && (!chain || t.blockchain.toLowerCase() === chain),
+    );
+    setLinkToken(undefined);
+    if (t) {
+      setSelectedToken(t);
+      setTokenPickerOpen(false);
+    } else {
+      setError(`${token} isn't offered for swaps right now · please pick another`);
+    }
+  }, [linkToken, tokenQuery.data]);
 
   // popular tokens first
   const sortedTokens = useMemo(() => {
@@ -568,6 +606,18 @@ const ZcashCrosschainSwap = () => {
   }, []);
 
   const canQuote = selectedToken && parseFloat(amountIn) > 0 && zcashAddress && destinationAddress;
+  // what this form would fill for someone else: never this wallet's own refund address
+  const shareLink =
+    selectedToken &&
+    toUri({
+      kind: 'swap',
+      swap: {
+        direction,
+        token: selectedToken.symbol.toLowerCase(),
+        amount: amountIn || undefined,
+        address: isFromZec ? destinationAddress || undefined : undefined,
+      },
+    });
 
   // a quote is only good for a short window - watch for it passing while the
   // user is still reviewing, so nothing is sent against a stale rate
@@ -739,6 +789,10 @@ const ZcashCrosschainSwap = () => {
               type='text'
               value={destinationAddress}
               onChange={e => {
+                if (looksLikeLink(e.target.value)) {
+                  navigate(PopupPath.LINK, { state: { uri: e.target.value, via: 'pasted' } });
+                  return;
+                }
                 setDestinationAddress(e.target.value);
                 setShowContacts(false);
               }}
@@ -773,6 +827,10 @@ const ZcashCrosschainSwap = () => {
           </div>
 
           {error && <p className='text-xs text-red-400'>{error}</p>}
+
+          {shareLink && (
+            <CopyButton text={shareLink} label='copy swap link' className='self-center' />
+          )}
 
           <button
             onClick={() => void handleRequestQuote()}
@@ -849,6 +907,7 @@ const ZcashCrosschainSwap = () => {
               />
               i accept these risks.
             </label>
+            {link?.via && <p className='mt-2 text-[11px] text-fg-muted'>{viaLine(link.via)}</p>}
 
             <div className='mt-3 flex gap-2'>
               <button
