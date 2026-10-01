@@ -40,6 +40,9 @@ export enum PopupPath {
   MULTISIG_SIGN = '/multisig/sign',
   NOTE_SYNC = '/note-sync',
 
+  // every transaction (home shows the newest few)
+  ACTIVITY = '/activity',
+
   // Per-pool Zcash notes (orchard legacy vs ironwood); IRONWOOD_MIGRATION-gated
   POOL_NOTES = '/pool-notes',
 

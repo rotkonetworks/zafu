@@ -93,6 +93,7 @@ export const popupScreens = {
   multisigSign: () => import('./multisig/sign').then(m => m.MultisigSign),
   noteSync: () => import('./note-sync').then(m => m.NoteSyncPage),
   poolNotes: () => import('./pool-notes').then(m => m.PoolNotesPage),
+  activity: () => import('./home/activity').then(m => m.ActivityPage),
   identity: () => import('./identity').then(m => m.IdentityPage),
   passwords: () => import('./identity/passwords').then(m => m.PasswordsPage),
   contactPicker: () => import('./pick-contacts').then(m => m.ContactPicker),

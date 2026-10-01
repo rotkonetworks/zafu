@@ -1,8 +1,6 @@
 /**
  * Format ZEC with meaningful digits only - no trailing zeros, min 2 decimals.
- * `maxDecimals` caps precision (default 8, full precision); the hero balance
- * card passes 4 so a long amount fits without overflowing - full precision
- * stays available in the pool view.
+ * `maxDecimals` caps precision (default 8, full precision).
  */
 export function fmtZec(val: number, maxDecimals = 8): string {
   if (val === 0) {
@@ -17,10 +15,9 @@ export function fmtZec(val: number, maxDecimals = 8): string {
   return decimals < 2 ? s + '0'.repeat(2 - decimals) : s;
 }
 
-/** hero balance formatter - see `fmtZec`'s `maxDecimals`. */
-export function fmtZecHero(val: number): string {
-  return fmtZec(val, 4);
-}
+/** home's figures: four fixed decimals, so amounts line up (full precision
+ *  stays in the pool view) */
+export const fmtZecHero = (val: number): string => val.toFixed(4);
 
 export function zatToZec(zat: bigint | string): string {
   const v = typeof zat === 'string' ? BigInt(zat) : zat;

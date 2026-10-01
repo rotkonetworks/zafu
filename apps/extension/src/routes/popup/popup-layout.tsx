@@ -40,6 +40,7 @@ const hiddenTabRoutes = [
   PopupPath.MULTISIG_SIGN,
   PopupPath.NOTE_SYNC,
   PopupPath.POOL_NOTES,
+  PopupPath.ACTIVITY,
 ];
 
 /**
@@ -73,6 +74,7 @@ const hiddenHeaderRoutes = [
   PopupPath.MULTISIG_SIGN,
   PopupPath.NOTE_SYNC,
   PopupPath.POOL_NOTES,
+  PopupPath.ACTIVITY,
 ];
 
 /** check if current path matches any hidden routes */
