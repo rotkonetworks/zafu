@@ -180,7 +180,10 @@ mod tests {
         assert!(c.max_body_bytes >= 64 * (16 + 64) * 2);
         assert!(c.max_entries_per_coord > c.max_entries_per_put as i64);
         assert_eq!(c.port, 8080);
-        assert!(c.scope_retention.is_empty(), "no per-scope override by default");
+        // not asserting scope_retention here: MINIRELAY_SCOPE_RETENTION is
+        // process-global env state and cargo test runs this file's tests
+        // concurrently by default - env_wiring_reads_scope_retention_and_its_cap
+        // below exercises that plumbing on its own, with its own set/remove.
     }
 
     #[test]
