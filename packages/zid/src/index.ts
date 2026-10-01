@@ -97,8 +97,6 @@ export type {
 export { encodeNoiseInitMemo, decodeNoiseInitMemo, isNoiseInitMemo } from './noise-init-memo';
 export type { NoiseInitPayload } from './noise-init-memo';
 
-export { encodeSealedRemark, decodeSealedRemark, isSealedRemark } from './sealed-remark';
-
 export {
   jamTimeslot,
   presenceEpoch,
