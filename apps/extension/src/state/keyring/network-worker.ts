@@ -178,7 +178,10 @@ const workers = new Map<NetworkType, WorkerState>();
 const spawnPromises = new Map<NetworkType, Promise<void>>();
 
 let messageId = 0;
-const nextId = () => `msg_${++messageId}`;
+// per-realm prefix: every popup counts from 1 and the host broadcasts replies
+// to all of them, so a bare counter would let two popups resolve each other's calls
+const realmId = crypto.randomUUID().slice(0, 8);
+const nextId = () => `msg_${realmId}_${++messageId}`;
 
 /**
  * spawn a dedicated worker for a network
@@ -272,7 +275,8 @@ const handleWorkerMessage = (
     // does not have. Keyed PER WALLET: one shared key would let a
     // fully-synced wallet's height hydrate the bar for a wallet that has
     // scanned nothing, which is the same lie in the opposite direction.
-    if (network === 'zcash' && msg.walletId) {
+    // offscreen documents have no chrome.storage; the clients write it
+    if (network === 'zcash' && msg.walletId && !isOffscreenHost()) {
       const { currentHeight } = (msg.payload ?? {}) as { currentHeight?: number };
       if (typeof currentHeight === 'number' && currentHeight > 0) {
         void chrome.storage.local
