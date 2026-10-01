@@ -55,7 +55,8 @@ import { parseZcashMeHandle, type ZcashMeProfile } from '../../../services/zcash
 import { directoryProfileByAddress } from '../../../services/zcashme/directory';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { HARDWARE_WALLET_ENABLED, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
-import { walletKind, zcashSendRefusal } from '../../../signing/wallet-kind';
+import { CAPS, walletKind, zcashSendRefusal } from '../../../signing/wallet-kind';
+import { persistentSurface, zcashSignerFor } from '../../../signing/resolve';
 import { connectLedgerBtc, zcashTransparentPath } from '../../../ledger/hw-btc-signer';
 import { ledgerTransparentSendFlowBtc } from '../../../ledger/hw-btc-flow';
 // connectLedger pairs/opens a WebHID session; ledgerSignerFor wraps the
@@ -65,7 +66,6 @@ import { ledgerSignerFor } from '../../../signing/ledger-signer';
 import { signAndBroadcast } from '../../../signing/cold-send';
 import { createZignerSigner } from '../../../signing/zigner-signer';
 import { frostAirgapSigner, frostSelfCustodySigner } from '../../../signing/frost-signer';
-import { isPopup } from '../../../utils/popup-detection';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { formatZecAmount, isZip321Uri, parseZip321 } from '@repo/wallet/networks/zcash/zip321';
@@ -109,7 +109,7 @@ type SendStep =
   | 'airgap-flow';
 
 /** zatoshi → ZEC, trailing zeros trimmed. Matches the formatting used inline. */
-const fmtZecShort = (zat: bigint): string =>
+const fmtZecShort = (zat: bigint | string): string =>
   (Number(zat) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
 
 /** address-book rows: keep the head/tail that actually identify the address. */
@@ -417,15 +417,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     activeZcashWallet?.ufvk ??
     (activeZcashWallet?.orchardFvk?.startsWith('uview') ? activeZcashWallet.orchardFvk : undefined);
 
-  // which signer this wallet holds; flags decide which arm of handleSign runs,
-  // and a kind without a signer is refused before the form renders.
+  // which signer this wallet holds; the resolver picks its implementation in
+  // handleSign, and a kind without a signer for this pool is refused before
+  // the form renders.
   const kind = selectedKeyInfo && walletKind(selectedKeyInfo, activeZcashWallet);
-  const refusal = kind && zcashSendRefusal(kind, SEND_FLAGS);
-  const coldSignerType = selectedKeyInfo?.insensitive?.['coldSignerType'] as string | undefined;
-  const isLedgerAccount =
-    HARDWARE_WALLET_ENABLED && (kind === 'ledger-shielded' || kind === 'ledger-transparent');
-  // t->t through the bitcoin app, not the shielded PCZT path
-  const isTransparentLedger = LEDGER_TRANSPARENT_ENABLED && kind === 'ledger-transparent';
 
   // ── what this form is allowed to say about your money ───────────────────
   //
@@ -442,6 +437,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // ironwood. Guessing orchard here would advertise funds the build refuses.
   const activePool: 'orchard' | 'ironwood' =
     sendChainHeight > 0 && sendChainHeight < nu63ActivationHeight(mainnet) ? 'orchard' : 'ironwood';
+  const refusal = kind && zcashSendRefusal(kind, SEND_FLAGS);
 
   const poolNotes = usePoolNotes(storeId);
 
@@ -609,7 +605,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // into the receipt, never mislead the approval.
   useEffect(() => {
     if (amountQuote?.ok) {
-      setFee((Number(amountQuote.feeZat) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, ''));
+      setFee(fmtZecShort(amountQuote.feeZat));
     }
   }, [amountQuote]);
 
@@ -742,306 +738,24 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     try {
       const walletId = selectedKeyInfo.id;
       const amountZat = Math.round(Number(amount) * 1e8).toString();
-
-      if (selectedKeyInfo.type === 'mnemonic') {
-        // mnemonic wallet: verify password, then build signed tx + broadcast
-        const authorized = await requestAuth();
-        if (!authorized) {
-          setStep('review');
-          return;
-        }
-        const mnemonic = await getMnemonic(walletId);
-        const result = await buildSendTxInWorker(
-          'zcash',
-          storeId ?? walletId,
-          zidecarUrl,
-          recipient.trim(),
-          amountZat,
-          memo,
-          accountIndex,
-          mainnet,
-          mnemonic,
-        );
-
-        if ('txid' in result) {
-          const feeZec = (Number(result.fee) / 1e8)
-            .toFixed(8)
-            .replace(/0+$/, '')
-            .replace(/\.$/, '');
-          setFee(feeZec);
-          void promoteToBroadcasted(result.txid);
-          complete(result.txid);
-          setTotalElapsedSec(Math.round((Date.now() - buildStartRef.current) / 1000));
-          setStep('complete');
-          void recordUsage(recipient, 'zcash');
-          if (shouldSuggestSave(recipient)) {
-            setShowSavePrompt(true);
-          }
-        }
-      } else if (isTransparentLedger) {
-        // Transparent Ledger (hw-app-btc) t->t send. No PCZT: fetch UTXOs, plan,
-        // sign the whole transparent tx on the device's Zcash (Bitcoin-app) path,
-        // broadcast. WebHID needs a persistent surface - refuse in the popup.
-        if (isPopup()) {
-          throw new Error(
-            'open zafu in a tab or the side panel to sign with a ledger - usb sessions ' +
-              'are dropped when the toolbar popup loses focus',
-          );
-        }
-        const fromAddress = activeZcashWallet!.transparentAddress!; // implied by the kind
-        // ZIP-317 transparent fee: a conservative fixed estimate covering a few
-        // logical actions. A slightly-high fee still confirms; tune on device.
-        const feeZat = 20000n;
-        setFee((Number(feeZat) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, ''));
-        setStep('ledger-sign');
-        const transport = await connectLedgerBtc();
-        try {
-          const { txid } = await ledgerTransparentSendFlowBtc(
-            transport,
-            {
-              serverUrl: zidecarUrl,
-              fromAddresses: [fromAddress],
-              recipientAddress: recipient.trim(),
-              amountZat: BigInt(amountZat),
-              feeZat,
-              change: { address: fromAddress, path: zcashTransparentPath(0) },
-              accountIndex: 0,
-              mainnet,
-              blockHeight: sendChainHeight,
-            },
-            { fetchUtxos: getTransparentUtxosInWorker, broadcast: broadcastRawTxInWorker },
-          );
-          setStep('broadcast');
-          void promoteToBroadcasted(txid);
-          complete(txid);
-          setTotalElapsedSec(Math.round((Date.now() - buildStartRef.current) / 1000));
-          setStep('complete');
-          void recordUsage(recipient, 'zcash');
-          if (shouldSuggestSave(recipient)) {
-            setShowSavePrompt(true);
-          }
-        } finally {
-          await transport.close();
-        }
-      } else if (activeZcashWallet?.multisig?.custody === 'airgapSigner') {
-        // airgap multisig: build a PCZT (gh #17) then hand off to FrostAirgapSignFlow.
-        if (!ufvk) {
-          throw new Error('UFVK required for airgap multisig PCZT build');
-        }
-        // frost=true: the worker fails closed post-NU6.3 rather than return an
-        // ironwood PCZT with empty sighash/alphas that no co-signer can sign.
-        const result = await buildSendTxPcztInWorker(
-          'zcash',
-          storeId ?? walletId,
-          zidecarUrl,
-          recipient.trim(),
-          amountZat,
-          memo,
-          0,
-          mainnet,
-          ufvk,
-          true,
-        );
-        if (!result.pcztHex) {
-          throw new Error('PCZT build succeeded but pcztHex is empty - reload the extension');
-        }
-        pcztMultisigRef.current = result;
-        setFee((Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, ''));
-        setStep('airgap-flow');
-      } else if (activeZcashWallet?.multisig) {
-        // self-custody multisig: zafu has the encrypted FROST share locally.
-        // PCZT-native (gh #17): build a standard pczt::Pczt so co-signers can
-        // inspect + sighash-verify the spend before signing.
-        const authorized = await requestAuth();
-        if (!authorized) {
-          setStep('review');
-          return;
-        }
-        const ms = activeZcashWallet.multisig;
-        const secrets = await useStore
-          .getState()
-          .keyRing.getMultisigSecrets(activeZcashWallet.vaultId);
-        if (!secrets) {
-          throw new Error('failed to decrypt multisig keys - unlock wallet first');
-        }
-        if (!ufvk) {
-          throw new Error('UFVK required for multisig PCZT build');
-        }
-        // frost=true: see the airgap branch above - post-NU6.3 the worker
-        // refuses rather than build an ironwood PCZT the FROST rounds and
-        // complete_orchard_pczt (orchard/v5-only) cannot consume.
-        const result = await buildSendTxPcztInWorker(
-          'zcash',
-          storeId ?? walletId,
-          zidecarUrl,
-          recipient.trim(),
-          amountZat,
-          memo,
-          0,
-          mainnet,
-          ufvk,
-          true,
-        );
-
-        setFee((Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, ''));
-
-        setStep('frost-room');
-        try {
-          // The FROST rounds are a synchronous-await cold signer: run both
-          // rounds, aggregate, and inject the orchard sigs via the shared
-          // signAndBroadcast tail (complete_orchard_pczt). Room/progress/abort
-          // UI stays here via the ctx callbacks; broadcast via onSigned - so the
-          // step transitions are identical to the old inline flow. See
-          // signing/frost-signer.ts + signing/cold-send.ts.
-          const frostSigner = frostSelfCustodySigner({
-            ms,
-            secrets,
-            unsigned: result,
-            recipient: recipient.trim(),
-            amountZat,
-            setFrostAbort: a => {
-              frostAbortRef.current = a;
-            },
-            setRoomCode: code => {
-              setFrostRoomCode(code);
-              setStep('frost-signing');
-            },
-            setProgress: setFrostProgress,
-          });
-          const finalResult = await signAndBroadcast(
-            frostSigner,
-            {
-              pcztHex: result.pcztHex,
-              spendIndices: result.spendIndices,
-              coldSendId: result.coldSendId,
-            },
-            { walletId: storeId ?? walletId, zidecarUrl, mainnet },
-            {
-              onSigned: () => {
-                setStep('broadcast');
-                setFrostProgress('broadcasting...');
-              },
-            },
-          );
-          void promoteToBroadcasted(finalResult.txid);
-          complete(finalResult.txid);
-          setTotalElapsedSec(Math.round((Date.now() - buildStartRef.current) / 1000));
-          setStep('complete');
-          void recordUsage(recipient, 'zcash');
-          if (shouldSuggestSave(recipient)) {
-            setShowSavePrompt(true);
-          }
-        } finally {
-          frostAbortRef.current = null;
-        }
-      } else if (isLedgerAccount) {
-        // ── ledger hardware wallet (single-signer): WebHID PCZT signing ──
-        // Mirrors the zigner BUILD below but swaps the QR round-trip for a
-        // WebHID transport: build the same orchard PCZT, sign the SpendAuth
-        // sigs on-device, then reuse the FROST-style inject
-        // (completeOrchardPcztInWorker) to finalize + broadcast. Purely
-        // additive; the mnemonic/zigner/FROST branches are untouched.
-        if (!ufvk) {
-          throw new Error('UFVK required for ledger signing');
-        }
-        // WebHID needs a live user gesture in a document that survives the
-        // transfer. The toolbar popup is torn down on blur (and the device
-        // picker steals focus), so the session dies mid-sign. Refuse up front
-        // instead of failing halfway through a signing round.
-        if (isPopup()) {
-          throw new Error(
-            'open zafu in a tab or the side panel to sign with a ledger - usb sessions ' +
-              'are dropped when the toolbar popup loses focus',
-          );
-        }
-        // 0 = "no hint" sentinel; the worker anchors to the live tip (same as
-        // the zigner branch).
-        const targetHeightHint = 0;
-        const result = await buildSendTxPcztInWorker(
-          'zcash',
-          storeId ?? walletId,
-          zidecarUrl,
-          recipient.trim(),
-          amountZat,
-          memo,
-          targetHeightHint,
-          mainnet,
-          ufvk,
-        );
-
-        // Ironwood (NU6.3 / V6) is not implemented for ledger. The build tags
-        // the UR type: 'zcash-pczt' for an orchard PCZT, the zigner-module
-        // envelope for an ironwood send. This MUST fail closed: an absent or
-        // unrecognised tag previously skipped the check entirely
-        // (`if (buildUrType && ...)`), which would have handed an ironwood
-        // build to the orchard-V5 translator.
-        const buildUrType = result.urFrames[0]?.split('/')[0]?.replace(/^ur:/i, '');
-        if (buildUrType !== 'zcash-pczt') {
-          throw new Error(
-            `ledger signing supports orchard (V5) PCZTs only; this build is ` +
-              `"${buildUrType ?? 'untagged'}". note that NU6.3 disabled orchard→orchard ` +
-              `sends on mainnet, so ledger shielded sends are unavailable until ` +
-              `ironwood (V6) support lands.`,
-          );
-        }
-
-        pcztUnsignedRef.current = result;
-        // Bind the response type to what actually went out on the wire.
-        pcztRequestWasCompactRef.current = result.compactRequest === true;
-        const feeZec = (Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
-        setFee(feeZec);
-
-        // show the "confirm on your Ledger" prompt while the device signs.
-        setStep('ledger-sign');
-
-        // TODO(ledger-session): the connected Ledger sessionId should be
-        // plumbed from the connect/pair step (a keyring or dedicated ledger
-        // store slice populated when the device is paired during onboarding).
-        // Until that plumbing lands, (re)open a session here to sign this round.
-        // Ledger as a composed ExternalSigner service (server-as-a-function):
-        // the WebHID sign is the base service; the feature-flag + app-version
-        // gates are filters (ledgerSignerFor). The send flow just picks the
-        // service and hands it to the shared orchard cold-send tail, which
-        // injects the spend-auth sigs via complete_orchard_pczt (re-verified in
-        // the worker) and broadcasts - the same tail every cold signer converges
-        // on. See signing/cold-send.ts.
-        // The buildUrType guard above already refused anything but ur:zcash-pczt,
-        // and the Ledger signer returns raw spend-auth sigs (the `spendAuthSigs`
-        // inject variant), so this completes via the orchard inject role.
-        const session = await connectLedger();
-        const finalResult = await signAndBroadcast(
-          ledgerSignerFor(session),
-          {
-            pcztHex: result.pcztHex,
-            spendIndices: result.spendIndices,
-            coldSendId: result.coldSendId,
-          },
-          { walletId: storeId ?? walletId, zidecarUrl, mainnet },
-          { onSigned: () => setStep('broadcast') },
-        );
-        pcztUnsignedRef.current = null;
-        void promoteToBroadcasted(finalResult.txid);
-        complete(finalResult.txid);
+      const coldDeps = { walletId: storeId ?? walletId, zidecarUrl, mainnet };
+      const finish = (txid: string) => {
+        void promoteToBroadcasted(txid);
+        complete(txid);
         setTotalElapsedSec(Math.round((Date.now() - buildStartRef.current) / 1000));
         setStep('complete');
         void recordUsage(recipient, 'zcash');
         if (shouldSuggestSave(recipient)) {
           setShowSavePrompt(true);
         }
-      } else {
-        // ── zigner wallet (single-signer): PCZT signing flow ──
-        // Replaces the legacy [sighash][alphas][summary] simple format. The
-        // PCZT round-trip ties zigner's display to the signed bytes so a
-        // compromised hot wallet can't decouple them.
+      };
+      // The worker overrides the height with the live chain tip; 0 is a "no
+      // hint" sentinel that anchors to the tip it just fetched. A hardcoded
+      // height historically risked branch_id mismatches on testnet.
+      const buildPczt = async (frost = false) => {
         if (!ufvk) {
-          throw new Error('UFVK required for zigner signing');
+          throw new Error('this wallet has no viewing key to build with · please re-import it');
         }
-        // The worker overrides this with the live chain tip; we pass 0 as
-        // a "no hint" sentinel that the worker treats as "use the tip you
-        // just fetched for the merkle anchor". Hardcoding a stale block
-        // height here historically risked branch_id mismatches on testnet
-        // where activation heights diverge from mainnet.
-        const targetHeightHint = 0;
         const result = await buildSendTxPcztInWorker(
           'zcash',
           storeId ?? walletId,
@@ -1049,71 +763,239 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           recipient.trim(),
           amountZat,
           memo,
-          targetHeightHint,
+          0,
           mainnet,
           ufvk,
+          frost,
         );
+        setFee(fmtZecShort(result.fee));
+        return result;
+      };
 
-        pcztUnsignedRef.current = result;
-        // Bind the response type to what actually went out on the wire.
-        pcztRequestWasCompactRef.current = result.compactRequest === true;
-        const feeZec = (Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
-        setFee(feeZec);
-        // e.g. "ur:zigner-module/1-3/..." -> "zigner-module" (ironwood),
-        // "ur:zcash-pczt/..." -> "zcash-pczt" (orchard). The zigner replays the
-        // signed PCZT under this same type, so the return scanner must match it.
-        const displayUrType = result.urFrames[0]?.split('/')[0]?.replace(/^ur:/i, '');
-        setPcztSignedUrType(displayUrType || 'zcash-pczt');
+      // one implementation per signer; the resolver picks the wallet's own,
+      // or refuses without calling any of them.
+      await zcashSignerFor(kind ?? 'unknown', SEND_FLAGS, {
+        hot: async () => {
+          // verify password, then build signed tx + broadcast
+          const authorized = await requestAuth();
+          if (!authorized) {
+            setStep('review');
+            return;
+          }
+          const mnemonic = await getMnemonic(walletId);
+          const result = await buildSendTxInWorker(
+            'zcash',
+            storeId ?? walletId,
+            zidecarUrl,
+            recipient.trim(),
+            amountZat,
+            memo,
+            accountIndex,
+            mainnet,
+            mnemonic,
+          );
+          if ('txid' in result) {
+            setFee(fmtZecShort(result.fee));
+            finish(result.txid);
+          }
+        },
 
-        // Zigner is a SUSPENDED cold signer (signing/zigner-signer.ts): the
-        // signature returns across a UI cycle. createZignerSigner parks a
-        // Promise; `display` shows the animated UR, then
-        // handlePcztSignatureScanned reconstructs the signed PCZT and resolves it
-        // via the deliver fn stored below. signAndBroadcast then extracts +
-        // broadcasts (the `signedPczt` variant, pool-agnostic - orchard AND
-        // ironwood). This requires the signing surface (tab/side-panel) to stay
-        // open for the sign->scan duration, same as the pre-existing flow.
-        // eslint-disable-next-line @typescript-eslint/unbound-method -- createZignerSigner returns plain closures, not this-bound methods
-        const { signer, deliver, fail } = createZignerSigner(() => {
-          setPcztSignFrames(result.urFrames);
-          startSigning({
-            id: `zcash-${Date.now()}`,
-            network: 'zcash',
-            summary: result.summary || `send ${amount} zec to ${recipient.slice(0, 20)}...`,
-            // legacy field kept for the signing-store consumers; the actual
-            // QR data the UI displays is `pcztSignFrames` (animated UR).
-            signRequestQr: '',
-            recipient,
-            amount,
-            fee: feeZec,
-            createdAt: Date.now(),
+        'ledger-transparent': persistentSurface(async () => {
+          // hw-app-btc t->t send. No PCZT: fetch UTXOs, plan, sign the whole
+          // transparent tx on the device's Zcash (Bitcoin-app) path, broadcast.
+          const fromAddress = activeZcashWallet!.transparentAddress!; // implied by the kind
+          // ZIP-317 transparent fee: a conservative fixed estimate covering a
+          // few logical actions. A slightly-high fee still confirms.
+          const feeZat = 20000n;
+          setFee(fmtZecShort(feeZat));
+          setStep('ledger-sign');
+          const transport = await connectLedgerBtc();
+          try {
+            const { txid } = await ledgerTransparentSendFlowBtc(
+              transport,
+              {
+                serverUrl: zidecarUrl,
+                fromAddresses: [fromAddress],
+                recipientAddress: recipient.trim(),
+                amountZat: BigInt(amountZat),
+                feeZat,
+                change: { address: fromAddress, path: zcashTransparentPath(0) },
+                accountIndex: 0,
+                mainnet,
+                blockHeight: sendChainHeight,
+              },
+              { fetchUtxos: getTransparentUtxosInWorker, broadcast: broadcastRawTxInWorker },
+            );
+            setStep('broadcast');
+            finish(txid);
+          } finally {
+            await transport.close();
+          }
+        }),
+
+        'frost-airgap': async () => {
+          // build a PCZT (gh #17) then hand off to FrostAirgapSignFlow
+          const result = await buildPczt(true);
+          if (!result.pcztHex) {
+            throw new Error('PCZT build succeeded but pcztHex is empty - reload the extension');
+          }
+          pcztMultisigRef.current = result;
+          setStep('airgap-flow');
+        },
+
+        'frost-self': async () => {
+          // zafu has the encrypted FROST share locally. PCZT-native (gh #17):
+          // co-signers can inspect + sighash-verify the spend before signing.
+          const authorized = await requestAuth();
+          if (!authorized) {
+            setStep('review');
+            return;
+          }
+          const ms = activeZcashWallet!.multisig!; // implied by the kind
+          const secrets = await useStore
+            .getState()
+            .keyRing.getMultisigSecrets(activeZcashWallet!.vaultId);
+          if (!secrets) {
+            throw new Error('failed to decrypt multisig keys - unlock wallet first');
+          }
+          const result = await buildPczt(true);
+          setStep('frost-room');
+          try {
+            // both rounds run inside the signer; room/progress/abort UI stays
+            // here via the ctx callbacks, and the orchard sigs are injected by
+            // the shared tail (complete_orchard_pczt). See signing/frost-signer.ts.
+            const frostSigner = frostSelfCustodySigner({
+              ms,
+              secrets,
+              unsigned: result,
+              recipient: recipient.trim(),
+              amountZat,
+              setFrostAbort: a => {
+                frostAbortRef.current = a;
+              },
+              setRoomCode: code => {
+                setFrostRoomCode(code);
+                setStep('frost-signing');
+              },
+              setProgress: setFrostProgress,
+            });
+            const finalResult = await signAndBroadcast(
+              frostSigner,
+              {
+                pcztHex: result.pcztHex,
+                spendIndices: result.spendIndices,
+                coldSendId: result.coldSendId,
+              },
+              coldDeps,
+              {
+                onSigned: () => {
+                  setStep('broadcast');
+                  setFrostProgress('broadcasting...');
+                },
+              },
+            );
+            finish(finalResult.txid);
+          } finally {
+            frostAbortRef.current = null;
+          }
+        },
+
+        'ledger-shielded': persistentSurface(async () => {
+          // WebHID PCZT signing: the same orchard PCZT as zigner, SpendAuth sigs
+          // signed on-device, injected via complete_orchard_pczt.
+          const result = await buildPczt();
+          // Ironwood (NU6.3 / V6) is not implemented for ledger. This MUST fail
+          // closed: an absent or unrecognised tag must never reach the
+          // orchard-V5 translator.
+          const buildUrType = result.urFrames[0]?.split('/')[0]?.replace(/^ur:/i, '');
+          if (buildUrType !== 'zcash-pczt') {
+            throw new Error(
+              `ledger signing supports orchard (V5) PCZTs only; this build is ` +
+                `"${buildUrType ?? 'untagged'}". note that NU6.3 disabled orchard→orchard ` +
+                `sends on mainnet, so ledger shielded sends are unavailable until ` +
+                `ironwood (V6) support lands.`,
+            );
+          }
+          pcztUnsignedRef.current = result;
+          // Bind the response type to what actually went out on the wire.
+          pcztRequestWasCompactRef.current = result.compactRequest === true;
+          // show the "confirm on your Ledger" prompt while the device signs.
+          setStep('ledger-sign');
+          // TODO(ledger-session): plumb the paired sessionId from the connect
+          // step; until then (re)open a session here to sign this round. The
+          // feature-flag + app-version gates are filters (ledgerSignerFor); the
+          // device returns raw spend-auth sigs, injected by the shared tail.
+          const session = await connectLedger();
+          const finalResult = await signAndBroadcast(
+            ledgerSignerFor(session),
+            {
+              pcztHex: result.pcztHex,
+              spendIndices: result.spendIndices,
+              coldSendId: result.coldSendId,
+            },
+            coldDeps,
+            { onSigned: () => setStep('broadcast') },
+          );
+          pcztUnsignedRef.current = null;
+          finish(finalResult.txid);
+        }),
+
+        // zigner, and keystone on orchard: the PCZT QR round trip ties the
+        // device's display to the signed bytes, so a compromised hot wallet
+        // cannot decouple them.
+        zigner: async () => {
+          const result = await buildPczt();
+          pcztUnsignedRef.current = result;
+          // Bind the response type to what actually went out on the wire.
+          pcztRequestWasCompactRef.current = result.compactRequest === true;
+          // e.g. "ur:zigner-module/1-3/..." -> "zigner-module" (ironwood),
+          // "ur:zcash-pczt/..." -> "zcash-pczt" (orchard). The zigner replays
+          // the signed PCZT under this same type, so the return scanner must match.
+          const displayUrType = result.urFrames[0]?.split('/')[0]?.replace(/^ur:/i, '');
+          setPcztSignedUrType(displayUrType || 'zcash-pczt');
+
+          // A SUSPENDED cold signer (signing/zigner-signer.ts): `display` shows
+          // the animated UR, then handlePcztSignatureScanned reconstructs the
+          // signed PCZT and resolves the parked Promise via `deliver`.
+          // signAndBroadcast then extracts + broadcasts (the `signedPczt`
+          // variant, orchard AND ironwood). The signing surface (tab/side-panel)
+          // must stay open for the sign->scan duration.
+          // eslint-disable-next-line @typescript-eslint/unbound-method -- createZignerSigner returns plain closures, not this-bound methods
+          const { signer, deliver, fail } = createZignerSigner(() => {
+            setPcztSignFrames(result.urFrames);
+            startSigning({
+              id: `zcash-${Date.now()}`,
+              network: 'zcash',
+              summary: result.summary || `send ${amount} zec to ${recipient.slice(0, 20)}...`,
+              // legacy field kept for the signing-store consumers; the QR the
+              // UI displays is `pcztSignFrames` (animated UR).
+              signRequestQr: '',
+              recipient,
+              amount,
+              fee: fmtZecShort(result.fee),
+              createdAt: Date.now(),
+            });
+            setStep('sign');
           });
-          setStep('sign');
-        });
-        zignerDeliverRef.current = deliver;
-        zignerFailRef.current = fail;
+          zignerDeliverRef.current = deliver;
+          zignerFailRef.current = fail;
 
-        const finalResult = await signAndBroadcast(
-          signer,
-          {
-            pcztHex: result.pcztHex,
-            spendIndices: result.spendIndices,
-            coldSendId: result.coldSendId,
-          },
-          { walletId: storeId ?? walletId, zidecarUrl, mainnet },
-          { onSigned: () => setStep('broadcast') },
-        );
-        zignerDeliverRef.current = null;
-        zignerFailRef.current = null;
-        pcztUnsignedRef.current = null;
-        void promoteToBroadcasted(finalResult.txid);
-        complete(finalResult.txid);
-        setStep('complete');
-        void recordUsage(recipient, 'zcash');
-        if (shouldSuggestSave(recipient)) {
-          setShowSavePrompt(true);
-        }
-      }
+          const finalResult = await signAndBroadcast(
+            signer,
+            {
+              pcztHex: result.pcztHex,
+              spendIndices: result.spendIndices,
+              coldSendId: result.coldSendId,
+            },
+            coldDeps,
+            { onSigned: () => setStep('broadcast') },
+          );
+          zignerDeliverRef.current = null;
+          zignerFailRef.current = null;
+          pcztUnsignedRef.current = null;
+          finish(finalResult.txid);
+        },
+      })();
     } catch (err) {
       frostAbortRef.current?.abort();
       frostAbortRef.current = null;
@@ -1685,11 +1567,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 back
               </Button>
               <Button variant='primary' onClick={() => void handleSign()} className='flex-1'>
-                {selectedKeyInfo?.type === 'mnemonic'
-                  ? 'sign & send'
-                  : isLedgerAccount
-                    ? 'sign with Ledger'
-                    : 'sign with zafu zigner'}
+                {kind && CAPS[kind].signLabel}
               </Button>
             </div>
           </div>
@@ -1947,7 +1825,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               the user can re-sync the zigner's verified balance right here,
               instead of hunting for it in settings after every send.
             */}
-            {coldSignerType === 'zigner' && (
+            {kind && CAPS[kind].afterSend === 'sync-zigner' && (
               <button
                 onClick={() => {
                   onClose();
