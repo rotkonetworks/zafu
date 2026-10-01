@@ -171,10 +171,8 @@ export const PenumbraContent = ({
         <AssetsTable account={account} />
       </Suspense>
 
-      {/* Unshielded Cosmos balances tied to the same key as the Penumbra
-          wallet. Renders nothing when the user has no Cosmos holdings.
-          Account index 0 - the cosmos-balance hooks don't yet split by
-          Penumbra account; v1 uses the wallet's primary derivation. */}
+      {/* the transparent chains tied to the same key, checked only on request.
+          Not split by Penumbra account: burners use the wallet's own derivation. */}
       <Suspense fallback={null}>
         <CosmosSubwallets />
       </Suspense>

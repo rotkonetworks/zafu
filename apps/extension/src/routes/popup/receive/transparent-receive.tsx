@@ -5,7 +5,6 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { conduitFor } from '@repo/wallet/networks/transparent/conduit';
 import { QrCode } from '../../../components/qr-code';
@@ -24,7 +23,6 @@ export const TransparentReceive = ({ chainId }: { chainId: CosmosChainId }) => {
   const cfg = COSMOS_CHAINS[chainId];
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { getMnemonic } = useStore(keyRingSelector);
-  const queryClient = useQueryClient();
   const keyId = selectedKeyInfo?.type === 'mnemonic' ? selectedKeyInfo.id : undefined;
 
   const [nonce, setNonce] = useState(0);
@@ -49,14 +47,12 @@ export const TransparentReceive = ({ chainId }: { chainId: CosmosChainId }) => {
       if (!cancelled) {
         setCurrent(next);
         setEarlier(undefined);
-        // the deposit scan picks the new index up
-        void queryClient.invalidateQueries({ queryKey: ['cosmosDepositWallets', chainId] });
       }
     })().catch(err => console.error(`[receive] ${chainId} address failed:`, err));
     return () => {
       cancelled = true;
     };
-  }, [chainId, keyId, getMnemonic, nonce, queryClient]);
+  }, [chainId, keyId, getMnemonic, nonce]);
 
   // earlier addresses, derived only when the list is opened
   useEffect(() => {
