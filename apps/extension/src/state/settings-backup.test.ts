@@ -5,6 +5,7 @@ const store: Record<string, unknown> = {
   zafuTheme: 'washi',
   hiddenTransparentChains: ['osmosis'],
   penumbraTotalIn: 'um',
+  penumbraRowsInUsd: ['16ztCNRCyQZYu3cNN7DNMevUt0v2pERpUBflNfwP+wc='],
   swapRoutes: { 'into_zec:btc@btc': 'thor' },
 };
 vi.mock('@repo/storage-chrome/local', () => ({
@@ -29,6 +30,7 @@ describe('settings backup', () => {
       zafuTheme: 'washi',
       hiddenTransparentChains: ['osmosis'],
       penumbraTotalIn: 'um',
+      penumbraRowsInUsd: ['16ztCNRCyQZYu3cNN7DNMevUt0v2pERpUBflNfwP+wc='],
       swapRoutes: { 'into_zec:btc@btc': 'thor' },
     });
   });

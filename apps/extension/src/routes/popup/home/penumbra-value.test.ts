@@ -3,13 +3,17 @@ import { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_
 import {
   AssetId,
   DenomUnit,
-  EquivalentValue,
   Metadata,
   ValueView,
 } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { base64ToUint8Array } from '@rotko/penumbra-types/base64';
-import { USDC_INJ, heroOf, selectAssets } from './penumbra-value';
+import { EquivalentValue } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
+import { fmtIn, heroOf, localPrices, selectHome, unpricedOf, valueOf } from './penumbra-value';
+import { combine, fixedBook, type Simulate } from '../../../penumbra/price';
+import { QUOTES, UNIVERSE } from '../../../penumbra/quotes';
+
+const selectAssets = (b: BalancesResponse[]) => selectHome(b).assets;
 
 const meta = (base: string, symbol: string, display: string, exponent: number, id?: string) =>
   new Metadata({
@@ -24,38 +28,49 @@ const meta = (base: string, symbol: string, display: string, exponent: number, i
     ],
   });
 
-const UM = meta('upenumbra', 'UM', 'penumbra', 6);
+const UM_ID = 'KeqcLzNx9qSH5+lcJHBB9KNW+YPrBk5dKzvPMiypahA=';
+const USDC_ID = '16ztCNRCyQZYu3cNN7DNMevUt0v2pERpUBflNfwP+wc=';
+const OSMO_ID = 'W4rFTMJQgSPxQ2zgxLbKCaLm7Of+aWpVR1kd0SDAvEk=';
+const UM = meta('upenumbra', 'UM', 'penumbra', 6, UM_ID);
 const USDC = meta(
-  USDC_INJ,
+  'transfer/channel-18/erc20:0xa00C59fF5a080D2b954d0c75e46E22a0c371235a',
   'USDC.inj',
   'transfer/channel-18/usdc',
   6,
-  '16ztCNRCyQZYu3cNN7DNMevUt0v2pERpUBflNfwP+wc=',
+  USDC_ID,
 );
-// the same numeraire as the view service may describe it: the id, a base spelled differently
-const USDC_BY_ID = meta(
-  'transfer/channel-18/erc20:0xA00C59FF5A080D2B954D0C75E46E22A0C371235A',
-  'USDC.inj',
-  'transfer/channel-18/usdc',
+const OSMO = meta('transfer/channel-20/uosmo', 'OSMO', 'transfer/channel-20/osmo', 6, OSMO_ID);
+const ETH = meta(
+  'transfer/channel-20/wei',
+  'allETH',
+  'transfer/channel-20/eth',
+  18,
+  OSMO_ID.replace('W', 'X'),
+);
+const NOBLE_ID = 'drPksQaBNYwSOzgfkGOEdrd4kEDkeALeh58Ps+7cjQs=';
+const NOBLE = meta('transfer/channel-2/uusdc', 'USDC', 'transfer/channel-2/usdc', 6, NOBLE_ID);
+const DELEGATION = meta(
+  'udelegation_penumbravalid1abc',
+  'delUM(x)',
+  'delegation_penumbravalid1abc',
   6,
-  '16ztCNRCyQZYu3cNN7DNMevUt0v2pERpUBflNfwP+wc=',
+  'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
 );
-const OSMO = meta('transfer/channel-4/uosmo', 'OSMO', 'transfer/channel-4/osmo', 6);
-const NOBLE = meta('transfer/channel-2/uusdc', 'USDC', 'transfer/channel-2/usdc', 6);
+const UNNAMED = meta('transfer/channel-20/unknown', '', 'transfer/channel-20/unknown', 6);
 
-const balance = (m: Metadata, units: number, worth: [Metadata, number][] = []) =>
+const balance = (m: Metadata, units: bigint, worth: [Metadata, bigint][] = []) =>
   new BalancesResponse({
     balanceView: new ValueView({
       valueView: {
         case: 'knownAssetId',
         value: {
-          amount: new Amount({ lo: BigInt(units * 1e6), hi: 0n }),
+          amount: new Amount({ lo: units, hi: 0n }),
           metadata: m,
           equivalentValues: worth.map(
             ([n, v]) =>
               new EquivalentValue({
                 numeraire: n,
-                equivalentAmount: new Amount({ lo: BigInt(v * 1e6), hi: 0n }),
+                equivalentAmount: new Amount({ lo: v, hi: 0n }),
               }),
           ),
         },
@@ -64,31 +79,118 @@ const balance = (m: Metadata, units: number, worth: [Metadata, number][] = []) =
   });
 
 describe('penumbra portfolio value', () => {
-  test('sums what has a route to usdc.inj, counts usdc.inj 1:1, leaves the rest out', () => {
-    const assets = selectAssets([
-      balance(UM, 10, [
-        [NOBLE, 41],
-        [USDC_BY_ID, 40],
+  const assets = selectAssets([
+    balance(UM, 10_000_000n),
+    balance(USDC, 5_000_000n),
+    balance(OSMO, 3_000_000n),
+  ]);
+
+  test('reads each asset by its id and registry exponent', () => {
+    expect(assets.map(a => [a.symbol, a.amount, a.unit])).toEqual([
+      ['UM', 10, { id: UM_ID, exponent: 6 }],
+      ['USDC.inj', 5, { id: USDC_ID, exponent: 6 }],
+      ['OSMO', 3, { id: OSMO_ID, exponent: 6 }],
+    ]);
+    const [eth] = selectAssets([balance(ETH, 2n * 10n ** 18n)]);
+    expect([eth!.amount, eth!.unit?.exponent]).toEqual([2, 18]);
+  });
+
+  test('sums the priced assets in the quote and leaves the unrouted out', () => {
+    const prices = { [USDC_ID]: 1, [UM_ID]: 4, [OSMO_ID]: null };
+    expect(heroOf(assets, prices, 'usd')).toEqual({ amount: 45, unit: 'usd' });
+    expect(valueOf(assets[2]!, prices)).toBeUndefined();
+    expect(valueOf(assets[0]!, prices)).toEqual({ price: 4, value: 40 });
+  });
+
+  test('sums in um the same way', () => {
+    const prices = { [UM_ID]: 1, [USDC_ID]: 0.25, [OSMO_ID]: 5 };
+    expect(heroOf(assets, prices, 'um')).toEqual({ amount: 26.25, unit: 'um' });
+  });
+
+  test('falls back to the um held while nothing has a price', () => {
+    expect(heroOf(assets, undefined, 'usd')).toEqual({ amount: 10, unit: 'um' });
+    expect(heroOf(assets, {}, 'usd')).toEqual({ amount: 10, unit: 'um' });
+  });
+
+  test('an asset with no id has no price', () => {
+    const [unnamed] = selectAssets([balance(UNNAMED, 1_000_000n)]);
+    expect(unnamed!.unit).toBeUndefined();
+    expect(valueOf(unnamed!, { [USDC_ID]: 1 })).toBeUndefined();
+  });
+
+  test('formats worth and price in the quote', () => {
+    expect(fmtIn(1034.614, 'usd')).toBe('$1,034.61');
+    expect(fmtIn(0.006612, 'usd', true)).toBe('$0.006612');
+    expect(fmtIn(152.404697, 'um', true)).toBe('152.4 um');
+    expect(fmtIn(26.25, 'um')).toBe('26.25 um');
+  });
+
+  test('reads the recorded price per display unit against um and usdc.inj, by id', () => {
+    const [osmo] = selectAssets([
+      balance(OSMO, 4_000_000n, [
+        [USDC, 130_000n],
+        [UM, 20_000_000n],
+        [NOBLE, 140_000n],
       ]),
-      balance(USDC, 5),
-      balance(OSMO, 3, [[NOBLE, 1]]),
     ]);
-    expect(assets.map(a => [a.symbol, a.usd])).toEqual([
-      ['UM', 40],
-      ['USDC.inj', 5],
-      ['OSMO', undefined],
-    ]);
-    expect(heroOf(assets, 'usd')).toEqual({ amount: 45, unit: 'usd' });
-    // 45 dollars at 4 dollars an um
-    expect(heroOf(assets, 'um')).toEqual({ amount: 11.25, unit: 'um' });
+    expect(osmo!.local).toEqual({ usd: 0.0325, um: 5 });
   });
 
-  test('falls back to the um held when nothing has a price', () => {
-    const assets = selectAssets([balance(UM, 2.5), balance(OSMO, 3)]);
-    expect(heroOf(assets, 'usd')).toEqual({ amount: 2.5, unit: 'um' });
+  test('prices 100 noble usdc through the dex, not as usdc.inj 1:1, and the total is the rows', async () => {
+    // display-unit rates on the dex; noble usdc trades a little over par, osmo has no route
+    const rates: Record<string, number> = {
+      [`${NOBLE_ID}>${USDC_ID}`]: 1.0203,
+      [`${NOBLE_ID}>${UM_ID}`]: 152.4,
+      [`${UM_ID}>${USDC_ID}`]: 0.006612,
+      [`${USDC_ID}>${UM_ID}`]: 149.4,
+    };
+    const simulate: Simulate = async (from, to, amount) => {
+      const r = rates[`${from.id}>${to.id}`];
+      const out = (Number(amount) / 10 ** from.exponent) * (r ?? 0) * 10 ** to.exponent;
+      return { filled: r ? amount : 0n, out: BigInt(Math.round(out)) };
+    };
+    const { assets, positions } = selectHome([
+      balance(NOBLE, 100_000_000n),
+      balance(UM, 250_000_000n),
+      balance(USDC, 5_000_000n),
+      balance(OSMO, 3_000_000n),
+      balance(DELEGATION, 7_000_000n),
+    ]);
+    expect(positions).toBe(1);
+    expect(assets.map(a => a.symbol).sort()).toEqual(['OSMO', 'UM', 'USDC', 'USDC.inj']);
+
+    const fixed = await fixedBook(simulate, UNIVERSE, QUOTES)();
+    const book = combine(QUOTES, localPrices(assets), fixed);
+
+    const noble = assets.find(a => a.unit?.id === NOBLE_ID)!;
+    expect(valueOf(noble, book.usd)?.value).toBeCloseTo(102.03, 6);
+    const rows = assets.flatMap(a => valueOf(a, book.usd)?.value ?? []);
+    const hero = heroOf(assets, book.usd, 'usd');
+    expect(hero.amount).toBeCloseTo(
+      rows.reduce((t, x) => t + x, 0),
+      9,
+    );
+    expect(hero.amount).toBeCloseTo(102.03 + 250 * 0.006612 + 5, 6);
+    expect(unpricedOf(assets, book.usd).map(a => a.symbol)).toEqual(['OSMO']);
+
+    expect(heroOf(assets, book.um, 'um').amount).toBeCloseTo(100 * 152.4 + 250 + 5 * 149.4, 6);
   });
 
-  test('stays in dollars when um itself has no price', () => {
-    expect(heroOf(selectAssets([balance(USDC, 7)]), 'um')).toEqual({ amount: 7, unit: 'usd' });
+  test('two wallets with different holdings send the node the identical query list', async () => {
+    const pass = async (balances: BalancesResponse[]) => {
+      const sent: string[] = [];
+      const simulate: Simulate = async (from, to, amount) => {
+        sent.push(`${from.id}>${to.id}:${amount}`);
+        return { filled: 0n, out: 0n };
+      };
+      const { assets } = selectHome(balances);
+      combine(QUOTES, localPrices(assets), await fixedBook(simulate, UNIVERSE, QUOTES)());
+      return sent;
+    };
+    const a = await pass([balance(NOBLE, 100_000_000n), balance(UM, 1n)]);
+    const b = await pass([balance(OSMO, 3_000_000n), balance(ETH, 5n * 10n ** 18n)]);
+    expect(a).toEqual(b);
+    expect(a).toHaveLength(2 * UNIVERSE.length - 2);
+    expect(a.some(q => q.includes(':5000000000000000000'))).toBe(false);
   });
 });
