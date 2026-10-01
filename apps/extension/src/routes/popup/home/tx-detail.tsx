@@ -123,7 +123,7 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
           <Sensitive className='font-display text-[38px] leading-none text-fg-high'>
             {tx.amountUpperBound ? '≤ ' : ''}
             {amountText}
-            {network === 'zcash' && <span className='text-base text-zigner-gold'> zec</span>}
+            {network === 'zcash' && <span className='ml-2.5 text-base text-zigner-gold'>zec</span>}
           </Sensitive>
         )}
 
