@@ -331,6 +331,9 @@ type LOCAL = {
   /** what the penumbra home's total is shown in; absent = usd */
   penumbraTotalIn?: 'usd' | 'um';
 
+  /** the swap route the user chose per pair (`into_zec:btc@btc`), kept only when they changed it */
+  swapRoutes?: Record<string, 'near' | 'thor' | 'penumbra'>;
+
   zafuFeeMultiplier?: number;
 
   proLicense?: string;

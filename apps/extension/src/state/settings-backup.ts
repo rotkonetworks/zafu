@@ -18,6 +18,7 @@ const PREF_KEYS = [
   'zidDiscovery',
   'hiddenTransparentChains',
   'penumbraTotalIn',
+  'swapRoutes',
 ] as const;
 
 type PrefKey = (typeof PREF_KEYS)[number];

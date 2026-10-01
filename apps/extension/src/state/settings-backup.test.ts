@@ -5,6 +5,7 @@ const store: Record<string, unknown> = {
   zafuTheme: 'washi',
   hiddenTransparentChains: ['osmosis'],
   penumbraTotalIn: 'um',
+  swapRoutes: { 'into_zec:btc@btc': 'thor' },
 };
 vi.mock('@repo/storage-chrome/local', () => ({
   localExtStorage: {
@@ -28,6 +29,7 @@ describe('settings backup', () => {
       zafuTheme: 'washi',
       hiddenTransparentChains: ['osmosis'],
       penumbraTotalIn: 'um',
+      swapRoutes: { 'into_zec:btc@btc': 'thor' },
     });
   });
 
@@ -51,7 +53,9 @@ describe('settings backup', () => {
       zafuFont: 'system',
       hiddenTransparentChains: ['injective'],
       penumbraTotalIn: 'usd',
+      swapRoutes: { 'from_zec:eth@eth': 'near' },
     });
+    expect(store['swapRoutes']).toEqual({ 'from_zec:eth@eth': 'near' });
     expect(store['zafuFont']).toBe('system');
     expect(store['hiddenTransparentChains']).toEqual(['injective']);
     expect(store['penumbraTotalIn']).toBe('usd');
