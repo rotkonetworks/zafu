@@ -55,7 +55,7 @@
     },
     {
       "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://[::1]/*"],
-      "js": ["zcash-links.js"],
+      "js": ["links.js"],
       "run_at": "document_idle",
       "world": "ISOLATED"
     }

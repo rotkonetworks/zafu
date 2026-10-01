@@ -123,6 +123,14 @@ export interface PrivacySettings {
   openZcashLinks: boolean;
 
   /**
+   * `zafu:` links clicked on websites (a swap, a screen, a group code).
+   * when true (default): zafu opens them on the screen they fill, for review.
+   * when false: zafu leaves the click alone. Pasted or scanned links are
+   * always understood.
+   */
+  openZafuLinks: boolean;
+
+  /**
    * SOCKS5 proxy for all extension network traffic.
    * routes zidecar, license, relay, and rpc connections through proxy.
    * hides IP from all servers. uses chrome.proxy API.
@@ -204,6 +212,7 @@ export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   enablePriceFetching: false,
   enableExplorerLinks: false,
   openZcashLinks: true,
+  openZafuLinks: true,
   proxy: { enabled: false, host: '', port: 1080 },
   enableIdentity: true,
   hideBalances: false,

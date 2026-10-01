@@ -44,7 +44,12 @@ export const PRIVACY_EXPLAIN: Record<string, Explain> = {
   'zcash: links': {
     blurb: 'lets zafu open zcash: payment links from other pages.',
     on: 'tapping a zcash: link opens it straight into send',
-    off: 'those links do nothing until you turn this on',
+    off: 'the browser hands those links to your other zcash app',
+  },
+  'zafu: links': {
+    blurb: 'lets zafu open zafu: links from other pages, like a swap or a screen.',
+    on: 'tapping a zafu: link opens the screen it fills, for you to review',
+    off: 'those links stay with the page',
   },
   'private contact discovery': {
     blurb: 'finds which of your contacts also use zafu, without sharing your list.',
