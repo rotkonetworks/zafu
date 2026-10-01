@@ -65,7 +65,7 @@ export const SetPassword = () => {
       <FadeTransition>
         <div className='flex flex-col gap-[22px]'>
           <OnboardingBack onClick={onBack} />
-          <h1 className='font-display text-[38px] font-medium text-fg-high'>set a password</h1>
+          <h1 className='font-display text-[38px] text-fg-high'>set a password</h1>
           <p className='text-body text-fg-muted lowercase'>unlocks zafu on this computer</p>
 
           <form onSubmit={handleFormSubmit} className='flex flex-col gap-4'>

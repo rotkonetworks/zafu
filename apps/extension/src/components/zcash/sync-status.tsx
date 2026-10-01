@@ -245,7 +245,7 @@ export const SyncStatus = ({
         )}
       >
         <div className='overflow-hidden'>
-          <div className='mt-2 flex flex-col gap-2 rounded-md border border-border-soft bg-elev-1 p-3'>
+          <div className='mt-2 flex flex-col gap-2 border border-border-soft bg-elev-1 p-3'>
             {error && (
               <div className='flex flex-col gap-1'>
                 <div className='flex flex-wrap items-baseline gap-x-2 gap-y-1'>
@@ -283,9 +283,9 @@ export const SyncStatus = ({
             )}
 
             {!synced && (
-              <div className='h-1.5 w-full overflow-hidden rounded-full bg-elev-2'>
+              <div className='h-1.5 w-full overflow-hidden bg-elev-2'>
                 <div
-                  className='h-full rounded-full bg-zigner-gold transition-all duration-500 ease-out'
+                  className='h-full bg-zigner-gold transition-all duration-500 ease-out'
                   style={{ width: `${Math.max(percent, 2)}%` }}
                 />
               </div>

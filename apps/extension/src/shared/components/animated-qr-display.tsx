@@ -400,10 +400,10 @@ export function AnimatedQrDisplay({
       }}
       title={fullscreen ? 'tap to shrink' : 'tap to enlarge for scanning'}
     >
-      <div className='relative rounded-lg bg-white p-3'>
+      <div className='relative bg-white p-3'>
         <canvas ref={canvasRef} />
         {frames.length > 1 && (
-          <div className='absolute bottom-1 right-1 rounded bg-black/60 px-1.5 py-0.5 text-label text-white font-mono'>
+          <div className='absolute bottom-1 right-1 bg-black/60 px-1.5 py-0.5 text-label text-white font-mono'>
             {currentFrame}/{frames.length}
           </div>
         )}
@@ -418,7 +418,7 @@ export function AnimatedQrDisplay({
 
   return (
     <div className='flex flex-col items-center gap-3'>
-      {title && <h3 className='text-sm font-medium text-fg'>{title}</h3>}
+      {title && <h3 className='text-sm text-fg'>{title}</h3>}
 
       {qrBlock}
 
@@ -491,13 +491,13 @@ export function AnimatedQrDisplay({
                   key={preset.key}
                   type='button'
                   onClick={() => changeDensity(preset.bytes)}
-                  className={`rounded-md border px-1 py-1 text-center text-xs transition-colors ${
+                  className={`border px-1 py-1 text-center text-xs transition-colors ${
                     active
                       ? 'border-zigner-gold bg-zigner-gold/10 text-fg-high'
                       : 'border-border-soft text-fg-muted hover:border-zigner-gold/50'
                   }`}
                 >
-                  <span className='block font-medium capitalize'>{preset.label}</span>
+                  <span className='block capitalize'>{preset.label}</span>
                   <span className='block opacity-70'>
                     {preset.bytes < 1000 ? `${preset.bytes}B` : `${preset.bytes / 1000}KB`}
                   </span>

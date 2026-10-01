@@ -120,7 +120,7 @@ export const PageIndex = () => {
           </div>
           <button
             onClick={() => setAdding(!adding)}
-            className='flex items-center gap-1.5 rounded-full border border-border-soft bg-elev-1 px-3.5 py-1.5 text-xs text-fg-muted transition-colors hover:border-zigner-gold/40 hover:text-fg-high'
+            className='flex items-center gap-1.5 border border-border-soft bg-elev-1 px-3.5 py-1.5 text-xs text-fg-muted transition-colors hover:border-zigner-gold/40 hover:text-fg-high'
           >
             <span className='i-ph-plus h-3.5 w-3.5' />
             add zapp
@@ -128,36 +128,36 @@ export const PageIndex = () => {
         </div>
 
         {adding && (
-          <div className='rounded-lg border border-border-soft bg-elev-1 p-4 flex flex-col gap-3'>
+          <div className='border border-border-soft bg-elev-1 p-4 flex flex-col gap-3'>
             <input
               value={draft.name}
               onChange={e => setDraft({ ...draft, name: e.target.value })}
               placeholder='name'
-              className='w-full bg-input border border-border-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
+              className='w-full bg-input border border-border-soft px-3 py-2 text-sm focus:outline-none focus:border-zigner-gold'
             />
             <input
               value={draft.url}
               onChange={e => setDraft({ ...draft, url: e.target.value })}
               placeholder='https://...'
-              className='w-full bg-input border border-border-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
+              className='w-full bg-input border border-border-soft px-3 py-2 text-sm focus:outline-none focus:border-zigner-gold'
             />
             <input
               value={draft.description}
               onChange={e => setDraft({ ...draft, description: e.target.value })}
               placeholder='description (optional)'
-              className='w-full bg-input border border-border-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
+              className='w-full bg-input border border-border-soft px-3 py-2 text-sm focus:outline-none focus:border-zigner-gold'
             />
             <div className='flex gap-2'>
               <button
                 onClick={() => setAdding(false)}
-                className='flex-1 rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
+                className='flex-1 border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
               >
                 cancel
               </button>
               <button
                 onClick={handleAdd}
                 disabled={!draft.name || !draft.url}
-                className='flex-1 rounded-lg bg-primary/15 text-zigner-gold border border-primary/25 py-2 text-xs hover:bg-primary/25 transition-colors disabled:opacity-50'
+                className='flex-1 bg-primary/15 text-zigner-gold border border-primary/25 py-2 text-xs hover:bg-primary/25 transition-colors disabled:opacity-50'
               >
                 add
               </button>
@@ -168,7 +168,7 @@ export const PageIndex = () => {
         {grouped.map(([category, zapps]) => (
           <div key={category} className='flex flex-col gap-3'>
             <div className='flex items-center gap-3'>
-              <h2 className='text-label font-semibold uppercase tracking-wider text-fg-muted'>
+              <h2 className='text-label uppercase tracking-wider text-fg-muted'>
                 {CATEGORY_LABELS[category]}
               </h2>
               <div className='h-px flex-1 bg-border-soft/60' />
@@ -178,15 +178,15 @@ export const PageIndex = () => {
                 <div key={zapp.id} className='group relative'>
                   <button
                     onClick={() => handleClick(zapp)}
-                    className='flex w-full items-center gap-3 rounded-xl border border-border-soft bg-elev-1 p-3 text-left transition-all duration-150 hover:-translate-y-0.5 hover:border-zigner-gold/40 hover:bg-elev-2 hover:shadow-lg hover:shadow-black/20'
+                    className='flex w-full items-center gap-3 border border-border-soft bg-elev-1 p-3 text-left transition-all duration-150 hover:-translate-y-0.5 hover:border-zigner-gold/40 hover:bg-elev-2 hover:shadow-lg hover:shadow-black/20'
                   >
-                    <span className='flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-elev-2 transition-colors group-hover:bg-zigner-gold/10'>
+                    <span className='flex h-10 w-10 shrink-0 items-center justify-center bg-elev-2 transition-colors group-hover:bg-zigner-gold/10'>
                       <span
                         className={`${zapp.icon} h-5 w-5 text-fg-muted transition-colors group-hover:text-zigner-gold`}
                       />
                     </span>
                     <span className='flex min-w-0 flex-col'>
-                      <span className='truncate text-sm font-medium text-fg-high'>{zapp.name}</span>
+                      <span className='truncate text-sm text-fg-high'>{zapp.name}</span>
                       <span className='truncate text-label text-fg-muted' title={zapp.description}>
                         {zapp.description}
                       </span>
@@ -196,7 +196,7 @@ export const PageIndex = () => {
                   {!zapp.builtin && (
                     <button
                       onClick={() => handleRemove(zapp.id)}
-                      className='absolute -right-1.5 -top-1.5 hidden h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm group-hover:flex'
+                      className='absolute -right-1.5 -top-1.5 hidden h-5 w-5 items-center justify-center bg-destructive text-destructive-foreground shadow-sm group-hover:flex'
                       title='remove zapp'
                     >
                       <span className='i-ph-x h-3 w-3' />

@@ -30,7 +30,7 @@ export const PasswordInput = ({
   return (
     <div className='flex flex-col items-center justify-center gap-2'>
       <div className='flex items-center gap-2 self-start'>
-        <div className='text-sm font-medium'>{label}</div>
+        <div className='text-sm'>{label}</div>
         {validationResult ? (
           <div
             className={cn(

@@ -30,9 +30,9 @@ const OnboardingSuccess = lazy(() =>
  */
 const LazyFallback = () => (
   <div className='flex h-full flex-col gap-4 animate-pulse'>
-    <div className='h-6 w-40 rounded-sm bg-elev-2/60' />
-    <div className='h-3 w-64 rounded-sm bg-elev-2/40' />
-    <div className='mt-4 h-32 w-full rounded-sm bg-elev-2/30' />
+    <div className='h-6 w-40 bg-elev-2/60' />
+    <div className='h-3 w-64 bg-elev-2/40' />
+    <div className='mt-4 h-32 w-full bg-elev-2/30' />
   </div>
 );
 

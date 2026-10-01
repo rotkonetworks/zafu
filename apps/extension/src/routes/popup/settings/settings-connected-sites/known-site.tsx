@@ -315,7 +315,7 @@ export const KnownSite = ({
 
           {/* confirmation dialogs */}
           {confirming === 'global' && (
-            <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-2.5 flex flex-col gap-2'>
+            <div className='border border-yellow-500/30 bg-yellow-500/5 p-2.5 flex flex-col gap-2'>
               <p className='text-label text-yellow-400'>
                 switching to global identity lets this site link your activity with every other site
                 using your global zid.
@@ -323,13 +323,13 @@ export const KnownSite = ({
               <div className='flex gap-2'>
                 <button
                   onClick={() => setConfirming(null)}
-                  className='flex-1 rounded border border-border-soft py-1 text-label text-fg-muted hover:bg-elev-1 transition-colors'
+                  className='flex-1 border border-border-soft py-1 text-label text-fg-muted hover:bg-elev-1 transition-colors'
                 >
                   cancel
                 </button>
                 <button
                   onClick={confirmGlobal}
-                  className='flex-1 rounded border border-yellow-500/30 py-1 text-label text-yellow-400 hover:bg-yellow-500/10 transition-colors'
+                  className='flex-1 border border-yellow-500/30 py-1 text-label text-yellow-400 hover:bg-yellow-500/10 transition-colors'
                 >
                   use global
                 </button>
@@ -338,7 +338,7 @@ export const KnownSite = ({
           )}
 
           {confirming === 'rotate' && (
-            <div className='rounded-lg border border-border-soft bg-elev-1 p-2.5 flex flex-col gap-2'>
+            <div className='border border-border-soft bg-elev-1 p-2.5 flex flex-col gap-2'>
               <p className='text-label text-fg-muted'>
                 this creates a new identity for this site. the site keeps your old zid - rotation
                 only affects future signatures.
@@ -346,13 +346,13 @@ export const KnownSite = ({
               <div className='flex gap-2'>
                 <button
                   onClick={() => setConfirming(null)}
-                  className='flex-1 rounded border border-border-soft py-1 text-label text-fg-muted hover:bg-elev-1 transition-colors'
+                  className='flex-1 border border-border-soft py-1 text-label text-fg-muted hover:bg-elev-1 transition-colors'
                 >
                   cancel
                 </button>
                 <button
                   onClick={confirmRotate}
-                  className='flex-1 rounded border border-primary/25 py-1 text-label text-zigner-gold hover:bg-primary/10 transition-colors'
+                  className='flex-1 border border-primary/25 py-1 text-label text-zigner-gold hover:bg-primary/10 transition-colors'
                 >
                   rotate
                 </button>

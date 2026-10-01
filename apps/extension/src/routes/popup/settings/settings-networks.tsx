@@ -217,7 +217,7 @@ const NetworkToggles = () => {
           <div
             key={networkId}
             className={cn(
-              'rounded-lg border overflow-hidden transition-colors',
+              'border overflow-hidden transition-colors',
               isActive ? 'border-primary/60' : 'border-border-soft',
             )}
           >
@@ -236,21 +236,19 @@ const NetworkToggles = () => {
               >
                 <div
                   className={cn(
-                    'h-3 w-3 rounded-full',
+                    'h-3 w-3',
                     isActive && 'ring-2 ring-primary/40 ring-offset-1 ring-offset-background',
                   )}
                   style={{ backgroundColor: getColorHex(network.color) }}
                 />
-                <span className={cn('font-medium text-sm', !isEnabled && 'text-fg-muted')}>
-                  {network.name}
-                </span>
+                <span className={cn('text-sm', !isEnabled && 'text-fg-muted')}>{network.name}</span>
                 {isActive && (
-                  <span className='text-label px-1.5 py-0.5 rounded-md bg-primary/15 text-zigner-gold font-medium leading-none'>
+                  <span className='text-label px-1.5 py-0.5 bg-primary/15 text-zigner-gold leading-none'>
                     active
                   </span>
                 )}
                 {network.transparent && (
-                  <span className='text-label px-1.5 py-0.5 rounded-md border border-warning/30 bg-warning/10 text-warning font-medium leading-none'>
+                  <span className='text-label px-1.5 py-0.5 border border-warning/30 bg-warning/10 text-warning leading-none'>
                     public
                   </span>
                 )}
@@ -275,7 +273,7 @@ const NetworkToggles = () => {
                 <button
                   onClick={() => void handleToggle(networkId)}
                   className={cn(
-                    'h-5 w-5 rounded border-2 flex items-center justify-center transition-colors',
+                    'h-5 w-5 border-2 flex items-center justify-center transition-colors',
                     isEnabled ? 'border-zigner-gold bg-zigner-gold' : 'border-muted-foreground/50',
                   )}
                 >
@@ -364,7 +362,7 @@ const NetworkToggles = () => {
                           value={editingEndpoint}
                           onChange={e => setEditingEndpoint(e.target.value)}
                           placeholder={state?.endpoint ?? 'https://...'}
-                          className='flex-1 rounded-lg bg-input border border-border-soft px-3 py-2.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
+                          className='flex-1 bg-input border border-border-soft px-3 py-2.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
                         />
                         <Button
                           variant='primary'
@@ -659,7 +657,7 @@ const ZcashEndpointPanel = ({
             value={selectionStrategy}
             onChange={e => handleStrategyChange(e.target.value as SelectionStrategy)}
             disabled={autoPicking}
-            className='flex-1 rounded-lg bg-input border border-border-soft px-3 py-2.5 text-label focus:border-primary/50 focus:outline-none'
+            className='flex-1 bg-input border border-border-soft px-3 py-2.5 text-label focus:border-primary/50 focus:outline-none'
           >
             {(Object.keys(STRATEGY_LABELS) as SelectionStrategy[]).map(s => (
               <option key={s} value={s}>
@@ -681,7 +679,7 @@ const ZcashEndpointPanel = ({
               onPick(preset.url);
             }
           }}
-          className='w-full rounded-lg bg-input border border-border-soft px-3 py-2.5 text-xs focus:border-primary/50 focus:outline-none'
+          className='w-full bg-input border border-border-soft px-3 py-2.5 text-xs focus:border-primary/50 focus:outline-none'
         >
           <option value='' disabled>
             {matched ? matched.label : 'custom url'}
@@ -704,9 +702,7 @@ const ZcashEndpointPanel = ({
 
       {/* 2 · trust line */}
       <div className='flex items-center gap-1.5 text-label lowercase'>
-        <span
-          className={cn('h-1.5 w-1.5 rounded-full', isTrustless ? 'bg-green-400' : 'bg-amber-400')}
-        />
+        <span className={cn('h-1.5 w-1.5', isTrustless ? 'bg-green-400' : 'bg-amber-400')} />
         <span className={isTrustless ? 'text-green-400' : 'text-amber-400'}>{trust.label}</span>
         <span className='text-fg-muted'>
           {isTrustless ? '· responses verified locally' : '· wallet trusts this server'}
@@ -740,7 +736,7 @@ const ZcashEndpointPanel = ({
                   value={editingEndpoint}
                   onChange={e => setEditingEndpoint(e.target.value)}
                   placeholder='https://...'
-                  className='flex-1 rounded-lg bg-input border border-border-soft px-3 py-2.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
+                  className='flex-1 bg-input border border-border-soft px-3 py-2.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
                 />
                 <Button
                   variant='primary'
@@ -796,7 +792,7 @@ const ZcashEndpointPanel = ({
                 <span className='text-label text-fg-muted'>instant pending (mempool watch)</span>
                 <span
                   className={cn(
-                    'relative h-4 w-7 shrink-0 rounded-full border-2 transition-colors',
+                    'relative h-4 w-7 shrink-0 border-2 transition-colors',
                     mempoolOn
                       ? 'border-zigner-gold bg-zigner-gold/30'
                       : 'border-muted-foreground/50',
@@ -804,7 +800,7 @@ const ZcashEndpointPanel = ({
                 >
                   <span
                     className={cn(
-                      'absolute top-0 h-3 w-3 rounded-full bg-zigner-gold transition-all',
+                      'absolute top-0 h-3 w-3 bg-zigner-gold transition-all',
                       mempoolOn ? 'left-3' : 'left-0',
                     )}
                   />
@@ -1078,7 +1074,7 @@ const PenumbraEndpointPanel = ({
               onSelectionStrategyChange(s);
             }}
             disabled={autoPicking}
-            className='flex-1 rounded-lg bg-input border border-border-soft px-3 py-2.5 text-label focus:border-primary/50 focus:outline-none'
+            className='flex-1 bg-input border border-border-soft px-3 py-2.5 text-label focus:border-primary/50 focus:outline-none'
           >
             {(Object.keys(STRATEGY_LABELS) as SelectionStrategy[]).map(s => (
               <option key={s} value={s}>
@@ -1099,7 +1095,7 @@ const PenumbraEndpointPanel = ({
               onSelectionStrategyChange('manual');
             }
           }}
-          className='w-full rounded-lg bg-input border border-border-soft px-3 py-2.5 text-xs focus:border-primary/50 focus:outline-none'
+          className='w-full bg-input border border-border-soft px-3 py-2.5 text-xs focus:border-primary/50 focus:outline-none'
         >
           <option value='' disabled>
             {matched ? matched.label : 'custom url'}
@@ -1124,7 +1120,7 @@ const PenumbraEndpointPanel = ({
           server sees encrypted compact blocks either way. Keep the tone
           consistent with the Zcash panel's one-line trust hint. */}
       <div className='flex items-center gap-1.5 text-label lowercase'>
-        <span className='h-1.5 w-1.5 rounded-full bg-green-400' />
+        <span className='h-1.5 w-1.5 bg-green-400' />
         <span className='text-green-400'>private</span>
         <span className='text-fg-muted'>· compact blocks decrypted locally</span>
       </div>
@@ -1155,7 +1151,7 @@ const PenumbraEndpointPanel = ({
                   value={editingEndpoint}
                   onChange={e => setEditingEndpoint(e.target.value)}
                   placeholder='https://...'
-                  className='flex-1 rounded-lg bg-input border border-border-soft px-3 py-2.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
+                  className='flex-1 bg-input border border-border-soft px-3 py-2.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
                 />
                 <Button
                   variant='primary'

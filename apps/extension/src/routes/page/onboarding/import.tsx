@@ -77,7 +77,7 @@ export const ImportSeedPhrase = () => {
     <OnboardingShell art='bamboo'>
       <FadeTransition>
         <form onSubmit={handleSubmit} className='flex flex-col gap-5'>
-          <h1 className='font-display text-[38px] font-medium text-fg-high'>enter your phrase</h1>
+          <h1 className='font-display text-[38px] text-fg-high'>enter your phrase</h1>
           <p className='text-body text-fg-muted lowercase'>
             paste it or type it. spaces or new lines are fine.
           </p>

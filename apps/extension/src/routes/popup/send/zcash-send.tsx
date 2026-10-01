@@ -39,6 +39,8 @@ import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
 import { nu63ActivationHeight } from '../../../config/feature-flags';
 import { maxSendable, quoteSend } from './spendable';
 import { Button } from '@repo/ui/components/ui/button';
+import { Input } from '@repo/ui/components/ui/input';
+import { ScreenHeader } from '../../../components/screen-header';
 import { HankoSeal } from '@repo/ui/components/editorial';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
@@ -1242,287 +1244,272 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     switch (step) {
       case 'form':
         return (
-          <div className='flex flex-col gap-4 p-4'>
-            <div className='flex items-center gap-3'>
-              <button
-                onClick={onClose}
-                className='text-fg-muted hover:text-fg-high transition-colors'
-              >
-                <span className='i-ph-arrow-left h-5 w-5' />
-              </button>
-              <h2 className='text-lg font-medium'>send zcash</h2>
-            </div>
-
-            <div className='flex flex-col gap-3'>
-              <div>
-                <label className='mb-1 block text-xs text-fg-muted'>recipient address</label>
-                <div className='flex gap-1'>
-                  {/* No `zs...` in the placeholder: sapling is not a supported
+          <>
+            <ScreenHeader title='send zcash' onBack={onClose} />
+            <div className='flex flex-col gap-4 p-4'>
+              <div className='flex flex-col gap-3'>
+                <div>
+                  <label className='mb-1 block text-xs text-fg-muted'>recipient address</label>
+                  <div className='flex gap-1'>
+                    {/* No `zs...` in the placeholder: sapling is not a supported
                       recipient and the validator rejects it, so advertising it
                       here invited an address the form then refuses. */}
-                  <input
-                    type='text'
-                    placeholder='u1... / t1...'
-                    value={recipient}
-                    onChange={e => {
-                      if (!applyZcashUri(e.target.value)) {
-                        setRecipient(e.target.value);
-                      }
-                    }}
-                    className='flex-1 rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none'
-                  />
-                  <button
-                    type='button'
-                    onClick={() => setShowQrScanner(true)}
-                    className='shrink-0 flex h-[42px] w-[42px] items-center justify-center rounded-lg border border-border-soft bg-input text-fg-muted hover:text-fg-high transition-colors'
-                    title='scan QR code'
-                  >
-                    <span className='i-ph-scan h-4 w-4' />
-                  </button>
-                  <button
-                    type='button'
-                    onClick={() => setShowAddressBook(true)}
-                    className='shrink-0 flex h-[42px] w-[42px] items-center justify-center rounded-lg border border-border-soft bg-input text-fg-muted hover:text-fg-high transition-colors'
-                    title='contacts'
-                  >
-                    <span className='i-ph-address-book h-4 w-4' />
-                  </button>
-                </div>
-                {/* the payoff of the book: a pasted/picked address that is a
-                    saved contact is called by name, not by its u1... prefix */}
-                {recipientContact && (
-                  <p className='mt-1.5 flex items-center gap-1.5 truncate text-label text-fg-muted'>
-                    <span className='i-ph-address-book h-3.5 w-3.5 shrink-0 text-zigner-gold' />
-                    <span className='truncate'>→ {recipientContact.contact.name}</span>
-                  </p>
-                )}
-                {requestError && (
-                  <StatusSlot tone='warn' icon='i-ph-warning' className='mt-1.5'>
-                    {requestError}
-                  </StatusSlot>
-                )}
-                {requestNote && (
-                  <p className='mt-1 truncate text-xs text-fg-muted' title={requestNote}>
-                    request: {requestNote}
-                  </p>
-                )}
-                <ZcashMeRecipientResolver
-                  input={recipient}
-                  onResolve={p => {
-                    setResolvedProfile(p);
-                    setRecipient(p.address);
-                  }}
-                />
-                {resolvedProfile && resolvedProfile.address === recipient.trim() && (
-                  <div className='mt-1.5 flex items-center gap-1.5 text-label text-fg-muted'>
-                    <ProfileBadge profile={resolvedProfile} />
+                    <Input
+                      type='text'
+                      placeholder='u1... / t1...'
+                      value={recipient}
+                      onChange={e => {
+                        if (!applyZcashUri(e.target.value)) {
+                          setRecipient(e.target.value);
+                        }
+                      }}
+                      className='min-w-0 flex-1'
+                    />
+                    <button
+                      type='button'
+                      onClick={() => setShowQrScanner(true)}
+                      className='flex size-12 shrink-0 items-center justify-center border border-border-soft bg-input text-fg-muted transition-colors hover:text-fg-high'
+                      title='scan QR code'
+                    >
+                      <span className='i-ph-scan h-4 w-4' />
+                    </button>
+                    <button
+                      type='button'
+                      onClick={() => setShowAddressBook(true)}
+                      className='flex size-12 shrink-0 items-center justify-center border border-border-soft bg-input text-fg-muted transition-colors hover:text-fg-high'
+                      title='contacts'
+                    >
+                      <span className='i-ph-address-book h-4 w-4' />
+                    </button>
                   </div>
-                )}
-                {showQrScanner && (
-                  <QrScanner
-                    onScan={data => {
-                      if (!applyZcashUri(data)) {
-                        setRecipient(data);
-                      }
-                      setShowQrScanner(false);
+                  {/* the payoff of the book: a pasted/picked address that is a
+                    saved contact is called by name, not by its u1... prefix */}
+                  {recipientContact && (
+                    <p className='mt-1.5 flex items-center gap-1.5 truncate text-label text-fg-muted'>
+                      <span className='i-ph-address-book h-3.5 w-3.5 shrink-0 text-zigner-gold' />
+                      <span className='truncate'>→ {recipientContact.contact.name}</span>
+                    </p>
+                  )}
+                  {requestError && (
+                    <StatusSlot tone='warn' icon='i-ph-warning' className='mt-1.5'>
+                      {requestError}
+                    </StatusSlot>
+                  )}
+                  {requestNote && (
+                    <p className='mt-1 truncate text-xs text-fg-muted' title={requestNote}>
+                      request: {requestNote}
+                    </p>
+                  )}
+                  <ZcashMeRecipientResolver
+                    input={recipient}
+                    onResolve={p => {
+                      setResolvedProfile(p);
+                      setRecipient(p.address);
                     }}
-                    onClose={() => setShowQrScanner(false)}
-                    title='scan address'
-                    description='scan a zcash address QR code'
-                    inline
                   />
-                )}
-                <RecipientPicker
-                  network='zcash'
-                  onSelect={addr => {
-                    setRecipient(addr);
-                  }}
-                  show={!recipient}
-                />
-                {/* contact book over the form: the picker above still covers
+                  {resolvedProfile && resolvedProfile.address === recipient.trim() && (
+                    <div className='mt-1.5 flex items-center gap-1.5 text-label text-fg-muted'>
+                      <ProfileBadge profile={resolvedProfile} />
+                    </div>
+                  )}
+                  {showQrScanner && (
+                    <QrScanner
+                      onScan={data => {
+                        if (!applyZcashUri(data)) {
+                          setRecipient(data);
+                        }
+                        setShowQrScanner(false);
+                      }}
+                      onClose={() => setShowQrScanner(false)}
+                      title='scan address'
+                      description='scan a zcash address QR code'
+                      inline
+                    />
+                  )}
+                  <RecipientPicker
+                    network='zcash'
+                    onSelect={addr => {
+                      setRecipient(addr);
+                    }}
+                    show={!recipient}
+                  />
+                  {/* contact book over the form: the picker above still covers
                     recent/wallets/directory, this is the saved address book */}
-                {showAddressBook && (
-                  <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
-                    <div className='mx-4 flex max-h-[80vh] w-full max-w-sm flex-col rounded-lg border border-border-soft bg-canvas p-5 shadow-xl'>
-                      <div className='mb-4 flex items-center gap-2'>
-                        <span className='i-ph-address-book h-4 w-4 text-zigner-gold' />
-                        <h2 className='text-lg font-medium'>contacts</h2>
-                        <button
-                          type='button'
-                          onClick={() => setShowAddressBook(false)}
-                          className='ml-auto text-fg-muted hover:text-fg-high transition-colors'
-                          title='close'
-                        >
-                          <span className='i-ph-x h-4 w-4' />
-                        </button>
-                      </div>
-                      <input
-                        type='text'
-                        placeholder='search name or address'
-                        value={addressBookQuery}
-                        onChange={e => setAddressBookQuery(e.target.value)}
-                        autoFocus
-                        className='mb-3 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
-                      />
-                      <div className='flex flex-col gap-2 overflow-y-auto'>
-                        {addressBookRows.map(({ contact, addresses }) => (
-                          <div
-                            key={contact.id}
-                            className='rounded-lg border border-border-soft bg-elev-2 p-2.5'
+                  {showAddressBook && (
+                    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
+                      <div className='mx-4 flex max-h-[80vh] w-full max-w-sm flex-col border border-border-soft bg-canvas p-5 shadow-xl'>
+                        <div className='mb-4 flex items-center gap-2'>
+                          <span className='i-ph-address-book h-4 w-4 text-zigner-gold' />
+                          <h2 className='text-lg'>contacts</h2>
+                          <button
+                            type='button'
+                            onClick={() => setShowAddressBook(false)}
+                            className='ml-auto text-fg-muted hover:text-fg-high transition-colors'
+                            title='close'
                           >
-                            <div className='flex items-center gap-1.5'>
-                              <p className='truncate text-sm text-fg-high'>{contact.name}</p>
-                              {contact.favorite && (
-                                <span className='i-ph-star-fill h-3 w-3 shrink-0 text-zigner-gold' />
-                              )}
+                            <span className='i-ph-x h-4 w-4' />
+                          </button>
+                        </div>
+                        <input
+                          type='text'
+                          placeholder='search name or address'
+                          value={addressBookQuery}
+                          onChange={e => setAddressBookQuery(e.target.value)}
+                          autoFocus
+                          className='mb-3 w-full border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
+                        />
+                        <div className='flex flex-col gap-2 overflow-y-auto'>
+                          {addressBookRows.map(({ contact, addresses }) => (
+                            <div
+                              key={contact.id}
+                              className='border border-border-soft bg-elev-2 p-2.5'
+                            >
+                              <div className='flex items-center gap-1.5'>
+                                <p className='truncate text-sm text-fg-high'>{contact.name}</p>
+                                {contact.favorite && (
+                                  <span className='i-ph-star-fill h-3 w-3 shrink-0 text-zigner-gold' />
+                                )}
+                              </div>
+                              {addresses.map(addr => (
+                                <button
+                                  key={addr.id}
+                                  type='button'
+                                  onClick={() => selectBookAddress(contact.id, addr)}
+                                  className='mt-1.5 flex w-full items-center gap-2 border border-border-soft bg-input px-2 py-1.5 text-left transition-colors hover:border-zigner-gold'
+                                >
+                                  <span className='truncate font-mono text-xs text-fg'>
+                                    {truncateAddress(addr.address)}
+                                  </span>
+                                  <span className='i-ph-caret-right ml-auto h-3.5 w-3.5 shrink-0 text-fg-dim' />
+                                </button>
+                              ))}
                             </div>
-                            {addresses.map(addr => (
-                              <button
-                                key={addr.id}
-                                type='button'
-                                onClick={() => selectBookAddress(contact.id, addr)}
-                                className='mt-1.5 flex w-full items-center gap-2 rounded-md border border-border-soft bg-input px-2 py-1.5 text-left transition-colors hover:border-zigner-gold'
-                              >
-                                <span className='truncate font-mono text-xs text-fg'>
-                                  {truncateAddress(addr.address)}
-                                </span>
-                                <span className='i-ph-caret-right ml-auto h-3.5 w-3.5 shrink-0 text-fg-dim' />
-                              </button>
-                            ))}
-                          </div>
-                        ))}
-                        {addressBookRows.length === 0 && (
-                          <p className='py-6 text-center text-xs text-fg-muted'>
-                            {addressBookQuery.trim()
-                              ? 'no contacts match that search'
-                              : 'no zcash contacts yet - add one to save addresses for next time'}
-                          </p>
-                        )}
+                          ))}
+                          {addressBookRows.length === 0 && (
+                            <p className='py-6 text-center text-xs text-fg-muted'>
+                              {addressBookQuery.trim()
+                                ? 'no contacts match that search'
+                                : 'no zcash contacts yet - add one to save addresses for next time'}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <div className='flex items-center justify-between mb-1'>
-                  <label className='text-xs text-fg-muted'>amount (zec)</label>
-                  {balanceZat !== null && (
-                    // named "spendable", not "balance": this is the active
-                    // pool only, and it deliberately differs from the home
-                    // screen's total, which includes orchard and transparent
-                    <span className='text-xs text-fg-muted tabular-nums'>
-                      spendable: <Sensitive>{fmtZecShort(balanceZat)} ZEC</Sensitive>
-                    </span>
                   )}
                 </div>
-                <div className='flex gap-1'>
-                  <input
-                    type='number'
-                    placeholder='0.0'
-                    value={amount}
-                    onChange={e => {
-                      filledByRequest.current.amount = false;
-                      setAmount(e.target.value);
-                    }}
-                    step='0.0001'
-                    min='0'
-                    className='flex-1 rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none'
-                  />
-                  <button
-                    type='button'
-                    // MAX is the amount a transaction can actually be BUILT
-                    // for: every note in the pool, minus the ZIP-317 fee that
-                    // transaction really pays. Not balance minus a flat 10,000.
-                    onClick={() => {
-                      filledByRequest.current.amount = false;
-                      setAmount(maxSend.amountZat > 0n ? fmtZecShort(maxSend.amountZat) : '0');
-                    }}
-                    disabled={maxSend.amountZat <= 0n}
-                    className='shrink-0 h-[42px] rounded-lg border border-border-soft bg-input px-3 text-xs text-fg-muted hover:text-fg-high transition-colors disabled:opacity-50'
-                  >
-                    max
-                  </button>
-                </div>
-                {/* Reserved-height slot, all of it computed from the same fee
+
+                <div>
+                  <div className='flex items-center justify-between mb-1'>
+                    <label className='text-xs text-fg-muted'>amount (zec)</label>
+                    {balanceZat !== null && (
+                      // named "spendable", not "balance": this is the active
+                      // pool only, and it deliberately differs from the home
+                      // screen's total, which includes orchard and transparent
+                      <span className='text-xs text-fg-muted tabular-nums'>
+                        spendable: <Sensitive>{fmtZecShort(balanceZat)} ZEC</Sensitive>
+                      </span>
+                    )}
+                  </div>
+                  <div className='flex gap-1.5'>
+                    <Input
+                      type='number'
+                      placeholder='0.0'
+                      value={amount}
+                      onChange={e => {
+                        filledByRequest.current.amount = false;
+                        setAmount(e.target.value);
+                      }}
+                      step='0.0001'
+                      min='0'
+                      className='h-14 min-w-0 flex-1 font-display text-2xl'
+                    />
+                    <button
+                      type='button'
+                      // MAX is the amount a transaction can actually be BUILT
+                      // for: every note in the pool, minus the ZIP-317 fee that
+                      // transaction really pays. Not balance minus a flat 10,000.
+                      onClick={() => {
+                        filledByRequest.current.amount = false;
+                        setAmount(maxSend.amountZat > 0n ? fmtZecShort(maxSend.amountZat) : '0');
+                      }}
+                      disabled={maxSend.amountZat <= 0n}
+                      className='h-14 shrink-0 border border-border-soft bg-input px-3 text-xs text-zigner-gold transition-colors hover:bg-elev-2 disabled:text-fg-dim'
+                    >
+                      max
+                    </button>
+                  </div>
+                  {/* Reserved-height slot, all of it computed from the same fee
                     arithmetic the worker will use at build time - this never
                     grows/shrinks the layout as the user types, it only swaps
                     which message (if any) sits in the reserved row. */}
-                <div className='mt-1.5 min-h-[3.5rem]'>
-                  {balanceZat === 0n && strandedZat === 0n ? (
-                    <StatusSlot tone='info' icon='i-ph-info'>
-                      no zec yet - receive first from the home screen.
-                    </StatusSlot>
-                  ) : strandedZat > 0n ? (
-                    // Orchard funds are real but consensus-disabled post-NU6.3.
-                    // Silently folding them into "your balance" is what
-                    // produced a send that failed after a two-minute prove.
-                    // Name them, and say what actually releases them.
-                    <StatusSlot tone='info' icon='i-ph-info'>
-                      <Sensitive>{fmtZecShort(strandedZat)} zec</Sensitive> is in the legacy orchard
-                      pool and cannot be sent - migrate it to ironwood from the home screen to spend
-                      it.
-                    </StatusSlot>
-                  ) : amountQuote !== null && !amountQuote.ok ? (
-                    <StatusSlot tone='warn' icon='i-ph-warning'>
-                      a little more than you have - up to{' '}
-                      <Sensitive>{fmtZecShort(maxSend.amountZat)} zec</Sensitive> after a{' '}
-                      <Sensitive>{fmtZecShort(maxSend.feeZat)} zec</Sensitive> fee
-                    </StatusSlot>
-                  ) : amountQuote !== null && amountQuote.ok ? (
-                    <StatusSlot tone='info'>
-                      fee <Sensitive>{fmtZecShort(amountQuote.feeZat)} zec</Sensitive> ·{' '}
-                      {amountQuote.nSpends} note{amountQuote.nSpends === 1 ? '' : 's'} spent
-                    </StatusSlot>
-                  ) : null}
+                  <div className='mt-1.5 min-h-[3.5rem]'>
+                    {strandedZat > 0n ? (
+                      // Orchard funds are real but consensus-disabled post-NU6.3.
+                      // Silently folding them into "your balance" is what
+                      // produced a send that failed after a two-minute prove.
+                      // Name them, and say what actually releases them.
+                      <StatusSlot tone='info' icon='i-ph-info'>
+                        <Sensitive>{fmtZecShort(strandedZat)} zec</Sensitive> is in the legacy
+                        orchard pool and cannot be sent - migrate it to ironwood from the home
+                        screen to spend it.
+                      </StatusSlot>
+                    ) : amountQuote !== null && !amountQuote.ok ? (
+                      <StatusSlot tone='warn' icon='i-ph-warning'>
+                        a little more than you have - up to{' '}
+                        <Sensitive>{fmtZecShort(maxSend.amountZat)} zec</Sensitive> after a{' '}
+                        <Sensitive>{fmtZecShort(maxSend.feeZat)} zec</Sensitive> fee
+                      </StatusSlot>
+                    ) : amountQuote !== null && amountQuote.ok ? (
+                      <StatusSlot tone='info'>
+                        fee <Sensitive>{fmtZecShort(amountQuote.feeZat)} zec</Sensitive> ·{' '}
+                        {amountQuote.nSpends} note{amountQuote.nSpends === 1 ? '' : 's'} spent
+                      </StatusSlot>
+                    ) : null}
+                  </div>
                 </div>
+
+                <div>
+                  <label className='mb-1 block text-xs text-fg-muted'>memo (optional)</label>
+                  <Input
+                    type='text'
+                    placeholder='private message'
+                    value={memo}
+                    onChange={e => {
+                      filledByRequest.current.memo = false;
+                      setMemo(e.target.value);
+                    }}
+                    maxLength={512}
+                  />
+                </div>
+
+                {formError && (
+                  <StatusSlot tone='warn' icon='i-ph-warning'>
+                    {formError}
+                  </StatusSlot>
+                )}
               </div>
 
-              <div>
-                <label className='mb-1 block text-xs text-fg-muted'>memo (optional)</label>
-                <input
-                  type='text'
-                  placeholder='private message'
-                  value={memo}
-                  onChange={e => {
-                    filledByRequest.current.memo = false;
-                    setMemo(e.target.value);
-                  }}
-                  maxLength={512}
-                  className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none'
-                />
-              </div>
-
-              {formError && (
-                <StatusSlot tone='warn' icon='i-ph-warning'>
-                  {formError}
-                </StatusSlot>
-              )}
-            </div>
-
-            {/* single full-width action - the header back-arrow (onClose)
+              {/* single full-width action - the header back-arrow (onClose)
                 already covers "leave the form", a redundant cancel button
                 next to it just split the one gold action in two. */}
-            <Button variant='primary' onClick={handleReview} disabled={!canReview} className='mt-4'>
-              review
-            </Button>
-          </div>
+              <Button
+                variant='primary'
+                onClick={handleReview}
+                disabled={!canReview}
+                className='mt-4'
+              >
+                review
+              </Button>
+            </div>
+          </>
         );
 
       case 'review':
         return (
-          <div className='flex flex-col gap-4 p-4'>
-            <div className='flex items-center gap-2'>
-              <button
-                onClick={handleBack}
-                className='text-fg-muted hover:text-fg-high transition-colors'
-              >
-                <span className='i-ph-arrow-left w-5 h-5' />
-              </button>
-              <h2 className='text-lg font-medium'>review transaction</h2>
-            </div>
-
-            {/* All five rows are static display, not <Row>: Row's value type
+          <>
+            <ScreenHeader title='review transaction' onBack={handleBack} />
+            <div className='flex flex-col gap-4 p-4'>
+              {/* All five rows are static display, not <Row>: Row's value type
                 renders a clickable button with a hover state and a trailing
                 chevron (it's meant to open a Sheet), which would draw a fake
                 affordance on network/to that does nothing. RowGroup still
@@ -1530,48 +1517,49 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 additionally wrap their value in <Sensitive> for privacy-mode
                 blur, which Row's string-only `value` prop can't carry either
                 way. */}
-            <RowGroup>
-              <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
-                <span className='text-data text-fg-muted lowercase'>network</span>
-                <span className='text-data text-fg-high'>
-                  zcash {mainnet ? 'mainnet' : 'testnet'}
-                </span>
-              </div>
-              <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
-                <span className='text-data text-fg-muted lowercase'>to</span>
-                <span className='truncate font-mono text-data text-fg-high'>
-                  {truncateAddress(recipient)}
-                </span>
-              </div>
-              <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
-                <span className='text-data text-fg-muted lowercase'>amount</span>
-                <span className='text-data tabular-nums text-fg-high'>
-                  <Sensitive>{amount} zec</Sensitive>
-                </span>
-              </div>
-              <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
-                <span className='text-data text-fg-muted lowercase'>fee</span>
-                <span className='text-data tabular-nums text-fg-high'>
-                  <Sensitive>{fee} zec</Sensitive>
-                </span>
-              </div>
-              <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
-                <span className='text-data text-fg-muted lowercase'>total</span>
-                <span className='text-data tabular-nums text-fg-high'>
-                  <Sensitive>{(Number(amount) + Number(fee)).toFixed(4)} zec</Sensitive>
-                </span>
-              </div>
-            </RowGroup>
+              <RowGroup>
+                <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
+                  <span className='text-data text-fg-muted lowercase'>network</span>
+                  <span className='text-data text-fg-high'>
+                    zcash {mainnet ? 'mainnet' : 'testnet'}
+                  </span>
+                </div>
+                <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
+                  <span className='text-data text-fg-muted lowercase'>to</span>
+                  <span className='truncate font-mono text-data text-fg-high'>
+                    {truncateAddress(recipient)}
+                  </span>
+                </div>
+                <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
+                  <span className='text-data text-fg-muted lowercase'>amount</span>
+                  <span className='text-data tabular-nums text-fg-high'>
+                    <Sensitive>{amount} zec</Sensitive>
+                  </span>
+                </div>
+                <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
+                  <span className='text-data text-fg-muted lowercase'>fee</span>
+                  <span className='text-data tabular-nums text-fg-high'>
+                    <Sensitive>{fee} zec</Sensitive>
+                  </span>
+                </div>
+                <div className='flex min-h-[52px] items-center justify-between px-3.5 py-2'>
+                  <span className='text-data text-fg-muted lowercase'>total</span>
+                  <span className='text-data tabular-nums text-fg-high'>
+                    <Sensitive>{(Number(amount) + Number(fee)).toFixed(4)} zec</Sensitive>
+                  </span>
+                </div>
+              </RowGroup>
 
-            <div className='flex gap-2 mt-4'>
-              <Button variant='secondary' onClick={handleBack} className='flex-1'>
-                back
-              </Button>
-              <Button variant='primary' onClick={() => void handleSign()} className='flex-1'>
-                {kind && CAPS[kind].signLabel}
-              </Button>
+              <div className='flex gap-2 mt-4'>
+                <Button variant='secondary' onClick={handleBack} className='flex-1'>
+                  back
+                </Button>
+                <Button variant='primary' onClick={() => void handleSign()} className='flex-1'>
+                  {kind && CAPS[kind].signLabel}
+                </Button>
+              </div>
             </div>
-          </div>
+          </>
         );
 
       case 'building':
@@ -1586,10 +1574,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         return (
           <div className='flex flex-col gap-4 p-6'>
             <div className='flex flex-col items-center gap-3'>
-              <div className='relative flex h-16 w-16 items-center justify-center rounded-full bg-primary/20'>
-                <div className='h-8 w-8 animate-spin rounded-full border-2 border-zigner-gold border-t-transparent' />
+              <div className='relative flex h-16 w-16 items-center justify-center bg-primary/20'>
+                <div className='h-8 w-8 animate-spin border-2 border-zigner-gold border-t-transparent' />
               </div>
-              <h2 className='text-lg font-medium'>sending</h2>
+              <h2 className='text-lg'>sending</h2>
               {/* live elapsed timer - ticks every second so the UI never looks frozen */}
               <LiveTimer startMs={buildStartRef.current} />
             </div>
@@ -1620,21 +1608,16 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         const truncAddr = (a: string) => (a.length > 22 ? `${a.slice(0, 10)}…${a.slice(-8)}` : a);
         return (
           <div className='flex flex-col h-full'>
-            {/* header */}
-            <div className='flex items-center gap-2 px-4 py-3 border-b border-border-soft'>
-              <button
-                onClick={handleBack}
-                className='text-fg-muted hover:text-fg-high transition-colors'
-              >
-                <span className='i-ph-arrow-left w-4 h-4' />
-              </button>
-              <span className='flex-1 text-sm font-medium'>sign with zigner</span>
-              <div className='flex items-center gap-1.5'>
-                <div className='h-1 w-5 rounded-full bg-zigner-gold' />
-                <div className='h-1 w-5 rounded-full bg-elev-2' />
-              </div>
-              <DontQuitIcon />
-            </div>
+            <ScreenHeader
+              title='sign with zigner'
+              onBack={handleBack}
+              meta={
+                <>
+                  1 / 2
+                  <DontQuitIcon />
+                </>
+              }
+            />
 
             <div className='flex flex-col gap-4 p-4 flex-1 overflow-y-auto'>
               {/* QR */}
@@ -1662,7 +1645,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               </div>
 
               {/* tx summary */}
-              <div className='rounded-md border border-border-soft bg-elev-1 divide-y divide-border-soft text-xs'>
+              <div className='border border-border-soft bg-elev-1 divide-y divide-border-soft text-xs'>
                 <div className='flex items-center justify-between px-3 py-2'>
                   <span className='text-fg-muted'>to</span>
                   <span className='font-mono text-fg-high'>{truncAddr(recipient)}</span>
@@ -1697,7 +1680,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   ] as const
                 ).map((label, i) => (
                   <li key={i} className='flex items-center gap-2.5 text-xs text-fg-muted'>
-                    <span className='flex size-4 shrink-0 items-center justify-center rounded-full bg-zigner-gold/15 text-[9px] text-zigner-gold'>
+                    <span className='flex size-4 shrink-0 items-center justify-center bg-zigner-gold/15 text-[9px] text-zigner-gold'>
                       {i + 1}
                     </span>
                     {label}
@@ -1718,21 +1701,16 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       case 'scan':
         return (
           <div className='flex flex-col h-full'>
-            {/* header */}
-            <div className='flex items-center gap-2 px-4 py-3 border-b border-border-soft'>
-              <button
-                onClick={() => setStep('sign')}
-                className='text-fg-muted hover:text-fg-high transition-colors'
-              >
-                <span className='i-ph-arrow-left w-4 h-4' />
-              </button>
-              <span className='flex-1 text-sm font-medium'>scan signature</span>
-              <div className='flex items-center gap-1.5'>
-                <div className='h-1 w-5 rounded-full bg-elev-2' />
-                <div className='h-1 w-5 rounded-full bg-zigner-gold' />
-              </div>
-              <DontQuitIcon />
-            </div>
+            <ScreenHeader
+              title='scan signature'
+              onBack={() => setStep('sign')}
+              meta={
+                <>
+                  2 / 2
+                  <DontQuitIcon />
+                </>
+              }
+            />
 
             <div className='flex flex-col gap-3 p-4 flex-1'>
               <p className='text-xs text-fg-muted'>
@@ -1766,16 +1744,16 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               >
                 <span className='i-ph-arrow-left w-5 h-5' />
               </button>
-              <h2 className='text-lg font-medium'>confirm on your Ledger</h2>
+              <h2 className='text-lg'>confirm on your Ledger</h2>
             </div>
-            <div className='w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center'>
+            <div className='w-16 h-16 bg-primary/20 flex items-center justify-center'>
               <span className='i-ph-usb w-8 h-8 text-zigner-gold' />
             </div>
             <p className='text-sm text-fg-muted text-center'>
               review the recipient, amount, and fee on your Ledger device and approve the orchard
               spend to continue.
             </p>
-            <div className='w-full rounded-md border border-border-soft bg-elev-1 divide-y divide-border-soft text-xs'>
+            <div className='w-full border border-border-soft bg-elev-1 divide-y divide-border-soft text-xs'>
               <div className='flex items-center justify-between px-3 py-2'>
                 <span className='text-fg-muted'>to</span>
                 <span className='font-mono text-fg-high truncate max-w-[60%]'>{recipient}</span>
@@ -1794,7 +1772,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               </div>
             </div>
             <div className='flex items-center gap-2 text-xs text-fg-muted'>
-              <div className='h-4 w-4 animate-spin rounded-full border-2 border-zigner-gold border-t-transparent' />
+              <div className='h-4 w-4 animate-spin border-2 border-zigner-gold border-t-transparent' />
               waiting for device confirmation...
             </div>
           </div>
@@ -1805,7 +1783,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           <div className='flex flex-col items-center gap-4 p-8'>
             {/* the receipt gets stamped - a broadcast tx is sealed (封) */}
             <HankoSeal glyph='封' size='md' />
-            <h2 className='text-lg font-medium'>transaction sent</h2>
+            <h2 className='text-lg'>transaction sent</h2>
             <p className='text-sm text-fg-muted text-center'>
               {amount} zec sent successfully
               {totalElapsedSec !== null && ` in ${totalElapsedSec}s`}
@@ -1833,19 +1811,17 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   navigate(PopupPath.NOTE_SYNC);
                 }}
                 title='scan on your zigner to re-sync its verified balance after this send'
-                className='flex w-full items-center gap-2 rounded-md border border-border-soft px-3 py-2 text-left hover:border-fg-muted'
+                className='flex w-full items-center gap-2 border border-border-soft px-3 py-2 text-left hover:border-fg-muted'
               >
                 <span className='i-ph-qr-code size-4 text-fg-high shrink-0' />
-                <span className='text-xs font-medium text-fg-high'>
-                  sync balance to your zigner
-                </span>
+                <span className='text-xs text-fg-high'>sync balance to your zigner</span>
                 <span className='i-ph-caret-right size-3.5 text-fg-dim ml-auto shrink-0' />
               </button>
             )}
 
             {/* save contact prompt */}
             {showSavePrompt && recipient && !findByAddress(recipient) && !showContactModal && (
-              <div className='w-full rounded-lg border border-border-soft bg-elev-1 p-3'>
+              <div className='w-full border border-border-soft bg-elev-1 p-3'>
                 <div className='flex items-center gap-2 mb-2'>
                   <span className='i-ph-user h-4 w-4 text-zigner-gold' />
                   <p className='text-sm'>save to contacts?</p>
@@ -1901,24 +1877,24 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       case 'frost-signing':
         return (
           <div className='flex flex-col items-center gap-6 p-8'>
-            <div className='w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center'>
+            <div className='w-16 h-16 bg-primary/20 flex items-center justify-center'>
               <span className='i-ph-users w-8 h-8 text-zigner-gold' />
             </div>
-            <h2 className='text-lg font-medium'>multisig signing</h2>
+            <h2 className='text-lg'>multisig signing</h2>
 
             {frostRoomCode && (
               <div className='flex flex-col items-center gap-2'>
                 <p className='text-xs text-fg-muted'>share this session id with co-signers:</p>
-                <div className='rounded bg-elev-2 px-4 py-2 font-mono text-lg'>{frostRoomCode}</div>
+                <div className='bg-elev-2 px-4 py-2 font-mono text-lg'>{frostRoomCode}</div>
               </div>
             )}
 
             <div className='flex flex-col items-center gap-2'>
               <p className='text-sm'>{frostProgress}</p>
-              <div className='h-5 w-5 animate-spin rounded-full border-2 border-zigner-gold border-t-transparent' />
+              <div className='h-5 w-5 animate-spin border-2 border-zigner-gold border-t-transparent' />
             </div>
 
-            <div className='w-full rounded bg-elev-2 p-3 text-xs text-fg-muted'>
+            <div className='w-full bg-elev-2 p-3 text-xs text-fg-muted'>
               <p>
                 {activeZcashWallet?.multisig?.threshold}-of-
                 {activeZcashWallet?.multisig?.maxSigners} threshold
@@ -1959,10 +1935,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       case 'error':
         return (
           <div className='flex flex-col items-center gap-4 p-8'>
-            <div className='w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center'>
+            <div className='w-16 h-16 bg-red-500/20 flex items-center justify-center'>
               <span className='i-ph-x w-8 h-8 text-red-400' />
             </div>
-            <h2 className='text-lg font-medium'>transaction failed</h2>
+            <h2 className='text-lg'>transaction failed</h2>
             <p className='text-sm text-red-400 text-center'>
               {formError || signingError || 'an error occurred'}
             </p>

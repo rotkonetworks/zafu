@@ -144,10 +144,10 @@ function NoteRow({ note }: { note: DecryptedNoteWithTxid }) {
   const change = note.is_change === true;
 
   return (
-    <div className='flex items-center gap-3 rounded-lg border border-border-soft bg-elev-1 p-3'>
+    <div className='flex items-center gap-3 border border-border-soft bg-elev-1 p-3'>
       <div
         className={cn(
-          'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
+          'flex h-9 w-9 shrink-0 items-center justify-center',
           spent ? 'bg-elev-2' : 'bg-green-500/10',
         )}
       >
@@ -166,7 +166,7 @@ function NoteRow({ note }: { note: DecryptedNoteWithTxid }) {
           </span>
           <span
             className={cn(
-              'shrink-0 rounded-md px-1.5 py-0.5 text-label leading-none',
+              'shrink-0 px-1.5 py-0.5 text-label leading-none',
               spent ? 'bg-elev-2 text-fg-dim' : 'bg-green-500/10 text-green-400',
             )}
           >
@@ -178,7 +178,7 @@ function NoteRow({ note }: { note: DecryptedNoteWithTxid }) {
             {note.height > 0 ? `block ${note.height.toLocaleString()}` : 'unconfirmed'}
           </span>
           {change && (
-            <span className='rounded-md bg-elev-2 px-1.5 py-0.5 text-label leading-none text-fg-dim'>
+            <span className='bg-elev-2 px-1.5 py-0.5 text-label leading-none text-fg-dim'>
               change
             </span>
           )}
@@ -222,8 +222,8 @@ function UtxoRow({ utxo }: { utxo: Utxo }) {
       ? `${utxo.address.slice(0, 12)}...${utxo.address.slice(-6)}`
       : utxo.address;
   return (
-    <div className='flex items-center gap-3 rounded-lg border border-border-soft bg-elev-1 p-3'>
-      <div className='flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-elev-2'>
+    <div className='flex items-center gap-3 border border-border-soft bg-elev-1 p-3'>
+      <div className='flex h-9 w-9 shrink-0 items-center justify-center bg-elev-2'>
         <span className='i-ph-eye h-4 w-4 text-fg-muted' />
       </div>
       <div className='min-w-0 flex-1'>
@@ -231,7 +231,7 @@ function UtxoRow({ utxo }: { utxo: Utxo }) {
           <span className='font-mono text-sm tabular-nums text-fg-high'>
             <Sensitive>{fmtZec(utxo.valueZat)} ZEC</Sensitive>
           </span>
-          <span className='shrink-0 rounded-md bg-elev-2 px-1.5 py-0.5 text-label leading-none text-fg-dim'>
+          <span className='shrink-0 bg-elev-2 px-1.5 py-0.5 text-label leading-none text-fg-dim'>
             public
           </span>
         </div>
@@ -378,11 +378,11 @@ const TransparentSection = ({
       {utxoLoading && utxos.length === 0 ? (
         <div className='flex flex-col gap-2 animate-pulse'>
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className='flex items-center gap-3 rounded-lg bg-elev-1 p-3'>
-              <div className='h-9 w-9 shrink-0 rounded-full bg-elev-2/60' />
+            <div key={i} className='flex items-center gap-3 bg-elev-1 p-3'>
+              <div className='h-9 w-9 shrink-0 bg-elev-2/60' />
               <div className='flex-1 space-y-1.5'>
-                <div className='h-3 w-1/2 rounded-sm bg-elev-2/60' />
-                <div className='h-2 w-1/3 rounded-sm bg-elev-2/40' />
+                <div className='h-3 w-1/2 bg-elev-2/60' />
+                <div className='h-2 w-1/3 bg-elev-2/40' />
               </div>
             </div>
           ))}
@@ -393,7 +393,7 @@ const TransparentSection = ({
         </div>
       ) : utxos.length === 0 ? (
         <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
-          <div className='rounded-full bg-primary/10 p-4'>
+          <div className='bg-primary/10 p-4'>
             <span className='i-ph-shield-check h-8 w-8 text-zigner-gold' />
           </div>
           <p className='text-sm text-fg-muted lowercase'>no transparent funds - all shielded</p>
@@ -432,7 +432,7 @@ const ShieldedSection = ({
         type='button'
         onClick={refetch}
         disabled={loading}
-        className='shrink-0 rounded-lg p-1.5 text-fg-muted transition-colors hover:bg-elev-1 hover:text-fg-high disabled:opacity-50'
+        className='shrink-0 p-1.5 text-fg-muted transition-colors hover:bg-elev-1 hover:text-fg-high disabled:opacity-50'
         title='refresh'
       >
         <span className={cn('i-ph-arrows-clockwise h-4 w-4', loading && 'animate-spin')} />
@@ -444,11 +444,11 @@ const ShieldedSection = ({
         // skeleton of note-row geometry - same rhythm as real rows, no spinner
         <div className='flex flex-col gap-2 animate-pulse'>
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className='flex items-center gap-3 rounded-lg bg-elev-1 p-3'>
-              <div className='h-9 w-9 shrink-0 rounded-full bg-elev-2/60' />
+            <div key={i} className='flex items-center gap-3 bg-elev-1 p-3'>
+              <div className='h-9 w-9 shrink-0 bg-elev-2/60' />
               <div className='flex-1 space-y-1.5'>
-                <div className='h-3 w-1/2 rounded-sm bg-elev-2/60' />
-                <div className='h-2 w-1/3 rounded-sm bg-elev-2/40' />
+                <div className='h-3 w-1/2 bg-elev-2/60' />
+                <div className='h-2 w-1/3 bg-elev-2/40' />
               </div>
             </div>
           ))}
@@ -466,7 +466,7 @@ const ShieldedSection = ({
         </div>
       ) : active.length === 0 ? (
         <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
-          <div className='rounded-full bg-primary/10 p-4'>
+          <div className='bg-primary/10 p-4'>
             <span
               className={cn(
                 'h-8 w-8 text-zigner-gold',

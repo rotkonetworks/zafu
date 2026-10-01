@@ -20,7 +20,7 @@ export function SaveContactPrompt({
   onDismiss: () => void;
 }) {
   return (
-    <div className='rounded-lg border border-zigner-gold/30 bg-zigner-gold/10 p-3'>
+    <div className='border border-zigner-gold/30 bg-zigner-gold/10 p-3'>
       <div className='flex items-start justify-between gap-2'>
         <div className='flex items-center gap-2'>
           <span className='i-ph-user h-4 w-4 text-zigner-gold' />
@@ -36,13 +36,13 @@ export function SaveContactPrompt({
       <div className='mt-2 flex gap-2'>
         <button
           onClick={onSave}
-          className='flex-1 rounded-md bg-zigner-gold px-3 py-1.5 text-xs font-medium text-zigner-gold-foreground transition-colors hover:bg-zigner-gold-light'
+          className='flex-1 bg-zigner-gold px-3 py-1.5 text-xs text-zigner-gold-foreground transition-colors hover:bg-zigner-gold-light'
         >
           save contact
         </button>
         <button
           onClick={onDismiss}
-          className='flex-1 rounded-md bg-elev-2 px-3 py-1.5 text-xs text-fg-muted transition-colors hover:bg-elev-1/80 hover:text-fg-high'
+          className='flex-1 bg-elev-2 px-3 py-1.5 text-xs text-fg-muted transition-colors hover:bg-elev-1/80 hover:text-fg-high'
         >
           not now
         </button>

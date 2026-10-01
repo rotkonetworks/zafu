@@ -106,7 +106,7 @@ export function ContactPicker() {
       {/* header */}
       <div className='px-4 pt-4 pb-2'>
         <div className='text-xs text-fg-muted uppercase tracking-wider mb-1'>{params.app}</div>
-        <div className='text-sm font-medium'>{params.purpose}</div>
+        <div className='text-sm'>{params.purpose}</div>
         <div className='text-xs text-fg-muted mt-1'>
           select up to {params.max} contact{params.max > 1 ? 's' : ''}
         </div>
@@ -115,7 +115,7 @@ export function ContactPicker() {
       {/* search */}
       <div className='px-4 pb-2'>
         <input
-          className='w-full px-3 py-1.5 text-xs bg-elev-1 border border-border-hard rounded-md focus:outline-none focus:ring-1 focus:ring-primary'
+          className='w-full px-3 py-1.5 text-xs bg-elev-1 border border-border-hard focus:outline-none focus:ring-1 focus:ring-primary'
           placeholder='search contacts...'
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -136,7 +136,7 @@ export function ContactPicker() {
               <button
                 key={contact.id}
                 className={cn(
-                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 transition-colors text-left',
+                  'w-full flex items-center gap-3 px-3 py-2.5 mb-1 transition-colors text-left',
                   isSelected
                     ? 'bg-primary/10 border border-primary/30'
                     : 'hover:bg-elev-1 border border-transparent',
@@ -146,7 +146,7 @@ export function ContactPicker() {
                 {/* avatar */}
                 <div
                   className={cn(
-                    'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold',
+                    'w-8 h-8 flex items-center justify-center text-xs',
                     isSelected
                       ? 'bg-zigner-gold text-zigner-gold-foreground'
                       : 'bg-elev-2 text-fg-muted',
@@ -157,7 +157,7 @@ export function ContactPicker() {
 
                 {/* name + address preview */}
                 <div className='flex-1 min-w-0'>
-                  <div className='text-sm font-medium truncate'>{contact.name}</div>
+                  <div className='text-sm truncate'>{contact.name}</div>
                   {contact.addresses.length > 0 && (
                     <div className='text-xs text-fg-muted truncate'>
                       {contact.addresses[0]!.network} - {contact.addresses[0]!.address.slice(0, 12)}
@@ -169,7 +169,7 @@ export function ContactPicker() {
                 {/* check indicator */}
                 <div
                   className={cn(
-                    'w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors',
+                    'w-5 h-5 border-2 flex items-center justify-center transition-colors',
                     isSelected ? 'border-zigner-gold bg-zigner-gold' : 'border-muted-foreground/30',
                   )}
                 >
@@ -194,14 +194,14 @@ export function ContactPicker() {
       {/* action bar */}
       <div className='px-4 py-3 border-t border-border-hard flex gap-2'>
         <button
-          className='flex-1 px-3 py-2 text-xs rounded-md border border-border-hard text-fg-muted hover:text-fg-high transition-colors'
+          className='flex-1 px-3 py-2 text-xs border border-border-hard text-fg-muted hover:text-fg-high transition-colors'
           onClick={handleCancel}
         >
           cancel
         </button>
         <button
           className={cn(
-            'flex-1 px-3 py-2 text-xs rounded-md font-medium transition-colors',
+            'flex-1 px-3 py-2 text-xs transition-colors',
             selected.size > 0
               ? 'bg-zigner-gold text-zigner-gold-foreground hover:bg-primary/90'
               : 'bg-elev-2 text-fg-muted cursor-not-allowed',

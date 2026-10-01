@@ -17,6 +17,7 @@ import { NetworkSheet } from './network-sheet';
 import { AddWalletSheet } from './add-wallet-sheet';
 import { NewPocketSheet } from './new-pocket-sheet';
 import { cn } from '@repo/ui/lib/utils';
+import { Mark } from '@repo/ui/components/ui/mark';
 
 type OpenSheet = 'accounts' | 'network' | 'add-wallet' | 'new-pocket' | null;
 
@@ -41,43 +42,44 @@ export const AppHeader = () => {
   const pocketName = pockets.find(p => p.account === pocketAccount)?.name;
 
   return (
-    <header className='sticky top-0 z-40 flex h-11 shrink-0 items-center justify-between gap-2 border-b border-border-soft bg-canvas/80 px-3 backdrop-blur-sm'>
+    <header className='sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border-soft bg-canvas pl-3 pr-2'>
       <button
         onClick={() => setOpenSheet('accounts')}
-        className='flex min-w-0 items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-elev-1'
+        className='flex h-10 min-w-0 items-center gap-2.5 pl-1 pr-2.5 transition-colors hover:bg-elev-2'
         aria-label='accounts'
         aria-haspopup='dialog'
       >
+        <Mark variant='seal' size={26} />
         <span className='flex min-w-0 flex-col items-start leading-tight'>
-          <span className='max-w-32 truncate text-data text-fg-high lowercase'>{walletName}</span>
+          <span className='max-w-32 truncate text-sm text-fg-high lowercase'>{walletName}</span>
           {pocketName && (
-            <span className='max-w-32 truncate text-label text-fg-muted lowercase'>
+            <span className='max-w-32 truncate text-[11px] text-fg-muted lowercase'>
               {pocketName}
             </span>
           )}
         </span>
         {selectedKeyInfo && <CustodyBadge vault={selectedKeyInfo} showLabel={false} />}
-        <span className='i-ph-caret-down h-3 w-3 shrink-0 text-fg-muted' />
+        <span className='i-lucide-chevron-down size-3.5 shrink-0 text-fg-muted' />
       </button>
 
       <button
         onClick={() => setOpenSheet('network')}
-        className='flex shrink-0 items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-elev-1'
+        className='flex h-8 shrink-0 items-center gap-2 border border-border-soft bg-elev-1 px-2.5 transition-colors hover:bg-elev-2'
         aria-label='switch network'
         aria-haspopup='dialog'
       >
-        <span className={cn('h-2.5 w-2.5 rounded-full', networkInfo.color)} />
-        <span className='text-data text-fg-high lowercase'>{networkInfo.name}</span>
+        <span className={cn('size-2', networkInfo.color)} />
+        <span className='text-[13px] text-fg-high lowercase'>{networkInfo.name}</span>
         {networkInfo.transparent && (
           <span
-            className='flex items-center gap-0.5 rounded-md bg-red-500/15 px-1.5 py-0.5 text-label leading-none text-red-500'
+            className='flex items-center gap-0.5 bg-hanko/15 px-1.5 py-0.5 text-label leading-none text-hanko'
             title='transparent network - balances and transactions are PUBLIC, not shielded'
           >
             <span className='i-ph-eye h-3 w-3' />
             unshielded
           </span>
         )}
-        <span className='i-ph-caret-down h-3 w-3 text-fg-muted' />
+        <span className='i-lucide-chevron-down size-3 text-fg-muted' />
       </button>
 
       <AccountsSheet

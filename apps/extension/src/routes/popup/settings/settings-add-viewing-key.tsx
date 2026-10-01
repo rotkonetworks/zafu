@@ -179,7 +179,7 @@ export const SettingsAddViewingKey = () => {
             rows={4}
             spellCheck={false}
             autoComplete='off'
-            className='w-full resize-none rounded-md border border-border-soft bg-elev-1 p-2 font-mono text-[11px] leading-snug text-fg-high outline-none focus:border-fg-muted'
+            className='w-full resize-none border border-border-soft bg-elev-1 p-2 font-mono text-[11px] leading-snug text-fg-high outline-none focus:border-fg-muted'
           />
           {verdict && (
             <p className={cn('text-label lowercase', verdict.bad ? 'text-hanko' : 'text-fg-dim')}>
@@ -189,7 +189,7 @@ export const SettingsAddViewingKey = () => {
         </div>
 
         {address && (
-          <div className='flex flex-col gap-1 rounded-md border border-border-soft bg-elev-1 p-3'>
+          <div className='flex flex-col gap-1 border border-border-soft bg-elev-1 p-3'>
             <span className='text-label text-fg-dim lowercase'>this key belongs to</span>
             <span className='font-mono text-xs text-fg-high' title={address}>
               {shorten(address)}

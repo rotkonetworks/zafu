@@ -57,7 +57,7 @@ export const PositionOpenViewComponent = ({ value }: { value: PositionOpenView }
           </ActionDetails.Row>
 
           <div className='flex gap-2'>
-            <p className='font-medium'>Trading Parameters</p>
+            <p>Trading Parameters</p>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger>

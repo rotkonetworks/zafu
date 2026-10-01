@@ -99,7 +99,7 @@ export const SettingsClearCache = () => {
       <div className='flex flex-col gap-4'>
         {clearingState.inProgress ? (
           <div className='flex flex-col gap-3'>
-            <div className='h-1.5 w-full rounded-full bg-elev-2 overflow-hidden'>
+            <div className='h-1.5 w-full bg-elev-2 overflow-hidden'>
               <div
                 className='h-full bg-zigner-gold transition-all duration-300 ease-out'
                 style={{ width: `${progressPercent}%` }}
@@ -127,7 +127,7 @@ export const SettingsClearCache = () => {
             {grouped.map(g => (
               <div key={g.type}>
                 <p className='kicker mb-2'>{g.label}</p>
-                <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border-soft bg-elev-1'>
+                <div className='flex flex-col divide-y divide-border/40 border border-border-soft bg-elev-1'>
                   {g.vaults.map(v => {
                     const hasZcash =
                       enabledNetworks.includes('zcash') &&
@@ -152,7 +152,7 @@ export const SettingsClearCache = () => {
                             <button
                               disabled={clearingState.inProgress}
                               onClick={() => handleClearPenumbra(v)}
-                              className='rounded border border-red-500/25 bg-red-500/5 px-2 py-0.5 text-label text-red-400 hover:bg-red-500/15 transition-colors disabled:opacity-50'
+                              className='border border-red-500/25 bg-red-500/5 px-2 py-0.5 text-label text-red-400 hover:bg-red-500/15 transition-colors disabled:opacity-50'
                               title='reloads the extension when done'
                             >
                               resync penumbra - reloads the extension
@@ -171,7 +171,7 @@ export const SettingsClearCache = () => {
                 separate, deliberate way to wipe them. */}
             <div>
               <p className='kicker mb-2'>personal data</p>
-              <div className='flex flex-col gap-2 rounded-lg border border-border-soft bg-elev-1 p-3'>
+              <div className='flex flex-col gap-2 border border-border-soft bg-elev-1 p-3'>
                 <p className='text-label text-fg-muted'>
                   send history, tx notes, and contacts - local only, never rebuilt from the chain. a
                   resync keeps these; this clears them.
@@ -183,14 +183,14 @@ export const SettingsClearCache = () => {
                     <button
                       disabled={personalStep === 'clearing'}
                       onClick={() => void handleClearPersonal()}
-                      className='rounded border border-hanko/40 bg-hanko/10 px-2 py-0.5 text-label text-hanko transition-colors hover:bg-hanko/20 disabled:opacity-50'
+                      className='border border-hanko/40 bg-hanko/10 px-2 py-0.5 text-label text-hanko transition-colors hover:bg-hanko/20 disabled:opacity-50'
                     >
                       {personalStep === 'clearing' ? 'clearing...' : 'yes, clear it all'}
                     </button>
                     {personalStep === 'confirm' && (
                       <button
                         onClick={() => setPersonalStep('idle')}
-                        className='rounded border border-border-soft px-2 py-0.5 text-label text-fg-muted'
+                        className='border border-border-soft px-2 py-0.5 text-label text-fg-muted'
                       >
                         cancel
                       </button>
@@ -199,7 +199,7 @@ export const SettingsClearCache = () => {
                 ) : (
                   <button
                     onClick={() => setPersonalStep('confirm')}
-                    className='self-start rounded border border-rust/30 bg-rust/5 px-2 py-0.5 text-label text-rust transition-colors hover:bg-rust/15'
+                    className='self-start border border-rust/30 bg-rust/5 px-2 py-0.5 text-label text-rust transition-colors hover:bg-rust/15'
                   >
                     clear personal data
                   </button>

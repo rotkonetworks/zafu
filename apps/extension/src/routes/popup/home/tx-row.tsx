@@ -107,7 +107,7 @@ export function TxRow({ tx, network }: { tx: ParsedTransaction; network: Network
         type='button'
         onClick={() => setOpen(true)}
         className={cn(
-          'flex items-center gap-3 rounded-lg border bg-elev-1 p-3 text-left transition-colors',
+          'flex items-center gap-3 border bg-elev-1 p-3 text-left transition-colors',
           isFailed ? 'border-hanko/40' : 'border-border-soft',
           // pending rows recede rather than flash: they are not an alert, they
           // are simply not finished
@@ -118,7 +118,7 @@ export function TxRow({ tx, network }: { tx: ParsedTransaction; network: Network
             shield / arrow-down / arrow-up on a neutral chip. An unsettled
             transaction shows the open ensō instead - the state matters more
             than the direction until it lands. */}
-        <div className='flex h-8 w-8 items-center justify-center rounded-full bg-elev-2'>
+        <div className='flex h-8 w-8 items-center justify-center bg-elev-2'>
           {isPending ? (
             <PendingMark />
           ) : isFailed ? (
@@ -135,13 +135,7 @@ export function TxRow({ tx, network }: { tx: ParsedTransaction; network: Network
         </div>
         <div className='flex-1 min-w-0'>
           <div className='flex items-center justify-between gap-2'>
-            <span
-              className={cn(
-                'text-xs font-medium',
-                isPending && 'text-fg-muted',
-                isFailed && 'text-hanko',
-              )}
-            >
+            <span className={cn('text-xs', isPending && 'text-fg-muted', isFailed && 'text-hanko')}>
               {tx.description}
             </span>
             {tx.amount && (

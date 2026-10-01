@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { generateGradient, generateSolidColor } from './generate';
 import { IdenticonProps } from './types';
-import { cn } from '../../../lib/utils';
 
 export const Identicon = ({ type, ...props }: IdenticonProps & { type: 'gradient' | 'solid' }) => {
   if (type === 'gradient') {
@@ -21,7 +20,7 @@ const IdenticonGradient = ({ uniqueIdentifier, size = 120, className }: Identico
       viewBox={`0 0 ${size} ${size}`}
       version='1.1'
       xmlns='http://www.w3.org/2000/svg'
-      className={cn('rounded-full', className)}
+      className={className}
     >
       <g>
         <defs>
@@ -46,7 +45,7 @@ const IdenticonSolid = ({ uniqueIdentifier, size = 120, className }: IdenticonPr
       viewBox={`0 0 ${size} ${size}`}
       version='1.1'
       xmlns='http://www.w3.org/2000/svg'
-      className={cn('rounded-full', className)}
+      className={className}
     >
       <rect fill={color.bg} x='0' y='0' width={size} height={size} />
       <text

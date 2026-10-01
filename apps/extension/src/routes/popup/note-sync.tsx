@@ -74,11 +74,11 @@ export const NoteSyncPage = () => {
 
       {step === 'display' && encoded && encoded.noteCount > 0 && activeWallet && (
         <div className='flex flex-col gap-4'>
-          <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
+          <div className='border border-border-soft bg-elev-1 p-3'>
             <p className='text-label text-fg-muted'>wallet</p>
-            <p className='text-sm font-medium truncate'>{activeWallet.label}</p>
+            <p className='text-sm truncate'>{activeWallet.label}</p>
             <div className='mt-1 flex items-center gap-2'>
-              <span className='text-lg font-mono font-medium'>
+              <span className='text-lg font-mono'>
                 <Sensitive>{balanceDisplay}</Sensitive>
               </span>
               <span className='text-xs text-fg-muted'>ZEC</span>
@@ -91,7 +91,7 @@ export const NoteSyncPage = () => {
           </div>
 
           {encoded.excludedPool && (encoded.excludedNoteCount ?? 0) > 0 && (
-            <div className='rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-amber-500'>
+            <div className='border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-amber-500'>
               this bundle carries only your {encoded.pool} notes. {encoded.excludedNoteCount}{' '}
               {encoded.excludedPool} note
               {encoded.excludedNoteCount !== 1 ? 's' : ''} (
@@ -114,13 +114,13 @@ export const NoteSyncPage = () => {
       )}
 
       {step === 'display' && encoded?.noteCount === 0 && (
-        <div className='rounded-lg border border-border-soft bg-elev-1 p-3 text-xs text-fg-muted'>
+        <div className='border border-border-soft bg-elev-1 p-3 text-xs text-fg-muted'>
           no spendable notes - sync the wallet first
         </div>
       )}
 
       {step === 'error' && (
-        <div className='rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-400'>
+        <div className='border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-400'>
           {error}
         </div>
       )}

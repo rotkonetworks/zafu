@@ -43,7 +43,7 @@ export const OnboardingSuccess = () => {
       <FadeTransition>
         <div className='flex flex-col gap-[22px]'>
           <Mark variant='seal' glyph='済' size={76} className='-rotate-[7deg]' />
-          <h1 className='font-display text-[44px] font-medium text-fg-high'>wallet ready</h1>
+          <h1 className='font-display text-[44px] text-fg-high'>wallet ready</h1>
 
           <Button
             variant='primary'

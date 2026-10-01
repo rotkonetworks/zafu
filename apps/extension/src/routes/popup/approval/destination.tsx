@@ -78,7 +78,7 @@ export const DestinationApproval = () => {
 
           {/* why - a human label for the purpose the wallet assigned */}
           {purposeLabel && (
-            <div className='rounded-lg border border-border-soft bg-canvas p-3'>
+            <div className='border border-border-soft bg-canvas p-3'>
               <p className='kicker mb-1'>purpose</p>
               <p className='text-xs text-fg-high'>{purposeLabel}</p>
             </div>
@@ -86,7 +86,7 @@ export const DestinationApproval = () => {
 
           {/* which site asked */}
           {origin && (
-            <div className='rounded-lg border border-border-soft bg-canvas p-3'>
+            <div className='border border-border-soft bg-canvas p-3'>
               <p className='kicker mb-1'>requested by</p>
               <p className='truncate text-xs text-fg-muted'>
                 <SafeOriginURL origin={origin} />

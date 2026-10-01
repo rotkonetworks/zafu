@@ -442,16 +442,16 @@ export const SubscribePage = () => {
       <div className='flex flex-col gap-4'>
         {/* status */}
         {pro ? (
-          <div className='rounded border border-border-soft p-3'>
+          <div className='border border-border-soft p-3'>
             <div className='flex items-center gap-2'>
-              <span className='h-2 w-2 rounded-full bg-green-400' />
+              <span className='h-2 w-2 bg-green-400' />
               <span className='text-xs font-mono'>pro - {days} days remaining</span>
             </div>
           </div>
         ) : (
-          <div className='rounded border border-border-soft p-3'>
+          <div className='border border-border-soft p-3'>
             <div className='flex items-center gap-2'>
-              <span className='h-2 w-2 rounded-full bg-fg-muted/40' />
+              <span className='h-2 w-2 bg-fg-muted/40' />
               <span className='text-xs font-mono'>free plan</span>
             </div>
           </div>
@@ -485,9 +485,9 @@ export const SubscribePage = () => {
 
         {/* pending payment from server */}
         {pending && pending.pendingZat > 0 && (
-          <div className='rounded border border-yellow-500/30 p-3'>
+          <div className='border border-yellow-500/30 p-3'>
             <div className='flex items-center gap-2'>
-              <span className='h-2 w-2 rounded-full bg-yellow-400 animate-pulse' />
+              <span className='h-2 w-2 bg-yellow-400 animate-pulse' />
               <span className='text-xs font-mono'>
                 payment detected -{' '}
                 <Sensitive>{(pending.pendingZat / 1e8).toFixed(4)} ZEC</Sensitive>
@@ -510,7 +510,7 @@ export const SubscribePage = () => {
             <button
               onClick={() => setMonths(m => Math.max(1, m - 1))}
               disabled={months <= 1 || payState !== 'idle'}
-              className='rounded border border-border-soft px-3 py-1.5 text-sm font-mono text-fg-muted hover:text-fg-high disabled:opacity-30 transition-colors'
+              className='border border-border-soft px-3 py-1.5 text-sm font-mono text-fg-muted hover:text-fg-high disabled:opacity-30 transition-colors'
             >
               -
             </button>
@@ -523,7 +523,7 @@ export const SubscribePage = () => {
             <button
               onClick={() => setMonths(m => Math.min(12, m + 1))}
               disabled={months >= 12 || payState !== 'idle'}
-              className='rounded border border-border-soft px-3 py-1.5 text-sm font-mono text-fg-muted hover:text-fg-high disabled:opacity-30 transition-colors'
+              className='border border-border-soft px-3 py-1.5 text-sm font-mono text-fg-muted hover:text-fg-high disabled:opacity-30 transition-colors'
             >
               +
             </button>
@@ -542,7 +542,7 @@ export const SubscribePage = () => {
           {payState === 'idle' && memo && (
             <button
               onClick={handleReview}
-              className='rounded border border-primary/40 bg-primary/10 py-3 text-sm font-mono text-zigner-gold hover:bg-primary/20 transition-colors'
+              className='border border-primary/40 bg-primary/10 py-3 text-sm font-mono text-zigner-gold hover:bg-primary/20 transition-colors'
             >
               {pro
                 ? `extend +${daysAdded} days${isZignerWallet ? ' with zigner' : ''}`
@@ -555,7 +555,7 @@ export const SubscribePage = () => {
           {/* review step - tx summary. zigner hands off to send page for QR
                 signing; mnemonic builds + broadcasts locally after password gate. */}
           {payState === 'review' && (
-            <div className='rounded border border-primary/40 bg-primary/5 p-3 flex flex-col gap-2'>
+            <div className='border border-primary/40 bg-primary/5 p-3 flex flex-col gap-2'>
               <p className='text-xs font-mono text-fg-muted'>transaction summary</p>
               <div className='flex justify-between text-xs font-mono'>
                 <span className='text-fg-muted'>amount</span>
@@ -588,7 +588,7 @@ export const SubscribePage = () => {
               <div className='flex gap-2 mt-2'>
                 <button
                   onClick={() => setPayState('idle')}
-                  className='flex-1 rounded border border-border-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high'
+                  className='flex-1 border border-border-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high'
                 >
                   cancel
                 </button>
@@ -600,7 +600,7 @@ export const SubscribePage = () => {
                       void handleConfirm();
                     }
                   }}
-                  className='flex-1 rounded border border-primary/40 bg-primary/10 py-2 text-xs font-mono text-zigner-gold hover:bg-primary/20'
+                  className='flex-1 border border-primary/40 bg-primary/10 py-2 text-xs font-mono text-zigner-gold hover:bg-primary/20'
                 >
                   {isZignerWallet ? 'continue to sign' : 'confirm & pay'}
                 </button>
@@ -610,7 +610,7 @@ export const SubscribePage = () => {
 
           {/* zigner: show sign-request QR */}
           {payState === 'zigner-sign' && signRequestQr && (
-            <div className='rounded border border-primary/40 bg-primary/5 p-3 flex flex-col gap-3 items-center'>
+            <div className='border border-primary/40 bg-primary/5 p-3 flex flex-col gap-3 items-center'>
               <p className='text-xs font-mono text-fg-muted'>sign with zafu zigner</p>
               <QrDisplay data={signRequestQr} size={220} />
               <div className='text-label font-mono text-fg-muted text-center leading-relaxed'>
@@ -629,13 +629,13 @@ export const SubscribePage = () => {
                     setSignRequestQr(null);
                     setPayState('idle');
                   }}
-                  className='flex-1 rounded border border-border-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high'
+                  className='flex-1 border border-border-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high'
                 >
                   cancel
                 </button>
                 <button
                   onClick={() => setPayState('zigner-scan')}
-                  className='flex-1 rounded border border-primary/40 bg-primary/10 py-2 text-xs font-mono text-zigner-gold hover:bg-primary/20'
+                  className='flex-1 border border-primary/40 bg-primary/10 py-2 text-xs font-mono text-zigner-gold hover:bg-primary/20'
                 >
                   scan signature
                 </button>
@@ -645,7 +645,7 @@ export const SubscribePage = () => {
 
           {/* zigner: scan signature QR */}
           {payState === 'zigner-scan' && (
-            <div className='rounded border border-primary/40 bg-primary/5 p-3 flex flex-col gap-2'>
+            <div className='border border-primary/40 bg-primary/5 p-3 flex flex-col gap-2'>
               <QrScanner
                 inline
                 title='scan signature'
@@ -658,7 +658,7 @@ export const SubscribePage = () => {
 
           {/* building/broadcasting */}
           {(payState === 'building' || payState === 'broadcasting') && (
-            <div className='rounded border border-border-soft p-3 flex flex-col gap-2'>
+            <div className='border border-border-soft p-3 flex flex-col gap-2'>
               <div className='flex items-center justify-between'>
                 <span className='text-xs font-mono text-fg'>
                   {payState === 'building' ? 'building transaction' : 'broadcasting'}
@@ -671,9 +671,9 @@ export const SubscribePage = () => {
 
           {/* polling for activation */}
           {payState === 'polling' && (
-            <div className='rounded border border-green-500/30 bg-green-500/10 p-3'>
+            <div className='border border-green-500/30 bg-green-500/10 p-3'>
               <div className='flex items-center gap-2'>
-                <span className='h-2 w-2 rounded-full bg-green-400 animate-pulse' />
+                <span className='h-2 w-2 bg-green-400 animate-pulse' />
                 <span className='text-xs font-mono text-green-400'>
                   payment sent - waiting for confirmation
                 </span>
@@ -688,7 +688,7 @@ export const SubscribePage = () => {
 
           {/* activated */}
           {payState === 'activated' && (
-            <div className='rounded border border-green-500/30 bg-green-500/10 p-3 text-center'>
+            <div className='border border-green-500/30 bg-green-500/10 p-3 text-center'>
               <span className='i-ph-check size-5 text-green-400 inline-block mb-1' />
               <p className='text-sm font-mono text-green-400'>pro activated</p>
             </div>
@@ -696,7 +696,7 @@ export const SubscribePage = () => {
 
           {/* sent but polling timed out */}
           {payState === 'sent' && (
-            <div className='rounded border border-yellow-500/30 bg-yellow-500/10 p-3'>
+            <div className='border border-yellow-500/30 bg-yellow-500/10 p-3'>
               <p className='text-xs font-mono text-yellow-400'>
                 payment sent - may need a few more confirmations
               </p>
@@ -710,7 +710,7 @@ export const SubscribePage = () => {
 
           {/* error */}
           {payState === 'error' && (
-            <div className='rounded border border-red-500/30 bg-red-500/10 p-3'>
+            <div className='border border-red-500/30 bg-red-500/10 p-3'>
               <p className='text-xs font-mono text-red-400'>{error}</p>
               <button
                 onClick={() => {
@@ -727,7 +727,7 @@ export const SubscribePage = () => {
           {/* manual copy fallback - shown only when in-wallet pay isn't available
                  (e.g. zcash not enabled, or user wants to pay from external wallet) */}
           {isZignerWallet && (
-            <div className='rounded border border-border-soft p-3'>
+            <div className='border border-border-soft p-3'>
               <p className='text-label font-mono text-fg-muted mb-2'>
                 or pay from an external wallet
               </p>
@@ -756,7 +756,7 @@ export const SubscribePage = () => {
             <button
               onClick={() => void manualCheck()}
               disabled={checking || !zidPubkey}
-              className='rounded border border-border-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high disabled:opacity-30 transition-colors'
+              className='border border-border-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high disabled:opacity-30 transition-colors'
             >
               {checking ? 'checking...' : (checkResult ?? 'check payment status')}
             </button>

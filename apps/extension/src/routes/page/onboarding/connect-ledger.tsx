@@ -140,7 +140,7 @@ export const ConnectLedger = () => {
       <FadeTransition>
         <div className='flex flex-col gap-5'>
           <OnboardingBack onClick={handleBack} />
-          <h1 className='font-display text-[38px] font-medium text-fg-high'>connect ledger</h1>
+          <h1 className='font-display text-[38px] text-fg-high'>connect ledger</h1>
           <p className='text-body text-fg-muted lowercase'>
             plug in your ledger and open the zcash app to add a watch-only wallet.
           </p>

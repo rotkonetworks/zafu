@@ -92,7 +92,7 @@ export function GroupChatThread() {
 
       <div className='flex-1 space-y-2 overflow-y-auto p-3'>
         {status === 'error' && (
-          <div className='rounded-lg border border-border-soft bg-elev-1 p-3 text-label text-amber-400'>
+          <div className='border border-border-soft bg-elev-1 p-3 text-label text-amber-400'>
             {thread?.error}
           </div>
         )}
@@ -120,13 +120,13 @@ export function GroupChatThread() {
           rows={1}
           maxLength={MAX_CHAT_CHARS}
           placeholder='message the group…'
-          className='max-h-24 flex-1 resize-none rounded-lg border border-border-soft bg-canvas px-3 py-2 text-sm text-fg-high placeholder:text-fg-dim focus:outline-none'
+          className='max-h-24 flex-1 resize-none border border-border-soft bg-canvas px-3 py-2 text-sm text-fg-high placeholder:text-fg-dim focus:outline-none'
         />
         <button
           type='button'
           onClick={() => void send()}
           disabled={!draft.trim() || sending || status === 'error'}
-          className='rounded-lg bg-network-accent px-3 py-2 text-sm font-medium text-network-accent-foreground disabled:opacity-40'
+          className='bg-network-accent px-3 py-2 text-sm text-network-accent-foreground disabled:opacity-40'
         >
           send
         </button>
@@ -141,8 +141,8 @@ function MessageBubble({ m }: { m: GroupChatMessage }) {
       <div
         className={
           m.mine
-            ? 'max-w-[80%] rounded-lg rounded-br-sm bg-network-accent px-3 py-1.5 text-sm text-network-accent-foreground'
-            : 'max-w-[80%] rounded-lg rounded-bl-sm bg-elev-1 px-3 py-1.5 text-sm text-fg-high'
+            ? 'max-w-[80%] bg-network-accent px-3 py-1.5 text-sm text-network-accent-foreground'
+            : 'max-w-[80%] bg-elev-1 px-3 py-1.5 text-sm text-fg-high'
         }
       >
         {!m.mine && (

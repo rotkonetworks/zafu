@@ -85,7 +85,7 @@ export const CustodyBadge = ({
     <span
       title={style.title}
       className={cn(
-        'inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-label lowercase',
+        'inline-flex shrink-0 items-center gap-1 px-1.5 py-0.5 text-label lowercase',
         style.tint,
         className,
       )}

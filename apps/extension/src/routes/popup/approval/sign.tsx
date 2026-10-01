@@ -215,22 +215,20 @@ export const SignApproval = () => {
       {/* ── review step ── */}
       {step === 'review' && (
         <>
-          <div className='mx-auto flex size-20 items-center justify-center rounded-full bg-elev-2'>
+          <div className='mx-auto flex size-20 items-center justify-center bg-elev-2'>
             <span className='i-ph-fingerprint h-10 w-10 text-fg-muted' />
           </div>
           <div className='w-full px-[30px]'>
             <div className='flex flex-col gap-3'>
-              <div className='flex min-h-11 w-full items-center overflow-x-auto rounded-md bg-elev-2 p-3 text-fg-muted'>
+              <div className='flex min-h-11 w-full items-center overflow-x-auto bg-elev-2 p-3 text-fg-muted'>
                 <div className='mx-auto items-center text-center leading-[0.8em]'>
                   {origin && <DisplayOriginURL url={new URL(origin)} />}
                 </div>
               </div>
               {statement && (
-                <div className='rounded-md border border-border-soft p-3 text-xs text-fg'>
-                  {statement}
-                </div>
+                <div className='border border-border-soft p-3 text-xs text-fg'>{statement}</div>
               )}
-              <div className='rounded-md bg-elev-2 p-3'>
+              <div className='bg-elev-2 p-3'>
                 <p className='kicker'>challenge</p>
                 <p className='mt-1 break-all tabular text-xs text-fg-high'>
                   {challengeHex && challengeHex.length > 64
@@ -239,7 +237,7 @@ export const SignApproval = () => {
                 </p>
               </div>
               {previewAddress && (
-                <div className='rounded-md border border-border-soft p-3'>
+                <div className='border border-border-soft p-3'>
                   <p className='kicker mb-1'>
                     signing as ({signingMode}){isAirgap ? ' - zigner' : ''}
                   </p>
@@ -258,7 +256,7 @@ export const SignApproval = () => {
       {/* ── password step (mnemonic only) ── */}
       {step === 'password' && (
         <div className='w-full px-[30px] flex flex-col gap-4'>
-          <div className='mx-auto flex size-16 items-center justify-center rounded-full bg-elev-2'>
+          <div className='mx-auto flex size-16 items-center justify-center bg-elev-2'>
             <span className='i-ph-lock h-8 w-8 text-fg-muted' />
           </div>
           <p className='text-sm text-fg-muted text-center'>enter password to sign</p>
@@ -272,7 +270,7 @@ export const SignApproval = () => {
                 void handlePasswordSubmit();
               }
             }}
-            className='w-full rounded-lg border border-border-soft bg-elev-2 p-3 text-sm outline-none focus:border-foreground/40'
+            className='w-full border border-border-soft bg-elev-2 p-3 text-sm outline-none focus:border-foreground/40'
             placeholder='password'
           />
           {passwordError && <p className='text-xs text-red-400 text-center'>{passwordError}</p>}
@@ -283,13 +281,13 @@ export const SignApproval = () => {
                 setPassword('');
                 setPasswordError('');
               }}
-              className='flex-1 rounded-md border border-border-soft p-3 text-xs text-fg-muted hover:text-fg-high hover:bg-elev-1 lowercase'
+              className='flex-1 border border-border-soft p-3 text-xs text-fg-muted hover:text-fg-high hover:bg-elev-1 lowercase'
             >
               back
             </button>
             <button
               onClick={() => void handlePasswordSubmit()}
-              className='flex-1 rounded-md bg-zigner-gold p-3 text-xs text-zigner-gold-foreground hover:bg-zigner-gold-light lowercase'
+              className='flex-1 bg-zigner-gold p-3 text-xs text-zigner-gold-foreground hover:bg-zigner-gold-light lowercase'
             >
               sign
             </button>
@@ -310,13 +308,13 @@ export const SignApproval = () => {
         <div className='w-full px-[30px] flex flex-col gap-4 items-center'>
           <p className='text-sm text-fg-muted text-center'>scan this QR with your zigner device</p>
           <QrCode value={challengeQr} size={240} label='zigner sign-challenge QR' />
-          <div className='rounded-md bg-elev-2 p-3 w-full'>
+          <div className='bg-elev-2 p-3 w-full'>
             <p className='kicker'>origin</p>
             <p className='tabular text-xs text-fg-high mt-1'>{origin}</p>
           </div>
           <button
             onClick={() => setStep('scan-qr')}
-            className='w-full rounded-md bg-zigner-gold p-3 text-xs text-zigner-gold-foreground hover:bg-zigner-gold-light lowercase'
+            className='w-full bg-zigner-gold p-3 text-xs text-zigner-gold-foreground hover:bg-zigner-gold-light lowercase'
           >
             scan signed response
           </button>

@@ -15,6 +15,7 @@ import { isActiveIbcChain, getNetwork, getActiveIbcSubnetworks } from '../../../
 import type { NetworkType } from '../../../state/keyring';
 import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { Button } from '@repo/ui/components/ui/button';
+import { ScreenHeader } from '../../../components/screen-header';
 import { isDedicatedWindow } from '../../../utils/popup-detection';
 import {
   PrivacySwitch,
@@ -168,15 +169,11 @@ export function SendPage() {
 
   return (
     <div className='flex flex-col'>
-      {/* Header */}
-      <div className='flex items-center gap-3 border-b border-border-soft px-4 py-3'>
-        {!inDedicatedWindow && (
-          <button onClick={goBack} className='text-fg-muted transition-colors hover:text-fg-high'>
-            <span className='i-ph-arrow-left h-5 w-5' />
-          </button>
-        )}
-        <h1 className='text-lg font-medium text-fg'>{getTitle()}</h1>
-      </div>
+      <ScreenHeader
+        title={getTitle()}
+        backPath={inDedicatedWindow ? false : undefined}
+        onBack={goBack}
+      />
 
       {/* Content */}
       <div className='p-4'>
@@ -205,8 +202,8 @@ export function SendPage() {
           ) : (
             // No live IBC channel to this chain right now (channels close on
             // network upgrades and reopen later), so deposit/send is unavailable.
-            <div className='flex flex-col gap-2 rounded-lg border border-border-soft bg-elev-1 p-4 text-sm'>
-              <span className='font-medium text-fg'>channel unavailable</span>
+            <div className='flex flex-col gap-2 border border-border-soft bg-elev-1 p-4 text-sm'>
+              <span className='text-fg'>channel unavailable</span>
               <span className='text-fg-muted'>
                 {getNetwork(sendChain as NetworkType).name} has no open IBC channel with Penumbra
                 right now.
@@ -220,7 +217,7 @@ export function SendPage() {
               <input
                 type='text'
                 placeholder='enter address'
-                className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
+                className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
               />
             </div>
 
@@ -229,7 +226,7 @@ export function SendPage() {
               <input
                 type='text'
                 placeholder='0.00'
-                className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
+                className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
               />
             </div>
 

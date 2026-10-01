@@ -2,9 +2,8 @@ import { cn } from '../../../lib/utils';
 
 /**
  * Toggle - the one on/off affordance for the whole popup. role="switch", a
- * rounded track that fills gold with the knob on the right when on, and
- * sits on surface-elev-2 with the knob on the left when off, so state reads
- * without parsing text.
+ * square 36x20 track: accent line, tint and knob on the right when on; line2
+ * on canvas with a dim knob on the left when off.
  */
 export const Toggle = ({
   checked,
@@ -28,21 +27,17 @@ export const Toggle = ({
     disabled={disabled}
     onClick={() => onChange(!checked)}
     className={cn(
-      'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors',
+      'relative inline-flex h-5 w-9 shrink-0 items-center border transition-colors',
       'focus:outline-none focus-visible:ring-1 focus-visible:ring-network-accent',
-      checked
-        ? 'border-network-accent bg-network-accent'
-        : 'border-surface-border-soft bg-surface-elev-2',
+      checked ? 'border-network-accent bg-network-accent/20' : 'border-border-hard bg-canvas',
       disabled && 'cursor-not-allowed opacity-40',
       className,
     )}
   >
     <span
       className={cn(
-        'block size-3.5 rounded-full transition-transform',
-        checked
-          ? 'translate-x-[19px] bg-network-accent-foreground'
-          : 'translate-x-[2px] bg-fg-muted',
+        'block size-3.5 transition-transform',
+        checked ? 'translate-x-[19px] bg-network-accent' : 'translate-x-[2px] bg-fg-dim',
       )}
     />
   </button>

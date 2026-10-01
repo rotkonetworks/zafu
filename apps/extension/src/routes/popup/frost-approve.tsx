@@ -804,7 +804,7 @@ export const FrostApprove = () => {
 
       {phase === 'confirm' && (
         <div className='flex flex-col gap-4 flex-1'>
-          <div className='rounded-md border border-border-soft bg-elev-1 p-3 text-xs space-y-2 text-fg'>
+          <div className='border border-border-soft bg-elev-1 p-3 text-xs space-y-2 text-fg'>
             {action === 'frost-create' && (
               <>
                 <p>
@@ -907,7 +907,7 @@ export const FrostApprove = () => {
 
       {phase === 'review' && reviewOutputs && (
         <div className='flex flex-col gap-3 flex-1'>
-          <div className='flex items-center gap-2 rounded-md border border-green-500/40 bg-green-500/10 p-2.5'>
+          <div className='flex items-center gap-2 border border-green-500/40 bg-green-500/10 p-2.5'>
             <span className='i-ph-shield-check size-5 shrink-0 text-green-400' />
             <div className='leading-tight'>
               <p className='text-xs text-green-300'>verified on-device</p>
@@ -917,7 +917,7 @@ export const FrostApprove = () => {
             </div>
           </div>
 
-          <div className='rounded-md border border-border-soft bg-elev-1 p-3 text-xs space-y-2 text-fg'>
+          <div className='border border-border-soft bg-elev-1 p-3 text-xs space-y-2 text-fg'>
             <div className='space-y-1'>
               {reviewOutputs.map((o, i) => (
                 <div key={i} className='flex items-baseline justify-between gap-2'>
@@ -948,7 +948,7 @@ export const FrostApprove = () => {
             </div>
           </div>
 
-          <div className='rounded-md border border-border-soft bg-elev-1 p-2.5 text-[10px] space-y-1'>
+          <div className='border border-border-soft bg-elev-1 p-2.5 text-[10px] space-y-1'>
             <div className='flex items-center gap-1.5 text-fg-muted'>
               <span className='i-ph-check size-3 shrink-0 text-green-400' />
               <span>sighash your share signs matches the PCZT</span>

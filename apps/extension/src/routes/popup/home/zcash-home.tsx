@@ -646,7 +646,7 @@ export const ZcashContent = ({
       {/* hero balance - the single figure on this screen. The per-pool
           split is a permanent RowGroup below (board: "balances" section),
           not a reveal-on-tap - nothing on this screen expands in place. */}
-      <div className='relative isolate rounded-md border border-network-accent/20 bg-elev-1 p-4'>
+      <div className='relative isolate border border-network-accent/20 bg-elev-1 p-4'>
         {/* quiet - only while the wallet's very first sync is still
             finding its balance. Gone once a balance appears, synced or not. */}
         {totalZat === 0n && !allSynced && !syncFailure && (

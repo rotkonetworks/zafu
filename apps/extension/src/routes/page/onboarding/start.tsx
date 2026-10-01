@@ -59,7 +59,7 @@ export const OnboardingStart = () => {
         <FadeTransition>
           <div className='flex flex-col gap-[22px]'>
             <OnboardingBack onClick={() => setPhase('welcome')} />
-            <h1 className='font-display text-[38px] font-medium text-fg-high'>bring your wallet</h1>
+            <h1 className='font-display text-[38px] text-fg-high'>bring your wallet</h1>
             <div className='flex flex-col gap-2.5'>
               {visibleOptions.map(opt => (
                 <button
@@ -90,7 +90,7 @@ export const OnboardingStart = () => {
       <FadeTransition>
         <div className='flex flex-col gap-[22px]'>
           <span className='text-label text-fg-muted tracking-[0.18em] lowercase'>zafu wallet</span>
-          <h1 className='font-display text-[50px] font-medium leading-[1.15] text-fg-high'>
+          <h1 className='font-display text-[50px] leading-[1.15] text-fg-high'>
             held in your
             <br />
             own hands, seen

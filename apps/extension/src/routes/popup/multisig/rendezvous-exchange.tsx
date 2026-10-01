@@ -32,7 +32,7 @@ const POLL_MS = 1000;
  */
 export function RelayProbing(): React.JSX.Element {
   return (
-    <div className='flex items-center gap-2 rounded-lg border border-border-soft bg-elev-1 p-3 text-xs text-fg-muted'>
+    <div className='flex items-center gap-2 border border-border-soft bg-elev-1 p-3 text-xs text-fg-muted'>
       <span className='i-ph-circle-notch size-3.5 animate-spin' />
       checking the relay…
     </div>
@@ -159,11 +159,11 @@ export function RendezvousHost({
   }, []);
 
   return (
-    <div className='flex flex-col gap-3 rounded-lg border border-border-soft bg-elev-1 p-3'>
+    <div className='flex flex-col gap-3 border border-border-soft bg-elev-1 p-3'>
       <div>
         <p className='text-xs text-fg-muted'>room code - send this to your co-signers</p>
         <div className='mt-1 flex items-center gap-2'>
-          <span className='flex-1 rounded bg-input px-2 py-1.5 font-mono text-sm'>
+          <span className='flex-1 bg-input px-2 py-1.5 font-mono text-sm'>
             {code === '' ? 'opening room…' : code}
           </span>
           <CopyButton
@@ -265,12 +265,12 @@ export function RendezvousJoin({ relayUrl, prepare, onState }: JoinProps): React
   };
 
   return (
-    <div className='flex flex-col gap-3 rounded-lg border border-border-soft bg-elev-1 p-3'>
+    <div className='flex flex-col gap-3 border border-border-soft bg-elev-1 p-3'>
       <label className='text-xs text-fg-muted'>
         room code from the wallet creator
         <div className='mt-1 flex gap-2'>
           <input
-            className='flex-1 rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-sm focus:border-primary/50 focus:outline-none'
+            className='flex-1 border border-border-soft bg-input px-3 py-2 font-mono text-sm focus:border-primary/50 focus:outline-none'
             value={code}
             onChange={e => setCode(e.target.value)}
             placeholder='7-word-word'
@@ -279,7 +279,7 @@ export function RendezvousJoin({ relayUrl, prepare, onState }: JoinProps): React
           />
           <button
             type='button'
-            className='shrink-0 rounded border border-border-soft px-3 py-1 text-xs disabled:opacity-40'
+            className='shrink-0 border border-border-soft px-3 py-1 text-xs disabled:opacity-40'
             disabled={code.trim() === '' || connected}
             onClick={() => void connect()}
           >

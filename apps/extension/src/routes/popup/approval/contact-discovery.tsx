@@ -69,7 +69,7 @@ export const ContactDiscoveryApproval = () => {
       <div className='w-full px-[30px]'>
         <div className='flex flex-col gap-3'>
           {/* requesting app */}
-          <div className='flex items-center gap-2 rounded-lg bg-canvas p-3'>
+          <div className='flex items-center gap-2 bg-canvas p-3'>
             {!!origin && <OriginIcon origin={origin} size={32} />}
             <div className='flex flex-col overflow-hidden'>
               {title && <span className='text-sm truncate'>{title}</span>}
@@ -88,12 +88,12 @@ export const ContactDiscoveryApproval = () => {
           </p>
 
           {/* the wallet-wide consequence, stated plainly */}
-          <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3 text-xs text-yellow-400'>
+          <div className='border border-yellow-500/30 bg-yellow-500/5 p-3 text-xs text-yellow-400'>
             turns on private contact discovery for every app, not just this one.
           </div>
 
           {/* the relay the wallet will use - the app cannot choose it */}
-          <div className='rounded-lg border border-border-soft bg-canvas p-3'>
+          <div className='border border-border-soft bg-canvas p-3'>
             <p className='kicker mb-1'>relay</p>
             <p className='break-all font-mono text-xs text-fg-high'>{relay}</p>
             <p className='mt-1 text-xs text-fg-muted'>

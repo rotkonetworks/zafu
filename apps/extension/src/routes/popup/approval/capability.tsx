@@ -98,7 +98,7 @@ export const CapabilityApproval = () => {
           {/* origin display - omitted for the global opt-in, which is not
               about any particular site */}
           {scope === 'site' ? (
-            <div className='flex items-center gap-2 rounded-lg bg-canvas p-3'>
+            <div className='flex items-center gap-2 bg-canvas p-3'>
               {!!origin && <OriginIcon origin={origin} size={32} />}
               <div className='flex flex-col overflow-hidden'>
                 {title && <span className='text-sm truncate'>{title}</span>}
@@ -116,15 +116,13 @@ export const CapabilityApproval = () => {
           )}
 
           {/* capability card */}
-          <div className={cn('rounded-lg border p-4', style.border, style.bg)}>
-            {style.banner && (
-              <div className={cn('mb-3 text-xs font-medium', style.text)}>{style.banner}</div>
-            )}
+          <div className={cn('border p-4', style.border, style.bg)}>
+            {style.banner && <div className={cn('mb-3 text-xs', style.text)}>{style.banner}</div>}
             <div className='flex items-center gap-2'>
-              <span className={cn('text-base font-medium', style.text)}>{meta.label}</span>
+              <span className={cn('text-base', style.text)}>{meta.label}</span>
               <span
                 className={cn(
-                  'rounded px-1.5 py-0.5 text-label',
+                  'px-1.5 py-0.5 text-label',
                   meta.risk === 'low' && 'bg-elev-2 text-fg-muted',
                   meta.risk === 'medium' && 'bg-yellow-500/10 text-yellow-400',
                   meta.risk === 'high' && 'bg-orange-500/10 text-orange-400',
@@ -139,7 +137,7 @@ export const CapabilityApproval = () => {
 
           {/* extra warning for critical */}
           {meta.risk === 'critical' && (
-            <div className='rounded-lg border border-red-500/50 bg-red-500/10 p-3 text-xs text-red-400'>
+            <div className='border border-red-500/50 bg-red-500/10 p-3 text-xs text-red-400'>
               {scope === 'zafu'
                 ? 'are you absolutely sure? once enabled, a site you approve can sign transactions without per-transaction confirmation.'
                 : 'are you absolutely sure? this site can sign transactions on your behalf without confirmation.'}

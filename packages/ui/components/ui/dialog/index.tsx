@@ -83,7 +83,6 @@ const dialogContentVariants = cva(
     '-translate-x-1/2',
     '-translate-y-1/2',
     'gap-4',
-    'rounded-lg',
     'shadow-lg',
     'duration-200',
     'data-[state=open]:animate-in',
@@ -96,7 +95,6 @@ const dialogContentVariants = cva(
     'data-[state=closed]:slide-out-to-top-[48%]',
     'data-[state=open]:slide-in-from-left-1/2',
     'data-[state=open]:slide-in-from-top-[48%]',
-    'sm:rounded-lg',
     'data-[state=closed]:fill-mode-forwards',
     'data-[state=open]:fill-mode-forwards',
   ],
@@ -124,7 +122,7 @@ const DialogContent = React.forwardRef<
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content ref={ref} className={cn(dialogContentVariants({ size }))}>
-      <motion.div layout layoutId={layoutId} className='rounded-lg bg-card-radial'>
+      <motion.div layout layoutId={layoutId} className='bg-card-radial'>
         {children}
       </motion.div>
     </DialogPrimitive.Content>
@@ -135,12 +133,12 @@ DialogContent.displayName = DialogPrimitive.Content.displayName;
 const DialogHeader = ({ children }: { children?: React.ReactNode }) => (
   <div
     className={cn(
-      'flex items-center gap-4 px-4 text-xl leading-[30px] font-headline font-medium h-[70px] border-b border-border-soft shrink-0 overflow-hidden w-full',
+      'flex items-center gap-4 px-4 text-xl leading-[30px] font-headline h-[70px] border-b border-border-soft shrink-0 overflow-hidden w-full',
     )}
   >
     <DialogPrimitive.Close
       aria-label='Close'
-      className='rounded-sm text-fg-muted ring-offset-background transition-opacity hover:opacity-50 focus:outline-none focus:ring-0 focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-elev-1'
+      className='text-fg-muted ring-offset-background transition-opacity hover:opacity-50 focus:outline-none focus:ring-0 focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-elev-1'
     >
       <Cross2Icon className='size-6' />
     </DialogPrimitive.Close>
@@ -167,7 +165,7 @@ const DialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn('text-lg font-medium leading-none tracking-tight', className)}
+    className={cn('text-lg leading-none tracking-tight', className)}
     {...props}
   />
 ));

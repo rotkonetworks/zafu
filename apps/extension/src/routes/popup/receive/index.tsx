@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { useBackNav } from '../../../utils/navigate';
+import { ScreenHeader } from '../../../components/screen-header';
 import { useLocation } from 'react-router-dom';
 import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
@@ -82,16 +82,10 @@ export function ReceivePage() {
   const [pickedChain, setPickedChain] = useState<CosmosChainId | undefined>(initial);
   const receiveOn: 'penumbra' | CosmosChainId =
     privacy === 'transparent' ? (pickedChain ?? transparentChains[0] ?? 'penumbra') : 'penumbra';
-  const goBack = useBackNav(PopupPath.INDEX);
 
   return (
     <div className='flex h-full flex-col'>
-      <div className='flex shrink-0 items-center gap-3 border-b border-surface-border-soft px-4 py-3'>
-        <button onClick={goBack} className='text-fg-muted transition-colors hover:text-fg-high'>
-          <span className='i-ph-arrow-left size-5' />
-        </button>
-        <h1 className='text-lg font-medium text-fg-high'>receive</h1>
-      </div>
+      <ScreenHeader title='receive' backPath={PopupPath.INDEX} />
 
       <div className='flex flex-1 flex-col p-4'>
         {transparentChains.length > 0 && (

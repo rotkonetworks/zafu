@@ -78,7 +78,7 @@ const UnbondingTooltipContent = ({
 
   return (
     <div className='flex flex-col gap-2 font-normal text-left'>
-      <div className='font-medium text-white'>Unbonding Token</div>
+      <div className='text-white'>Unbonding Token</div>
       <div>
         <span className='text-fg-muted'>Start: </span>
         <span className='text-white font-mono'>{info.startAt.toLocaleString()}</span>
@@ -102,7 +102,7 @@ const UnbondingTooltipContent = ({
       )}
       <div>
         <span className='text-fg-muted'>Validator: </span>
-        {info.validatorName && <div className='text-white font-medium'>{info.validatorName}</div>}
+        {info.validatorName && <div className='text-white'>{info.validatorName}</div>}
         <div className='text-white break-all text-[10px] font-mono'>{info.validatorId}</div>
       </div>
       {isReady && onClaim && (
@@ -112,7 +112,7 @@ const UnbondingTooltipContent = ({
             e.stopPropagation();
             onClaim();
           }}
-          className='mt-1 rounded-md bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
+          className='mt-1 bg-zigner-gold px-3 py-1.5 text-sm text-zigner-dark hover:bg-zigner-gold-light transition-colors'
         >
           Claim
         </button>
@@ -149,7 +149,7 @@ export const ValueComponent = ({
     <Pill variant={variant === 'default' ? 'default' : 'dashed'}>
       <div className='flex min-w-0 items-center gap-1'>
         {showIcon && (
-          <div className='-ml-2 mr-1 flex shrink-0 items-center justify-center rounded-full'>
+          <div className='-ml-2 mr-1 flex shrink-0 items-center justify-center'>
             <AssetIcon metadata={metadata} size={size === 'default' ? 'sm' : 'xs'} />
           </div>
         )}

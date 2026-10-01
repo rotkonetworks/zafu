@@ -88,7 +88,7 @@ const EndpointDecisionRow = ({
     <div className='flex flex-col gap-1 border-t border-border-soft pt-2 first:border-t-0 first:pt-0'>
       <div className='flex items-center gap-1.5 text-label lowercase'>
         <span className='text-fg-muted'>{kind}</span>
-        <span className={cn('h-1.5 w-1.5 rounded-full', EGRESS_DOT[state])} />
+        <span className={cn('h-1.5 w-1.5', EGRESS_DOT[state])} />
         <span className='text-fg-dim'>{EGRESS_LABEL[state]}</span>
       </div>
       <div className='break-all font-mono text-xs text-fg-dim'>{url}</div>
@@ -276,28 +276,28 @@ const OwnNetworks = ({
           value={name}
           onChange={e => setName(e.target.value)}
           placeholder='name (my noble node)'
-          className='rounded-lg bg-input border border-border-soft px-3 py-2.5 text-xs focus:border-primary/50 focus:outline-none'
+          className='bg-input border border-border-soft px-3 py-2.5 text-xs focus:border-primary/50 focus:outline-none'
         />
         <input
           type='text'
           value={chainId}
           onChange={e => setChainId(e.target.value)}
           placeholder='chain id (noble-1)'
-          className='rounded-lg bg-input border border-border-soft px-3 py-2.5 text-xs focus:border-primary/50 focus:outline-none'
+          className='bg-input border border-border-soft px-3 py-2.5 text-xs focus:border-primary/50 focus:outline-none'
         />
         <input
           type='text'
           value={rpc}
           onChange={e => setRpc(e.target.value)}
           placeholder='rpc (https://...)'
-          className='rounded-lg bg-input border border-border-soft px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
+          className='bg-input border border-border-soft px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
         />
         <input
           type='text'
           value={rest}
           onChange={e => setRest(e.target.value)}
           placeholder='rest (optional, https://...)'
-          className='rounded-lg bg-input border border-border-soft px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
+          className='bg-input border border-border-soft px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
         />
         {error && <p className='text-label text-hanko lowercase leading-snug'>{error}</p>}
         <div className='flex items-center justify-end'>
@@ -322,7 +322,7 @@ const OwnNetworks = ({
           {networks.map(network => (
             <div
               key={network.id}
-              className='flex items-center gap-2 rounded-lg border border-border-soft px-3 py-2'
+              className='flex items-center gap-2 border border-border-soft px-3 py-2'
             >
               <div className='flex min-w-0 flex-1 flex-col'>
                 <span className='text-xs text-fg lowercase'>{network.name}</span>

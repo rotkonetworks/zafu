@@ -31,7 +31,7 @@ export const ChannelTag = ({ open }: { open?: boolean }) =>
         open ? 'text-fg-muted' : 'text-fg-dim',
       )}
     >
-      <span className={cn('h-1.5 w-1.5 rounded-full', open ? 'bg-green-400' : 'bg-fg-dim')} />
+      <span className={cn('h-1.5 w-1.5', open ? 'bg-green-400' : 'bg-fg-dim')} />
       {open ? 'channel open' : 'no channel'}
     </span>
   );
@@ -97,7 +97,7 @@ export const TransparentChainEndpoints = ({
                   value={url}
                   onChange={e => setAt(i, e.target.value)}
                   placeholder='https://...'
-                  className='min-w-0 flex-1 rounded-md border border-border-soft bg-input px-2.5 py-1.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
+                  className='min-w-0 flex-1 border border-border-soft bg-input px-2.5 py-1.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
                 />
                 <button
                   type='button'

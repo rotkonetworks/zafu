@@ -66,7 +66,7 @@ export interface NetworkConfig {
 export const NETWORKS: Record<NetworkType, NetworkConfig> = {
   zcash: {
     name: 'Zcash',
-    color: 'bg-yellow-500',
+    color: 'bg-zigner-gold',
     focusColor: 'focus:border-zigner-gold',
     transparent: false,
     launched: true,

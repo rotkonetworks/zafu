@@ -281,7 +281,7 @@ const MultisigJoinZafu = () => {
             <label className='text-xs text-fg-muted'>
               session id from the wallet creator
               <input
-                className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
+                className='mt-1 w-full border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
                 value={roomCode}
                 onChange={e => setRoomCode(e.target.value)}
                 placeholder='00000000-0000-0000-0000-000000000000'
@@ -348,16 +348,16 @@ const MultisigJoinZafu = () => {
       {(step === 'joining' || step === 'dkg' || step === 'fvk-echo') && (
         <div className='flex flex-col items-center gap-4'>
           {thresholdInfo && (
-            <span className='rounded-md bg-primary/10 px-2 py-0.5 text-label font-medium text-zigner-gold'>
+            <span className='bg-primary/10 px-2 py-0.5 text-label text-zigner-gold'>
               {thresholdInfo}
             </span>
           )}
 
           {maxSigners > 0 && (
-            <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
+            <div className='flex items-center gap-2 bg-elev-2 px-3 py-1.5'>
               <span className='i-ph-users size-3.5 text-fg-muted' />
               <span className='text-xs'>
-                <span className='font-medium text-fg'>{participantCount}</span>
+                <span className='text-fg'>{participantCount}</span>
                 <span className='text-fg-muted'> / {maxSigners} joined</span>
               </span>
             </div>
@@ -373,10 +373,10 @@ const MultisigJoinZafu = () => {
 
       {step === 'complete' && (
         <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
+          <div className='border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
             joined multisig wallet
           </div>
-          <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
+          <div className='border border-border-soft bg-elev-1 p-3'>
             <p className='text-label text-fg-muted'>address</p>
             <p className='mt-1 break-all font-mono text-xs'>{address}</p>
           </div>
@@ -836,7 +836,7 @@ const MultisigJoinZigner = () => {
             <label className='text-xs text-fg-muted'>
               session id from the wallet creator
               <input
-                className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
+                className='mt-1 w-full border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
                 value={roomCode}
                 onChange={e => setRoomCode(e.target.value)}
                 placeholder='00000000-0000-0000-0000-000000000000'
@@ -990,10 +990,10 @@ const MultisigJoinZigner = () => {
 
       {step === 'complete' && (
         <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
+          <div className='border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
             multisig wallet saved - signing key lives on zigner only
           </div>
-          <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
+          <div className='border border-border-soft bg-elev-1 p-3'>
             <p className='text-label text-fg-muted'>address</p>
             <p className='mt-1 break-all font-mono text-xs'>{address}</p>
           </div>

@@ -138,7 +138,7 @@ export const SettingsAppearance = () => {
                 key={t.id}
                 onClick={() => pickTheme(t.id)}
                 className={cn(
-                  'flex w-full items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors',
+                  'flex w-full items-center gap-3 border px-3 py-2.5 text-left transition-colors',
                   theme === t.id
                     ? 'border-zigner-gold/60 bg-elev-1'
                     : 'border-border-soft hover:bg-elev-1',
@@ -146,7 +146,7 @@ export const SettingsAppearance = () => {
               >
                 {/* material chip: canvas swatch with an ink stroke */}
                 <span
-                  className='flex h-8 w-8 shrink-0 items-center justify-center rounded-[4px] border border-border-soft text-[13px]'
+                  className='flex h-8 w-8 shrink-0 items-center justify-center border border-border-soft text-[13px]'
                   style={{ background: t.chip, color: t.ink }}
                 >
                   あ
@@ -169,14 +169,14 @@ export const SettingsAppearance = () => {
                 key={f.id}
                 onClick={() => pickFont(f.id)}
                 className={cn(
-                  'flex w-full items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors',
+                  'flex w-full items-center gap-3 border px-3 py-2.5 text-left transition-colors',
                   font === f.id
                     ? 'border-zigner-gold/60 bg-elev-1'
                     : 'border-border-soft hover:bg-elev-1',
                 )}
               >
                 <span
-                  className='flex h-8 w-8 shrink-0 items-center justify-center rounded-[4px] border border-border-soft bg-elev-2 text-title text-fg'
+                  className='flex h-8 w-8 shrink-0 items-center justify-center border border-border-soft bg-elev-2 text-title text-fg'
                   style={{ fontFamily: f.stack }}
                 >
                   Aa
@@ -199,13 +199,13 @@ export const SettingsAppearance = () => {
                 key={m.id}
                 onClick={() => pickApprovalMode(m.id)}
                 className={cn(
-                  'flex w-full items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors',
+                  'flex w-full items-center gap-3 border px-3 py-2.5 text-left transition-colors',
                   approvalSurface === m.id
                     ? 'border-zigner-gold/60 bg-elev-1'
                     : 'border-border-soft hover:bg-elev-1',
                 )}
               >
-                <span className='flex h-8 w-8 shrink-0 items-center justify-center rounded-[4px] border border-border-soft bg-elev-2 text-fg'>
+                <span className='flex h-8 w-8 shrink-0 items-center justify-center border border-border-soft bg-elev-2 text-fg'>
                   <span className={cn(m.icon, 'size-4')} />
                 </span>
                 <span className='flex flex-1 flex-col'>

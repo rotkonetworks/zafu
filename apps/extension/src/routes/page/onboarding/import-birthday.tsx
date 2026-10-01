@@ -114,7 +114,7 @@ export const ImportBirthday = () => {
       <FadeTransition>
         <div className='flex flex-col gap-[22px]'>
           <OnboardingBack onClick={() => navigate(-1)} />
-          <h1 className='font-display text-[38px] font-medium leading-[1.2] text-fg-high'>
+          <h1 className='font-display text-[38px] leading-[1.2] text-fg-high'>
             when did you start
             <br />
             using this wallet?
@@ -196,7 +196,7 @@ export const ImportBirthday = () => {
               className='relative z-10 flex max-h-[85vh] flex-col gap-3 border-t border-border-hard bg-elev-1 p-4 pb-5'
             >
               <div className='flex items-center justify-between gap-3'>
-                <span id='birthday-sheet-title' className='text-body font-medium text-fg-high'>
+                <span id='birthday-sheet-title' className='text-body text-fg-high'>
                   exact block height
                 </span>
                 <button

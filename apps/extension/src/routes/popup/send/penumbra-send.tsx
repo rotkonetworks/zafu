@@ -44,11 +44,11 @@ export function PenumbraSend({
   return (
     <div className='flex flex-col gap-4'>
       {/* mode tabs */}
-      <div className='flex rounded-lg bg-elev-2 p-1'>
+      <div className='flex bg-elev-2 p-1'>
         <button
           onClick={() => setMode('send')}
           className={cn(
-            'flex-1 rounded-md py-2 text-sm font-medium transition-colors',
+            'flex-1 py-2 text-sm transition-colors',
             mode === 'send' ? 'bg-canvas text-fg shadow-sm' : 'text-fg-muted hover:text-fg-high',
           )}
         >
@@ -57,7 +57,7 @@ export function PenumbraSend({
         <button
           onClick={() => setMode('ibc')}
           className={cn(
-            'flex-1 rounded-md py-2 text-sm font-medium transition-colors',
+            'flex-1 py-2 text-sm transition-colors',
             mode === 'ibc' ? 'bg-canvas text-fg shadow-sm' : 'text-fg-muted hover:text-fg-high',
           )}
         >
@@ -219,7 +219,7 @@ function PenumbraNativeSend({
           <button
             onClick={() => setAssetOpen(!assetOpen)}
             disabled={txStatus !== 'idle' || balancesLoading}
-            className='flex w-full items-center justify-between rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50 disabled:opacity-50'
+            className='flex w-full items-center justify-between border border-border-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50 disabled:opacity-50'
           >
             {balancesLoading ? (
               <span className='text-fg-muted'>loading...</span>
@@ -243,7 +243,7 @@ function PenumbraNativeSend({
           </button>
 
           {assetOpen && (
-            <div className='absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-border-soft bg-canvas shadow-lg'>
+            <div className='absolute top-full left-0 right-0 z-50 mt-1 border border-border-soft bg-canvas shadow-lg'>
               <div className='border-b border-border-soft p-1.5'>
                 <AssetBucketToggle
                   bucket={bucket}
@@ -319,7 +319,7 @@ function PenumbraNativeSend({
             placeholder='penumbra1...'
             disabled={txStatus !== 'idle'}
             className={cn(
-              'flex-1 rounded-lg border bg-input px-3 py-2.5 text-sm text-fg',
+              'flex-1 border bg-input px-3 py-2.5 text-sm text-fg',
               'placeholder:text-fg-muted transition-colors duration-100',
               'focus:border-penumbra-purple focus:outline-none disabled:opacity-50',
               sendState.recipient && !addressValid ? 'border-red-400' : 'border-border-soft',
@@ -329,7 +329,7 @@ function PenumbraNativeSend({
             type='button'
             onClick={() => setShowQrScanner(true)}
             disabled={txStatus !== 'idle'}
-            className='shrink-0 flex h-[42px] w-[42px] items-center justify-center rounded-lg border border-border-soft bg-input text-fg-muted hover:text-fg-high transition-colors disabled:opacity-50'
+            className='shrink-0 flex h-[42px] w-[42px] items-center justify-center border border-border-soft bg-input text-fg-muted hover:text-fg-high transition-colors disabled:opacity-50'
             title='scan QR code'
           >
             <span className='i-ph-scan h-4 w-4' />
@@ -380,7 +380,7 @@ function PenumbraNativeSend({
           // in the amount field. Without a prefill we leave focus to the
           // default (recipient field is the first thing they need to fill).
           autoFocus={!!prefillAsset}
-          className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
+          className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
         />
       </div>
 
@@ -393,20 +393,20 @@ function PenumbraNativeSend({
           onChange={e => sendState.setMemo(e.target.value)}
           placeholder='optional message'
           disabled={txStatus !== 'idle'}
-          className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
+          className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
         />
       </div>
 
       {/* transaction status */}
       {txStatus === 'success' && txHash && (
-        <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
+        <div className='border border-green-500/40 bg-green-500/10 p-3'>
           <p className='text-sm text-green-400'>transaction sent!</p>
           <p className='text-xs text-fg-muted mt-1 font-mono break-all'>{txHash}</p>
         </div>
       )}
 
       {txStatus === 'error' && txError && (
-        <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
+        <div className='border border-red-500/40 bg-red-500/10 p-3'>
           <p className='text-sm text-red-400'>transaction failed</p>
           <p className='text-xs text-fg-muted mt-1'>{txError}</p>
         </div>

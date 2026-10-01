@@ -45,7 +45,7 @@ export const RulerScale = ({
   return (
     <div
       className={cn(
-        'relative bg-[#050505] border border-border-hard rounded-sm overflow-hidden',
+        'relative bg-[#050505] border border-border-hard overflow-hidden',
         'pt-18 pb-6 px-8',
         className,
       )}
@@ -81,7 +81,7 @@ export const RulerScale = ({
       {segments.map((s, i) => (
         <div
           key={i}
-          className='absolute h-2 rounded-sm'
+          className='absolute h-2'
           style={{
             top: 62,
             left: pct(s.from),

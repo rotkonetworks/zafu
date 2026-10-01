@@ -48,7 +48,7 @@ function ChainSelector({
     <div className='relative'>
       <button
         onClick={() => setOpen(!open)}
-        className='flex w-full items-center justify-between rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
+        className='flex w-full items-center justify-between border border-border-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
       >
         {selected ? (
           <span>{selected.displayName}</span>
@@ -61,7 +61,7 @@ function ChainSelector({
       </button>
 
       {open && (
-        <div className='absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-border-soft bg-canvas shadow-lg overflow-hidden'>
+        <div className='absolute top-full left-0 right-0 z-50 mt-1 border border-border-soft bg-canvas shadow-lg overflow-hidden'>
           {chains.map(chain => (
             <button
               key={chain.chainId}
@@ -77,7 +77,7 @@ function ChainSelector({
               <RegistryIcon
                 name={chain.displayName}
                 images={chain.images}
-                className='h-5 w-5 rounded-full'
+                className='h-5 w-5'
                 size={20}
               />
               <span>{chain.displayName}</span>
@@ -401,7 +401,7 @@ export function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
       <div>
         <label className='mb-1 block text-xs text-fg-muted'>destination chain</label>
         {chainsLoading ? (
-          <div className='h-10 rounded-lg bg-elev-2 animate-pulse' />
+          <div className='h-10 bg-elev-2 animate-pulse' />
         ) : (
           <ChainSelector chains={chains} selected={ibcState.chain} onSelect={ibcState.setChain} />
         )}
@@ -413,10 +413,10 @@ export function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
           recipient {ibcState.chain && `(${ibcState.chain.addressPrefix}1...)`}
         </label>
         {ownAddress && !overrideAddress ? (
-          <div className='rounded-lg border border-border-soft bg-input px-3 py-2.5'>
+          <div className='border border-border-soft bg-input px-3 py-2.5'>
             <div className='flex items-center justify-between gap-2'>
               <span className='text-label text-fg-muted lowercase'>your deposit address</span>
-              <span className='rounded bg-red-500/10 px-1.5 py-0.5 text-label leading-none text-red-400 lowercase'>
+              <span className='bg-red-500/10 px-1.5 py-0.5 text-label leading-none text-red-400 lowercase'>
                 transparent
               </span>
             </div>
@@ -446,7 +446,7 @@ export function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
               }
               disabled={!ibcState.chain || txStatus !== 'idle'}
               className={cn(
-                'w-full rounded-lg border bg-input px-3 py-2.5 text-sm text-fg',
+                'w-full border bg-input px-3 py-2.5 text-sm text-fg',
                 'placeholder:text-fg-muted transition-colors duration-100',
                 'focus:border-penumbra-purple focus:outline-none disabled:opacity-50',
                 ibcState.destinationAddress && !addressValid
@@ -494,7 +494,7 @@ export function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
               <button
                 onClick={() => setAssetOpen(!assetOpen)}
                 disabled={txStatus !== 'idle'}
-                className='flex w-full items-center gap-1.5 rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg text-left disabled:opacity-50'
+                className='flex w-full items-center gap-1.5 border border-border-soft bg-input px-3 py-2.5 text-sm text-fg text-left disabled:opacity-50'
               >
                 {selectedAsset ? (
                   <>
@@ -509,7 +509,7 @@ export function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
                 )}
               </button>
               {assetOpen && (
-                <div className='absolute z-10 mt-1 w-full rounded-lg border border-border-soft bg-canvas shadow-lg max-h-48 overflow-y-auto'>
+                <div className='absolute z-10 mt-1 w-full border border-border-soft bg-canvas shadow-lg max-h-48 overflow-y-auto'>
                   {withdrawableAssets.map((b, i) => {
                     const meta = getMetadataFromBalancesResponse.optional(b);
                     const display = symbolFromMetadata(meta);
@@ -565,7 +565,7 @@ export function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
           onChange={e => ibcState.setAmount(e.target.value)}
           placeholder='0.00'
           disabled={txStatus !== 'idle'}
-          className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
+          className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
         />
         {belowNobleMin && (
           <p className='mt-1 text-xs text-red-400'>
@@ -584,7 +584,7 @@ export function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
 
       {/* transaction status */}
       {txStatus === 'success' && txHash && (
-        <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
+        <div className='border border-green-500/40 bg-green-500/10 p-3'>
           <p className='text-sm text-green-400'>transaction sent!</p>
           <p className='text-xs text-fg-muted mt-1 font-mono break-all'>{txHash}</p>
           <IbcTransferStatusLine transferId={trackedTransferId} />
@@ -609,14 +609,14 @@ export function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
 
       {/* contact name modal */}
       {showContactModal && sentToAddress && (
-        <div className='rounded-lg border border-border-soft bg-canvas p-3'>
-          <p className='text-sm font-medium mb-2'>name this contact</p>
+        <div className='border border-border-soft bg-canvas p-3'>
+          <p className='text-sm mb-2'>name this contact</p>
           <input
             type='text'
             value={contactName}
             onChange={e => setContactName(e.target.value)}
             placeholder='enter name...'
-            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm mb-2 focus:border-penumbra-purple focus:outline-none'
+            className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm mb-2 focus:border-penumbra-purple focus:outline-none'
             autoFocus
           />
           <div className='flex gap-2'>
@@ -634,7 +634,7 @@ export function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
                 }
               }}
               disabled={!contactName.trim()}
-              className='flex-1 rounded-md bg-zigner-gold px-3 py-1.5 text-xs font-medium text-zigner-gold-foreground transition-colors disabled:opacity-50'
+              className='flex-1 bg-zigner-gold px-3 py-1.5 text-xs text-zigner-gold-foreground transition-colors disabled:opacity-50'
             >
               save
             </button>
@@ -643,7 +643,7 @@ export function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
                 setShowContactModal(false);
                 setContactName('');
               }}
-              className='flex-1 rounded-md bg-elev-2 px-3 py-1.5 text-xs text-fg-muted transition-colors'
+              className='flex-1 bg-elev-2 px-3 py-1.5 text-xs text-fg-muted transition-colors'
             >
               cancel
             </button>
@@ -652,7 +652,7 @@ export function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
       )}
 
       {txStatus === 'error' && txError && (
-        <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
+        <div className='border border-red-500/40 bg-red-500/10 p-3'>
           <p className='text-sm text-red-400'>transaction failed</p>
           <p className='text-xs text-fg-muted mt-1'>{txError}</p>
         </div>

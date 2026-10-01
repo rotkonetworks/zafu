@@ -12,8 +12,8 @@ import { PopupPath } from '../routes/popup/paths';
 const TABS = [
   { path: PopupPath.INDEX, icon: 'i-zafu-mon', label: 'wallet' },
   { path: PopupPath.INBOX, icon: 'i-zafu-letter', label: 'people' },
-  { path: PopupPath.TOOLS, icon: 'i-ph-wrench', label: 'tools' },
-  { path: PopupPath.SETTINGS, icon: 'i-ph-gear-six', label: 'settings' },
+  { path: PopupPath.TOOLS, icon: 'i-zafu-torii', label: 'tools' },
+  { path: PopupPath.SETTINGS, icon: 'i-zafu-shoji', label: 'settings' },
 ] as const;
 
 const TabButton = memo(
@@ -29,13 +29,13 @@ const TabButton = memo(
     <button
       onClick={() => onNavigate(tab.path)}
       className={cn(
-        'flex flex-1 flex-col items-center justify-center gap-0.5',
+        'flex flex-1 flex-col items-center justify-center gap-[5px]',
         'transition-colors hover:text-fg-high',
-        isActive ? 'text-zigner-gold' : 'text-fg-dim',
+        isActive ? 'text-zigner-gold' : 'text-fg-muted',
       )}
     >
       <span className={cn(tab.icon, 'size-5')} aria-hidden='true' />
-      <span className='text-label lowercase'>{tab.label}</span>
+      <span className='text-[11px] leading-none lowercase'>{tab.label}</span>
     </button>
   ),
 );
@@ -64,7 +64,7 @@ export const BottomTabs = memo(() => {
         'contain-layout contain-style',
       )}
     >
-      <div className='flex h-12 items-center justify-around'>
+      <div className='flex h-14 items-stretch'>
         {TABS.map(tab => {
           const isActive =
             location.pathname === tab.path ||
@@ -79,4 +79,4 @@ export const BottomTabs = memo(() => {
 });
 BottomTabs.displayName = 'BottomTabs';
 
-export const BOTTOM_TABS_HEIGHT = '3rem';
+export const BOTTOM_TABS_HEIGHT = '3.5rem';

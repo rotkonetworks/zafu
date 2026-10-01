@@ -88,11 +88,11 @@ export function RelayKeyExchange({
   };
 
   return (
-    <div className='flex flex-col gap-3 rounded-lg border border-border-soft bg-elev-1 p-3'>
+    <div className='flex flex-col gap-3 border border-border-soft bg-elev-1 p-3'>
       <div>
         <p className='text-xs text-fg-muted'>your relay key - send this to your co-signers</p>
         <div className='mt-1 flex items-center gap-2'>
-          <code className='flex-1 break-all rounded bg-input px-2 py-1.5 font-mono text-[10px]'>
+          <code className='flex-1 break-all bg-input px-2 py-1.5 font-mono text-[10px]'>
             {myKey === '' ? 'generating…' : myKey}
           </code>
           <CopyButton
@@ -116,7 +116,7 @@ export function RelayKeyExchange({
             // index is stable here: the list length is driven by maxSigners
 
             key={i}
-            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-[10px] focus:border-primary/50 focus:outline-none'
+            className='w-full border border-border-soft bg-input px-3 py-2 font-mono text-[10px] focus:border-primary/50 focus:outline-none'
             placeholder={`co-signer ${i + 1} relay key`}
             value={value}
             onChange={e => update(i, e.target.value)}
@@ -127,7 +127,7 @@ export function RelayKeyExchange({
       {!known && (
         <button
           type='button'
-          className='self-start rounded border border-border-soft px-2 py-1 text-xs'
+          className='self-start border border-border-soft px-2 py-1 text-xs'
           onClick={() => setInputs(prev => [...prev, ''])}
         >
           + another co-signer

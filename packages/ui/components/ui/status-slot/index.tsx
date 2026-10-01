@@ -25,7 +25,7 @@ export interface StatusSlotProps {
 
 const TONE_CLASS: Record<NonNullable<StatusSlotProps['tone']>, string> = {
   info: 'border-surface-border-soft bg-surface-elev-2/40 text-fg-muted',
-  warn: 'border-yellow-500/40 bg-yellow-500/10 text-yellow-400',
+  warn: 'border-warn/40 bg-warn/10 text-warn',
   danger: 'border-hanko/40 bg-hanko/10 text-hanko-light',
   gold: 'border-zigner-gold/40 bg-zigner-gold/10 text-fg-high',
 };
@@ -55,7 +55,7 @@ export function StatusSlot({
           <button
             type='button'
             onClick={action.onClick}
-            className='shrink-0 text-label font-medium underline-offset-2 hover:underline'
+            className='shrink-0 text-label underline-offset-2 hover:underline'
           >
             {action.label}
           </button>

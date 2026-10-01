@@ -251,7 +251,7 @@ export const TransactionApproval = () => {
 
       <div className='min-h-0 flex-1 overflow-y-auto p-4'>
         {invalidPlan && (
-          <div className='mb-4 rounded-md border border-red-400/40 p-3 text-xs text-red-400'>
+          <div className='mb-4 border border-red-400/40 p-3 text-xs text-red-400'>
             <h2 className='kicker mb-1 flex items-center gap-1 text-red-400/80'>
               <span className='i-ph-warning h-3.5 w-3.5' />
               invalid transaction
@@ -265,7 +265,7 @@ export const TransactionApproval = () => {
         {selectedTransactionViewName === TransactionViewTab.SENDER && (
           <>
             {hasTransparentAddress(selectedTransactionView) && (
-              <div className='mb-4 rounded-md border border-yellow-400/40 bg-yellow-400/5 p-3 text-xs text-yellow-400'>
+              <div className='mb-4 border border-yellow-400/40 bg-yellow-400/5 p-3 text-xs text-yellow-400'>
                 <h2 className='kicker mb-1 flex items-center gap-1 text-yellow-400/80'>
                   <span className='i-ph-warning h-3.5 w-3.5' />
                   privacy warning
@@ -274,7 +274,7 @@ export const TransactionApproval = () => {
               </div>
             )}
             {!hasAltGasFee(selectedTransactionView) && (
-              <div className='mb-4 rounded-md border border-yellow-400/40 bg-yellow-400/5 p-3 text-xs text-yellow-400'>
+              <div className='mb-4 border border-yellow-400/40 bg-yellow-400/5 p-3 text-xs text-yellow-400'>
                 <h2 className='kicker mb-1 flex items-center gap-1 text-yellow-400/80'>
                   <span className='i-ph-warning h-3.5 w-3.5' />
                   privacy warning
@@ -309,7 +309,7 @@ export const TransactionApproval = () => {
       </div>
       <div className='shrink-0 border-t border-border-soft p-0'>
         {isAirgap ? (
-          <div className='flex flex-row justify-between gap-4 rounded-lg bg-elev-1 px-4 py-7 shadow-lg'>
+          <div className='flex flex-row justify-between gap-4 bg-elev-1 px-4 py-7 shadow-lg'>
             <Button
               variant='primary'
               className='w-1/2 py-3.5 text-base'

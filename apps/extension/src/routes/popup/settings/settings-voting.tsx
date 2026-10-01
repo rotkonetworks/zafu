@@ -40,7 +40,7 @@ function EndpointList({ title, endpoints }: { title: string; endpoints: ServiceE
       ) : (
         <div className='flex flex-col gap-1'>
           {endpoints.map(e => (
-            <div key={e.url} className='rounded border border-border-soft/40 bg-elev-1 px-2 py-1.5'>
+            <div key={e.url} className='border border-border-soft/40 bg-elev-1 px-2 py-1.5'>
               <p className='text-data text-fg-high'>{e.label || e.url}</p>
               <p className='break-all text-label text-fg-muted'>{e.url}</p>
             </div>
@@ -160,7 +160,7 @@ export const SettingsVoting = () => {
 
           {advancedOpen && (
             <div className='mt-3 flex flex-col gap-3'>
-              <div className='rounded border border-red-400/30 bg-red-400/5 px-3 py-2'>
+              <div className='border border-red-400/30 bg-red-400/5 px-3 py-2'>
                 <p className='text-label text-red-400'>
                   warning - a custom or malicious voting/PIR server can deanonymize your vote or
                   serve invalid data. only point this at a source you trust: a build you control, or
@@ -184,7 +184,7 @@ export const SettingsVoting = () => {
                   value={urlInput}
                   onChange={e => setUrlInput(e.target.value)}
                   placeholder='https://example.com/static-voting-config.json'
-                  className='w-full rounded border border-border-soft bg-transparent px-2 py-1.5 text-xs font-mono outline-none focus:border-zigner-gold'
+                  className='w-full border border-border-soft bg-transparent px-2 py-1.5 text-xs font-mono outline-none focus:border-zigner-gold'
                 />
                 <span className='text-label text-fg-dim'>
                   https:// required, or http://localhost / http://127.0.0.1 for a local dev rig
@@ -197,7 +197,7 @@ export const SettingsVoting = () => {
                   value={sha256Input}
                   onChange={e => setSha256Input(e.target.value)}
                   placeholder='lowercase hex - leave blank to skip verification'
-                  className='w-full rounded border border-border-soft bg-transparent px-2 py-1.5 text-xs font-mono outline-none focus:border-zigner-gold'
+                  className='w-full border border-border-soft bg-transparent px-2 py-1.5 text-xs font-mono outline-none focus:border-zigner-gold'
                 />
                 <span className='text-label text-fg-dim'>
                   if set, the fetched config is checksum-verified against this before use
@@ -210,13 +210,13 @@ export const SettingsVoting = () => {
               <div className='flex gap-2'>
                 <button
                   onClick={() => void save()}
-                  className='flex-1 rounded border border-network-accent bg-network-accent px-3 py-1.5 text-data text-network-accent-foreground'
+                  className='flex-1 border border-network-accent bg-network-accent px-3 py-1.5 text-data text-network-accent-foreground'
                 >
                   save
                 </button>
                 <button
                   onClick={() => void resetToDefault()}
-                  className='flex-1 rounded border border-border-soft px-3 py-1.5 text-data text-fg-muted hover:text-fg-high'
+                  className='flex-1 border border-border-soft px-3 py-1.5 text-data text-fg-muted hover:text-fg-high'
                 >
                   reset to default
                 </button>

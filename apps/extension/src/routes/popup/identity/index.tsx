@@ -507,7 +507,7 @@ export const IdentityPage = () => {
               {/* engraved generation watermark */}
               <span
                 aria-hidden
-                className='pointer-events-none absolute -top-3 right-1 select-none font-headline font-bold leading-none tabular'
+                className='pointer-events-none absolute -top-3 right-1 select-none font-headline leading-none tabular'
                 style={WATERMARK_STYLE}
               >
                 {genPad}

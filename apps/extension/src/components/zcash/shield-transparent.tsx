@@ -266,13 +266,13 @@ export const ShieldTransparent = ({
   const tZec = Number(transparentZat) / 1e8;
 
   return (
-    <div className='rounded-md border border-border-soft bg-elev-1 px-4 py-2.5'>
+    <div className='border border-border-soft bg-elev-1 px-4 py-2.5'>
       {PasswordModal}
       <div className='flex items-center justify-between gap-3'>
         <div className='flex min-w-0 items-center gap-2'>
           <span className='i-ph-eye h-3.5 w-3.5 shrink-0 text-fg-muted' />
           <span className='text-xs text-fg-muted lowercase'>transparent</span>
-          <span className='rounded-sm bg-elev-2 px-1.5 py-0.5 text-label text-fg-dim leading-none lowercase'>
+          <span className='bg-elev-2 px-1.5 py-0.5 text-label text-fg-dim leading-none lowercase'>
             public
           </span>
           <Sensitive className='truncate text-xs tabular text-fg-high'>
@@ -284,7 +284,7 @@ export const ShieldTransparent = ({
             type='button'
             onClick={() => void handleShield()}
             disabled={shielding || !!shieldTxid}
-            className='shrink-0 text-xs font-medium text-network-accent transition-colors hover:text-fg-high disabled:opacity-50'
+            className='shrink-0 text-xs text-network-accent transition-colors hover:text-fg-high disabled:opacity-50'
           >
             {shielding ? 'shielding...' : shieldTxid ? 'pending...' : 'shield'}
           </button>
@@ -293,7 +293,7 @@ export const ShieldTransparent = ({
             type='button'
             onClick={() => void handleZignerShield()}
             disabled={zignerStep !== 'idle' && zignerStep !== 'error' && zignerStep !== 'complete'}
-            className='shrink-0 text-xs font-medium text-network-accent transition-colors hover:text-fg-high disabled:opacity-50'
+            className='shrink-0 text-xs text-network-accent transition-colors hover:text-fg-high disabled:opacity-50'
           >
             {zignerStep === 'building'
               ? 'building...'
@@ -325,7 +325,7 @@ export const ShieldTransparent = ({
           <div className='flex w-full gap-2'>
             <button
               onClick={() => setZignerStep('scanning')}
-              className='flex-1 bg-zigner-gold py-1.5 text-xs font-medium text-zigner-gold-foreground transition-colors hover:bg-primary/90'
+              className='flex-1 bg-zigner-gold py-1.5 text-xs text-zigner-gold-foreground transition-colors hover:bg-primary/90'
             >
               scan signature
             </button>
