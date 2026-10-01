@@ -143,8 +143,14 @@ export function OnboardingShell({ children, art }: OnboardingShellProps) {
           alt={ART_ALT[resolvedArt]}
           className='absolute inset-0 h-full w-full object-cover'
         />
-        <div className='absolute left-10 top-9'>
+        <div className='absolute left-10 top-9 flex flex-col gap-2'>
           <Mark size={38} keyline />
+          <span
+            className='text-label tracking-[0.18em] text-fg-high lowercase'
+            style={{ WebkitTextStroke: '3px var(--surface-canvas)', paintOrder: 'stroke fill' }}
+          >
+            shielded signing
+          </span>
         </div>
       </aside>
 

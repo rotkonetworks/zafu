@@ -91,11 +91,11 @@ export const OnboardingStart = () => {
         <div className='flex flex-col gap-[22px]'>
           <span className='text-label text-fg-muted tracking-[0.18em] lowercase'>zafu wallet</span>
           <h1 className='font-display text-[50px] font-medium leading-[1.15] text-fg-high'>
-            shielded money,
-            <br />
             held in your
             <br />
-            own hands.
+            own hands, seen
+            <br />
+            by no one.
           </h1>
           <p className='text-body text-fg-muted lowercase'>
             zcash and penumbra · private by default
