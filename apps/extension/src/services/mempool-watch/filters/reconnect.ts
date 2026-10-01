@@ -1,5 +1,5 @@
 /**
- * withReconnect — catch errors from inner and retry with exponential backoff.
+ * withReconnect - catch errors from inner and retry with exponential backoff.
  *
  * sits between withPoll and the base fetcher: when the base throws (network
  * down, server 5xx, transient parse error), reconnect waits and re-invokes
@@ -22,8 +22,7 @@ export interface ReconnectOptions {
   readonly initialDelayMs?: number;
   /** max retry delay in ms. default 60_000. */
   readonly maxDelayMs?: number;
-  /** max consecutive attempts before giving up (0 = unlimited). default 100 —
-   *  prevents an infinite reconnect loop against a permanently dead endpoint
+  /** max consecutive attempts before giving up (0 = unlimited). default 100 - *  prevents an infinite reconnect loop against a permanently dead endpoint
    *  silently never surfacing a hard error to the UI / backend selector. */
   readonly maxAttempts?: number;
   /** sleep slice for abort responsiveness. default 250ms. */
@@ -49,7 +48,7 @@ export const withReconnect = (opts: ReconnectOptions = {}): MempoolFilter => {
             attempt = 0;
             yield snap;
           }
-          // inner completed cleanly — let the outer (poll) loop drive the next call
+          // inner completed cleanly - let the outer (poll) loop drive the next call
           return;
         } catch (err) {
           if (ctx.signal.aborted) {

@@ -27,9 +27,9 @@ export interface Manifest {
   key_id: number;
   /** signed class */
   class: FwClass;
-  /** image signature (64 bytes) — field 8 of the full manifest */
+  /** image signature (64 bytes) - field 8 of the full manifest */
   image_sig: Uint8Array;
-  /** session correlation id (8 bytes) — field 9, NOT signed */
+  /** session correlation id (8 bytes) - field 9, NOT signed */
   req_id: Uint8Array;
 }
 
@@ -79,7 +79,7 @@ export interface DeviceFwRecord {
   feature_set: string[];
   /** epoch ms the update was recorded */
   applied_at: number;
-  /** provenance — only ever 'ur:zafu-result' */
+  /** provenance - only ever 'ur:zafu-result' */
   source: 'ur:zafu-result';
   /** session correlation id that produced the result */
   session: string;

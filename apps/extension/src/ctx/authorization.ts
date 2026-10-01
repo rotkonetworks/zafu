@@ -16,16 +16,16 @@ import { PopupType } from '../message/popup';
 import { throwIfNeedsLogin } from '../needs-login';
 import { popup } from '../popup';
 
-/** swap claims don't require user approval — auto-authorize them */
+/** swap claims don't require user approval - auto-authorize them */
 const isSwapClaimOnly = (plan: TransactionPlan): boolean =>
   plan.actions.length > 0 && plan.actions.every(a => a.action.case === 'swapClaim');
 
 export const getAuthorization = async (plan: TransactionPlan): Promise<AuthorizationData> => {
-  // Swap claims don't require user interaction — sign without popup
+  // Swap claims don't require user interaction - sign without popup
   if (isSwapClaimOnly(plan)) {
     return new AuthorizationData();
   }
-  // Check if active wallet is airgap (Zigner) — use getWalletFromStorage
+  // Check if active wallet is airgap (Zigner) - use getWalletFromStorage
   // which handles decryption (wallets are encrypted at rest)
   const activeWallet = await getWalletFromStorage();
 

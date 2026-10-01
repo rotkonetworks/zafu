@@ -158,7 +158,7 @@ export class ZidecarClient {
       parts.push(...this.varint(endHeight));
     }
 
-    // streaming RPC — need raw response with gRPC frames intact
+    // streaming RPC - need raw response with gRPC frames intact
     const resp = await this.grpcCallStream('GetCompactBlocks', new Uint8Array(parts));
     return this.parseBlockStream(resp);
   }
@@ -450,7 +450,7 @@ export class ZidecarClient {
         const msg = messageMatch?.[1]?.trim();
         throw new Error(`gRPC ${method}: ${decodeURIComponent(msg ?? `status ${status}`)}`);
       }
-      // status 0 but no data frame — treat as empty success
+      // status 0 but no data frame - treat as empty success
       return new Uint8Array(0);
     }
 
@@ -459,7 +459,7 @@ export class ZidecarClient {
     return buf.subarray(5, 5 + len);
   }
 
-  /** raw gRPC-web call for server-streaming RPCs — returns full response with frame headers */
+  /** raw gRPC-web call for server-streaming RPCs - returns full response with frame headers */
   private async grpcCallStream(
     method: string,
     msg: Uint8Array,
@@ -626,7 +626,7 @@ export class ZidecarClient {
 
       // `<<24` yields a SIGNED int32: a declared length >= 2^31 parses
       // negative, the bounds check below passes, subarray clamps to empty and
-      // `pos += len` walks BACKWARDS — an unbounded loop that pushes an object
+      // `pos += len` walks BACKWARDS - an unbounded loop that pushes an object
       // every 5 bytes until the worker OOMs. A 9-byte hostile response was
       // enough. Use unsigned arithmetic and reject anything not a sane length.
       const len =
@@ -694,7 +694,7 @@ export class ZidecarClient {
         } else if (field === 4) {
           block.actionsRoot = buf.slice(pos, pos + len);
         } else if (field === 5) {
-          // ironwood_actions — same wire shape as orchard actions. Without
+          // ironwood_actions - same wire shape as orchard actions. Without
           // this the wallet downloads its own ironwood notes and discards
           // them, showing zero after a turnstile migration.
           (block.ironwoodActions ??= []).push(this.parseAction(data));
@@ -1072,7 +1072,7 @@ export class ZidecarClient {
       const wire = tag & 0x7;
 
       if (wire === 0) {
-        // varint — need to handle uint64 for valueZat
+        // varint - need to handle uint64 for valueZat
         let v = 0n;
         let s = 0n;
         while (pos < buf.length) {
@@ -1195,7 +1195,7 @@ export class ZidecarClient {
           orchardTree = decoder.decode(data);
         } else if (field === 6) {
           // zidecar.v1 TreeState.ironwood_tree = 6. This read field 7, which
-          // is the LIGHTWALLETD TreeState number — so against zidecar it never
+          // is the LIGHTWALLETD TreeState number - so against zidecar it never
           // matched and every ironwood send failed with "server has no
           // ironwood tree state", despite the server returning it correctly.
           ironwoodTree = decoder.decode(data);
@@ -1479,7 +1479,7 @@ export class ZidecarClient {
 
       if (wire === 0) {
         // varint. This branch used to `break`, which meant any scalar field
-        // silently truncated the parse — the sync-height fields below sit
+        // silently truncated the parse - the sync-height fields below sit
         // after the length-delimited ones on the wire.
         let v = 0,
           s = 0;

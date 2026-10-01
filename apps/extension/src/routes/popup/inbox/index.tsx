@@ -445,13 +445,13 @@ export function ContactCardBubble({
         ) : (
           <>
             <span className='i-ph-warning-circle h-3 w-3 text-warning' />
-            <span className='text-label text-warning'>unverified — not signed</span>
+            <span className='text-label text-warning'>unverified - not signed</span>
           </>
         )}
       </div>
       {!trust.known && trust.matchesDeliveringAddress && (
         <p className='text-label text-fg-dim'>
-          the note's sender declares this address — a claim, not a verification
+          the note's sender declares this address - a claim, not a verification
         </p>
       )}
       {trust.deliveringAddress && (
@@ -598,8 +598,8 @@ export function FrostSignBubble({ message }: { message: InboxMessage }) {
           <span className='i-ph-warning-circle h-3 w-3 text-warning' />
           <span className='text-label text-warning'>
             {message.sessionId
-              ? 'unverified — session not recognised'
-              : 'unverified — no session id in memo'}
+              ? 'unverified - session not recognised'
+              : 'unverified - no session id in memo'}
           </span>
         </div>
       )}
@@ -1173,7 +1173,7 @@ export function InboxPage() {
         </div>
       </div>
 
-      {/* tabs — icon + label so the discriminator is glanceable. unread
+      {/* tabs - icon + label so the discriminator is glanceable. unread
           count anchors to conversations since that's where the user lives
           most of the time. */}
       <Segmented
@@ -1191,7 +1191,7 @@ export function InboxPage() {
         ]}
       />
 
-      {/* multisig group chats — coordination threads over the relay, distinct
+      {/* multisig group chats - coordination threads over the relay, distinct
           from the on-chain-memo conversations below. only groups whose
           co-signer relay keys are on file can chat. */}
       {groupWallets.length > 0 && (
@@ -1219,7 +1219,7 @@ export function InboxPage() {
         </div>
       )}
 
-      {/* search — hidden when the underlying collection is empty.
+      {/* search - hidden when the underlying collection is empty.
           A new user with zero conversations shouldn't see a
           'search conversations...' bar inviting them to search
           across nothing. Once anything lands in the inbox, the

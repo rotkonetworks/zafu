@@ -210,7 +210,7 @@ export function useActiveAddress() {
 
             // zcash - derive orchard address via worker (avoids main-thread wasm)
             if (activeNetwork === 'zcash') {
-              // retry worker spawn — rescan may have terminated it
+              // retry worker spawn - rescan may have terminated it
               for (let attempt = 0; attempt < 3 && !cancelled; attempt++) {
                 try {
                   await spawnNetworkWorker('zcash');
@@ -339,7 +339,7 @@ export function useActiveAddress() {
               console.error('failed to derive address from ufvk:', err);
             }
           }
-          // orchardFvk is base64 FVK bytes (from zigner QR binary) — derive via WatchOnlyWallet
+          // orchardFvk is base64 FVK bytes (from zigner QR binary) - derive via WatchOnlyWallet
           if (zcashWallet.orchardFvk && !zcashWallet.orchardFvk.startsWith('uview')) {
             try {
               const zcashWasm = await loadZcashWasm();

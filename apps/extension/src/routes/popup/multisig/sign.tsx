@@ -80,7 +80,7 @@ export const MultisigSign = () => {
   const relayRef = useRef<FrostdRelayClient | null>(null);
   const participantIdRef = useRef<Uint8Array | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  // the latched request — set exactly once per session, never mutated after.
+  // the latched request - set exactly once per session, never mutated after.
   const txRef = useRef<SignRequest | null>(null);
   // set if a second, different SIGN: lands after we latched. Poisons the
   // session: the user reviewed request #1, so request #2 has no consent.
@@ -169,7 +169,7 @@ export const MultisigSign = () => {
               pcztHex: signMatch[6],
             };
 
-            // Latch. A second SIGN: is not a "retry" — it is an attempt to
+            // Latch. A second SIGN: is not a "retry" - it is an attempt to
             // swap the tx out from under a review the user has already
             // started (classic case: land it while the password modal is up).
             //
@@ -185,7 +185,7 @@ export const MultisigSign = () => {
                   kind: 'refuse',
                   reasons: [
                     'the host published a SECOND, different transaction after you began reviewing this one',
-                    'this session is void — reject and re-join if you still intend to sign',
+                    'this session is void - reject and re-join if you still intend to sign',
                   ],
                 });
               }
@@ -199,8 +199,7 @@ export const MultisigSign = () => {
             setFeeZat(req.feeZat);
 
             // Verifier: derive output truth from the PCZT (recompute sighash +
-            // OVK-decrypt outputs). Anything that cannot be verified refuses —
-            // there is no "show it anyway and leave approve live" path, because
+            // OVK-decrypt outputs). Anything that cannot be verified refuses - // there is no "show it anyway and leave approve live" path, because
             // the host chooses whether we can verify. FROST multisig wallets
             // store the `uview1…` string in `orchardFvk` (DKG flows save it
             // there); single-key wallets store it in `ufvk`.
@@ -212,7 +211,7 @@ export const MultisigSign = () => {
               setVerdict({
                 kind: 'refuse',
                 reasons: [
-                  'host did not publish the PCZT bytes — everything shown here would be host-authored text bound to nothing',
+                  'host did not publish the PCZT bytes - everything shown here would be host-authored text bound to nothing',
                   'refusing to release a share against an unverifiable request',
                 ],
               });
@@ -283,7 +282,7 @@ export const MultisigSign = () => {
     // ── snapshot what the user is consenting to, BEFORE any await ──
     // `approved` is the request the verdict on screen was computed from. From
     // here on nothing reads txRef for signing purposes; only `approved` is
-    // signed. `verdict`/`acknowledged` are this render's values — i.e. exactly
+    // signed. `verdict`/`acknowledged` are this render's values - i.e. exactly
     // what was displayed when the button was clicked.
     const approved = txRef.current;
     if (!approved) {
@@ -304,7 +303,7 @@ export const MultisigSign = () => {
     if (supersededRef.current || txRef.current !== approved) {
       teardown();
       setError(
-        'the signing request changed while you were authenticating — nothing was signed. re-join to review the new request.',
+        'the signing request changed while you were authenticating - nothing was signed. re-join to review the new request.',
       );
       setStep('error');
       return;
@@ -350,7 +349,7 @@ export const MultisigSign = () => {
       // late swap harmless, but there is no reason to release shares into a
       // session we know has been tampered with.
       if (supersededRef.current || txRef.current !== approved) {
-        throw new Error('signing request changed mid-session — aborted before releasing any share');
+        throw new Error('signing request changed mid-session - aborted before releasing any share');
       }
 
       // split each peer's "c0|c1|..." into per-action lists.
@@ -508,7 +507,7 @@ export const MultisigSign = () => {
               </Sensitive>
             </div>
             {/* The fee is the one number on this screen that is NOT derived
-                from the bytes — see assessClaimedFee(). Say so rather than
+                from the bytes - see assessClaimedFee(). Say so rather than
                 letting it sit next to verified fields looking equally solid. */}
             <p className='text-label text-fg-dim'>
               fee is reported by the host and cannot be checked against the transaction bytes

@@ -18,7 +18,7 @@ import type { NetworkType } from './types';
 
 /**
  * chrome.storage.local key holding the last scan height the zcash worker
- * reported for a wallet. A UI hint only — IndexedDB (`meta.syncHeight`) is
+ * reported for a wallet. A UI hint only - IndexedDB (`meta.syncHeight`) is
  * what the worker actually resumes from. Per-wallet on purpose; see the
  * write site in the 'sync-progress' handler.
  */
@@ -207,8 +207,8 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
         }),
       );
       // Persist the height for the next popup open. Two places already READ
-      // chrome.storage.local.zcashSyncHeight — the sync hook's mount-time
-      // hydration and the post-error retry's resume point — and nothing has
+      // chrome.storage.local.zcashSyncHeight - the sync hook's mount-time
+      // hydration and the post-error retry's resume point - and nothing has
       // ever WRITTEN it, so both silently degraded: the bar started every
       // session at 0% until the worker's first emit landed, and a retry
       // resumed from `undefined` instead of where it left off.
@@ -467,7 +467,7 @@ export const stopSyncInWorker = async (network: NetworkType, walletId: string): 
 };
 
 /**
- * reset sync for a wallet — clears IDB notes/spent/meta and in-memory state
+ * reset sync for a wallet - clears IDB notes/spent/meta and in-memory state
  */
 export const resetSyncInWorker = async (network: NetworkType, walletId: string): Promise<void> => {
   return callWorker(network, 'reset-sync', {}, walletId);
@@ -687,16 +687,16 @@ export const getTransparentHistoryInWorker = async (
  * real block height, `pending` means broadcast and not yet seen (we do not know
  * whether it will confirm), `failed` means the wallet has scanned past the
  * transaction's own expiry height without finding it. The fields below `status`
- * exist only for transactions this wallet sent — the chain cannot supply them.
+ * exist only for transactions this wallet sent - the chain cannot supply them.
  */
 export interface HistoryEntry {
   id: string;
-  /** real block height, or 0 when there is not one yet — never a sentinel */
+  /** real block height, or 0 when there is not one yet - never a sentinel */
   height: number;
   type: 'send' | 'receive' | 'shield';
   /**
-   * zatoshis as a string. For a send this is what LEFT the wallet — recipient
-   * amount plus fee — not the gross value of the notes spent as inputs. Change
+   * zatoshis as a string. For a send this is what LEFT the wallet - recipient
+   * amount plus fee - not the gross value of the notes spent as inputs. Change
    * comes back to you and was never spent.
    */
   amount: string;
@@ -728,7 +728,7 @@ export const getHistoryInWorker = async (
 
 /**
  * Sends this wallet broadcast that the chain has not confirmed (plus any that
- * provably expired). Answered from local state only — no network — so it is
+ * provably expired). Answered from local state only - no network - so it is
  * cheap enough to refetch on every sync tick, which is what the balance panel
  * needs in order to explain a temporarily reduced figure.
  */
@@ -827,7 +827,7 @@ export interface SendTxUnsignedResult {
    * recipient and memo the chain does not store. Pass this back on the matching
    * complete* call and the worker does the same bookkeeping a hot send does.
    *
-   * Optional because stashing it is best-effort — a build that could not record
+   * Optional because stashing it is best-effort - a build that could not record
    * its context is still perfectly signable and broadcastable.
    */
   coldSendId?: string;
@@ -935,7 +935,7 @@ export interface SendTxPcztUnsignedResult {
   sighash: string;
   alphas: string[];
   spendIndices: number[];
-  /** see SendTxUnsignedResult.coldSendId — same handle, same contract */
+  /** see SendTxUnsignedResult.coldSendId - same handle, same contract */
   coldSendId?: string;
   /**
    * The request envelope went out COMPACT (tx_type 0x05), so the device will
@@ -958,7 +958,7 @@ export interface SendTxPcztUnsignedResult {
  *
  * Set `frost` when the PCZT feeds a FROST multisig signing round (self-custody
  * or airgap co-signers). Those callers REQUIRE the `sighash` / `alphas` /
- * `spendIndices` fields, which only the orchard builder emits — the worker
+ * `spendIndices` fields, which only the orchard builder emits - the worker
  * fails closed rather than hand back a PCZT with empty FROST fields.
  */
 export const buildSendTxPcztInWorker = async (
@@ -1061,7 +1061,7 @@ export interface TurnstileMigrationUnsignedResult {
   amount: string;
   urFrames: string[];
   cborBytes: number;
-  /** see SendTxUnsignedResult.coldSendId — same handle, same contract */
+  /** see SendTxUnsignedResult.coldSendId - same handle, same contract */
   coldSendId?: string;
 }
 
@@ -1267,7 +1267,7 @@ export const frostDkgPart2InWorker = async (
   });
 };
 
-/** DKG round 3: finalize — returns key package + public key package */
+/** DKG round 3: finalize - returns key package + public key package */
 export const frostDkgPart3InWorker = async (
   secretHex: string,
   round1Broadcasts: string[],
@@ -1288,7 +1288,7 @@ export const frostSignRound1InWorker = async (
   return callWorker('zcash', 'frost-sign-round1', { ephemeralSeedHex, keyPackageHex });
 };
 
-/** signed FROST share — wrapping is required for cross-party aggregator (poker-escrow) to extract the signer identifier */
+/** signed FROST share - wrapping is required for cross-party aggregator (poker-escrow) to extract the signer identifier */
 export const frostSpendSignInWorker = async (
   ephemeralSeedHex: string,
   keyPackageHex: string,
@@ -1325,7 +1325,7 @@ export const frostSpendAggregateInWorker = async (
 };
 
 /** derive multisig Orchard address from FROST group key (non-deterministic
- * — only use for single-party derive-and-broadcast flows) */
+ * - only use for single-party derive-and-broadcast flows) */
 export const frostDeriveAddressInWorker = async (
   publicKeyPackageHex: string,
   diversifierIndex: number,
@@ -1335,7 +1335,7 @@ export const frostDeriveAddressInWorker = async (
 
 /** derive multisig Orchard address deterministically from pkg + host-broadcast sk.
  * pair with `frostDeriveUfvkInWorker` so address and UFVK share one source of
- * truth for nk/rivk — otherwise participants end up with matching UFVK but
+ * truth for nk/rivk - otherwise participants end up with matching UFVK but
  * different addresses. */
 export const frostDeriveAddressFromSkInWorker = async (
   publicKeyPackageHex: string,
@@ -1361,7 +1361,7 @@ export const frostSampleFvkSkInWorker = async (): Promise<string> => {
 /**
  * derive the Orchard-only UFVK string (`uview1…`) from the FROST group
  * public key package and the host-broadcast `sk`. given identical inputs
- * on every participant, output is byte-identical — this is the property
+ * on every participant, output is byte-identical - this is the property
  * we echo-broadcast to verify before persisting the wallet.
  */
 export const frostDeriveUfvkInWorker = async (
@@ -1410,11 +1410,10 @@ export interface FrostParsedTx {
     action_count: number;
   };
   /** ZIP-244 sighash recomputed from the unsigned tx bytes the joiner was
-   * given. Compare to the host's claimed sighash from the SIGN: payload —
-   * a mismatch means the host published a decoy bundle for display while
+   * given. Compare to the host's claimed sighash from the SIGN: payload - * a mismatch means the host published a decoy bundle for display while
    * asking the joiner to actually sign a different tx. `null` means the
    * tx shape (transparent or sapling component present) isn't covered by
-   * this verifier yet — fall back to OVK-only check with a warning. */
+   * this verifier yet - fall back to OVK-only check with a warning. */
   computed_sighash_hex: string | null;
   // ── additive, transaction-level (see FrostParsedAction) ──
   expiry_height?: number;
@@ -1442,8 +1441,7 @@ export const frostParseTxOutputsInWorker = async (
   return JSON.parse(json) as FrostParsedTx;
 };
 
-/** PCZT-native variant: inspect a standard pczt::Pczt (the migration target —
- * mnemonic/zigner hosts + the escrow all publish a PCZT). Recomputes the
+/** PCZT-native variant: inspect a standard pczt::Pczt (the migration target - * mnemonic/zigner hosts + the escrow all publish a PCZT). Recomputes the
  * canonical sighash from the PCZT itself; same FrostParsedTx contract as the
  * v5-tx parser so computeVerdict is unchanged. */
 export const frostInspectPcztOutputsInWorker = async (

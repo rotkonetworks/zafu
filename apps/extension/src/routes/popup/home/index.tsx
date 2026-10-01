@@ -106,8 +106,7 @@ export const PopupIndex = () => {
   // Backup nudge: shown for mnemonic vaults until the user demonstrably
   // possesses their recovery phrase (onboarding checkbox, import, settings
   // reveal, or explicit dismissal here). Replaces a dead effect that
-  // self-dismissed `backupReminderSeen` without ever rendering anything —
-  // which is why this uses a fresh key: the old one is poisoned `true`
+  // self-dismissed `backupReminderSeen` without ever rendering anything - // which is why this uses a fresh key: the old one is poisoned `true`
   // for every pre-fix wallet.
   const [showBackupNudge, setShowBackupNudge] = useState(false);
   useEffect(() => {
@@ -142,13 +141,13 @@ export const PopupIndex = () => {
     }
   }, [effectiveAddress, isPenumbra, activeNetwork]);
 
-  // mnemonic vaults derive zcash keys directly — no zcash wallet record
+  // mnemonic vaults derive zcash keys directly - no zcash wallet record
   const walletName =
     activeNetwork === 'zcash' && selectedKeyInfo?.type !== 'mnemonic'
       ? (activeZcashWallet?.label ?? selectedKeyInfo?.name ?? 'no wallet')
       : (selectedKeyInfo?.name ?? 'no wallet');
 
-  // gate on the selected vault, not activeZcashIndex — the index lags on
+  // gate on the selected vault, not activeZcashIndex - the index lags on
   // vault switches to mnemonic (which has no zcash wallet record).
   const selectedMultisigWallet =
     selectedKeyInfo?.type === 'frost-multisig'

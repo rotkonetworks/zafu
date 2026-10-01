@@ -38,7 +38,7 @@ export const MultisigOverview = () => {
   // fetch balances for all multisig wallets. sync writes notes keyed by
   // vaultId (selectedKeyInfo.id), not zcashWallet.id, so the balance lookup
   // must use vaultId; local state stays keyed by w.id for row identity.
-  // re-fetch on every sync-progress tick — only the *active* wallet emits
+  // re-fetch on every sync-progress tick - only the *active* wallet emits
   // these, but that's enough to refresh the active multisig vault's row.
   useEffect(() => {
     const fetchAll = () => {

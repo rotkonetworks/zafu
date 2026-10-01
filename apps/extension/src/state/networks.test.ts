@@ -19,7 +19,7 @@ describe('networks slice: disableNetwork', () => {
   test('disables and persists even when a vault declares the network', async () => {
     // Vault metadata naming the target network is the only "wallet uses this
     // network" signal that exists (wallets/zcashWallets carry no network id),
-    // and it does NOT gate disable — toggling a network off is always allowed.
+    // and it does NOT gate disable - toggling a network off is always allowed.
     localMock.set('vaults', [
       { id: 'v1', type: 'mnemonic', insensitive: { supportedNetworks: ['zcash'] } },
     ]);

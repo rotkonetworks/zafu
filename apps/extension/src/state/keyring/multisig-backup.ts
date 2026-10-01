@@ -23,9 +23,9 @@ export interface FrostSharePayload {
   threshold: number;
   maxSigners: number;
   mainnet: boolean;
-  /** Orchard-only UFVK (`uview1…`) — saved so restore doesn't need the FVK sk. */
+  /** Orchard-only UFVK (`uview1…`) - saved so restore doesn't need the FVK sk. */
   orchardFvk: string;
-  /** unified address — also derivable from publicKeyPackage + sk, saved for convenience. */
+  /** unified address - also derivable from publicKeyPackage + sk, saved for convenience. */
   address: string;
   /** relay url for FROST signing rounds. */
   relayUrl: string;
@@ -52,7 +52,7 @@ export interface FrostBackupEnvelope {
   publicKeyPackage?: string;
   /** number of shares for batch backups; absent for single */
   shareCount?: number;
-  /** when the export was made — plaintext, helps user identify */
+  /** when the export was made - plaintext, helps user identify */
   exportedAt: number;
   keyPrint: KeyPrintJson;
   box: BoxJson;

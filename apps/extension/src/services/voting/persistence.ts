@@ -1,9 +1,9 @@
 /**
- * voting persistence — encrypted hotkey and delegation state storage
+ * voting persistence - encrypted hotkey and delegation state storage
  *
  * stores per-round voting hotkeys and delegation state blobs in encrypted
  * local storage, using the same seal/unseal pattern as FROST multisig secrets.
- * the voting hotkey is a hot app-owned secret (64-byte random) — treated with
+ * the voting hotkey is a hot app-owned secret (64-byte random) - treated with
  * the same security as ephemeralSeed/keyPackage.
  */
 
@@ -75,7 +75,7 @@ export const saveVotingHotkey = async (
 ): Promise<void> => {
   const sessionKeyJson = await session.get('passwordKey');
   if (!sessionKeyJson) {
-    throw new Error('keyring locked — cannot save voting hotkey');
+    throw new Error('keyring locked - cannot save voting hotkey');
   }
 
   const key = await Key.fromJson(sessionKeyJson);
@@ -105,7 +105,7 @@ export const saveVotingHotkey = async (
 
 /**
  * Update (or create) the delegation state blob for a round.
- * The blob is treated as opaque JSON produced by wasm — stored verbatim.
+ * The blob is treated as opaque JSON produced by wasm - stored verbatim.
  * If the hotkey hasn't been saved yet, this will be deferred when hotkey is saved.
  */
 export const saveDelegationState = async (
@@ -117,7 +117,7 @@ export const saveDelegationState = async (
 ): Promise<void> => {
   const sessionKeyJson = await session.get('passwordKey');
   if (!sessionKeyJson) {
-    throw new Error('keyring locked — cannot save delegation state');
+    throw new Error('keyring locked - cannot save delegation state');
   }
 
   const storage = await getVotingStorage(local);
@@ -162,7 +162,7 @@ export const loadVotingRoundRecord = async (
 ): Promise<VotingRoundRecord | null> => {
   const sessionKeyJson = await session.get('passwordKey');
   if (!sessionKeyJson) {
-    throw new Error('keyring locked — cannot load voting round');
+    throw new Error('keyring locked - cannot load voting round');
   }
 
   const key = await Key.fromJson(sessionKeyJson);

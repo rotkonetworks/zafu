@@ -132,7 +132,7 @@ export function VotePage() {
   const [voteError, setVoteError] = useState<string | null>(null);
 
   // gate the network query via `enabled` so the hook still runs when on
-  // another network — Rules of Hooks require a stable hook count.
+  // another network - Rules of Hooks require a stable hook count.
   const isPenumbra = activeNetwork === 'penumbra';
 
   const proposalsQuery = useQuery({

@@ -1,12 +1,11 @@
-// Multisig verifier — verdict computation. Compares the host's claimed
+// Multisig verifier - verdict computation. Compares the host's claimed
 // (recipient, amount, fee) against the OVK-decrypted output the joiner
 // derived locally from the PCZT the host published.
 //
 // There is deliberately NO "unverified but signable" verdict.
 //
 // The original reason was that the relay was unauthenticated and the room code
-// guessable, so "the host" was anyone who could post. That is no longer true —
-// frostd admits only listed keys and Noise_K authenticates the sender — and
+// guessable, so "the host" was anyone who could post. That is no longer true - // frostd admits only listed keys and Noise_K authenticates the sender - and
 // the rule stands anyway, on the reason that does not expire: the host is a
 // co-signer, and a threshold scheme exists precisely because a co-signer is
 // not fully trusted. Authenticating who sent a claim says nothing about
@@ -36,7 +35,7 @@ export type Verdict =
       sighashLie?: boolean;
     }
   | { kind: 'pending' }
-  /** cannot verify — hard block, not overridable. */
+  /** cannot verify - hard block, not overridable. */
   | { kind: 'refuse'; reasons: string[] };
 
 /** true for the verdicts a signer is permitted to release a share against. */
@@ -92,7 +91,7 @@ export function computeVerdict(args: {
     return {
       kind: 'refuse',
       reasons: [
-        'sighash could not be recomputed from the published bytes — refusing to sign an unverifiable tx',
+        'sighash could not be recomputed from the published bytes - refusing to sign an unverifiable tx',
         'this tx has a transparent or sapling component, which this verifier cannot bind; a host can induce this deliberately',
       ],
     };
@@ -107,7 +106,7 @@ export function computeVerdict(args: {
         sendZat,
         changeZat,
         reasons: [
-          'claimed sighash does not match the unsigned tx bytes — host is asking you to sign a different tx than the one shown',
+          'claimed sighash does not match the unsigned tx bytes - host is asking you to sign a different tx than the one shown',
           `claimed ${claimed.slice(0, 12)}…, derived ${expected.slice(0, 12)}…`,
         ],
       };
@@ -132,7 +131,7 @@ export function computeVerdict(args: {
   // the funds elsewhere on top of the displayed recipient.
   if (externals.length > 1) {
     reasons.push(
-      `bundle has ${externals.length} recipient outputs but host's claim shows only one — possible split-spend attack`,
+      `bundle has ${externals.length} recipient outputs but host's claim shows only one - possible split-spend attack`,
     );
   } else if (externals.length === 0 && claimedAmount > 0n) {
     reasons.push('bundle has no recipient output but host claims to send funds');
@@ -175,15 +174,15 @@ export function computeVerdict(args: {
  *
  * READ THIS BEFORE TRUSTING IT. This is not fee verification and cannot be.
  * For a shielded-only tx the fee IS `orchard_bundle.value_balance()`, and
- * `frost_inspect_pczt_outputs` does not return it — it returns only the
+ * `frost_inspect_pczt_outputs` does not return it - it returns only the
  * OVK-decryptable outputs. We can therefore see what is being *sent* but never
  * what is being *spent*, so value conservation (inputs − outputs = fee) is not
  * checkable on this side of the wasm boundary at all.
  *
  * Concretely, the attack this does NOT stop: spend a 10 ZEC note, pay 0.01 to
  * the displayed recipient, emit no change, and let 9.99 fall out as fee for a
- * colluding miner. Every output-side check above passes — the recipient and
- * amount are exactly what was claimed — and the host simply claims a small fee
+ * colluding miner. Every output-side check above passes - the recipient and
+ * amount are exactly what was claimed - and the host simply claims a small fee
  * here. The fee we are bounding is an attacker-supplied string.
  *
  * What this does buy: it catches an *honestly reported* excessive fee (a broken
@@ -193,7 +192,7 @@ export function computeVerdict(args: {
  * `frost_inspect_pczt_outputs` in crates/zcash-wasm/src/frost.rs (the zcli
  * repo); the wasm ships here prebuilt, so it cannot be done from this repo.
  */
-export const MAX_PLAUSIBLE_FEE_ZAT = 10_000_000n; // 0.1 ZEC — orders of magnitude above ZIP-317
+export const MAX_PLAUSIBLE_FEE_ZAT = 10_000_000n; // 0.1 ZEC - orders of magnitude above ZIP-317
 
 export function assessClaimedFee(
   claimedFeeZat: string,
@@ -238,7 +237,7 @@ export type EscrowVerdict =
  * Verdict for an escrow-driven payout (poker, and future escrow multisig).
  * Unlike computeVerdict the dapp's claimed plan is NOT trusted: the escrow
  * builds the PCZT, so the PCZT is the only truth. Bind the sighash we're about
- * to sign to the one recomputed from the PCZT (mandatory — escrow payouts are
+ * to sign to the one recomputed from the PCZT (mandatory - escrow payouts are
  * orchard-only so a null sighash means we can't verify), then return the
  * OVK-decoded outputs for the user to approve. Output-side parity with
  * computeVerdict; value-conservation against inputs needs data the parser
@@ -254,7 +253,7 @@ export function computeEscrowVerdict(args: {
   if (!parsed.computed_sighash_hex) {
     return {
       kind: 'refuse',
-      reasons: ['PCZT sighash could not be recomputed — refusing to sign an unverifiable payout'],
+      reasons: ['PCZT sighash could not be recomputed - refusing to sign an unverifiable payout'],
     };
   }
   const expected = parsed.computed_sighash_hex.toLowerCase();
@@ -278,7 +277,7 @@ export function computeEscrowVerdict(args: {
   const outputs: { recipientUa: string; amountZat: bigint }[] = [];
   for (const a of externals) {
     if (!a.recipient_raw_hex) {
-      return { kind: 'refuse', reasons: ['a recipient output could not be decoded — refusing'] };
+      return { kind: 'refuse', reasons: ['a recipient output could not be decoded - refusing'] };
     }
     try {
       outputs.push({
@@ -286,7 +285,7 @@ export function computeEscrowVerdict(args: {
         amountZat: BigInt(a.amount_zat),
       });
     } catch {
-      return { kind: 'refuse', reasons: ['a recipient output could not be decoded — refusing'] };
+      return { kind: 'refuse', reasons: ['a recipient output could not be decoded - refusing'] };
     }
   }
 

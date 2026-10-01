@@ -8,7 +8,7 @@ import { SheetOptions } from './sheet-options';
 
 /**
  * Transaction-signing security selector. Lives under Security & Backup
- * because it controls when a password confirmation is required — that's
+ * because it controls when a password confirmation is required - that's
  * a security posture, not a privacy toggle. Does NOT change encryption
  * (the seed is always encrypted at rest); only affects when the
  * per-transaction confirmation prompt fires.

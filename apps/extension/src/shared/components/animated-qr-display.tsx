@@ -1,5 +1,5 @@
 /**
- * animated QR display — cycles through multipart QR frames
+ * animated QR display - cycles through multipart QR frames
  *
  * for payloads > ~2KB that don't fit in a single QR code.
  * splits the payload into numbered frames and cycles through them.
@@ -10,8 +10,8 @@
  * BC-UR encoding for UR flows goes through the wasm ur_encode_frames).
  *
  * Two controls:
- *   QR speed   — ms per frame (how fast the animation cycles)
- *   QR density — payload bytes per frame (Safe 400B / Medium 800B / Aggressive
+ *   QR speed - ms per frame (how fast the animation cycles)
+ *   QR density - payload bytes per frame (Safe 400B / Medium 800B / Aggressive
  *                1.2KB). Higher density = fewer frames but a higher QR version,
  *                which needs a sharper camera. Persistent per-install.
  */
@@ -57,7 +57,7 @@ interface AnimatedQrDisplayProps {
   data?: Uint8Array;
   /** pre-built UR string frames (e.g. from WASM ur_encode_frames) */
   urFrames?: string[];
-  /** UR type string (e.g. 'zcash-notes', 'zafu-stream') — used with data prop */
+  /** UR type string (e.g. 'zcash-notes', 'zafu-stream') - used with data prop */
   urType?: string;
   /** size of QR code in pixels */
   size?: number;
@@ -72,7 +72,7 @@ interface AnimatedQrDisplayProps {
   /** initial payload-bytes-per-frame density (default 200 = safe) */
   densityBytes?: number;
   /**
-   * raw fountain source for UR flows — lets the component re-fountain frames at
+   * raw fountain source for UR flows - lets the component re-fountain frames at
    * the chosen density via wasm ur_encode_frames. Without it, pre-built
    * urFrames can't be re-densified and the density slider is hidden.
    */
@@ -109,7 +109,7 @@ function estimateQrVersion(payloadBytes: number): number {
       return qr.version;
     }
   } catch {
-    /* qrcode lib unavailable/sparse — fall through to the table */
+    /* qrcode lib unavailable/sparse - fall through to the table */
   }
   // QR capacity table (bytes, EC L); first version whose capacity is >= payloadBytes
   const CAP: [number, number][] = [
@@ -436,7 +436,7 @@ export function AnimatedQrDisplay({
       {frames.length > 1 && (
         <div className='flex items-center gap-2 text-label text-fg-muted'>
           <span className='i-ph-circle-notch size-3 animate-spin' />
-          scanning — hold camera steady
+          scanning - hold camera steady
         </div>
       )}
 

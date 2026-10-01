@@ -1,7 +1,7 @@
 /**
  * zid  - seed-derived ed25519 signing identity
  *
- * a zid is a cross-network identity: not penumbra, not zcash — it's the
+ * a zid is a cross-network identity: not penumbra, not zcash - it's the
  * person behind the wallet. one seed -> named identities -> derived keypairs.
  *
  * derivation hierarchy:
@@ -16,17 +16,17 @@
  *
  * identities are named, not numbered. "poker" and "personal" derive
  * different subtrees. the name is a derivation path component, not a
- * secret — the mnemonic provides all entropy.
+ * secret - the mnemonic provides all entropy.
  *
- * identities are unlinkable — no one can tell identity["poker"] and
+ * identities are unlinkable - no one can tell identity["poker"] and
  * identity["personal"] came from the same seed.
  *
- * contacts are scoped to the identity — poker identity's contacts are
+ * contacts are scoped to the identity - poker identity's contacts are
  * completely separate from personal identity's contacts.
  *
  * cross-site key: links your activity across origins WITHIN one identity.
  * opt-in only, requires explicit confirmation. never displayed by default.
- * it does NOT link across identities — "poker" cross-site key cannot be
+ * it does NOT link across identities - "poker" cross-site key cannot be
  * correlated with "personal" cross-site key.
  *
  * limitations:
@@ -169,7 +169,7 @@ export interface Zid {
 
 /** a named identity persona */
 export interface ZidIdentity {
-  /** derivation name ("personal", "poker", "anon") — stable, part of key path */
+  /** derivation name ("personal", "poker", "anon") - stable, part of key path */
   name: string;
   /** user-facing label (can be renamed without changing keys) */
   label: string;
@@ -368,7 +368,7 @@ export const DEFAULT_IDENTITY = 'default';
 
 /**
  * derive a site-specific zid for an origin under a named identity.
- * this is the DEFAULT mode — each site sees a unique key.
+ * this is the DEFAULT mode - each site sees a unique key.
  */
 export const deriveZidForSite = (
   mnemonic: string,
@@ -567,7 +567,7 @@ export const deriveHotWalletMnemonic = async (
 /**
  * derive a per-contact zid under a named identity.
  *
- * contacts are scoped to the identity — "poker" contacts are separate
+ * contacts are scoped to the identity - "poker" contacts are separate
  * from "personal" contacts. the same contactId under different identities
  * produces different keypairs.
  *
@@ -694,7 +694,7 @@ export function rotatedIdentity(baseIdentity: string, zidIndex: number): string 
 
 /** current rotated identity name for the login/share paths.
  * NOTE: multisig, license, and escrow identities deliberately do NOT use
- * this — those must stay pinned to their creation generation or funds and
+ * this - those must stay pinned to their creation generation or funds and
  * subscriptions would "rotate away". Only site login/share rotates. */
 export async function currentIdentityName(base: string = DEFAULT_IDENTITY): Promise<string> {
   return rotatedIdentity(base, await getZidIndex());
@@ -781,7 +781,7 @@ export const signZid = (
 
 /**
  * derive a site-specific P-256 public key (for WebAuthn/passkey registration).
- * same origin scoping as ed25519 ZID — same rotation, same identity.
+ * same origin scoping as ed25519 ZID - same rotation, same identity.
  * returns uncompressed public key (65 bytes: 0x04 || x || y).
  */
 export const deriveP256ForSite = (
@@ -848,7 +848,7 @@ export const verifyP256 = (
 
 /**
  * derive a passkey seed for a relying party. NOT affected by ZID rotation.
- * passkeys are long-lived credentials — rotating would lock the user out.
+ * passkeys are long-lived credentials - rotating would lock the user out.
  * re-registration is an explicit action (delete + create new passkey).
  */
 const deriveSeedForPasskey = (identity: Uint8Array, rpId: string): Uint8Array =>
@@ -870,7 +870,7 @@ export const derivePasskeyForSite = (
 
 /**
  * sign with the passkey P-256 key (non-rotating).
- * message is NOT pre-hashed — p256.sign handles SHA-256 internally.
+ * message is NOT pre-hashed - p256.sign handles SHA-256 internally.
  */
 export const signPasskey = (
   mnemonic: string,
@@ -892,7 +892,7 @@ export const signPasskey = (
 // -- PRF (WebAuthn pseudo-random function) --
 
 /**
- * derive a PRF output for a site — the WebAuthn hmac-secret / prf extension.
+ * derive a PRF output for a site - the WebAuthn hmac-secret / prf extension.
  *
  * sites like Confer.to use PRF to derive encryption keys from passkeys.
  * our implementation: HMAC(identity, "prf:" + origin + "\0" + salt_hex)
@@ -917,7 +917,7 @@ export const derivePrf = (
 
 // -- deterministic passwords --
 
-/** base85 alphabet (RFC 1924 — URL-safe, no quotes) */
+/** base85 alphabet (RFC 1924 - URL-safe, no quotes) */
 const B85 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~';
 
 /**
@@ -927,7 +927,7 @@ const B85 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&
  * derivation: HMAC-SHA512(identity, "password:" + origin + "\0" + username)
  * output: first 32 bytes → base85 → 40-char string, truncated to len.
  */
-/** normalize origin for password derivation — strip protocol, www/common subdomains, trailing slash */
+/** normalize origin for password derivation - strip protocol, www/common subdomains, trailing slash */
 export const normalizeOrigin = (raw: string): string => {
   let s = raw.trim().toLowerCase();
   s = s.replace(/^https?:\/\//, '');
@@ -944,7 +944,7 @@ export const derivePassword = (
   origin: string,
   username: string,
   length = 32,
-  /** rotation index — increment when site requires password change */
+  /** rotation index - increment when site requires password change */
   index = 0,
 ): string =>
   withIdentity(mnemonic, identity, id => {

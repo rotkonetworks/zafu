@@ -1,5 +1,5 @@
 /**
- * zcash auto-sync hook — manages sync lifecycle at the layout level
+ * zcash auto-sync hook - manages sync lifecycle at the layout level
  *
  * this hook persists across tab navigation (home → history → inbox)
  * so the sync doesn't stop when switching pages.
@@ -28,7 +28,7 @@ import type { ZcashBackend } from '../state/keyring/zcash-backend';
 import { isMempoolWatchEnabled } from '../services/mempool-watch/strategy';
 
 /** resolve wallet birthday height from storage or chain tip.
- *  never returns below orchard activation — no point scanning pre-orchard blocks. */
+ *  never returns below orchard activation - no point scanning pre-orchard blocks. */
 async function resolveBirthday(
   walletId: string,
   zidecarUrl: string,
@@ -40,7 +40,7 @@ async function resolveBirthday(
   if (stored[birthdayKey] && typeof stored[birthdayKey] === 'number') {
     return Math.max(ZCASH_ORCHARD_ACTIVATION, stored[birthdayKey]);
   }
-  // no birthday set — default to near chain tip (new wallet = recent)
+  // no birthday set - default to near chain tip (new wallet = recent)
   try {
     const tip =
       backend === 'lightwalletd'
@@ -287,7 +287,7 @@ export function useZcashAutoSync() {
     }
 
     let cancelled = false;
-    // no timer delay — worker is already pre-spawned by the eager effect above,
+    // no timer delay - worker is already pre-spawned by the eager effect above,
     // and this effect only fires once zcashWallets has hydrated, so start immediately
     (async () => {
       try {

@@ -1,5 +1,5 @@
 /**
- * Endpoint health probe — reaches the CompactTxStreamer GetLightdInfo RPC
+ * Endpoint health probe - reaches the CompactTxStreamer GetLightdInfo RPC
  * on a Zcash preset and returns latency + tip + version + reachability.
  * Works uniformly against both `lightwalletd` and `zidecar` backends since
  * zidecar mirrors the lwd wire surface.
@@ -18,7 +18,7 @@ const HOSH_URL = 'https://hosh.zec.rocks/api/v0/zec.json';
 const HOSH_TTL_MS = 60_000;
 
 export interface LightdInfo {
-  /** lwd protocol version (e.g. "0.4.18") — reported to wallets */
+  /** lwd protocol version (e.g. "0.4.18") - reported to wallets */
   version: string;
   /** free-form vendor string (e.g. "zidecar/rotkonetworks") */
   vendor: string;
@@ -95,7 +95,7 @@ let hoshCache: HoshCache | null = null;
 /**
  * Median block height of healthy servers on hosh.zec.rocks.
  * Cached 60s. Returns null on network error / no healthy servers /
- * unparseable payload — callers can fall back to `peerMedianTip`.
+ * unparseable payload - callers can fall back to `peerMedianTip`.
  */
 export async function getReferenceTip(signal?: AbortSignal): Promise<number | null> {
   if (hoshCache && Date.now() - hoshCache.fetchedAt < HOSH_TTL_MS) {

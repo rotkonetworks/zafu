@@ -523,8 +523,8 @@ export const createZignerSlice =
       try {
         const urExport = parseZcashAccountsCbor(cbor);
         // Trust the user's explicit declaration (which button they clicked).
-        // The byte heuristic — "zid_pubkey present implies zigner, absent
-        // implies non-zigner" — is only a consistency check, not the source
+        // The byte heuristic - "zid_pubkey present implies zigner, absent
+        // implies non-zigner" - is only a consistency check, not the source
         // of truth, because:
         //   1. A future zigner build could legitimately omit zid_pubkey
         //      (e.g. privacy mode, key rotation in flight).

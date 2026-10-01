@@ -85,7 +85,7 @@ export interface Contact {
    */
   zcashme?: string;
   /**
-   * a website / social link for this contact — the address book is a social
+   * a website / social link for this contact - the address book is a social
    * graph, not just a list of wallet addresses. A person is a name, a ZID, and
    * where to find them, of which their chain addresses are only one part.
    */
@@ -98,7 +98,7 @@ export interface Contact {
   addresses: ContactAddress[];
 }
 
-/** portable export format — encrypted with a password-derived key */
+/** portable export format - encrypted with a password-derived key */
 export interface ContactsExport {
   version: 3;
   exportedAt: number;
@@ -210,7 +210,7 @@ export const createContactsSlice =
       const c = get().contacts.contacts;
       return Array.isArray(c) ? c : [];
     };
-    // use local.set (encrypted proxy) — NOT writeEncrypted directly,
+    // use local.set (encrypted proxy) - NOT writeEncrypted directly,
     // since local is already the encrypted proxy and writeEncrypted would double-encrypt
     const persist = () => local.set('contacts' as keyof LocalStorageState, safeContacts() as never);
 
@@ -455,7 +455,7 @@ export const createContactsSlice =
 
       importContacts: async (data, password, mode) => {
         if (data.version !== 3) {
-          throw new Error('unsupported export version — expected v3 (encrypted)');
+          throw new Error('unsupported export version - expected v3 (encrypted)');
         }
 
         const { KeyPrint: KP } = await import('@repo/encryption/key-print');
@@ -562,7 +562,7 @@ export const createContactsSlice =
 
       importPersonalData: async (data, password, mode) => {
         if (data.version !== 4) {
-          throw new Error('unsupported backup version — expected v4');
+          throw new Error('unsupported backup version - expected v4');
         }
         const { KeyPrint: KP } = await import('@repo/encryption/key-print');
         const key = await Key.recreate(password, KP.fromJson(data.keyPrint));

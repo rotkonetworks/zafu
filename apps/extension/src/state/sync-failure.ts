@@ -7,8 +7,7 @@
  *
  *   - a failure message says WHO ACTS (the wallet, or the person holding the
  *     money) and WHETHER IT SELF-HEALS,
- *   - it never contains a height, a hash, a hex string, or a type name —
- *     those live in `raw`, behind a "technical details" disclosure,
+ *   - it never contains a height, a hash, a hex string, or a type name - *     those live in `raw`, behind a "technical details" disclosure,
  *   - the failures the wallet can recover from on its own are never shown at
  *     all (see the rewind budget below).
  *
@@ -48,7 +47,7 @@ export interface SyncFailureAction {
 
 export interface SyncFailure {
   kind: SyncFailureKind;
-  /** verbatim error text — for diagnostics only, NEVER rendered as the message */
+  /** verbatim error text - for diagnostics only, NEVER rendered as the message */
   raw: string;
   /** the only string a user is shown */
   message: string;
@@ -161,7 +160,7 @@ const has = (haystack: string, needles: readonly string[]): boolean =>
 
 /**
  * Broadcast responses that mean "the node already has this transaction".
- * Not a failure at all — the node is telling us the work is done. Kept here
+ * Not a failure at all - the node is telling us the work is done. Kept here
  * only so it can never be shown as an error; broadcast semantics themselves
  * are handled upstream (zcli `client.rs`) and are not touched.
  */
@@ -266,7 +265,7 @@ const NETWORK = [
   'tls',
   'transport error',
   'socket',
-  // status numbers only ever matched with their prefix — a bare "503" also
+  // status numbers only ever matched with their prefix - a bare "503" also
   // appears inside block heights, which is how a reorg gets misread as an outage
   'http 500',
   'http 502',
@@ -354,7 +353,7 @@ export const classifySyncFailure = (error: unknown, code?: unknown): SyncFailure
  * never rotate the endpoint on its own: a local problem must never make the
  * wallet blame the node. `consensus` still OFFERS the user a "switch node"
  * action, because a node that serves unverifiable data is a node worth
- * leaving — but that is the user's decision, not an automatic one.
+ * leaving - but that is the user's decision, not an automatic one.
  */
 export const isEndpointFailoverCandidate = (failure: SyncFailure): boolean =>
   failure.kind === 'network' || failure.kind === 'endpoint';

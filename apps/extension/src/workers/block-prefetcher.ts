@@ -1,8 +1,7 @@
 /**
  * Bounded, in-order look-ahead fetch for the compact-block sync loop.
  *
- * The catch-up loop used to be strictly serial — fetch, scan, write, fetch —
- * so the network idled for the whole scan and the cores idled for the whole
+ * The catch-up loop used to be strictly serial - fetch, scan, write, fetch - * so the network idled for the whole scan and the cores idled for the whole
  * fetch. Measured against zcash.rotko.net, a single 200-block
  * `GetCompactBlocks` costs ~1s wall (~90ms of that is RTT; the rest is the
  * server walking its block store), while the same 200 blocks trial-decrypt in
@@ -10,9 +9,9 @@
  *
  * Two things fix that, and this class does both:
  *
- *   1. Overlap — batch N+1 is already in flight while batch N is scanned, so
+ *   1. Overlap - batch N+1 is already in flight while batch N is scanned, so
  *      wall clock becomes max(fetch, scan) instead of fetch + scan.
- *   2. Depth — a SINGLE in-flight request only removes one of the two. The
+ *   2. Depth - a SINGLE in-flight request only removes one of the two. The
  *      server parallelises across streams: over one HTTP/2 connection the
  *      fetch stage measured 205 blocks/s at depth 1, 614 at depth 4 and ~730
  *      at depth 6, flat after that. Depth is what actually moves the fetch
@@ -23,8 +22,8 @@
  * ascending contiguous ranges no matter what order the network completes
  * them, and at most `depth` batches are ever in memory.
  *
- * Everything that can invalidate the cursor — abort, a rejected fetch, an
- * empty batch, or a rewind after a chain-continuity error — discards the
+ * Everything that can invalidate the cursor - abort, a rejected fetch, an
+ * empty batch, or a rewind after a chain-continuity error - discards the
  * whole queue rather than trying to salvage it. A stale in-flight batch
  * applied across a reorg boundary is a corrupt wallet; a re-fetched batch is
  * one wasted second.
@@ -56,7 +55,7 @@ export interface BlockPrefetcherOptions<B> {
   depth: number;
   /**
    * Consulted before every hand-off. Once it returns true, `next()` resolves
-   * null forever and no fetched batch is ever handed back — an in-flight
+   * null forever and no fetched batch is ever handed back - an in-flight
    * request cannot resurrect a sync the user stopped.
    */
   isAborted: () => boolean;
@@ -66,7 +65,7 @@ interface Slot<B> {
   start: number;
   end: number;
   /**
-   * Never rejects — a failed fetch is carried as `err` so the queue stays
+   * Never rejects - a failed fetch is carried as `err` so the queue stays
    * intact until we reach that slot in order.
    *
    * Typed `Error` rather than `unknown` because the value is rethrown
@@ -111,7 +110,7 @@ export class BlockPrefetcher<B> {
   prime(fromHeight: number, chainHeight: number): void {
     const head = this.queue[0];
     if (head && head.start !== fromHeight + 1) {
-      // the caller's cursor no longer matches the head of the queue — the only
+      // the caller's cursor no longer matches the head of the queue - the only
       // safe reading is that everything queued is about the wrong range
       this.reset();
     } else if (this.cursor > chainHeight) {
@@ -131,7 +130,7 @@ export class BlockPrefetcher<B> {
   /**
    * The next contiguous range, in ascending order. Resolves null when the
    * sync has been aborted or there is nothing left to request below the
-   * ceiling — never a batch out of order, and never a batch fetched under a
+   * ceiling - never a batch out of order, and never a batch fetched under a
    * superseded generation.
    */
   async next(): Promise<PrefetchedBatch<B> | null> {
@@ -149,7 +148,7 @@ export class BlockPrefetcher<B> {
 
       // Anything that happened while we were awaiting wins over this result:
       // an abort, or a reset from the caller's error handling. Dropping the
-      // batch is always safe — it is only ever a cache of what the server
+      // batch is always safe - it is only ever a cache of what the server
       // will happily serve again.
       if (this.opts.isAborted()) {
         this.reset();

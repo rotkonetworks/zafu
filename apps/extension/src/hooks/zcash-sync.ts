@@ -79,7 +79,7 @@ export function useZcashSyncStatus(): ZcashSyncState {
       }
       if (typeof detail?.message === 'string') {
         setWorkerError(new Error(detail.message));
-        // Classify here, once, at the boundary — so no view is ever tempted
+        // Classify here, once, at the boundary - so no view is ever tempted
         // to render the raw worker text.
         setWorkerFailure(classifySyncFailure(detail.message, detail.code));
       }
@@ -88,7 +88,7 @@ export function useZcashSyncStatus(): ZcashSyncState {
     return () => window.removeEventListener('zcash-sync-error', handler);
   }, [activeWalletId]);
 
-  // listen for worker sync-progress events — filter by active wallet
+  // listen for worker sync-progress events - filter by active wallet
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;

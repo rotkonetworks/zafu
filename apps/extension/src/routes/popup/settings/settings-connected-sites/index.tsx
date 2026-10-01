@@ -1,5 +1,5 @@
 /**
- * connected sites — redirects to identity page where all site management lives.
+ * connected sites - redirects to identity page where all site management lives.
  */
 
 import { useEffect } from 'react';

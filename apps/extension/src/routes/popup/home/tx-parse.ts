@@ -20,13 +20,13 @@ export interface ParsedTransaction {
    * transactions (penumbra), and is treated as confirmed.
    */
   status?: 'pending' | 'confirmed' | 'failed';
-  /** `amount` is a ceiling — change may exist but has not been scanned yet */
+  /** `amount` is a ceiling - change may exist but has not been scanned yet */
   amountUpperBound?: boolean;
   /** what the recipient got, excluding fee (amount = this + fee) */
   recipientAmount?: string;
   /** the fee paid, in ZEC, for the breakdown line */
   feeAmount?: string;
-  /** who we sent it to, from our own record — the chain cannot recover this */
+  /** who we sent it to, from our own record - the chain cannot recover this */
   recipient?: string;
   /** wall-clock ms at broadcast, used to date a row that has no height yet */
   sentAt?: number;

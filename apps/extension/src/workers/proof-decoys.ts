@@ -6,15 +6,15 @@
  * Sync verification asks the server two questions about the wallet's own
  * notes:
  *
- *   GetCommitmentProofs(cmx[], position[])  — "prove these outputs are in the
+ *   GetCommitmentProofs(cmx[], position[]) - "prove these outputs are in the
  *                                              commitment tree"
- *   GetNullifierProofs(nullifier[])         — "are these notes spent yet?"
+ *   GetNullifierProofs(nullifier[]) - "are these notes spent yet?"
  *
  * Sent unpadded, both are a complete inventory of the wallet. A (cmx,
  * position) pair indexes straight into the block that contains it, so the
  * server learns exactly which on-chain outputs belong to this user. An
  * *unspent* nullifier is worse: it is not yet on-chain, so the server can
- * store it and match it the moment it appears in a block — deanonymising a
+ * store it and match it the moment it appears in a block - deanonymising a
  * future spend prospectively, before the user has made it. Against the
  * server operator the anonymity set of an unpadded query is 1.
  *
@@ -37,14 +37,14 @@
  *
  * 2. DECOY NULLIFIERS ARE UNIFORM OVER THE PALLAS BASE FIELD, which is where
  *    real orchard nullifiers live. Sampling uniform 32-byte strings would
- *    have been trivially separable — roughly a quarter of them exceed the
+ *    have been trivially separable - roughly a quarter of them exceed the
  *    field modulus and could not be a nullifier at all.
  *
  * Commitment decoys are drawn from a reservoir of (cmx, position) pairs the
  * scanner actually observed in the blocks it just walked. They have to be
  * real tree entries: a cmx that is not in the tree gets no proof back, which
  * identifies it as a decoy immediately. Drawing from the just-scanned range
- * also gives the recency-weighted distribution the real notes have — decoys
+ * also gives the recency-weighted distribution the real notes have - decoys
  * sampled uniformly over all of chain history would cluster in the wrong
  * place and be separable on that alone.
  *
@@ -61,8 +61,8 @@
  *     the real nullifier appears on-chain; the decoys never will. The server
  *     can then look back and mark which member of each triple was real. What
  *     the padding actually buys is the destruction of the *prospective*
- *     attack — the server can no longer build a watchlist that fires the
- *     instant the user spends — and it costs the operator work to unwind
+ *     attack - the server can no longer build a watchlist that fires the
+ *     instant the user spends - and it costs the operator work to unwind
  *     rather than handing it over.
  *
  *   - The batch is still linkable to a single wallet. Queries are grouped
@@ -73,7 +73,7 @@
  *
  *   - The seed lives in the wallet's IndexedDB `meta` store. Clearing the
  *     cache regenerates it, which re-rolls every decoy while the real items
- *     stay the same — exactly the intersection the stability property exists
+ *     stay the same - exactly the intersection the stability property exists
  *     to prevent. A clear-and-resync therefore leaks materially more than a
  *     steady-state sync. See `getDecoySeed` in zcash-worker.ts.
  *
@@ -89,8 +89,7 @@
 import { sha512 } from '@noble/hashes/sha512';
 
 /**
- * Pallas base field modulus. Orchard nullifiers are `Extract_P` outputs —
- * the x-coordinate of a Pallas point — so they are elements of F_p
+ * Pallas base field modulus. Orchard nullifiers are `Extract_P` outputs - * the x-coordinate of a Pallas point - so they are elements of F_p
  * serialised little-endian.
  */
 const PALLAS_BASE_MODULUS = 0x40000000000000000000000000000000224698fc094cf91b992d30ed00000001n;
@@ -177,8 +176,7 @@ export const decoyNullifiersFor = (
  * Position leaks: appending decoys after the real items would let the server
  * read the real set straight off the request ordering. The permutation is
  * derived from the seed rather than from `crypto.getRandomValues` so that a
- * repeated query is byte-identical (see the stability note in the header) —
- * a per-session random order would make otherwise-identical queries
+ * repeated query is byte-identical (see the stability note in the header) - * a per-session random order would make otherwise-identical queries
  * distinguishable from each other, which is a small leak but a free one to
  * avoid.
  */
@@ -199,7 +197,7 @@ export const seededShuffle = <T>(items: T[], seed: Uint8Array, domain: string): 
 export interface PaddedNullifierQuery {
   /** real + decoy nullifiers, shuffled. this is what goes on the wire. */
   readonly query: Uint8Array[];
-  /** hex of the REAL nullifiers only — proofs outside this set are ignored. */
+  /** hex of the REAL nullifiers only - proofs outside this set are ignored. */
   readonly realHex: ReadonlySet<string>;
 }
 
@@ -250,7 +248,7 @@ export interface PaddedCommitmentQuery {
  * Pad a commitment query with decoys drawn from observed tree entries.
  *
  * `pool` must contain (cmx, position) pairs the scanner actually saw on
- * chain — a fabricated cmx has no proof and outs itself. If the pool is too
+ * chain - a fabricated cmx has no proof and outs itself. If the pool is too
  * small to supply the requested decoys we add what we can; that is graceful
  * degradation of the anonymity set, not an error, and the caller logs the
  * achieved ratio rather than the requested one.
@@ -323,7 +321,7 @@ export class CommitmentReservoir {
       return;
     }
     // classic reservoir replacement; crypto RNG is unnecessary here because
-    // the pool only has to be unbiased, not unpredictable — the *selection*
+    // the pool only has to be unbiased, not unpredictable - the *selection*
     // from it is what is keyed.
     const r = Math.floor(Math.random() * this.seen);
     if (r < this.cap) {

@@ -1,7 +1,7 @@
 /**
  * Ed25519 verification for the Zafu firmware-OTA wire contract.
  *
- * Verification only — the wallet NEVER signs firmware. All signatures are
+ * Verification only - the wallet NEVER signs firmware. All signatures are
  * over a fixed domain tag (including the leading 0x00, frozen by
  * docs/design/zafu-ota-wire-freeze.md) concatenated with the canonical CBOR
  * of the signed field set.
@@ -22,7 +22,7 @@ function asBytes(v: Bytes): Uint8Array {
   return typeof v === 'string' ? hexToBytes(v) : v;
 }
 
-/** Frozen domain tags — the leading 0x00 is part of the signed bytes. */
+/** Frozen domain tags - the leading 0x00 is part of the signed bytes. */
 export const DOMAINS = {
   manifest: new Uint8Array([0x00, ...new TextEncoder().encode('zafu/manifest/v1')]),
   image: new Uint8Array([0x00, ...new TextEncoder().encode('zafu/image/v1')]),

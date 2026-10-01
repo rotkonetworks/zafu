@@ -139,7 +139,7 @@ export const StakePage = () => {
   const penumbraTx = usePenumbraTransaction();
 
   // gate network-only queries via the hook's `enabled` flag rather than an
-  // early return — Rules of Hooks require the same hook count on every render.
+  // early return - Rules of Hooks require the same hook count on every render.
   const canStake = hasFeature(activeNetwork, 'stake');
 
   // fetch validators

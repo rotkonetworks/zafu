@@ -44,7 +44,7 @@ import { fmtZec } from './format';
 import { BalanceFigure } from './balance-figure';
 import { GetZecHint } from './notices';
 
-/** zcash-specific content — zashi-inspired combined balance */
+/** zcash-specific content - zashi-inspired combined balance */
 export const ZcashContent = ({
   hasMnemonic,
   watchOnly,
@@ -87,11 +87,11 @@ export const ZcashContent = ({
   const [orchardZat, setOrchardZat] = useState(0n);
   // Whether that figure means anything yet. `0n` is both "no funds" and "not
   // asked yet", and conflating them is how the balance came to render as a
-  // bare em dash — a placeholder that tells the user nothing and reads as
+  // bare em dash - a placeholder that tells the user nothing and reads as
   // "your money is gone". Every state below is now named.
   const [balanceState, setBalanceState] = useState<'loading' | 'ready' | 'error'>('loading');
 
-  // wallet birthday — used to show progress relative to start, not block 0
+  // wallet birthday - used to show progress relative to start, not block 0
   const [walletBirthday, setWalletBirthday] = useState(0);
   useEffect(() => {
     if (!hasWallet || !selectedKeyInfo) {
@@ -108,7 +108,7 @@ export const ZcashContent = ({
   // sync lifecycle managed by useZcashAutoSync in PopupLayout
   // this component only reads sync status and balance
 
-  // fetch orchard balance from worker — re-fetch on sync progress and height changes
+  // fetch orchard balance from worker - re-fetch on sync progress and height changes
   useEffect(() => {
     if (!storeId) {
       return;
@@ -121,8 +121,8 @@ export const ZcashContent = ({
           setBalanceState('ready');
         })
         .catch(() => {
-          // Keep any figure we already had — a transient worker hiccup is not
-          // evidence the balance changed — but stop presenting it as current.
+          // Keep any figure we already had - a transient worker hiccup is not
+          // evidence the balance changed - but stop presenting it as current.
           setBalanceState(prev => (prev === 'ready' ? 'ready' : 'error'));
         });
     };
@@ -165,7 +165,7 @@ export const ZcashContent = ({
   const [rescanConfirmHeight, setRescanConfirmHeight] = useState<number | null>(null);
   // toggle to show sync detail panel when wallet is fully synced
 
-  // rescan via custom event — terminate worker, clear IDB, let auto-sync restart
+  // rescan via custom event - terminate worker, clear IDB, let auto-sync restart
   useEffect(() => {
     const handler = async (e: Event) => {
       const requested = (e as CustomEvent<number>).detail;
@@ -177,7 +177,7 @@ export const ZcashContent = ({
       }
       // A rescan DELETES the note database and writes this height as the new
       // birthday. Any note received before it becomes permanently invisible to
-      // this wallet — no later scan ever revisits those blocks. So a height
+      // this wallet - no later scan ever revisits those blocks. So a height
       // below orchard activation is meaningless and a height at or near the
       // TIP is destructive: it means "start from now", i.e. forget everything
       // you own. Clamp to the earliest height that can hold a note.
@@ -195,8 +195,7 @@ export const ZcashContent = ({
         // delete IndexedDB to clear stale commitment tree. awaited: a
         // fire-and-forget delete against a still-open database hangs on
         // onblocked and silently leaves the data in place.
-        // ('zafu-memo-cache' was deleted here too; no such database exists —
-        // the memo cache is an object store inside 'zafu-zcash'.)
+        // ('zafu-memo-cache' was deleted here too; no such database exists - // the memo cache is an object store inside 'zafu-zcash'.)
         await deleteZcashDatabases();
         // update birthday and clear persisted sync height
         await chrome.storage.local.set({ [birthdayKey]: height });
@@ -212,7 +211,7 @@ export const ZcashContent = ({
         setOrchardZat(0n);
         setBalanceState('loading');
 
-        // respawn worker and start sync — mark syncing immediately to prevent
+        // respawn worker and start sync - mark syncing immediately to prevent
         // auto-sync hook from racing with a duplicate sync
         await new Promise(r => setTimeout(r, 500));
         await spawnNetworkWorker('zcash');
@@ -251,7 +250,7 @@ export const ZcashContent = ({
     };
     // Retry after a transient backend error (node restart, 503): respawn the
     // worker and resume from the height already reached. Deliberately does NOT
-    // clear zcashSyncHeight or zero the balances the way a rescan does — a
+    // clear zcashSyncHeight or zero the balances the way a rescan does - a
     // blip should cost seconds, not a full re-scan from the birthday.
     const retryHandler = () => {
       void (async () => {
@@ -357,7 +356,7 @@ export const ZcashContent = ({
   const scanProgress = Math.max(0, workerSyncHeight - effectiveBirthday);
   // FLOOR, not round. Rounding declared "synced" at 99.5%, which with a
   // birthday a million blocks back is ~5,000 unscanned blocks presented as a
-  // final balance — and it gated the "get your first zec" prompt, so a wallet
+  // final balance - and it gated the "get your first zec" prompt, so a wallet
   // with unscanned receipts told the user they had none.
   // caught up to the tip: done, even for a pocket born at the tip (range 0)
   const caughtUp = chainHeight > 0 && workerSyncHeight >= chainHeight;
@@ -369,13 +368,13 @@ export const ZcashContent = ({
   // "synced" must mean every block was read, not 100 after rounding.
   const scanComplete = chainHeight > 0 && scanProgress >= scanRange;
 
-  // Synced means "this wallet has scanned every block up to the tip" — that
+  // Synced means "this wallet has scanned every block up to the tip" - that
   // is what makes the balance correct, and it is entirely the wallet's own
   // work. Ligerito verification is the server proving it did not lie about
   // those blocks; valuable, but it trails the server's own backfill and can
   // lag by hours. Gating "synced" on it left the wallet reading
   // "syncing 100%" indefinitely with nothing left to do and nothing the user
-  // could act on — which reads as a stall, not as a pending audit.
+  // could act on - which reads as a stall, not as a pending audit.
   //
   // So the scan decides synced, and verification is reported as its own
   // stage. Note this is a display decision only: it does not weaken any
@@ -391,8 +390,7 @@ export const ZcashContent = ({
   // workerSyncHeight === 0 means the worker has not reported a height AT ALL:
   // no sync started, or it died before its first emit. That is the state with
   // the least information, and it used to fall through to the server pipeline
-  // percentage below and announce "syncing 100%" next to "scanning notes 0%" —
-  // the wallet claiming to be done while admitting it had scanned nothing.
+  // percentage below and announce "syncing 100%" next to "scanning notes 0%" - // the wallet claiming to be done while admitting it had scanned nothing.
   // Whatever the server has proven about blocks this wallet never read says
   // nothing about this wallet's balance, so it must not drive this bar.
   const scanNotStarted = workerSyncHeight <= effectiveBirthday;
@@ -413,7 +411,7 @@ export const ZcashContent = ({
         (chainHeight > 0 ? `, tip is ${hgt(chainHeight)}.` : '.')
       : ' no proven range yet.';
 
-  // pipeline stages for the sync detail panel — a steady row instead of
+  // pipeline stages for the sync detail panel - a steady row instead of
   // the old flickering label rotation. lightwalletd skips verification.
   const syncStages: SyncStage[] =
     zcashBackend === 'lightwalletd'
@@ -447,8 +445,7 @@ export const ZcashContent = ({
             iconDone: 'i-ph-seal-check-fill',
             hint: `the server reports a completeness proof is ready.${ligeritoRangeHint} the wallet does not yet verify it - the proof is not checked here.`,
             state: ligeritoPct >= 100 ? 'done' : gigaproofStatus >= 1 ? 'active' : 'pending',
-            // The wallet VERIFIES a ligerito proof; it never produces one —
-            // proving happens server-side. So the detail says what the wallet
+            // The wallet VERIFIES a ligerito proof; it never produces one - // proving happens server-side. So the detail says what the wallet
             // is waiting on, never what the server is doing.
             //
             // Saying nothing was worse than saying the wrong thing: the stage
@@ -458,7 +455,7 @@ export const ZcashContent = ({
             // is required of the user.
             //
             // blocksUntilReady is a countdown, but some server states report a
-            // raw height here — rendering "3436543 blocks" as a remaining
+            // raw height here - rendering "3436543 blocks" as a remaining
             // count is nonsense, so it is shown only when it reads like a
             // delta.
             detail:
@@ -485,7 +482,7 @@ export const ZcashContent = ({
           },
         ];
 
-  // overall sync percentage (0-100) with 1 decimal — zashi style
+  // overall sync percentage (0-100) with 1 decimal - zashi style
   // guard on the raw progress, not the floored percent: below 1% scanPct is 0
   // and the fallback would show the (complete) proof stage as 100%
   const overallPct = caughtUp
@@ -500,9 +497,9 @@ export const ZcashContent = ({
 
   // combined balance - transparent funds fold into the single hero figure.
   // Pending shielded change (change from our own unconfirmed sends, e.g. the
-  // ironwood change note of a send that has not mined yet — and a pending
+  // ironwood change note of a send that has not mined yet - and a pending
   // turnstile migration's in-flight value moving orchard → the wallet's own
-  // ironwood pool) is part of what the wallet holds — it is NOT spendable, but
+  // ironwood pool) is part of what the wallet holds - it is NOT spendable, but
   // it is not gone, and omitting it from the figure made a pending send (or
   // migrate) read as "0 in all pools". Include it; the breakdown below calls it
   // out as pending.
@@ -511,17 +508,17 @@ export const ZcashContent = ({
 
   // What the hero figure is allowed to claim.
   //
-  //   loading — we have not read a balance yet. Show a placeholder that is
+  //   loading - we have not read a balance yet. Show a placeholder that is
   //             visibly a placeholder, never a dash where a number goes.
-  //   error   — the read failed and we have nothing to fall back on. Say so.
-  //   unknown — the read succeeded and came back zero, but the wallet has not
+  //   error - the read failed and we have nothing to fall back on. Say so.
+  //   unknown - the read succeeded and came back zero, but the wallet has not
   //             finished scanning. Zero here means "nothing found YET", and
   //             the two are not the same claim. A wallet mid-scan has not yet
   //             rediscovered its own change notes, so printing "0 ZEC" (or a
   //             bare dash) states a loss that has not happened.
-  //   partial — a positive figure with scanning still to do: a floor, not a
+  //   partial - a positive figure with scanning still to do: a floor, not a
   //             total, and labelled as such.
-  //   ready   — scanned to the tip. The number is the number, including zero.
+  //   ready - scanned to the tip. The number is the number, including zero.
   //
   // A wallet that has never synced but holds transparent funds still has
   // something true to show, so a positive figure counts as loaded.
@@ -537,7 +534,7 @@ export const ZcashContent = ({
             : 'partial';
 
   // In-flight and failed sends, for the line under the figure. `amount` is
-  // already what left the wallet (recipient + fee) — adding the fee again here
+  // already what left the wallet (recipient + fee) - adding the fee again here
   // would double-count it.
   const inFlightZat = pendingSends
     .filter(t => t.status === 'pending')
@@ -611,7 +608,7 @@ export const ZcashContent = ({
   // Pending shielded change from our own unconfirmed sends is part of the
   // hero figure (total includes it) but is NOT spendable. Give it its own row
   // so the breakdown reconciles with the figure above instead of showing a
-  // smaller number with no explanation — the case that read as "0 in all
+  // smaller number with no explanation - the case that read as "0 in all
   // pools" while an ironwood send was pending.
   if (pools.pendingTotal > 0n) {
     poolRows.push({
@@ -650,7 +647,7 @@ export const ZcashContent = ({
         <div className='flex items-center justify-between'>
           <span className='kicker'>balance</span>
           {/* the global hide-balances control lives where you notice you
-              need it — same state as settings → privacy, effective on
+              need it - same state as settings → privacy, effective on
               every amount in the app. The one hide/show eye on this screen. */}
           <button
             onClick={() => void setPrivacySetting('hideBalances', !privacySettings.hideBalances)}
@@ -696,7 +693,7 @@ export const ZcashContent = ({
           </div>
         )}
         {/* The notes this payment would have spent were marked spent locally at
-            broadcast and are NOT released automatically — nothing in the wallet
+            broadcast and are NOT released automatically - nothing in the wallet
             un-marks them, so the balance stays low until the chain is re-read.
             Saying "your funds are back" would be a lie; saying what actually
             recovers them is not. */}
@@ -711,8 +708,7 @@ export const ZcashContent = ({
             <button
               type='button'
               // Never the chain tip. The old fallback (`effectiveBirthday ||
-              // chainHeight`) meant that a wallet with no stored birthday —
-              // the default for every import that did not supply one — asked
+              // chainHeight`) meant that a wallet with no stored birthday - // the default for every import that did not supply one - asked
               // to rescan FROM NOW, and the handler then wrote that as the new
               // birthday: every note the wallet already held became invisible
               // forever. Orchard activation is the earliest height that can
@@ -733,7 +729,7 @@ export const ZcashContent = ({
 
         {/* Rescan confirmation. This is the destructive one: it drops every
             scanned note and re-derives the wallet from `height` upward. Stating
-            the cost is the whole point — the previous version had no confirm
+            the cost is the whole point - the previous version had no confirm
             step at all. A Sheet, not an inline card: nothing on this screen
             expands in place. */}
         <Sheet
@@ -799,7 +795,7 @@ export const ZcashContent = ({
           errorDetail={syncFailure?.raw}
           // The action comes from the taxonomy, so a LOCAL failure (storage,
           // or anything we could not classify) no longer tells the user to
-          // switch nodes — blaming the endpoint for the wallet's own problem
+          // switch nodes - blaming the endpoint for the wallet's own problem
           // is how people end up chasing a working node forever.
           errorAction={
             syncFailure?.action
@@ -818,7 +814,7 @@ export const ZcashContent = ({
               : undefined
           }
           onRetry={() => window.dispatchEvent(new Event('zcash-retry-sync'))}
-          // same confirmation as the banner above — a hand-typed height is no
+          // same confirmation as the banner above - a hand-typed height is no
           // less destructive than a suggested one
           onRescan={h => setRescanConfirmHeight(rescanStartHeight(h))}
         />

@@ -3,8 +3,8 @@
  *
  * This pins `NETWORKS[*].features` to the behaviour the pre-migration literal
  * checks produced. The expectations are transcribed from the ORIGINAL
- * `=== 'zcash'` / `=== 'penumbra'` / `isIbcNetwork(n) || n === ...` checks — not
- * derived from the corrected table — so a wrong feature value fails here rather
+ * `=== 'zcash'` / `=== 'penumbra'` / `isIbcNetwork(n) || n === ...` checks - not
+ * derived from the corrected table - so a wrong feature value fails here rather
  * than silently changing which tabs, routes and components render.
  */
 

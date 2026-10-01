@@ -5,7 +5,7 @@
  * Any change here must be mirrored in zigner, and vice versa.
  *
  * If either repo fails these vectors, zafu and zigner will produce
- * different pubkeys for the same seed — breaking "same device across
+ * different pubkeys for the same seed - breaking "same device across
  * zafu and zigner = same identity" guarantee.
  *
  * One tag branch exists beyond the legacy form: an origin containing ':'

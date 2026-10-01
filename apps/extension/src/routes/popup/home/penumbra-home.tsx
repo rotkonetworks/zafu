@@ -101,7 +101,7 @@ export const PenumbraContent = ({
 
   return (
     <div className='flex-1 flex flex-col gap-3'>
-      {/* balance card — matches the zcash hero card (accent border, 'balance'
+      {/* balance card - matches the zcash hero card (accent border, 'balance'
           kicker) so the two networks read as one design, not two. */}
       <div className='rounded-md border border-network-accent/20 bg-elev-1 p-4'>
         <span className='kicker'>balance</span>
@@ -163,7 +163,7 @@ export const PenumbraContent = ({
         </StatusSlot>
       )}
 
-      {/* account picker — between sync bar and assets */}
+      {/* account picker - between sync bar and assets */}
       <PenumbraAccountPicker account={account} onChange={onAccountChange} />
 
       <div className='kicker mb-2'>assets</div>
@@ -173,7 +173,7 @@ export const PenumbraContent = ({
 
       {/* Unshielded Cosmos balances tied to the same key as the Penumbra
           wallet. Renders nothing when the user has no Cosmos holdings.
-          Account index 0 — the cosmos-balance hooks don't yet split by
+          Account index 0 - the cosmos-balance hooks don't yet split by
           Penumbra account; v1 uses the wallet's primary derivation. */}
       <Suspense fallback={null}>
         <CosmosSubwallets />

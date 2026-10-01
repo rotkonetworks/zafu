@@ -59,7 +59,7 @@ export const SettingsMultisig = () => {
       return;
     }
     try {
-      // app-managed (hidden) tables are refused here by the keyring guard — they can only be
+      // app-managed (hidden) tables are refused here by the keyring guard - they can only be
       // removed from the multisig manager after backup. Surface that instead of failing silently.
       await deleteKeyRing(wallet.vaultId);
       navigate(PopupPath.SETTINGS_WALLETS);

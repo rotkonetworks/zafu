@@ -1,7 +1,7 @@
 /**
  * frostd-client tests.
  *
- * These cover the HTTP shape only — that we call the endpoints the standard
+ * These cover the HTTP shape only - that we call the endpoints the standard
  * defines, with the bodies it expects, and read the responses it returns.
  * The Noise_K encryption lives in wasm (FrostRelayCipher) and is tested in
  * Rust, where it is asserted byte-compatible with ZF's own frost-client.
@@ -42,7 +42,7 @@ describe('FrostdClient', () => {
     });
 
     const client = new FrostdClient(HOST);
-    // signing is the caller's job — the private key never enters this class
+    // signing is the caller's job - the private key never enters this class
     const sign = vi.fn(async () => new Uint8Array(64).fill(7));
     await client.login('aabb', sign);
 
@@ -102,7 +102,7 @@ describe('FrostdClient', () => {
     await expect(client.send('sess-1', ['ccdd'], 'deadbeef')).rejects.toThrow(/frostd/i);
   });
 
-  it('passes ciphertext straight through — it never encrypts anything itself', async () => {
+  it('passes ciphertext straight through - it never encrypts anything itself', async () => {
     const calls = mockFetch({
       challenge: { challenge: 'c' },
       login: { access_token: 'tok' },

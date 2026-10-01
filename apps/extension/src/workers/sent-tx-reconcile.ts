@@ -4,7 +4,7 @@
  * Two notions of the same transaction exist, and they arrive in either order:
  *
  *   - the local record, written the instant we broadcast. It knows the amount,
- *     the fee, the recipient and the memo — none of which the chain can give
+ *     the fee, the recipient and the memo - none of which the chain can give
  *     back, because an outgoing note is encrypted to the recipient.
  *   - the chain-derived entry, produced by scanning. It knows the height, and
  *     only the height is proof that anything actually happened.
@@ -14,7 +14,7 @@
  * a transaction confirmed; the local record is the sole authority on *what it
  * was*. Neither is allowed to speak for the other.
  *
- * This module is deliberately pure — no IndexedDB, no worker globals — so the
+ * This module is deliberately pure - no IndexedDB, no worker globals - so the
  * rules below can be tested directly rather than inferred from behaviour.
  */
 
@@ -37,8 +37,8 @@ export interface SentTxRecord {
   sentAt: number;
   /**
    * nExpiryHeight, read out of the transaction we actually broadcast. Zero (or
-   * absent, for records written before we captured it) means "no expiry" — the
-   * Zcash consensus rule for expiry height 0 — and such a record is never
+   * absent, for records written before we captured it) means "no expiry" - the
+   * Zcash consensus rule for expiry height 0 - and such a record is never
    * treated as failed, however old it gets.
    */
   expiryHeight?: number;
@@ -51,10 +51,10 @@ export interface SentTxRecord {
 }
 
 /**
- * pending  — broadcast, not yet seen in a block. We do not know if it will
+ * pending - broadcast, not yet seen in a block. We do not know if it will
  *            confirm, and we say exactly that.
- * confirmed— seen on chain at a real height.
- * failed   — the wallet has scanned past the transaction's own expiry height
+ * confirmed - seen on chain at a real height.
+ * failed - the wallet has scanned past the transaction's own expiry height
  *            without seeing it. It can no longer be mined.
  */
 export type TxStatus = 'pending' | 'confirmed' | 'failed';
@@ -67,7 +67,7 @@ export interface HistoryTx {
   type: string;
   /**
    * zatoshi as a decimal string. For an outgoing transaction this is what
-   * actually LEFT the wallet — recipient amount plus fee — never the gross
+   * actually LEFT the wallet - recipient amount plus fee - never the gross
    * value of the notes chosen as inputs.
    *
    * The distinction is the whole ballgame in a shielded wallet. Spending a
@@ -81,7 +81,7 @@ export interface HistoryTx {
   status: TxStatus;
   /**
    * True when `amount` is the gross input total and the change that came back
-   * has not been found yet — so the real figure is at most this. Set only when
+   * has not been found yet - so the real figure is at most this. Set only when
    * the wallet has not scanned the spend's own block; once it has, a missing
    * change note really does mean there was none.
    */
@@ -133,7 +133,7 @@ export interface ReconcileResult {
  *
  * This is not pedantry. `markNotesSpentLocally` records the inputs we spent at
  * broadcast time, so the scan-derived list contains an entry for our own txid
- * *immediately* — with height 0 (never scanned) and with the amount computed
+ * *immediately* - with height 0 (never scanned) and with the amount computed
  * as the full input total rather than what the user sent. Treating that as
  * "the chain knows about it" is what made a fresh send appear as a wrong,
  * heightless row and suppressed the accurate local record behind it.
@@ -143,7 +143,7 @@ const isConfirmedHeight = (h: number | undefined): h is number =>
 
 /**
  * Parse a zatoshi decimal string. Money must never become NaN silently, and a
- * malformed record is not a reason to render a wrong number — treat it as zero
+ * malformed record is not a reason to render a wrong number - treat it as zero
  * and let the fields that are intact still tell the user something.
  */
 const toZat = (s: string | undefined): bigint => {
@@ -186,8 +186,7 @@ export function reconcileSentTxs({
   const prune: string[] = [];
   const claimed = new Set<string>();
 
-  // The store's key is [walletId, txid], so duplicates should be impossible —
-  // but "should be impossible" is not a reason to emit two rows for one
+  // The store's key is [walletId, txid], so duplicates should be impossible - // but "should be impossible" is not a reason to emit two rows for one
   // payment if it ever happens. Newest broadcast wins.
   const byTxid = new Map<string, SentTxRecord>();
   for (const rec of sent) {
@@ -213,7 +212,7 @@ export function reconcileSentTxs({
       id: rec.txid,
       type,
       // What left the wallet: what the recipient got, plus the fee. Change is
-      // not part of it — it never left. We know both numbers exactly because
+      // not part of it - it never left. We know both numbers exactly because
       // we wrote them down at broadcast, which is why the local record beats
       // the scan-derived figure outright rather than merely filling gaps.
       amount: (toZat(rec.amount) + toZat(rec.fee)).toString(),
@@ -289,7 +288,7 @@ export function sortHistory(txs: HistoryTx[]): HistoryTx[] {
  *
  * We take it from the bytes we are about to broadcast rather than recomputing
  * it from a tip height, so the record cannot disagree with the transaction the
- * network actually saw — that agreement is the whole basis for later declaring
+ * network actually saw - that agreement is the whole basis for later declaring
  * the send failed.
  *
  * Header layout (all little-endian u32): header | versionGroupId |

@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 import { cn } from '../../lib/utils';
 
 /**
- * Section header — a three-column row used above every content block:
+ * Section header - a three-column row used above every content block:
  *
  *   [ 01 | section label | ───────────── ]
  *     hint goes here on row 2 (optional)
@@ -15,9 +15,9 @@ import { cn } from '../../lib/utils';
  *   <SectionHead n="03" label="ink · text shades" hint="hierarchy by weight, not size" />
  */
 export interface SectionHeadProps {
-  /** Left-column numbering — usually two-digit "01", "02", etc. */
+  /** Left-column numbering - usually two-digit "01", "02", etc. */
   n?: ReactNode;
-  /** Main section label — lowercase by convention. */
+  /** Main section label - lowercase by convention. */
   label: ReactNode;
   /** Right-column hint / sub-description. Optional. */
   hint?: ReactNode;

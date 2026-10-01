@@ -2,9 +2,9 @@
  * Preset list of zcash light-wallet endpoints, grouped by region.
  *
  * Two flavors:
- *   - zidecar — rotko-hosted, trustless verification (Ligerito + NOMT
+ *   - zidecar - rotko-hosted, trustless verification (Ligerito + NOMT
  *     proofs). Mempool watch works on this backend.
- *   - lightwalletd — public ECC lightwalletd / Zaino. Trusted (the
+ *   - lightwalletd - public ECC lightwalletd / Zaino. Trusted (the
  *     wallet accepts what the server returns). Mempool watch is
  *     unavailable on this backend.
  *
@@ -13,7 +13,7 @@
  * automatically at runtime. Anything else gets the lightwalletd
  * (trusted) treatment.
  *
- * Vizor's preset set is the inspiration here — the goal is "the user
+ * Vizor's preset set is the inspiration here - the goal is "the user
  * has a working fallback if their default node is down". For zafu's
  * privacy story, zidecar endpoints are preferable; the public
  * lightwalletd endpoints are listed as honest fallbacks.
@@ -158,7 +158,7 @@ export function defaultZcashEndpoint(): ZcashEndpointPreset {
  * Group presets by region for the dropdown UI.
  *
  * Generic over the preset shape so the Penumbra panel can reuse the same
- * regional grouping without duplicating this logic — the helper only reads
+ * regional grouping without duplicating this logic - the helper only reads
  * `p.region`, so any `{ region: RpcEndpointRegion }` shape works.
  */
 export function groupPresetsByRegion<T extends { readonly region: RpcEndpointRegion }>(

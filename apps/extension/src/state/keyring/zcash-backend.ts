@@ -82,7 +82,7 @@ export interface ZcashClient {
     nullifierRoot: Uint8Array;
     /**
      * Validity horizons. The NOMT indexes are existence-keyed, so above these
-     * heights "no entry" means "not indexed yet" — indistinguishable from
+     * heights "no entry" means "not indexed yet" - indistinguishable from
      * "not spent". Callers must not read absence as unspent above them.
      * The two pools advance independently: ironwood is indexed from NU6.3
      * activation and tracks the tip, while the full-chain backfill trails.
@@ -101,7 +101,7 @@ export interface ZcashClient {
  * Design choice (defensive, hdevalence-style):
  *   We deliberately do NOT auto-probe a zidecar-only RPC at runtime.
  *   Probing `zidecar.v1.Zidecar/GetSyncStatus` against an arbitrary
- *   endpoint is a unique-to-zafu request signature — no other Zcash
+ *   endpoint is a unique-to-zafu request signature - no other Zcash
  *   wallet hits that path. Even on failure the probe is an unambiguous
  *   "this is a zafu client" beacon that survives across IP changes,
  *   browser sessions, and TLS handshakes.
@@ -163,7 +163,7 @@ export function backendTrustDescription(backend: ZcashBackend): {
         'Merkle proofs for nullifiers and commitments are checked locally, so ' +
         'the server cannot forge those paths. It can still omit blocks or ' +
         'actions, and the header proof does not yet bind the chain state it ' +
-        'reports — so this is stronger than a plain light server, but it is ' +
+        'reports - so this is stronger than a plain light server, but it is ' +
         'not trustless. Prefer an endpoint you run yourself.',
     };
   }

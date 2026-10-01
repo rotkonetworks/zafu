@@ -5,10 +5,10 @@ import { fmtZecHero } from './format';
 /**
  * The hero balance figure, in the four states it can honestly be in.
  *
- * The previous version rendered `— ZEC` whenever the wallet had not yet
+ * The previous version rendered ` - ZEC` whenever the wallet had not yet
  * reported a sync height, which covered "still loading", "failed to read" and
  * "genuinely zero" with one blank dash. A dash where a number belongs does not
- * read as "unknown", it reads as "gone" — which is exactly what a user who had
+ * read as "unknown", it reads as "gone" - which is exactly what a user who had
  * just sent a real payment concluded. Each state now says which it is.
  *
  * `partial` still shows the number: a figure that is a floor is far more use
@@ -47,7 +47,7 @@ export const BalanceFigure = ({
   if (view === 'error') {
     return (
       <div className='flex items-baseline gap-2 text-hero leading-none'>
-        <span className='text-fg-dim tabular'>—</span>
+        <span className='text-fg-dim tabular'> - </span>
         {/* the dash is only ever allowed next to the word that explains it */}
         <span className='text-label text-hanko lowercase'>balance unavailable</span>
       </div>

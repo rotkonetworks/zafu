@@ -8,8 +8,7 @@ import { ZidecarClient } from './zidecar-client';
  * This file exists because the same class of bug has now shipped twice: a
  * field number in the decoder drifting from `proto/zidecar.proto`. Neither was
  * caught by types, by the build, or by any other test, because a protobuf
- * decoder that reads the wrong field number is still perfectly valid code —
- * it just returns a plausible-looking number that means something else.
+ * decoder that reads the wrong field number is still perfectly valid code - * it just returns a plausible-looking number that means something else.
  *
  *   1. `ironwood_tree` was read from field 7 when the proto says 6, so every
  *      ironwood send failed against a healthy server.
@@ -20,7 +19,7 @@ import { ZidecarClient } from './zidecar-client';
  *      server that was fully caught up.
  *
  * The fixture below is a REAL `GetSyncStatus` response captured from
- * https://zcash.rotko.net, not a hand-built message — so it pins the decoder
+ * https://zcash.rotko.net, not a hand-built message - so it pins the decoder
  * against what a production server actually emits, including the fact that a
  * zero-valued field (`blocks_until_ready`) is OMITTED from the wire entirely.
  * That omission is what made the swap invisible: the absent field defaulted to
@@ -84,7 +83,7 @@ describe('parseSyncStatus field numbers', () => {
     // This is the user-visible consequence and the reason the bug mattered:
     // with the fields swapped, blocksUntilReady was 3,437,567, the stage
     // computed 0% forever and rendered "server catching up" against a server
-    // that had a proof at height 3,437,567 — 829 blocks off a 3,438,396 tip.
+    // that had a proof at height 3,437,567 - 829 blocks off a 3,438,396 tip.
     expect(s.gigaproofStatus).toBeGreaterThanOrEqual(2);
     expect(s.blocksUntilReady).toBeLessThanOrEqual(0);
   });

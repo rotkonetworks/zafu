@@ -1,5 +1,5 @@
 /**
- * frost-session — DKG and signing session coordinator
+ * frost-session - DKG and signing session coordinator
  *
  * manages the interactive FROST rounds via the relay.
  * WASM handles crypto, relay handles transport, this handles state.
@@ -13,8 +13,7 @@ import type { DkgSession, SigningSession } from './keyring/multisig-types';
 /**
  * Total time budget for a FROST DKG or signing session, end-to-end.
  *
- * This is a single deadline that spans the whole interactive flow —
- * waiting for peers to join, exchanging round messages, finalizing.
+ * This is a single deadline that spans the whole interactive flow - * waiting for peers to join, exchanging round messages, finalizing.
  * Each individual `waitForUntil` call eats from this same budget; the
  * session aborts whenever the deadline is hit, regardless of which
  * step is currently waiting.
@@ -65,7 +64,7 @@ export interface FrostSessionSlice {
    * operator cannot link a user's sessions to each other.
    */
   relayCeremonyId: string | null;
-  /** our relay public key, hex — the thing to hand to the other signers */
+  /** our relay public key, hex - the thing to hand to the other signers */
   relayPublicKey: string | null;
 
   /**
@@ -78,14 +77,14 @@ export interface FrostSessionSlice {
    */
   prepareRelayIdentity: () => Promise<string>;
 
-  /** start a new DKG as coordinator — creates the session, runs round 1 */
+  /** start a new DKG as coordinator - creates the session, runs round 1 */
   startDkg: (
     relayUrl: string,
     threshold: number,
     maxSigners: number,
     peerKeys: string[],
   ) => Promise<string>;
-  /** join an existing DKG session — runs round 1 */
+  /** join an existing DKG session - runs round 1 */
   joinDkg: (
     relayUrl: string,
     roomCode: string,
@@ -100,7 +99,7 @@ export interface FrostSessionSlice {
   /** reset DKG state */
   resetDkg: () => void;
 
-  /** start a signing session — creates room, runs round 1 */
+  /** start a signing session - creates room, runs round 1 */
   startSigning: (
     relayUrl: string,
     sighashHex: string,
@@ -240,7 +239,7 @@ export const createFrostSessionSlice = (): SliceCreator<FrostSessionSlice> => (s
 
   advanceDkg: async () => {
     // DKG advancement happens in the worker via WASM calls.
-    // This is a placeholder — the actual round advancement is triggered
+    // This is a placeholder - the actual round advancement is triggered
     // from the DKG UI component which calls the zcash-worker with
     // the collected messages and gets back the next round's output.
     // See routes/popup/multisig/dkg-flow.tsx for the full orchestration.

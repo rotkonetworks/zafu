@@ -65,7 +65,7 @@ export const needsLogin = async (): Promise<Response | null> => {
 let onboardingPromptOpened = false;
 
 export const needsOnboard = async () => {
-  // use vaults (unencrypted metadata) — wallets are encrypted at rest
+  // use vaults (unencrypted metadata) - wallets are encrypted at rest
   const vaults = await localExtStorage.get('vaults');
 
   if (vaults && vaults.length > 0) {

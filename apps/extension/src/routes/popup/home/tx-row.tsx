@@ -20,7 +20,7 @@ import type { ParsedTransaction } from './tx-parse';
 /**
  * The unsettled-transaction mark: the same ensō the sync line uses, drawn as
  * an open arc that never closes. Deliberately the *same* idiom rather than a
- * new one — "not finished yet" already has a visual language in this wallet,
+ * new one - "not finished yet" already has a visual language in this wallet,
  * and a spinner would shout where this whispers.
  */
 const PendingMark = ({ className }: { className?: string }) => (
@@ -116,7 +116,7 @@ export function TxRow({ tx, network }: { tx: ParsedTransaction; network: Network
       >
         {/* direction reads from the lucide icon, not from color-as-category:
             shield / arrow-down / arrow-up on a neutral chip. An unsettled
-            transaction shows the open ensō instead — the state matters more
+            transaction shows the open ensō instead - the state matters more
             than the direction until it lands. */}
         <div className='flex h-8 w-8 items-center justify-center rounded-full bg-elev-2'>
           {isPending ? (

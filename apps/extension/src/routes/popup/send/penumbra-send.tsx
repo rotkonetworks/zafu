@@ -162,7 +162,7 @@ function PenumbraNativeSend({
     // takes the spend-all branch (dry-run autoFee, reissue manualFee)
     // so the output lands at balance - fee for same-asset fees, or at
     // balance for cross-asset (fee comes out of separate UM balance).
-    // No change note is created either way — no dust left behind.
+    // No change note is created either way - no dust left behind.
     // sendState.setAmount clears maxMode on any subsequent keystroke.
     sendState.setAmount(selectedBalance);
     sendState.setMaxMode(true);

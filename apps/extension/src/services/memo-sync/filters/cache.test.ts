@@ -79,7 +79,7 @@ describe('withBucketCache', () => {
   });
 
   test('marks every input bucket whose event arrived', async () => {
-    // cache is OUTERMOST (call-time first) — its input is real-only.
+    // cache is OUTERMOST (call-time first) - its input is real-only.
     // every bucket the inner generator yields an event for, in this case
     // every bucket, should be recorded.
     const store = memoryBucketStore();

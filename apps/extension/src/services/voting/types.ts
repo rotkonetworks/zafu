@@ -1,5 +1,5 @@
 /**
- * Zcash coinholder voting — wire types.
+ * Zcash coinholder voting - wire types.
  *
  * Protocol: Valar/ZODL token-holder voting, as shipped in Zashi.
  * Config chain:
@@ -10,7 +10,7 @@
  *
  * This module is read-only (phase 1): list rounds, show proposals,
  * show tallies. Casting requires the voting crypto crate (note-bundle
- * setup, hotkeys, nullifier proofs) compiled into zcash-wasm — phase 2.
+ * setup, hotkeys, nullifier proofs) compiled into zcash-wasm - phase 2.
  */
 
 export interface TrustedKey {

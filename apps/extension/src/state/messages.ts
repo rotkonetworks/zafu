@@ -27,8 +27,8 @@ export type MessageNetwork = 'penumbra' | 'zcash';
  * the tx up.
  *
  * `failed` and `interrupted` are deliberately separate. Closing the popup
- * mid-send is not evidence that anything failed — the build may already have
- * been signed and broadcast — and a wallet that says "failed" about a payment
+ * mid-send is not evidence that anything failed - the build may already have
+ * been signed and broadcast - and a wallet that says "failed" about a payment
  * that in fact left invites the user to send it a second time. Anything the
  * wallet did not observe is reported as unknown.
  */
@@ -79,7 +79,7 @@ export interface MessagesSlice {
   addMessages: (messages: Omit<Message, 'id'>[]) => Promise<void>;
 
   /**
-   * Optimistic outgoing pending entry — added the moment the user clicks
+   * Optimistic outgoing pending entry - added the moment the user clicks
    * send, before any RPC. Generates a `temp:<uuid>` placeholder txid that
    * gets replaced via promoteOutgoing once the real txid is known.
    */
@@ -108,7 +108,7 @@ export interface MessagesSlice {
   markOutgoingFailed: (txIdOrTempId: string, reason: string) => Promise<void>;
 
   /**
-   * Mark an outgoing entry as "we stopped watching" — outcome unknown.
+   * Mark an outgoing entry as "we stopped watching" - outcome unknown.
    *
    * Distinct from markOutgoingFailed, which asserts the send did not happen.
    * Leaves the record promotable: if the flow that created it is still alive
@@ -167,8 +167,8 @@ export const createMessagesSlice =
      *
      * They are marked 'interrupted', not 'failed': a temp: record proves only
      * that a send was STARTED in a session that ended. The build may have been
-     * signed and broadcast before the session died — the worker writes its own
-     * durable record in that case — so claiming failure here would be asserting
+     * signed and broadcast before the session died - the worker writes its own
+     * durable record in that case - so claiming failure here would be asserting
      * something this code has no way to know. Real-txid records in 'pending'
      * are left alone; the block scan will promote them when the tx mines.
      */
@@ -304,7 +304,7 @@ export const createMessagesSlice =
             msg.txId = realTxId;
             msg.status = 'broadcasting';
             // an 'interrupted' record that reaches here was not interrupted
-            // after all — the flow survived and learned the txid
+            // after all - the flow survived and learned the txid
             msg.failureReason = undefined;
           }
         });

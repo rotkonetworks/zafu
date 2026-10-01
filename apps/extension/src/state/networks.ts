@@ -52,7 +52,7 @@ export type MemoSyncStrategy = 'private' | 'fast';
 
 /**
  * Mempool-watch toggle. Off by default (per the hdevalence review): the
- * feature has a real privacy cost — the indexer learns the wallet is online
+ * feature has a real privacy cost - the indexer learns the wallet is online
  * and polls on a regular cadence. Users opt in explicitly.
  *
  * See apps/extension/src/services/mempool-watch/README.md for the design.
@@ -88,7 +88,7 @@ export interface NetworkConfig {
    */
   memoSyncStrategy?: MemoSyncStrategy;
   /**
-   * Mempool watch toggle for shielded networks. Off by default — opening
+   * Mempool watch toggle for shielded networks. Off by default - opening
    * a polling subscription reveals to the indexer that this wallet is
    * online and continuously interested in mempool state. See README.
    * Honored only when backend === 'zidecar' (lightwalletd has no
@@ -96,15 +96,15 @@ export interface NetworkConfig {
    */
   mempoolWatch?: MempoolWatchSetting;
   /**
-   * Sync backend. NOT auto-detected — declarative per endpoint. Probes
+   * Sync backend. NOT auto-detected - declarative per endpoint. Probes
    * leak "this is a zafu client" and are deliberately avoided.
-   *   'zidecar'      — trustless verification pipeline (Ligerito + NOMT)
-   *   'lightwalletd' — trusted public indexer (no verification)
+   *   'zidecar' - trustless verification pipeline (Ligerito + NOMT)
+   *   'lightwalletd' - trusted public indexer (no verification)
    */
   backend?: ZcashBackend;
   /**
    * How the endpoint picker chooses among preset nodes for this network.
-   * `manual` means: never auto-swap — the user's last-saved endpoint URL
+   * `manual` means: never auto-swap - the user's last-saved endpoint URL
    * wins, even after a fresh latency probe. Only meaningful for networks
    * with a preset pool (zcash today). Default 'fastest' (persisted so a
    * `manual` choice survives popup restarts).
@@ -354,7 +354,7 @@ export const createNetworksSlice =
         });
 
         // Declaratively classify the new Zcash endpoint. We deliberately
-        // do NOT probe a zidecar-only RPC here — every other Zcash light
+        // do NOT probe a zidecar-only RPC here - every other Zcash light
         // wallet that talks to public lightwalletd never hits those paths,
         // so a probe uniquely fingerprints "this is a zafu client." Match
         // a static known-zidecar list instead; users on custom endpoints
@@ -363,7 +363,7 @@ export const createNetworksSlice =
           const backend: ZcashBackend = isZidecarEndpoint(endpoint) ? 'zidecar' : 'lightwalletd';
           set(state => {
             state.networks.networks.zcash.backend = backend;
-            // Force-off mempool watch when moving to lightwalletd — the
+            // Force-off mempool watch when moving to lightwalletd - the
             // worker also enforces this, but flipping state here keeps
             // the UI and any consumers consistent immediately.
             if (backend === 'lightwalletd') {
@@ -406,7 +406,7 @@ export const createNetworksSlice =
         }
         // Enforce: mempool watch only makes sense on the zidecar backend.
         // If the caller asks for 'on' but the network is on lightwalletd,
-        // silently coerce to 'off' — the worker won't run a watcher anyway,
+        // silently coerce to 'off' - the worker won't run a watcher anyway,
         // and we keep persisted state consistent with worker behavior.
         const cfg = get().networks.networks[id];
         const effective: MempoolWatchSetting =

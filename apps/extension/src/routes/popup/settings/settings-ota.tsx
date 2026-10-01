@@ -4,12 +4,12 @@
  * Shows real device firmware info ONLY from verified records, and drives the
  * wallet-side update flow:
  *
- *   check → verifyStream (pinned key) → "signed & verified — upgrade?" Y/N
+ *   check → verifyStream (pinned key) → "signed & verified - upgrade?" Y/N
  *   → animated ur:zafu-stream QR → scan device's ur:zafu-result → verify →
  *   record (source: 'ur:zafu-result').
  *
  * The device update is a small signed protocol module (wasm), not a whole
- * firmware/kernel replacement — copy and the stream size cap reflect that.
+ * firmware/kernel replacement - copy and the stream size cap reflect that.
  */
 
 import { useState } from 'react';
@@ -83,10 +83,10 @@ export const SettingsOta = () => {
           urType={STREAM_UR_TYPE}
           urSource={{ bytes: pendingUpdate.payload, urType: STREAM_UR_TYPE }}
           totalBytes={pendingUpdate.manifest.payload_size}
-          title={`signed update v${pendingUpdate.manifest.version} — hold to device`}
+          title={`signed update v${pendingUpdate.manifest.version} - hold to device`}
           description='device protocol module update, ~1 min scan. scan the animated QR with the device, then tap to apply.'
         />
-        <Button onClick={confirmShown}>stream shown — awaiting device result</Button>
+        <Button onClick={confirmShown}>stream shown - awaiting device result</Button>
       </div>
     ) : null;
 
@@ -153,7 +153,7 @@ export const SettingsOta = () => {
         {phase === SessionPhase.Streaming && pendingUpdate && (
           <div className='flex flex-col gap-3 rounded-md border border-green-500/30 bg-green-500/5 p-3'>
             <p className='text-data text-fg-high'>
-              signed &amp; verified — upgrade to v{pendingUpdate.manifest.version}?
+              signed &amp; verified - upgrade to v{pendingUpdate.manifest.version}?
             </p>
             <p className='text-label text-fg-muted'>
               device protocol module update (wasm, ~1 min scan). key_id{' '}

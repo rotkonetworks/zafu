@@ -30,10 +30,10 @@ const REAL_ERRORS = {
     'broadcast failed (-1): zebrad RPC error: RPC error -1: transaction dropped because it is already queued for download',
 };
 
-describe('classifySyncFailure — structured codes', () => {
+describe('classifySyncFailure - structured codes', () => {
   it('honours a code emitted by the worker over anything in the text', () => {
     // The text looks like a chain rewind; the worker says it is consensus.
-    // The worker wins — it knows where it threw from.
+    // The worker wins - it knows where it threw from.
     expect(classifySyncFailure('tree root mismatch at height 100', 'consensus').kind).toBe(
       'consensus',
     );
@@ -57,7 +57,7 @@ describe('classifySyncFailure — structured codes', () => {
   });
 });
 
-describe('classifySyncFailure — sniffed', () => {
+describe('classifySyncFailure - sniffed', () => {
   it.each([
     ['network: connection reset by peer', 'network'],
     ['TypeError: Failed to fetch', 'network'],

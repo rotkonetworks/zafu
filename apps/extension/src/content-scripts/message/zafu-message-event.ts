@@ -1,5 +1,5 @@
 // Static namespace key for zafu's window.postMessage envelopes. The value
-// is just a label — the envelope key isn't a security boundary (anything
+// is just a label - the envelope key isn't a security boundary (anything
 // in the page's window can read or send messages anyway). Kept as a plain
 // string so ISOLATED and MAIN content scripts agree without a build-time
 // constant; switching off the per-build `ZAFU` (extension-id) constant

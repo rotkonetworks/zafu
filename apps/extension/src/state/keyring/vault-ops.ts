@@ -1,5 +1,5 @@
 /**
- * vault-ops — pure domain functions
+ * vault-ops - pure domain functions
  *
  * no I/O, no crypto, no storage. takes data, returns data.
  * every function here is independently testable.
@@ -96,7 +96,7 @@ export const buildZignerVault = (
  * matches the Keystone precedent: the vault `type` stays `'zigner-zafu'` so it
  * reuses all existing zigner vault plumbing (unlock, select, delete, wallet
  * linkage). the discriminator lives in `insensitive.coldSignerType` and on the
- * mirrored zcash wallet record. zcash-only for now — no penumbra/polkadot/cosmos
+ * mirrored zcash wallet record. zcash-only for now - no penumbra/polkadot/cosmos
  * capabilities, so `supportedNetworks` is always `['zcash']`. no seed is stored;
  * `encryptedData` is the sealed watch-only import payload.
  */
@@ -130,7 +130,7 @@ export type FrostCustody = 'self' | 'airgapSigner';
 export interface FrostMultisigParams {
   label: string;
   address: string;
-  /** Orchard-only UFVK (`uview1…`) — derived from the group public key
+  /** Orchard-only UFVK (`uview1…`) - derived from the group public key
    * package + the host-broadcast `sk`. every participant computes this
    * locally and we verify agreement via echo-broadcast before persisting,
    * so this value is guaranteed to match across all N participants. */
@@ -168,8 +168,7 @@ export interface FrostMultisigParams {
   /**
    * Origin of the dapp that created the vault via the external API
    * (zafu_dkg_join / zafu_frost_create). Used by destructive external
-   * operations (zafu_delete_multisig) to enforce same-origin scope —
-   * a malicious site can't target vaults owned by another origin via
+   * operations (zafu_delete_multisig) to enforce same-origin scope - * a malicious site can't target vaults owned by another origin via
    * a guessed label prefix. Absent for vaults created via the wallet
    * UI directly (e.g. zigner-multisig flow).
    */

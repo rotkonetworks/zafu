@@ -34,8 +34,7 @@ let wasmModule: WasmModule | null = null;
 let initPromise: Promise<void> | null = null;
 
 // Same blob the compute worker loads (public/zafu-wasm). They were separate
-// directories holding byte-identical parallel builds — 6.3 MB shipped twice —
-// and the duplication is what let one copy sit stale for two days. One path,
+// directories holding byte-identical parallel builds - 6.3 MB shipped twice - // and the duplication is what let one copy sit stale for two days. One path,
 // one truth; each realm still gets its own module instance and rayon pool.
 const WASM_BASE = '/zafu-wasm';
 
@@ -63,7 +62,7 @@ const initParallelWasm = async (): Promise<WasmModule> => {
     // the helpers do `new Worker(new URL('./workerHelpers.js', import.meta.url), { type: 'module' })`
     // but import.meta.url in the offscreen context resolves wrong.
     // we intercept and rewrite the URL to the correct absolute extension path.
-    // note: chrome.runtime is NOT available in nested Workers — use self.location.origin instead.
+    // note: chrome.runtime is NOT available in nested Workers - use self.location.origin instead.
     const OriginalWorker = globalThis.Worker;
     const extOrigin = self.location.origin + '/';
     globalThis.Worker = class PatchedWorker extends OriginalWorker {
@@ -83,7 +82,7 @@ const initParallelWasm = async (): Promise<WasmModule> => {
     };
 
     try {
-      // @ts-expect-error dynamic import — parallel WASM build with rayon + shared memory
+      // @ts-expect-error dynamic import - parallel WASM build with rayon + shared memory
       const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm/zafu_wasm.js');
       // let the JS glue create shared memory with its own initial/max settings
       await wasm.default({ module_or_path: `${WASM_BASE}/zafu_wasm_bg.wasm` });
@@ -168,12 +167,12 @@ const initParallelVotingWasm = async (): Promise<WasmModule> => {
     };
 
     try {
-      // @ts-expect-error dynamic import — parallel voting-wasm build with rayon + shared memory
+      // @ts-expect-error dynamic import - parallel voting-wasm build with rayon + shared memory
       const wasm = await import(/* webpackIgnore: true */ '/voting-wasm/voting_wasm.js');
       await wasm.default({ module_or_path: `${VOTING_WASM_BASE}/voting_wasm_bg.wasm` });
       wasm.voting_wasm_init_panic_hook();
 
-      // Own pool, independent of the core module's — same crossOriginIsolated
+      // Own pool, independent of the core module's - same crossOriginIsolated
       // offscreen context, but a separate wasm instance/memory needs its own
       // initThreadPool call.
       assertRayonIsolation('voting-wasm prover');
@@ -469,7 +468,7 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
     case 'build_delegation_pczt':
       // (fvk_hex, seed_fingerprint_hex, account_index, hotkey_pubkey_hex,
       //  notes_json, round_params_json, consensus_branch_id, round_name,
-      //  network, bundle_index) — see voting-wasm/src/voting_delegation.rs.
+      //  network, bundle_index) - see voting-wasm/src/voting_delegation.rs.
       result = wasm['build_delegation_pczt'](
         a[0],
         a[1],
@@ -486,13 +485,13 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
 
     case 'finalize_delegation':
       // (delegation_context_json, merkle_witnesses_json, imt_proofs_json,
-      //  spend_auth_sig_hex, sighash_hex) — runs the real K=14 ZKP #1 proof.
+      //  spend_auth_sig_hex, sighash_hex) - runs the real K=14 ZKP #1 proof.
       result = wasm['finalize_delegation'](a[0], a[1], a[2], a[3], a[4]);
       break;
 
     case 'cast_vote_hot_wire':
       // (hotkey_secret_hex, round_params_json, delegation_state_json,
-      //  van_witness_json, vote_json, network, submit_at) — runs ZKP #2.
+      //  van_witness_json, vote_json, network, submit_at) - runs ZKP #2.
       // submit_at crosses postMessage as a stringified bigint, same
       // convention as the amount/fee args on the core send builders above.
       result = wasm['cast_vote_hot_wire'](

@@ -2,7 +2,7 @@
  * hook to sync zcash transaction memos into the inbox
  *
  * all heavy lifting (bucket fetch, noise generation, decryption) runs in the
- * zcash worker — this hook is a thin wrapper that sends one message and
+ * zcash worker - this hook is a thin wrapper that sends one message and
  * inserts returned memos into the zustand messages store.
  */
 
@@ -148,7 +148,7 @@ export function useZcashMemos(walletId: string, zidecarUrl: string = DEFAULT_ZID
             isChange: m.direction === 'sent',
             timestamp: m.timestamp,
             // the note's own declared return address is the only thing a
-            // card/sign payload can be bound to — a memo carries no signature
+            // card/sign payload can be bound to - a memo carries no signature
             senderAddress: parseReturnAddress(m.content).returnAddress,
           }));
         if (structuredNotes.length > 0) {

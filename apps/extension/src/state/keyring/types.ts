@@ -179,7 +179,7 @@ export interface ZignerZafuImport {
   /**
    * Cold signer kind. Defaults to `'zigner'` when omitted (covers all
    * pre-Keystone watch-only imports). Set to `'keystone'` for FVKs imported
-   * from a Keystone hardware wallet — gates Zigner-only features (Penumbra,
+   * from a Keystone hardware wallet - gates Zigner-only features (Penumbra,
    * FROST, ZID) in the UI even though the underlying Zcash signing path is
    * shared via PCZT/UR. `'viewing-key'` is a pasted viewing key with no signer
    * at all: it can see, never spend (see settings-add-viewing-key).
@@ -203,7 +203,7 @@ export type ColdSignerType = 'zigner' | 'keystone' | 'ledger';
  * unlike a zigner/keystone import (which is a multi-network watch-only FVK
  * bundle), a Ledger account is a single-signer zcash-only cold wallet. it
  * carries no penumbra FVK, no polkadot/cosmos addresses, no ZID key, and no
- * FROST share — just enough to watch a single orchard account and hand PCZTs
+ * FROST share - just enough to watch a single orchard account and hand PCZTs
  * to the device for signing.
  *
  * flag-gated hardware-wallet scaffolding: reuses the `zigner-zafu` vault

@@ -1,5 +1,5 @@
 /**
- * relay-identity — this device's identity on a frostd relay.
+ * relay-identity - this device's identity on a frostd relay.
  *
  * A relay identity is NOT a wallet key and is deliberately unrelated to one.
  * Its X25519 private key authenticates to the relay and keys the Noise_K

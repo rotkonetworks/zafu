@@ -13,7 +13,7 @@ interface QrScannerProps {
   inline?: boolean;
 }
 
-/** Convert ZXing result text to hex — handles binary QR (Latin-1) and plain hex */
+/** Convert ZXing result text to hex - handles binary QR (Latin-1) and plain hex */
 function resultToHex(text: string): string {
   if (/^[0-9a-fA-F]+$/.test(text) && text.length % 2 === 0) {
     return text;
@@ -52,7 +52,7 @@ export const QrScanner = ({
   // level), reopening it on every retry would loop - show guidance instead.
   const grantAttemptedRef = useRef(false);
 
-  // Stable refs for callbacks — avoids re-creating startScanning on every render
+  // Stable refs for callbacks - avoids re-creating startScanning on every render
   const onScanRef = useRef(onScan);
   const onErrorRef = useRef(onError);
   onScanRef.current = onScan;
@@ -95,7 +95,7 @@ export const QrScanner = ({
         throw new DOMException('camera API unavailable in this browser', 'NotFoundError');
       }
 
-      // request camera permission FIRST — Chrome MV3 extension pages may
+      // request camera permission FIRST - Chrome MV3 extension pages may
       // auto-dismiss the permission prompt if enumerateDevices() runs before
       // getUserMedia(). Getting a stream first ensures the prompt is shown.
       const initialStream = await navigator.mediaDevices.getUserMedia({ video: true });

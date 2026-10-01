@@ -46,7 +46,7 @@ export async function cancelScheduledDelete(vaultId: string): Promise<void> {
  * a different origin via a guessed/colliding label prefix. The origin
  * is matched against the `createdByOrigin` field stored on the vault
  * at DKG-join time. Vaults missing that field (pre-hardening creation)
- * are returned only when `requireOrigin` is undefined — the lookup is
+ * are returned only when `requireOrigin` is undefined - the lookup is
  * fail-closed for any caller that asked for origin-scoping.
  */
 export async function findVaultByLabelPrefix(
@@ -78,11 +78,11 @@ export async function findVaultByLabelPrefix(
  *
  * POLICY (money-safety): app-managed multisig vaults (poker tables) are NO LONGER auto-destroyed.
  * A FROST key share is NOT seed-recoverable, has no auto-backup, and lives only in this device's
- * `chrome.storage.local` — so a timer-driven purge is a permanent fund-loss vector (a late deposit
+ * `chrome.storage.local` - so a timer-driven purge is a permanent fund-loss vector (a late deposit
  * to a "settled" table, or an unconfirmed balance the scanner hasn't credited, would be lost). The
  * vaults are a few KB each and already hidden from the UI, so retaining them costs effectively
  * nothing. Removal is now EXCLUSIVELY a user-initiated, balance+sync-gated action in the multisig
- * manager — never an automatic one. This sweep therefore only clears the (now-inert) schedule so
+ * manager - never an automatic one. This sweep therefore only clears the (now-inert) schedule so
  * legacy entries stop accumulating; it purges nothing.
  */
 export async function sweepScheduledDeletes(): Promise<void> {

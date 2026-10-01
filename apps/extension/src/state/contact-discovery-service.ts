@@ -12,7 +12,7 @@
  * Everything here is a STRICT NO-OP unless the user opted in AND the wallet is
  * unlocked. A wallet that never opted in never reads a contact, never derives a
  * secret, and never opens a socket. An opted-in wallet with no endpoint of its
- * own talks to DEFAULT_CONTACT_DISCOVERY_RELAY — opting in IS the consent, so a
+ * own talks to DEFAULT_CONTACT_DISCOVERY_RELAY - opting in IS the consent, so a
  * blank endpoint field cannot leave the feature dead.
  */
 

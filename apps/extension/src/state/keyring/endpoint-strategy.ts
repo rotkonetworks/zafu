@@ -2,13 +2,13 @@
  * Endpoint selection strategies.
  *
  * Given probed endpoints, rank them best-first per a user-selected policy:
- *   fastest      — lowest latency first (Zashi's default, and ours).
- *   most-synced  — smallest behindBy first.
- *   random       — session-random shuffle; picks change on rerank.
- *   manual       — never auto-pick; keep whatever the user last chose.
+ *   fastest - lowest latency first (Zashi's default, and ours).
+ *   most-synced - smallest behindBy first.
+ *   random - session-random shuffle; picks change on rerank.
+ *   manual - never auto-pick; keep whatever the user last chose.
  *                  rankEndpoints returns [] and pickEndpoint returns null
  *                  so the caller sees the same "no candidate" signal it
- *                  gets when every endpoint is unhealthy — treat it as
+ *                  gets when every endpoint is unhealthy - treat it as
  *                  "leave the current selection alone".
  *
  * "Healthy" filter is applied before ranking: unreachable and severely
@@ -20,7 +20,7 @@ import type { ZcashEndpointPreset } from '../../config/zcash-endpoints';
 import type { EndpointHealth } from './endpoint-health';
 
 /**
- * Minimal shape a strategy needs from a preset — just an id to key health
+ * Minimal shape a strategy needs from a preset - just an id to key health
  * lookups by, plus a url so pickers can act on the winner. Made explicit so
  * non-Zcash preset types (Penumbra) can satisfy `Candidate` structurally
  * without pulling Zcash-only fields (backend, isDefault) into shared code.
@@ -47,7 +47,7 @@ export interface Candidate<TPreset extends EndpointLike = ZcashEndpointPreset> {
 
 /**
  * Rank candidates best-first per strategy. Unhealthy candidates are dropped.
- * If everyone is unhealthy the result is empty — caller must fall back
+ * If everyone is unhealthy the result is empty - caller must fall back
  * (typically: keep the user's current selection and show a warning).
  */
 export function rankEndpoints<TPreset extends EndpointLike>(
@@ -56,7 +56,7 @@ export function rankEndpoints<TPreset extends EndpointLike>(
 ): Candidate<TPreset>[] {
   // Manual mode opts out of ranking entirely. Returning [] gives every
   // caller the same "leave the current selection as-is" signal they use
-  // for the "all unhealthy" case — no separate branch to maintain.
+  // for the "all unhealthy" case - no separate branch to maintain.
   if (strategy === 'manual') {
     return [];
   }
@@ -70,7 +70,7 @@ export function rankEndpoints<TPreset extends EndpointLike>(
       arr.sort((a, b) => (a.health!.behindBy ?? Infinity) - (b.health!.behindBy ?? Infinity));
       return arr;
     case 'random':
-      // Fisher-Yates. Math.random is fine — this isn't a security-sensitive
+      // Fisher-Yates. Math.random is fine - this isn't a security-sensitive
       // shuffle, just query-correlation noise.
       for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));

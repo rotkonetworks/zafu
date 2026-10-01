@@ -2,7 +2,7 @@
  * UR fountain (BC-UR) decode worker
  *
  * Off-loads `ur_decode_frames` from the popup main thread. The fountain
- * decoder is NOT incremental — every new part re-decodes the whole
+ * decoder is NOT incremental - every new part re-decodes the whole
  * accumulated set, which is O(n) per part and O(n^2) over a multi-part
  * airgap scan. Running that in the ZXing scan callback on the UI thread
  * drops camera frames and janks the progress bar. Here it runs in an
@@ -34,7 +34,7 @@ interface UrWasm {
 
 // Accumulated raw frame strings. Uniqueness is enforced on the main thread,
 // so this is a plain array (append-only). The whole set is re-fed to
-// ur_decode_frames on each decode pass — that is the fountain decoder's
+// ur_decode_frames on each decode pass - that is the fountain decoder's
 // contract, and the point of this file is that the cost lands here.
 const parts: string[] = [];
 let urType = '';
@@ -57,13 +57,13 @@ let finished = false;
 // root (webpackIgnore keeps it external so this self-contained worker bundle
 // stays tiny) and await bindgen's default() before any export call. Stored as
 // a promise so init runs once; on failure the promise is nulled so the next
-// `part` retries — matching the component's prior retry-on-next-frame behavior.
+// `part` retries - matching the component's prior retry-on-next-frame behavior.
 let wasmPromise: Promise<UrWasm> | null = null;
 
 const initWasm = (): Promise<UrWasm> => {
   if (!wasmPromise) {
     wasmPromise = (async () => {
-      // @ts-expect-error — runtime dynamic import, resolved from extension root
+      // @ts-expect-error - runtime dynamic import, resolved from extension root
       const mod = (await import(/* webpackIgnore: true */ '/zafu-wasm/zafu_wasm.js')) as UrWasm;
       await mod.default({ module_or_path: '/zafu-wasm/zafu_wasm_bg.wasm' });
       return mod;
@@ -93,7 +93,7 @@ const runDecode = async (): Promise<void> => {
     return;
   }
 
-  // snapshot size at the moment of this pass — parts appended during the
+  // snapshot size at the moment of this pass - parts appended during the
   // async init above are already included, and any that arrive after are
   // folded into a freshly-scheduled pass (dirty was reset before this ran).
   const size = parts.length;
@@ -118,7 +118,7 @@ const runDecode = async (): Promise<void> => {
       );
     }
     workerSelf.postMessage({ type: 'progress', size });
-    // a part may have been appended while we were decoding — pick it up
+    // a part may have been appended while we were decoding - pick it up
     if (dirty) {
       scheduleDecode();
     }
@@ -148,7 +148,7 @@ workerSelf.onmessage = (e: MessageEvent<{ type: 'part'; text: string; urType: st
   scheduleDecode();
 };
 
-// warm the wasm in parallel with camera startup — the component created this
+// warm the wasm in parallel with camera startup - the component created this
 // worker on mount precisely so init overlaps the user aiming the camera
 void initWasm()
   .then(() => workerSelf.postMessage({ type: 'ready' }))

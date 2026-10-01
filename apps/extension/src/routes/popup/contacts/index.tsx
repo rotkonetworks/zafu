@@ -64,7 +64,7 @@ const NETWORK_COLORS: Record<ContactNetwork, string> = {
 
 /** Make a contact's website safe + clickable: only http(s) links, prefixing a
  *  bare domain with https://. Anything with a different scheme (javascript:,
- *  data:, etc.) is treated as not a link — the string still shows, just inert. */
+ *  data:, etc.) is treated as not a link - the string still shows, just inert. */
 const contactWebsiteUrl = (raw: string): string | undefined => {
   const s = raw.trim();
   if (!s) {
@@ -144,7 +144,7 @@ function ContactModal({
               type='text'
               value={zid}
               onChange={e => setZid(e.target.value)}
-              placeholder='identity pubkey — the anchor for their addresses'
+              placeholder='identity pubkey - the anchor for their addresses'
               className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-xs font-mono focus:border-zigner-gold focus:outline-none'
             />
           </div>
@@ -717,7 +717,7 @@ export function ContactsPage() {
     setShowContactModal(true);
   };
 
-  // deep link: /contacts?open=<id> opens that contact's editor directly — this
+  // deep link: /contacts?open=<id> opens that contact's editor directly - this
   // is where a tx row's "to <contact>" link lands, so you can jump straight from
   // a payment to editing who you paid. Consume the param so a back/refresh
   // doesn't re-pop the modal.

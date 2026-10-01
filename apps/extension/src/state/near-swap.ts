@@ -3,21 +3,21 @@
  *
  * Uses ChainDefuser's 1Click API (same as Zashi mobile) for
  * crosschain swaps to/from ZEC. The API handles routing through
- * NEAR's intent infrastructure — we just request quotes and send
+ * NEAR's intent infrastructure - we just request quotes and send
  * ZEC to the deposit address.
  *
  * Flow:
- *   1. GET /v0/tokens — list supported assets
- *   2. POST /v0/quote — get quote with deposit address
+ *   1. GET /v0/tokens - list supported assets
+ *   2. POST /v0/quote - get quote with deposit address
  *   3. User sends ZEC to deposit address (or receives at their address)
- *   4. GET /v0/status?depositAddress=... — poll for completion
+ *   4. GET /v0/status?depositAddress=... - poll for completion
  */
 
 import { requestEgressOptIn } from '../net/egress-opt-in';
 
 const API_BASE = 'https://1click.chaindefuser.com';
 
-// 1Click partner JWT — partner_id: rotko-networks (issued via NEAR Intents portal).
+// 1Click partner JWT - partner_id: rotko-networks (issued via NEAR Intents portal).
 // Sent as `Authorization: Bearer <jwt>` on quote/status/deposit to avoid the 0.2% fee
 // and attribute swaps to rotko.
 //

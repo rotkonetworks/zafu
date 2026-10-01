@@ -84,8 +84,7 @@ const isSpent = (note: DecryptedNoteWithTxid): boolean =>
  *
  * This summed every note including ones the very same view labels "spent", so
  * a wallet that had spent its whole orchard balance still showed
- * "orchard - 7 notes / 4.9000 ZEC" above a list where every row read spent —
- * and contradicted the hero balance that links here. A pool subtotal means
+ * "orchard - 7 notes / 4.9000 ZEC" above a list where every row read spent - * and contradicted the hero balance that links here. A pool subtotal means
  * "what is in this pool", and a spent note is not.
  */
 const subtotal = (notes: DecryptedNoteWithTxid[]): bigint =>

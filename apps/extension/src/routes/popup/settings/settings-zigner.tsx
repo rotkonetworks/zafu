@@ -235,7 +235,7 @@ export const SettingsZigner = () => {
           </div>
         )}
 
-        {/* Zigner Wallets — unified list from keyring (visible to all users) */}
+        {/* Zigner Wallets - unified list from keyring (visible to all users) */}
         {zignerVaults.length > 0 && (
           <div className='border-t border-border-soft pt-4'>
             <div className='mb-3 flex items-center justify-between'>
@@ -461,7 +461,7 @@ export const SettingsZigner = () => {
                 {detectedNetwork === 'zcash' && (
                   <div className='flex flex-col gap-1'>
                     <label className='text-label text-fg-muted'>
-                      start block (optional) — blank syncs from near the chain tip
+                      start block (optional) - blank syncs from near the chain tip
                     </label>
                     <Input
                       type='text'

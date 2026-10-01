@@ -8,20 +8,20 @@ import { ZCASH_MAINNET_ENDPOINTS } from '../config/zcash-endpoints';
  * prover chose and absorbed into its own transcript. Nothing binds them to
  * consensus, and block/action omission is undetectable from a single server.
  * Cross-verification against an INDEPENDENT operator is the stated mitigation.
- * It had zero call sites — the one thing standing between a lying server and
+ * It had zero call sites - the one thing standing between a lying server and
  * the user was never wired up.
  *
  * This is deliberately modest, and it is worth being precise about what it
  * does and does not buy:
  *
  *   It DOES catch a server that reports a chain state no one else agrees
- *   with — a forged tip, a stalled tip presented as current, or a commitment
+ *   with - a forged tip, a stalled tip presented as current, or a commitment
  *   tree that diverges from the network's.
  *
  *   It does NOT make the wallet trustless. Two endpoints run by the same
  *   operator, or colluding, agree with each other. It cannot detect omission
  *   that both servers perform. And it is a liveness/consistency check, not a
- *   proof — a real fix is a constraint system, which is a design project.
+ *   proof - a real fix is a constraint system, which is a design project.
  *
  * Failure is advisory by default: a disagreement is surfaced, not fatal,
  * because a lagging peer is far more common than an attack and bricking the

@@ -1,9 +1,9 @@
 /**
- * named strategies — closed enum exposed to the UI.
+ * named strategies - closed enum exposed to the UI.
  *
- * 'off'  — no stream is ever opened. the fetcher is a no-op iterable.
+ * 'off' - no stream is ever opened. the fetcher is a no-op iterable.
  *          users who don't want to advertise mempool interest pick this.
- * 'on'   — poll(10s) + reconnect(exp backoff) + dedup, wrapping the
+ * 'on' - poll(10s) + reconnect(exp backoff) + dedup, wrapping the
  *          provided base fetcher.
  *
  * filter composition order (innermost first, outermost last):
@@ -45,7 +45,7 @@ export function isMempoolWatchEnabled(setting: unknown, backend: unknown): boole
 export interface StrategyParams {
   /** concrete fetcher to wrap (typically zidecarMempoolFetcher(client)). */
   readonly base: MempoolFetcher;
-  /** poll interval (ms). default 10_000 — matches the previous inline behavior. */
+  /** poll interval (ms). default 10_000 - matches the previous inline behavior. */
   readonly pollIntervalMs?: number;
 }
 
@@ -64,7 +64,7 @@ export function buildStrategy(name: MempoolWatchStrategy, params: StrategyParams
 
 /** A fetcher that yields nothing and completes immediately. */
 const offFetcher: MempoolFetcher = async function* () {
-  /* off — no events */
+  /* off - no events */
 };
 
 function compose(

@@ -1,5 +1,5 @@
 /**
- * Zcash coinholder voting — read-only rounds + tallies (phase 1).
+ * Zcash coinholder voting - read-only rounds + tallies (phase 1).
  *
  * Data flows through the functional service in services/voting: pinned
  * static config → dynamic config → vote servers. This screen owns no

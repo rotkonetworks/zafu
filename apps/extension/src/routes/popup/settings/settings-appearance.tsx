@@ -6,11 +6,11 @@ import { PopupPath } from '../paths';
 import { getApprovalSurface, type ApprovalSurface } from '../../../side-panel-pref';
 
 /**
- * appearance — theme and type, applied instantly, persisted locally.
+ * appearance - theme and type, applied instantly, persisted locally.
  *
  * Themes are one material language in two states (see globals.css):
- *   sumi ink  — warm ink-stone dark (default)
- *   washi     — sumi ink on unbleached paper (light)
+ *   sumi ink - warm ink-stone dark (default)
+ *   washi - sumi ink on unbleached paper (light)
  */
 
 export type ZafuTheme = 'sumi' | 'washi';
@@ -31,7 +31,7 @@ const FONTS: { id: ZafuFont; name: string; blurb: string; stack: string }[] = [
   {
     id: 'iosevka',
     name: 'iosevka term',
-    blurb: 'the zafu voice — narrow, confident',
+    blurb: 'the zafu voice - narrow, confident',
     stack: "'Iosevka Term', 'Courier New', Courier, monospace",
   },
   {

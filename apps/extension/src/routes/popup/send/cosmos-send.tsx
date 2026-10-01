@@ -235,8 +235,8 @@ const bip39Words = (): Set<string> | null => {
 /**
  * Memos are the one free-text field whose contents become permanent and
  * public the moment the tx is broadcast, so a paste-slip is unrecoverable.
- * Keplr guards the specific slip people actually make — pasting a seed
- * phrase in — by rejecting a memo that is mostly BIP-39 words. Same rule
+ * Keplr guards the specific slip people actually make - pasting a seed
+ * phrase in - by rejecting a memo that is mostly BIP-39 words. Same rule
  * here: 8-32 words and at least three quarters of them in the wordlist.
  */
 const memoLooksLikeMnemonic = (memo: string): boolean => {
@@ -699,7 +699,7 @@ export function CosmosSend({
     gas.gasLimit,
   ]);
 
-  // confirmed — ask password then sign+broadcast
+  // confirmed - ask password then sign+broadcast
   const handleConfirm = useCallback(async () => {
     if (!selectedAsset) {
       return;

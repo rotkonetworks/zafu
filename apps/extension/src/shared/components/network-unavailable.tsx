@@ -5,7 +5,7 @@
  */
 
 interface NetworkUnavailableProps {
-  /** lowercase feature name — used as both heading and body subject */
+  /** lowercase feature name - used as both heading and body subject */
   feature: string;
   /** lucide icon class, e.g. "i-ph-stack" */
   iconClass: string;

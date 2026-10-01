@@ -34,8 +34,8 @@ export function KeplrCompatToggle() {
         label='act as keplr'
         description={
           enabled
-            ? 'cosmos dapps see zafu as keplr — applies on next page load'
-            : 'off — a real keplr extension is left untouched'
+            ? 'cosmos dapps see zafu as keplr - applies on next page load'
+            : 'off - a real keplr extension is left untouched'
         }
         checked={enabled}
         onChange={toggle}

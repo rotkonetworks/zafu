@@ -72,7 +72,7 @@ installGracefulNetworkErrorHandler();
  * Tag an error we raise ourselves with its classification.
  *
  * The UI must never render a raw worker error, and guessing what an error
- * MEANS from its text is brittle — but we own both sides of this boundary, so
+ * MEANS from its text is brittle - but we own both sides of this boundary, so
  * anything thrown here can simply say what it is. Only errors from wasm, from
  * `fetch`, and from IndexedDB fall back to substring sniffing in
  * `state/sync-failure.ts`.
@@ -84,7 +84,7 @@ const syncError = (code: SyncErrorCode, message: string): Error =>
  * Worker-local endpoint→backend registry. Populated only via the explicit
  * `backend` field on the 'sync' payload (the popup classifies endpoints
  * declaratively via isZidecarEndpoint() and forwards). We deliberately do
- * NOT auto-probe — probing zidecar-only RPCs is a unique-to-zafu request
+ * NOT auto-probe - probing zidecar-only RPCs is a unique-to-zafu request
  * signature that fingerprints the wallet.
  *
  * Unknown endpoints default to 'zidecar' (the rotko-shipped baseline);
@@ -117,7 +117,7 @@ function lookupBackend(serverUrl: string): ZcashBackend {
 /**
  * Factory: construct the appropriate sync client for an endpoint+backend.
  *
- * Two-arg form is the canonical (defensive) one — pass backend explicitly
+ * Two-arg form is the canonical (defensive) one - pass backend explicitly
  * when you have it in scope. The one-arg form is for call sites deep in
  * the worker that don't carry backend through their payload; they fall
  * back to the registry. Throws on unknown backend, never silently coerces.
@@ -268,7 +268,7 @@ interface DecryptedNote {
   recipient?: string;
   /** serialized IncrementalWitness (hex), advanced to witnessTreeSize leaves */
   witness_hex?: string;
-  /** tree size at which witness was last advanced — used to detect drift */
+  /** tree size at which witness was last advanced - used to detect drift */
   witness_tree_size?: number;
 }
 
@@ -752,7 +752,7 @@ const patchBranchId = (buf: Uint8Array): void => {
  * Wait for both the sync loop AND the mempool watcher to stop after the
  * caller has set syncAbort=true (or otherwise signaled shutdown). Polls
  * state.syncing every 50ms up to timeoutMs, then explicitly awaits the
- * watcher task if one was running — this matters because a freshly-spawned
+ * watcher task if one was running - this matters because a freshly-spawned
  * runSync race can otherwise have two watchers contending against the same
  * walletId.
  */
@@ -774,7 +774,7 @@ const waitForSyncStop = async (state: WalletState, timeoutMs = 2000): Promise<vo
     });
   }
   // Wait for the watcher's promise to settle so we know the IIFE finished.
-  // Bounded by the same timeout — if the watcher is wedged inside a fetch
+  // Bounded by the same timeout - if the watcher is wedged inside a fetch
   // that ignored the signal, we still return after timeoutMs.
   if (state.mempoolTask) {
     await Promise.race([
@@ -853,7 +853,7 @@ const readCompactSize = (buf: Uint8Array, off: number): [number, number] => {
       off + 5,
     ];
   }
-  // 0xff — 8 byte, unlikely for tx counts
+  // 0xff - 8 byte, unlikely for tx counts
   return [0, off + 9];
 };
 
@@ -885,14 +885,14 @@ const parseTransparentTx = (data: Uint8Array, ourScripts: Set<string>): bigint =
   const [nVin, vinOff] = readCompactSize(data, off);
   off = vinOff;
 
-  // parse inputs — check scriptSig for our pubkey hash
+  // parse inputs - check scriptSig for our pubkey hash
   for (let i = 0; i < nVin; i++) {
     // prevout: txid(32) + index(4)
     off += 36;
     // scriptSig
     const [sigLen, sigOff] = readCompactSize(data, off);
     off = sigOff;
-    // note: transparent inputs don't carry value — we can't determine sent amount
+    // note: transparent inputs don't carry value - we can't determine sent amount
     // from the tx alone without looking up the referenced UTXOs
     off += sigLen;
     // nSequence
@@ -946,12 +946,12 @@ const getDb = (): Promise<IDBDatabase> => {
     // The open request then fires 'blocked' and NEVER settles: no success, no
     // error. Every await on getDb() hangs, runSync stalls before it emits a
     // single height, and the wallet sits at "scanning notes 0%" with nothing
-    // in the log. Fail loudly instead — the caller surfaces it and a reload
+    // in the log. Fail loudly instead - the caller surfaces it and a reload
     // (which drops the other connection) fixes it.
     req.onblocked = () =>
       reject(
         new Error(
-          `IndexedDB upgrade to v${DB_VERSION} blocked by another open connection to ${DB_NAME} — reload the extension`,
+          `IndexedDB upgrade to v${DB_VERSION} blocked by another open connection to ${DB_NAME} - reload the extension`,
         ),
       );
     req.onsuccess = () => {
@@ -1005,7 +1005,7 @@ const getDb = (): Promise<IDBDatabase> => {
   });
 };
 
-/** close shared db connection — called when worker is idle */
+/** close shared db connection - called when worker is idle */
 export const closeDb = () => {
   if (sharedDb) {
     sharedDb.close();
@@ -1213,14 +1213,14 @@ const verifySyncProofs = async (
   // that output, so an unpadded request is a complete, unambiguous inventory
   // of the wallet's notes handed to the server in the clear. The query is
   // padded with decoys drawn from commitments the scanner actually observed
-  // in the same block range (see proof-decoys.ts) — fabricated cmxs would
+  // in the same block range (see proof-decoys.ts) - fabricated cmxs would
   // have no proof and identify themselves. Only proofs for OUR cmxs are
   // verified; decoy responses are dropped unread.
   if (pendingCmxs.length > 0) {
     // Two independent properties, both required:
-    //   privacy — the query is padded with decoys so the server does not learn
+    //   privacy - the query is padded with decoys so the server does not learn
     //             the wallet's exact note set from the cmx+position pairs;
-    //   integrity — every proof is bound to the batch root and to something we
+    //   integrity - every proof is bound to the batch root and to something we
     //             actually asked about, and every REAL cmx must come back.
     // Neither subsumes the other: padding without binding still lets a server
     // forge paths, and binding without padding still hands over the note set.
@@ -1299,7 +1299,7 @@ const verifySyncProofs = async (
   // 3. verify nullifier proofs for unspent notes.
   //
   // Ironwood used to be excluded here on the belief that the NOMT nullifier
-  // set was orchard-only. It never was — the set is existence-keyed and
+  // set was orchard-only. It never was - the set is existence-keyed and
   // pool-agnostic, and zidecar indexes sapling, orchard and ironwood
   // nullifiers into it from the same block walk. What actually bounds an
   // answer is not the pool but the index's height, and the two pools have
@@ -1308,7 +1308,7 @@ const verifySyncProofs = async (
   //
   // That distinction matters because absence is not proof. Above a pool's
   // horizon "no entry" means "not indexed yet", which is byte-identical to
-  // "not spent" — trusting it would mark a spent note as spendable. So each
+  // "not spent" - trusting it would mark a spent note as spendable. So each
   // note is only queried once its own pool's index reaches the tip; the rest
   // fall back to scan-time detection.
   const unspentAll = state.notes.filter(n => !state.spentNullifiers.has(n.nullifier));
@@ -1317,7 +1317,7 @@ const verifySyncProofs = async (
   // before the batch, purely to read the index horizons off its response.
   //
   // It was the worst request in the wallet. One bare nullifier, unpadded, no
-  // possible ambiguity about whose it was — and because it was always
+  // possible ambiguity about whose it was - and because it was always
   // `unspentAll[0]`, it was the same stable value every session, which
   // re-identified the wallet to the server across sessions on its own. Being
   // adjacent to the batch also joined the two: the server could attribute the
@@ -1330,7 +1330,7 @@ const verifySyncProofs = async (
   // The horizon is ONE-DIRECTIONAL, and treating it as a filter was wrong.
   //
   // `is_spent = true` is a Merkle INCLUSION proof against nullifier_root,
-  // verified locally below and root-bound before use — it is sound at any
+  // verified locally below and root-bound before use - it is sound at any
   // horizon. Only `is_spent = false` is uninformative above the horizon,
   // because the NOMT set is existence-keyed and "not indexed yet" and "not
   // spent" are the same bytes.
@@ -1338,12 +1338,12 @@ const verifySyncProofs = async (
   // Filtering the QUERY by horizon therefore discarded sound positives along
   // with the unsound negatives. Worse: the orchard backfill trails the tip by
   // design, so `orchardHorizon >= tip` is essentially never true in
-  // production — which meant this disabled orchard spend detection outright
+  // production - which meant this disabled orchard spend detection outright
   // rather than merely narrowing it. Always ask; gate only what we believe.
   const unspentNotes = unspentAll;
   const unspentNfs = unspentNotes.map(n => hexDecode(n.nullifier));
 
-  // PRIVACY: these are nullifiers of UNSPENT notes — values that are not yet
+  // PRIVACY: these are nullifiers of UNSPENT notes - values that are not yet
   // on chain and that only this wallet can know. Sent bare, the server can
   // record them and fire the moment one appears in a block, deanonymising a
   // spend before the user has made it. The query is padded with decoys drawn
@@ -1351,7 +1351,7 @@ const verifySyncProofs = async (
   // shuffled, so the request alone no longer says which are ours.
   //
   // Be clear about the size of this win: the anonymity set is 3, and it is
-  // retrospective-only — when the user actually spends, the real nullifier
+  // retrospective-only - when the user actually spends, the real nullifier
   // hits the chain and the decoys never do, so the server can work backwards
   // and identify it then. What the padding removes is the PROSPECTIVE
   // watchlist. See proof-decoys.ts for the full accounting.
@@ -1367,7 +1367,7 @@ const verifySyncProofs = async (
     } = await client.getNullifierProofs(queryNfs, tip);
     const nfRootHex = hexEncode(nullifierRoot);
 
-    // Horizons come off the batch itself — this is what the deleted probe
+    // Horizons come off the batch itself - this is what the deleted probe
     // call was for. No absence gate is needed at the consumption site below:
     // the loop acts ONLY on `proof.isSpent === true`, and never infers
     // "unspent" from a missing entry. They are logged so the record states
@@ -1383,8 +1383,7 @@ const verifySyncProofs = async (
     //
     // These two roots are taken at DIFFERENT INSTANTS from a MUTABLE tree.
     // zidecar's NOMT is a single live tree: proofs are generated against
-    // nomt.root() at request time, and `at_height` is accepted but ignored —
-    // there is no versioned or pinned historical root. Meanwhile the ligerito
+    // nomt.root() at request time, and `at_height` is accepted but ignored - // there is no versioned or pinned historical root. Meanwhile the ligerito
     // header proof carries a snapshot of that root from whenever the proof was
     // last generated. The server writes continuously (the ironwood cursor
     // follows the chain tip), so between the proof and this query the root has
@@ -1392,7 +1391,7 @@ const verifySyncProofs = async (
     //
     // Treating that as "the server tampered" was my error earlier today: it
     // converted a benign race into a hard sync failure that users hit within
-    // minutes, and it teaches people to ignore an integrity warning — the
+    // minutes, and it teaches people to ignore an integrity warning - the
     // worst possible outcome for a check that is supposed to mean something.
     //
     // What IS sound is verified below and stays fatal: every proof must bind
@@ -1436,7 +1435,7 @@ const verifySyncProofs = async (
       }
       // Decoys are asked about but never believed. A decoy proof carries no
       // information about this wallet, so verifying it would only hand the
-      // server a way to fail the sync at will — and acting on its `isSpent`
+      // server a way to fail the sync at will - and acting on its `isSpent`
       // would let it mark a note spent that was never ours to begin with.
       if (!padded.realHex.has(nfHexForProof)) {
         continue;
@@ -1470,7 +1469,7 @@ const verifySyncProofs = async (
   // Only meaningful when the wallet's fold is genesis-anchored. The actions
   // commitment is a positional hash chain seeded from the previously-folded
   // value, so a wallet whose sync begins at a birthday/import block (nearly
-  // all wallets — the default start is near tip, not genesis) folds from a
+  // all wallets - the default start is near tip, not genesis) folds from a
   // seed that can never equal the server's genesis-anchored proven value. For
   // those wallets any "mismatch" here is guaranteed by construction and was
   // spamming the retry loop under a misleading "server tampered" label. See
@@ -1522,11 +1521,11 @@ const getIronwoodTreeFrontierHeight = async (walletId: string): Promise<number> 
 };
 
 /**
- * Orchard anchor height for a spend: the cached sync frontier height — the
+ * Orchard anchor height for a spend: the cached sync frontier height - the
  * exact height our note witnesses are rooted at. The witness machinery only
  * fast-forwards, never rewinds, so anchoring anywhere else (the live tip, or
  * tip−N) leaves the witness root pinned at the frontier while the cross-check
- * fetches the network root at the anchor, and the two disagree — the "tree
+ * fetches the network root at the anchor, and the two disagree - the "tree
  * root mismatch at height N" failure. A frontier we've synced past is a valid
  * historical Orchard anchor regardless of how far behind the tip it sits.
  * Falls back to the tip only for a fresh wallet with no cached frontier.
@@ -1538,8 +1537,8 @@ const resolveAnchorHeight = async (walletId: string, tipHeight: number): Promise
 
 /**
  * Append the anchor block's own Unix timestamp to a note-sync CBOR bundle as
- * map key 7 (uint). The block header time is objective chain truth — unlike the
- * device clock the zigner stamps at import (`synced_at`), which can drift — so
+ * map key 7 (uint). The block header time is objective chain truth - unlike the
+ * device clock the zigner stamps at import (`synced_at`), which can drift - so
  * the cold device can render "as of block N" toggleable with that block's real
  * date without any network access it doesn't have.
  *
@@ -1548,8 +1547,7 @@ const resolveAnchorHeight = async (walletId: string, tipHeight: number): Promise
  * ships without a wasm rebuild and an older zigner ignores it harmlessly.
  *
  * The bundle's outer map header is a single byte (`0xa0 | len`, len ≤ 7), so we
- * bump it by one and append `07 1a <u32 BE>` (CBOR uint key 7 + 4-byte uint —
- * unix seconds fit u32 until 2106).
+ * bump it by one and append `07 1a <u32 BE>` (CBOR uint key 7 + 4-byte uint - * unix seconds fit u32 until 2106).
  */
 const appendCborAnchorTime = (cbor: Uint8Array, unixSeconds: number): Uint8Array => {
   const t = Math.max(0, Math.floor(unixSeconds));
@@ -1584,7 +1582,7 @@ const FRONTIER_SNAPSHOT_INTERVAL = 5_000;
  *
  * Left at 200 deliberately. Measured against zcash.rotko.net, serial
  * throughput barely moves with batch size (205 blocks/s at 200, 265 at 1000)
- * and at the depths we actually use it is a wash — the server is per-request
+ * and at the depths we actually use it is a wash - the server is per-request
  * latency bound, not per-block. 200 keeps the cost of discarding a batch on
  * reorg/abort small, keeps peak worker memory at depth * ~110KB, and keeps
  * sync-progress updates frequent.
@@ -1599,7 +1597,7 @@ const SYNC_BATCH_SIZE = 200;
  *
  * Browsers multiplex a single HTTP/2 connection per origin, which is what
  * flattens this. A later measurement reached 544-627 blocks/s at depth 8-12,
- * but that ran under node's undici, which pools HTTP/1.1 connections — so it
+ * but that ran under node's undici, which pools HTTP/1.1 connections - so it
  * measured multi-connection fan-out, not depth. Unlocking that region needs
  * batches sharded across 2-3 hostnames onto the same anycast edge, NOT a
  * bigger number here.
@@ -1609,7 +1607,7 @@ const SYNC_BATCH_SIZE = 200;
  *
  * The real ceiling is upstream of all of this: zidecar spends ~7.5ms per
  * block serving a range (1.6s for 200 blocks, 88ms TTFB), so the client is
- * pipelining around server-side work. See docs — the fix there is an
+ * pipelining around server-side work. See docs - the fix there is an
  * append-only action log, not a client change.
  */
 const SYNC_PREFETCH_DEPTH = 6;
@@ -1669,7 +1667,7 @@ interface IronwoodBatchMeta {
  * "is this spent?" for every unspent orchard note, so an orchard spend is
  * noticed on the next tick regardless of which blocks get scanned.
  *
- * Ironwood has no such oracle — the NOMT nullifier tree is orchard-only — so
+ * Ironwood has no such oracle - the NOMT nullifier tree is orchard-only - so
  * its only spend signal is the scan-time nullifier match in runSync, which
  * fires only while walking the block that contains the spend. A wallet that
  * was already synced when it sent is *past* that block and never revisits it,
@@ -1678,7 +1676,7 @@ interface IronwoodBatchMeta {
  *
  * We know exactly which notes we spent, so record it at broadcast. Worst case
  * the transaction never mines and the note is wrongly held back, which the
- * mempool/reorg path already has to handle — strictly safer than the reverse,
+ * mempool/reorg path already has to handle - strictly safer than the reverse,
  * which is double-spending a note we believe is still ours.
  */
 const markNotesSpentLocally = async (
@@ -1729,7 +1727,7 @@ const markNotesSpentLocally = async (
     await txComplete(tx);
   } catch (e) {
     // Roll the in-memory marks back so memory cannot claim a durability the
-    // store does not have — better to re-detect the spend on the next scan
+    // store does not have - better to re-detect the spend on the next scan
     // than to believe a write that never landed.
     for (const nf of nullifiers) {
       state.spentNullifiers.delete(nf);
@@ -1842,20 +1840,20 @@ const saveBatch = async (
 // ── wasm ──
 
 // Every message handler starts with `await initWasm()`, and the handlers run
-// concurrently — network-worker sends `init` and the first real command back to
+// concurrently - network-worker sends `init` and the first real command back to
 // back. A bare `if (wasmModule) return` guard does not survive that: both calls
 // see `null` and both initialize the SAME wasm instance. The second
 // `initThreadPool` then throws, gets swallowed by the fallback below, and
 // scanning drops to one core for the life of the worker. `once` shares the
 // in-flight promise so the initializer runs exactly once.
 const initWasm = once(async (): Promise<void> => {
-  // @ts-expect-error — dynamic import in worker
+  // @ts-expect-error - dynamic import in worker
   const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm/zafu_wasm.js');
   await wasm.default({ module_or_path: '/zafu-wasm/zafu_wasm_bg.wasm' });
   wasm.init();
 
   // Rayon thread pool. scan_actions_parallel is only actually parallel once a
-  // pool exists — without it rayon runs sequentially, so trial decryption was
+  // pool exists - without it rayon runs sequentially, so trial decryption was
   // using ONE core no matter how many the machine has. The offscreen prover
   // has always done this; the scan worker never did.
   //
@@ -1920,7 +1918,7 @@ const initWasm = once(async (): Promise<void> => {
  *
  * zidecar echoes the txid in its SendResponse, so we trust it there. Public
  * lightwalletd's standard SendResponse has no txid field, so we derive the
- * canonical ZIP-244 txid locally from the signed tx bytes — the same value
+ * canonical ZIP-244 txid locally from the signed tx bytes - the same value
  * zidecar computes server-side and the same bytes that appear as
  * `CompactTx.hash` during sync, so the optimistic outgoing record reconciles.
  */
@@ -1936,7 +1934,7 @@ const resolveBroadcastTxid = async (
   if (!wasmModule) {
     throw new Error('wasm not initialized for txid computation');
   }
-  // compute_txid returns INTERNAL (wire) byte order — the same bytes that
+  // compute_txid returns INTERNAL (wire) byte order - the same bytes that
   // appear as CompactTx.hash during sync. zidecar's SendResponse, by
   // contrast, echoes the DISPLAY-order txid, so without this reversal the
   // same wallet reported two different conventions depending on backend and
@@ -2016,7 +2014,7 @@ const pendingProveRequests = new Map<
 let proveRequestCounter = 0;
 
 const proveViaOffscreen = async (req: ZcashBuildRequest): Promise<unknown> => {
-  // web workers don't have chrome.runtime — relay through parent (network-worker/popup)
+  // web workers don't have chrome.runtime - relay through parent (network-worker/popup)
   // which has chrome APIs and can forward to service worker → offscreen document
   const id = `prove-${++proveRequestCounter}`;
   const { promise, resolve, reject } = Promise.withResolvers<unknown>();
@@ -2067,12 +2065,12 @@ const computeFee = (
 };
 
 /**
- * ZIP-317 fee for the NU6.3 turnstile migration — the one transaction that
+ * ZIP-317 fee for the NU6.3 turnstile migration - the one transaction that
  * spans TWO shielded bundles: orchard (the spends) and ironwood (the output).
  *
  * ZIP-317 counts logical actions as the SUM over bundles, and each non-empty
  * shielded bundle is padded to MIN_ORCHARD_ACTIONS for privacy (the orchard
- * bundle gains a dummy output, the ironwood bundle a dummy spend — which is
+ * bundle gains a dummy output, the ironwood bundle a dummy spend - which is
  * why the output-only ironwood bundle still needs an anchor).
  *
  * computeFee() above models a SINGLE bundle: it collapses the ironwood output
@@ -2109,7 +2107,7 @@ const ZIP317_TX_BYTES_PER_ACTION = 150;
  * NOT `n`. `ceil(148n/150) === n` only while `2n < 150`; at n = 75 the byte
  * total is exactly 11_100 = 74 * 150, so the true count is 74 and every count
  * from 75 up is strictly below `n`. Using `n` overpaid one marginal fee per
- * ~75 inputs — safe for consensus (nodes only reject UNDER-payment) but a
+ * ~75 inputs - safe for consensus (nodes only reject UNDER-payment) but a
  * wallet fingerprint on every large consolidation, since no ZIP-317-correct
  * wallet would pay it.
  *
@@ -2124,7 +2122,7 @@ const zip317TransparentActions = (nTInputs: number): number =>
  * ZIP-317 fee for a shielding transaction: one padded (2-action) shielded
  * bundle plus the transparent input side.
  *
- * Deliberately does NOT apply the user fee multiplier — the shielding paths
+ * Deliberately does NOT apply the user fee multiplier - the shielding paths
  * never did, and the wasm builder re-checks this exact number, so keeping it at
  * the conventional fee leaves the two in lockstep.
  */
@@ -2170,8 +2168,7 @@ const WITNESS_BATCH_SIZE = 1000;
 
 // Cap concurrent compact-block fetches. A from-corruption witness rebuild can
 // span ~150k blocks (150 batches); firing them all at once spikes worker memory
-// (every decoded payload held until .flat()) and can trip server stream limits —
-// and this runs on the witness-recovery path *during a send*, where a thrown
+// (every decoded payload held until .flat()) and can trip server stream limits - // and this runs on the witness-recovery path *during a send*, where a thrown
 // fetch leaves the user unable to broadcast. Bounded fan-out keeps the speed win
 // without the failure mode.
 const WITNESS_FETCH_CONCURRENCY = 12;
@@ -2213,7 +2210,7 @@ const fetchCompactBlocksRange = async (
 
   // build all batch ranges, then fetch them through a bounded pool.
   // gRPC/HTTP2 multiplexes over a single connection, but a deep rebuild can
-  // produce ~150 batches — capping in-flight requests keeps peak memory and
+  // produce ~150 batches - capping in-flight requests keeps peak memory and
   // server-side stream count in check.
   const ranges: [number, number][] = [];
   for (let s = start; s <= end; s += WITNESS_BATCH_SIZE) {
@@ -2320,7 +2317,7 @@ const backfillWitnesses = async (
   );
   const fetchSecs = ((performance.now() - fetchStart) / 1000).toFixed(1);
   console.log(
-    `[zcash-worker] backfill: fetch done in ${fetchSecs}s — ${compactBlocks.length} blocks, ${totalActions} actions`,
+    `[zcash-worker] backfill: fetch done in ${fetchSecs}s - ${compactBlocks.length} blocks, ${totalActions} actions`,
   );
   onProgress?.('backfill: blocks downloaded', `${compactBlocks.length} blocks in ${fetchSecs}s`);
 
@@ -2413,7 +2410,7 @@ const backfillWitnesses = async (
  *
  * Deliberately best-effort: a failure here must never fail a send that the
  * network has already accepted. The chain remains the authority on whether it
- * confirmed — this only preserves the details the chain cannot give back.
+ * confirmed - this only preserves the details the chain cannot give back.
  */
 const recordSentTx = async (rec: SentTxRecord): Promise<void> => {
   try {
@@ -2468,7 +2465,7 @@ const applyReconciliation = async (
  * ── cold-send continuity ──────────────────────────────────────────────────
  *
  * A hot send is one worker message: it selects the notes, builds, signs,
- * broadcasts, and — because everything it needs is still in scope — marks the
+ * broadcasts, and - because everything it needs is still in scope - marks the
  * inputs spent and writes the local `sent` record on the way out.
  *
  * A cold send (zigner / Keystone / Ledger / watch-only) is TWO messages with a
@@ -2486,7 +2483,7 @@ const applyReconciliation = async (
  * in-memory map.
  *
  * Consequences of getting this wrong are asymmetric, so the resolution is
- * deliberately conservative — see takeColdSend.
+ * deliberately conservative - see takeColdSend.
  */
 interface ColdSendContext {
   id: string;
@@ -2529,7 +2526,7 @@ const writeColdSends = async (walletId: string, list: ColdSendContext[]): Promis
 /**
  * Record what a cold build knows, and return the id the completion needs to
  * find it again. Best-effort: failing to stash must never fail a build the user
- * can still sign and broadcast — it only costs the bookkeeping below.
+ * can still sign and broadcast - it only costs the bookkeeping below.
  */
 const stashColdSend = async (
   walletId: string,
@@ -2581,7 +2578,7 @@ const takeColdSend = async (
  * The tail of a cold broadcast: mark the inputs spent and write the local
  * record, exactly as the hot paths do at the same point.
  *
- * Without this the flagship configuration — every cold signer — kept counting
+ * Without this the flagship configuration - every cold signer - kept counting
  * spent notes toward its balance until a rescan, re-offered them to the next
  * send, and lost the recipient / memo / fee for good, none of which the chain
  * can give back.
@@ -2636,7 +2633,7 @@ const finalizeColdBroadcast = async (
   }
 };
 
-/** Stored ironwood witness no longer matches the network tree — recoverable. */
+/** Stored ironwood witness no longer matches the network tree - recoverable. */
 class IronwoodWitnessDrift extends Error {
   constructor(height: number) {
     super(`ironwood witness drift at height ${height}`);
@@ -2728,7 +2725,7 @@ const buildWitnessesIronwood = async (
   }
 
   // The fast path is an OPTIMISATION, so a drifted witness must not fail the
-  // send — it must fall back to the slow replay. Ironwood witnesses live in
+  // send - it must fall back to the slow replay. Ironwood witnesses live in
   // their own IDB store which the reorg wipes never touch, so drift is not
   // exotic: a reorg leaves stale witnesses attached to real notes, and before
   // this the wallet showed a spendable balance it could never spend.
@@ -2998,7 +2995,7 @@ const buildWitnesses = async (
       walletId,
       [],
       [],
-      // don't rewind syncHeight — this is a spend-time update
+      // don't rewind syncHeight - this is a spend-time update
       Math.max(anchorHeight, await getSyncHeight(walletId)),
       newTreeSize,
       updated,
@@ -3008,7 +3005,7 @@ const buildWitnesses = async (
   }
 
   // Step 4: extract paths; cross-check witness root against network anchor.
-  // Snapshot witness bytes BEFORE the network call — the sync loop can advance note.witness_hex
+  // Snapshot witness bytes BEFORE the network call - the sync loop can advance note.witness_hex
   // past anchorHeight during any await, yielding a root that mismatches the historical anchor.
   const witnessSnap = new Map(notes.map(n => [n.nullifier, n.witness_hex]));
   const anchorTs = await client.getTreeState(anchorHeight);
@@ -3048,7 +3045,7 @@ const buildWitnesses = async (
       `[zcash-worker] witness root mismatch (recovering via backfill): note=${mismatchNote.slice(0, 8)} ` +
         `(anchor=${anchorHeight}, frontierHeight=${runningFrontierHeight}, rebootstrapped=${rebootstrapped})`,
     );
-    onProgress?.('witness corrupt — rebuilding', 'this takes ~3 min');
+    onProgress?.('witness corrupt - rebuilding', 'this takes ~3 min');
     for (const n of notes) {
       n.witness_hex = undefined;
       n.witness_tree_size = undefined;
@@ -3062,7 +3059,7 @@ const buildWitnesses = async (
       anchorHeight,
       onProgress,
     );
-    // Use byNullifier (set from WASM result before any await inside backfillWitnesses) — note.witness_hex
+    // Use byNullifier (set from WASM result before any await inside backfillWitnesses) - note.witness_hex
     // may have been fast-forwarded past anchorHeight by the sync loop by the time backfill returns.
     const backfillSnap = new Map(
       [...byNullifier.entries()].map(
@@ -3138,7 +3135,7 @@ const ACTION_EPHEMERAL_KEY_LEN = 32;
 /**
  * 52 bytes = compact note plaintext (ZIP-225 / NU5 Orchard):
  *   0x02 (version) || d (11) || v (8) || rseed (32)
- * The version byte is checked below — only 0x02 is supported until the
+ * The version byte is checked below - only 0x02 is supported until the
  * wallet learns about future variants (e.g. Orchard-ZSA at NU7).
  */
 const ACTION_COMPACT_CT_LEN = 52;
@@ -3187,7 +3184,7 @@ function handleMempoolSnapshot(
         a.cmx.length === ACTION_CMX_LEN &&
         a.ephemeralKey.length === ACTION_EPHEMERAL_KEY_LEN &&
         a.ciphertext.length >= ACTION_COMPACT_CT_LEN &&
-        // Orchard compact-note version byte — refuse forward-compat plaintexts
+        // Orchard compact-note version byte - refuse forward-compat plaintexts
         // (e.g. NU7/ZSA) until explicit support lands. Refusing is the safe
         // default; misinterpreting a different format would silently produce
         // bogus matches.
@@ -3198,7 +3195,7 @@ function handleMempoolSnapshot(
         continue;
       }
       if (valid.length >= MAX_MEMPOOL_ACTIONS) {
-        // Hard stop — log once per snapshot, don't continue inspecting.
+        // Hard stop - log once per snapshot, don't continue inspecting.
         console.warn(
           `[zcash-worker] mempool snapshot exceeded ${MAX_MEMPOOL_ACTIONS} actions; truncating`,
         );
@@ -3248,7 +3245,7 @@ function handleMempoolSnapshot(
     mempoolNullifiers.set(hexEncode(v.nullifier), v.txidHex);
   }
 
-  // `txid` on pendingIncoming is misleading — pre-confirmation we only have
+  // `txid` on pendingIncoming is misleading - pre-confirmation we only have
   // the note's cmx. The field carries that until the block scan can replace
   // it with a real txid. UI consumers must treat it as an opaque identifier,
   // not a transaction hash.
@@ -3315,7 +3312,7 @@ const runSync = async (
 
   const state = getOrCreateWalletState(walletId);
 
-  // abort existing sync if running — prevents concurrent loops
+  // abort existing sync if running - prevents concurrent loops
   if (state.syncing) {
     state.syncAbort = true;
     await waitForSyncStop(state);
@@ -3338,12 +3335,12 @@ const runSync = async (
   await loadState(walletId);
 
   const syncedHeight = await getSyncHeight(walletId);
-  // use whichever is higher — prevents re-scanning if chrome.storage was stale
+  // use whichever is higher - prevents re-scanning if chrome.storage was stale
   let currentHeight = Math.max(startHeight ?? 0, syncedHeight);
 
   const client = await makeZcashClient(serverUrl, backend);
   // Trustless proofs (Ligerito header proofs, NOMT nullifier proofs) only
-  // exist on zidecar. On lightwalletd we accept the indexer's word — the
+  // exist on zidecar. On lightwalletd we accept the indexer's word - the
   // UI surfaces this trust delta via the "trusted" badge.
   const trustless = backend === 'zidecar';
 
@@ -3358,7 +3355,7 @@ const runSync = async (
 
   // Bootstrap / repair the frontier if missing or stale relative to orchardTreeSize/currentHeight.
   // frontier_tree_size THROWS on a frontier it cannot parse, and this call sits
-  // before the first sync-progress emit — an unparseable stored frontier (or a
+  // before the first sync-progress emit - an unparseable stored frontier (or a
   // wasm instance left poisoned by an earlier panic) therefore killed runSync
   // outright and the wallet never reported a height again. An unreadable
   // frontier is exactly the "stale" case the rebootstrap below already handles.
@@ -3533,7 +3530,7 @@ const runSync = async (
   // rewind with an escalating distance (10 → 100 → 1000 blocks, because a
   // stale local tree can disagree over a far wider range than a one-block
   // reorg), at most MAX_REWINDS_PER_RUN times per run, logged at warn. Only
-  // once that budget is spent does the failure become visible — as
+  // once that budget is spent does the failure become visible - as
   // `chainRecovery`, never as the raw "tree root mismatch at height N".
   let rewindsThisRun = 0;
   // Never rewind below what this wallet was asked to scan from; there is
@@ -3584,7 +3581,7 @@ const runSync = async (
     );
 
     // Ironwood witnesses live in their own store, so clearing the field on
-    // the note record does not remove them — loadState() would re-attach the
+    // the note record does not remove them - loadState() would re-attach the
     // stale witness we just decided not to trust. Drop the rows outright;
     // they are rebuilt from the re-anchored frontier as the range re-scans.
     try {
@@ -3609,7 +3606,7 @@ const runSync = async (
     }
 
     // Re-scanning a range re-pushes the notes it finds onto `state.notes`,
-    // which is a plain array — leaving the already-known ones in place would
+    // which is a plain array - leaving the already-known ones in place would
     // double-count them in the balance. Notes at or below the rewind point
     // are untouched; the ones above come back as the range is read again
     // (IndexedDB keeps its copy either way, keyed by nullifier).
@@ -3621,7 +3618,7 @@ const runSync = async (
   // The actions commitment fold is only sound (and only equal to the server's
   // proven value) when this wallet's sync has covered the chain from genesis.
   // A birthday/import start (startHeight > 0) folds from a non-genesis seed,
-  // so the verify step must be skipped for those wallets — see verifySyncProofs.
+  // so the verify step must be skipped for those wallets - see verifySyncProofs.
   const actionsGenesisAnchored = (startHeight ?? 0) === 0;
   // notes found since last header proof verification
   const pendingCmxs: Uint8Array[] = [];
@@ -3629,7 +3626,7 @@ const runSync = async (
   // Pool of real, on-chain (cmx, position) pairs observed while scanning, used
   // to pad the commitment-proof query with decoys that are indistinguishable
   // from our own notes. Drawn from the same block range we just walked, which
-  // is where the real notes are — decoys sampled uniformly over all of chain
+  // is where the real notes are - decoys sampled uniformly over all of chain
   // history would cluster in the wrong era and be separable on that alone.
   const decoyPool = new CommitmentReservoir();
 
@@ -3784,7 +3781,7 @@ const runSync = async (
             if (localRoot !== netRoot) {
               console.warn(
                 `[zcash-worker] local frontier diverged from network at catch-up ${currentHeight} ` +
-                  `(local=${localRoot.slice(0, 16)} net=${netRoot.slice(0, 16)}) — wiping witnesses`,
+                  `(local=${localRoot.slice(0, 16)} net=${netRoot.slice(0, 16)}) - wiping witnesses`,
               );
               runningFrontier = syncTs.orchardTree;
               runningFrontierHeight = currentHeight;
@@ -3872,7 +3869,7 @@ const runSync = async (
             } else if (ironwoodFrontier) {
               // diverged (reorg / drift): drop ironwood witnesses and re-anchor
               console.warn(
-                `[zcash-worker] ironwood frontier diverged from network at catch-up ${currentHeight} — wiping witnesses`,
+                `[zcash-worker] ironwood frontier diverged from network at catch-up ${currentHeight} - wiping witnesses`,
               );
               ironwoodFrontier = syncTs.ironwoodTree;
               ironwoodFrontierHeight = currentHeight;
@@ -3959,7 +3956,7 @@ const runSync = async (
           console.warn('[zcash-worker] failed to cache tree frontier:', e);
         }
 
-        // Verify proofs whenever the backend supports it — NOT only when this
+        // Verify proofs whenever the backend supports it - NOT only when this
         // batch happened to discover a new orchard note.
         //
         // pendingCmxs is appended to only by the orchard discovery loop, so
@@ -3973,7 +3970,7 @@ const runSync = async (
         // pendingCmxs, so this only widens what was already conditional.
         if (trustless && zyncModule) {
           try {
-            // seed failure must not silently drop the padding — if we cannot
+            // seed failure must not silently drop the padding - if we cannot
             // load it we would send bare queries, which is the leak this is
             // here to close. skip the verification round instead.
             const decoySeed = await getDecoySeed(walletId);
@@ -3995,13 +3992,13 @@ const runSync = async (
             // Two different kinds of failure land here and they are NOT the
             // same thing:
             //
-            //   SOUND — comparisons taken at ONE instant, where a mismatch
+            //   SOUND - comparisons taken at ONE instant, where a mismatch
             //   means the server contradicted itself: a proof that does not
             //   bind to the batch root we checked, a proof for something we
             //   never asked about, a duplicate, or a wrong count. These are
             //   real evidence and must refuse.
             //
-            //   RACY — comparisons between a SNAPSHOT and a LIVE value. The
+            //   RACY - comparisons between a SNAPSHOT and a LIVE value. The
             //   NOMT tree is mutable and single-versioned: proofs are made
             //   against nomt.root() at request time while the ligerito header
             //   proof carries a root from whenever it was last generated, and
@@ -4060,14 +4057,14 @@ const runSync = async (
       prefetcher.prime(currentHeight, chainHeight);
       const batch = await prefetcher.next();
       if (!batch) {
-        // aborted, or nothing left below the tip — the loop condition and the
+        // aborted, or nothing left below the tip - the loop condition and the
         // caught-up branch above handle both on the next pass
         continue;
       }
       const { blocks, end: endHeight } = batch;
       console.log(`[zcash-worker] blocks ${batch.start}..${endHeight}`);
 
-      // Guard: lightwalletd may race between getTip() and block indexing — if the
+      // Guard: lightwalletd may race between getTip() and block indexing - if the
       // server reported a height but returned zero blocks, don't advance currentHeight.
       // The next iteration will retry once the server catches up. The prefetcher
       // has already dropped its look-ahead (it was aimed past a range the server
@@ -4230,7 +4227,7 @@ const runSync = async (
         //  1. a spend seen for the first time here;
         //  2. a spend we already marked locally at broadcast (its nullifier is
         //     already in spentNullifiers) whose CONFIRMATION HEIGHT we never
-        //     recorded — because this loop used to skip already-marked notes.
+        //     recorded - because this loop used to skip already-marked notes.
         //     markNotesSpentLocally sets spent_by_txid but has no height to give,
         //     so without backfilling it here spent_at_height stays 0, the send's
         //     chain-derived entry gets height 0, and reconcile (which confirms
@@ -4588,7 +4585,7 @@ const runSync = async (
             if (localRoot !== netRoot) {
               console.warn(
                 `[zcash-worker] local frontier diverged from network at snapshot ${currentHeight} ` +
-                  `(local=${localRoot.slice(0, 16)} net=${netRoot.slice(0, 16)}) — likely reorg; resetting witnesses`,
+                  `(local=${localRoot.slice(0, 16)} net=${netRoot.slice(0, 16)}) - likely reorg; resetting witnesses`,
               );
               runningFrontier = snapshotTs.orchardTree;
               runningFrontierHeight = currentHeight;
@@ -4759,13 +4756,13 @@ const runSync = async (
   // The loop can exit on its own (10 consecutive errors) with nobody having
   // sent 'stop-sync'. Without this the main thread's syncingWallets set keeps
   // the wallet listed as syncing forever and the auto-sync hook never
-  // restarts it — a wallet that has silently stopped scanning looks exactly
+  // restarts it - a wallet that has silently stopped scanning looks exactly
   // like one that is up to date.
   workerSelf.postMessage({ type: 'sync-stopped', id: '', network: 'zcash', walletId });
 };
 
 const getBalance = async (walletId: string): Promise<bigint> => {
-  // always load from IDB — in-memory state may be stale after rescan
+  // always load from IDB - in-memory state may be stale after rescan
   const state = await loadState(walletId);
   let balance = 0n;
   for (const note of state.notes) {
@@ -4780,13 +4777,13 @@ const getBalance = async (walletId: string): Promise<bigint> => {
 interface PoolBalances {
   orchard: bigint;
   ironwood: bigint;
-  /** orchard + ironwood — the same total getBalance() returns */
+  /** orchard + ironwood - the same total getBalance() returns */
   total: bigint;
   /**
    * Pending shielded change: value our own broadcast-but-unconfirmed sends will
    * return to us once they mine (upstream change_pending_confirmation). The
    * input notes are marked spent locally at broadcast, which drops `total` to
-   * zero while the change note has not mined yet — correct, but it made the
+   * zero while the change note has not mined yet - correct, but it made the
    * wallet read as empty (all pools 0, "get your first zec") with money in
    * flight. These figures keep that value visible and are NOT spendable.
    * pendingIronwood additionally carries a pending turnstile migration's
@@ -4835,7 +4832,7 @@ const getPoolBalances = async (walletId: string): Promise<PoolBalances> => {
   //
   // A turnstile migration (kind === 'migrate') is special: its orchard inputs
   // are marked spent at broadcast (orchard → 0) but nothing actually leaves the
-  // wallet except the fee — the value moves to the wallet's OWN ironwood pool
+  // wallet except the fee - the value moves to the wallet's OWN ironwood pool
   // and returns as an ironwood output once mined. Attribute its whole in-flight
   // value (rec.amount, already inputs − fee) to pendingIronwood so the hero
   // total stays whole through the confirmation window instead of reading ~0.
@@ -4863,7 +4860,7 @@ const getPoolBalances = async (walletId: string): Promise<PoolBalances> => {
         if (!inp) {
           continue;
         }
-        // A pending migrate's value is not leaving the wallet — it is moving
+        // A pending migrate's value is not leaving the wallet - it is moving
         // orchard → the wallet's own ironwood pool. rec.amount is the ironwood
         // output (inputs − fee); count it as arriving ironwood so the hero total
         // stays whole. The kind check must precede the generic send math: that
@@ -4949,7 +4946,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         };
         // Defensive: validate enum values from cross-context payload.
         // Silent coercion of an unknown backend to 'zidecar' is a privacy
-        // regression — a user configured to talk to a third-party
+        // regression - a user configured to talk to a third-party
         // lightwalletd would end up hitting the trustless code path (with
         // its zidecar-only RPCs) and either fail loudly OR, worse, succeed
         // against a server that happens to implement those endpoints with
@@ -5102,7 +5099,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           throw new Error('walletId required');
         }
         // The balance panel needs to know what is in flight, and it needs to
-        // know cheaply — get-history fetches transparent history over the
+        // know cheaply - get-history fetches transparent history over the
         // network, which is far too heavy to run on every sync tick. This
         // answers the same question from local state only: which of our
         // recorded sends has the chain not confirmed yet.
@@ -5233,7 +5230,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // replay"). Split by pool and export one pool per bundle; when both hold
         // value (mid-migration), export the larger and disclose the remainder
         // rather than silently dropping it (a single-anchor bundle cannot verify
-        // two trees — dual-pool export needs a v2 bundle format).
+        // two trees - dual-pool export needs a v2 bundle format).
         const orchardNotes = allUnspent.filter(n => poolOf(n) === 'orchard');
         const ironwoodNotes = allUnspent.filter(n => poolOf(n) === 'ironwood');
         const sumBalance = (ns: DecryptedNote[]) =>
@@ -5255,7 +5252,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const excludedBalance = exportPool === 'ironwood' ? orchardBalance : ironwoodBalance;
 
         // anchor where the witnesses are rooted (that pool's cached frontier),
-        // not the newest note's height — otherwise the cross-check root won't
+        // not the newest note's height - otherwise the cross-check root won't
         // match. Each pool has its own frontier meta; the ironwood anchor MUST
         // come from the ironwood frontier or the ironwood tree-state fetch /
         // drift-check downstream will fail.
@@ -5265,7 +5262,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             ? (await getIronwoodTreeFrontierHeight(walletId)) || newestSelectedHeight
             : await resolveAnchorHeight(walletId, newestSelectedHeight);
 
-        // build merkle witnesses — use the backend-aware client (zidecar/
+        // build merkle witnesses - use the backend-aware client (zidecar/
         // lightwalletd) instead of a hardcoded zidecar REST shape, so export
         // works on any backend the wallet synced against.
         const client = await makeZcashClient(syncServerUrl);
@@ -5302,9 +5299,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // tree-state during witness building, so it isn't arbitrary.
         // Attestation is orchard-only for now: zidecar's SignAnchor verifies the
         // anchor against its orchard tree-state, so an ironwood anchor would not
-        // match and returns unavailable. Ironwood bundles ship unattested — fine
+        // match and returns unavailable. Ironwood bundles ship unattested - fine
         // for the non-FROST devices this flow targets. (A FROST device syncing
-        // ironwood notes would need a zidecar ironwood-tree verifier — future.)
+        // ironwood notes would need a zidecar ironwood-tree verifier - future.)
         let attestationHex: string | null = null;
         if (exportPool === 'orchard' && lookupBackend(syncServerUrl) === 'zidecar') {
           try {
@@ -5354,7 +5351,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         // encode to QR frames via zoda transport (verified erasure coding).
         // auto-size k/n to the payload so each hex-encoded `zt:` frame fits a
-        // scannable QR — a fixed 12-of-16 overflows the QR for large note sets
+        // scannable QR - a fixed 12-of-16 overflows the QR for large note sets
         // (each shard ~payload/k, hex-doubled). 300 raw bytes/frame ≈ 0.6KB QR
         // string (~v15 at ECC-L) keeps each frame light enough to lock fast on
         // the zigner camera (denser frames scan slowly); 30% parity so the
@@ -5377,7 +5374,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             cborBytes: cborBytes.length,
             pool: exportPool,
             // when the wallet straddles both pools, the zigner bundle can only
-            // carry one — tell the UI what was left out so it doesn't imply the
+            // carry one - tell the UI what was left out so it doesn't imply the
             // synced balance is the wallet's whole spendable balance.
             excludedPool: excludedNotes.length > 0 ? excludedPool : undefined,
             excludedNoteCount: excludedNotes.length,
@@ -5578,7 +5575,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               amount = inputTotal - info.changeValue;
             } else {
               // No input total. histSpentByMap is keyed on note.spent_by_txid,
-              // which the NOMT nullifier ORACLE never sets — it adds the
+              // which the NOMT nullifier ORACLE never sets - it adds the
               // nullifier to spentNullifiers with no txid. So any spend
               // detected by proof rather than by a scan-time nullifier match
               // lands here (classic case: the same seed used on another device,
@@ -5615,7 +5612,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // The input total is NOT the amount sent. Spending a 355,000 zat note to
         // pay 50,000 returns 290,000 as change, and the wallet is 65,000 poorer.
         // This branch used to publish the gross input total as the amount, which
-        // is only correct when there genuinely was no change — and we cannot tell
+        // is only correct when there genuinely was no change - and we cannot tell
         // the two apart until the block holding the change has been scanned.
         // (Worse for a turnstile migration, where orchard inputs produce ironwood
         // change that a separate scan pass discovers later still.)
@@ -5623,7 +5620,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // So: report it as an upper bound unless we have actually walked the
         // block that spent it and found no change coming back. Where a local
         // record exists, reconciliation replaces this figure with the exact one
-        // anyway — this is the honest fallback for sends we did not record.
+        // anyway - this is the honest fallback for sends we did not record.
         const histScannedHeight = await getSyncHeight(walletId);
         for (const [txid, { value: inputTotal, height: spentHeight }] of histSpentByMap) {
           if (!histTxMap.has(txid)) {
@@ -5642,7 +5639,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // merge transparent history
         const seenTxids = new Map(histTxs.map((tx, i) => [tx.id, i]));
         // Transactions WE sent, so a transparent output of ours is change
-        // coming back — not income.
+        // coming back - not income.
         //
         // parseTransparentTx only sums outputs matching our scripts; the
         // comment there concedes inputs carry no value, so a t->t or z->t
@@ -5659,7 +5656,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           const ownSent = await idbGetAllByIndex<SentTxRecord>('sent', 'byWallet', walletId);
           ownSentTxids = new Set(ownSent.map(s => s.txid));
         } catch {
-          // best effort — a missing record must not break history
+          // best effort - a missing record must not break history
         }
 
         for (const tTx of tHistory) {
@@ -5690,7 +5687,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // so scanning recovers a send only via OVK decryption and never
         // recovers the recipient/memo the user actually chose.
         //
-        // Reconciliation — not a naive merge. The earlier merge skipped any
+        // Reconciliation - not a naive merge. The earlier merge skipped any
         // txid already present in the chain-derived list, but that list gets an
         // entry for our own send the moment we broadcast, because
         // markNotesSpentLocally records the inputs we spent. That entry has no
@@ -5916,7 +5913,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const memoClient = await makeZcashClient(memoServerUrl);
         const { height: currentTip } = await memoClient.getTip();
 
-        // estimate block time from tip (no per-height GetBlock calls — preserves bucket privacy)
+        // estimate block time from tip (no per-height GetBlock calls - preserves bucket privacy)
         const tipTimeMs = Date.now();
         const estimateBlockTimeMs = (h: number): number => tipTimeMs + (h - currentTip) * 75000;
 
@@ -5938,7 +5935,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         // ── consume the async iterable; decode memos from each yielded bucket ──
         // progress: the base fetcher knows the post-cache, post-decoy total and
-        // calls ctx.onProgress with accurate (completed, total) — we just
+        // calls ctx.onProgress with accurate (completed, total) - we just
         // forward those values to the UI.
         const results: {
           txId: string;
@@ -6620,7 +6617,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       // Mirrors `send-tx` for the unsigned-build phase, but emits a real
       // pczt::Pczt::serialize() byte stream instead of [sighash][alphas][summary].
       // The cold device verifies note inclusion + value consistency before
-      // signing, and recomputes the sighash from the PCZT contents — so
+      // signing, and recomputes the sighash from the PCZT contents - so
       // display and signed bytes are bound by construction.
 
       case 'send-tx-pczt': {
@@ -6656,7 +6653,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         // Mirror send-tx note selection / witness build. Inlined rather than
         // factored out because send-tx's variant has interleaved emitProgress
-        // calls and a fee-recompute loop that we want to keep verbatim — and
+        // calls and a fee-recompute loop that we want to keep verbatim - and
         // because the pczt builder's only meaningful difference from
         // build_unsigned_transaction is the output format, not the inputs.
         let memoHex: string | null = null;
@@ -6979,7 +6976,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // Use the live chain tip we just fetched for the merkle anchor as
         // the builder's target_height. The popup may pass a hint via
         // `sendPayload.targetHeight` for offline / advanced flows but the
-        // tip we have in hand is authoritative — branch_id derivation
+        // tip we have in hand is authoritative - branch_id derivation
         // depends on `(network, height)` and using a stale value (e.g.
         // hardcoded constant) risks producing txs the network rejects on
         // testnet where activation heights diverge from mainnet.
@@ -7004,7 +7001,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           pczt_hex: string;
           summary: string;
           action_count: number;
-          // FROST multisig fields (additive — zigner cold-sign ignores them)
+          // FROST multisig fields (additive - zigner cold-sign ignores them)
           sighash: string;
           alphas: string[];
           spend_indices: number[];
@@ -7109,7 +7106,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           coldSendId?: string;
         };
 
-        // TransactionExtractor reconstructs the canonical v5 tx — collects all
+        // TransactionExtractor reconstructs the canonical v5 tx - collects all
         // spend auth sigs from the signed PCZT, validates the proof, and emits
         // a broadcast-ready transaction. No manual offset-patching as in the
         // legacy `complete_transaction` path.
@@ -7346,7 +7343,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // The migration spends EVERY orchard note. Both send paths mark
           // their inputs spent at broadcast; this one did not, so for the
           // whole confirmation window the wallet still counted the migrated
-          // orchard balance as spendable — and the fail-closed guard only
+          // orchard balance as spendable - and the fail-closed guard only
           // fires when ironwood notes are absent, so a second migration
           // launched in that window would build a conflicting spend of the
           // same notes.
@@ -7427,7 +7424,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         emitProgress('turnstile PCZT QR ready', `${migrateUrFrames.length} frames`);
 
         // The migration spends EVERY orchard note, so a completion that does
-        // not mark them leaves the whole legacy balance looking spendable — and
+        // not mark them leaves the whole legacy balance looking spendable - and
         // a second migration launched in that window builds a conflicting
         // spend. The hot branch above already does this; see ColdSendContext.
         const migrateColdSendId = await stashColdSend(walletId, {
@@ -8166,7 +8163,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             alphaHex: string;
             commitments: string;
           };
-        // signed variant — coordinator (zafu/poker-escrow) extracts signer identifier from VK
+        // signed variant - coordinator (zafu/poker-escrow) extracts signer identifier from VK
         const result = wasmModule!.frost_spend_sign_round2_signed(
           ephemeralSeedHex,
           keyPackageHex,

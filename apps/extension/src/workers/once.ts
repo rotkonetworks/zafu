@@ -5,7 +5,7 @@
  * only set after the await chain finishes, so two messages arriving in the same
  * tick both see `null` and both run the initializer. For a wasm-bindgen module
  * that means `wasm.default()` runs twice on one instance and `initThreadPool()`
- * is called a second time — which throws `unwrap_throw() on an Err value`, is
+ * is called a second time - which throws `unwrap_throw() on an Err value`, is
  * caught by the "degrade to sequential" handler, and silently leaves scanning
  * single-threaded. The re-init also detaches the live memory views, which
  * surfaces later as `RuntimeError: memory access out of bounds`.

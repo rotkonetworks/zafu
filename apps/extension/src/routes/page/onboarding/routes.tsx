@@ -24,7 +24,7 @@ const OnboardingSuccess = lazy(() =>
 
 /**
  * Skeleton placeholder used while a lazy route bundle is fetched. Avoids
- * the spinner because spinners advertise "we're slow" — a skeleton with
+ * the spinner because spinners advertise "we're slow" - a skeleton with
  * the same geometry as the real content feels faster even though the
  * wall-clock latency is identical. Pure CSS, no JS animation cost.
  */

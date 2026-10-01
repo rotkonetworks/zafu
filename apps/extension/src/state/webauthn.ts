@@ -1,8 +1,8 @@
 /**
- * webauthn authenticator — builds credential responses from ZID-derived P-256 keys.
+ * webauthn authenticator - builds credential responses from ZID-derived P-256 keys.
  *
  * uses the non-rotating passkey derivation path (not ZID rotation).
- * passkeys are long-lived — rotation would lock users out.
+ * passkeys are long-lived - rotation would lock users out.
  *
  * supports:
  * - credential creation (navigator.credentials.create)
@@ -30,7 +30,7 @@ const FLAGS = {
 
 /**
  * credential ID = "zafu:" + SHA-256(rpId)[:8]
- * deterministic — same rpId always produces the same credential ID.
+ * deterministic - same rpId always produces the same credential ID.
  * no rotation encoded (passkeys don't rotate).
  */
 export function buildCredentialId(rpId: string): Uint8Array {
@@ -140,7 +140,7 @@ export function createCredential(
 /**
  * sign a WebAuthn assertion.
  *
- * clientDataHash = SHA-256(clientDataJSON) — provided by the browser.
+ * clientDataHash = SHA-256(clientDataJSON) - provided by the browser.
  * we sign: authData || clientDataHash (p256.sign hashes internally with SHA-256).
  */
 export function signAssertion(
@@ -159,7 +159,7 @@ export function signAssertion(
   const ad = authData(rpIdHash, flags, 0);
 
   // message to sign: authData || clientDataHash
-  // p256.sign handles SHA-256 internally — do NOT pre-hash
+  // p256.sign handles SHA-256 internally - do NOT pre-hash
   const message = new Uint8Array(ad.length + clientDataHash.length);
   message.set(ad, 0);
   message.set(clientDataHash, ad.length);

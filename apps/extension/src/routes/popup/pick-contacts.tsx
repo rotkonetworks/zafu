@@ -1,5 +1,5 @@
 /**
- * Contact picker popup — opened by external apps via zafu_pick_contacts.
+ * Contact picker popup - opened by external apps via zafu_pick_contacts.
  *
  * Shows the user's contacts. User selects who to share.
  * Returns app-scoped opaque handles (SHA-256), never real pubkeys.

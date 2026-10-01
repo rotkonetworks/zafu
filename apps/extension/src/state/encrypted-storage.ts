@@ -31,7 +31,7 @@ async function getKey(session: ExtensionStorage<SessionStorageState>): Promise<K
 }
 
 /**
- * hydration gate — prevents writeEncrypted from overwriting storage
+ * hydration gate - prevents writeEncrypted from overwriting storage
  * before readEncrypted has loaded the existing data. without this,
  * a persist() call during startup can wipe contacts/wallets with [].
  */
@@ -102,7 +102,7 @@ export async function writeEncrypted(
   storageKey: keyof LocalStorageState,
   data: unknown,
 ): Promise<boolean> {
-  // wait for hydration to complete before writing — prevents overwriting
+  // wait for hydration to complete before writing - prevents overwriting
   // existing encrypted data with empty/partial in-memory state during startup
   await waitForHydration();
 
@@ -149,8 +149,8 @@ export const isEncryptedKey = (key: string): boolean => ENCRYPTED_KEYS.has(key);
  * `local` handle (state/index.ts). UI code that reaches for `localExtStorage`
  * directly bypasses it completely, and writes the value in the clear even
  * though the key is listed in ENCRYPTED_KEYS. That is how
- * `diversifiedAddresses` — the user's payment-referral graph, mapping
- * contact names to the diversified addresses handed to them — came to be
+ * `diversifiedAddresses` - the user's payment-referral graph, mapping
+ * contact names to the diversified addresses handed to them - came to be
  * stored unencrypted despite being declared encrypted.
  *
  * The migration matters: `readEncrypted` returns null for an unwrapped
@@ -172,7 +172,7 @@ export async function readEncryptedWithMigration<T>(
   if (isEncryptedWrapper(raw)) {
     return readEncrypted<T>(local, session, storageKey);
   }
-  // legacy plaintext — seal it now, if we can.
+  // legacy plaintext - seal it now, if we can.
   const key = await getKey(session);
   if (!key) {
     return null;

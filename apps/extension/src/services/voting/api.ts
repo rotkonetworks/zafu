@@ -1,5 +1,5 @@
 /**
- * Zcash coinholder voting — read-only API, functional style.
+ * Zcash coinholder voting - read-only API, functional style.
  *
  * No classes, no shared mutable state: every function takes its inputs
  * and returns data. Failover across vote servers is a fold over the
@@ -9,8 +9,7 @@
  *   - the static config is integrity-pinned (commit-locked URL + sha256)
  *   - rounds are cross-checked against the pinned dynamic config's
  *     rounds map (`inConfig`); unlisted rounds render with a warning
- *   - per-round ed25519 authenticator signatures are NOT yet verified —
- *     that lands with the phase-2 cast flow where it actually gates
+ *   - per-round ed25519 authenticator signatures are NOT yet verified - *     that lands with the phase-2 cast flow where it actually gates
  *     spending-adjacent actions. Display-only data is bounded by the
  *     pinned config's server list.
  */

@@ -2,7 +2,7 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 
 const PENUMBRA_DB_PREFIX = 'viewdata/penumbra';
 // 'zafu-memo-cache' used to be listed here and in four other clear paths.
-// No such database has ever existed — the memo cache is the 'memo-cache'
+// No such database has ever existed - the memo cache is the 'memo-cache'
 // OBJECT STORE inside 'zafu-zcash' (see zcash-worker.ts). Deleting a
 // non-existent database succeeds silently, so all five call sites looked
 // like they were clearing the memo cache and were clearing nothing. The
@@ -100,7 +100,7 @@ const clearZcashSyncCache = (name: string): Promise<void> =>
  * Delete the zcash databases and WAIT for the result.
  *
  * Callers must terminate the zcash worker first. An open connection does not
- * make `deleteDatabase` fail — it fires `onblocked` and never completes — so
+ * make `deleteDatabase` fail - it fires `onblocked` and never completes - so
  * a fire-and-forget delete is indistinguishable from a successful one. This
  * resolves either way but logs loudly when the data was not actually
  * removed, which is the case a user clearing their wallet needs to know

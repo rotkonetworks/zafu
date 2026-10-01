@@ -1,7 +1,7 @@
 /**
  * Batch FROST multisig backup. Single passphrase encrypts every
  * self-custody multisig share into one file. Airgap wallets are listed
- * but not included — those are exported from zigner.
+ * but not included - those are exported from zigner.
  */
 
 import { useState } from 'react';

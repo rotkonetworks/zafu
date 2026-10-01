@@ -24,7 +24,7 @@ export interface ZcashWalletJson {
   transparentAddress?: string;
   /** vault ID this wallet belongs to */
   vaultId: string;
-  /** FROST multisig fields — present only for multisig wallets */
+  /** FROST multisig fields - present only for multisig wallets */
   multisig?: {
     /** hex-encoded FROST public key package (shared, non-sensitive) */
     publicKeyPackage: string;
@@ -37,9 +37,9 @@ export interface ZcashWalletJson {
     /** where the FROST share lives. undefined / 'self' = encrypted on zafu;
      * 'airgapSigner' = on a zigner device only, signing requires QR round-trip */
     custody?: 'self' | 'airgapSigner';
-    /** FROST key package — present only for self-custody wallets */
+    /** FROST key package - present only for self-custody wallets */
     keyPackage?: BoxJson | string;
-    /** ephemeral seed — present only for self-custody wallets */
+    /** ephemeral seed - present only for self-custody wallets */
     ephemeralSeed?: BoxJson | string;
     /** zigner-side wallet_id from frost_store_wallet (airgapSigner only).
      *  enables O(1) lookup at sign time vs scanning all FROST wallets. */
@@ -336,13 +336,13 @@ export const selectMultisigWallets = (state: AllSlices) => {
   const wallets = Array.isArray(state.wallets.zcashWallets) ? state.wallets.zcashWallets : [];
   return wallets.filter(w => w.multisig);
 };
-/** like selectMultisigWallets but drops hidden=true — use for user-facing lists, NOT backup/dedupe */
+/** like selectMultisigWallets but drops hidden=true - use for user-facing lists, NOT backup/dedupe */
 export const selectVisibleMultisigWallets = (state: AllSlices) => {
   const wallets = Array.isArray(state.wallets.zcashWallets) ? state.wallets.zcashWallets : [];
   return wallets.filter(w => w.multisig && !w.multisig.hidden);
 };
 /** app-managed tables = multisig AND hidden (the poker tables the dedicated manager owns). Feed for
- *  the manager's TableView only — NOT for backup/dedupe (that needs the unfiltered set). */
+ *  the manager's TableView only - NOT for backup/dedupe (that needs the unfiltered set). */
 export const selectAppManagedMultisigWallets = (state: AllSlices) => {
   const wallets = Array.isArray(state.wallets.zcashWallets) ? state.wallets.zcashWallets : [];
   return wallets.filter(w => w.multisig && w.multisig.hidden);

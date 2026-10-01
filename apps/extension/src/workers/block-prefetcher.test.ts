@@ -120,7 +120,7 @@ describe('BlockPrefetcher', () => {
     p.prime(0, 10_000);
 
     const inflight = p.next();
-    // the batch lands *after* the user stops the sync — the classic
+    // the batch lands *after* the user stops the sync - the classic
     // apply-after-abort window
     aborted = true;
     pending.get(1)!.resolve([{ height: 1 }]);
@@ -155,7 +155,7 @@ describe('BlockPrefetcher', () => {
     expect(empty).not.toBeNull();
     expect(empty!.blocks).toEqual([]);
     expect(empty!.start).toBe(201);
-    // caller holds its cursor — this is the "server reported a tip it has not
+    // caller holds its cursor - this is the "server reported a tip it has not
     // indexed" case, NOT "this range was empty"
     expect(cursor).toBe(200);
     // everything speculatively queued past the un-indexed range is gone, so a
@@ -203,7 +203,7 @@ describe('BlockPrefetcher', () => {
     p.reset();
     p.prime(500, 10_000);
 
-    // the pre-rewind fetch lands now — it describes a chain we no longer trust
+    // the pre-rewind fetch lands now - it describes a chain we no longer trust
     pending.get(1001)!.resolve([{ height: 1001 }]);
     pending.get(501)!.resolve([{ height: 501 }]);
 

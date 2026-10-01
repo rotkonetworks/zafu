@@ -95,7 +95,7 @@ export const CapabilityApproval = () => {
       </div>
       <div className='w-full px-[30px]'>
         <div className='flex flex-col gap-2'>
-          {/* origin display — omitted for the global opt-in, which is not
+          {/* origin display - omitted for the global opt-in, which is not
               about any particular site */}
           {scope === 'site' ? (
             <div className='flex items-center gap-2 rounded-lg bg-canvas p-3'>
