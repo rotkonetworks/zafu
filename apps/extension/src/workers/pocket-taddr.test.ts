@@ -41,12 +41,14 @@ const legacy3 = deriveZcashTransparentAddress(SEED, 0, 3, true);
 const utxo = { address: legacy3, script: scriptOf(legacy3), valueZat: 50_000n };
 
 describe('pocket transparent scan indices', () => {
-  test('index 0 always, the old five-address floor, and any higher index once stored', () => {
-    expect(pocketTransparentIndices(undefined)).toEqual([0, 1, 2, 3, 4]);
-    expect(pocketTransparentIndices(3)).toEqual([0, 1, 2, 3, 4]);
-    expect(pocketTransparentIndices(7)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
-    expect(pocketTransparentIndices('7')).toEqual([0, 1, 2, 3, 4]);
-    expect(pocketTransparentIndices(-2)).toEqual([0, 1, 2, 3, 4]);
+  const floor = Array.from({ length: 20 }, (_, i) => i);
+
+  test('index 0 always, the twenty-address floor, and any higher index once stored', () => {
+    expect(pocketTransparentIndices(undefined)).toEqual(floor);
+    expect(pocketTransparentIndices(3)).toEqual(floor);
+    expect(pocketTransparentIndices(23)).toEqual([...floor, 20, 21, 22, 23]);
+    expect(pocketTransparentIndices('23')).toEqual(floor);
+    expect(pocketTransparentIndices(-2)).toEqual(floor);
   });
 
   test('position is the derivation index', () => {
