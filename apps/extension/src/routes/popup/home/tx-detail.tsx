@@ -81,7 +81,8 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
   const [noteDraft, setNoteDraft] = useState('');
   const contactNet: ContactNetwork =
     network === 'zcash' ? 'zcash' : network === 'penumbra' ? 'penumbra' : 'cosmos';
-  const hasBreakdown = !!tx.recipientAmount && !!tx.feeAmount;
+  // an expired send charged no fee, so it has no breakdown to give
+  const hasBreakdown = !isFailed && !!tx.recipientAmount && !!tx.feeAmount;
   const shortRecipient = tx.recipient && `${tx.recipient.slice(0, 8)}…${tx.recipient.slice(-4)}`;
   const recipientName = contactMatch?.contact.name ?? directoryName ?? shortRecipient;
   const title = isIn

@@ -121,11 +121,11 @@ export const ZignerWrongCode = ({
     <ScreenHeader title={`sign on ${device}`} onBack={onBack} />
     <Strip icon='i-lucide-asterisk'>{sending}</Strip>
     <Main className='items-center gap-4 px-5 pt-6'>
-      <div className='relative size-[260px] shrink-0 border border-warn/40 bg-elev-1 opacity-50'>
-        <span className='absolute left-4 top-4 size-[34px] border-l-2 border-t-2 border-warn' />
-        <span className='absolute right-4 top-4 size-[34px] border-r-2 border-t-2 border-warn' />
-        <span className='absolute bottom-4 left-4 size-[34px] border-b-2 border-l-2 border-warn' />
-        <span className='absolute bottom-4 right-4 size-[34px] border-b-2 border-r-2 border-warn' />
+      <div className='relative size-[180px] shrink-0 border border-warn/40 bg-elev-1 opacity-50'>
+        <span className='absolute left-3 top-3 size-[26px] border-l-2 border-t-2 border-warn' />
+        <span className='absolute right-3 top-3 size-[26px] border-r-2 border-t-2 border-warn' />
+        <span className='absolute bottom-3 left-3 size-[26px] border-b-2 border-l-2 border-warn' />
+        <span className='absolute bottom-3 right-3 size-[26px] border-b-2 border-r-2 border-warn' />
       </div>
       <div className='flex min-h-[66px] w-full items-center gap-2.5 border border-warn/40 bg-warn/10 px-3.5 py-2.5'>
         <span className='i-lucide-eye size-4 shrink-0 text-warn' />
