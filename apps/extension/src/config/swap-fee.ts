@@ -10,10 +10,11 @@ import { IS_BETA_BUILD } from './feature-flags';
 export const NEAR_APP_FEE_BPS = 10;
 
 /**
- * TODO(founder): the near account that receives the app fee. While empty the
- * fee is inert: no app fee is sent with a quote, and none is shown.
+ * The near account that receives the app fee (the same account the 1click
+ * integration has paid since 25.3.0). Empty = the fee is inert.
  */
-export const NEAR_APP_FEE_RECIPIENT = '';
+export const NEAR_APP_FEE_RECIPIENT =
+  'bdb384d8c6273bf4e40757d57d49ff7931c12b4ddaa838c323e4f93a7263744f';
 
 /**
  * A registered THORName for a future thorchain affiliate; unused while zafu
