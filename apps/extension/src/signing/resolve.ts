@@ -7,14 +7,21 @@
  */
 
 import { isPopup } from '../utils/popup-detection';
-import { CAPS, type SendFlags, type WalletKind, type ZcashArm } from './wallet-kind';
+import {
+  zcashArm,
+  type SendFlags,
+  type WalletKind,
+  type ZcashArm,
+  type ZcashPool,
+} from './wallet-kind';
 
 export const zcashSignerFor = <T>(
   kind: WalletKind,
   flags: SendFlags,
+  pool: ZcashPool,
   arms: Record<ZcashArm, () => Promise<T>>,
 ): (() => Promise<T>) => {
-  const arm = CAPS[kind].zcash(flags);
+  const arm = zcashArm(kind, flags, pool);
   return typeof arm === 'string'
     ? arms[arm]
     : () => Promise.reject(new Error(`${arm.title} · ${arm.body}`));

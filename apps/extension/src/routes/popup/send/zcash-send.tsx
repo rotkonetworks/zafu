@@ -437,7 +437,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // ironwood. Guessing orchard here would advertise funds the build refuses.
   const activePool: 'orchard' | 'ironwood' =
     sendChainHeight > 0 && sendChainHeight < nu63ActivationHeight(mainnet) ? 'orchard' : 'ironwood';
-  const refusal = kind && zcashSendRefusal(kind, SEND_FLAGS);
+  const refusal = kind && zcashSendRefusal(kind, SEND_FLAGS, activePool);
 
   const poolNotes = usePoolNotes(storeId);
 
@@ -774,7 +774,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
       // one implementation per signer; the resolver picks the wallet's own,
       // or refuses without calling any of them.
-      await zcashSignerFor(kind ?? 'unknown', SEND_FLAGS, {
+      await zcashSignerFor(kind ?? 'unknown', SEND_FLAGS, activePool, {
         hot: async () => {
           // verify password, then build signed tx + broadcast
           const authorized = await requestAuth();
@@ -904,9 +904,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           // WebHID PCZT signing: the same orchard PCZT as zigner, SpendAuth sigs
           // signed on-device, injected via complete_orchard_pczt.
           const result = await buildPczt();
-          // Ironwood (NU6.3 / V6) is not implemented for ledger. This MUST fail
-          // closed: an absent or unrecognised tag must never reach the
-          // orchard-V5 translator.
+          // Ironwood (NU6.3 / V6) is not implemented for ledger; CAPS refuses an
+          // ironwood send before the build, and this MUST still fail closed: an
+          // absent or unrecognised tag must never reach the orchard-V5 translator.
           const buildUrType = result.urFrames[0]?.split('/')[0]?.replace(/^ur:/i, '');
           if (buildUrType !== 'zcash-pczt') {
             throw new Error(

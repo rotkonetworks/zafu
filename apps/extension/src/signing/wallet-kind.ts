@@ -57,6 +57,8 @@ export const walletKind = (key: WalletFacts, zcash?: ZcashFacts): WalletKind => 
       : 'unknown';
 };
 
+export type ZcashPool = 'orchard' | 'ironwood';
+
 /** the zcash send implementations; signing/resolve.ts picks one per kind */
 export type ZcashArm =
   | 'hot'
@@ -82,6 +84,10 @@ export interface SendFlags {
 export interface Caps {
   /** the zcash send implementation under these flags, or why there is none */
   readonly zcash: (f: SendFlags) => ZcashArm | Refusal;
+  /** set when this signer reads orchard PCZTs only: why an ironwood send is refused */
+  readonly orchardOnly?: Refusal;
+  /** the turnstile migration (an ironwood build on the zigner QR) is offered */
+  readonly migrate?: true;
   /** a password unlocks a secret held on zafu before signing */
   readonly unlockToSign: boolean;
   readonly signLabel: string;
@@ -117,6 +123,12 @@ const LEDGER_OFF: Refusal = {
   body: "sends need a zigner or this wallet's phrase",
 };
 
+const orchardOnly = (device: string, icon: string): Refusal => ({
+  icon,
+  title: `${device} signs orchard only for now`,
+  body: "ironwood sends need a zigner or this wallet's phrase",
+});
+
 const LEDGER_ZID =
   'ledger cannot sign a zafu identity yet. please sign in with a zigner or a phrase wallet.';
 
@@ -128,6 +140,7 @@ export const CAPS: Record<WalletKind, Caps> = {
     zcash: () => 'hot',
     unlockToSign: true,
     signLabel: 'sign & send',
+    migrate: true,
     cosmos: 'hot',
     zid: null,
   },
@@ -136,11 +149,15 @@ export const CAPS: Record<WalletKind, Caps> = {
     unlockToSign: false,
     signLabel: 'sign with zafu zigner',
     afterSend: 'sync-zigner',
+    migrate: true,
     cosmos: 'zigner',
     zid: null,
   },
+  // keystone reads orchard PCZTs only: an ironwood build rides zigner's
+  // `ur:zigner-module` envelope, which keystone cannot read.
   keystone: {
     zcash: () => 'zigner',
+    orchardOnly: orchardOnly('keystone', 'i-ph-qr-code'),
     unlockToSign: false,
     signLabel: 'sign with keystone',
     zid: 'keystone cannot sign a zafu identity. please sign in with a zigner or a phrase wallet.',
@@ -149,6 +166,7 @@ export const CAPS: Record<WalletKind, Caps> = {
     ...LEDGER,
     zcash: f =>
       f.hardwareWallet ? 'ledger-shielded' : f.ledgerTransparent ? LEDGER_SHIELDED : LEDGER_OFF,
+    orchardOnly: orchardOnly('ledger', 'i-ph-usb'),
   },
   'ledger-transparent': {
     ...LEDGER,
@@ -185,9 +203,16 @@ export const CAPS: Record<WalletKind, Caps> = {
   },
 };
 
-/** Why this wallet cannot send zcash, or null when a signer for it exists.
- *  A refused kind is never handed to another device's flow. */
-export const zcashSendRefusal = (kind: WalletKind, flags: SendFlags): Refusal | null => {
-  const arm = CAPS[kind].zcash(flags);
+/** The zcash send implementation for this wallet from `pool`, or why there is
+ *  none. A refused kind is never handed to another device's flow. */
+export const zcashArm = (kind: WalletKind, flags: SendFlags, pool: ZcashPool) => {
+  const { zcash, orchardOnly } = CAPS[kind];
+  const arm = zcash(flags);
+  return typeof arm === 'string' && pool === 'ironwood' && orchardOnly ? orchardOnly : arm;
+};
+
+/** Why this wallet cannot send zcash from `pool`, or null when it can. */
+export const zcashSendRefusal = (kind: WalletKind, flags: SendFlags, pool: ZcashPool) => {
+  const arm = zcashArm(kind, flags, pool);
   return typeof arm === 'string' ? null : arm;
 };
