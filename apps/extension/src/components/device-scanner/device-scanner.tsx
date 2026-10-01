@@ -1,11 +1,14 @@
 /**
- * One device scanner for zigner / keystone.
+ * One device scanner for zigner / keystone, used wherever a wallet already
+ * exists (settings - wallets, settings - zigner). One code carries one
+ * network; the found screen lets a second code join the same wallet (see
+ * connect-device.ts / mergeZignerCapabilities).
  *
- * Replaces the four hand-rolled copies of "scan a zigner/keystone QR, then
- * add-or-merge a wallet" (onboarding's import-zigner, settings-zigner,
- * settings-wallets, and the developer paste modes each of those carried).
- * One code carries one network; the found screen lets a second code join
- * the same wallet (see connect-device.ts / mergeZignerCapabilities).
+ * Onboarding (routes/page/onboarding/import-zigner.tsx) scans before a
+ * password exists, so it hands the parsed import to the password step
+ * through state/zigner.ts instead of writing a vault directly here - a
+ * different data path to the same classifier logic (parse-connect-code.ts
+ * here, the equivalent heuristic in state/zigner.ts there).
  *
  * States: scan (camera + a visible paste fallback, never hidden behind a
  * tap-counter) -> result (found or joined, same screen - `joined` only
