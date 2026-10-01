@@ -52,10 +52,6 @@ export const settingsRoutes: RouteObject[] = [
     lazy: lazyScreen('settingsFeatures'),
   },
   {
-    path: PopupPath.SETTINGS_APPEARANCE,
-    lazy: lazyScreen('settingsAppearance'),
-  },
-  {
     path: PopupPath.SETTINGS_WALLETS,
     lazy: lazyScreen('settingsWalletsNetworks'),
   },
@@ -102,6 +98,10 @@ export const settingsRoutes: RouteObject[] = [
   {
     path: PopupPath.SETTINGS_NETWORKS_HOME,
     lazy: lazyScreen('settingsNetworksHome'),
+  },
+  {
+    path: PopupPath.SETTINGS_NETWORKS_ALL,
+    lazy: lazyScreen('settingsNetworksAll'),
   },
   {
     path: PopupPath.SETTINGS_ZCASH_NETWORK,

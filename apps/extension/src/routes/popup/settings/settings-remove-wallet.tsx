@@ -40,7 +40,7 @@ export const SettingsRemoveWallet = () => {
 
   if (!vault) {
     return (
-      <SettingsScreen title='remove wallet' backPath={PopupPath.SETTINGS_WALLETS}>
+      <SettingsScreen title='remove wallet' backPath={PopupPath.SETTINGS_SECURITY}>
         <p className='text-sm text-fg-muted'>this wallet is already gone.</p>
       </SettingsScreen>
     );
@@ -73,7 +73,7 @@ export const SettingsRemoveWallet = () => {
   };
 
   return (
-    <SettingsScreen title={`remove ${vault.name}`} backPath={PopupPath.SETTINGS_WALLETS}>
+    <SettingsScreen title={`remove ${vault.name}`} backPath={PopupPath.SETTINGS_SECURITY}>
       <div className='flex flex-col gap-4'>
         {step === 'what' && (
           <div className='flex flex-col gap-4'>
@@ -185,7 +185,7 @@ export const SettingsRemoveWallet = () => {
             size='md'
             className='w-28'
             onClick={() =>
-              step === 'confirm' ? setStep('what') : navigate(PopupPath.SETTINGS_WALLETS)
+              step === 'confirm' ? setStep('what') : navigate(PopupPath.SETTINGS_SECURITY)
             }
           >
             not now

@@ -3,8 +3,9 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../../../state';
 import { privacySelector, type PrivacySettings } from '../../../state/privacy';
 import { selectActiveNetwork } from '../../../state/keyring';
-import { SettingsScreen } from './settings-screen';
-import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { Section, SettingsScreen } from './settings-screen';
+import { Row } from '@repo/ui/components/ui/row';
+import { selectConnectedSiteCount } from './settings-status';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { PopupPath } from '../paths';
 import type { NetworkType } from '../../../state/keyring/network-types';
@@ -25,7 +26,7 @@ const ZCASHME_MODE_LABEL: Record<ZcashMeMode, string> = {
 /** zcash.me - a Row(value) reading the persisted mode (an external system,
  *  so this is a plain effect, not derived state); the detail screen owns
  *  the mode picker itself (settings-zcashme.tsx). */
-function ZcashMeRow() {
+export function ZcashMeRow() {
   const navigate = usePopupNav();
   const [mode, setMode] = useState<ZcashMeMode>('off');
   useEffect(() => {
@@ -41,145 +42,49 @@ function ZcashMeRow() {
   );
 }
 
-interface PrivacyRow {
+type Group = 'on screen' | 'network' | 'people';
+
+/** the boolean privacy settings, in board order. `visible` hides a row the active network has no use for. */
+const PRIVACY_ROWS: readonly {
   key: keyof PrivacySettings;
   label: string;
-  onLabel: string;
-  offLabel: string;
-  /** filter function - return true if this row is visible for the given network */
+  group: Group;
   visible?: (network: NetworkType) => boolean;
-}
-
-const PRIVACY_ROWS: readonly PrivacyRow[] = [
+}[] = [
+  { key: 'hideBalances', label: 'hide balances', group: 'on screen' },
+  { key: 'enableTransactionHistory', label: 'transaction history', group: 'on screen' },
   {
-    key: 'hideBalances',
-    label: 'hide balances',
-    onLabel: 'amounts blurred across every screen',
-    offLabel: 'amounts visible',
-  },
-  {
-    key: 'enableIdentity',
-    label: 'zid identity',
-    onLabel: 'sites can derive per-site identities',
-    offLabel: 'off - menu, sign approvals, e2ee disabled',
-  },
-  {
-    key: 'enableTransparentBalances',
-    label: 'cosmos balances',
-    onLabel: 'querying rpc for balances',
-    offLabel: 'hidden - no rpc queries',
+    key: 'enablePriceFetching',
+    label: 'price display',
+    group: 'on screen',
     visible: n => hasFeature(n, 'cosmos'),
-  },
-  {
-    key: 'enableTransactionHistory',
-    label: 'transaction history',
-    onLabel: 'saved locally',
-    offLabel: 'disabled',
   },
   {
     key: 'enableBackgroundSync',
     label: 'background sync',
-    onLabel: 'syncing in background',
-    offLabel: 'only when extension is open',
+    group: 'network',
     visible: n => hasFeature(n, 'cosmos'),
   },
   {
-    key: 'enablePriceFetching',
-    label: 'price display',
-    onLabel: 'fetching prices - apis cannot see your addresses, but do see your ip',
-    offLabel: 'hidden',
+    key: 'enableTransparentBalances',
+    label: 'cosmos balances',
+    group: 'network',
     visible: n => hasFeature(n, 'cosmos'),
   },
   {
     key: 'enableExplorerLinks',
     label: 'explorer links',
-    onLabel: 'tx rows link to a block explorer - it sees your ip and which tx you open',
-    offLabel: 'copy-only - nothing leaves the wallet',
+    group: 'network',
     visible: n => hasFeature(n, 'zcash'),
   },
   {
     key: 'openZcashLinks',
     label: 'zcash: links',
-    onLabel: 'links on websites open in zafu',
-    offLabel: 'links open in your default zcash app',
+    group: 'people',
     visible: n => hasFeature(n, 'zcash'),
   },
+  { key: 'enableIdentity', label: 'zid identity', group: 'people' },
 ];
-
-/** proxy - a plain, user-owned socks5 host/port, on or off. A Row(value)
- *  opening a Sheet to edit it, rather than expanding inline (nothing
- *  expands in place). No rotko/pro relay framing - pro is shelved. */
-function ProxySection() {
-  const { settings, setProxy } = useStore(privacySelector);
-  // Defensive: settings persisted before the proxy field existed have no
-  // proxy key. persist.ts now merges defaults on hydration, but guard here too.
-  const proxy = settings.proxy ?? { enabled: false, host: '', port: 1080 };
-  const [open, setOpen] = useState(false);
-  const [host, setHost] = useState(proxy.host);
-  const [port, setPort] = useState(String(proxy.port));
-
-  const apply = () => {
-    const p = parseInt(port, 10) || 1080;
-    void setProxy({ enabled: true, host: host.trim(), port: p });
-    setOpen(false);
-  };
-
-  const disable = () => {
-    void setProxy({ enabled: false, host: host.trim(), port: parseInt(port, 10) || 1080 });
-  };
-
-  return (
-    <RowGroup>
-      <Row
-        type='value'
-        label='proxy'
-        value={proxy.enabled ? `socks5://${proxy.host}:${proxy.port}` : 'off'}
-        onPress={() => setOpen(true)}
-      />
-      <Sheet open={open} onOpenChange={setOpen} title='proxy'>
-        <div className='flex flex-col gap-3'>
-          <p className='text-xs text-fg-muted'>
-            {proxy.enabled
-              ? `direct connections go through ${proxy.host}:${proxy.port}`
-              : 'off - your ip is visible to servers you connect to'}
-          </p>
-          <div className='flex gap-2'>
-            <input
-              value={host}
-              onChange={e => setHost(e.target.value)}
-              placeholder='host'
-              className='flex-1 border border-border-soft bg-transparent px-2 py-1.5 text-xs font-mono'
-            />
-            <input
-              value={port}
-              onChange={e => setPort(e.target.value)}
-              placeholder='port'
-              className='w-16 border border-border-soft bg-transparent px-2 py-1.5 text-xs font-mono'
-            />
-          </div>
-          <div className='flex gap-2'>
-            <button
-              onClick={apply}
-              disabled={!host.trim()}
-              className='flex-1 border border-zigner-gold bg-zigner-gold/10 py-2 text-xs text-zigner-gold disabled:opacity-30'
-            >
-              connect
-            </button>
-            {proxy.enabled && (
-              <button
-                onClick={disable}
-                className='border border-border-soft px-3 py-2 text-xs text-fg-muted'
-              >
-                turn off
-              </button>
-            )}
-          </div>
-          <p className='text-label text-fg-muted/60'>routes all traffic through your socks5</p>
-        </div>
-      </Sheet>
-    </RowGroup>
-  );
-}
 
 /**
  * Private contact discovery is opt-in and stores a relay endpoint the service
@@ -229,15 +134,10 @@ export function ContactDiscoverySection() {
   const endpointValid = /^https?:\/\//.test(endpoint.trim());
 
   return (
-    <RowGroup>
+    <>
       <Row
         type='toggle'
         label='private contact discovery'
-        description={
-          saved.enabled
-            ? `beaconing presence via ${saved.relayEndpoint || DEFAULT_CONTACT_DISCOVERY_RELAY}`
-            : 'off - apps cannot learn which of your contacts are online'
-        }
         checked={saved.enabled}
         onChange={next => (next ? save(true, endpoint, token) : save(false, endpoint, token))}
       />
@@ -273,62 +173,62 @@ export function ContactDiscoverySection() {
           >
             save
           </button>
-          <p className='text-label text-fg-muted/60'>
-            an app learns only which contacts are present in that app, under app-scoped handles -
-            never your contact list, and unlinkable across apps.
-          </p>
         </div>
       </Sheet>
-    </RowGroup>
+    </>
   );
 }
 
+/** "all privacy controls" (SetPrivacyAll.dc.html). proxy is shelved, so it has no row. */
 export function SettingsPrivacy() {
   const { settings, setSetting } = useStore(privacySelector);
   const activeNetwork = useStore(selectActiveNetwork);
+  const sites = useStore(selectConnectedSiteCount);
   const navigate = usePopupNav();
 
-  const visibleRows = PRIVACY_ROWS.filter(row => !row.visible || row.visible(activeNetwork));
+  const rows = (group: Group) =>
+    PRIVACY_ROWS.filter(r => r.group === group && (!r.visible || r.visible(activeNetwork))).map(
+      r => (
+        <Row
+          key={r.key}
+          type='toggle'
+          label={r.label}
+          checked={settings[r.key] as boolean}
+          onChange={v => setSetting(r.key, v as never)}
+        />
+      ),
+    );
 
   return (
-    <SettingsScreen title='all privacy controls' backPath={PopupPath.SETTINGS_PRIVACY_HOME}>
+    <SettingsScreen
+      title='all privacy controls'
+      category='privacy'
+      backPath={PopupPath.SETTINGS_PRIVACY_HOME}
+    >
       <div className='flex flex-col gap-4'>
-        {visibleRows.length > 0 && (
-          <RowGroup>
-            {visibleRows.map(row => (
-              <Row
-                key={row.key}
-                type='toggle'
-                label={row.label}
-                description={settings[row.key] ? row.onLabel : row.offLabel}
-                checked={settings[row.key] as boolean}
-                onChange={v => setSetting(row.key, v as never)}
-              />
-            ))}
-          </RowGroup>
-        )}
-        <ProxySection />
-        {/* discovery derives from the zid contact layer; hide it when zid is off */}
-        {(settings.enableIdentity ?? true) && <ContactDiscoverySection />}
-        {hasFeature(activeNetwork, 'zcash') && (
-          <RowGroup>
-            <ZcashMeRow />
-          </RowGroup>
-        )}
-        <RowGroup>
+        <Section title='on screen'>{rows('on screen')}</Section>
+        <Section title='network'>
+          {rows('network')}
           <Row
             type='screen'
             label='everything zafu talks to'
             onPress={() => navigate(PopupPath.SETTINGS_CONNECTIONS)}
           />
-        </RowGroup>
-        {/* Keplr "act as" toggle moved to Networks → Penumbra section
-            since it only affects the Penumbra/IBC scope. */}
-        {visibleRows.length === 0 && (
-          <p className='py-8 text-center text-sm text-fg-muted'>
-            no privacy settings for this network
-          </p>
-        )}
+        </Section>
+        <Section title='people'>
+          {/* discovery derives from the zid contact layer; hide it when zid is off */}
+          {settings.enableIdentity && <ContactDiscoverySection />}
+          {hasFeature(activeNetwork, 'zcash') && <ZcashMeRow />}
+          {rows('people')}
+        </Section>
+        <Section title='sites'>
+          <Row
+            type='value'
+            label='connected sites'
+            value={String(sites)}
+            onPress={() => navigate(PopupPath.SETTINGS_CONNECTED_SITES)}
+          />
+        </Section>
       </div>
     </SettingsScreen>
   );

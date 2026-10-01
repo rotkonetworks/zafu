@@ -27,8 +27,6 @@ export const popupScreens = {
     import('./settings/settings-networks').then(m => m.SettingsWalletsNetworks),
   settingsPrivacy: () => import('./settings/settings-privacy').then(m => m.SettingsPrivacy),
   settingsFeatures: () => import('./settings/settings-features').then(m => m.SettingsFeatures),
-  settingsAppearance: () =>
-    import('./settings/settings-appearance').then(m => m.SettingsAppearance),
   settingsAddViewingKey: () =>
     import('./settings/settings-add-viewing-key').then(m => m.SettingsAddViewingKey),
   // Security & Backup tab. SecurityBackup (authored by another engineer) brings
@@ -52,6 +50,8 @@ export const popupScreens = {
     import('./settings/settings-privacy-home').then(m => m.SettingsPrivacyHome),
   settingsNetworksHome: () =>
     import('./settings/settings-networks-home').then(m => m.SettingsNetworksHome),
+  settingsNetworksAll: () =>
+    import('./settings/settings-networks-home').then(m => m.SettingsNetworksAll),
   settingsZcashNetwork: () =>
     import('./settings/settings-zcash-network').then(m => m.SettingsZcashNetwork),
   settingsDevicesHome: () =>

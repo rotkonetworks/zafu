@@ -1,103 +1,108 @@
-import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../../state';
-import { selectEnabledNetworks } from '../../../state/keyring';
+import { selectEffectiveKeyInfo, selectEnabledNetworks } from '../../../state/keyring';
+import { selectTxSigningSecurity } from '../../../state/privacy';
+import type { TxSigningSecurity } from '../../../shared/tx-signing-security';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
-import { Sheet } from '@repo/ui/components/ui/sheet';
-import { SettingsScreen } from './settings-screen';
+import { Section, SettingsScreen } from './settings-screen';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { useAutoLock, AUTO_LOCK_OPTIONS } from './use-auto-lock';
-import { SigningSecuritySelector } from './signing-security-selector';
-import { SheetOptions } from './sheet-options';
+import { OptionsRow } from './sheet-options';
+import { TintedRow } from './tinted-row';
+import { selectUnbackedSeatCount } from './settings-status';
 
-/**
- * "all security controls" - the security category's power-user list. Auto-
- * lock and transaction-signing security live here inline (they're posture
- * settings, not their own destinations). Recovery phrase, multisig backup,
- * and resync state each have their own canonical screen - this hub LINKS to
- * those rather than duplicating.
- */
+const SIGNING_OPTIONS: readonly { value: TxSigningSecurity; label: string; desc: string }[] = [
+  { value: 'unlock-only', label: 'unlock only', desc: 'unlocked means you can sign' },
+  { value: 'grace', label: 'grace 15 min', desc: 'ask for the password again after 15 min' },
+  { value: 'foilhat', label: 'foil hat', desc: 'password for every signature' },
+];
+
+export const useZcashOn = () => {
+  const enabled = useStore(selectEnabledNetworks) as string[];
+  return enabled.length === 0 || enabled.includes('zcash');
+};
+
+export const AutoLockRow = () => {
+  const { minutes, set } = useAutoLock();
+  return <OptionsRow label='auto-lock' value={minutes} options={AUTO_LOCK_OPTIONS} onPick={set} />;
+};
+
+const SigningRow = () => {
+  const setSetting = useStore(s => s.privacy.setSetting);
+  return (
+    <OptionsRow
+      label='transaction signing'
+      value={useStore(selectTxSigningSecurity)}
+      options={SIGNING_OPTIONS}
+      onPick={v => void setSetting('txSigningSecurity', v)}
+    />
+  );
+};
+
+export const BackupsRow = ({ label }: { label: string }) => {
+  const navigate = usePopupNav();
+  const unbacked = useStore(selectUnbackedSeatCount);
+  return (
+    <Row
+      type='value'
+      label={label}
+      value={unbacked ? `${unbacked} not backed up` : undefined}
+      tone='warn'
+      onPress={() => navigate(PopupPath.SETTINGS_MULTISIG_BACKUP)}
+    />
+  );
+};
+
+/** removes the wallet the person is looking at; the list of all wallets lives in the accounts sheet */
+export const RemoveWalletRow = () => {
+  const navigate = useNavigate();
+  const vault = useStore(selectEffectiveKeyInfo);
+  return vault ? (
+    <RowGroup>
+      <TintedRow
+        label={`remove ${vault.name}`}
+        tone='danger'
+        onPress={() => navigate(`${PopupPath.SETTINGS_REMOVE_WALLET}?id=${vault.id}`)}
+      />
+    </RowGroup>
+  ) : null;
+};
+
+/** "all security controls" (SetSecurityAll.dc.html) */
 export const SecurityBackup = () => {
   const navigate = usePopupNav();
-  const enabledNetworks = useStore(selectEnabledNetworks) as string[];
-  const zcashOn = enabledNetworks.length === 0 || enabledNetworks.includes('zcash');
+  const zcashOn = useZcashOn();
 
   return (
-    <SettingsScreen title='all security controls' backPath={PopupPath.SETTINGS_SECURITY}>
-      <div className='flex flex-col gap-5'>
-        <SigningSecuritySelector />
-        <AutoLock />
-
-        <div>
-          <p className='kicker mb-2'>backup & recovery</p>
-          <RowGroup>
-            <Row
-              type='screen'
-              icon='i-ph-file-text'
-              label='recovery passphrase'
-              description="reveal this wallet's seed phrase"
-              onPress={() => navigate(PopupPath.SETTINGS_RECOVERY_PASSPHRASE)}
-            />
-            {zcashOn && (
-              <Row
-                type='screen'
-                icon='i-ph-shield'
-                label='multisig backup'
-                description='back up FROST multisig shares'
-                onPress={() => navigate(PopupPath.SETTINGS_MULTISIG_BACKUP)}
-              />
-            )}
-            <Row
-              type='screen'
-              icon='i-ph-arrows-clockwise'
-              label='resync state'
-              description='refetch balance & history from chain - keys kept'
-              onPress={() => navigate(PopupPath.SETTINGS_CLEAR_CACHE)}
-            />
-          </RowGroup>
-        </div>
+    <SettingsScreen
+      title='all security controls'
+      category='security'
+      backPath={PopupPath.SETTINGS_SECURITY}
+    >
+      <div className='flex flex-col gap-4'>
+        <Section title='keys'>
+          <Row
+            type='screen'
+            label='recovery phrase'
+            onPress={() => navigate(PopupPath.SETTINGS_RECOVERY_PASSPHRASE)}
+          />
+          {zcashOn && <BackupsRow label='multisig backup (frost shares)' />}
+        </Section>
+        <Section title='locking'>
+          <AutoLockRow />
+          <SigningRow />
+        </Section>
+        <Section title='recovery'>
+          <Row
+            type='value'
+            label='resync balance and history'
+            value='keys kept'
+            onPress={() => navigate(PopupPath.SETTINGS_CLEAR_CACHE)}
+          />
+        </Section>
+        <RemoveWalletRow />
       </div>
     </SettingsScreen>
   );
 };
-
-/* ── auto-lock (the one control with no dedicated screen) ─────────────── */
-
-/** the Row + Sheet only, so a caller can place it inside its own RowGroup
- *  (the security home) or under its own kicker + RowGroup (all controls). */
-export const AutoLockRow = () => {
-  const { minutes, set } = useAutoLock();
-  const [open, setOpen] = useState(false);
-  const current = AUTO_LOCK_OPTIONS.find(o => o.value === minutes);
-
-  return (
-    <>
-      <Row
-        type='value'
-        label='auto-lock'
-        description='lock the wallet after this long with no activity'
-        value={current?.label ?? `${minutes} min`}
-        onPress={() => setOpen(true)}
-      />
-      <Sheet open={open} onOpenChange={setOpen} title='auto-lock'>
-        <SheetOptions
-          value={minutes}
-          options={AUTO_LOCK_OPTIONS}
-          onPick={v => {
-            set(v);
-            setOpen(false);
-          }}
-        />
-      </Sheet>
-    </>
-  );
-};
-
-const AutoLock = () => (
-  <div>
-    <p className='kicker mb-2'>auto-lock</p>
-    <RowGroup>
-      <AutoLockRow />
-    </RowGroup>
-  </div>
-);

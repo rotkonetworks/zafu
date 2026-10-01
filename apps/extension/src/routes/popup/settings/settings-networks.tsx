@@ -11,7 +11,6 @@ import {
   selectSetActiveNetwork,
   type NetworkType,
 } from '../../../state/keyring';
-import { isIbcNetwork } from '../../../state/keyring/network-types';
 import {
   networksSelector,
   type NetworkId,
@@ -60,9 +59,7 @@ import { Button } from '@repo/ui/components/ui/button';
 import { KeplrCompatToggle } from './keplr-compat-toggle';
 import { SettingsWallets } from './settings-wallets';
 import { PenumbraIbcDirectory } from './settings-networks-directory';
-import { Row, RowGroup } from '@repo/ui/components/ui/row';
-import { usePopupNav } from '../../../utils/navigate';
-import { PopupPath } from '../paths';
+import { useEnableNetwork } from './settings-networks-home';
 
 // Bundled registry, resolved once per realm (not per render): getRegistryEndpoints()
 // builds a fresh array every call, so recomputing it in the component body gave
@@ -94,46 +91,25 @@ const NETWORK_DESCRIPTIONS: Record<string, string> = {
   penumbra: 'encrypted defi',
 };
 
-/**
- * The merged "wallets & networks" screen. SettingsWallets supplies the screen
- * chrome (header + back button) and the wallet-management UI; the network
- * enable/disable toggles render as a section right below it, so wallet and
- * network management live in one place.
- */
-export const SettingsWalletsNetworks = () => {
-  const navigate = usePopupNav();
-  return (
-    // Networks fold INTO the wallets screen via appendSlot, so both share one
-    // header/back/scroll column (one tab) - not a sibling block hanging below
-    // a full-height wallets screen.
-    <SettingsWallets
-      title='wallets & networks'
-      appendSlot={
-        <div className='flex flex-col gap-2'>
-          <p className='kicker'>networks</p>
-          <NetworkToggles />
-          {/* the full destination list + allow/block now lives in privacy,
-              as its own screen rather than a folded-away accordion here */}
-          <RowGroup>
-            <Row
-              type='screen'
-              label='everything zafu talks to'
-              onPress={() => navigate(PopupPath.SETTINGS_CONNECTIONS)}
-            />
-          </RowGroup>
-        </div>
-      }
-    />
-  );
-};
+export const SettingsWalletsNetworks = () => (
+  // networks fold into the wallets screen via appendSlot, so both share one header and scroll column
+  <SettingsWallets
+    title='wallets & networks'
+    appendSlot={
+      <div className='flex flex-col gap-2'>
+        <p className='kicker'>networks</p>
+        <NetworkToggles />
+      </div>
+    }
+  />
+);
 
 const NetworkToggles = () => {
   const activeNetwork = useStore(selectActiveNetwork);
   const enabledNetworks = useStore(selectEnabledNetworks);
   const setActiveNetwork = useStore(selectSetActiveNetwork);
   const toggleNetwork = useStore(state => state.keyRing.toggleNetwork);
-  const privacySetSetting = useStore(state => state.privacy.setSetting);
-  const transparentEnabled = useStore(state => state.privacy.settings.enableTransparentBalances);
+  const enableNetwork = useEnableNetwork();
   const {
     networks: networkState,
     setNetworkEndpoint,
@@ -168,17 +144,8 @@ const NetworkToggles = () => {
     // run once on mount; initialExpand is derived from the entry URL
   }, []);
 
-  const handleToggle = async (network: NetworkType) => {
-    const wasEnabled = enabledNetworks.includes(network);
-    await toggleNetwork(network);
-    if (!wasEnabled && isIbcNetwork(network) && !transparentEnabled) {
-      await privacySetSetting('enableTransparentBalances', true);
-    }
-    // if enabling, auto-activate it (user probably wants to use it)
-    if (!wasEnabled) {
-      void setActiveNetwork(network);
-    }
-  };
+  const handleToggle = (network: NetworkType) =>
+    enabledNetworks.includes(network) ? toggleNetwork(network) : enableNetwork(network);
 
   const handleExpandToggle = (networkId: NetworkType) => {
     if (expandedNetwork === networkId) {

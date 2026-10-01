@@ -1,4 +1,7 @@
+import { useState } from 'react';
 import { cn } from '@repo/ui/lib/utils';
+import { Row } from '@repo/ui/components/ui/row';
+import { Sheet } from '@repo/ui/components/ui/sheet';
 
 export interface SheetOption<T extends string | number> {
   value: T;
@@ -50,7 +53,7 @@ export function SheetOptions<T extends string | number>({
               <span className='text-data text-fg-high lowercase'>{o.label}</span>
               {o.desc && <span className='text-label text-fg-muted lowercase'>{o.desc}</span>}
               {o.warn && on && (
-                <span className='mt-1 flex items-center gap-1 text-label text-yellow-400 lowercase'>
+                <span className='mt-1 flex items-center gap-1 text-label text-warn lowercase'>
                   <span className='i-ph-warning size-3 shrink-0' />
                   {o.warn}
                 </span>
@@ -62,3 +65,38 @@ export function SheetOptions<T extends string | number>({
     </div>
   );
 }
+
+/** a value Row that opens a Sheet of options */
+export const OptionsRow = <T extends string | number>({
+  label,
+  value,
+  options,
+  onPick,
+}: {
+  label: string;
+  value: T;
+  options: readonly { value: T; label: string; desc?: string }[];
+  onPick: (v: T) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Row
+        type='value'
+        label={label}
+        value={options.find(o => o.value === value)?.label ?? String(value)}
+        onPress={() => setOpen(true)}
+      />
+      <Sheet open={open} onOpenChange={setOpen} title={label}>
+        <SheetOptions
+          value={value}
+          options={options}
+          onPick={v => {
+            onPick(v);
+            setOpen(false);
+          }}
+        />
+      </Sheet>
+    </>
+  );
+};
