@@ -6,6 +6,7 @@ import { useStore } from '../../../state';
 import type { NetworkType } from '../../../state/keyring';
 import { activeZcashStoreId } from '../../../state/pockets';
 import { messagesSelector } from '../../../state/messages';
+import { privacySelector } from '../../../state/privacy';
 import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
 import { useSyncProgress } from '../../../hooks/full-sync-height';
@@ -16,6 +17,47 @@ import { zatToZec } from './format';
 import { parsePenumbraTx, type ParsedTransaction } from './tx-parse';
 import { TxRow } from './tx-row';
 import { PopupPath } from '../paths';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+import { Button } from '@repo/ui/components/ui/button';
+
+/**
+ * The first-payment "keep a history on this computer?" ask, asked once and
+ * shared by every network's home screen (`enableTransactionHistory` gates
+ * {@link HistoryContent} for all of them, not just zcash). A network's home
+ * passes `hasFunds` the moment it has something worth asking about - zcash's
+ * total balance, penumbra's UM total - so each screen decides its own
+ * trigger without duplicating the sheet or the privacy-setting writes.
+ */
+export const AskHistorySheet = ({ hasFunds }: { hasFunds: boolean }) => {
+  const { settings, setSetting } = useStore(privacySelector);
+  const ask = hasFunds && !settings.enableTransactionHistory && !settings.historyAsked;
+  const answer = (keep: boolean) => {
+    void setSetting('historyAsked', true);
+    if (keep) {
+      void setSetting('enableTransactionHistory', true);
+    }
+  };
+  return (
+    <Sheet
+      open={ask}
+      onOpenChange={open => !open && answer(false)}
+      title='your first payment arrived.'
+    >
+      <div className='flex flex-col gap-3'>
+        <p className='-mt-6 mb-1.5 font-display text-xl text-fg-high'>
+          keep a history on this computer?
+        </p>
+        <Button onClick={() => answer(true)}>keep history</Button>
+        <Button variant='secondary' onClick={() => answer(false)}>
+          show only balance
+        </Button>
+        <span className='text-[11px] text-fg-dim'>
+          asked once · change it in settings › privacy
+        </span>
+      </div>
+    </Sheet>
+  );
+};
 
 /**
  * Transaction history. Fetched only after the user chose to keep it

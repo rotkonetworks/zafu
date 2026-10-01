@@ -14,6 +14,7 @@ import { fromValueView } from '@rotko/penumbra-types/amount';
 import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { balancesQueryOptions, balancesQueryKey } from '../../../hooks/penumbra-balances';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { AskHistorySheet } from './history';
 
 /** lazy load network-specific content - only load when needed */
 const AssetsTable = lazy(() => import('./assets-table').then(m => ({ default: m.AssetsTable })));
@@ -176,6 +177,8 @@ export const PenumbraContent = ({
       <Suspense fallback={null}>
         <CosmosSubwallets />
       </Suspense>
+
+      <AskHistorySheet hasFunds={(umBalance ?? 0) > 0} />
     </div>
   );
 };

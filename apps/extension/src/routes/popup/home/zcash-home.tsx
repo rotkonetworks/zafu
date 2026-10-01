@@ -35,7 +35,7 @@ import { Button } from '@repo/ui/components/ui/button';
 import { fmtZecHero } from './format';
 import { BalanceFigure } from './balance-figure';
 import { HomeActions } from './actions';
-import { HistoryContent } from './history';
+import { HistoryContent, AskHistorySheet } from './history';
 import { MultisigOverview } from './multisig-overview';
 
 const zec = (zat: bigint) => fmtZecHero(Number(zat) / 1e8);
@@ -222,17 +222,6 @@ export const ZcashContent = ({
   // held, not spendable, and not gone - so it counts in the figure
   const shieldedTotal = shieldedZat + pools.pendingTotal;
   const totalZat = shieldedTotal + transparentZat;
-
-  // the first payment: ask once whether to keep a history. Until the answer is
-  // "keep history" nothing is fetched (HistoryContent's query gate).
-  const askHistory =
-    totalZat > 0n && !privacySettings.enableTransactionHistory && !privacySettings.historyAsked;
-  const answerHistory = (keep: boolean) => {
-    void setPrivacySetting('historyAsked', true);
-    if (keep) {
-      void setPrivacySetting('enableTransactionHistory', true);
-    }
-  };
 
   if (!hasWallet) {
     return (
@@ -501,24 +490,7 @@ export const ZcashContent = ({
       </Sheet>
 
       {/* the first payment: keep a history on this computer, or only the balance */}
-      <Sheet
-        open={askHistory}
-        onOpenChange={open => !open && answerHistory(false)}
-        title='your first payment arrived.'
-      >
-        <div className='flex flex-col gap-3'>
-          <p className='-mt-6 mb-1.5 font-display text-xl text-fg-high'>
-            keep a history on this computer?
-          </p>
-          <Button onClick={() => answerHistory(true)}>keep history</Button>
-          <Button variant='secondary' onClick={() => answerHistory(false)}>
-            show only balance
-          </Button>
-          <span className='text-[11px] text-fg-dim'>
-            asked once · change it in settings › privacy
-          </span>
-        </div>
-      </Sheet>
+      <AskHistorySheet hasFunds={totalZat > 0n} />
 
       {/* Rescan confirmation: it drops every scanned note and re-reads the
           chain from `height` upward, so the cost is stated before it runs. */}
