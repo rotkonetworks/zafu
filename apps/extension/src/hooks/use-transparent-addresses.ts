@@ -1,17 +1,19 @@
 /**
- * shared hook to derive and cache zcash transparent addresses
- *
- * avoids duplicate derivation across home + history pages
- * caches in chrome.storage.local keyed by walletId
+ * A pocket's transparent addresses, cached per pocket store. Index 0 is the
+ * one address the pocket shows; the rest are legacy indices older builds
+ * handed out, kept so their funds are still counted and shielded.
  */
 
 import { useState, useEffect } from 'react';
 import { useStore } from '../state';
-import { selectEffectiveKeyInfo, keyRingSelector } from '../state/keyring';
+import { selectEffectiveKeyInfo, keyRingSelector, selectActiveNetwork } from '../state/keyring';
 import { selectActiveZcashWallet } from '../state/wallets';
 import { deriveZcashTransparent, deriveZcashTransparentFromUfvk } from './use-address';
 import { activeZcashStoreId, activeAccountIndex } from '../state/pockets';
-import { zcashTransparentIndexKey } from '../state/pocket-id';
+import { pocketTransparentIndices, zcashTransparentIndexKey } from '../state/pocket-id';
+
+/** why a wallet that exists has no transparent address */
+export type NoTransparent = 'undecryptable' | 'no-transparent-key';
 
 export function useTransparentAddresses(isMainnet: boolean) {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
@@ -21,13 +23,11 @@ export function useTransparentAddresses(isMainnet: boolean) {
   // historic storage keys, so existing addresses never shift
   const pocket = useStore(activeAccountIndex);
   const storeId = useStore(activeZcashStoreId);
+  const isZcash = useStore(s => selectActiveNetwork(s) === 'zcash');
 
   const [tAddresses, setTAddresses] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  // true when this wallet's seed is sealed under a stale password key and can
-  // no longer be decrypted. Lets consumers show a recovery affordance instead
-  // of a silently-empty address list. Does NOT mutate or delete anything.
-  const [undecryptable, setUndecryptable] = useState(false);
+  const [missing, setMissing] = useState<NoTransparent>();
 
   const isMnemonic = selectedKeyInfo?.type === 'mnemonic';
 
@@ -35,13 +35,10 @@ export function useTransparentAddresses(isMainnet: boolean) {
     // clear before deriving - previous vault's addresses would otherwise
     // bleed into the new vault's history query when derivation bails out.
     setTAddresses([]);
-    setUndecryptable(false);
+    setMissing(undefined);
 
-    if (!selectedKeyInfo) {
-      setIsLoading(false);
-      return;
-    }
-    if (selectedKeyInfo.type === 'frost-multisig') {
+    // multisig UFVKs are orchard-only: no t-branch to derive
+    if (!isZcash || !selectedKeyInfo || selectedKeyInfo.type === 'frost-multisig') {
       setIsLoading(false);
       return;
     }
@@ -51,10 +48,10 @@ export function useTransparentAddresses(isMainnet: boolean) {
       setIsLoading(true);
       try {
         const indexKey = zcashTransparentIndexKey(isMnemonic ? pocket : 0);
-        const r = await chrome.storage.local.get(indexKey);
-        const storedIdx = (r[indexKey] as number | undefined) ?? 0;
-        const maxIdx = Math.max(4, storedIdx);
-        const expectedCount = maxIdx + 1;
+        const indices = pocketTransparentIndices(
+          (await chrome.storage.local.get(indexKey))[indexKey],
+        );
+        const expectedCount = indices.length;
 
         // check cache
         const cacheKey = `zcashTAddrs:${storeId ?? selectedKeyInfo.id}`;
@@ -68,8 +65,6 @@ export function useTransparentAddresses(isMainnet: boolean) {
           return;
         }
 
-        // derive
-        const indices = Array.from({ length: expectedCount }, (_, i) => i);
         let addrs: string[] = [];
 
         if (isMnemonic) {
@@ -90,8 +85,8 @@ export function useTransparentAddresses(isMainnet: boolean) {
           try {
             addrs = await Promise.all(indices.map(i => deriveZcashTransparentFromUfvk(ufvk, i)));
           } catch {
-            // UFVK may lack transparent component
             if (!cancelled) {
+              setMissing('no-transparent-key');
               setIsLoading(false);
             }
             return;
@@ -111,7 +106,7 @@ export function useTransparentAddresses(isMainnet: boolean) {
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes('failed to decrypt vault')) {
           if (!cancelled) {
-            setUndecryptable(true);
+            setMissing('undecryptable');
           }
           console.warn('[use-transparent-addresses] vault cannot be decrypted (re-import to fix)');
         } else {
@@ -127,6 +122,7 @@ export function useTransparentAddresses(isMainnet: boolean) {
       cancelled = true;
     };
   }, [
+    isZcash,
     isMnemonic,
     pocket,
     storeId,
@@ -138,5 +134,5 @@ export function useTransparentAddresses(isMainnet: boolean) {
     watchOnly?.orchardFvk,
   ]);
 
-  return { tAddresses, isLoading, undecryptable };
+  return { tAddresses, isLoading, missing };
 }

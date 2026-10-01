@@ -40,7 +40,13 @@ import { once } from './once';
 import { assessAmbientRayonIsolation, RAYON_ISOLATION_WARNING } from '../perf/rayon-isolation';
 import { loadVotingWasm } from '../state/voting-wasm';
 import { hotSpendAccount, isStoreOfWallet, parsePocketStoreId } from '../state/pocket-id';
-import { isP2pkhOf, pocketWalletKeys, type PocketKeysCtor } from './pocket-keys';
+import {
+  isP2pkhOf,
+  pocketWalletKeys,
+  tIndexOf,
+  utxosByTIndex,
+  type PocketKeysCtor,
+} from './pocket-keys';
 import { unsealVault, withSpendKeys, type SpendKeysCtor } from './hot-sign';
 import { assertProveRequest, type ProveRequest } from '../shared/prove-guard';
 import { issueWorkerKey, type SealedVault } from '../shared/vault-seal';
@@ -7747,13 +7753,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           throw new Error('wasm not initialized');
         }
 
-        const { vault, serverUrl, tAddresses, mainnet, addressIndexMap } = payload as {
+        const { vault, serverUrl, tAddresses, mainnet } = payload as {
           /** the sealed vault this worker opens itself */
           vault: SealedVault;
           serverUrl: string;
+          /** position is the t-branch index: legacy indices included */
           tAddresses: string[];
           mainnet: boolean;
-          addressIndexMap?: Record<string, number>;
         };
 
         const client = await makeZcashClient(serverUrl);
@@ -7763,29 +7769,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           throw new Error('no transparent UTXOs to shield');
         }
 
-        // build address → derivation index lookup
-        const addrToIndex = new Map<string, number>();
-        if (addressIndexMap) {
-          for (const [addr, idx] of Object.entries(addressIndexMap)) {
-            addrToIndex.set(addr, idx);
-          }
-        } else {
-          for (const addr of tAddresses) {
-            addrToIndex.set(addr, 0);
-          }
-        }
-
-        // group UTXOs by derivation index (WASM signs all inputs with one key)
-        const byIndex = new Map<number, typeof allUtxos>();
-        for (const utxo of allUtxos) {
-          const idx = addrToIndex.get(utxo.address) ?? 0;
-          let group = byIndex.get(idx);
-          if (!group) {
-            group = [];
-            byIndex.set(idx, group);
-          }
-          group.push(utxo);
-        }
+        // one group per t-branch index: WASM signs all inputs with one key
+        const byIndex = utxosByTIndex(allUtxos, tAddresses);
 
         // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe)
         const shieldBranchIdHex = await fetchBranchIdHex(client);
@@ -7915,7 +7900,6 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           tAddresses: string[];
           mainnet: boolean;
           ufvk: string;
-          addressIndexMap?: Record<string, number>;
         };
 
         const shieldUClient = await makeZcashClient(shieldUnsignedPayload.serverUrl);
@@ -7925,18 +7909,6 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const shieldUUtxos = await shieldUClient.getAddressUtxos(shieldUnsignedPayload.tAddresses);
         if (shieldUUtxos.length === 0) {
           throw new Error('no transparent UTXOs to shield');
-        }
-
-        // build address → derivation index lookup
-        const shieldUAddrToIndex = new Map<string, number>();
-        if (shieldUnsignedPayload.addressIndexMap) {
-          for (const [addr, idx] of Object.entries(shieldUnsignedPayload.addressIndexMap)) {
-            shieldUAddrToIndex.set(addr, idx);
-          }
-        } else {
-          for (const addr of shieldUnsignedPayload.tAddresses) {
-            shieldUAddrToIndex.set(addr, 0);
-          }
         }
 
         // orchard recipient from watch-only wallet
@@ -7958,7 +7930,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const shieldUAmount = shieldUTotal - shieldUFee;
 
         // collect address indices in UTXO order
-        const shieldUAddrIndices = shieldUUtxos.map(u => shieldUAddrToIndex.get(u.address) ?? 0);
+        const shieldUAddrIndices = shieldUUtxos.map(tIndexOf(shieldUnsignedPayload.tAddresses));
 
         const shieldUUtxosJson = JSON.stringify(
           shieldUUtxos.map(u => ({

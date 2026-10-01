@@ -37,3 +37,27 @@ export const isP2pkhOf = (script: Uint8Array, pubkeyHex: string): boolean => {
   const want = [0x76, 0xa9, 0x14, ...hash, 0x88, 0xac];
   return script.length === want.length && want.every((b, i) => script[i] === b);
 };
+
+/**
+ * The t-branch index of a UTXO's address, where `tAddresses[i]` is index i.
+ * An address missing from the reply falls back to index 0, as before; the
+ * hot signer still refuses any input not locked to that index's key.
+ */
+export const tIndexOf =
+  (tAddresses: string[]) =>
+  ({ address }: { address: string }): number =>
+    Math.max(0, tAddresses.indexOf(address));
+
+/** UTXOs grouped by t-branch index, so each group signs with one key */
+export const utxosByTIndex = <U extends { address: string }>(
+  utxos: U[],
+  tAddresses: string[],
+): Map<number, U[]> => {
+  const indexOf = tIndexOf(tAddresses);
+  const groups = new Map<number, U[]>();
+  for (const u of utxos) {
+    const i = indexOf(u);
+    groups.set(i, [...(groups.get(i) ?? []), u]);
+  }
+  return groups;
+};

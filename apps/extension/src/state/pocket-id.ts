@@ -53,8 +53,25 @@ export const hotSpendAccount = (storeId: string, requested?: number): number => 
 };
 
 /**
- * chrome.storage key of the highest transparent address index handed out.
+ * chrome.storage key of the highest transparent address index an older build
+ * handed out. Nothing writes it any more; it only widens the funds scan.
  * Account 0 keeps the historic global key so existing addresses never shift.
  */
 export const zcashTransparentIndexKey = (account: number): string =>
   account === 0 ? 'zcashTransparentIndex' : `zcashTransparentIndex#${account}`;
+
+/** older builds rotated t-addresses; the first five were always scanned */
+const LEGACY_T_FLOOR = 4;
+
+/**
+ * Every t-branch index scanned for a pocket's funds. A pocket shows one
+ * address, index 0, but older builds handed out more and those may still hold
+ * coins, so the scan covers up to the highest index ever stored for it.
+ * Array position is the derivation index: never filter or reorder it.
+ */
+export const pocketTransparentIndices = (legacyMax: unknown): number[] => {
+  const max = Number.isInteger(legacyMax)
+    ? Math.max(LEGACY_T_FLOOR, legacyMax as number)
+    : LEGACY_T_FLOOR;
+  return Array.from({ length: max + 1 }, (_, i) => i);
+};
