@@ -454,7 +454,6 @@ export async function requestCapabilityApprovalPopup(
     app: origin,
     capability: cap,
     requestId,
-    favIconUrl: sender.tab?.favIconUrl || '',
     title: sender.tab?.title || '',
   });
   const url = chrome.runtime.getURL(`popup.html#/approval/capability?${params.toString()}`);
@@ -510,7 +509,10 @@ export const externalMessageListener = (
     // a picker/approval/send popup wearing the host tab's identity (provenance
     // spoof). The frost/passkey entries already gate via requireCapability /
     // isValidExternalSender; ping is a harmless discovery response.
-    (type === 'send' || type === 'zafu_pick_contacts' || type === 'zafu_request_capability') &&
+    (type === 'send' ||
+      type === 'zafu_pick_contacts' ||
+      type === 'zafu_request_capability' ||
+      type === 'zafu_zcash_send') &&
     !isValidExternalSender(sender)
   ) {
     sendResponse({ success: false, error: 'denied', code: 'denied' });
@@ -1129,7 +1131,8 @@ export const externalMessageListener = (
 
       const totalAmount = outputs.reduce((sum, o) => sum + (o.amount || 0), 0);
       const fee = Number(msg['fee']) || 10_000;
-      const appOrigin = sender.origin || sender.url || 'unknown';
+      // the guard above already required a valid top-frame https sender
+      const appOrigin = sender.origin ?? 'unknown';
       const requestId = crypto.randomUUID();
 
       pendingPicks.set(requestId, sendResponse);
@@ -1141,27 +1144,18 @@ export const externalMessageListener = (
         fee: String(fee),
         numOutputs: String(outputs.length),
         outputsJson: JSON.stringify(outputs),
-        favIconUrl: sender.tab?.favIconUrl || '',
       });
       const url = chrome.runtime.getURL(`popup.html#/approval/zcash-send?${params.toString()}`);
-      // Track windowId -> requestId for the onRemoved sweep; on create-failure
-      // / untrackable id, respond with the denied shape rather than hang.
-      chrome.windows
-        .create({ url, type: 'popup', width: 400, height: 628 })
-        .then(win => {
-          if (win?.id !== undefined) {
-            popupWindowToRequestId.set(win.id, requestId);
-            return;
-          }
+      // Same per-origin dedup as every other high-risk popup: a second
+      // concurrent send from the same origin is dropped instead of stacking
+      // another window.
+      void (async () => {
+        if (!(await openApprovalPopup(appOrigin, url, requestId))) {
           if (pendingPicks.delete(requestId)) {
             sendResponse({ success: false, error: 'denied' });
           }
-        })
-        .catch(() => {
-          if (pendingPicks.delete(requestId)) {
-            sendResponse({ success: false, error: 'denied' });
-          }
-        });
+        }
+      })();
       return true;
     }
 

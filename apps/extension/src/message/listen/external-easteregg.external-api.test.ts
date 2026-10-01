@@ -616,3 +616,54 @@ describe('zafu_passkey_get - expired or legacy grants re-ask instead of failing 
     expect(await first).toMatchObject({ success: true });
   });
 });
+
+describe('zafu_zcash_send — top-frame gate and same-origin popup dedup', () => {
+  const outputs = [{ address: 'u1test', amount: 1000 }];
+
+  /** any approval-popup url opened for `origin`, whatever path it is under */
+  const anyPopupUrlFor = (origin: string): string | undefined =>
+    createMock.mock.calls
+      .map((c: unknown[]) => String((c[0] as { url?: string } | undefined)?.url ?? ''))
+      .find(u => appParam(u) === origin);
+
+  it("refuses a sender that is not the tab's top frame", async () => {
+    const origin = 'https://iframe.example';
+    // a third-party iframe: same shape as validSender, but not frame 0 - this
+    // is exactly the "wearing the host tab's identity" spoof the gate exists for
+    const iframeSender: chrome.runtime.MessageSender = {
+      ...validSender(origin),
+      frameId: 1,
+    };
+    const res = await call({ type: 'zafu_zcash_send', outputs }, iframeSender);
+    expect(res).toEqual({ success: false, error: 'denied', code: 'denied' });
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it('opens one popup for two concurrent sends from the same origin', async () => {
+    const origin = 'https://send-dup.example';
+
+    void call({ type: 'zafu_zcash_send', outputs }, validSender(origin));
+    await flush();
+    expect(createMock).toHaveBeenCalledTimes(1);
+
+    const second = await call({ type: 'zafu_zcash_send', outputs }, validSender(origin));
+    expect(second).toEqual({ success: false, error: 'denied' });
+    expect(createMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('never carries the sender favicon into the approval popup url', async () => {
+    const origin = 'https://no-favicon.example';
+    void call(
+      { type: 'zafu_zcash_send', outputs },
+      {
+        ...validSender(origin),
+        tab: { id: 1, favIconUrl: 'https://evil.example/f.ico' } as chrome.tabs.Tab,
+      },
+    );
+    await flush();
+    const url = anyPopupUrlFor(origin);
+    expect(url).toBeDefined();
+    expect(url).not.toContain('favIconUrl');
+    expect(url).not.toContain('evil.example');
+  });
+});
