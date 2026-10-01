@@ -10,6 +10,7 @@ import { PopupPath } from '../paths';
 import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
 import { useTransparentBalance } from '../../../hooks/zcash-transparent-balance';
+import { Watermark } from '@repo/ui/components/ui/watermark';
 import {
   spawnNetworkWorker,
   terminateNetworkWorker,
@@ -595,7 +596,12 @@ export const ZcashContent = ({
       {/* hero balance - the single figure on this screen. The per-pool
           split is a permanent RowGroup below (board: "balances" section),
           not a reveal-on-tap - nothing on this screen expands in place. */}
-      <div className='rounded-md border border-network-accent/20 bg-elev-1 p-4'>
+      <div className='relative isolate rounded-md border border-network-accent/20 bg-elev-1 p-4'>
+        {/* quiet - only while the wallet's very first sync is still
+            finding its balance. Gone once a balance appears, synced or not. */}
+        {totalZat === 0n && !allSynced && !syncFailure && (
+          <Watermark glyph='間' corner='top-right' />
+        )}
         <div className='flex items-center justify-between'>
           <span className='kicker'>balance</span>
           {/* the global hide-balances control lives where you notice you

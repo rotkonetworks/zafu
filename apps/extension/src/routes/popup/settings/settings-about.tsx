@@ -1,10 +1,12 @@
 import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
+import { Watermark } from '@repo/ui/components/ui/watermark';
 
 export const SettingsAbout = () => {
   return (
     <SettingsScreen title='about' backPath={PopupPath.SETTINGS}>
-      <div className='flex flex-col gap-4'>
+      <div className='relative isolate flex flex-col gap-4'>
+        <Watermark glyph='道' corner='bottom-right' />
         <div>
           <h3 className='kicker mb-1'>zafu wallet</h3>
           <p className='text-xs text-fg-muted leading-relaxed'>

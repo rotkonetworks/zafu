@@ -1,6 +1,7 @@
 import { Button } from '@repo/ui/components/ui/button';
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { InputProps } from '@repo/ui/components/ui/input';
+import { Watermark } from '@repo/ui/components/ui/watermark';
 import { PasswordInput } from '../../shared/components/password-input';
 import { usePopupNav } from '../../utils/navigate';
 import { useStore } from '../../state';
@@ -84,7 +85,8 @@ export const Login = () => {
 
   return (
     <FadeTransition className='flex flex-col items-stretch justify-start'>
-      <div className='flex h-screen flex-col justify-between p-[30px] pt-10'>
+      <div className='relative isolate flex h-screen flex-col justify-between p-[30px] pt-10'>
+        <Watermark glyph='守' corner='bottom-right' />
         <div className='mx-auto my-0 flex flex-col items-center gap-1'>
           <span className='text-label tracking-[0.18em] text-fg-muted lowercase'>
             shielded signing
