@@ -72,7 +72,7 @@ const PasswordChoice = ({
   </div>
 );
 
-type DetectedNet = 'penumbra' | 'zcash' | 'cosmos' | 'polkadot';
+type DetectedNet = 'penumbra' | 'zcash' | 'cosmos';
 
 /** one detail line per network for the scanned-account summary. */
 function detailLine(
@@ -81,7 +81,6 @@ function detailLine(
     walletImport: ReturnType<typeof zignerConnectSelector>['walletImport'];
     zcashWalletImport: ReturnType<typeof zignerConnectSelector>['zcashWalletImport'];
     parsedCosmosExport: ReturnType<typeof zignerConnectSelector>['parsedCosmosExport'];
-    parsedPolkadotExport: ReturnType<typeof zignerConnectSelector>['parsedPolkadotExport'];
   },
 ): { title: string; detail: React.ReactNode; kind: 'airgap' | 'watch-only' } | null {
   if (net === 'penumbra' && ctx.walletImport) {
@@ -119,18 +118,6 @@ function detailLine(
       kind: 'watch-only',
     };
   }
-  if (net === 'polkadot' && ctx.parsedPolkadotExport) {
-    return {
-      title: 'polkadot account detected',
-      detail: (
-        <>
-          {ctx.parsedPolkadotExport.address.slice(0, 12)}...
-          {ctx.parsedPolkadotExport.address.slice(-8)}
-        </>
-      ),
-      kind: 'watch-only',
-    };
-  }
   return null;
 }
 
@@ -145,7 +132,6 @@ export const ImportZigner = () => {
     walletLabel,
     walletImport,
     zcashWalletImport,
-    parsedPolkadotExport,
     parsedCosmosExport,
     detectedNetwork,
     errorMessage,
@@ -188,7 +174,7 @@ export const ImportZigner = () => {
 
   // skip password - use default encryption
   const handleSkip = async () => {
-    if (!walletImport && !zcashWalletImport && !parsedPolkadotExport && !parsedCosmosExport) {
+    if (!walletImport && !zcashWalletImport && !parsedCosmosExport) {
       setError('please scan a valid QR code first');
       return;
     }
@@ -243,14 +229,6 @@ export const ImportZigner = () => {
           deviceId: `cosmos-${Date.now()}`,
         };
         await addZignerUnencrypted(zignerData, walletLabel || 'zigner cosmos');
-      } else if (parsedPolkadotExport) {
-        const zignerData: ZignerZafuImport = {
-          polkadotSs58: parsedPolkadotExport.address,
-          polkadotGenesisHash: parsedPolkadotExport.genesisHash,
-          accountIndex: 0,
-          deviceId: `polkadot-${Date.now()}`,
-        };
-        await addZignerUnencrypted(zignerData, walletLabel || 'zigner polkadot');
       }
       await setOnboardingValuesInStorage(SEED_PHRASE_ORIGIN.ZIGNER);
       clearZignerState();
@@ -264,7 +242,7 @@ export const ImportZigner = () => {
   };
 
   const handleSetPassword = () => {
-    if (!walletImport && !zcashWalletImport && !parsedPolkadotExport && !parsedCosmosExport) {
+    if (!walletImport && !zcashWalletImport && !parsedCosmosExport) {
       setError('please scan a valid QR code first');
       return;
     }
@@ -317,7 +295,6 @@ export const ImportZigner = () => {
           walletImport,
           zcashWalletImport,
           parsedCosmosExport,
-          parsedPolkadotExport,
         })
       : null;
 
@@ -413,7 +390,7 @@ export const ImportZigner = () => {
             <Button
               variant='primary'
               className='flex-1'
-              disabled={!walletImport && !zcashWalletImport && !parsedPolkadotExport}
+              disabled={!walletImport && !zcashWalletImport && !parsedCosmosExport}
               onClick={() => void handleSkip()}
             >
               import

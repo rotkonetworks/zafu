@@ -44,8 +44,6 @@ const networkBadge = (network: string) => {
     penumbra: 'bg-teal-400/15 text-teal-300',
     zcash: 'bg-yellow-500/15 text-yellow-400',
     cosmos: 'bg-blue-500/15 text-blue-400',
-    polkadot: 'bg-pink-500/15 text-pink-400',
-    kusama: 'bg-pink-500/15 text-pink-400',
   };
   return (
     <span
@@ -82,7 +80,6 @@ export const SettingsWallets = ({
     walletLabel,
     walletImport,
     zcashWalletImport,
-    parsedPolkadotExport,
     parsedCosmosExport,
     detectedNetwork,
     errorMessage,
@@ -213,7 +210,7 @@ export const SettingsWallets = ({
   };
 
   const handleAddWallet = async () => {
-    if (!walletImport && !zcashWalletImport && !parsedPolkadotExport && !parsedCosmosExport) {
+    if (!walletImport && !zcashWalletImport && !parsedCosmosExport) {
       setError('please scan a qr code first');
       return;
     }
@@ -265,14 +262,6 @@ export const SettingsWallets = ({
           deviceId: `cosmos-${Date.now()}`,
         };
         await addZignerUnencrypted(zignerData, walletLabel || 'zigner cosmos');
-      } else if (detectedNetwork === 'polkadot' && parsedPolkadotExport && isLaunched('polkadot')) {
-        const zignerData: ZignerZafuImport = {
-          polkadotSs58: parsedPolkadotExport.address,
-          polkadotGenesisHash: parsedPolkadotExport.genesisHash,
-          accountIndex: 0,
-          deviceId: `polkadot-${Date.now()}`,
-        };
-        await addZignerUnencrypted(zignerData, walletLabel || 'zigner polkadot');
       }
       setAddSuccess(true);
       clearZignerState();
@@ -293,8 +282,7 @@ export const SettingsWallets = ({
   const removingVault = keyInfos.find(v => v.id === removingId);
   const showManualInput = manualInputRef.current && scanState !== 'scanned';
   const showScannedState =
-    scanState === 'scanned' &&
-    (walletImport || zcashWalletImport || parsedPolkadotExport || parsedCosmosExport);
+    scanState === 'scanned' && (walletImport || zcashWalletImport || parsedCosmosExport);
   const showInitialState = scanState === 'idle' && !showManualInput;
   const hasSeedVault = keyInfos.some(v => v.type === 'mnemonic');
   const zcashEnabled = enabledNetworks.includes('zcash');
@@ -350,9 +338,6 @@ export const SettingsWallets = ({
                 if (v.insensitive['cosmosAddresses'] && isLaunched('noble')) {
                   networks.push('cosmos');
                 }
-                if (v.insensitive['polkadotSs58'] && isLaunched('polkadot')) {
-                  networks.push('polkadot');
-                }
                 // seed wallets derive keys for all networks
                 if (v.type === 'mnemonic') {
                   if (!networks.includes('zcash')) {
@@ -371,7 +356,7 @@ export const SettingsWallets = ({
                 // reflect what the user has actually enabled (Settings >
                 // Networks) - otherwise a Zcash-only wallet still shows a
                 // penumbra tag. Only gate the top-level networks the user
-                // toggles; leave cosmos/polkadot (already isLaunched-gated).
+                // toggles; leave cosmos (already isLaunched-gated).
                 // Guard against an empty list so tags never all vanish.
                 const shownNetworks =
                   enabledNetworks.length === 0
@@ -491,11 +476,6 @@ export const SettingsWallets = ({
                         {parsedCosmosExport.addresses.map(a => a.address.slice(0, 10)).join(', ')}
                         ...
                       </>
-                    ) : parsedPolkadotExport ? (
-                      <>
-                        {parsedPolkadotExport.address.slice(0, 8)}...
-                        {parsedPolkadotExport.address.slice(-6)}
-                      </>
                     ) : (
                       <>
                         account #
@@ -548,11 +528,7 @@ export const SettingsWallets = ({
                   <Btn
                     primary
                     disabled={
-                      (!walletImport &&
-                        !zcashWalletImport &&
-                        !parsedPolkadotExport &&
-                        !parsedCosmosExport) ||
-                      isAdding
+                      (!walletImport && !zcashWalletImport && !parsedCosmosExport) || isAdding
                     }
                     onClick={() => void handleAddWallet()}
                   >

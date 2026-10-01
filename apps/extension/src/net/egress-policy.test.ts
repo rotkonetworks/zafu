@@ -29,7 +29,6 @@ describe('a fresh zcash-only wallet', () => {
         'unknown',
       ],
       ['https://noble-rpc.polkachu.com/status', 'network-off'],
-      ['https://paritytech.github.io/chainspecs/polkadot.json', 'network-off'],
       // the independent cross-check peer: a node the user did not choose, so opt-in
       ['https://us.zec.stardust.rest:443/x', 'opt-in'],
       // optional services, off until asked

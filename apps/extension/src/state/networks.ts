@@ -8,7 +8,7 @@ import { isZidecarEndpoint, type ZcashBackend } from './keyring/zcash-backend';
  *
  * Privacy networks (zcash, penumbra): require trusted sync endpoint
  * IBC chains (noble, cosmoshub): cosmos-sdk chains for IBC transfers
- * Transparent networks (polkadot, ethereum): simple RPC balance queries
+ * Transparent networks (ethereum): simple RPC balance queries
  *
  * Core focus:
  * - Penumbra: private DEX, shielded assets
@@ -24,8 +24,6 @@ export type NetworkId =
   | 'noble'
   | 'cosmoshub'
   // other transparent networks
-  | 'polkadot'
-  | 'kusama'
   | 'ethereum'
   | 'bitcoin';
 
@@ -173,22 +171,6 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
   },
 
   // === Other Transparent Networks ===
-  polkadot: {
-    id: 'polkadot',
-    name: 'Polkadot',
-    symbol: 'DOT',
-    decimals: 10,
-    enabled: false,
-    endpoint: 'wss://rpc.polkadot.io',
-  },
-  kusama: {
-    id: 'kusama',
-    name: 'Kusama',
-    symbol: 'KSM',
-    decimals: 12,
-    enabled: false,
-    endpoint: 'wss://kusama-rpc.polkadot.io',
-  },
   ethereum: {
     id: 'ethereum',
     name: 'Ethereum',

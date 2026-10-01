@@ -170,7 +170,7 @@ export async function createZignerWalletEntries(
 /**
  * create the zcash wallet entry for a Ledger cold-signer import (side effect:
  * local.set). clone of the zcash branch of createZignerWalletEntries, trimmed to
- * zcash-only single-signer - no penumbra FVK, no polkadot/cosmos, no ZID.
+ * zcash-only single-signer - no penumbra FVK, no cosmos, no ZID.
  *
  * `key` is accepted for signature parity with createZignerWalletEntries (and so
  * future device-metadata sealing can slot in) but is currently unused: a Ledger

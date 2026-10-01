@@ -40,8 +40,6 @@ const ALL_FEATURES: FeatureKey[] = [
 const EXPECTED_SETS: Record<NetworkType, FeatureKey[]> = {
   zcash: ['swap', 'vote', 'inbox', 'multisig', 'zcash'],
   penumbra: ['stake', 'swap', 'vote', 'inbox', 'cosmos'],
-  polkadot: [],
-  kusama: [],
   noble: ['cosmos'],
   cosmoshub: ['cosmos'],
   osmosis: ['cosmos'],
