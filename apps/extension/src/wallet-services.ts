@@ -15,6 +15,8 @@ import { hasLiveDappSession } from './dapp-session-presence';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { ChainRegistryClient } from '@penumbrafi/registry';
 import { SENTINEL_U64_MAX } from './utils/sentinel';
+import { base64ToUint8Array } from '@rotko/penumbra-types/base64';
+import { USDC_INJ_ID } from './penumbra/quotes';
 
 /**
  * check if penumbra network is enabled
@@ -200,23 +202,25 @@ const syncLastBlockToStorage = async (
 };
 
 /**
- * The assets prices are recorded against. Onboarding stores them, but a wallet
- * that turned penumbra on later never got any, so its balances could never be
- * valued: fall back to the bundled registry (no network) and keep the result.
+ * The assets the view service records prices against, from the batch swaps in
+ * the blocks it syncs: the stored or bundled registry numeraires, always with
+ * UM and USDC.inj, which the penumbra home values in. A wallet onboarded with
+ * an older set gets the two added once (no network).
  */
 const numerairesFor = async (chainId: string): Promise<string[]> => {
   const stored = await localExtStorage.get('numeraires');
-  if (stored.length) {
-    return stored;
-  }
   try {
-    const bundled = new ChainRegistryClient().bundled
-      .get(chainId)
-      .numeraires.map(n => n.toJsonString());
-    if (bundled.length) {
-      await localExtStorage.set('numeraires', bundled);
+    const bundled = new ChainRegistryClient().bundled;
+    const ids = [
+      ...(stored.length ? stored : bundled.get(chainId).numeraires.map(n => n.toJsonString())),
+      bundled.globals().stakingAssetId.toJsonString(),
+      new AssetId({ inner: base64ToUint8Array(USDC_INJ_ID) }).toJsonString(),
+    ];
+    const next = [...new Set(ids.map(n => AssetId.fromJsonString(n).toJsonString()))];
+    if (next.length !== stored.length) {
+      await localExtStorage.set('numeraires', next);
     }
-    return bundled;
+    return next;
   } catch {
     return stored;
   }
