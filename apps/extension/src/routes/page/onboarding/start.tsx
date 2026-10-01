@@ -17,7 +17,7 @@ const BRING = [
     icon: 'i-zafu-kori text-device-blue',
     label: 'zigner or keystone',
     hint: 'scan its connect code',
-    to: PagePath.IMPORT_ZIGNER,
+    to: PagePath.IMPORT_SIGNER,
     shown: true,
   },
   {

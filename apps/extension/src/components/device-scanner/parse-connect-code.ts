@@ -1,13 +1,14 @@
 /**
  * Pure parsing for a cold-signer "connect code" - the QR (or pasted text)
- * a zigner or keystone shows to join a wallet to zafu.
+ * a zigner or keystone shows to join a wallet to zafu. There is one scanner
+ * for every signer; the user never picks a brand beforehand - this module
+ * classifies the code and the brand only appears once it has.
  *
  * Zigner's scope is zcash and penumbra only. A code carries ONE network;
  * `mergeZignerCapabilities` (state/keyring) is what lets a second network's
- * code join the same wallet. Device type comes from the caller's declared
- * hint (which button was pressed) when given, otherwise from the payload -
- * the presence of a ZID public key is a zigner tell, never the other way
- * around, so it is only a consistency check, not a source of truth.
+ * code join the same wallet. Device type is always derived from the payload:
+ * a ZID public key is a zigner tell (isLikelyKeystoneAccountsExport), never
+ * a user choice - there is no "which device" button to trust instead.
  *
  * No React, no store, no chrome APIs here - this is unit-testable on its
  * own (see parse-connect-code.test.ts).
@@ -30,6 +31,7 @@ import {
   parsePenumbraUr,
   parseZcashUr,
   parseZcashAccountsCbor,
+  isLikelyKeystoneAccountsExport,
 } from '@repo/wallet/ur-parser';
 
 export type ConnectDevice = 'zigner' | 'keystone';
@@ -67,8 +69,6 @@ export type ParsedConnectCode = ParsedZcashCode | ParsedPenumbraCode;
 export type ConnectCodeErrorReason =
   /** a recognized code from a different flow (e.g. a pending signing request) */
   | 'signing-request'
-  /** a recognized but out-of-scope network (substrate/cosmos) */
-  | 'unsupported-network'
   /** not recognized as a connect code at all */
   | 'garbage';
 
@@ -86,58 +86,40 @@ const err = (reason: ConnectCodeErrorReason, message: string): ConnectCodeError 
   message,
 });
 
-/** networks zigner/keystone connect codes no longer support - declined calmly */
-const UNSUPPORTED_PREFIXES: { prefix: string; network: string }[] = [
-  { prefix: 'substrate:', network: 'polkadot' },
-  { prefix: 'cosmos:', network: 'cosmos' },
-];
+const NOT_A_CONNECT_CODE = 'not a connect code. please show the connect code and try again.';
 
-/**
- * Parse a single-frame connect code payload (raw QR text, or pasted text).
- *
- * `declaredDevice` is the user's explicit choice (which button they pressed),
- * trusted over the byte-level ZID heuristic - see the module doc.
- */
-export function parseConnectCode(payload: string, declaredDevice?: ConnectDevice): ConnectCodeResult {
+/** parse a single-frame connect code payload (raw QR text, or pasted text) */
+export function parseConnectCode(payload: string): ConnectCodeResult {
   const trimmed = payload.trim();
   if (!trimmed) {
     return err('garbage', 'no code to read yet.');
   }
 
-  if (trimmed.startsWith('{') && trimmed.includes('"cosmos-accounts"')) {
-    return err('unsupported-network', 'this code is for cosmos, which zigner no longer connects here.');
-  }
-  for (const { prefix, network } of UNSUPPORTED_PREFIXES) {
-    if (trimmed.startsWith(prefix)) {
-      return err('unsupported-network', `this code is for ${network}, which zigner no longer connects here.`);
-    }
-  }
-
   if (isUrString(trimmed)) {
-    return parseUr(trimmed, declaredDevice);
+    return parseUr(trimmed);
   }
 
   // legacy binary format (pre-UR zigner firmware)
   const network = detectQRNetwork(trimmed);
   if (network === 'penumbra' && isZignerFvkQR(trimmed)) {
     try {
-      return fromPenumbraExport(parseZignerFvkQR(trimmed), 'zigner');
+      return fromPenumbraExport(parseZignerFvkQR(trimmed));
     } catch (cause) {
-      return err('garbage', readableCause(cause, 'this penumbra code did not read.'));
+      return err('garbage', readableCause(cause, 'this code did not read.'));
     }
   }
   if (network === 'zcash' && isZcashFvkQR(trimmed)) {
     try {
-      return fromZcashExport(parseZcashFvkQR(trimmed), declaredDevice ?? 'zigner');
+      return fromZcashExport(parseZcashFvkQR(trimmed));
     } catch (cause) {
-      return err('garbage', readableCause(cause, 'this zcash code did not read.'));
+      return err('garbage', readableCause(cause, 'this code did not read.'));
     }
   }
 
-  return err('garbage', 'not a connect code. please show the connect code and try again.');
+  return err('garbage', NOT_A_CONNECT_CODE);
 }
 
-function parseUr(trimmed: string, declaredDevice?: ConnectDevice): ConnectCodeResult {
+function parseUr(trimmed: string): ConnectCodeResult {
   const urType = getUrType(trimmed);
 
   if (urType === 'penumbra-accounts') {
@@ -155,26 +137,15 @@ function parseUr(trimmed: string, declaredDevice?: ConnectDevice): ConnectCodeRe
         zidPublicKey: urExport.zidPublicKey,
       };
     } catch (cause) {
-      return err('garbage', readableCause(cause, 'this penumbra code did not read.'));
+      return err('garbage', readableCause(cause, 'this code did not read.'));
     }
   }
 
   if (urType === 'zcash-accounts') {
     try {
-      const urExport = parseZcashUr(trimmed);
-      return {
-        ok: true,
-        network: 'zcash',
-        device: pickDevice(declaredDevice, Boolean(urExport.zidPublicKey)),
-        accountIndex: urExport.accountIndex,
-        label: urExport.label,
-        ufvk: urExport.ufvk,
-        orchardFvk: null,
-        mainnet: urExport.ufvk.startsWith('uview1'),
-        zidPublicKey: urExport.zidPublicKey,
-      };
+      return fromZcashUrExport(parseZcashUr(trimmed));
     } catch (cause) {
-      return err('garbage', readableCause(cause, 'this zcash code did not read.'));
+      return err('garbage', readableCause(cause, 'this code did not read.'));
     }
   }
 
@@ -185,7 +156,7 @@ function parseUr(trimmed: string, declaredDevice?: ConnectDevice): ConnectCodeRe
     );
   }
 
-  return err('garbage', `unsupported code: ur:${urType ?? 'unknown'}.`);
+  return err('garbage', NOT_A_CONNECT_CODE);
 }
 
 /**
@@ -193,37 +164,24 @@ function parseUr(trimmed: string, declaredDevice?: ConnectDevice): ConnectCodeRe
  * multi-frame (fountain-coded) scan - the path an animated/Keystone-class
  * scan takes, as distinct from a single-frame UR string.
  */
-export function parseConnectCodeBytes(
-  cbor: Uint8Array,
-  declaredDevice: ConnectDevice,
-): ConnectCodeResult {
+export function parseConnectCodeBytes(cbor: Uint8Array): ConnectCodeResult {
   try {
-    const urExport = parseZcashAccountsCbor(cbor);
-    return fromZcashUrExport(urExport, declaredDevice);
+    return fromZcashUrExport(parseZcashAccountsCbor(cbor));
   } catch (cause) {
     return err('garbage', readableCause(cause, 'this code did not read.'));
   }
 }
 
-function fromZcashUrExport(
-  urExport: { ufvk: string; accountIndex: number; label: string | null; zidPublicKey?: string },
-  declaredDevice: ConnectDevice,
-): ParsedZcashCode {
-  // The byte heuristic - "zid_pubkey present implies zigner" - is only a
-  // consistency check against the declared device, never the source of
-  // truth (see module doc); log so drift is visible without ever silently
-  // overriding what the user told us.
-  const heuristic: ConnectDevice = urExport.zidPublicKey ? 'zigner' : 'keystone';
-  if (heuristic !== declaredDevice) {
-    console.warn(
-      `[device-scanner] declared "${declaredDevice}" but the code looks like "${heuristic}" ` +
-        `(zid_pubkey ${urExport.zidPublicKey ? 'present' : 'absent'}). trusting the declaration.`,
-    );
-  }
+function fromZcashUrExport(urExport: {
+  ufvk: string;
+  accountIndex: number;
+  label: string | null;
+  zidPublicKey?: string;
+}): ParsedZcashCode {
   return {
     ok: true,
     network: 'zcash',
-    device: declaredDevice,
+    device: isLikelyKeystoneAccountsExport(urExport) ? 'keystone' : 'zigner',
     accountIndex: urExport.accountIndex,
     label: urExport.label,
     ufvk: urExport.ufvk,
@@ -233,11 +191,12 @@ function fromZcashUrExport(
   };
 }
 
-function fromZcashExport(exportData: ZcashFvkExportData, device: ConnectDevice): ParsedZcashCode {
+function fromZcashExport(exportData: ZcashFvkExportData): ParsedZcashCode {
   return {
     ok: true,
     network: 'zcash',
-    device,
+    device:
+      exportData.zidPublicKey || !exportData.coldSignerType ? 'zigner' : exportData.coldSignerType,
     accountIndex: exportData.accountIndex,
     label: exportData.label,
     ufvk: exportData.ufvk ?? null,
@@ -247,14 +206,11 @@ function fromZcashExport(exportData: ZcashFvkExportData, device: ConnectDevice):
   };
 }
 
-function fromPenumbraExport(
-  exportData: ZignerFvkExportData,
-  device: 'zigner',
-): ParsedPenumbraCode {
+function fromPenumbraExport(exportData: ZignerFvkExportData): ParsedPenumbraCode {
   return {
     ok: true,
     network: 'penumbra',
-    device,
+    device: 'zigner',
     accountIndex: exportData.accountIndex,
     label: exportData.label,
     walletIdBytes: exportData.walletIdBytes,
@@ -262,11 +218,6 @@ function fromPenumbraExport(
     fvkBech32m: exportData.fvkBech32m ?? '',
     zidPublicKey: exportData.zidPublicKey,
   };
-}
-
-/** declared device wins; the zid heuristic only fills in when none was given */
-function pickDevice(declared: ConnectDevice | undefined, zidPresent: boolean): ConnectDevice {
-  return declared ?? (zidPresent ? 'zigner' : 'keystone');
 }
 
 function readableCause(cause: unknown, fallback: string): string {

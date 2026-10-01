@@ -103,9 +103,7 @@ export const DeviceScanner = ({ onDone, onCancel }: DeviceScannerProps) => {
         setScreen({ kind: 'scan', error: `unsupported code: ur:${urType}.` });
         return;
       }
-      // no explicit device button in this unified flow - the zid heuristic
-      // picks a default; the found screen can still flip it.
-      const result = parseConnectCodeBytes(bytes, 'keystone');
+      const result = parseConnectCodeBytes(bytes);
       if (!result.ok) {
         setScreen({ kind: 'scan', error: result.message });
         return;
@@ -168,6 +166,7 @@ export const DeviceScanner = ({ onDone, onCancel }: DeviceScannerProps) => {
         onComplete={handleMultipartComplete}
         onError={message => setScreen({ kind: 'scan', error: message })}
         onClose={() => setScreen({ kind: 'scan' })}
+        inline
         title='reading device code'
         description='hold the camera steady - this code spans several frames'
         urTypeFilter='zcash-accounts'
@@ -235,7 +234,8 @@ export const DeviceScanner = ({ onDone, onCancel }: DeviceScannerProps) => {
     return (
       <StatusSlot tone='gold' icon='i-ph-check-circle'>
         <span className='text-fg-high'>
-          {networkLabel(screen.outcome.network)} added{screen.outcome.joined ? ' to this wallet' : ''}
+          {networkLabel(screen.outcome.network)} added
+          {screen.outcome.joined ? ' to this wallet' : ''}
         </span>
       </StatusSlot>
     );
@@ -300,11 +300,7 @@ export const DeviceScanner = ({ onDone, onCancel }: DeviceScannerProps) => {
         )}
       </RowGroup>
 
-      <Input
-        placeholder='wallet name'
-        value={label}
-        onChange={e => setLabel(e.target.value)}
-      />
+      <Input placeholder='wallet name' value={label} onChange={e => setLabel(e.target.value)} />
 
       {parsed.network === 'zcash' && (
         <div className='flex flex-col gap-1'>

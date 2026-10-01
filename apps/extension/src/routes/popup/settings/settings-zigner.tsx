@@ -191,7 +191,7 @@ export const SettingsZigner = () => {
             <div className='flex gap-2'>
               <Button
                 size='sm'
-                onClick={() => openPageInTab(PagePath.IMPORT_ZIGNER)}
+                onClick={() => openPageInTab(PagePath.IMPORT_SIGNER)}
                 title='scan the pairing QR from your zigner'
               >
                 pair zigner
@@ -216,7 +216,7 @@ export const SettingsZigner = () => {
               <p className='kicker'>wallets</p>
               <button
                 type='button'
-                onClick={() => openPageInTab(PagePath.IMPORT_ZIGNER)}
+                onClick={() => openPageInTab(PagePath.IMPORT_SIGNER)}
                 className='text-label text-zigner-gold hover:underline underline-offset-2 lowercase'
                 title='scan the pairing QR from another zigner'
               >
@@ -433,7 +433,7 @@ export const SettingsZigner = () => {
                 <Button
                   variant='secondary'
                   className='w-full'
-                  onClick={() => openPageInTab(PagePath.IMPORT_ZIGNER)}
+                  onClick={() => openPageInTab(PagePath.IMPORT_SIGNER)}
                 >
                   <ExternalLinkIcon className='size-4 mr-2' />
                   scan QR code

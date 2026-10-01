@@ -19,7 +19,10 @@ export interface ConnectOutcome {
 }
 
 /** the vault this code would join, if any - computed before the write so the UI can say "joined" up front */
-export function findJoinTarget(parsed: ParsedConnectCode, keyInfos: KeyInfo[]): KeyInfo | undefined {
+export function findJoinTarget(
+  parsed: ParsedConnectCode,
+  keyInfos: KeyInfo[],
+): KeyInfo | undefined {
   if (!parsed.zidPublicKey) {
     return undefined;
   }
@@ -58,7 +61,8 @@ export function buildZignerImport(parsed: ParsedConnectCode): ZignerZafuImport {
   }
 
   const viewingKey =
-    parsed.ufvk ?? (parsed.orchardFvk ? btoa(String.fromCharCode(...parsed.orchardFvk)) : undefined);
+    parsed.ufvk ??
+    (parsed.orchardFvk ? btoa(String.fromCharCode(...parsed.orchardFvk)) : undefined);
   // no ZID on this device (keystone never has one; pre-ZID zigner firmware
   // doesn't either) - fall back to a hash of the viewing key, never a
   // timestamp, so re-scanning the same device dedups against itself.

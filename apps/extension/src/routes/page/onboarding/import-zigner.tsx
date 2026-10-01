@@ -51,11 +51,8 @@ const PasswordChoice = ({
       onClick={onSetPassword}
       disabled={importing}
     >
-      set password
+      set a password
     </Button>
-    <p className='text-center text-label text-fg-muted lowercase'>
-      required to use apps. more secure.
-    </p>
 
     <Button
       variant='secondary'
@@ -63,9 +60,11 @@ const PasswordChoice = ({
       onClick={onSkip}
       disabled={importing}
     >
-      {importing ? 'importing...' : 'skip password'}
+      {importing ? 'importing...' : 'continue without a password'}
     </Button>
-    <p className='text-center text-label text-fg-muted lowercase'>no login needed. less secure.</p>
+    <p className='text-center text-label text-fg-muted lowercase'>
+      anyone using this computer can open zafu and see your balances
+    </p>
 
     <Button variant='quiet' className='mt-2 w-full' onClick={onScanAgain} disabled={importing}>
       scan again
@@ -74,6 +73,9 @@ const PasswordChoice = ({
 );
 
 type DetectedNet = 'penumbra' | 'zcash' | 'cosmos';
+
+/** a payload that opens a multi-frame (fountain) UR sequence, e.g. a keystone export too large for one QR */
+const MULTIPART_UR = /^ur:[^/]+\/\d+-\d+\//i;
 
 /** one detail line per network for the scanned-account summary. */
 function detailLine(
@@ -143,12 +145,10 @@ export const ImportZigner = () => {
     setError,
     clearZignerState,
   } = useStore(zignerConnectSelector);
-  // Tracks whether the user picked the Keystone-class flow (animated multipart
-  // UR over `ur:zcash-accounts`). Distinct from the legacy zigner scan to keep
-  // UI semantics clear and avoid regressing the static-QR happy path.
-  const [keystoneMode, setKeystoneMode] = useState(false);
   const { addZignerUnencrypted } = useStore(keyRingSelector);
   const [importing, setImporting] = useState(false);
+  // whether the scanner has upgraded to animated (multi-frame) mode
+  const [multipart, setMultipart] = useState(false);
 
   // Hidden manual input mode - activated by clicking the title 10 times
   const clickCountRef = useRef(0);
@@ -170,7 +170,21 @@ export const ImportZigner = () => {
     }
   };
 
-  const handleScan = useCallback((data: string) => processQrData(data), [processQrData]);
+  // one camera for any signer: a single-frame code (legacy zigner QR, or a
+  // one-shot UR) goes straight through processQrData; a code that opens a
+  // multi-frame (fountain) UR sequence - keystone's animated export - swaps
+  // the scanner itself into animated mode instead of asking which device
+  // this is beforehand.
+  const handleScan = useCallback(
+    (data: string) => {
+      if (MULTIPART_UR.test(data.trim())) {
+        setMultipart(true);
+        return;
+      }
+      processQrData(data);
+    },
+    [processQrData],
+  );
   const handleManualInput = (value: string) => value.trim() && processQrData(value);
 
   // skip password - use default encryption
@@ -260,9 +274,11 @@ export const ImportZigner = () => {
     manualInputRef.current = false;
   };
 
-  // Full-screen scanner mode
+  // Full-screen scanner mode - one camera. A code that needs several frames
+  // (keystone's animated export) upgrades the same screen to animated mode
+  // instead of asking beforehand which device this is.
   if (scanState === 'scanning') {
-    if (keystoneMode) {
+    if (multipart) {
       return (
         <AnimatedQrScanner
           onComplete={(bytes, urType) => {
@@ -270,15 +286,16 @@ export const ImportZigner = () => {
               setError(`expected ur:zcash-accounts, got ur:${urType}`);
               return;
             }
-            processZcashAccountsBytes(bytes, 'keystone');
+            processZcashAccountsBytes(bytes);
           }}
           onError={setError}
           onClose={() => {
-            setKeystoneMode(false);
+            setMultipart(false);
             setScanState('idle');
           }}
-          title='scan keystone QR'
-          description='hold the camera steady on the animated zcash-accounts QR'
+          inline
+          title='reading device code'
+          description='hold the camera steady - this code spans several frames'
           urTypeFilter='zcash-accounts'
         />
       );
@@ -288,8 +305,9 @@ export const ImportZigner = () => {
         onScan={handleScan}
         onError={setError}
         onClose={() => setScanState('idle')}
-        title='scan zigner QR'
-        description="point the camera at your zigner's viewing-key QR"
+        inline
+        title='scan your device'
+        description='zafu tells which one it is'
       />
     );
   }
@@ -311,56 +329,44 @@ export const ImportZigner = () => {
         onClick={handleTitleClick}
         className='cursor-default font-display text-[38px] text-fg-high'
       >
-        connect zigner
+        scan your device
       </h1>
       <p className='text-body text-fg-muted lowercase'>
-        scan the viewing-key QR from your zigner to add a watch-only wallet.
+        scan the connect code your cold signer shows - zafu tells which one it is.
       </p>
 
       {scanState === 'idle' && !showManualInput && (
         <div className='flex flex-col gap-2.5'>
           <div className='flex flex-col gap-2 border border-border-soft bg-elev-1 p-3'>
-            <span className='flex items-center gap-1.5 text-label text-fg-high lowercase'>
-              <span className='i-ph-device-mobile size-3.5 text-zigner-gold' />
-              on your zigner
-            </span>
-            <ol className='flex flex-col gap-1.5'>
-              {[
-                'open the zcash key path',
-                'select FVK (viewing key)',
-                'scan the QR it shows below',
-              ].map((label, i) => (
-                <li key={i} className='flex items-center gap-2 text-label text-fg-muted lowercase'>
-                  <span className='flex size-4 shrink-0 items-center justify-center bg-zigner-gold/15 text-[9px] text-zigner-gold'>
-                    {i + 1}
-                  </span>
-                  {label}
-                </li>
-              ))}
-            </ol>
+            {[
+              { icon: 'i-ph-link', name: 'zigner', path: 'home › connect to zafu' },
+              {
+                icon: 'i-ph-qr-code',
+                name: 'keystone',
+                path: 'connect software wallet › zafu',
+              },
+            ].map(({ icon, name, path }) => (
+              <span
+                key={name}
+                className='flex items-center gap-2 text-label text-fg-muted lowercase'
+              >
+                <span className={cn(icon, 'size-3.5 shrink-0 text-zigner-gold')} />
+                <span className='text-fg-high'>{name}</span>
+                {path}
+              </span>
+            ))}
           </div>
 
           <Button
             variant='primary'
             className='h-14 w-full text-body'
             onClick={() => {
-              setKeystoneMode(false);
+              setMultipart(false);
               setScanState('scanning');
             }}
           >
             <span className='i-ph-scan mr-2 size-4' />
-            scan zigner QR
-          </Button>
-          <Button
-            variant='secondary'
-            className='h-14 w-full text-body'
-            onClick={() => {
-              setKeystoneMode(true);
-              setScanState('scanning');
-            }}
-          >
-            <span className='i-ph-scan mr-2 size-4' />
-            scan keystone QR (zcash)
+            scan a signer
           </Button>
 
           {errorMessage && (

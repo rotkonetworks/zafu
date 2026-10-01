@@ -76,16 +76,20 @@ function cborText(s: string): number[] {
   return [...cborLenPrefix(0x60, bytes.length), ...bytes];
 }
 
-/** a `zcash-accounts` CBOR map: {1: seed_fingerprint(16), 2: [{1: ufvk, 2: 0, 3: name}]} */
-function zcashAccountsCbor(opts: { ufvk: string; name: string }): Uint8Array {
+/** a `zcash-accounts` CBOR map: {1: seed_fingerprint(16), 2: [{1: ufvk, 2: 0, 3: name[, 4: zid]}]} */
+function zcashAccountsCbor(opts: { ufvk: string; name: string; zidHex?: string }): Uint8Array {
+  const zidField = opts.zidHex
+    ? [...cborUint(4), ...cborBytes(Array.from(Buffer.from(opts.zidHex, 'hex')))]
+    : [];
   const account = [
-    0xa3, // map(3)
+    0xa0 | (3 + (opts.zidHex ? 1 : 0)), // map(3 or 4)
     ...cborUint(1),
     ...cborText(opts.ufvk),
     ...cborUint(2),
     ...cborUint(0),
     ...cborUint(3),
     ...cborText(opts.name),
+    ...zidField,
   ];
   const bytes = [
     0xa2, // map(2)
@@ -101,7 +105,7 @@ function zcashAccountsCbor(opts: { ufvk: string; name: string }): Uint8Array {
 const REAL_UFVK = 'uview1' + 'q'.repeat(250);
 
 describe('parseConnectCode', () => {
-  it('reads a real penumbra FVK export (legacy binary QR)', () => {
+  it('reads a real penumbra FVK export (legacy binary QR) - always a zigner', () => {
     const result = parseConnectCode(penumbraLegacyHex());
     expect(result.ok).toBe(true);
     if (!result.ok) {
@@ -123,25 +127,28 @@ describe('parseConnectCode', () => {
     expect(result.orchardFvk).not.toBeNull();
   });
 
-  it('declines a substrate/cosmos connect code calmly', () => {
+  it('declines a substrate connect code calmly (polkadot is gone)', () => {
     const result = parseConnectCode('substrate:5F...someaddress:0xdeadbeef');
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
     }
-    expect(result.reason).toBe('unsupported-network');
+    expect(result.reason).toBe('garbage');
     expect(result.message).not.toMatch(/!/);
   });
 
-  it('declines a cosmos-accounts json code calmly', () => {
+  it('declines a cosmos-accounts json code calmly (zigner scope is zcash + penumbra)', () => {
     const result = parseConnectCode(
-      JSON.stringify({ type: 'cosmos-accounts', addresses: [{ chain_id: 'noble', address: 'noble1x', prefix: 'noble' }] }),
+      JSON.stringify({
+        type: 'cosmos-accounts',
+        addresses: [{ chain_id: 'noble', address: 'noble1x', prefix: 'noble' }],
+      }),
     );
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
     }
-    expect(result.reason).toBe('unsupported-network');
+    expect(result.reason).toBe('garbage');
   });
 
   it('refuses garbage', () => {
@@ -157,12 +164,22 @@ describe('parseConnectCode', () => {
     const result = parseConnectCode('   ');
     expect(result.ok).toBe(false);
   });
+
+  it('names a signing request instead of silently refusing it', () => {
+    // a zcash-pczt UR is a different flow (sign), not a connect code
+    const result = parseConnectCode('ur:zcash-pczt/1-1/data');
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.reason).toBe('signing-request');
+  });
 });
 
 describe('parseConnectCodeBytes (keystone / multi-frame path)', () => {
-  it('reads a keystone zcash-accounts payload and trusts the declared device', () => {
+  it('classifies a keystone zcash-accounts payload (no zid) as keystone', () => {
     const cbor = zcashAccountsCbor({ ufvk: REAL_UFVK, name: 'keystone zcash' });
-    const result = parseConnectCodeBytes(cbor, 'keystone');
+    const result = parseConnectCodeBytes(cbor);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -173,18 +190,23 @@ describe('parseConnectCodeBytes (keystone / multi-frame path)', () => {
     expect(result.zidPublicKey).toBeUndefined();
   });
 
-  it('trusts a declared "zigner" device even without a zid (documented edge case)', () => {
-    const cbor = zcashAccountsCbor({ ufvk: REAL_UFVK, name: 'zigner zcash' });
-    const result = parseConnectCodeBytes(cbor, 'zigner');
+  it('classifies a zigner zcash-accounts payload (zid present) as zigner', () => {
+    const cbor = zcashAccountsCbor({
+      ufvk: REAL_UFVK,
+      name: 'zigner zcash',
+      zidHex: 'ab'.repeat(32),
+    });
+    const result = parseConnectCodeBytes(cbor);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
     }
     expect(result.device).toBe('zigner');
+    expect(result.zidPublicKey).toBe('ab'.repeat(32));
   });
 
   it('refuses malformed cbor', () => {
-    const result = parseConnectCodeBytes(new Uint8Array([0xff, 0xff]), 'keystone');
+    const result = parseConnectCodeBytes(new Uint8Array([0xff, 0xff]));
     expect(result.ok).toBe(false);
   });
 });

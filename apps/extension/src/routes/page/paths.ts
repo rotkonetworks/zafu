@@ -11,8 +11,13 @@ export enum PagePath {
   IMPORT_VIEWING_KEY = '/welcome/import-viewing-key',
   VIEWING_KEY_BIRTHDAY = '/welcome/import-viewing-key/birthday',
   VIEWING_KEY_PASSWORD = '/welcome/import-viewing-key/password',
+  /** one scanner for any cold signer (zigner, keystone); the old per-brand path redirects here */
+  IMPORT_SIGNER = '/welcome/import-signer',
+  ZIGNER_PASSWORD = '/welcome/import-signer/password',
+  /** @deprecated redirects to IMPORT_SIGNER */
   IMPORT_ZIGNER = '/welcome/import-zigner',
-  ZIGNER_PASSWORD = '/welcome/import-zigner/password',
+  /** @deprecated redirects to ZIGNER_PASSWORD */
+  IMPORT_ZIGNER_PASSWORD_OLD = '/welcome/import-zigner/password',
   CONNECT_LEDGER = '/welcome/connect-ledger',
   PERSONALIZE = '/welcome/personalize',
   ONBOARDING_SUCCESS = '/welcome/success',

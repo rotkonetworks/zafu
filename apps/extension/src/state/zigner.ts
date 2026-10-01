@@ -138,7 +138,7 @@ export interface ZignerSlice {
    * heuristics, which are kept only as a consistency check that warns on
    * disagreement (logs to console) so future protocol drift is visible.
    */
-  processZcashAccountsBytes: (cbor: Uint8Array, declared: 'zigner' | 'keystone') => void;
+  processZcashAccountsBytes: (cbor: Uint8Array) => void;
   /** Set the wallet label */
   setWalletLabel: (label: string) => void;
   /** Set scan state */
@@ -458,26 +458,13 @@ export const createZignerSlice =
      * `parseZcashAccountsCbor` and then build the same `ZcashFvkExportData`
      * shape so downstream onboarding logic doesn't care which path was taken.
      */
-    processZcashAccountsBytes: (cbor: Uint8Array, declared: 'zigner' | 'keystone') => {
+    processZcashAccountsBytes: (cbor: Uint8Array) => {
       try {
         const urExport = parseZcashAccountsCbor(cbor);
-        // Trust the user's explicit declaration (which button they clicked).
-        // The byte heuristic - "zid_pubkey present implies zigner, absent
-        // implies non-zigner" - is only a consistency check, not the source
-        // of truth, because:
-        //   1. A future zigner build could legitimately omit zid_pubkey
-        //      (e.g. privacy mode, key rotation in flight).
-        //   2. A non-zigner signer could in principle add a zid_pubkey-like
-        //      field; we'd misclassify silently.
-        // If declaration disagrees with bytes, log so the divergence is
-        // visible during testing but proceed with the declared kind.
-        const heuristic: 'zigner' | 'keystone' = urExport.zidPublicKey ? 'zigner' : 'keystone';
-        if (heuristic !== declared) {
-          console.warn(
-            `[zigner-import] declared cold signer is "${declared}" but byte heuristic suggests "${heuristic}". ` +
-              `zid_pubkey ${urExport.zidPublicKey ? 'present' : 'absent'}. Trusting declaration.`,
-          );
-        }
+        // one scanner for any cold signer: there is no "which device" button
+        // to declare from any more - the zid_pubkey tell is the only source
+        // of truth (see isLikelyKeystoneAccountsExport).
+        const device: 'zigner' | 'keystone' = urExport.zidPublicKey ? 'zigner' : 'keystone';
         const exportData: ZcashFvkExportData = {
           accountIndex: urExport.accountIndex,
           label: urExport.label,
@@ -487,10 +474,10 @@ export const createZignerSlice =
           address: null,
           ufvk: urExport.ufvk,
           zidPublicKey: urExport.zidPublicKey,
-          coldSignerType: declared,
+          coldSignerType: device,
         };
         const defaultLabel =
-          urExport.label || (declared === 'zigner' ? 'zigner zcash' : 'keystone zcash');
+          urExport.label || (device === 'zigner' ? 'zigner zcash' : 'keystone zcash');
         set(state => {
           state.zigner.qrData = '<multipart-ur:zcash-accounts>'; // sentinel, not a real UR string
           state.zigner.detectedNetwork = 'zcash';
