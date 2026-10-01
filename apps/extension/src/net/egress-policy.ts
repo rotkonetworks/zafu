@@ -19,6 +19,7 @@ import { ZCASHME_BASE_URL } from '../services/zcashme/api';
 import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../config/contact-discovery-relay';
 import { PENUMBRA_MAINNET_ENDPOINTS, defaultPenumbraEndpoint } from '../config/penumbra-endpoints';
 import { ZCASH_MAINNET_ENDPOINTS, defaultZcashEndpoint } from '../config/zcash-endpoints';
+import { pickIndependentPeer } from '../workers/cross-verify';
 import { hostOf } from './destination';
 import { matchRule, type EgressRule, type EgressTable } from './egress-table';
 import type { NetPurpose } from './purpose';
@@ -126,6 +127,18 @@ export const DESTINATIONS: readonly DestinationSpec[] = [
     purpose: 'chain-rpc',
     gate: { kind: 'network', networks: ['zcash'] },
     urls: i => [zcashEndpoint(i)],
+  },
+  {
+    id: 'zcash-tip-check',
+    // the founder's call: cross-checking the tip against one independent
+    // operator is part of zcash's own light-client allowance, not an
+    // optional extra - without it the "right network" check never runs.
+    // Same helper the worker calls (workers/cross-verify.ts), so the peer
+    // the policy allows is always the one the sync actually asks.
+    label: 'zcash tip cross-check',
+    purpose: 'indexer',
+    gate: { kind: 'network', networks: ['zcash'] },
+    urls: i => [pickIndependentPeer(zcashEndpoint(i))],
   },
   {
     id: 'penumbra',
