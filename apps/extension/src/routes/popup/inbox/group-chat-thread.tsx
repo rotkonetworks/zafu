@@ -126,7 +126,7 @@ export function GroupChatThread() {
           type='button'
           onClick={() => void send()}
           disabled={!draft.trim() || sending || status === 'error'}
-          className='bg-network-accent px-3 py-2 text-sm font-medium text-network-accent-foreground disabled:opacity-40'
+          className='bg-network-accent px-3 py-2 text-sm text-network-accent-foreground disabled:opacity-40'
         >
           send
         </button>

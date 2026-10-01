@@ -82,7 +82,7 @@ export const SettingsMultisig = () => {
         {/* info */}
         <div className='border border-border-soft bg-elev-1 p-3'>
           <div className='flex items-center gap-2'>
-            <span className='bg-primary/10 px-2 py-0.5 text-label font-medium text-zigner-gold'>
+            <span className='bg-primary/10 px-2 py-0.5 text-label text-zigner-gold'>
               {ms.threshold}/{ms.maxSigners}
             </span>
           </div>
@@ -127,7 +127,7 @@ export const SettingsMultisig = () => {
         <div className='border-t border-border-soft pt-4'>
           {ms.custody === 'airgapSigner' ? (
             <div className='border border-border-soft bg-elev-1 p-3 text-body text-fg-muted'>
-              <p className='font-medium text-fg'>backup</p>
+              <p className='text-fg'>backup</p>
               <p className='mt-1'>
                 this share lives on your zigner - export it there under multisig wallets.
               </p>

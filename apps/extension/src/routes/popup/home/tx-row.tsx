@@ -135,13 +135,7 @@ export function TxRow({ tx, network }: { tx: ParsedTransaction; network: Network
         </div>
         <div className='flex-1 min-w-0'>
           <div className='flex items-center justify-between gap-2'>
-            <span
-              className={cn(
-                'text-xs font-medium',
-                isPending && 'text-fg-muted',
-                isFailed && 'text-hanko',
-              )}
-            >
+            <span className={cn('text-xs', isPending && 'text-fg-muted', isFailed && 'text-hanko')}>
               {tx.description}
             </span>
             {tx.amount && (

@@ -126,7 +126,7 @@ const DeprecationNotice = ({
       icon='i-ph-warning'
       action={onMoveOut ? { label: `move ${config.symbol} out`, onClick: onMoveOut } : undefined}
     >
-      <span className='font-medium'>{config.name} is being deprecated</span>
+      <span>{config.name} is being deprecated</span>
       <span className='normal-case text-fg-muted'>
         {dep.reason} {dep.guidance}
       </span>
@@ -164,7 +164,7 @@ const DepositRow = memo(
     const hasBalance = wallet.balance > 0n;
     return (
       <div className='flex items-center gap-3 border border-border/40 bg-card/40 px-3 py-2'>
-        <div className='flex h-8 w-8 shrink-0 items-center justify-center bg-muted text-xs font-medium uppercase'>
+        <div className='flex h-8 w-8 shrink-0 items-center justify-center bg-muted text-xs uppercase'>
           {config.symbol.slice(0, 2)}
         </div>
         <div className='flex flex-1 flex-col min-w-0'>

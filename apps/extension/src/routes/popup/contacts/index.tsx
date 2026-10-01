@@ -112,7 +112,7 @@ function ContactModal({
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
       <div className='w-full max-w-sm mx-4 bg-canvas border border-border-soft p-5 shadow-xl'>
-        <h2 className='text-lg font-medium mb-4'>{editContact ? 'edit contact' : 'new contact'}</h2>
+        <h2 className='text-lg mb-4'>{editContact ? 'edit contact' : 'new contact'}</h2>
 
         <div className='space-y-3'>
           <div>
@@ -171,7 +171,7 @@ function ContactModal({
           <button
             onClick={handleSave}
             disabled={!canSave}
-            className='flex-1 bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
+            className='flex-1 bg-zigner-gold py-3 text-sm text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
           >
             save
           </button>
@@ -214,7 +214,7 @@ function AddressModal({
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
       <div className='w-full max-w-sm mx-4 bg-canvas border border-border-soft p-5 shadow-xl'>
-        <h2 className='text-lg font-medium mb-4'>{editAddress ? 'edit address' : 'add address'}</h2>
+        <h2 className='text-lg mb-4'>{editAddress ? 'edit address' : 'add address'}</h2>
 
         <div className='space-y-3'>
           <div>
@@ -278,7 +278,7 @@ function AddressModal({
           <button
             onClick={handleSave}
             disabled={!canSave}
-            className='flex-1 bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
+            className='flex-1 bg-zigner-gold py-3 text-sm text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
           >
             save
           </button>
@@ -311,7 +311,7 @@ function AddressRow({
       <div className='flex items-center gap-2 min-w-0 flex-1'>
         <span
           className={cn(
-            'shrink-0 px-1.5 py-0.5 text-label font-medium',
+            'shrink-0 px-1.5 py-0.5 text-label',
             NETWORK_COLORS[address.network] ?? 'bg-elev-2 text-fg-muted',
           )}
         >
@@ -390,7 +390,7 @@ function ContactCard({
 
           <div>
             <div className='flex items-center gap-2'>
-              <span className='font-medium'>{contact.name}</span>
+              <span>{contact.name}</span>
               <span className='text-xs text-fg-muted'>
                 {contact.addresses.length} address{contact.addresses.length !== 1 && 'es'}
               </span>
@@ -783,7 +783,7 @@ export function ContactsPage() {
           <button onClick={goBack} className='text-fg-muted transition-colors hover:text-fg-high'>
             <span className='i-ph-arrow-left h-5 w-5' />
           </button>
-          <h1 className='text-lg font-medium'>contacts</h1>
+          <h1 className='text-lg'>contacts</h1>
         </div>
         <div className='flex items-center gap-2'>
           {/* menu button */}
@@ -822,7 +822,7 @@ export function ContactsPage() {
               setEditingContact(undefined);
               setShowContactModal(true);
             }}
-            className='flex items-center gap-1 bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors'
+            className='flex items-center gap-1 bg-zigner-gold px-3 py-1.5 text-sm text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors'
           >
             <span className='i-ph-plus h-4 w-4' />
             add
@@ -902,7 +902,7 @@ export function ContactsPage() {
               <span className='i-ph-user h-8 w-8 text-zigner-gold' />
             </div>
             <div className='flex flex-col gap-1'>
-              <p className='text-sm font-medium'>no contacts yet</p>
+              <p className='text-sm'>no contacts yet</p>
               <p className='max-w-xs text-xs text-fg-muted leading-snug'>
                 {search
                   ? 'no contacts match your search'

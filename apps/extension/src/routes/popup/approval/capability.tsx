@@ -117,11 +117,9 @@ export const CapabilityApproval = () => {
 
           {/* capability card */}
           <div className={cn('border p-4', style.border, style.bg)}>
-            {style.banner && (
-              <div className={cn('mb-3 text-xs font-medium', style.text)}>{style.banner}</div>
-            )}
+            {style.banner && <div className={cn('mb-3 text-xs', style.text)}>{style.banner}</div>}
             <div className='flex items-center gap-2'>
-              <span className={cn('text-base font-medium', style.text)}>{meta.label}</span>
+              <span className={cn('text-base', style.text)}>{meta.label}</span>
               <span
                 className={cn(
                   'px-1.5 py-0.5 text-label',

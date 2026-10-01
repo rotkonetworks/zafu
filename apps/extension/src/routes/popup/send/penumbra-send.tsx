@@ -48,7 +48,7 @@ export function PenumbraSend({
         <button
           onClick={() => setMode('send')}
           className={cn(
-            'flex-1 py-2 text-sm font-medium transition-colors',
+            'flex-1 py-2 text-sm transition-colors',
             mode === 'send' ? 'bg-canvas text-fg shadow-sm' : 'text-fg-muted hover:text-fg-high',
           )}
         >
@@ -57,7 +57,7 @@ export function PenumbraSend({
         <button
           onClick={() => setMode('ibc')}
           className={cn(
-            'flex-1 py-2 text-sm font-medium transition-colors',
+            'flex-1 py-2 text-sm transition-colors',
             mode === 'ibc' ? 'bg-canvas text-fg shadow-sm' : 'text-fg-muted hover:text-fg-high',
           )}
         >

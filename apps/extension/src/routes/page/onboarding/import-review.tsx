@@ -45,7 +45,7 @@ export const ImportReview = () => {
       <FadeTransition>
         <div className='flex flex-col gap-5'>
           <OnboardingBack onClick={() => navigate(PagePath.IMPORT_SEED_PHRASE)} />
-          <h1 className='font-display text-[38px] font-medium text-fg-high'>review your phrase</h1>
+          <h1 className='font-display text-[38px] text-fg-high'>review your phrase</h1>
           <p className='text-body text-fg-muted lowercase'>
             confirm these are the right words, in the right order.
           </p>

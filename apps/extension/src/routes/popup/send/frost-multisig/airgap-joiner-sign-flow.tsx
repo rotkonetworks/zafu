@@ -349,7 +349,7 @@ export function FrostAirgapJoinerSignFlow({
           <span className='i-ph-arrow-left h-5 w-5' />
         </button>
       )}
-      <h2 className='text-lg font-medium flex-1'>co-sign multisig</h2>
+      <h2 className='text-lg flex-1'>co-sign multisig</h2>
       <DontQuitIcon />
     </div>
   );
@@ -384,7 +384,7 @@ export function FrostAirgapJoinerSignFlow({
           <div className='border border-border-soft bg-elev-1 p-3 flex flex-col gap-2.5'>
             <div>
               <p className='text-label tracking-wider text-fg-muted'>from</p>
-              <p className='mt-0.5 text-xs font-medium'>{walletLabel}</p>
+              <p className='mt-0.5 text-xs'>{walletLabel}</p>
               <p className='mt-0.5 break-all font-mono text-label text-fg-muted'>{walletAddress}</p>
             </div>
             <div className='border-t border-border-soft' />
@@ -395,7 +395,7 @@ export function FrostAirgapJoinerSignFlow({
             <div className='border-t border-border-soft' />
             <div className='flex items-baseline justify-between'>
               <span className='text-label tracking-wider text-fg-muted'>amount</span>
-              <Sensitive className='text-sm font-medium tabular-nums'>
+              <Sensitive className='text-sm tabular-nums'>
                 {formatZec(tx?.amountZat ?? '')} ZEC
               </Sensitive>
             </div>
@@ -435,7 +435,7 @@ export function FrostAirgapJoinerSignFlow({
           )}
           {verdict.kind === 'refuse' && (
             <div className='border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
-              <div className='flex items-center gap-2 text-body font-medium text-red-400'>
+              <div className='flex items-center gap-2 text-body text-red-400'>
                 <span className='i-ph-shield-warning size-4' />
                 cannot verify - signing refused
               </div>
@@ -448,7 +448,7 @@ export function FrostAirgapJoinerSignFlow({
           )}
           {verdict.kind === 'mismatch' && (
             <div className='border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
-              <div className='flex items-center gap-2 text-body font-medium text-red-400'>
+              <div className='flex items-center gap-2 text-body text-red-400'>
                 <span className='i-ph-shield-warning size-4' />
                 mismatch - host claim disagrees with tx bytes
               </div>
@@ -550,7 +550,7 @@ export function FrostAirgapJoinerSignFlow({
           <div className='flex items-center gap-2 bg-elev-2 px-3 py-1.5'>
             <span className='i-ph-users size-3.5 text-fg-muted' />
             <span className='text-xs'>
-              <span className='font-medium text-fg'>{peersReady + 1}</span>
+              <span className='text-fg'>{peersReady + 1}</span>
               <span className='text-fg-muted'> / {ms.threshold} ready</span>
             </span>
           </div>

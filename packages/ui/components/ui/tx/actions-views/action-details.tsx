@@ -18,7 +18,7 @@ import { cn } from '../../../../lib/utils';
 export const ActionDetails = ({ children, label }: { children: ReactNode; label?: string }) => {
   return (
     <div className='flex flex-col gap-2'>
-      {!!label && <div className='font-medium'>{label}</div>}
+      {!!label && <div>{label}</div>}
 
       {children}
     </div>

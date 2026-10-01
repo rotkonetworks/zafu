@@ -13,7 +13,7 @@ export function SignStepProgress({ current }: { current: 1 | 2 | 3 }) {
       {SIGN_STEPS.map(s => (
         <div key={s.key} className='flex items-center gap-1.5'>
           <div
-            className={`flex size-5 items-center justify-center text-label font-medium ${
+            className={`flex size-5 items-center justify-center text-label ${
               s.key <= current
                 ? 'bg-zigner-gold text-zigner-gold-foreground'
                 : 'bg-elev-2 text-fg-muted'

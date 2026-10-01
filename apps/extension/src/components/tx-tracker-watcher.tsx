@@ -157,7 +157,7 @@ export const TxTrackerWatcher = () => {
           }
         />
         <div className='min-w-0 flex-1'>
-          <p className='text-sm font-medium'>{headline}</p>
+          <p className='text-sm'>{headline}</p>
           {!ok && toast.error && (
             <p className='mt-0.5 break-words text-label text-fg-muted'>{toast.error}</p>
           )}

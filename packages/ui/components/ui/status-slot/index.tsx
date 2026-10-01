@@ -55,7 +55,7 @@ export function StatusSlot({
           <button
             type='button'
             onClick={action.onClick}
-            className='shrink-0 text-label font-medium underline-offset-2 hover:underline'
+            className='shrink-0 text-label underline-offset-2 hover:underline'
           >
             {action.label}
           </button>

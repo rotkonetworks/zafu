@@ -418,7 +418,7 @@ export function AnimatedQrDisplay({
 
   return (
     <div className='flex flex-col items-center gap-3'>
-      {title && <h3 className='text-sm font-medium text-fg'>{title}</h3>}
+      {title && <h3 className='text-sm text-fg'>{title}</h3>}
 
       {qrBlock}
 
@@ -497,7 +497,7 @@ export function AnimatedQrDisplay({
                       : 'border-border-soft text-fg-muted hover:border-zigner-gold/50'
                   }`}
                 >
-                  <span className='block font-medium capitalize'>{preset.label}</span>
+                  <span className='block capitalize'>{preset.label}</span>
                   <span className='block opacity-70'>
                     {preset.bytes < 1000 ? `${preset.bytes}B` : `${preset.bytes / 1000}KB`}
                   </span>

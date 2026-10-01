@@ -356,7 +356,7 @@ export const QrScanner = ({
     <div className='fixed inset-0 z-50 bg-black/95 backdrop-blur-sm flex flex-col overflow-hidden'>
       <div className='flex-none flex items-center justify-between p-4 bg-black'>
         <div>
-          <h2 className='text-lg font-medium text-white'>{title}</h2>
+          <h2 className='text-lg text-white'>{title}</h2>
           {description && <p className='text-sm text-white/60'>{description}</p>}
         </div>
         <button onClick={handleClose} className='p-2 hover:bg-white/10 transition-colors'>

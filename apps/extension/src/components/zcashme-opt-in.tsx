@@ -92,7 +92,7 @@ export function ZcashMeOptIn({ reason, respectDismissal = true, className }: Pro
           type='button'
           disabled={busy}
           onClick={() => void choose('directory')}
-          className='flex-1 bg-network-accent py-1.5 text-xs font-medium text-network-accent-foreground hover:opacity-90 disabled:opacity-50'
+          className='flex-1 bg-network-accent py-1.5 text-xs text-network-accent-foreground hover:opacity-90 disabled:opacity-50'
         >
           local directory
         </button>

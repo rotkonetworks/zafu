@@ -271,7 +271,7 @@ export function SettingsZcashMe() {
                 type='button'
                 disabled={!!busy}
                 onClick={() => void refresh()}
-                className='flex-1 bg-network-accent py-2 text-xs font-medium text-network-accent-foreground transition-colors hover:opacity-90 disabled:opacity-50'
+                className='flex-1 bg-network-accent py-2 text-xs text-network-accent-foreground transition-colors hover:opacity-90 disabled:opacity-50'
               >
                 {busy ?? (index ? 'refresh directory' : 'download directory')}
               </button>

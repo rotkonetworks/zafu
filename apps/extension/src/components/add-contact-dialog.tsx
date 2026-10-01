@@ -74,7 +74,7 @@ export function AddContactDialog({ address, network, onClose, onSuccess }: AddCo
       >
         {/* header */}
         <div className='flex items-center justify-between border-b border-border-soft px-4 py-3'>
-          <h2 className='text-lg font-medium'>add to contacts</h2>
+          <h2 className='text-lg'>add to contacts</h2>
           <button onClick={onClose} className='p-1 hover:bg-elev-1 transition-colors'>
             <span className='i-ph-x h-4 w-4' />
           </button>
@@ -151,14 +151,14 @@ export function AddContactDialog({ address, network, onClose, onSuccess }: AddCo
         <div className='flex gap-2 border-t border-border-soft px-4 py-3'>
           <button
             onClick={onClose}
-            className='flex-1 border border-border-soft py-3 text-sm font-medium hover:bg-elev-1 transition-colors'
+            className='flex-1 border border-border-soft py-3 text-sm hover:bg-elev-1 transition-colors'
           >
             cancel
           </button>
           <button
             onClick={() => void handleSubmit()}
             disabled={!canSubmit || isSubmitting}
-            className='flex-1 bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
+            className='flex-1 bg-zigner-gold py-3 text-sm text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
           >
             {isSubmitting ? 'adding...' : 'add contact'}
           </button>

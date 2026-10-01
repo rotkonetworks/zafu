@@ -100,10 +100,10 @@ const WalletRow = ({
     >
       <div className='flex flex-col gap-1 min-w-0'>
         <div className='flex items-center gap-2'>
-          <span className='bg-primary/15 px-1.5 py-0.5 text-label font-semibold text-zigner-gold leading-none shrink-0'>
+          <span className='bg-primary/15 px-1.5 py-0.5 text-label text-zigner-gold leading-none shrink-0'>
             {wallet.multisig!.threshold}-of-{wallet.multisig!.maxSigners}
           </span>
-          <span className='text-sm font-medium truncate'>{wallet.label}</span>
+          <span className='text-sm truncate'>{wallet.label}</span>
           {isActive && <span className='i-ph-check h-3 w-3 text-zigner-gold shrink-0' />}
         </div>
         <span className='text-body text-fg-muted font-mono'>{truncateAddr(wallet.address)}</span>
@@ -254,7 +254,7 @@ const AppManagedRow = (props: {
     <div className='flex flex-col gap-2 border border-border-soft bg-elev-1 px-3 py-3'>
       <div className='flex min-w-0 items-center justify-between gap-2'>
         <div className='flex min-w-0 flex-col gap-0.5'>
-          <span className='truncate text-sm font-medium'>{props.row.wallet.label}</span>
+          <span className='truncate text-sm'>{props.row.wallet.label}</span>
           <span className='text-label text-fg-dim'>created {created}</span>
         </div>
         {props.row.balanceZat > 0n ? (
@@ -344,7 +344,7 @@ const AppManagedTablesSection = () => {
       >
         <span className='flex items-center gap-2'>
           <span className='i-ph-squares-four h-4 w-4 text-fg-muted' />
-          <span className='text-sm font-medium'>App-managed tables</span>
+          <span className='text-sm'>App-managed tables</span>
           <span className='bg-elev-2 px-1.5 py-0.5 text-label font-mono text-fg-muted'>
             {tables.length}
           </span>
@@ -517,7 +517,7 @@ export const MultisigPage = () => {
       <div className='flex items-center justify-between'>
         <div className='flex items-center gap-2'>
           <span className='i-ph-shield h-5 w-5 text-zigner-gold' />
-          <h2 className='text-lg font-medium'>multisig</h2>
+          <h2 className='text-lg'>multisig</h2>
         </div>
         {walletsWithIndex.length > 0 && (
           <Sensitive className='text-sm font-mono text-fg-muted'>
@@ -535,7 +535,7 @@ export const MultisigPage = () => {
           {/* primary CTA: co-sign */}
           <button
             onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
-            className='flex items-center justify-center gap-2 bg-primary/15 px-4 py-4 text-base font-semibold text-zigner-gold transition-colors hover:bg-primary/25'
+            className='flex items-center justify-center gap-2 bg-primary/15 px-4 py-4 text-base text-zigner-gold transition-colors hover:bg-primary/25'
           >
             <span className='i-ph-pen-nib h-5 w-5' />
             Co-sign transaction
@@ -615,14 +615,14 @@ export const MultisigPage = () => {
             <div className='flex gap-2'>
               <button
                 onClick={() => navigate(createPath)}
-                className='flex flex-1 items-center justify-center gap-1.5 bg-primary/10 px-3 py-2.5 text-sm font-medium text-zigner-gold transition-colors hover:bg-primary/20'
+                className='flex flex-1 items-center justify-center gap-1.5 bg-primary/10 px-3 py-2.5 text-sm text-zigner-gold transition-colors hover:bg-primary/20'
               >
                 <span className='i-ph-plus h-4 w-4' />
                 Create
               </button>
               <button
                 onClick={() => navigate(joinPath)}
-                className='flex flex-1 items-center justify-center gap-1.5 bg-primary/10 px-3 py-2.5 text-sm font-medium text-zigner-gold transition-colors hover:bg-primary/20'
+                className='flex flex-1 items-center justify-center gap-1.5 bg-primary/10 px-3 py-2.5 text-sm text-zigner-gold transition-colors hover:bg-primary/20'
               >
                 <span className='i-ph-user-plus h-4 w-4' />
                 Join
@@ -631,7 +631,7 @@ export const MultisigPage = () => {
             {walletsWithIndex.length > 0 && (
               <button
                 onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
-                className='flex items-center justify-center gap-1.5 border border-border-soft px-3 py-2.5 text-sm font-medium text-fg transition-colors hover:bg-elev-1'
+                className='flex items-center justify-center gap-1.5 border border-border-soft px-3 py-2.5 text-sm text-fg transition-colors hover:bg-elev-1'
               >
                 <span className='i-ph-pen-nib h-4 w-4' />
                 Co-sign transaction

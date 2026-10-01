@@ -90,7 +90,7 @@ export function ReceivePage() {
         <button onClick={goBack} className='text-fg-muted transition-colors hover:text-fg-high'>
           <span className='i-ph-arrow-left size-5' />
         </button>
-        <h1 className='text-lg font-medium text-fg-high'>receive</h1>
+        <h1 className='text-lg text-fg-high'>receive</h1>
       </div>
 
       <div className='flex flex-1 flex-col p-4'>

@@ -1250,7 +1250,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               >
                 <span className='i-ph-arrow-left h-5 w-5' />
               </button>
-              <h2 className='text-lg font-medium'>send zcash</h2>
+              <h2 className='text-lg'>send zcash</h2>
             </div>
 
             <div className='flex flex-col gap-3'>
@@ -1346,7 +1346,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     <div className='mx-4 flex max-h-[80vh] w-full max-w-sm flex-col border border-border-soft bg-canvas p-5 shadow-xl'>
                       <div className='mb-4 flex items-center gap-2'>
                         <span className='i-ph-address-book h-4 w-4 text-zigner-gold' />
-                        <h2 className='text-lg font-medium'>contacts</h2>
+                        <h2 className='text-lg'>contacts</h2>
                         <button
                           type='button'
                           onClick={() => setShowAddressBook(false)}
@@ -1519,7 +1519,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               >
                 <span className='i-ph-arrow-left w-5 h-5' />
               </button>
-              <h2 className='text-lg font-medium'>review transaction</h2>
+              <h2 className='text-lg'>review transaction</h2>
             </div>
 
             {/* All five rows are static display, not <Row>: Row's value type
@@ -1589,7 +1589,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               <div className='relative flex h-16 w-16 items-center justify-center bg-primary/20'>
                 <div className='h-8 w-8 animate-spin border-2 border-zigner-gold border-t-transparent' />
               </div>
-              <h2 className='text-lg font-medium'>sending</h2>
+              <h2 className='text-lg'>sending</h2>
               {/* live elapsed timer - ticks every second so the UI never looks frozen */}
               <LiveTimer startMs={buildStartRef.current} />
             </div>
@@ -1628,7 +1628,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               >
                 <span className='i-ph-arrow-left w-4 h-4' />
               </button>
-              <span className='flex-1 text-sm font-medium'>sign with zigner</span>
+              <span className='flex-1 text-sm'>sign with zigner</span>
               <div className='flex items-center gap-1.5'>
                 <div className='h-1 w-5 bg-zigner-gold' />
                 <div className='h-1 w-5 bg-elev-2' />
@@ -1726,7 +1726,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               >
                 <span className='i-ph-arrow-left w-4 h-4' />
               </button>
-              <span className='flex-1 text-sm font-medium'>scan signature</span>
+              <span className='flex-1 text-sm'>scan signature</span>
               <div className='flex items-center gap-1.5'>
                 <div className='h-1 w-5 bg-elev-2' />
                 <div className='h-1 w-5 bg-zigner-gold' />
@@ -1766,7 +1766,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               >
                 <span className='i-ph-arrow-left w-5 h-5' />
               </button>
-              <h2 className='text-lg font-medium'>confirm on your Ledger</h2>
+              <h2 className='text-lg'>confirm on your Ledger</h2>
             </div>
             <div className='w-16 h-16 bg-primary/20 flex items-center justify-center'>
               <span className='i-ph-usb w-8 h-8 text-zigner-gold' />
@@ -1805,7 +1805,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           <div className='flex flex-col items-center gap-4 p-8'>
             {/* the receipt gets stamped - a broadcast tx is sealed (封) */}
             <HankoSeal glyph='封' size='md' />
-            <h2 className='text-lg font-medium'>transaction sent</h2>
+            <h2 className='text-lg'>transaction sent</h2>
             <p className='text-sm text-fg-muted text-center'>
               {amount} zec sent successfully
               {totalElapsedSec !== null && ` in ${totalElapsedSec}s`}
@@ -1836,9 +1836,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 className='flex w-full items-center gap-2 border border-border-soft px-3 py-2 text-left hover:border-fg-muted'
               >
                 <span className='i-ph-qr-code size-4 text-fg-high shrink-0' />
-                <span className='text-xs font-medium text-fg-high'>
-                  sync balance to your zigner
-                </span>
+                <span className='text-xs text-fg-high'>sync balance to your zigner</span>
                 <span className='i-ph-caret-right size-3.5 text-fg-dim ml-auto shrink-0' />
               </button>
             )}
@@ -1904,7 +1902,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             <div className='w-16 h-16 bg-primary/20 flex items-center justify-center'>
               <span className='i-ph-users w-8 h-8 text-zigner-gold' />
             </div>
-            <h2 className='text-lg font-medium'>multisig signing</h2>
+            <h2 className='text-lg'>multisig signing</h2>
 
             {frostRoomCode && (
               <div className='flex flex-col items-center gap-2'>
@@ -1962,7 +1960,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             <div className='w-16 h-16 bg-red-500/20 flex items-center justify-center'>
               <span className='i-ph-x w-8 h-8 text-red-400' />
             </div>
-            <h2 className='text-lg font-medium'>transaction failed</h2>
+            <h2 className='text-lg'>transaction failed</h2>
             <p className='text-sm text-red-400 text-center'>
               {formError || signingError || 'an error occurred'}
             </p>

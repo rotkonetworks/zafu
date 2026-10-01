@@ -28,11 +28,7 @@ const TableFooter = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
 >(({ className, ...props }, ref) => (
-  <tfoot
-    ref={ref}
-    className={cn('bg-zigner-gold font-medium text-zigner-dark', className)}
-    {...props}
-  />
+  <tfoot ref={ref} className={cn('bg-zigner-gold text-zigner-dark', className)} {...props} />
 ));
 TableFooter.displayName = 'TableFooter';
 
@@ -50,7 +46,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      'py-4 text-left align-top text-lg leading-[26px] font-headline font-medium [&:has([role=checkbox])]:pr-0',
+      'py-4 text-left align-top text-lg leading-[26px] font-headline [&:has([role=checkbox])]:pr-0',
       className,
     )}
     {...props}

@@ -76,9 +76,9 @@ export const NoteSyncPage = () => {
         <div className='flex flex-col gap-4'>
           <div className='border border-border-soft bg-elev-1 p-3'>
             <p className='text-label text-fg-muted'>wallet</p>
-            <p className='text-sm font-medium truncate'>{activeWallet.label}</p>
+            <p className='text-sm truncate'>{activeWallet.label}</p>
             <div className='mt-1 flex items-center gap-2'>
-              <span className='text-lg font-mono font-medium'>
+              <span className='text-lg font-mono'>
                 <Sensitive>{balanceDisplay}</Sensitive>
               </span>
               <span className='text-xs text-fg-muted'>ZEC</span>

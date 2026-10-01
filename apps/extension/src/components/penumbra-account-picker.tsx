@@ -20,7 +20,7 @@ export function PenumbraAccountPicker({
       >
         <span className='i-ph-caret-left h-4 w-4' />
       </button>
-      <span className='min-w-[110px] text-center text-xs font-medium text-fg-muted'>
+      <span className='min-w-[110px] text-center text-xs text-fg-muted'>
         {accountLabel(account)}
       </span>
       <button

@@ -329,7 +329,7 @@ export const SettingsZigner = () => {
         {/* Polkadot Vault Settings */}
         {pro && (
           <div className='border-t border-border-hard pt-4'>
-            <p className='text-sm font-bold mb-3'>polkadot vault</p>
+            <p className='text-sm mb-3'>polkadot vault</p>
             <div className='flex flex-col gap-3'>
               <RowGroup>
                 <Row
@@ -371,7 +371,7 @@ export const SettingsZigner = () => {
         {/* Add Wallet section */}
         {pro && (
           <div className='border-t border-border-hard pt-4'>
-            <p className='text-sm font-bold mb-3'>add wallet</p>
+            <p className='text-sm mb-3'>add wallet</p>
 
             {/* Manual input (hidden by default, developer mode) */}
             {showManualInput && (
@@ -419,7 +419,7 @@ export const SettingsZigner = () => {
               <div className='flex flex-col gap-3'>
                 <div className='border border-green-500/30 bg-green-500/10 p-3'>
                   <div className='flex items-center gap-2'>
-                    <p className='text-sm font-medium text-green-400'>qr code scanned</p>
+                    <p className='text-sm text-green-400'>qr code scanned</p>
                     <span className='text-label px-1.5 py-0.5 bg-elev-2 text-fg-muted'>
                       {detectedNetwork}
                     </span>

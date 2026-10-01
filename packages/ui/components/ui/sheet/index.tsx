@@ -47,7 +47,7 @@ export function Sheet({
           )}
         >
           <div className='flex items-center justify-between gap-3'>
-            <DialogPrimitive.Title className='text-base font-medium text-fg-high'>
+            <DialogPrimitive.Title className='text-base text-fg-high'>
               {title}
             </DialogPrimitive.Title>
             <DialogPrimitive.Close

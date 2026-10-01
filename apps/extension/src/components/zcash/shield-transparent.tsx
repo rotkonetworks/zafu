@@ -284,7 +284,7 @@ export const ShieldTransparent = ({
             type='button'
             onClick={() => void handleShield()}
             disabled={shielding || !!shieldTxid}
-            className='shrink-0 text-xs font-medium text-network-accent transition-colors hover:text-fg-high disabled:opacity-50'
+            className='shrink-0 text-xs text-network-accent transition-colors hover:text-fg-high disabled:opacity-50'
           >
             {shielding ? 'shielding...' : shieldTxid ? 'pending...' : 'shield'}
           </button>
@@ -293,7 +293,7 @@ export const ShieldTransparent = ({
             type='button'
             onClick={() => void handleZignerShield()}
             disabled={zignerStep !== 'idle' && zignerStep !== 'error' && zignerStep !== 'complete'}
-            className='shrink-0 text-xs font-medium text-network-accent transition-colors hover:text-fg-high disabled:opacity-50'
+            className='shrink-0 text-xs text-network-accent transition-colors hover:text-fg-high disabled:opacity-50'
           >
             {zignerStep === 'building'
               ? 'building...'
@@ -325,7 +325,7 @@ export const ShieldTransparent = ({
           <div className='flex w-full gap-2'>
             <button
               onClick={() => setZignerStep('scanning')}
-              className='flex-1 bg-zigner-gold py-1.5 text-xs font-medium text-zigner-gold-foreground transition-colors hover:bg-primary/90'
+              className='flex-1 bg-zigner-gold py-1.5 text-xs text-zigner-gold-foreground transition-colors hover:bg-primary/90'
             >
               scan signature
             </button>

@@ -17,7 +17,7 @@ export const NetworkUnavailable = ({ feature, iconClass }: NetworkUnavailablePro
       <span className={`${iconClass} h-8 w-8 text-zigner-gold`} />
     </div>
     <div>
-      <h2 className='text-lg font-medium'>{feature}</h2>
+      <h2 className='text-lg'>{feature}</h2>
       <p className='mt-1 text-sm text-fg-muted'>{feature} is not available on this network.</p>
     </div>
   </div>

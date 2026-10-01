@@ -76,7 +76,7 @@ export const PasskeyApprove = () => {
 
           {/* what is being granted */}
           <div className='border border-orange-500/40 bg-orange-500/10 p-4'>
-            <div className='text-base font-medium text-orange-400'>sign in as you</div>
+            <div className='text-base text-orange-400'>sign in as you</div>
             <p className='mt-2 text-sm text-fg-muted'>
               this site is asking zafu to create a passkey for it. if you approve, a site-bound
               credential derived from your wallet seed is created and stored in the wallet. the site

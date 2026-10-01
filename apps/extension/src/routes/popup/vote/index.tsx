@@ -227,7 +227,7 @@ export function VotePage() {
   return (
     <div className='flex flex-col gap-3 p-4'>
       <div className='flex items-center justify-between'>
-        <h2 className='text-lg font-medium'>governance</h2>
+        <h2 className='text-lg'>governance</h2>
         {activeCount > 0 && <span className='text-xs text-fg-high'>{activeCount} active</span>}
       </div>
 
@@ -357,7 +357,7 @@ export function VotePage() {
                           key={v}
                           onClick={() => void handleVote(p.id, v)}
                           disabled={isVoting}
-                          className='flex flex-1 items-center justify-center gap-1 py-1.5 bg-elev-2 text-xs font-medium text-fg-high transition-colors hover:bg-elev-1 disabled:opacity-50'
+                          className='flex flex-1 items-center justify-center gap-1 py-1.5 bg-elev-2 text-xs text-fg-high transition-colors hover:bg-elev-1 disabled:opacity-50'
                         >
                           {isVoting ? (
                             '...'

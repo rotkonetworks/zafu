@@ -236,7 +236,7 @@ export function FrostAirgapSignFlow({
           <span className='i-ph-arrow-left h-5 w-5' />
         </button>
       )}
-      <h2 className='text-lg font-medium flex-1'>multisig sign</h2>
+      <h2 className='text-lg flex-1'>multisig sign</h2>
       <DontQuitIcon />
     </div>
   );
@@ -311,7 +311,7 @@ export function FrostAirgapSignFlow({
           <div className='flex items-center gap-2 bg-elev-2 px-3 py-1.5'>
             <span className='i-ph-users size-3.5 text-fg-muted' />
             <span className='text-xs'>
-              <span className='font-medium text-fg'>{peersReady + 1}</span>
+              <span className='text-fg'>{peersReady + 1}</span>
               <span className='text-fg-muted'> / {ms.threshold} ready</span>
             </span>
           </div>

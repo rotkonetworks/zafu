@@ -403,7 +403,7 @@ const MultisigCreateZafu = () => {
           <div className='flex items-center gap-2 bg-elev-2 px-3 py-1.5'>
             <span className='i-ph-users size-3.5 text-fg-muted' />
             <span className='text-xs'>
-              <span className='font-medium text-fg'>{participantCount}</span>
+              <span className='text-fg'>{participantCount}</span>
               <span className='text-fg-muted'> / {maxSigners} joined</span>
             </span>
           </div>
@@ -431,7 +431,7 @@ const MultisigCreateZafu = () => {
             {DKG_STEPS.map((s, i) => (
               <div key={s.key} className='flex items-center gap-1.5'>
                 <div
-                  className={`flex size-5 items-center justify-center text-label font-medium ${
+                  className={`flex size-5 items-center justify-center text-label ${
                     i + 1 <= currentRound
                       ? 'bg-zigner-gold text-zigner-gold-foreground'
                       : 'bg-elev-2 text-fg-muted'
@@ -449,7 +449,7 @@ const MultisigCreateZafu = () => {
           <div className='flex items-center gap-2 bg-elev-2 px-3 py-1.5'>
             <span className='i-ph-users size-3.5 text-fg-muted' />
             <span className='text-xs'>
-              <span className='font-medium text-fg'>{participantCount}</span>
+              <span className='text-fg'>{participantCount}</span>
               <span className='text-fg-muted'> / {maxSigners} participants</span>
             </span>
           </div>
@@ -996,7 +996,7 @@ const MultisigCreateZigner = () => {
           <div className='flex items-center gap-2 bg-elev-2 px-3 py-1.5'>
             <span className='i-ph-users size-3.5 text-fg-muted' />
             <span className='text-xs'>
-              <span className='font-medium text-fg'>{participantCount}</span>
+              <span className='text-fg'>{participantCount}</span>
               <span className='text-fg-muted'> / {maxSigners} joined</span>
             </span>
           </div>

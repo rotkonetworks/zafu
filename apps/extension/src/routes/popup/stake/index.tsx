@@ -412,7 +412,7 @@ export const StakePage = () => {
       <div className='flex flex-col gap-4 p-4'>
         {/* header */}
         <div className='flex items-center justify-between'>
-          <h2 className='text-lg font-medium'>{isDelegate ? 'delegate' : 'undelegate'}</h2>
+          <h2 className='text-lg'>{isDelegate ? 'delegate' : 'undelegate'}</h2>
           <button
             onClick={closeForm}
             className='text-fg-muted hover:text-fg-high transition-colors'
@@ -519,7 +519,7 @@ export const StakePage = () => {
             txStatus === 'broadcasting'
           }
           className={cn(
-            'w-full bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground',
+            'w-full bg-zigner-gold py-3 text-sm text-zigner-gold-foreground',
             'transition-colors hover:bg-zigner-gold-light disabled:opacity-50 disabled:cursor-not-allowed',
           )}
         >
@@ -537,7 +537,7 @@ export const StakePage = () => {
     <div className='flex flex-col gap-4 p-4'>
       {/* header */}
       <div className='flex items-center justify-between'>
-        <h2 className='text-lg font-medium'>staking</h2>
+        <h2 className='text-lg'>staking</h2>
         <button
           onClick={() => {
             void refetchValidators();
@@ -552,14 +552,14 @@ export const StakePage = () => {
       {/* staking balance */}
       <div className='border border-border-soft bg-elev-2/20 p-4'>
         <p className='text-xs text-fg-muted'>available to stake</p>
-        <p className='text-xl font-medium'>
+        <p className='text-xl'>
           <Sensitive>
             {stakingBalance || '0'} {STAKING_TOKEN}
           </Sensitive>
         </p>
         <button
           onClick={() => setAction('delegate')}
-          className='mt-2 w-full bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
+          className='mt-2 w-full bg-zigner-gold py-3 text-sm text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
         >
           delegate
         </button>
@@ -567,9 +567,7 @@ export const StakePage = () => {
 
       {/* user delegations */}
       <div>
-        <h3 className='mb-2 text-xs font-medium uppercase tracking-wider text-fg-muted'>
-          your delegations
-        </h3>
+        <h3 className='mb-2 text-xs uppercase tracking-wider text-fg-muted'>your delegations</h3>
         {delegationsLoading ? (
           <div className='flex items-center gap-2 py-12 text-sm text-fg-muted'>
             <span className='i-ph-arrows-clockwise h-4 w-4 animate-spin' />
@@ -597,7 +595,7 @@ export const StakePage = () => {
                   className='flex items-center justify-between border border-border-soft bg-elev-2/10 p-3'
                 >
                   <div className='min-w-0 flex-1'>
-                    <p className='text-sm font-medium truncate'>{displayName}</p>
+                    <p className='text-sm truncate'>{displayName}</p>
                     <p className='text-xs text-fg-muted'>
                       <Sensitive>{balStr}</Sensitive> staked
                     </p>
@@ -620,7 +618,7 @@ export const StakePage = () => {
 
       {/* validators */}
       <div>
-        <h3 className='mb-2 text-xs font-medium uppercase tracking-wider text-fg-muted'>
+        <h3 className='mb-2 text-xs uppercase tracking-wider text-fg-muted'>
           validators ({validators.filter(v => v.state === 'active').length} active)
         </h3>
         {validatorsLoading ? (
@@ -645,7 +643,7 @@ export const StakePage = () => {
                     className='flex items-center justify-between border border-border-soft bg-elev-2/10 p-2 text-left hover:bg-elev-1 transition-colors'
                   >
                     <div className='flex-1 min-w-0'>
-                      <p className='text-sm font-medium truncate'>{v.name}</p>
+                      <p className='text-sm truncate'>{v.name}</p>
                       <p className='text-xs text-fg-muted'>
                         {pct.toFixed(2)}% · {v.commission}% fee
                       </p>

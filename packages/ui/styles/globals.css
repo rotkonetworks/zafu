@@ -332,7 +332,7 @@
   h4,
   h5,
   h6 {
-    color: var(--zigner-gold);
+    color: var(--fg-high);
     font-weight: normal;
   }
 
@@ -416,8 +416,11 @@ html body {
 }
 
 /* custom utilities */
+/* display type: Mincho at 500 (titles, amounts); seals add font-semibold.
+   All Iosevka text is 400 - only that one face is bundled. */
 @utility font-display {
   font-family: 'Shippori Mincho', serif;
+  font-weight: 500;
 }
 @utility text-high-contrast {
   color: hsl(var(--foreground));

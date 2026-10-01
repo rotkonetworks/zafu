@@ -36,7 +36,7 @@ export function SaveContactPrompt({
       <div className='mt-2 flex gap-2'>
         <button
           onClick={onSave}
-          className='flex-1 bg-zigner-gold px-3 py-1.5 text-xs font-medium text-zigner-gold-foreground transition-colors hover:bg-zigner-gold-light'
+          className='flex-1 bg-zigner-gold px-3 py-1.5 text-xs text-zigner-gold-foreground transition-colors hover:bg-zigner-gold-light'
         >
           save contact
         </button>

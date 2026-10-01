@@ -348,7 +348,7 @@ const MultisigJoinZafu = () => {
       {(step === 'joining' || step === 'dkg' || step === 'fvk-echo') && (
         <div className='flex flex-col items-center gap-4'>
           {thresholdInfo && (
-            <span className='bg-primary/10 px-2 py-0.5 text-label font-medium text-zigner-gold'>
+            <span className='bg-primary/10 px-2 py-0.5 text-label text-zigner-gold'>
               {thresholdInfo}
             </span>
           )}
@@ -357,7 +357,7 @@ const MultisigJoinZafu = () => {
             <div className='flex items-center gap-2 bg-elev-2 px-3 py-1.5'>
               <span className='i-ph-users size-3.5 text-fg-muted' />
               <span className='text-xs'>
-                <span className='font-medium text-fg'>{participantCount}</span>
+                <span className='text-fg'>{participantCount}</span>
                 <span className='text-fg-muted'> / {maxSigners} joined</span>
               </span>
             </div>

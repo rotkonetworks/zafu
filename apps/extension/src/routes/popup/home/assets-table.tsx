@@ -538,7 +538,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
         <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
           <div className='mx-4 w-full max-w-sm border border-border-soft bg-canvas p-5'>
             <div className='flex items-center justify-between mb-4'>
-              <h2 className='text-lg font-medium'>claim unbonding tokens</h2>
+              <h2 className='text-lg'>claim unbonding tokens</h2>
               {(claimStatus === 'confirm' ||
                 claimStatus === 'success' ||
                 claimStatus === 'error') && (
@@ -555,7 +555,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
               <div className='flex flex-col gap-3'>
                 <div className='border border-border-soft bg-elev-1 p-3'>
                   <div className='text-xs text-fg-muted'>amount to receive</div>
-                  <div className='text-lg font-medium tabular-nums'>
+                  <div className='text-lg tabular-nums'>
                     <Sensitive>{claimDisplayAmount} UM</Sensitive>
                   </div>
                 </div>
@@ -563,9 +563,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
                 <div className='text-sm'>
                   <div className='flex justify-between py-1'>
                     <span className='text-fg-muted'>validator</span>
-                    <span className='text-right font-medium'>
-                      {claimValidatorName ?? 'unknown'}
-                    </span>
+                    <span className='text-right'>{claimValidatorName ?? 'unknown'}</span>
                   </div>
                   <div className='flex justify-between py-1'>
                     <span className='text-fg-muted'>unbonding start</span>
@@ -586,7 +584,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
                   </button>
                   <button
                     onClick={() => void handleClaim()}
-                    className='flex-1 bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors'
+                    className='flex-1 bg-zigner-gold py-3 text-sm text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors'
                   >
                     confirm claim
                   </button>
@@ -637,7 +635,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
                       setClaimStatus('confirm');
                       setClaimError(undefined);
                     }}
-                    className='flex-1 bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors'
+                    className='flex-1 bg-zigner-gold py-3 text-sm text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors'
                   >
                     retry
                   </button>

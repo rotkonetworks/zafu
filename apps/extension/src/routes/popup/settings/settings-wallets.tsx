@@ -934,7 +934,7 @@ const VaultRow = ({
           className='flex items-center gap-2 mt-2 w-full border border-border-soft px-3 py-2 text-left hover:border-fg-muted'
         >
           <span className='i-ph-qr-code size-4 text-fg-high shrink-0' />
-          <span className='text-xs font-medium text-fg-high'>sync to zigner</span>
+          <span className='text-xs text-fg-high'>sync to zigner</span>
           <span className='i-ph-caret-right size-3.5 text-fg-dim ml-auto shrink-0' />
         </button>
       )}
@@ -971,7 +971,7 @@ const VaultRow = ({
 
 const RemovalCard = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <div className='border border-red-500/20 bg-elev-1 p-4'>
-    <div className='text-sm font-medium text-red-400 mb-2'>{title}</div>
+    <div className='text-sm text-red-400 mb-2'>{title}</div>
     {children}
   </div>
 );

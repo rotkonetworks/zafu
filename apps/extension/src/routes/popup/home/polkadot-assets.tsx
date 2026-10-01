@@ -31,16 +31,16 @@ interface PolkadotAssetsProps {
 const ChainRow = memo(({ balance }: { balance: ChainBalance }) => (
   <div className='flex items-center justify-between py-2 px-3 border-b border-border-soft last:border-0'>
     <div className='flex items-center gap-2'>
-      <div className='h-6 w-6 bg-primary/10 flex items-center justify-center text-xs font-bold'>
+      <div className='h-6 w-6 bg-primary/10 flex items-center justify-center text-xs'>
         {balance.symbol.slice(0, 2)}
       </div>
       <div className='flex flex-col'>
-        <span className='text-sm font-medium'>{balance.chainName}</span>
+        <span className='text-sm'>{balance.chainName}</span>
         <span className='text-xs text-fg-muted'>{balance.symbol}</span>
       </div>
     </div>
     <div className='text-right'>
-      <Sensitive className='text-sm font-medium tabular-nums'>
+      <Sensitive className='text-sm tabular-nums'>
         {formatBalance(balance.balance, balance.decimals, 4)} {balance.symbol}
       </Sensitive>
       {balance.cached && <div className='text-xs text-fg-muted/70'>cached</div>}

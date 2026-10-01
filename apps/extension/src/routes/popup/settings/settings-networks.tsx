@@ -241,16 +241,14 @@ const NetworkToggles = () => {
                   )}
                   style={{ backgroundColor: getColorHex(network.color) }}
                 />
-                <span className={cn('font-medium text-sm', !isEnabled && 'text-fg-muted')}>
-                  {network.name}
-                </span>
+                <span className={cn('text-sm', !isEnabled && 'text-fg-muted')}>{network.name}</span>
                 {isActive && (
-                  <span className='text-label px-1.5 py-0.5 bg-primary/15 text-zigner-gold font-medium leading-none'>
+                  <span className='text-label px-1.5 py-0.5 bg-primary/15 text-zigner-gold leading-none'>
                     active
                   </span>
                 )}
                 {network.transparent && (
-                  <span className='text-label px-1.5 py-0.5 border border-warning/30 bg-warning/10 text-warning font-medium leading-none'>
+                  <span className='text-label px-1.5 py-0.5 border border-warning/30 bg-warning/10 text-warning leading-none'>
                     public
                   </span>
                 )}

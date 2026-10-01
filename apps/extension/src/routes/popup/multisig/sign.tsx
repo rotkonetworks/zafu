@@ -437,11 +437,11 @@ export const MultisigSign = () => {
       {PasswordModal}
       <div className='mb-4 border border-border-soft bg-elev-1 p-3'>
         <p className='text-label text-fg-muted'>signing as</p>
-        <p className='mt-0.5 text-sm font-medium truncate'>{activeWallet.label}</p>
+        <p className='mt-0.5 text-sm truncate'>{activeWallet.label}</p>
         <p className='text-label font-mono text-fg-muted truncate'>
           {activeWallet.address.slice(0, 16)}...{activeWallet.address.slice(-8)}
         </p>
-        <span className='mt-1 inline-block bg-primary/10 px-2 py-0.5 text-label font-medium text-zigner-gold'>
+        <span className='mt-1 inline-block bg-primary/10 px-2 py-0.5 text-label text-zigner-gold'>
           {ms.threshold}/{ms.maxSigners}
         </span>
       </div>
@@ -483,7 +483,7 @@ export const MultisigSign = () => {
           <div className='border border-border-soft bg-elev-1 p-3 flex flex-col gap-2.5'>
             <div>
               <p className='text-label tracking-wider text-fg-muted'>from</p>
-              <p className='mt-0.5 text-xs font-medium'>{activeWallet.label}</p>
+              <p className='mt-0.5 text-xs'>{activeWallet.label}</p>
               <p className='mt-0.5 break-all font-mono text-label text-fg-muted'>
                 {activeWallet.address}
               </p>
@@ -496,9 +496,7 @@ export const MultisigSign = () => {
             <div className='border-t border-border-soft' />
             <div className='flex items-baseline justify-between'>
               <span className='text-label tracking-wider text-fg-muted'>amount</span>
-              <Sensitive className='tabular text-sm font-medium'>
-                {formatZec(amountZat)} ZEC
-              </Sensitive>
+              <Sensitive className='tabular text-sm'>{formatZec(amountZat)} ZEC</Sensitive>
             </div>
             <div className='flex items-baseline justify-between'>
               <span className='text-label tracking-wider text-fg-muted'>fee (host claim)</span>
@@ -539,7 +537,7 @@ export const MultisigSign = () => {
           )}
           {verdict.kind === 'refuse' && (
             <div className='border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
-              <div className='flex items-center gap-2 text-body font-medium text-red-400'>
+              <div className='flex items-center gap-2 text-body text-red-400'>
                 <span className='i-ph-shield-warning size-4' />
                 cannot verify - signing refused
               </div>
@@ -552,7 +550,7 @@ export const MultisigSign = () => {
           )}
           {verdict.kind === 'mismatch' && (
             <div className='border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
-              <div className='flex items-center gap-2 text-body font-medium text-red-400'>
+              <div className='flex items-center gap-2 text-body text-red-400'>
                 <span className='i-ph-shield-warning size-4' />
                 mismatch - host claim disagrees with tx bytes
               </div>
@@ -614,7 +612,7 @@ export const MultisigSign = () => {
           {recipient && (
             <div className='w-full border border-yellow-500/40 bg-yellow-500/5 p-3'>
               <p className='text-label tracking-wider text-yellow-400'>signing</p>
-              <p className='mt-0.5 text-sm font-medium text-yellow-300'>
+              <p className='mt-0.5 text-sm text-yellow-300'>
                 <Sensitive>{formatZec(amountZat)} ZEC</Sensitive> →{' '}
                 <span className='font-mono text-label'>
                   {recipient.slice(0, 16)}…{recipient.slice(-6)}
@@ -692,11 +690,11 @@ const AirgapJoinerWrapper = ({
   const WalletCard = () => (
     <div className='mb-4 border border-border-soft bg-elev-1 p-3'>
       <p className='text-label text-fg-muted'>signing as</p>
-      <p className='mt-0.5 text-sm font-medium truncate'>{walletLabel}</p>
+      <p className='mt-0.5 text-sm truncate'>{walletLabel}</p>
       <p className='text-label font-mono text-fg-muted truncate'>
         {walletAddress.slice(0, 16)}...{walletAddress.slice(-8)}
       </p>
-      <span className='mt-1 inline-block bg-primary/10 px-2 py-0.5 text-label font-medium text-zigner-gold'>
+      <span className='mt-1 inline-block bg-primary/10 px-2 py-0.5 text-label text-zigner-gold'>
         {ms.threshold}/{ms.maxSigners} · airgap
       </span>
     </div>

@@ -71,7 +71,7 @@ export const ImportModal = ({ open, onClose, onImported }: Props) => {
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4'>
       <div className='w-full max-w-sm border border-border-soft bg-elev-1 p-4'>
-        <h2 className='text-lg font-medium'>restore multisig backup</h2>
+        <h2 className='text-lg'>restore multisig backup</h2>
 
         {!envelope ? (
           <>
@@ -93,7 +93,7 @@ export const ImportModal = ({ open, onClose, onImported }: Props) => {
           <>
             <div className='mt-3 border border-border-soft bg-elev-2 p-3 text-body'>
               <p className='kicker'>backup file</p>
-              <p className='mt-0.5 font-medium'>{envelope.label}</p>
+              <p className='mt-0.5'>{envelope.label}</p>
               {isBatch ? (
                 <p className='mt-0.5 text-label text-fg-muted'>
                   contains {envelope.shareCount ?? '?'} multisig wallet

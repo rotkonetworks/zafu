@@ -175,7 +175,7 @@ export function SendPage() {
             <span className='i-ph-arrow-left h-5 w-5' />
           </button>
         )}
-        <h1 className='text-lg font-medium text-fg'>{getTitle()}</h1>
+        <h1 className='text-lg text-fg'>{getTitle()}</h1>
       </div>
 
       {/* Content */}
@@ -206,7 +206,7 @@ export function SendPage() {
             // No live IBC channel to this chain right now (channels close on
             // network upgrades and reopen later), so deposit/send is unavailable.
             <div className='flex flex-col gap-2 border border-border-soft bg-elev-1 p-4 text-sm'>
-              <span className='font-medium text-fg'>channel unavailable</span>
+              <span className='text-fg'>channel unavailable</span>
               <span className='text-fg-muted'>
                 {getNetwork(sendChain as NetworkType).name} has no open IBC channel with Penumbra
                 right now.

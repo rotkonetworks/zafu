@@ -84,7 +84,7 @@ function AssetSelector({
       >
         {selected ? (
           <div className='flex items-center gap-2'>
-            <span className='font-medium'>{selected.symbol}</span>
+            <span>{selected.symbol}</span>
             <span className='text-fg-muted'>
               <Sensitive>{selected.formatted}</Sensitive>
             </span>
@@ -111,7 +111,7 @@ function AssetSelector({
                 selected?.denom === asset.denom && 'bg-elev-2',
               )}
             >
-              <span className='font-medium'>{asset.symbol}</span>
+              <span>{asset.symbol}</span>
               <span className='text-fg-muted'>
                 <Sensitive>{asset.formatted}</Sensitive>
               </span>
@@ -1182,7 +1182,7 @@ export function CosmosSend({
       {/* contact name modal */}
       {showContactModal && (
         <div className='border border-border-soft bg-canvas p-3'>
-          <p className='text-sm font-medium mb-2'>name this contact</p>
+          <p className='text-sm mb-2'>name this contact</p>
           <input
             type='text'
             value={contactName}
@@ -1206,7 +1206,7 @@ export function CosmosSend({
                 }
               }}
               disabled={!contactName.trim()}
-              className='flex-1 bg-zigner-gold px-3 py-1.5 text-xs font-medium text-zigner-gold-foreground transition-colors disabled:opacity-50'
+              className='flex-1 bg-zigner-gold px-3 py-1.5 text-xs text-zigner-gold-foreground transition-colors disabled:opacity-50'
             >
               save
             </button>

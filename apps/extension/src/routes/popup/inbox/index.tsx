@@ -249,9 +249,7 @@ function ConversationRow({
       {/* content */}
       <div className='flex-1 min-w-0'>
         <div className='flex items-center justify-between gap-2'>
-          <span className={cn('text-sm truncate', conversation.unread > 0 && 'font-medium')}>
-            {label}
-          </span>
+          <span className={cn('text-sm truncate', conversation.unread > 0 && '')}>{label}</span>
           <div className='flex items-center gap-1.5 shrink-0'>
             {conversation.unread > 0 && (
               <span className='bg-zigner-gold px-1.5 py-0.5 text-label tabular text-zigner-gold-foreground'>
@@ -420,7 +418,7 @@ export function ContactCardBubble({
     <div className='space-y-2'>
       <div className='flex items-center gap-2'>
         <span className='i-ph-address-book h-4 w-4 text-zigner-gold' />
-        <span className='text-sm font-medium'>{card.name || 'anonymous'}</span>
+        <span className='text-sm'>{card.name || 'anonymous'}</span>
       </div>
       <p className='text-label font-mono text-fg-muted break-all'>{card.address}</p>
       {card.zid && (
@@ -548,7 +546,7 @@ function FrostDkgBubble({ message }: { message: InboxMessage }) {
     <div className='space-y-2'>
       <div className='flex items-center gap-2'>
         <span className='i-ph-key h-4 w-4 text-fg-muted' />
-        <span className='text-sm font-medium text-fg-high'>DKG round {round}</span>
+        <span className='text-sm text-fg-high'>DKG round {round}</span>
       </div>
       <p className='text-label text-fg-muted'>
         {round === 1 && 'key generation started - share your commitment'}
@@ -583,7 +581,7 @@ export function FrostSignBubble({ message }: { message: InboxMessage }) {
     <div className='space-y-2'>
       <div className='flex items-center gap-2'>
         <span className='i-ph-pen-nib h-4 w-4 text-fg-muted' />
-        <span className='text-sm font-medium text-fg-high'>{message.typeLabel}</span>
+        <span className='text-sm text-fg-high'>{message.typeLabel}</span>
       </div>
       <p className='text-label text-fg-muted'>{labels[message.type] ?? 'FROST signing round'}</p>
       {!trusted && (
@@ -685,7 +683,7 @@ function ConversationThread({
                 setLabelDraft(conversation.label ?? '');
                 setEditingLabel(true);
               }}
-              className='flex items-center gap-1.5 text-sm font-medium hover:text-zigner-gold transition-colors'
+              className='flex items-center gap-1.5 text-sm hover:text-zigner-gold transition-colors'
             >
               {conversation.label || `conversation #${conversation.diversifierIndex}`}
               <span className='i-ph-pencil-simple h-3 w-3 text-fg-muted' />
@@ -872,7 +870,7 @@ function ComposeMessage({
         <button onClick={onClose} className='text-fg-muted hover:text-fg-high transition-colors'>
           <span className='i-ph-arrow-left h-5 w-5' />
         </button>
-        <h2 className='text-lg font-medium'>new message</h2>
+        <h2 className='text-lg'>new message</h2>
       </div>
 
       <div className='flex-1 overflow-y-auto p-4 space-y-4'>
@@ -951,7 +949,7 @@ function ComposeMessage({
             }
           }}
           disabled={(txStatus === 'idle' && !canSend) || txStatus === 'sending'}
-          className='w-full flex items-center justify-center gap-2 bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
+          className='w-full flex items-center justify-center gap-2 bg-zigner-gold py-3 text-sm text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
         >
           {txStatus === 'sending' ? (
             <>
@@ -1133,7 +1131,7 @@ export function InboxPage() {
       {/* header */}
       <div className='flex items-center justify-between px-4 py-3 border-b border-border-soft'>
         <div className='flex items-center gap-2'>
-          <h1 className='text-lg font-medium'>inbox</h1>
+          <h1 className='text-lg'>inbox</h1>
           {isSyncing && (
             <span className='flex items-center gap-1 text-xs text-fg-muted'>
               <span className='i-ph-arrows-clockwise h-3 w-3 animate-spin' />
@@ -1158,7 +1156,7 @@ export function InboxPage() {
           </button>
           <button
             onClick={() => setShowCompose(true)}
-            className='flex items-center gap-1 bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors'
+            className='flex items-center gap-1 bg-zigner-gold px-3 py-1.5 text-sm text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors'
           >
             <span className='i-ph-paper-plane-right h-4 w-4' />
             compose
@@ -1342,7 +1340,7 @@ function FlatMessageRow({
       </div>
       <div className='flex-1 min-w-0'>
         <div className='flex items-center justify-between gap-2'>
-          <span className={cn('text-sm truncate', !message.read && 'font-medium')}>
+          <span className={cn('text-sm truncate', !message.read && '')}>
             {contactName ?? truncateAddress(displayAddress)}
           </span>
           <span className='text-label text-fg-muted whitespace-nowrap'>
@@ -1418,7 +1416,7 @@ function EmptyState({
         <span className='i-ph-envelope h-8 w-8 text-zigner-gold' />
       </div>
       <div className='flex flex-col gap-1'>
-        <p className='text-sm font-medium'>{text}</p>
+        <p className='text-sm'>{text}</p>
         <p className='max-w-xs text-xs text-fg-muted leading-snug'>{subtitle}</p>
       </div>
       {action && (

@@ -73,15 +73,15 @@ export const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
           <div className='flex items-center justify-between'>
             <div className='flex items-center gap-2'>
               <div className='h-8 w-8 bg-elev-2 flex items-center justify-center'>
-                <span className='text-sm font-bold'>{config.symbol[0]}</span>
+                <span className='text-sm'>{config.symbol[0]}</span>
               </div>
               <div>
-                <div className='text-sm font-medium'>{config.symbol}</div>
+                <div className='text-sm'>{config.symbol}</div>
                 <div className='text-xs text-fg-muted'>{config.name}</div>
               </div>
             </div>
             <div className='text-right'>
-              <Sensitive className='text-sm font-medium tabular-nums'>0 {config.symbol}</Sensitive>
+              <Sensitive className='text-sm tabular-nums'>0 {config.symbol}</Sensitive>
             </div>
           </div>
         </div>
@@ -92,19 +92,17 @@ export const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
               <div className='flex items-center justify-between'>
                 <div className='flex items-center gap-2'>
                   <div className='h-8 w-8 bg-elev-2 flex items-center justify-center'>
-                    <span className='text-sm font-bold'>{asset.symbol[0]}</span>
+                    <span className='text-sm'>{asset.symbol[0]}</span>
                   </div>
                   <div>
-                    <div className='text-sm font-medium'>{asset.symbol}</div>
+                    <div className='text-sm'>{asset.symbol}</div>
                     <div className='text-xs text-fg-muted truncate max-w-[120px]'>
                       {asset.denom}
                     </div>
                   </div>
                 </div>
                 <div className='text-right'>
-                  <Sensitive className='text-sm font-medium tabular-nums'>
-                    {asset.formatted}
-                  </Sensitive>
+                  <Sensitive className='text-sm tabular-nums'>{asset.formatted}</Sensitive>
                 </div>
               </div>
             </div>

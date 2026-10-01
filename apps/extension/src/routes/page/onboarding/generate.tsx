@@ -82,7 +82,7 @@ export const GenerateSeedPhrase = () => {
         <FadeTransition>
           <div className='flex flex-col gap-[22px]'>
             <OnboardingBack onClick={() => setPhase('phrase')} />
-            <h1 className='font-display text-[38px] font-medium text-fg-high'>quick check</h1>
+            <h1 className='font-display text-[38px] text-fg-high'>quick check</h1>
             <div className='flex items-baseline justify-between'>
               <span className='text-body text-fg-high'>
                 tap word #{cur?.index != null ? cur.index + 1 : ''}
@@ -116,9 +116,7 @@ export const GenerateSeedPhrase = () => {
     <OnboardingShell art='enso'>
       <FadeTransition>
         <div className='flex flex-col gap-5'>
-          <h1 className='font-display text-[38px] font-medium text-fg-high'>
-            your recovery phrase
-          </h1>
+          <h1 className='font-display text-[38px] text-fg-high'>your recovery phrase</h1>
           <p className='text-body text-fg-muted lowercase'>
             write the 24 words on paper, in order. they are the wallet.
           </p>

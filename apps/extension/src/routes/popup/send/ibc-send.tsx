@@ -610,7 +610,7 @@ export function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
       {/* contact name modal */}
       {showContactModal && sentToAddress && (
         <div className='border border-border-soft bg-canvas p-3'>
-          <p className='text-sm font-medium mb-2'>name this contact</p>
+          <p className='text-sm mb-2'>name this contact</p>
           <input
             type='text'
             value={contactName}
@@ -634,7 +634,7 @@ export function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
                 }
               }}
               disabled={!contactName.trim()}
-              className='flex-1 bg-zigner-gold px-3 py-1.5 text-xs font-medium text-zigner-gold-foreground transition-colors disabled:opacity-50'
+              className='flex-1 bg-zigner-gold px-3 py-1.5 text-xs text-zigner-gold-foreground transition-colors disabled:opacity-50'
             >
               save
             </button>

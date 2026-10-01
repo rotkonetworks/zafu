@@ -168,7 +168,7 @@ export const PageIndex = () => {
         {grouped.map(([category, zapps]) => (
           <div key={category} className='flex flex-col gap-3'>
             <div className='flex items-center gap-3'>
-              <h2 className='text-label font-semibold uppercase tracking-wider text-fg-muted'>
+              <h2 className='text-label uppercase tracking-wider text-fg-muted'>
                 {CATEGORY_LABELS[category]}
               </h2>
               <div className='h-px flex-1 bg-border-soft/60' />
@@ -186,7 +186,7 @@ export const PageIndex = () => {
                       />
                     </span>
                     <span className='flex min-w-0 flex-col'>
-                      <span className='truncate text-sm font-medium text-fg-high'>{zapp.name}</span>
+                      <span className='truncate text-sm text-fg-high'>{zapp.name}</span>
                       <span className='truncate text-label text-fg-muted' title={zapp.description}>
                         {zapp.description}
                       </span>

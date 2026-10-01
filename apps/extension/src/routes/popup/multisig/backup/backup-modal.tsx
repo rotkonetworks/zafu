@@ -67,7 +67,7 @@ export const BackupModal = ({
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4'>
       <div className='w-full max-w-sm border border-border-soft bg-elev-1 p-4'>
-        <h2 className='text-lg font-medium'>{title}</h2>
+        <h2 className='text-lg'>{title}</h2>
         <p className='mt-1 text-label text-fg-muted'>
           {batch ? `Exporting ${walletLabel}.` : `Exporting "${walletLabel}".`}
         </p>
