@@ -13,6 +13,9 @@ import { ApproveDeny } from './approve-deny';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
 import { OriginIcon, hostnameOf } from '../../../shared/components/origin-icon';
 import { Mark } from '@repo/ui/components/ui/mark';
+import { RowGroup } from '@repo/ui/components/ui/row';
+import { useStore } from '../../../state';
+import { selectSelectedKeyInfo } from '../../../state/keyring';
 
 // `new URL()` throws on a malformed string; the `app` query param is only
 // truthiness-checked, so parse defensively and fall back to the raw text.
@@ -30,6 +33,7 @@ export const PasskeyApprove = () => {
   const [params] = useSearchParams();
   const origin = params.get('app') || '';
   const requestId = params.get('requestId') || '';
+  const keyInfo = useStore(selectSelectedKeyInfo);
 
   const respond = async (approved: boolean) => {
     // Deliver the decision BEFORE closing: `window.close()` removes the window
@@ -78,7 +82,15 @@ export const PasskeyApprove = () => {
         />
       }
     >
-      <div className='w-full px-[30px]'>
+      <div className='flex w-full flex-col gap-3 px-[30px]'>
+        {keyInfo && (
+          <RowGroup>
+            <div className='flex h-12 items-center justify-between px-3.5 text-sm'>
+              <span className='text-fg-muted'>account</span>
+              <span className='text-fg-high'>{keyInfo.name}</span>
+            </div>
+          </RowGroup>
+        )}
         <p className='text-xs text-fg-muted'>
           the key stays in zafu and comes back with your recovery phrase.
         </p>

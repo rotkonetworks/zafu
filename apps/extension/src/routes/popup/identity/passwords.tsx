@@ -6,6 +6,15 @@
  * only a mnemonic wallet can derive - a zigner, viewing-key, ledger or
  * multisig wallet has no phrase on this device, so the form stays disabled
  * with one calm line instead of failing silently.
+ *
+ * TODO(seed exposure): getMnemonic decrypts the phrase here, in the popup.
+ * state/shared/vault-seal.ts + getVaultUnlock already move a decrypt like
+ * this into the zcash worker for sends, so it never touches the popup - but
+ * that worker only exists when zcash is enabled, and passwords is an
+ * everywhere tool (a penumbra-only wallet has no zcash worker to host it
+ * in). Moving this derivation there would make an everywhere tool secretly
+ * depend on a zcash-only process. Needs its own always-on host (or a
+ * network-agnostic seal target) before this can move out of the popup.
  */
 
 import { useEffect, useState } from 'react';
