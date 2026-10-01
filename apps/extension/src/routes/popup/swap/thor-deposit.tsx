@@ -27,7 +27,7 @@ import { usePasswordGate } from '../../../hooks/password-gate';
 import { usePoolNotes } from '../../../hooks/zcash-pool-balances';
 import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
 import { quoteSend } from '../send/spendable';
-import { Main, Review, Stopped, shortAddress } from '../send/send-ui';
+import { Main, PrivacyLine, Review, Stopped, shortAddress } from '../send/send-ui';
 
 type Phase =
   | { at: 'planning' }
@@ -44,6 +44,12 @@ const zec = (zat: string | bigint) => fromUnits(BigInt(zat), 8);
 
 const lineOf = (e: unknown) =>
   e instanceof Error && e.message ? e.message : 'something broke on our side, not yours';
+
+/** a step's own line for money that isn't there yet, over the worker's arithmetic */
+const SHORT = {
+  moving: "the shielded balance doesn't cover this yet · nothing was sent",
+  paying: "your transparent address doesn't cover this yet · nothing was sent",
+} as const;
 
 export const ThorDeposit = ({
   quote,
@@ -106,7 +112,10 @@ export const ThorDeposit = ({
   }, [phase.at, tAddress, zidecarUrl]);
 
   /** unlock, then run one confirmed step; a decline goes back to its review */
-  const step = async (busy: Phase, run: (vault: VaultUnlock) => Promise<void>) => {
+  const step = async (
+    busy: { at: keyof typeof SHORT },
+    run: (vault: VaultUnlock) => Promise<void>,
+  ) => {
     if (!walletId || !(await requestAuth())) {
       return;
     }
@@ -114,7 +123,8 @@ export const ThorDeposit = ({
     try {
       await run(await getVaultUnlock(walletId));
     } catch (e) {
-      setPhase({ at: 'stopped', error: lineOf(e) });
+      const line = lineOf(e);
+      setPhase({ at: 'stopped', error: /insufficient/i.test(line) ? SHORT[busy.at] : line });
     }
   };
 
@@ -191,7 +201,7 @@ export const ThorDeposit = ({
             ['fee', <Sensitive key='fee'>{`${zec(fee)} zec`}</Sensitive>],
             ['then', 'the swap, reviewed next'],
           ]}
-          privacy='leaving the shielded pool is public · the amount and the address show'
+          privacy='public · the amount and your address show'
           confirm='move zec'
           onEdit={onBack}
           onConfirm={() => void move(phase.plan)}
@@ -206,11 +216,10 @@ export const ThorDeposit = ({
         {PasswordModal}
         <Review
           title='review swap'
-          meta={moved ? '2 / 2' : undefined}
+          meta={moved ? '2 / 2' : ''}
           amount={zec(amountZat)}
           unit='zec'
           rows={[
-            ['to', 'thorchain vault'],
             ['fee', <Sensitive key='fee'>{`${zec(phase.plan.fee)} zec`}</Sensitive>],
             [
               'refunds to',
@@ -219,18 +228,18 @@ export const ThorDeposit = ({
               </span>,
             ],
           ]}
-          privacy='transparent · the amount, the vault and your address show'
           confirm='confirm and send'
           onEdit={onBack}
           onConfirm={() => void pay(phase.plan)}
         >
-          {/* the vault and the memo are what is being signed; shown in full */}
-          <dl className='flex flex-col gap-1.5 border border-border-soft bg-elev-1 p-3 text-xs'>
-            <dt className='text-fg-muted'>vault</dt>
+          {/* the vault and the memo are what is being signed; shown in full, above the fold */}
+          <dl className='-mt-2 flex flex-col gap-1 border border-border-soft bg-elev-1 px-3.5 py-3 text-xs'>
+            <dt className='text-fg-muted'>to the thorchain vault</dt>
             <dd className='break-all font-mono text-fg-high'>{quote.depositAddress}</dd>
-            <dt className='pt-1 text-fg-muted'>memo</dt>
+            <dt className='pt-1.5 text-fg-muted'>memo</dt>
             <dd className='break-all font-mono text-fg-high'>{quote.memo}</dd>
           </dl>
+          <PrivacyLine>public · amount, vault and your address show</PrivacyLine>
         </Review>
       </div>
     );
