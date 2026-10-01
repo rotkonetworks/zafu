@@ -10,13 +10,7 @@ import { createRoot, type Root } from 'react-dom/client';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const ALLOW_ZCASH_ONLY = {
-  rules: [{ host: 'zcash.rotko.net', path: '', destination: 'zcash', allow: true }],
-  hosts: {},
-  adhoc: false,
-};
-
-let storage: Record<string, unknown>;
+const localMock = (chrome.storage.local as unknown as { mock: Map<string, unknown> }).mock;
 let nativeFetch: ReturnType<typeof vi.fn>;
 const originalFetch = globalThis.fetch;
 
@@ -49,31 +43,28 @@ describe('the ask sheet', () => {
   let root: Root;
   let egress: typeof import('./egress');
   let optIn: typeof import('./egress-opt-in');
+  let policy: typeof import('./egress-policy');
   let AskSheet: typeof import('./egress-ask-sheet').EgressAskSheet;
 
   beforeEach(async () => {
     vi.resetModules();
-    storage = { enabledNetworks: ['zcash'] };
-    (globalThis as { chrome?: unknown }).chrome = {
-      storage: {
-        local: {
-          get: async (keys: string[]) =>
-            Object.fromEntries(keys.map(k => [k, storage[k]]).filter(([, v]) => v !== undefined)),
-          set: async (values: Record<string, unknown>) => {
-            Object.assign(storage, values);
-          },
-        },
-      },
-    };
+    localMock.clear();
+    localMock.set('enabledNetworks', ['zcash']);
 
     nativeFetch = vi.fn(() => Promise.resolve(new Response('ok')));
     globalThis.fetch = nativeFetch as unknown as typeof fetch;
 
     egress = await import('./egress');
     optIn = await import('./egress-opt-in');
+    policy = await import('./egress-policy');
     AskSheet = (await import('./egress-ask-sheet')).EgressAskSheet;
 
-    egress.installEgress('popup', { load: () => Promise.resolve(ALLOW_ZCASH_ONLY) });
+    egress.installEgress('popup', {
+      load: async () =>
+        policy.compileEgress(
+          (await chrome.storage.local.get([...policy.EGRESS_INPUT_KEYS])) as never,
+        ),
+    });
     await egress.refreshEgress();
 
     const container = document.createElement('div');
@@ -127,23 +118,16 @@ describe('the ask sheet', () => {
   });
 
   it('lets the feature succeed after allow, through the real fetch guard', async () => {
-    const nativeFetch = vi.fn(() => Promise.resolve(new Response('ok')));
-    const prevFetch = globalThis.fetch;
-    globalThis.fetch = nativeFetch as unknown as typeof fetch;
-    try {
-      await expect(fetch('https://1click.chaindefuser.com/v0/tokens')).rejects.toThrow(
-        /did not contact/,
-      );
+    await expect(fetch('https://1click.chaindefuser.com/v0/tokens')).rejects.toThrow(
+      /did not contact/,
+    );
 
-      const asked = optIn.requestEgressOptIn('near-swap');
-      await flush();
-      act(() => allowButton().click());
-      expect(await asked).toBe(true);
+    const asked = optIn.requestEgressOptIn('near-swap');
+    await flush();
+    act(() => allowButton().click());
+    expect(await asked).toBe(true);
 
-      await fetch('https://1click.chaindefuser.com/v0/tokens');
-      expect(nativeFetch).toHaveBeenCalledTimes(1);
-    } finally {
-      globalThis.fetch = prevFetch;
-    }
+    await fetch('https://1click.chaindefuser.com/v0/tokens');
+    expect(nativeFetch).toHaveBeenCalledTimes(1);
   });
 });
