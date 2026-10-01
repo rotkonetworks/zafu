@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useShallow } from 'zustand/react/shallow';
 
 import { useStore } from '../../../state';
 import { privacySelector } from '../../../state/privacy';
@@ -12,32 +11,21 @@ import { CAPS, walletKind } from '../../../signing/wallet-kind';
 import {
   activeAccountIndex,
   activeZcashStoreId,
-  activePockets,
   activePocketBirthday,
 } from '../../../state/pockets';
-import { pocketStoreId } from '../../../state/pocket-id';
 import { Sensitive } from '../../../components/sensitive';
 import { PopupPath } from '../paths';
 import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
 import { useTransparentBalance } from '../../../hooks/zcash-transparent-balance';
-import {
-  spawnNetworkWorker,
-  terminateNetworkWorker,
-  markWalletSyncing,
-  startSyncInWorker,
-  startWatchOnlySyncInWorker,
-  getBalanceInWorker,
-  zcashSyncHeightKey,
-  type HistoryEntry,
-} from '../../../state/keyring/network-worker';
+import { getBalanceInWorker, type HistoryEntry } from '../../../state/keyring/network-worker';
 import { usePendingSends, usePoolBalances } from '../../../hooks/zcash-pool-balances';
 import { ShieldTransparent } from '../../../components/zcash/shield-transparent';
 import { InFlightCard, PendingLine } from '../../../components/in-flight-card';
 import { IRONWOOD_MIGRATION, nu63ActivationHeight } from '../../../config/feature-flags';
 import { rescanStartHeight } from '../../../utils/zcash-blocks';
+import { rescanZcash, retryZcashSync } from '../../../services/zcash-resync';
 import { IronwoodMigrate } from '../send/ironwood-migrate';
-import { deleteZcashDatabases } from '../../../clear-cache-startup';
 import { cn } from '@repo/ui/lib/utils';
 import { SyncStatus } from '../../../components/zcash/sync-status';
 import { usePasswordGate } from '../../../hooks/password-gate';
@@ -133,7 +121,6 @@ export const ZcashContent = ({
   // the active pocket's own worker store and zip32 account
   const storeId = useStore(activeZcashStoreId);
   const pocketAccount = useStore(activeAccountIndex);
-  const pockets = useStore(useShallow(activePockets));
   // a pocket's own birthday (the chain tip when it was created); undefined
   // for account 0 or a pocket that recorded none, meaning "use the wallet's"
   const pocketBirthday = useStore(activePocketBirthday);
@@ -218,148 +205,18 @@ export const ZcashContent = ({
   // deletes the note database, so it does not happen on one click.
   const [rescanConfirmHeight, setRescanConfirmHeight] = useState<number | null>(null);
 
-  // rescan via custom event - terminate worker, clear IDB, let auto-sync restart
-  useEffect(() => {
-    const handler = async (e: Event) => {
-      const requested = (e as CustomEvent<number>).detail;
-      if (!selectedKeyInfo) {
-        return;
-      }
-      if (typeof requested !== 'number' || isNaN(requested)) {
-        return;
-      }
-      // A rescan DELETES the note database and writes this height as the new
-      // birthday. Any note received before it becomes permanently invisible to
-      // this wallet - no later scan ever revisits those blocks. So a height
-      // below orchard activation is meaningless and a height at or near the
-      // TIP is destructive: it means "start from now", i.e. forget everything
-      // you own. Clamp to the earliest height that can hold a note.
-      const height = rescanStartHeight(requested);
-
-      try {
-        const walletId = selectedKeyInfo.id;
-        const activeStoreId = pocketStoreId(walletId, pocketAccount);
-        const birthdayKey = `zcashBirthday_${walletId}`;
-
-        // terminate worker so in-memory commitment tree is dropped
-        try {
-          terminateNetworkWorker('zcash');
-        } catch {}
-        // delete IndexedDB to clear stale commitment tree. awaited: a
-        // fire-and-forget delete against a still-open database hangs on
-        // onblocked and silently leaves the data in place.
-        // ('zafu-memo-cache' was deleted here too; no such database exists - // the memo cache is an object store inside 'zafu-zcash'.)
-        await deleteZcashDatabases();
-        // update birthday and clear persisted sync height
-        await chrome.storage.local.set({ [birthdayKey]: height });
-        // legacy global key kept in the removal list so an old install's
-        // stale value cannot outlive a rescan. Clears EVERY pocket's store,
-        // not just the active one - a rescan drops the shared commitment
-        // tree, so a stale hint for an inactive pocket would resume it from
-        // a height the tree no longer has.
-        const storeIds =
-          pockets.length > 0 ? pockets.map(p => pocketStoreId(walletId, p.account)) : [walletId];
-        await chrome.storage.local.remove(['zcashSyncHeight', ...storeIds.map(zcashSyncHeightKey)]);
-        setWalletBirthday(height);
-        setShieldedZat(0n);
-        setBalanceState('loading');
-
-        // respawn worker and start sync - mark syncing immediately to prevent
-        // auto-sync hook from racing with a duplicate sync
-        await new Promise(r => setTimeout(r, 500));
-        await spawnNetworkWorker('zcash');
-        markWalletSyncing('zcash', activeStoreId);
-
-        if (hasMnemonic && selectedKeyInfo.type === 'mnemonic') {
-          const vault = await keyRing.getVaultUnlock(walletId);
-          // pass the configured backend - defaulting to zidecar here would
-          // point a zidecar client at a lightwalletd endpoint (HTTP 415s)
-          await startSyncInWorker('zcash', activeStoreId, vault, zidecarUrl, height, zcashBackend);
-        } else if (watchOnly) {
-          const ufvkStr =
-            watchOnly.ufvk ??
-            (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
-          if (ufvkStr) {
-            await startWatchOnlySyncInWorker(
-              'zcash',
-              activeStoreId,
-              ufvkStr,
-              zidecarUrl,
-              height,
-              zcashBackend,
-            );
-          }
+  const rescan = (h: number) =>
+    void rescanZcash(h)
+      .then(height => {
+        if (height !== undefined) {
+          setWalletBirthday(height);
+          setShieldedZat(0n);
+          setBalanceState('loading');
         }
-      } catch (err) {
-        console.error('[zcash] rescan failed:', err);
-      }
-    };
-    // Retry after a transient backend error (node restart, 503): respawn the
-    // worker and resume from the height already reached. Deliberately does NOT
-    // clear zcashSyncHeight or zero the balances the way a rescan does - a
-    // blip should cost seconds, not a full re-scan from the birthday.
-    const retryHandler = () => {
-      void (async () => {
-        try {
-          const walletId = selectedKeyInfo?.id;
-          if (!walletId) {
-            return;
-          }
-          const activeStoreId = pocketStoreId(walletId, pocketAccount);
-          await spawnNetworkWorker('zcash');
-          markWalletSyncing('zcash', activeStoreId);
-          const resumeKey = zcashSyncHeightKey(activeStoreId);
-          const resumeAt = (await chrome.storage.local.get(resumeKey))[resumeKey] as
-            | number
-            | undefined;
-          if (hasMnemonic && selectedKeyInfo.type === 'mnemonic') {
-            const vault = await keyRing.getVaultUnlock(walletId);
-            await startSyncInWorker(
-              'zcash',
-              activeStoreId,
-              vault,
-              zidecarUrl,
-              resumeAt,
-              zcashBackend,
-            );
-          } else if (watchOnly) {
-            const ufvkStr =
-              watchOnly.ufvk ??
-              (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
-            if (ufvkStr) {
-              await startWatchOnlySyncInWorker(
-                'zcash',
-                activeStoreId,
-                ufvkStr,
-                zidecarUrl,
-                resumeAt,
-                zcashBackend,
-              );
-            }
-          }
-        } catch (err) {
-          console.error('[zcash] sync retry failed:', err);
-        }
-      })();
-    };
-
-    window.addEventListener('zcash-rescan', handler);
-    window.addEventListener('zcash-retry-sync', retryHandler);
-    return () => {
-      window.removeEventListener('zcash-rescan', handler);
-      window.removeEventListener('zcash-retry-sync', retryHandler);
-    };
-  }, [
-    hasMnemonic,
-    watchOnly,
-    selectedKeyInfo?.id,
-    selectedKeyInfo?.type,
-    keyRing,
-    zidecarUrl,
-    zcashBackend,
-    pocketAccount,
-    pockets,
-  ]);
+      })
+      .catch(err => console.error('[zcash] rescan failed:', err));
+  const retry = () =>
+    void retryZcashSync().catch(err => console.error('[zcash] sync retry failed:', err));
 
   // pending shielded change (our own unconfirmed sends, a pending migrate) is
   // held, not spendable, and not gone - so it counts in the figure
@@ -477,10 +334,10 @@ export const ZcashContent = ({
                   ? navigate(`${PopupPath.SETTINGS_NETWORKS}?network=zcash`)
                   : syncFailure.action?.kind === 'reload'
                     ? window.location.reload()
-                    : window.dispatchEvent(new Event('zcash-retry-sync')),
+                    : retry(),
             }
           }
-          onRetry={() => window.dispatchEvent(new Event('zcash-retry-sync'))}
+          onRetry={retry}
           onRescan={h => setRescanConfirmHeight(rescanStartHeight(h))}
         />
       )}
@@ -686,7 +543,7 @@ export const ZcashContent = ({
               onClick={() => {
                 const h = rescanConfirmHeight;
                 setRescanConfirmHeight(null);
-                window.dispatchEvent(new CustomEvent('zcash-rescan', { detail: h }));
+                rescan(h);
               }}
             >
               read again from {rescanConfirmHeight.toLocaleString()}
