@@ -4,7 +4,7 @@
  * tap the network chip -> Network sheet (switch network, turn one on)
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '../state';
 import { selectActiveNetwork, selectEffectiveKeyInfo } from '../state/keyring';
@@ -15,10 +15,12 @@ import { AccountsSheet, type PocketSheetTarget } from './accounts-sheet';
 import { NetworkSheet } from './network-sheet';
 import { AddWalletSheet } from './add-wallet-sheet';
 import { NewPocketSheet } from './new-pocket-sheet';
+import { MovedSheet } from './moved-sheet';
+import { LAST_SEEN_VERSION, showMoved } from '../state/moved-notice';
 import { cn } from '@repo/ui/lib/utils';
 import { Mark } from '@repo/ui/components/ui/mark';
 
-type OpenSheet = 'accounts' | 'network' | 'add-wallet' | 'new-pocket' | null;
+type OpenSheet = 'accounts' | 'network' | 'add-wallet' | 'new-pocket' | 'moved' | null;
 
 export const AppHeader = () => {
   const activeNetwork = useStore(selectActiveNetwork);
@@ -30,6 +32,19 @@ export const AppHeader = () => {
   // set when the new-pocket sheet is opened to rename an existing pocket
   // instead of creating one
   const [renameTarget, setRenameTarget] = useState<PocketSheetTarget>();
+
+  // the first open after the redesign update says what moved, once
+  useEffect(() => {
+    void chrome.storage.local.get(LAST_SEEN_VERSION).then(r => {
+      if (showMoved(r[LAST_SEEN_VERSION])) {
+        setOpenSheet(open => open ?? 'moved');
+      }
+    });
+  }, []);
+  const seenMoved = (next: OpenSheet) => {
+    setOpenSheet(next);
+    void chrome.storage.local.set({ [LAST_SEEN_VERSION]: chrome.runtime.getManifest().version });
+  };
 
   const networkInfo = getNetwork(activeNetwork);
   // mnemonic vaults derive zcash keys directly - no zcash wallet record
@@ -109,6 +124,11 @@ export const AppHeader = () => {
         open={openSheet === 'new-pocket'}
         onOpenChange={next => setOpenSheet(next ? 'new-pocket' : null)}
         rename={renameTarget}
+      />
+      <MovedSheet
+        open={openSheet === 'moved'}
+        onDone={() => seenMoved(null)}
+        onAccounts={() => seenMoved('accounts')}
       />
     </header>
   );
