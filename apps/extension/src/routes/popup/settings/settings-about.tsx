@@ -1,6 +1,7 @@
 import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
 import { Watermark } from '@repo/ui/components/ui/watermark';
+import { Mark } from '@repo/ui/components/ui/mark';
 
 export const SettingsAbout = () => {
   return (
@@ -8,8 +9,11 @@ export const SettingsAbout = () => {
       <div className='relative isolate flex flex-col gap-4'>
         <Watermark glyph='道' corner='bottom-right' />
         <div>
-          <h3 className='kicker mb-1'>zafu wallet</h3>
-          <p className='text-xs text-fg-muted leading-relaxed'>
+          <Mark size={28} className='mb-2' />
+          <span className='block text-label tracking-[0.18em] text-fg-muted lowercase'>
+            shielded signing
+          </span>
+          <p className='text-xs text-fg-muted leading-relaxed mt-2'>
             privacy-first browser wallet for penumbra, zcash, and cosmos IBC chains.
           </p>
           <p className='text-xs text-fg-muted mt-1'>
