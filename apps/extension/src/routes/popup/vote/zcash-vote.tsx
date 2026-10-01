@@ -13,9 +13,15 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@repo/ui/lib/utils';
 import { Segmented } from '@repo/ui/components/ui/segmented';
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from '@repo/ui/components/ui/tooltip';
 import { loadVoting, fetchTally } from '../../../services/voting/api';
 import { resolveVotingConfigSource } from '../../../services/voting/resolve';
-import type { VotingRound, RoundStatus } from '../../../services/voting/types';
+import type { VotingRound, RoundStatus, VotingProposal } from '../../../services/voting/types';
 
 // round status is a category, not an alarm - fg tokens only (DESIGN.md).
 const STATUS_STYLE: Record<RoundStatus, string> = {
@@ -45,6 +51,13 @@ const formatEnd = (round: VotingRound): string => {
   }
   return `ended ${new Date(round.votingEnd * 1000).toISOString().slice(0, 10)}`;
 };
+
+// weight arrives as a plain number (relative zec weight); show every
+// significant digit we were sent, zec's own precision (8dp) as the ceiling.
+const formatWeight = (weight: number): string =>
+  weight.toLocaleString(undefined, { maximumFractionDigits: 8 });
+
+const shortRoundId = (id: string): string => `${id.slice(0, 10)}…`;
 
 export const ZcashVotePage = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -245,6 +258,11 @@ const RoundCard = ({
                     </span>
                   )}
                 </div>
+                {showTally && total > 0 && (
+                  <span className='text-label text-fg-dim tabular'>
+                    {formatWeight(total)} zec tallied
+                  </span>
+                )}
                 {p.options.map(opt => {
                   const weight = tally?.options.find(o => o.optionId === opt.id)?.weight ?? 0;
                   const pct = total > 0 ? (weight / total) * 100 : 0;
@@ -254,17 +272,15 @@ const RoundCard = ({
                         {opt.label}
                       </span>
                       {showTally ? (
-                        <>
-                          <div className='h-1.5 flex-1 bg-elev-2'>
-                            <div
-                              className='h-full bg-zigner-gold/70'
-                              style={{ width: `${pct.toFixed(1)}%` }}
-                            />
-                          </div>
-                          <span className='w-12 shrink-0 text-right text-label text-fg-dim tabular'>
-                            {total > 0 ? `${pct.toFixed(1)}%` : '-'}
-                          </span>
-                        </>
+                        <TallyBar
+                          pct={pct}
+                          round={round}
+                          proposal={p}
+                          optionId={opt.id}
+                          optionLabel={opt.label}
+                          weight={weight}
+                          total={total}
+                        />
                       ) : (
                         <div className='h-px flex-1 bg-border-soft' />
                       )}
@@ -290,5 +306,66 @@ const RoundCard = ({
         </div>
       )}
     </div>
+  );
+};
+
+/**
+ * One option's share, as a bar whose length is its share of the proposal's
+ * tallied weight. The bar alone never carries the figures - they open on
+ * hover, keyboard focus or tap, so the resting screen stays quiet while
+ * every number the tally server sent us is still one touch away.
+ */
+const TallyBar = ({
+  pct,
+  round,
+  proposal,
+  optionId,
+  optionLabel,
+  weight,
+  total,
+}: {
+  pct: number;
+  round: VotingRound;
+  proposal: VotingProposal;
+  optionId: number;
+  optionLabel: string;
+  weight: number;
+  total: number;
+}) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <TooltipProvider>
+      <Tooltip open={open} onOpenChange={setOpen}>
+        <TooltipTrigger asChild>
+          <button
+            type='button'
+            onClick={() => setOpen(o => !o)}
+            aria-label={`${optionLabel}: ${formatWeight(weight)} zec, ${pct.toFixed(2)}%`}
+            className='flex flex-1 items-center gap-2 text-left'
+          >
+            <div className='h-1.5 flex-1 bg-elev-2'>
+              <div className='h-full bg-zigner-gold/70' style={{ width: `${pct.toFixed(1)}%` }} />
+            </div>
+            <span className='w-12 shrink-0 text-right text-label text-fg-dim tabular'>
+              {total > 0 ? `${pct.toFixed(1)}%` : '-'}
+            </span>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent
+          side='top'
+          collisionPadding={8}
+          className='flex max-w-[240px] flex-col gap-1 whitespace-normal lowercase'
+        >
+          <span className='text-fg-high'>{optionLabel}</span>
+          <span className='tabular'>
+            {formatWeight(weight)} zec · {total > 0 ? `${pct.toFixed(2)}%` : 'no votes yet'}
+          </span>
+          <span className='text-fg-muted tabular'>{formatWeight(total)} zec tallied total</span>
+          <span className='text-fg-dim'>
+            proposal {proposal.id} · option {optionId} · round {shortRoundId(round.id)}
+          </span>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 };
