@@ -258,9 +258,39 @@ const reinitializeServices = (why: string) => rebuilds.request(why);
 // balances) several times per transaction - dapps then saw stale or empty
 // state. Penumbra stays up until the user next switches networks, which
 // re-evaluates the gate.
+//
+// If penumbra was stubbed, the dapp's first RPCs arrive on this very port
+// before the rebuild swaps the stub out, and used to fail with "penumbra
+// network not active". Hold them on `dappStart` until the real services exist.
+let dappStart: Promise<void> | undefined;
 setDappSessionHooks({
-  onFirst: () => void reinitializeServices('dapp session started'),
+  onFirst: () => {
+    const stubbed = rebuilds.getRunning()?.run === false;
+    if (stubbed) {
+      // block wallet getters now; the rebuild settles this same cache
+      resetWalletCache();
+    }
+    const started = reinitializeServices('dapp session started');
+    if (stubbed) {
+      dappStart = started;
+      void started.finally(async () => {
+        if (dappStart === started) {
+          dappStart = undefined;
+        }
+        // the scheduler skipped (gate still closed, e.g. penumbra disabled):
+        // no rebuild settled the cache reset above, so fail it like the stub would
+        if (rebuilds.getRunning()?.run === false) {
+          const gate = await penumbraGate();
+          setCachedWallet(undefined, gate.run ? undefined : gate.reason);
+        }
+      });
+    }
+  },
 });
+
+/** The penumbra services RPCs should use, waiting out a dapp-triggered start. */
+const currentWalletServices = () =>
+  dappStart ? dappStart.then(() => walletServices) : walletServices;
 
 // Listen for wallet and network changes
 localExtStorage.addListener(changes => {
@@ -353,7 +383,7 @@ const initHandler = async () => {
 
       // remaining context for all services
       contextValues.set(fvkCtx, getFullViewingKey);
-      contextValues.set(servicesCtx, (() => walletServices) as never);
+      contextValues.set(servicesCtx, currentWalletServices as never);
       contextValues.set(walletIdCtx, getWalletId);
 
       // discriminate context available to specific services
