@@ -5,11 +5,10 @@
  * listens to worker sync-progress events for local scan height.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ZidecarClient, type SyncStatus, type ChainTip } from '../state/keyring/zidecar-client';
-import { LightwalletdClient } from '../state/keyring/lightwalletd-client';
-import type { ZcashClient } from '../state/keyring/zcash-backend';
+import type { SyncStatus, ChainTip } from '../state/keyring/zidecar-client';
+import { zcashClient, zidecarExtras } from '../state/keyring/zcash-backend';
 import { useStore } from '../state';
 import { selectActiveNetwork } from '../state/keyring';
 import { activeZcashStoreId } from '../state/pockets';
@@ -145,13 +144,8 @@ export function useZcashSyncStatus(): ZcashSyncState {
   const zcashActive = useStore(selectActiveNetwork) === 'zcash';
   const { workerSyncHeight, workerChainHeight, workerError, workerFailure } = useZcashWorkerSync();
 
-  const client = useCallback(
-    (): ZcashClient =>
-      backend === 'lightwalletd'
-        ? new LightwalletdClient(zidecarUrl)
-        : new ZidecarClient(zidecarUrl),
-    [zidecarUrl, backend],
-  );
+  // GetSyncStatus is zidecar's own rpc; a standard lightwalletd has none
+  const zidecar = zidecarExtras(zidecarUrl, backend);
 
   const {
     data: syncStatus,
@@ -159,10 +153,9 @@ export function useZcashSyncStatus(): ZcashSyncState {
     error: syncError,
   } = useQuery({
     queryKey: ['zcashSyncStatus', backend, zidecarUrl],
-    // GetSyncStatus is a zidecar-only RPC; public lightwalletd endpoints lack it.
-    // Also gated on zcash being enabled - no polling for a penumbra-only wallet.
-    enabled: zcashActive && backend === 'zidecar',
-    queryFn: () => client().getSyncStatus(),
+    // gated on zcash being enabled - no polling for a penumbra-only wallet
+    enabled: zcashActive && !!zidecar,
+    queryFn: () => zidecar!.getSyncStatus(),
     staleTime: POLL_INTERVAL,
     refetchInterval: POLL_INTERVAL,
     retry: 2,
@@ -180,7 +173,7 @@ export function useZcashSyncStatus(): ZcashSyncState {
     // Gated on zcash being enabled - a penumbra-only wallet must not poll the
     // zidecar for the chain tip.
     enabled: zcashActive,
-    queryFn: () => client().getTip(),
+    queryFn: () => zcashClient(zidecarUrl, backend).getTip(),
     staleTime: POLL_INTERVAL,
     refetchInterval: POLL_INTERVAL,
     retry: 2,

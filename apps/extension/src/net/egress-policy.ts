@@ -47,6 +47,7 @@ export const EGRESS_INPUT_KEYS: readonly string[] = [
   'keplrCompat',
   'zitadelRelayUrl',
   'zcashWallets',
+  'zcashBackend',
   ...(Object.keys(COSMOS_CHAINS) as CosmosChainId[]).map(rpcPoolKey),
 ];
 
@@ -67,6 +68,8 @@ export interface EgressInputs {
   zitadelRelayUrl?: string;
   /** only `multisig.relayUrl` is read: each multisig wallet's own relay */
   zcashWallets?: { multisig?: { relayUrl?: unknown } }[];
+  /** absent means the shipped default, zidecar */
+  zcashBackend?: string;
 }
 
 /**
@@ -149,7 +152,9 @@ export const DESTINATIONS: readonly DestinationSpec[] = [
     label: 'zcash tip cross-check',
     purpose: 'indexer',
     gate: { kind: 'optional' },
-    urls: i => [pickIndependentPeer(zcashEndpoint(i))],
+    // a zidecar extra (ZCASH_BACKENDS): nothing to allow behind a standard lightwalletd
+    urls: i =>
+      i.zcashBackend === 'lightwalletd' ? [] : [pickIndependentPeer(zcashEndpoint(i))?.url],
   },
   {
     id: 'penumbra',

@@ -299,11 +299,23 @@ describe('the zcash tip cross-check', () => {
   it('moves with the configured zcash endpoint, same helper the worker calls', () => {
     const inputs = {
       ...ZCASH_ONLY,
-      networkEndpoints: { zcash: 'https://eu.zec.rocks:443' },
+      networkEndpoints: { zcash: 'https://zidecar.example.org' },
+      zcashBackend: 'zidecar',
       netEgress: { optIns: { 'zcash-tip-check': 'allowed' as const } },
     };
     // the configured endpoint is no longer the primary's own domain, so the
     // default rotko preset becomes the independent peer
     expect(outcome(inputs, 'https://zcash.rotko.net/zidecar.v1.Zidecar/GetTip')).toBe('allow');
+  });
+
+  it('is a zidecar extra: behind a standard lightwalletd there is nothing to allow', () => {
+    const inputs = {
+      ...ZCASH_ONLY,
+      networkEndpoints: { zcash: 'https://zec.rocks:443' },
+      zcashBackend: 'lightwalletd',
+      netEgress: { optIns: { 'zcash-tip-check': 'allowed' as const } },
+    };
+    expect(describeEgress(inputs).find(d => d.id === 'zcash-tip-check')?.hosts).toEqual([]);
+    expect(outcome(inputs, 'https://zcash.rotko.net/x')).not.toBe('allow');
   });
 });
