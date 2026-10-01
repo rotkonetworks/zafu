@@ -40,11 +40,9 @@ export class Services implements ServicesInterface {
     // once blockProcessor.stop(reason) aborts it - one per caller that ever
     // asked for services during this processor's life, not just one.
     void this.walletServicesPromise.then(({ blockProcessor }) =>
-      blockProcessor.sync().catch((e: unknown) => {
-        if (!String(e).includes('Sync stop')) {
-          console.error('[penumbra] block processor sync failed:', e);
-        }
-      }),
+      blockProcessor
+        .sync()
+        .catch((e: unknown) => console.error('[penumbra] block processor sync failed:', e)),
     );
     return this.walletServicesPromise;
   }
@@ -79,6 +77,10 @@ export class Services implements ServicesInterface {
     });
 
     let viewServer: ViewServer | undefined;
+    // the block processor seeds a fresh wallet when its stored height is the
+    // frontier's, so it must see the height the snapshot actually came from,
+    // not the earlier tip the birthday was taken at
+    let frontierHeight = compactFrontierBlockHeight;
 
     // 'fullSyncHeight' will always be undefined after onboarding independent
     // of the wallet type. On subsequent service worker inits, the field will
@@ -113,6 +115,7 @@ export class Services implements ServicesInterface {
         );
 
         await indexedDb.saveFullSyncHeight(compact_frontier.height);
+        frontierHeight = Number(compact_frontier.height);
 
         viewServer = await ViewServer.initialize_from_snapshot({
           fullViewingKey,
@@ -155,7 +158,7 @@ export class Services implements ServicesInterface {
       stakingAssetId: registryClient.bundled.globals().stakingAssetId,
       numeraires,
       walletCreationBlockHeight,
-      compactFrontierBlockHeight,
+      compactFrontierBlockHeight: frontierHeight,
       fullViewingKey,
     });
 
