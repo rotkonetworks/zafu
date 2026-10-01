@@ -9,9 +9,9 @@ import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '../state';
 import { selectActiveNetwork, selectEffectiveKeyInfo } from '../state/keyring';
 import { selectActiveZcashWallet } from '../state/wallets';
-import { activeAccountIndex, activePockets } from '../state/pockets';
+import { activePockets } from '../state/pockets';
 import { getNetwork } from '../config/networks';
-import { AccountsSheet, type PocketSheetTarget } from './accounts-sheet';
+import { AccountsSheet, pocketTarget, type PocketSheetTarget } from './accounts-sheet';
 import { NetworkSheet } from './network-sheet';
 import { AddWalletSheet } from './add-wallet-sheet';
 import { NewPocketSheet } from './new-pocket-sheet';
@@ -27,7 +27,7 @@ export const AppHeader = () => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const pockets = useStore(useShallow(activePockets));
-  const pocketAccount = useStore(activeAccountIndex);
+  const pocketAccount = useStore(pocketTarget(activeNetwork).active);
   const [openSheet, setOpenSheet] = useState<OpenSheet>(null);
   // set when the new-pocket sheet is opened to rename an existing pocket
   // instead of creating one

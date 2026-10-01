@@ -12,11 +12,11 @@ import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { useStore } from '../state';
-import { selectEffectiveKeyInfo } from '../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo } from '../state/keyring';
 import { MAX_POCKETS, pocketOwner, pocketsOf } from '../state/pockets';
 import { ZidecarClient } from '../state/keyring/zidecar-client';
 import { LightwalletdClient } from '../state/keyring/lightwalletd-client';
-import type { PocketSheetTarget } from './accounts-sheet';
+import { pocketTarget, type PocketSheetTarget } from './accounts-sheet';
 
 export const NewPocketSheet = ({
   open,
@@ -31,7 +31,7 @@ export const NewPocketSheet = ({
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const book = useStore(s => s.pockets.book);
   const add = useStore(s => s.pockets.add);
-  const select = useStore(s => s.pockets.select);
+  const target = pocketTarget(useStore(selectActiveNetwork));
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const zcashBackend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
 
@@ -91,7 +91,7 @@ export const NewPocketSheet = ({
       // scans from the wallet birthday instead of from now.
       const tip = await client.getTip().catch(() => undefined);
       const account = await add(owner, name, tip?.height);
-      await select(owner, account);
+      await target.pick(useStore.getState(), owner, account);
       onOpenChange(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'could not create this pocket');
