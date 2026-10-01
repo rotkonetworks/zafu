@@ -170,7 +170,7 @@ describe('hide and unhide', () => {
     book = unhidePocket(book, 'z', 1);
     expect(book['z']!.pockets).toEqual([
       { account: 0, name: 'main' },
-      { account: 1, name: 'savings', hidden: false },
+      { account: 1, name: 'savings' },
     ]);
   });
 
@@ -192,6 +192,19 @@ describe('hide and unhide', () => {
   test('sanitize strips a hidden flag that somehow landed on main', () => {
     const raw = { z: { pockets: [{ account: 0, name: 'main', hidden: true }], active: 0 } };
     expect(sanitizePocketBook(raw)['z']!.pockets).toEqual([{ account: 0, name: 'main' }]);
+  });
+
+  test('sanitize refuses to leave a crafted backup pointed at a hidden pocket', () => {
+    const raw = {
+      z: {
+        pockets: [
+          { account: 0, name: 'main' },
+          { account: 1, name: 'savings', hidden: true },
+        ],
+        active: 1,
+      },
+    };
+    expect(sanitizePocketBook(raw)['z']!.active).toBe(0);
   });
 });
 

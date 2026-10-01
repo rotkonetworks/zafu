@@ -136,7 +136,13 @@ export const unhidePocket = (book: PocketBook, owner: string, account: number): 
   return {
     ...book,
     [owner]: {
-      pockets: pockets.map(p => (p.account === account ? { ...p, hidden: false } : p)),
+      pockets: pockets.map(p => {
+        if (p.account !== account) {
+          return p;
+        }
+        const { hidden: _hidden, ...rest } = p;
+        return rest;
+      }),
       active: activePocketOf(book, owner),
     },
   };
@@ -184,7 +190,7 @@ export const sanitizePocketBook = (raw: unknown): PocketBook => {
     if (!pockets.some(p => p.account === 0)) {
       pockets.unshift(MAIN);
     }
-    const active = pockets.some(p => p.account === entry?.active) ? entry.active! : 0;
+    const active = pockets.some(p => p.account === entry?.active && !p.hidden) ? entry.active! : 0;
     out[owner] = { pockets: pockets.slice(0, MAX_POCKETS), active };
   }
   return out;

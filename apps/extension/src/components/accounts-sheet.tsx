@@ -284,7 +284,19 @@ export const AccountsSheet = ({
                   pocket:
                     p.account === 0
                       ? undefined
-                      : { account: p.account, hide: () => hidePocket(owner, p.account) },
+                      : {
+                          account: p.account,
+                          hide: async () => {
+                            // the book's own active account is zcash's; a
+                            // hidden network's active pocket (penumbra's
+                            // account index) lives outside the book, so the
+                            // UI switches it away here before hiding
+                            if (p.account === activeAccount) {
+                              await target.pick(useStore.getState(), owner, 0);
+                            }
+                            await hidePocket(owner, p.account);
+                          },
+                        },
                 })
               }
             />
