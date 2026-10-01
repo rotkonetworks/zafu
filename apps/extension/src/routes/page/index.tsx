@@ -3,6 +3,7 @@ import { redirect } from 'react-router-dom';
 import { PagePath } from './paths';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
+import { Mark } from '@repo/ui/components/ui/mark';
 import {
   DEFAULT_ZAPPS,
   CATEGORY_LABELS,
@@ -109,7 +110,9 @@ export const PageIndex = () => {
       <div className='mx-auto flex max-w-2xl flex-col gap-9 px-4 pb-12 pt-10'>
         <div className='flex items-end justify-between border-b border-border-soft/50 pb-6'>
           <div className='flex flex-col gap-2'>
-            <h1 className='text-3xl font-semibold lowercase tracking-tight text-fg-high'>zafu</h1>
+            <h1 className='lowercase'>
+              <Mark variant='mono' content='wordmark' size={44} className='tracking-tight' />
+            </h1>
             <div className='h-px w-8 bg-zigner-gold/70' />
             <p className='text-label lowercase tracking-wide text-fg-muted'>
               apps &amp; integrations

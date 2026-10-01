@@ -11,6 +11,7 @@
  */
 
 import { cn } from '@repo/ui/lib/utils';
+import { Mark } from '@repo/ui/components/ui/mark';
 import { useLocation } from 'react-router-dom';
 import { PagePath } from '../paths';
 import { getSeedPhraseOrigin } from './password/utils';
@@ -142,11 +143,8 @@ export function OnboardingShell({ children, art }: OnboardingShellProps) {
           alt={ART_ALT[resolvedArt]}
           className='absolute inset-0 h-full w-full object-cover'
         />
-        <div className='absolute left-10 top-9 flex items-center gap-3'>
-          <span className='flex h-[38px] w-[38px] items-center justify-center bg-hanko font-display text-[21px] font-semibold text-fg-high'>
-            匿
-          </span>
-          <span className='font-display text-[26px] font-semibold text-fg-high'>zafu</span>
+        <div className='absolute left-10 top-9'>
+          <Mark size={38} keyline />
         </div>
       </aside>
 

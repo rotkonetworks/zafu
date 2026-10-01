@@ -6,6 +6,7 @@
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { Button } from '@repo/ui/components/ui/button';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
+import { Mark } from '@repo/ui/components/ui/mark';
 import { OnboardingShell } from './onboarding-shell';
 
 const openSidePanel = async () => {
@@ -41,9 +42,7 @@ export const OnboardingSuccess = () => {
     <OnboardingShell art='castle'>
       <FadeTransition>
         <div className='flex flex-col gap-[22px]'>
-          <span className='flex h-[76px] w-[76px] -rotate-[7deg] items-center justify-center border-[3px] border-hanko font-display text-[40px] font-semibold text-hanko'>
-            済
-          </span>
+          <Mark variant='seal' glyph='済' size={76} className='-rotate-[7deg]' />
           <h1 className='font-display text-[44px] font-medium text-fg-high'>wallet ready</h1>
 
           <Button
