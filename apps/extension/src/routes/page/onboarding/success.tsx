@@ -36,7 +36,7 @@ const openSidePanel = async () => {
 
 export const OnboardingSuccess = () => (
   <div className='flex flex-col gap-[22px]'>
-    <Mark variant='seal' glyph='済' size={76} className='-rotate-[7deg]' />
+    <Mark variant='stamp' glyph='済' size={76} />
     <h1 className='font-display text-[44px] text-fg-high'>wallet ready</h1>
 
     <div className='flex flex-col gap-3 border border-border-soft bg-elev-1 p-[18px]'>

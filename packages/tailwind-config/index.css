@@ -96,6 +96,10 @@
   --color-zafu-blue-light: var(--zafu-blue-light);
   --color-zafu-blue-dark: var(--zafu-blue-dark);
 
+  /* device blue - cold custody icons (zigner, keystone, ledger) */
+  --color-device-blue: var(--device-blue);
+  --color-device-blue-line: var(--device-blue-line);
+
   /* legacy shadcn-style tokens — kept as aliases onto the same hex
      values. Existing components using hsl(var(--foreground)) etc. still
      work. Prefer the new tokens above for new code. */

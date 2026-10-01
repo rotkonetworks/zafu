@@ -1428,7 +1428,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 </>
               }
             />
-            <Strip icon='i-lucide-asterisk' right={<Sensitive>fee {fee}</Sensitive>}>
+            <Strip
+              icon='i-lucide-asterisk text-device-blue'
+              right={<Sensitive>fee {fee}</Sensitive>}
+            >
               {sending}
             </Strip>
             <Main className='items-center gap-4 px-5 pt-6'>

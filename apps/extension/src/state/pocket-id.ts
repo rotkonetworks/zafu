@@ -60,8 +60,8 @@ export const hotSpendAccount = (storeId: string, requested?: number): number => 
 export const zcashTransparentIndexKey = (account: number): string =>
   account === 0 ? 'zcashTransparentIndex' : `zcashTransparentIndex#${account}`;
 
-/** older builds rotated t-addresses; the first five were always scanned */
-const LEGACY_T_FLOOR = 4;
+/** older builds rotated t-addresses; the first twenty were always scanned */
+const LEGACY_T_FLOOR = 19;
 
 /**
  * Every t-branch index scanned for a pocket's funds. A pocket shows one

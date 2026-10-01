@@ -120,6 +120,10 @@ export const ImportBirthday = () => {
         </button>
       </div>
 
+      <span className='text-label text-fg-dim'>
+        orchard and ironwood only · sapling funds won't show
+      </span>
+
       <Button autoFocus className='h-14 w-full text-[15px]' onClick={proceed}>
         continue
       </Button>

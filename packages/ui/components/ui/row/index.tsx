@@ -18,6 +18,8 @@ export interface RowBaseProps {
   description?: string;
   disabled?: boolean;
   className?: string;
+  /** opens a Sheet explaining this setting, via a small "?" after the label */
+  onExplain?: () => void;
 }
 
 export type RowProps = RowBaseProps &
@@ -28,7 +30,7 @@ export type RowProps = RowBaseProps &
   );
 
 export function Row(props: RowProps) {
-  const { icon, label, description, disabled, className } = props;
+  const { icon, label, description, disabled, className, onExplain } = props;
 
   const rowClass = cn(
     'flex min-h-[50px] w-full items-center gap-3 px-3.5 py-2 text-left transition-colors',
@@ -41,7 +43,22 @@ export function Row(props: RowProps) {
     <>
       {icon && <span className={cn(icon, 'size-5 shrink-0 text-fg-muted')} aria-hidden='true' />}
       <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
-        <span className='truncate text-sm text-fg-high lowercase'>{label}</span>
+        <span className='flex items-center gap-2'>
+          <span className='truncate text-sm text-fg-high lowercase'>{label}</span>
+          {onExplain && (
+            <button
+              type='button'
+              onClick={e => {
+                e.stopPropagation();
+                onExplain();
+              }}
+              aria-label={`explain ${label}`}
+              className='inline-flex size-4 shrink-0 items-center justify-center border border-surface-border text-[10px] text-fg-dim'
+            >
+              ?
+            </button>
+          )}
+        </span>
         {description && (
           <span className='truncate text-[11px] text-fg-muted lowercase'>{description}</span>
         )}
@@ -74,6 +91,29 @@ export function Row(props: RowProps) {
 
   if (props.type === 'toggle') {
     return <div className={rowClass}>{content}</div>;
+  }
+
+  // the "?" is its own button, so a value/screen row with onExplain can't
+  // also be a <button> (no nested interactive elements) - a div with
+  // button semantics carries the row's own press instead.
+  if (onExplain) {
+    return (
+      <div
+        role='button'
+        tabIndex={disabled ? undefined : 0}
+        onClick={props.onPress}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            props.onPress();
+          }
+        }}
+        aria-disabled={disabled}
+        className={rowClass}
+      >
+        {content}
+      </div>
+    );
   }
 
   return (

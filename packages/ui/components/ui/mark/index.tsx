@@ -20,11 +20,14 @@ import { cn } from '../../../lib/utils';
  *          stroke, not a shadow) so the glyph separates from whatever is
  *          under it, not just from the page's own background.
  * lockup - seal to the left of the (always-mono) wordmark.
+ * stamp  - an outlined hanko: vermillion border and glyph, transparent
+ *          fill, rotated slightly like ink pressed by hand. For a one-off
+ *          status stamp ("done", "sent"), never the brand seal.
  */
 
 const GLYPH = '匿';
 
-export type MarkVariant = 'seal' | 'mono' | 'lockup';
+export type MarkVariant = 'seal' | 'mono' | 'lockup' | 'stamp';
 export type MarkContent = 'glyph' | 'wordmark';
 
 export interface MarkProps {
@@ -67,6 +70,23 @@ const Seal = ({
   </span>
 );
 
+const Stamp = ({
+  size = 76,
+  glyph = GLYPH,
+  className,
+}: Pick<MarkProps, 'size' | 'glyph' | 'className'>) => (
+  <span
+    aria-hidden='true'
+    className={cn(
+      'inline-flex shrink-0 -rotate-6 items-center justify-center border-[3px] border-hanko font-display font-semibold text-hanko',
+      className,
+    )}
+    style={{ width: size, height: size, fontSize: (size ?? 76) * 0.53 }}
+  >
+    {glyph}
+  </span>
+);
+
 const Mono = ({
   size = 38,
   content = 'glyph',
@@ -100,6 +120,9 @@ export const Mark = ({
 }: MarkProps) => {
   if (variant === 'seal') {
     return <Seal size={size} keyline={keyline} glyph={glyph} className={className} />;
+  }
+  if (variant === 'stamp') {
+    return <Stamp size={size} glyph={glyph} className={className} />;
   }
   if (variant === 'mono') {
     return (
