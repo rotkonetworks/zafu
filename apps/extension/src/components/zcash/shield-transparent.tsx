@@ -68,7 +68,7 @@ export interface ShieldTransparentProps {
   hasMnemonic?: boolean;
   /** watch-only wallet record - enables the zigner QR flow */
   watchOnly?: { label: string; mainnet: boolean; orchardFvk?: string; ufvk?: string; id?: string };
-  /** derived transparent addresses (BIP44 order = derivation index) */
+  /** the pocket's t-addresses; position is the derivation index the worker signs with */
   tAddresses: string[];
   isMainnet: boolean;
   zidecarUrl: string;
@@ -119,11 +119,6 @@ export const ShieldTransparent = ({
 
     try {
       const vault = await keyRing.getVaultUnlock(selectedKeyInfo.id);
-      // map each address to its BIP44 derivation index so the worker signs with the correct key
-      const addressIndexMap: Record<string, number> = {};
-      tAddresses.forEach((addr, i) => {
-        addressIndexMap[addr] = i;
-      });
       const result = await shieldInWorker(
         'zcash',
         storeId ?? selectedKeyInfo.id,
@@ -131,7 +126,6 @@ export const ShieldTransparent = ({
         zidecarUrl,
         tAddresses,
         isMainnet,
-        addressIndexMap,
       );
       setShieldTxid(result.txid);
     } catch (err) {
@@ -169,11 +163,6 @@ export const ShieldTransparent = ({
 
     try {
       await spawnNetworkWorker('zcash');
-      const addressIndexMap: Record<string, number> = {};
-      tAddresses.forEach((addr, i) => {
-        addressIndexMap[addr] = i;
-      });
-
       const result = await buildUnsignedShieldInWorker(
         'zcash',
         selectedKeyInfo.id,
@@ -181,7 +170,6 @@ export const ShieldTransparent = ({
         tAddresses,
         isMainnet,
         ufvk,
-        addressIndexMap,
       );
       setUnsignedData(result);
 

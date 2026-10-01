@@ -1096,12 +1096,11 @@ export const shieldInWorker = async (
   serverUrl: string,
   tAddresses: string[],
   mainnet: boolean,
-  addressIndexMap?: Record<string, number>,
 ): Promise<ShieldResult> => {
   return callWorker(
     network,
     'shield',
-    { vault: await sealFor(network, vault), serverUrl, tAddresses, mainnet, addressIndexMap },
+    { vault: await sealFor(network, vault), serverUrl, tAddresses, mainnet },
     walletId,
   );
 };
@@ -1449,14 +1448,8 @@ export const buildUnsignedShieldInWorker = async (
   tAddresses: string[],
   mainnet: boolean,
   ufvk: string,
-  addressIndexMap?: Record<string, number>,
 ): Promise<ShieldUnsignedResult> => {
-  return callWorker(
-    network,
-    'shield-unsigned',
-    { serverUrl, tAddresses, mainnet, ufvk, addressIndexMap },
-    walletId,
-  );
+  return callWorker(network, 'shield-unsigned', { serverUrl, tAddresses, mainnet, ufvk }, walletId);
 };
 
 /**
