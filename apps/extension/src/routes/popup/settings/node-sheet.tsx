@@ -13,6 +13,8 @@ export interface NodePreset {
   readonly label: string;
   readonly url: string;
   readonly region: RpcEndpointRegion;
+  /** what kind of node it is, when the chain has more than one */
+  readonly kind?: string;
 }
 
 /** url -> round trip in ms, null when the node did not answer */
@@ -39,6 +41,9 @@ const speedLabel = (speeds: NodeSpeeds | null, url: string) => {
   const ms = speeds?.get(url);
   return ms === undefined ? undefined : ms === null ? 'no answer' : `${ms} ms`;
 };
+
+const descOf = (p: NodePreset, speeds: NodeSpeeds | null) =>
+  [p.kind, speedLabel(speeds, p.url)].filter(Boolean).join(' · ') || undefined;
 
 /**
  * the node picker for one chain (NetworkSheet.dc.html shape): presets by
@@ -110,7 +115,7 @@ export const NodeSheet = ({
                   options={g.presets.map(p => ({
                     value: p.url,
                     label: p.label,
-                    desc: speedLabel(speeds, p.url),
+                    desc: descOf(p, speeds),
                   }))}
                   onPick={url => void pick(url)}
                 />

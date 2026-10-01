@@ -17,6 +17,7 @@ import {
 import { usePopupNav } from '../../../utils/navigate';
 import { readZcashMeConfig, type ZcashMeMode } from '../../../services/zcashme/config';
 import { useExplain } from './settings-explain';
+import { ZCASH_BACKENDS } from '../../../state/keyring/zcash-backend';
 
 const ZCASHME_MODE_LABEL: Record<ZcashMeMode, string> = {
   off: 'off',
@@ -44,13 +45,18 @@ export function ZcashMeRow({ onExplain }: { onExplain?: () => void }) {
   );
 }
 
-/** what the zcash node learns: memo decoys, and the mempool watch (zidecar nodes only) */
+/** what the zcash node learns: memo decoys and the mempool watch, both zidecar's own (a lightwalletd has neither) */
 function ZcashWireRows() {
   const memo = useStore(s => s.networks.networks.zcash.memoSyncStrategy ?? 'private');
   const mempool = useStore(s => s.networks.networks.zcash.mempoolWatch ?? 'off');
-  const zidecar = useStore(s => (s.networks.networks.zcash.backend ?? 'zidecar') === 'zidecar');
+  const zidecar = useStore(
+    s => !!ZCASH_BACKENDS[s.networks.networks.zcash.backend ?? 'zidecar'].extras,
+  );
   const setMemo = useStore(s => s.networks.setMemoSyncStrategy);
   const setMempool = useStore(s => s.networks.setMempoolWatch);
+  if (!zidecar) {
+    return null;
+  }
   return (
     <>
       <Row
@@ -62,9 +68,7 @@ function ZcashWireRows() {
       <Row
         type='toggle'
         label='zcash: instant pending'
-        description={zidecar ? undefined : 'needs a zidecar node'}
-        disabled={!zidecar}
-        checked={zidecar && mempool === 'on'}
+        checked={mempool === 'on'}
         onChange={v => void setMempool('zcash', v ? 'on' : 'off')}
       />
     </>

@@ -13,7 +13,7 @@ import {
 } from '../../../components/zcash/sync-status';
 import { ZCASH_MAINNET_ENDPOINTS, findPresetByUrl } from '../../../config/zcash-endpoints';
 import { measurePresetLatencies } from '../../../state/keyring/endpoint-latency';
-import type { ZcashBackend } from '../../../state/keyring/zcash-backend';
+import { ZCASH_BACKENDS, type ZcashBackend } from '../../../state/keyring/zcash-backend';
 import { hostOf } from '../../../net/destination';
 import { PopupPath } from '../paths';
 import { Section, SettingsScreen } from './settings-screen';
@@ -45,6 +45,9 @@ const useBirthday = (vaultId: string | undefined) => {
   return [h, setH] as const;
 };
 
+/** each preset shows its backend in the same short value as the network screen */
+const PRESETS = ZCASH_MAINNET_ENDPOINTS.map(p => ({ ...p, kind: ZCASH_BACKENDS[p.backend].label }));
+
 const speedTest = async () =>
   new Map([...(await measurePresetLatencies())].map(([url, l]) => [url, l.rttMs]));
 
@@ -72,7 +75,7 @@ const ZcashNodeSheet = ({
       open={open}
       onOpenChange={onOpenChange}
       title='zcash node'
-      presets={ZCASH_MAINNET_ENDPOINTS}
+      presets={PRESETS}
       current={endpoint}
       egress='zcash-servers'
       measure={speedTest}
@@ -103,6 +106,7 @@ const ZcashNodeSheet = ({
 export const SettingsZcashNetwork = () => {
   const vaultId = useStore(selectEffectiveKeyInfo)?.id;
   const endpoint = useStore(s => s.networks.networks.zcash.endpoint);
+  const kind = useStore(s => ZCASH_BACKENDS[s.networks.networks.zcash.backend ?? 'zidecar'].label);
   // local progress only: opening this screen asks no node
   const { workerSyncHeight, workerChainHeight: tip, workerFailure: failure } = useZcashWorkerSync();
   const [birthday, setBirthday] = useBirthday(vaultId);
@@ -189,6 +193,7 @@ export const SettingsZcashNetwork = () => {
           <Row
             type='value'
             label='node'
+            description={kind}
             value={(endpoint && hostOf(endpoint)) || 'auto'}
             onPress={() => setSheet('node')}
           />
