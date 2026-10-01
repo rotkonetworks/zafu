@@ -226,6 +226,8 @@ export class SpendKeys {
     }
     /**
      * The account's unified full viewing key: what the prover builds from.
+     * Derived at coin type 133 like every other zafu key; `mainnet` picks
+     * only the encoding.
      * @returns {string}
      */
     ufvk() {

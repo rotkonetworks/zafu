@@ -26,6 +26,7 @@
  */
 
 import type { NetworkType, VaultUnlock } from './types';
+import type { SealedVault, WorkerKey } from '../../shared/vault-seal';
 
 /** true only inside the offscreen document - the one place that owns real Workers */
 const isOffscreenHost = (): boolean =>
@@ -67,6 +68,7 @@ export interface NetworkWorkerMessage {
     | 'reset-sync'
     | 'get-balance'
     | 'get-pool-balances'
+    | 'vault-key'
     | 'send-tx'
     | 'send-tx-multi'
     | 'send-tx-complete'
@@ -128,6 +130,7 @@ export interface NetworkWorkerResponse {
     | 'sync-reset'
     | 'balance'
     | 'pool-balances'
+    | 'vault-key'
     | 'tx-result'
     | 'tx-multi-result'
     | 'send-tx-unsigned'
@@ -609,6 +612,12 @@ const callWorker = async <T>(
   });
 };
 
+/** the vault with the session key wrapped to a key the worker issued for this one call */
+const sealFor = async (network: NetworkType, vault: VaultUnlock): Promise<SealedVault> => ({
+  box: vault.box,
+  seal: await vault.sealTo(await callWorker<WorkerKey>(network, 'vault-key')),
+});
+
 /**
  * derive address for a network (runs in worker)
  */
@@ -645,7 +654,13 @@ export const startSyncInWorker = async (
   return callWorker(
     network,
     'sync',
-    { vault, serverUrl, startHeight, backend, mempoolWatch: effectiveMempoolWatch },
+    {
+      vault: await sealFor(network, vault),
+      serverUrl,
+      startHeight,
+      backend,
+      mempoolWatch: effectiveMempoolWatch,
+    },
     walletId,
   );
 };
@@ -1049,7 +1064,7 @@ export const shieldInWorker = async (
   return callWorker(
     network,
     'shield',
-    { vault, serverUrl, tAddresses, mainnet, addressIndexMap },
+    { vault: await sealFor(network, vault), serverUrl, tAddresses, mainnet, addressIndexMap },
     walletId,
   );
 };
@@ -1099,7 +1114,16 @@ export const buildSendTxInWorker = async (
   return callWorker(
     network,
     'send-tx',
-    { serverUrl, recipient, amount, memo, accountIndex, mainnet, vault, ufvk },
+    {
+      serverUrl,
+      recipient,
+      amount,
+      memo,
+      accountIndex,
+      mainnet,
+      vault: vault && (await sealFor(network, vault)),
+      ufvk,
+    },
     walletId,
   );
 };
@@ -1127,7 +1151,7 @@ export const buildMultiSendTxInWorker = async (
   return callWorker(
     network,
     'send-tx-multi',
-    { serverUrl, outputs, accountIndex, mainnet, vault },
+    { serverUrl, outputs, accountIndex, mainnet, vault: await sealFor(network, vault) },
     walletId,
   );
 };
@@ -1336,7 +1360,15 @@ export const buildTurnstileMigrationInWorker = async (
   return callWorker(
     network,
     'send-turnstile-migration',
-    { serverUrl, accountIndex, mainnet, ufvk, backend, vault, fragmentSize },
+    {
+      serverUrl,
+      accountIndex,
+      mainnet,
+      ufvk,
+      backend,
+      vault: vault && (await sealFor(network, vault)),
+      fragmentSize,
+    },
     walletId,
   );
 };

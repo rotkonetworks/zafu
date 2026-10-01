@@ -97,8 +97,8 @@ diff against the values above. A mismatch means the vendored blob is stale.
 ## 2026-10-01 rebuild (2) - hot sends signed in the worker, proven seed-free
 
 - source repo: zcli, branch `feat/seed-sign-in-worker` (from
-  `integ/zafu-wasm-2026-10` f9eb264), rev `e668a00` (`1f18e24` on top adds
-  tests only; `src/` is identical).
+  `integ/zafu-wasm-2026-10` f9eb264), rev `f94dd39`. SpendKeys derives at
+  coin type 133 on every network, like the scanner (`WalletKeys`).
 - new: the `SpendKeys` class (`new SpendKeys(phrase, account, mainnet)`,
   `ufvk()`, `receiving_address()`, `sign_pczt(pczt_hex)`,
   `transparent_pubkey(index)`, `sign_shielding(index, unsigned_tx_hex,
@@ -124,9 +124,9 @@ sighashes_json)`, `free()`). The zcash worker builds it from the vault it
   `_bg.wasm.d.ts`). The rayon snippet hash is unchanged
   (`wasm-bindgen-rayon-38edf6e439f6d70d`), so the patched `workerHelpers.js`
   (`wbgRayonBase` defined and used) was kept as is.
-- size: pre `wasm-opt` 21,911,695 bytes; post `-Oz` 9,872,934 bytes.
+- size: pre `wasm-opt` 21,910,928 bytes; post `-Oz` 9,872,355 bytes.
 - sha256(parallel zafu_wasm_bg.wasm) =
-  5d91e1ff7f1e5332c831597b31964fe2e44d970038bdac129c360b4db9a0b18d
+  d8ae22c4fc23f0c401b650cd7cfffa56df82498202a7cef8465b7bea18117dff
 - shared imported memory confirmed post-bindgen:
   `(memory $mimport$0 55 32768 shared)`.
 

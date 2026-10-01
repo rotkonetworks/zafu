@@ -43,7 +43,7 @@ import { hotSpendAccount, isStoreOfWallet, parsePocketStoreId } from '../state/p
 import { isP2pkhOf, pocketWalletKeys, type PocketKeysCtor } from './pocket-keys';
 import { unsealVault, withSpendKeys, type SpendKeysCtor } from './hot-sign';
 import { assertProveRequest, type ProveRequest } from '../shared/prove-guard';
-import type { VaultUnlock } from '../state/keyring/types';
+import { issueWorkerKey, type SealedVault } from '../shared/vault-seal';
 import {
   parseExpiryHeight,
   reconcileSentTxs,
@@ -150,6 +150,7 @@ const makeZcashClient = async (serverUrl: string, backend?: ZcashBackend): Promi
 interface WorkerMessage {
   type:
     | 'init'
+    | 'vault-key'
     | 'derive-address'
     | 'sync'
     | 'stop-sync'
@@ -4838,6 +4839,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         workerSelf.postMessage({ type: 'ready', id, network: 'zcash' });
         return;
 
+      case 'vault-key':
+        // a single-use key the page wraps the session key to for the next call
+        workerSelf.postMessage({
+          type: 'vault-key',
+          id,
+          network: 'zcash',
+          payload: await issueWorkerKey(),
+        });
+        return;
+
       case 'derive-address': {
         await initWasm();
         const { mnemonic, accountIndex, diversifierHex, pocket } = payload as {
@@ -4865,7 +4876,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         await initWasm();
         const { vault, serverUrl, startHeight, ufvk, backend, mempoolWatch } = payload as {
           /** hot wallet: the sealed vault this worker opens itself; watch-only sends ufvk */
-          vault?: VaultUnlock;
+          vault?: SealedVault;
           serverUrl: string;
           startHeight?: number;
           ufvk?: string;
@@ -6010,7 +6021,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           accountIndex: number;
           mainnet: boolean;
           /** hot wallet: the sealed vault this worker opens itself */
-          vault?: VaultUnlock;
+          vault?: SealedVault;
           ufvk?: string;
         };
         // a hot build signs with the account of the store its notes come from
@@ -7096,7 +7107,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           mainnet: boolean;
           ufvk?: string;
           /** hot wallet: the sealed vault this worker opens itself */
-          vault?: VaultUnlock;
+          vault?: SealedVault;
           backend?: ZcashBackend;
           /** UR fragment-size override; falls back to 200 for back-compat */
           fragmentSize?: number;
@@ -7481,7 +7492,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           outputs: { address: string; amount: string; memo?: string }[];
           accountIndex: number;
           mainnet: boolean;
-          vault: VaultUnlock;
+          vault: SealedVault;
         };
 
         if (!multiPayload.outputs || multiPayload.outputs.length === 0) {
@@ -7738,7 +7749,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         const { vault, serverUrl, tAddresses, mainnet, addressIndexMap } = payload as {
           /** the sealed vault this worker opens itself */
-          vault: VaultUnlock;
+          vault: SealedVault;
           serverUrl: string;
           tAddresses: string[];
           mainnet: boolean;

@@ -80,6 +80,10 @@ describe('seed boundary', () => {
       for (const call of sent) {
         expect(call, type).not.toMatch(/\bmnemonic\b/);
       }
+      // a hot call's vault is sealed to a key the worker issued for it
+      if (type !== 'sync') {
+        expect(sent[0], type).toMatch(/vault: (vault && \()?await sealFor\(network, vault\)/);
+      }
     }
     // the service-worker relay forwards the prove request and nothing else
     expect(NETWORK).toMatch(/chrome\.runtime\.sendMessage\(\{ type: 'ZCASH_BUILD', request \}\)/);
@@ -89,7 +93,7 @@ describe('seed boundary', () => {
     for (const handler of ['send-tx', 'send-tx-multi', 'send-turnstile-migration', 'shield']) {
       const start = WORKER.indexOf(`case '${handler}': {`);
       const body = WORKER.slice(start, WORKER.indexOf('\n      case ', start + 1));
-      expect(body, handler).toMatch(/vault\??: VaultUnlock/);
+      expect(body, handler).toMatch(/vault\??: SealedVault/);
       expect(body, handler).not.toMatch(/\bmnemonic\b/);
     }
   });

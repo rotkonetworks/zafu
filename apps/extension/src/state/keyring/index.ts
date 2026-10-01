@@ -49,7 +49,7 @@ import {
   requireKey,
   encrypt,
   decryptVault,
-  requireDecryptOnlyKey,
+  sealSessionKeyTo,
   createMasterKey,
   recreateMasterKey,
   reencryptVault,
@@ -1028,7 +1028,7 @@ export const createKeyRingSlice =
 
       getVaultUnlock: async (vaultId: string) => ({
         box: (await mnemonicVault(vaultId)).encryptedData,
-        key: await requireDecryptOnlyKey(ctx),
+        sealTo: to => sealSessionKeyTo(ctx, to),
       }),
 
       getMultisigSecrets: async (vaultId: string) => {

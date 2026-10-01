@@ -66,15 +66,7 @@ export class Key {
     return new Key(key);
   }
 
-  // A decrypt-only, non-extractable copy of the key. It structured-clones into a
-  // worker, which can then unseal one vault without the page seeing the plaintext.
-  static decryptOnly(keyJson: KeyJson): Promise<CryptoKey> {
-    return crypto.subtle.importKey('jwk', keyJson._inner, { name: 'AES-GCM', length: 256 }, false, [
-      'decrypt',
-    ]);
-  }
-
-  // The worker side of decryptOnly.
+  // Unseal with a bare CryptoKey: the zcash worker, holding the key it unwrapped.
   static unsealWith(key: CryptoKey, box: Box): Promise<string | null> {
     return new Key(key).unseal(box);
   }

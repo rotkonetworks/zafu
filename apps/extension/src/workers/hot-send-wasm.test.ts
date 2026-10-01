@@ -20,17 +20,17 @@ const TARGET = 10_000_000;
 const NOTES = [
   {
     value: 1_000_000,
-    nullifier: '10974acd7e0881336ad5232eaab1ca7ca7338847f02a668027b8d5c8ee48ff1b',
-    cmx: 'cbeafb9d0d79e5a759e3d84fd43a0a71d41a974af093aba8505faaff751d5600',
+    nullifier: '18ccfc57455447dc8bb45ba80d6e4f511a9fcc9af87f8b4bb6bf21a6cfe1ca3d',
+    cmx: 'd67408aa1dd5273d13662b1d64be43ed87c410d957cf6f64bc9ca4f72b777b2d',
     position: 0,
     rseed_hex: '00'.repeat(32),
     rho_hex: '01'.repeat(32),
     recipient_hex:
-      '5b2e1cabe31cdfd90bd91f520fdc3164de8c1a37e3522fc66c271953c22c6794cb49eee990db3f38ccdd23',
+      '82911d92fb24edeaa7220057cdf4db32a0006bfd1a8af4bd27ad8fd2bb5a2f4369313457ec7f3a22b4c10b',
   },
 ];
 const PATHS = [{ path: Array<string>(32).fill('00'.repeat(32)), position: 0 }];
-const ANCHOR = '633dedeceede2e29af159d7430b134b964b44dac296ba7980435df0a2b27cf2d';
+const ANCHOR = '1c599139a3f69be978c96691b046b407169540f5a6ccacf043642a9c1144b205';
 
 interface Wasm {
   initSync(opts: { module: Uint8Array }): void;

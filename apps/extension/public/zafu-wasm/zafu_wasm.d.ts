@@ -59,6 +59,8 @@ export class SpendKeys {
     transparent_pubkey(index: number): string;
     /**
      * The account's unified full viewing key: what the prover builds from.
+     * Derived at coin type 133 like every other zafu key; `mainnet` picks
+     * only the encoding.
      */
     ufvk(): string;
 }
