@@ -14,7 +14,7 @@
 export type NetPurpose =
   /** chain node: Zcash lightwalletd, Penumbra view service, cosmos/CosmWasm rpc */
   | 'chain-rpc'
-  /** indexer in front of a chain: zidecar, hosh tip, your own node */
+  /** indexer in front of a chain: zidecar, your own node */
   | 'indexer'
   /** store-and-forward for other people's traffic: contact discovery, FROST rendezvous, group chat */
   | 'relay'

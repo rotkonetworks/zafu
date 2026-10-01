@@ -33,7 +33,8 @@ describe('a fresh zcash-only wallet', () => {
       // the independent cross-check peer: a node the user did not choose, so opt-in
       ['https://us.zec.stardust.rest:443/x', 'opt-in'],
       // optional services, off until asked
-      ['https://hosh.zec.rocks/api/v0/zec.json', 'opt-in'],
+      // nothing asks hosh for a reference tip any more
+      ['https://hosh.zec.rocks/api/v0/zec.json', 'unknown'],
       ['https://zcash.me/api/lookup', 'opt-in'],
       ['wss://zrelay.rotko.net/ws', 'opt-in'],
       ['https://relay.zafu.pro/login', 'opt-in'],
@@ -180,16 +181,14 @@ describe('the user always has the last word', () => {
 
   it('allowing a host opens it, unless its destination is blocked', () => {
     const allowed = {
-      destinations: { 'hosh.zec.rocks': { state: 'allowed' }, 'x.example': { state: 'allowed' } },
+      destinations: { 'eu.zec.rocks': { state: 'allowed' }, 'x.example': { state: 'allowed' } },
     };
-    expect(outcome({ ...ZCASH_ONLY, netEgress: allowed }, 'https://hosh.zec.rocks/api')).toBe(
+    expect(outcome({ ...ZCASH_ONLY, netEgress: allowed }, 'https://eu.zec.rocks/api')).toBe(
       'allow',
     );
     expect(outcome({ ...ZCASH_ONLY, netEgress: allowed }, 'https://x.example/')).toBe('allow');
     const both = { ...allowed, optIns: { 'zcash-servers': 'blocked' as const } };
-    expect(outcome({ ...ZCASH_ONLY, netEgress: both }, 'https://hosh.zec.rocks/api')).toBe(
-      'blocked',
-    );
+    expect(outcome({ ...ZCASH_ONLY, netEgress: both }, 'https://eu.zec.rocks/api')).toBe('blocked');
   });
 
   it('a pending record is not a decision', () => {
