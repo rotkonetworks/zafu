@@ -87,7 +87,7 @@ export const Personalize = () => {
               { value: 'keep', label: 'keep history' },
               { value: 'balance', label: 'show only balance' },
             ]}
-            className='w-[230px]'
+            className='w-[260px]'
           />
         </div>
         <Row
@@ -121,11 +121,14 @@ export const Personalize = () => {
         <Button autoFocus className='h-14 w-full text-[15px]' onClick={proceed}>
           keep defaults
         </Button>
-        {touched && (
-          <Button variant='secondary' className='h-14 w-full text-[15px]' onClick={proceed}>
-            save
-          </Button>
-        )}
+        {/* reserved so tapping anything above never shifts the page (nothing expands in place) */}
+        <div className='h-14'>
+          {touched && (
+            <Button variant='secondary' className='h-14 w-full text-[15px]' onClick={proceed}>
+              save
+            </Button>
+          )}
+        </div>
       </div>
 
       <Sheet
