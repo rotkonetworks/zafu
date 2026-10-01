@@ -32,7 +32,36 @@ React 19 + zustand, written in the fine-grained spirit of SolidJS:
   Composition (children, slots) over boolean prop explosions.
 - Async state (loading, error, value) lives in one place per resource.
 
-## 3. No unnecessary network calls
+## 3. Structure: your server as a function
+
+Following Marius Eriksen's "Your Server as a Function": the app is a
+composition of small functions, not a pile of conditionals.
+
+- **Services are functions.** A service takes a request and returns a
+  response (or a promise of one): `(req) => Promise<rep>`. Keep them pure
+  where possible and give them typed inputs and outputs.
+- **Cross-cutting concerns are filters** wrapped around a service: timeout,
+  retry, egress policy, logging, auth, rate limits. A filter is
+  `(req, next) => rep`. Compose filters; don't repeat that logic inside
+  each service.
+- **Polymorphism over branch cascades.** When behaviour varies by wallet
+  type, network or device, define one interface and give each case its own
+  implementation. The caller picks an implementation and never runs an
+  `if (zigner) ... else if (ledger) ...` chain. For example:
+  - signing is one service, `pczt -> signatures`. Hot seed, zigner and
+    keystone (QR), ledger (USB) and frost are implementations; the
+    transport is a filter.
+  - the zcash backend (zidecar or lightwalletd) sits behind one client
+    interface.
+  - each network (zcash, penumbra, cosmos chains) implements the same send,
+    receive and balance contract, so screens don't special-case networks.
+- **New behaviour means a new implementation or a new filter,** not another
+  branch in an existing function. If a function grows a third `if` on the
+  same discriminator, it wants to be polymorphic.
+- Each service and filter is unit-testable on its own; compose them in one
+  place where the wiring is visible.
+
+## 4. No unnecessary network calls
 
 zafu is a privacy wallet. It contacts only what the user's enabled networks
 strictly need (for a zcash-only user: the zcash light client), and nothing
@@ -46,7 +75,7 @@ else until the user opts in.
 - No speculative prefetch, speed checks or polling for features that are off.
 - No analytics or telemetry of any kind.
 
-## 4. The way zafu speaks (all UI copy)
+## 5. The way zafu speaks (all UI copy)
 
 Calm, polite and honest, like good hospitality. Politeness is tone, not length.
 
@@ -60,7 +89,7 @@ Calm, polite and honest, like good hospitality. Politeness is tone, not length.
   shows the amount). No fake progress, no fake numbers.
 - No slang, no exclamation marks, no emojis.
 
-## 5. Design rules
+## 6. Design rules
 
 - Square corners, 1px lines, no shadows, no gradients, one gold primary per screen.
 - Nothing expands in place: use a Sheet, a new step or a fixed-height StatusSlot.
@@ -78,7 +107,7 @@ Calm, polite and honest, like good hospitality. Politeness is tone, not length.
 - The design source of truth is the zafu redesign canvas, where the
   maintainers point you to it.
 
-## 6. Writing style in code and commits
+## 7. Writing style in code and commits
 
 - Comments say why, not what. No narrating comments ("this function
   handles..."), no banners, no restating the code.
@@ -95,7 +124,7 @@ Calm, polite and honest, like good hospitality. Politeness is tone, not length.
 - Never commit or push secrets, keys, seed phrases or local `dist/` builds.
 - AI-assisted commits end with a `Co-Authored-By:` trailer for the model.
 
-## 7. Verify before you say done
+## 8. Verify before you say done
 
 Run from the repo root unless noted. Turbo caches can false-green, so use
 `--force` where turbo is involved.
