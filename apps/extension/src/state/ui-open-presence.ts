@@ -38,10 +38,15 @@ export const trackUiOpenPresence = (onFirstOpen: () => void, onLastClose: () => 
   });
 };
 
-/** UI side. Announce presence for the lifetime of the document. */
+/**
+ * UI side. Announce presence for the lifetime of the document. A service
+ * worker that restarts starts counting from zero, so the port reconnects:
+ * otherwise another window closing later reads as the last one, and sync
+ * stops under a window that is still open.
+ */
 export const announceUiOpenPresence = (): void => {
   try {
-    chrome.runtime.connect({ name: PORT_NAME });
+    chrome.runtime.connect({ name: PORT_NAME }).onDisconnect.addListener(announceUiOpenPresence);
   } catch {
     // extension context unavailable - nothing to announce
   }
