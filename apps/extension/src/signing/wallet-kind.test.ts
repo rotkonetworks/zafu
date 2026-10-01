@@ -127,6 +127,13 @@ describe('CAPS', () => {
     expect(offered).toEqual(['hot', 'zigner']);
   });
 
+  it('signs a thorchain deposit only where zafu holds the key and shows the memo', () => {
+    const signs = Object.entries(CAPS)
+      .filter(([, c]) => c.opReturn)
+      .map(([k]) => k);
+    expect(signs).toEqual(['hot']);
+  });
+
   it('asks for a password only where zafu holds the secret', () => {
     expect(CAPS.hot.unlockToSign).toBe(true);
     expect(CAPS['frost-self'].unlockToSign).toBe(true);

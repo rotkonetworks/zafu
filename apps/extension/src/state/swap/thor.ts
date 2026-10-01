@@ -5,15 +5,23 @@
  * current vault with the swap instruction as a memo, and THORChain pays out
  * (or refunds) on the other side. Its zcash client is transparent only: ZEC
  * arrives at a t-address, and ZEC sent in must be a t->t transaction carrying
- * the memo in an OP_RETURN, refunded to the address that funded vin[0]. The
- * wasm builder has no OP_RETURN output yet, so from-zec quotes are shown for
- * comparison and marked not yet.
+ * the memo in an OP_RETURN, refunded to the address that funded vin[0]. Only a
+ * signer that holds the key and shows the memo signs that (CAPS.opReturn); for
+ * every other wallet, from-zec quotes are shown for comparison and marked not
+ * yet.
  *
  * All THORChain amounts are 1e8 fixed point, whatever the asset's decimals.
  */
 
 import { requestEgressOptIn } from '../../net/egress-opt-in';
-import { fromUnits, rescale, toUnits, type Quote, type SwapProvider } from './provider';
+import {
+  fromUnits,
+  rescale,
+  toUnits,
+  type Quote,
+  type SwapProvider,
+  type SwapStatusView,
+} from './provider';
 import { ROUTES, THOR_ASSETS, thorAsset } from './routes';
 
 const THORNODE_URLS = [
@@ -72,6 +80,44 @@ const thorFetch = async <T>(path: string): Promise<T> => {
     }
   }
   throw last instanceof Error ? last : new Error('thorchain did not answer');
+};
+
+interface ThorTxStatus {
+  out_txs?: { memo?: string }[];
+  stages?: {
+    inbound_observed?: { completed: boolean };
+    inbound_finalised?: { completed: boolean };
+    swap_status?: { pending: boolean };
+    swap_finalised?: { completed: boolean };
+    outbound_signed?: { completed: boolean };
+  };
+}
+
+const STATUS = {
+  unseen: { phase: 'waiting', line: 'waiting for thorchain to see the deposit' },
+  confirming: { phase: 'waiting', line: 'deposit seen, confirming' },
+  swapping: { phase: 'processing', line: 'swapping' },
+  sending: { phase: 'processing', line: 'sending to the recipient' },
+  done: { phase: 'done', line: 'swap complete' },
+  refunded: { phase: 'failed', line: 'thorchain refunded the zec to your transparent address' },
+} as const satisfies Record<string, SwapStatusView>;
+
+/** where a deposit is, from thornode's stages */
+export const thorStatus = (s: ThorTxStatus): SwapStatusView => {
+  const st = s.stages;
+  const stage: keyof typeof STATUS = !st?.inbound_observed?.completed
+    ? 'unseen'
+    : !st.inbound_finalised?.completed
+      ? 'confirming'
+      : s.out_txs?.some(o => o.memo?.toUpperCase().startsWith('REFUND'))
+        ? 'refunded'
+        : st.swap_status?.pending || !st.swap_finalised?.completed
+          ? 'swapping'
+          : // a swap into a native thorchain asset has no outbound stage
+            st.outbound_signed && !st.outbound_signed.completed
+            ? 'sending'
+            : 'done';
+  return STATUS[stage];
 };
 
 const open = (a: InboundAddress | undefined) =>
@@ -174,9 +220,24 @@ export const thorProvider: SwapProvider = {
       depositAddress: q.inbound_address,
       memo: q.memo,
       recipient: destination,
-      // sending zec in needs a t->t transaction with an OP_RETURN output
-      notYet: into ? undefined : 'not available yet',
+      // sending zec in is a t->t transaction with an OP_RETURN output
+      notYet: into || req.signsOpReturn ? undefined : 'not available yet',
+      watch: into ? undefined : 'txid',
       raw: q,
     } satisfies Quote;
+  },
+
+  status: async (_quote, txid) => {
+    try {
+      return thorStatus(
+        await thorFetch<ThorTxStatus>(`/thorchain/tx/status/${txid?.toUpperCase()}`),
+      );
+    } catch (e) {
+      // thornode answers 4xx for a tx it hasn't observed yet
+      if ((e as { final?: boolean }).final) {
+        return STATUS.unseen;
+      }
+      throw e;
+    }
   },
 };

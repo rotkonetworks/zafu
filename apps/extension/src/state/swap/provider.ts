@@ -26,6 +26,8 @@ export interface QuoteRequest {
   zcashTransparent?: string;
   /** into zec: the payer's refund address; from zec: where the token goes */
   otherAddress: string;
+  /** this wallet signs a t->t with an OP_RETURN (CAPS.opReturn) */
+  signsOpReturn?: boolean;
 }
 
 export interface Quote {
@@ -48,6 +50,8 @@ export interface Quote {
   recipient: string;
   /** set when the route can quote this but zafu can't send it yet */
   notYet?: string;
+  /** how the swap is watched: by its deposit address, by the deposit's txid, or not at all */
+  watch?: 'deposit' | 'txid';
   raw: unknown;
 }
 
@@ -63,8 +67,8 @@ export interface SwapProvider {
   /** what the token picker offers; may ask for this route's egress */
   tokens: () => Promise<SwapToken[]>;
   quote: (req: QuoteRequest) => Promise<Quote>;
-  /** absent when the route can't be watched from here */
-  status?: (quote: Quote) => Promise<SwapStatusView>;
+  /** absent when the route can't be watched from here; `txid` for `watch: 'txid'` quotes */
+  status?: (quote: Quote, txid?: string) => Promise<SwapStatusView>;
 }
 
 /** base units for a decimal string, exact (no float) */

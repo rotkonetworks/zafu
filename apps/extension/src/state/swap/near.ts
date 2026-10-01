@@ -74,6 +74,7 @@ export const nearProvider: SwapProvider = {
       expiresAt: q.deadline ? new Date(q.deadline).getTime() : undefined,
       depositAddress: q.depositAddress,
       recipient: fromZec ? req.otherAddress : req.zcashAddress,
+      watch: 'deposit',
       raw: resp,
     } satisfies Quote;
   },

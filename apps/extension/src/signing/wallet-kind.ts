@@ -88,6 +88,8 @@ export interface Caps {
   readonly orchardOnly?: Refusal;
   /** the turnstile migration (an ironwood build on the zigner QR) is offered */
   readonly migrate?: true;
+  /** signs a t->t with an OP_RETURN (a thorchain deposit); a signer that can't show the memo can't */
+  readonly opReturn?: true;
   /** a password unlocks a secret held on zafu before signing */
   readonly unlockToSign: boolean;
   readonly signLabel: string;
@@ -141,6 +143,7 @@ export const CAPS: Record<WalletKind, Caps> = {
     unlockToSign: true,
     signLabel: 'confirm and send',
     migrate: true,
+    opReturn: true,
     cosmos: 'hot',
     zid: null,
   },

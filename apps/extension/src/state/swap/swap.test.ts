@@ -18,7 +18,7 @@ vi.mock('../near-swap', async orig => ({ ...(await orig<object>()), ...near }));
 
 import { fromUnits, rank, rescale, toUnits, type Quote, type QuoteRequest } from './provider';
 import { candidates, ROUTES } from './routes';
-import { checkQuote, thorProvider, type InboundAddress, type ThorQuote } from './thor';
+import { checkQuote, thorProvider, thorStatus, type InboundAddress, type ThorQuote } from './thor';
 import { nearProvider } from './near';
 import { quoteRoutes, routeTokens } from '.';
 
@@ -197,7 +197,7 @@ describe('thorchain', () => {
     expect(asked).toContain('thorchain');
   });
 
-  it('quotes zec out for comparison, marked not yet: no OP_RETURN builder', async () => {
+  it('quotes zec out for comparison, marked not yet, where the wallet cannot sign an OP_RETURN', async () => {
     thornode(
       thorQuote({
         inbound_address: ZEC_VAULT,
@@ -214,6 +214,48 @@ describe('thorchain', () => {
       depositAddress: ZEC_VAULT,
       notYet: 'not available yet',
     });
+    const signs = await thorProvider.quote(
+      req({
+        direction: 'from_zec',
+        amountIn: '1',
+        otherAddress: 'bc1qdestexample',
+        signsOpReturn: true,
+      }),
+    );
+    expect(signs).toMatchObject({ notYet: undefined, watch: 'txid', memo: expect.any(String) });
+  });
+
+  it('watches a zec deposit by its txid through every thornode stage', async () => {
+    const done = { completed: true };
+    const open = { completed: false };
+    expect(thorStatus({})).toMatchObject({ phase: 'waiting' });
+    expect(thorStatus({ stages: { inbound_observed: done } }).line).toBe(
+      'deposit seen, confirming',
+    );
+    const final = { inbound_observed: done, inbound_finalised: done };
+    expect(thorStatus({ stages: { ...final, swap_status: { pending: true } } })).toMatchObject({
+      phase: 'processing',
+    });
+    expect(
+      thorStatus({ stages: { ...final, swap_finalised: done, outbound_signed: open } }).line,
+    ).toBe('sending to the recipient');
+    expect(
+      thorStatus({ stages: { ...final, swap_finalised: done, outbound_signed: done } }),
+    ).toMatchObject({ phase: 'done' });
+    expect(
+      thorStatus({ stages: { ...final, swap_finalised: done }, out_txs: [{ memo: 'REFUND:AB' }] }),
+    ).toMatchObject({ phase: 'failed' });
+
+    const urls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        urls.push(url);
+        return Promise.resolve(new Response('{"message":"not found"}', { status: 404 }));
+      }),
+    );
+    expect(await thorProvider.status!(q('thor', 1n), 'abcd')).toMatchObject({ phase: 'waiting' });
+    expect(urls[0]).toMatch(/\/thorchain\/tx\/status\/ABCD$/);
   });
 
   it('pays only transparent addresses, so a wallet without one gets a calm line', async () => {
