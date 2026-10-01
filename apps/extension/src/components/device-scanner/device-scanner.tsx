@@ -70,11 +70,20 @@ export const DeviceScanner = ({ onDone, onCancel }: DeviceScannerProps) => {
   const startBlockOk = !startBlock.trim() || (startBlockHint?.ok ?? false);
 
   const handlePayload = useCallback(
-    (raw: string) => {
+    (raw: string, origin: 'camera' | 'paste') => {
       const result = parseConnectCode(raw);
       if (!result.ok) {
         if (MULTIPART_UR.test(raw.trim())) {
-          setScreen({ kind: 'scan', multipart: true });
+          // a single frame of a fountain-coded code. the camera can keep
+          // reading the rest; a paste has no more frames to give.
+          if (origin === 'camera') {
+            setScreen({ kind: 'scan', multipart: true });
+          } else {
+            setScreen({
+              kind: 'scan',
+              error: 'this code spans several frames. please use the camera instead of pasting.',
+            });
+          }
           return;
         }
         setScreen({ kind: 'scan', error: result.message });
@@ -113,7 +122,7 @@ export const DeviceScanner = ({ onDone, onCancel }: DeviceScannerProps) => {
     if (!pasteValue.trim()) {
       return;
     }
-    handlePayload(pasteValue);
+    handlePayload(pasteValue, 'paste');
   };
 
   const handleAdd = async () => {
@@ -171,12 +180,12 @@ export const DeviceScanner = ({ onDone, onCancel }: DeviceScannerProps) => {
       <div className='flex flex-col gap-4'>
         {!showPaste && (
           <QrScanner
-            onScan={handlePayload}
+            onScan={data => handlePayload(data, 'camera')}
             onError={message => setScreen({ kind: 'scan', error: message })}
             onClose={onCancel}
             inline
             title='scan your device'
-            description="zafu tells which network it's for"
+            description='zafu tells which network this is for'
           />
         )}
 
@@ -191,7 +200,7 @@ export const DeviceScanner = ({ onDone, onCancel }: DeviceScannerProps) => {
           onClick={() => setShowPaste(v => !v)}
           className='text-label text-fg-muted underline-offset-2 hover:underline lowercase'
         >
-          {showPaste ? 'use the camera instead' : "can't use the camera? paste the code"}
+          {showPaste ? 'use the camera instead' : 'paste the code instead'}
         </button>
 
         {showPaste && (

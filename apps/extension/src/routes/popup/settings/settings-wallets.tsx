@@ -1,24 +1,14 @@
-import { useState, useRef, useEffect, useCallback, type KeyboardEvent } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useState, useRef, useEffect, type KeyboardEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../../state';
-import {
-  keyRingSelector,
-  selectEnabledNetworks,
-  type KeyInfo,
-  type ZignerZafuImport,
-} from '../../../state/keyring';
+import { keyRingSelector, selectEnabledNetworks, type KeyInfo } from '../../../state/keyring';
 import { walletsSelector } from '../../../state/wallets';
-import { zignerConnectSelector } from '../../../state/zigner';
 import { passwordSelector } from '../../../state/password';
 import { SettingsScreen } from './settings-screen';
-import { QrScanner } from '../../../shared/components/qr-scanner';
-import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
-import { keystoneDeviceId } from '../../../utils/viewing-key';
 import { openPageInTab } from '../../../utils/popup-detection';
 import { PagePath } from '../../page/paths';
 import { HARDWARE_WALLET_ENABLED, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
 import { Button } from '@repo/ui/components/ui/button';
-import { Input } from '@repo/ui/components/ui/input';
 import { cn } from '@repo/ui/lib/utils';
 import { CustodyBadge } from '../../../components/custody-badge';
 import { PhraseGrid } from './settings-passphrase';
@@ -68,28 +58,10 @@ export const SettingsWallets = ({
    *  block below a full-height screen. */
   appendSlot?: React.ReactNode;
 } = {}) => {
-  const location = useLocation();
-  const autoScan = (location.state as { autoScan?: boolean } | null)?.autoScan;
-
-  const { keyInfos, getMnemonic, renameKeyRing, addZignerUnencrypted } = useStore(keyRingSelector);
+  const { keyInfos, getMnemonic, renameKeyRing } = useStore(keyRingSelector);
   const { isPassword } = useStore(passwordSelector);
   const { all: penumbraWallets, zcashWallets, updateMultisigWallet } = useStore(walletsSelector);
   const enabledNetworks = useStore(selectEnabledNetworks);
-  const {
-    scanState,
-    walletLabel,
-    walletImport,
-    zcashWalletImport,
-    parsedCosmosExport,
-    detectedNetwork,
-    errorMessage,
-    processQrData,
-    processZcashAccountsBytes,
-    setWalletLabel,
-    setScanState,
-    setError,
-    clearZignerState,
-  } = useStore(zignerConnectSelector);
 
   // -- export-recovery-phrase state --
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -103,30 +75,6 @@ export const SettingsWallets = ({
   // the remove-wallet screen takes a query param, which usePopupNav's typed
   // `to` does not accept.
   const rawNavigate = useNavigate();
-
-  // -- add wallet state --
-  const [scanning, setScanning] = useState(false);
-  const [scanningKeystone, setScanningKeystone] = useState(false);
-  const [addSuccess, setAddSuccess] = useState(false);
-  const [isAdding, setIsAdding] = useState(false);
-
-  // hidden paste mode - activated by tapping info box 10 times
-  const clickCountRef = useRef(0);
-  const clickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const manualInputRef = useRef(false);
-
-  useEffect(() => {
-    return () => {
-      clearZignerState();
-    };
-  }, [clearZignerState]);
-
-  // auto-start scanner when navigated with autoScan
-  useEffect(() => {
-    if (autoScan && !scanning && scanState === 'idle') {
-      setScanning(true);
-    }
-  }, [autoScan]);
 
   // -- export-recovery-phrase logic --
   const resetRemoval = () => {
@@ -185,142 +133,12 @@ export const SettingsWallets = ({
     }
   };
 
-  // -- add wallet logic --
-  const handleQrScan = useCallback(
-    (data: string) => {
-      setScanning(false);
-      processQrData(data);
-    },
-    [processQrData],
-  );
-
-  const handleSecretTap = () => {
-    clickCountRef.current += 1;
-    if (clickTimeoutRef.current) {
-      clearTimeout(clickTimeoutRef.current);
-    }
-    clickTimeoutRef.current = setTimeout(() => {
-      clickCountRef.current = 0;
-    }, 3000);
-    if (clickCountRef.current >= 10) {
-      manualInputRef.current = true;
-      setScanState('idle');
-      clickCountRef.current = 0;
-    }
-  };
-
-  const handleAddWallet = async () => {
-    if (!walletImport && !zcashWalletImport && !parsedCosmosExport) {
-      setError('please scan a qr code first');
-      return;
-    }
-    try {
-      setIsAdding(true);
-      if (detectedNetwork === 'penumbra' && walletImport) {
-        // route through vault system so wallet gets vaultId and shows in wallet list
-        const fvkBytes = walletImport.fullViewingKey.inner;
-        const zignerData: ZignerZafuImport = {
-          fullViewingKey: btoa(String.fromCharCode(...fvkBytes)),
-          accountIndex: walletImport.accountIndex,
-          deviceId: walletImport.zidPublicKey ?? `penumbra-${Date.now()}`,
-          zidPublicKey: walletImport.zidPublicKey,
-        };
-        await addZignerUnencrypted(
-          zignerData,
-          walletLabel || walletImport.label || 'zigner penumbra',
-        );
-      } else if (detectedNetwork === 'zcash' && zcashWalletImport) {
-        // route through vault system so wallet gets vaultId and shows in wallet list
-        const viewingKey =
-          zcashWalletImport.ufvk ||
-          (zcashWalletImport.orchardFvk
-            ? btoa(String.fromCharCode(...zcashWalletImport.orchardFvk))
-            : undefined);
-        const kind = zcashWalletImport.coldSignerType ?? 'zigner';
-        const zignerData: ZignerZafuImport = {
-          viewingKey,
-          accountIndex: zcashWalletImport.accountIndex,
-          deviceId:
-            zcashWalletImport.zidPublicKey ??
-            (kind === 'keystone' && viewingKey
-              ? keystoneDeviceId(viewingKey)
-              : `zcash-${Date.now()}`),
-          zidPublicKey: zcashWalletImport.zidPublicKey,
-          coldSignerType: kind,
-        };
-        await addZignerUnencrypted(
-          zignerData,
-          walletLabel ||
-            zcashWalletImport.label ||
-            (kind === 'keystone' ? 'keystone zcash' : 'zigner zcash'),
-        );
-      } else if (detectedNetwork === 'cosmos' && parsedCosmosExport && isLaunched('noble')) {
-        const zignerData: ZignerZafuImport = {
-          cosmosAddresses: parsedCosmosExport.addresses,
-          publicKey: parsedCosmosExport.publicKey || undefined,
-          accountIndex: parsedCosmosExport.accountIndex,
-          deviceId: `cosmos-${Date.now()}`,
-        };
-        await addZignerUnencrypted(zignerData, walletLabel || 'zigner cosmos');
-      }
-      setAddSuccess(true);
-      clearZignerState();
-      manualInputRef.current = false;
-      setTimeout(() => setAddSuccess(false), 3000);
-    } catch (cause) {
-      setError(`failed to add wallet: ${cause instanceof Error ? cause.message : String(cause)}`);
-    } finally {
-      setIsAdding(false);
-    }
-  };
-
-  const resetAdd = () => {
-    clearZignerState();
-    manualInputRef.current = false;
-  };
-
   const removingVault = keyInfos.find(v => v.id === removingId);
-  const showManualInput = manualInputRef.current && scanState !== 'scanned';
-  const showScannedState =
-    scanState === 'scanned' && (walletImport || zcashWalletImport || parsedCosmosExport);
-  const showInitialState = scanState === 'idle' && !showManualInput;
   const hasSeedVault = keyInfos.some(v => v.type === 'mnemonic');
   const zcashEnabled = enabledNetworks.includes('zcash');
 
   return (
     <>
-      {scanning && (
-        <QrScanner
-          onScan={handleQrScan}
-          onError={err => {
-            setError(err);
-            setScanning(false);
-          }}
-          onClose={() => setScanning(false)}
-          title='scan zigner QR'
-          description='point camera at your zigner FVK QR code'
-        />
-      )}
-      {scanningKeystone && (
-        <AnimatedQrScanner
-          onComplete={(bytes, urType) => {
-            setScanningKeystone(false);
-            if (urType !== 'zcash-accounts') {
-              setError(`expected ur:zcash-accounts, got ur:${urType}`);
-              return;
-            }
-            processZcashAccountsBytes(bytes, 'keystone');
-          }}
-          onError={err => {
-            setError(err);
-            setScanningKeystone(false);
-          }}
-          onClose={() => setScanningKeystone(false)}
-          title='scan keystone QR'
-          description='hold the camera steady on the animated zcash-accounts QR'
-          urTypeFilter='zcash-accounts'
-        />
-      )}
       <SettingsScreen title={title} backPath={PopupPath.INDEX}>
         <div className='flex flex-col gap-5'>
           {/* ── wallet list ── */}
@@ -434,166 +252,47 @@ export const SettingsWallets = ({
 
           {error && step === 'idle' && <p className='text-xs text-red-400'>{error}</p>}
 
-          {/* ── add wallet ── */}
+          {/* ── add wallet ──
+              one scanner for any cold signer - the brand appears only once
+              zafu has read the code, never as a choice beforehand. */}
 
           <div className='border-t border-border-soft pt-4'>
             <p className='text-label text-fg-muted mb-2'>add wallet</p>
-            {/* zigner info box - tap 10x for dev paste mode */}
-            <div className='border border-border-soft bg-elev-1 p-3 mb-3' onClick={handleSecretTap}>
-              <p className='text-xs text-fg-muted'>
-                zafu zigner keeps spending keys offline - sign by QR.
-              </p>
-              <a
-                href='https://zafu.pro/zigner'
-                target='_blank'
-                rel='noopener noreferrer'
-                className='flex items-center gap-2 text-xs text-zigner-gold hover:underline mt-2'
+            <div className='flex flex-col gap-2'>
+              <button
+                onClick={() => navigate(PopupPath.SETTINGS_CONNECT_DEVICE)}
+                className='w-full flex items-center justify-center gap-2 border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors'
               >
-                <span className='i-ph-arrow-square-out h-3 w-3' />
-                download zafu zigner
-              </a>
-            </div>
-
-            {addSuccess && (
-              <div className='border border-green-500/40 bg-green-500/5 p-3 mb-3 text-xs text-green-400'>
-                wallet added successfully
-              </div>
-            )}
-
-            {/* scanned state */}
-            {showScannedState && (
-              <div className='flex flex-col gap-3'>
-                <div className='border border-green-500/40 bg-green-500/5 p-3'>
-                  <div className='flex items-center gap-2'>
-                    <p className='text-xs text-green-400'>qr code scanned</p>
-                    <span className='text-label px-1 bg-elev-2 text-fg-muted'>
-                      {detectedNetwork}
-                    </span>
-                  </div>
-                  <p className='text-label text-fg-muted mt-1 font-mono'>
-                    {parsedCosmosExport ? (
-                      <>
-                        {parsedCosmosExport.addresses.map(a => a.address.slice(0, 10)).join(', ')}
-                        ...
-                      </>
-                    ) : (
-                      <>
-                        account #
-                        {walletImport?.accountIndex ?? zcashWalletImport?.accountIndex ?? 0}
-                        {zcashWalletImport && (
-                          <span className='ml-2'>
-                            {zcashWalletImport.mainnet ? 'mainnet' : 'testnet'}
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </p>
-                </div>
-                <Input
-                  placeholder='wallet label (optional)'
-                  value={walletLabel}
-                  onChange={e => setWalletLabel(e.target.value)}
-                />
-                {errorMessage && <p className='text-xs text-red-400'>{errorMessage}</p>}
-                <div className='flex gap-2'>
-                  <Btn onClick={resetAdd}>cancel</Btn>
-                  <Btn primary disabled={isAdding} onClick={() => void handleAddWallet()}>
-                    {isAdding ? 'adding...' : 'add wallet'}
-                  </Btn>
-                </div>
-              </div>
-            )}
-
-            {/* manual paste mode (dev) */}
-            {showManualInput && (
-              <div className='flex flex-col gap-3'>
-                <p className='text-label text-fg-muted'>developer mode: paste QR hex data</p>
-                <Input
-                  placeholder='paste QR code hex (530301...)'
-                  onChange={e => {
-                    if (e.target.value.trim()) {
-                      processQrData(e.target.value);
-                    }
-                  }}
-                  className='font-mono text-xs'
-                />
-                <Input
-                  placeholder='wallet label (optional)'
-                  value={walletLabel}
-                  onChange={e => setWalletLabel(e.target.value)}
-                />
-                {errorMessage && <p className='text-xs text-red-400'>{errorMessage}</p>}
-                <div className='flex gap-2'>
-                  <Btn onClick={resetAdd}>cancel</Btn>
-                  <Btn
-                    primary
-                    disabled={
-                      (!walletImport && !zcashWalletImport && !parsedCosmosExport) || isAdding
-                    }
-                    onClick={() => void handleAddWallet()}
-                  >
-                    {isAdding ? 'adding...' : 'add wallet'}
-                  </Btn>
-                </div>
-              </div>
-            )}
-
-            {/* initial: scan button + import seed */}
-            {showInitialState && (
-              <div className='flex flex-col gap-2'>
+                <span className='i-ph-scan size-4' />
+                scan a signer
+              </button>
+              {zcashEnabled && (HARDWARE_WALLET_ENABLED || LEDGER_TRANSPARENT_ENABLED) && (
                 <button
-                  onClick={() => setScanning(true)}
-                  className='w-full flex items-center justify-center gap-2 border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors'
+                  // WebHID dies with the popup, so the ledger flow runs in a tab
+                  onClick={() => void openPageInTab(PagePath.CONNECT_LEDGER, true)}
+                  className='w-full flex items-center justify-center gap-2 border border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high transition-colors'
                 >
-                  <span className='i-ph-scan size-4' />
-                  scan zigner QR
+                  <span className='i-ph-usb size-4' />
+                  connect ledger
                 </button>
-                {zcashEnabled && (
-                  <button
-                    onClick={() => setScanningKeystone(true)}
-                    className='w-full flex items-center justify-center gap-2 border border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high transition-colors'
-                  >
-                    <span className='i-ph-qr-code size-4' />
-                    scan keystone QR (zcash)
-                  </button>
-                )}
-                {zcashEnabled && (HARDWARE_WALLET_ENABLED || LEDGER_TRANSPARENT_ENABLED) && (
-                  <button
-                    // WebHID dies with the popup, so the ledger flow runs in a tab
-                    onClick={() => void openPageInTab(PagePath.CONNECT_LEDGER, true)}
-                    className='w-full flex items-center justify-center gap-2 border border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high transition-colors'
-                  >
-                    <span className='i-ph-usb size-4' />
-                    connect ledger
-                  </button>
-                )}
-                {!hasSeedVault && (
-                  <button
-                    onClick={() => chrome.runtime.openOptionsPage()}
-                    className='w-full border border-dashed border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high hover:border-border-soft transition-colors'
-                  >
-                    + import seed phrase
-                  </button>
-                )}
-                {zcashEnabled && (
-                  <button
-                    onClick={() => navigate(PopupPath.SETTINGS_ADD_VIEWING_KEY)}
-                    className='w-full border border-dashed border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high hover:border-border-soft transition-colors'
-                  >
-                    + add viewing key (watch only)
-                  </button>
-                )}
-                {errorMessage && <p className='text-xs text-red-400 text-center'>{errorMessage}</p>}
-              </div>
-            )}
-
-            {/* error state */}
-            {scanState === 'error' && !showManualInput && (
-              <div className='flex flex-col gap-3'>
-                <p className='text-xs text-red-400'>{errorMessage}</p>
-                <Btn onClick={resetAdd}>try again</Btn>
-              </div>
-            )}
+              )}
+              {!hasSeedVault && (
+                <button
+                  onClick={() => chrome.runtime.openOptionsPage()}
+                  className='w-full border border-dashed border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high hover:border-border-soft transition-colors'
+                >
+                  + import seed phrase
+                </button>
+              )}
+              {zcashEnabled && (
+                <button
+                  onClick={() => navigate(PopupPath.SETTINGS_ADD_VIEWING_KEY)}
+                  className='w-full border border-dashed border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high hover:border-border-soft transition-colors'
+                >
+                  + add viewing key (watch only)
+                </button>
+              )}
+            </div>
           </div>
           {appendSlot}
         </div>
