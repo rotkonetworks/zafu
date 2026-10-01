@@ -16,8 +16,8 @@ import { useSearchParams } from 'react-router-dom';
 import { ApprovalScreen } from './approval-screen';
 import { ApproveDeny } from './approve-deny';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
-import { OriginIcon } from '../../../shared/components/origin-icon';
-import { LinkGradientIcon } from '../../../icons/link-gradient';
+import { OriginIcon, hostnameOf } from '../../../shared/components/origin-icon';
+import { Mark } from '@repo/ui/components/ui/mark';
 import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../../../config/contact-discovery-relay';
 
 // `new URL()` throws on a malformed string; the `app` query param is only
@@ -41,6 +41,7 @@ export const ContactDiscoveryApproval = () => {
   // endpoint, else the built-in default). Falling back to the constant keeps the
   // popup honest if the param is ever missing - never show a relay we're not sure of.
   const relay = params.get('relay') || DEFAULT_CONTACT_DISCOVERY_RELAY;
+  const appName = title || (origin ? hostnameOf(origin) : 'this app');
 
   const respond = async (approved: boolean) => {
     // Await before closing (see passkey.tsx): window.close() tears this popup
@@ -60,52 +61,42 @@ export const ContactDiscoveryApproval = () => {
   return (
     <ApprovalScreen
       header={
-        <header className='flex h-[70px] flex-col items-center justify-center border-b border-border-soft'>
-          <span className='kicker mb-1'>app request</span>
-          <h1 className='text-title text-fg-high lowercase tracking-[-0.01em]'>
-            private contact discovery
-          </h1>
-        </header>
-      }
-      footer={<ApproveDeny approve={() => respond(true)} deny={() => respond(false)} />}
-    >
-      <div className='mx-auto size-20'>
-        <LinkGradientIcon />
-      </div>
-      <div className='w-full px-[30px]'>
-        <div className='flex flex-col gap-3'>
-          {/* requesting app */}
-          <div className='flex items-center gap-2 bg-canvas p-3'>
+        <header className='flex flex-col items-center justify-center gap-2 border-b border-border-soft px-4 py-4'>
+          <div className='flex w-full items-center gap-2'>
             {!!origin && <OriginIcon origin={origin} size={32} />}
-            <div className='flex flex-col overflow-hidden'>
-              {title && <span className='text-sm truncate'>{title}</span>}
+            <div className='flex min-w-0 flex-col'>
+              {title && <span className='truncate text-sm text-fg-high'>{title}</span>}
               {origin && (
-                <span className='text-xs text-fg-muted truncate'>
+                <span className='truncate text-xs text-fg-muted'>
                   <SafeOriginURL origin={origin} />
                 </span>
               )}
             </div>
           </div>
-
-          {/* what it means */}
-          <p className='text-sm text-fg-muted'>
-            an app learns only which contacts are present in that app, under app-scoped handles -
-            never your contact list, and unlinkable across apps.
+          <Mark variant='seal' size={40} />
+          <h1 className='text-title text-fg-high lowercase tracking-[-0.01em]'>
+            show {appName} which friends are here?
+          </h1>
+        </header>
+      }
+      footer={
+        <ApproveDeny
+          approve={() => respond(true)}
+          deny={() => respond(false)}
+          approveLabel='show friends'
+        />
+      }
+    >
+      <div className='w-full px-[30px]'>
+        <div className='flex flex-col gap-2 text-xs text-fg-muted'>
+          <p>only friends who also use {appName}</p>
+          <p>never your whole contact list</p>
+          <p>the relay can&apos;t tell who you looked for</p>
+          <p>friends here will see you are online</p>
+          <p className='border border-yellow-500/30 bg-yellow-500/5 p-2 text-yellow-400'>
+            turns this on for every app, not just this one
           </p>
-
-          {/* the wallet-wide consequence, stated plainly */}
-          <div className='border border-yellow-500/30 bg-yellow-500/5 p-3 text-xs text-yellow-400'>
-            turns on private contact discovery for every app, not just this one.
-          </div>
-
-          {/* the relay the wallet will use - the app cannot choose it */}
-          <div className='border border-border-soft bg-canvas p-3'>
-            <p className='kicker mb-1'>relay</p>
-            <p className='break-all font-mono text-xs text-fg-high'>{relay}</p>
-            <p className='mt-1 text-xs text-fg-muted'>
-              your wallet chooses the relay; the app cannot point it elsewhere.
-            </p>
-          </div>
+          <p className='break-all font-mono text-fg-dim'>relay {relay}</p>
         </div>
       </div>
     </ApprovalScreen>
