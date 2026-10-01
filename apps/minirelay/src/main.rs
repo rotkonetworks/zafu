@@ -17,6 +17,7 @@ async fn main() {
         &config.db_path,
         config.max_entries_per_coord,
         config.retention_seconds,
+        config.scope_retention.clone(),
     ) {
         Ok(s) => Arc::new(s),
         Err(e) => {
@@ -69,6 +70,14 @@ async fn main() {
         "minirelay: listening on {addr} (db {}, retention {}s, cap {}/coordinate, origin {})",
         config.db_path, config.retention_seconds, config.max_entries_per_coord, config.allow_origin
     );
+    if !config.scope_retention.is_empty() {
+        eprintln!(
+            "minirelay: {} scope retention override(s), capped at {}s: {:?}",
+            config.scope_retention.len(),
+            config.max_scope_retention_seconds,
+            config.scope_retention
+        );
+    }
 
     // Connect info so a policy filter can do per-source rate limiting; without it
     // every request would look like it came from the same address.

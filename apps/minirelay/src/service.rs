@@ -448,7 +448,7 @@ mod tests {
     use super::*;
 
     fn store() -> Arc<Store> {
-        Arc::new(Store::open(":memory:", 1000, 3600).unwrap())
+        Arc::new(Store::open(":memory:", 1000, 3600, Vec::new()).unwrap())
     }
 
     fn coord(scope: &str) -> Coord {

@@ -59,10 +59,43 @@ impl std::fmt::Display for StoreError {
 
 impl std::error::Error for StoreError {}
 
+/// Escape `%`/`_` (SQL LIKE wildcards) in a literal prefix, then append `%` -
+/// so a prefix rule only ever matches a literal prefix, never a pattern an
+/// operator's scope string happened to contain.
+fn like_prefix_pattern(prefix: &str) -> String {
+    let mut out = String::with_capacity(prefix.len() + 1);
+    for c in prefix.chars() {
+        if c == '%' || c == '_' || c == '\\' {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out.push('%');
+    out
+}
+
 impl From<rusqlite::Error> for StoreError {
     fn from(e: rusqlite::Error) -> Self {
         Self::Sql(e)
     }
+}
+
+/// How an `app_scope` is matched against a {@link ScopeRetention} rule.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ScopeMatch {
+    /// the scope string, exactly.
+    Exact(String),
+    /// any scope starting with this string (the config's trailing `*`).
+    Prefix(String),
+}
+
+/// One per-scope retention override. Rules are tried in the order given; the
+/// first match wins, and a scope matching none of them gets the store's
+/// default retention.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScopeRetention {
+    pub matches: ScopeMatch,
+    pub retention_seconds: i64,
 }
 
 pub struct Store {
@@ -71,18 +104,24 @@ pub struct Store {
     /// tags without limit, so this is a floor on everyone's download size, not a
     /// quota for any one client.
     max_entries_per_coord: i64,
-    /// How long a published entry is kept. Tags rotate every epoch, so older rows
-    /// are unreadable to clients and useless to readers - and this layer has no
-    /// forward secrecy by design, so keeping history only lengthens the window in
-    /// which a later key compromise reconstructs who was online when.
-    retention_seconds: i64,
+    /// How long a published entry is kept, for any `app_scope` not matched by
+    /// `scope_retention`. Tags rotate every epoch, so older rows are unreadable
+    /// to clients and useless to readers - and this layer has no forward secrecy
+    /// by design, so keeping history only lengthens the window in which a later
+    /// key compromise reconstructs who was online when.
+    default_retention_seconds: i64,
+    /// Overrides for specific scopes or prefixes (e.g. a zirc group room, kept
+    /// ~25h instead of the 1h default). See `config.rs` for the cap every entry
+    /// here is already clamped to before it reaches the store.
+    scope_retention: Vec<ScopeRetention>,
 }
 
 impl Store {
     pub fn open(
         path: &str,
         max_entries_per_coord: i64,
-        retention_seconds: i64,
+        default_retention_seconds: i64,
+        scope_retention: Vec<ScopeRetention>,
     ) -> Result<Self, StoreError> {
         let conn = Connection::open(path)?;
         // WAL: reads do not block the writer. busy_timeout: a concurrent publish
@@ -105,7 +144,8 @@ impl Store {
         Ok(Self {
             conn: Mutex::new(conn),
             max_entries_per_coord,
-            retention_seconds,
+            default_retention_seconds,
+            scope_retention,
         })
     }
 
@@ -202,14 +242,49 @@ impl Store {
         Ok(out)
     }
 
-    /// Drop entries older than the retention window. Returns how many went.
+    /// Drop entries older than the retention window, honouring each scope rule's
+    /// own retention. Returns how many rows went.
+    ///
+    /// Built as one `DELETE ... WHERE inserted_at < CASE WHEN ... END` rather
+    /// than one query per rule: every row is visited once, the first matching
+    /// rule (in configured order) decides its cutoff, and anything matching no
+    /// rule falls through to `default_retention_seconds` - the same priority a
+    /// human reading the config top to bottom would expect.
     pub fn gc(&self) -> Result<usize, StoreError> {
-        let cutoff = self.now() - self.retention_seconds;
+        let now = self.now();
         let conn = self.conn.lock();
-        let removed = conn.execute(
-            "DELETE FROM entries WHERE inserted_at < ?1",
-            params![cutoff],
-        )?;
+
+        if self.scope_retention.is_empty() {
+            let cutoff = now - self.default_retention_seconds;
+            let removed = conn.execute(
+                "DELETE FROM entries WHERE inserted_at < ?1",
+                params![cutoff],
+            )?;
+            return Ok(removed);
+        }
+
+        let mut sql = String::from("DELETE FROM entries WHERE inserted_at < CASE ");
+        let mut values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        for rule in &self.scope_retention {
+            let cutoff = now - rule.retention_seconds;
+            match &rule.matches {
+                ScopeMatch::Exact(scope) => {
+                    sql.push_str("WHEN app_scope = ? THEN ? ");
+                    values.push(Box::new(scope.clone()));
+                    values.push(Box::new(cutoff));
+                }
+                ScopeMatch::Prefix(prefix) => {
+                    sql.push_str("WHEN app_scope LIKE ? ESCAPE '\\' THEN ? ");
+                    values.push(Box::new(like_prefix_pattern(prefix)));
+                    values.push(Box::new(cutoff));
+                }
+            }
+        }
+        sql.push_str("ELSE ? END");
+        values.push(Box::new(now - self.default_retention_seconds));
+
+        let refs: Vec<&dyn rusqlite::ToSql> = values.iter().map(|v| v.as_ref()).collect();
+        let removed = conn.execute(&sql, refs.as_slice())?;
         Ok(removed)
     }
 
@@ -225,7 +300,7 @@ mod tests {
     use super::*;
 
     fn store() -> Store {
-        Store::open(":memory:", 1000, 3600).expect("open")
+        Store::open(":memory:", 1000, 3600, Vec::new()).expect("open")
     }
 
     fn coord(scope: &str, epoch: i64) -> Coord {
@@ -284,7 +359,7 @@ mod tests {
 
     #[test]
     fn cap_refuses_growth_but_allows_retries() {
-        let s = Store::open(":memory:", 2, 3600).unwrap();
+        let s = Store::open(":memory:", 2, 3600, Vec::new()).unwrap();
         s.put(&coord("poker", 100), &[entry(1, 1), entry(2, 2)])
             .unwrap();
         // A retry of what is already there is not growth.
@@ -300,11 +375,109 @@ mod tests {
 
     #[test]
     fn gc_drops_entries_past_retention() {
-        let s = Store::open(":memory:", 1000, 0).unwrap();
+        let s = Store::open(":memory:", 1000, 0, Vec::new()).unwrap();
         s.put(&coord("poker", 100), &[entry(1, 1)]).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(1100));
         let removed = s.gc().unwrap();
         assert_eq!(removed, 1);
         assert_eq!(s.count().unwrap(), 0);
+    }
+
+    #[test]
+    fn gc_honours_a_longer_retention_for_a_specific_scope() {
+        // a long-retention scope and a default-retention scope, swept together -
+        // exactly the mixed shape a group-purse room (kept ~25h) and discovery
+        // (kept 1h) share on one relay.
+        let s = Store::open(
+            ":memory:",
+            1000,
+            0, // default: anything not "zafu-group-v1" is swept immediately
+            vec![ScopeRetention {
+                matches: ScopeMatch::Exact("zafu-group-v1".to_string()),
+                retention_seconds: 3600, // the group scope is kept an hour
+            }],
+        )
+        .unwrap();
+        s.put(&coord("zafu-group-v1", 100), &[entry(1, 1)]).unwrap();
+        s.put(&coord("zid-discovery", 100), &[entry(2, 2)]).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+
+        let removed = s.gc().unwrap();
+
+        assert_eq!(removed, 1, "only the default-retention scope's row is past its cutoff");
+        assert_eq!(s.get(&coord("zafu-group-v1", 100)).unwrap().len(), 1, "the group row survives");
+        assert_eq!(s.get(&coord("zid-discovery", 100)).unwrap().len(), 0, "the default-retention row is gone");
+    }
+
+    #[test]
+    fn gc_matches_a_prefix_rule_across_several_scopes() {
+        let s = Store::open(
+            ":memory:",
+            1000,
+            0,
+            vec![ScopeRetention {
+                matches: ScopeMatch::Prefix("zafu-group-".to_string()),
+                retention_seconds: 3600,
+            }],
+        )
+        .unwrap();
+        s.put(&coord("zafu-group-v1", 100), &[entry(1, 1)]).unwrap();
+        s.put(&coord("zafu-group-v2", 100), &[entry(2, 2)]).unwrap();
+        s.put(&coord("other", 100), &[entry(3, 3)]).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+
+        let removed = s.gc().unwrap();
+
+        assert_eq!(removed, 1);
+        assert_eq!(s.get(&coord("zafu-group-v1", 100)).unwrap().len(), 1);
+        assert_eq!(s.get(&coord("zafu-group-v2", 100)).unwrap().len(), 1);
+        assert_eq!(s.get(&coord("other", 100)).unwrap().len(), 0);
+    }
+
+    #[test]
+    fn a_prefix_rule_does_not_match_a_scope_that_merely_contains_it() {
+        // "zafu-group-v1-evil" must not be swept by a rule that only names the
+        // literal prefix "zafu-group-v1" without a trailing '*' of its own - the
+        // config layer is what turns "scope*" into a Prefix rule at all.
+        let s = Store::open(
+            ":memory:",
+            1000,
+            0,
+            vec![ScopeRetention {
+                matches: ScopeMatch::Exact("zafu-group-v1".to_string()),
+                retention_seconds: 3600,
+            }],
+        )
+        .unwrap();
+        s.put(&coord("zafu-group-v1-evil", 100), &[entry(1, 1)])
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+
+        let removed = s.gc().unwrap();
+        assert_eq!(removed, 1, "an exact rule must not accidentally act as a prefix");
+    }
+
+    #[test]
+    fn a_literal_sql_wildcard_in_a_prefix_rule_is_escaped() {
+        let s = Store::open(
+            ":memory:",
+            1000,
+            0,
+            vec![ScopeRetention {
+                matches: ScopeMatch::Prefix("a_b".to_string()),
+                retention_seconds: 3600,
+            }],
+        )
+        .unwrap();
+        // "a_b..." should match (real prefix); "axbyc" must NOT match just
+        // because unescaped '_' is a SQL LIKE wildcard for "any one character".
+        s.put(&coord("a_bcde", 100), &[entry(1, 1)]).unwrap();
+        s.put(&coord("axbyc", 100), &[entry(2, 2)]).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+
+        s.gc().unwrap();
+
+        assert_eq!(s.get(&coord("a_bcde", 100)).unwrap().len(), 1, "real prefix kept");
+        assert_eq!(s.get(&coord("axbyc", 100)).unwrap().len(), 0, "unrelated scope swept by default");
     }
 }

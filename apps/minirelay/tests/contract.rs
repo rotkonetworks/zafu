@@ -24,7 +24,7 @@ use tower::ServiceExt;
 
 /// A relay with no policy filters: the base service alone.
 fn fresh(cap: i64, max_per_put: usize) -> axum::Router {
-    let store = Arc::new(Store::open(":memory:", cap, 3600).unwrap());
+    let store = Arc::new(Store::open(":memory:", cap, 3600, Vec::new()).unwrap());
     let config = policy_config();
     app(AppState {
         service: strategy::build(&config, store).0,
@@ -39,6 +39,8 @@ fn policy_config() -> Config {
         db_path: ":memory:".into(),
         max_entries_per_coord: 1000,
         retention_seconds: 3600,
+        scope_retention: Vec::new(),
+        max_scope_retention_seconds: 172_800,
         max_entries_per_put: 4096,
         max_body_bytes: 8 * 1024 * 1024,
         allow_origin: "*".into(),
@@ -50,7 +52,7 @@ fn policy_config() -> Config {
 
 /// A relay whose policy came from configuration, exactly as the binary builds it.
 fn with_policy(config: &Config) -> axum::Router {
-    let store = Arc::new(Store::open(":memory:", config.max_entries_per_coord, 3600).unwrap());
+    let store = Arc::new(Store::open(":memory:", config.max_entries_per_coord, 3600, config.scope_retention.clone()).unwrap());
     let (service, _enforced) = strategy::build(config, store);
     app(AppState {
         service,
