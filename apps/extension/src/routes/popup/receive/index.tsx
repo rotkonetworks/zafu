@@ -14,6 +14,7 @@ import { useLocation } from 'react-router-dom';
 import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
 import { selectActiveNetwork } from '../../../state/keyring';
+import { selectActiveZcashWallet } from '../../../state/wallets';
 import { useActiveAddress } from '../../../hooks/use-address';
 import { rotateShieldedDiversifier } from '../../../state/shielded-receive-index';
 import { routeForChain, usePenumbraRoutes } from '../../../transparent/penumbra-routes';
@@ -30,6 +31,7 @@ import { Segmented } from '@repo/ui/components/ui/segmented';
 
 export function ReceivePage() {
   const activeNetwork = useStore(selectActiveNetwork);
+  const isMultisig = useStore(s => !!selectActiveZcashWallet(s)?.multisig);
   const { address, loading, shieldedIndex } = useActiveAddress();
   const isPenumbra = activeNetwork === 'penumbra';
   // zcash shielded addresses are single-use. Opening receive retires whatever
@@ -94,7 +96,8 @@ export function ReceivePage() {
         title='receive'
         backPath={PopupPath.INDEX}
         meta={
-          isZcash ? (
+          // a multisig purse is shielded-only: no transparent address to offer
+          isZcash && !isMultisig ? (
             <Segmented
               label='address type'
               value={addrType}
