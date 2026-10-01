@@ -55,41 +55,6 @@ export {
   type ZcashNetworkConfig,
 } from './zcash';
 
-// Polkadot - light client only, no rpc
-export {
-  // user-facing (what user sees)
-  POLKADOT_NETWORKS,
-  getDefaultChain as getPolkadotDefaultChain,
-  getRelayChain as getPolkadotRelayChain,
-  getChainsForNetwork as getPolkadotChainsForNetwork,
-  type PolkadotNetwork,
-  type NetworkConfig as PolkadotNetworkConfig,
-
-  // internal (parachains handled under the hood)
-  PolkadotLightClient,
-  getLightClient,
-  disconnectAll as disconnectPolkadot,
-  CHAIN_INFO as POLKADOT_CHAIN_INFO,
-  getParentNetwork as getPolkadotParentNetwork,
-  buildSignRequestQr as buildPolkadotSignRequestQr,
-  parseSignatureQr as parsePolkadotSignatureQr,
-  buildTransferTx as buildPolkadotTransferTx,
-  broadcastTx as broadcastPolkadotTx,
-  isValidSs58,
-  formatBalance as formatPolkadotBalance,
-  parseAmount as parsePolkadotAmount,
-  type SupportedChain as PolkadotChain,
-  type RelayChain as PolkadotRelayChainType,
-  type SystemParachain as PolkadotSystemParachain,
-  type EcosystemParachain as PolkadotEcosystemParachain,
-  type ChainInfo as PolkadotChainInfo,
-  type ConnectionState as PolkadotConnectionState,
-  type LightClientState as PolkadotLightClientState,
-  type PolkadotTxType,
-  type UnsignedPolkadotTx,
-  type SignedPolkadotTx,
-} from './polkadot';
-
 // Penumbra - with dynamic schema updates
 export {
   // constants

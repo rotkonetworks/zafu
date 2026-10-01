@@ -75,10 +75,6 @@ export function detectNetwork(hex: string): NetworkType | null {
         return 'penumbra';
       case CHAIN_IDS.ZCASH:
         return 'zcash';
-      case CHAIN_IDS.SUBSTRATE_SR25519:
-      case CHAIN_IDS.SUBSTRATE_ED25519:
-      case CHAIN_IDS.SUBSTRATE_ECDSA:
-        return 'polkadot';
       default:
         return null;
     }
@@ -117,8 +113,6 @@ export function getChainId(network: NetworkType): number {
       return CHAIN_IDS.PENUMBRA;
     case 'zcash':
       return CHAIN_IDS.ZCASH;
-    case 'polkadot':
-      return CHAIN_IDS.SUBSTRATE_ED25519; // default to ed25519
     case 'cosmos':
       // Cosmos doesn't use this protocol yet
       throw new Error('Cosmos QR protocol not implemented');
