@@ -56,6 +56,7 @@ import { parseZcashMeHandle, type ZcashMeProfile } from '../../../services/zcash
 import { directoryProfileByAddress } from '../../../services/zcashme/directory';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { HARDWARE_WALLET_ENABLED, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
+import { walletKind, zcashSendRefusal } from '../../../signing/wallet-kind';
 import { connectLedgerBtc, zcashTransparentPath } from '../../../ledger/hw-btc-signer';
 import { ledgerTransparentSendFlowBtc } from '../../../ledger/hw-btc-flow';
 // connectLedger pairs/opens a WebHID session; ledgerSignerFor wraps the
@@ -76,6 +77,11 @@ import {
   mergeContributions,
   SUPPORTED_COMPACT_RESPONSE_VERSION,
 } from '../../../state/keyring/compact-signing';
+
+const SEND_FLAGS = {
+  hardwareWallet: HARDWARE_WALLET_ENABLED,
+  ledgerTransparent: LEDGER_TRANSPARENT_ENABLED,
+};
 
 interface ZcashSendProps {
   onClose: () => void;
@@ -413,25 +419,15 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     activeZcashWallet?.ufvk ??
     (activeZcashWallet?.orchardFvk?.startsWith('uview') ? activeZcashWallet.orchardFvk : undefined);
 
-  // Ledger send branch is flag-gated (HARDWARE_WALLET_ENABLED) AND keyed off the
-  // account actually being a ledger vault. Two shapes can indicate ledger:
-  //   - a full ledger keyvault: selectedKeyInfo.type === 'ledger'
-  //   - a watch-only import whose cold signer is a ledger. This parallels the
-  //     existing zigner-vs-keystone detection: the cold-signer kind is carried
-  //     in the KeyInfo `insensitive` metadata bag as `coldSignerType`
-  //     ('zigner' | 'keystone' | 'ledger'), NOT on the ZcashWalletJson. Read it
-  //     from there (Record<string, unknown>, so compare as string).
+  // which signer this wallet holds; flags decide which arm of handleSign runs,
+  // and a kind without a signer is refused before the form renders.
+  const kind = selectedKeyInfo && walletKind(selectedKeyInfo, activeZcashWallet);
+  const refusal = kind && zcashSendRefusal(kind, SEND_FLAGS);
   const coldSignerType = selectedKeyInfo?.insensitive?.['coldSignerType'] as string | undefined;
   const isLedgerAccount =
-    HARDWARE_WALLET_ENABLED && (selectedKeyInfo?.type === 'ledger' || coldSignerType === 'ledger');
-  // Transparent Ledger (hw-app-btc) account: a Ledger cold signer whose wallet
-  // record carries a transparent address. Routed to a t->t send via the Bitcoin
-  // app, NOT the shielded PCZT path. Gated on its own flag (separate from the
-  // blocked DMK shielded path's HARDWARE_WALLET_ENABLED).
-  const isTransparentLedger =
-    LEDGER_TRANSPARENT_ENABLED &&
-    coldSignerType === 'ledger' &&
-    !!activeZcashWallet?.transparentAddress;
+    HARDWARE_WALLET_ENABLED && (kind === 'ledger-shielded' || kind === 'ledger-transparent');
+  // t->t through the bitcoin app, not the shielded PCZT path
+  const isTransparentLedger = LEDGER_TRANSPARENT_ENABLED && kind === 'ledger-transparent';
 
   // ── what this form is allowed to say about your money ───────────────────
   //
@@ -794,7 +790,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               'are dropped when the toolbar popup loses focus',
           );
         }
-        const fromAddress = activeZcashWallet.transparentAddress!;
+        const fromAddress = activeZcashWallet!.transparentAddress!; // implied by the kind
         // ZIP-317 transparent fee: a conservative fixed estimate covering a few
         // logical actions. A slightly-high fee still confirms; tune on device.
         const feeZat = 20000n;
@@ -2110,17 +2106,14 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     }
   };
 
-  // A pasted viewing key has no signer. Say so instead of offering a send
-  // that could never be signed.
-  if (coldSignerType === 'viewing-key') {
+  // A wallet with no signer here (a viewing key, a ledger with its signing
+  // flag off) is told so instead of being offered a send it cannot sign.
+  if (refusal) {
     return (
       <div className='flex h-full flex-col items-center justify-center gap-3 bg-canvas p-6 text-center'>
-        <span className='i-ph-eye size-6 text-fg-muted' />
-        <p className='text-sm text-fg-high lowercase'>this wallet is a viewing key</p>
-        <p className='text-xs text-fg-muted lowercase'>
-          it can see this wallet&apos;s transactions but cannot spend. send from the wallet that
-          holds the keys.
-        </p>
+        <span className={`${refusal.icon} size-6 text-fg-muted`} />
+        <p className='text-sm text-fg-high lowercase'>{refusal.title}</p>
+        <p className='text-xs text-fg-muted lowercase'>{refusal.body}</p>
         <Button variant='secondary' onClick={handleClose}>
           back
         </Button>
