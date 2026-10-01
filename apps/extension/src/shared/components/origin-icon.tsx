@@ -12,7 +12,7 @@
 
 import { Identicon } from '@repo/ui/components/ui/identicon';
 
-const hostnameOf = (origin: string): string => {
+export const hostnameOf = (origin: string): string => {
   try {
     return new URL(origin).hostname;
   } catch {
