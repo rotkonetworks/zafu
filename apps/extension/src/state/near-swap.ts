@@ -212,38 +212,22 @@ export function findZecAssetId(tokens: NearToken[]): string | undefined {
   return (zecTokens.find(t => t.blockchain === 'zec') ?? zecTokens[0])?.assetId;
 }
 
-/** Filter tokens to only those swappable with ZEC (exclude ZEC variants). */
 /**
- * Reduce the raw NEAR token list (which lists every symbol once per chain -
- * e.g. BTC on btc/near/aptos, ZEC on zec/sol/aptos/...) to ONE canonical entry
- * per symbol. Without this the picker shows confusing duplicates and defaults
- * can land on a wrapped variant ("BTC on aptos"). Preference order:
- *   1. the asset's native chain (blockchain === symbol, e.g. BTC->btc, ETH->eth)
- *   2. a popularity list of well-supported chains
- *   3. whatever came first
- * ZEC is dropped (it is always the local side of the swap, not a pick).
- * Multi-chain selection can return later behind the provider abstraction.
+ * Every token swappable with ZEC, on every chain 1Click lists it on (the picker
+ * goes chain first). ZEC is dropped: it is always the local side. Each symbol's
+ * native chain comes first, then well-supported chains, so a link that names
+ * only a symbol ("btc") lands on bitcoin, not a wrapped variant on aptos.
  */
-const CHAIN_PREFERENCE = ['btc', 'eth', 'sol', 'near', 'arbitrum', 'base', 'polygon'];
-export function filterSwappableTokens(tokens: NearToken[]): NearToken[] {
-  const chainRank = (t: NearToken): number => {
-    if (t.blockchain === t.symbol.toLowerCase()) {
-      return -1; // native chain wins
-    }
-    const i = CHAIN_PREFERENCE.indexOf(t.blockchain);
-    return i >= 0 ? i : CHAIN_PREFERENCE.length;
-  };
-  const bySymbol = new Map<string, NearToken>();
-  for (const t of tokens) {
-    if (t.symbol === 'ZEC') {
-      continue;
-    }
-    const cur = bySymbol.get(t.symbol);
-    if (!cur || chainRank(t) < chainRank(cur)) {
-      bySymbol.set(t.symbol, t);
-    }
+const CHAIN_PREFERENCE = ['btc', 'eth', 'sol', 'near', 'arb', 'base', 'pol'];
+const chainRank = (t: NearToken): number => {
+  if (t.blockchain === t.symbol.toLowerCase()) {
+    return -1;
   }
-  return [...bySymbol.values()];
+  const i = CHAIN_PREFERENCE.indexOf(t.blockchain);
+  return i >= 0 ? i : CHAIN_PREFERENCE.length;
+};
+export function filterSwappableTokens(tokens: NearToken[]): NearToken[] {
+  return tokens.filter(t => t.symbol !== 'ZEC').sort((a, b) => chainRank(a) - chainRank(b));
 }
 
 /** Format amount from base units to display (e.g. zatoshis → ZEC). */

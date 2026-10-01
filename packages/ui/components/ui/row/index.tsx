@@ -14,6 +14,8 @@ import { Toggle } from '../toggle';
  */
 export interface RowBaseProps {
   icon?: string;
+  /** an image in the icon's place, e.g. a bundled token logo */
+  media?: React.ReactNode;
   label: string;
   description?: string;
   disabled?: boolean;
@@ -30,7 +32,7 @@ export type RowProps = RowBaseProps &
   );
 
 export function Row(props: RowProps) {
-  const { icon, label, description, disabled, className, onExplain } = props;
+  const { icon, media, label, description, disabled, className, onExplain } = props;
 
   const rowClass = cn(
     'flex min-h-[50px] w-full items-center gap-3 px-3.5 py-2 text-left transition-colors',
@@ -41,7 +43,8 @@ export function Row(props: RowProps) {
 
   const content = (
     <>
-      {icon && <span className={cn(icon, 'size-5 shrink-0 text-fg-muted')} aria-hidden='true' />}
+      {media ??
+        (icon && <span className={cn(icon, 'size-5 shrink-0 text-fg-muted')} aria-hidden='true' />)}
       <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
         <span className='flex items-center gap-2'>
           <span className='truncate text-sm text-fg-high lowercase'>{label}</span>
