@@ -25,6 +25,14 @@ const downloadJson = (filename: string, jsonText: string) => {
   URL.revokeObjectURL(url);
 };
 
+const markBackedUp = async (wallets: readonly ZcashWalletJson[]) => {
+  const { updateMultisigWallet } = useStore.getState().wallets;
+  const at = Date.now();
+  for (const w of wallets) {
+    await updateMultisigWallet(w.id, { backedUpAt: at });
+  }
+};
+
 const buildSharePayload = async (
   wallet: ZcashWalletJson,
 ): Promise<Omit<FrostSharePayload, 'version' | 'type'>> => {
@@ -67,6 +75,7 @@ export const exportSingleBackup = async (
     publicKeyPackage: wallet.multisig!.publicKeyPackage,
   });
   downloadJson(backupFilename(wallet.label, false), JSON.stringify(envelope, null, 2));
+  await markBackedUp([wallet]);
 };
 
 /** export every self-custody multisig wallet as `frost-backup-all-<date>.json`. */
@@ -88,4 +97,5 @@ export const exportBatchBackup = async (
     shareCount: selfCustody.length,
   });
   downloadJson(backupFilename('all', true), JSON.stringify(envelope, null, 2));
+  await markBackedUp(selfCustody);
 };
