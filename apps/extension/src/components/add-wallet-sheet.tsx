@@ -26,9 +26,9 @@ interface AddWalletOption {
 const KEYS_ELSEWHERE: AddWalletOption[] = [
   {
     icon: 'i-ph-qr-code',
-    label: 'zigner',
-    desc: 'scan its connect code - sign by qr',
-    path: PopupPath.SETTINGS_ZIGNER,
+    label: 'scan a signer',
+    desc: 'zigner, keystone - sign by qr',
+    path: PopupPath.SETTINGS_CONNECT_DEVICE,
   },
   {
     icon: 'i-ph-usb',
