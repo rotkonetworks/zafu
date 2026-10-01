@@ -11,6 +11,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Sensitive } from '../../../components/sensitive';
+import { OriginIcon } from '../../../shared/components/origin-icon';
 import { cn } from '@repo/ui/lib/utils';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
@@ -36,7 +37,6 @@ export function ZcashSendApproval() {
   const app = params.get('app') || 'unknown';
   const requestId = params.get('requestId') || '';
   const feePerOutput = Number(params.get('fee')) || 10_000;
-  const favIcon = params.get('favIconUrl') || '';
 
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const getMnemonic = useStore(selectGetMnemonic);
@@ -181,7 +181,7 @@ export function ZcashSendApproval() {
     <div className='flex h-full min-h-0 flex-col bg-canvas text-fg p-4'>
       {/* header */}
       <header className='flex shrink-0 items-center gap-3 mb-4'>
-        {favIcon && <img src={favIcon} className='w-6 h-6 rounded-sm' alt='' />}
+        {app !== 'unknown' && <OriginIcon origin={app} size={24} className='rounded-sm' />}
         <div>
           <div className='kicker'>zcash transaction</div>
           <div className='text-label text-fg-dim tabular'>{app}</div>

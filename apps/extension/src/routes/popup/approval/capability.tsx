@@ -8,6 +8,7 @@ import { cn } from '@repo/ui/lib/utils';
 import { ApprovalScreen } from './approval-screen';
 import { ApproveDeny } from './approve-deny';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
+import { OriginIcon } from '../../../shared/components/origin-icon';
 import { LinkGradientIcon } from '../../../icons/link-gradient';
 
 const riskStyles: Record<RiskLevel, { border: string; bg: string; text: string; banner?: string }> =
@@ -53,7 +54,6 @@ export const CapabilityApproval = () => {
   const origin = params.get('app') || '';
   const capability = params.get('capability') as Capability | null;
   const requestId = params.get('requestId') || '';
-  const favIconUrl = params.get('favIconUrl') || '';
   const title = params.get('title') || '';
   // Scope 'zafu' is the one-time global opt-in: the question is whether zafu
   // should offer this capability at all, so it is asked with no site attached
@@ -99,7 +99,7 @@ export const CapabilityApproval = () => {
               about any particular site */}
           {scope === 'site' ? (
             <div className='flex items-center gap-2 rounded-lg bg-canvas p-3'>
-              {!!favIconUrl && <img src={favIconUrl} alt='' className='size-8 rounded-full' />}
+              {!!origin && <OriginIcon origin={origin} size={32} />}
               <div className='flex flex-col overflow-hidden'>
                 {title && <span className='text-sm truncate'>{title}</span>}
                 {origin && (
