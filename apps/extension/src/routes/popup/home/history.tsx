@@ -188,7 +188,9 @@ export const HistoryContent = ({
       : allTxs;
   const isReceived = (tx: ParsedTransaction) => tx.type === 'receive' || tx.type === 'deposit';
   const txs =
-    filter === 'all' ? byAccount : byAccount.filter(tx => isReceived(tx) === (filter === 'received'));
+    filter === 'all'
+      ? byAccount
+      : byAccount.filter(tx => isReceived(tx) === (filter === 'received'));
 
   if (q.error) {
     return (

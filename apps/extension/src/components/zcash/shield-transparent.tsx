@@ -89,7 +89,9 @@ export const ShieldTransparent = ({
   const keyRing = useStore(keyRingSelector);
   const { requestAuth, PasswordModal } = usePasswordGate();
   const account = useStore(activeAccountIndex);
-  const pocketName = useStore(s => activePockets(s).find(p => p.account === account)?.name ?? 'main');
+  const pocketName = useStore(
+    s => activePockets(s).find(p => p.account === account)?.name ?? 'main',
+  );
 
   // hot-wallet shielding state
   const [shielding, setShielding] = useState(false);
