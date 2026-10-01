@@ -334,10 +334,14 @@ export default ({
           },
         },
         {
-          // bundled registry/skip/chain icons: shipped in the build, never
-          // fetched at runtime (see shared/components/registry-icons.ts)
+          // bundled registry/skip/chain and swap icons: shipped in the build,
+          // never fetched at runtime (shared/components/registry-icons.ts,
+          // state/swap/icons.ts)
           test: /\.(png|svg)$/,
-          include: path.resolve(__dirname, 'src/assets/registry-icons'),
+          include: [
+            path.resolve(__dirname, 'src/assets/registry-icons'),
+            path.resolve(__dirname, 'src/assets/swap-icons'),
+          ],
           type: 'asset/resource',
           generator: {
             filename: 'icons/[hash][ext]',
