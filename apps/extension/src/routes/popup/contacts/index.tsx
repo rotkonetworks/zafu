@@ -18,6 +18,7 @@ import {
   type PersonalDataBackup,
 } from '../../../state/contacts';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
+import { keyInfoSupportsNetwork } from '../../../state/keyring/vault-ops';
 import { cn } from '@repo/ui/lib/utils';
 import type { DiversifiedAddressRecord } from '@repo/wallet/networks/zcash/diversified-address';
 import { contactCardMemoHex, myAddressForContact } from '../../../state/contact-share';
@@ -26,7 +27,8 @@ import {
   getDiversifiedAddresses,
   setDiversifiedAddresses,
 } from '../../../state/diversified-addresses';
-import { selectActiveZcashWallet, selectMyWalletsAsContacts } from '../../../state/wallets';
+import { selectMyWalletsAsContacts } from '../../../state/wallets';
+import { useContactAddressSource } from '../../../hooks/use-contact-address-source';
 import { ZcashMeOptInRow } from '../../../components/zcashme-opt-in';
 import { useExplain } from '../settings/settings-explain';
 
@@ -295,10 +297,13 @@ function AddressModal({
 /** single address row within an expanded contact */
 function AddressRow({
   address,
+  onSend,
   onEdit,
   onDelete,
 }: {
   address: ContactAddress;
+  /** absent when this wallet can't send on the address's network */
+  onSend?: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -330,6 +335,15 @@ function AddressRow({
             <span className='i-ph-copy h-3 w-3' />
           )}
         </button>
+        {onSend && (
+          <button
+            onClick={onSend}
+            title='send'
+            className='shrink-0 p-1 text-fg-muted hover:text-zigner-gold'
+          >
+            <span className='i-ph-paper-plane-tilt h-3 w-3' />
+          </button>
+        )}
       </div>
 
       <div className='flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity'>
@@ -354,6 +368,7 @@ function ContactCard({
   onEditAddress,
   onDeleteAddress,
   onShareCard,
+  onSendTo,
 }: {
   contact: Contact;
   onEditContact: () => void;
@@ -363,6 +378,8 @@ function ContactCard({
   onEditAddress: (address: ContactAddress) => void;
   onDeleteAddress: (addressId: string) => void;
   onShareCard?: () => void;
+  /** the send action for one of this contact's addresses, if this wallet can send there */
+  onSendTo?: (address: ContactAddress) => (() => void) | undefined;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -467,6 +484,7 @@ function ContactCard({
                 <AddressRow
                   key={addr.id}
                   address={addr}
+                  onSend={onSendTo?.(addr)}
                   onEdit={() => onEditAddress(addr)}
                   onDelete={() => onDeleteAddress(addr.id)}
                 />
@@ -510,17 +528,28 @@ export function ContactsPage() {
   // can send between your wallets (e.g. Ledger transparent -> your shielded).
   const myWallets = useStore(selectMyWalletsAsContacts);
   const keyInfo = useStore(selectEffectiveKeyInfo);
-  const zcashWallet = useStore(selectActiveZcashWallet);
+  const addressSource = useContactAddressSource();
   const getMnemonic = useStore(s => s.keyRing.getMnemonic);
   const { explainProps, sheet: explainSheet } = useExplain();
+
+  /** send to one of a contact's addresses, on that address's network */
+  const sendTo = (addr: ContactAddress): (() => void) | undefined => {
+    const network = addr.network;
+    if (network !== 'zcash' && network !== 'penumbra') {
+      return undefined;
+    }
+    if (!keyInfo || !keyInfoSupportsNetwork(keyInfo, network)) {
+      return undefined;
+    }
+    return () => navigate(PopupPath.SEND, { state: { prefillRecipient: addr.address, network } });
+  };
 
   /** share your card with one contact: your name, your address for them, their zid */
   const shareContactCard = async (contact: Contact, recipientZcashAddr: string) => {
     if (!keyInfo) {
       return;
     }
-    const ufvk = zcashWallet?.ufvk ?? zcashWallet?.orchardFvk;
-    const mine = await myAddressForContact(contact.id, typeof ufvk === 'string' ? ufvk : undefined);
+    const mine = await myAddressForContact(contact.id, addressSource());
     if (!mine) {
       setImportStatus({
         type: 'error',
@@ -920,9 +949,10 @@ export function ContactsPage() {
                 onAddAddress={() => handleAddAddress(contact.id)}
                 onEditAddress={addr => handleEditAddress(contact.id, addr)}
                 onDeleteAddress={addrId => void handleDeleteAddress(contact.id, addrId)}
+                onSendTo={sendTo}
                 onShareCard={(() => {
                   const zcashAddr = contact.addresses.find(a => a.network === 'zcash');
-                  if (!zcashAddr) {
+                  if (!zcashAddr || !keyInfo || !keyInfoSupportsNetwork(keyInfo, 'zcash')) {
                     return undefined;
                   }
                   return () => void shareContactCard(contact, zcashAddr.address);

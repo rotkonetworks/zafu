@@ -72,7 +72,8 @@ export function SendPage() {
   // network may itself be a cosmos ibc destination, resolved through the registry
   const cosmosChain = locationState?.cosmosChain ?? resolveNetworkCosmosChain(activeNetwork);
 
-  if (!locationState?.cosmosChain && (zcashLink || activeNetwork === 'zcash')) {
+  const network = locationState?.network ?? activeNetwork;
+  if (!locationState?.cosmosChain && (zcashLink || network === 'zcash')) {
     if (waitingForWallets) {
       return (
         <div className='flex h-full items-center justify-center p-6 text-xs text-fg-muted'>
@@ -94,8 +95,14 @@ export function SendPage() {
       />
     );
   }
-  if (activeNetwork === 'penumbra') {
-    return <PenumbraSendScreen onClose={goBack} prefillAsset={locationState?.prefillAsset} />;
+  if (network === 'penumbra') {
+    return (
+      <PenumbraSendScreen
+        onClose={goBack}
+        prefillAsset={locationState?.prefillAsset}
+        prefillRecipient={prefill?.recipient}
+      />
+    );
   }
   return (
     <div className='flex h-full flex-col'>
@@ -158,9 +165,11 @@ type PenumbraMode = 'send' | 'withdraw' | 'transparent';
 function PenumbraSendScreen({
   onClose,
   prefillAsset,
+  prefillRecipient,
 }: {
   onClose: () => void;
   prefillAsset?: string;
+  prefillRecipient?: string;
 }) {
   const chains = orderTransparentChains(getActiveIbcSubnetworks('penumbra') as CosmosChainId[]);
   const [mode, setMode] = useState<PenumbraMode>('send');
@@ -179,7 +188,14 @@ function PenumbraSendScreen({
     />
   );
   const screens: Record<PenumbraMode, () => ReactNode> = {
-    send: () => <PenumbraSend onClose={onClose} prefillAsset={prefillAsset} meta={meta} />,
+    send: () => (
+      <PenumbraSend
+        onClose={onClose}
+        prefillAsset={prefillAsset}
+        prefillRecipient={prefillRecipient}
+        meta={meta}
+      />
+    ),
     withdraw: () => <PenumbraIbcSend onClose={onClose} meta={meta} />,
     transparent: () =>
       source && (

@@ -15,6 +15,8 @@ export interface SendLocationState {
    * list. Falls back to the top-priority balance if the denom is not found.
    */
   prefillAsset?: string;
+  /** a contact's address on this network: open that network's send whatever is active */
+  network?: 'zcash' | 'penumbra';
   /**
    * Cosmos off-ramp: open the cosmos send for this chain WITHOUT switching the
    * active network. Noble is a burner doorway, not a network - the user stays

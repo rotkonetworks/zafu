@@ -1,6 +1,6 @@
 /** penumbra send (penumbra -> penumbra), on the shared send steps */
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
@@ -28,11 +28,14 @@ import { PenumbraFlow } from './penumbra-flow';
 export function PenumbraSend({
   onClose,
   prefillAsset,
+  prefillRecipient,
   meta,
 }: {
   onClose: () => void;
   /** base denom the row-level "send X" action preselects */
   prefillAsset?: string;
+  /** a contact's address, from the contact's "send" */
+  prefillRecipient?: string;
   /** the header's mode switch */
   meta?: ReactNode;
 }) {
@@ -46,6 +49,13 @@ export function PenumbraSend({
   const [scanOpen, setScanOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [sent, setSent] = useState<{ to: string; amount: string; unit: string; memo: string }>();
+
+  const { setRecipient } = sendState;
+  useEffect(() => {
+    if (prefillRecipient) {
+      setRecipient(prefillRecipient);
+    }
+  }, [prefillRecipient, setRecipient]);
 
   // the ['balances', account] cache holds the raw list (home preloads it);
   // `select` buckets it per observer

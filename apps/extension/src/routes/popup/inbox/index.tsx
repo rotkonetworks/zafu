@@ -12,7 +12,7 @@ import { Segmented } from '@repo/ui/components/ui/segmented';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { useShallow } from 'zustand/react/shallow';
 import { useStore, type AllSlices } from '../../../state';
-import { selectActiveZcashWallet, selectVisibleMultisigWallets } from '../../../state/wallets';
+import { selectVisibleMultisigWallets } from '../../../state/wallets';
 import { replyAddress } from '../../../state/contact-share';
 import {
   inboxSelector,
@@ -33,6 +33,7 @@ import {
 import { usePenumbraMemos } from '../../../hooks/penumbra-memos';
 import { useZcashMemos } from '../../../hooks/zcash-memos';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
+import { useContactAddressSource } from '../../../hooks/use-contact-address-source';
 import { useActiveAddress } from '../../../hooks/use-address';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { Address } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
@@ -784,7 +785,7 @@ function ComposeMessage({
   const penumbraAccount = useStore(selectPenumbraAccount);
   const { address: ownAddress } = useActiveAddress();
   const { findByAddress } = useStore(contactsSelector);
-  const zcashWallet = useStore(selectActiveZcashWallet);
+  const addressSource = useContactAddressSource();
   const [recipient, setRecipient] = useState(replyTo?.address ?? '');
   const [message, setMessage] = useState('');
   const [amount, setAmount] = useState('');
@@ -844,12 +845,7 @@ function ComposeMessage({
 
   const handleSendZcash = useCallback(async () => {
     const contact = findByAddress(recipient.trim())?.contact;
-    const ufvk = zcashWallet?.ufvk ?? zcashWallet?.orchardFvk;
-    const reply = await replyAddress(
-      contact?.id,
-      typeof ufvk === 'string' ? ufvk : undefined,
-      ownAddress,
-    );
+    const reply = await replyAddress(contact?.id, addressSource(), ownAddress);
     const memoWithReply = reply ? `${message}\nreply:${reply}` : message;
 
     navigate(PopupPath.SEND, {
@@ -860,7 +856,7 @@ function ComposeMessage({
       },
     });
     onClose();
-  }, [navigate, message, recipient, amount, ownAddress, onClose, findByAddress, zcashWallet]);
+  }, [navigate, message, recipient, amount, ownAddress, onClose, findByAddress, addressSource]);
 
   const handleSend = () => {
     if (!canSend) {

@@ -21,21 +21,32 @@ export const wasmDeriveAddress: DeriveAddress = async (ufvk, index) => {
   return wasm.address_from_ufvk(ufvk, index);
 };
 
+/** diversifier index -> your address there, derived in the zcash worker from the seed */
+export type SeedDerive = (index: number) => Promise<string>;
+
+/** where your own addresses come from: a viewing key, or (hot wallets) the seed */
+export interface AddressSource {
+  ufvk?: string;
+  seed?: SeedDerive;
+}
+
 /**
- * Your address for this one contact, from your own viewing key. Undefined when
- * there is no viewing key or the derivation fails - never anyone else's address.
+ * Your address for this one contact, from your viewing key or your seed.
+ * Undefined when the wallet has neither or the derivation fails - never anyone
+ * else's address, and never the rotating receive address.
  */
 export const myAddressForContact = async (
   contactId: string,
-  ufvk: string | undefined,
+  source: AddressSource,
   derive: DeriveAddress = wasmDeriveAddress,
 ): Promise<{ address: string; index: number } | undefined> => {
-  if (!ufvk?.startsWith('uview')) {
+  const ufvk = source.ufvk?.startsWith('uview') ? source.ufvk : undefined;
+  if (!ufvk && !source.seed) {
     return undefined;
   }
   try {
     const index = await contactDiversifierIndex(contactId);
-    const address = await derive(ufvk, index);
+    const address = ufvk ? await derive(ufvk, index) : await source.seed!(index);
     return address ? { address, index } : undefined;
   } catch (e) {
     console.warn('[contact-share] could not derive the contact address:', e);
@@ -64,8 +75,8 @@ export const contactCardMemoHex = (card: {
  */
 export const replyAddress = async (
   contactId: string | undefined,
-  ufvk: string | undefined,
+  source: AddressSource,
   current: string | undefined,
   derive: DeriveAddress = wasmDeriveAddress,
 ): Promise<string | undefined> =>
-  (contactId && (await myAddressForContact(contactId, ufvk, derive))?.address) || current;
+  (contactId && (await myAddressForContact(contactId, source, derive))?.address) || current;
