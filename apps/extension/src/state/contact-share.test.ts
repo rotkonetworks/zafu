@@ -158,3 +158,53 @@ describe('a card link', () => {
     expect(readCardPayload('')).toBeUndefined();
   });
 });
+
+describe('a card that can open a pair room', () => {
+  const UA = 'u1' + 'q'.repeat(140); // a full unified address is ~141 characters
+  const inception = 'aa'.repeat(32);
+  const pairKa = 'bb'.repeat(32);
+  const ka = 'dd'.repeat(32);
+  const answers = 'cc'.repeat(32);
+
+  it('carries the pair key, the discovery key and what it answers', () => {
+    const hex = contactCardMemoHex({
+      senderName: 'alice',
+      myAddress: UA,
+      zid: inception,
+      ka,
+      answers,
+    });
+    expect(decodeHex(hex!)).toMatchObject({
+      name: 'alice',
+      address: UA,
+      zid: inception,
+      ka,
+      answers,
+    });
+    // one memo: 512 bytes, padded
+    expect(hex!.length).toBe(1024);
+  });
+
+  it('fits one memo with a 24-character name and a full address', () => {
+    const name = 'a'.repeat(24);
+    const hex = contactCardMemoHex({
+      senderName: name,
+      myAddress: UA,
+      zid: inception,
+      ka,
+      pairKa,
+      answers,
+    });
+    expect(hex!.length).toBe(1024);
+    // and the link form carries the same card
+    expect(readCardPayload(cardLinkPayload(hex!))).toMatchObject({ name, ka, pairKa, answers });
+  });
+
+  it('a card without them still reads as a plain card', () => {
+    const hex = contactCardMemoHex({ senderName: 'bob', myAddress: UA, zid: inception });
+    const card = decodeHex(hex!);
+    expect(card).toMatchObject({ name: 'bob', zid: inception });
+    expect(card?.pairKa).toBeUndefined();
+    expect(card?.answers).toBeUndefined();
+  });
+});

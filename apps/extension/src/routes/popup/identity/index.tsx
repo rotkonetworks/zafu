@@ -18,7 +18,9 @@ import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyrin
 import { keyInfoSupportsNetwork } from '../../../state/keyring/vault-ops';
 import {
   addZidPin,
-  deriveZidForContact,
+  deriveRelationshipKeys,
+  getZidIndex,
+  mintRelationshipIndex,
   myDiscoveryKey,
   setZidIndex,
 } from '../../../state/identity';
@@ -63,9 +65,21 @@ const useCardLink = (open: boolean) => {
       const one = crypto.randomUUID();
       const mine = await myAddressForContact(one, addressSource());
       const mnemonic = keyInfo.type === 'mnemonic' ? await getMnemonic(keyInfo.id) : undefined;
-      const zid = mnemonic && deriveZidForContact(mnemonic, 'default', one).publicKey;
+      // a fresh relationship for whoever scans this: their answer names it
+      const gen = await getZidIndex(keyInfo.id);
+      const rel = mnemonic
+        ? deriveRelationshipKeys(mnemonic, gen, await mintRelationshipIndex(keyInfo.id, gen))
+        : undefined;
       const ka = mnemonic && (await myDiscoveryKey(mnemonic));
-      const hex = mine && contactCardMemoHex({ senderName: '', myAddress: mine.address, zid, ka });
+      const hex =
+        mine &&
+        contactCardMemoHex({
+          senderName: '',
+          myAddress: mine.address,
+          zid: rel?.pubkey,
+          ka,
+          pairKa: rel?.kaPublicKey,
+        });
       if (!mine || !hex) {
         return live && setLink(null);
       }

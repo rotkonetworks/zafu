@@ -16,7 +16,11 @@ import { Input } from '@repo/ui/components/ui/input';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { ZidSeal } from '@repo/ui/components/ui/zid-seal';
 import type { ContactCard } from '@repo/wallet/networks/zcash/memo-codec';
+import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import { useStore } from '../../../state';
+import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
+import { findRelationship } from '../../../state/identity';
+import { peopleCall } from '../../../people/client';
 import { cardDiscoveryKey, cardLinkPayload, readCardPayload } from '../../../state/contact-share';
 import { getDiversifiedAddresses } from '../../../state/diversified-addresses';
 import { useMintCard } from '../../../hooks/use-share-card';
@@ -75,7 +79,13 @@ const ShowYours = ({ contactId, name }: { contactId: string; name: string }) => 
     }
     let live = true;
     void mint(contactId).then(
-      hex => live && setLink(hex ? toUri({ kind: 'contact', card: cardLinkPayload(hex) }) : null),
+      hex => {
+        if (live) {
+          setLink(hex ? toUri({ kind: 'contact', card: cardLinkPayload(hex) }) : null);
+        }
+        // you hold their card and gave them yours: your side of the pair room
+        void peopleCall('pair-join', { contactId }).catch(() => undefined);
+      },
       () => live && setLink(null),
     );
     return () => {
@@ -98,6 +108,7 @@ const ShowYours = ({ contactId, name }: { contactId: string; name: string }) => 
               aria-hidden='true'
             />
           )}
+          {link && <CopyButton text={link} label='copy link' />}
           <span className='text-xs text-fg-muted'>
             {link === null
               ? 'sorry, zafu could not make your card. please unlock and try again.'
@@ -127,7 +138,9 @@ export function CardPage() {
   const [mine, setMine] = useState<boolean>();
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState(card?.name ?? '');
-  const [done, setDone] = useState<{ id: string; name: string }>();
+  const [done, setDone] = useState<{ id: string; name: string; answered?: boolean }>();
+  const keyInfo = useStore(selectEffectiveKeyInfo);
+  const getMnemonic = useStore(selectGetMnemonic);
 
   // every card you showed or sent is recorded with its address
   useEffect(() => {
@@ -144,14 +157,24 @@ export function CardPage() {
     if (!card) {
       return;
     }
+    // a card that answers one you gave names its relationship: you are both in
+    const rel =
+      card.answers && keyInfo?.type === 'mnemonic'
+        ? await findRelationship(await getMnemonic(keyInfo.id), keyInfo.id, card.answers)
+        : undefined;
     const contact = await addContact({
       name: name.trim(),
       zid: card.zid,
       card: cardDiscoveryKey(card),
+      pairKa: card.pairKa,
+      ...(rel && keyInfo ? { rel: { walletId: keyInfo.id, ...rel } } : {}),
     });
     await addAddress(contact.id, { network: 'zcash', address: card.address });
     setNaming(false);
-    setDone({ id: contact.id, name: contact.name });
+    if (rel) {
+      await peopleCall('pair-join', { contactId: contact.id }).catch(() => undefined);
+    }
+    setDone({ id: contact.id, name: contact.name, answered: !!rel });
   };
 
   // someone already saved hands you their card again: keep the key it carries,
@@ -172,7 +195,13 @@ export function CardPage() {
   return (
     <div className='flex min-h-full flex-col'>
       <ScreenHeader title={done ? done.name : 'a card'} backPath={PopupPath.CONTACTS} />
-      {done ? (
+      {done?.answered ? (
+        <Line
+          text={`you and ${done.name} are in each other's people`}
+          action='done'
+          onAction={() => navigate(contactPath(done.id), { replace: true })}
+        />
+      ) : done ? (
         <ShowYours contactId={done.id} name={done.name} />
       ) : mine === undefined ? null : state.kind === 'unreadable' ? (
         <Line text='this is not a zafu card' action='close' onAction={close} />

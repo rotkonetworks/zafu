@@ -28,6 +28,7 @@ import {
   type RoomMessage,
 } from '@zafu/zirc/room';
 import { presenceEpoch, type RelayTransport } from '@zafu/zid';
+import { pairShard } from './shard';
 import { mergeItems, threadKey, type PeopleRoom, type Thread, type ThreadItem } from './vault';
 
 /** what the slot under a title says (design-social 5.0) */
@@ -137,7 +138,15 @@ export const createPeopleService = (
   const ensure = (): Session =>
     (session ??= { abort: new AbortController(), rooms: new Map(), watches: new Map() });
 
-  const status = (slot: PeopleSlot) => deps.status({ slot, at: now() });
+  // the slot is written when it changes, or once a minute while it holds
+  let said: PeopleStatus | undefined;
+  const status = (slot: PeopleSlot) => {
+    if (said?.slot === slot && now() - said.at < 60_000) {
+      return;
+    }
+    said = { slot, at: now() };
+    return deps.status(said);
+  };
 
   const mine = async (): Promise<PeopleRoom[] | null> => {
     const [rooms, wallet] = await Promise.all([deps.readRooms(), deps.walletId()]);
@@ -206,6 +215,7 @@ export const createPeopleService = (
         roomSecret: hexBytes(rec.secret),
         relay: deps.transport(rec.relay, rec.size, s.abort.signal),
         plaintextBytes: rec.size,
+        ...(rec.kind === 'pair' ? { shardFor: pairShard(rec.secret) } : {}),
         now: () => Math.floor(now() / 1000),
         ...(rec.head ? { head: rec.head } : {}),
       },
@@ -248,7 +258,11 @@ export const createPeopleService = (
     const unreachable = res.dropped.some(d => d.kind === 'unreachable');
     const oversize = res.dropped.some(d => d.kind === 'oversize');
     const msgs = res.messages.filter(m => m.kind !== 'dm');
-    const chat = msgs.filter(m => !PROTOCOL_PREFIX.test(m.body)).map(m => toItem(m, me));
+    // a pair room has two voices: a line signed by anyone else is not theirs
+    const voices = rec.kind === 'pair' && rec.pair?.peer ? [me, rec.pair.peer] : undefined;
+    const chat = msgs
+      .filter(m => !PROTOCOL_PREFIX.test(m.body) && (!voices || voices.includes(m.author)))
+      .map(m => toItem(m, me));
     if (chat.length) {
       await writeItems(rec, t => mergeItems(t, chat));
     }
@@ -362,14 +376,17 @@ export const createPeopleService = (
     watch: (roomId: string): (() => void) => {
       const s = ensure();
       const w = s.watches.get(roomId);
+      // what the screen shows comes from its own room's reads too
+      const tick = () =>
+        void sync(roomId).then(
+          slot => slot !== 'idle' && status(slot),
+          () => status('unreachable'),
+        );
       if (w) {
         w.n++;
       } else {
-        void sync(roomId).catch(() => undefined);
-        s.watches.set(roomId, {
-          n: 1,
-          timer: setInterval(() => void sync(roomId).catch(() => undefined), ROOM_POLL_MS),
-        });
+        tick();
+        s.watches.set(roomId, { n: 1, timer: setInterval(tick, ROOM_POLL_MS) });
       }
       return () => {
         const cur = session?.watches.get(roomId);
@@ -384,6 +401,11 @@ export const createPeopleService = (
       const rec = await findRoom(roomId);
       if (!rec) {
         return 'idle';
+      }
+      // not allowed yet: nothing is drafted, the screen asks and says it again
+      const gate = await deps.gate(rec.relay);
+      if (gate !== 'on') {
+        return gate === 'blocked' ? 'blocked' : 'needs-opt-in';
       }
       const nick = /^\/nick\s+(\S{1,24})$/.exec(text.trim());
       if (nick) {

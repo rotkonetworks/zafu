@@ -72,8 +72,14 @@ export const myAddressForContact = async (
 export const contactCardMemoHex = (card: {
   senderName: string;
   myAddress: string;
+  /** the relationship's inception key */
   zid?: string;
+  /** the discovery key-agreement key */
   ka?: string;
+  /** the relationship's pair-room key-agreement key */
+  pairKa?: string;
+  /** their inception key, when this card answers theirs */
+  answers?: string;
 }): string | undefined => {
   const memos = encodeContactCard({
     name: card.senderName,
@@ -81,6 +87,8 @@ export const contactCardMemoHex = (card: {
     flags: 0,
     zid: card.zid,
     ka: card.ka,
+    pairKa: card.pairKa,
+    answers: card.answers,
   });
   return memos[0] && bytesToHex(memos[0]);
 };

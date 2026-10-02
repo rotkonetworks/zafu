@@ -117,8 +117,8 @@ describe('nothing without a reason', () => {
     expect(a.transport).not.toHaveBeenCalled();
     expect(relay.calls).toEqual([]);
     expect(a.statuses.at(-1)?.slot).toBe('needs-opt-in');
-    // the line stays, said honestly
-    expect(a.thread()?.items.map(i => i.status)).toEqual(['failed']);
+    // nothing was drafted: the screen asks, then says it again
+    expect(a.thread()).toBeUndefined();
   });
 
   test('a blocked relay is said as blocked, and still nothing leaves', async () => {

@@ -1272,3 +1272,30 @@ export async function mintRelationshipIndex(walletId: string, gen: number): Prom
     return j;
   });
 }
+
+/**
+ * Which of your relationships an answering card names (its TLV 0x05): try
+ * every `j` this wallet minted, under every generation up to the current one.
+ * Nothing about handed-out cards is stored; the seed and the counters say it.
+ */
+export async function findRelationship(
+  mnemonic: string,
+  walletId: string,
+  inceptionPub: string,
+): Promise<{ gen: number; j: number } | undefined> {
+  const key = `${XID_REL_NEXT_KEY}:${walletId}`;
+  const next = ((await chrome.storage.local.get(key))[key] ?? {}) as Record<string, number>;
+  for (const [g, n] of Object.entries(next)) {
+    for (let j = 0; j < n; j++) {
+      const k = deriveRelationshipKeys(mnemonic, Number(g), j);
+      const hit = k.pubkey === inceptionPub;
+      k.seed.fill(0);
+      k.kaSeed.fill(0);
+      k.xwingSeed.fill(0);
+      if (hit) {
+        return { gen: Number(g), j };
+      }
+    }
+  }
+  return undefined;
+}

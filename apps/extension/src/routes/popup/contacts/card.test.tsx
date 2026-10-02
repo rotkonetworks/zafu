@@ -12,6 +12,12 @@ let records: { address: string }[] = [];
 const addContact = vi.fn(async ({ name }: { name: string }) => ({ id: 'c1', name }));
 const addAddress = vi.fn(async () => ({}));
 const store = {
+  keyRing: {
+    keyInfos: [],
+    selectedKeyInfo: undefined,
+    activeNetwork: 'zcash',
+    getMnemonic: vi.fn(),
+  },
   contacts: {
     findByAddress: () => (saved ? { contact: saved } : undefined),
     addContact,
@@ -27,6 +33,7 @@ vi.mock('../../../state/diversified-addresses', () => ({
 }));
 vi.mock('../../../hooks/use-share-card', () => ({ useMintCard: () => async () => undefined }));
 vi.mock('../../../components/qr-code', () => ({ QrCode: () => null }));
+vi.mock('../../../people/client', () => ({ peopleCall: vi.fn(async () => undefined) }));
 vi.mock('../../../utils/navigate', () => ({ useBackNav: () => vi.fn() }));
 vi.mock('react-router-dom', () => ({
   useNavigate: () => navigate,

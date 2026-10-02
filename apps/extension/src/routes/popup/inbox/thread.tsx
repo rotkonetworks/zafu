@@ -1,9 +1,13 @@
 /**
  * one direct thread (Thread.dc.html): everything between you and one
  * address, oldest first, with a `zcash:` request shown as a pay card and a
- * payment as one quiet line. The composer hands text, a payment or a request
- * to the send pipeline with the recipient filled in; the memo is the only
- * transport there is today, so every message is a shielded transaction.
+ * payment as one quiet line.
+ *
+ * Two transports (design-social 2.7, 4.7). With someone whose card you hold
+ * and who holds yours, text goes over your pair room on the people relay:
+ * free and instant, a hairline bubble. Everyone else, and money always, goes
+ * as a memo in a shielded transaction: a gold rule. The square left of the
+ * field is the transport; one tap sends the next message as a memo instead.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -29,6 +33,17 @@ import { useActiveAddress } from '../../../hooks/use-address';
 import { useBackNav } from '../../../utils/navigate';
 import { MessageText } from '../../../components/message-text';
 import { PopupPath, contactPath } from '../paths';
+import { isMutual } from '../../../state/contacts';
+import {
+  peopleCall,
+  peopleSay,
+  useMyRooms,
+  useThread,
+  useWatchRoom,
+} from '../../../people/client';
+import { RelaySlot } from '../../../people/relay-slot';
+import { pairId } from '../../../people/protocol';
+import type { ThreadItem } from '../../../people/vault';
 import { useThreadName } from './use-thread-name';
 import { cardOf, counterparty, shortAddress, threadIdOf, whenOf } from './threads';
 
@@ -132,6 +147,7 @@ const Item = ({ m, from }: { m: Message; from: string }) => {
         <div
           className={cn(
             'max-w-[78%] border px-3 py-[9px] text-[13px] leading-normal text-fg-high',
+            'border-l-2 border-l-zigner-gold',
             mine
               ? 'self-end border-gold-line bg-zigner-gold/10'
               : 'self-start border-border-soft bg-elev-1',
@@ -165,6 +181,46 @@ const Item = ({ m, from }: { m: Message; from: string }) => {
     </>
   );
 };
+
+/** a line on the pair room: a hairline, no fill */
+const RelayLine = ({ item, onRetry }: { item: ThreadItem; onRetry: () => void }) => (
+  <>
+    <div
+      className={cn(
+        'max-w-[78%] border border-border-hard px-3 py-[9px] text-[13px] leading-normal text-fg-high',
+        item.mine ? 'self-end' : 'self-start',
+      )}
+    >
+      <p className='whitespace-pre-wrap break-words'>
+        <MessageText text={item.body} />
+      </p>
+    </div>
+    {item.mine && (
+      <span
+        className={cn(
+          'self-end text-[11px]',
+          item.status === 'failed' ? 'text-hanko-light' : 'text-fg-muted',
+        )}
+      >
+        {item.status === 'sending' ? (
+          'sending'
+        ) : item.status === 'failed' ? (
+          <>
+            this did not reach the relay ·{' '}
+            <button type='button' onClick={onRetry} className='text-zigner-gold hover:underline'>
+              try again
+            </button>
+          </>
+        ) : (
+          'on the relay'
+        )}
+      </span>
+    )}
+  </>
+);
+
+/** the ZIP 317 floor for a shielded memo: two actions at 5000 zat */
+const MEMO_FEE = '0.0001';
 
 /** + in the composer: pay them, or ask them for an amount */
 const MoneySheet = ({
@@ -311,6 +367,29 @@ export function ThreadPage() {
   const name = useThreadName(address);
   const canSend = !!address && !!keyInfo && keyInfoSupportsNetwork(keyInfo, network);
 
+  // the pair room, when you hold each other's cards
+  const mutual = network === 'zcash' && isMutual(contact, keyInfo?.id);
+  const roomId = mutual && contact ? pairId(contact.id) : undefined;
+  const room = useMyRooms().find(r => r.id === roomId && r.joined);
+  const relay = useThread(room)?.items;
+  const [asMemo, setAsMemo] = useState(false);
+  const via: 'relay' | 'memo' = room && !asMemo ? 'relay' : 'memo';
+  useWatchRoom(room?.id);
+  useEffect(() => {
+    if (roomId && !room && contact) {
+      void peopleCall('pair-join', { contactId: contact.id }).catch(() => undefined);
+    }
+  }, [roomId, room, contact]);
+
+  const rows = useMemo(
+    () =>
+      [
+        ...messages.map(m => ({ key: m.id, t: m.timestamp, m })),
+        ...(relay ?? []).map(it => ({ key: it.hash || it.local!, t: it.ts * 1000, it })),
+      ].sort((a, b) => a.t - b.t),
+    [messages, relay],
+  );
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
     for (const m of messages) {
@@ -318,7 +397,15 @@ export function ThreadPage() {
         void markRead(m.id);
       }
     }
-  }, [messages, markRead]);
+  }, [messages, markRead, rows.length]);
+  useEffect(() => {
+    if (room && relay?.some(i => !i.mine)) {
+      void peopleCall('read', { roomId: room.id }).catch(() => undefined);
+    }
+  }, [room, relay]);
+
+  const say = (text: string, retry?: string) =>
+    room && void peopleSay(room.id, text, retry).catch(() => undefined);
 
   const send = (prefillMemo?: string) =>
     navigate(PopupPath.SEND, { state: { prefillRecipient: address, prefillMemo, network } });
@@ -328,6 +415,12 @@ export function ThreadPage() {
     if (!text) {
       return;
     }
+    if (via === 'relay') {
+      setDraft('');
+      say(text);
+      return;
+    }
+    setAsMemo(false);
     const reply =
       network === 'zcash'
         ? await replyAddress(contact?.id, addressSource(), ownAddress)
@@ -373,13 +466,18 @@ export function ThreadPage() {
         </button>
       </header>
 
+      {room && <RelaySlot />}
       <div ref={scrollRef} className='flex grow flex-col gap-3 overflow-y-auto px-3.5 pb-2 pt-3.5'>
-        {messages.map((m, i) => (
-          <div key={m.id} className='contents'>
-            {dayOf(m.timestamp) !== dayOf(messages[i - 1]?.timestamp ?? 0) && (
-              <span className='self-center text-[11px] text-fg-dim'>{dayOf(m.timestamp)}</span>
+        {rows.map((r, i) => (
+          <div key={r.key} className='contents'>
+            {dayOf(r.t) !== dayOf(rows[i - 1]?.t ?? 0) && (
+              <span className='self-center text-[11px] text-fg-dim'>{dayOf(r.t)}</span>
             )}
-            <Item m={m} from={name} />
+            {'m' in r ? (
+              <Item m={r.m} from={name} />
+            ) : (
+              <RelayLine item={r.it} onRetry={() => say(r.it.body, r.it.local)} />
+            )}
           </div>
         ))}
       </div>
@@ -400,6 +498,22 @@ export function ThreadPage() {
           >
             <span className='i-lucide-plus size-[18px]' aria-hidden='true' />
           </button>
+          <button
+            type='button'
+            aria-label={via === 'relay' ? 'relay · tap to send as a memo' : 'memo'}
+            aria-pressed={via === 'memo'}
+            disabled={!room}
+            onClick={() => setAsMemo(v => !v)}
+            className='grid size-11 shrink-0 place-items-center border border-border-soft disabled:cursor-default'
+          >
+            <span
+              className={cn(
+                'size-3.5',
+                via === 'relay' ? 'border border-fg-muted' : 'bg-zigner-gold',
+              )}
+              aria-hidden='true'
+            />
+          </button>
           <Input
             aria-label='message'
             placeholder={`message ${name}`}
@@ -407,6 +521,13 @@ export function ThreadPage() {
             onChange={e => setDraft(e.target.value)}
             className='h-11 min-w-0 grow'
           />
+          <button
+            type='submit'
+            disabled={!draft.trim()}
+            className='h-11 shrink-0 bg-zigner-gold px-3 text-xs text-zigner-gold-foreground hover:bg-zigner-gold-light disabled:bg-elev-2 disabled:text-fg-dim'
+          >
+            {via === 'memo' && network === 'zcash' ? `send · ${MEMO_FEE}` : 'send'}
+          </button>
         </form>
       ) : (
         <p className='shrink-0 border-t border-border-soft px-4 py-3 text-[11px] text-fg-muted'>

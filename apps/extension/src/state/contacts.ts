@@ -89,6 +89,19 @@ export interface Contact {
    */
   card?: ContactCardKey;
   /**
+   * the relationship you gave them (xid-rel-v1): which wallet, generation and
+   * index the card you handed them was minted from. With their card's `zid`
+   * (its inception key) and `card` (its KA key) it makes the pair room;
+   * nothing secret is stored, the keys come from the seed and these numbers.
+   */
+  rel?: ContactRel;
+  /**
+   * their relationship's pair-room key-agreement key (card TLV 0x06), hex:
+   * with `rel` and `zid` it makes your 1:1 pair room. Not `card`, which is
+   * the discovery key and the same for every card they give.
+   */
+  pairKa?: string;
+  /**
    * zcash.me username this contact was saved from (or linked to). A
    * directory handle, not an identity anchor - it says where the address
    * came from so the UI can show the profile link and verification state.
@@ -107,6 +120,18 @@ export interface Contact {
   /** addresses across different networks */
   addresses: ContactAddress[];
 }
+
+export interface ContactRel {
+  walletId: string;
+  gen: number;
+  j: number;
+}
+
+/** both cards are exchanged: a pair room is possible (design-social 2.1 `mutual`) */
+export const isMutual = (
+  c: Pick<Contact, 'rel' | 'pairKa' | 'zid'> | undefined,
+  walletId: string | undefined,
+): boolean => !!c?.rel && c.rel.walletId === walletId && !!c.pairKa && !!c.zid;
 
 /** portable export format - encrypted with a password-derived key */
 export interface ContactsExport {
@@ -130,6 +155,8 @@ export interface ContactsSlice {
     website?: string;
     /** contact-card KA key; supplied when a discovery-capable share is imported */
     card?: ContactCardKey;
+    rel?: ContactRel;
+    pairKa?: string;
   }) => Promise<Contact>;
 
   /** update contact info (name, notes, zid, website, card) */
@@ -141,6 +168,8 @@ export interface ContactsSlice {
       zid?: string;
       website?: string;
       card?: ContactCardKey;
+      rel?: ContactRel;
+      pairKa?: string;
     },
   ) => Promise<void>;
 
@@ -265,6 +294,8 @@ export const createContactsSlice =
           website: data.website?.trim() || undefined,
           notes: data.notes?.trim() || undefined,
           card: data.card,
+          ...(data.rel ? { rel: data.rel } : {}),
+          ...(data.pairKa ? { pairKa: data.pairKa } : {}),
           createdAt: Date.now(),
           addresses: [],
         };
@@ -300,6 +331,12 @@ export const createContactsSlice =
             }
             if (updates.card !== undefined) {
               contact.card = updates.card;
+            }
+            if (updates.rel !== undefined) {
+              contact.rel = updates.rel;
+            }
+            if (updates.pairKa !== undefined) {
+              contact.pairKa = updates.pairKa;
             }
           }
         });

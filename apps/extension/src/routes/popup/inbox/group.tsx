@@ -11,7 +11,13 @@ import { Input } from '@repo/ui/components/ui/input';
 import { cn } from '@repo/ui/lib/utils';
 import { MessageText } from '../../../components/message-text';
 import { useBackNav } from '../../../utils/navigate';
-import { peopleCall, useMyRooms, useThread, useWatchRoom } from '../../../people/client';
+import {
+  peopleCall,
+  peopleSay,
+  useMyRooms,
+  useThread,
+  useWatchRoom,
+} from '../../../people/client';
 import { RelaySlot } from '../../../people/relay-slot';
 import type { ThreadItem } from '../../../people/vault';
 import { PopupPath, groupInvitePath } from '../paths';
@@ -86,7 +92,7 @@ export function GroupPage() {
   }, [room, roomId, last, thread?.read]);
 
   const say = (text: string, retry?: string) =>
-    void peopleCall('say', { roomId, text, retry }).catch(() => undefined);
+    void peopleSay(roomId, text, retry).catch(() => undefined);
 
   if (!room) {
     return (

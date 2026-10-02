@@ -118,3 +118,12 @@ export const useThread = (room: PeopleRoom | undefined): Thread | undefined => {
   const { threads } = usePeople();
   return room ? threads[threadKey(room)] : undefined;
 };
+
+/** say a line in a room; the first time, ask for the relay and say it again */
+export const peopleSay = async (roomId: string, text: string, retry?: string): Promise<string> => {
+  const first = await peopleCall<string>('say', { roomId, text, retry });
+  if (first !== 'needs-opt-in' || !(await requestEgressOptIn(PEOPLE_RELAY))) {
+    return first;
+  }
+  return peopleCall<string>('say', { roomId, text, retry });
+};

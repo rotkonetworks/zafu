@@ -12,7 +12,18 @@ import { createHttpRelayTransport } from '@zafu/zid';
 import { relayLimitsFor } from '@zafu/zirc/room';
 import { identityOf } from './keys';
 import { useStore } from '../state';
-import { deriveRoomKeys, getZidIndex, type XidKeys } from '../state/identity';
+import {
+  deriveRelationshipKeys,
+  deriveRoomKeys,
+  getZidIndex,
+  type RelationshipKeys,
+  type XidKeys,
+} from '../state/identity';
+import { localExtStorage } from '@repo/storage-chrome/local';
+import { sessionExtStorage } from '@repo/storage-chrome/session';
+import { readEncryptedWithMigration } from '../state/encrypted-storage';
+import type { Contact } from '../state/contacts';
+import { createPairs } from './pairs';
 import { createGroups } from './groups';
 import { compileEgress, describeEgress, type EgressInputs } from '../net/egress-policy';
 import { decideEgress } from '../net/egress-table';
@@ -58,23 +69,45 @@ const roomKeys = async (walletId: string, gen: number, G: string): Promise<XidKe
   return k;
 };
 
-export const keysFor = (room: PeopleRoom): Promise<XidKeys> => {
-  if (room.signer.G === undefined) {
-    throw new Error('this room has no key yet');
+const relKeys = async (walletId: string, gen: number, j: number): Promise<RelationshipKeys> => {
+  const id = `${walletId}/${gen}/j/${j}`;
+  const cached = keys.get(id) as RelationshipKeys | undefined;
+  if (cached) {
+    return cached;
   }
-  return roomKeys(room.walletId, room.signer.gen, room.signer.G);
+  const k = deriveRelationshipKeys(await useStore.getState().keyRing.getMnemonic(walletId), gen, j);
+  keys.set(id, k);
+  return k;
 };
+
+export const keysFor = (room: PeopleRoom): Promise<XidKeys> =>
+  room.signer.j !== undefined
+    ? relKeys(room.walletId, room.signer.gen, room.signer.j)
+    : room.signer.G !== undefined
+      ? roomKeys(room.walletId, room.signer.gen, room.signer.G)
+      : Promise.reject(new Error('this room has no key yet'));
+
+const pairs = createPairs({
+  walletId: async () => useStore.getState().keyRing.selectedKeyInfo?.id,
+  contacts: async () =>
+    (await readEncryptedWithMigration<Contact[]>(localExtStorage, sessionExtStorage, 'contacts')) ??
+    [],
+  relKeys,
+  relay: () => defaultRelay(),
+});
+
+const defaultRelay = async () =>
+  defaultPeopleRelay(
+    (await chrome.storage.local.get(PEOPLE_RELAY_KEY))[PEOPLE_RELAY_KEY] as
+      | PeopleRelaySetting
+      | undefined,
+  );
 
 const groups = createGroups({
   walletId: async () => useStore.getState().keyRing.selectedKeyInfo?.id,
   keys: roomKeys,
   generation: walletId => getZidIndex(walletId),
-  relay: async () =>
-    defaultPeopleRelay(
-      (await chrome.storage.local.get(PEOPLE_RELAY_KEY))[PEOPLE_RELAY_KEY] as
-        | PeopleRelaySetting
-        | undefined,
-    ),
+  relay: () => defaultRelay(),
   gate: relay => peopleDeps.gate(relay),
   transport: (relay, size, signal) => peopleDeps.transport(relay, size, signal),
 });
@@ -125,6 +158,7 @@ export const startPeopleRelay = (
       ),
     read: (r, s) => s.read(String(r['roomId'])),
     ...groups.ops,
+    ...pairs.ops,
     ...ops,
   };
 
@@ -169,7 +203,11 @@ export const startPeopleRelay = (
         }),
       pause: () => {
         service.close();
-        keys.forEach(k => (k.seed.fill(0), k.xwingSeed.fill(0)));
+        keys.forEach(k => {
+          k.seed.fill(0);
+          k.xwingSeed.fill(0);
+          (k as Partial<RelationshipKeys>).kaSeed?.fill(0);
+        });
         keys.clear();
         void chrome.storage.session.remove(SESSION_FLAG);
       },

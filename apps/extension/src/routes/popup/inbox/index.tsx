@@ -29,9 +29,9 @@ import { PopupPath, groupPath, threadPath } from '../paths';
 import { useIdentity } from '../identity/use-identity';
 import { deriveThreads, previewOf, shortAddress, whenOf, type DirectThread } from './threads';
 import { useThreadName } from './use-thread-name';
-import { useMyRooms, useOpenPeople, useThread } from '../../../people/client';
+import { useMyRooms, useOpenPeople, usePeople, useThread } from '../../../people/client';
 import { RelaySlot } from '../../../people/relay-slot';
-import { unreadOf, type PeopleRoom } from '../../../people/vault';
+import { threadKey, unreadOf, type PeopleRoom } from '../../../people/vault';
 
 const zec = (zat: bigint) => (Number(zat) / 1e8).toFixed(2);
 
@@ -184,7 +184,25 @@ const Groups = () => {
   );
 };
 
-const DirectRow = memo(({ thread }: { thread: DirectThread }) => {
+/** one person: their newest line, memo or relay */
+interface DirectRowData {
+  id: string;
+  address?: string;
+  line: string;
+  /** ms */
+  ts: number;
+  unread: number;
+}
+
+const rowOf = (t: DirectThread): DirectRowData => ({
+  id: t.id,
+  address: t.address,
+  line: previewOf(t.last),
+  ts: t.last.timestamp,
+  unread: t.unread,
+});
+
+const DirectRow = memo(({ thread }: { thread: DirectRowData }) => {
   const navigate = useNavigate();
   const name = useThreadName(thread.address);
   const unread = thread.unread > 0;
@@ -199,10 +217,10 @@ const DirectRow = memo(({ thread }: { thread: DirectThread }) => {
       </span>
       <span className='flex min-w-0 grow flex-col gap-[3px]'>
         <span className={cn('truncate text-sm', unread ? 'text-fg-high' : 'text-fg')}>{name}</span>
-        <span className='truncate text-[11px] text-fg-muted'>{previewOf(thread.last)}</span>
+        <span className='truncate text-[11px] text-fg-muted'>{thread.line}</span>
       </span>
       <span className='flex shrink-0 flex-col items-end gap-1'>
-        <span className='text-[11px] text-fg-dim'>{whenOf(thread.last.timestamp)}</span>
+        <span className='text-[11px] text-fg-dim'>{whenOf(thread.ts)}</span>
         {unread && <span className='size-2 bg-zigner-gold' aria-label='unread' />}
       </span>
     </button>
@@ -216,11 +234,37 @@ const Direct = ({ canCard }: { canCard: boolean }) => {
   const navigate = useNavigate();
   const network = useStore(selectActiveNetwork);
   const messages = useStore(selectThreads);
-  const threads = useMemo(
-    () =>
-      deriveThreads((Array.isArray(messages) ? messages : []).filter(m => m.network === network)),
-    [messages, network],
-  );
+  const contacts = useStore(s => s.contacts.contacts);
+  const rooms = useMyRooms();
+  const pairRooms = useMemo(() => rooms.filter(r => r.kind === 'pair' && r.joined), [rooms]);
+  const { threads: relayThreads } = usePeople();
+  const threads = useMemo(() => {
+    const rows = new Map(
+      deriveThreads(
+        (Array.isArray(messages) ? messages : []).filter(m => m.network === network),
+      ).map(t => [t.id, rowOf(t)]),
+    );
+    // relay lines from pair rooms join the person's row, newest wins
+    for (const room of network === 'zcash' ? pairRooms : []) {
+      const t = relayThreads[threadKey(room)];
+      const last = t?.items[t.items.length - 1];
+      const address = (Array.isArray(contacts) ? contacts : [])
+        .find(c => c.id === room.pair?.personId)
+        ?.addresses.find(a => a.network === 'zcash')?.address;
+      if (!last || !address) {
+        continue;
+      }
+      const id = address.toLowerCase();
+      const row = rows.get(id);
+      const unread = unreadOf(t) + (row?.unread ?? 0);
+      if (!row || last.ts * 1000 > row.ts) {
+        rows.set(id, { id, address, line: last.body, ts: last.ts * 1000, unread });
+      } else {
+        rows.set(id, { ...row, unread });
+      }
+    }
+    return [...rows.values()].sort((a, b) => b.ts - a.ts);
+  }, [messages, network, pairRooms, relayThreads, contacts]);
   return (
     <section className='flex flex-col gap-1.5'>
       <div className='flex items-baseline justify-between'>
