@@ -1,19 +1,16 @@
 // egress guard first: nothing may capture fetch or open a socket before it
 import '../net/egress-install-lite';
-import { Code, ConnectError } from '@connectrpc/connect';
+import { ConnectError } from '@connectrpc/connect';
 import { errorToJson } from '@connectrpc/connect/protocol-connect';
 import {
   ParallelBuildResponse,
   isParallelBuildRequest,
   isOffscreenRequest,
-} from '@rotko/penumbra-types/internal-msg/offscreen';
+} from '@penumbrafi/types/internal-msg/offscreen';
 import { assertProveRequest } from '../shared/prove-guard';
 import { hostedWorkerCount, initNetworkWorkerHost } from '../state/keyring/network-worker';
-import type {
-  ParallelProveRequest,
-  ParallelWorkerFailure,
-  ParallelWorkerRequest,
-} from '../wasm-build-parallel';
+import type { ParallelProveRequest } from '@penumbrafi/types/internal-msg/offscreen';
+import type { ParallelWorkerFailure, ParallelWorkerRequest } from '../wasm-build-parallel';
 
 // this document is the one long-lived home for the zcash/penumbra sync
 // workers - every popup, settings screen and approval window is a client
@@ -177,11 +174,8 @@ const spawnParallelWorker = <T>(job: ParallelWorkerRequest) => {
     // A refused job replies `{ __buildError }`; a successful one replies with
     // the bare JSON result (wasm-build-parallel.ts).
     if (typeof reply === 'object' && reply !== null && '__buildError' in reply) {
-      const { message, unimplemented } = (reply as ParallelWorkerFailure).__buildError;
-      // Unimplemented tells the services client to fall back to BUILD_PARALLEL
-      settle(() =>
-        reject(unimplemented ? new ConnectError(message, Code.Unimplemented) : new Error(message)),
-      );
+      const { message } = (reply as ParallelWorkerFailure).__buildError;
+      settle(() => reject(new Error(message)));
     } else {
       settle(() => resolve(reply as T));
     }
