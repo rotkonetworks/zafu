@@ -120,6 +120,14 @@ const MEMO_HOW: Record<MemoCarrier, string> = {
 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
+/** a deposit deadline can be days out: tick under an hour, round above it */
+export const untilLabel = (s: number) =>
+  s < 3600
+    ? mmss(s)
+    : s < 48 * 3600
+      ? `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`
+      : `${Math.floor(s / 86400)} days`;
+
 const errorLine = (e: unknown) =>
   e instanceof Error && e.message ? e.message : 'the route did not answer · please try again';
 
@@ -742,7 +750,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
           expired ? (
             <span className='text-hanko-light'>quote expired</span>
           ) : (
-            `good for ${mmss(left)}`
+            `good for ${untilLabel(left)}`
           ),
         )}
         <Main className='gap-3 pt-4'>
