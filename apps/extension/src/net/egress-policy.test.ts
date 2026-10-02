@@ -19,7 +19,7 @@ describe('a fresh zcash-only wallet', () => {
       ['https://zcash.rotko.net/cash.z.wallet.sdk.rpc.CompactTxStreamer/GetLightdInfo', 'allow'],
       // other services on the same host are their own, optional destinations
       ['wss://zcash.rotko.net/ws', 'opt-in'],
-      ['https://zcash.rotko.net/bucket?appScope=x', 'opt-in'],
+      ['https://relay.zafu.pro/bucket?appScope=x', 'opt-in'],
       ['https://zcash.rotko.net/rendezvous/open', 'opt-in'],
       // networks the user did not enable
       ['https://penumbra.rotko.net/penumbra.core.app.v1.QueryService/AppParameters', 'network-off'],
@@ -374,8 +374,8 @@ describe('thorchain names are their own opt-in', () => {
 });
 
 describe('two optional services on one url', () => {
-  // contact discovery and the people relay both default to zcash.rotko.net/bucket
-  const url = 'https://zcash.rotko.net/bucket?appScope=zafu-group-v1&epoch=1&shard=ab';
+  // contact discovery and the people relay both default to relay.zafu.pro/bucket
+  const url = 'https://relay.zafu.pro/bucket?appScope=zafu-group-v1&epoch=1&shard=ab';
   const decide = (optIns: Record<string, 'allowed' | 'blocked'>) =>
     decideEgress(url, 'service-worker', compileEgress({ netEgress: { optIns } }));
 
@@ -393,7 +393,7 @@ describe('two optional services on one url', () => {
   test('both rows list the host in settings', () => {
     const view = describeEgress({});
     for (const id of ['people-relay', 'contact-discovery']) {
-      expect(view.find(d => d.id === id)?.hosts).toContain('zcash.rotko.net/bucket');
+      expect(view.find(d => d.id === id)?.hosts).toContain('relay.zafu.pro/bucket');
     }
   });
 

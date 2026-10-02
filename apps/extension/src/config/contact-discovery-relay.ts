@@ -12,12 +12,11 @@
  * this; the default exists so that opting in is enough to have working
  * discovery, and so an app that asks for it has something to enable.
  *
- * Why this host and not a `relay.*` name: the reference deployment is served on
- * the same vhost as the zcash light-client endpoints, and a default that does
- * not resolve is worse than no default at all - presence would be published
- * into the void with the UI claiming otherwise.
+ * relay.zafu.pro runs the reference minirelay (/bucket) beside frostd and
+ * rendezvous, so discovery, zirc rooms and multisig share one relay host and
+ * the zcash light-client container carries only zebrad and zidecar.
  */
-export const DEFAULT_CONTACT_DISCOVERY_RELAY = 'https://zcash.rotko.net';
+export const DEFAULT_CONTACT_DISCOVERY_RELAY = 'https://relay.zafu.pro';
 
 /**
  * What to persist when the user opts in. Blank is the stored spelling of "use

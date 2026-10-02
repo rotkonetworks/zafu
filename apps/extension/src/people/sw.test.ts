@@ -11,7 +11,7 @@ vi.mock('../state', () => ({ useStore: { getState: () => ({}) } }));
 
 const { peopleGate } = await import('./sw');
 
-const DEFAULT = 'https://zcash.rotko.net';
+const DEFAULT = 'https://relay.zafu.pro';
 
 describe('peopleGate', () => {
   test('off by default: ask', () => {
@@ -47,7 +47,7 @@ describe('peopleGate', () => {
         {
           netEgress: {
             optIns: { 'people-relay': 'allowed' },
-            destinations: { 'zcash.rotko.net': { state: 'blocked' } },
+            destinations: { 'relay.zafu.pro': { state: 'blocked' } },
           },
         },
         DEFAULT,
