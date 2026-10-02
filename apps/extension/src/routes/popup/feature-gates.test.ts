@@ -44,6 +44,9 @@ const EXPECTED_SETS: Record<NetworkType, FeatureKey[]> = {
   cosmoshub: ['cosmos'],
   osmosis: ['cosmos'],
   injective: ['cosmos'],
+  celestia: ['cosmos'],
+  kava: ['cosmos'],
+  axelar: ['cosmos'],
   ethereum: [],
   bitcoin: [],
 };
@@ -70,6 +73,9 @@ describe('NETWORKS features match the original literal gates', () => {
         network === 'cosmoshub' ||
         network === 'osmosis' ||
         network === 'injective' ||
+        network === 'celestia' ||
+        network === 'kava' ||
+        network === 'axelar' ||
         network === 'penumbra',
     );
     expect(hasFeature(network, 'zcash')).toBe(network === 'zcash');
