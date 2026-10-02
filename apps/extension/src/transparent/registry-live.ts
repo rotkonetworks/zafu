@@ -13,10 +13,12 @@
 import { ed25519 } from '@noble/curves/ed25519';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
-import type { Chain } from '@penumbrafi/registry';
+import type { Chain, Registry } from '@penumbrafi/registry';
 import bundledPackage from '@penumbrafi/registry/package.json';
 import { applyLiveConnections } from '@repo/wallet/networks/cosmos/chains';
 import { LIVE_REGISTRY_URL } from './registry-endpoint';
+
+type JsonRegistry = ConstructorParameters<typeof Registry>[0];
 
 const CHAIN_ID = 'penumbra-1';
 const FORMAT = 'penumbrafi-registry-sig/1';
@@ -88,6 +90,15 @@ export const verifyRegistry = (
 };
 
 export const BUNDLED_REGISTRY_VERSION = bundledPackage.version;
+
+/** the stored copy's registry JSON when it still verifies and is newer than the bundled one */
+export const storedRegistryJson = async (): Promise<JsonRegistry | undefined> => {
+  const stored = await readStored();
+  if (!stored || !verifyRegistry(stored.text, stored.sig, BUNDLED_REGISTRY_VERSION)) {
+    return undefined;
+  }
+  return JSON.parse(stored.text) as JsonRegistry;
+};
 
 const readStored = async (): Promise<StoredRegistry | undefined> => {
   try {

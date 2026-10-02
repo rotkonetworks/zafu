@@ -24,7 +24,7 @@ import {
   type CosmosChainId,
 } from '@repo/wallet/networks/cosmos/chains';
 import { resolvePenumbraEndpoint } from '../config/penumbra-endpoints';
-import { refreshRegistryAssets } from './assets';
+import { forgetRegistryAssets, refreshRegistryAssets } from './assets';
 import { fetchLiveRegistry, refreshForUnknownChains } from './registry-live';
 import { REGISTRY_EGRESS } from './registry-endpoint';
 import { requestEgressOptIn } from '../net/egress-opt-in';
@@ -127,7 +127,8 @@ export const usePenumbraRoutes = (): PenumbraRoute[] | undefined => {
         fetch: fetchLiveRegistry,
       });
       if (added.length) {
-        await refreshEgress();
+        forgetRegistryAssets();
+        await Promise.all([refreshEgress(), refreshRegistryAssets()]);
         if (alive) {
           setRoutes(r ? [...r] : r);
         }
