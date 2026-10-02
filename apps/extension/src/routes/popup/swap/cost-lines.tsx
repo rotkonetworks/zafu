@@ -9,7 +9,10 @@ const ZafuRate = ({ bps }: { bps: number }) => {
   const list = zafuListBps();
   return bps < list ? (
     <>
-      <s>{pct(list)}</s> <span className='text-success'>{pct(bps)}</span>
+      <s>{pct(list)}</s>{' '}
+      <span className='text-success'>
+        {pct(bps)} -{Math.round(100 - (bps * 100) / list)}%
+      </span>
     </>
   ) : (
     <>{pct(bps)}</>
