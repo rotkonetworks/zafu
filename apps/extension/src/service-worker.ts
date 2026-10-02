@@ -773,11 +773,13 @@ chrome.contextMenus.onClicked.addListener((_info, _tab) => {
 // `zafu <intent>` in the address bar: same router as a clicked link, landing
 // on the same prefilled review. One window at a time, like every other
 // wallet-initiated popup - typing enter twice never stacks windows.
-chrome.omnibox.onInputChanged.addListener((text, suggest) => {
+// absent until the extension is reloaded with the manifest's omnibox key
+// (an unpacked build picks up new code first), and in browsers without it
+chrome.omnibox?.onInputChanged.addListener((text, suggest) => {
   suggest([{ content: text, description: escapeOmniboxXml(omniboxDescription(text)) }]);
 });
 
-chrome.omnibox.onInputEntered.addListener(text => {
+chrome.omnibox?.onInputEntered.addListener(text => {
   const route = `${PopupPath.LINK}?uri=${encodeURIComponent(omniboxUri(text))}&via=typed`;
   void openWalletRoute('omnibox', route);
 });
