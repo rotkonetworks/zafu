@@ -61,7 +61,7 @@
   },
   "devDependencies": {
     "@repo/encryption": "workspace:*",
-    "@penumbrafi/wasm": "file:../../../penumbrafi-57-pkgs/penumbrafi-wasm-57.0.0.tgz",
+    "@penumbrafi/wasm": "57.0.0",
     "@types/chrome": "0.0.270",
     "@types/qrcode": "^1.5.6"
   }
