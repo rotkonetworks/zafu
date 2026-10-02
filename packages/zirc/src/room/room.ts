@@ -305,6 +305,14 @@ export interface RoomConfig {
    */
   public?: boolean;
   /**
+   * A shard per window instead of one for the room's life (design-social
+   * 2.5): a pair room passes `HKDF(pairSecret, "shard" || u64be(epoch))` so
+   * the relay cannot line up one pair's windows across months by shard.
+   * Wins over `shard` and `public`. Must return 16 lowercase hex characters,
+   * the width {@link roomShardFromSecret} uses.
+   */
+  shardFor?: (epoch: number) => Promise<string>;
+  /**
    * Fixed plaintext size this room's entries pad to - {@link ROOM_PLAINTEXT_BYTES}
    * (chat) by default, {@link GROUP_ROOM_PLAINTEXT_BYTES} for a group or door
    * room. Every entry in one room is still one size (so the relay cannot tell
@@ -736,6 +744,7 @@ export class Room {
   private readonly now: () => number;
   private readonly relay: RelayTransport;
   private readonly shardPin: string | undefined;
+  private readonly shardFor: ((epoch: number) => Promise<string>) | undefined;
   /** a public room addresses by channel name; a sealed one by the room secret. */
   private readonly isPublic: boolean;
 
@@ -777,17 +786,31 @@ export class Room {
     this.now = config.now ?? (() => Math.floor(Date.now() / 1000));
     this.relay = config.relay;
     this.shardPin = config.shard;
+    this.shardFor = config.shardFor;
     this.isPublic = config.public ?? false;
     this.seq = config.head?.seq ?? 0;
     this.head = config.head?.hash ?? '';
   }
 
-  /** resolve derived coordinates once, then reuse. */
-  private async coords(): Promise<{
+  /** resolve derived coordinates once, then reuse; a per-window shard per window. */
+  private async coords(epoch: number): Promise<{
     shard: string;
     shardHash: Uint8Array;
     appScopeHash: Uint8Array;
   }> {
+    if (this.shardFor) {
+      const shard = await this.shardFor(epoch);
+      if (!/^[0-9a-f]{16}$/.test(shard)) {
+        throw new Error('room: shardFor must return 16 lowercase hex characters');
+      }
+      const shardHash = new Uint8Array(SHA256_BYTES);
+      shardHash.set(fromHex(shard));
+      if (!this.shard) {
+        this.shard = shard;
+        this.appScopeHash.set(await sha256(enc.encode(this.appScope)));
+      }
+      return { shard, shardHash, appScopeHash: this.appScopeHash };
+    }
     if (!this.shard) {
       // A pinned shard wins - tests, and a relay with pre-provisioned
       // coordinates. Otherwise the mode decides: a public room is addressed by
@@ -881,8 +904,8 @@ export class Room {
     if (opts.plain && kind === 'dm') {
       throw new Error('room: a direct message cannot be sent in the clear');
     }
-    const { shardHash, appScopeHash } = await this.coords();
     const epoch = opts.epoch ?? this.currentEpoch();
+    const { shardHash, appScopeHash } = await this.coords(epoch);
     const name = opts.name ?? this.identity.name ?? this.identity.pubkey.slice(0, 8);
     const to = opts.to ?? '';
     const bytes = enc.encode(body);
@@ -941,7 +964,7 @@ export class Room {
     await this.relay.putBucket({
       appScope: this.appScope,
       epoch,
-      shard: await this.shardOrThrow(),
+      shard: await this.shardOrThrow(epoch),
       entries: [{ tag, blob }],
     });
 
@@ -971,8 +994,8 @@ export class Room {
    * all they need, since presence is "I am here", not a secret.
    */
   async announce(name?: string, opts: { plain?: boolean; epoch?: number } = {}): Promise<void> {
-    const { shardHash, appScopeHash } = await this.coords();
     const win = opts.epoch ?? this.currentEpoch();
+    const { shardHash, appScopeHash } = await this.coords(win);
     const display = name ?? this.identity.name ?? this.identity.pubkey.slice(0, 8);
     const rec = {
       kind: 'presence' as const,
@@ -1001,7 +1024,7 @@ export class Room {
     await this.relay.putBucket({
       appScope: this.appScope,
       epoch: win,
-      shard: await this.shardOrThrow(),
+      shard: await this.shardOrThrow(win),
       entries: [{ tag, blob }],
     });
   }
@@ -1053,7 +1076,6 @@ export class Room {
   }
 
   private async syncWindows(windows: number[]): Promise<RoomSync> {
-    const { shardHash, appScopeHash } = await this.coords();
     const keysFor = new Map<number, { msg: CryptoKey; presence: CryptoKey; dm: CryptoKey }>();
     const dropped: { hash: string; reason: string; kind: DropKind }[] = [];
     const messages: RoomMessage[] = [];
@@ -1062,12 +1084,13 @@ export class Room {
     const seen = new Set<string>();
 
     for (const epoch of windows) {
+      const { shard, shardHash, appScopeHash } = await this.coords(epoch);
       let entries: PresenceEntry[];
       try {
         entries = await this.relay.getBucket({
           appScope: this.appScope,
           epoch,
-          shard: await this.shardOrThrow(),
+          shard,
         });
       } catch (e) {
         dropped.push({
@@ -1362,8 +1385,8 @@ export class Room {
     }
   }
 
-  private async shardOrThrow(): Promise<string> {
-    const { shard } = await this.coords();
+  private async shardOrThrow(epoch: number): Promise<string> {
+    const { shard } = await this.coords(epoch);
     return shard;
   }
 }

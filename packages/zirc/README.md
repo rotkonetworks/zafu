@@ -55,6 +55,11 @@ holding no key can find it by typing the name - guessable on purpose, and
 therefore a choice a room makes rather than a default it falls into. Either way
 the relay serving the request sees the shard; pinned `shard` overrides both.
 
+`shardFor: (epoch) => Promise<string>` replaces that one coordinate with one
+per window: a two-member pair room passes a shard derived from its secret
+and the epoch, so the relay cannot follow the same pair across windows by
+shard. It still sees which addresses touched one shard in one window.
+
 A direct message is sealed under a key derived from the room secret **and** the
 recipient's pubkey, so it never appears in the public lane and the relay cannot
 tell who is talking to whom. That key is not private _between members_: every
