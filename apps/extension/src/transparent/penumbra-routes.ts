@@ -91,6 +91,15 @@ export const routeForChain = (
 };
 
 /**
+ * The chains to offer, in the given order: those with a live route, or with
+ * pinned channels while discovery has never run.
+ */
+export const offeredChains = (
+  chains: readonly CosmosChainId[],
+  routes: PenumbraRoute[] | undefined,
+): CosmosChainId[] => chains.filter(c => routeForChain(c, routes));
+
+/**
  * react hook: discovered routes (undefined until the first discovery lands).
  * Also waits for the live asset registry, so the re-render this triggers shows
  * the current labels for whatever the routes carry.
