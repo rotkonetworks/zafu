@@ -1,7 +1,9 @@
 /**
  * deterministic password generator - derive passwords from seed + site +
- * username. nothing stored. same seed, site, username, length and rotation
- * always derive the same password (see state/identity.ts: derivePassword).
+ * username. the password is never stored. same seed, site, username, length
+ * and rotation always derive the same password (see state/identity.ts:
+ * derivePassword). a saved login keeps only what fills the form again, sealed
+ * (state/password-logins.ts), and goes into the personal-data backup.
  *
  * only a mnemonic wallet can derive - a zigner, viewing-key, ledger or
  * multisig wallet has no phrase on this device, so the form stays disabled
@@ -18,6 +20,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Input } from '@repo/ui/components/ui/input';
 import { Button } from '@repo/ui/components/ui/button';
 import { CopyButton } from '@repo/ui/components/ui/copy-button';
@@ -26,6 +29,13 @@ import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { useStore } from '../../../state';
 import { selectSelectedKeyInfo, selectGetMnemonic } from '../../../state/keyring';
 import { derivePassword, normalizeOrigin, DEFAULT_IDENTITY } from '../../../state/identity';
+import { pocketOwner } from '../../../state/pockets';
+import {
+  forgetPasswordLogin,
+  readPasswordLogins,
+  savePasswordLogin,
+  type PasswordLogin,
+} from '../../../state/password-logins';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
 
@@ -46,6 +56,28 @@ export const PasswordsPage = () => {
   const [password, setPassword] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deriving, setDeriving] = useState(false);
+  const owner = keyInfo ? pocketOwner(keyInfo) : undefined;
+  const [logins, setLogins] = useState<PasswordLogin[]>([]);
+
+  useEffect(() => {
+    void readPasswordLogins().then(setLogins, () => setLogins([]));
+  }, []);
+
+  const mine = logins.filter(l => l.owner === owner);
+  const here = { owner: owner ?? '', site: normalizeOrigin(site), username: username.trim() };
+  const saved = mine.find(l => l.site === here.site && l.username === here.username);
+  const unchanged = saved?.length === length && saved.version === rotation;
+  const fill = (l: PasswordLogin) => {
+    setSite(l.site);
+    setUsername(l.username);
+    setLength(LENGTHS.find(n => n === l.length) ?? 32);
+    setRotation(l.version);
+    setRevealed(false);
+  };
+  const keep = (next: Promise<PasswordLogin[]>) =>
+    void next.then(setLogins, () =>
+      setError('zafu could not reach your saved logins. please unlock and try again.'),
+    );
 
   useEffect(() => {
     setPassword(null);
@@ -190,11 +222,42 @@ export const PasswordsPage = () => {
             )}
           </div>
 
+          {owner && site.trim() && (
+            <Button
+              variant='secondary'
+              disabled={!canDerive || unchanged}
+              onClick={() =>
+                keep(savePasswordLogin({ ...here, length, version: rotation, savedAt: Date.now() }))
+              }
+            >
+              {saved ? (unchanged ? 'saved' : 'save this version') : 'save login'}
+            </Button>
+          )}
+
           <span className='text-label text-fg-dim'>
-            made from your recovery phrase · the same inputs always give the same password · nothing
-            is stored
+            made from your recovery phrase · the same inputs always give the same password · the
+            password is never stored
           </span>
         </div>
+
+        {mine.length > 0 && (
+          <RowGroup>
+            {mine.map(l => (
+              <Row
+                key={`${l.site}\n${l.username}`}
+                type='value'
+                label={l.username ? `${l.site} · ${l.username}` : l.site}
+                value={`${l.length} · ${l.version === 0 ? 'original' : `v${l.version}`}`}
+                onPress={() => fill(l)}
+              />
+            ))}
+          </RowGroup>
+        )}
+        {saved && (
+          <Button variant='quiet' onClick={() => keep(forgetPasswordLogin(here))}>
+            forget {saved.site}
+          </Button>
+        )}
       </div>
     </SettingsScreen>
   );

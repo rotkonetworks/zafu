@@ -299,6 +299,20 @@ type LOCAL = {
     sharedAt: number;
   }[];
 
+  /**
+   * the passwords tool's saved logins: what to put back in its form, never a
+   * password. sealed at rest (ENCRYPTED_KEYS); `owner` is the wallet's zid or
+   * vault id, since each wallet's phrase derives its own passwords.
+   */
+  passwordLogins?: {
+    owner: string;
+    site: string;
+    username: string;
+    length: number;
+    version: number;
+    savedAt: number;
+  }[];
+
   autoLockMinutes?: number;
 
   zafuTheme?: 'sumi' | 'washi' | 'terminal';

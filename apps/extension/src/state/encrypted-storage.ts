@@ -151,6 +151,7 @@ const ENCRYPTED_KEYS = new Set<string>([
   'diversifiedAddresses',
   'groupChats',
   'frostRelayIdentities',
+  'passwordLogins',
 ]);
 
 /** should this storage key be encrypted? */

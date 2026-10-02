@@ -140,6 +140,8 @@ export const clearPersonalData = async (opts: ClearPersonalDataOptions): Promise
   if (opts.sent) {
     await clearSentStore();
   }
+  // saved logins are personal data too (never passwords, only what fills the form)
+  await chrome.storage.local.remove('passwordLogins');
 };
 
 /** Read all per-tx notes (for backup/export). */

@@ -5,6 +5,7 @@
  * addresses are expandable in the UI.
  */
 
+import { readPasswordLogins, restorePasswordLogins } from './password-logins';
 import type { AllSlices, SliceCreator } from '.';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
@@ -35,7 +36,7 @@ import type { PrivacySettings } from './privacy';
 export interface PersonalDataBackup {
   version: 4;
   exportedAt: number;
-  /** encrypted { contacts, sent, txNotes, pockets, egress, settings, walletNames } JSON */
+  /** encrypted { contacts, sent, txNotes, pockets, egress, settings, walletNames, passwordLogins } JSON */
   data: BoxJson;
   keyPrint: KeyPrintJson;
 }
@@ -579,7 +580,9 @@ export const createContactsSlice =
         const walletNames = Object.fromEntries(
           get().keyRing.keyInfos.map(k => [pocketOwner(k), k.name]),
         );
+        const passwordLogins = await readPasswordLogins();
         const plaintext = JSON.stringify({
+          passwordLogins,
           contacts,
           sent,
           txNotes,
@@ -625,6 +628,8 @@ export const createContactsSlice =
           settings?: SettingsBackup;
           /** wallet labels by owner key (absent in older backups) */
           walletNames?: Record<string, string>;
+          /** the passwords tool's saved logins (absent in older backups) */
+          passwordLogins?: unknown;
         };
 
         const newContacts = restoreContacts(parsed.contacts ?? [], safeContacts(), mode);
@@ -653,6 +658,9 @@ export const createContactsSlice =
           }
         }
         await importEgressChoices(parsed.egress);
+        if (parsed.passwordLogins !== undefined) {
+          await restorePasswordLogins(parsed.passwordLogins, mode);
+        }
         const current = get().privacy.settings;
         const privacy = restoredPrivacy(current, parsed.settings?.privacy);
         for (const key of Object.keys(privacy) as (keyof PrivacySettings)[]) {
