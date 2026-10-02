@@ -29,7 +29,7 @@ describe('resolveNetworkCosmosChain', () => {
 
   it('returns none for a network outside the registry instead of casting', () => {
     expect(resolveNetworkCosmosChain('dogecoin' as NetworkType)).toBeUndefined();
-    expect(resolveNetworkCosmosChain('celestia' as NetworkType)).toBeUndefined();
+    expect(resolveNetworkCosmosChain('stargaze' as NetworkType)).toBeUndefined();
   });
 
   it('returns none for an unlaunched or non-IBC network', () => {
