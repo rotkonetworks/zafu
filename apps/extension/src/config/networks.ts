@@ -4,7 +4,11 @@
  */
 
 import type { NetworkType } from '../state/keyring';
-import { COSMOS_CHAINS, getCosmosChain } from '@repo/wallet/networks/cosmos/chains';
+import {
+  COSMOS_CHAINS,
+  getCosmosChain,
+  onCosmosChainsAdded,
+} from '@repo/wallet/networks/cosmos/chains';
 
 /** orchard pool activation height - no zcash wallet should scan before this */
 export const ZCASH_ORCHARD_ACTIVATION = 1_687_104;
@@ -259,6 +263,12 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
       .map(id => [id, registrySubnetwork(id)]),
   ),
 };
+
+onCosmosChainsAdded(ids => {
+  for (const id of ids) {
+    NETWORKS[id] ??= registrySubnetwork(id);
+  }
+});
 
 /** derive display info - computed once, no runtime overhead */
 export const getNetwork = (network: NetworkType): NetworkConfig =>

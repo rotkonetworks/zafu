@@ -13,7 +13,8 @@ import { keyRingSelector, selectEffectiveKeyInfo, selectEnabledNetworks } from '
 import { knownAssets } from '../transparent/assets';
 import { readCheck, runCheck, type DepositAsset } from '../transparent/chain-check';
 
-const CHAINS = getActiveIbcSubnetworks('penumbra').filter(c => COSMOS_CHAINS[c]);
+/** read per call: a verified live registry can add chains after load */
+const transparentChains = () => getActiveIbcSubnetworks('penumbra').filter(c => COSMOS_CHAINS[c]);
 
 export interface Holding {
   chainId: CosmosChainId;
@@ -38,7 +39,7 @@ export const useTransparentHoldings = () => {
   const { getMnemonic } = useStore(keyRingSelector);
   const queryClient = useQueryClient();
   // a chain is here once a flow used it (receive's shield tab, a withdrawal)
-  const chains = keyId ? CHAINS.filter(c => enabled.includes(c)) : [];
+  const chains = keyId ? transparentChains().filter(c => enabled.includes(c)) : [];
 
   // the same cache entries the send flow reads, so both see one check
   const reads = useQueries({

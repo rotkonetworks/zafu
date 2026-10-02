@@ -6,6 +6,7 @@ import '../install-console-quieting';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode, useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
+import { loadStoredRegistry } from '../transparent/registry-live';
 import { RouterProvider } from 'react-router-dom';
 import { popupRouter } from '../routes/popup/router';
 import { isSidePanel } from '../utils/popup-detection';
@@ -141,11 +142,17 @@ void localExtStorage.get('zafuFont').then(v => {
   }
 });
 
-createRoot(rootElement, {
-  onCaughtError: (error, info) => reportRenderError(error, info),
-  onUncaughtError: (error, info) => reportRenderError(error, info),
-}).render(
-  <AppErrorBoundary>
-    <MainPopup />
-  </AppErrorBoundary>,
-);
+// a verified newer registry, if one is stored, before the first render so
+// every chain list is complete; storage only, never the network
+void loadStoredRegistry()
+  .catch(() => undefined)
+  .finally(() =>
+    createRoot(rootElement, {
+      onCaughtError: (error, info) => reportRenderError(error, info),
+      onUncaughtError: (error, info) => reportRenderError(error, info),
+    }).render(
+      <AppErrorBoundary>
+        <MainPopup />
+      </AppErrorBoundary>,
+    ),
+  );

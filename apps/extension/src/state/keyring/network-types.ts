@@ -27,7 +27,12 @@
  *    - ethereum, bitcoin
  */
 
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import {
+  COSMOS_CHAINS,
+  onCosmosChainsAdded,
+  type CosmosChainConfig,
+  type CosmosChainId,
+} from '@repo/wallet/networks/cosmos/chains';
 
 export type PrivacyNetwork = 'zcash' | 'penumbra';
 /** a penumbra subnetwork: any cosmos chain in COSMOS_CHAINS, by its chain-registry name */
@@ -178,24 +183,32 @@ const WRITTEN_CONFIGS: Record<string, NetworkConfig> = {
   },
 };
 
+const ibcConfig = (c: CosmosChainConfig): NetworkConfig => ({
+  id: c.id,
+  name: c.name,
+  symbol: c.symbol,
+  decimals: c.decimals,
+  type: 'ibc',
+  bech32Prefix: c.bech32Prefix,
+  denom: c.denom,
+  derivationPath: `m/44'/${c.coinType ?? 118}'/0'/0/0`,
+});
+
 export const NETWORK_CONFIGS: Record<NetworkType, NetworkConfig> = {
   ...WRITTEN_CONFIGS,
-  ...Object.fromEntries(
-    registryChains(WRITTEN_CONFIGS).map(c => [
-      c.id,
-      {
-        id: c.id,
-        name: c.name,
-        symbol: c.symbol,
-        decimals: c.decimals,
-        type: 'ibc' as const,
-        bech32Prefix: c.bech32Prefix,
-        denom: c.denom,
-        derivationPath: `m/44'/${c.coinType ?? 118}'/0'/0/0`,
-      },
-    ]),
-  ),
+  ...Object.fromEntries(registryChains(WRITTEN_CONFIGS).map(c => [c.id, ibcConfig(c)])),
 };
+
+// chains a verified live registry adds after load
+onCosmosChainsAdded(ids => {
+  for (const id of ids) {
+    const chain = COSMOS_CHAINS[id];
+    if (chain) {
+      NETWORK_CONFIGS[id] ??= ibcConfig(chain);
+      NETWORK_DEFAULT_ENCRYPTION[id] ??= 'cosmos';
+    }
+  }
+});
 
 export const isPrivacyNetwork = (network: NetworkType): network is PrivacyNetwork => {
   return NETWORK_CONFIGS[network]?.type === 'privacy';

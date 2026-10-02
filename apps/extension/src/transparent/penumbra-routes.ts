@@ -18,9 +18,17 @@ import {
   selectPenumbraRoute,
   type PenumbraRoute,
 } from '@repo/wallet/networks/cosmos/penumbra-routes';
-import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import {
+  chainByChainId,
+  getCosmosChain,
+  type CosmosChainId,
+} from '@repo/wallet/networks/cosmos/chains';
 import { resolvePenumbraEndpoint } from '../config/penumbra-endpoints';
 import { refreshRegistryAssets } from './assets';
+import { fetchLiveRegistry, refreshForUnknownChains } from './registry-live';
+import { REGISTRY_EGRESS } from './registry-endpoint';
+import { requestEgressOptIn } from '../net/egress-opt-in';
+import { refreshEgress } from '../net/egress';
 
 const KEY = 'penumbraRoutes';
 const MAX_AGE_MS = 60 * 60 * 1000;
@@ -108,9 +116,21 @@ export const usePenumbraRoutes = (): PenumbraRoute[] | undefined => {
   const [routes, setRoutes] = useState<PenumbraRoute[]>();
   useEffect(() => {
     let alive = true;
-    void Promise.all([getPenumbraRoutes(), refreshRegistryAssets()]).then(([r]) => {
+    void Promise.all([getPenumbraRoutes(), refreshRegistryAssets()]).then(async ([r]) => {
       if (alive) {
         setRoutes(r);
+      }
+      // a live channel to a chain zafu doesn't know: offer the signed registry
+      const added = await refreshForUnknownChains(r ?? [], {
+        known: chainId => !!chainByChainId(chainId),
+        optIn: () => requestEgressOptIn(REGISTRY_EGRESS),
+        fetch: fetchLiveRegistry,
+      });
+      if (added.length) {
+        await refreshEgress();
+        if (alive) {
+          setRoutes(r ? [...r] : r);
+        }
       }
     });
     return () => {
