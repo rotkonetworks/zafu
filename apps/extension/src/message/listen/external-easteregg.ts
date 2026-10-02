@@ -1432,6 +1432,9 @@ export const externalMessageListener = (
         'zafu_zid_pubkey',
         'zafu_encryption_approval_result', // handled by external-encryption.ts
         'zafu_request_contact_discovery', // handled by contact-discovery-request.ts
+        // handled by contact-discovery.ts: answering here first left every
+        // site with "unknown message type", so discovery never ran
+        'zafu_discover_contacts',
       ];
       if (typeof type === 'string' && delegatedTypes.includes(type)) {
         return false;

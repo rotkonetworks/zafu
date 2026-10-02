@@ -20,9 +20,17 @@ import { QrScanner } from '../../../shared/components/qr-scanner';
 export const networkOf = (address: string): ContactNetwork =>
   /^penumbra/i.test(address.trim()) ? 'penumbra' : 'zcash';
 
-/** a contact's line under the name: whether they gave you a card or only an address */
+/**
+ * a contact's line under the name: whether friends on sites can find each
+ * other (their card carried the key), or only an address is known. Said
+ * calmly: address only is not a fault, it just cannot be found.
+ */
 export const contactStatus = (c: Contact): { line: string; warn?: boolean } =>
-  c.zid ? { line: 'from a card' } : { line: 'address only · ask for their card', warn: true };
+  c.card
+    ? { line: 'from a card · can be found' }
+    : c.zid
+      ? { line: 'from an older card · ask for their new one' }
+      : { line: 'address only · ask for their card' };
 
 const byName = (a: Contact, b: Contact) =>
   Number(!!b.favorite) - Number(!!a.favorite) || a.name.localeCompare(b.name);

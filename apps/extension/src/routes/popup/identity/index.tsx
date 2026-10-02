@@ -16,7 +16,12 @@ import { ZidSeal } from '@repo/ui/components/ui/zid-seal';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
 import { keyInfoSupportsNetwork } from '../../../state/keyring/vault-ops';
-import { addZidPin, deriveZidForContact, setZidIndex } from '../../../state/identity';
+import {
+  addZidPin,
+  deriveZidForContact,
+  myDiscoveryKey,
+  setZidIndex,
+} from '../../../state/identity';
 import {
   cardLinkPayload,
   contactCardMemoHex,
@@ -57,11 +62,10 @@ const useCardLink = (open: boolean) => {
     void (async () => {
       const one = crypto.randomUUID();
       const mine = await myAddressForContact(one, addressSource());
-      const zid =
-        keyInfo.type === 'mnemonic'
-          ? deriveZidForContact(await getMnemonic(keyInfo.id), 'default', one).publicKey
-          : undefined;
-      const hex = mine && contactCardMemoHex({ senderName: '', myAddress: mine.address, zid });
+      const mnemonic = keyInfo.type === 'mnemonic' ? await getMnemonic(keyInfo.id) : undefined;
+      const zid = mnemonic && deriveZidForContact(mnemonic, 'default', one).publicKey;
+      const ka = mnemonic && (await myDiscoveryKey(mnemonic));
+      const hex = mine && contactCardMemoHex({ senderName: '', myAddress: mine.address, zid, ka });
       if (!mine || !hex) {
         return live && setLink(null);
       }

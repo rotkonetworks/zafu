@@ -28,7 +28,12 @@ import {
   type PresenceRecord,
   type PresenceDir,
 } from './presence-blob';
-import type { ContactRelay, PresenceEntry, FriendPresenceQuery } from './contact-relay';
+import {
+  PRESENCE_BLOB_BYTES,
+  type ContactRelay,
+  type PresenceEntry,
+  type FriendPresenceQuery,
+} from './contact-relay';
 
 /** a friend to publish-to / discover, with the cached pairwise root secret. */
 export interface DiscoveryPeer {
@@ -69,6 +74,15 @@ export interface PresenceService {
    * dropped.
    */
   findPresent(peers: readonly DiscoveryPeer[], epoch?: number): Promise<PresentPeer[]>;
+  /**
+   * Take back this epoch's presence: the same padded, fixed-size write as
+   * `publishSelf`, with each real tag carrying fresh random bytes instead of a
+   * sealed record. The relay merges by tag, so the earlier blob is replaced and
+   * a friend's lookup finds the tag but nothing that opens: absent, at once,
+   * instead of at the end of the window. To the relay it is one more 64-entry
+   * write of random-looking bytes.
+   */
+  withdrawSelf(peers: readonly DiscoveryPeer[], epoch?: number): Promise<void>;
 }
 
 /**
@@ -98,6 +112,14 @@ export const createPresenceService = (
       );
       entries.push({ tag, blob });
     }
+    await relay.publishPresence(entries, epoch);
+  },
+
+  async withdrawSelf(peers, epoch = presenceEpoch()) {
+    const entries: PresenceEntry[] = peers.map(p => ({
+      tag: rendezvousTag(p.rootSecret, appOrigin, epoch, myPubHex),
+      blob: crypto.getRandomValues(new Uint8Array(PRESENCE_BLOB_BYTES)),
+    }));
     await relay.publishPresence(entries, epoch);
   },
 

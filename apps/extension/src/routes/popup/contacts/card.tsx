@@ -17,7 +17,7 @@ import { Sheet } from '@repo/ui/components/ui/sheet';
 import { ZidSeal } from '@repo/ui/components/ui/zid-seal';
 import type { ContactCard } from '@repo/wallet/networks/zcash/memo-codec';
 import { useStore } from '../../../state';
-import { cardLinkPayload, readCardPayload } from '../../../state/contact-share';
+import { cardDiscoveryKey, cardLinkPayload, readCardPayload } from '../../../state/contact-share';
 import { getDiversifiedAddresses } from '../../../state/diversified-addresses';
 import { useMintCard } from '../../../hooks/use-share-card';
 import { viaLine } from '../../../links/land';
@@ -144,11 +144,27 @@ export function CardPage() {
     if (!card) {
       return;
     }
-    const contact = await addContact({ name: name.trim(), zid: card.zid });
+    const contact = await addContact({
+      name: name.trim(),
+      zid: card.zid,
+      card: cardDiscoveryKey(card),
+    });
     await addAddress(contact.id, { network: 'zcash', address: card.address });
     setNaming(false);
     setDone({ id: contact.id, name: contact.name });
   };
+
+  // someone already saved hands you their card again: keep the key it carries,
+  // so a person saved from an address (or an older card) becomes findable
+  const updateContact = useStore(s => s.contacts.updateContact);
+  const savedId = saved?.id;
+  const savedKey = saved?.card?.publicKey;
+  useEffect(() => {
+    const key = card && cardDiscoveryKey(card);
+    if (savedId && key && savedKey !== key.publicKey) {
+      void updateContact(savedId, { card: key });
+    }
+  }, [card, savedId, savedKey, updateContact]);
 
   const state = cardState(card, saved, mine === true);
   const close = () => navigate(PopupPath.CONTACTS, { replace: true });

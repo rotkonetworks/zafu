@@ -35,3 +35,14 @@ export function relayEndpointForStorage(endpoint: string): string {
   const trimmed = endpoint.trim();
   return trimmed === DEFAULT_CONTACT_DISCOVERY_RELAY ? '' : trimmed;
 }
+
+/** true when `endpoint` is an http(s) URL the relay transport can talk to.
+ *  Anything else (unset, garbage) leaves the feature unconfigured. */
+export const isUsableRelayEndpoint = (endpoint: string): boolean => {
+  try {
+    const url = new URL(endpoint);
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  } catch {
+    return false;
+  }
+};

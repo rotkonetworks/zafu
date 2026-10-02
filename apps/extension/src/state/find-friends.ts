@@ -19,13 +19,14 @@ export const siteFindsFriends = async (origin: string): Promise<boolean> =>
 
 /**
  * Turn the grant on or off for one site. Turning it on also turns discovery
- * on (keeping any relay the person configured); turning it off touches only
- * this site.
+ * on (keeping any relay the person configured): the first grant is the
+ * opt-in for the one discovery destination in "everything zafu talks to".
+ * Turning it off touches only this site, and withdraws its beacon at once
+ * (discovery-presence-port).
  */
 export const setSiteFindsFriends = async (origin: string, on: boolean): Promise<void> => {
-  const prefs = { ...((await localExtStorage.get('zidPreferences')) as Prefs | undefined) };
-  prefs[origin] = { ...(prefs[origin] ?? DEFAULT_PREF), findFriends: on };
-  await localExtStorage.set('zidPreferences', prefs);
+  // discovery first: an open page of this site starts holding presence the
+  // moment its grant lands, and must find discovery already on
   if (on) {
     const stored = await localExtStorage.get('zidDiscovery');
     await localExtStorage.set('zidDiscovery', {
@@ -34,6 +35,9 @@ export const setSiteFindsFriends = async (origin: string, on: boolean): Promise<
       relayToken: stored?.relayToken ?? '',
     });
   }
+  const prefs = { ...((await localExtStorage.get('zidPreferences')) as Prefs | undefined) };
+  prefs[origin] = { ...(prefs[origin] ?? DEFAULT_PREF), findFriends: on };
+  await localExtStorage.set('zidPreferences', prefs);
 };
 
 /** discovery on wallet-wide (the relay may still be refused by the site gate) */

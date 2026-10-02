@@ -5,7 +5,7 @@ import { selectEffectiveKeyInfo, selectGetMnemonic } from '../state/keyring';
 import { keyInfoSupportsNetwork } from '../state/keyring/vault-ops';
 import type { Contact } from '../state/contacts';
 import { contactCardMemoHex, myAddressForContact } from '../state/contact-share';
-import { deriveZidForContact } from '../state/identity';
+import { deriveZidForContact, myDiscoveryKey } from '../state/identity';
 import { getDiversifiedAddresses, setDiversifiedAddresses } from '../state/diversified-addresses';
 import { PopupPath } from '../routes/popup/paths';
 import { useContactAddressSource } from './use-contact-address-source';
@@ -46,11 +46,10 @@ export const useMintCard = () => {
           },
         ]);
       }
-      const zid =
-        keyInfo.type === 'mnemonic'
-          ? deriveZidForContact(await getMnemonic(keyInfo.id), 'default', contactId).publicKey
-          : undefined;
-      return contactCardMemoHex({ senderName: '', myAddress: mine.address, zid });
+      const mnemonic = keyInfo.type === 'mnemonic' ? await getMnemonic(keyInfo.id) : undefined;
+      const zid = mnemonic && deriveZidForContact(mnemonic, 'default', contactId).publicKey;
+      const ka = mnemonic && (await myDiscoveryKey(mnemonic));
+      return contactCardMemoHex({ senderName: '', myAddress: mine.address, zid, ka });
     },
     [keyInfo, addressSource, getMnemonic],
   );

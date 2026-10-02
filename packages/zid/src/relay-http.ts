@@ -116,26 +116,28 @@ const bytesToBase64 = (bytes: Uint8Array): string => {
 const base64ToBytes = (s: string): Uint8Array => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
 /**
- * Client-side ceiling on what an untrusted relay may make us decode. An honest
- * client contributes one padded batch (PRESENCE_PAD_TO = 64) per epoch, so a
- * cap of a few batches bounds a hostile relay without clipping legitimate data.
+ * Client-side ceiling on what an untrusted relay may make us decode. A bucket
+ * is one app's window, shared by EVERY publisher there, and each adds one
+ * padded batch (PRESENCE_PAD_TO = 64). The old 256 held four people: a fifth
+ * was cut off silently and their friends never found them. 16384 holds 256
+ * publishers per app per window and still bounds a hostile relay.
  */
-export const MAX_RELAY_ENTRIES = 256;
+export const MAX_RELAY_ENTRIES = 16384;
 /** generous base64 ceiling for one tag (32 B) or blob (64 B) - anything longer is discarded. */
 export const MAX_RELAY_ENTRY_BASE64 = 1024;
 
 /**
  * Client-side ceiling on what an untrusted relay may make us BUFFER. An honest
- * bucket is at most MAX_RELAY_ENTRIES entries of two MAX_RELAY_ENTRY_BASE64
- * fields (well under 0.5 MB), so 1 MiB accepts any legal response and still
- * bounds a hostile one.
+ * bucket of MAX_RELAY_ENTRIES discovery entries (a 44-char tag and an 88-char
+ * blob each, about 160 bytes with JSON) is about 2.6 MB, so 4 MiB accepts any
+ * legal response and still bounds a hostile one.
  *
  * This is the read-side twin of MAX_RELAY_ENTRIES, and it is not redundant:
  * `JSON.parse` allocates the whole body before `parseEntries` can cap a single
  * entry, so the count/cap checks alone still let a relay hand us a 2 GB body to
  * materialise first. The limit is applied while reading, not after.
  */
-export const MAX_RELAY_BODY_BYTES = 1024 * 1024;
+export const MAX_RELAY_BODY_BYTES = 4 * 1024 * 1024;
 
 /** read a relay response body, refusing to buffer more than `maxBodyBytes`. */
 async function readBoundedBody(res: Response, maxBodyBytes: number): Promise<string> {

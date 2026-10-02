@@ -15,7 +15,9 @@
  *     configured relay (else the built-in DEFAULT_CONTACT_DISCOVERY_RELAY) is
  *     used, so an app can never point the wallet at a relay of its choosing;
  *   - accepting turns discovery on and grants THIS site only ("friends can
- *     find you here"); every other site needs its own grant;
+ *     find you here"); every other site needs its own grant. The first grant
+ *     is also the opt-in for the one discovery relay destination;
+ *   - accepting starts presence for this site while its page is open;
  *   - a denial is NOT remembered (unlike a capability): nothing is persisted
  *     and the caller may ask again;
  *   - if the feature is on and this site already holds the grant, the request
@@ -42,6 +44,7 @@ import { isValidExternalSender } from '../../senders/external';
 import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../../config/contact-discovery-relay';
 import { setSiteFindsFriends, siteFindsFriends } from '../../state/find-friends';
 import { PopupPath } from '../../routes/popup/paths';
+import { holdTab } from '../../discovery-presence-port';
 import {
   openApprovalPopup,
   registerPendingApproval,
@@ -77,6 +80,8 @@ export interface ContactDiscoveryRequestDeps {
   siteAllowed: (origin: string) => Promise<boolean>;
   /** grant this site, and turn discovery on PRESERVING any configured endpoint/token. */
   enable: (origin: string) => Promise<void>;
+  /** the site's open page may hold presence now (it said yes: "friends here will see you are online") */
+  hold?: (tabId: number) => void;
   /** show the consent popup and resolve the user's decision. */
   prompt: (
     origin: string,
@@ -114,12 +119,14 @@ export const createContactDiscoveryRequestListener =
     const origin = sender.origin;
     const favIconUrl = sender.tab?.favIconUrl || '';
     const title = sender.tab?.title || '';
+    const tabId = sender.tab.id;
 
     void (async () => {
       try {
         const { enabled, relayEndpoint } = await deps.settings();
         if (enabled && (await deps.siteAllowed(origin))) {
           // Already on for this site: nothing to ask and nothing to change.
+          deps.hold?.(tabId);
           sendResponse({ success: true, enabled: true });
           return;
         }
@@ -134,6 +141,7 @@ export const createContactDiscoveryRequestListener =
         const decision = await deps.prompt(origin, favIconUrl, title, relayEndpoint);
         if (decision === 'approved') {
           await deps.enable(origin);
+          deps.hold?.(tabId);
           sendResponse({ success: true, enabled: true });
         } else if (decision === 'cancelled') {
           sendResponse({ success: false, error: 'cancelled', cancelled: true });
@@ -211,6 +219,7 @@ export const contactDiscoveryRequestDeps: ContactDiscoveryRequestDeps = {
   // Flips the wallet-wide flag (keeping a relay the person set up) and grants
   // this one site. Every other site still needs its own grant.
   enable: origin => setSiteFindsFriends(origin, true),
+  hold: holdTab,
   prompt: openConsentPopup,
 };
 

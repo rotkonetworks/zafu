@@ -5,6 +5,7 @@ import {
   cardLinkPayload,
   contactCardMemoHex,
   readCardPayload,
+  cardDiscoveryKey,
   myAddressForContact,
   replyAddress,
   type DeriveAddress,
@@ -124,6 +125,28 @@ describe('a card link', () => {
       contactCardMemoHex({ senderName: '', myAddress: address, zid })!,
     );
     expect(readCardPayload(payload)).toMatchObject({ name: '', address, zid });
+  });
+
+  it('carries the discovery key next to the seal key, and back', () => {
+    const address = 'u1' + 'q'.repeat(140);
+    const zid = 'ab'.repeat(32);
+    const ka = 'cd'.repeat(32);
+    const card = readCardPayload(
+      cardLinkPayload(contactCardMemoHex({ senderName: '', myAddress: address, zid, ka })!),
+    );
+    expect(card).toMatchObject({ address, zid, ka });
+    expect(cardDiscoveryKey(card!)).toEqual({ suite: 'x25519-v1', publicKey: ka });
+  });
+
+  it('a card without the discovery key is address-only for discovery', () => {
+    const address = 'u1' + 'q'.repeat(140);
+    const card = readCardPayload(
+      cardLinkPayload(
+        contactCardMemoHex({ senderName: '', myAddress: address, zid: 'ab'.repeat(32) })!,
+      ),
+    );
+    expect(card?.ka).toBeUndefined();
+    expect(cardDiscoveryKey(card!)).toBeUndefined();
   });
 
   it('is nothing when the link carries something else', () => {

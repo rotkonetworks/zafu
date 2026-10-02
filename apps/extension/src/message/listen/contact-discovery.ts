@@ -7,10 +7,12 @@
  * holds the pairwise secrets; the app never does.
  *
  * Gate: a valid top-frame https sender (isValidExternalSender), then a per-origin
- * rate limit. There is no per-request popup - the privacy design is what makes
- * the method safe for arbitrary origins: the reply reveals nothing the caller
- * did not already hold a handle for, and the whole feature is opt-in and off by
- * default. The wallet resolves the app scope from the browser-ATTESTED origin,
+ * rate limit, then the site's own "friends can find you here" grant (asked at
+ * the moment by zafu_request_contact_discovery, ReqDiscover.dc.html). There is
+ * no per-request popup here: the reply reveals nothing the caller did not
+ * already hold a handle for, and the feature is off until the person grants a
+ * site. A served lookup beacons this site first and lets its page hold
+ * presence, so the answer is mutual: whoever you see here can see you. The wallet resolves the app scope from the browser-ATTESTED origin,
  * never from the caller-supplied field, so a page cannot ask about another
  * origin's scope.
  *
@@ -32,6 +34,7 @@ import {
   type ContactDiscoveryDeps,
 } from '../../state/contact-discovery-service';
 import { CONTACT_DISCOVERY_METHODS } from './zafu-method-names';
+import { discoveryPresence, holdTab } from '../../discovery-presence-port';
 
 const DISCOVER_TYPE = CONTACT_DISCOVERY_METHODS[0];
 
@@ -61,8 +64,14 @@ const isDiscoverRequest = (req: unknown): req is ZafuDiscoverContactsRequest =>
  * contract is testable with a fake relay (see contact-discovery.test.ts); the
  * default export below wires the real storage/keyring deps.
  */
+/** presence hooks: beacon the site before a lookup, then let its page hold presence */
+export interface DiscoveryPresenceHooks {
+  publishNow: (origin: string) => Promise<void>;
+  holdTab: (tabId: number) => void;
+}
+
 export const createContactDiscoveryListener =
-  (deps: ContactDiscoveryDeps) =>
+  (deps: ContactDiscoveryDeps, presence?: DiscoveryPresenceHooks) =>
   (
     req: unknown,
     sender: chrome.runtime.MessageSender,
@@ -98,8 +107,18 @@ export const createContactDiscoveryListener =
       return true;
     }
 
-    void runDiscoveryForScope(origin, deps).then(sendResponse);
+    const tabId = sender.tab.id;
+    void runDiscoveryForScope(origin, deps, presence?.publishNow).then(res => {
+      if ('contacts' in res) {
+        // served: this site is granted and open, so you are online here too
+        presence?.holdTab(tabId);
+      }
+      sendResponse(res);
+    });
     return true;
   };
 
-export const contactDiscoveryListener = createContactDiscoveryListener(contactDiscoveryDeps);
+export const contactDiscoveryListener = createContactDiscoveryListener(contactDiscoveryDeps, {
+  publishNow: origin => discoveryPresence.publishNow(origin),
+  holdTab,
+});
