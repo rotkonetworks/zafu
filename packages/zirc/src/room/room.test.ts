@@ -17,6 +17,7 @@ import {
   maxBodyBytes,
   parseInvite,
   relayLimitsFor,
+  ROOM_WINDOW_ENTRIES,
   sealedBlobBytes,
   DEFAULT_CHANNEL,
   roomShard,
@@ -1299,5 +1300,46 @@ describe('room: shardFor (a shard per window)', () => {
       now: () => T0,
     });
     await expect(room.send('x')).rejects.toThrow(/16 lowercase hex/);
+  });
+});
+
+describe('room: a read is bounded by the room, not by discovery', () => {
+  it('a room caps its window at ROOM_WINDOW_ENTRIES and a few MiB, not the 16384-entry default', () => {
+    const group = relayLimitsFor(GROUP_ROOM_PLAINTEXT_BYTES);
+    expect(group.maxEntries).toBe(ROOM_WINDOW_ENTRIES);
+    expect(group.maxBodyBytes).toBe(2 * 1024 * 1024);
+    expect(relayLimitsFor(ROOM_PLAINTEXT_BYTES).maxBodyBytes).toBe(1024 * 1024);
+    // what one honest full window weighs fits inside it
+    expect(ROOM_WINDOW_ENTRIES * (group.maxEntryBase64 + 64)).toBeLessThanOrEqual(
+      group.maxBodyBytes,
+    );
+  });
+
+  it('a hostile relay cannot make a room read buffer beyond the cap', async () => {
+    const limits = relayLimitsFor(GROUP_ROOM_PLAINTEXT_BYTES);
+    let pulled = 0;
+    const chunk = new TextEncoder().encode('x'.repeat(64 * 1024));
+    // an endless body: the relay keeps sending as long as anyone reads
+    const fetch = () =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            pull(c) {
+              pulled += chunk.byteLength;
+              c.enqueue(chunk);
+            },
+          }),
+        ),
+      );
+    const relay = createHttpRelayTransport({
+      endpoint: 'https://relay.example',
+      fetch: fetch as unknown as typeof globalThis.fetch,
+      ...limits,
+    });
+    await expect(
+      relay.getBucket({ appScope: 'zafu-group-v1', epoch: 1, shard: 'ab' }),
+    ).rejects.toThrow(/exceeds/);
+    // read up to the cap, one chunk past it at most, then stopped
+    expect(pulled).toBeLessThanOrEqual(limits.maxBodyBytes + 2 * chunk.byteLength);
   });
 });

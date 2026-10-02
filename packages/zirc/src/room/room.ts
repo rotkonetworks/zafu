@@ -73,16 +73,7 @@
  *     `roomShardFromSecret`.
  */
 
-import {
-  concat,
-  lpText,
-  MAX_RELAY_BODY_BYTES,
-  MAX_RELAY_ENTRIES,
-  PresenceEntry,
-  presenceEpoch,
-  RelayTransport,
-  u32be,
-} from '@zafu/zid';
+import { concat, lpText, PresenceEntry, presenceEpoch, RelayTransport, u32be } from '@zafu/zid';
 
 // ---------------------------------------------------------------------------
 // wire format
@@ -165,6 +156,16 @@ export const ZAFU_GROUP_APP_SCOPE = 'zafu-group-v1';
 export const sealedBlobBytes = (plaintextBytes: number): number => 1 + 12 + plaintextBytes + 16;
 
 /**
+ * How many entries one window of a room may hold before a reader stops
+ * buffering: every member's lines and presence for five minutes. Its own
+ * number, not the relay client's default: that one is sized for a discovery
+ * bucket (16384 small entries), and a room's entries are kilobytes each, so
+ * borrowing it would let one hostile window make a reader buffer hundreds of
+ * megabytes (groups design 0.1 sizes a group window at 256).
+ */
+export const ROOM_WINDOW_ENTRIES = 256;
+
+/**
  * The `createHttpRelayTransport` limits a room of this plaintext size needs.
  *
  * `MAX_RELAY_ENTRY_BASE64` in `@zafu/zid` defaults to 1024 base64 chars, sized
@@ -175,9 +176,14 @@ export const sealedBlobBytes = (plaintextBytes: number): number => 1 + 12 + plai
  * bug this function exists to make impossible to repeat. Every `Room` built
  * against a real relay MUST wire these into {@link RelayTransport}'s
  * constructor options (`createHttpRelayTransport({ ...opts, ...relayLimitsFor(plaintextBytes) })`).
+ *
+ * The read is bounded by `maxEntries` windows' worth of this room's records,
+ * never by the discovery defaults: `maxBodyBytes` is what the transport stops
+ * reading at, so it is the most one window can ever make a reader hold.
  */
 export const relayLimitsFor = (
   plaintextBytes: number,
+  maxEntries: number = ROOM_WINDOW_ENTRIES,
 ): { maxEntryBase64: number; maxEntries: number; maxBodyBytes: number } => {
   const sealed = sealedBlobBytes(plaintextBytes);
   const rawBase64 = Math.ceil(sealed / 3) * 4;
@@ -185,15 +191,10 @@ export const relayLimitsFor = (
   // version (different fixed-field widths, same plaintext budget) is never
   // pushed just over the line.
   const maxEntryBase64 = Math.ceil(rawBase64 / 1024) * 1024;
-  const maxEntries = MAX_RELAY_ENTRIES; // unchanged: one padded batch per publisher
-  // Two base64 fields (tag + blob) per entry; rounded up to a whole MiB so a
-  // hostile relay still cannot make a reader buffer unboundedly, just a larger
-  // bound than discovery's.
-  const worstCase = maxEntries * maxEntryBase64 * 2;
-  const maxBodyBytes = Math.max(
-    MAX_RELAY_BODY_BYTES,
-    Math.ceil(worstCase / (1024 * 1024)) * 1024 * 1024,
-  );
+  // one entry on the wire: the blob, a 16-byte tag (24 base64 chars) and its
+  // JSON punctuation; rounded up to a whole MiB
+  const perEntry = maxEntryBase64 + 64;
+  const maxBodyBytes = Math.ceil((maxEntries * perEntry) / (1024 * 1024)) * 1024 * 1024;
   return { maxEntryBase64, maxEntries, maxBodyBytes };
 };
 
