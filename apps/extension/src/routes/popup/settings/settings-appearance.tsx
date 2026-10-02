@@ -20,27 +20,35 @@ const applyRootData = (key: 'theme' | 'font', value: string, fallback: string) =
   }
 };
 
-/** one persisted choice: read once from storage (an external system), written through on pick */
+/**
+ * one persisted choice: read once from storage (an external system), written
+ * through on pick. `loaded` flips true once that read resolves, so a caller
+ * that wants to snapshot the value for a later revert knows when it's real
+ * (not just the pre-read placeholder).
+ */
 const useStoredChoice = <T extends string>(
   initial: T,
   read: () => Promise<T>,
   write: (v: T) => void,
 ) => {
   const [value, setValue] = useState<T>(initial);
+  const [loaded, setLoaded] = useState(false);
   useEffect(() => {
-    void read().then(setValue);
-  }, []);
-  return {
-    value,
-    set: (v: T) => {
+    void read().then(v => {
       setValue(v);
-      write(v);
-    },
+      setLoaded(true);
+    });
+  }, []);
+  const set = (v: T) => {
+    setValue(v);
+    write(v);
   };
+  // same op as `set`, named for callers reverting to an earlier snapshot
+  return { value, loaded, set, restore: set };
 };
 
 export const useZafuTheme = () => {
-  const { value, set } = useStoredChoice<ZafuTheme>(
+  const { value, loaded, set, restore } = useStoredChoice<ZafuTheme>(
     'sumi',
     // a retired 'terminal' choice falls back to the default
     async () => ((await localExtStorage.get('zafuTheme')) === 'washi' ? 'washi' : 'sumi'),
@@ -49,7 +57,7 @@ export const useZafuTheme = () => {
       void localExtStorage.set('zafuTheme', t);
     },
   );
-  return { theme: value, set };
+  return { theme: value, loaded, set, restore };
 };
 
 export const ThemeRow = () => {
@@ -67,8 +75,8 @@ export const ThemeRow = () => {
   );
 };
 
-export const FontRow = () => {
-  const { value, set } = useStoredChoice<ZafuFont>(
+export const useZafuFont = () => {
+  const { value, loaded, set, restore } = useStoredChoice<ZafuFont>(
     'iosevka',
     async () => (await localExtStorage.get('zafuFont')) ?? 'iosevka',
     f => {
@@ -76,10 +84,17 @@ export const FontRow = () => {
       void localExtStorage.set('zafuFont', f);
     },
   );
+  return { font: value, loaded, set, restore };
+};
+
+/** uncontrolled by default (own hook instance); pass `state` to share one instance with a parent that needs to read or revert it */
+export const FontRow = ({ state }: { state?: ReturnType<typeof useZafuFont> }) => {
+  const own = useZafuFont();
+  const { font, set } = state ?? own;
   return (
     <OptionsRow
       label='type'
-      value={value}
+      value={font}
       options={[
         { value: 'iosevka', label: 'iosevka term' },
         { value: 'system', label: 'system mono' },
@@ -89,16 +104,27 @@ export const FontRow = () => {
   );
 };
 
-export const ApprovalsRow = () => {
-  const { value, set } = useStoredChoice<ApprovalSurface>('hybrid', getApprovalSurface, s => {
-    void localExtStorage.set('approvalSurface', s);
-    // keep the legacy flag in step for anything still reading it
-    void localExtStorage.set('approvalsInSidePanel', s !== 'popup');
-  });
+export const useApprovalSurface = () => {
+  const { value, loaded, set, restore } = useStoredChoice<ApprovalSurface>(
+    'hybrid',
+    getApprovalSurface,
+    s => {
+      void localExtStorage.set('approvalSurface', s);
+      // keep the legacy flag in step for anything still reading it
+      void localExtStorage.set('approvalsInSidePanel', s !== 'popup');
+    },
+  );
+  return { surface: value, loaded, set, restore };
+};
+
+/** uncontrolled by default (own hook instance); pass `state` to share one instance with a parent that needs to read or revert it */
+export const ApprovalsRow = ({ state }: { state?: ReturnType<typeof useApprovalSurface> }) => {
+  const own = useApprovalSurface();
+  const { surface, set } = state ?? own;
   return (
     <OptionsRow
       label='approvals open in'
-      value={value}
+      value={surface}
       options={[
         { value: 'hybrid', label: 'side panel or window', desc: 'a window when no panel can open' },
         { value: 'sidebar', label: 'side panel only' },

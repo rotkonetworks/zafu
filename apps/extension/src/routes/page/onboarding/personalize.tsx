@@ -2,11 +2,13 @@
  * make it yours - the one optional step between a sealed wallet and "wallet
  * ready", on every path (create, import, watch-only, signer import). Every
  * row here writes straight through to the same storage the settings screens
- * read, so skipping it changes nothing and answering it needs no separate
- * save: "keep defaults" and "save" both just move on.
+ * read, so skipping it (or tapping "keep defaults" before touching anything)
+ * changes nothing. Once something IS touched, "keep defaults" puts back the
+ * snapshot taken on arrival (so it's a real "never mind", not a second
+ * "save"); "save" just moves on with whatever is live.
  */
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
@@ -18,10 +20,17 @@ import { privacySelector } from '../../../state/privacy';
 import { usePageNav } from '../../../utils/navigate';
 import { hostOf } from '../../../net/destination';
 import { PagePath } from '../paths';
-import { useZafuTheme, FontRow, ApprovalsRow } from '../../popup/settings/settings-appearance';
+import {
+  useZafuTheme,
+  useZafuFont,
+  useApprovalSurface,
+  FontRow,
+  ApprovalsRow,
+} from '../../popup/settings/settings-appearance';
 import { ContactDiscoverySection } from '../../popup/settings/settings-privacy';
 import { ZcashNodeSheet } from '../../popup/settings/settings-zcash-network';
 import { useAutoLock, AUTO_LOCK_OPTIONS } from '../../popup/settings/use-auto-lock';
+import type { ZcashBackend } from '../../../state/keyring/zcash-backend';
 
 // the three choices worth a tap before there is anything to lock; "off" and
 // the finer options stay in settings > security, same list, same storage
@@ -30,6 +39,22 @@ const AUTO_LOCK_CHOICES = AUTO_LOCK_OPTIONS.filter(o => [5, 15, 60].includes(o.v
   value: String(o.value),
 }));
 
+interface Snapshot {
+  theme: ReturnType<typeof useZafuTheme>['theme'];
+  font: ReturnType<typeof useZafuFont>['font'];
+  surface: ReturnType<typeof useApprovalSurface>['surface'];
+  enableTransactionHistory: boolean;
+  historyAsked: boolean;
+  hideBalances: boolean;
+  minutes: number;
+  zcashEndpoint: string | undefined;
+  zcashBackend: ZcashBackend;
+  enableExplorerLinks: boolean;
+  openZcashLinks: boolean;
+  openZafuLinks: boolean;
+  enableBackgroundSync: boolean;
+}
+
 export const Personalize = () => {
   const navigate = usePageNav();
   const { state } = useLocation();
@@ -37,12 +62,71 @@ export const Personalize = () => {
   const [moreOpen, setMoreOpen] = useState(false);
   const [nodeOpen, setNodeOpen] = useState(false);
 
-  const { theme, set: setTheme } = useZafuTheme();
+  const themeState = useZafuTheme();
+  const fontState = useZafuFont();
+  const surfaceState = useApprovalSurface();
+  const { theme, set: setTheme } = themeState;
   const { settings, setSetting } = useStore(privacySelector);
   const { minutes, set: setAutoLock } = useAutoLock();
   const zcashEndpoint = useStore(s => s.networks.networks.zcash.endpoint);
+  const zcashBackend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
+  const setNetworkEndpoint = useStore(s => s.networks.setNetworkEndpoint);
+  const setZcashBackend = useStore(s => s.networks.setZcashBackend);
 
-  const proceed = () => navigate(PagePath.ONBOARDING_SUCCESS, { state, replace: true });
+  // one snapshot, taken once every value here has loaded for real (not the
+  // pre-read placeholder) - this is what "keep defaults" restores to.
+  const snapshot = useRef<Snapshot | null>(null);
+  useEffect(() => {
+    if (snapshot.current || !themeState.loaded || !fontState.loaded || !surfaceState.loaded) {
+      return;
+    }
+    snapshot.current = {
+      theme: themeState.theme,
+      font: fontState.font,
+      surface: surfaceState.surface,
+      enableTransactionHistory: settings.enableTransactionHistory,
+      historyAsked: settings.historyAsked,
+      hideBalances: settings.hideBalances,
+      minutes,
+      zcashEndpoint,
+      zcashBackend,
+      enableExplorerLinks: settings.enableExplorerLinks,
+      openZcashLinks: settings.openZcashLinks,
+      openZafuLinks: settings.openZafuLinks,
+      enableBackgroundSync: settings.enableBackgroundSync,
+    };
+  });
+
+  // the zcash-node sheet lives outside the "more settings" div's click-to-touch
+  // wrapper (it's a sibling sheet), so a pick there needs its own touch: once
+  // the snapshot exists, any value that drifts from it means something changed.
+  useEffect(() => {
+    const s = snapshot.current;
+    if (s && (s.zcashEndpoint !== zcashEndpoint || s.zcashBackend !== zcashBackend)) {
+      setTouched(true);
+    }
+  }, [zcashEndpoint, zcashBackend]);
+
+  const keepDefaults = () => {
+    const s = snapshot.current;
+    if (touched && s) {
+      themeState.restore(s.theme);
+      fontState.restore(s.font);
+      surfaceState.restore(s.surface);
+      void setSetting('enableTransactionHistory', s.enableTransactionHistory);
+      void setSetting('historyAsked', s.historyAsked);
+      void setSetting('hideBalances', s.hideBalances);
+      setAutoLock(s.minutes);
+      void setNetworkEndpoint('zcash', s.zcashEndpoint ?? '');
+      void setZcashBackend(s.zcashBackend);
+      void setSetting('enableExplorerLinks', s.enableExplorerLinks);
+      void setSetting('openZcashLinks', s.openZcashLinks);
+      void setSetting('openZafuLinks', s.openZafuLinks);
+      void setSetting('enableBackgroundSync', s.enableBackgroundSync);
+    }
+    navigate(PagePath.ONBOARDING_SUCCESS, { state, replace: true });
+  };
+  const save = () => navigate(PagePath.ONBOARDING_SUCCESS, { state, replace: true });
 
   const answerHistory = (keep: boolean) => {
     setTouched(true);
@@ -118,13 +202,13 @@ export const Personalize = () => {
       <span className='text-label text-fg-dim'>you can change any of this in settings</span>
 
       <div className='flex flex-col gap-2'>
-        <Button autoFocus className='h-14 w-full text-[15px]' onClick={proceed}>
+        <Button autoFocus className='h-14 w-full text-[15px]' onClick={keepDefaults}>
           keep defaults
         </Button>
         {/* reserved so tapping anything above never shifts the page (nothing expands in place) */}
         <div className='h-14'>
           {touched && (
-            <Button variant='secondary' className='h-14 w-full text-[15px]' onClick={proceed}>
+            <Button variant='secondary' className='h-14 w-full text-[15px]' onClick={save}>
               save
             </Button>
           )}
@@ -142,8 +226,8 @@ export const Personalize = () => {
           className='-mx-4 flex min-h-0 flex-col gap-4 overflow-y-auto px-4'
         >
           <RowGroup>
-            <FontRow />
-            <ApprovalsRow />
+            <FontRow state={fontState} />
+            <ApprovalsRow state={surfaceState} />
           </RowGroup>
           <RowGroup>
             <Row
