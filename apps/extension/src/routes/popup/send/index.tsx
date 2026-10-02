@@ -101,6 +101,7 @@ export function SendPage() {
         onClose={goBack}
         prefillAsset={locationState?.prefillAsset}
         prefillRecipient={prefill?.recipient}
+        initialMode={locationState?.penumbraMode}
       />
     );
   }
@@ -166,13 +167,15 @@ function PenumbraSendScreen({
   onClose,
   prefillAsset,
   prefillRecipient,
+  initialMode,
 }: {
   onClose: () => void;
   prefillAsset?: string;
   prefillRecipient?: string;
+  initialMode?: PenumbraMode;
 }) {
   const chains = orderTransparentChains(getActiveIbcSubnetworks('penumbra') as CosmosChainId[]);
-  const [mode, setMode] = useState<PenumbraMode>('send');
+  const [mode, setMode] = useState<PenumbraMode>(initialMode ?? 'send');
   const [chain, setChain] = useState<CosmosChainId>();
   const source = chain ?? chains[0];
   const meta = (
