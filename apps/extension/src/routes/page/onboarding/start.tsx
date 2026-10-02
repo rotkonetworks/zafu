@@ -9,7 +9,7 @@ const BRING = [
   {
     icon: 'i-zafu-hi text-zigner-gold',
     label: 'recovery phrase',
-    hint: '12 or 24 words from any zcash wallet',
+    hint: '24 words from any zcash wallet',
     to: PagePath.IMPORT_SEED_PHRASE,
     shown: true,
   },

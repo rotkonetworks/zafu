@@ -1,6 +1,7 @@
 /**
- * Enter a recovery phrase - Onb7Paste board. One box for 12 or 24 words,
- * pasted or typed, any spacing. A typo gets one calm line with the nearest
+ * Enter a recovery phrase - Onb7Paste board. One box for the 24 words,
+ * pasted or typed, any spacing. A 12-word phrase is accepted quietly for
+ * people coming from a penumbra wallet, but never advertised. A typo gets one calm line with the nearest
  * word, and tapping it applies the fix. The board's "paste" button would
  * need clipboard-read permission, so a native paste stands in for it.
  */
@@ -47,7 +48,7 @@ export const ImportSeedPhrase = () => {
         ? `${words.length} words · valid phrase`
         : words.length
           ? `${words.length} words`
-          : '12 or 24 words';
+          : '24 words';
 
   const applyFix = () => fix && setText(words.map(w => (w === typo ? fix : w)).join(' '));
 
