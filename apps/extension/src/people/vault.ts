@@ -260,9 +260,13 @@ export const restorePeopleBackup = async (
   return added.length;
 };
 
-/** a removed wallet's rooms and messages go with it */
+/** a removed wallet's rooms, messages and memo invites go with it */
 export const purgePeople = async (walletId: string): Promise<void> => {
   const [rooms, threads] = [await readRooms(), await readThreads()];
+  const invites = await readInvites();
+  if (invites.some(i => i.walletId === walletId)) {
+    await writeInvites(invites.filter(i => i.walletId !== walletId));
+  }
   if (rooms) {
     await writeRooms(rooms.filter(r => r.walletId !== walletId));
   }
