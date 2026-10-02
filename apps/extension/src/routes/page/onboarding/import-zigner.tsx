@@ -234,7 +234,9 @@ export const ImportZigner = () => {
         };
         await addZignerUnencrypted(zignerData, walletLabel || 'zigner cosmos');
       }
-      await setOnboardingValuesInStorage(SEED_PHRASE_ORIGIN.ZIGNER);
+      if (firstWallet) {
+        await setOnboardingValuesInStorage(SEED_PHRASE_ORIGIN.ZIGNER);
+      }
       clearZignerState();
       navigate(firstWallet ? PagePath.PERSONALIZE : PagePath.ONBOARDING_SUCCESS);
     } catch (cause) {
