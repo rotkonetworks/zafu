@@ -21,7 +21,7 @@ import {
 } from '@repo/wallet/networks/cosmos/signer';
 import type { ZignerSignRequest, EncodeObject } from '@repo/wallet/networks/cosmos/signer';
 import { encodeCosmosSignRequest } from '@repo/wallet/networks/cosmos/airgap';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { cosmosKeyFor, noCosmosKey } from '../signing/cosmos-key';
 import { conduitFor, type TxKind } from '@repo/wallet/networks/transparent/conduit';
 
@@ -118,7 +118,7 @@ async function broadcastWithMnemonic(
   let feeGranter: string | undefined;
   if (sponsored) {
     if (!conduit.requestFeeGrant) {
-      throw new Error(`no gas sponsor for ${COSMOS_CHAINS[chainId].name}`);
+      throw new Error(`no gas sponsor for ${getCosmosChain(chainId).name}`);
     }
     const from = expectedAddress ?? (await conduit.deriveAddress(mnemonic, accountIndex));
     feeGranter = (await conduit.requestFeeGrant(from, kind)).granter;
@@ -127,12 +127,12 @@ async function broadcastWithMnemonic(
   if (res.code !== 0) {
     throw new Error(res.rawLog || `broadcast failed (code ${res.code})`);
   }
-  const syncBroadcast = COSMOS_CHAINS[chainId].keyAlgo === 'eth_secp256k1';
+  const syncBroadcast = getCosmosChain(chainId).keyAlgo === 'eth_secp256k1';
   return {
     type: 'broadcast',
     txHash: res.txHash,
     code: res.code,
-    ...(syncBroadcast ? { restUrl: COSMOS_CHAINS[chainId].restEndpoint } : {}),
+    ...(syncBroadcast ? { restUrl: getCosmosChain(chainId).restEndpoint } : {}),
   };
 }
 
@@ -181,7 +181,7 @@ export async function cosmosSend(
   selected: KeyFacts | undefined,
   getMnemonic: GetMnemonic,
 ): Promise<CosmosTxResult | CosmosZignerSignResult> {
-  const config = COSMOS_CHAINS[params.chainId];
+  const config = getCosmosChain(params.chainId);
   const denom = params.denom ?? config.denom;
   const accountIndex = params.accountIndex ?? 0;
   const amountInBase = parseAmountToBaseUnits(params.amount, params.decimals ?? config.decimals);
@@ -220,7 +220,7 @@ export async function cosmosIbcTransfer(
   selected: KeyFacts | undefined,
   getMnemonic: GetMnemonic,
 ): Promise<CosmosTxResult | CosmosZignerSignResult> {
-  const config = COSMOS_CHAINS[params.sourceChainId];
+  const config = getCosmosChain(params.sourceChainId);
   const denom = params.denom ?? config.denom;
   const accountIndex = params.accountIndex ?? 0;
   const amountInBase = parseAmountToBaseUnits(params.amount, params.decimals ?? config.decimals);

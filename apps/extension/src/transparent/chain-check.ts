@@ -8,7 +8,7 @@
  * shows the last result with its age instead of asking the chain again.
  */
 
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { conduitFor } from '@repo/wallet/networks/transparent/conduit';
 import { peekHdIndex } from '@repo/storage-chrome/cosmos-chain-counters';
 import { getRpcPool } from '../hooks/transparent-rpc';
@@ -162,7 +162,7 @@ export const toDepositAssets = (
   balances: readonly { denom: string; amount: bigint }[],
 ): DepositAsset[] => {
   const known = knownAssets(chainId);
-  const rank = (a: { denom: string }) => Number(a.denom === COSMOS_CHAINS[chainId].denom);
+  const rank = (a: { denom: string }) => Number(a.denom === getCosmosChain(chainId).denom);
   return balances
     .filter(b => b.amount > 0n)
     .map(b => {

@@ -11,7 +11,6 @@ import { Services } from '@repo/context';
 import { WalletServices } from '@penumbrafi/types/services';
 import { getRootNetwork } from './config/networks';
 import { resolvePenumbraEndpoint } from './config/penumbra-endpoints';
-import type { NetworkType } from './state/keyring';
 import { hasLiveDappSession } from './dapp-session-presence';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { ChainRegistryClient } from '@penumbrafi/registry';
@@ -61,11 +60,7 @@ export const penumbraGate = async (): Promise<{ run: true } | { run: false; reas
     return { run: false, reason: 'penumbra network not enabled' };
   }
   const activeNetwork = await localExtStorage.get('activeNetwork');
-  if (
-    activeNetwork &&
-    getRootNetwork(activeNetwork as NetworkType) !== 'penumbra' &&
-    !hasLiveDappSession()
-  ) {
+  if (activeNetwork && getRootNetwork(activeNetwork) !== 'penumbra' && !hasLiveDappSession()) {
     return { run: false, reason: 'penumbra network not active' };
   }
   return { run: true };

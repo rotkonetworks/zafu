@@ -4,7 +4,7 @@ import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/
 import { useStore } from '../state';
 import { selectEffectiveKeyInfo, keyRingSelector, selectActiveNetwork } from '../state/keyring';
 import { getRootNetwork } from '../config/networks';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { conduitFor } from '@repo/wallet/networks/transparent/conduit';
 import { knownAssets } from '../transparent/assets';
 import { cosmosKeyFor } from '../signing/cosmos-key';
@@ -49,7 +49,7 @@ export const useChainCheck = (chainId: CosmosChainId) => {
   const queryKey = useCheckKey(chainId);
   const keyId = queryKey?.[2];
   const { getMnemonic } = useStore(keyRingSelector);
-  const enabled = useStore(s => (s.keyRing.enabledNetworks as string[]).includes(chainId));
+  const enabled = useStore(s => s.keyRing.enabledNetworks.includes(chainId));
   const queryClient = useQueryClient();
   const { data: check } = useQuery({
     queryKey: queryKey ?? ['chainCheck', chainId],
@@ -111,7 +111,7 @@ export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
               )
             ).get(accountIndex)!;
 
-      const config = COSMOS_CHAINS[chainId];
+      const config = getCosmosChain(chainId);
       const balances = await conduitFor(chainId).queryBalances(address);
       const known = knownAssets(chainId);
 

@@ -85,7 +85,7 @@ export const releaseActive = async (
   state: AllSlices,
   owner: string,
   account: number,
-  targets: PocketTarget[] = [ZCASH_POCKET, ...Object.values(POCKET_TARGET)],
+  targets: PocketTarget[] = [ZCASH_POCKET, ...Object.values(POCKET_TARGET).filter(t => !!t)],
 ): Promise<void> => {
   for (const target of targets) {
     if (target.active(state) === account) {

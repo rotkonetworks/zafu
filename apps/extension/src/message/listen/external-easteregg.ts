@@ -44,7 +44,7 @@ import {
   nextHdIndex,
   checkAndBumpFreshAddressRateLimit,
 } from '@repo/storage-chrome/cosmos-chain-counters';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { isPro } from '../../state/license';
 import { isValidExternalSender } from '../../senders/external';
 import { ZAFU_PROTOCOL_VERSION, ZAFU_SUPPORTED_PROTOCOL_VERSIONS } from '@zafu/protocol';
@@ -1051,7 +1051,7 @@ export const externalMessageListener = (
         sendResponse({ error: `unknown chainId '${rawChainId}'`, code: 'invalid_request' });
         return true;
       }
-      const chainId = rawChainId as CosmosChainId;
+      const chainId = rawChainId;
 
       void (async () => {
         try {

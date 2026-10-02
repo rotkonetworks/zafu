@@ -22,7 +22,7 @@ import { PenumbraReceive, PlainReceive, ZcashReceive, type AddrType } from './re
 import { TransparentReceive } from './transparent-receive';
 import { orderTransparentChains, type Privacy } from '../../../components/privacy-switch';
 import { getActiveIbcSubnetworks } from '../../../config/networks';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { Segmented } from '@repo/ui/components/ui/segmented';
 
 export function ReceivePage() {
@@ -64,8 +64,8 @@ export function ReceivePage() {
   const routes = usePenumbraRoutes();
   const transparentChains = isPenumbra
     ? orderTransparentChains(
-        (getActiveIbcSubnetworks('penumbra') as CosmosChainId[]).filter(
-          c => routeForChain(c, routes) && !COSMOS_CHAINS[c].deprecation,
+        getActiveIbcSubnetworks('penumbra').filter(
+          c => routeForChain(c, routes) && !getCosmosChain(c).deprecation,
         ),
       )
     : [];
@@ -126,7 +126,7 @@ export function ReceivePage() {
             label='network'
             value={receiveOn}
             onChange={setPickedChain}
-            options={transparentChains.map(c => ({ value: c, label: COSMOS_CHAINS[c].name }))}
+            options={transparentChains.map(c => ({ value: c, label: getCosmosChain(c).name }))}
             className='mb-4 w-full'
           />
         )}

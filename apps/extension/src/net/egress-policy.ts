@@ -49,7 +49,7 @@ export const EGRESS_INPUT_KEYS: readonly string[] = [
   'keplrCompat',
   'zcashWallets',
   'zcashBackend',
-  ...(Object.keys(COSMOS_CHAINS) as CosmosChainId[]).map(rpcPoolKey),
+  ...Object.keys(COSMOS_CHAINS).map(rpcPoolKey),
 ];
 
 /** What those keys hold, read loosely: storage is written by older builds too. */

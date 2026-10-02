@@ -42,7 +42,6 @@
     "./license": "./src/license.ts"
   },
   "dependencies": {
-    "@chain-registry/types": "^2.0.251",
     "@connectrpc/connect": "^1.6.1",
     "@connectrpc/connect-web": "^1.6.1",
     "@cosmjs/amino": "^0.32.4",
@@ -54,8 +53,8 @@
     "@noble/hashes": "^1.8.0",
     "@penumbra-zone/bech32m": "18.0.0",
     "@penumbra-zone/protobuf": "11.0.0",
+    "@penumbrafi/registry": "^13.2.0",
     "bip39": "^3.1.0",
-    "chain-registry": "2.0.251",
     "cosmjs-types": "^0.9.0",
     "qrcode": "^1.5.4"
   },

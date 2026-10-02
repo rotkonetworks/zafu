@@ -19,7 +19,7 @@ const SIGNING_OPTIONS: readonly { value: TxSigningSecurity; label: string; desc:
 ];
 
 const useZcashOn = () => {
-  const enabled = useStore(selectEnabledNetworks) as string[];
+  const enabled = useStore(selectEnabledNetworks);
   return enabled.length === 0 || enabled.includes('zcash');
 };
 

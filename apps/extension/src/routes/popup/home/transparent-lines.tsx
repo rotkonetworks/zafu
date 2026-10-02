@@ -12,7 +12,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { Button } from '@repo/ui/components/ui/button';
 import { Sheet } from '@repo/ui/components/ui/sheet';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { defaultRpcPool, getRpcPool, setRpcPool } from '../../../hooks/transparent-rpc';
 import { useTransparentHoldings, type Holding } from '../../../hooks/transparent-holdings';
 import { refreshEgress } from '../../../net/egress';
@@ -21,7 +21,7 @@ import { useStore } from '../../../state';
 import { BalanceRow, Tile, UnshieldedLine } from '../../../components/wallet/balance-rows';
 import { useOpenIntent } from '../../../hooks/open-link';
 
-const chainName = (c: CosmosChainId) => COSMOS_CHAINS[c].name.toLowerCase();
+const chainName = (c: CosmosChainId) => getCosmosChain(c).name.toLowerCase();
 
 interface Nodes {
   all: string[];
@@ -179,7 +179,7 @@ export const useTransparentLines = () => {
     const held = (t.holdings.get(symbol) ?? []).filter(h => h.chainId === c);
     if (held.length) {
       const h = held[0]!;
-      const gone = COSMOS_CHAINS[c].deprecation;
+      const gone = getCosmosChain(c).deprecation;
       return (
         <UnshieldedLine
           key={c}

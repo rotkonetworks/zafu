@@ -123,18 +123,8 @@ type LOCAL = {
   approvalSurface?: 'hybrid' | 'sidebar' | 'popup';
   clearingCache?: boolean;
   pendingClearCache?: ('penumbra' | 'zcash')[];
-  activeNetwork?:
-    | 'penumbra'
-    | 'zcash'
-    | 'noble'
-    | 'cosmoshub'
-    | 'osmosis'
-    | 'injective'
-    | 'celestia'
-    | 'kava'
-    | 'axelar'
-    | 'ethereum'
-    | 'bitcoin';
+  /** 'zcash', 'penumbra', or a penumbra subnetwork's chain-registry name */
+  activeNetwork?: string;
   zcashWallets?: {
     id: string;
     label: string;
@@ -173,19 +163,8 @@ type LOCAL = {
     enableBackgroundSync: boolean;
     enablePriceFetching: boolean;
   };
-  enabledNetworks?: (
-    | 'penumbra'
-    | 'zcash'
-    | 'noble'
-    | 'cosmoshub'
-    | 'osmosis'
-    | 'injective'
-    | 'celestia'
-    | 'kava'
-    | 'axelar'
-    | 'ethereum'
-    | 'bitcoin'
-  )[];
+  /** as activeNetwork: any cosmos chain the penumbrafi registry lists can be here */
+  enabledNetworks?: string[];
   networkEndpoints?: {
     penumbra?: string;
     zcash?: string;

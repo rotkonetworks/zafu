@@ -321,8 +321,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         const stored = changes.enabledNetworks.newValue;
         set(
           produce((state: AllSlices) => {
-            state.keyRing.enabledNetworks = (stored ??
-              []) as AllSlices['keyRing']['enabledNetworks'];
+            state.keyRing.enabledNetworks = stored ?? [];
           }),
         );
       }

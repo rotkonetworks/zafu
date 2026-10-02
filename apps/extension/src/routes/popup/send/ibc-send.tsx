@@ -5,7 +5,11 @@ import { useQuery } from '@tanstack/react-query';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
 import { getDisplayDenomExponent } from '@penumbra-zone/getters/metadata';
 import { fromValueView } from '@penumbrafi/types/amount';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import {
+  COSMOS_CHAINS,
+  getCosmosChain,
+  type CosmosChainId,
+} from '@repo/wallet/networks/cosmos/chains';
 import { Button } from '@repo/ui/components/ui/button';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { useStore } from '../../../state';
@@ -150,7 +154,7 @@ export function PenumbraIbcSend({ onClose, meta }: { onClose: () => void; meta?:
     if (
       selectedKeyInfo?.type !== 'zigner-zafu' ||
       !ibcState.chain ||
-      (cosmosChainId && COSMOS_CHAINS[cosmosChainId].keyAlgo === 'eth_secp256k1')
+      (cosmosChainId && getCosmosChain(cosmosChainId).keyAlgo === 'eth_secp256k1')
     ) {
       return undefined;
     }
@@ -296,7 +300,7 @@ export function PenumbraIbcSend({ onClose, meta }: { onClose: () => void; meta?:
               srcTxHash: txId,
               amount: ibcState.amount,
               // the asset's decimals: INJ is 18, USDC.inj 6
-              decimals: ibcState.exponent ?? COSMOS_CHAINS[trackChainId].decimals,
+              decimals: ibcState.exponent ?? getCosmosChain(trackChainId).decimals,
               symbol: meta?.symbol ?? meta?.display ?? ibcState.denom,
               destChainId: trackChainId,
               destAddress: destAddr,

@@ -4,7 +4,7 @@ import { usePopupNav } from '../../../utils/navigate';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { useStore } from '../../../state';
 import { selectEnabledNetworks, type NetworkType } from '../../../state/keyring';
 import { useDisableNetwork, useEnableNetwork } from '../../../hooks/enable-network';
@@ -25,19 +25,19 @@ import { RpcPoolSheet } from './transparent-chain-endpoints';
 const PRESETS = getRegistryEndpoints();
 /** a penumbra ibc chain: a network zafu can turn on, with a cosmos chain config */
 type Chain = Extract<CosmosChainId, NetworkType>;
-const CHAINS = getSubnetworks('penumbra') as Chain[];
+const CHAINS = getSubnetworks('penumbra');
 
 const speedTest = async () => {
   const results = await probeAllPenumbra(PRESETS);
   return new Map(PRESETS.map((p, i) => [p.url, results[i]?.ok ? results[i].latencyMs : null]));
 };
 
-const chainName = (id: Chain) => COSMOS_CHAINS[id].name.toLowerCase();
+const chainName = (id: Chain) => getCosmosChain(id).name.toLowerCase();
 
 type Open = 'node' | 'ibc' | Chain | null;
 
 const openFrom = (params: URLSearchParams): Open => {
-  const chain = params.get('chain') as Chain | null;
+  const chain = params.get('chain');
   return chain && CHAINS.includes(chain) ? chain : params.get('sheet') === 'node' ? 'node' : null;
 };
 
@@ -46,7 +46,7 @@ const ChainSheet = ({ id, onClose }: { id: Chain; onClose: () => void }) => {
   const on = useStore(s => selectEnabledNetworks(s).includes(id));
   const disable = useDisableNetwork();
   const enable = useEnableNetwork();
-  const gone = COSMOS_CHAINS[id].deprecation;
+  const gone = getCosmosChain(id).deprecation;
   return (
     <RpcPoolSheet chainId={id} open onOpenChange={o => !o && onClose()}>
       {gone && <StatusSlot tone='warn'>please move funds out by {gone.moveOutBy}</StatusSlot>}
@@ -155,9 +155,7 @@ export const SettingsPenumbraNetwork = () => {
         </RowGroup>
       </Sheet>
 
-      {open && CHAINS.includes(open as Chain) && (
-        <ChainSheet id={open as Chain} onClose={() => setOpen('ibc')} />
-      )}
+      {open && CHAINS.includes(open) && <ChainSheet id={open} onClose={() => setOpen('ibc')} />}
       {explainSheet}
     </SettingsScreen>
   );

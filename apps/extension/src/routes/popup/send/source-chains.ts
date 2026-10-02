@@ -5,7 +5,7 @@
  * come first, a deprecated chain sinks to the bottom.
  */
 
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import type { Pick } from './send-fields';
 
 /** what a chain's deposit addresses held at the last check */
@@ -24,7 +24,7 @@ export const sourceChainPicks = (
   const rows = candidates
     .filter(c => offered.has(c) || held.has(c))
     .map(c => {
-      const cfg = COSMOS_CHAINS[c];
+      const cfg = getCosmosChain(c);
       const amounts = held.get(c)?.amounts ?? [];
       const description = !offered.has(c)
         ? 'channel closed'
