@@ -27,6 +27,11 @@ import { CosmosSend } from './cosmos-send';
 import { PenumbraSend } from './penumbra-send';
 import { PenumbraIbcSend } from './ibc-send';
 import { sendPrefill, type SendLocationState } from './prefill';
+import { PickSheet } from './send-fields';
+import { sourceChainPicks, type ChainHeld } from './source-chains';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { offeredChains, usePenumbraRoutes } from '../../../transparent/penumbra-routes';
+import { useTransparentHoldings } from '../../../hooks/transparent-holdings';
 
 export function SendPage() {
   const navigate = useNavigate();
@@ -174,10 +179,32 @@ function PenumbraSendScreen({
   prefillRecipient?: string;
   initialMode?: PenumbraMode;
 }) {
-  const chains = orderTransparentChains(getActiveIbcSubnetworks('penumbra') as CosmosChainId[]);
+  const routes = usePenumbraRoutes();
+  const holdings = useTransparentHoldings();
+  const candidates = orderTransparentChains(getActiveIbcSubnetworks('penumbra') as CosmosChainId[]);
+  const held = new Map<CosmosChainId, ChainHeld>();
+  for (const list of holdings.holdings.values()) {
+    for (const h of list) {
+      held.set(h.chainId, {
+        amounts: [
+          ...(held.get(h.chainId)?.amounts ?? []),
+          `${h.asset.formatted} ${h.asset.symbol.toLowerCase()}`,
+        ],
+      });
+    }
+  }
+  const picks = sourceChainPicks(
+    candidates,
+    new Set(offeredChains(candidates, routes)),
+    new Set(holdings.chains.filter(c => holdings.statusOf(c).at > 0)),
+    held,
+  );
+  const chains = picks.map(p => p.key);
   const [mode, setMode] = useState<PenumbraMode>(initialMode ?? 'send');
   const [chain, setChain] = useState<CosmosChainId>();
+  const [picking, setPicking] = useState(false);
   const source = chain ?? chains[0];
+  const sourcePick = picks.find(p => p.key === source);
   const meta = (
     <Segmented
       label='send mode'
@@ -208,14 +235,25 @@ function PenumbraSendScreen({
           intent='send'
           meta={meta}
           above={
-            chains.length > 1 && (
-              <Segmented
-                label='network'
-                value={source}
-                onChange={setChain}
-                options={chains.map(c => ({ value: c, label: COSMOS_CHAINS[c].name }))}
+            <>
+              <RowGroup>
+                <Row
+                  type='value'
+                  label='chain'
+                  description={sourcePick?.description}
+                  value={COSMOS_CHAINS[source].name.toLowerCase()}
+                  disabled={chains.length < 2}
+                  onPress={() => setPicking(true)}
+                />
+              </RowGroup>
+              <PickSheet
+                title='send from'
+                open={picking}
+                onOpenChange={setPicking}
+                picks={picks}
+                onPick={setChain}
               />
-            )
+            </>
           }
         />
       ),

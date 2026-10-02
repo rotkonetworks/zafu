@@ -130,6 +130,9 @@ type LOCAL = {
     | 'cosmoshub'
     | 'osmosis'
     | 'injective'
+    | 'celestia'
+    | 'kava'
+    | 'axelar'
     | 'ethereum'
     | 'bitcoin';
   zcashWallets?: {
@@ -177,6 +180,9 @@ type LOCAL = {
     | 'cosmoshub'
     | 'osmosis'
     | 'injective'
+    | 'celestia'
+    | 'kava'
+    | 'axelar'
     | 'ethereum'
     | 'bitcoin'
   )[];

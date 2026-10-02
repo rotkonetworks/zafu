@@ -291,6 +291,7 @@ export function PickSheet<K extends string | number>({
   onPick,
   empty = 'nothing here yet',
   head,
+  foot,
 }: {
   title: string;
   open: boolean;
@@ -300,6 +301,8 @@ export function PickSheet<K extends string | number>({
   empty?: string;
   /** above the rows, e.g. an assets / positions switch */
   head?: ReactNode;
+  /** below the rows, e.g. a show-more switch */
+  foot?: ReactNode;
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title={title}>
@@ -324,6 +327,7 @@ export function PickSheet<K extends string | number>({
         ) : (
           <p className='py-6 text-center text-xs text-fg-muted'>{empty}</p>
         )}
+        {foot}
       </div>
     </Sheet>
   );

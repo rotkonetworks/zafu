@@ -44,7 +44,6 @@ import {
 import { derivePenumbraEphemeralFromMnemonic } from '../../../hooks/use-address';
 import { Input } from '@repo/ui/components/ui/input';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
-import { Segmented } from '@repo/ui/components/ui/segmented';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { useCopy } from '@repo/ui/hooks/use-copy';
 import { ScreenHeader } from '../../../components/screen-header';
@@ -149,12 +148,9 @@ export function CosmosSend({
   // a shield has exactly one destination (penumbra over IBC), so the mode and
   // destination-chain pickers don't apply to it
   const isShield = intent === 'shield' && !!penumbraChannel;
-  const [sendMode, setSendMode] = useState<'same' | 'ibc'>(isShield ? 'ibc' : 'same');
   const [destChainId, setDestChainId] = useState<string | undefined>(
     isShield ? PENUMBRA_CHAIN_ID : undefined,
   );
-  // once the user picks a destination, stop defaulting it
-  const [destTouched, setDestTouched] = useState(false);
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [selectedAsset, setSelectedAsset] = useState<CosmosAsset | undefined>();
@@ -213,29 +209,6 @@ export function CosmosSend({
 
   const { data: skipChains = [], isLoading: chainsLoading } = useSkipChains();
 
-  // In IBC mode default the destination to Penumbra - shielding USDC in is the
-  // primary ramp (the Noble off-ramp is deprecating). Only when the source
-  // chain actually has a penumbra channel (osmosis intentionally does not);
-  // otherwise fall back to Osmosis, the hub most off-ramps route through.
-  // Same-chain mode has no destination chain (it stays put).
-  useEffect(() => {
-    if (sendMode !== 'ibc') {
-      setDestChainId(undefined);
-      setDestTouched(false);
-      return;
-    }
-    if (destTouched || destChainId || sourceChain.chainId === PENUMBRA_CHAIN_ID) {
-      return;
-    }
-    // our own relayed channel: no Skip route needed
-    if (penumbraChannel) {
-      setDestChainId(PENUMBRA_CHAIN_ID);
-      return;
-    }
-    if (sourceChain.chainId !== 'osmosis-1' && skipChains.some(c => c.chainId === 'osmosis-1')) {
-      setDestChainId('osmosis-1');
-    }
-  }, [sendMode, skipChains, destChainId, destTouched, sourceChain.chainId, penumbraChannel]);
   // Penumbra is always offered when there is a direct channel, listed or not
   const destChains = useMemo(
     () =>
@@ -298,11 +271,18 @@ export function CosmosSend({
         : 'empty',
     }));
   }, [deposits, accountIndex, assetsData?.address]);
-  const gas = useGasSponsor(
-    sourceChainId,
-    sendMode === 'same' ? 'send' : 'ibc',
-    assetsData?.assets,
-  );
+  // auto-detect destination chain from address
+  const detectedChain = useMemo(() => {
+    if (!recipient) {
+      return undefined;
+    }
+    return getChainFromAddress(recipient);
+  }, [recipient]);
+
+  // effective destination: manual selection > the pasted address > same chain
+  const effectiveDestChainId = destChainId || detectedChain?.chainId || sourceChain.chainId;
+  const isSameChain = effectiveDestChainId === sourceChain.chainId;
+  const gas = useGasSponsor(sourceChainId, isSameChain ? 'send' : 'ibc', assetsData?.assets);
   const payWithSponsor = !gas.gasOk && gas.sponsored;
   const canPayFee = gas.gasOk || gas.sponsored;
   // moving the gas asset itself must leave the fee behind
@@ -340,7 +320,7 @@ export function CosmosSend({
       return;
     }
     setTopUp({ back: accountIndex, to: assetsData.address });
-    setSendMode('same');
+    setDestChainId(undefined);
     setAccountIndex(donorIndex);
     setRecipient(assetsData.address);
     setTxStatus('idle');
@@ -357,7 +337,7 @@ export function CosmosSend({
     setRecipient('');
     setTxHash(undefined);
     setTxStatus('idle');
-    setSendMode(intent === 'shield' && penumbraChannel ? 'ibc' : 'same');
+    setDestChainId(isShield ? PENUMBRA_CHAIN_ID : undefined);
   };
   // on the donor: the gas asset, all of what can move
   useEffect(() => {
@@ -414,22 +394,6 @@ export function CosmosSend({
       !!selectedAsset,
   });
 
-  // auto-detect destination chain from address
-  const detectedChain = useMemo(() => {
-    if (!recipient) {
-      return undefined;
-    }
-    return getChainFromAddress(recipient);
-  }, [recipient]);
-
-  // effective destination: manual selection > auto-detect > same chain
-  // same-chain mode always stays on the source chain, regardless of what the
-  // pasted address might auto-detect as - that is the whole point of the tab
-  const effectiveDestChainId =
-    sendMode === 'same'
-      ? sourceChain.chainId
-      : destChainId || detectedChain?.chainId || sourceChain.chainId;
-  const isSameChain = effectiveDestChainId === sourceChain.chainId;
   // Shielding INTO penumbra: bypass Skip, use our own relayed channel directly.
   const isPenumbraDest = effectiveDestChainId === PENUMBRA_CHAIN_ID;
 
@@ -732,7 +696,7 @@ export function CosmosSend({
       : `that is not a ${isPenumbraDest ? 'penumbra' : 'cosmos'} address · please check it`
     : ethermintRecipient?.ok && ethermintRecipient.fromHex
       ? `sends to ${shortAddress(toAddress)}`
-      : sendMode === 'ibc' && detectedChain && !destChainId
+      : !isSameChain && detectedChain && !destChainId
         ? `on ${detectedChain.name}`
         : toName;
   const amountHelper = exceeds
@@ -757,18 +721,7 @@ export function CosmosSend({
         />
         <Main className='gap-[18px] pt-5'>
           {above}
-          {!isShield && (
-            <Segmented
-              label='send mode'
-              value={sendMode}
-              onChange={setSendMode}
-              options={[
-                { value: 'same', label: `within ${sourceChain.name}` },
-                { value: 'ibc', label: 'to another chain' },
-              ]}
-            />
-          )}
-          {(assetsData?.address || (sendMode === 'ibc' && !isShield)) && (
+          {(assetsData?.address || !isShield) && (
             <RowGroup>
               {assetsData?.address && (
                 <Row
@@ -782,7 +735,7 @@ export function CosmosSend({
                   onPress={() => setPick('from')}
                 />
               )}
-              {sendMode === 'ibc' && !isShield && (
+              {!isShield && (
                 <Row
                   type='value'
                   label='to network'
@@ -803,7 +756,7 @@ export function CosmosSend({
           <ToField
             value={recipient}
             onChange={setRecipient}
-            placeholder={sendMode === 'same' ? `${sourceChain.bech32Prefix}1…` : 'address'}
+            placeholder='address'
             warn={badRecipient}
             helper={toHelper}
             onContacts={isPenumbraDest ? undefined : () => setPick('book')}
@@ -880,7 +833,7 @@ export function CosmosSend({
               </Helper>
             </div>
           )}
-          {sendMode === 'ibc' && !isShield && (
+          {!isSameChain && !isShield && (
             <Button
               variant='quiet'
               size='sm'
@@ -935,7 +888,6 @@ export function CosmosSend({
               .map(c => ({ key: c.chainId, label: c.chainName })),
           ]}
           onPick={id => {
-            setDestTouched(true);
             setDestChainId(id || undefined);
             setRecipient('');
           }}

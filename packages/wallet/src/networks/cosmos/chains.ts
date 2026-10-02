@@ -18,9 +18,18 @@ import celestiaChain from 'chain-registry/mainnet/celestia/chain';
 import celestiaAssets from 'chain-registry/mainnet/celestia/asset-list';
 import kavaChain from 'chain-registry/mainnet/kava/chain';
 import kavaAssets from 'chain-registry/mainnet/kava/asset-list';
+import axelarChain from 'chain-registry/mainnet/axelar/chain';
+import axelarAssets from 'chain-registry/mainnet/axelar/asset-list';
 import { chainFromRegistry } from './registry-chain';
 
-export type CosmosChainId = 'noble' | 'cosmoshub' | 'injective' | 'osmosis' | 'celestia' | 'kava';
+export type CosmosChainId =
+  | 'noble'
+  | 'cosmoshub'
+  | 'injective'
+  | 'osmosis'
+  | 'celestia'
+  | 'kava'
+  | 'axelar';
 
 export interface CosmosChainConfig {
   id: CosmosChainId;
@@ -234,6 +243,12 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
   kava: chainFromRegistry('kava', kavaChain, kavaAssets, {
     penumbraChannel: 'channel-162', // kava -> penumbra
     penumbraSourceChannel: 'channel-21', // penumbra -> kava
+  }),
+  // both clients Active (checked 2026-10-02): penumbra channel-24 <-> axelar
+  // channel-198; the older channel-7 has an expired penumbra client
+  axelar: chainFromRegistry('axelar', axelarChain, axelarAssets, {
+    penumbraChannel: 'channel-198', // axelar -> penumbra
+    penumbraSourceChannel: 'channel-24', // penumbra -> axelar
   }),
 };
 
