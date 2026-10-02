@@ -13,6 +13,7 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { ChannelGenesis, ChannelRecord } from '@zafu/zirc';
+import type { MemoDoorRead } from './memo-door';
 import { readEncrypted, writeEncrypted } from '../state/encrypted-storage';
 
 export type PeopleRoomKind = 'group' | 'door' | 'pair';
@@ -88,6 +89,8 @@ export interface PeopleRoom {
     peer?: string;
     /** waiting for them to answer a memo invite */
     waiting?: boolean;
+    /** the card their answer carried, until the screen saves it on the contact */
+    card?: { zid: string; pairKa: string; address: string; name: string };
   };
 }
 
@@ -146,6 +149,29 @@ export const readThreads = async (): Promise<Record<string, Thread> | null> => {
 
 export const writeThreads = (threads: Record<string, Thread>): Promise<boolean> =>
   writeEncrypted(localExtStorage, sessionExtStorage, THREADS_KEY, threads);
+
+export interface StoredInvite {
+  /** the memo's txid: one invite per memo */
+  id: string;
+  walletId: string;
+  network: 'zcash' | 'penumbra';
+  /** ms */
+  at: number;
+  /** the memo's own return address, when it had one */
+  from?: string;
+  read: MemoDoorRead;
+  state: 'open' | 'declined' | 'accepted';
+}
+
+const INVITES_KEY = 'peopleInvites' as keyof LocalStorageState;
+
+export const readInvites = async (): Promise<StoredInvite[]> => {
+  const v = await readEncrypted<unknown>(localExtStorage, sessionExtStorage, INVITES_KEY);
+  return Array.isArray(v) ? (v as StoredInvite[]) : [];
+};
+
+export const writeInvites = (all: StoredInvite[]) =>
+  writeEncrypted(localExtStorage, sessionExtStorage, INVITES_KEY, all);
 
 export const PEOPLE_STORAGE_KEYS = [ROOMS_KEY, THREADS_KEY] as const;
 

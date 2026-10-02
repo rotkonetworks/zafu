@@ -24,6 +24,7 @@ import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { readEncryptedWithMigration } from '../state/encrypted-storage';
 import type { Contact } from '../state/contacts';
 import { createPairs } from './pairs';
+import { createInvites } from './invites';
 import { createGroups } from './groups';
 import { compileEgress, describeEgress, type EgressInputs } from '../net/egress-policy';
 import { decideEgress } from '../net/egress-table';
@@ -103,6 +104,16 @@ const defaultRelay = async () =>
       | undefined,
   );
 
+const invites = createInvites({
+  walletId: async () => useStore.getState().keyRing.selectedKeyInfo?.id,
+  contacts: async () =>
+    (await readEncryptedWithMigration<Contact[]>(localExtStorage, sessionExtStorage, 'contacts')) ??
+    [],
+  roomKeys,
+  generation: walletId => getZidIndex(walletId),
+  relay: () => defaultRelay(),
+});
+
 const groups = createGroups({
   walletId: async () => useStore.getState().keyRing.selectedKeyInfo?.id,
   keys: roomKeys,
@@ -143,7 +154,11 @@ export const startPeopleRelay = (
   ops: Record<string, PeopleOp> = {},
   handlers: Partial<Record<PeopleRoom['kind'], RecordHandler>> = {},
 ) => {
-  const service = createPeopleService(peopleDeps, { ...groups.handlers, ...handlers });
+  const service = createPeopleService(peopleDeps, {
+    ...groups.handlers,
+    ...invites.handlers,
+    ...handlers,
+  });
   const all: Record<string, PeopleOp> = {
     open: async (_, s) => {
       await chrome.storage.session.set({ [SESSION_FLAG]: true });
@@ -159,6 +174,7 @@ export const startPeopleRelay = (
     read: (r, s) => s.read(String(r['roomId'])),
     ...groups.ops,
     ...pairs.ops,
+    ...invites.ops,
     ...ops,
   };
 

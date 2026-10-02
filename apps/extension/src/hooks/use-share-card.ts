@@ -3,50 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useStore } from '../state';
 import { selectEffectiveKeyInfo, selectGetMnemonic } from '../state/keyring';
 import { keyInfoSupportsNetwork } from '../state/keyring/vault-ops';
-import type { Contact, ContactRel } from '../state/contacts';
+import type { Contact } from '../state/contacts';
 import { contactCardMemoHex, myAddressForContact } from '../state/contact-share';
-import {
-  deriveRelationshipKeys,
-  getZidIndex,
-  mintRelationshipIndex,
-  myDiscoveryKey,
-} from '../state/identity';
+import { deriveRelationshipKeys, myDiscoveryKey } from '../state/identity';
 import { getDiversifiedAddresses, setDiversifiedAddresses } from '../state/diversified-addresses';
 import { PopupPath } from '../routes/popup/paths';
 import { useContactAddressSource } from './use-contact-address-source';
-
-const contactNow = (id: string): Contact | undefined => {
-  const all = useStore.getState().contacts.contacts;
-  return (Array.isArray(all) ? all : []).find(c => c.id === id);
-};
-
-/** one mint per person, however many screens ask at once */
-const minting = new Map<string, Promise<ContactRel>>();
-
-/** the relationship you give this person: minted once, then kept on them */
-const relationshipOf = (
-  contactId: string,
-  walletId: string,
-  updateContact: (id: string, u: { rel: ContactRel }) => Promise<void>,
-): Promise<ContactRel> => {
-  const have = contactNow(contactId)?.rel;
-  if (have?.walletId === walletId) {
-    return Promise.resolve(have);
-  }
-  const key = `${walletId}/${contactId}`;
-  const running = minting.get(key);
-  if (running) {
-    return running;
-  }
-  const made = (async () => {
-    const gen = await getZidIndex(walletId);
-    const rel = { walletId, gen, j: await mintRelationshipIndex(walletId, gen) };
-    await updateContact(contactId, { rel });
-    return rel;
-  })().finally(() => minting.delete(key));
-  minting.set(key, made);
-  return made;
-};
+import { useMemoInvite } from '../people/use-invites';
+import { contactNow, relationshipOf } from './relationship';
 
 /**
  * Your card for one saved contact, as memo hex: your own address for them and
@@ -108,26 +72,33 @@ export const useMintCard = () => {
 
 /**
  * Send one contact your card by memo: the send form opens with the recipient
- * and the card filled in. Undefined when this wallet cannot; resolves false
- * when the contact has no zcash address or no card could be made.
+ * and the card filled in. By default the memo is a chat invite (the memo
+ * door): your card for them, a pair-room secret and your relay, so they can
+ * accept and talk for free from then on. A wallet with no seed here sends
+ * the plain card. Undefined when this wallet cannot; resolves false when the
+ * contact has no zcash address or no card could be made.
  */
 export const useShareCard = () => {
   const navigate = useNavigate();
   const mint = useMintCard();
+  const memoInvite = useMemoInvite();
 
   const share = useCallback(
     async (contact: Contact): Promise<boolean> => {
       const to = contact.addresses.find(a => a.network === 'zcash')?.address;
-      const hex = to && mint ? await mint(contact.id) : undefined;
-      if (!to || !hex) {
+      const memo = to
+        ? ((await memoInvite(contact, '').catch(() => undefined)) ??
+          (mint ? await mint(contact.id) : undefined))
+        : undefined;
+      if (!to || !memo) {
         return false;
       }
       navigate(PopupPath.SEND, {
-        state: { prefillRecipient: to, prefillMemo: hex, network: 'zcash' },
+        state: { prefillRecipient: to, prefillMemo: memo, network: 'zcash' },
       });
       return true;
     },
-    [mint, navigate],
+    [mint, memoInvite, navigate],
   );
 
   return mint ? share : undefined;

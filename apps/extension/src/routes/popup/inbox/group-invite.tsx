@@ -16,6 +16,10 @@ import { peopleAsk, useMyRooms, useWatchRoom } from '../../../people/client';
 import { RelaySlot } from '../../../people/relay-slot';
 import { shortXid, xidOf } from '../../../state/identity';
 import { PopupPath, groupPath } from '../paths';
+import { useStore } from '../../../state';
+import { encodeMemoInvite } from '../../../people/memo-door';
+import type { PeopleRoom } from '../../../people/vault';
+import { DEFAULT_PEOPLE_RELAY } from '../../../config/people-relay';
 import { peopleCount } from './group';
 
 const Share = ({ code }: { code: string }) => {
@@ -87,6 +91,72 @@ const Person = ({
     {action}
   </div>
 );
+
+/**
+ * someone you already have an address for: the invite goes in a memo, which
+ * is end-to-end encrypted to them, so it carries the room itself (the memo
+ * door). No code, no relay round trip, and no allow step: sending it is yours.
+ */
+const ByMemo = ({ room }: { room: PeopleRoom }) => {
+  const navigate = useNavigate();
+  const contacts = useStore(s => s.contacts.contacts);
+  const [fail, setFail] = useState(false);
+  const reachable = (Array.isArray(contacts) ? contacts : []).flatMap(c => {
+    const a = c.addresses.find(x => x.network === 'zcash');
+    return a ? [{ c, address: a.address }] : [];
+  });
+  if (!reachable.length || !room.group) {
+    return null;
+  }
+  const g = room.group;
+  const send = (address: string) => {
+    try {
+      const memo = encodeMemoInvite({
+        kind: 'group',
+        secret: room.secret,
+        G: g.G,
+        founder: g.founder,
+        group: room.name,
+        from: g.names?.[g.founder] ?? '',
+        // '' is the built-in relay; anything else travels with the invite
+        relay: room.relay === DEFAULT_PEOPLE_RELAY ? '' : room.relay,
+      });
+      navigate(PopupPath.SEND, {
+        state: { prefillRecipient: address, prefillMemo: memo, network: 'zcash' },
+      });
+    } catch {
+      setFail(true);
+    }
+  };
+  return (
+    <section className='flex flex-col gap-1.5'>
+      <h2 className='text-xs tracking-[0.04em] text-fg-muted'>invite by memo</h2>
+      <div className='flex flex-col'>
+        {reachable.map(({ c, address }) => (
+          <Person
+            key={c.id}
+            initial={c.name.charAt(0)}
+            name={c.name}
+            action={
+              <button
+                type='button'
+                onClick={() => send(address)}
+                className='h-8 px-2 text-xs text-zigner-gold hover:underline'
+              >
+                send
+              </button>
+            }
+          />
+        ))}
+      </div>
+      {fail && (
+        <span className='text-[11px] text-hanko-light'>
+          sorry, this invite does not fit in a memo. please share the code instead.
+        </span>
+      )}
+    </section>
+  );
+};
 
 export function GroupInvitePage() {
   const navigate = useNavigate();
@@ -201,6 +271,7 @@ export function GroupInvitePage() {
               ))}
             </div>
           </section>
+          <ByMemo room={room} />
           <Button variant='secondary' onClick={() => navigate(groupPath(G))}>
             open the group
           </Button>

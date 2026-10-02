@@ -413,7 +413,61 @@ export const createGroups = (deps: GroupDeps) => {
     return r => ({ ...r, group: { ...r.group!, opened: true }, until: api.now() });
   };
 
-  const onGroup: RecordHandler = async (room, records) => {
+  /**
+   * The founder: someone who joined by a memo invite asks in the room itself
+   * (only an invited person holds its secret). They go on the roster.
+   */
+  const voiceAsks = async (
+    room: PeopleRoom,
+    records: RoomMessage[],
+    api: PeopleApi,
+  ): Promise<PeopleRoom | undefined> => {
+    const g = room.group;
+    if (!g?.mine || !g.log) {
+      return undefined;
+    }
+    const roster = new Set(rosterOf(g.log).map(m => m.key));
+    const asks = records.flatMap(m => {
+      const w = decodeWire(m.body);
+      return w?.kind === 'ask' && w.key === m.author && !roster.has(w.key) ? [w] : [];
+    });
+    if (!asks.length) {
+      return undefined;
+    }
+    const me = identityOf(await keysFor(room));
+    let { records: log } = g.log;
+    const names = { ...g.names };
+    for (const a of asks) {
+      log = [
+        ...log,
+        await appendRecord({
+          genesis: g.log.genesis,
+          records: log,
+          author: me,
+          body: { kind: 'mode', mode: '+v', subject: a.key },
+        }),
+      ];
+      names[a.key] = a.name;
+      roster.add(a.key);
+    }
+    const next = await api.updateRoom(room.id, r => ({
+      ...r,
+      group: {
+        ...r.group!,
+        log: { genesis: g.log!.genesis, records: log },
+        names,
+        members: rosterOf({ genesis: g.log!.genesis, records: log }, names, r.createdAt),
+      },
+    }));
+    if (next) {
+      await postRoster(api, next);
+    }
+    return next;
+  };
+
+  const onGroup: RecordHandler = async (seen, records, api) => {
+    // the room as it stands after any new member went on the roster
+    const room = (await voiceAsks(seen, records, api)) ?? seen;
     const g = room.group;
     if (!g) {
       return undefined;

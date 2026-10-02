@@ -10,7 +10,16 @@ import { selectEffectiveKeyInfo } from '../state/keyring';
 import { requestEgressOptIn } from '../net/egress-opt-in';
 import { PEOPLE_RELAY } from '../config/people-relay';
 import { PEOPLE_MESSAGE, PEOPLE_STATUS_KEY, PEOPLE_WATCH_PORT } from './protocol';
-import { readRooms, readThreads, threadKey, type PeopleRoom, type Thread } from './vault';
+import {
+  readInvites,
+  readRooms,
+  readThreads,
+  threadKey,
+  type PeopleRoom,
+  type StoredInvite,
+  type Thread,
+} from './vault';
+import { hasMemoInvite } from './memo-door';
 import type { PeopleSlot, PeopleStatus } from './service';
 
 export const peopleCall = async <T = unknown>(
@@ -28,23 +37,26 @@ export const peopleCall = async <T = unknown>(
 interface Snapshot {
   rooms: PeopleRoom[];
   threads: Record<string, Thread>;
+  invites: StoredInvite[];
   status?: PeopleStatus;
 }
 
-let snap: Snapshot = { rooms: [], threads: {} };
+let snap: Snapshot = { rooms: [], threads: {}, invites: [] };
 const subs = new Set<() => void>();
 let loading: Promise<void> | undefined;
 
 const load = (): Promise<void> =>
   (loading ??= (async () => {
-    const [rooms, threads, s] = await Promise.all([
+    const [rooms, threads, invites, s] = await Promise.all([
       readRooms(),
       readThreads(),
+      readInvites(),
       chrome.storage.session.get(PEOPLE_STATUS_KEY),
     ]);
     snap = {
       rooms: rooms ?? [],
       threads: threads ?? {},
+      invites,
       status: s[PEOPLE_STATUS_KEY] as PeopleStatus | undefined,
     };
     subs.forEach(f => f());
@@ -57,7 +69,8 @@ const subscribe = (f: () => void) => {
     listening = true;
     chrome.storage.onChanged.addListener((changes, area) => {
       if (
-        (area === 'local' && ('peopleRooms' in changes || 'peopleThreads' in changes)) ||
+        (area === 'local' &&
+          ('peopleRooms' in changes || 'peopleThreads' in changes || 'peopleInvites' in changes)) ||
         (area === 'session' && (PEOPLE_STATUS_KEY in changes || 'passwordKey' in changes))
       ) {
         void load();
@@ -126,4 +139,42 @@ export const peopleSay = async (roomId: string, text: string, retry?: string): P
     return first;
   }
   return peopleCall<string>('say', { roomId, text, retry });
+};
+
+/**
+ * The memo-ingest seam (see ./invites): every memo the zcash and penumbra
+ * syncs decode that carries a zafu invite goes to the worker, which keeps it
+ * until the person answers. Nothing here or there touches a relay.
+ */
+export const ingestMemoInvites = (
+  memos: {
+    network: 'zcash' | 'penumbra';
+    txId: string;
+    content: string;
+    timestamp?: number;
+    from?: string;
+    direction?: string;
+  }[],
+): void => {
+  for (const m of memos) {
+    if (m.direction !== 'sent' && hasMemoInvite(m.content)) {
+      void peopleCall('memo-ingest', {
+        network: m.network,
+        txId: m.txId,
+        content: m.content,
+        at: m.timestamp,
+        from: m.from,
+      }).catch(() => undefined);
+    }
+  }
+};
+
+/** the active wallet's open invites */
+export const useMyInvites = (): StoredInvite[] => {
+  const walletId = useStore(s => selectEffectiveKeyInfo(s)?.id);
+  const { invites } = usePeople();
+  return useMemo(
+    () => invites.filter(i => i.walletId === walletId && i.state === 'open'),
+    [invites, walletId],
+  );
 };

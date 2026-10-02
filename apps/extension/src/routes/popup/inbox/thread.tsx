@@ -34,16 +34,20 @@ import { useBackNav } from '../../../utils/navigate';
 import { MessageText } from '../../../components/message-text';
 import { PopupPath, contactPath } from '../paths';
 import { isMutual } from '../../../state/contacts';
-import {
-  peopleCall,
-  peopleSay,
-  useMyRooms,
-  useThread,
-  useWatchRoom,
-} from '../../../people/client';
+import { peopleCall, peopleSay, useMyRooms, useThread, useWatchRoom } from '../../../people/client';
 import { RelaySlot } from '../../../people/relay-slot';
 import { pairId } from '../../../people/protocol';
 import type { ThreadItem } from '../../../people/vault';
+import { allowRelay, useMemoInvite, usePairCards } from '../../../people/use-invites';
+import {
+  DEFAULT_PEOPLE_RELAY,
+  PEOPLE_RELAY_KEY,
+  defaultPeopleRelay,
+  peopleRelays,
+  relayBase,
+  relayHost,
+  type PeopleRelaySetting,
+} from '../../../config/people-relay';
 import { useThreadName } from './use-thread-name';
 import { cardOf, counterparty, shortAddress, threadIdOf, whenOf } from './threads';
 
@@ -337,12 +341,92 @@ const SaveSheet = ({
   );
 };
 
+/** which relay your chats with this person go through: one you know, or a new one you allow */
+const RelaySheet = ({
+  open,
+  onClose,
+  current,
+  onPick,
+}: {
+  open: boolean;
+  onClose: () => void;
+  current: string;
+  onPick: (relay: string) => void;
+}) => {
+  const [known, setKnown] = useState<string[]>([]);
+  const [typed, setTyped] = useState('');
+  useEffect(() => {
+    if (open) {
+      void chrome.storage.local
+        .get(PEOPLE_RELAY_KEY)
+        .then(v => setKnown(peopleRelays(v[PEOPLE_RELAY_KEY] as PeopleRelaySetting | undefined)));
+    }
+  }, [open]);
+  const pick = (relay: string) => {
+    onPick(relay === known[0] ? '' : relay);
+    onClose();
+  };
+  return (
+    <Sheet open={open} onOpenChange={o => !o && onClose()} title='which relay'>
+      <div className='flex flex-col border border-border-soft bg-elev-1'>
+        {known.map(r => (
+          <button
+            key={r}
+            type='button'
+            onClick={() => pick(r)}
+            className='flex h-12 items-center justify-between border-b border-border-soft px-3.5 text-left text-sm text-fg-high last:border-0 hover:bg-elev-2'
+          >
+            {relayHost(r)}
+            {r === current && <span className='i-lucide-check size-4 text-zigner-gold' />}
+          </button>
+        ))}
+      </div>
+      <form
+        className='flex gap-2'
+        onSubmit={e => {
+          e.preventDefault();
+          const base = relayBase(typed);
+          if (base) {
+            void allowRelay(base).then(ok => ok && pick(base));
+          }
+        }}
+      >
+        <Input
+          aria-label='another relay'
+          placeholder='https://relay.example'
+          value={typed}
+          onChange={e => setTyped(e.target.value)}
+          className='grow font-mono text-xs'
+        />
+        <Button type='submit' variant='secondary' disabled={!relayBase(typed)}>
+          allow
+        </Button>
+      </form>
+    </Sheet>
+  );
+};
+
+/** the people relay new rooms use, as the person set it */
+const useDefaultRelay = (): string => {
+  const [relay, setRelay] = useState(DEFAULT_PEOPLE_RELAY);
+  useEffect(() => {
+    void chrome.storage.local
+      .get(PEOPLE_RELAY_KEY)
+      .then(v =>
+        setRelay(defaultPeopleRelay(v[PEOPLE_RELAY_KEY] as PeopleRelaySetting | undefined)),
+      );
+  }, []);
+  return relay;
+};
+
 export function ThreadPage() {
   const navigate = useNavigate();
   const goBack = useBackNav(PopupPath.INBOX);
   const threadId = decodeURIComponent(useParams()['threadId'] ?? '');
   const all = useStore(s => s.messages.messages);
   const markRead = useStore(s => s.messages.markRead);
+  const updateContact = useStore(s => s.contacts.updateContact);
+  const defaultRelay = useDefaultRelay();
   const keyInfo = useStore(selectEffectiveKeyInfo);
   const addressSource = useContactAddressSource();
   const { address: ownAddress } = useActiveAddress();
@@ -370,16 +454,27 @@ export function ThreadPage() {
   // the pair room, when you hold each other's cards
   const mutual = network === 'zcash' && isMutual(contact, keyInfo?.id);
   const roomId = mutual && contact ? pairId(contact.id) : undefined;
-  const room = useMyRooms().find(r => r.id === roomId && r.joined);
+  const myRooms = useMyRooms();
+  const room = myRooms.find(r => r.id === roomId && r.joined);
   const relay = useThread(room)?.items;
+  // your invite to someone with no card from you, waiting for their answer
+  const waiting = myRooms.some(r => contact && r.id === pairId(contact.id) && r.pair?.waiting);
   const [asMemo, setAsMemo] = useState(false);
   const via: 'relay' | 'memo' = room && !asMemo ? 'relay' : 'memo';
-  useWatchRoom(room?.id);
+  // the pair room, or the one waiting for an answer to your invite: read while on screen (T2)
+  useWatchRoom(room?.id ?? (waiting && contact ? pairId(contact.id) : undefined));
   useEffect(() => {
     if (roomId && !room && contact) {
       void peopleCall('pair-join', { contactId: contact.id }).catch(() => undefined);
     }
   }, [roomId, room, contact]);
+
+  // the memo door (people/memo-door): someone saved, with no card from you yet
+  const memoInvite = useMemoInvite();
+  const invites =
+    !!contact && !mutual && network === 'zcash' && keyInfo?.type === 'mnemonic' && !waiting;
+  const [picking, setPicking] = useState(false);
+  usePairCards();
 
   const rows = useMemo(
     () =>
@@ -421,6 +516,14 @@ export function ThreadPage() {
       return;
     }
     setAsMemo(false);
+    // the first memo to someone with no card from you invites them to chat
+    if (invites && contact) {
+      const memo = await memoInvite(contact, text).catch(() => undefined);
+      if (memo) {
+        send(memo);
+        return;
+      }
+    }
     const reply =
       network === 'zcash'
         ? await replyAddress(contact?.id, addressSource(), ownAddress)
@@ -482,6 +585,24 @@ export function ThreadPage() {
         ))}
       </div>
 
+      {canSend && (invites || waiting) && (
+        <div className='flex h-8 shrink-0 items-center justify-between gap-3 border-t border-border-soft px-4 text-[11px] text-fg-muted'>
+          <span className='truncate'>
+            {waiting
+              ? `waiting for ${name} to answer your invite`
+              : `invites ${name} to chat · on ${relayHost(contact?.relay || defaultRelay)}`}
+          </span>
+          {invites && (
+            <button
+              type='button'
+              onClick={() => setPicking(true)}
+              className='shrink-0 text-zigner-gold hover:underline'
+            >
+              change
+            </button>
+          )}
+        </div>
+      )}
       {canSend ? (
         <form
           className='flex shrink-0 gap-2 border-t border-border-soft px-3 pb-3 pt-2.5'
@@ -541,6 +662,14 @@ export function ThreadPage() {
         onPay={() => send()}
         onRequest={network === 'zcash' ? (zat, note) => void request(zat, note) : undefined}
       />
+      {contact && (
+        <RelaySheet
+          open={picking}
+          onClose={() => setPicking(false)}
+          current={contact.relay || defaultRelay}
+          onPick={relay => void updateContact(contact.id, { relay })}
+        />
+      )}
       {address && (
         <SaveSheet
           address={address}

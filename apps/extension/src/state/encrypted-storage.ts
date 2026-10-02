@@ -155,6 +155,7 @@ const ENCRYPTED_KEYS = new Set<string>([
   'passwordLogins',
   'peopleRooms',
   'peopleThreads',
+  'peopleInvites',
 ]);
 
 /** should this storage key be encrypted? */

@@ -11,13 +11,7 @@ import { Input } from '@repo/ui/components/ui/input';
 import { cn } from '@repo/ui/lib/utils';
 import { MessageText } from '../../../components/message-text';
 import { useBackNav } from '../../../utils/navigate';
-import {
-  peopleCall,
-  peopleSay,
-  useMyRooms,
-  useThread,
-  useWatchRoom,
-} from '../../../people/client';
+import { peopleCall, peopleSay, useMyRooms, useThread, useWatchRoom } from '../../../people/client';
 import { RelaySlot } from '../../../people/relay-slot';
 import type { ThreadItem } from '../../../people/vault';
 import { PopupPath, groupInvitePath } from '../paths';

@@ -31,6 +31,8 @@ import { deriveThreads, previewOf, shortAddress, whenOf, type DirectThread } fro
 import { useThreadName } from './use-thread-name';
 import { useMyRooms, useOpenPeople, usePeople, useThread } from '../../../people/client';
 import { RelaySlot } from '../../../people/relay-slot';
+import { InviteRows } from '../../../people/invite-rows';
+import { usePairCards } from '../../../people/use-invites';
 import { threadKey, unreadOf, type PeopleRoom } from '../../../people/vault';
 
 const zec = (zat: bigint) => (Number(zat) / 1e8).toFixed(2);
@@ -374,6 +376,7 @@ export function InboxPage() {
   const canCard = !!keyInfo && keyInfoSupportsNetwork(keyInfo, 'zcash');
 
   useOpenPeople();
+  usePairCards();
   const hasRooms = useMyRooms().some(r => r.joined);
   // the chain memos the light client already reads
   const { syncMemos: syncPenumbra } = usePenumbraMemos(walletId);
@@ -417,6 +420,7 @@ export function InboxPage() {
       <div className='flex flex-col gap-[18px] px-4 pb-4 pt-3.5'>
         <YouRow />
         <NeedsYou />
+        <InviteRows />
         <Groups />
         <Direct canCard={canCard} />
       </div>

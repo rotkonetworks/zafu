@@ -101,6 +101,8 @@ export interface Contact {
    * the discovery key and the same for every card they give.
    */
   pairKa?: string;
+  /** the relay your chats with them go through, when not the default (a base url) */
+  relay?: string;
   /**
    * zcash.me username this contact was saved from (or linked to). A
    * directory handle, not an identity anchor - it says where the address
@@ -157,6 +159,8 @@ export interface ContactsSlice {
     card?: ContactCardKey;
     rel?: ContactRel;
     pairKa?: string;
+    /** addresses to save with them, in the same write */
+    addresses?: Omit<ContactAddress, 'id'>[];
   }) => Promise<Contact>;
 
   /** update contact info (name, notes, zid, website, card) */
@@ -170,6 +174,7 @@ export interface ContactsSlice {
       card?: ContactCardKey;
       rel?: ContactRel;
       pairKa?: string;
+      relay?: string;
     },
   ) => Promise<void>;
 
@@ -297,7 +302,11 @@ export const createContactsSlice =
           ...(data.rel ? { rel: data.rel } : {}),
           ...(data.pairKa ? { pairKa: data.pairKa } : {}),
           createdAt: Date.now(),
-          addresses: [],
+          addresses: (data.addresses ?? []).map(a => ({
+            ...a,
+            id: generateId(),
+            address: a.address.trim(),
+          })),
         };
 
         set(state => {
@@ -337,6 +346,9 @@ export const createContactsSlice =
             }
             if (updates.pairKa !== undefined) {
               contact.pairKa = updates.pairKa;
+            }
+            if (updates.relay !== undefined) {
+              contact.relay = updates.relay || undefined;
             }
           }
         });
