@@ -1,12 +1,13 @@
 /**
- * One transparent chain's editable RPC node pool, in a Sheet, opened from its
- * "on the way in" row's "use another node" on the penumbra home.
+ * One transparent chain's editable RPC node pool, in a Sheet. Opened from the
+ * chain's row in settings > networks > penumbra > ibc chains (with the chain's
+ * own switch as children) and from the penumbra home's "use another node".
  * Deposit-address lookups rotate across the pool per address, so no single
  * provider can link all of a user's addresses. An empty pool falls back to
  * the shipped defaults from the chain config.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { Sheet } from '@repo/ui/components/ui/sheet';
@@ -19,10 +20,13 @@ export const RpcPoolSheet = ({
   chainId,
   open,
   onOpenChange,
+  children,
 }: {
   chainId: CosmosChainId;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** the chain's own controls, above its nodes */
+  children?: ReactNode;
 }) => {
   const { pool, isCustom, save, reset } = useRpcPool(chainId);
   const [draft, setDraft] = useState<string[]>(pool);
@@ -40,6 +44,7 @@ export const RpcPoolSheet = ({
       onOpenChange={onOpenChange}
       title={COSMOS_CHAINS[chainId].name.toLowerCase()}
     >
+      {children}
       <div className='-mx-4 flex min-h-0 flex-col gap-1.5 overflow-y-auto px-4'>
         {draft.map((url, i) => (
           <div key={i} className='flex items-center gap-1.5'>
