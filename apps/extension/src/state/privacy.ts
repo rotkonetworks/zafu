@@ -86,11 +86,9 @@ export interface PrivacySettings {
   historyAsked: boolean;
 
   /**
-   * enable background sync for transparent networks
-   * when false (default): no background network activity
-   * when true: periodically syncs state with network
-   *
-   * note: penumbra and zcash sync always safe (shielded)
+   * keep penumbra syncing after the last zafu window closes. read as
+   * `=== true` by the service worker: false (default) pauses penumbra with
+   * the last window, as zcash always does.
    */
   enableBackgroundSync: boolean;
 

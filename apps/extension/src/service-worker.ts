@@ -132,6 +132,16 @@ const penumbraSync = (act: 'pause' | 'resume') =>
     .then(ws => (ws.blockProcessor as { pause?: () => void; resume?: () => void })[act]?.())
     .catch(() => undefined);
 let uiOpen = false;
+/** the user's "keep syncing when closed": penumbra alone may go on with every window closed */
+let keepPenumbraSyncing = false;
+const readKeepSyncing = () =>
+  void localExtStorage.get('privacySettings').then(p => {
+    keepPenumbraSyncing = p?.enableBackgroundSync === true;
+  });
+readKeepSyncing();
+chrome.storage.onChanged.addListener(
+  (c, area) => area === 'local' && 'privacySettings' in c && readKeepSyncing(),
+);
 
 /**
  * Services start on the stored chain id, so a start never waits on the node.
@@ -150,7 +160,7 @@ const runChainCheck = () => {
 /** a fresh block processor, before anything can start it */
 const onBlockProcessor = (bp: BlockProcessor, chain: { id: string; confirmed: boolean }) => {
   // fresh services start syncing at once; with every window closed they wait
-  if (!uiOpen) {
+  if (!uiOpen && !keepPenumbraSyncing) {
     bp.pause();
   }
   if (chain.confirmed) {
@@ -197,7 +207,9 @@ trackUiOpenPresence(
     console.log('[sw] last UI surface closed, requesting zcash sync stop');
     uiOpen = false;
     requestStopAllSync('zcash');
-    penumbraSync('pause');
+    if (!keepPenumbraSyncing) {
+      penumbraSync('pause');
+    }
   },
 );
 

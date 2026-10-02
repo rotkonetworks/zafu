@@ -18,6 +18,7 @@ import { SettingsScreen } from './settings-screen';
 import { NodeSheet } from './node-sheet';
 import { TintedRow } from './tinted-row';
 import { KeplrCompatToggle } from './keplr-compat-toggle';
+import { useExplain } from './settings-explain';
 import { RpcPoolSheet } from './transparent-chain-endpoints';
 
 // the bundled registry, resolved once per realm: no remote fetch, and a stable identity
@@ -71,6 +72,9 @@ export const SettingsPenumbraNetwork = () => {
   const disable = useDisableNetwork();
   const navigate = usePopupNav();
   const { totalIn, setTotalIn } = usePenumbraTotalIn();
+  const keepSyncing = useStore(s => s.privacy.settings.enableBackgroundSync);
+  const setSetting = useStore(s => s.privacy.setSetting);
+  const { explainProps, sheet: explainSheet } = useExplain();
 
   const chainsOn = CHAINS.filter(c => enabled.includes(c));
   const sheet = (o: Open) => (next: boolean) => setOpen(next ? o : null);
@@ -102,6 +106,13 @@ export const SettingsPenumbraNetwork = () => {
             label='total in'
             value={totalIn}
             onPress={() => void setTotalIn(totalIn === 'usd' ? 'um' : 'usd')}
+          />
+          <Row
+            type='toggle'
+            label='keep syncing when closed'
+            checked={keepSyncing}
+            onChange={v => void setSetting('enableBackgroundSync', v)}
+            {...explainProps('keep syncing when closed')}
           />
         </RowGroup>
         <RowGroup>
@@ -147,6 +158,7 @@ export const SettingsPenumbraNetwork = () => {
       {open && CHAINS.includes(open as Chain) && (
         <ChainSheet id={open as Chain} onClose={() => setOpen('ibc')} />
       )}
+      {explainSheet}
     </SettingsScreen>
   );
 };

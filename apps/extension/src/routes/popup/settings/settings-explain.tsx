@@ -30,10 +30,15 @@ export const PRIVACY_EXPLAIN: Record<string, Explain> = {
     on: 'zafu asks a price service to convert the figure shown',
     off: 'amounts show only in the asset itself, no price lookup',
   },
-  'background sync': {
-    blurb: 'keeps cosmos balances current while zafu is closed.',
-    on: 'zafu asks the cosmos nodes now and then, even when closed',
-    off: 'zafu checks only when you ask',
+  'keep syncing when closed': {
+    blurb: 'lets penumbra keep reading new blocks after the last zafu window closes.',
+    on: 'penumbra is caught up when you open zafu; its node sees zafu reading while closed',
+    off: 'penumbra pauses with the last window and catches up when you open zafu',
+  },
+  'transparent balances': {
+    blurb: 'what waits on your deposit addresses, before it is shielded.',
+    on: 'zafu asks the nodes you picked, from your ip, when you tap a transparent line',
+    off: 'nothing is asked; zafu asks you first, the next time you tap one',
   },
   'explorer links': {
     blurb: 'adds a link from each transaction to a public block explorer.',

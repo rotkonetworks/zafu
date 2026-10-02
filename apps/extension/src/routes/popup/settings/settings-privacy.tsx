@@ -93,14 +93,8 @@ const PRIVACY_ROWS: readonly {
     visible: n => hasFeature(n, 'cosmos'),
   },
   {
-    key: 'enableBackgroundSync',
-    label: 'background sync',
-    group: 'network',
-    visible: n => hasFeature(n, 'cosmos'),
-  },
-  {
     key: 'enableTransparentBalances',
-    label: 'cosmos balances',
+    label: 'transparent balances',
     group: 'network',
     visible: n => hasFeature(n, 'cosmos'),
   },
