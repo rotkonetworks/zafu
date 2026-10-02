@@ -1,7 +1,7 @@
 /**
- * Swap zec out over thorchain. Its zcash observer reads transparent only, so
- * the deposit is a t->t from this pocket's transparent address to the vault
- * with the memo in an OP_RETURN, and refunds come back to that address. When
+ * Swap zec out over a THORNode-protocol route. The deposit is a t->t from
+ * this pocket's transparent address to the vault with the memo in an
+ * OP_RETURN, and refunds come back to that address. When
  * the address holds too little, a first step moves the shortfall there from
  * the shielded pool. Each step is reviewed and confirmed on its own; nothing
  * moves on until the user says so.
@@ -23,6 +23,7 @@ import type { VaultUnlock } from '../../../state/keyring/types';
 import type { DepositPlan } from '../../../workers/transparent-deposit';
 import type { Quote } from '../../../state/swap/provider';
 import { fromUnits } from '../../../state/swap/provider';
+import { ROUTES } from '../../../state/swap/routes';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { usePoolNotes } from '../../../hooks/zcash-pool-balances';
 import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
@@ -234,7 +235,7 @@ export const ThorDeposit = ({
         >
           {/* the vault and the memo are what is being signed; shown in full, above the fold */}
           <dl className='-mt-2 flex flex-col gap-1 border border-border-soft bg-elev-1 px-3.5 py-3 text-xs'>
-            <dt className='text-fg-muted'>to the thorchain vault</dt>
+            <dt className='text-fg-muted'>to the {ROUTES[quote.route].label} vault</dt>
             <dd className='break-all font-mono text-fg-high'>{quote.depositAddress}</dd>
             <dt className='pt-1.5 text-fg-muted'>memo</dt>
             <dd className='break-all font-mono text-fg-high'>{quote.memo}</dd>

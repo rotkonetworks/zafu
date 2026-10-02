@@ -20,33 +20,56 @@ export interface SwapPair {
 export const pairKey = ({ direction, symbol, chain }: SwapPair): string =>
   `${direction}:${symbol}${chain ? `@${chain}` : ''}`;
 
-/** how a deposit into thorchain carries its memo on the source chain */
+/** how a deposit carries its memo on the source chain */
 export type MemoCarrier = 'op_return' | 'memo';
 
-/** thorchain pools zafu offers, keyed `symbol@chain` */
-export const THOR_ASSETS: Record<
-  string,
-  { asset: string; decimals: number; carrier?: MemoCarrier }
-> = {
-  'btc@btc': { asset: 'BTC.BTC', decimals: 8, carrier: 'op_return' },
-  'ltc@ltc': { asset: 'LTC.LTC', decimals: 8, carrier: 'op_return' },
-  'bch@bch': { asset: 'BCH.BCH', decimals: 8, carrier: 'op_return' },
-  'doge@doge': { asset: 'DOGE.DOGE', decimals: 8, carrier: 'op_return' },
-  'atom@gaia': { asset: 'GAIA.ATOM', decimals: 6, carrier: 'memo' },
-  'xrp@xrp': { asset: 'XRP.XRP', decimals: 6, carrier: 'memo' },
-  // evm deposits are a router contract call, which zafu can't hand to another wallet
-  'eth@eth': { asset: 'ETH.ETH', decimals: 18 },
-  'usdc@eth': { asset: 'ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48', decimals: 6 },
-  'usdt@eth': { asset: 'ETH.USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7', decimals: 6 },
-  'eth@base': { asset: 'BASE.ETH', decimals: 18 },
-  'bnb@bsc': { asset: 'BSC.BNB', decimals: 18 },
-  'avax@avax': { asset: 'AVAX.AVAX', decimals: 18 },
+export interface PoolAsset {
+  asset: string;
+  decimals: number;
+  /** absent for evm: a router contract call, which zafu can't hand to another wallet */
+  carrier?: MemoCarrier;
+}
+
+/** the pools each THORNode-protocol route offers, keyed `symbol@chain` */
+export const POOLS = {
+  thor: {
+    'btc@btc': { asset: 'BTC.BTC', decimals: 8, carrier: 'op_return' },
+    'ltc@ltc': { asset: 'LTC.LTC', decimals: 8, carrier: 'op_return' },
+    'bch@bch': { asset: 'BCH.BCH', decimals: 8, carrier: 'op_return' },
+    'doge@doge': { asset: 'DOGE.DOGE', decimals: 8, carrier: 'op_return' },
+    'atom@gaia': { asset: 'GAIA.ATOM', decimals: 6, carrier: 'memo' },
+    'xrp@xrp': { asset: 'XRP.XRP', decimals: 6, carrier: 'memo' },
+    'eth@eth': { asset: 'ETH.ETH', decimals: 18 },
+    'usdc@eth': { asset: 'ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48', decimals: 6 },
+    'usdt@eth': { asset: 'ETH.USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7', decimals: 6 },
+    'eth@base': { asset: 'BASE.ETH', decimals: 18 },
+    'bnb@bsc': { asset: 'BSC.BNB', decimals: 18 },
+    'avax@avax': { asset: 'AVAX.AVAX', decimals: 18 },
+  },
+} satisfies Record<string, Record<string, PoolAsset>>;
+
+/** a route's pool for a pair; a bare symbol takes its native chain */
+export const poolAsset = (route: RouteId, { symbol, chain }: SwapPair): PoolAsset | undefined => {
+  const pools: Record<string, PoolAsset> = POOLS[route as keyof typeof POOLS] ?? {};
+  return (
+    pools[`${symbol}@${chain ?? symbol}`] ??
+    (chain ? undefined : Object.entries(pools).find(([k]) => k.startsWith(`${symbol}@`))?.[1])
+  );
 };
 
-/** the thorchain pool for a pair; a bare symbol takes its native chain */
-export const thorAsset = ({ symbol, chain }: SwapPair) =>
-  THOR_ASSETS[`${symbol}@${chain ?? symbol}`] ??
-  (chain ? undefined : Object.entries(THOR_ASSETS).find(([k]) => k.startsWith(`${symbol}@`))?.[1]);
+/** why a THORNode-protocol route can't carry a pair, or undefined */
+const nodeRefuses =
+  (route: keyof typeof POOLS, name: string) =>
+  (pair: SwapPair): string | undefined => {
+    const a = poolAsset(route, pair);
+    if (!a) {
+      return `${name} doesn't trade ${pair.symbol}${pair.chain ? ` on ${pair.chain}` : ''} · near intents may`;
+    }
+    if (pair.direction === 'into_zec' && !a.carrier) {
+      return `${name} needs a contract call for ${pair.symbol} · near intents can take this one`;
+    }
+    return undefined;
+  };
 
 export interface RouteMeta {
   label: string;
@@ -68,16 +91,7 @@ export const ROUTES: Record<RouteId, RouteMeta> = {
     label: 'thorchain',
     egress: 'thorchain',
     custody: 'no middleman',
-    refuses: pair => {
-      const a = thorAsset(pair);
-      if (!a) {
-        return `thorchain doesn't trade ${pair.symbol}${pair.chain ? ` on ${pair.chain}` : ''} · near intents may`;
-      }
-      if (pair.direction === 'into_zec' && !a.carrier) {
-        return `thorchain needs a contract call for ${pair.symbol} · near intents can take this one`;
-      }
-      return undefined;
-    },
+    refuses: nodeRefuses('thor', 'thorchain'),
   },
   penumbra: {
     label: 'penumbra',

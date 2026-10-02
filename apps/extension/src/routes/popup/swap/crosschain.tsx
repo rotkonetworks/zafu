@@ -44,14 +44,14 @@ import {
   type SwapStatusView,
   type SwapToken,
 } from '../../../state/swap/provider';
-import { BelowMinimum } from '../../../state/swap/thor';
+import { BelowMinimum } from '../../../state/swap/thornode';
 import {
   candidates,
   pairKey,
   ROUTES,
   ROUTE_IDS,
   routeLabel,
-  thorAsset,
+  poolAsset,
   type MemoCarrier,
   type RouteId,
   type SwapPair,
@@ -283,8 +283,9 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const belowMin = !!minimum && minimum.key === key && toUnits(amountIn, 8) < minimum.min;
   // only routes zafu can't send yet: shown for comparison, nothing to review
   const view = quote ?? quotes[0];
-  const carrier = pair && thorAsset(pair)?.carrier;
-  const aliasChain = pair && thorAsset(pair)?.asset.split('.')[0];
+  const carrier = pair && quote && poolAsset(quote.route, pair)?.carrier;
+  // thornames resolve to thorchain's own chain naming
+  const aliasChain = pair && poolAsset('thor', pair)?.asset.split('.')[0];
   const left = useDeadlineCountdown(step === 'routes' ? (view?.expiresAt ?? null) : null);
   const expired = step === 'routes' && !!view?.expiresAt && view.expiresAt <= Date.now();
   const provider = quote && PROVIDERS[quote.route];

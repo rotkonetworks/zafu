@@ -41,16 +41,23 @@ import {
 import { candidates, routeLabel, ROUTES } from './routes';
 import {
   BelowMinimum,
-  checkQuote,
+  checkQuote as nodeCheckQuote,
   nameInMemo,
-  thorCost,
-  thorProvider,
-  thorStatus,
+  nodeCost,
+  nodeStatus,
   type InboundAddress,
-  type ThorQuote,
-} from './thor';
+  type NodeQuote,
+} from './thornode';
+import { thorProvider } from './thor';
 import { nearCost, nearProvider } from './near';
 import { quoteRoutes, routeTokens } from '.';
+
+const checkQuote = (
+  ...a: Parameters<typeof nodeCheckQuote> extends [string, ...infer R] ? R : never
+) => nodeCheckQuote('thorchain', ...a);
+const thorStatus = (s: Parameters<typeof nodeStatus>[0]) => nodeStatus(s, 'thorchain');
+const thorCost = (...a: Parameters<typeof nodeCost> extends [string, ...infer R] ? R : never) =>
+  nodeCost('thorchain', ...a);
 
 const NOW = 1_790_000_000;
 const T = 't1PTs8DQifJxg6HmUq7AgYYFNkbyQa1zjgf';
@@ -80,7 +87,7 @@ const inbound = (over: Partial<InboundAddress> = {}): InboundAddress[] => [
   },
 ];
 /** BTC.BTC -> ETH.ETH as recorded, its output relabelled zec */
-const thorQuote = (over: Partial<ThorQuote> = {}): ThorQuote => ({
+const thorQuote = (over: Partial<NodeQuote> = {}): NodeQuote => ({
   inbound_address: BTC_VAULT,
   expiry: NOW + 600,
   memo: `=:ZEC.ZEC:${T}/bc1qrefundexample:0/1/0`,
@@ -146,7 +153,7 @@ const nearQuote = {
 };
 
 /** answers thornode paths, records each url asked; `withFee` answers a quote carrying an affiliate */
-const thornode = (quote: ThorQuote, inb = inbound(), withFee?: ThorQuote) => {
+const thornode = (quote: NodeQuote, inb = inbound(), withFee?: NodeQuote) => {
   const urls: string[] = [];
   vi.stubGlobal(
     'fetch',
