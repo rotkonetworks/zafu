@@ -1,10 +1,19 @@
 import { PenumbraRequestFailure } from '@penumbra-zone/client/error';
 import type { ZafuConnection } from './zafu-connection';
-import { isContextInvalidated, noteContextInvalidated } from '../../utils/reload-notice';
+import {
+  isContextInvalidated,
+  noteContextInvalidated,
+  runtimeGone,
+} from '../../utils/reload-notice';
 
 export const sendBackground = async (
   request: ZafuConnection,
 ): Promise<null | PenumbraRequestFailure> => {
+  // orphaned by a zafu reload: say so once instead of throwing on every request
+  if (runtimeGone()) {
+    noteContextInvalidated();
+    return PenumbraRequestFailure.BadResponse;
+  }
   try {
     const response = await chrome.runtime.sendMessage<ZafuConnection, unknown>(request);
 

@@ -62,7 +62,7 @@ document.addEventListener(
       return;
     }
     event.preventDefault();
-    void chrome.runtime.sendMessage({ type: OPEN_LINK, uri: href }).catch(() => undefined);
+    void chrome.runtime?.sendMessage({ type: OPEN_LINK, uri: href })?.catch(() => undefined);
   },
   true,
 );

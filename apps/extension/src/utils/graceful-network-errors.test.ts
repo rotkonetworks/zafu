@@ -54,7 +54,7 @@ describe('installGracefulNetworkErrorHandler', () => {
     expect(preventDefault).toHaveBeenCalled();
     const notice = document.getElementById('zafu-reload-notice');
     expect(notice).not.toBeNull();
-    expect(notice?.textContent).toContain('Reload');
+    expect(notice?.textContent).toContain('reload');
   });
 
   it('also handles the orphaned context reported through an error event', async () => {
