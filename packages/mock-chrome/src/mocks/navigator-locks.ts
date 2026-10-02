@@ -34,8 +34,8 @@ const grantable = (r: Resource, mode: Mode, ahead: Resource['queue']) =>
     : !r.held.includes('exclusive') && !ahead.some(q => q.mode === 'exclusive');
 
 const pump = (r: Resource) => {
-  while (r.queue.length && grantable(r, r.queue[0]!.mode, [])) {
-    const next = r.queue.shift()!;
+  for (let next = r.queue[0]; next && grantable(r, next.mode, []); next = r.queue[0]) {
+    r.queue.shift();
     r.held.push(next.mode);
     next.grant();
   }
@@ -60,7 +60,9 @@ export const mockLocks: Pick<LockManager, 'request'> = {
     if (grantable(r, mode, r.queue)) {
       r.held.push(mode);
     } else {
-      await new Promise<void>(grant => r.queue.push({ mode, grant }));
+      await new Promise<void>(grant => {
+        r.queue.push({ mode, grant });
+      });
     }
     try {
       return await callback({ name, mode });

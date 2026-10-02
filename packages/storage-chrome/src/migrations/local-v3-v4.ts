@@ -11,6 +11,7 @@ const POLKADOT_NETWORKS = new Set(['polkadot', 'kusama']);
  * ({ encrypted } boxes the migration cannot open). Only a plain array is
  * filtered; anything else is passed through untouched, never mapped.
  */
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- T only types `keep` for the caller; the stored value is never trusted as T[]
 const filterList = <T>(v: unknown, keep: (x: T) => boolean): unknown =>
   Array.isArray(v) ? (v as T[]).filter(keep) : v;
 const mapList = <T>(v: unknown, f: (x: T) => T): unknown =>
@@ -73,14 +74,17 @@ export default {
       a => !POLKADOT_NETWORKS.has(a.network),
     ) as TO.LOCAL['recentAddresses'];
 
-    const zignerWallets = mapList<{ networks?: Record<string, unknown> }>(old.zignerWallets, w => {
-      if (!w?.networks || typeof w.networks !== 'object') {
-        return w;
-      }
-      const { polkadot, ...networks } = w.networks;
-      void polkadot;
-      return { ...w, networks };
-    }) as TO.LOCAL['zignerWallets'];
+    const zignerWallets = mapList<{ networks?: Record<string, unknown> } | null>(
+      old.zignerWallets,
+      w => {
+        if (!w?.networks || typeof w.networks !== 'object') {
+          return w;
+        }
+        const { polkadot, ...networks } = w.networks;
+        void polkadot;
+        return { ...w, networks };
+      },
+    ) as TO.LOCAL['zignerWallets'];
 
     return {
       ...(rest as unknown as TO.LOCAL),
