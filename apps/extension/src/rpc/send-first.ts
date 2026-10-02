@@ -17,7 +17,7 @@
 
 import type { HandlerContext, ServiceImpl } from '@connectrpc/connect';
 import type { CustodyService, ViewService } from '@penumbra-zone/protobuf';
-import { servicesCtx } from '@rotko/penumbra-services/ctx/prax';
+import { servicesCtx } from '@penumbrafi/services/ctx/prax';
 import { penumbraTiming } from '../penumbra/timing';
 
 type ViewImpl = Partial<ServiceImpl<typeof ViewService>>;
