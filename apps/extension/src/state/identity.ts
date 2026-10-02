@@ -1181,3 +1181,94 @@ export const deriveRoomKeys = (mnemonic: string, gen: number, genesisId: string)
     ),
   );
 };
+
+// ========================================================================
+// relationships: one XID per person you gave a card to (xid plan, PR 3)
+// ========================================================================
+
+/** a relationship's keys: its XID context, plus the X25519 key a pair room agrees with */
+export interface RelationshipKeys extends XidKeys {
+  /** X25519 public key, hex: the card's key-agreement key */
+  kaPublicKey: string;
+  kaSeed: Uint8Array;
+}
+
+/**
+ * What you give person `j` (xid plan, design-social 2.2):
+ *
+ *   rel[gen, j] = HMAC-SHA512(identity[gen], "xid-rel-v1" || u32be(j))
+ *   inception   = ed25519 seed HKDF(rel, "inception")  -> XID[gen, j]
+ *   ka          = x25519 seed  HKDF(rel, "contact-ka")
+ *   xwing       = X-Wing seed  HKDF(rel, "xwing")
+ *
+ * `j` is a per-(wallet, gen) counter that only grows, so a relationship is
+ * regenerable from the seed and an index, and two people never hold keys
+ * that link to each other or to your anchor. Pinned to `gen`.
+ */
+export const deriveRelationshipKeys = (
+  mnemonic: string,
+  gen: number,
+  j: number,
+): RelationshipKeys => {
+  if (!Number.isInteger(j) || j < 0 || j > 0xffffffff) {
+    throw new Error('a relationship index is a u32');
+  }
+  return withIdentity(mnemonic, rotatedIdentity(DEFAULT_IDENTITY, gen), id => {
+    const rel = hmac(
+      sha512,
+      id,
+      new Uint8Array([
+        ...enc.encode('xid-rel-v1'),
+        (j >>> 24) & 0xff,
+        (j >>> 16) & 0xff,
+        (j >>> 8) & 0xff,
+        j & 0xff,
+      ]),
+    );
+    const kaSeed = hkdfLabel(rel, 'contact-ka');
+    const kaPublicKey = bytesToHex(x25519.getPublicKey(kaSeed));
+    return { ...xidKeysFrom(rel), kaSeed, kaPublicKey };
+  });
+};
+
+/**
+ * The secret two people's pair room is keyed by (design-social 2.2):
+ *
+ *   pairRoot  = X25519(ka_mine, ka_theirs)
+ *   pairSecret = HKDF(pairRoot, salt "zafu-pair-v1", info min(XID) || max(XID))
+ *
+ * Both sides compute it from what their cards carry: no invite, no handshake.
+ * XIDs order as hex strings, which is their byte order.
+ */
+export const pairSecret = (
+  kaSeed: Uint8Array,
+  peerKa: string,
+  myXid: string,
+  peerXid: string,
+): Uint8Array => {
+  const root = x25519.getSharedSecret(kaSeed, hexToBytes(peerKa));
+  const [lo, hi] = myXid < peerXid ? [myXid, peerXid] : [peerXid, myXid];
+  const out = hkdf(
+    sha256,
+    root,
+    enc.encode('zafu-pair-v1'),
+    new Uint8Array([...hexToBytes(lo), ...hexToBytes(hi)]),
+    32,
+  );
+  root.fill(0);
+  return out;
+};
+
+/** chrome.storage.local, per wallet: the next unused `j` per generation */
+export const XID_REL_NEXT_KEY = 'xidRelNext';
+
+/** take the next relationship index for this wallet and generation; never reused */
+export async function mintRelationshipIndex(walletId: string, gen: number): Promise<number> {
+  const key = `${XID_REL_NEXT_KEY}:${walletId}`;
+  return navigator.locks.request(key, async () => {
+    const next = ((await chrome.storage.local.get(key))[key] ?? {}) as Record<string, number>;
+    const j = next[gen] ?? 0;
+    await chrome.storage.local.set({ [key]: { ...next, [gen]: j + 1 } });
+    return j;
+  });
+}
