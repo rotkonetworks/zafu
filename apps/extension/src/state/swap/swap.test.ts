@@ -254,8 +254,9 @@ describe('thorchain', () => {
       to_asset: 'ZEC.ZEC',
       amount: '1000000',
       destination: 't1PTs8DQifJxg6HmUq7AgYYFNkbyQa1zjgf',
-      refund_address: 'bc1qrefundexample',
     });
+    // a btc deposit's memo must fit 80 bytes: no refund address, it refunds the sender
+    expect(params.has('refund_address')).toBe(false);
     expect(asked).toContain('thorchain');
   });
 
@@ -455,11 +456,12 @@ describe('thorchain', () => {
       expect(quote.memo).toBe(`=:ETH.ETH:${ETH_ADDR}:0/1/0`);
     });
 
-    it('never puts a name in the refund slot: into zec refunds to the resolved address', async () => {
+    it('never puts a name in the refund slot, and a btc deposit refunds to its sender', async () => {
       const urls = thornode(thorQuote());
       await thorProvider.quote(req({ otherAddress: 'bc1qrefundexample', otherName: 'alice' }));
       const asked = urls.find(u => u.includes('/quote/swap'))!;
-      expect(asked).toContain('refund_address=bc1qrefundexample');
+      // dest/refund would not fit btc's 80-byte OP_RETURN; thorchain refunds the sender
+      expect(asked).not.toContain('refund_address');
       expect(asked).not.toContain('alice');
     });
   });

@@ -34,6 +34,9 @@ const NODE_DECIMALS = 8;
 /** observers relay at most 80 bytes of OP_RETURN, and zcash allows no more */
 export const MAX_MEMO_BYTES = 80;
 
+/** source chains whose deposit memo rides in an OP_RETURN */
+export const OP_RETURN_CHAINS = new Set(['BTC', 'LTC', 'BCH', 'DOGE', 'DASH', 'ZEC']);
+
 export interface NodeChain {
   id: keyof typeof POOLS;
   /** the api path prefix, `/thorchain` or `/mayachain` */
@@ -310,10 +313,12 @@ export const nodeProvider = (chain: NodeChain): SwapProvider => {
         destination,
         streaming_interval: '1',
       });
-      if (into && chain.refundInMemo) {
+      const sourceChain = (into ? pool.asset : ZEC_ASSET).split('.')[0]!;
+      // utxo deposits carry the memo in an 80-byte OP_RETURN, where dest/refund
+      // does not fit (94 bytes for btc); the network refunds those to the sender
+      if (into && chain.refundInMemo && !OP_RETURN_CHAINS.has(sourceChain)) {
         query.set('refund_address', req.otherAddress);
       }
-      const sourceChain = (into ? pool.asset : ZEC_ASSET).split('.')[0]!;
       const quoted = nodeFetch<NodeQuote>(chain, `/quote/swap?${query}`);
       quoted.catch(() => {});
       // a halted chain is said plainly, before whatever the quote makes of it
