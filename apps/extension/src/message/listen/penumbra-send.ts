@@ -19,6 +19,7 @@ import { bech32mAddress } from '@penumbra-zone/bech32m/penumbra';
 import { isValidInternalSender } from '../../senders/internal';
 import { isPenumbraSendRequest } from '../penumbra-send';
 import { writeTxOp, type TxOp } from '../../tx-ops';
+import { penumbraTiming } from '../../penumbra/timing';
 
 /** A short name for what the plan does, for the transaction tracker. */
 const describePlan = (req: TransactionPlannerRequest): string => {
@@ -222,6 +223,7 @@ export const createPenumbraSendListener =
     if (!isValidInternalSender(sender)) {
       return false;
     }
+    penumbraTiming('send request received');
     // Ack synchronously; the real result is delivered through session storage,
     // decoupled from this message's (short-lived) response channel.
     void runSend(message, getViewClient);

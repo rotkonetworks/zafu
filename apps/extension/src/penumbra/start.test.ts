@@ -162,4 +162,16 @@ describe('penumbra rebuild targets', () => {
     await s.request('wallets changed');
     expect(built).toEqual([]);
   });
+
+  it('a chain id the node changed rebuilds; an unknown one does not', async () => {
+    const t = { walletId: 'w1', run: true, chainId: 'penumbra-1' };
+    const { s, built, want } = setup(t);
+    s.setRunning(settledTarget(t, 'w1', false));
+    want({ ...t, chainId: undefined });
+    await s.request('params unknown');
+    expect(built).toEqual([]);
+    want({ ...t, chainId: 'penumbra-2' });
+    await s.request('chain id changed');
+    expect(built).toEqual([{ ...t, chainId: 'penumbra-2' }]);
+  });
 });

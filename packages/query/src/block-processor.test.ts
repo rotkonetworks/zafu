@@ -82,4 +82,85 @@ describe('BlockProcessor sync loop', () => {
     });
     expect(streamsOpened).toBe(before);
   });
+
+  describe('holds (a send goes ahead of sync)', () => {
+    const settle = () =>
+      new Promise(r => {
+        setTimeout(r, 200);
+      });
+
+    it('a hold stops the stream and its release starts it again', async () => {
+      let streamsOpened = 0;
+      const processor = makeProcessor(() => streamsOpened++);
+      void processor.sync().catch(() => undefined);
+      await vi.waitFor(() => expect(streamsOpened).toBeGreaterThanOrEqual(1));
+
+      const release = processor.hold();
+      await settle();
+      const held = streamsOpened;
+      await processor.sync();
+      await settle();
+      expect(streamsOpened).toBe(held);
+
+      release();
+      await vi.waitFor(() => expect(streamsOpened).toBeGreaterThan(held), { timeout: 5_000 });
+      processor.stop('test done');
+    });
+
+    it('holds nest: sync waits for the last release, and a release is counted once', async () => {
+      let streamsOpened = 0;
+      const processor = makeProcessor(() => streamsOpened++);
+      const first = processor.hold();
+      const second = processor.hold();
+      void processor.sync().catch(() => undefined);
+      first();
+      first();
+      await settle();
+      expect(streamsOpened).toBe(0);
+
+      second();
+      await vi.waitFor(() => expect(streamsOpened).toBeGreaterThanOrEqual(1), { timeout: 5_000 });
+      processor.stop('test done');
+    });
+
+    it('a hold nests with the closed pause, in either order', async () => {
+      let streamsOpened = 0;
+      const processor = makeProcessor(() => streamsOpened++);
+
+      // closed, then a send: releasing the send leaves the closed pause in place
+      processor.pause();
+      const release = processor.hold();
+      release();
+      await settle();
+      expect(streamsOpened).toBe(0);
+
+      // a send, then the window opens: still held until the send releases
+      const send = processor.hold();
+      processor.resume();
+      await settle();
+      expect(streamsOpened).toBe(0);
+      send();
+      await vi.waitFor(() => expect(streamsOpened).toBeGreaterThanOrEqual(1), { timeout: 5_000 });
+
+      // closing while a send is held, then releasing it, stays paused
+      const late = processor.hold();
+      processor.pause();
+      late();
+      await settle();
+      const closed = streamsOpened;
+      await settle();
+      expect(streamsOpened).toBe(closed);
+      processor.stop('test done');
+    });
+
+    it('a release after stop opens nothing', async () => {
+      let streamsOpened = 0;
+      const processor = makeProcessor(() => streamsOpened++);
+      const release = processor.hold();
+      processor.stop('wallet switch');
+      release();
+      await settle();
+      expect(streamsOpened).toBe(0);
+    });
+  });
 });

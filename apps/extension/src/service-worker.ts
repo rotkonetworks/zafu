@@ -78,7 +78,15 @@ import { internalTransportOptions } from './transport-options';
 // idb, querier, block processor
 import { walletIdCtx } from '@penumbrafi/services/ctx/wallet-id';
 import type { Services } from '@repo/context';
-import { startWalletServices, penumbraGate, PENUMBRA_START_NEEDED } from './wallet-services';
+import {
+  startWalletServices,
+  penumbraGate,
+  PENUMBRA_START_NEEDED,
+  refreshPenumbraChainId,
+  storedPenumbraChainId,
+} from './wallet-services';
+import type { StartedServices } from './wallet-services';
+import type { BlockProcessor } from '@penumbra-zone/query/block-processor';
 import { getWalletFromStorage } from '@repo/storage-chrome/onboard';
 import type { WalletJson } from '@repo/wallet';
 import { createRebuildScheduler } from './rebuild-scheduler';
@@ -91,8 +99,13 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { networkAllowsBackgroundSync } from './state/privacy';
 import { runPresencePublish } from './state/contact-discovery-service';
 import { trackUiOpenPresence } from './state/ui-open-presence';
+import { penumbraTiming } from './penumbra/timing';
 import { requestStopAllSync } from './state/keyring/network-worker';
 import { stampSeenVersion } from './state/moved-notice';
+
+// performance.now() counts from the worker's start, so this is wake to here:
+// the wasm-backed imports above are what the entry body waits on
+penumbraTiming('sw modules and wasm loaded');
 
 // count open side panels so approval routing can target the panel only when it
 // is actually open (see popup.ts). Registered once at worker startup.
@@ -120,10 +133,52 @@ const penumbraSync = (act: 'pause' | 'resume') =>
     .catch(() => undefined);
 let uiOpen = false;
 
+/**
+ * Services start on the stored chain id, so a start never waits on the node.
+ * Their sync is held until the node confirms it - asked only once a window is
+ * open, since nothing may call out while every window is closed. A changed id
+ * rebuilds the services, and the held sync means the old chain's database
+ * never reads a block of the new one.
+ */
+let chainCheck: (() => Promise<void>) | undefined;
+const runChainCheck = () => {
+  const check = chainCheck;
+  chainCheck = undefined;
+  void check?.();
+};
+
+/** a fresh block processor, before anything can start it */
+const onBlockProcessor = (bp: BlockProcessor, chain: { id: string; confirmed: boolean }) => {
+  // fresh services start syncing at once; with every window closed they wait
+  if (!uiOpen) {
+    bp.pause();
+  }
+  if (chain.confirmed) {
+    chainCheck = undefined;
+    return;
+  }
+  const release = bp.hold();
+  chainCheck = async () => {
+    const t = performance.now();
+    const node = await refreshPenumbraChainId().catch(() => undefined);
+    penumbraTiming('params refresh (node)', t);
+    if (node && node !== chain.id) {
+      // the refresh stored the node's params, so the rebuild reads the new
+      // chain; this processor stays held until the rebuild stops it
+      console.warn(`[sync] the node serves ${node}, not ${chain.id}; rebuilding`);
+      void reinitializeServices('chain id changed');
+      return;
+    }
+    // confirmed, or the node did not answer: sync goes on as it would have
+    release();
+  };
+};
+
 trackUiOpenPresence(
   () => {
     uiOpen = true;
     penumbraSync('resume');
+    runChainCheck();
     void runPresencePublish();
     presencePublishTimer ??= setInterval(() => void runPresencePublish(), 5 * 60_000);
     // the next popup/page open resumes sync on its own (zcash-auto-sync.ts),
@@ -155,11 +210,7 @@ trackUiOpenPresence(
 // storage-chrome/local.ts) so every realm - SW, popup, options page - has them,
 // not just this worker. No explicit enableMigration call needed here.
 
-let walletServicesResult: Promise<{
-  services: Services;
-  wallet: WalletJson;
-  reason?: string;
-}>;
+let walletServicesResult: Promise<StartedServices>;
 // Undefined until `initHandler` creates the boot services. Any awaited use must
 // tolerate that: the first millisecond of a worker's life is a real, reachable
 // state, not just a typing nicety (see the blockSync alarm and the internal
@@ -177,10 +228,25 @@ let currentSyncAbort: AbortController | undefined;
 const desiredPenumbraTarget = async (): Promise<PenumbraTarget> => ({
   walletId: (await getWalletFromStorage())?.id,
   run: (await penumbraGate()).run,
+  chainId: await storedPenumbraChainId(),
 });
 
-const settle = (r: { wallet?: WalletJson; reason?: string }, target: PenumbraTarget) =>
-  rebuilds.setRunning(settledTarget(target, r.wallet?.id, r.reason === PENUMBRA_START_NEEDED));
+const settle = (
+  r: { wallet?: WalletJson; reason?: string; chainId?: string },
+  target: PenumbraTarget,
+) => {
+  rebuilds.setRunning(
+    settledTarget(
+      { ...target, chainId: r.chainId ?? target.chainId },
+      r.wallet?.id,
+      r.reason === PENUMBRA_START_NEEDED,
+    ),
+  );
+  // confirm the stored chain id now if a window is open, else on the next open
+  if (uiOpen) {
+    runChainCheck();
+  }
+};
 
 /** Tear down the current services and start fresh ones for `target`. */
 const rebuildServices = async (target: PenumbraTarget, _previous: unknown, why: string) => {
@@ -204,10 +270,10 @@ const rebuildServices = async (target: PenumbraTarget, _previous: unknown, why: 
   resetWalletCache();
 
   currentSyncAbort = new AbortController();
-  walletServicesResult = startWalletServices(currentSyncAbort.signal);
+  // the old services' chain check is moot: it must not ask a node for them
+  chainCheck = undefined;
+  walletServicesResult = startWalletServices(currentSyncAbort.signal, onBlockProcessor);
   walletServices = walletServicesResult.then(r => r.services);
-  // fresh services start syncing at once; with every window closed they wait
-  void walletServices.then(() => !uiOpen && penumbraSync('pause'));
   const result = await walletServicesResult;
   const { services, wallet, reason } = result;
   setCachedWallet(wallet, reason);
@@ -335,10 +401,8 @@ const initHandler = async () => {
   const bootTarget = await desiredPenumbraTarget();
   rebuilds.setRunning(bootTarget);
   currentSyncAbort = new AbortController();
-  walletServicesResult = startWalletServices(currentSyncAbort.signal);
+  walletServicesResult = startWalletServices(currentSyncAbort.signal, onBlockProcessor);
   walletServices = walletServicesResult.then(r => r.services);
-  // fresh services start syncing at once; with every window closed they wait
-  void walletServices.then(() => !uiOpen && penumbraSync('pause'));
   // cache decrypted wallet as soon as it's available - unblocks RPC context getters
   void walletServicesResult.then(r => {
     setCachedWallet(r.wallet, r.reason);

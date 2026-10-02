@@ -26,6 +26,8 @@ import {
   type PenumbraStart,
   type ResolvedStart,
 } from './penumbra/start';
+import { penumbraTiming } from './penumbra/timing';
+import type { BlockProcessor } from '@penumbra-zone/query/block-processor';
 
 /**
  * check if penumbra network is enabled
@@ -69,9 +71,26 @@ export const penumbraGate = async (): Promise<{ run: true } | { run: false; reas
   return { run: true };
 };
 
+export interface StartedServices {
+  services: Services;
+  wallet: WalletJson;
+  reason?: string;
+  /** the chain the services read (real services only) */
+  chainId?: string;
+}
+
 export const startWalletServices = async (
   signal?: AbortSignal,
-): Promise<{ services: Services; wallet: WalletJson; reason?: string }> => {
+  /**
+   * Sees the block processor before anything can start it. `chain.confirmed`
+   * is false when the chain id came from storage, so the caller holds sync
+   * until the node confirms it (see refreshPenumbraChainId).
+   */
+  onBlockProcessor?: (
+    blockProcessor: BlockProcessor,
+    chain: { id: string; confirmed: boolean },
+  ) => void,
+): Promise<StartedServices> => {
   // Stub services object that throws on access - returned whenever penumbra
   // must not sync.
   const stubServices = (reason: string) => ({
@@ -94,6 +113,7 @@ export const startWalletServices = async (
   // If locked, wait for unlock (session key appears in storage).
   let wallet = await getWalletFromStorage();
   if (!wallet) {
+    const locked = performance.now();
     wallet = await new Promise<WalletJson>(resolve => {
       // listen for session key (unlock) or wallet creation
       const sessionListener = () => void check();
@@ -115,6 +135,7 @@ export const startWalletServices = async (
       // also check when session key appears (user unlocked)
       chrome.storage.session.onChanged.addListener(sessionListener);
     });
+    penumbraTiming('waited for unlock', locked);
   }
 
   await adoptLegacy();
@@ -129,9 +150,14 @@ export const startWalletServices = async (
   }
 
   const grpcEndpoint = await resolvePenumbraEndpoint();
-  const chainId = await getChainId(grpcEndpoint);
+  let t = performance.now();
+  const { chainId, confirmed } = await startChainId(paramsAt(grpcEndpoint));
+  penumbraTiming(`params (${confirmed ? 'node, first run' : 'stored'})`, t);
   const numeraires = await numerairesFor(chainId);
+  t = performance.now();
+  // a known start is read at once; only a start still to resolve asks the node
   const start = isResolved(asked) ? asked : await resolveAt(wallet.id, asked, grpcEndpoint, signal);
+  penumbraTiming(`start (${isResolved(asked) ? 'known' : 'node'})`, t);
   console.log(`[sync] starting from ${grpcEndpoint}, decrypting from ${start.creation}`);
 
   const services = new Services({
@@ -142,6 +168,8 @@ export const startWalletServices = async (
     numeraires: numeraires.map(n => AssetId.fromJsonString(n)),
     walletCreationBlockHeight: start.creation,
     compactFrontierBlockHeight: start.frontier,
+    onBlockProcessor: bp => onBlockProcessor?.(bp, { id: chainId, confirmed }),
+    onPhase: penumbraTiming,
   });
 
   const walletServices = await services.getWalletServices();
@@ -154,8 +182,10 @@ export const startWalletServices = async (
     await setStart(wallet.id, { creation: start.creation });
   }
   void publishSyncHeight(wallet.id, walletServices, signal);
+  // `@` is wake to ready: performance.now() in a worker counts from its start
+  penumbraTiming('services ready');
 
-  return { services, wallet };
+  return { services, wallet, chainId };
 };
 
 /** why the services are a stub while the wallet's start is not chosen */
@@ -226,31 +256,72 @@ const chainTip = async (baseUrl: string) => {
   return tip;
 };
 
+interface ParamsSource {
+  stored: () => Promise<AppParameters | undefined>;
+  fetch: () => Promise<AppParameters | undefined>;
+  save: (params: AppParameters) => Promise<void>;
+}
+
+const storedParams = () =>
+  localExtStorage
+    .get('params')
+    .then(json => (json ? AppParameters.fromJsonString(json) : undefined));
+
+const paramsAt = (baseUrl: string): ParamsSource => ({
+  stored: storedParams,
+  fetch: () =>
+    createClient(AppService, createGrpcWebTransport({ baseUrl }))
+      .appParameters({})
+      .then(({ appParameters }) => appParameters),
+  save: params => localExtStorage.set('params', params.toJsonString()),
+});
+
 /**
- * Get chainId from the rpc endpoint, or fall back to chainId from storage.
+ * The chain id the services start on. Stored params come first, so a start
+ * never waits on the node; only a first run, with nothing stored, asks it.
+ * A stored id is unconfirmed: the caller holds sync until
+ * refreshPenumbraChainId has asked the node, and rebuilds if it changed.
  *
  * It's possible that the remote endpoint may suddenly serve a new chainId.
  * @see https://github.com/prax-wallet/prax/pull/65
  */
-const getChainId = async (baseUrl: string) => {
-  const serviceClient = createClient(AppService, createGrpcWebTransport({ baseUrl }));
-  const params =
-    (await serviceClient.appParameters({}).then(
-      ({ appParameters }) => appParameters,
-      () => undefined,
-    )) ??
-    (await localExtStorage
-      .get('params')
-      .then(jsonParams => (jsonParams ? AppParameters.fromJsonString(jsonParams) : undefined)));
-
-  if (params?.chainId) {
-    void localExtStorage.set('params', params.toJsonString());
-  } else {
+export const startChainId = async (
+  source: ParamsSource,
+): Promise<{ chainId: string; confirmed: boolean }> => {
+  const stored = await source.stored();
+  if (stored?.chainId) {
+    return { chainId: stored.chainId, confirmed: false };
+  }
+  const fetched = await source.fetch().catch(() => undefined);
+  if (!fetched?.chainId) {
     throw new Error('No chainId available');
   }
-
-  return params.chainId;
+  await source.save(fetched);
+  return { chainId: fetched.chainId, confirmed: true };
 };
+
+/**
+ * Ask the node for its params after the services are up, and store them when
+ * they changed. The node's chain id, or undefined when it did not answer.
+ */
+export const refreshChainId = async (source: ParamsSource): Promise<string | undefined> => {
+  const fetched = await source.fetch().catch(() => undefined);
+  if (!fetched?.chainId) {
+    return undefined;
+  }
+  const stored = await source.stored();
+  if (!stored?.equals(fetched)) {
+    await source.save(fetched);
+  }
+  return fetched.chainId;
+};
+
+export const refreshPenumbraChainId = async () =>
+  refreshChainId(paramsAt(await resolvePenumbraEndpoint()));
+
+/** the chain id of the stored params, without asking anyone */
+export const storedPenumbraChainId = async () =>
+  (await storedParams().catch(() => undefined))?.chainId || undefined;
 
 const knownHeight = (h: bigint | undefined) =>
   h == null || h === SENTINEL_U64_MAX ? undefined : Number(h);

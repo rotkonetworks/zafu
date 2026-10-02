@@ -81,11 +81,21 @@ export interface PenumbraTarget {
   /** undefined while locked: the start waiting for unlock takes whichever wallet is active then */
   walletId: string | undefined;
   run: boolean;
+  /**
+   * the chain the services read; undefined before any is known (a first run).
+   * The services start on the stored chain id, so the node serving another
+   * one later must rebuild them rather than keep a mismatched chain.
+   */
+  chainId?: string;
 }
 
 export const sameTarget = (running: PenumbraTarget, next: PenumbraTarget) =>
   running.run === next.run &&
-  (running.walletId === undefined || running.walletId === next.walletId);
+  (running.walletId === undefined || running.walletId === next.walletId) &&
+  (!running.run ||
+    running.chainId === undefined ||
+    next.chainId === undefined ||
+    running.chainId === next.chainId);
 
 /**
  * What a finished start actually runs: its wallet, and nothing while that
@@ -97,6 +107,7 @@ export const settledTarget = (
   walletId: string | undefined,
   waitingForStart: boolean,
 ): PenumbraTarget => ({
+  ...target,
   walletId: walletId ?? target.walletId,
   run: target.run && !waitingForStart,
 });

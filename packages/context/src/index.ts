@@ -17,6 +17,13 @@ export interface ServicesConfig {
   readonly numeraires: AssetId[];
   readonly walletCreationBlockHeight: number | undefined;
   readonly compactFrontierBlockHeight: number | undefined;
+  /**
+   * Sees the block processor before anything can start it, so a caller can
+   * pause or hold it first (every window closed, a chain id still unconfirmed).
+   */
+  readonly onBlockProcessor?: (blockProcessor: BlockProcessor) => void;
+  /** told when each startup phase ends and when it began, for timing a cold start */
+  readonly onPhase?: (phase: string, since: number) => void;
 }
 
 export class Services implements ServicesInterface {
@@ -64,7 +71,10 @@ export class Services implements ServicesInterface {
       numeraires,
       walletCreationBlockHeight,
       compactFrontierBlockHeight,
+      onBlockProcessor,
+      onPhase,
     } = this.config;
+    let t = performance.now();
     const querier = new RootQuerier({ grpcEndpoint });
     // `IndexedDb.initialize` pre-populates asset metadata from the remote
     // registry and logs its own error if that fetch fails; the fallback client
@@ -75,6 +85,8 @@ export class Services implements ServicesInterface {
       walletId,
       registryClient,
     });
+    onPhase?.('db', t);
+    t = performance.now();
 
     let viewServer: ViewServer | undefined;
     // the block processor seeds a fresh wallet when its stored height is the
@@ -142,6 +154,9 @@ export class Services implements ServicesInterface {
       });
     }
 
+    onPhase?.('wasm view server (tree load)', t);
+    t = performance.now();
+
     // Dynamically fetch the 'local' genesis file from the exentsion's
     // static assets.
     const response = await fetch('./penumbra-1-genesis.bin');
@@ -161,6 +176,8 @@ export class Services implements ServicesInterface {
       compactFrontierBlockHeight: frontierHeight,
       fullViewingKey,
     });
+    onPhase?.('genesis', t);
+    onBlockProcessor?.(blockProcessor);
 
     return { viewServer, blockProcessor, indexedDb, querier };
   }

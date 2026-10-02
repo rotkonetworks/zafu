@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { localExtStorage } from '@repo/storage-chrome/local';
-import { publishSyncHeight } from './wallet-services';
+import { AppParameters } from '@penumbra-zone/protobuf/penumbra/core/app/v1/app_pb';
+import { publishSyncHeight, refreshChainId, startChainId } from './wallet-services';
 
 const localMock = (chrome.storage.local as unknown as { mock: Map<string, unknown> }).mock;
 
@@ -61,5 +62,68 @@ describe('publishSyncHeight', () => {
     old.push(435_001n);
     await tick();
     expect(await published()).toEqual({ walletId: 'w1', height: 12_997_731, from: 12_997_731 });
+  });
+});
+
+describe('params come from storage first', () => {
+  const source = (stored: string | undefined, node: string | undefined | Error) => {
+    const calls: string[] = [];
+    let saved: AppParameters | undefined;
+    return {
+      calls,
+      saved: () => saved,
+      source: {
+        stored: () => {
+          calls.push('stored');
+          return Promise.resolve(stored ? new AppParameters({ chainId: stored }) : undefined);
+        },
+        fetch: () => {
+          calls.push('node');
+          return node instanceof Error
+            ? Promise.reject(node)
+            : Promise.resolve(node ? new AppParameters({ chainId: node }) : undefined);
+        },
+        save: (p: AppParameters) => {
+          calls.push('save');
+          saved = p;
+          return Promise.resolve();
+        },
+      },
+    };
+  };
+
+  it('starts on the stored chain id without asking the node', async () => {
+    const s = source('penumbra-1', 'penumbra-1');
+    expect(await startChainId(s.source)).toEqual({ chainId: 'penumbra-1', confirmed: false });
+    expect(s.calls).toEqual(['stored']);
+  });
+
+  it('asks the node only when nothing is stored, and stores its answer', async () => {
+    const s = source(undefined, 'penumbra-1');
+    expect(await startChainId(s.source)).toEqual({ chainId: 'penumbra-1', confirmed: true });
+    expect(s.calls).toEqual(['stored', 'node', 'save']);
+    expect(s.saved()?.chainId).toBe('penumbra-1');
+  });
+
+  it('a first run with no node and nothing stored has no chain id', async () => {
+    await expect(startChainId(source(undefined, new Error('down')).source)).rejects.toThrow(
+      'No chainId available',
+    );
+  });
+
+  it('the refresh reports the node chain id, storing params only when they changed', async () => {
+    const same = source('penumbra-1', 'penumbra-1');
+    expect(await refreshChainId(same.source)).toBe('penumbra-1');
+    expect(same.calls).not.toContain('save');
+
+    const moved = source('penumbra-1', 'penumbra-2');
+    expect(await refreshChainId(moved.source)).toBe('penumbra-2');
+    expect(moved.saved()?.chainId).toBe('penumbra-2');
+  });
+
+  it('a node that does not answer leaves the stored params alone', async () => {
+    const s = source('penumbra-1', new Error('down'));
+    expect(await refreshChainId(s.source)).toBeUndefined();
+    expect(s.calls).toEqual(['node']);
   });
 });

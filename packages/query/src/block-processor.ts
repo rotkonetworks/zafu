@@ -104,7 +104,10 @@ export class BlockProcessor implements BlockProcessorInterface {
   private readonly indexedDb: IndexedDbInterface;
   private readonly viewServer: ViewServerInterface;
   private abortController: AbortController = new AbortController();
+  /** every window is closed: nobody is looking */
   private paused = false;
+  /** work that goes ahead of sync (a send being planned or built); nests */
+  private holds = 0;
   /** stopped for good (wallet switch, shutdown): nothing may start it again */
   private stopped = false;
   private numeraires: AssetId[];
@@ -143,7 +146,7 @@ export class BlockProcessor implements BlockProcessorInterface {
     // paused: nobody is looking, so a view call poking sync() starts nothing;
     // stopped: a view call through old services must not revive a wallet
     // the user switched away from
-    this.paused || this.stopped
+    this.paused || this.holds > 0 || this.stopped
       ? Promise.resolve()
       : (this.syncPromise ??= backOff(() => this.syncAndStore().catch(this.endIfStopped), {
           delayFirstAttempt: false,
@@ -211,10 +214,40 @@ export class BlockProcessor implements BlockProcessorInterface {
       return;
     }
     this.paused = false;
+    this.restart();
+  };
+
+  /**
+   * Yield to work that must not wait on catch-up sync (planning or building a
+   * send). Holds nest with each other and with pause(): sync runs again only
+   * once every hold is released and a window is open. The release is
+   * idempotent, so a caller can release from a finally without counting.
+   */
+  public hold = (): (() => void) => {
+    this.holds += 1;
+    this.abortController.abort('Sync stop held');
+    let released = false;
+    return () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      this.holds -= 1;
+      this.restart();
+    };
+  };
+
+  /** start again once nothing pauses or holds the loop */
+  private restart = () => {
+    if (this.paused || this.holds > 0 || this.stopped) {
+      return;
+    }
     this.abortController = new AbortController();
     // the paused loop clears its promise once it has wound down
     const winding = this.syncPromise?.catch(() => undefined) ?? Promise.resolve();
-    void winding.then(() => (this.paused ? undefined : this.sync().catch(() => undefined)));
+    void winding.then(() =>
+      this.paused || this.holds > 0 ? undefined : this.sync().catch(() => undefined),
+    );
   };
 
   setNumeraires(numeraires: AssetId[]): void {
