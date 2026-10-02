@@ -1,7 +1,7 @@
 /**
- * The transparent chains under Penumbra (Noble, Injective, ...), one row each
- * on the Penumbra home. Their burner addresses are single-use deposit
- * addresses, each independently shieldable.
+ * On the way in: the burner chains under Penumbra that a receive, shield or
+ * withdrawal has used, one row each on the Penumbra balance. Their addresses
+ * are single-use deposit addresses, each independently shieldable.
  *
  * Nothing is fetched until the user presses check: the row shows the last
  * check from this browser session, with its age. Funded burners, and every
@@ -17,7 +17,7 @@ import { Sheet } from '@repo/ui/components/ui/sheet';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { Sensitive } from '../../../components/sensitive';
-import { useChainCheck, useHiddenChains } from '../../../hooks/cosmos-balance';
+import { useChainCheck } from '../../../hooks/cosmos-balance';
 import { ago, type DepositWallet } from '../../../transparent/chain-check';
 import { getActiveIbcSubnetworks } from '../../../config/networks';
 import { useStore } from '../../../state';
@@ -72,8 +72,7 @@ const DepositRow = ({
 const ChainRow = ({ chainId }: { chainId: CosmosChainId }) => {
   const navigate = useNavigate();
   const config = COSMOS_CHAINS[chainId];
-  const { state, check, turnOn } = useChainCheck(chainId);
-  const { setHidden } = useHiddenChains();
+  const { state, check } = useChainCheck(chainId);
   const [sheet, setSheet] = useState<'chain' | 'pool' | null>(null);
   const funded = 'check' in state ? state.check.funded : [];
   const age = 'check' in state ? ago(state.check.at) : undefined;
@@ -111,16 +110,6 @@ const ChainRow = ({ chainId }: { chainId: CosmosChainId }) => {
         onPress={() => setSheet('chain')}
         action={
           <>
-            {state.kind === 'off' && (
-              <Button
-                variant='secondary'
-                size='sm'
-                className='min-w-[76px]'
-                onClick={() => void turnOn()}
-              >
-                turn on
-              </Button>
-            )}
             {showRefresh && (
               <button
                 onClick={() => void check()}
@@ -176,14 +165,6 @@ const ChainRow = ({ chainId }: { chainId: CosmosChainId }) => {
             />
           )}
           <Row type='screen' label='use another node' onPress={() => setSheet('pool')} />
-          <Row
-            type='screen'
-            label='hide from home'
-            onPress={() => {
-              setSheet(null);
-              void setHidden(chainId, true);
-            }}
-          />
         </RowGroup>
       </Sheet>
       <RpcPoolSheet
@@ -195,22 +176,20 @@ const ChainRow = ({ chainId }: { chainId: CosmosChainId }) => {
   );
 };
 
-/** Home: one row per transparent chain the user has turned on and not hidden. */
+/** one row per burner chain a flow has used */
 export const CosmosSubwallets = () => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const enabledNetworks = useStore(selectEnabledNetworks) as string[];
-  const { hidden } = useHiddenChains();
-  // only hot (mnemonic) wallets derive burner addresses here; a chain the
-  // user has not turned on (settings > networks > penumbra > ibc chains)
-  // gets no row at all
+  // only hot (mnemonic) wallets derive burner addresses here; a chain no
+  // flow has used gets no row at all
   const chains = (getActiveIbcSubnetworks('penumbra') as CosmosChainId[]).filter(
-    c => COSMOS_CHAINS[c] && enabledNetworks.includes(c) && !hidden.includes(c),
+    c => COSMOS_CHAINS[c] && enabledNetworks.includes(c),
   );
   if (selectedKeyInfo?.type !== 'mnemonic' || chains.length === 0) {
     return null;
   }
   return (
-    <BalanceGroup heading='transparent chains'>
+    <BalanceGroup heading='on the way in'>
       {chains.map(chainId => (
         <ChainRow key={chainId} chainId={chainId} />
       ))}

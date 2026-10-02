@@ -1005,7 +1005,7 @@ export const externalMessageListener = (
             sendResponse({ error: 'not connected', code: 'denied' });
             return;
           }
-          if (!(await openWalletRoute(shieldOrigin, PopupPath.INJECTIVE))) {
+          if (!(await openWalletRoute(shieldOrigin, `${PopupPath.RECEIVE}?mode=shield`))) {
             sendResponse({ error: 'a wallet window is already open', code: 'rate_limited' });
             return;
           }

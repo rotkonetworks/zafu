@@ -15,6 +15,7 @@ import { useCopy } from '@repo/ui/hooks/use-copy';
 import { useStore } from '../../../state';
 import { keyRingSelector, selectEffectiveKeyInfo } from '../../../state/keyring';
 import { AddressView } from './address-view';
+import { useChainInUse } from '../../../hooks/enable-network';
 import {
   allocateTransparentAddress,
   readShownIndices,
@@ -29,6 +30,8 @@ export const TransparentReceive = ({ chainId }: { chainId: CosmosChainId }) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { getMnemonic } = useStore(keyRingSelector);
   const keyId = selectedKeyInfo?.type === 'mnemonic' ? selectedKeyInfo.id : undefined;
+  // funds sent here show on the penumbra home, on the way in
+  useChainInUse(keyId ? chainId : undefined);
 
   const [nonce, setNonce] = useState(0);
   const [current, setCurrent] = useState<{ index: number; address: string }>();

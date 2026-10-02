@@ -1,4 +1,3 @@
-import { InFlightCard } from '../../../components/in-flight-card';
 import { Suspense, useState, useCallback, useEffect } from 'react';
 import type { ComponentType, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -16,14 +15,10 @@ import { needsLogin, needsOnboard } from '../popup-needs';
 import { PopupPath } from '../paths';
 import { AssetListSkeleton } from '../../../components/primitives/skeleton';
 import { usePreloadBalances } from '../../../hooks/use-preload';
-import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 
 import { BackupNudge } from './notices';
-import { HomeActions } from './actions';
-import { HistoryContent } from './history';
 import { PenumbraContent } from './penumbra-home';
 import { ZcashContent } from './zcash-home';
-import { CosmosContent, NetworkPlaceholder } from './other-networks';
 
 export const popupIndexLoader = async (): Promise<Response | null> =>
   (await needsOnboard()) ?? (await needsLogin()) ?? null;
@@ -86,37 +81,11 @@ export const PopupIndex = () => {
     />
   ) : null;
 
-  const Home = HOME[activeNetwork];
-  if (Home) {
-    return (
-      <Suspense fallback={<AssetListSkeleton rows={4} />}>
-        <Home nudge={backupNudge} />
-      </Suspense>
-    );
-  }
-
+  // a burner chain is penumbra's plumbing: an older wallet left on one sees penumbra
+  const Home = HOME[activeNetwork] ?? PenumbraHome;
   return (
-    <div className='flex min-h-full flex-col gap-3 p-4'>
-      <InFlightCard />
-      <Suspense fallback={<AssetListSkeleton rows={4} />}>
-        <NetworkContent network={activeNetwork} nudge={backupNudge} />
-      </Suspense>
-      <Suspense fallback={<AssetListSkeleton rows={3} />}>
-        <HistoryContent network={activeNetwork} penumbraAccount={penumbraAccount} limit={3} />
-      </Suspense>
-    </div>
+    <Suspense fallback={<AssetListSkeleton rows={4} />}>
+      <Home nudge={backupNudge} />
+    </Suspense>
   );
 };
-
-/** network-specific content - split out to minimize re-renders */
-const NetworkContent = ({ network, nudge }: { network: NetworkType; nudge?: ReactNode }) => (
-  <>
-    {nudge}
-    <HomeActions />
-    {network === 'noble' || network === 'cosmoshub' ? (
-      <CosmosContent chainId={network as CosmosChainId} />
-    ) : (
-      <NetworkPlaceholder network={network} />
-    )}
-  </>
-);

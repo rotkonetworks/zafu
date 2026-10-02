@@ -225,9 +225,12 @@ function AddressModal({
               onChange={e => setNetwork(e.target.value as ContactNetwork)}
               className='w-full border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
             >
-              {Object.entries(NETWORK_LABELS).map(([value, label]) => (
+              {/* new addresses are zcash or penumbra; one saved on another network stays editable */}
+              {[
+                ...new Set<ContactNetwork>(['zcash', 'penumbra', editAddress?.network ?? 'zcash']),
+              ].map(value => (
                 <option key={value} value={value}>
-                  {label}
+                  {NETWORK_LABELS[value]}
                 </option>
               ))}
             </select>

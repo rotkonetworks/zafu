@@ -79,7 +79,6 @@ export const popupScreens = {
   link: () => import('./link').then(m => m.LinkPage),
   send: () => import('./send').then(m => m.SendPage),
   receive: () => import('./receive').then(m => m.ReceivePage),
-  injective: () => import('./injective').then(m => m.InjectivePage),
   cosmosSign: () => import('./cosmos-sign').then(m => m.CosmosSign),
   multisigSessions: () => import('./multisig/sessions').then(m => m.MultisigPage),
   multisigCreate: () => import('./multisig/create').then(m => m.MultisigCreate),

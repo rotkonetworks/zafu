@@ -12,7 +12,7 @@ import { Row } from '@repo/ui/components/ui/row';
 /** each chain's own screen, and its label here */
 const CHAINS = [
   { id: 'zcash', label: 'zcash', screen: PopupPath.SETTINGS_ZCASH_NETWORK },
-  { id: 'penumbra', label: 'penumbra + ibc', screen: PopupPath.SETTINGS_PENUMBRA_NETWORK },
+  { id: 'penumbra', label: 'penumbra', screen: PopupPath.SETTINGS_PENUMBRA_NETWORK },
 ] as const satisfies readonly { id: NetworkId; label: string; screen: PopupPath }[];
 
 /** a chain shows the node it reads from when on, and turns on when off */

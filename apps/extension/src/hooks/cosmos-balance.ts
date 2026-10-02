@@ -2,19 +2,12 @@
 
 import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useStore } from '../state';
-import {
-  selectEffectiveKeyInfo,
-  keyRingSelector,
-  selectActiveNetwork,
-  type NetworkType,
-} from '../state/keyring';
-import { refreshEgress } from '../net/egress';
+import { selectEffectiveKeyInfo, keyRingSelector, selectActiveNetwork } from '../state/keyring';
 import { getRootNetwork } from '../config/networks';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { conduitFor } from '@repo/wallet/networks/transparent/conduit';
 import { knownAssets } from '../transparent/assets';
 import { cosmosKeyFor } from '../signing/cosmos-key';
-import { localExtStorage } from '@repo/storage-chrome/local';
 import {
   checkState,
   deriveAddresses,
@@ -56,8 +49,6 @@ export const useChainCheck = (chainId: CosmosChainId) => {
   const queryKey = useCheckKey(chainId);
   const keyId = queryKey?.[2];
   const { getMnemonic } = useStore(keyRingSelector);
-  const toggleNetwork = useStore(s => s.keyRing.toggleNetwork);
-  const setPrivacy = useStore(s => s.privacy.setSetting);
   const enabled = useStore(s => (s.keyRing.enabledNetworks as string[]).includes(chainId));
   const queryClient = useQueryClient();
   const { data: check } = useQuery({
@@ -80,33 +71,9 @@ export const useChainCheck = (chainId: CosmosChainId) => {
   return {
     state: checkState({ enabled, checking, check }),
     check: () => (enabled ? ask() : Promise.resolve()),
-    /** the chain's nodes are allowed only while it is on: turn it on, then check */
-    turnOn: async () => {
-      await toggleNetwork(chainId as NetworkType);
-      // the privacy summary lists cosmos balances as on from here
-      await setPrivacy('enableTransparentBalances', true);
-      await refreshEgress();
-      await ask();
-    },
   };
 };
 
-/** chains the user hid from the penumbra home (a backed-up setting), and the switch */
-export const useHiddenChains = () => {
-  const queryClient = useQueryClient();
-  const { data: hidden = [] } = useQuery({
-    queryKey: ['hiddenTransparentChains'],
-    queryFn: async () => (await localExtStorage.get('hiddenTransparentChains')) ?? [],
-  });
-  const setHidden = async (chainId: CosmosChainId, hide: boolean) => {
-    const next = hide ? [...new Set([...hidden, chainId])] : hidden.filter(c => c !== chainId);
-    queryClient.setQueryData(['hiddenTransparentChains'], next);
-    await localExtStorage.set('hiddenTransparentChains', next);
-  };
-  return { hidden, setHidden };
-};
-
-/** asset info for UI display */
 export interface CosmosAsset {
   denom: string;
   amount: bigint;

@@ -114,10 +114,6 @@ export const popupRoutes: RouteObject[] = [
             path: PopupPath.RECEIVE,
             lazy: lazyScreen('receive'),
           },
-          {
-            path: PopupPath.INJECTIVE,
-            lazy: lazyScreen('injective'),
-          },
 
           // Cosmos airgap signing (dedicated window)
           {

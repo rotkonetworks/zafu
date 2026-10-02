@@ -13,7 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { PopupPath } from '../routes/popup/paths';
 import { selectActiveZcashWallet } from '../state/wallets';
 import { activePockets, hiddenPockets, pocketOwner } from '../state/pockets';
-import { getNetwork } from '../config/networks';
+import { getNetwork, getRootNetwork } from '../config/networks';
 import { AccountsSheet, pocketTarget, type PocketSheetTarget } from './accounts-sheet';
 import { NetworkSheet } from './network-sheet';
 import { AddWalletSheet } from './add-wallet-sheet';
@@ -61,7 +61,8 @@ export const AppHeader = () => {
     void chrome.storage.local.set({ [LAST_SEEN_VERSION]: chrome.runtime.getManifest().version });
   };
 
-  const networkInfo = getNetwork(activeNetwork);
+  // a burner chain is penumbra's plumbing, never a network of its own
+  const networkInfo = getNetwork(getRootNetwork(activeNetwork));
   // mnemonic vaults derive zcash keys directly - no zcash wallet record
   const walletName =
     activeNetwork === 'zcash' && selectedKeyInfo?.type !== 'mnemonic'
@@ -107,15 +108,6 @@ export const AppHeader = () => {
         >
           <span className={cn('size-2', networkInfo.color)} />
           <span className='text-[13px] text-fg-high lowercase'>{networkInfo.name}</span>
-          {networkInfo.transparent && (
-            <span
-              className='flex items-center gap-0.5 bg-hanko/15 px-1.5 py-0.5 text-label leading-none text-hanko'
-              title='transparent network - balances and transactions are PUBLIC, not shielded'
-            >
-              <span className='i-ph-eye h-3 w-3' />
-              unshielded
-            </span>
-          )}
           <span className='i-lucide-chevron-down size-3 text-fg-muted' />
         </button>
         <button

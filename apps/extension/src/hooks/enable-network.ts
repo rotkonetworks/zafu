@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { useStore } from '../state';
+import { refreshEgress } from '../net/egress';
 import type { NetworkType } from '../state/keyring';
 import { isIbcNetwork } from '../state/keyring/network-types';
 import { getNetwork, getSubnetworks } from '../config/networks';
@@ -32,4 +34,25 @@ export const useDisableNetwork = () => {
       await toggleNetwork(c);
     }
   };
+};
+
+/** toggleNetwork flips, so a chain already being turned on is never flipped back */
+const turningOn = new Set<NetworkType>();
+
+/**
+ * a burner chain is penumbra's plumbing, with no switch of its own: the flow
+ * that moves funds through it turns it on, so its nodes may be reached
+ */
+export const useChainInUse = (id: string | undefined) => {
+  const chainId = getSubnetworks('penumbra').find(n => n === id);
+  const on = useStore(s => !chainId || s.keyRing.enabledNetworks.includes(chainId));
+  const enable = useEnableNetwork();
+  useEffect(() => {
+    if (chainId && !on && !turningOn.has(chainId)) {
+      turningOn.add(chainId);
+      void enable(chainId)
+        .then(refreshEgress)
+        .finally(() => turningOn.delete(chainId));
+    }
+  }, [chainId, on]);
 };

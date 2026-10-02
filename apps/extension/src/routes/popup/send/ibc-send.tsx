@@ -32,6 +32,7 @@ import { Footer, Main, shortAddress } from './send-ui';
 import { AmountField, ContactsSheet, PickSheet, ToField } from './send-fields';
 import { BalanceSheet, balanceLook } from './balance-sheet';
 import { PenumbraFlow } from './penumbra-flow';
+import { useChainInUse } from '../../../hooks/enable-network';
 
 /** filter balances to assets withdrawable through a given IBC channel */
 const filterWithdrawableAssets = <T,>(balances: T[], channelId: string | undefined): T[] => {
@@ -135,6 +136,8 @@ export function PenumbraIbcSend({ onClose, meta }: { onClose: () => void; meta?:
   const cosmosChainId = destPrefix
     ? Object.values(COSMOS_CHAINS).find(c => c.bech32Prefix === destPrefix)?.id
     : undefined;
+  // the withdrawal lands on this chain, and is followed there
+  useChainInUse(cosmosChainId);
 
   // Own address to offer as the one-tap target. Mnemonic vaults get a FRESH HD
   // address (a new one each unshield, never shown twice), derived by the

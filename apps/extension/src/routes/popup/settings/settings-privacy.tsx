@@ -67,7 +67,7 @@ function ThorNameRow({ onExplain }: { onExplain?: () => void }) {
   return (
     <Row
       type='toggle'
-      label='thorchain names'
+      label='names'
       checked={on}
       onChange={next =>
         void setDestinationOptIn(THORNAME_EGRESS, next ? 'allowed' : undefined).then(refreshEgress)
@@ -287,7 +287,7 @@ export function SettingsPrivacy() {
             <ContactDiscoverySection {...explainProps('private contact discovery')} />
           )}
           {hasFeature(activeNetwork, 'zcash') && <ZcashMeRow {...explainProps('zcash.me')} />}
-          <ThorNameRow {...explainProps('thorchain names')} />
+          <ThorNameRow {...explainProps('names')} />
           {rows('people')}
         </Section>
         <Section title='sites'>

@@ -52,6 +52,7 @@ import { SaveContactModal } from '../../../components/save-contact-modal';
 import { Done, Footer, Helper, Main, Review, Sending, Stopped } from './send-ui';
 import { AmountField, ContactsSheet, PickSheet, ToField } from './send-fields';
 import { STAGES } from './send-stage';
+import { useChainInUse } from '../../../hooks/enable-network';
 
 // Penumbra's Skip/registry chain id. Shielding USDC INTO penumbra is a direct
 // single-hop IBC MsgTransfer over our own relayed channel, NOT a Skip route -
@@ -138,6 +139,7 @@ export function CosmosSend({
   above?: ReactNode;
 }) {
   const sourceChain = COSMOS_CHAINS[sourceChainId];
+  useChainInUse(sourceChainId);
   // the live chain -> penumbra channel (discovered, never an expired pin);
   // undefined when the chain has no route into penumbra right now
   const penumbraChannel = routeForChain(sourceChainId, usePenumbraRoutes())?.penumbraChannel;
