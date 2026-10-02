@@ -1,11 +1,11 @@
 /**
  * THORNames: short names THORChain maps to one address per chain. Forward
  * lookups only (name -> address); there is no reverse lookup on purpose. A
- * lookup tells the node operator which name, from your ip, so nothing is
- * asked until the `thorname` destination is on.
+ * lookup tells the node operator which name, from your ip, so one is asked
+ * only when the user presses "look up", and never otherwise.
  */
 
-import { readEgressView, requestEgressOptIn } from '../net/egress-opt-in';
+import { requestEgressOptIn } from '../net/egress-opt-in';
 import { THORNAME_PATH, ThornodeRefusal, thornodeGet } from './thornode';
 
 export const THORNAME_EGRESS = 'thorname';
@@ -42,8 +42,6 @@ export const aliasFor = (record: ThorNameRecord, chain: string): string | undefi
   record.aliases?.find(a => a.chain.toUpperCase() === chain.toUpperCase())?.address || undefined;
 
 export type ThorNameAnswer =
-  /** off and not asked: nothing was sent */
-  | { kind: 'ask' }
   | { kind: 'declined' }
   | { kind: 'missing' }
   | { kind: 'no-alias'; name: string; chain: string }
@@ -66,21 +64,10 @@ const record = (name: string): Promise<ThorNameRecord> => {
   return next;
 };
 
-/**
- * Resolve `name` to its `chain` alias. `ask` is a user's press: it may raise
- * the egress sheet. Without it, the lookup runs only if the user already
- * allowed name lookups.
- */
-export const lookupThorName = async (
-  name: string,
-  chain: string,
-  ask: boolean,
-): Promise<ThorNameAnswer> => {
-  const on = ask
-    ? await requestEgressOptIn(THORNAME_EGRESS)
-    : !!(await readEgressView()).find(d => d.id === THORNAME_EGRESS)?.on;
-  if (!on) {
-    return { kind: ask ? 'declined' : 'ask' };
+/** Resolve `name` to its `chain` alias, on a user's press: it may raise the egress sheet. */
+export const lookupThorName = async (name: string, chain: string): Promise<ThorNameAnswer> => {
+  if (!(await requestEgressOptIn(THORNAME_EGRESS))) {
+    return { kind: 'declined' };
   }
   try {
     const r = await record(name);

@@ -18,10 +18,6 @@ import { usePopupNav } from '../../../utils/navigate';
 import { readZcashMeConfig, type ZcashMeMode } from '../../../services/zcashme/config';
 import { useExplain } from './settings-explain';
 import { ZCASH_BACKENDS } from '../../../state/keyring/zcash-backend';
-import { readEgressView } from '../../../net/egress-opt-in';
-import { refreshEgress } from '../../../net/egress';
-import { setDestinationOptIn } from '../../../net/ledger';
-import { THORNAME_EGRESS } from '../../../services/thorname';
 
 const ZCASHME_MODE_LABEL: Record<ZcashMeMode, string> = {
   off: 'off',
@@ -44,34 +40,6 @@ export function ZcashMeRow({ onExplain }: { onExplain?: () => void }) {
       label='zcash.me'
       value={ZCASHME_MODE_LABEL[mode]}
       onPress={() => navigate(PopupPath.SETTINGS_ZCASHME)}
-      onExplain={onExplain}
-    />
-  );
-}
-
-/** thorchain name lookups: the egress opt-in itself, so the backup carries it; off means ask first */
-function ThorNameRow({ onExplain }: { onExplain?: () => void }) {
-  const [on, setOn] = useState<boolean>();
-  useEffect(() => {
-    const load = () =>
-      void readEgressView().then(v => setOn(!!v.find(d => d.id === THORNAME_EGRESS)?.on));
-    const changed = (c: Record<string, unknown>, area: string) =>
-      area === 'local' && 'netEgress' in c && load();
-    load();
-    chrome.storage.onChanged.addListener(changed);
-    return () => chrome.storage.onChanged.removeListener(changed);
-  }, []);
-  if (on === undefined) {
-    return null;
-  }
-  return (
-    <Row
-      type='toggle'
-      label='names'
-      checked={on}
-      onChange={next =>
-        void setDestinationOptIn(THORNAME_EGRESS, next ? 'allowed' : undefined).then(refreshEgress)
-      }
       onExplain={onExplain}
     />
   );
@@ -287,7 +255,6 @@ export function SettingsPrivacy() {
             <ContactDiscoverySection {...explainProps('private contact discovery')} />
           )}
           {hasFeature(activeNetwork, 'zcash') && <ZcashMeRow {...explainProps('zcash.me')} />}
-          <ThorNameRow {...explainProps('names')} />
           {rows('people')}
         </Section>
         <Section title='sites'>

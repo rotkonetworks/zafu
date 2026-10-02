@@ -1,18 +1,15 @@
 /**
  * THORName resolver for a recipient field. Renders only while the field
  * holds something shaped like a name, on a chain thorchain has aliases for.
- * Before name lookups are allowed it offers one press, which asks; once
- * allowed it looks up after typing pauses. Pressing the answer puts the
- * address in the field.
+ * Nothing is looked up until the user presses "look up", never on typing.
+ * Pressing the answer puts the address in the field.
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@repo/ui/components/ui/button';
 import { cn } from '@repo/ui/lib/utils';
 import { isThorName, lookupThorName } from '../services/thorname';
-
-const PAUSE_MS = 900;
 
 const short = (a: string) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-5)}` : a);
 
@@ -29,20 +26,12 @@ export function ThorNameResolver({
   const name = input.trim();
   const on = chain ?? '';
   const candidate = !!on && isThorName(name);
-  const [settled, setSettled] = useState('');
   const [press, setPress] = useState<{ name: string; n: number }>();
-
-  useEffect(() => {
-    const t = setTimeout(() => setSettled(name), PAUSE_MS);
-    return () => clearTimeout(t);
-  }, [name]);
-
   const asked = press?.name === name;
-  const ready = candidate && (asked || settled === name);
   const answer = useQuery({
     queryKey: ['thorname', name.toLowerCase(), on, asked ? press.n : 0],
-    queryFn: () => lookupThorName(name, on, asked),
-    enabled: ready,
+    queryFn: () => lookupThorName(name, on),
+    enabled: candidate && asked,
     staleTime: Infinity,
     retry: false,
   });

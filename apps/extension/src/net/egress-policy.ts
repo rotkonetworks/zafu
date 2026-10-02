@@ -297,7 +297,7 @@ export const DESTINATIONS: readonly DestinationSpec[] = [
   {
     id: 'thorname',
     // the lookup path only (longest prefix wins): a swap opt-in is not a name opt-in
-    label: 'names',
+    label: 'thorchain name lookups',
     purpose: 'registry',
     gate: { kind: 'optional' },
     urls: () => THORNODE_URLS.map(u => `${u}${THORNAME_PATH}`),

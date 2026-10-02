@@ -61,11 +61,6 @@ export const PRIVACY_EXPLAIN: Record<string, Explain> = {
     on: 'zafu asks zcash.me about the names you look up',
     off: 'zafu never contacts zcash.me',
   },
-  names: {
-    blurb: 'lets you pay a short name, like "alice", instead of a long address.',
-    on: 'zafu looks the name up as you type it; the node it asks sees your ip',
-    off: 'zafu asks you first, each time',
-  },
 };
 
 /** one label open at a time, so every row in a screen shares one sheet */
