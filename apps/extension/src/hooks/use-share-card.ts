@@ -42,7 +42,8 @@ export const useShareCard = () => {
           ...records,
           {
             diversifierIndex: mine.index,
-            sharedWith: contact.name || contact.id,
+            // the contact's id: a name can change, the id cannot
+            sharedWith: contact.id,
             address: mine.address,
             sharedAt: Date.now(),
           },

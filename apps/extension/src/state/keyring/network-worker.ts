@@ -1179,8 +1179,14 @@ export interface MemoSyncEntry {
   amount: string;
   /** hex-encoded raw 512-byte memo (for structured/binary memos) */
   memoBytes?: string;
-  /** diversifier index of the receiving address */
+  /** diversifier index of the receiving address (never set by the worker; see `receiver`) */
   diversifierIndex?: number;
+  /**
+   * incoming only: the raw 43-byte orchard address of yours the note arrived
+   * on (hex), from the scanned note. The extension resolves it to the person
+   * you gave that address to (state/receiving-address.ts).
+   */
+  receiver?: string;
 }
 
 /**

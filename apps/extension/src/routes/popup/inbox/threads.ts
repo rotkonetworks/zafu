@@ -19,9 +19,14 @@ export interface DirectThread {
   unread: number;
 }
 
-/** the other side of one memo: the recipient of a send, the declared sender of a receive */
+/**
+ * the other side of one memo: the recipient of a send; for a receive, the
+ * person you gave the address it arrived on (your own record), else the
+ * sender's declared `reply:` address
+ */
 export const counterparty = (m: Message): string | undefined =>
-  (m.direction === 'sent' ? m.recipientAddress : m.senderAddress)?.trim() || undefined;
+  (m.direction === 'sent' ? m.recipientAddress : (m.personAddress ?? m.senderAddress))?.trim() ||
+  undefined;
 
 export const threadIdOf = (m: Message): string => counterparty(m)?.toLowerCase() ?? `s:${m.txId}`;
 

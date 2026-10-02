@@ -203,7 +203,7 @@ export function f4Jumble(M: Uint8Array): Uint8Array {
 // ── unified address encoding ──
 
 /**
- * Encode a single-item ZIP-316 "Unified Encoding" container: a CompactSize
+ * Encode a ZIP-316 "Unified Encoding" container: per item a CompactSize
  * typecode, a CompactSize length, the raw item bytes, then the HRP
  * (US-ASCII, right-padded with 0x00 to 16 bytes) - F4Jumbled, then
  * bech32m-encoded with the given HRP. Shared by unified addresses (typecode
@@ -212,19 +212,21 @@ export function f4Jumble(M: Uint8Array): Uint8Array {
  * defines both as instances of the same generic container/jumble/bech32m
  * pipeline, only the HRP and item differ.
  */
-function encodeUnifiedSingleItem(typecode: number, itemBytes: Uint8Array, hrp: string): string {
-  const container = new Uint8Array(1 + 1 + itemBytes.length + 16);
-  container[0] = typecode;
-  container[1] = itemBytes.length;
-  container.set(itemBytes, 2);
-  const padOffset = 1 + 1 + itemBytes.length;
+export function encodeUnifiedItems(
+  items: { typecode: number; bytes: Uint8Array }[],
+  hrp: string,
+): string {
+  const body = items.flatMap(i => [i.typecode, i.bytes.length, ...i.bytes]);
+  const container = new Uint8Array(body.length + 16);
+  container.set(body, 0);
   for (let i = 0; i < hrp.length; i++) {
-    container[padOffset + i] = hrp.charCodeAt(i);
+    container[body.length + i] = hrp.charCodeAt(i);
   }
-
-  const jumbled = f4Jumble(container);
-  return bech32mEncode(hrp, jumbled);
+  return bech32mEncode(hrp, f4Jumble(container));
 }
+
+const encodeUnifiedSingleItem = (typecode: number, bytes: Uint8Array, hrp: string): string =>
+  encodeUnifiedItems([{ typecode, bytes }], hrp);
 
 /**
  * Encode raw orchard receiver bytes as a ZIP-316 unified address.
@@ -281,4 +283,104 @@ export function fixOrchardAddress(addr: string, mainnet = true): string {
   }
 
   return encodeOrchardUnifiedAddress(rawBytes, mainnet);
+}
+
+// ── unified address decoding (the receiver a note arrived on) ──
+
+function bech32mDecode(text: string): { hrp: string; data: Uint8Array } | undefined {
+  const s = text.toLowerCase();
+  const sep = s.lastIndexOf('1');
+  if (sep < 1 || s.length - sep < 7 || (text !== s && text !== text.toUpperCase())) {
+    return undefined;
+  }
+  const hrp = s.slice(0, sep);
+  const words: number[] = [];
+  for (const c of s.slice(sep + 1)) {
+    const v = CHARSET.indexOf(c);
+    if (v < 0) {
+      return undefined;
+    }
+    words.push(v);
+  }
+  if (bech32mPolymod(bech32mHrpExpand(hrp).concat(words)) !== BECH32M_CONST) {
+    return undefined;
+  }
+  const bytes = convertBits(Uint8Array.from(words.slice(0, -6)), 5, 8, false);
+  return { hrp, data: Uint8Array.from(bytes) };
+}
+
+/** F4Jumble inverse per ZIP-316: the four rounds undone in reverse order */
+export function f4Unjumble(M: Uint8Array): Uint8Array {
+  const l = M.length;
+  if (l < 48 || l > 4194368) {
+    throw new Error(`f4Unjumble: invalid length ${l}`);
+  }
+  const lL = Math.min(Math.floor(l / 2), OUTBYTES);
+  const lR = l - lL;
+  const left = M.slice(0, lL);
+  const right = M.slice(lL);
+  xorInPlace(left, hRound(1, right, lL));
+  xorInPlace(right, gRound(1, left, lR));
+  xorInPlace(left, hRound(0, right, lL));
+  xorInPlace(right, gRound(0, left, lR));
+  const result = new Uint8Array(l);
+  result.set(left, 0);
+  result.set(right, lL);
+  return result;
+}
+
+/** CompactSize as ZIP-316 uses it (a typecode or a length); [value, bytes read] */
+const readCompactSize = (b: Uint8Array, at: number): [number, number] | undefined => {
+  const first = b[at];
+  if (first === undefined) {
+    return undefined;
+  }
+  if (first < 0xfd) {
+    return [first, 1];
+  }
+  const lo = b[at + 1];
+  const hi = b[at + 2];
+  if (first === 0xfd && lo !== undefined && hi !== undefined) {
+    return [lo | (hi << 8), 3];
+  }
+  return undefined;
+};
+
+/**
+ * The raw 43-byte Orchard receiver inside a unified address, or undefined
+ * when the text is not a unified address with one. Checks the bech32m
+ * checksum and the HRP padding, so a mistyped address never matches.
+ */
+export function orchardReceiverOf(ua: string): Uint8Array | undefined {
+  const decoded = bech32mDecode(ua.trim());
+  if (!decoded || !/^u(test|regtest)?$/.test(decoded.hrp) || decoded.data.length < 48) {
+    return undefined;
+  }
+  const raw = f4Unjumble(decoded.data);
+  const pad = raw.slice(raw.length - 16);
+  for (let i = 0; i < 16; i++) {
+    if (pad[i] !== (i < decoded.hrp.length ? decoded.hrp.charCodeAt(i) : 0)) {
+      return undefined;
+    }
+  }
+  const items = raw.slice(0, raw.length - 16);
+  for (let at = 0; at < items.length; ) {
+    const type = readCompactSize(items, at);
+    if (!type) {
+      return undefined;
+    }
+    const len = readCompactSize(items, at + type[1]);
+    if (!len) {
+      return undefined;
+    }
+    const start = at + type[1] + len[1];
+    if (start + len[0] > items.length) {
+      return undefined;
+    }
+    if (type[0] === 0x03) {
+      return len[0] === 43 ? items.slice(start, start + 43) : undefined;
+    }
+    at = start + len[0];
+  }
+  return undefined;
 }

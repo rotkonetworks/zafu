@@ -62,3 +62,26 @@ describe('cardOf', () => {
     expect(cardOf(msg({ content: 'alice\nu1abc' }))).toBeUndefined();
   });
 });
+
+describe('a reply with no reply: line', () => {
+  it('lands in the thread of the person you gave that address to', () => {
+    const threads = deriveThreads([
+      msg({
+        txId: 'out',
+        direction: 'sent',
+        recipientAddress: 'u1Bob',
+        senderAddress: undefined,
+        timestamp: 1,
+        read: true,
+      }),
+      msg({ txId: 'in', senderAddress: undefined, personAddress: 'u1bob', timestamp: 2 }),
+    ]);
+    expect(threads.map(t => t.id)).toEqual(['u1bob']);
+    expect(threads[0]!.messages.map(m => m.txId)).toEqual(['out', 'in']);
+  });
+
+  it('trusts your own record over the address the memo declares', () => {
+    const [t] = deriveThreads([msg({ senderAddress: 'u1mallory', personAddress: 'u1bob' })]);
+    expect(t!.id).toBe('u1bob');
+  });
+});

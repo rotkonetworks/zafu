@@ -5,6 +5,7 @@
 
 import { bytesToHex, encodeContactCard } from '@repo/wallet/networks/zcash/memo-codec';
 import { contactDiversifierIndex } from '@repo/wallet/networks/zcash/diversified-address';
+import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 
 /** (ufvk, diversifier index) -> address */
 export type DeriveAddress = (ufvk: string, index: number) => string | Promise<string>;
@@ -18,7 +19,9 @@ export const wasmDeriveAddress: DeriveAddress = async (ufvk, index) => {
   if (typeof wasm.default === 'function') {
     await wasm.default();
   }
-  return wasm.address_from_ufvk(ufvk, index);
+  // the wasm answers in its debug form (`u1orchard:<hex>`); a card must carry
+  // a real unified address
+  return fixOrchardAddress(wasm.address_from_ufvk(ufvk, index), !ufvk.startsWith('uviewtest'));
 };
 
 /** diversifier index -> your address there, derived in the zcash worker from the seed */

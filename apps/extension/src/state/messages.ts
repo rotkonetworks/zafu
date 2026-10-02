@@ -67,6 +67,14 @@ export interface Message {
   status?: MessageStatus;
   /** reason captured when status === 'failed' or 'interrupted' */
   failureReason?: string;
+  /** received: the diversifier index of your address it was paid to, when zafu handed it out */
+  diversifierIndex?: number;
+  /**
+   * received: the saved address of the person you gave that address to. Known
+   * from your own record, so a thread files it under them even when the memo
+   * declares no `reply:` (or declares someone else's).
+   */
+  personAddress?: string;
 }
 
 export interface MessagesSlice {

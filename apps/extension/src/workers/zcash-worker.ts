@@ -5910,6 +5910,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           amount: string;
           memoBytes?: string;
           diversifierIndex?: number;
+          /** incoming: the raw orchard address of ours the note was paid to (hex) */
+          receiver?: string;
         }[] = [];
         const abortCtrl = new AbortController();
 
@@ -5992,6 +5994,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                     direction: 'received',
                     amount: (memo.value / 100_000_000).toFixed(8),
                     memoBytes: isStructured ? memoRawHex : undefined,
+                    receiver: matchingNote.recipient,
                   });
                   processedTxids.add(matchingNote.txid);
                 }
