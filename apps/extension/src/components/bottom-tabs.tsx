@@ -3,6 +3,12 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { cn } from '@repo/ui/lib/utils';
 import { screenTransition } from '../utils/navigate';
 import { PopupPath } from '../routes/popup/paths';
+import { useStore, type AllSlices } from '../state';
+
+/** something someone sent you that you have not opened yet */
+const selectUnread = (s: AllSlices): boolean =>
+  Array.isArray(s.messages.messages) &&
+  s.messages.messages.some(m => m.direction === 'received' && !m.read);
 
 /**
  * Four fixed tabs, the same on every network: wallet, people, tools,
@@ -15,6 +21,11 @@ const TABS = [
   { path: PopupPath.TOOLS, icon: 'i-zafu-torii', label: 'tools' },
   { path: PopupPath.SETTINGS, icon: 'i-zafu-shoji', label: 'settings' },
 ] as const;
+
+const UnreadDot = () =>
+  useStore(selectUnread) ? (
+    <span className='absolute left-[58%] top-2 size-[7px] bg-hanko' aria-label='unread' />
+  ) : null;
 
 const TabButton = memo(
   ({
@@ -29,13 +40,14 @@ const TabButton = memo(
     <button
       onClick={() => onNavigate(tab.path)}
       className={cn(
-        'flex flex-1 flex-col items-center justify-center gap-[5px]',
+        'relative flex flex-1 flex-col items-center justify-center gap-[5px]',
         'transition-colors hover:text-fg-high',
         isActive ? 'text-zigner-gold' : 'text-fg-muted',
       )}
     >
       <span className={cn(tab.icon, 'size-5')} aria-hidden='true' />
       <span className='text-[11px] leading-none lowercase'>{tab.label}</span>
+      {tab.path === PopupPath.INBOX && <UnreadDot />}
     </button>
   ),
 );
@@ -46,10 +58,7 @@ const OWNER: [string, string][] = [
   [PopupPath.SETTINGS, PopupPath.SETTINGS],
   [PopupPath.INBOX, PopupPath.INBOX],
   [PopupPath.CONTACTS, PopupPath.INBOX],
-  // an everywhere tool reached from the tools tab, nested under /identity
-  // for its storage/derivation context - must keep "tools" lit, not
-  // "people", so this goes before the /identity prefix below.
-  [PopupPath.PASSWORDS, PopupPath.TOOLS],
+  // passkeys and passwords sits under "you" (IdKeys.dc.html), so people
   [PopupPath.IDENTITY, PopupPath.INBOX],
   [PopupPath.MULTISIG, PopupPath.INBOX],
   [PopupPath.TOOLS, PopupPath.TOOLS],

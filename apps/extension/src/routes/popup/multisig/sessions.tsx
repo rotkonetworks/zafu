@@ -6,7 +6,7 @@
  * status indicators for active DKG/signing sessions.
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Button } from '@repo/ui/components/ui/button';
@@ -23,8 +23,7 @@ import {
   keyRingSelector,
 } from '../../../state/keyring';
 import { frostDkgSelector, frostSigningSelector } from '../../../state/frost-session';
-import { getBalanceInWorker } from '../../../state/keyring/network-worker';
-import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
+import { useMultisigBalances } from '../../../hooks/multisig-balances';
 import { NetworkUnavailable } from '../../../shared/components/network-unavailable';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { hasFeature } from '../../../config/networks';
@@ -415,8 +414,6 @@ export const MultisigPage = () => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const multisigWallets = useStore(selectVisibleMultisigWallets);
   const { setActiveZcashWallet } = useStore(walletsSelector);
-  const { workerSyncHeight } = useZcashSyncStatus();
-  const [balances, setBalances] = useState<Record<string, bigint>>({});
 
   // per-wallet backup UI state. restore is on the settings backup page.
   const [backupTarget, setBackupTarget] = useState<ZcashWalletJson | null>(null);
@@ -436,39 +433,7 @@ export const MultisigPage = () => {
     [multisigWallets, zcashWallets],
   );
 
-  // fetch balances for all multisig wallets. sync writes notes keyed by
-  // vaultId (selectedKeyInfo.id), not zcashWallet.id, so the balance lookup
-  // must use vaultId; local state stays keyed by w.id for row identity.
-  // re-fetch on every sync-progress tick so the active vault's row stays
-  // in step with the home-page balance. skip entirely when off zcash -
-  // gate inside the effect, not around it (Rules of Hooks).
-  useEffect(() => {
-    if (!isZcash) {
-      return;
-    }
-    const fetchAll = () => {
-      for (const w of walletsWithIndex) {
-        if (!w.vaultId) {
-          continue;
-        }
-        const vaultId = w.vaultId;
-        const rowId = w.id;
-        getBalanceInWorker('zcash', vaultId)
-          .then(bal => setBalances(prev => ({ ...prev, [rowId]: BigInt(bal) })))
-          .catch(() => {});
-      }
-    };
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.network !== 'zcash') {
-        return;
-      }
-      fetchAll();
-    };
-    window.addEventListener('network-sync-progress', handler);
-    fetchAll();
-    return () => window.removeEventListener('network-sync-progress', handler);
-  }, [walletsWithIndex, workerSyncHeight, isZcash]);
+  const balances = useMultisigBalances(multisigWallets, isZcash);
 
   const totalZat = Object.values(balances).reduce((sum, b) => sum + b, 0n);
 

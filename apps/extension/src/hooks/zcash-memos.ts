@@ -178,7 +178,7 @@ export function useZcashMemos(walletId: string, zidecarUrl: string = DEFAULT_ZID
             txId: m.txId,
             blockHeight: m.blockHeight,
             timestamp: m.timestamp,
-            content: `📇 ${card.name || 'anonymous'}\n${card.address}`,
+            content: `${card.name}\n${card.address}`,
             // never record the card's self-declared address as the sender:
             // only the delivering note's own return address is evidence
             senderAddress: note.senderAddress,

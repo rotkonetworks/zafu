@@ -93,9 +93,6 @@ export const ContactDiscoveryApproval = () => {
           <p>never your whole contact list</p>
           <p>the relay can&apos;t tell who you looked for</p>
           <p>friends here will see you are online</p>
-          <p className='border border-yellow-500/30 bg-yellow-500/5 p-2 text-yellow-400'>
-            turns this on for every app, not just this one
-          </p>
           <p className='break-all font-mono text-fg-dim'>relay {relay}</p>
         </div>
       </div>

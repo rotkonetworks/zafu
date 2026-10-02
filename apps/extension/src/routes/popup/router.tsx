@@ -73,12 +73,20 @@ export const popupRoutes: RouteObject[] = [
             lazy: lazyScreen('inbox'),
           },
           {
+            path: PopupPath.INBOX_THREAD,
+            lazy: lazyScreen('thread'),
+          },
+          {
             path: PopupPath.INBOX_GROUP,
             lazy: lazyScreen('groupChatThread'),
           },
           {
             path: PopupPath.CONTACTS,
             lazy: lazyScreen('contacts'),
+          },
+          {
+            path: PopupPath.CONTACT,
+            lazy: lazyScreen('contact'),
           },
           {
             path: PopupPath.TOOLS,
@@ -94,6 +102,14 @@ export const popupRoutes: RouteObject[] = [
           {
             path: PopupPath.IDENTITY,
             lazy: lazyScreen('identity'),
+          },
+          {
+            path: PopupPath.IDENTITY_SITES,
+            lazy: lazyScreen('identitySites'),
+          },
+          {
+            path: PopupPath.IDENTITY_CONTROLS,
+            lazy: lazyScreen('identityControls'),
           },
           {
             path: PopupPath.PASSWORDS,

@@ -15,8 +15,7 @@ export const popupScreens = {
   settingsMain: () => import('./settings/settings').then(m => m.Settings),
   settingsClearCache: () =>
     import('./settings/settings-clear-cache').then(m => m.SettingsClearCache),
-  settingsConnectedSites: () =>
-    import('./settings/settings-connected-sites').then(m => m.SettingsConnectedSites),
+  settingsConnectedSites: () => import('./identity/sites').then(m => m.SitesPage),
   settingsPassphrase: () =>
     import('./settings/settings-passphrase').then(m => m.SettingsPassphrase),
   settingsDefaultFrontend: () =>
@@ -74,8 +73,10 @@ export const popupScreens = {
   swap: () => import('./swap').then(m => m.SwapPage),
   vote: () => import('./vote').then(m => m.VotePage),
   inbox: () => import('./inbox').then(m => m.InboxPage),
+  thread: () => import('./inbox/thread').then(m => m.ThreadPage),
   groupChatThread: () => import('./inbox/group-chat-thread').then(m => m.GroupChatThread),
   contacts: () => import('./contacts').then(m => m.ContactsPage),
+  contact: () => import('./contacts/contact').then(m => m.ContactPage),
   link: () => import('./link').then(m => m.LinkPage),
   send: () => import('./send').then(m => m.SendPage),
   receive: () => import('./receive').then(m => m.ReceivePage),
@@ -89,6 +90,8 @@ export const popupScreens = {
   activity: () => import('./home/activity').then(m => m.ActivityPage),
   txDetail: () => import('./home/tx-detail').then(m => m.TxDetailPage),
   identity: () => import('./identity').then(m => m.IdentityPage),
+  identitySites: () => import('./identity/sites').then(m => m.SitesPage),
+  identityControls: () => import('./identity/controls').then(m => m.IdentityControlsPage),
   passwords: () => import('./identity/passwords').then(m => m.PasswordsPage),
   contactPicker: () => import('./pick-contacts').then(m => m.ContactPicker),
   frostApprove: () => import('./frost-approve').then(m => m.FrostApprove),

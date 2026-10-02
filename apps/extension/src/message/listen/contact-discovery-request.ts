@@ -14,12 +14,12 @@
  *   - the request carries NO relay endpoint and NO token. The wallet's own
  *     configured relay (else the built-in DEFAULT_CONTACT_DISCOVERY_RELAY) is
  *     used, so an app can never point the wallet at a relay of its choosing;
- *   - accepting flips a GLOBAL setting, so ONE app's request turns the feature
- *     on for EVERY app - the popup states this plainly;
+ *   - accepting turns discovery on and grants THIS site only ("friends can
+ *     find you here"); every other site needs its own grant;
  *   - a denial is NOT remembered (unlike a capability): nothing is persisted
  *     and the caller may ask again;
- *   - if the feature is already on, the request resolves immediately and no
- *     popup is shown.
+ *   - if the feature is on and this site already holds the grant, the request
+ *     resolves immediately and no popup is shown.
  *
  * Refusals use the standard `{ error, code }` shape: `denied` (bad sender or
  * user declined), `cancelled` (popup closed undecided), `not_available`
@@ -40,6 +40,7 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { isValidExternalSender } from '../../senders/external';
 import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../../config/contact-discovery-relay';
+import { setSiteFindsFriends, siteFindsFriends } from '../../state/find-friends';
 import { PopupPath } from '../../routes/popup/paths';
 import {
   openApprovalPopup,
@@ -72,8 +73,10 @@ export interface ContactDiscoveryRequestDeps {
   settings: () => Promise<{ enabled: boolean; relayEndpoint: string }>;
   /** true when the wallet is locked. */
   locked: () => Promise<boolean>;
-  /** persist the wallet-wide enable, PRESERVING any configured endpoint/token. */
-  enable: () => Promise<void>;
+  /** this site already holds the "friends can find you here" grant */
+  siteAllowed: (origin: string) => Promise<boolean>;
+  /** grant this site, and turn discovery on PRESERVING any configured endpoint/token. */
+  enable: (origin: string) => Promise<void>;
   /** show the consent popup and resolve the user's decision. */
   prompt: (
     origin: string,
@@ -115,8 +118,8 @@ export const createContactDiscoveryRequestListener =
     void (async () => {
       try {
         const { enabled, relayEndpoint } = await deps.settings();
-        if (enabled) {
-          // Already on wallet-wide: nothing to ask and nothing to change.
+        if (enabled && (await deps.siteAllowed(origin))) {
+          // Already on for this site: nothing to ask and nothing to change.
           sendResponse({ success: true, enabled: true });
           return;
         }
@@ -130,7 +133,7 @@ export const createContactDiscoveryRequestListener =
         // no use for it - it can only ask the wallet to discover contacts.
         const decision = await deps.prompt(origin, favIconUrl, title, relayEndpoint);
         if (decision === 'approved') {
-          await deps.enable();
+          await deps.enable(origin);
           sendResponse({ success: true, enabled: true });
         } else if (decision === 'cancelled') {
           sendResponse({ success: false, error: 'cancelled', cancelled: true });
@@ -204,18 +207,10 @@ export const contactDiscoveryRequestDeps: ContactDiscoveryRequestDeps = {
     };
   },
   locked: async () => !(await sessionExtStorage.get('passwordKey')),
-  enable: async () => {
-    // Global and wallet-wide: flip the flag and NOTHING else. A user who already
-    // configured their own endpoint (or a token) keeps it - accepting an app's
-    // request must never silently reroute or wipe a relay they set up. A blank
-    // endpoint means the built-in default, resolved by the service.
-    const stored = await localExtStorage.get('zidDiscovery');
-    await localExtStorage.set('zidDiscovery', {
-      enabled: true,
-      relayEndpoint: stored?.relayEndpoint ?? '',
-      relayToken: stored?.relayToken ?? '',
-    });
-  },
+  siteAllowed: siteFindsFriends,
+  // Flips the wallet-wide flag (keeping a relay the person set up) and grants
+  // this one site. Every other site still needs its own grant.
+  enable: origin => setSiteFindsFriends(origin, true),
   prompt: openConsentPopup,
 };
 
