@@ -141,14 +141,17 @@ export const NodeSheet = ({
               }}
             />
           </RowGroup>
-          <Button
-            variant='secondary'
-            className='shrink-0'
-            loading={testing}
-            onClick={() => void test()}
-          >
-            {speeds ? 'test speed again' : 'test speed'}
-          </Button>
+          {/* a speed test compares nodes; one node has nothing to compare */}
+          {presets.length > 1 && (
+            <Button
+              variant='secondary'
+              className='shrink-0'
+              loading={testing}
+              onClick={() => void test()}
+            >
+              {speeds ? 'test speed again' : 'test speed'}
+            </Button>
+          )}
         </>
       ) : (
         <>
