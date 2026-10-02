@@ -5693,6 +5693,47 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           forceResync: boolean;
         };
 
+        // Opening the inbox again with no note found or spent since the last
+        // read has nothing new to read: answer from two counts, without
+        // loading every note (and its witness) out of the store.
+        const db = await getDb();
+        const fpKey = `${walletId}:memo-fp`;
+        const count = (store: 'notes' | 'spent') =>
+          new Promise<number>((resolve, reject) => {
+            const req = db
+              .transaction(store, 'readonly')
+              .objectStore(store)
+              .index('byWallet')
+              .count(walletId);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+          });
+        const fingerprint = `${await count('notes')}:${await count('spent')}`;
+        const lastFingerprint = await new Promise<unknown>(resolve => {
+          const req = db.transaction('memo-cache', 'readonly').objectStore('memo-cache').get(fpKey);
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => resolve(undefined);
+        });
+        const remember = () =>
+          new Promise<void>((resolve, reject) => {
+            const req = db
+              .transaction('memo-cache', 'readwrite')
+              .objectStore('memo-cache')
+              .put(fingerprint, fpKey);
+            req.onsuccess = () => resolve();
+            req.onerror = () => reject(req.error);
+          });
+        if (!forceResync && lastFingerprint === fingerprint) {
+          workerSelf.postMessage({
+            type: 'memos-result',
+            id,
+            network: 'zcash',
+            walletId,
+            payload: [],
+          });
+          return;
+        }
+
         const memoState = await loadState(walletId);
         const memoKeys = walletStates.get(walletId)?.keys;
         if (!memoKeys) {
@@ -5716,7 +5757,6 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
 
         // load persisted set of note txids already scanned (no memo found)
-        const db = await getDb();
         const scannedKey = `${walletId}:scanned-txids`;
         const scannedTxids: Set<string> = await new Promise(resolve => {
           const tx = db.transaction('memo-cache', 'readonly');
@@ -5733,6 +5773,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           n => n.spent_by_txid && !processedTxids.has(n.spent_by_txid),
         );
         if (notesToProcess.length === 0 && !unprocessedSpent) {
+          await remember();
           workerSelf.postMessage({
             type: 'memos-result',
             id,
@@ -5971,6 +6012,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           req.onsuccess = () => resolve();
           req.onerror = () => reject(req.error);
         });
+        await remember();
 
         workerSelf.postMessage({
           type: 'memos-result',
