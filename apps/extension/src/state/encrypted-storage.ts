@@ -149,6 +149,7 @@ const ENCRYPTED_KEYS = new Set<string>([
   'dismissedContactSuggestions',
   'messages',
   'diversifiedAddresses',
+  // the retired frostd group chat's history: still sealed, read by nothing
   'groupChats',
   'frostRelayIdentities',
   'passwordLogins',

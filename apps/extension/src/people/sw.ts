@@ -8,16 +8,22 @@
  * nothing here. The first call is the person opening people.
  */
 
-import { ed25519 } from '@noble/curves/ed25519';
-import { bytesToHex } from '@noble/hashes/utils';
 import { createHttpRelayTransport } from '@zafu/zid';
-import { relayLimitsFor, type RoomIdentity } from '@zafu/zirc/room';
+import { relayLimitsFor } from '@zafu/zirc/room';
+import { identityOf } from './keys';
 import { useStore } from '../state';
-import { deriveRoomKeys, shortXid, type XidKeys } from '../state/identity';
+import { deriveRoomKeys, getZidIndex, type XidKeys } from '../state/identity';
+import { createGroups } from './groups';
 import { compileEgress, describeEgress, type EgressInputs } from '../net/egress-policy';
 import { decideEgress } from '../net/egress-table';
 import { readEgressInputs } from '../net/egress-opt-in';
-import { PEOPLE_RELAY, peopleRelays } from '../config/people-relay';
+import {
+  PEOPLE_RELAY,
+  PEOPLE_RELAY_KEY,
+  defaultPeopleRelay,
+  peopleRelays,
+  type PeopleRelaySetting,
+} from '../config/people-relay';
 import { PEOPLE_MESSAGE, PEOPLE_STATUS_KEY, PEOPLE_WATCH_PORT } from './protocol';
 import { readRooms, readThreads, writeRooms, writeThreads, type PeopleRoom } from './vault';
 import { createPeopleService, type Gate, type PeopleDeps, type RecordHandler } from './service';
@@ -41,32 +47,36 @@ export const peopleGate = (i: EgressInputs, relay: string): Gate => {
 /** keys derived for a room, kept for the session only */
 const keys = new Map<string, XidKeys>();
 
-export const keysFor = async (room: PeopleRoom): Promise<XidKeys> => {
-  const id = `${room.walletId}/${room.signer.gen}/${room.signer.G ?? ''}/${room.signer.j ?? ''}`;
+const roomKeys = async (walletId: string, gen: number, G: string): Promise<XidKeys> => {
+  const id = `${walletId}/${gen}/g/${G}`;
   const cached = keys.get(id);
   if (cached) {
     return cached;
   }
-  const mnemonic = await useStore.getState().keyRing.getMnemonic(room.walletId);
-  if (room.signer.G === undefined) {
-    throw new Error('this room has no key yet');
-  }
-  const k = deriveRoomKeys(mnemonic, room.signer.gen, room.signer.G);
+  const k = deriveRoomKeys(await useStore.getState().keyRing.getMnemonic(walletId), gen, G);
   keys.set(id, k);
   return k;
 };
 
-export const identityOf = (k: XidKeys): RoomIdentity => ({
-  pubkey: k.pubkey,
-  name: shortXid(k.xid),
-  sign: data => Promise.resolve(bytesToHex(ed25519.sign(data, k.seed))),
-  verify: (data, sig, pubkey) => {
-    try {
-      return Promise.resolve(ed25519.verify(sig, data, pubkey));
-    } catch {
-      return Promise.resolve(false);
-    }
-  },
+export const keysFor = (room: PeopleRoom): Promise<XidKeys> => {
+  if (room.signer.G === undefined) {
+    throw new Error('this room has no key yet');
+  }
+  return roomKeys(room.walletId, room.signer.gen, room.signer.G);
+};
+
+const groups = createGroups({
+  walletId: async () => useStore.getState().keyRing.selectedKeyInfo?.id,
+  keys: roomKeys,
+  generation: walletId => getZidIndex(walletId),
+  relay: async () =>
+    defaultPeopleRelay(
+      (await chrome.storage.local.get(PEOPLE_RELAY_KEY))[PEOPLE_RELAY_KEY] as
+        | PeopleRelaySetting
+        | undefined,
+    ),
+  gate: relay => peopleDeps.gate(relay),
+  transport: (relay, size, signal) => peopleDeps.transport(relay, size, signal),
 });
 
 export const peopleDeps: PeopleDeps = {
@@ -100,15 +110,21 @@ export const startPeopleRelay = (
   ops: Record<string, PeopleOp> = {},
   handlers: Partial<Record<PeopleRoom['kind'], RecordHandler>> = {},
 ) => {
-  const service = createPeopleService(peopleDeps, handlers);
+  const service = createPeopleService(peopleDeps, { ...groups.handlers, ...handlers });
   const all: Record<string, PeopleOp> = {
     open: async (_, s) => {
       await chrome.storage.session.set({ [SESSION_FLAG]: true });
       return s.open();
     },
     check: (_, s) => s.check(),
-    say: (r, s) => s.say(String(r['roomId']), String(r['text'] ?? '')),
+    say: (r, s) =>
+      s.say(
+        String(r['roomId']),
+        String(r['text'] ?? ''),
+        typeof r['retry'] === 'string' ? r['retry'] : undefined,
+      ),
     read: (r, s) => s.read(String(r['roomId'])),
+    ...groups.ops,
     ...ops,
   };
 

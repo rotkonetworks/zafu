@@ -78,7 +78,19 @@ export const popupRoutes: RouteObject[] = [
           },
           {
             path: PopupPath.INBOX_GROUP,
-            lazy: lazyScreen('groupChatThread'),
+            lazy: lazyScreen('group'),
+          },
+          {
+            path: PopupPath.INBOX_GROUP_INVITE,
+            lazy: lazyScreen('groupInvite'),
+          },
+          {
+            path: PopupPath.INBOX_NEW_GROUP,
+            lazy: lazyScreen('newGroup'),
+          },
+          {
+            path: PopupPath.INBOX_JOIN,
+            lazy: lazyScreen('groupJoin'),
           },
           {
             path: PopupPath.CONTACTS,

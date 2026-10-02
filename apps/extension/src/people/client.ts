@@ -4,9 +4,13 @@
  * the session key), so every open zafu window sees the same thing at once.
  */
 
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import { useStore } from '../state';
+import { selectEffectiveKeyInfo } from '../state/keyring';
+import { requestEgressOptIn } from '../net/egress-opt-in';
+import { PEOPLE_RELAY } from '../config/people-relay';
 import { PEOPLE_MESSAGE, PEOPLE_STATUS_KEY, PEOPLE_WATCH_PORT } from './protocol';
-import { readRooms, readThreads, type PeopleRoom, type Thread } from './vault';
+import { readRooms, readThreads, threadKey, type PeopleRoom, type Thread } from './vault';
 import type { PeopleSlot, PeopleStatus } from './service';
 
 export const peopleCall = async <T = unknown>(
@@ -84,3 +88,33 @@ export const useWatchRoom = (roomId: string | undefined): void =>
     const port = chrome.runtime.connect({ name: PEOPLE_WATCH_PORT + roomId });
     return () => port.disconnect();
   }, [roomId]);
+
+/** the relay is off until the person says yes: ask once, here, then try again */
+export const peopleAsk = async <T = unknown>(
+  op: string,
+  args: Record<string, unknown> = {},
+): Promise<T> => {
+  try {
+    return await peopleCall<T>(op, args);
+  } catch (e) {
+    if (!(e instanceof Error) || !e.message.includes('not allowed yet')) {
+      throw e;
+    }
+    if (!(await requestEgressOptIn(PEOPLE_RELAY))) {
+      throw e;
+    }
+    return peopleCall<T>(op, args);
+  }
+};
+
+/** the active wallet's rooms, by id */
+export const useMyRooms = (): PeopleRoom[] => {
+  const walletId = useStore(s => selectEffectiveKeyInfo(s)?.id);
+  const { rooms } = usePeople();
+  return useMemo(() => rooms.filter(r => r.walletId === walletId), [rooms, walletId]);
+};
+
+export const useThread = (room: PeopleRoom | undefined): Thread | undefined => {
+  const { threads } = usePeople();
+  return room ? threads[threadKey(room)] : undefined;
+};

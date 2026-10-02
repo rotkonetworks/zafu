@@ -12,6 +12,7 @@
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
+import type { ChannelGenesis, ChannelRecord } from '@zafu/zirc';
 import { readEncrypted, writeEncrypted } from '../state/encrypted-storage';
 
 export type PeopleRoomKind = 'group' | 'door' | 'pair';
@@ -69,10 +70,16 @@ export interface PeopleRoom {
     mine: boolean;
     members: GroupMember[];
     requests?: JoinRequest[];
+    /** asks the founder said no to: never shown again */
+    declined?: string[];
     /** a door: the group it opens, and its code (founder side only) */
     code?: string;
     /** joiner side: the invite was opened and the group joined */
     opened?: boolean;
+    /** the roster log as far as it verifies from genesis */
+    log?: { genesis: ChannelGenesis; records: ChannelRecord[] };
+    /** what members call themselves, as the founder last posted it */
+    names?: Record<string, string>;
   };
   /** pair rooms */
   pair?: {
@@ -105,6 +112,10 @@ export interface Thread {
   /** seconds: items at or before this are read */
   read: number;
 }
+
+/** a thread is one room seen from one wallet */
+export const threadKey = (room: Pick<PeopleRoom, 'walletId' | 'id'>): string =>
+  `${room.walletId}/${room.id}`;
 
 /** relay history kept per thread, here and in the backup */
 export const THREAD_CAP = 500;

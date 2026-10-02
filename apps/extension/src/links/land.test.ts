@@ -46,10 +46,16 @@ describe('land', () => {
     });
   });
 
-  it('answers what is not ready with one calm line', () => {
+  it('opens a group code on the join screen, the code in the query', () => {
     expect(landOf('zafu:join/673-chaos-mail')).toEqual({
-      line: 'groups are coming soon · please keep the code until then',
+      to: `${PopupPath.INBOX_JOIN}?code=673-chaos-mail`,
     });
+    expect(land(parseLink('https://zafu.pro/j#673-chaos-mail'), 'pasted')).toEqual({
+      to: `${PopupPath.INBOX_JOIN}?code=673-chaos-mail&via=pasted`,
+    });
+  });
+
+  it('answers what is not ready with one calm line', () => {
     expect(landOf(`zcash:?address=${T}&address.1=${T}`)).toEqual({
       line: 'this request pays 2 addresses · zafu pays one at a time, for now',
     });

@@ -25,11 +25,13 @@ import { useZcashMemos } from '../../../hooks/zcash-memos';
 import { useMultisigBalances } from '../../../hooks/multisig-balances';
 import { ScreenHeader } from '../../../components/screen-header';
 import { Sensitive } from '../../../components/sensitive';
-import { PopupPath, threadPath } from '../paths';
+import { PopupPath, groupPath, threadPath } from '../paths';
 import { useIdentity } from '../identity/use-identity';
 import { deriveThreads, previewOf, shortAddress, whenOf, type DirectThread } from './threads';
 import { useThreadName } from './use-thread-name';
-import { useOpenPeople } from '../../../people/client';
+import { useMyRooms, useOpenPeople, useThread } from '../../../people/client';
+import { RelaySlot } from '../../../people/relay-slot';
+import { unreadOf, type PeopleRoom } from '../../../people/vault';
 
 const zec = (zat: bigint) => (Number(zat) / 1e8).toFixed(2);
 
@@ -102,13 +104,7 @@ const GroupRow = memo(({ wallet, balance }: { wallet: ZcashWalletJson; balance?:
   return (
     <button
       type='button'
-      onClick={() =>
-        navigate(
-          ms.relayPeerKeys?.length
-            ? PopupPath.INBOX_GROUP.replace(':walletId', wallet.id)
-            : PopupPath.MULTISIG,
-        )
-      }
+      onClick={() => navigate(PopupPath.MULTISIG)}
       className='flex h-16 items-center gap-3 px-1 text-left transition-colors hover:bg-elev-2'
     >
       <span className='flex size-10 shrink-0 items-center justify-center border border-border-hard bg-elev-1 font-display text-lg text-zigner-gold'>
@@ -128,17 +124,58 @@ const GroupRow = memo(({ wallet, balance }: { wallet: ZcashWalletJson; balance?:
 });
 GroupRow.displayName = 'GroupRow';
 
+/** a group on the people relay: its last line, and how many you have not read */
+const RoomRow = memo(({ room }: { room: PeopleRoom }) => {
+  const navigate = useNavigate();
+  const thread = useThread(room);
+  const last = thread?.items[thread.items.length - 1];
+  const unread = unreadOf(thread);
+  const who = last && (last.mine ? 'you' : (room.group?.names?.[last.author] ?? last.name));
+  return (
+    <button
+      type='button'
+      onClick={() => navigate(groupPath(room.group!.G))}
+      className='flex h-16 items-center gap-3 px-1 text-left transition-colors hover:bg-elev-2'
+    >
+      <span className='flex size-10 shrink-0 items-center justify-center border border-border-hard bg-elev-1 font-display text-lg text-zigner-gold'>
+        蔵
+      </span>
+      <span className='flex min-w-0 grow flex-col gap-[3px]'>
+        <span className='flex items-baseline gap-2'>
+          <span className='truncate text-sm text-fg-high lowercase'>{room.name}</span>
+          <span className='shrink-0 text-[11px] text-fg-muted'>
+            {room.group?.members.length || 1}
+          </span>
+        </span>
+        <span className='truncate text-[11px] text-fg-muted'>
+          {last ? `${who}: ${last.body}` : 'no messages yet'}
+        </span>
+      </span>
+      {unread > 0 && (
+        <span className='flex h-[18px] min-w-[18px] shrink-0 items-center justify-center bg-hanko px-[5px] text-[11px] text-fg-high'>
+          {unread}
+        </span>
+      )}
+    </button>
+  );
+});
+RoomRow.displayName = 'RoomRow';
+
 const Groups = () => {
   const wallets = useStore(selectVisibleMultisigWallets);
   const onZcash = useStore(s => selectActiveNetwork(s) === 'zcash');
   const balances = useMultisigBalances(wallets, onZcash);
-  if (!wallets.length) {
+  const rooms = useMyRooms().filter(r => r.kind === 'group' && r.joined);
+  if (!wallets.length && !rooms.length) {
     return null;
   }
   return (
     <section className='flex flex-col gap-1.5'>
       <h2 className='text-xs tracking-[0.04em] text-fg-muted'>groups</h2>
       <div className='flex flex-col'>
+        {rooms.map(r => (
+          <RoomRow key={r.id} room={r} />
+        ))}
         {wallets.map(w => (
           <GroupRow key={w.id} wallet={w} balance={balances[w.id]} />
         ))}
@@ -293,6 +330,7 @@ export function InboxPage() {
   const canCard = !!keyInfo && keyInfoSupportsNetwork(keyInfo, 'zcash');
 
   useOpenPeople();
+  const hasRooms = useMyRooms().some(r => r.joined);
   // the chain memos the light client already reads
   const { syncMemos: syncPenumbra } = usePenumbraMemos(walletId);
   const { syncMemos: syncZcash } = useZcashMemos(walletId, zidecarUrl);
@@ -314,7 +352,7 @@ export function InboxPage() {
             <button
               type='button'
               aria-label='new group'
-              onClick={() => navigate(PopupPath.MULTISIG_CREATE)}
+              onClick={() => navigate(PopupPath.INBOX_NEW_GROUP)}
               className='flex h-9 items-center gap-1.5 border border-border-soft px-2.5 text-xs text-fg-high transition-colors hover:bg-elev-2'
             >
               <span className='i-zafu-torii size-[15px]' aria-hidden='true' />
@@ -331,6 +369,7 @@ export function InboxPage() {
           </>
         }
       />
+      {hasRooms && <RelaySlot />}
       <div className='flex flex-col gap-[18px] px-4 pb-4 pt-3.5'>
         <YouRow />
         <NeedsYou />

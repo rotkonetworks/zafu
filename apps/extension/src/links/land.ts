@@ -78,7 +78,10 @@ const LAND: { [K in Intent['kind']]: (i: Extract<Intent, { kind: K }>, via?: str
     contact: (i, via) => ({
       to: `${PopupPath.CONTACT_CARD}?card=${encodeURIComponent(i.card)}${withVia(via)}`,
     }),
-    join: () => ({ line: 'groups are coming soon · please keep the code until then' }),
+    // the query, so the code survives the unlock redirect
+    join: (i, via) => ({
+      to: `${PopupPath.INBOX_JOIN}?code=${encodeURIComponent(i.code)}${withVia(via)}`,
+    }),
   };
 
 export const land = (parsed: Parsed, via?: string): Landing => {

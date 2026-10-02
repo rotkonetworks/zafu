@@ -28,7 +28,7 @@ import {
   type RoomMessage,
 } from '@zafu/zirc/room';
 import { presenceEpoch, type RelayTransport } from '@zafu/zid';
-import { mergeItems, type PeopleRoom, type Thread, type ThreadItem } from './vault';
+import { mergeItems, threadKey, type PeopleRoom, type Thread, type ThreadItem } from './vault';
 
 /** what the slot under a title says (design-social 5.0) */
 export type PeopleSlot =
@@ -72,12 +72,16 @@ export interface PeopleDeps {
 /** bodies starting with these are protocol records, never shown as chat */
 export const PROTOCOL_PREFIX = /^z[gp]\d:/;
 
-/** what a room kind does with the protocol records a pass found */
+/**
+ * What a room kind does with the protocol records a pass found. It returns a
+ * patch, applied to the room as it is in the vault at that moment, so a pass
+ * never writes back a stale copy over what another step changed meanwhile.
+ */
 export type RecordHandler = (
   room: PeopleRoom,
   records: RoomMessage[],
   api: PeopleApi,
-) => Promise<PeopleRoom | undefined>;
+) => Promise<((r: PeopleRoom) => PeopleRoom) | undefined>;
 
 export interface PeopleApi {
   send(roomId: string, body: string, kind?: 'msg' | 'action'): Promise<RoomMessage>;
@@ -87,13 +91,13 @@ export interface PeopleApi {
     fn: (r: PeopleRoom) => PeopleRoom | undefined,
   ): Promise<PeopleRoom | undefined>;
   sync(roomId: string): Promise<PeopleSlot>;
+  room(roomId: string): Promise<PeopleRoom | undefined>;
   /** this member's pubkey in a room */
   me(room: PeopleRoom): Promise<string>;
   now(): number;
 }
 
-export const threadKey = (room: Pick<PeopleRoom, 'walletId' | 'id'>): string =>
-  `${room.walletId}/${room.id}`;
+export { threadKey } from './vault';
 
 /** catch-up, every 5 minutes after the person opened people (T3) */
 export const T3_MS = 5 * 60_000;
@@ -248,23 +252,13 @@ export const createPeopleService = (
     if (chat.length) {
       await writeItems(rec, t => mergeItems(t, chat));
     }
-    let next: PeopleRoom = {
-      ...rec,
-      head: room.chainHead(),
-      // a window that failed is read again next time
-      since: unreachable ? from : room.currentEpoch(),
-    };
     const handle = handlers[rec.kind];
     const proto = msgs.filter(m => PROTOCOL_PREFIX.test(m.body));
-    if (handle && proto.length) {
-      next = (await handle(next, proto, api)) ?? next;
-    }
-    await updateRoom(rec.id, r => ({
-      ...r,
-      ...next,
-      // the handler may have changed membership meanwhile; keep the newest
-      group: next.group ?? r.group,
-    }));
+    const patch = handle && proto.length ? await handle(rec, proto, api) : undefined;
+    const head = room.chainHead();
+    // a window that failed is read again next time
+    const since = unreachable ? from : room.currentEpoch();
+    await updateRoom(rec.id, r => ({ ...(patch ? patch(r) : r), head, since }));
     return unreachable ? 'unreachable' : oversize ? 'oversize' : 'checked';
   };
 
@@ -346,6 +340,7 @@ export const createPeopleService = (
     addRoom,
     updateRoom,
     sync: id => sync(id),
+    room: id => findRoom(id),
     me: async room => (await deps.identity(room)).pubkey,
     now,
   };
@@ -385,10 +380,23 @@ export const createPeopleService = (
       };
     },
     /** a line typed in a thread: shown at once as "sending", then on the relay */
-    say: async (roomId: string, text: string): Promise<'sent' | PeopleSlot> => {
+    say: async (roomId: string, text: string, retry?: string): Promise<'sent' | PeopleSlot> => {
       const rec = await findRoom(roomId);
       if (!rec) {
         return 'idle';
+      }
+      const nick = /^\/nick\s+(\S{1,24})$/.exec(text.trim());
+      if (nick) {
+        // your name in this room from the next line on; the room is rebuilt to carry it
+        await updateRoom(roomId, r => ({ ...r, nick: nick[1] }));
+        session?.rooms.delete(threadKey(rec));
+        return 'sent';
+      }
+      if (retry) {
+        await writeItems(rec, t => ({
+          read: t?.read ?? 0,
+          items: (t?.items ?? []).filter(i => i.local !== retry),
+        }));
       }
       const local = crypto.randomUUID();
       const draft: ThreadItem = {
@@ -442,6 +450,8 @@ export const createPeopleService = (
     get active() {
       return !!session;
     },
+    /** the session's abort signal: requests made for this session die with it */
+    signal: (): AbortSignal => ensure().abort.signal,
     /** resolves when no room is being read (tests) */
     settled: () => Promise.all([...busy.values()]).then(() => undefined),
   };
