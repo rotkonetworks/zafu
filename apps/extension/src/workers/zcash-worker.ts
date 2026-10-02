@@ -5803,11 +5803,17 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         const spentHeights = new Set<number>();
         const spentTxIds = new Map<number, Set<string>>(); // height → spent_by_txids
+        // spends broadcast but not yet mined: no block to read their memo from
+        // yet, so they stay unscanned and are read once their height is known
+        const unmined = new Set<string>();
         for (const note of memoNotes) {
           if (!note.spent_by_txid || processedTxids.has(note.spent_by_txid)) {
             continue;
           }
           const h = note.spent_at_height || txidToHeight.get(note.spent_by_txid);
+          if (!h) {
+            unmined.add(note.spent_by_txid);
+          }
           if (h) {
             spentHeights.add(h);
             let set = spentTxIds.get(h);
@@ -6002,7 +6008,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           }
         }
         for (const n of memoNotes) {
-          if (n.spent_by_txid) {
+          if (n.spent_by_txid && !unmined.has(n.spent_by_txid)) {
             allScanned.add(n.spent_by_txid);
           }
         }
@@ -6012,7 +6018,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           req.onsuccess = () => resolve();
           req.onerror = () => reject(req.error);
         });
-        await remember();
+        // a spend's height can arrive without any note being found or spent,
+        // so the counts cannot tell; read again on the next open until it does
+        if (unmined.size === 0) {
+          await remember();
+        }
 
         workerSelf.postMessage({
           type: 'memos-result',
