@@ -16,6 +16,7 @@
  */
 
 import { wordlists } from 'bip39';
+import { isEgressBlockedCause } from '../../net/egress';
 
 export interface RendezvousEntry {
   pubkey: string;
@@ -76,8 +77,10 @@ export async function hasRendezvous(relayUrl: string): Promise<boolean> {
   try {
     const res = await post(relayUrl, 'poll', { room: '0'.repeat(64) });
     return res.ok;
-  } catch {
-    return false;
+  } catch (e) {
+    // the relay is simply not allowed yet: zafu's relays serve rendezvous, so
+    // offer the room code and ask at "create" / "join", where intent is explicit
+    return isEgressBlockedCause(e);
   }
 }
 
