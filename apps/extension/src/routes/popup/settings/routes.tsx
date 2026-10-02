@@ -116,11 +116,6 @@ export const settingsRoutes: RouteObject[] = [
     lazy: lazyScreen('settingsSecurityHome'),
   },
   {
-    path: PopupPath.SETTINGS_PRIVACY_HOME,
-    lazy: lazyScreen('settingsPrivacyHome'),
-  },
-  {
-    // ?network=zcash|penumbra (the home "switch node" links) opens that network's node sheet
     path: PopupPath.SETTINGS_ZCASH_NETWORK,
     lazy: lazyScreen('settingsZcashNetwork'),
   },
