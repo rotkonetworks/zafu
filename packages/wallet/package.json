@@ -53,7 +53,7 @@
     "@noble/hashes": "^1.8.0",
     "@penumbra-zone/bech32m": "18.0.0",
     "@penumbra-zone/protobuf": "11.0.0",
-    "@penumbrafi/registry": "^13.2.0",
+    "@penumbrafi/registry": "^13.3.0",
     "bip39": "^3.1.0",
     "cosmjs-types": "^0.9.0",
     "qrcode": "^1.5.4"

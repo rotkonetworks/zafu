@@ -64,7 +64,7 @@
     "vitest": "~1.6.1"
   },
   "overrides": {
-    "@penumbrafi/registry": "^13.2.0",
+    "@penumbrafi/registry": "^13.3.0",
     "@bufbuild/protobuf": "^1.10.0",
     "@penumbra-zone/types": "npm:@penumbrafi/types@38.0.0",
     "@penumbra-zone/wasm": "npm:@penumbrafi/wasm@57.0.0",
@@ -72,8 +72,8 @@
   },
   "pnpm": {
     "overrides": {
-      "@penumbra-labs/registry": "npm:@penumbrafi/registry@^13.2.0",
-      "@penumbrafi/registry": "file:/steam/rotko/registry/npm/penumbrafi-registry-transparent.tgz",
+      "@penumbra-labs/registry": "npm:@penumbrafi/registry@^13.3.0",
+      "@penumbrafi/registry": "13.3.0",
       "@penumbra-zone/types": "npm:@penumbrafi/types@38.0.0",
       "@penumbra-zone/wasm": "npm:@penumbrafi/wasm@57.0.0",
       "@penumbra-zone/services": "npm:@penumbrafi/services@72.0.0",
