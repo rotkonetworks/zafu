@@ -9,7 +9,7 @@ import { SaveContactModal } from '../../../components/save-contact-modal';
 import { useTxNote } from '../../../hooks/use-tx-note';
 import { Sensitive } from '../../../components/sensitive';
 import { cn } from '@repo/ui/lib/utils';
-import { PopupPath } from '../paths';
+import { PopupPath, contactPath } from '../paths';
 import { ScreenHeader } from '../../../components/screen-header';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Button } from '@repo/ui/components/ui/button';
@@ -220,7 +220,7 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
                   type='screen'
                   icon='i-ph-user'
                   label={`to ${contactMatch.contact.name}`}
-                  onPress={() => navigate(`${PopupPath.CONTACTS}?open=${contactMatch.contact.id}`)}
+                  onPress={() => navigate(contactPath(contactMatch.contact.id))}
                 />
               ) : (
                 <div className='flex items-center'>

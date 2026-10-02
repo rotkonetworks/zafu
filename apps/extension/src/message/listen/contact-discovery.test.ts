@@ -107,6 +107,7 @@ const depsWith = (
 ): ContactDiscoveryDeps => ({
   settings: async () => ({ enabled: true, relayEndpoint: 'https://relay.example', relayToken: '' }),
   locked: async () => false,
+  siteAllowed: async () => true,
   contacts: async () => contacts,
   identity: async () => ({ mnemonic: MNEMONIC, identityName: IDENTITY }),
   transport: () => relay,
@@ -263,6 +264,17 @@ describe('zafu_discover_contacts - refusals', () => {
       senderFor(APP),
     );
     expect(res).toEqual({ error: 'contact discovery is not available', code: 'not_available' });
+  });
+
+  it('refuses not_available, and reads no relay, when this site has no "find friends" grant', async () => {
+    const transport = vi.fn(() => relay);
+    const res = await call(
+      depsWith(relay, { siteAllowed: async origin => origin !== APP, transport }),
+      { type: 'zafu_discover_contacts', appScope: APP },
+      senderFor(APP),
+    );
+    expect(res).toEqual({ error: 'contact discovery is not available', code: 'not_available' });
+    expect(transport).not.toHaveBeenCalled();
   });
 
   it('refuses not_available when the wallet is locked', async () => {

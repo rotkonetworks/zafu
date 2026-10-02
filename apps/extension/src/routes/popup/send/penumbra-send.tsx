@@ -29,6 +29,7 @@ export function PenumbraSend({
   onClose,
   prefillAsset,
   prefillRecipient,
+  prefillMemo,
   meta,
 }: {
   onClose: () => void;
@@ -36,6 +37,8 @@ export function PenumbraSend({
   prefillAsset?: string;
   /** a contact's address, from the contact's "send" */
   prefillRecipient?: string;
+  /** a message from a thread's composer */
+  prefillMemo?: string;
   /** the header's mode switch */
   meta?: ReactNode;
 }) {
@@ -50,12 +53,15 @@ export function PenumbraSend({
   const [saveOpen, setSaveOpen] = useState(false);
   const [sent, setSent] = useState<{ to: string; amount: string; unit: string; memo: string }>();
 
-  const { setRecipient } = sendState;
+  const { setRecipient, setMemo } = sendState;
   useEffect(() => {
     if (prefillRecipient) {
       setRecipient(prefillRecipient);
     }
-  }, [prefillRecipient, setRecipient]);
+    if (prefillMemo) {
+      setMemo(prefillMemo);
+    }
+  }, [prefillRecipient, prefillMemo, setRecipient, setMemo]);
 
   // the ['balances', account] cache holds the raw list (home preloads it);
   // `select` buckets it per observer

@@ -183,6 +183,12 @@ export interface ZidSitePreference {
   rotation: number;
   /** which identity name to use for this origin */
   identity: string;
+  /**
+   * "friends can find you here": this site may run private contact discovery
+   * (zafu_discover_contacts). Off unless the person turned it on for this
+   * site, on its sheet or by accepting the site's own request.
+   */
+  findFriends?: boolean;
 }
 
 /** format a public key as a zid address */

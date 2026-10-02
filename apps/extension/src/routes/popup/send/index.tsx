@@ -107,6 +107,7 @@ export function SendPage() {
         prefillAsset={locationState?.prefillAsset}
         prefillRecipient={prefill?.recipient}
         initialMode={locationState?.penumbraMode}
+        prefillMemo={prefill?.memo}
       />
     );
   }
@@ -173,11 +174,13 @@ function PenumbraSendScreen({
   prefillAsset,
   prefillRecipient,
   initialMode,
+  prefillMemo,
 }: {
   onClose: () => void;
   prefillAsset?: string;
   prefillRecipient?: string;
   initialMode?: PenumbraMode;
+  prefillMemo?: string;
 }) {
   const routes = usePenumbraRoutes();
   const holdings = useTransparentHoldings();
@@ -223,6 +226,7 @@ function PenumbraSendScreen({
         onClose={onClose}
         prefillAsset={prefillAsset}
         prefillRecipient={prefillRecipient}
+        prefillMemo={prefillMemo}
         meta={meta}
       />
     ),

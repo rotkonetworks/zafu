@@ -4,15 +4,21 @@ export enum PopupPath {
   STAKE = '/stake',
   SWAP = '/swap',
   VOTE = '/vote',
+  /** the people tab (People.dc.html) */
   INBOX = '/inbox',
+  /** one direct thread: a counterparty address, or `s:<txid>` for an unknown sender */
+  INBOX_THREAD = '/inbox/t/:threadId',
   /** multisig group coordination chat, one thread per group (wallet id param) */
   INBOX_GROUP = '/inbox/group/:walletId',
   CONTACTS = '/contacts',
+  CONTACT = '/contacts/:contactId',
   TOOLS = '/tools',
   SETTINGS = '/settings',
 
-  // Identity
+  // Identity: "you" (Identity.dc.html) and what hangs off it
   IDENTITY = '/identity',
+  IDENTITY_SITES = '/identity/sites',
+  IDENTITY_CONTROLS = '/identity/controls',
 
   // Auth
   LOGIN = '/login',
@@ -63,7 +69,7 @@ export enum PopupPath {
   // Passkey creation consent (opened by external apps via zafu_passkey_create)
   PASSKEY_APPROVE = '/passkey-approve',
 
-  // Passwords (deterministic password generator)
+  // passkeys and passwords (IdKeys.dc.html)
   PASSWORDS = '/identity/passwords',
 
   // Capability approval (opened by external apps via zafu_request_capability)
@@ -119,3 +125,11 @@ export enum PopupPath {
    *  purpose, with an allow/block control per host. */
   SETTINGS_CONNECTIONS = '/settings/privacy/connections',
 }
+
+/** a direct thread's route */
+export const threadPath = (threadId: string): string =>
+  PopupPath.INBOX_THREAD.replace(':threadId', encodeURIComponent(threadId));
+
+/** one saved contact's route */
+export const contactPath = (contactId: string): string =>
+  PopupPath.CONTACT.replace(':contactId', encodeURIComponent(contactId));

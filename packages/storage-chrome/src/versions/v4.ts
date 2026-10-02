@@ -279,6 +279,8 @@ type LOCAL = {
       mode: 'cross-site' | 'site';
       rotation: number;
       identity: string;
+      /** "friends can find you here" for this site; absent = off */
+      findFriends?: boolean;
     }
   >;
 

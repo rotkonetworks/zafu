@@ -37,6 +37,7 @@ import { currentIdentityName, deriveZidContactCardKey } from './identity';
 import type { Contact } from './contacts';
 import { buildPublishArgs, createContactRelay, discoverForScope } from './contact-discovery';
 import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../config/contact-discovery-relay';
+import { siteFindsFriends } from './find-friends';
 
 /** true when `endpoint` is an http(s) URL the relay transport can talk to.
  *  Anything else (unset, garbage) leaves the feature unconfigured. */
@@ -65,6 +66,8 @@ export interface ContactDiscoveryDeps {
   settings: () => Promise<{ enabled: boolean; relayEndpoint: string; relayToken: string }>;
   /** true when the wallet is locked (no session key). */
   locked: () => Promise<boolean>;
+  /** this site holds the per-site "friends can find you here" grant */
+  siteAllowed: (origin: string) => Promise<boolean>;
   /** the wallet's contacts (decrypted). */
   contacts: () => Promise<Contact[]>;
   /** mnemonic + active identity name, or null when no key is selected. */
@@ -87,6 +90,7 @@ export const contactDiscoveryDeps: ContactDiscoveryDeps = {
     };
   },
   locked: async () => !(await sessionExtStorage.get('passwordKey')),
+  siteAllowed: siteFindsFriends,
   contacts: async () =>
     (await readEncryptedWithMigration<Contact[]>(localExtStorage, sessionExtStorage, 'contacts')) ??
     [],
@@ -117,6 +121,9 @@ export const runDiscoveryForScope = async (
   try {
     const { enabled, relayEndpoint, relayToken } = await deps.settings();
     if (!enabled || !isUsableRelayEndpoint(relayEndpoint)) {
+      return NOT_AVAILABLE;
+    }
+    if (!(await deps.siteAllowed(appScope))) {
       return NOT_AVAILABLE;
     }
     if (await deps.locked()) {

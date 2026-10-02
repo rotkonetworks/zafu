@@ -1,5 +1,7 @@
 /**
- * deterministic password generator - derive passwords from seed + site +
+ * passkeys and passwords (IdKeys.dc.html): the sites that hold a zafu passkey
+ * (each one comes back from the recovery phrase), then the deterministic
+ * password generator - derive passwords from seed + site +
  * username. the password is never stored. same seed, site, username, length
  * and rotation always derive the same password (see state/identity.ts:
  * derivePassword). a saved login keeps only what fills the form again, sealed
@@ -24,8 +26,9 @@ import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Input } from '@repo/ui/components/ui/input';
 import { Button } from '@repo/ui/components/ui/button';
 import { CopyButton } from '@repo/ui/components/ui/copy-button';
-import { Segmented } from '@repo/ui/components/ui/segmented';
+import { Sheet } from '@repo/ui/components/ui/sheet';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
+import { getAllPermissions } from '@repo/storage-chrome/origin';
 import { useStore } from '../../../state';
 import { selectSelectedKeyInfo, selectGetMnemonic } from '../../../state/keyring';
 import { derivePassword, normalizeOrigin, DEFAULT_IDENTITY } from '../../../state/identity';
@@ -38,6 +41,23 @@ import {
 } from '../../../state/password-logins';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
+import { hostOf, shortDay } from './site-list';
+
+/** sites holding a zafu passkey, newest first */
+const usePasskeys = () => {
+  const [sites, setSites] = useState<{ origin: string; at: number }[]>([]);
+  useEffect(() => {
+    void getAllPermissions().then(all =>
+      setSites(
+        all
+          .filter(p => p.granted.includes('passkey'))
+          .map(p => ({ origin: p.origin, at: p.grantedAt }))
+          .sort((a, b) => b.at - a.at),
+      ),
+    );
+  }, []);
+  return sites;
+};
 
 // the seed feeding the encoder is 32 bytes, 8 groups of at most 5 base85
 // characters each - 40 is the real ceiling (see derive-password.test.ts).
@@ -58,6 +78,8 @@ export const PasswordsPage = () => {
   const [deriving, setDeriving] = useState(false);
   const owner = keyInfo ? pocketOwner(keyInfo) : undefined;
   const [logins, setLogins] = useState<PasswordLogin[]>([]);
+  const [picking, setPicking] = useState(false);
+  const passkeys = usePasskeys();
 
   useEffect(() => {
     void readPasswordLogins().then(setLogins, () => setLogins([]));
@@ -119,8 +141,27 @@ export const PasswordsPage = () => {
   }, [canDerive, keyInfo, site, username, length, rotation, getMnemonic]);
 
   return (
-    <SettingsScreen title='passwords' backPath={PopupPath.TOOLS}>
+    <SettingsScreen title='passkeys and passwords' backPath={PopupPath.IDENTITY}>
       <div className='flex flex-col gap-4'>
+        <section className='flex flex-col gap-1.5'>
+          <h2 className='text-[11px] tracking-[0.06em] text-fg-muted'>passkeys</h2>
+          {passkeys.length > 0 && (
+            <RowGroup>
+              {passkeys.map(p => (
+                <div key={p.origin} className='flex h-[50px] items-center gap-3 px-3.5'>
+                  <span className='grow truncate text-sm text-fg-high'>{hostOf(p.origin)}</span>
+                  <span className='text-[11px] text-fg-muted'>{shortDay(p.at)}</span>
+                </div>
+              ))}
+            </RowGroup>
+          )}
+          <span className='text-[11px] text-fg-dim'>
+            {passkeys.length
+              ? 'restored from your recovery phrase · nothing to back up'
+              : 'no passkeys yet · a site asks when it wants one'}
+          </span>
+        </section>
+        <h2 className='-mb-2 text-[11px] tracking-[0.06em] text-fg-muted'>make a password</h2>
         {!canDerive && (
           <StatusSlot tone='info' icon='i-ph-info'>
             <span>
@@ -154,17 +195,6 @@ export const PasswordsPage = () => {
             <span className='text-label text-fg-dim'>-&gt; {normalizeOrigin(site)}</span>
           )}
 
-          <Segmented
-            label='password length'
-            value={String(length)}
-            onChange={v => setLength(Number(v) as (typeof LENGTHS)[number])}
-            options={LENGTHS.map(l => ({
-              value: String(l),
-              label: String(l),
-              disabled: !canDerive,
-            }))}
-          />
-
           <div className='flex h-[52px] items-center gap-2.5 border border-border-hard bg-elev-1 px-3'>
             <span className='flex-1 truncate font-mono text-sm text-zigner-gold tracking-wide'>
               {password ? (revealed ? password : '•'.repeat(Math.min(length, 24))) : '- -'}
@@ -186,32 +216,35 @@ export const PasswordsPage = () => {
             />
           </div>
 
-          <div className='flex items-center justify-between text-label text-fg-muted'>
-            <span>
-              {rotation === 0 ? 'original version' : `version ${rotation}`}
+          <div className='flex items-center justify-between text-[11px] text-fg-muted'>
+            <button
+              type='button'
+              disabled={!canDerive}
+              onClick={() => setPicking(true)}
+              className='hover:text-fg-high'
+            >
+              {length} characters · version {rotation + 1}
               {deriving ? ' · deriving...' : ''}
-            </span>
-            <div className='flex items-center gap-1.5'>
-              <Button
-                variant='quiet'
-                size='sm'
-                disabled={!canDerive || rotation === 0}
-                onClick={() => setRotation(r => Math.max(0, r - 1))}
-                aria-label='previous version'
-              >
-                <span className='i-ph-minus size-3.5' />
-              </Button>
-              <Button
-                variant='quiet'
-                size='sm'
+            </button>
+            <span className='flex items-center gap-3'>
+              {rotation > 0 && (
+                <button
+                  type='button'
+                  onClick={() => setRotation(r => Math.max(0, r - 1))}
+                  className='hover:text-fg-high'
+                >
+                  previous
+                </button>
+              )}
+              <button
+                type='button'
                 disabled={!canDerive}
                 onClick={() => setRotation(r => r + 1)}
-                aria-label='new version'
+                className='text-zigner-gold hover:underline'
               >
-                <span className='i-ph-plus size-3.5' />
                 new version
-              </Button>
-            </div>
+              </button>
+            </span>
           </div>
 
           <div className='min-h-[1.25rem]'>
@@ -236,7 +269,7 @@ export const PasswordsPage = () => {
 
           <span className='text-label text-fg-dim'>
             made from your recovery phrase · the same inputs always give the same password · the
-            password is never stored
+            password itself is never stored
           </span>
         </div>
 
@@ -247,7 +280,7 @@ export const PasswordsPage = () => {
                 key={`${l.site}\n${l.username}`}
                 type='value'
                 label={l.username ? `${l.site} · ${l.username}` : l.site}
-                value={`${l.length} · ${l.version === 0 ? 'original' : `v${l.version}`}`}
+                value={`${l.length} · version ${l.version + 1}`}
                 onPress={() => fill(l)}
               />
             ))}
@@ -259,6 +292,22 @@ export const PasswordsPage = () => {
           </Button>
         )}
       </div>
+      <Sheet open={picking} onOpenChange={setPicking} title='length'>
+        <RowGroup>
+          {LENGTHS.map(l => (
+            <Row
+              key={l}
+              type='value'
+              label={`${l} characters`}
+              value={l === length ? 'now' : undefined}
+              onPress={() => {
+                setLength(l);
+                setPicking(false);
+              }}
+            />
+          ))}
+        </RowGroup>
+      </Sheet>
     </SettingsScreen>
   );
 };

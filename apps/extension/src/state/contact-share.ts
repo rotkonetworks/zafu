@@ -80,3 +80,19 @@ export const replyAddress = async (
   derive: DeriveAddress = wasmDeriveAddress,
 ): Promise<string | undefined> =>
   (contactId && (await myAddressForContact(contactId, source, derive))?.address) || current;
+
+/**
+ * A card memo as the `#` part of a card link (`zafu:contact#...`): the memo
+ * bytes without their zero padding, base64url. The reader pads it back to 512.
+ */
+export const cardLinkPayload = (memoHex: string): string => {
+  const bytes = (memoHex.match(/../g) ?? []).map(b => parseInt(b, 16));
+  let end = bytes.length;
+  while (end > 0 && bytes[end - 1] === 0) {
+    end--;
+  }
+  return btoa(String.fromCharCode(...bytes.slice(0, end)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+};

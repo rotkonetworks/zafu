@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { decodeContactCard, decodeMemo } from '@repo/wallet/networks/zcash/memo-codec';
+import { bytesToHex, decodeContactCard, decodeMemo } from '@repo/wallet/networks/zcash/memo-codec';
+import { parseLink, toUri } from '../links/router';
 import {
+  cardLinkPayload,
   contactCardMemoHex,
   myAddressForContact,
   replyAddress,
@@ -95,5 +97,22 @@ describe('the reply address', () => {
     expect(await replyAddress(undefined, { ufvk: ALICE_UFVK }, 'u1rotating', aliceDerive)).toBe(
       'u1rotating',
     );
+  });
+});
+
+describe('a card link', () => {
+  it('fits a zafu:contact link and comes back to the same memo', () => {
+    const hex = contactCardMemoHex({ senderName: '', myAddress: 'u1' + 'q'.repeat(140) })!;
+    const payload = cardLinkPayload(hex);
+    expect(parseLink(toUri({ kind: 'contact', card: payload }))).toEqual({
+      ok: true,
+      intent: { kind: 'contact', card: payload },
+    });
+    const back = Uint8Array.from(atob(payload.replace(/-/g, '+').replace(/_/g, '/')), c =>
+      c.charCodeAt(0),
+    );
+    const memo = new Uint8Array(512);
+    memo.set(back);
+    expect(bytesToHex(memo)).toBe(hex);
   });
 });
