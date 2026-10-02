@@ -5,6 +5,7 @@ import {
 } from '../../../message/services';
 import { useStore } from '../../../state';
 import { selectEnabledNetworks, selectKeyInfos } from '../../../state/keyring';
+import { keyInfoSupportsNetwork } from '../../../state/keyring/vault-ops';
 import { selectZcashWallets, selectPenumbraWallets } from '../../../state/wallets';
 import { clearPersonalData } from '../../../state/personal-data';
 import { useState, useEffect } from 'react';
@@ -131,7 +132,8 @@ export const SettingsClearCache = () => {
                   {g.vaults.map(v => {
                     const hasZcash =
                       enabledNetworks.includes('zcash') &&
-                      (zcashWallets.some(w => w.vaultId === v.id) || v.type === 'mnemonic');
+                      (zcashWallets.some(w => w.vaultId === v.id) ||
+                        (v.type === 'mnemonic' && keyInfoSupportsNetwork(v, 'zcash')));
                     const hasPenumbra =
                       enabledNetworks.includes('penumbra') &&
                       (penumbraWallets.some(w => w.vaultId === v.id) || v.type === 'mnemonic');

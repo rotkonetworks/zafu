@@ -20,6 +20,7 @@ import {
 } from '../../../state/seed-phrase/mnemonic';
 import { usePageNav } from '../../../utils/navigate';
 import { PagePath } from '../paths';
+import { PENDING_ZCASH_BIRTHDAY_KEY } from './constants';
 
 const LENGTHS = [12, 24];
 
@@ -29,6 +30,14 @@ export const ImportSeedPhrase = () => {
   const update = useStore(s => s.seedPhrase.import.update);
   const setLength = useStore(s => s.seedPhrase.import.setLength);
   const [text, setText] = useState(() => stored.join(' ').trim());
+  // the shell counts the steps from the stored length: 12 words skip the birthday
+  const write = (value: string) => {
+    setText(value);
+    const n = parsePhrase(value).length;
+    if (LENGTHS.includes(n)) {
+      setLength(n === 12 ? SeedPhraseLength.TWELVE_WORDS : SeedPhraseLength.TWENTY_FOUR_WORDS);
+    }
+  };
 
   const words = parsePhrase(text);
   const typing = !/\s$/.test(text);
@@ -50,17 +59,21 @@ export const ImportSeedPhrase = () => {
           ? `${words.length} words`
           : '24 words';
 
-  const applyFix = () => fix && setText(words.map(w => (w === typo ? fix : w)).join(' '));
+  const applyFix = () => fix && write(words.map(w => (w === typo ? fix : w)).join(' '));
 
   const submit = (e?: FormEvent) => {
     e?.preventDefault();
     if (!valid) {
       return;
     }
-    setLength(
-      words.length === 12 ? SeedPhraseLength.TWELVE_WORDS : SeedPhraseLength.TWENTY_FOUR_WORDS,
-    );
     update(words.join(' '), 0);
+    // twelve words are penumbra-only: no zcash birthday to ask, and none left
+    // over from an abandoned attempt
+    if (words.length === 12) {
+      sessionStorage.removeItem(PENDING_ZCASH_BIRTHDAY_KEY);
+      navigate(PagePath.IMPORT_PASSWORD);
+      return;
+    }
     navigate(PagePath.IMPORT_BIRTHDAY);
   };
 
@@ -69,7 +82,7 @@ export const ImportSeedPhrase = () => {
     const el = e.currentTarget;
     if (el.selectionStart === 0 && el.selectionEnd === el.value.length) {
       e.preventDefault();
-      setText(parsePhrase(e.clipboardData.getData('text')).join(' '));
+      write(parsePhrase(e.clipboardData.getData('text')).join(' '));
     }
   };
 
@@ -96,7 +109,7 @@ export const ImportSeedPhrase = () => {
         autoComplete='off'
         autoCapitalize='off'
         value={text}
-        onChange={e => setText(e.target.value)}
+        onChange={e => write(e.target.value)}
         onKeyDown={onKeyDown}
         onPaste={onPaste}
         placeholder='word word word ...'

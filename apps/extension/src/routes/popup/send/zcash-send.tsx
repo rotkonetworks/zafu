@@ -8,7 +8,11 @@ import { zignerSigningSelector } from '../../../state/zigner-signing';
 import { recentAddressesSelector } from '../../../state/recent-addresses';
 import { contactsSelector } from '../../../state/contacts';
 import { messagesSelector } from '../../../state/messages';
-import { selectEffectiveKeyInfo, selectGetVaultUnlock } from '../../../state/keyring';
+import {
+  selectEffectiveKeyInfo,
+  selectGetVaultUnlock,
+  selectPenumbraOnly,
+} from '../../../state/keyring';
 import { selectActiveZcashWallet, selectZcashWallets } from '../../../state/wallets';
 import { activeZcashStoreId } from '../../../state/pockets';
 import {
@@ -42,7 +46,13 @@ import { zcashMeLabel } from '../../../services/zcashme/label';
 import { directoryProfileByAddress } from '../../../services/zcashme/directory';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { HARDWARE_WALLET_ENABLED, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
-import { CAPS, walletKind, zcashSendRefusal, type WalletKind } from '../../../signing/wallet-kind';
+import {
+  CAPS,
+  PENUMBRA_ONLY,
+  walletKind,
+  zcashSendRefusal,
+  type WalletKind,
+} from '../../../signing/wallet-kind';
 import { persistentSurface, zcashSignerFor } from '../../../signing/resolve';
 import { connectLedgerBtc, zcashTransparentPath } from '../../../ledger/hw-btc-signer';
 import { ledgerTransparentSendFlowBtc } from '../../../ledger/hw-btc-flow';
@@ -403,7 +413,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // ironwood. Guessing orchard here would advertise funds the build refuses.
   const activePool: 'orchard' | 'ironwood' =
     sendChainHeight > 0 && sendChainHeight < nu63ActivationHeight(mainnet) ? 'orchard' : 'ironwood';
-  const refusal = kind && zcashSendRefusal(kind, SEND_FLAGS, activePool);
+  const penumbraOnly = useStore(selectPenumbraOnly);
+  const refusal = kind
+    ? zcashSendRefusal(kind, SEND_FLAGS, activePool)
+    : penumbraOnly && PENUMBRA_ONLY;
 
   const poolNotes = usePoolNotes(storeId);
 

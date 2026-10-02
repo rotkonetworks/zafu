@@ -16,6 +16,7 @@ import {
   selectGetMnemonic,
   selectGetVaultUnlock,
 } from '../state/keyring';
+import { keyInfoSupportsNetwork } from '../state/keyring/vault-ops';
 import { selectActiveZcashWallet } from '../state/wallets';
 import { activePocketBirthday, activeZcashStoreId } from '../state/pockets';
 import {
@@ -60,8 +61,12 @@ export function useZcashAutoSync() {
   const location = useLocation();
   // zcash keeps syncing while any zafu window is open and zcash is on, whatever
   // network is on screen: switching to penumbra must not stop it
-  const zcashOn = useStore(selectEnabledNetworks).includes('zcash');
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  // and never for a penumbra-only (12-word) vault
+  const zcashOn =
+    useStore(selectEnabledNetworks).includes('zcash') &&
+    !!selectedKeyInfo &&
+    keyInfoSupportsNetwork(selectedKeyInfo, 'zcash');
   const getMnemonic = useStore(selectGetMnemonic);
   const getVaultUnlock = useStore(selectGetVaultUnlock);
   const activeZcashWallet = useStore(selectActiveZcashWallet);

@@ -10,6 +10,7 @@ import { motion } from 'framer-motion';
 import { cn } from '@repo/ui/lib/utils';
 import { Mark } from '@repo/ui/components/ui/mark';
 import { usePageNav } from '../../../utils/navigate';
+import { useStore } from '../../../state';
 import { screenFor, type OnboardingArt } from './flow';
 
 const ART: Record<OnboardingArt, string> = {
@@ -36,7 +37,8 @@ export const useOnboarding = () => useOutletContext<OnboardingContext>();
 export const Onboarding = () => {
   const { pathname } = useLocation();
   const navigate = usePageNav();
-  const { art, back, step } = screenFor(pathname);
+  const twelve = useStore(s => s.seedPhrase.import.phrase.length === 12);
+  const { art, back, step } = screenFor(pathname, twelve);
   const [password, setPassword] = useState('');
   const [viewingKey, setViewingKey] = useState('');
 

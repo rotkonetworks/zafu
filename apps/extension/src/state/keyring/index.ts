@@ -445,7 +445,7 @@ export const createKeyRingSlice =
 
         const vaultId = generateVaultId();
         const encryptedData = await encrypt(ctx, mnemonic);
-        const vault = buildMnemonicVault(vaultId, name, encryptedData);
+        const vault = buildMnemonicVault(vaultId, name, encryptedData, mnemonic);
         vault.insensitive['zid'] = zid.publicKey;
 
         const newVaults = [vault, ...vaults];
@@ -1263,6 +1263,12 @@ const isHidden = (k: KeyInfo) => k.insensitive?.['hidden'] === true;
 export const selectKeyInfosForActiveNetwork = (state: AllSlices) => {
   const { keyInfos, activeNetwork } = state.keyRing;
   return keyInfos.filter(k => keyInfoSupportsNetwork(k, activeNetwork) && !isHidden(k));
+};
+
+/** the selected wallet holds penumbra only (a 12-word phrase): zcash has nothing for it */
+export const selectPenumbraOnly = (state: AllSlices) => {
+  const k = state.keyRing.selectedKeyInfo;
+  return !!k && keyInfoSupportsNetwork(k, 'penumbra') && !keyInfoSupportsNetwork(k, 'zcash');
 };
 
 export const selectEffectiveKeyInfo = (state: AllSlices) => {

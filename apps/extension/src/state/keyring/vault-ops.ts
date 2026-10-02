@@ -25,10 +25,14 @@ export const vaultsToKeyInfos = (vaults: EncryptedVault[], selectedId?: string):
     insensitive: v.insensitive,
   }));
 
+/** A 12-word phrase is penumbra-only: zcash won't work on 12 words. */
+export const penumbraOnlyPhrase = (mnemonic: string) => mnemonic.trim().split(/\s+/).length === 12;
+
 export const buildMnemonicVault = (
   vaultId: string,
   name: string,
   encryptedData: string,
+  mnemonic: string,
 ): EncryptedVault => ({
   id: vaultId,
   type: 'mnemonic',
@@ -36,7 +40,8 @@ export const buildMnemonicVault = (
   createdAt: Date.now(),
   encryptedData,
   salt: '',
-  insensitive: {},
+  // no field means every network, as for every vault made before this
+  insensitive: penumbraOnlyPhrase(mnemonic) ? { supportedNetworks: ['penumbra'] } : {},
 });
 
 export const zignerSupportedNetworks = (data: ZignerZafuImport): string[] => {
@@ -271,9 +276,6 @@ export const selectionAfterDelete = (
 };
 
 export const keyInfoSupportsNetwork = (k: KeyInfo, network: NetworkType): boolean => {
-  if (k.type === 'mnemonic') {
-    return true;
-  }
   const supported = k.insensitive['supportedNetworks'] as string[] | undefined;
   if (!supported) {
     return true;

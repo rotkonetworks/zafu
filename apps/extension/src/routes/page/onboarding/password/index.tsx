@@ -11,9 +11,10 @@ import { Input } from '@repo/ui/components/ui/input';
 import { usePageNav } from '../../../../utils/navigate';
 import { PagePath } from '../../paths';
 import { PENDING_ZCASH_BIRTHDAY_KEY } from '../constants';
-import { BIRTHDAY_PATH, originOf, passwordStrength } from '../flow';
+import { BIRTHDAY_PATH, originOf, passwordStrength, penumbraOnlyImport } from '../flow';
 import { useOnboarding } from '..';
 import { useFinalizeOnboarding } from './hooks';
+import { useStore } from '../../../../state';
 import { SEED_PHRASE_ORIGIN } from './types';
 
 const STRENGTH = [
@@ -33,11 +34,14 @@ export const SetPassword = () => {
   const [password, setPassword] = useState(kept);
   const [again, setAgain] = useState(kept);
   const { finalize, error, loading } = useFinalizeOnboarding();
+  const words = useStore(s => s.seedPhrase.import.phrase.length);
 
   // an import always carries a birthday from the step before; reached
   // without one (a reload, a typed url), go back and ask for it. Read once:
   // sealing the wallet clears it on the way out.
-  const birthdayAt = (BIRTHDAY_PATH as Partial<Record<string, PagePath>>)[origin];
+  const birthdayAt = penumbraOnlyImport(origin, words)
+    ? undefined
+    : (BIRTHDAY_PATH as Partial<Record<string, PagePath>>)[origin];
   const [needsBirthday] = useState(
     () => !!birthdayAt && !sessionStorage.getItem(PENDING_ZCASH_BIRTHDAY_KEY),
   );

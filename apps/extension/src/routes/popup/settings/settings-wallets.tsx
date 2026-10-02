@@ -7,6 +7,7 @@ import {
   type KeyInfo,
   type ZignerZafuImport,
 } from '../../../state/keyring';
+import { keyInfoSupportsNetwork } from '../../../state/keyring/vault-ops';
 import { walletsSelector } from '../../../state/wallets';
 import { zignerConnectSelector } from '../../../state/zigner';
 import { passwordSelector } from '../../../state/password';
@@ -338,13 +339,12 @@ export const SettingsWallets = ({
                 if (v.insensitive['cosmosAddresses'] && isLaunched('noble')) {
                   networks.push('cosmos');
                 }
-                // seed wallets derive keys for all networks
+                // seed wallets derive keys for every network they support
                 if (v.type === 'mnemonic') {
-                  if (!networks.includes('zcash')) {
-                    networks.push('zcash');
-                  }
-                  if (!networks.includes('penumbra')) {
-                    networks.push('penumbra');
+                  for (const n of ['zcash', 'penumbra'] as const) {
+                    if (!networks.includes(n) && keyInfoSupportsNetwork(v, n)) {
+                      networks.push(n);
+                    }
                   }
                 }
                 // frost-multisig vaults support zcash

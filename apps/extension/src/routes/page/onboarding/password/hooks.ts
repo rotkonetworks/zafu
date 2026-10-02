@@ -14,7 +14,7 @@ import { ZCASH_MAINNET_ENDPOINTS, defaultZcashEndpoint } from '../../../../confi
 import type { ZignerZafuImport } from '../../../../state/keyring/types';
 import { viewingKeyImport } from '../../../../hooks/use-viewing-key';
 import { useOnboarding } from '..';
-import { BIRTHDAY_PATH } from '../flow';
+import { BIRTHDAY_PATH, penumbraOnlyImport } from '../flow';
 import { PasswordMismatchError } from '../../../../state/keyring';
 import { resealSnapshot } from '../../../../state/keyring/reseal';
 import { keySwap } from '../../../../state/keyring-lock';
@@ -76,6 +76,7 @@ export const useFinalizeOnboarding = () => {
     enabledNetworks,
   } = useStore(keyRingSelector);
   const { viewingKey } = useOnboarding();
+  const importedLength = useStore(s => s.seedPhrase.import.phrase.length);
   const { setNetworkEndpoint } = useStore(networksSelector);
   const { walletImport, zcashWalletImport, parsedCosmosExport, walletLabel, clearZignerState } =
     useStore(zignerConnectSelector);
@@ -150,7 +151,21 @@ export const useFinalizeOnboarding = () => {
     clearZignerState();
   };
 
+  // A 12-word phrase is penumbra-only: zcash won't work on 12 words. Zcash
+  // is global, so it stays on when other wallets already use it.
+  const penumbraOnly = async () => {
+    if (!useStore.getState().keyRing.enabledNetworks.includes('penumbra')) {
+      await toggleNetwork('penumbra');
+    }
+    await setActiveNetwork('penumbra');
+  };
+
   const addMnemonic = async (password: string, origin: SEED_PHRASE_ORIGIN) => {
+    if (penumbraOnlyImport(origin, importedLength)) {
+      await addWallet(password, origin);
+      await penumbraOnly();
+      return;
+    }
     await zcashOnly();
     // Recover/import is idempotent by walletId: recovering the same seed
     // derives the same key, and the wallet layer must NOT create a second

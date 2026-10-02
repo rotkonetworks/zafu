@@ -109,6 +109,13 @@ const VIEWING_KEY: Refusal = {
   body: "it can see this wallet's transactions but cannot spend. send from the wallet that holds the keys.",
 };
 
+/** a 12-word phrase holds penumbra only; zcash has no key on it */
+export const PENUMBRA_ONLY: Refusal = {
+  icon: 'i-ph-wallet',
+  title: 'this wallet is for penumbra only',
+  body: 'please send zec from another wallet',
+};
+
 const UNKNOWN: Refusal = {
   icon: 'i-ph-question',
   title: "zafu does not recognise this wallet's signer",

@@ -4,7 +4,11 @@ import { useNavigate } from 'react-router-dom';
 
 import { useStore } from '../../../state';
 import { contactsSelector } from '../../../state/contacts';
-import { selectEffectiveKeyInfo, keyRingSelector } from '../../../state/keyring';
+import {
+  selectEffectiveKeyInfo,
+  keyRingSelector,
+  selectPenumbraOnly,
+} from '../../../state/keyring';
 import { selectActiveZcashWallet } from '../../../state/wallets';
 import { CAPS, walletKind } from '../../../signing/wallet-kind';
 import {
@@ -80,6 +84,7 @@ export const ZcashContent = ({
   const navigate = useNavigate();
 
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const penumbraOnly = useStore(selectPenumbraOnly);
   // the turnstile migration is an ironwood build on the zigner QR: offered
   // only to a signer that reads it (not keystone, ledger, frost or a viewing key)
   const zcashWallet = useStore(selectActiveZcashWallet);
@@ -189,10 +194,16 @@ export const ZcashContent = ({
   if (!hasWallet) {
     return (
       <div className='flex flex-col items-center justify-center py-12 text-center'>
-        <div className='text-sm text-fg-muted'>no zcash wallet</div>
-        <div className='text-xs text-fg-muted mt-1'>
-          create a wallet or import a viewing key from zigner
-        </div>
+        {penumbraOnly ? (
+          <div className='text-sm text-fg-muted'>this wallet is for penumbra only</div>
+        ) : (
+          <>
+            <div className='text-sm text-fg-muted'>no zcash wallet</div>
+            <div className='text-xs text-fg-muted mt-1'>
+              create a wallet or import a viewing key from zigner
+            </div>
+          </>
+        )}
       </div>
     );
   }
