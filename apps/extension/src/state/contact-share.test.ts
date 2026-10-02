@@ -4,6 +4,7 @@ import { parseLink, toUri } from '../links/router';
 import {
   cardLinkPayload,
   contactCardMemoHex,
+  readCardPayload,
   myAddressForContact,
   replyAddress,
   type DeriveAddress,
@@ -114,5 +115,23 @@ describe('a card link', () => {
     const memo = new Uint8Array(512);
     memo.set(back);
     expect(bytesToHex(memo)).toBe(hex);
+  });
+
+  it('reads back to the card it carried, with no name and its seal key', () => {
+    const address = 'u1' + 'q'.repeat(140);
+    const zid = 'ab'.repeat(32);
+    const payload = cardLinkPayload(
+      contactCardMemoHex({ senderName: '', myAddress: address, zid })!,
+    );
+    expect(readCardPayload(payload)).toMatchObject({ name: '', address, zid });
+  });
+
+  it('is nothing when the link carries something else', () => {
+    const notUa = cardLinkPayload(contactCardMemoHex({ senderName: 'x', myAddress: 't1abc' })!);
+    expect(readCardPayload(notUa)).toBeUndefined();
+    expect(readCardPayload('A'.repeat(32))).toBeUndefined();
+    expect(readCardPayload('not base64 !!')).toBeUndefined();
+    expect(readCardPayload('A'.repeat(800))).toBeUndefined();
+    expect(readCardPayload('')).toBeUndefined();
   });
 });

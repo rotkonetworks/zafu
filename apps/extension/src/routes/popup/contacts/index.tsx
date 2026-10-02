@@ -13,6 +13,8 @@ import { useStore } from '../../../state';
 import type { Contact, ContactNetwork } from '../../../state/contacts';
 import { ScreenHeader } from '../../../components/screen-header';
 import { PopupPath, contactPath } from '../paths';
+import { looksLikeLink } from '../../../links/router';
+import { QrScanner } from '../../../shared/components/qr-scanner';
 
 /** the network an address is on, read from its prefix */
 export const networkOf = (address: string): ContactNetwork =>
@@ -25,12 +27,22 @@ export const contactStatus = (c: Contact): { line: string; warn?: boolean } =>
 const byName = (a: Contact, b: Contact) =>
   Number(!!b.favorite) - Number(!!a.favorite) || a.name.localeCompare(b.name);
 
-/** add someone: a name and an address, one sheet */
+/** add someone: scan their card, paste their card link, or a name and an address */
 export const AddContactSheet = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
   const navigate = useNavigate();
   const { addContact, addAddress } = useStore(s => s.contacts);
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
+  const [scanning, setScanning] = useState(false);
+  /** a card link (or any zafu/zcash link) goes to the link reader, which opens the card */
+  const follow = (text: string, via: 'pasted' | 'scanned'): boolean => {
+    if (!looksLikeLink(text)) {
+      return false;
+    }
+    onClose();
+    navigate(PopupPath.LINK, { state: { uri: text.trim(), via } });
+    return true;
+  };
   const save = async () => {
     const contact = await addContact({ name: name.trim() });
     if (address.trim()) {
@@ -40,33 +52,56 @@ export const AddContactSheet = ({ open, onClose }: { open: boolean; onClose: () 
     navigate(contactPath(contact.id));
   };
   return (
-    <Sheet open={open} onOpenChange={o => !o && onClose()} title='add someone'>
-      <form
-        className='flex flex-col gap-3'
-        onSubmit={e => {
-          e.preventDefault();
-          void save();
-        }}
-      >
-        <Input
-          aria-label='name'
-          placeholder='name'
-          value={name}
-          onChange={e => setName(e.target.value)}
-          autoFocus
-        />
-        <Input
-          aria-label='address'
-          placeholder='their zcash or penumbra address'
-          value={address}
-          onChange={e => setAddress(e.target.value)}
-          className='font-mono text-xs'
-        />
-        <Button type='submit' disabled={!name.trim()}>
-          save
+    <>
+      <Sheet open={open && !scanning} onOpenChange={o => !o && onClose()} title='add someone'>
+        <Button variant='secondary' onClick={() => setScanning(true)}>
+          <span className='i-lucide-scan-line size-4' aria-hidden='true' />
+          scan their card
         </Button>
-      </form>
-    </Sheet>
+        <form
+          className='flex flex-col gap-3'
+          onSubmit={e => {
+            e.preventDefault();
+            if (!follow(address, 'pasted')) {
+              void save();
+            }
+          }}
+        >
+          <Input
+            aria-label='address'
+            placeholder='their card link, or an address'
+            value={address}
+            onChange={e => {
+              if (!follow(e.target.value, 'pasted')) {
+                setAddress(e.target.value);
+              }
+            }}
+            className='font-mono text-xs'
+          />
+          <Input
+            aria-label='name'
+            placeholder='name'
+            value={name}
+            onChange={e => setName(e.target.value)}
+          />
+          <Button type='submit' disabled={!name.trim()}>
+            save
+          </Button>
+        </form>
+      </Sheet>
+      {open && scanning && (
+        <QrScanner
+          title='scan their card'
+          onScan={data => {
+            setScanning(false);
+            if (!follow(data, 'scanned')) {
+              setAddress(data);
+            }
+          }}
+          onClose={() => setScanning(false)}
+        />
+      )}
+    </>
   );
 };
 

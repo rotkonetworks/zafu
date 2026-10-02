@@ -85,6 +85,10 @@ export const popupRoutes: RouteObject[] = [
             lazy: lazyScreen('contacts'),
           },
           {
+            path: PopupPath.CONTACT_CARD,
+            lazy: lazyScreen('contactCard'),
+          },
+          {
             path: PopupPath.CONTACT,
             lazy: lazyScreen('contact'),
           },

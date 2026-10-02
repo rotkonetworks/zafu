@@ -3,7 +3,14 @@
  * that carries it under your name.
  */
 
-import { bytesToHex, encodeContactCard } from '@repo/wallet/networks/zcash/memo-codec';
+import {
+  bytesToHex,
+  decodeContactCard,
+  decodeMemo,
+  encodeContactCard,
+  MemoType,
+  type ContactCard,
+} from '@repo/wallet/networks/zcash/memo-codec';
 import { contactDiversifierIndex } from '@repo/wallet/networks/zcash/diversified-address';
 import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 
@@ -98,4 +105,30 @@ export const cardLinkPayload = (memoHex: string): string => {
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=+$/, '');
+};
+
+/** a zcash unified address in its bech32 shape (the checksum is the wasm's to check) */
+const UA = /^u1[02-9ac-hj-np-z]{100,}$/;
+
+/**
+ * The card inside a card link's `#` part, or undefined when it is not one: a
+ * single contact-card memo carrying a unified address. A v1 card is not
+ * signed, so everything in it is the sender's word until you meet.
+ */
+export const readCardPayload = (payload: string): ContactCard | undefined => {
+  try {
+    const bytes = Uint8Array.from(atob(payload.replace(/-/g, '+').replace(/_/g, '/')), c =>
+      c.charCodeAt(0),
+    );
+    if (bytes.length > 512) {
+      return undefined;
+    }
+    const memo = new Uint8Array(512);
+    memo.set(bytes);
+    const parsed = decodeMemo(memo);
+    const card = parsed?.type === MemoType.ContactCard ? decodeContactCard(parsed.payload) : null;
+    return card && UA.test(card.address) ? card : undefined;
+  } catch {
+    return undefined;
+  }
 };

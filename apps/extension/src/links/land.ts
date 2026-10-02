@@ -74,7 +74,10 @@ const LAND: { [K in Intent['kind']]: (i: Extract<Intent, { kind: K }>, via?: str
               },
             },
     screen: i => ({ to: SCREENS[i.screen] }),
-    contact: () => ({ line: 'adding a contact from a link is coming · thank you for waiting' }),
+    // the query, not route state, so the card survives the unlock redirect
+    contact: (i, via) => ({
+      to: `${PopupPath.CONTACT_CARD}?card=${encodeURIComponent(i.card)}${withVia(via)}`,
+    }),
     join: () => ({ line: 'groups are coming soon · please keep the code until then' }),
   };
 

@@ -77,6 +77,7 @@ export const popupScreens = {
   groupChatThread: () => import('./inbox/group-chat-thread').then(m => m.GroupChatThread),
   contacts: () => import('./contacts').then(m => m.ContactsPage),
   contact: () => import('./contacts/contact').then(m => m.ContactPage),
+  contactCard: () => import('./contacts/card').then(m => m.CardPage),
   link: () => import('./link').then(m => m.LinkPage),
   send: () => import('./send').then(m => m.SendPage),
   receive: () => import('./receive').then(m => m.ReceivePage),

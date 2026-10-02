@@ -36,11 +36,20 @@ describe('land', () => {
     });
   });
 
+  it('opens a card to review, from the app and from the web, keeping where it came from', () => {
+    const card = 'A'.repeat(32);
+    expect(landOf(`zafu:contact#${card}`)).toEqual({
+      to: `${PopupPath.CONTACT_CARD}?card=${card}`,
+    });
+    expect(land(parseLink(`https://zafu.pro/c#${card}`), 'scanned')).toEqual({
+      to: `${PopupPath.CONTACT_CARD}?card=${card}&via=scanned`,
+    });
+  });
+
   it('answers what is not ready with one calm line', () => {
     expect(landOf('zafu:join/673-chaos-mail')).toEqual({
       line: 'groups are coming soon · please keep the code until then',
     });
-    expect(landOf(`zafu:contact#${'A'.repeat(32)}`)).toHaveProperty('line');
     expect(landOf(`zcash:?address=${T}&address.1=${T}`)).toEqual({
       line: 'this request pays 2 addresses · zafu pays one at a time, for now',
     });

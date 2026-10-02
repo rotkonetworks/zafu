@@ -12,6 +12,8 @@ export enum PopupPath {
   INBOX_GROUP = '/inbox/group/:walletId',
   CONTACTS = '/contacts',
   CONTACT = '/contacts/:contactId',
+  /** a card someone gave you, to review and save (`?card=<payload>&via=`) */
+  CONTACT_CARD = '/contacts/card',
   TOOLS = '/tools',
   SETTINGS = '/settings',
 
