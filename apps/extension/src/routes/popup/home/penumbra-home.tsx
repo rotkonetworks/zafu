@@ -1,4 +1,4 @@
-import { Fragment, lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -36,12 +36,8 @@ import { QUOTES } from '../../../penumbra/quotes';
 import { SyncStrip } from '../../../components/wallet/sync-strip';
 import { EmptyBox, HomeScreen } from './home-screen';
 import { BalanceGroup, BalanceRow, Tile } from '../../../components/wallet/balance-rows';
+import { useTransparentLines } from './transparent-lines';
 import type { BalanceView } from '../../../components/wallet/balance-hero';
-
-// the transparent chains under penumbra; lazy so other homes don't pay the chunk
-const CosmosSubwallets = lazy(() =>
-  import('./cosmos-subwallets').then(m => ({ default: m.CosmosSubwallets })),
-);
 
 const look = HOME_LOOK.penumbra;
 
@@ -170,10 +166,13 @@ const AssetRow = ({
   asset: a,
   usd,
   onOpen,
+  below,
 }: {
   asset: Asset;
   usd?: Book<TotalIn>['usd'];
   onOpen: () => void;
+  /** its unshielded side, when a deposit address can hold it */
+  below?: ReactNode;
 }) => {
   const { inUsd, toggle } = usePenumbraRowsInUsd();
   const v = valueOf(a, usd);
@@ -189,6 +188,7 @@ const AssetRow = ({
         v ? `${a.symbol.toLowerCase()} · ${fmtIn(v.price, 'usd', true)}` : a.symbol.toLowerCase()
       }
       onPress={onOpen}
+      below={below}
       action={
         <button
           onClick={() => a.unit && toggle(a.unit.id)}
@@ -207,6 +207,7 @@ const AssetRow = ({
 /** penumbra home: the shared home, read from the view service */
 export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: ReactNode }) => {
   const queryClient = useQueryClient();
+  const unshielded = useTransparentLines();
   const { tip, height, from, ask, walletId, error: syncError } = useSyncProgress();
   const [later, setLater] = useState(false);
   // the shared RAW balances cache (preload, send, swap read it too); this
@@ -306,24 +307,29 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
         >
           your balances did not load · nothing is lost
         </StatusSlot>
-      ) : view === 'loading' ? null : empty ? (
-        <EmptyBox look={look} />
-      ) : (
-        assets &&
-        assets.length > 0 && (
-          <BalanceGroup heading={look.heading}>
-            {assets.map(a => (
-              <AssetRow key={a.key} asset={a} usd={book?.usd} onOpen={() => setOpen(a)} />
-            ))}
-          </BalanceGroup>
-        )
+      ) : view === 'loading' ? null : (
+        <>
+          {empty && <EmptyBox look={look} />}
+          {/* one assets list: each asset shielded, with its unshielded side under
+              it; deposit addresses use the wallet's own derivation, not an account */}
+          {(!empty || unshielded.active) && (
+            <BalanceGroup heading={look.heading}>
+              {!empty &&
+                assets?.map(a => (
+                  <AssetRow
+                    key={a.key}
+                    asset={a}
+                    usd={book?.usd}
+                    onOpen={() => setOpen(a)}
+                    below={unshielded.lineFor(a.symbol)}
+                  />
+                ))}
+              {unshielded.rows(empty ? [] : (assets ?? []).map(a => a.symbol))}
+            </BalanceGroup>
+          )}
+          {unshielded.sheet}
+        </>
       )}
-
-      {/* the transparent chains tied to the same key, checked only on request.
-          Not split by Penumbra account: burners use the wallet's own derivation. */}
-      <Suspense fallback={null}>
-        <CosmosSubwallets />
-      </Suspense>
 
       <HistoryContent network='penumbra' penumbraAccount={account} limit={3} />
 

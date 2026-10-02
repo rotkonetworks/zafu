@@ -46,11 +46,12 @@ const turningOn = new Set<NetworkType>();
 export const useChainInUse = (id: string | undefined) => {
   const chainId = getSubnetworks('penumbra').find(n => n === id);
   const on = useStore(s => !chainId || s.keyRing.enabledNetworks.includes(chainId));
-  const enable = useEnableNetwork();
+  // only the chain itself: checking its balances is asked for on the penumbra balance
+  const toggleNetwork = useStore(s => s.keyRing.toggleNetwork);
   useEffect(() => {
     if (chainId && !on && !turningOn.has(chainId)) {
       turningOn.add(chainId);
-      void enable(chainId)
+      void toggleNetwork(chainId)
         .then(refreshEgress)
         .finally(() => turningOn.delete(chainId));
     }

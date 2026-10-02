@@ -95,6 +95,13 @@ export interface PrivacySettings {
   enableBackgroundSync: boolean;
 
   /**
+   * check the transparent deposit addresses on their own each time the
+   * penumbra balance opens, once the user agreed to the first check.
+   * false (default): only a tap on a transparent line asks.
+   */
+  autoCheckTransparent: boolean;
+
+  /**
    * enable price fetching (affects all networks)
    * when false (default): no fiat price queries
    * when true: fetches prices from external apis
@@ -207,6 +214,7 @@ export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   enableTransactionHistory: false,
   historyAsked: false,
   enableBackgroundSync: false,
+  autoCheckTransparent: false,
   enablePriceFetching: false,
   enableExplorerLinks: false,
   openZcashLinks: true,
