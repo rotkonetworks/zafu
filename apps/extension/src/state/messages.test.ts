@@ -99,3 +99,44 @@ describe('messages - outgoing send lifecycle', () => {
     expect(messages().messages[0]!.failureReason).toBe('insufficient funds');
   });
 });
+
+describe('messages - penumbra memos stored before amounts had an asset', () => {
+  let useStore: TestStore;
+  const messages = () => useStore.getState().messages;
+
+  beforeEach(() => {
+    localMock.clear();
+    sessionMock.clear();
+    useStore = create<AllSlices>()(initializeStore(sessionExtStorage, localExtStorage));
+  });
+
+  const memo = (amount: string, asset?: string, timestamp = 0) => ({
+    network: 'penumbra' as const,
+    recipientAddress: 'penumbra1me',
+    content: 'from the door',
+    txId: 'ab12',
+    blockHeight: 100,
+    timestamp,
+    direction: 'received' as const,
+    read: false,
+    amount,
+    asset,
+  });
+
+  test('a re-read repairs the raw amount, asset and time, and adds no duplicate', async () => {
+    await messages().addMessages([memo('50000000')]);
+    await messages().addMessages([memo('50', 'um', 1_790_000_000_000)]);
+    expect(messages().messages).toHaveLength(1);
+    expect(messages().messages[0]).toMatchObject({
+      amount: '50',
+      asset: 'um',
+      timestamp: 1_790_000_000_000,
+    });
+  });
+
+  test('a memo that already has its asset is left alone', async () => {
+    await messages().addMessages([memo('50', 'um', 5)]);
+    await messages().addMessages([memo('51', 'um', 9)]);
+    expect(messages().messages[0]).toMatchObject({ amount: '50', timestamp: 5 });
+  });
+});

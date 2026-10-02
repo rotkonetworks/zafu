@@ -258,12 +258,18 @@ export const createMessagesSlice =
       },
 
       addMessages: async messagesData => {
-        const existingTxIds = new Set(safeMessages().map(m => m.txId));
+        const existing = new Map(safeMessages().map(m => [m.txId, m]));
         const newMessages = messagesData
-          .filter(m => !existingTxIds.has(m.txId))
+          .filter(m => !existing.has(m.txId))
           .map(m => ({ ...m, id: generateId() }));
+        // a penumbra memo stored before its amount carried an asset takes the
+        // re-read amount, asset and time; nothing else about it changes
+        const repairs = messagesData.filter(m => {
+          const old = existing.get(m.txId);
+          return old?.network === 'penumbra' && old.amount && !old.asset && m.asset;
+        });
 
-        if (newMessages.length === 0) {
+        if (newMessages.length === 0 && repairs.length === 0) {
           return;
         }
 
@@ -272,6 +278,14 @@ export const createMessagesSlice =
             state.messages.messages = [];
           }
           state.messages.messages.push(...newMessages);
+          for (const r of repairs) {
+            const m = state.messages.messages.find(x => x.txId === r.txId);
+            if (m) {
+              m.amount = r.amount;
+              m.asset = r.asset;
+              m.timestamp = r.timestamp || m.timestamp;
+            }
+          }
         });
 
         await local.set('messages' as keyof LocalStorageState, safeMessages() as never);

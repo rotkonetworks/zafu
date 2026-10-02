@@ -11,7 +11,12 @@ import { useStore } from '../state';
 import { messagesSelector } from '../state/messages';
 import { bech32mAddress } from '@penumbra-zone/bech32m/penumbra';
 import { getAddress as getAddressFromView } from '@penumbra-zone/getters/address-view';
-import { getAmount as getAmountFromView } from '@penumbra-zone/getters/value-view';
+import {
+  getAmount as getAmountFromView,
+  getDisplayDenomExponentFromValueView,
+  getSymbolFromValueView,
+} from '@penumbra-zone/getters/value-view';
+import { fromUnits } from '../state/swap/provider';
 import type { TransactionInfo } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 
 interface ExtractedMemo {
@@ -135,7 +140,10 @@ function extractMemoFromTransaction(txInfo: TransactionInfo): ExtractedMemo | nu
           if (amountValue) {
             const lo = amountValue.lo ?? 0n;
             const hi = amountValue.hi ?? 0n;
-            amount = ((hi << 64n) + lo).toString();
+            // shown as the asset's display amount, like zcash memos ("50 um")
+            const exponent = getDisplayDenomExponentFromValueView.optional(note.value) ?? 0;
+            amount = fromUnits((hi << 64n) + lo, exponent, exponent);
+            asset = getSymbolFromValueView.optional(note.value)?.toLowerCase();
           }
         }
       }
@@ -211,8 +219,10 @@ export function usePenumbraMemos(walletId: string) {
 
     const synced = (await viewClient.status({})).fullSyncHeight;
     const from = await readScanned(walletId);
+    // memos stored before amounts carried their asset are read again once
+    const repairing = messages.messages.some(m => m.network === 'penumbra' && m.amount && !m.asset);
     // the view service starts over after a resync from scratch; so does this
-    const startHeight = from > synced ? 0n : from;
+    const startHeight = from > synced || repairing ? 0n : from;
 
     // only transactions the last read has not seen
     for await (const response of viewClient.transactionInfo({ startHeight })) {
@@ -230,7 +240,7 @@ export function usePenumbraMemos(walletId: string) {
             .join('')
         : '';
 
-      if (messages.hasMessage(txId)) {
+      if (messages.hasMessage(txId) && !repairing) {
         continue;
       }
 

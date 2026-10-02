@@ -63,8 +63,11 @@ export const previewOf = (m: Message): string => {
     : '';
 };
 
-/** 14:02 today, "yesterday", a weekday this week, else "sep 12" */
+/** 14:02 today, "yesterday", a weekday this week, else "sep 12"; empty when unknown */
 export const whenOf = (ts: number, now = Date.now()): string => {
+  if (!ts) {
+    return '';
+  }
   const d = new Date(ts);
   const n = new Date(now);
   const days = Math.round(

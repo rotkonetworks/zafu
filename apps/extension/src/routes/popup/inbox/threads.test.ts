@@ -49,6 +49,9 @@ describe('whenOf', () => {
     expect(whenOf(new Date(2026, 9, 1, 9, 0).getTime(), now)).toBe('yesterday');
     expect(whenOf(new Date(2026, 8, 12).getTime(), now)).toBe('sep 12');
   });
+  it('says nothing for an unknown time instead of "jan 1"', () => {
+    expect(whenOf(0, now)).toBe('');
+  });
 });
 
 describe('cardOf', () => {

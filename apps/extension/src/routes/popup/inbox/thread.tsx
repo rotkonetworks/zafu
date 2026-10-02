@@ -123,6 +123,9 @@ const Item = ({ m, from }: { m: Message; from: string }) => {
   const link = ZCASH_LINK.exec(m.content)?.[0];
   const text = (link ? m.content.replace(link, '') : m.content).trim();
   const status = m.status ? STATUS[m.status] : '';
+  // a memo whose block time could not be read shows its block, never a made-up date
+  const when =
+    whenOf(m.timestamp) || (m.blockHeight ? `block ${m.blockHeight.toLocaleString('en')}` : '');
   return (
     <>
       {text && (
@@ -144,7 +147,8 @@ const Item = ({ m, from }: { m: Message; from: string }) => {
         <div className='flex items-center gap-1.5 self-center text-[11px] text-fg-muted'>
           <span className={cn('size-1.5', status ? 'border border-fg-muted' : 'bg-success')} />
           {mine ? 'you paid' : 'received'} {m.amount}{' '}
-          {m.network === 'zcash' ? 'zec' : (m.asset ?? '')} · {whenOf(m.timestamp)}
+          {m.network === 'zcash' ? 'zec' : (m.asset ?? '')}
+          {when && ` · ${when}`}
         </div>
       )}
       {status && (
