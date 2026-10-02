@@ -14,7 +14,14 @@
  * realms and the patched globals live in `./egress`.
  */
 
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import {
+  COSMOS_CHAINS,
+  getCosmosChain,
+  onCosmosChainsAdded,
+  type CosmosChainConfig,
+  type CosmosChainId,
+} from '@repo/wallet/networks/cosmos/chains';
+import { LIVE_REGISTRY_DIR, REGISTRY_EGRESS } from '../transparent/registry-endpoint';
 import { ZCASHME_BASE_URL } from '../services/zcashme/api';
 import { THORNAME_PATH, THORNODE_URLS } from '../services/thornode';
 import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../config/contact-discovery-relay';
@@ -38,7 +45,7 @@ export const rpcPoolKey = (chainId: CosmosChainId): string =>
       : `${chainId}RpcEndpoints`;
 
 /** The storage keys the policy reads. A change to any of them recompiles the table. */
-export const EGRESS_INPUT_KEYS: readonly string[] = [
+export const EGRESS_INPUT_KEYS: string[] = [
   'enabledNetworks',
   'networkEndpoints',
   'grpcEndpoint',
@@ -137,7 +144,22 @@ const multisigRelays = (i: EgressInputs): string[] =>
  * prefix), where the earlier row wins: the configured endpoint before the
  * preset pool it came from.
  */
-export const DESTINATIONS: readonly DestinationSpec[] = [
+/** a cosmos chain's nodes: on while a flow uses the chain (useChainInUse) */
+const chainNodes = (chain: CosmosChainConfig): DestinationSpec => ({
+  id: chain.id,
+  label: `${chain.name.toLowerCase()} nodes`,
+  purpose: 'chain-rpc',
+  gate: { kind: 'network', networks: [chain.id] },
+  urls: i => [
+    endpoint(i, chain.id),
+    chain.rpcEndpoint,
+    chain.restEndpoint,
+    ...(chain.rpcEndpoints ?? []),
+    ...rpcPool(i, chain.id),
+  ],
+});
+
+export const DESTINATIONS: DestinationSpec[] = [
   {
     id: 'zcash',
     label: 'zcash light client',
@@ -171,23 +193,16 @@ export const DESTINATIONS: readonly DestinationSpec[] = [
   },
   // the penumbra asset registry (json + icons) is bundled at build time
   // (@penumbrafi/registry, see packages/context/src/registry-client.ts and
-  // shared/components/registry-icons.ts) - there is no runtime destination
-  // for it any more, so raw.githubusercontent.com is simply unknown.
-  ...Object.values(COSMOS_CHAINS).map(
-    (chain): DestinationSpec => ({
-      id: chain.id,
-      label: `${chain.name.toLowerCase()} nodes`,
-      purpose: 'chain-rpc',
-      gate: { kind: 'network', networks: [chain.id] },
-      urls: i => [
-        endpoint(i, chain.id),
-        chain.rpcEndpoint,
-        chain.restEndpoint,
-        ...(chain.rpcEndpoints ?? []),
-        ...rpcPool(i, chain.id),
-      ],
-    }),
-  ),
+  // shared/components/registry-icons.ts). The one runtime copy is the signed
+  // newer registry below, asked for when a chain zafu doesn't know goes live.
+  {
+    id: REGISTRY_EGRESS,
+    label: 'penumbra registry updates',
+    purpose: 'registry',
+    gate: { kind: 'optional' },
+    urls: () => [LIVE_REGISTRY_DIR],
+  },
+  ...Object.values(COSMOS_CHAINS).map(chainNodes),
   ...Object.entries(OTHER_NETWORKS).map(
     ([id, urls]): DestinationSpec => ({
       id,
@@ -318,6 +333,17 @@ export const DESTINATIONS: readonly DestinationSpec[] = [
     hidden: true,
   },
 ];
+
+// a verified live registry can add chains after this module loaded: give each
+// its gated row and its rpc-pool key, like the bundled ones
+onCosmosChainsAdded(ids => {
+  for (const id of ids) {
+    if (!DESTINATIONS.some(d => d.id === id)) {
+      DESTINATIONS.push(chainNodes(getCosmosChain(id)));
+      EGRESS_INPUT_KEYS.push(rpcPoolKey(id));
+    }
+  }
+});
 
 export const destinationSpec = (id: string): DestinationSpec | undefined =>
   DESTINATIONS.find(d => d.id === id);

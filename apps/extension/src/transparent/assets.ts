@@ -11,7 +11,8 @@
  * assets are known from its config.
  */
 
-import { ChainRegistryClient } from '@penumbrafi/registry';
+import { ChainRegistryClient, Registry } from '@penumbrafi/registry';
+import { storedRegistryJson } from './registry-live';
 import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 
 export interface TransparentAsset {
@@ -29,24 +30,28 @@ export interface HeldAsset extends TransparentAsset {
 
 const registryCache = new Map<string, Map<string, TransparentAsset>>();
 
-type Registry = ReturnType<ChainRegistryClient['bundled']['get']>;
 let liveRegistry: Registry | undefined;
 let refreshing: Promise<void> | undefined;
 
 /**
- * Fetch the live penumbra registry once per session (bundled copy if it can't
- * be reached). Resolves when later `knownAssets` calls will see it.
+ * Use the signed newer registry when one is stored (transparent/registry-live),
+ * else the bundled copy. Never the network. Resolves when later `knownAssets`
+ * calls will see it.
  */
 export const refreshRegistryAssets = (): Promise<void> =>
-  (refreshing ??= new ChainRegistryClient().remote
-    .getWithBundledBackup('penumbra-1')
-    .then(r => {
-      liveRegistry = r;
-      registryCache.clear();
+  (refreshing ??= storedRegistryJson()
+    .then(json => {
+      if (json) {
+        liveRegistry = new Registry(json);
+        registryCache.clear();
+      }
     })
-    .catch(err => {
-      console.warn('[transparent] live registry unavailable, using the bundled one', err);
-    }));
+    .catch(() => undefined));
+
+/** after a newer signed registry was fetched: read it again on next use */
+export const forgetRegistryAssets = () => {
+  refreshing = undefined;
+};
 
 /** assets Penumbra accepts over `penumbraChannel` (penumbra side), by lower-cased denom */
 function registryAssets(penumbraChannel: string): Map<string, TransparentAsset> {

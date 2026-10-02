@@ -12,7 +12,7 @@
 
 import { fromBech32 } from '@cosmjs/encoding';
 
-import { ChainRegistryClient } from '@penumbrafi/registry';
+import { ChainRegistryClient, type Chain } from '@penumbrafi/registry';
 import { chainsFromRegistry } from './registry-chains';
 
 /** a chain-registry chain name, e.g. 'osmosis' */
@@ -232,6 +232,44 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
   ...chainsFromRegistry(registryConnections()),
   ...PRESETS,
 };
+
+type ChainsListener = (added: CosmosChainId[]) => void;
+const listeners = new Set<ChainsListener>();
+
+/**
+ * Tables built from COSMOS_CHAINS when their module loads (networks, egress
+ * rows) register here, and are told which chains a verified live registry
+ * added. Returns the unsubscribe.
+ */
+export function onCosmosChainsAdded(listener: ChainsListener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+/**
+ * Layers a verified live copy of the registry over the bundled one, in place
+ * (every holder of COSMOS_CHAINS sees it): its chains replace bundled ones of
+ * the same id, the presets still win. Returns the chains that are new.
+ */
+export function applyLiveConnections(connections: readonly Chain[]): CosmosChainId[] {
+  const live = chainsFromRegistry(connections);
+  const added: CosmosChainId[] = [];
+  for (const [id, config] of Object.entries(live)) {
+    if (id in PRESETS) {
+      continue;
+    }
+    if (!(id in COSMOS_CHAINS)) {
+      added.push(id);
+    }
+    COSMOS_CHAINS[id] = config;
+  }
+  if (added.length) {
+    for (const l of listeners) {
+      l(added);
+    }
+  }
+  return added;
+}
 
 /** a known chain's config; an id from outside COSMOS_CHAINS is a bug, so it throws */
 export function getCosmosChain(id: CosmosChainId): CosmosChainConfig {

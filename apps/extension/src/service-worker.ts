@@ -33,6 +33,8 @@ import {
 } from './message/listen/contact-discovery-request';
 import { destinationConsentResultListener } from './net/prompt';
 import { runNetEgressMigration } from './net/egress-migrate';
+import { loadStoredRegistry } from './transparent/registry-live';
+import { refreshEgress } from './net/egress';
 import { NET_EGRESS_INTERNAL_METHODS } from './message/listen/zafu-method-names';
 import { linkListener } from './message/listen/links';
 import { openWalletRoute } from './message/listen/external-easteregg';
@@ -382,6 +384,11 @@ localExtStorage.addListener(changes => {
 const initHandler = async () => {
   // v1 egress ledger -> default deny, once (see net/egress-migrate.ts)
   await runNetEgressMigration().catch(() => undefined);
+
+  // chains from a verified newer registry, then their egress rows (storage only)
+  if ((await loadStoredRegistry().catch(() => [])).length) {
+    await refreshEgress();
+  }
 
   // run any pending IDB clears requested before the previous reload,
   // BEFORE wallet services open new connections (which would block deletion)
