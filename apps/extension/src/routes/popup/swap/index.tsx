@@ -43,6 +43,9 @@ import { CrosschainSwap } from './crosschain';
 import { splitLoHi } from '@penumbrafi/types/lo-hi';
 import { fromUnits, toUnits } from '../../../state/swap/provider';
 import { traceOut, u128 } from './penumbra-units';
+import { reachOf, splitByReach } from './reachable';
+import { usePenumbraRoutes } from '../../../transparent/penumbra-routes';
+import { chainByChainId } from '@repo/wallet/networks/cosmos/chains';
 
 /**
  * Router state accepted by the swap page. Set from the row-level "Swap X"
@@ -128,6 +131,8 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
   const [pick, setPick] = useState<'in' | 'out'>();
   const [selectedIn, setSelectedIn] = useState<InputAsset | undefined>();
   const [selectedOut, setSelectedOut] = useState<OutputAsset | undefined>();
+  const [showClosed, setShowClosed] = useState(false);
+  const routes = usePenumbraRoutes();
 
   // fetch balances
   // The ['balances', account] cache holds the RAW list (the home screen
@@ -293,7 +298,19 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
       <Sensitive>{`${simulation?.outputAmount ?? '0'} ${unitOut}`}</Sensitive>
     </>
   );
-  const outChoices = outputAssets.filter(a => !sameId(a.assetId, selectedIn?.assetId));
+  const { shown: reachableOut, hidden: closedOut } = splitByReach(
+    outputAssets.filter(a => !sameId(a.assetId, selectedIn?.assetId)),
+    a => a.metadata?.base,
+    a => inputAssets.some(i => sameId(i.assetId, a.assetId)),
+    routes,
+  );
+  const outChoices = showClosed ? [...reachableOut, ...closedOut] : reachableOut;
+  const outDescription = (a: OutputAsset) => {
+    const reach = reachOf(a.metadata?.base, routes);
+    return reach.reachable
+      ? reach.via && chainByChainId(reach.via)?.name.toLowerCase()
+      : `${reach.via} · can't leave penumbra`;
+  };
 
   return (
     <PenumbraFlow
@@ -381,8 +398,26 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
             title='you get'
             open={pick === 'out'}
             onOpenChange={o => setPick(o ? 'out' : undefined)}
-            picks={outChoices.map((a, i) => ({ key: i, label: a.symbol }))}
+            picks={outChoices.map((a, i) => ({
+              key: i,
+              label: a.symbol,
+              description: outDescription(a),
+            }))}
             onPick={i => setSelectedOut(outChoices[i])}
+            foot={
+              closedOut.length > 0 && (
+                <Button
+                  variant='quiet'
+                  size='sm'
+                  onClick={() => setShowClosed(!showClosed)}
+                  className='w-full'
+                >
+                  {showClosed
+                    ? 'hide closed channels'
+                    : `show ${closedOut.length} from closed channels`}
+                </Button>
+              )
+            }
           />
         </>
       )}
