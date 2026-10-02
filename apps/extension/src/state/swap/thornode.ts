@@ -260,19 +260,20 @@ export const nodeCost = (
   const routeOut = BigInt(q.fees.liquidity ?? 0) + BigInt(q.fees.outbound ?? 0);
   const gross = expected + BigInt(q.fees.total);
   const inbound = into ? inboundFee(q) : undefined;
-  const share = (x: bigint, of: bigint) => (of ? Number((x * 10_000n) / of) : 0);
+  // to the nearest bps, never truncated down, so a fee is not shown smaller than it is
+  const share = (x: bigint, of: bigint) => (of ? Number((x * 20_000n + of) / (2n * of)) : 0);
   return costOf([
     ...(inbound !== undefined && amountIn
       ? [
           {
             label: 'network fee in',
             bps: share(inbound, amountIn),
-            out: out((inbound * expected) / amountIn),
+            out: out((inbound * gross) / amountIn),
             inText: `~${fromUnits(inbound, NODE_DECIMALS)} ${inUnit}`,
           },
         ]
       : []),
-    { label: name, bps: q.fees.total_bps ?? share(routeOut, gross), out: out(routeOut) },
+    { label: name, bps: share(routeOut, gross), out: out(routeOut) },
     { label: 'zafu fee', bps: 0, out: 0n, zafu: true },
   ]);
 };

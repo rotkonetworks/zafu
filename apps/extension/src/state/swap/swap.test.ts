@@ -9,14 +9,13 @@ vi.mock('../../net/egress-opt-in', () => ({
   },
 }));
 
-const fee = vi.hoisted(() => ({ beta: false, recipient: '' }));
+const fee = vi.hoisted(() => ({ recipient: '' }));
 vi.mock('../../config/swap-fee', async orig => {
   const real = await orig<typeof import('../../config/swap-fee')>();
   return {
     ...real,
     zafuListBps: () => real.zafuListBps(fee.recipient),
-    zafuFeeBps: (route: string) =>
-      real.zafuFeeBps(route, fee.beta, real.zafuListBps(fee.recipient)),
+    zafuFeeBps: (route: string) => real.zafuFeeBps(route, real.zafuListBps(fee.recipient)),
   };
 });
 
@@ -106,8 +105,8 @@ const thorQuote = (over: Partial<NodeQuote> = {}): NodeQuote => ({
     outbound: '9246',
     liquidity: '62579',
     total: '71825',
-    slippage_bps: 19,
-    total_bps: 30,
+    slippage_bps: 1,
+    total_bps: 1,
   },
   ...over,
 });
@@ -172,7 +171,6 @@ const thornode = (quote: NodeQuote, inb = inbound(), withFee?: NodeQuote) => {
 };
 
 beforeEach(() => {
-  fee.beta = false;
   fee.recipient = '';
   asked.length = 0;
   allow.clear();
@@ -385,20 +383,21 @@ describe('thorchain', () => {
   it('costs a swap from the quote: the fee in, thorchain, and zafu at 0', async () => {
     thornode(thorQuote());
     const quote = await thorProvider.quote(req());
-    // 750 sat of 0.01 btc is 7 bps, worth 750 x 412 zec / btc; liquidity + outbound = 71825
+    // 750 sat of 0.01 btc is 7.5 bps, rounded up and worth 750 sat at the pre-fee rate;
+    // liquidity + outbound = 71825 of 4.12 zec is 1.74 bps, rounded, not thornode's truncated 1
     expect(quote.cost).toEqual({
       parts: [
         {
           label: 'network fee in',
-          bps: 7,
-          out: 309_000n,
+          bps: 8,
+          out: 309_053n,
           inText: '~0.0000075 btc',
         },
-        { label: 'thorchain', bps: 30, out: 71_825n },
+        { label: 'thorchain', bps: 2, out: 71_825n },
         { label: 'zafu fee', bps: 0, out: 0n, zafu: true },
       ],
-      bps: 37,
-      out: 380_825n,
+      bps: 10,
+      out: 380_878n,
     });
     expect(quote.gasLine).toBe('use a fast fee · 3 sat/byte');
     expect(quote.refundLine).toBeUndefined();
@@ -592,8 +591,8 @@ describe('maya', () => {
       notYet: undefined,
     });
     expect(quote.cost?.parts.map(p => [p.label, p.bps])).toEqual([
-      ['network fee in', 7],
-      ['maya', 14],
+      ['network fee in', 8],
+      ['maya', 15],
       ['zafu fee', 0],
     ]);
   });
@@ -682,14 +681,11 @@ describe('near intents', () => {
     );
   });
 
-  it("charges zafu's app fee, half off, in production once a recipient is set, never in beta", async () => {
+  it("charges zafu's app fee at half off once a recipient is set", async () => {
     fee.recipient = 'zafu.near';
     const quote = await nearProvider.quote(req());
     expect(near.requestQuote).toHaveBeenLastCalledWith(expect.objectContaining({ appFeeBps: 5 }));
     expect(quote.cost?.parts.at(-1)).toMatchObject({ label: 'zafu fee', bps: 5, zafu: true });
-    fee.beta = true;
-    await nearProvider.quote(req());
-    expect(near.requestQuote).toHaveBeenLastCalledWith(expect.objectContaining({ appFeeBps: 0 }));
   });
 
   it("splits a 1click quote's cost into near's and zafu's, from its own prices", () => {
@@ -719,16 +715,15 @@ describe('near intents', () => {
 });
 
 describe("zafu's fee", () => {
-  it('is the production near rate, inert without a recipient, and 0 in beta and on thorchain', async () => {
+  it('is half the near list rate, inert without a recipient, and 0 on thorchain', async () => {
     const { zafuFeeBps, zafuListBps } =
       await vi.importActual<typeof import('../../config/swap-fee')>('../../config/swap-fee');
     expect(zafuListBps('', 10)).toBe(0);
     expect(zafuListBps('zafu.near', 10)).toBe(10);
-    expect(zafuFeeBps('near', false, 10)).toBe(5);
-    expect(zafuFeeBps('near', false, 10, 0)).toBe(10);
-    expect(zafuFeeBps('near', true, 10)).toBe(0);
-    expect(zafuFeeBps('thor', false, 10)).toBe(0);
-    expect(zafuFeeBps('near', false, 0)).toBe(0);
+    expect(zafuFeeBps('near', 10)).toBe(5);
+    expect(zafuFeeBps('near', 10, 0)).toBe(10);
+    expect(zafuFeeBps('thor', 10)).toBe(0);
+    expect(zafuFeeBps('near', 0)).toBe(0);
   });
 
   it('adds every part into an estimated total', () => {
