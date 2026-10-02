@@ -52,7 +52,7 @@ const MainPage = () => {
   useEffect(() => {
     // initialize standard wasm module for keys, addresses
     // parallel wasm will be initialized on-demand when needed for tx building
-    import('@rotko/penumbra-wasm/init')
+    import('@penumbrafi/wasm/init')
       .then(({ initWasm }) => initWasm())
       .then(() => setWasmReady(true))
       .catch(err => {

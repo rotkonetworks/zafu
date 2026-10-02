@@ -7,7 +7,7 @@ import {
   ValueView,
 } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
-import { base64ToUint8Array } from '@rotko/penumbra-types/base64';
+import { base64ToUint8Array } from '@penumbrafi/types/base64';
 import { EquivalentValue } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { fmtIn, heroOf, localPrices, selectHome, unpricedOf, valueOf } from './penumbra-value';
 import { combine, fixedBook, type Simulate } from '../../../penumbra/price';

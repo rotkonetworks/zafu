@@ -7,7 +7,7 @@
 import { useState } from 'react';
 import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
-import { fromValueView } from '@rotko/penumbra-types/amount';
+import { fromValueView } from '@penumbrafi/types/amount';
 import { symbolFromMetadata } from '../../../utils/asset-display';
 import { positionLabel } from '../../../utils/is-fungible-asset';
 import { AssetBucketToggle, type AssetBucket } from '../../../components/asset-bucket-toggle';

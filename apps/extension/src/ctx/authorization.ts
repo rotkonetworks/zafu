@@ -6,13 +6,13 @@ import {
 } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
 import { AuthorizeRequest } from '@penumbra-zone/protobuf/penumbra/custody/v1/custody_pb';
 import { FullViewingKey } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
-import { Jsonified } from '@rotko/penumbra-types/jsonified';
+import { Jsonified } from '@penumbrafi/types/jsonified';
 import { Key } from '@repo/encryption/key';
 import { UserChoice } from '@repo/storage-chrome/records';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { Wallet, getCustodyTypeName } from '@repo/wallet';
 import { getWalletFromStorage } from '@repo/storage-chrome/onboard';
-import { computeEffectHash } from '@rotko/penumbra-wasm/build';
+import { computeEffectHash } from '@penumbrafi/wasm/build';
 import { PopupType } from '../message/popup';
 import { throwIfNeedsLogin } from '../needs-login';
 import { popup } from '../popup';

@@ -1,7 +1,7 @@
 import { ChainRegistryClient } from '@penumbrafi/registry';
 import { getDisplayDenomExponent } from '@penumbra-zone/getters/metadata';
 import type { Metadata } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
-import { uint8ArrayToBase64 } from '@rotko/penumbra-types/base64';
+import { uint8ArrayToBase64 } from '@penumbrafi/types/base64';
 import type { Quotes, Unit } from './price';
 
 const client = new ChainRegistryClient();

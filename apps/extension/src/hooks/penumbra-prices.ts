@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { joinLoHiAmount } from '@rotko/penumbra-types/amount';
-import { base64ToUint8Array } from '@rotko/penumbra-types/base64';
+import { joinLoHiAmount } from '@penumbrafi/types/amount';
+import { base64ToUint8Array } from '@penumbrafi/types/base64';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { simulationClient } from '../clients';
 import { cached, fixedBook, type Simulate } from '../penumbra/price';

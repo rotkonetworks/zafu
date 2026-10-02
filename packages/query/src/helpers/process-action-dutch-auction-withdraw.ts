@@ -1,7 +1,7 @@
 import { AuctionId } from '@penumbra-zone/protobuf/penumbra/core/component/auction/v1/auction_pb';
 import { getAssetId } from '@penumbra-zone/getters/metadata';
-import { IndexedDbInterface } from '@rotko/penumbra-types/indexed-db';
-import { getAuctionNftMetadata } from '@rotko/penumbra-wasm/auction';
+import { IndexedDbInterface } from '@penumbrafi/types/indexed-db';
+import { getAuctionNftMetadata } from '@penumbrafi/wasm/auction';
 
 export const processActionDutchAuctionWithdraw = async (
   auctionId: AuctionId,

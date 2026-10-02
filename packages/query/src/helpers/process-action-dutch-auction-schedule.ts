@@ -1,7 +1,7 @@
 import { DutchAuctionDescription } from '@penumbra-zone/protobuf/penumbra/core/component/auction/v1/auction_pb';
 import { getAssetId } from '@penumbra-zone/getters/metadata';
-import { IndexedDbInterface } from '@rotko/penumbra-types/indexed-db';
-import { getAuctionId, getAuctionNftMetadata } from '@rotko/penumbra-wasm/auction';
+import { IndexedDbInterface } from '@penumbrafi/types/indexed-db';
+import { getAuctionId, getAuctionNftMetadata } from '@penumbrafi/wasm/auction';
 
 export const processActionDutchAuctionSchedule = async (
   description: DutchAuctionDescription,

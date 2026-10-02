@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
 import { getDisplayDenomExponent } from '@penumbra-zone/getters/metadata';
-import { fromValueView } from '@rotko/penumbra-types/amount';
+import { fromValueView } from '@penumbrafi/types/amount';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { Button } from '@repo/ui/components/ui/button';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';

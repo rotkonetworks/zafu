@@ -22,9 +22,9 @@ import {
 
 import { custodyImpl } from '@repo/custody-chrome';
 
-import { sctImpl } from '@rotko/penumbra-services/sct-service';
-import { stakeImpl } from '@rotko/penumbra-services/stake-service';
-import { viewImpl } from '@rotko/penumbra-services/view-service';
+import { sctImpl } from '@penumbrafi/services/sct-service';
+import { stakeImpl } from '@penumbrafi/services/stake-service';
+import { viewImpl } from '@penumbrafi/services/view-service';
 import { createProxyImpl, noContextHandler } from '@penumbra-zone/transport-dom/proxy';
 import { resolvePenumbraEndpoint } from '../config/penumbra-endpoints';
 import { rethrowImplErrors } from './rethrow-impl-errors';

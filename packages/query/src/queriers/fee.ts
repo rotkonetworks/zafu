@@ -1,7 +1,7 @@
 import { Client } from '@connectrpc/connect';
 import { createClient } from './utils';
 import { FeeService } from '@penumbra-zone/protobuf';
-import { FeeQuerierInterface } from '@rotko/penumbra-types/querier';
+import { FeeQuerierInterface } from '@penumbrafi/types/querier';
 import {
   CurrentGasPricesRequest,
   CurrentGasPricesResponse,

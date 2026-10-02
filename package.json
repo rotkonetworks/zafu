@@ -66,23 +66,28 @@
   "overrides": {
     "@penumbrafi/registry": "^13.2.0",
     "@bufbuild/protobuf": "^1.10.0",
-    "@penumbra-zone/types": "npm:@rotko/penumbra-types@37.0.0",
-    "@penumbra-zone/wasm": "npm:@rotko/penumbra-wasm@55.0.2",
-    "@rotko/penumbra-wasm": "55.0.2",
-    "@penumbra-zone/services": "npm:@rotko/penumbra-services@70.0.0"
+    "@penumbra-zone/types": "file:../penumbrafi-57-pkgs/penumbrafi-types-38.0.0.tgz",
+    "@penumbra-zone/wasm": "file:../penumbrafi-57-pkgs/penumbrafi-wasm-57.0.0.tgz",
+    "@penumbra-zone/services": "file:../penumbrafi-57-pkgs/penumbrafi-services-72.0.0.tgz"
   },
   "pnpm": {
     "overrides": {
-      "@penumbra-labs/registry": "npm:@penumbrafi/registry@^13.2.0"
+      "@penumbra-labs/registry": "npm:@penumbrafi/registry@^13.2.0",
+      "@penumbra-zone/types": "file:../penumbrafi-57-pkgs/penumbrafi-types-38.0.0.tgz",
+      "@penumbra-zone/wasm": "file:../penumbrafi-57-pkgs/penumbrafi-wasm-57.0.0.tgz",
+      "@penumbra-zone/services": "file:../penumbrafi-57-pkgs/penumbrafi-services-72.0.0.tgz",
+      "@penumbrafi/types": "file:../penumbrafi-57-pkgs/penumbrafi-types-38.0.0.tgz",
+      "@penumbrafi/wasm": "file:../penumbrafi-57-pkgs/penumbrafi-wasm-57.0.0.tgz",
+      "@penumbrafi/services": "file:../penumbrafi-57-pkgs/penumbrafi-services-72.0.0.tgz"
     },
     "peerDependencyRules": {
       "allowAny": [
-        "@rotko/penumbra-wasm",
+        "@penumbrafi/wasm",
+        "@penumbra-zone/wasm",
+        "@penumbra-zone/types",
+        "@penumbra-zone/services",
         "@penumbra-labs/registry"
       ]
-    },
-    "patchedDependencies": {
-      "@rotko/penumbra-services@70.0.0": "patches/@rotko__penumbra-services@70.0.0.patch"
     }
   },
   "workspaces": [

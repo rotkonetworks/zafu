@@ -105,7 +105,7 @@ export default ({
 
   const keysPackage = path.dirname(require.resolve('@penumbra-zone/keys'));
   // Resolve wasm package via a known export, then go up to package root
-  const wasmPackage = path.dirname(path.dirname(require.resolve('@rotko/penumbra-wasm/build')));
+  const wasmPackage = path.dirname(path.dirname(require.resolve('@penumbrafi/wasm/build')));
 
   const localPackages = [
     ...Object.values(rootPackageJson.dependencies),
@@ -354,9 +354,9 @@ export default ({
       alias: {
         '@ui': path.resolve(__dirname, '../../packages/ui'),
         // Redirect @penumbra-zone packages to @rotko equivalents (async API)
-        '@penumbra-zone/types': '@rotko/penumbra-types',
-        '@penumbra-zone/wasm': '@rotko/penumbra-wasm',
-        '@penumbra-zone/services': '@rotko/penumbra-services',
+        '@penumbra-zone/types': '@penumbrafi/types',
+        '@penumbra-zone/wasm': '@penumbrafi/wasm',
+        '@penumbra-zone/services': '@penumbrafi/services',
         // protobufjs ships an `inquire()` helper that uses eval() to
         // optionally load long.js. MV3 CSP blocks all eval. Stub it.
         '@protobufjs/inquire': path.resolve(__dirname, 'src/stubs/protobufjs-inquire.cjs'),
@@ -382,8 +382,8 @@ export default ({
             to: 'keys/[name][ext]',
           },
           {
-            from: path.join(wasmPackage, 'wasm-parallel'),
-            to: 'wasm-parallel',
+            from: path.join(wasmPackage, 'wasm'),
+            to: 'wasm',
           },
           // zcash-wasm: public/zafu-wasm/ serves BOTH the scanning worker and
           // the offscreen prover (one parallel build, one path) — copied via
@@ -559,9 +559,9 @@ export default ({
       extensions: ['.ts', '.tsx', '.js'],
       alias: {
         // Redirect @penumbra-zone packages to @rotko equivalents (async API)
-        '@penumbra-zone/types': '@rotko/penumbra-types',
-        '@penumbra-zone/wasm': '@rotko/penumbra-wasm',
-        '@penumbra-zone/services': '@rotko/penumbra-services',
+        '@penumbra-zone/types': '@penumbrafi/types',
+        '@penumbra-zone/wasm': '@penumbrafi/wasm',
+        '@penumbra-zone/services': '@penumbrafi/services',
         '@protobufjs/inquire': path.resolve(__dirname, 'src/stubs/protobufjs-inquire.cjs'),
       },
       // Mirror the browser config: the service worker now pulls the cosmos

@@ -31,7 +31,7 @@ export async function createPenumbraWalletForMnemonic(
   generated = false,
 ): Promise<void> {
   const { generateSpendKey, getFullViewingKey, getWalletId } =
-    await import('@rotko/penumbra-wasm/keys');
+    await import('@penumbrafi/wasm/keys');
   const spendKey = await generateSpendKey(mnemonic);
   const fullViewingKey = await getFullViewingKey(spendKey);
   const walletId = await getWalletId(fullViewingKey);
@@ -83,7 +83,7 @@ export async function createZignerWalletEntries(
     try {
       const { FullViewingKey } =
         await import('@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb');
-      const { getWalletId } = await import('@rotko/penumbra-wasm/keys');
+      const { getWalletId } = await import('@penumbrafi/wasm/keys');
 
       const fvkBytes = Uint8Array.from(atob(data.fullViewingKey), c => c.charCodeAt(0));
       const fvk = new FullViewingKey({ inner: fvkBytes });

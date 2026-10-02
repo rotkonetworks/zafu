@@ -2,7 +2,7 @@ import { Metadata } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_p
 import { AssetIcon } from '../asset-icon';
 import { Pill } from '../pill';
 import { cn } from '../../../lib/utils';
-import { assetPatterns } from '@rotko/penumbra-types/assets';
+import { assetPatterns } from '@penumbrafi/types/assets';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../tooltip';
 
 const UNBONDING_DELAY_BLOCKS = 120_960;

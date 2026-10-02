@@ -33,7 +33,7 @@ async function deriveCosmosAddress(mnemonic: string, prefix: string): Promise<st
 /** derive penumbra address from mnemonic */
 async function derivePenumbraAddress(mnemonic: string, index = 0): Promise<string> {
   const { generateSpendKey, getFullViewingKey, getAddressByIndex } =
-    await import('@rotko/penumbra-wasm/keys');
+    await import('@penumbrafi/wasm/keys');
   const { bech32mAddress } = await import('@penumbra-zone/bech32m/penumbra');
 
   const spendKey = await generateSpendKey(mnemonic);
@@ -45,7 +45,7 @@ async function derivePenumbraAddress(mnemonic: string, index = 0): Promise<strin
 /** derive a random ephemeral penumbra address from mnemonic (each call returns a different address) */
 async function derivePenumbraEphemeralFromMnemonic(mnemonic: string, index = 0): Promise<string> {
   const { generateSpendKey, getFullViewingKey, getEphemeralByIndex } =
-    await import('@rotko/penumbra-wasm/keys');
+    await import('@penumbrafi/wasm/keys');
   const { bech32mAddress } = await import('@penumbra-zone/bech32m/penumbra');
 
   const spendKey = await generateSpendKey(mnemonic);
@@ -57,7 +57,7 @@ async function derivePenumbraEphemeralFromMnemonic(mnemonic: string, index = 0):
 /** derive a random ephemeral penumbra address from stored FVK JSON */
 async function derivePenumbraEphemeralFromFvk(fvkJson: string, index = 0): Promise<string> {
   const { FullViewingKey } = await import('@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb');
-  const { getEphemeralByIndex } = await import('@rotko/penumbra-wasm/keys');
+  const { getEphemeralByIndex } = await import('@penumbrafi/wasm/keys');
   const { bech32mAddress } = await import('@penumbra-zone/bech32m/penumbra');
 
   const fvk = FullViewingKey.fromJsonString(fvkJson);
@@ -285,7 +285,7 @@ export function useActiveAddress() {
         if (activeNetwork === 'penumbra' && penumbraWallet?.fullViewingKey) {
           const { FullViewingKey } =
             await import('@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb');
-          const { getAddressByIndex } = await import('@rotko/penumbra-wasm/keys');
+          const { getAddressByIndex } = await import('@penumbrafi/wasm/keys');
           const { bech32mAddress } = await import('@penumbra-zone/bech32m/penumbra');
 
           // fullViewingKey is stored as JSON string: {"inner":"base64..."}

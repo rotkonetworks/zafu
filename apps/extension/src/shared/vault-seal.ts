@@ -10,7 +10,7 @@
  * private key, which never leaves the worker, and the unwrapped key is a
  * non-extractable, decrypt-only CryptoKey that is dropped after the send.
  */
-import { base64ToUint8Array, uint8ArrayToBase64 } from '@rotko/penumbra-types/base64';
+import { base64ToUint8Array, uint8ArrayToBase64 } from '@penumbrafi/types/base64';
 import type { KeyJson } from '@repo/encryption/key';
 
 /** a single-use key the worker issued for one operation */

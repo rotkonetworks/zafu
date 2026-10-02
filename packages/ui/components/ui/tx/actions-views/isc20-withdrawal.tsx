@@ -1,8 +1,8 @@
 import { Ics20Withdrawal } from '@penumbra-zone/protobuf/penumbra/core/component/ibc/v1/ibc_pb';
 import { ViewBox } from '../viewbox';
 import { ActionDetails } from './action-details';
-import { joinLoHiAmount } from '@rotko/penumbra-types/amount';
-import { getTransmissionKeyByAddress } from '@rotko/penumbra-wasm/keys';
+import { joinLoHiAmount } from '@penumbrafi/types/amount';
+import { getTransmissionKeyByAddress } from '@penumbrafi/wasm/keys';
 import { bech32TransparentAddress } from '@penumbra-zone/bech32m/tpenumbra';
 import { bech32mAddress } from '@penumbra-zone/bech32m/penumbra';
 import { Address } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';

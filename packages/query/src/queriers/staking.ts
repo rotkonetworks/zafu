@@ -8,7 +8,7 @@ import {
   ValidatorPenaltyRequest,
   ValidatorPenaltyResponse,
 } from '@penumbra-zone/protobuf/penumbra/core/component/stake/v1/stake_pb';
-import { StakeQuerierInterface } from '@rotko/penumbra-types/querier';
+import { StakeQuerierInterface } from '@penumbrafi/types/querier';
 
 export class StakeQuerier implements StakeQuerierInterface {
   private readonly client: Client<typeof StakeService>;
