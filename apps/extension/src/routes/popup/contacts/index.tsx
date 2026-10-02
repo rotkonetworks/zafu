@@ -17,13 +17,14 @@ import {
   type ContactNetwork,
   type PersonalDataBackup,
 } from '../../../state/contacts';
-import { encodeContactCard, bytesToHex } from '@repo/wallet/networks/zcash/memo-codec';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { cn } from '@repo/ui/lib/utils';
+import type { DiversifiedAddressRecord } from '@repo/wallet/networks/zcash/diversified-address';
 import {
-  contactDiversifierIndex,
-  type DiversifiedAddressRecord,
-} from '@repo/wallet/networks/zcash/diversified-address';
+  cardSenderName,
+  contactCardMemoHex,
+  myAddressForContact,
+} from '../../../state/contact-share';
 import { deriveZidForContact } from '../../../state/identity';
 import {
   getDiversifiedAddresses,
@@ -517,55 +518,32 @@ export function ContactsPage() {
   const getMnemonic = useStore(s => s.keyRing.getMnemonic);
   const { explainProps, sheet: explainSheet } = useExplain();
 
-  /** share a contact card with per-contact diversified address + zid */
+  /** share your card with one contact: your name, your address for them, their zid */
   const shareContactCard = async (contact: Contact, recipientZcashAddr: string) => {
     if (!keyInfo) {
       return;
     }
-
-    // derive per-contact diversified address (unique receiving address for this contact)
-    let myAddress = recipientZcashAddr; // fallback to recipient's address if no zcash wallet
     const ufvk = zcashWallet?.ufvk ?? zcashWallet?.orchardFvk;
-    if (ufvk && typeof ufvk === 'string' && ufvk.startsWith('uview')) {
-      try {
-        const divIndex = await contactDiversifierIndex(contact.id);
-
-        const wasm: any = await import('@repo/zcash-wasm');
-        // wasm-bindgen glue: the module-level `wasm` binding stays undefined
-        // until the default export (`__wbg_init`) fetches+instantiates the
-        // .wasm. Calling an export before that throws on `__wbindgen_malloc`.
-        // This popup context is a *separate* module instance from the
-        // worker's, so it is generally uninitialized here. Without this
-        // await, the call below silently throws and we fall back to a
-        // non-diversified address (privacy degradation), not a crash.
-        if (typeof wasm.default === 'function') {
-          await wasm.default();
-        }
-        const rawAddr: string = wasm.address_from_ufvk(ufvk, divIndex);
-        // fixOrchardAddress would be needed here for proper bech32m encoding
-        // for now use the raw address - the codec handles it
-        if (rawAddr) {
-          myAddress = rawAddr;
-          // record the diversified address for referral tracking
-          // encrypted at rest: these records are the payment-referral graph
-          // (which contact got which address, and when). they went through
-          // localExtStorage directly, which bypasses the encrypting proxy,
-          // so they were written in the clear despite the key being declared
-          // encrypted. see state/diversified-addresses.ts.
-          const records: DiversifiedAddressRecord[] = await getDiversifiedAddresses();
-          if (!records.some(r => r.diversifierIndex === divIndex)) {
-            records.push({
-              diversifierIndex: divIndex,
-              sharedWith: contact.name || contact.id,
-              address: rawAddr,
-              sharedAt: Date.now(),
-            });
-            await setDiversifiedAddresses(records);
-          }
-        }
-      } catch (e) {
-        console.warn('[contacts] failed to derive diversified address, using default:', e);
-      }
+    const mine = await myAddressForContact(contact.id, typeof ufvk === 'string' ? ufvk : undefined);
+    if (!mine) {
+      setImportStatus({
+        type: 'error',
+        message: 'sorry, this wallet cannot make an address for a card',
+      });
+      setTimeout(() => setImportStatus(null), 3000);
+      return;
+    }
+    // the payment-referral graph (which contact got which address), encrypted
+    // at rest - see state/diversified-addresses.ts
+    const records: DiversifiedAddressRecord[] = await getDiversifiedAddresses();
+    if (!records.some(r => r.diversifierIndex === mine.index)) {
+      records.push({
+        diversifierIndex: mine.index,
+        sharedWith: contact.name || contact.id,
+        address: mine.address,
+        sharedAt: Date.now(),
+      });
+      await setDiversifiedAddresses(records);
     }
 
     // derive per-contact zid for authenticated e2ee
@@ -579,18 +557,16 @@ export function ContactsPage() {
       contactZid = keyInfo.insensitive?.['zid'] as string | undefined;
     }
 
-    const memos = encodeContactCard({
-      name: contact.name,
-      address: myAddress,
-      flags: 0,
+    const hex = contactCardMemoHex({
+      senderName: cardSenderName(keyInfo.name),
+      myAddress: mine.address,
       zid: contactZid,
     });
-    if (!memos.length) {
+    if (!hex) {
       return;
     }
-    const hex = bytesToHex(memos[0]!);
     navigate(PopupPath.SEND, {
-      state: { prefillMemo: hex, network: 'zcash' },
+      state: { prefillRecipient: recipientZcashAddr, prefillMemo: hex, network: 'zcash' },
     });
   };
   const [search, setSearch] = useState('');

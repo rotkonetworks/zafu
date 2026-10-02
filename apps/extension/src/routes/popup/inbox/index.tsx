@@ -12,7 +12,8 @@ import { Segmented } from '@repo/ui/components/ui/segmented';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { useShallow } from 'zustand/react/shallow';
 import { useStore, type AllSlices } from '../../../state';
-import { selectVisibleMultisigWallets } from '../../../state/wallets';
+import { selectActiveZcashWallet, selectVisibleMultisigWallets } from '../../../state/wallets';
+import { replyAddress } from '../../../state/contact-share';
 import {
   inboxSelector,
   selectConversations,
@@ -41,7 +42,6 @@ import { FeeTier_Tier } from '@penumbra-zone/protobuf/penumbra/core/component/fe
 import { viewClient } from '../../../clients';
 import { cn } from '@repo/ui/lib/utils';
 import { PopupPath } from '../paths';
-import { AddContactDialog } from '../../../components/add-contact-dialog';
 import {
   traceAddressReferral,
   type DiversifiedAddressRecord,
@@ -783,6 +783,8 @@ function ComposeMessage({
   const penumbraTx = usePenumbraTransaction();
   const penumbraAccount = useStore(selectPenumbraAccount);
   const { address: ownAddress } = useActiveAddress();
+  const { findByAddress } = useStore(contactsSelector);
+  const zcashWallet = useStore(selectActiveZcashWallet);
   const [recipient, setRecipient] = useState(replyTo?.address ?? '');
   const [message, setMessage] = useState('');
   const [amount, setAmount] = useState('');
@@ -840,8 +842,15 @@ function ComposeMessage({
     }
   }, [recipient, message, amount, penumbraTx, penumbraAccount]);
 
-  const handleSendZcash = useCallback(() => {
-    const memoWithReply = ownAddress ? `${message}\nreply:${ownAddress}` : message;
+  const handleSendZcash = useCallback(async () => {
+    const contact = findByAddress(recipient.trim())?.contact;
+    const ufvk = zcashWallet?.ufvk ?? zcashWallet?.orchardFvk;
+    const reply = await replyAddress(
+      contact?.id,
+      typeof ufvk === 'string' ? ufvk : undefined,
+      ownAddress,
+    );
+    const memoWithReply = reply ? `${message}\nreply:${reply}` : message;
 
     navigate(PopupPath.SEND, {
       state: {
@@ -851,7 +860,7 @@ function ComposeMessage({
       },
     });
     onClose();
-  }, [navigate, message, recipient, amount, ownAddress, onClose]);
+  }, [navigate, message, recipient, amount, ownAddress, onClose, findByAddress, zcashWallet]);
 
   const handleSend = () => {
     if (!canSend) {
@@ -860,7 +869,7 @@ function ComposeMessage({
     if (network === 'penumbra') {
       void handleSendPenumbra();
     } else {
-      handleSendZcash();
+      void handleSendZcash();
     }
   };
 
@@ -1010,10 +1019,6 @@ export function InboxPage() {
   const [showCompose, setShowCompose] = useState(false);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<'conversations' | 'all'>('conversations');
-  const [addContactData, setAddContactData] = useState<{
-    address: string;
-    network: 'zcash' | 'penumbra';
-  } | null>(null);
 
   // live conversation for the open thread, derived from the store-backed list
   const selectedConvo = useMemo(
@@ -1294,14 +1299,6 @@ export function InboxPage() {
           </div>
         )}
       </div>
-
-      {addContactData && (
-        <AddContactDialog
-          address={addContactData.address}
-          network={addContactData.network}
-          onClose={() => setAddContactData(null)}
-        />
-      )}
     </div>
   );
 }

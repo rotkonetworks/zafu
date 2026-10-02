@@ -48,7 +48,6 @@ vi.mock('../../../services/zcashme/config', () => ({
   useZcashMeDirectoryLookup: () => () => undefined,
 }));
 vi.mock('../../../services/zcashme/label', () => ({ zcashMeLabel: () => undefined }));
-vi.mock('../../../components/add-contact-dialog', () => ({ AddContactDialog: () => null }));
 vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
 
 import { MemoType, type ContactCard } from '@repo/wallet/networks/zcash/memo-codec';

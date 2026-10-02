@@ -26,32 +26,7 @@ import { resolveNetworkCosmosChain } from './chain-identity';
 import { CosmosSend } from './cosmos-send';
 import { PenumbraSend } from './penumbra-send';
 import { PenumbraIbcSend } from './ibc-send';
-
-interface SendLocationState {
-  prefillMemo?: string;
-  prefillRecipient?: string;
-  prefillAmount?: string;
-  /**
-   * Row-level "Send X" quick-action on the home asset list: base denom of the
-   * asset to preselect. Matched against `metadata.base` on the fetched balance
-   * list. Falls back to the top-priority balance if the denom is not found.
-   */
-  prefillAsset?: string;
-  /**
-   * Cosmos off-ramp: open the cosmos send for this chain WITHOUT switching the
-   * active network. Noble is a burner doorway, not a network - the user stays
-   * on Penumbra; this just routes the send form to the transparent chain.
-   */
-  cosmosChain?: CosmosChainId;
-  /** which burner index (BIP44 address_index) to spend from. Default 0. */
-  cosmosAccountIndex?: number;
-  /**
-   * Why the cosmos send form was opened: 'shield' (back into Penumbra) or
-   * 'send' (out to an external address, e.g. an exchange). The form is the same
-   * today; this lets it prefill/route differently later without changing callers.
-   */
-  cosmosIntent?: 'send' | 'shield';
-}
+import { sendPrefill, type SendLocationState } from './prefill';
 
 export function SendPage() {
   const navigate = useNavigate();
@@ -87,32 +62,7 @@ export function SendPage() {
     }
     return rawMemo.replaceAll('[primary]', primaryAddr).replaceAll('[self]', primaryAddr);
   })();
-  const prefill = locationState?.prefillRecipient
-    ? {
-        recipient: locationState.prefillRecipient,
-        amount: locationState.prefillAmount,
-        memo: locationState.prefillMemo,
-      }
-    : searchParams.get('to')
-      ? {
-          recipient: searchParams.get('to') ?? undefined,
-          // amount_zat (uint64 string, zatoshi) is the unambiguous unit for external callers;
-          // ZcashSend expects a decimal ZEC string so we convert (1 ZEC = 1e8 zat).
-          amount: (() => {
-            const zat = searchParams.get('amount_zat');
-            if (!zat) {
-              return undefined;
-            }
-            const n = Number(zat);
-            if (!Number.isFinite(n) || n <= 0) {
-              return undefined;
-            }
-            return (n / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
-          })(),
-          memo: externalMemo,
-          via: searchParams.get('via') ?? undefined,
-        }
-      : undefined;
+  const prefill = sendPrefill(locationState, searchParams, externalMemo);
 
   const goBack = () => (inDedicatedWindow ? window.close() : navigate(PopupPath.INDEX));
   // a zcash: payment link (clicked on a website) is a zcash send whatever

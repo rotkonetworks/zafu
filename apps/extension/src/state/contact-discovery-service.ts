@@ -6,10 +6,9 @@
  * in, presence out) and the message listener can be driven with fakes in tests.
  * This module owns the pieces that need chrome/storage: the settings read, the
  * lock check, the encrypted contacts read, the mnemonic/identity lookup, and the
- * relay transport, plus the fixed-cadence presence publisher the service
- * worker drives only while a zafu UI surface is open (see
- * state/ui-open-presence.ts) - never from a background alarm while zafu is
- * closed.
+ * relay transport, plus a presence publisher that nothing calls today: it
+ * waits for the per-site "find friends here" grant. Opening a window, unlocking
+ * or a service-worker start never publishes (no autoconnect).
  *
  * Everything here is a STRICT NO-OP unless the user opted in AND the wallet is
  * unlocked. A wallet that never opted in never reads a contact, never derives a
@@ -171,8 +170,8 @@ const scopeStates = new Map<string, ScopeState>();
 
 /**
  * Publish this wallet's presence once per epoch, for every app scope it serves.
- * Driven by the service worker's UI-open ticker (see ui-open-presence.ts) -
- * runs only while some zafu surface is open, never from a background alarm.
+ * Unwired for now: kept for the per-site "find friends here" grant, where a
+ * user action on that site starts it. Never from popup open or an alarm.
  * Idempotent within an epoch (the per-scope `createPresenceScheduler` claims
  * the epoch before publishing), so over-ticking is harmless. A strict no-op
  * when disabled, unconfigured, or locked. Never throws.

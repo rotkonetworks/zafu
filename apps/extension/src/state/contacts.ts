@@ -206,6 +206,35 @@ export interface ContactsSlice {
 
 const generateId = () => crypto.randomUUID();
 
+/** a contact as a backup holds it; backups made before ids were kept have none */
+type BackupContact = Omit<Contact, 'id' | 'createdAt' | 'addresses'> & {
+  id?: string;
+  createdAt?: number;
+  addresses: (Omit<ContactAddress, 'id'> & { id?: string })[];
+};
+
+/**
+ * The contacts a restore adds. Ids and cards come back as they were, so every
+ * address and key derived from a contact id stays the same. Merge skips a
+ * contact already here by id, or by name when the backup has no id.
+ */
+export const restoreContacts = (
+  backup: BackupContact[],
+  existing: Contact[],
+  mode: 'merge' | 'replace',
+): Contact[] => {
+  const ids = new Set(existing.map(c => c.id));
+  const names = new Set(existing.map(c => c.name.toLowerCase()));
+  const kept = (c: BackupContact) =>
+    mode === 'replace' || (c.id ? !ids.has(c.id) : !names.has(c.name.toLowerCase()));
+  return backup.filter(kept).map(c => ({
+    ...c,
+    id: c.id ?? generateId(),
+    createdAt: c.createdAt ?? Date.now(),
+    addresses: c.addresses.map(a => ({ ...a, id: a.id ?? generateId() })),
+  }));
+};
+
 export const createContactsSlice =
   (
     local: ExtensionStorage<LocalStorageState>,
@@ -536,20 +565,9 @@ export const createContactsSlice =
       },
 
       exportPersonalData: async (password: string) => {
-        const contacts = safeContacts().map(c => ({
-          name: c.name,
-          zid: c.zid,
-          website: c.website,
-          notes: c.notes,
-          favorite: c.favorite,
-          zcashme: c.zcashme,
-          addresses: c.addresses.map(a => ({
-            network: a.network,
-            address: a.address,
-            chainId: a.chainId,
-            notes: a.notes,
-          })),
-        }));
+        // whole contacts, ids and cards included: the per-contact address and
+        // zid are functions of the id, so a restore must keep it
+        const contacts = safeContacts();
         const sent = await readSentRecords();
         const txNotes = await readTxNotes();
         const egress = await exportEgressChoices();
@@ -595,20 +613,8 @@ export const createContactsSlice =
           throw new Error('failed to decrypt backup');
         }
         const parsed = JSON.parse(plaintext) as {
-          contacts: {
-            name: string;
-            zid?: string;
-            website?: string;
-            notes?: string;
-            favorite?: boolean;
-            zcashme?: string;
-            addresses: {
-              network: ContactNetwork;
-              address: string;
-              chainId?: string;
-              notes?: string;
-            }[];
-          }[];
+          /** backups made before ids were kept carry no ids */
+          contacts: BackupContact[];
           sent: SentTxRecord[];
           txNotes: Record<string, string>;
           /** zcash pocket names (absent in backups made before pockets) */
@@ -621,26 +627,7 @@ export const createContactsSlice =
           walletNames?: Record<string, string>;
         };
 
-        const existingNames = new Set(safeContacts().map(c => c.name.toLowerCase()));
-        const newContacts: Contact[] = (parsed.contacts ?? [])
-          .filter(c => mode === 'replace' || !existingNames.has(c.name.toLowerCase()))
-          .map(c => ({
-            id: generateId(),
-            name: c.name,
-            zid: c.zid,
-            website: c.website,
-            notes: c.notes,
-            favorite: c.favorite,
-            zcashme: c.zcashme,
-            createdAt: Date.now(),
-            addresses: c.addresses.map(a => ({
-              id: generateId(),
-              network: a.network,
-              address: a.address,
-              chainId: a.chainId,
-              notes: a.notes,
-            })),
-          }));
+        const newContacts = restoreContacts(parsed.contacts ?? [], safeContacts(), mode);
         set(state => {
           if (mode === 'replace') {
             state.contacts.contacts = newContacts;

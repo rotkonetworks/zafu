@@ -97,8 +97,7 @@ import { backOff } from 'exponential-backoff';
 
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { networkAllowsBackgroundSync } from './state/privacy';
-import { runPresencePublish } from './state/contact-discovery-service';
-import { trackUiOpenPresence } from './state/ui-open-presence';
+import { startUiOpenSession } from './ui-open-session';
 import { penumbraTiming } from './penumbra/timing';
 import { requestStopAllSync } from './state/keyring/network-worker';
 import { stampSeenVersion } from './state/moved-notice';
@@ -116,13 +115,6 @@ trackSidePanelPresence();
 // lose the user gesture chrome.sidePanel.open requires).
 initSidePanelPref();
 
-// private contact discovery: beacon this wallet's presence once per presence
-// epoch (5 min), but only while some zafu UI surface (popup, side panel, or a
-// page tab) is actually open. A connected presence port keeps this worker
-// alive for exactly that long, so the ticker needs no alarm and leaves no
-// trace once the last surface closes. Strict no-op unless the user opted in
-// AND configured a relay AND the wallet is unlocked - see runPresencePublish.
-let presencePublishTimer: ReturnType<typeof setInterval> | undefined;
 /** penumbra's block processor runs in this worker: pause it with the last
  *  window and resume with the next, like the zcash worker */
 const penumbraSync = (act: 'pause' | 'resume') =>
@@ -131,7 +123,6 @@ const penumbraSync = (act: 'pause' | 'resume') =>
     // pause/resume live on zafu's block processor, not the shared interface
     .then(ws => (ws.blockProcessor as { pause?: () => void; resume?: () => void })[act]?.())
     .catch(() => undefined);
-let uiOpen = false;
 /** the user's "keep syncing when closed": penumbra alone may go on with every window closed */
 let keepPenumbraSyncing = false;
 const readKeepSyncing = () =>
@@ -142,6 +133,23 @@ readKeepSyncing();
 chrome.storage.onChanged.addListener(
   (c, area) => area === 'local' && 'privacySettings' in c && readKeepSyncing(),
 );
+// zafu is fully closed: the offscreen-hosted zcash worker otherwise keeps
+// syncing (and polling mempool) with nobody watching. Stop network activity
+// only - the offscreen document and its worker stay up for proving - and the
+// next popup/page open resumes sync on its own (zcash-auto-sync.ts).
+const ui = startUiOpenSession({
+  resume: () => {
+    penumbraSync('resume');
+    runChainCheck();
+  },
+  pause: () => {
+    console.log('[sw] last UI surface closed, requesting zcash sync stop');
+    requestStopAllSync('zcash');
+    if (!keepPenumbraSyncing) {
+      penumbraSync('pause');
+    }
+  },
+});
 
 /**
  * Services start on the stored chain id, so a start never waits on the node.
@@ -160,7 +168,7 @@ const runChainCheck = () => {
 /** a fresh block processor, before anything can start it */
 const onBlockProcessor = (bp: BlockProcessor, chain: { id: string; confirmed: boolean }) => {
   // fresh services start syncing at once; with every window closed they wait
-  if (!uiOpen && !keepPenumbraSyncing) {
+  if (!ui.open && !keepPenumbraSyncing) {
     bp.pause();
   }
   if (chain.confirmed) {
@@ -183,35 +191,6 @@ const onBlockProcessor = (bp: BlockProcessor, chain: { id: string; confirmed: bo
     release();
   };
 };
-
-trackUiOpenPresence(
-  () => {
-    uiOpen = true;
-    penumbraSync('resume');
-    runChainCheck();
-    void runPresencePublish();
-    presencePublishTimer ??= setInterval(() => void runPresencePublish(), 5 * 60_000);
-    // the next popup/page open resumes sync on its own (zcash-auto-sync.ts),
-    // same as any fresh open - nothing to do here.
-  },
-  () => {
-    if (presencePublishTimer) {
-      clearInterval(presencePublishTimer);
-      presencePublishTimer = undefined;
-    }
-    // zafu is fully closed: the offscreen-hosted zcash worker otherwise keeps
-    // syncing (and polling mempool) with nobody watching, calling out while
-    // the user thinks the wallet is shut. Stop network activity only - the
-    // offscreen document and its worker stay up for proving - and resume is
-    // automatic on the next open.
-    console.log('[sw] last UI surface closed, requesting zcash sync stop');
-    uiOpen = false;
-    requestStopAllSync('zcash');
-    if (!keepPenumbraSyncing) {
-      penumbraSync('pause');
-    }
-  },
-);
 
 // The graceful network-error handler (unhandledrejection + error) is registered
 // by the top-of-file './install-global-error-handlers' import - it must run on
@@ -255,7 +234,7 @@ const settle = (
     ),
   );
   // confirm the stored chain id now if a window is open, else on the next open
-  if (uiOpen) {
+  if (ui.open) {
     runChainCheck();
   }
 };
@@ -699,7 +678,7 @@ chrome.alarms.onAlarm.addListener(async alarm => {
 
   if (alarm.name === 'blockSync') {
     // nothing syncs while every zafu window is closed
-    if (!uiOpen) {
+    if (!ui.open) {
       return;
     }
     // privacy check: shielded (penumbra, zcash) networks always sync - trial
