@@ -92,5 +92,11 @@
   },
   "content_security_policy": {
     "extension_pages": "object-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:"
+  },
+  "cross_origin_opener_policy": {
+    "value": "same-origin"
+  },
+  "cross_origin_embedder_policy": {
+    "value": "require-corp"
   }
 }
