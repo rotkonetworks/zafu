@@ -32,7 +32,6 @@ import {
 } from './message/listen/contact-discovery-request';
 import { destinationConsentResultListener } from './net/prompt';
 import { runNetEgressMigration } from './net/egress-migrate';
-import { internalZidListener } from './message/listen/internal-zid';
 import { NET_EGRESS_INTERNAL_METHODS } from './message/listen/zafu-method-names';
 import { linkListener } from './message/listen/links';
 import { openWalletRoute } from './message/listen/external-easteregg';
@@ -394,7 +393,6 @@ chrome.runtime.onMessage.addListener(contentScriptConnectListener);
 chrome.runtime.onMessage.addListener(contentScriptDisconnectListener);
 chrome.runtime.onMessage.addListener(contentScriptLoadListener);
 chrome.runtime.onMessage.addListener(internalRevokeListener);
-chrome.runtime.onMessage.addListener(internalZidListener);
 chrome.runtime.onMessage.addListener(linkListener);
 
 // CRSessionManager must be initialized NOW - before wallet services are

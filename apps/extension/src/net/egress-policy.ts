@@ -47,7 +47,6 @@ export const EGRESS_INPUT_KEYS: readonly string[] = [
   'zidDiscovery',
   'zcashMeConfig',
   'keplrCompat',
-  'zitadelRelayUrl',
   'zcashWallets',
   'zcashBackend',
   ...(Object.keys(COSMOS_CHAINS) as CosmosChainId[]).map(rpcPoolKey),
@@ -67,7 +66,6 @@ export interface EgressInputs {
   zidDiscovery?: { enabled?: boolean; relayEndpoint?: string };
   zcashMeConfig?: { mode?: string; mirrorUrl?: string };
   keplrCompat?: boolean;
-  zitadelRelayUrl?: string;
   /** only `multisig.relayUrl` is read: each multisig wallet's own relay */
   zcashWallets?: { multisig?: { relayUrl?: unknown } }[];
   /** absent means the shipped default, zidecar */
@@ -242,7 +240,7 @@ export const DESTINATIONS: readonly DestinationSpec[] = [
     label: 'chat relay',
     purpose: 'relay',
     gate: { kind: 'optional' },
-    urls: i => ['wss://zrelay.rotko.net/ws', 'wss://zcash.rotko.net/ws', i.zitadelRelayUrl],
+    urls: () => ['wss://zrelay.rotko.net/ws', 'wss://zcash.rotko.net/ws'],
   },
   {
     id: 'multisig-relay',

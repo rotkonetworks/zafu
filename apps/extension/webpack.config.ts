@@ -278,7 +278,6 @@ export default ({
       'offscreen-handler': path.join(entryDir, 'offscreen-handler.ts'),
       'page-root': path.join(entryDir, 'page-root.tsx'),
       'popup-root': path.join(entryDir, 'popup-root.tsx'),
-      zitadel: path.join(srcDir, 'zitadel', 'main.tsx'),
       // network workers (isolated sync per network)
       'workers/zcash-worker': path.join(workersDir, 'zcash-worker.ts'),
       // UR fountain decode worker — off-threads ur_decode_frames from the popup
@@ -417,12 +416,6 @@ export default ({
         rootId: 'popup-root',
         filename: 'sidepanel.html',
         chunks: ['popup-root'],
-      }),
-      new HtmlWebpackPlugin({
-        title: 'zitadel',
-        template: 'zitadel.html',
-        filename: 'zitadel.html',
-        chunks: ['zitadel'],
       }),
       new HtmlWebpackPlugin({
         title: 'Zafu Offscreen',

@@ -1,6 +1,6 @@
 /**
  * Egress guard for realms with `chrome.storage`: the service worker, popup,
- * side panel, options page and zitadel. Import FIRST in the entry, before any
+ * side panel and options page. Import FIRST in the entry, before any
  * module that could capture `fetch` or open a socket.
  *
  * Compiles the policy table from storage, recompiles when one of its inputs

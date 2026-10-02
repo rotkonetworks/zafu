@@ -78,7 +78,7 @@ describe('every webpack entry installs the egress guard first', () => {
       expect(first).toMatch(/\/net\/egress-install(-lite)?$/);
       expect(firstImport(file)).toBe(first);
       // the lite guard has no storage and waits for a table: storage realms must use the full one
-      const wantsFull = /^(service-worker|entry\/(page|popup)-root|zitadel\/main)$/.test(name);
+      const wantsFull = /^(service-worker|entry\/(page|popup)-root)$/.test(name);
       expect(first!.endsWith('-lite')).toBe(!wantsFull);
     });
   }
