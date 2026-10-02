@@ -49,7 +49,7 @@ import {
   candidates,
   pairKey,
   ROUTES,
-  ROUTE_IDS,
+  OFFERED,
   routeLabel,
   poolAsset,
   type MemoCarrier,
@@ -92,7 +92,7 @@ type Step =
   | 'error';
 
 /** routes with an implementation: the picker and best-route draw from these */
-const QUOTABLE = ROUTE_IDS.filter(id => PROVIDERS[id]);
+const QUOTABLE = OFFERED.filter(id => PROVIDERS[id]);
 
 /** the one note under the routes, per route and direction */
 const NOTE: Record<RouteId, Record<SwapPair['direction'], string>> = {
@@ -103,6 +103,11 @@ const NOTE: Record<RouteId, Record<SwapPair['direction'], string>> = {
   thor: {
     into_zec:
       'thorchain pays transparent addresses only. the zec lands at your t-address, ready to shield.',
+    from_zec: 'leaves the shielded pool through your transparent address. that step is public.',
+  },
+  maya: {
+    into_zec:
+      "maya can't pay zafu's shielded address yet, so the zec lands at your t-address. refunds go back to the address that paid.",
     from_zec: 'leaves the shielded pool through your transparent address. that step is public.',
   },
   penumbra: { into_zec: '', from_zec: '' },
@@ -228,7 +233,9 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const { requestAuth, PasswordModal } = usePasswordGate();
   const { chosen, choose } = useSwapRoutes();
 
-  const pinned = link?.link.route;
+  // a link to a route zafu doesn't offer opens the normal router, with that one line
+  const off = link?.link.route && ROUTES[link.link.route].off;
+  const pinned = off ? undefined : link?.link.route;
   const [step, setStep] = useState<Step>('input');
   const [direction, setDirection] = useState(link?.link.direction ?? 'into_zec');
   const [amountIn, setAmountIn] = useState(link?.link.amount ?? '');
@@ -626,7 +633,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
                   }
                 : undefined
             }
-            helper={error ?? pinnedRefusal ?? (belowMin ? minimum.line : undefined)}
+            helper={error ?? pinnedRefusal ?? (belowMin ? minimum.line : off || undefined)}
             warn={!!(error ?? pinnedRefusal) || belowMin}
           />
           <Button
