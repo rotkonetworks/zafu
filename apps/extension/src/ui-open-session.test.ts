@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const transport = { publish: vi.fn(), query: vi.fn() };
 const transportFactory = vi.fn(() => transport);
 vi.mock('./state/contact-discovery-service', () => ({
-  runPresencePublish: vi.fn(() => transportFactory()),
   runDiscoveryForScope: vi.fn(() => transportFactory()),
   contactDiscoveryDeps: { transport: transportFactory },
 }));
@@ -52,7 +51,7 @@ describe('opening the popup', () => {
 
     expect(session.open).toBe(true);
     expect(sync.resume).toHaveBeenCalledOnce();
-    expect(discovery.runPresencePublish).not.toHaveBeenCalled();
+    expect(discovery.runDiscoveryForScope).not.toHaveBeenCalled();
     expect(transportFactory).not.toHaveBeenCalled();
     expect(transport.publish).not.toHaveBeenCalled();
     expect(fetchSpy).not.toHaveBeenCalled();

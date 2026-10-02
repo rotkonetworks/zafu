@@ -187,6 +187,22 @@ describe('zafu_frost_sign_disabled_unreachable - arm removed, no popup', () => {
   });
 });
 
+describe('contact discovery is left to its own listeners', () => {
+  it.each(['zafu_discover_contacts', 'zafu_request_contact_discovery'])(
+    '%s gets no answer here, so its listener can answer',
+    type => {
+      const respond = vi.fn();
+      const handled = externalMessageListener(
+        { type, appScope: 'https://friends.example' },
+        validSender('https://friends.example'),
+        respond,
+      );
+      expect(handled).toBe(false);
+      expect(respond).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe('gh #18 - zafu_delete_multisig uniform rejection', () => {
   it('rejects a too-short label with the uniform denied shape (granted origin)', async () => {
     const origin = 'https://del-short.example';

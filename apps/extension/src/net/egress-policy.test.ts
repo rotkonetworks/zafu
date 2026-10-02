@@ -148,6 +148,18 @@ describe('optional services', () => {
     expect(outcome(ownRelay, 'https://r.example/bucket?x=1')).toBe('allow');
   });
 
+  it('discovery is one destination: off until the first site grant, then only its relay', () => {
+    const own = { relayEndpoint: 'https://r.example' };
+    expect(outcome({ ...ZCASH_ONLY, zidDiscovery: own }, 'https://r.example/bucket')).toBe(
+      'opt-in',
+    );
+    const on = { ...ZCASH_ONLY, zidDiscovery: { ...own, enabled: true } };
+    expect(outcome(on, 'https://r.example/bucket')).toBe('allow');
+    expect(outcome(on, 'https://r.example/other')).not.toBe('allow');
+    const row = describeEgress(on).find(d => d.id === 'contact-discovery');
+    expect(row).toMatchObject({ on: true, why: 'setting', hosts: ['r.example/bucket'] });
+  });
+
   it('turn on through an opt-in, and follow per-wallet relays', () => {
     const optIns = { 'chat-relay': 'allowed', 'multisig-relay': 'allowed' } as const;
     const inputs: EgressInputs = {

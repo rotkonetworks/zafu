@@ -142,17 +142,16 @@ const ContactView = ({ contact }: { contact: Contact }) => {
 
       <RowGroup>
         <Row type='screen' label='rename' onPress={() => setOpen({ kind: 'rename' })} />
-        {contact.zid ? (
+        {contact.zid && (
           <Row type='screen' label='check seal again' onPress={() => setOpen({ kind: 'seal' })} />
-        ) : (
-          shareCard &&
-          hasZcash && (
-            <Row
-              type='screen'
-              label='send them your card'
-              onPress={() => void shareCard(contact).then(ok => setShareFailed(!ok))}
-            />
-          )
+        )}
+        {/* until both cards carry the discovery key, neither side can be found */}
+        {!contact.card && shareCard && hasZcash && (
+          <Row
+            type='screen'
+            label='send them your card'
+            onPress={() => void shareCard(contact).then(ok => setShareFailed(!ok))}
+          />
         )}
       </RowGroup>
       {shareFailed && (

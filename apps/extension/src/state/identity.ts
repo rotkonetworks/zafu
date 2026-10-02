@@ -736,6 +736,14 @@ export async function currentIdentityName(base: string = DEFAULT_IDENTITY): Prom
   return rotatedIdentity(base, await getZidIndex());
 }
 
+/**
+ * The contact key-agreement key a card carries: the same key presence is
+ * published under (contact-discovery-service uses `currentIdentityName()`
+ * too), so the two always agree or discovery finds nobody.
+ */
+export const myDiscoveryKey = async (mnemonic: string): Promise<string> =>
+  deriveZidContactCardKey(mnemonic, await currentIdentityName()).publicKey;
+
 /** chrome.storage.local key prefix: per wallet, a map of generation index ->
  * zid public key hex. Populated whenever a generation is actually derived, so
  * display surfaces can show the real key for the active generation without

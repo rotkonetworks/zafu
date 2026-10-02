@@ -64,17 +64,23 @@ export const myAddressForContact = async (
   }
 };
 
-/** a contact card memo, as hex, carrying the sender's name and address */
+/**
+ * a contact card memo, as hex, carrying the sender's name and address, and
+ * (`ka`) the contact key-agreement key that lets the two of you find each
+ * other on sites with private contact discovery
+ */
 export const contactCardMemoHex = (card: {
   senderName: string;
   myAddress: string;
   zid?: string;
+  ka?: string;
 }): string | undefined => {
   const memos = encodeContactCard({
     name: card.senderName,
     address: card.myAddress,
     flags: 0,
     zid: card.zid,
+    ka: card.ka,
   });
   return memos[0] && bytesToHex(memos[0]);
 };
@@ -132,3 +138,15 @@ export const readCardPayload = (payload: string): ContactCard | undefined => {
     return undefined;
   }
 };
+
+/**
+ * The discovery key a card carries, in the shape a contact stores it. Only
+ * x25519-v1 exists today; a card without the key gives an address-only
+ * person for discovery.
+ */
+export const cardDiscoveryKey = (
+  card: Pick<ContactCard, 'ka'>,
+): { suite: 'x25519-v1'; publicKey: string } | undefined =>
+  card.ka && /^[0-9a-f]{64}$/.test(card.ka)
+    ? { suite: 'x25519-v1', publicKey: card.ka }
+    : undefined;

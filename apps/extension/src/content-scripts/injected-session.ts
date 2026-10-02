@@ -2,6 +2,8 @@
 // egress guard first: nothing may capture fetch or open a socket before it
 import '../net/egress-install-lite';
 import '../install-console-quieting';
+// discovery presence for a granted site's open page (inert until zafu asks)
+import './discovery-hold';
 import { PenumbraRequestFailure } from '@penumbra-zone/client/error';
 import { CRSessionClient } from '@penumbra-zone/transport-chrome/session-client';
 import { onContextInvalidated } from '../utils/reload-notice';

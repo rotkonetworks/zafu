@@ -93,4 +93,20 @@ describe('PresenceService - end-to-end publish + discover', () => {
     const present = await otherApp.findPresent([peerA], EPOCH);
     expect(present).toHaveLength(0);
   });
+
+  it('withdraw takes this epoch back at once: the tag stays, nothing opens', async () => {
+    // the real relay merges by tag (minirelay ON CONFLICT DO UPDATE)
+    const t = new MemRelay();
+    const merged = new Map<string, PresenceEntry>();
+    t.putBucket = async req => {
+      for (const e of req.entries) {
+        merged.set(bytesToHex(e.tag), e);
+      }
+      t.store.set(`${req.appScope}|${req.epoch}|${req.shard}`, [...merged.values()]);
+    };
+    await svcA(t).publishSelf(record(1), [peerB], EPOCH);
+    expect(await svcB(t).findPresent([peerA], EPOCH)).toHaveLength(1);
+    await svcA(t).withdrawSelf([peerB], EPOCH);
+    expect(await svcB(t).findPresent([peerA], EPOCH)).toHaveLength(0);
+  });
 });

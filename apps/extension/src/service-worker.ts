@@ -26,6 +26,7 @@ import { internalServiceListener } from './message/listen/internal-services';
 import { externalMessageListener } from './message/listen/external-easteregg';
 import { encryptionMessageListener } from './message/listen/external-encryption';
 import { contactDiscoveryListener } from './message/listen/contact-discovery';
+import { startDiscoveryPresence } from './discovery-presence-port';
 import {
   contactDiscoveryRequestListener,
   contactDiscoveryRequestResultListener,
@@ -565,6 +566,9 @@ chrome.runtime.onMessageExternal.addListener(encryptionMessageListener);
 // listen for private, app-scoped contact discovery (zafu_discover_contacts).
 // A no-op unless the user opted in and configured a relay.
 chrome.runtime.onMessageExternal.addListener(contactDiscoveryListener);
+// presence for a granted site's open page, held over its content script's
+// port; nothing here runs while no granted page is open
+startDiscoveryPresence();
 
 // listen for the contact-discovery CONSENT request
 // (zafu_request_contact_discovery): an app asks the user to turn the

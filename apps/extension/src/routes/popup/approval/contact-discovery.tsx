@@ -2,10 +2,10 @@
  * Private-contact-discovery consent popup.
  *
  * Opened by external apps via `zafu_request_contact_discovery`: the app asked
- * the USER to turn private contact discovery on. This popup is the user's
- * decision, and it must be an INFORMED one - so it states plainly that
- * accepting turns the feature on for EVERY app, not just the caller, and it
- * shows the relay the wallet will actually use (the app cannot choose it).
+ * the USER to show it which friends are here (ReqDiscover.dc.html). The
+ * answer is for THIS site only, and it says the one cost straight: friends
+ * here will see you are online. The relay it uses is the wallet's own (the
+ * app cannot choose it), listed under "everything zafu talks to".
  *
  * On approve/deny it reports the decision to the service worker over the
  * internal callback `zafu_contact_discovery_approval_result`; closing the
@@ -18,7 +18,6 @@ import { ApproveDeny } from './approve-deny';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
 import { OriginIcon, hostnameOf } from '../../../shared/components/origin-icon';
 import { Mark } from '@repo/ui/components/ui/mark';
-import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../../../config/contact-discovery-relay';
 
 // `new URL()` throws on a malformed string; the `app` query param is only
 // truthiness-checked upstream, so parse defensively and fall back to the raw text.
@@ -36,12 +35,8 @@ export const ContactDiscoveryApproval = () => {
   const [params] = useSearchParams();
   const origin = params.get('app') || '';
   const requestId = params.get('requestId') || '';
-  const title = params.get('title') || '';
-  // The endpoint the wallet will ACTUALLY use (the worker resolved a configured
-  // endpoint, else the built-in default). Falling back to the constant keeps the
-  // popup honest if the param is ever missing - never show a relay we're not sure of.
-  const relay = params.get('relay') || DEFAULT_CONTACT_DISCOVERY_RELAY;
-  const appName = title || (origin ? hostnameOf(origin) : 'this app');
+  // the site's own host, never its page title: a title is whatever the page says
+  const host = origin ? hostnameOf(origin) : 'this site';
 
   const respond = async (approved: boolean) => {
     // Await before closing (see passkey.tsx): window.close() tears this popup
@@ -65,17 +60,17 @@ export const ContactDiscoveryApproval = () => {
           <div className='flex w-full items-center gap-2'>
             {!!origin && <OriginIcon origin={origin} size={32} />}
             <div className='flex min-w-0 flex-col'>
-              {title && <span className='truncate text-sm text-fg-high'>{title}</span>}
+              <span className='truncate text-sm text-fg-high'>{host}</span>
               {origin && (
                 <span className='truncate text-xs text-fg-muted'>
-                  <SafeOriginURL origin={origin} />
+                  <SafeOriginURL origin={origin} /> · find friends
                 </span>
               )}
             </div>
           </div>
           <Mark variant='seal' size={40} />
           <h1 className='text-title text-fg-high lowercase tracking-[-0.01em]'>
-            show {appName} which friends are here?
+            show {host} which friends are here?
           </h1>
         </header>
       }
@@ -89,11 +84,10 @@ export const ContactDiscoveryApproval = () => {
     >
       <div className='w-full px-[30px]'>
         <div className='flex flex-col gap-2 text-xs text-fg-muted'>
-          <p>only friends who also use {appName}</p>
+          <p>only friends who also use {host}</p>
           <p>never your whole contact list</p>
           <p>the relay can&apos;t tell who you looked for</p>
           <p>friends here will see you are online</p>
-          <p className='break-all font-mono text-fg-dim'>relay {relay}</p>
         </div>
       </div>
     </ApprovalScreen>

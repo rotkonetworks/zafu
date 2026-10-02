@@ -7,7 +7,8 @@
  * not have - the mnemonic-derived pairwise contact secrets. This module joins
  * them: it turns wallet contacts into the SDK's `DiscoveryPeer`s (deriving each
  * root secret ONCE, suite-blind from here on), runs discovery for one app scope,
- * and publishes this wallet's own presence for the fixed-cadence alarm.
+ * and builds this wallet's own presence record (published by
+ * ./discovery-presence, only for a granted site whose page is open).
  *
  * PRIVACY INVARIANTS (do not weaken):
  *   - a root secret is established ONCE and cached for the session; it is never
@@ -32,7 +33,6 @@ import {
   discoverContacts as discoverPresentContacts,
   type DiscoveryPeer,
   type PresenceRecord,
-  type PublishArgs,
   type RelayTransport,
 } from '@zafu/zid';
 import type { ZafuDiscoveredContact } from '@zafu/protocol';
@@ -212,23 +212,3 @@ export const buildPresenceRecord = (appScope: string, epoch: number): PresenceRe
   sessionPub: sessionPubFor(appScope, epoch),
   caps: CONTACT_DISCOVERY_CAPS,
 });
-
-/**
- * What this wallet should publish for `(appScope, epoch)`: the presence record
- * (a fresh app-scoped ephemeral session pubkey) and the peers to beacon to.
- * With zero discovery-capable contacts `peers` is empty - the SDK still writes
- * a padded, constant-shape bucket (fixed cadence), so "went quiet" is not
- * observable. The cadence itself is the scheduler's job (see
- * state/contact-discovery-service).
- */
-export const buildPublishArgs = async (args: {
-  appScope: string;
-  contacts: readonly Contact[];
-  mnemonic: string;
-  identityName: string;
-  epoch: number;
-}): Promise<PublishArgs> => {
-  const secrets = deriveContactRootSecrets(args.contacts, args.mnemonic, args.identityName);
-  const peers = await buildDiscoveryPeers(args.contacts, args.appScope, secrets);
-  return { record: buildPresenceRecord(args.appScope, args.epoch), peers };
-};
