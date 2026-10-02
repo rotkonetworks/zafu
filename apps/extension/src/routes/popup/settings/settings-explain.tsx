@@ -62,9 +62,8 @@ export const PRIVACY_EXPLAIN: Record<string, Explain> = {
     off: 'zafu never contacts zcash.me',
   },
   'thorchain names': {
-    blurb:
-      'some people register a short name on thorchain, like "alice", that stands for their addresses. you can type that name in send, swap or contacts instead of a long address.',
-    on: 'zafu looks the name up on a thorchain node as you type it; that node sees your ip',
+    blurb: 'lets you pay a short name, like "alice", instead of a long address.',
+    on: 'zafu looks the name up as you type it; the node it asks sees your ip',
     off: 'zafu asks you first, each time',
   },
 };
