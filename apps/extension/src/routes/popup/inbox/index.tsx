@@ -1031,7 +1031,7 @@ export function InboxPage() {
     syncMemos: syncPenumbraMemos,
     isSyncing: isPenumbraSyncing,
     syncProgress,
-  } = usePenumbraMemos();
+  } = usePenumbraMemos(walletId);
   const {
     syncMemos: syncZcashMemos,
     isSyncing: isZcashSyncing,
