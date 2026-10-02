@@ -22,6 +22,7 @@ import { PENUMBRA_MAINNET_ENDPOINTS, defaultPenumbraEndpoint } from '../config/p
 import { ZCASH_MAINNET_ENDPOINTS, defaultZcashEndpoint } from '../config/zcash-endpoints';
 import { BUNDLED_SERVICE_CONFIG } from '../services/voting/bundled-config';
 import { pickIndependentPeer } from '../workers/cross-verify';
+import { MAYA_ENABLED } from '../config/feature-flags';
 import { hostOf } from './destination';
 import { matchRule, type EgressRule, type EgressTable } from './egress-table';
 import type { NetPurpose } from './purpose';
@@ -280,6 +281,14 @@ export const DESTINATIONS: readonly DestinationSpec[] = [
     purpose: 'swap',
     gate: { kind: 'optional' },
     urls: () => THORNODE_URLS,
+  },
+  {
+    id: 'mayachain',
+    label: 'maya swap',
+    purpose: 'swap',
+    gate: { kind: 'optional' },
+    urls: () => ['https://mayanode.mayachain.info'],
+    hidden: !MAYA_ENABLED,
   },
   {
     id: 'thorname',

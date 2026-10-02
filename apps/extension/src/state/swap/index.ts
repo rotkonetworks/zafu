@@ -3,6 +3,7 @@
 import { requestEgressOptIn } from '../../net/egress-opt-in';
 import { nearProvider } from './near';
 import { thorProvider } from './thor';
+import { mayaProvider } from './maya';
 import { rank, type Quote, type QuoteRequest, type SwapProvider, type SwapToken } from './provider';
 import { ROUTES, type RouteId } from './routes';
 
@@ -10,6 +11,7 @@ import { ROUTES, type RouteId } from './routes';
 export const PROVIDERS: Partial<Record<RouteId, SwapProvider>> = {
   near: nearProvider,
   thor: thorProvider,
+  maya: mayaProvider,
 };
 
 export type RouteResult = { route: RouteId; quote: Quote } | { route: RouteId; error: unknown };

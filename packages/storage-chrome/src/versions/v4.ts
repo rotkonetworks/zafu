@@ -314,7 +314,7 @@ type LOCAL = {
   /** penumbra home rows (asset ids, base64) the user turned to show usd */
   penumbraRowsInUsd?: string[];
   /** the swap route the user chose per pair (`into_zec:btc@btc`), kept only when they changed it */
-  swapRoutes?: Record<string, 'near' | 'thor' | 'penumbra'>;
+  swapRoutes?: Record<string, 'near' | 'thor' | 'maya' | 'penumbra'>;
 
   zafuFeeMultiplier?: number;
 

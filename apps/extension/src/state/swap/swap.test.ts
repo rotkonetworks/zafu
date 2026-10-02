@@ -38,19 +38,27 @@ import {
   type Quote,
   type QuoteRequest,
 } from './provider';
-import { candidates, routeLabel, ROUTES } from './routes';
+import { candidates, OFFERED, routeLabel, ROUTES } from './routes';
 import {
   BelowMinimum,
-  checkQuote,
+  checkQuote as nodeCheckQuote,
   nameInMemo,
-  thorCost,
-  thorProvider,
-  thorStatus,
+  nodeCost,
+  nodeStatus,
   type InboundAddress,
-  type ThorQuote,
-} from './thor';
+  type NodeQuote,
+} from './thornode';
+import { thorProvider } from './thor';
+import { mayaProvider } from './maya';
 import { nearCost, nearProvider } from './near';
 import { quoteRoutes, routeTokens } from '.';
+
+const checkQuote = (
+  ...a: Parameters<typeof nodeCheckQuote> extends [string, ...infer R] ? R : never
+) => nodeCheckQuote('thorchain', ...a);
+const thorStatus = (s: Parameters<typeof nodeStatus>[0]) => nodeStatus(s, 'thorchain');
+const thorCost = (...a: Parameters<typeof nodeCost> extends [string, ...infer R] ? R : never) =>
+  nodeCost('thorchain', ...a);
 
 const NOW = 1_790_000_000;
 const T = 't1PTs8DQifJxg6HmUq7AgYYFNkbyQa1zjgf';
@@ -80,7 +88,7 @@ const inbound = (over: Partial<InboundAddress> = {}): InboundAddress[] => [
   },
 ];
 /** BTC.BTC -> ETH.ETH as recorded, its output relabelled zec */
-const thorQuote = (over: Partial<ThorQuote> = {}): ThorQuote => ({
+const thorQuote = (over: Partial<NodeQuote> = {}): NodeQuote => ({
   inbound_address: BTC_VAULT,
   expiry: NOW + 600,
   memo: `=:ZEC.ZEC:${T}/bc1qrefundexample:0/1/0`,
@@ -146,7 +154,7 @@ const nearQuote = {
 };
 
 /** answers thornode paths, records each url asked; `withFee` answers a quote carrying an affiliate */
-const thornode = (quote: ThorQuote, inb = inbound(), withFee?: ThorQuote) => {
+const thornode = (quote: NodeQuote, inb = inbound(), withFee?: NodeQuote) => {
   const urls: string[] = [];
   vi.stubGlobal(
     'fetch',
@@ -460,6 +468,184 @@ describe('thorchain', () => {
     vi.stubGlobal('fetch', vi.fn());
     expect(await thorProvider.tokens()).toContainEqual(BTC);
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+/** answers recorded from mayanode.mayachain.info (1.133.0) on 2026-10-02, trimmed to the fields read */
+const MAYA_ZEC_VAULT = 't1VtnnhTYhmADh7L2uKU3Sev7GscBHT6HfE';
+const MAYA_BTC_VAULT = 'bc1qs0dw6qhqqwxfu6ls9gwc4kc9was7z5zpjh9ngf';
+const mayaInbound: InboundAddress[] = [
+  {
+    chain: 'BTC',
+    address: MAYA_BTC_VAULT,
+    halted: false,
+    dust_threshold: '10000',
+    outbound_fee: '150',
+  },
+  {
+    chain: 'ZEC',
+    address: MAYA_ZEC_VAULT,
+    halted: false,
+    dust_threshold: '10000',
+    outbound_fee: '34614',
+  },
+];
+const mayaIntoZec: NodeQuote = {
+  inbound_address: MAYA_BTC_VAULT,
+  expiry: NOW + 900,
+  memo: `=:z:${T}:0/1/0`,
+  expected_amount_out: '63176359',
+  recommended_min_amount_in: '2188',
+  dust_threshold: '10000',
+  recommended_gas_rate: '3',
+  gas_rate_units: 'satsperbyte',
+  max_streaming_quantity: 1,
+  total_swap_seconds: 600,
+  fees: {
+    asset: 'ZEC.ZEC',
+    affiliate: '0',
+    outbound: '34614',
+    liquidity: '57195',
+    total: '91809',
+    slippage_bps: 9,
+    total_bps: 14,
+  },
+};
+const mayaFromZec: NodeQuote = {
+  inbound_address: MAYA_ZEC_VAULT,
+  expiry: NOW + 900,
+  memo: '=:b:bc1qdest:0/1/0',
+  expected_amount_out: '1574493',
+  recommended_min_amount_in: '138456',
+  dust_threshold: '10000',
+  recommended_gas_rate: '90000',
+  gas_rate_units: 'satsperbyte',
+  max_streaming_quantity: 1,
+  total_swap_seconds: 81,
+  fees: {
+    asset: 'BTC.BTC',
+    affiliate: '0',
+    outbound: '150',
+    liquidity: '2250',
+    total: '2400',
+    slippage_bps: 14,
+    total_bps: 15,
+  },
+};
+const ok = { completed: true };
+const mayaSwapped = {
+  out_txs: [{ memo: 'OUT:C60B0DBABD9B6F813886E8EC7E45AB79CD98169AC03F4FF053E1FA62A4C00489' }],
+  stages: {
+    inbound_observed: ok,
+    inbound_finalised: ok,
+    swap_status: { pending: false },
+    swap_finalised: ok,
+    outbound_signed: ok,
+  },
+};
+
+describe('maya', () => {
+  it('is off: never a candidate, never listed, a link to it falls back to the router', () => {
+    expect(ROUTES.maya.off).toBe("maya isn't offered right now");
+    expect(OFFERED).not.toContain('maya');
+    expect(candidates({ direction: 'into_zec', symbol: 'dash', chain: 'dash' })).toEqual(['near']);
+    expect(candidates({ direction: 'into_zec', symbol: 'btc', chain: 'btc' }, 'maya')).toEqual([
+      'near',
+      'thor',
+    ]);
+  });
+
+  it('asks nothing of mayanode on a quote round while off', async () => {
+    allow.add('near-swap').add('thorchain').add('mayachain');
+    const urls = thornode(thorQuote());
+    await quoteRoutes(candidates({ direction: 'into_zec', symbol: 'btc', chain: 'btc' }), req());
+    expect(asked).not.toContain('mayachain');
+    expect(urls.some(u => u.includes('mayachain'))).toBe(false);
+  });
+
+  it('pays zec into the transparent address, refunded to whoever paid, no zafu fee', async () => {
+    allow.add('mayachain');
+    const urls = thornode(mayaIntoZec, mayaInbound);
+    const quote = await mayaProvider.quote(req());
+    expect(asked).toContain('mayachain');
+    expect(urls.every(u => u.startsWith('https://mayanode.mayachain.info/mayachain/'))).toBe(true);
+    const ask = new URL(urls.find(u => u.includes('/quote/swap'))!).searchParams;
+    // no refund_address (it would push a btc memo past 80 bytes) and no affiliate
+    expect(Object.fromEntries(ask)).toEqual({
+      from_asset: 'BTC.BTC',
+      to_asset: 'ZEC.ZEC',
+      amount: '1000000',
+      destination: T,
+      streaming_interval: '1',
+    });
+    expect(quote).toMatchObject({
+      route: 'maya',
+      amountOut: 63_176_359n,
+      amountOutText: '0.63176359',
+      timeText: '~10 min',
+      depositAddress: MAYA_BTC_VAULT,
+      memo: `=:z:${T}:0/1/0`,
+      recipient: T,
+      watch: undefined,
+      notYet: undefined,
+    });
+    expect(quote.cost?.parts.map(p => [p.label, p.bps])).toEqual([
+      ['network fee in', 7],
+      ['maya', 14],
+      ['zafu fee', 0],
+    ]);
+  });
+
+  it('takes zec in as a memo deposit, for a signer that shows the memo', async () => {
+    thornode(mayaFromZec, mayaInbound);
+    const out = req({ direction: 'from_zec', otherAddress: 'bc1qdest', otherName: 'alice' });
+    expect(await mayaProvider.quote(out)).toMatchObject({
+      amountOut: 1_574_493n,
+      depositAddress: MAYA_ZEC_VAULT,
+      // maya resolves mayanames, so a thorname never stands in for the address
+      memo: '=:b:bc1qdest:0/1/0',
+      recipient: 'bc1qdest',
+      notYet: 'not available yet',
+      watch: 'txid',
+    });
+    expect((await mayaProvider.quote({ ...out, signsOpReturn: true })).notYet).toBeUndefined();
+  });
+
+  it('says calmly when maya has halted a chain, moved its vault, or the amount is too small', async () => {
+    thornode(mayaIntoZec, [{ ...mayaInbound[0]!, halted: true }, mayaInbound[1]!]);
+    await expect(mayaProvider.quote(req())).rejects.toThrow("maya isn't taking btc right now");
+    thornode({ ...mayaIntoZec, inbound_address: 'bc1qold' }, mayaInbound);
+    await expect(mayaProvider.quote(req())).rejects.toThrow('maya moved its vault');
+    thornode(mayaIntoZec, mayaInbound);
+    await expect(mayaProvider.quote(req({ amountIn: '0.00002' }))).rejects.toThrow(
+      'maya swaps 0.00010001 btc or more',
+    );
+  });
+
+  it('watches a deposit through the same stages as thornode', async () => {
+    expect(nodeStatus(mayaSwapped, 'maya')).toEqual({ phase: 'done', line: 'swap complete' });
+    const urls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        urls.push(url);
+        return Promise.resolve(new Response('{"error":"fail to parse tx id"}', { status: 404 }));
+      }),
+    );
+    expect(await mayaProvider.status!(q('maya', 1n), 'abcd')).toEqual({
+      phase: 'waiting',
+      line: 'waiting for maya to see the deposit',
+    });
+    expect(urls[0]).toBe('https://mayanode.mayachain.info/mayachain/tx/status/ABCD');
+  });
+
+  it('offers its pools, rune on thorchain among them', async () => {
+    const tokens = await mayaProvider.tokens();
+    expect(tokens).toContainEqual({ symbol: 'RUNE', chain: 'thor', decimals: 8 });
+    expect(tokens).toContainEqual({ symbol: 'DASH', chain: 'dash', decimals: 8 });
+    expect(ROUTES.maya.refuses({ direction: 'into_zec', symbol: 'doge' })).toMatch(
+      /maya doesn't trade doge/,
+    );
   });
 });
 

@@ -277,7 +277,7 @@ export const looksLikeLink = (text: string): boolean =>
 export const notYet = (intent: Intent): string | undefined =>
   intent.kind === 'pay' && intent.payments.length > 1
     ? `this request pays ${intent.payments.length} addresses · zafu pays one at a time, for now`
-    : intent.kind === 'swap' && intent.swap.route
+    : intent.kind === 'swap' && intent.swap.route && !ROUTES[intent.swap.route].off
       ? ROUTES[intent.swap.route].refuses({
           direction: intent.swap.direction,
           symbol: intent.swap.token,

@@ -31,6 +31,7 @@ const CHAINS: Record<string, { name: string; aliases?: string[] }> = {
   ltc: { name: 'litecoin' },
   bch: { name: 'bitcoin cash' },
   dash: { name: 'dash' },
+  thor: { name: 'thorchain', aliases: ['rune'] },
   starknet: { name: 'starknet' },
   scroll: { name: 'scroll' },
   monad: { name: 'monad' },
