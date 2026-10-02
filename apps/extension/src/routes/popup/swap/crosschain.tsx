@@ -6,7 +6,7 @@
  * reviews before anything is signed or shown to pay.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
@@ -30,17 +30,17 @@ import { useTransparentAddresses } from '../../../hooks/use-transparent-addresse
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
 import { useSwapRoutes } from '../../../hooks/swap-routes';
 import { usePasswordGate } from '../../../hooks/password-gate';
-import {
-  getBalanceInWorker,
-  buildSendTxInWorker,
-  completeSendTxInWorker,
-} from '../../../state/keyring/network-worker';
-import { blockchainToContactNetwork, toBaseUnits } from '../../../state/near-swap';
+import { buildSendTxInWorker, completeSendTxInWorker } from '../../../state/keyring/network-worker';
+import type { VaultUnlock } from '../../../state/keyring/types';
+import { usePoolNotes } from '../../../hooks/zcash-pool-balances';
+import { maxSendable } from '../send/spendable';
+import { blockchainToContactNetwork } from '../../../state/near-swap';
 import { PROVIDERS, quoteRoutes, routeTokens, type RouteResult } from '../../../state/swap';
 import {
   fromUnits,
   lead,
   toUnits,
+  type SwapPhase,
   type SwapStatusView,
   type SwapToken,
 } from '../../../state/swap/provider';
@@ -78,7 +78,7 @@ import { TokenSheet } from './token-sheet';
 import { CostList, CostMeta } from './cost-lines';
 import { ThorNameResolver } from '../../../components/thorname-resolver';
 
-type Step =
+export type Step =
   | 'input'
   | 'quoting'
   | 'routes'
@@ -89,7 +89,51 @@ type Step =
   | 'deposit'
   | 'polling'
   | 'done'
+  | 'refunded'
   | 'error';
+
+/** where a watched swap goes on each status; a refund is its own calm end, never the error step */
+export const STEP_FOR: Partial<Record<SwapPhase, Step>> = {
+  processing: 'polling',
+  done: 'done',
+  refunded: 'refunded',
+  failed: 'error',
+};
+
+/** a refund is a normal outcome: the money is safe, and nothing here invites a second swap */
+export const RefundedSlot = ({ line }: { line?: string }) => (
+  <StatusSlot tone='info' icon='i-ph-arrow-u-up-left'>
+    {line}
+  </StatusSlot>
+);
+
+/**
+ * The worker build for a zcash deposit, the one call every signer shares: the
+ * chosen pocket's store and account, never the wallet's pocket 0. A hot wallet
+ * passes its vault (signed and broadcast), a cold one its ufvk (unsigned).
+ */
+export const buildDeposit = (o: {
+  storeId?: string;
+  walletId: string;
+  pocket: number;
+  zidecarUrl: string;
+  to: string;
+  amountIn: string;
+  vault?: VaultUnlock;
+  ufvk?: string;
+}) =>
+  buildSendTxInWorker(
+    'zcash',
+    o.storeId ?? o.walletId,
+    o.zidecarUrl,
+    o.to,
+    toUnits(o.amountIn, 8).toString(),
+    '',
+    o.pocket,
+    true,
+    o.vault,
+    o.ufvk,
+  );
 
 /** routes with an implementation: the picker and best-route draw from these */
 const QUOTABLE = OFFERED.filter(id => PROVIDERS[id]);
@@ -268,7 +312,6 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const [minimum, setMinimum] = useState<{ key: string; min: bigint; line: string }>();
   // kept alongside the message so a blocked destination can offer an inline allow
   const [errorCause, setErrorCause] = useState<unknown>();
-  const [balanceZec, setBalanceZec] = useState<string>();
   const [signRequestQr, setSignRequestQr] = useState<string | null>(null);
   const unsignedTxRef = useRef<any | null>(null);
   const [sendSteps, setSendSteps] = useState<
@@ -301,7 +344,10 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const carrier = pair && quote && poolAsset(quote.route, pair)?.carrier;
   // thornames resolve to thorchain's own chain naming
   const aliasChain = pair && poolAsset('thor', pair)?.asset.split('.')[0];
-  const left = useDeadlineCountdown(step === 'routes' ? (view?.expiresAt ?? null) : null);
+  // the deadline on routes is the price's; on the deposit screen it is the window to pay in
+  const left = useDeadlineCountdown(
+    step === 'routes' || step === 'deposit' ? (view?.expiresAt ?? null) : null,
+  );
   const expired = step === 'routes' && !!view?.expiresAt && view.expiresAt <= Date.now();
   const provider = quote && PROVIDERS[quote.route];
   const watchable =
@@ -325,15 +371,14 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
     return () => window.removeEventListener('zcash-send-progress', handler);
   }, [step]);
 
-  const walletId = selectedKeyInfo?.id;
-  useEffect(() => {
-    if (!walletId) {
-      return;
-    }
-    getBalanceInWorker('zcash', walletId)
-      .then(b => setBalanceZec((Number(b) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '')))
-      .catch(() => {});
-  }, [walletId]);
+  // the spending pocket's own pool (as thor-deposit); nothing shows before its notes are read
+  const { ironwood } = usePoolNotes(storeId ?? selectedKeyInfo?.id);
+  const notes = useMemo(() => ironwood.filter(n => !n.spent).map(n => BigInt(n.value)), [ironwood]);
+  const total = notes.reduce((a, v) => a + v, 0n);
+  const balanceZec = notes.length ? fromUnits(total, 8) : undefined;
+  // every note, the real ZIP-317 fee, priced as the dearer transparent output: the deposit
+  // address isn't known yet. thorchain's two-step pays a second fee (its own screen checks)
+  const maxZec = fromUnits(maxSendable(notes, { transparentRecipient: true }).amountZat, 8);
 
   // the picker's tokens, fetched only once the user opens it, never merely from opening swap
   const pickerRoutes = pinned ? [pinned] : QUOTABLE;
@@ -448,27 +493,16 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
 
     try {
       const walletId = selectedKeyInfo.id;
-      const amountZat = toBaseUnits(amountIn, 8);
+      const deposit = { storeId, walletId, pocket, zidecarUrl, to: quote.depositAddress, amountIn };
+      setSendSteps([]);
       if (selectedKeyInfo.type === 'mnemonic') {
         if (!(await requestAuth())) {
           setStep('routes');
           return;
         }
-        setSendSteps([]);
         buildStartRef.current = Date.now();
         setStep('sending');
-        const vault = await getVaultUnlock(walletId);
-        const result = await buildSendTxInWorker(
-          'zcash',
-          storeId ?? walletId,
-          zidecarUrl,
-          quote.depositAddress,
-          amountZat,
-          '',
-          pocket,
-          true,
-          vault,
-        );
+        const result = await buildDeposit({ ...deposit, vault: await getVaultUnlock(walletId) });
         if (!('txid' in result)) {
           throw new Error('failed to broadcast deposit transaction');
         }
@@ -480,28 +514,16 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
       if (!ufvk) {
         throw new Error('UFVK required for zigner wallet send');
       }
-      setSendSteps([]);
       buildStartRef.current = Date.now();
       setStep('sending');
-      const result = await buildSendTxInWorker(
-        'zcash',
-        walletId,
-        zidecarUrl,
-        quote.depositAddress,
-        amountZat,
-        '',
-        0,
-        true,
-        undefined,
-        ufvk,
-      );
+      const result = await buildDeposit({ ...deposit, ufvk });
       if (!('sighash' in result)) {
         throw new Error('unexpected unsigned tx result');
       }
       unsignedTxRef.current = result;
       setSignRequestQr(
         encodeZcashSignRequest({
-          accountIndex: 0,
+          accountIndex: pocket,
           sighash: hexToBytes(result.sighash),
           orchardAlphas: result.alphas.map(a => hexToBytes(a)),
           summary: `swap ${amountIn} ZEC`,
@@ -529,9 +551,10 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
         throw new Error('missing unsigned tx');
       }
       setStep('sending');
+      // the same pocket store the build read, so the spent notes are marked there
       const result = await completeSendTxInWorker(
         'zcash',
-        selectedKeyInfo.id,
+        storeId ?? selectedKeyInfo.id,
         zidecarUrl,
         unsignedTxRef.current.unsignedTx,
         {
@@ -564,13 +587,12 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
       try {
         const next = await watch(quote, depositTxid);
         setStatus(next);
-        if (next.phase === 'done') {
-          setStep('done');
-        } else if (next.phase === 'failed') {
+        if (next.phase === 'failed') {
           setError(next.line);
-          setStep('error');
-        } else if (next.phase === 'processing') {
-          setStep('polling');
+        }
+        const to = STEP_FOR[next.phase];
+        if (to) {
+          setStep(to);
         }
       } catch (err) {
         console.error('[swap-status] poll failed', err);
@@ -633,14 +655,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
             unit={isFromZec ? 'zec' : tokenQuery.isFetching ? 'reading' : unit}
             onUnit={isFromZec ? undefined : () => setPickerOpen(true)}
             available={isFromZec ? balanceZec : undefined}
-            onMax={
-              isFromZec && balanceZec
-                ? () => {
-                    const max = Math.max(0, parseFloat(balanceZec) - 0.0001);
-                    setAmountIn(max.toFixed(8).replace(/0+$/, '').replace(/\.$/, ''));
-                  }
-                : undefined
-            }
+            onMax={isFromZec && balanceZec ? () => setAmountIn(maxZec) : undefined}
             helper={error ?? pinnedRefusal ?? (belowMin ? minimum.line : off || undefined)}
             warn={!!(error ?? pinnedRefusal) || belowMin}
           />
@@ -959,9 +974,16 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
                 <div className='flex flex-col items-center gap-3 border border-border-soft bg-elev-1 p-3'>
                   <p className='text-xs text-fg-muted'>
                     send exactly <Sensitive>{`${quote.amountInText} ${inUnit}`}</Sensitive> on{' '}
-                    {token?.chain} to
+                    {token && chainName(token.chain)} to
                   </p>
                   <QrCode value={quote.depositAddress} size={160} label='deposit address' />
+                  {quote.expiresAt && (
+                    <p className={cn('text-xs', left ? 'text-zigner-gold' : 'text-fg-muted')}>
+                      {left
+                        ? `pay within ${untilLabel(left)}`
+                        : "the deposit window has closed · please don't send to it now"}
+                    </p>
+                  )}
                   {quote.gasLine && <p className='text-xs text-fg-muted'>{quote.gasLine}</p>}
                   <div className='flex w-full items-center gap-2'>
                     <span className='min-w-0 flex-1 break-all font-mono text-xs'>
@@ -996,6 +1018,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
           </div>
         )}
 
+        {step === 'refunded' && <RefundedSlot line={status?.line} />}
         {step === 'error' &&
           (isEgressBlocked(errorCause) ? (
             <EgressBlockedStatus error={errorCause} onAllowed={() => setStep('input')} />
@@ -1019,6 +1042,11 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
               done
             </Button>
           ))}
+        {step === 'refunded' && (
+          <Button className='w-full' onClick={() => navigate(PopupPath.INDEX)}>
+            done
+          </Button>
+        )}
         {(step === 'done' || step === 'error') && (
           <Button className='w-full' onClick={reset}>
             {step === 'done' ? 'swap again' : 'try again'}

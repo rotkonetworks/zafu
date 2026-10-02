@@ -194,6 +194,20 @@ describe('units', () => {
     expect(rescale(412_000_000n, 8, 18)).toBe(4_120_000_000_000_000_000n);
     expect(rescale(412_000_000n, 8, 6)).toBe(4_120_000n);
   });
+
+  it('round-trips 18-decimal values a float cannot hold', () => {
+    for (const s of [
+      '1.000000000000000001',
+      '123456789012.345678901234567891',
+      '0.000000000000000001',
+    ]) {
+      expect(fromUnits(toUnits(s, 18), 18, 18)).toBe(s);
+    }
+    expect(toUnits('1.000000000000000001', 18)).toBe(10n ** 18n + 1n);
+    // past 2^53 in the whole part
+    expect(toUnits('9007199254740993', 8)).toBe(900_719_925_474_099_300_000_000n);
+    expect(toUnits('1e5', 8)).toBe(0n);
+  });
 });
 
 describe('rank', () => {
@@ -305,7 +319,7 @@ describe('thorchain', () => {
     ).toMatchObject({ phase: 'done' });
     expect(
       thorStatus({ stages: { ...final, swap_finalised: done }, out_txs: [{ memo: 'REFUND:AB' }] }),
-    ).toMatchObject({ phase: 'failed' });
+    ).toMatchObject({ phase: 'refunded' });
 
     const urls: string[] = [];
     vi.stubGlobal(
@@ -681,6 +695,23 @@ describe('near intents', () => {
     );
   });
 
+  it('asks for an 18-decimal amount exactly', async () => {
+    const eth = {
+      assetId: 'nep141:eth.omft.near',
+      decimals: 18,
+      blockchain: 'eth',
+      symbol: 'ETH',
+      price: 1,
+    };
+    near.getSupportedTokens.mockResolvedValue([...nearTokens, eth]);
+    vi.setSystemTime(NOW * 1000 + 301_000); // past the cached token list
+    const token = { symbol: 'ETH', chain: 'eth', decimals: 18 };
+    await nearProvider.quote(req({ token, amountIn: '1.000000000000000001' }));
+    expect(near.requestQuote).toHaveBeenLastCalledWith(
+      expect.objectContaining({ amount: '1000000000000000001' }),
+    );
+  });
+
   it("charges zafu's app fee at full price once a recipient is set", async () => {
     fee.recipient = 'zafu.near';
     const quote = await nearProvider.quote(req());
@@ -710,6 +741,8 @@ describe('near intents', () => {
     near.checkSwapStatus.mockResolvedValue({ status: null });
     expect((await nearProvider.status!(q('near', 0n))).phase).toBe('waiting');
     near.checkSwapStatus.mockResolvedValue({ status: 'REFUNDED' });
+    expect((await nearProvider.status!(q('near', 0n))).phase).toBe('refunded');
+    near.checkSwapStatus.mockResolvedValue({ status: 'FAILED' });
     expect((await nearProvider.status!(q('near', 0n))).phase).toBe('failed');
   });
 });

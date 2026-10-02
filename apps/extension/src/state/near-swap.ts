@@ -232,24 +232,6 @@ export function filterSwappableTokens(tokens: NearToken[]): NearToken[] {
   return tokens.filter(t => t.symbol !== 'ZEC').sort((a, b) => chainRank(a) - chainRank(b));
 }
 
-/** Format amount from base units to display (e.g. zatoshis → ZEC). */
-export function formatAmount(baseUnits: string, decimals: number): string {
-  const n = Number(baseUnits);
-  if (isNaN(n)) {
-    return '0';
-  }
-  return (n / 10 ** decimals).toFixed(Math.min(decimals, 8));
-}
-
-/** Convert display amount to base units string. */
-export function toBaseUnits(displayAmount: string, decimals: number): string {
-  const n = parseFloat(displayAmount);
-  if (isNaN(n) || n <= 0) {
-    return '0';
-  }
-  return Math.floor(n * 10 ** decimals).toString();
-}
-
 /** Map NEAR 1Click blockchain name to our ContactNetwork type. */
 const BLOCKCHAIN_TO_NETWORK: Record<string, string> = {
   btc: 'bitcoin',

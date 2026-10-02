@@ -113,7 +113,10 @@ export const nodeStatus = (s: NodeTxStatus, name: string): SwapStatusView => {
     swapping: { phase: 'processing', line: 'swapping' },
     sending: { phase: 'processing', line: 'sending to the recipient' },
     done: { phase: 'done', line: 'swap complete' },
-    refunded: { phase: 'failed', line: `${name} refunded the zec to your transparent address` },
+    refunded: {
+      phase: 'refunded',
+      line: `${name} sent the zec back to your transparent address · it is safe`,
+    },
   } as const satisfies Record<string, SwapStatusView>;
   const st = s.stages;
   const stage: keyof typeof lines = !st?.inbound_observed?.completed

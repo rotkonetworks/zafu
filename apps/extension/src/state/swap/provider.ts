@@ -90,7 +90,8 @@ export interface Quote {
   raw: unknown;
 }
 
-export type SwapPhase = 'waiting' | 'processing' | 'done' | 'failed';
+/** `refunded` is a calm end: the money is back, nothing failed */
+export type SwapPhase = 'waiting' | 'processing' | 'done' | 'refunded' | 'failed';
 
 export interface SwapStatusView {
   phase: SwapPhase;

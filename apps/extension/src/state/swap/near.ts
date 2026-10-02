@@ -7,12 +7,12 @@ import {
   findZecAssetId,
   getSupportedTokens,
   requestQuote,
-  toBaseUnits,
   type NearToken,
   type SwapQuoteResponse,
   type SwapStatus,
 } from '../near-swap';
 import { costOf, type Cost, type Quote, type SwapProvider, type SwapStatusView } from './provider';
+import { toUnits } from './provider';
 
 const TOKENS_FOR_MS = 300_000;
 let list: { at: number; tokens: Promise<NearToken[]> } | undefined;
@@ -30,7 +30,10 @@ const nearTokens = (): Promise<NearToken[]> => {
 const STATUS: Record<SwapStatus | 'none', SwapStatusView> = {
   SUCCESS: { phase: 'done', line: 'swap complete' },
   FAILED: { phase: 'failed', line: 'swap failed' },
-  REFUNDED: { phase: 'failed', line: 'swap refunded' },
+  REFUNDED: {
+    phase: 'refunded',
+    line: 'near intents sent it back to your refund address · it is safe',
+  },
   PROCESSING: { phase: 'processing', line: 'processing the swap' },
   KNOWN_DEPOSIT_TX: { phase: 'waiting', line: 'deposit seen, confirming' },
   INCOMPLETE_DEPOSIT: { phase: 'waiting', line: 'waiting for the full deposit' },
@@ -92,7 +95,7 @@ export const nearProvider: SwapProvider = {
     const zafuBps = zafuFeeBps('near');
     const resp: SwapQuoteResponse = await requestQuote({
       swapType: 'EXACT_INPUT',
-      amount: toBaseUnits(req.amountIn, fromZec ? 8 : token.decimals),
+      amount: toUnits(req.amountIn, fromZec ? 8 : token.decimals).toString(),
       originAsset: fromZec ? zecAssetId : token.assetId,
       destinationAsset: fromZec ? token.assetId : zecAssetId,
       recipient: fromZec ? req.otherAddress : req.zcashAddress,

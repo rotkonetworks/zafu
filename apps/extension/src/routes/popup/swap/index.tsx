@@ -40,6 +40,9 @@ import { PopupPath } from '../paths';
 import { hasFeature } from '../../../config/networks';
 import type { SwapLinkState } from '../../../links/land';
 import { CrosschainSwap } from './crosschain';
+import { splitLoHi } from '@penumbrafi/types/lo-hi';
+import { fromUnits, toUnits } from '../../../state/swap/provider';
+import { traceOut, u128 } from './penumbra-units';
 
 /**
  * Router state accepted by the swap page. Set from the row-level "Swap X"
@@ -63,6 +66,9 @@ interface InputAsset {
 
 /** stable empty list so memo/effect deps don't churn while balances load */
 const EMPTY_BALANCES: BalancesResponse[] = [];
+
+const sameId = (a?: Uint8Array, b?: Uint8Array) =>
+  !!a && !!b && a.length === b.length && a.every((v, i) => v === b[i]);
 
 /** output asset from assets list */
 interface OutputAsset {
@@ -189,70 +195,48 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
     setSelectedIn(match ?? inputAssets[0]);
   }, [inputAssets, selectedIn, prefillFromAsset]);
 
+  // exact base units of what is typed; never a float
+  const units = selectedIn ? toUnits(amountIn, selectedIn.exponent) : 0n;
   const {
     data: simulation,
     isLoading: simLoading,
     error: simError,
   } = useQuery({
     queryKey: ['simulate', selectedIn?.assetId, selectedOut?.assetId, amountIn],
-    enabled: !!selectedIn && !!selectedOut && parseFloat(amountIn) > 0,
+    enabled: !!selectedIn && !!selectedOut && units > 0n,
     staleTime: 10_000,
     queryFn: async () => {
-      if (!selectedIn || !selectedOut || !amountIn || parseFloat(amountIn) <= 0) {
+      if (!selectedIn || !selectedOut || units <= 0n) {
         return null;
       }
-
-      const multiplier = 10 ** selectedIn.exponent;
-      const baseAmount = BigInt(Math.floor(parseFloat(amountIn) * multiplier));
-
-      const inputValue = new Value({
-        amount: new Amount({ lo: baseAmount, hi: 0n }),
-        assetId: { inner: selectedIn.assetId },
-      });
-
       const result = await simulationClient.simulateTrade({
-        input: inputValue,
+        input: new Value({
+          amount: new Amount(splitLoHi(units)),
+          assetId: { inner: selectedIn.assetId },
+        }),
         output: { inner: selectedOut.assetId },
       });
-
-      const execution = result.output;
-      if (!execution) {
+      if (!result.output) {
         return null;
       }
-
-      let totalOutput = 0n;
-      for (const trace of execution.traces ?? []) {
-        const outputValue = trace.value?.at(-1);
-        if (outputValue?.amount) {
-          totalOutput += outputValue.amount.lo ?? 0n;
-        }
-      }
-
-      const outputAmount = Number(totalOutput) / 10 ** selectedOut.exponent;
-
-      // Penumbra always returns an `unfilled` Value; it only means a partial
-      // fill when its amount is > 0 (input that couldn't fill at the price and
-      // is returned to you). Guarding on the object alone flagged every swap.
-      const unfilledAmt = result.unfilled?.amount;
-      const unfilledLo = unfilledAmt?.lo ?? 0n;
-      const hasUnfilled = unfilledLo > 0n || (unfilledAmt?.hi ?? 0n) > 0n;
-
-      // Effective price against the *filled* portion only: the input that was
-      // returned unfilled never traded, so rating it against the full input
-      // would understate the rate you actually got.
-      const inputAmount = parseFloat(amountIn);
-      const filledInput = inputAmount - Number(unfilledLo) / 10 ** selectedIn.exponent;
-      const rate = filledInput > 0 ? outputAmount / filledInput : 0;
-
+      const out = traceOut(result.output.traces);
+      // Penumbra always returns an `unfilled` Value; only a non-zero one is a
+      // partial fill (input that couldn't fill at the price, returned to you).
+      const unfilled = u128(result.unfilled?.amount);
+      // the rate is against the filled input only: what came back never traded
+      const filled = units - unfilled;
+      const rate =
+        filled > 0n
+          ? Number(fromUnits(out, selectedOut.exponent, 18)) /
+            Number(fromUnits(filled, selectedIn.exponent, 18))
+          : 0;
       return {
-        outputAmount: outputAmount.toFixed(6),
+        outputAmount: fromUnits(out, selectedOut.exponent, 6),
         rate: rate > 0 ? rate : undefined,
-        unfilled: hasUnfilled
-          ? {
-              amount: (Number(unfilledLo) / 10 ** selectedIn.exponent).toFixed(6),
-              symbol: selectedIn.symbol,
-            }
-          : undefined,
+        unfilled:
+          unfilled > 0n
+            ? { amount: fromUnits(unfilled, selectedIn.exponent, 6), symbol: selectedIn.symbol }
+            : undefined,
       };
     },
   });
@@ -264,33 +248,18 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
   }, [selectedIn]);
 
   const handleFlip = useCallback(() => {
-    if (selectedIn && selectedOut) {
-      const newIn = inputAssets.find(
-        a =>
-          a.assetId &&
-          a.assetId.length === selectedOut.assetId?.length &&
-          a.assetId.every((v, i) => v === selectedOut.assetId![i]),
-      );
-      if (newIn) {
-        const newOut = outputAssets.find(
-          a =>
-            a.assetId &&
-            a.assetId.length === selectedIn.assetId?.length &&
-            a.assetId.every((v, i) => v === selectedIn.assetId![i]),
-        );
-        if (newOut) {
-          setSelectedIn(newIn);
-          setSelectedOut(newOut);
-          setAmountIn('');
-        }
-      }
+    const newIn = inputAssets.find(a => sameId(a.assetId, selectedOut?.assetId));
+    const newOut = outputAssets.find(a => sameId(a.assetId, selectedIn?.assetId));
+    if (newIn && newOut) {
+      setSelectedIn(newIn);
+      setSelectedOut(newOut);
+      setAmountIn('');
     }
   }, [selectedIn, selectedOut, inputAssets, outputAssets]);
 
-  const canReview = !!selectedIn && !!selectedOut && parseFloat(amountIn) > 0 && !!simulation;
+  const canReview = !!selectedIn && !!selectedOut && units > 0n && !!simulation;
 
   const plan = async () => {
-    const baseAmount = BigInt(Math.floor(parseFloat(amountIn) * 10 ** selectedIn!.exponent));
     const { address: claimAddress } = await viewClient.addressByIndex({
       addressIndex: { account: penumbraAccount },
     });
@@ -299,7 +268,7 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
         {
           targetAsset: { inner: selectedOut!.assetId },
           value: new Value({
-            amount: new Amount({ lo: baseAmount, hi: 0n }),
+            amount: new Amount(splitLoHi(units)),
             assetId: { inner: selectedIn!.assetId },
           }),
           claimAddress,
@@ -324,12 +293,7 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
       <Sensitive>{`${simulation?.outputAmount ?? '0'} ${unitOut}`}</Sensitive>
     </>
   );
-  const sameAsIn = (a: OutputAsset) =>
-    !!selectedIn?.assetId &&
-    !!a.assetId &&
-    selectedIn.assetId.length === a.assetId.length &&
-    selectedIn.assetId.every((v, i) => v === a.assetId![i]);
-  const outChoices = outputAssets.filter(a => !sameAsIn(a));
+  const outChoices = outputAssets.filter(a => !sameId(a.assetId, selectedIn?.assetId));
 
   return (
     <PenumbraFlow
