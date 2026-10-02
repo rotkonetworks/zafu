@@ -20,9 +20,13 @@ describe('zcash backends', () => {
     expect(isMempoolWatchEnabled('on', 'constructor')).toBe(false);
   });
 
-  it('builds the cross-check peer for the peer own protocol', () => {
-    const peer = pickIndependentPeer('https://zcash.rotko.net');
-    expect(peer && backendOfEndpoint(peer.url)).toBe('lightwalletd');
-    expect(peer?.backend).toBe('lightwalletd');
+  it('has no independent peer once the primary is the only shipped preset', () => {
+    expect(pickIndependentPeer('https://zcash.rotko.net')).toBeUndefined();
+  });
+
+  it('once the primary is pointed elsewhere, the shipped preset becomes the peer, for the peer own protocol', () => {
+    const peer = pickIndependentPeer('https://zidecar.example.org');
+    expect(peer && backendOfEndpoint(peer.url)).toBe('zidecar');
+    expect(peer?.backend).toBe('zidecar');
   });
 });
