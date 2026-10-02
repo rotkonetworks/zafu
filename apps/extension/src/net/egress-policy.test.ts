@@ -344,4 +344,12 @@ describe('thorchain names are their own opt-in', () => {
       ),
     ).toBe('allow');
   });
+
+  it('still allows the zcash node while the wallets list is sealed at rest', () => {
+    const t = compileEgress({
+      enabledNetworks: ['zcash'],
+      zcashWallets: { encrypted: { c: 'x' } },
+    } as unknown as EgressInputs);
+    expect(t.rules.find(r => r.destination === 'zcash')).toMatchObject({ allow: true });
+  });
 });

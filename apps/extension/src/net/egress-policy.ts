@@ -127,8 +127,10 @@ const OTHER_NETWORKS: Record<string, string[]> = {
   bitcoin: [],
 };
 
+// zcashWallets is sealed at rest ({ encrypted }) once a session key exists:
+// the policy cannot read it then, so only a plaintext list contributes
 const multisigRelays = (i: EgressInputs): string[] =>
-  (i.zcashWallets ?? []).flatMap(w =>
+  (Array.isArray(i.zcashWallets) ? i.zcashWallets : []).flatMap(w =>
     typeof w?.multisig?.relayUrl === 'string' && w.multisig.relayUrl ? [w.multisig.relayUrl] : [],
   );
 
@@ -412,7 +414,15 @@ export const compileEgress = (i: EgressInputs): EgressTable => {
   const rules: EgressRule[] = [];
   for (const spec of DESTINATIONS) {
     const { on, why } = stateOf(spec, i);
-    for (const url of spec.urls(i)) {
+    // one malformed input must not cost every other destination its row
+    let urls: (string | undefined)[];
+    try {
+      urls = spec.urls(i);
+    } catch (e) {
+      console.warn(`[egress] could not resolve ${spec.id}:`, e);
+      continue;
+    }
+    for (const url of urls) {
       const target = url ? targetOf(url) : undefined;
       if (target) {
         rules.push({

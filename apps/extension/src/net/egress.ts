@@ -141,7 +141,20 @@ export const refreshEgress = (): Promise<void> => reload?.() ?? Promise.resolve(
 
 const waitForTable = (): Promise<void> => {
   channel?.postMessage({ type: 'request' } satisfies ChannelMessage);
+  // only realms with storage compile the table; a long-lived page (the
+  // offscreen document) can outlive the service worker that holds it, so
+  // wake it: any runtime message does, and on start it publishes the table
+  if (realm !== 'content-script') {
+    wakeServiceWorker();
+  }
   return Promise.race([ready, new Promise<void>(r => setTimeout(r, READY_TIMEOUT_MS))]);
+};
+
+const wakeServiceWorker = (): void => {
+  const runtime = (
+    globalThis as { chrome?: { runtime?: { sendMessage?: (m: unknown) => Promise<unknown> } } }
+  ).chrome?.runtime;
+  void runtime?.sendMessage?.({ type: 'zafu_egress_wake' })?.catch(() => undefined);
 };
 
 export const installEgress = (where: EgressRealm, host: EgressHost = {}): void => {
@@ -211,7 +224,10 @@ export const installEgress = (where: EgressRealm, host: EgressHost = {}): void =
   // decision there is a refusal, with no table and no channel to wait on.
   if (host.load) {
     const load = host.load;
-    reload = () => load().then(publish, () => undefined);
+    reload = () =>
+      load().then(publish, (e: unknown) =>
+        console.error('[egress] could not compile the table:', e),
+      );
   }
   if (where === 'content-script' || typeof BroadcastChannel === 'undefined') {
     markReady?.();
@@ -222,7 +238,9 @@ export const installEgress = (where: EgressRealm, host: EgressHost = {}): void =
   channel = new BroadcastChannel(CHANNEL);
   channel.onmessage = (ev: MessageEvent<ChannelMessage>) => {
     const msg = ev.data;
-    if (msg.type === 'request' && host.load && table) {
+    // anyone holding a table answers, so a worker inside the offscreen
+    // document is served by that document while the service worker sleeps
+    if (msg.type === 'request' && table) {
       channel!.postMessage({ type: 'table', table } satisfies ChannelMessage);
     } else if (msg.type === 'table' && !host.load) {
       table = msg.table;

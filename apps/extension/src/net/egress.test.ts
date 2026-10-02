@@ -132,6 +132,28 @@ describe('installEgress', () => {
   });
 });
 
+describe('table relay', () => {
+  it('serves its table to a worker even when the storage realm is asleep', async () => {
+    const egress = await import('./egress');
+    egress.installEgress('offscreen');
+    const sw = new BroadcastChannel('zafu-egress');
+    sw.postMessage({ type: 'table', table: ALLOW_ZCASH });
+    await new Promise(r => setTimeout(r, 20));
+    sw.close();
+
+    // a worker spawned later asks; the sleeping service worker cannot answer
+    const worker = new BroadcastChannel('zafu-egress');
+    const reply = new Promise<unknown>(resolve => {
+      worker.onmessage = ev => {
+        if ((ev.data as { type: string }).type === 'table') resolve(ev.data);
+      };
+    });
+    worker.postMessage({ type: 'request' });
+    expect(await reply).toEqual({ type: 'table', table: ALLOW_ZCASH });
+    worker.close();
+  });
+});
+
 describe('isEgressBlockedCause', () => {
   it('finds a refusal wrapped by a ConnectError, not just a bare one', async () => {
     const { isEgressBlockedCause, EgressBlockedError } = await import('./egress');
