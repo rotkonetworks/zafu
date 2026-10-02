@@ -12,11 +12,10 @@ import { useStore } from '../../../state';
 import { selectActiveNetwork } from '../../../state/keyring';
 import { activeAccountIndex } from '../../../state/pockets';
 import { isActiveIbcChain, getNetwork, getActiveIbcSubnetworks } from '../../../config/networks';
-import type { NetworkType } from '../../../state/keyring';
 import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { Segmented } from '@repo/ui/components/ui/segmented';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
-import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
+import { getCosmosChain } from '@repo/wallet/networks/cosmos/chains';
 import { NetworkUnavailable } from '../../../shared/components/network-unavailable';
 import { Main } from './send-ui';
 import { ScreenHeader } from '../../../components/screen-header';
@@ -136,15 +135,15 @@ function TransparentSend({
   above?: ReactNode;
 }) {
   // channels close on network upgrades and reopen later
-  if (!isActiveIbcChain(chain as NetworkType)) {
+  if (!isActiveIbcChain(chain)) {
     return (
       <div className='flex h-full flex-col'>
         <ScreenHeader title='send' onBack={onClose} meta={meta} />
         <Main className='gap-[18px] pt-5'>
           {above}
           <StatusSlot tone='warn' icon='i-ph-warning'>
-            {getNetwork(chain as NetworkType).name.toLowerCase()} has no open channel with penumbra
-            right now · please try again later
+            {getNetwork(chain).name.toLowerCase()} has no open channel with penumbra right now ·
+            please try again later
           </StatusSlot>
         </Main>
       </div>
@@ -184,7 +183,7 @@ function PenumbraSendScreen({
 }) {
   const routes = usePenumbraRoutes();
   const holdings = useTransparentHoldings();
-  const candidates = orderTransparentChains(getActiveIbcSubnetworks('penumbra') as CosmosChainId[]);
+  const candidates = orderTransparentChains(getActiveIbcSubnetworks('penumbra'));
   const held = new Map<CosmosChainId, ChainHeld>();
   for (const list of holdings.holdings.values()) {
     for (const h of list) {
@@ -245,7 +244,7 @@ function PenumbraSendScreen({
                   type='value'
                   label='chain'
                   description={sourcePick?.description}
-                  value={COSMOS_CHAINS[source].name.toLowerCase()}
+                  value={getCosmosChain(source).name.toLowerCase()}
                   disabled={chains.length < 2}
                   onPress={() => setPicking(true)}
                 />

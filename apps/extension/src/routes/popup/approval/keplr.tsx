@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useStore } from '../../../state';
 import { keyRingSelector, selectEffectiveKeyInfo } from '../../../state/keyring';
-import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
+import { getCosmosChain } from '@repo/wallet/networks/cosmos/chains';
 import { OriginIcon } from '../../../shared/components/origin-icon';
 import {
   deriveKeplrWireKey,
@@ -28,7 +28,7 @@ import {
 const prefixFor = (chainId: string, signerAddress?: string): string => {
   const id = cosmosChainIdFromKeplr(chainId);
   if (id) {
-    return COSMOS_CHAINS[id].bech32Prefix;
+    return getCosmosChain(id).bech32Prefix;
   }
   // bech32 is "<prefix>1<data>" and the data charset excludes '1', so the last
   // '1' is the separator - everything before it is the human-readable prefix

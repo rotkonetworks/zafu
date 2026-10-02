@@ -12,7 +12,7 @@
  */
 
 import { ChainRegistryClient } from '@penumbrafi/registry';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 
 export interface TransparentAsset {
   /** the denom as the chain's bank module spells it */
@@ -95,7 +95,7 @@ const RETURNING_ASSETS: Partial<Record<CosmosChainId, TransparentAsset[]>> = {
 
 /** every asset on `chainId` we know the decimals of, by lower-cased denom */
 export function knownAssets(chainId: CosmosChainId): Map<string, TransparentAsset> {
-  const cfg = COSMOS_CHAINS[chainId];
+  const cfg = getCosmosChain(chainId);
   const out = new Map(
     cfg.penumbraSourceChannel ? registryAssets(cfg.penumbraSourceChannel) : undefined,
   );
@@ -134,7 +134,7 @@ export function heldAssets(
       out.push({ ...meta, denom: b.denom, amount: b.amount });
     }
   }
-  const prefer = COSMOS_CHAINS[chainId].denom.toLowerCase();
+  const prefer = getCosmosChain(chainId).denom.toLowerCase();
   return out.sort((a, b) =>
     a.denom.toLowerCase() === prefer
       ? -1

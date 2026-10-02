@@ -13,9 +13,7 @@ import { keyRingSelector, selectEffectiveKeyInfo, selectEnabledNetworks } from '
 import { knownAssets } from '../transparent/assets';
 import { readCheck, runCheck, type DepositAsset } from '../transparent/chain-check';
 
-const CHAINS = (getActiveIbcSubnetworks('penumbra') as CosmosChainId[]).filter(
-  c => COSMOS_CHAINS[c],
-);
+const CHAINS = getActiveIbcSubnetworks('penumbra').filter(c => COSMOS_CHAINS[c]);
 
 export interface Holding {
   chainId: CosmosChainId;
@@ -36,7 +34,7 @@ export const useTransparentHoldings = () => {
   const keyInfo = useStore(selectEffectiveKeyInfo);
   // only hot (mnemonic) wallets derive deposit addresses here
   const keyId = keyInfo?.type === 'mnemonic' ? keyInfo.id : undefined;
-  const enabled = useStore(selectEnabledNetworks) as string[];
+  const enabled = useStore(selectEnabledNetworks);
   const { getMnemonic } = useStore(keyRingSelector);
   const queryClient = useQueryClient();
   // a chain is here once a flow used it (receive's shield tab, a withdrawal)

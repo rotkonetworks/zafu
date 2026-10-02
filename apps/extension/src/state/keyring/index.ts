@@ -287,8 +287,8 @@ export const createKeyRingSlice =
             state.keyRing.status = 'empty';
             state.keyRing.keyInfos = [];
             state.keyRing.selectedKeyInfo = undefined;
-            state.keyRing.activeNetwork = activeNetwork as NetworkType;
-            state.keyRing.enabledNetworks = enabledNetworks as NetworkType[];
+            state.keyRing.activeNetwork = activeNetwork;
+            state.keyRing.enabledNetworks = enabledNetworks;
           });
           return;
         }
@@ -308,8 +308,8 @@ export const createKeyRingSlice =
           state.keyRing.status = sessionKey ? 'unlocked' : 'locked';
           state.keyRing.keyInfos = keyInfos;
           state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
-          state.keyRing.activeNetwork = activeNetwork as NetworkType;
-          state.keyRing.enabledNetworks = enabledNetworks as NetworkType[];
+          state.keyRing.activeNetwork = activeNetwork;
+          state.keyRing.enabledNetworks = enabledNetworks;
           state.wallets.activeIndex = syncedWalletIndex;
         });
 
@@ -498,7 +498,7 @@ export const createKeyRingSlice =
             const updatedVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
             const selectedId = (await local.get('selectedVaultId'))!;
             const enabledNetworks = mergeEnabledNetworks(
-              ((await local.get('enabledNetworks')) ?? []) as NetworkType[],
+              (await local.get('enabledNetworks')) ?? [],
               zignerSupportedNetworks(data),
             );
             await local.set('enabledNetworks', enabledNetworks);
@@ -544,7 +544,7 @@ export const createKeyRingSlice =
           state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
           state.keyRing.enabledNetworks = newEnabledNetworks;
           if (vaults.length === 0 && supportedNetworks.length > 0) {
-            state.keyRing.activeNetwork = supportedNetworks[0] as NetworkType;
+            state.keyRing.activeNetwork = supportedNetworks[0]!;
           }
         });
 
@@ -572,7 +572,7 @@ export const createKeyRingSlice =
             const selectedId = (await local.get('selectedVaultId'))!;
             const keyInfos = vaultsToKeyInfos(updatedVaults, selectedId);
             const enabledNetworks = mergeEnabledNetworks(
-              ((await local.get('enabledNetworks')) ?? []) as NetworkType[],
+              (await local.get('enabledNetworks')) ?? [],
               zignerSupportedNetworks(data),
             );
             await local.set('enabledNetworks', enabledNetworks);
@@ -693,7 +693,7 @@ export const createKeyRingSlice =
           state.keyRing.status = 'unlocked';
           state.keyRing.enabledNetworks = newEnabledNetworks;
           if (vaults.length === 0 && supportedNetworks.length > 0) {
-            state.keyRing.activeNetwork = supportedNetworks[0] as NetworkType;
+            state.keyRing.activeNetwork = supportedNetworks[0]!;
           }
         });
 

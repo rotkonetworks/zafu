@@ -6,6 +6,7 @@ settings:
 
 overrides:
   '@penumbra-labs/registry': npm:@penumbrafi/registry@^13.2.0
+  '@penumbrafi/registry': file:/steam/rotko/registry/npm/penumbrafi-registry-transparent.tgz
   '@penumbra-zone/types': npm:@penumbrafi/types@38.0.0
   '@penumbra-zone/wasm': npm:@penumbrafi/wasm@57.0.0
   '@penumbra-zone/services': npm:@penumbrafi/services@72.0.0
@@ -189,8 +190,8 @@ importers:
         specifier: npm:@penumbrafi/wasm@57.0.0
         version: '@penumbrafi/wasm@57.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1))(@penumbrafi/types@38.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/getters@28.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))'
       '@penumbrafi/registry':
-        specifier: ^13.2.0
-        version: 13.2.0
+        specifier: file:/steam/rotko/registry/npm/penumbrafi-registry-transparent.tgz
+        version: file:../registry/npm/penumbrafi-registry-transparent.tgz
       '@penumbrafi/services':
         specifier: 72.0.0
         version: 72.0.0(lfc25sc4tv4wwzttk3p24bhsxy)
@@ -404,8 +405,8 @@ importers:
         specifier: 7.5.2
         version: 7.5.2
       '@penumbrafi/registry':
-        specifier: ^13.2.0
-        version: 13.2.0
+        specifier: file:/steam/rotko/registry/npm/penumbrafi-registry-transparent.tgz
+        version: file:../registry/npm/penumbrafi-registry-transparent.tgz
       '@penumbrafi/services':
         specifier: 72.0.0
         version: 72.0.0(iuvghjstrzwvpijxs4knoabfey)
@@ -543,8 +544,8 @@ importers:
         specifier: 28.0.0
         version: 28.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1))
       '@penumbrafi/registry':
-        specifier: ^13.2.0
-        version: 13.2.0
+        specifier: file:/steam/rotko/registry/npm/penumbrafi-registry-transparent.tgz
+        version: file:../registry/npm/penumbrafi-registry-transparent.tgz
       '@penumbrafi/types':
         specifier: 38.0.0
         version: 38.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/getters@28.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1))
@@ -590,8 +591,8 @@ importers:
         specifier: 11.0.0
         version: 11.0.0(@bufbuild/protobuf@1.10.1)
       '@penumbrafi/registry':
-        specifier: ^13.2.0
-        version: 13.2.0
+        specifier: file:/steam/rotko/registry/npm/penumbrafi-registry-transparent.tgz
+        version: file:../registry/npm/penumbrafi-registry-transparent.tgz
       '@penumbrafi/types':
         specifier: 38.0.0
         version: 38.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/getters@28.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1))
@@ -761,9 +762,6 @@ importers:
 
   packages/wallet:
     dependencies:
-      '@chain-registry/types':
-        specifier: ^2.0.251
-        version: 2.0.251
       '@connectrpc/connect':
         specifier: ^1.6.1
         version: 1.7.0(@bufbuild/protobuf@1.10.1)
@@ -797,12 +795,12 @@ importers:
       '@penumbra-zone/protobuf':
         specifier: 11.0.0
         version: 11.0.0(@bufbuild/protobuf@1.10.1)
+      '@penumbrafi/registry':
+        specifier: file:/steam/rotko/registry/npm/penumbrafi-registry-transparent.tgz
+        version: file:../registry/npm/penumbrafi-registry-transparent.tgz
       bip39:
         specifier: ^3.1.0
         version: 3.1.0
-      chain-registry:
-        specifier: 2.0.251
-        version: 2.0.251
       cosmjs-types:
         specifier: ^0.9.0
         version: 0.9.0
@@ -981,9 +979,6 @@ packages:
 
   '@bufbuild/protobuf@1.10.1':
     resolution: {integrity: sha512-wJ8ReQbHxsAfXhrf9ixl0aYbZorRuOWpBNzm8pL8ftmSxQx/wnJD5Eg861NwJU/czy2VXFIebCeZnZrI9rktIQ==}
-
-  '@chain-registry/types@2.0.251':
-    resolution: {integrity: sha512-9kwqb6i42YML0yg/OQ4e0iet62ckCFC2qIJDuz+ayg79wZbitbzNNa5N1m4QLGpSdC3v/U0P2V0iA8WEXWHj/g==}
 
   '@changesets/apply-release-plan@8.0.0':
     resolution: {integrity: sha512-kUd2pbf1w5/AYmBMb0Tt+rkIPCjFJdT0SZMrkOjJT/WV/QbtmvkyB5jkV0oaNPheavprZk+SfUiozUti7TIL2w==}
@@ -2386,6 +2381,10 @@ packages:
 
   '@penumbrafi/registry@13.2.0':
     resolution: {integrity: sha512-libLdEDck+H62CKyCDcpnb3Eqeboy2fZRGbD1HRiLdVY3VMtCaxEiaUMNXboyCcjCt3pxw5auz2l4b9Rsi/DHA==}
+
+  '@penumbrafi/registry@file:../registry/npm/penumbrafi-registry-transparent.tgz':
+    resolution: {integrity: sha512-IOCag86UUxPc9B6WwcD7icuTps4XFNbqogh207RmykLsCoiLIfx+HdQNDQyxFkp8rZt3yTHdCW24uTUXPCGLQg==, tarball: file:../registry/npm/penumbrafi-registry-transparent.tgz}
+    version: 13.2.0
 
   '@penumbrafi/services@72.0.0':
     resolution: {integrity: sha512-tEfUQ8Uh6YFZemEeUrVN7puwH6xgD6oozYVvP+nPC2V57v5bXfaxY5gqVPoy00eB6E6biUGgDMEPzrgs6SuFjQ==}
@@ -4569,9 +4568,6 @@ packages:
   chai@5.3.3:
     resolution: {integrity: sha512-4zNhdJD/iOjSH0A05ea+Ke6MU5mmpQcbQsSOkgdaUMJ9zTlDTD/GYlwohmIE2u0gaxHYiVHEn1Fw9mZ/ktJWgw==}
     engines: {node: '>=18'}
-
-  chain-registry@2.0.251:
-    resolution: {integrity: sha512-6eh/54I2cOGC7lywb63VPDqJKKNTby7TT3l9bdgLze6R06v77oMLJh2lXB4A1zaux/Dxp8gpf9tBx2kKD7kVxA==}
 
   chalk@3.0.0:
     resolution: {integrity: sha512-4D3B6Wf41KOYRFdszmDqMCGq5VV/uMAB273JILmO+3jAlh8X4qDtdtgCR3fxtbLEMzSx22QdhnDcJvu2u1fVwg==}
@@ -8765,8 +8761,6 @@ snapshots:
 
   '@bufbuild/protobuf@1.10.1': {}
 
-  '@chain-registry/types@2.0.251': {}
-
   '@changesets/apply-release-plan@8.0.0':
     dependencies:
       '@changesets/config': 4.0.0
@@ -10095,6 +10089,8 @@ snapshots:
       '@connectrpc/connect': 1.7.0(@bufbuild/protobuf@1.10.1)
 
   '@penumbrafi/registry@13.2.0': {}
+
+  '@penumbrafi/registry@file:../registry/npm/penumbrafi-registry-transparent.tgz': {}
 
   '@penumbrafi/services@72.0.0(iuvghjstrzwvpijxs4knoabfey)':
     dependencies:
@@ -12612,10 +12608,6 @@ snapshots:
       deep-eql: 5.0.2
       loupe: 3.2.1
       pathval: 2.0.1
-
-  chain-registry@2.0.251:
-    dependencies:
-      '@chain-registry/types': 2.0.251
 
   chalk@3.0.0:
     dependencies:

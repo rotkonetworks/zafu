@@ -1,35 +1,22 @@
 /**
- * cosmos chain registry
+ * The transparent cosmos chains Penumbra connects to.
  *
- * chains we currently relay IBC packets for between Penumbra and:
- * - noble: native USDC issuance
- * - cosmoshub: ATOM, the Cosmos Hub
- *
- * other cosmos chains (osmosis, nomic, celestia) were previously listed
- * but are not part of the active relay set; their entries can be re-added
- * when those channels open.
- *
- * all use same key derivation (m/44'/118'/0'/0/0) with different bech32 prefix
+ * Every chain in the penumbrafi registry with a `transparent` block is here
+ * (see registry-chains.ts), so a new connection needs a registry release,
+ * not a zafu one. The entries written out below are presets that win over the
+ * registry: Injective, whose Ethermint keys the registry leaves out, and the
+ * chains whose curated node pools or wind-down notices predate it. Which of
+ * them is offered at any moment is decided by the user's Penumbra node
+ * (transparent/penumbra-routes), never by this list.
  */
 
 import { fromBech32 } from '@cosmjs/encoding';
 
-import celestiaChain from 'chain-registry/mainnet/celestia/chain';
-import celestiaAssets from 'chain-registry/mainnet/celestia/asset-list';
-import kavaChain from 'chain-registry/mainnet/kava/chain';
-import kavaAssets from 'chain-registry/mainnet/kava/asset-list';
-import axelarChain from 'chain-registry/mainnet/axelar/chain';
-import axelarAssets from 'chain-registry/mainnet/axelar/asset-list';
-import { chainFromRegistry } from './registry-chain';
+import { ChainRegistryClient } from '@penumbrafi/registry';
+import { chainsFromRegistry } from './registry-chains';
 
-export type CosmosChainId =
-  | 'noble'
-  | 'cosmoshub'
-  | 'injective'
-  | 'osmosis'
-  | 'celestia'
-  | 'kava'
-  | 'axelar';
+/** a chain-registry chain name, e.g. 'osmosis' */
+export type CosmosChainId = string;
 
 export interface CosmosChainConfig {
   id: CosmosChainId;
@@ -100,7 +87,7 @@ export interface CosmosChainConfig {
   gasSponsorUrl?: string;
 }
 
-export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
+const PRESETS: Record<CosmosChainId, CosmosChainConfig> = {
   noble: {
     id: 'noble',
     name: 'Noble',
@@ -231,35 +218,33 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
     penumbraChannel: 'channel-111093', // osmosis -> penumbra
     penumbraSourceChannel: 'channel-20', // penumbra -> osmosis
   },
-  // From the cosmos chain registry (see registry-chain.ts). Channel pins are
-  // the ones the penumbrafi registry lists as verified end to end (deposit and
-  // withdraw); route discovery keeps them only while their client is Active.
-  celestia: chainFromRegistry('celestia', celestiaChain, celestiaAssets, {
-    penumbraChannel: 'channel-701', // celestia -> penumbra
-    penumbraSourceChannel: 'channel-23', // penumbra -> celestia
-  }),
-  // coin type 459 (the registry's slip44, and Keplr's default for Kava), so
-  // its address is derived on its own path, never prefix-swapped from 118
-  kava: chainFromRegistry('kava', kavaChain, kavaAssets, {
-    penumbraChannel: 'channel-162', // kava -> penumbra
-    penumbraSourceChannel: 'channel-21', // penumbra -> kava
-  }),
-  // both clients Active (checked 2026-10-02): penumbra channel-24 <-> axelar
-  // channel-198; the older channel-7 has an expired penumbra client
-  axelar: chainFromRegistry('axelar', axelarChain, axelarAssets, {
-    penumbraChannel: 'channel-198', // axelar -> penumbra
-    penumbraSourceChannel: 'channel-24', // penumbra -> axelar
-  }),
 };
 
-/** get chain config by id */
+const registryConnections = () => {
+  try {
+    return new ChainRegistryClient().bundled.get('penumbra-1').ibcConnections;
+  } catch {
+    return [];
+  }
+};
+
+export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
+  ...chainsFromRegistry(registryConnections()),
+  ...PRESETS,
+};
+
+/** a known chain's config; an id from outside COSMOS_CHAINS is a bug, so it throws */
 export function getCosmosChain(id: CosmosChainId): CosmosChainConfig {
-  return COSMOS_CHAINS[id];
+  const config = COSMOS_CHAINS[id];
+  if (!config) {
+    throw new Error(`unknown cosmos chain: ${id}`);
+  }
+  return config;
 }
 
 /** the RPC pool for a chain (falls back to the single primary endpoint) */
 export function rpcEndpointPool(id: CosmosChainId): string[] {
-  const config = COSMOS_CHAINS[id];
+  const config = getCosmosChain(id);
   return config.rpcEndpoints?.length ? config.rpcEndpoints : [config.rpcEndpoint];
 }
 
@@ -270,12 +255,12 @@ export function rpcEndpointPool(id: CosmosChainId): string[] {
  */
 export function rpcEndpointForIndex(id: CosmosChainId, index: number): string {
   const pool = rpcEndpointPool(id);
-  return pool[index % pool.length] ?? COSMOS_CHAINS[id].rpcEndpoint;
+  return pool[index % pool.length] ?? getCosmosChain(id).rpcEndpoint;
 }
 
 /** get all chain ids */
 export function getAllCosmosChainIds(): CosmosChainId[] {
-  return Object.keys(COSMOS_CHAINS) as CosmosChainId[];
+  return Object.keys(COSMOS_CHAINS);
 }
 
 /** validate bech32 address for any supported chain */

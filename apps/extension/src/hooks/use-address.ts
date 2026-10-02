@@ -16,8 +16,7 @@ import {
 } from '../state/keyring';
 import { getActiveWalletJson, selectActiveZcashWallet } from '../state/wallets';
 import { activeAccountIndex } from '../state/pockets';
-import { NETWORK_CONFIGS, isIbcNetwork } from '../state/keyring/network-types';
-import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { getNetworkConfig, isIbcNetwork } from '../state/keyring/network-types';
 import { spawnNetworkWorker, deriveAddressInWorker } from '../state/keyring/network-worker';
 import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { createZafuWasmMemory } from '../config/zafu-wasm-memory';
@@ -244,7 +243,7 @@ export function useActiveAddress() {
 
             // cosmos/ibc chains
             if (isIbcNetwork(activeNetwork)) {
-              const config = NETWORK_CONFIGS[activeNetwork];
+              const config = getNetworkConfig(activeNetwork);
               const addr = await deriveCosmosAddress(mnemonic, config.bech32Prefix!);
               if (!cancelled) {
                 setAddress(addr);
@@ -384,10 +383,7 @@ export function useActiveAddress() {
                 try {
                   const { deriveChainAddress } =
                     await import('@repo/wallet/networks/cosmos/signer');
-                  const addr = deriveChainAddress(
-                    addrs[0]!.address,
-                    activeNetwork as CosmosChainId,
-                  );
+                  const addr = deriveChainAddress(addrs[0]!.address, activeNetwork);
                   if (!cancelled) {
                     setAddress(addr);
                   }

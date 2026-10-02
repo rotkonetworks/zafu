@@ -20,7 +20,7 @@ import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
 import { getAmount as getAmountFromView } from '@penumbra-zone/getters/value-view';
 import { joinLoHiAmount } from '@penumbrafi/types/amount';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { viewClient } from '../clients';
 import {
   track,
@@ -43,7 +43,7 @@ const fetchCosmosBalancesRest = async (
   chainId: CosmosChainId,
   address: string,
 ): Promise<{ denom: string; amount: bigint }[]> => {
-  const base = COSMOS_CHAINS[chainId].restEndpoint.replace(/\/+$/, '');
+  const base = getCosmosChain(chainId).restEndpoint.replace(/\/+$/, '');
   const res = await fetch(`${base}/cosmos/bank/v1beta1/balances/${address}`);
   if (!res.ok) {
     throw new Error(`cosmos balance query failed: ${res.status}`);
@@ -140,7 +140,7 @@ export const makeIbcProbe =
     if (!t.destChainId || !t.destAddress) {
       return undefined;
     }
-    const balances = await fetchCosmosBalancesRest(t.destChainId as CosmosChainId, t.destAddress);
+    const balances = await fetchCosmosBalancesRest(t.destChainId, t.destAddress);
     return matchCosmosBalance(balances, t.destDenom);
   };
 
@@ -199,7 +199,7 @@ export const trackUnshieldOut = (args: {
     expiresAt: now + UNSHIELD_TIMEOUT_MS,
     destChainId: args.destChainId,
     destAddress: args.destAddress,
-    destDenom: args.isNative ? COSMOS_CHAINS[args.destChainId].denom : undefined,
+    destDenom: args.isNative ? getCosmosChain(args.destChainId).denom : undefined,
   };
   return track(input, uiIbcProbe, defaultTrackerDeps());
 };

@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { conduitFor } from '@repo/wallet/networks/transparent/conduit';
 import { Button } from '@repo/ui/components/ui/button';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
@@ -26,7 +26,7 @@ import {
 const EARLIER_SHOWN = 10;
 
 export const TransparentReceive = ({ chainId }: { chainId: CosmosChainId }) => {
-  const cfg = COSMOS_CHAINS[chainId];
+  const cfg = getCosmosChain(chainId);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { getMnemonic } = useStore(keyRingSelector);
   const keyId = selectedKeyInfo?.type === 'mnemonic' ? selectedKeyInfo.id : undefined;

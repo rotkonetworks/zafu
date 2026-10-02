@@ -81,7 +81,7 @@ export const syncNetworkLoading = async (
   derivedKeys: DerivedKey[],
 ): Promise<void> => {
   // get all supported networks from config
-  const allNetworks = Object.keys(NETWORK_CONFIGS) as NetworkType[];
+  const allNetworks = Object.keys(NETWORK_CONFIGS);
   const activations: NetworkActivation[] = allNetworks.map(n =>
     getNetworkActivation(n, enabledNetworks, derivedKeys),
   );

@@ -18,7 +18,7 @@ import {
   selectPenumbraRoute,
   type PenumbraRoute,
 } from '@repo/wallet/networks/cosmos/penumbra-routes';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { resolvePenumbraEndpoint } from '../config/penumbra-endpoints';
 import { refreshRegistryAssets } from './assets';
 
@@ -81,7 +81,7 @@ export const routeForChain = (
   chainId: CosmosChainId,
   routes: PenumbraRoute[] | undefined,
 ): ChainRoute | undefined => {
-  const cfg = COSMOS_CHAINS[chainId];
+  const cfg = getCosmosChain(chainId);
   if (!routes) {
     return cfg.penumbraSourceChannel && cfg.penumbraChannel
       ? { penumbraSourceChannel: cfg.penumbraSourceChannel, penumbraChannel: cfg.penumbraChannel }

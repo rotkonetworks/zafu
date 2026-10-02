@@ -6,7 +6,7 @@
  */
 
 import { deriveChainAddress } from '@repo/wallet/networks/cosmos/signer';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { CAPS, walletKind, type WalletFacts } from './wallet-kind';
 
 export type CosmosKey<K> =
@@ -16,7 +16,7 @@ export type CosmosKey<K> =
 /** the address a zigner exported for `chainId`, or one derived from its prefix */
 const zignerAddress = (insensitive: Record<string, unknown>, chainId: CosmosChainId) => {
   // zigner holds coin-118 cosmos keys; nothing it has is valid on an Ethermint chain
-  if (COSMOS_CHAINS[chainId].keyAlgo === 'eth_secp256k1') {
+  if (getCosmosChain(chainId).keyAlgo === 'eth_secp256k1') {
     return null;
   }
   const addrs = insensitive['cosmosAddresses'] as
@@ -49,4 +49,4 @@ export const cosmosKeyFor = <K extends WalletFacts>(
 };
 
 export const noCosmosKey = (chainId: CosmosChainId) =>
-  `this wallet has no key for ${COSMOS_CHAINS[chainId].name.toLowerCase()} · add one or pick a wallet that has it`;
+  `this wallet has no key for ${getCosmosChain(chainId).name.toLowerCase()} · add one or pick a wallet that has it`;

@@ -52,8 +52,7 @@ export const privacyStatus = (privateDefaults: boolean, sites: number) =>
   }`;
 
 export const networksStatus = (enabled: readonly string[]) =>
-  enabled.map(n => NETWORKS[n as keyof typeof NETWORKS]?.name.toLowerCase() ?? n).join(' · ') ||
-  'no networks on';
+  enabled.map(n => NETWORKS[n]?.name.toLowerCase() ?? n).join(' · ') || 'no networks on';
 
 export const isZigner = (k: KeyInfo) =>
   k.type === 'zigner-zafu' && (k.insensitive['coldSignerType'] ?? 'zigner') === 'zigner';

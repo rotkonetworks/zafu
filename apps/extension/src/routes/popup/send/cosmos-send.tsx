@@ -24,7 +24,7 @@ import { trackTx } from '../../../tx-ops';
 import { parseAmountToBaseUnits } from '@repo/wallet/networks/cosmos/signer';
 import { useChainCheck, useCosmosAssets, type CosmosAsset } from '../../../hooks/cosmos-balance';
 import {
-  COSMOS_CHAINS,
+  getCosmosChain,
   type CosmosChainId,
   isValidCosmosAddress,
   getChainFromAddress,
@@ -137,7 +137,7 @@ export function CosmosSend({
   /** first in the form, e.g. which transparent chain */
   above?: ReactNode;
 }) {
-  const sourceChain = COSMOS_CHAINS[sourceChainId];
+  const sourceChain = getCosmosChain(sourceChainId);
   useChainInUse(sourceChainId);
   // the live chain -> penumbra channel (discovered, never an expired pin);
   // undefined when the chain has no route into penumbra right now

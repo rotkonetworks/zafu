@@ -80,7 +80,7 @@ export const SettingsWallets = ({
 
   const { keyInfos, addZignerUnencrypted } = useStore(keyRingSelector);
   const { all: penumbraWallets, zcashWallets } = useStore(walletsSelector);
-  const enabledNetworks = useStore(selectEnabledNetworks) as string[];
+  const enabledNetworks = useStore(selectEnabledNetworks);
   const zignerState = useStore(zignerConnectSelector);
   const {
     scanState,

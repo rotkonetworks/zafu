@@ -27,15 +27,11 @@
  *    - ethereum, bitcoin
  */
 
+import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+
 export type PrivacyNetwork = 'zcash' | 'penumbra';
-export type IbcNetwork =
-  | 'noble'
-  | 'cosmoshub'
-  | 'osmosis'
-  | 'injective'
-  | 'celestia'
-  | 'kava'
-  | 'axelar';
+/** a penumbra subnetwork: any cosmos chain in COSMOS_CHAINS, by its chain-registry name */
+export type IbcNetwork = CosmosChainId;
 export type TransparentNetwork = 'ethereum' | 'bitcoin';
 export type NetworkType = PrivacyNetwork | IbcNetwork | TransparentNetwork;
 
@@ -50,8 +46,11 @@ export type EncryptionType =
   | 'bitcoin' // BIP-84 native segwit
   | 'ethereum'; // standard secp256k1
 
-/** default encryption for each network type */
-export const NETWORK_DEFAULT_ENCRYPTION: Record<NetworkType, EncryptionType> = {
+/** the cosmos chains with no entry below: everything the penumbrafi registry adds */
+const registryChains = (written: object) =>
+  Object.values(COSMOS_CHAINS).filter(c => !(c.id in written));
+
+const WRITTEN_ENCRYPTION: Record<string, EncryptionType> = {
   // privacy networks
   zcash: 'zcash',
   penumbra: 'penumbra',
@@ -59,9 +58,6 @@ export const NETWORK_DEFAULT_ENCRYPTION: Record<NetworkType, EncryptionType> = {
   noble: 'cosmos',
   cosmoshub: 'cosmos',
   osmosis: 'cosmos',
-  celestia: 'cosmos',
-  kava: 'cosmos',
-  axelar: 'cosmos',
   // injective is Ethermint: eth_secp256k1 (ethereum curve + keccak), not the
   // cosmos secp256k1 path - so its encryption type is ethereum.
   injective: 'ethereum',
@@ -70,9 +66,15 @@ export const NETWORK_DEFAULT_ENCRYPTION: Record<NetworkType, EncryptionType> = {
   bitcoin: 'bitcoin',
 };
 
+/** default encryption for each network type */
+export const NETWORK_DEFAULT_ENCRYPTION: Record<NetworkType, EncryptionType> = {
+  ...WRITTEN_ENCRYPTION,
+  ...Object.fromEntries(registryChains(WRITTEN_ENCRYPTION).map(c => [c.id, 'cosmos' as const])),
+};
+
 /** get supported encryptions for a network */
 export const getSupportedEncryptions = (network: NetworkType): EncryptionType[] => {
-  return [NETWORK_DEFAULT_ENCRYPTION[network]];
+  return [getNetworkEncryption(network)];
 };
 
 export interface NetworkConfig {
@@ -91,7 +93,7 @@ export interface NetworkConfig {
   denom?: string; // cosmos coin denom
 }
 
-export const NETWORK_CONFIGS: Record<NetworkType, NetworkConfig> = {
+const WRITTEN_CONFIGS: Record<string, NetworkConfig> = {
   // privacy networks - need local sync
   zcash: {
     id: 'zcash',
@@ -142,37 +144,6 @@ export const NETWORK_CONFIGS: Record<NetworkType, NetworkConfig> = {
     denom: 'uosmo',
     derivationPath: "m/44'/118'/0'/0/0",
   },
-  celestia: {
-    id: 'celestia',
-    name: 'Celestia',
-    symbol: 'TIA',
-    decimals: 6,
-    type: 'ibc',
-    bech32Prefix: 'celestia',
-    denom: 'utia',
-    derivationPath: "m/44'/118'/0'/0/0",
-  },
-  kava: {
-    id: 'kava',
-    name: 'Kava',
-    symbol: 'KAVA',
-    decimals: 6,
-    type: 'ibc',
-    bech32Prefix: 'kava',
-    denom: 'ukava',
-    // the registry's slip44 and Keplr's default; signer.ts derives it on its own path
-    derivationPath: "m/44'/459'/0'/0/0",
-  },
-  axelar: {
-    id: 'axelar',
-    name: 'Axelar',
-    symbol: 'AXL',
-    decimals: 6,
-    type: 'ibc',
-    bech32Prefix: 'axelar',
-    denom: 'uaxl',
-    derivationPath: "m/44'/118'/0'/0/0",
-  },
   injective: {
     id: 'injective',
     name: 'Injective',
@@ -207,23 +178,45 @@ export const NETWORK_CONFIGS: Record<NetworkType, NetworkConfig> = {
   },
 };
 
+export const NETWORK_CONFIGS: Record<NetworkType, NetworkConfig> = {
+  ...WRITTEN_CONFIGS,
+  ...Object.fromEntries(
+    registryChains(WRITTEN_CONFIGS).map(c => [
+      c.id,
+      {
+        id: c.id,
+        name: c.name,
+        symbol: c.symbol,
+        decimals: c.decimals,
+        type: 'ibc' as const,
+        bech32Prefix: c.bech32Prefix,
+        denom: c.denom,
+        derivationPath: `m/44'/${c.coinType ?? 118}'/0'/0/0`,
+      },
+    ]),
+  ),
+};
+
 export const isPrivacyNetwork = (network: NetworkType): network is PrivacyNetwork => {
-  return NETWORK_CONFIGS[network].type === 'privacy';
+  return NETWORK_CONFIGS[network]?.type === 'privacy';
 };
 
 export const isIbcNetwork = (network: NetworkType): network is IbcNetwork => {
-  return NETWORK_CONFIGS[network].type === 'ibc';
+  return NETWORK_CONFIGS[network]?.type === 'ibc';
 };
 
 export const isTransparentNetwork = (network: NetworkType): network is TransparentNetwork => {
-  return NETWORK_CONFIGS[network].type === 'transparent';
+  return NETWORK_CONFIGS[network]?.type === 'transparent';
 };
 
 export const getNetworkConfig = (network: NetworkType): NetworkConfig => {
-  return NETWORK_CONFIGS[network];
+  const config = NETWORK_CONFIGS[network];
+  if (!config) {
+    throw new Error(`unknown network: ${network}`);
+  }
+  return config;
 };
 
 /** get default encryption type for a network */
-export const getNetworkEncryption = (network: NetworkType): EncryptionType => {
-  return NETWORK_DEFAULT_ENCRYPTION[network];
-};
+export const getNetworkEncryption = (network: NetworkType): EncryptionType =>
+  NETWORK_DEFAULT_ENCRYPTION[network] ?? 'cosmos';

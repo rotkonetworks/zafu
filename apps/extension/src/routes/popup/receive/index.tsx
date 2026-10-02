@@ -22,8 +22,10 @@ import { PenumbraReceive, PlainReceive, ZcashReceive, type AddrType } from './re
 import { TransparentReceive } from './transparent-receive';
 import { orderTransparentChains, type Privacy } from '../../../components/privacy-switch';
 import { getActiveIbcSubnetworks } from '../../../config/networks';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { Segmented } from '@repo/ui/components/ui/segmented';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { PickSheet } from '../send/send-fields';
 
 export function ReceivePage() {
   const activeNetwork = useStore(selectActiveNetwork);
@@ -64,8 +66,8 @@ export function ReceivePage() {
   const routes = usePenumbraRoutes();
   const transparentChains = isPenumbra
     ? orderTransparentChains(
-        (getActiveIbcSubnetworks('penumbra') as CosmosChainId[]).filter(
-          c => routeForChain(c, routes) && !COSMOS_CHAINS[c].deprecation,
+        getActiveIbcSubnetworks('penumbra').filter(
+          c => routeForChain(c, routes) && !getCosmosChain(c).deprecation,
         ),
       )
     : [];
@@ -79,6 +81,7 @@ export function ReceivePage() {
   const initial = requested && transparentChains.includes(requested) ? requested : undefined;
   const [privacy, setPrivacy] = useState<Privacy>(initial ? 'transparent' : 'shielded');
   const [pickedChain, setPickedChain] = useState<CosmosChainId | undefined>(initial);
+  const [pickingChain, setPickingChain] = useState(false);
   const receiveOn: 'penumbra' | CosmosChainId =
     privacy === 'transparent' ? (pickedChain ?? transparentChains[0] ?? 'penumbra') : 'penumbra';
 
@@ -121,15 +124,27 @@ export function ReceivePage() {
       (look?.shielded() ?? <PlainReceive address={address} loading={loading} />)
     ) : (
       <>
-        {transparentChains.length > 1 && (
-          <Segmented
-            label='network'
-            value={receiveOn}
-            onChange={setPickedChain}
-            options={transparentChains.map(c => ({ value: c, label: COSMOS_CHAINS[c].name }))}
-            className='mb-4 w-full'
+        <RowGroup className='mb-4'>
+          <Row
+            type='value'
+            label='chain'
+            description={getCosmosChain(receiveOn).symbol.toLowerCase()}
+            value={getCosmosChain(receiveOn).name.toLowerCase()}
+            disabled={transparentChains.length < 2}
+            onPress={() => setPickingChain(true)}
           />
-        )}
+        </RowGroup>
+        <PickSheet
+          title='receive on'
+          open={pickingChain}
+          onOpenChange={setPickingChain}
+          picks={transparentChains.map(c => ({
+            key: c,
+            label: getCosmosChain(c).name.toLowerCase(),
+            description: getCosmosChain(c).symbol.toLowerCase(),
+          }))}
+          onPick={setPickedChain}
+        />
         <TransparentReceive key={receiveOn} chainId={receiveOn} />
       </>
     );

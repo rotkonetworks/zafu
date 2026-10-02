@@ -11,7 +11,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { Sheet } from '@repo/ui/components/ui/sheet';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { useRpcPool } from '../../../hooks/transparent-rpc';
 
 const clean = (list: string[]) => list.map(s => s.trim()).filter(Boolean);
@@ -42,7 +42,7 @@ export const RpcPoolSheet = ({
     <Sheet
       open={open}
       onOpenChange={onOpenChange}
-      title={COSMOS_CHAINS[chainId].name.toLowerCase()}
+      title={getCosmosChain(chainId).name.toLowerCase()}
     >
       {children}
       <div className='-mx-4 flex min-h-0 flex-col gap-1.5 overflow-y-auto px-4'>

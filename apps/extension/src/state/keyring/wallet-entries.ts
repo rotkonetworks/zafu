@@ -11,7 +11,7 @@ import type { SessionStorageState } from '@repo/storage-chrome/session';
 import type { NetworkType, ZignerZafuImport, LedgerImport } from './types';
 import type { ZcashWalletJson } from '../wallets';
 import type { Key } from '@repo/encryption/key';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { shownIndicesKey, fundedIndicesKey } from '../../transparent/hd';
 import { isStoreOfWallet } from '../pocket-id';
 import { PENDING_WIPE_KEY } from '../../clear-cache-startup';
@@ -171,7 +171,7 @@ export async function createZignerWalletEntries(
   await local.set('enabledNetworks', newEnabledNetworks);
 
   if (existingVaultCount === 0 && supportedNetworks.length > 0) {
-    await local.set('activeNetwork', supportedNetworks[0] as NetworkType);
+    await local.set('activeNetwork', supportedNetworks[0]);
   }
 
   return newEnabledNetworks;
@@ -526,7 +526,7 @@ export async function purgeWalletData(
     // lands, the per-wallet form must be purged here too, not the bare key.
     `zcashTAddrs:${vaultId}`,
   ];
-  for (const cap of Object.keys(COSMOS_CHAINS) as CosmosChainId[]) {
+  for (const cap of Object.keys(COSMOS_CHAINS)) {
     staticKeys.push(shownIndicesKey(cap, vaultId), fundedIndicesKey(cap, vaultId));
   }
   try {

@@ -55,7 +55,7 @@ const LAND: { [K in Intent['kind']]: (i: Extract<Intent, { kind: K }>, via?: str
       m.action === 'swap'
         ? { to: PopupPath.SWAP, state: { prefillFromAsset: m.asset } }
         : m.action === 'shield'
-          ? (getSubnetworks('penumbra') as string[]).includes(m.chain)
+          ? getSubnetworks('penumbra').includes(m.chain)
             ? {
                 to: PopupPath.SEND,
                 state: {

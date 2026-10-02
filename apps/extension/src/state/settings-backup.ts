@@ -6,7 +6,7 @@
  */
 
 import { localExtStorage } from '@repo/storage-chrome/local';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { rpcPoolKey } from '../net/egress-policy';
 import { DEFAULT_PRIVACY_SETTINGS, type PrivacySettings } from './privacy';
 
@@ -36,8 +36,7 @@ export interface SettingsBackup {
   nodePools?: Record<string, string[]>;
 }
 
-const poolKeys = () =>
-  (Object.keys(COSMOS_CHAINS) as CosmosChainId[]).map(c => [c, rpcPoolKey(c)] as const);
+const poolKeys = () => Object.keys(COSMOS_CHAINS).map(c => [c, rpcPoolKey(c)] as const);
 
 /** proxy is shelved and is applied to chrome.proxy only through setProxy, so it never rides along */
 const withoutProxy = ({ proxy: _proxy, ...rest }: Partial<PrivacySettings>) => rest;

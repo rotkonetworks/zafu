@@ -19,7 +19,7 @@ import {
 // NB: import only the lightweight chain CONFIG here, never the cosmos client -
 // the client pulls @cosmjs/stargate -> crypto/bip39, a Node-only dependency the
 // service-worker build can't resolve. We broadcast with a raw RPC fetch below.
-import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
+import { getCosmosChain } from '@repo/wallet/networks/cosmos/chains';
 import { POPUP_WINDOW_WIDTH, POPUP_WINDOW_HEIGHT } from '../../utils/popup-window';
 
 /** requestId -> resolver for an in-flight approval popup */
@@ -118,7 +118,7 @@ async function handleMethod(
         : [];
   for (const cid of requestedChains) {
     const resolved = cosmosChainIdFromKeplr(cid);
-    if (resolved && COSMOS_CHAINS[resolved].keyAlgo === 'eth_secp256k1') {
+    if (resolved && getCosmosChain(resolved).keyAlgo === 'eth_secp256k1') {
       throw new Error(
         `unsupported chain ${cid}: Ethermint chains are not served over Keplr; use the in-wallet flow`,
       );
@@ -191,7 +191,7 @@ async function handleMethod(
       // Raw Tendermint RPC broadcast_tx_sync - avoids bundling the stargate
       // client into the service worker. params.tx is base64, which is exactly
       // the txB64 we already carry.
-      const rpc = COSMOS_CHAINS[cosmosId].rpcEndpoint;
+      const rpc = getCosmosChain(cosmosId).rpcEndpoint;
       const resp = await fetch(rpc, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
