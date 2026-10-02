@@ -67,9 +67,9 @@ const ActionDetailsRow = ({
   return (
     <div className='flex items-center justify-between'>
       {isOpaque ? (
-        <span className='flex items-center whitespace-nowrap text-gray-600'>
+        <span className='flex items-center whitespace-nowrap text-fg-dim'>
           <span className='mx-2'>
-            <IncognitoIcon fill='#4b5563' />
+            <IncognitoIcon fill='currentColor' />
           </span>
           <span>{label}</span>
         </span>

@@ -31,6 +31,8 @@ export interface SendLocationState {
    * today; this lets it prefill/route differently later without changing callers.
    */
   cosmosIntent?: 'send' | 'shield';
+  /** penumbra's send opens on this mode: 'withdraw' is a row's unshield */
+  penumbraMode?: 'send' | 'withdraw';
 }
 
 export interface SendPrefill {

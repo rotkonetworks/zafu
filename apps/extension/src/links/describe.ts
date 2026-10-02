@@ -16,6 +16,8 @@ const DESCRIBE: { [K in Intent['kind']]: (i: Extract<Intent, { kind: K }>) => st
       .join(' - '),
   swap: ({ swap }) =>
     swap.direction === 'into_zec' ? `swap ${swap.token} into zec` : `swap zec into ${swap.token}`,
+  move: ({ move }) =>
+    move.action === 'shield' ? `shield from ${move.chain}` : `${move.action} ${move.asset}`,
   screen: ({ screen }) => `open ${screen}`,
   contact: () => 'contact',
   join: ({ code }) => `join ${code}`,

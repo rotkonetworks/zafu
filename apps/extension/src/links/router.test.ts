@@ -312,3 +312,32 @@ describe('anything else', () => {
     expect(looksLikeLink('https://example.com')).toBe(false);
   });
 });
+
+describe('row actions as links', () => {
+  it('reads send, unshield, swap and shield, and writes them back the same', async () => {
+    const { parseLink: parse, toUri: uri } = await import('./router');
+    for (const link of [
+      'zafu:send?asset=upenumbra',
+      'zafu:unshield?asset=transfer%2Fchannel-4%2Fuusdc',
+      'zafu:swap?asset=upenumbra',
+      'zafu:shield?chain=injective&index=3',
+    ]) {
+      const r = parse(link);
+      expect(r.ok).toBe(true);
+      expect(r.ok && uri(r.intent)).toBe(link);
+    }
+  });
+
+  it('refuses a move it cannot read', async () => {
+    const { parseLink: parse } = await import('./router');
+    for (const link of [
+      'zafu:send',
+      'zafu:send?asset=..%2Fx%20y',
+      'zafu:shield?chain=INJ%20x',
+      'zafu:shield?chain=injective&index=-1',
+      'zafu:swap?asset=upenumbra&from=zec',
+    ]) {
+      expect(parse(link).ok).toBe(false);
+    }
+  });
+});

@@ -319,6 +319,9 @@ type LOCAL = {
 
   zafuFont?: 'iosevka' | 'system';
 
+  /** the transparent chains whose nodes the user agreed may be asked for balances */
+  transparentAgreed?: string[];
+
   /** transparent chains the user hid from the penumbra home */
   hiddenTransparentChains?: string[];
 

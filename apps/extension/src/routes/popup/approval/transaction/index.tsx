@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { useApprovalFixture } from '../use-approval-fixture';
+import { fixtureTxRequest } from './fixture';
 import { MetadataFetchFn, TransactionViewComponent } from '@repo/ui/components/ui/tx';
 import { exitApprovalSurface, usePopupNav } from '../../../../utils/navigate';
 import { Sensitive } from '../../../../components/sensitive';
@@ -79,6 +82,14 @@ export const TransactionApproval = () => {
 
   const { selectedTransactionView, selectedTransactionViewName, setSelectedTransactionViewName } =
     useTransactionViewSwitcher();
+
+  const acceptRequest = useStore(s => s.txApproval.acceptRequest);
+  const [params] = useSearchParams();
+  useApprovalFixture(!!authorizeRequest, () => {
+    void fixtureTxRequest(params.get('airgap') === '1').then(req =>
+      acceptRequest(req).catch(() => undefined),
+    );
+  });
 
   const txSigningSecurity = useStore(selectTxSigningSecurity);
   const navigate = usePopupNav();

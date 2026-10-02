@@ -21,6 +21,7 @@ import { exportEgressChoices, importEgressChoices, type EgressChoices } from '..
 import {
   exportSettings,
   importPrefs,
+  importNodePools,
   restoredPrivacy,
   type SettingsBackup,
 } from './settings-backup';
@@ -669,6 +670,7 @@ export const createContactsSlice =
           }
         }
         await importPrefs(parsed.settings?.prefs);
+        await importNodePools(parsed.settings?.nodePools);
 
         return {
           contacts: newContacts.length,

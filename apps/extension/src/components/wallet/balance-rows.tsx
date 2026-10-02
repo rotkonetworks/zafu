@@ -84,32 +84,52 @@ export const BalanceRow = ({
   </div>
 );
 
+/** one small action on a balance line: an icon, named for screen readers */
+export interface LineAction {
+  icon: string;
+  label: string;
+  onPress: () => void;
+  busy?: boolean;
+}
+
+/** a row's actions as small icons, side by side */
+export const LineActions = ({ actions }: { actions: LineAction[] }) => (
+  <span className='flex shrink-0 items-center'>
+    {actions.map(a => (
+      <button
+        key={a.label}
+        type='button'
+        onClick={a.onPress}
+        disabled={a.busy}
+        aria-label={a.label}
+        title={a.label}
+        className='grid size-7 place-items-center text-fg-muted transition-colors hover:text-fg-high disabled:text-fg-dim'
+      >
+        <span className={cn(a.icon, 'size-3.5', a.busy && 'animate-spin')} aria-hidden='true' />
+      </button>
+    ))}
+  </span>
+);
+
 /**
  * the unshielded side of one asset, under its row: what waits on a public
- * address, and the one thing to do about it. Nothing here asks any node; the
- * caller decides what a press does.
+ * address, and what to do about it. Nothing here asks any node; the caller
+ * decides what a press does.
  */
 export const UnshieldedLine = ({
   children,
   found,
-  action,
+  actions,
 }: {
   children: ReactNode;
   /** something is waiting: the line reads as a figure, not a hint */
   found?: boolean;
-  action: { label: string; onPress: () => void; busy?: boolean };
+  actions: LineAction[];
 }) => (
-  <div className='flex min-h-9 items-center gap-3 border-t border-border-soft px-3 pl-[54px] text-[11px]'>
+  <div className='flex min-h-8 items-center gap-2 border-t border-border-soft pr-1.5 pl-[54px] text-[11px]'>
     <span className={cn('min-w-0 flex-1 truncate', found ? 'text-fg-high' : 'text-fg-muted')}>
       {children}
     </span>
-    <button
-      type='button'
-      onClick={action.onPress}
-      disabled={action.busy}
-      className='shrink-0 text-network-accent transition-colors hover:text-fg-high disabled:text-fg-dim'
-    >
-      {action.label}
-    </button>
+    <LineActions actions={actions} />
   </div>
 );

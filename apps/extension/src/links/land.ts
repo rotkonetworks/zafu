@@ -5,6 +5,7 @@
  */
 
 import { PopupPath } from '../routes/popup/paths';
+import { getSubnetworks } from '../config/networks';
 import { notYet, SCREENS, toUri, type Intent, type Parsed, type SwapLink } from './router';
 
 /** how a link reached zafu: a site's origin (stamped by the service worker) or one of these */
@@ -50,6 +51,28 @@ const LAND: { [K in Intent['kind']]: (i: Extract<Intent, { kind: K }>, via?: str
       to: PopupPath.SWAP,
       state: { link: i.swap, via } satisfies SwapLinkState,
     }),
+    move: ({ move: m }) =>
+      m.action === 'swap'
+        ? { to: PopupPath.SWAP, state: { prefillFromAsset: m.asset } }
+        : m.action === 'shield'
+          ? (getSubnetworks('penumbra') as string[]).includes(m.chain)
+            ? {
+                to: PopupPath.SEND,
+                state: {
+                  cosmosChain: m.chain,
+                  cosmosAccountIndex: m.index,
+                  cosmosIntent: 'shield',
+                },
+              }
+            : { line: "zafu can't shield from that chain" }
+          : {
+              to: PopupPath.SEND,
+              state: {
+                network: 'penumbra',
+                prefillAsset: m.asset,
+                ...(m.action === 'unshield' ? { penumbraMode: 'withdraw' } : {}),
+              },
+            },
     screen: i => ({ to: SCREENS[i.screen] }),
     contact: () => ({ line: 'adding a contact from a link is coming · thank you for waiting' }),
     join: () => ({ line: 'groups are coming soon · please keep the code until then' }),

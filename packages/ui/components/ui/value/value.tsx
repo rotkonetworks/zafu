@@ -78,23 +78,23 @@ const UnbondingTooltipContent = ({
 
   return (
     <div className='flex flex-col gap-2 font-normal text-left'>
-      <div className='text-white'>Unbonding Token</div>
+      <div className='text-fg-high'>Unbonding Token</div>
       <div>
         <span className='text-fg-muted'>Start: </span>
-        <span className='text-white font-mono'>{info.startAt.toLocaleString()}</span>
+        <span className='text-fg-high font-mono'>{info.startAt.toLocaleString()}</span>
       </div>
       <div>
         <span className='text-fg-muted'>End: </span>
-        <span className='text-white font-mono'>{info.claimableAt.toLocaleString()}</span>
+        <span className='text-fg-high font-mono'>{info.claimableAt.toLocaleString()}</span>
       </div>
       {currentBlockHeight !== undefined && blocksRemaining !== undefined && (
         <div>
           <span className='text-fg-muted'>Current: </span>
-          <span className='text-white font-mono'>{currentBlockHeight.toLocaleString()}</span>
+          <span className='text-fg-high font-mono'>{currentBlockHeight.toLocaleString()}</span>
           {isReady ? (
-            <span className='text-green-400 ml-2'>Ready!</span>
+            <span className='text-success ml-2'>Ready!</span>
           ) : (
-            <div className='text-orange-400 text-xs mt-1'>
+            <div className='text-warn text-xs mt-1'>
               {blocksRemaining.toLocaleString()} blocks ({formatDuration(blocksRemaining)})
             </div>
           )}
@@ -102,8 +102,8 @@ const UnbondingTooltipContent = ({
       )}
       <div>
         <span className='text-fg-muted'>Validator: </span>
-        {info.validatorName && <div className='text-white'>{info.validatorName}</div>}
-        <div className='text-white break-all text-[10px] font-mono'>{info.validatorId}</div>
+        {info.validatorName && <div className='text-fg-high'>{info.validatorName}</div>}
+        <div className='text-fg-high break-all text-[10px] font-mono'>{info.validatorId}</div>
       </div>
       {isReady && onClaim && (
         <button

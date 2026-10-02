@@ -77,9 +77,11 @@ export const TransactionViewComponent = ({
           visibleContent={
             <div className='flex items-center gap-2'>
               <ValueViewComponent view={feeValueView} />
-              {isLoading && <span className='font-mono text-light-brown'>Loading...</span>}
+              {isLoading && <span className='text-xs text-fg-dim'>reading</span>}
               {error ? (
-                <span className='font-mono text-red-400'>Error: {String(error)}</span>
+                <span className='text-xs text-fg-muted' title={String(error)}>
+                  its asset can&apos;t be named yet
+                </span>
               ) : null}
             </div>
           }

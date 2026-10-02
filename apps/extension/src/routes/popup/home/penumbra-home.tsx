@@ -35,7 +35,13 @@ import { combine, type Book } from '../../../penumbra/price';
 import { QUOTES } from '../../../penumbra/quotes';
 import { SyncStrip } from '../../../components/wallet/sync-strip';
 import { EmptyBox, HomeScreen } from './home-screen';
-import { BalanceGroup, BalanceRow, Tile } from '../../../components/wallet/balance-rows';
+import {
+  BalanceGroup,
+  BalanceRow,
+  LineActions,
+  Tile,
+} from '../../../components/wallet/balance-rows';
+import { useOpenIntent } from '../../../hooks/open-link';
 import { useTransparentLines } from './transparent-lines';
 import type { BalanceView } from '../../../components/wallet/balance-hero';
 
@@ -162,7 +168,7 @@ const NotCounted = ({ unpriced, positions }: { unpriced: Asset[]; positions: num
 };
 
 /** one balance: tap the figures to see them in usd, tap the rest for send and swap */
-const AssetRow = ({
+export const AssetRow = ({
   asset: a,
   usd,
   onOpen,
@@ -175,6 +181,10 @@ const AssetRow = ({
   below?: ReactNode;
 }) => {
   const { inUsd, toggle } = usePenumbraRowsInUsd();
+  const open = useOpenIntent();
+  const base = a.base;
+  const move = (action: 'send' | 'swap' | 'unshield') => () =>
+    base && open({ kind: 'move', move: { action, asset: base } });
   const v = valueOf(a, usd);
   const showUsd = !!v && !!a.unit && inUsd.includes(a.unit.id);
   const [top, under] = showUsd
@@ -190,15 +200,38 @@ const AssetRow = ({
       onPress={onOpen}
       below={below}
       action={
-        <button
-          onClick={() => a.unit && toggle(a.unit.id)}
-          disabled={!v}
-          aria-label={`show ${a.symbol.toLowerCase()} in ${showUsd ? 'its own amount' : 'usd'}`}
-          className='flex h-full shrink-0 flex-col items-end justify-center gap-[3px] pl-2'
-        >
-          <Sensitive className='text-sm text-fg-high tabular'>{top}</Sensitive>
-          {under && <Sensitive className='text-[11px] text-fg-muted'>{under}</Sensitive>}
-        </button>
+        <>
+          {base && (
+            <LineActions
+              actions={[
+                {
+                  icon: 'i-lucide-arrow-up',
+                  label: `send ${a.symbol.toLowerCase()}`,
+                  onPress: move('send'),
+                },
+                {
+                  icon: 'i-lucide-arrow-left-right',
+                  label: `swap ${a.symbol.toLowerCase()}`,
+                  onPress: move('swap'),
+                },
+                {
+                  icon: 'i-ph-shield-slash',
+                  label: `unshield ${a.symbol.toLowerCase()}`,
+                  onPress: move('unshield'),
+                },
+              ]}
+            />
+          )}
+          <button
+            onClick={() => a.unit && toggle(a.unit.id)}
+            disabled={!v}
+            aria-label={`show ${a.symbol.toLowerCase()} in ${showUsd ? 'its own amount' : 'usd'}`}
+            className='flex h-full shrink-0 flex-col items-end justify-center gap-[3px] pl-2'
+          >
+            <Sensitive className='text-sm text-fg-high tabular'>{top}</Sensitive>
+            {under && <Sensitive className='text-[11px] text-fg-muted'>{under}</Sensitive>}
+          </button>
+        </>
       }
     />
   );

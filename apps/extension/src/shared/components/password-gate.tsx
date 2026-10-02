@@ -93,34 +93,32 @@ export const PasswordGateModal = ({
         <div className='mx-4 w-full max-w-sm border border-border-soft bg-canvas p-5 shadow-xl'>
           <div className='mb-4 flex items-center gap-2'>
             <span className='i-ph-lock h-4 w-4 text-zigner-gold' />
-            <h3 className='text-lg'>Confirm Transaction</h3>
+            <h3 className='text-lg'>confirm this transaction</h3>
           </div>
 
           {walletType === 'zigner' ? (
             <>
               <p className='mb-4 text-xs text-fg-muted'>
-                This transaction requires authorization from your Zigner device.
+                this transaction is signed on your zigner.
               </p>
               <div className='flex gap-2'>
                 <button
                   onClick={onCancel}
                   className='flex-1 border border-border-soft px-4 py-3 text-sm text-fg-muted transition-colors hover:bg-elev-1'
                 >
-                  Cancel
+                  not now
                 </button>
                 <button
                   onClick={onConfirm}
                   className='flex-1 bg-zigner-gold px-4 py-3 text-sm text-zigner-gold-foreground transition-colors hover:bg-primary/90'
                 >
-                  Continue
+                  continue
                 </button>
               </div>
             </>
           ) : (
             <>
-              <p className='mb-3 text-xs text-fg-muted'>
-                Enter your password to authorize this transaction.
-              </p>
+              <p className='mb-3 text-xs text-fg-muted'>your password, to sign it.</p>
 
               <div className='relative mb-3'>
                 <input
@@ -157,14 +155,14 @@ export const PasswordGateModal = ({
                   disabled={checking}
                   className='flex-1 border border-border-soft px-4 py-3 text-sm text-fg-muted transition-colors hover:bg-elev-1 disabled:opacity-50'
                 >
-                  Cancel
+                  not now
                 </button>
                 <button
                   onClick={() => void handleSubmit()}
                   disabled={checking || !password.trim()}
                   className='flex-1 bg-zigner-gold px-4 py-3 text-sm text-zigner-gold-foreground transition-colors hover:bg-primary/90 disabled:opacity-50'
                 >
-                  {checking ? 'verifying...' : 'Confirm'}
+                  {checking ? 'checking' : 'sign'}
                 </button>
               </div>
             </>

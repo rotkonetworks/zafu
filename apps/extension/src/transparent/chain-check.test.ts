@@ -125,3 +125,16 @@ describe('toDepositAssets', () => {
     expect(assets.map(a => a.formatted)).toEqual(['120.4 USDC.inj', '0.02 INJ']);
   });
 });
+
+describe('one chain per check', () => {
+  it("asks only that chain's conduit and node pool", async () => {
+    const conduit = await import('@repo/wallet/networks/transparent/conduit');
+    const rpc = await import('../hooks/transparent-rpc');
+    const conduitFor = vi.spyOn(conduit, 'conduitFor');
+    const pool = vi.spyOn(rpc, 'getRpcPool');
+    balances.mockResolvedValue([]);
+    await runCheck('vault-1', 'injective', phrase);
+    expect(new Set(conduitFor.mock.calls.map(c => c[0]))).toEqual(new Set(['injective']));
+    expect(pool.mock.calls.map(c => c[0])).toEqual(['injective']);
+  });
+});

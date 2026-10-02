@@ -53,8 +53,14 @@ export const SCREENS = {
 
 export type Screen = keyof typeof SCREENS;
 
+/** one asset moved within the wallet: its row's own actions, one route each */
+export type Move =
+  | { action: 'send' | 'unshield' | 'swap'; asset: string }
+  | { action: 'shield'; chain: string; index: number };
+
 export type Intent =
   | { kind: 'pay'; payments: Zip321Payment[] }
+  | { kind: 'move'; move: Move }
   | { kind: 'swap'; swap: SwapLink }
   | { kind: 'screen'; screen: Screen }
   | { kind: 'contact'; card: string }
@@ -77,6 +83,9 @@ const FOREIGN_ADDRESS = /^[A-Za-z0-9._:-]{3,128}$/;
 const AMOUNT = /^(\d{1,12})(?:\.(\d{1,18}))?$/;
 const ROOM_CODE = /^\d{3}-[a-z]{2,12}-[a-z]{2,12}$/;
 const CARD = /^[A-Za-z0-9_-]{16,2048}$/;
+/** a penumbra base denom: `upenumbra`, `transfer/channel-4/uusdc`, ... */
+const DENOM = /^[A-Za-z0-9][A-Za-z0-9/._-]{0,127}$/;
+const INDEX = /^\d{1,9}$/;
 const MAX_ZEC = 21_000_000;
 
 const refuse = (reason: string): Parsed => ({ ok: false, reason });
@@ -140,12 +149,55 @@ const readAmount = (text: string | undefined, zec: boolean): string | undefined 
   return text;
 };
 
+/** `zafu:send|unshield?asset=`: one of the wallet's own assets */
+const readAssetMove =
+  (action: 'send' | 'unshield' | 'swap') =>
+  (arg: string, query: string): Parsed => {
+    const q = readQuery(query, ['asset']);
+    if (!q.ok) {
+      return refuse(q.reason);
+    }
+    const asset = q.params.get('asset');
+    return !arg && asset && DENOM.test(asset)
+      ? accept({ kind: 'move', move: { action, asset } })
+      : refuse(UNREADABLE);
+  };
+
+/** `zafu:shield?chain=&index=`: a deposit address's funds, into penumbra */
+const readShield = (arg: string, query: string): Parsed => {
+  const q = readQuery(query, ['chain', 'index']);
+  if (!q.ok) {
+    return refuse(q.reason);
+  }
+  const chain = q.params.get('chain')?.toLowerCase();
+  const index = q.params.get('index') ?? '0';
+  return !arg && chain && CHAIN.test(chain) && INDEX.test(index)
+    ? accept({ kind: 'move', move: { action: 'shield', chain, index: Number(index) } })
+    : refuse(UNREADABLE);
+};
+
 const readSwap = (query: string): Parsed => {
-  const q = readQuery(query, ['from', 'to', 'into', 'amount', 'refund', 'dest', 'chain', 'xc']);
+  const q = readQuery(query, [
+    'from',
+    'to',
+    'into',
+    'amount',
+    'refund',
+    'dest',
+    'chain',
+    'xc',
+    'asset',
+  ]);
   if (!q.ok) {
     return refuse(q.reason);
   }
   const p = q.params;
+  // `asset=` alone: a swap on penumbra's dex, from one of the wallet's assets
+  if (p.has('asset')) {
+    return p.size === 1
+      ? readAssetMove('swap')('', `asset=${encodeURIComponent(p.get('asset')!)}`)
+      : refuse(UNREADABLE);
+  }
   if (p.has('to') && p.has('into')) {
     return refuse(UNREADABLE);
   }
@@ -212,6 +264,9 @@ const VERBS: Record<string, (arg: string, query: string, fragment: string) => Pa
       : refuse("zafu can't open that screen from a link"),
   contact: (arg, _q, fragment) => (arg ? refuse(UNREADABLE) : readContact(fragment)),
   join: arg => readJoin(arg),
+  send: readAssetMove('send'),
+  unshield: readAssetMove('unshield'),
+  shield: readShield,
 };
 
 const readZafu = (rest: string): Parsed => {
@@ -301,8 +356,14 @@ const swapUri = ({ direction, token, chain, amount, address, route }: SwapLink):
     .join('&')}`;
 };
 
+const moveUri = (m: Move): string =>
+  m.action === 'shield'
+    ? `zafu:shield?chain=${encodeURIComponent(m.chain)}&index=${m.index}`
+    : `zafu:${m.action}?asset=${encodeURIComponent(m.asset)}`;
+
 const TO_URI: { [K in Intent['kind']]: (i: Extract<Intent, { kind: K }>) => string } = {
   pay: i => buildZip321(i.payments),
+  move: i => moveUri(i.move),
   swap: i => swapUri(i.swap),
   screen: i => `zafu:open/${i.screen}`,
   contact: i => `zafu:contact#${i.card}`,

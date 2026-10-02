@@ -61,7 +61,7 @@ export const PositionOpenViewComponent = ({ value }: { value: PositionOpenView }
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger>
-                  <InfoIcon className='size-4 cursor-pointer text-fg-muted hover:text-[#8D5728]' />
+                  <InfoIcon className='size-4 cursor-pointer text-fg-muted hover:text-fg-high' />
                 </TooltipTrigger>
                 <TooltipContent className='w-[250px]'>
                   <p>

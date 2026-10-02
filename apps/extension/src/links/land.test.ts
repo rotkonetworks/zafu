@@ -79,3 +79,29 @@ describe('viaLine', () => {
     expect(viaLine('constructor')).toBeUndefined();
   });
 });
+
+describe('row actions land on one screen each', () => {
+  it('send, unshield, swap and shield', async () => {
+    const { land: l } = await import('./land');
+    const { parseLink: parse } = await import('./router');
+    expect(l(parse('zafu:send?asset=upenumbra'))).toEqual({
+      to: '/send',
+      state: { network: 'penumbra', prefillAsset: 'upenumbra' },
+    });
+    expect(l(parse('zafu:unshield?asset=upenumbra'))).toMatchObject({
+      to: '/send',
+      state: { penumbraMode: 'withdraw', prefillAsset: 'upenumbra' },
+    });
+    expect(l(parse('zafu:swap?asset=upenumbra'))).toEqual({
+      to: '/swap',
+      state: { prefillFromAsset: 'upenumbra' },
+    });
+    expect(l(parse('zafu:shield?chain=injective&index=2'))).toEqual({
+      to: '/send',
+      state: { cosmosChain: 'injective', cosmosAccountIndex: 2, cosmosIntent: 'shield' },
+    });
+    expect(l(parse('zafu:shield?chain=nowhere'))).toEqual({
+      line: "zafu can't shield from that chain",
+    });
+  });
+});

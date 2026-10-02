@@ -1,10 +1,11 @@
 /**
  * What waits on the wallet's transparent deposit addresses, by asset symbol:
- * the last check from this session (no network) and `check`, which asks the
- * nodes of every chain a flow has turned on. Only `check` contacts a node.
+ * the last check from this session (no network), and `check(chain)`, which
+ * asks that one chain's nodes and no other's. Only `check` contacts a node.
  */
 
-import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { getActiveIbcSubnetworks } from '../config/networks';
 import { useStore } from '../state';
@@ -25,6 +26,12 @@ export interface Holding {
 
 export type HoldingsStatus = 'unchecked' | 'checking' | 'checked' | 'unanswered';
 
+export interface ChainStatus {
+  status: HoldingsStatus;
+  /** when its last check finished, epoch ms; 0 before any */
+  at: number;
+}
+
 export const useTransparentHoldings = () => {
   const keyInfo = useStore(selectEffectiveKeyInfo);
   // only hot (mnemonic) wallets derive deposit addresses here
@@ -44,60 +51,62 @@ export const useTransparentHoldings = () => {
       structuralSharing: false, // bigint amounts
     })),
   });
-  const run = useMutation({
-    mutationFn: () =>
-      Promise.all(
-        chains.map(c =>
-          runCheck(keyId!, c, () => getMnemonic(keyId!)).then(
-            next => queryClient.setQueryData(['chainCheck', c, keyId], next),
-            () => undefined, // a chain that fails keeps its last result
-          ),
-        ),
-      ),
-  });
+  const [checking, setChecking] = useState<ReadonlySet<CosmosChainId>>(new Set());
+  const mark = (c: CosmosChainId, on: boolean) =>
+    setChecking(prev => {
+      const next = new Set(prev);
+      if (on) {
+        next.add(c);
+      } else {
+        next.delete(c);
+      }
+      return next;
+    });
 
   const holdings = new Map<string, Holding[]>();
-  let at = 0;
-  let missed = false;
+  const byChain = new Map<CosmosChainId, ChainStatus>();
   reads.forEach((r, i) => {
+    const chainId = chains[i]!;
     const check = r.data;
-    if (!check) {
-      return;
-    }
-    at = Math.max(at, check.at);
-    missed ||= check.missed > 0;
-    for (const w of check.funded) {
+    byChain.set(chainId, {
+      status: checking.has(chainId)
+        ? 'checking'
+        : !check
+          ? 'unchecked'
+          : check.missed > 0
+            ? 'unanswered'
+            : 'checked',
+      at: check?.at ?? 0,
+    });
+    for (const w of check?.funded ?? []) {
       for (const asset of w.assets) {
         const key = asset.symbol.toLowerCase();
-        holdings.set(key, [
-          ...(holdings.get(key) ?? []),
-          { chainId: chains[i]!, index: w.index, asset },
-        ]);
+        holdings.set(key, [...(holdings.get(key) ?? []), { chainId, index: w.index, asset }]);
       }
     }
   });
 
-  const status: HoldingsStatus = run.isPending
-    ? 'checking'
-    : missed
-      ? 'unanswered'
-      : at
-        ? 'checked'
-        : 'unchecked';
+  /** ask one chain's nodes, and only that chain's */
+  const check = (chainId: CosmosChainId) => {
+    if (!keyId || !chains.includes(chainId) || checking.has(chainId)) {
+      return;
+    }
+    mark(chainId, true);
+    void runCheck(keyId, chainId, () => getMnemonic(keyId))
+      .then(
+        next => queryClient.setQueryData(['chainCheck', chainId, keyId], next),
+        () => undefined, // a chain that fails keeps its last result
+      )
+      .finally(() => mark(chainId, false));
+  };
 
   return {
     chains,
-    /** symbols a deposit address on these chains can hold, lowercase */
-    symbols: new Set(
-      chains.flatMap(c => [...knownAssets(c).values()].map(a => a.symbol.toLowerCase())),
-    ),
+    /** chains whose deposit addresses can hold this asset symbol (lowercase) */
+    chainsFor: (symbol: string) =>
+      chains.filter(c => [...knownAssets(c).values()].some(a => a.symbol.toLowerCase() === symbol)),
     holdings,
-    status,
-    at,
-    check: () => {
-      if (keyId && chains.length && !run.isPending) {
-        run.mutate();
-      }
-    },
+    statusOf: (c: CosmosChainId): ChainStatus => byChain.get(c) ?? { status: 'unchecked', at: 0 },
+    check,
   };
 };
