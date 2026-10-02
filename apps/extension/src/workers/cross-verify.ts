@@ -59,7 +59,17 @@ const registrableDomain = (url: string): string => {
   }
 };
 
-/** the peer's own preset, so its client speaks the peer's protocol, not the primary's */
+/**
+ * The peer's own preset, so its client speaks the peer's protocol, not the
+ * primary's.
+ *
+ * Only one browser-reachable preset ships (see config/zcash-endpoints.ts),
+ * so while the primary IS that preset this returns undefined - there is
+ * nothing independent left to ask. Once the user points zcash at a
+ * different operator (their own node, a custom grpc-web proxy), the
+ * shipped preset becomes that peer. Callers already treat "no peer" as
+ * "nothing to check", not an error.
+ */
 export const pickIndependentPeer = (primaryUrl: string): ZcashEndpointPreset | undefined => {
   const own = registrableDomain(primaryUrl);
   return ZCASH_MAINNET_ENDPOINTS.find(e => registrableDomain(e.url) !== own);

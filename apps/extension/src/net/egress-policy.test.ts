@@ -29,8 +29,10 @@ describe('a fresh zcash-only wallet', () => {
         'unknown',
       ],
       ['https://noble-rpc.polkachu.com/status', 'network-off'],
-      // the independent cross-check peer: a node the user did not choose, so opt-in
-      ['https://us.zec.stardust.rest:443/x', 'opt-in'],
+      // only one browser-reachable preset ships, and it is the primary: no
+      // independent peer exists to cross-check against, so this host is
+      // simply unowned
+      ['https://us.zec.stardust.rest:443/x', 'unknown'],
       // optional services, off until asked
       // nothing asks hosh for a reference tip any more
       ['https://hosh.zec.rocks/api/v0/zec.json', 'unknown'],
@@ -184,14 +186,19 @@ describe('the user always has the last word', () => {
 
   it('allowing a host opens it, unless its destination is blocked', () => {
     const allowed = {
-      destinations: { 'eu.zec.rocks': { state: 'allowed' }, 'x.example': { state: 'allowed' } },
+      destinations: {
+        '1click.chaindefuser.com': { state: 'allowed' },
+        'x.example': { state: 'allowed' },
+      },
     };
-    expect(outcome({ ...ZCASH_ONLY, netEgress: allowed }, 'https://eu.zec.rocks/api')).toBe(
-      'allow',
-    );
+    expect(
+      outcome({ ...ZCASH_ONLY, netEgress: allowed }, 'https://1click.chaindefuser.com/v0/tokens'),
+    ).toBe('allow');
     expect(outcome({ ...ZCASH_ONLY, netEgress: allowed }, 'https://x.example/')).toBe('allow');
-    const both = { ...allowed, optIns: { 'zcash-servers': 'blocked' as const } };
-    expect(outcome({ ...ZCASH_ONLY, netEgress: both }, 'https://eu.zec.rocks/api')).toBe('blocked');
+    const both = { ...allowed, optIns: { 'near-swap': 'blocked' as const } };
+    expect(
+      outcome({ ...ZCASH_ONLY, netEgress: both }, 'https://1click.chaindefuser.com/v0/tokens'),
+    ).toBe('blocked');
   });
 
   it('a pending record is not a decision', () => {
@@ -267,11 +274,11 @@ describe('describeEgress', () => {
   it('lists each host under the destination that owns it, and what is needed', () => {
     const view = describeEgress({ enabledNetworks: ['zcash'] });
     const byId = Object.fromEntries(view.map(d => [d.id, d]));
-    expect(byId['zcash-servers']!.hosts).not.toContain('zcash.rotko.net');
-    expect(byId['zcash-servers']!.hosts).toContain('zec.rocks');
-    // the cross-check peer is owned by the tip-check destination, not "other servers"
-    expect(byId['zcash-servers']!.hosts).not.toContain('us.zec.stardust.rest');
-    expect(byId['zcash-tip-check']!.hosts).toEqual(['us.zec.stardust.rest']);
+    // only one preset ships, and it is already owned by the required `zcash`
+    // destination, so "other zcash servers" has nothing left to list
+    expect(byId['zcash-servers']!.hosts).toEqual([]);
+    // and no independent peer exists to cross-check the primary against
+    expect(byId['zcash-tip-check']!.hosts).toEqual([]);
     expect(byId['zcash']).toMatchObject({ needed: true, networks: ['zcash'] });
     expect(byId['zcash-tip-check']).toMatchObject({ needed: false });
     expect(byId['penumbra']).toMatchObject({ needed: false, networks: [] });
@@ -284,16 +291,16 @@ describe('the zcash tip cross-check', () => {
     const view = describeEgress(ZCASH_ONLY);
     const check = view.find(d => d.id === 'zcash-tip-check');
     expect(check).toMatchObject({ on: false, why: 'default-off', needed: false });
-    expect(check?.hosts).toEqual(['us.zec.stardust.rest']);
-    expect(outcome(ZCASH_ONLY, 'https://us.zec.stardust.rest/x')).not.toBe('allow');
   });
 
-  it('once opted in, it is pointed at one independent preset', () => {
+  it('has no peer while the primary is the only preset zafu ships: it stays unavailable even opted in', () => {
     const inputs = {
       ...ZCASH_ONLY,
       netEgress: { optIns: { 'zcash-tip-check': 'allowed' as const } },
     };
-    expect(outcome(inputs, 'https://us.zec.stardust.rest/x')).toBe('allow');
+    // no host to allow, so the settings row has nothing to show - this is
+    // "hides itself", not an error
+    expect(describeEgress(inputs).find(d => d.id === 'zcash-tip-check')?.hosts).toEqual([]);
   });
 
   it('moves with the configured zcash endpoint, same helper the worker calls', () => {

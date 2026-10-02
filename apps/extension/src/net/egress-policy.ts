@@ -156,7 +156,11 @@ export const DESTINATIONS: readonly DestinationSpec[] = [
     label: 'zcash tip cross-check',
     purpose: 'indexer',
     gate: { kind: 'optional' },
-    // a zidecar extra (ZCASH_BACKENDS): nothing to allow behind a standard lightwalletd
+    // a zidecar extra (ZCASH_BACKENDS): nothing to allow behind a standard
+    // lightwalletd. Also nothing to allow while the primary IS the only
+    // browser-reachable preset zafu ships - pickIndependentPeer returns
+    // undefined, hosts comes back empty, and the settings row hides itself
+    // (it is filtered out wherever hosts.length is checked).
     urls: i =>
       i.zcashBackend === 'lightwalletd' ? [] : [pickIndependentPeer(zcashEndpoint(i))?.url],
   },
