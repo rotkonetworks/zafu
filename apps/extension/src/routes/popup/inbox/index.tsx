@@ -3,10 +3,10 @@
  * something does), your groups with their balance, then direct threads by
  * recency.
  *
- * NO AUTOCONNECT: opening this tab reads the chain memos the light client
- * already syncs (zidecar for zcash, the view service for penumbra) and
- * nothing else. No relay, no group chat, no discovery. A group's chat
- * connects only when that group is opened.
+ * Opening this tab is T1 of the no-autoconnect contract: the chain memos the
+ * light client already syncs, plus one catch-up pass over the rooms this
+ * wallet joined on the people relay. With no rooms that pass is nothing at
+ * all: no request, no question. No discovery runs from here.
  */
 
 import { memo, useEffect, useMemo, useState } from 'react';
@@ -29,6 +29,7 @@ import { PopupPath, threadPath } from '../paths';
 import { useIdentity } from '../identity/use-identity';
 import { deriveThreads, previewOf, shortAddress, whenOf, type DirectThread } from './threads';
 import { useThreadName } from './use-thread-name';
+import { useOpenPeople } from '../../../people/client';
 
 const zec = (zat: bigint) => (Number(zat) / 1e8).toFixed(2);
 
@@ -291,7 +292,8 @@ export function InboxPage() {
   const [composing, setComposing] = useState(false);
   const canCard = !!keyInfo && keyInfoSupportsNetwork(keyInfo, 'zcash');
 
-  // the chain memos the light client already reads; never a relay
+  useOpenPeople();
+  // the chain memos the light client already reads
   const { syncMemos: syncPenumbra } = usePenumbraMemos(walletId);
   const { syncMemos: syncZcash } = useZcashMemos(walletId, zidecarUrl);
   useEffect(() => {

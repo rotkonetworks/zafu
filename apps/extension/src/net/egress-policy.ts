@@ -25,13 +25,19 @@ import { LIVE_REGISTRY_DIR, REGISTRY_EGRESS } from '../transparent/registry-endp
 import { ZCASHME_BASE_URL } from '../services/zcashme/api';
 import { THORNAME_PATH, THORNODE_URLS } from '../services/thornode';
 import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../config/contact-discovery-relay';
+import {
+  PEOPLE_RELAY,
+  PEOPLE_RELAY_KEY,
+  peopleRelays,
+  type PeopleRelaySetting,
+} from '../config/people-relay';
 import { PENUMBRA_MAINNET_ENDPOINTS, defaultPenumbraEndpoint } from '../config/penumbra-endpoints';
 import { ZCASH_MAINNET_ENDPOINTS, defaultZcashEndpoint } from '../config/zcash-endpoints';
 import { BUNDLED_SERVICE_CONFIG } from '../services/voting/bundled-config';
 import { pickIndependentPeer } from '../workers/cross-verify';
 import { MAYA_ENABLED } from '../config/feature-flags';
 import { hostOf } from './destination';
-import { matchRule, type EgressRule, type EgressTable } from './egress-table';
+import { matchRules, type EgressRule, type EgressTable } from './egress-table';
 import type { NetPurpose } from './purpose';
 
 export type { EgressDecision, EgressRealm, EgressReason, EgressTable } from './egress-table';
@@ -56,6 +62,7 @@ export const EGRESS_INPUT_KEYS: string[] = [
   'keplrCompat',
   'zcashWallets',
   'zcashBackend',
+  PEOPLE_RELAY_KEY,
   ...Object.keys(COSMOS_CHAINS).map(rpcPoolKey),
 ];
 
@@ -77,6 +84,8 @@ export interface EgressInputs {
   zcashWallets?: { multisig?: { relayUrl?: unknown } }[];
   /** absent means the shipped default, zidecar */
   zcashBackend?: string;
+  /** the people relay's default and the other relays the person allowed */
+  peopleRelay?: PeopleRelaySetting;
 }
 
 /**
@@ -251,6 +260,14 @@ export const DESTINATIONS: DestinationSpec[] = [
     ],
   },
   {
+    id: PEOPLE_RELAY,
+    // group rooms, their 1-hour doors and pair rooms: asked once, at first use
+    label: 'people relay',
+    purpose: 'relay',
+    gate: { kind: 'optional' },
+    urls: i => peopleRelays(i.peopleRelay).map(base => `${base}/bucket`),
+  },
+  {
     id: 'chat-relay',
     label: 'chat relay',
     purpose: 'relay',
@@ -416,7 +433,8 @@ export const describeEgress = (i: EgressInputs): DestinationView[] => {
     // the light client's, not also one of the "other zcash servers"
     const hosts = spec.urls(i).flatMap(u => {
       const t = u ? targetOf(u) : undefined;
-      const owned = t && matchRule(table, `https://${t.host}${t.path}`)?.destination === spec.id;
+      const owned =
+        t && matchRules(table, `https://${t.host}${t.path}`).some(r => r.destination === spec.id);
       return owned ? [`${t.host}${t.path}`] : [];
     });
     const networks =
@@ -458,6 +476,7 @@ export const compileEgress = (i: EgressInputs): EgressTable => {
           destination: spec.id,
           allow: on,
           reason: on ? undefined : REASON[why],
+          ...(spec.gate.kind === 'optional' ? { shared: true } : {}),
         });
       }
     }

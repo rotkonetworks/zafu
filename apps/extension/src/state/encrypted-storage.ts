@@ -152,6 +152,8 @@ const ENCRYPTED_KEYS = new Set<string>([
   'groupChats',
   'frostRelayIdentities',
   'passwordLogins',
+  'peopleRooms',
+  'peopleThreads',
 ]);
 
 /** should this storage key be encrypted? */

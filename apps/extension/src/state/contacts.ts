@@ -17,6 +17,7 @@ import { readSentRecords, writeSentRecords, readTxNotes, writeTxNotes } from './
 import type { SentTxRecord } from '../workers/sent-tx-reconcile';
 import { pocketOwner } from './pockets';
 import type { ContactCardKey } from './identity';
+import { readPeopleBackup, restorePeopleBackup } from '../people/vault';
 import { exportEgressChoices, importEgressChoices, type EgressChoices } from '../net/ledger';
 import {
   exportSettings,
@@ -582,7 +583,10 @@ export const createContactsSlice =
           get().keyRing.keyInfos.map(k => [pocketOwner(k), k.name]),
         );
         const passwordLogins = await readPasswordLogins();
+        // rooms you are in and their relay history, capped per thread
+        const people = await readPeopleBackup();
         const plaintext = JSON.stringify({
+          people,
           passwordLogins,
           contacts,
           sent,
@@ -631,6 +635,8 @@ export const createContactsSlice =
           walletNames?: Record<string, string>;
           /** the passwords tool's saved logins (absent in older backups) */
           passwordLogins?: unknown;
+          /** people rooms and relay history (absent in older backups) */
+          people?: unknown;
         };
 
         const newContacts = restoreContacts(parsed.contacts ?? [], safeContacts(), mode);
@@ -661,6 +667,9 @@ export const createContactsSlice =
         await importEgressChoices(parsed.egress);
         if (parsed.passwordLogins !== undefined) {
           await restorePasswordLogins(parsed.passwordLogins, mode);
+        }
+        if (parsed.people !== undefined) {
+          await restorePeopleBackup(parsed.people, mode);
         }
         const current = get().privacy.settings;
         const privacy = restoredPrivacy(current, parsed.settings?.privacy);
