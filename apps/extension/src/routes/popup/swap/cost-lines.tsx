@@ -4,12 +4,12 @@ import { Sensitive } from '../../../components/sensitive';
 import { zafuListBps } from '../../../config/swap-fee';
 import { fromUnits, pct, type Cost, type CostPart } from '../../../state/swap/provider';
 
-/** zafu's rate; a zero beside a real production rate shows that rate struck through */
+/** zafu's rate; below the production list rate, that rate shows struck through */
 const ZafuRate = ({ bps }: { bps: number }) => {
   const list = zafuListBps();
-  return bps === 0 && list > 0 ? (
+  return bps < list ? (
     <>
-      <s>{pct(list)}</s> <span className='text-success'>0%</span>
+      <s>{pct(list)}</s> <span className='text-success'>{pct(bps)}</span>
     </>
   ) : (
     <>{pct(bps)}</>

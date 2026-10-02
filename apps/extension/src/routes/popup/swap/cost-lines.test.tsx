@@ -30,6 +30,14 @@ describe('cost lines', () => {
     expect(container.textContent).toContain('total ≈0.3% · 0.00071825 zec');
   });
 
+  it('strikes the list rate through beside the discounted rate', () => {
+    list.bps = 10;
+    const half = costOf([{ label: 'zafu fee', bps: 5, out: 1_000n, zafu: true }]);
+    const { container } = render(<CostList cost={half} unit='zec' decimals={8} />);
+    expect(container.querySelector('s')?.textContent).toBe('0.1%');
+    expect(container.querySelector('.text-success')?.textContent).toBe('0.05%');
+  });
+
   it('shows a plain 0% when production charges nothing either', () => {
     list.bps = 0;
     const { container } = render(<CostList cost={cost} unit='zec' decimals={8} />);

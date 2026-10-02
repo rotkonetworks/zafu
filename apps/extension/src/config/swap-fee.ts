@@ -1,6 +1,6 @@
 /**
- * zafu's own fee on swaps. Production charges NEAR_APP_FEE_BPS on near
- * intents routes, as a 1click app fee; thorchain carries none, since its own
+ * zafu's own fee on swaps. Production lists NEAR_APP_FEE_BPS on near intents
+ * routes and charges it less NEAR_APP_FEE_OFF_PCT, as a 1click app fee; thorchain carries none, since its own
  * dynamic minimum fee is how it competes. The beta build charges nothing on
  * any route.
  */
@@ -8,6 +8,9 @@
 import { IS_BETA_BUILD } from './feature-flags';
 
 export const NEAR_APP_FEE_BPS = 10;
+
+/** the launch discount on that rate, shown as the list rate struck through */
+export const NEAR_APP_FEE_OFF_PCT = 50;
 
 /**
  * The near account that receives the app fee (the same account the 1click
@@ -28,5 +31,9 @@ export const zafuListBps = (recipient = NEAR_APP_FEE_RECIPIENT, bps = NEAR_APP_F
   recipient ? bps : 0;
 
 /** zafu's fee on a route in this build */
-export const zafuFeeBps = (route: string, beta = IS_BETA_BUILD, list = zafuListBps()): number =>
-  beta || route !== 'near' ? 0 : list;
+export const zafuFeeBps = (
+  route: string,
+  beta = IS_BETA_BUILD,
+  list = zafuListBps(),
+  off = NEAR_APP_FEE_OFF_PCT,
+): number => (beta || route !== 'near' ? 0 : Math.round((list * (100 - off)) / 100));
