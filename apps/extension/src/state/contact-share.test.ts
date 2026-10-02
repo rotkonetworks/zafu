@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { decodeContactCard, decodeMemo } from '@repo/wallet/networks/zcash/memo-codec';
 import {
-  cardSenderName,
   contactCardMemoHex,
   myAddressForContact,
   replyAddress,
@@ -50,12 +49,6 @@ describe('a card alice shares with bob', () => {
     const c = await myAddressForContact('carol-contact-id', ALICE_UFVK, aliceDerive);
     expect(a).toEqual(b);
     expect(c?.address).not.toBe(a?.address);
-  });
-
-  it('a default wallet name goes out as no name', () => {
-    expect(cardSenderName('Wallet 1')).toBe('');
-    expect(cardSenderName(' alice ')).toBe('alice');
-    expect(cardSenderName(undefined)).toBe('');
   });
 });
 

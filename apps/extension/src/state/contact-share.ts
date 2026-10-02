@@ -43,12 +43,6 @@ export const myAddressForContact = async (
   }
 };
 
-/** the name on your cards: the wallet's name, unless it is still the default */
-export const cardSenderName = (walletName: string | undefined): string => {
-  const name = walletName?.trim() ?? '';
-  return /^wallet \d+$/i.test(name) ? '' : name;
-};
-
 /** a contact card memo, as hex, carrying the sender's name and address */
 export const contactCardMemoHex = (card: {
   senderName: string;

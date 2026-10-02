@@ -20,11 +20,7 @@ import {
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { cn } from '@repo/ui/lib/utils';
 import type { DiversifiedAddressRecord } from '@repo/wallet/networks/zcash/diversified-address';
-import {
-  cardSenderName,
-  contactCardMemoHex,
-  myAddressForContact,
-} from '../../../state/contact-share';
+import { contactCardMemoHex, myAddressForContact } from '../../../state/contact-share';
 import { deriveZidForContact } from '../../../state/identity';
 import {
   getDiversifiedAddresses,
@@ -558,7 +554,9 @@ export function ContactsPage() {
     }
 
     const hex = contactCardMemoHex({
-      senderName: cardSenderName(keyInfo.name),
+      // a wallet's name is a private label; a card carries no name until the
+      // person chooses one to share, and the recipient names them meanwhile
+      senderName: '',
       myAddress: mine.address,
       zid: contactZid,
     });
