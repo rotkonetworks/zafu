@@ -71,4 +71,12 @@ describe('settings backup', () => {
     await importPrefs(out.prefs);
     expect(store['penumbraTotalIn']).toBeUndefined();
   });
+
+  it('carries the zcash node choice made in onboarding or settings', async () => {
+    store['networkEndpoints'] = { zcash: 'https://zcash.example' };
+    store['zcashBackend'] = 'lightwalletd';
+    const out = await exportSettings(DEFAULT_PRIVACY_SETTINGS);
+    expect(out.prefs?.networkEndpoints).toEqual({ zcash: 'https://zcash.example' });
+    expect(out.prefs?.zcashBackend).toBe('lightwalletd');
+  });
 });

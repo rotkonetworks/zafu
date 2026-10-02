@@ -13,6 +13,7 @@ import { PagePath } from '../paths';
 import { keystoneDeviceId } from '../../../utils/viewing-key';
 import { setOnboardingValuesInStorage } from './persist-parameters';
 import { SEED_PHRASE_ORIGIN } from './password/types';
+import { localExtStorage } from '@repo/storage-chrome/local';
 
 /**
  * access-level note on a scanned import. one tight line, no prose - the
@@ -180,6 +181,9 @@ export const ImportZigner = () => {
     }
     try {
       setImporting(true);
+      // reachable from settings > zigner on an already set-up wallet (adding
+      // another device) - "make it yours" is only for the first one
+      const firstWallet = !(await localExtStorage.get('vaults'))?.length;
       if (walletImport) {
         // penumbra zigner import - convert protobuf to base64 strings
         const fvkInner = walletImport.fullViewingKey.inner;
@@ -232,7 +236,7 @@ export const ImportZigner = () => {
       }
       await setOnboardingValuesInStorage(SEED_PHRASE_ORIGIN.ZIGNER);
       clearZignerState();
-      navigate(PagePath.ONBOARDING_SUCCESS);
+      navigate(firstWallet ? PagePath.PERSONALIZE : PagePath.ONBOARDING_SUCCESS);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       setError(`failed to import: ${message}`);

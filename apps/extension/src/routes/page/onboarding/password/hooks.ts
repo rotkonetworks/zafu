@@ -219,7 +219,7 @@ export const useFinalizeOnboarding = () => {
       }
       sessionStorage.removeItem(PENDING_ZCASH_BIRTHDAY_KEY);
 
-      navigate(PagePath.ONBOARDING_SUCCESS, { state: { origin } });
+      navigate(PagePath.PERSONALIZE, { state: { origin } });
     } catch (e) {
       console.error('[onboarding] finalize failed', e);
       setError(

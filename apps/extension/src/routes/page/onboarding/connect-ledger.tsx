@@ -140,7 +140,7 @@ const ConnectLedgerTransparent = () => {
       if (firstWallet) {
         await setOnboardingValuesInStorage(SEED_PHRASE_ORIGIN.LEDGER);
       }
-      navigate(PagePath.ONBOARDING_SUCCESS);
+      navigate(firstWallet ? PagePath.PERSONALIZE : PagePath.ONBOARDING_SUCCESS);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       setError(`failed to import: ${message}`);
@@ -368,7 +368,7 @@ const ConnectLedgerShielded = ({ onTransparent }: { onTransparent: () => void })
       if (firstWallet) {
         await setOnboardingValuesInStorage(SEED_PHRASE_ORIGIN.LEDGER);
       }
-      navigate(PagePath.ONBOARDING_SUCCESS);
+      navigate(firstWallet ? PagePath.PERSONALIZE : PagePath.ONBOARDING_SUCCESS);
     } catch (cause) {
       setGuidance(ledgerGuidance(cause));
       setPhase('review');

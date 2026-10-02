@@ -28,6 +28,7 @@ export const onboardingRoute: RouteObject = {
     { path: P.ZIGNER_PASSWORD, lazy: screen('SetPassword') },
     // the ledger entry is flagged in start.tsx; the route stays so it type-checks
     { path: P.CONNECT_LEDGER, lazy: screen('ConnectLedger') },
+    { path: P.PERSONALIZE, lazy: screen('Personalize') },
     { path: P.ONBOARDING_SUCCESS, lazy: screen('OnboardingSuccess') },
   ],
 };
