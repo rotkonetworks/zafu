@@ -31,10 +31,7 @@ export const Tile = ({ tone, children }: { tone: keyof typeof TILE; children: st
   </span>
 );
 
-/**
- * a balance row: tile, name over a quiet tag, amount over its note, optional
- * action; `below` is a second line under it (the unshielded side of the asset)
- */
+/** a balance row: tile, name over a quiet tag, amount over its note, optional action */
 export const BalanceRow = ({
   tile,
   label,
@@ -43,7 +40,6 @@ export const BalanceRow = ({
   note,
   onPress,
   action,
-  below,
 }: {
   tile: ReactNode;
   label: string;
@@ -52,35 +48,31 @@ export const BalanceRow = ({
   note?: ReactNode;
   onPress?: () => void;
   action?: ReactNode;
-  below?: ReactNode;
 }) => (
-  <div className='bg-elev-1'>
-    <div className='flex h-[58px] items-center gap-3 px-3 transition-colors hover:bg-elev-2'>
-      <button
-        type='button'
-        onClick={onPress}
-        disabled={!onPress}
-        className='flex min-w-0 flex-1 items-center gap-3 text-left'
-      >
-        {tile}
-        <span className='flex min-w-0 flex-1 flex-col gap-[3px]'>
-          <span className='truncate text-sm text-fg-high lowercase'>{label}</span>
-          {typeof tag === 'string' ? (
-            <span className='truncate text-[11px] text-fg-muted'>{tag}</span>
-          ) : (
-            tag
-          )}
-        </span>
-        {amount !== undefined && (
-          <span className='flex shrink-0 flex-col items-end gap-[3px]'>
-            <Sensitive className='text-sm text-fg-high tabular'>{amount}</Sensitive>
-            {note}
-          </span>
+  <div className='flex h-[58px] items-center gap-3 bg-elev-1 px-3 transition-colors hover:bg-elev-2'>
+    <button
+      type='button'
+      onClick={onPress}
+      disabled={!onPress}
+      className='flex min-w-0 flex-1 items-center gap-3 text-left'
+    >
+      {tile}
+      <span className='flex min-w-0 flex-1 flex-col gap-[3px]'>
+        <span className='truncate text-sm text-fg-high lowercase'>{label}</span>
+        {typeof tag === 'string' ? (
+          <span className='truncate text-[11px] text-fg-muted'>{tag}</span>
+        ) : (
+          tag
         )}
-      </button>
-      {action}
-    </div>
-    {below}
+      </span>
+      {amount !== undefined && (
+        <span className='flex shrink-0 flex-col items-end gap-[3px]'>
+          <Sensitive className='text-sm text-fg-high tabular'>{amount}</Sensitive>
+          {note}
+        </span>
+      )}
+    </button>
+    {action}
   </div>
 );
 
@@ -112,9 +104,9 @@ export const LineActions = ({ actions }: { actions: LineAction[] }) => (
 );
 
 /**
- * the unshielded side of one asset, under its row: what waits on a public
- * address, and what to do about it. Nothing here asks any node; the caller
- * decides what a press does.
+ * the unshielded side of one token on one chain, in its sheet: what waits on
+ * a public address, and what to do about it. Nothing here asks any node; the
+ * caller decides what a press does.
  */
 export const UnshieldedLine = ({
   children,
@@ -126,7 +118,7 @@ export const UnshieldedLine = ({
   found?: boolean;
   actions: LineAction[];
 }) => (
-  <div className='flex min-h-8 items-center gap-2 border-t border-border-soft pr-1.5 pl-[54px] text-[11px]'>
+  <div className='flex min-h-8 items-center gap-2 border-t border-border-soft pr-1.5 pl-3.5 text-[11px] first:border-t-0'>
     <span className={cn('min-w-0 flex-1 truncate', found ? 'text-fg-high' : 'text-fg-muted')}>
       {children}
     </span>

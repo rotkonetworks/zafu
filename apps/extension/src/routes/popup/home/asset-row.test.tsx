@@ -34,18 +34,32 @@ const render = (asset: Asset) => {
 };
 
 describe('asset row', () => {
-  it('carries send, swap and unshield as small icons, named for screen readers', () => {
+  it('is just the token: no actions until a check finds it on a deposit address', () => {
     const row = render(um);
-    expect(
-      [...row.querySelectorAll('button[aria-label]')].map(b => b.getAttribute('aria-label')),
-    ).toEqual(expect.arrayContaining(['send um', 'swap um', 'unshield um']));
-    for (const icon of ['i-lucide-arrow-up', 'i-lucide-arrow-left-right', 'i-ph-shield-slash']) {
-      expect(row.querySelector(`.${icon}`)).not.toBeNull();
-    }
+    const labels = [...row.querySelectorAll('button[aria-label]')].map(b =>
+      b.getAttribute('aria-label'),
+    );
+    expect(labels).toEqual(['show um in usd']);
+    expect(row.textContent).not.toMatch(/transparent|not checked|ago/);
   });
 
-  it('offers no actions for an asset zafu cannot name', () => {
-    const row = render({ ...um, base: undefined });
-    expect(row.querySelector('[aria-label="send um"]')).toBeNull();
+  it('carries one small shield button once one is found', () => {
+    const div = document.createElement('div');
+    div.innerHTML = renderToStaticMarkup(
+      <MemoryRouter>
+        <AssetRow
+          asset={um}
+          onOpen={() => undefined}
+          shield={{
+            icon: 'i-ph-shield',
+            label: 'shield um from injective',
+            onPress: () => undefined,
+          }}
+        />
+      </MemoryRouter>,
+    );
+    expect(
+      div.querySelector('[aria-label="shield um from injective"] .i-ph-shield'),
+    ).not.toBeNull();
   });
 });

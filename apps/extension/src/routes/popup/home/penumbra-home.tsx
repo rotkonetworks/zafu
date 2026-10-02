@@ -1,6 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
@@ -16,7 +15,6 @@ import { runPercent } from '../../../penumbra/start';
 import { PenumbraStartSheet } from '../../../components/wallet/penumbra-start-sheet';
 import { balancesQueryOptions, balancesQueryKey } from '../../../hooks/penumbra-balances';
 import { classifySyncFailure } from '../../../state/sync-failure';
-import { PopupPath } from '../paths';
 import { AskHistorySheet, HistoryContent } from './history';
 import { HOME_LOOK } from './look';
 import {
@@ -40,9 +38,10 @@ import {
   BalanceRow,
   LineActions,
   Tile,
+  type LineAction,
 } from '../../../components/wallet/balance-rows';
 import { useOpenIntent } from '../../../hooks/open-link';
-import { useTransparentLines } from './transparent-lines';
+import { useTransparent } from './transparent-lines';
 import type { BalanceView } from '../../../components/wallet/balance-hero';
 
 const look = HOME_LOOK.penumbra;
@@ -63,52 +62,81 @@ const priceLine = (a: Asset, book?: Book<TotalIn>) =>
     })
     .join(' · ') || 'no price on the dex';
 
-/** send or swap one asset, see its price, or copy the id of one zafu cannot name */
-const AssetSheet = ({
-  asset,
+/** a token's ways to move, each one link through the router */
+const MOVES = [
+  ['send', 'i-lucide-arrow-up'],
+  ['swap', 'i-lucide-arrow-left-right'],
+  ['unshield', 'i-ph-shield-slash'],
+] as const;
+
+/** what a token sheet is about: a shielded asset, or one found only on a deposit address */
+type Token = { asset: Asset } | { symbol: string };
+const symbolOf = (t: Token) => ('asset' in t ? t.asset.symbol : t.symbol);
+
+/** one token's whole control: price, shielded amount, its deposit addresses, every move */
+const TokenSheet = ({
+  token,
   book,
+  transparent,
   onClose,
 }: {
-  asset?: Asset;
+  token?: Token;
   book?: Book<TotalIn>;
+  transparent: ReturnType<typeof useTransparent>;
   onClose: () => void;
 }) => {
-  const navigate = useNavigate();
+  const open = useOpenIntent();
+  const asset = token && 'asset' in token ? token.asset : undefined;
+  const symbol = token ? symbolOf(token).toLowerCase() : '';
   const base = asset?.base;
+  const move = (action: 'send' | 'swap' | 'unshield') =>
+    base && open({ kind: 'move', move: { action, asset: base } });
+  const shield = transparent.shieldButton(symbol);
+  const lines = token ? transparent.chainLines(symbol) : null;
   return (
     <Sheet
-      open={!!asset}
+      open={!!token}
       onOpenChange={o => !o && onClose()}
-      title={asset?.name.toLowerCase() ?? ''}
+      title={asset?.name.toLowerCase() ?? symbol}
     >
-      {asset && (
-        <RowGroup>
-          {book && <Line label={`1 ${asset.symbol.toLowerCase()}`}>{priceLine(asset, book)}</Line>}
-          {base && (
-            <>
-              <Row
-                type='screen'
-                icon='i-lucide-arrow-up'
-                label={`send ${asset.symbol.toLowerCase()}`}
-                onPress={() => navigate(PopupPath.SEND, { state: { prefillAsset: base } })}
-              />
-              <Row
-                type='screen'
-                icon='i-lucide-arrow-left-right'
-                label={`swap ${asset.symbol.toLowerCase()}`}
-                onPress={() => navigate(PopupPath.SWAP, { state: { prefillFromAsset: base } })}
-              />
-            </>
+      {token && (
+        <>
+          <RowGroup>
+            {asset && book && <Line label={`1 ${symbol}`}>{priceLine(asset, book)}</Line>}
+            <Line label='shielded'>
+              <Sensitive>{`${asset ? fmtAmount(asset.amount) : '0'} ${symbol}`}</Sensitive>
+            </Line>
+          </RowGroup>
+          {Array.isArray(lines) && lines.length > 0 && (
+            <section className='flex flex-col gap-1.5'>
+              <h2 className='text-[11px] tracking-[0.04em] text-fg-muted'>on deposit addresses</h2>
+              <div className='flex flex-col border border-border-soft bg-elev-1'>{lines}</div>
+            </section>
           )}
-          {asset.rawId && (
-            <div className='flex min-h-12 items-center gap-2 px-3.5'>
-              <span className='min-w-0 flex-1 truncate font-mono text-[11px] text-fg-muted'>
-                {asset.rawId}
-              </span>
-              <CopyButton text={asset.rawId} className='h-8 px-1' />
-            </div>
-          )}
-        </RowGroup>
+          <RowGroup>
+            {base &&
+              MOVES.map(([action, icon]) => (
+                <Row
+                  key={action}
+                  type='screen'
+                  icon={icon}
+                  label={`${action} ${symbol}`}
+                  onPress={() => move(action)}
+                />
+              ))}
+            {shield && (
+              <Row type='screen' icon={shield.icon} label={shield.label} onPress={shield.onPress} />
+            )}
+            {asset?.rawId && (
+              <div className='flex min-h-12 items-center gap-2 px-3.5'>
+                <span className='min-w-0 flex-1 truncate font-mono text-[11px] text-fg-muted'>
+                  {asset.rawId}
+                </span>
+                <CopyButton text={asset.rawId} className='h-8 px-1' />
+              </div>
+            )}
+          </RowGroup>
+        </>
       )}
     </Sheet>
   );
@@ -167,24 +195,20 @@ const NotCounted = ({ unpriced, positions }: { unpriced: Asset[]; positions: num
   );
 };
 
-/** one balance: tap the figures to see them in usd, tap the rest for send and swap */
+/** one token: tap the figures to see them in usd, tap the rest for its sheet */
 export const AssetRow = ({
   asset: a,
   usd,
   onOpen,
-  below,
+  shield,
 }: {
   asset: Asset;
   usd?: Book<TotalIn>['usd'];
   onOpen: () => void;
-  /** its unshielded side, when a deposit address can hold it */
-  below?: ReactNode;
+  /** a check found it on a deposit address: one small button to shield it */
+  shield?: LineAction;
 }) => {
   const { inUsd, toggle } = usePenumbraRowsInUsd();
-  const open = useOpenIntent();
-  const base = a.base;
-  const move = (action: 'send' | 'swap' | 'unshield') => () =>
-    base && open({ kind: 'move', move: { action, asset: base } });
   const v = valueOf(a, usd);
   const showUsd = !!v && !!a.unit && inUsd.includes(a.unit.id);
   const [top, under] = showUsd
@@ -198,30 +222,9 @@ export const AssetRow = ({
         v ? `${a.symbol.toLowerCase()} · ${fmtIn(v.price, 'usd', true)}` : a.symbol.toLowerCase()
       }
       onPress={onOpen}
-      below={below}
       action={
         <>
-          {base && (
-            <LineActions
-              actions={[
-                {
-                  icon: 'i-lucide-arrow-up',
-                  label: `send ${a.symbol.toLowerCase()}`,
-                  onPress: move('send'),
-                },
-                {
-                  icon: 'i-lucide-arrow-left-right',
-                  label: `swap ${a.symbol.toLowerCase()}`,
-                  onPress: move('swap'),
-                },
-                {
-                  icon: 'i-ph-shield-slash',
-                  label: `unshield ${a.symbol.toLowerCase()}`,
-                  onPress: move('unshield'),
-                },
-              ]}
-            />
-          )}
+          {shield && <LineActions actions={[shield]} />}
           <button
             onClick={() => a.unit && toggle(a.unit.id)}
             disabled={!v}
@@ -240,7 +243,7 @@ export const AssetRow = ({
 /** penumbra home: the shared home, read from the view service */
 export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: ReactNode }) => {
   const queryClient = useQueryClient();
-  const unshielded = useTransparentLines();
+  const transparent = useTransparent();
   const { tip, height, from, ask, walletId, error: syncError } = useSyncProgress();
   const [later, setLater] = useState(false);
   // the shared RAW balances cache (preload, send, swap read it too); this
@@ -251,7 +254,7 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
     select: selectHome,
   });
   const assets = data?.assets;
-  const [open, setOpen] = useState<Asset>();
+  const [open, setOpen] = useState<Token>();
 
   // refresh when the synced height advances (no flicker)
   const prevHeight = useRef(height);
@@ -343,9 +346,8 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
       ) : view === 'loading' ? null : (
         <>
           {empty && <EmptyBox look={look} />}
-          {/* one assets list: each asset shielded, with its unshielded side under
-              it; deposit addresses use the wallet's own derivation, not an account */}
-          {(!empty || unshielded.active) && (
+          {/* one row per token; its deposit addresses live in its sheet */}
+          {(!empty || transparent.onlyThere([]).length > 0) && (
             <BalanceGroup heading={look.heading}>
               {!empty &&
                 assets?.map(a => (
@@ -353,14 +355,24 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
                     key={a.key}
                     asset={a}
                     usd={book?.usd}
-                    onOpen={() => setOpen(a)}
-                    below={unshielded.lineFor(a.symbol)}
+                    onOpen={() => setOpen({ asset: a })}
+                    shield={transparent.shieldButton(a.symbol)}
                   />
                 ))}
-              {unshielded.rows(empty ? [] : (assets ?? []).map(a => a.symbol))}
+              {transparent.onlyThere(empty ? [] : (assets ?? []).map(a => a.symbol)).map(s => (
+                <BalanceRow
+                  key={s}
+                  tile={<Tile tone='quiet'>{s.slice(0, 2)}</Tile>}
+                  label={s}
+                  tag='nothing shielded yet'
+                  amount={transparent.found(s)}
+                  onPress={() => setOpen({ symbol: s })}
+                  action={<LineActions actions={[transparent.shieldButton(s)!]} />}
+                />
+              ))}
             </BalanceGroup>
           )}
-          {unshielded.sheet}
+          {transparent.sheet}
         </>
       )}
 
@@ -375,7 +387,12 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
         />
       </RowGroup>
 
-      <AssetSheet asset={open} book={book} onClose={() => setOpen(undefined)} />
+      <TokenSheet
+        token={open}
+        book={book}
+        transparent={transparent}
+        onClose={() => setOpen(undefined)}
+      />
       <AskHistorySheet hasFunds={funded} />
       <PenumbraStartSheet walletId={walletId} open={ask && !later} onClose={() => setLater(true)} />
     </HomeScreen>

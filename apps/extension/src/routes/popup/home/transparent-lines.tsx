@@ -1,9 +1,9 @@
 /**
- * The unshielded side of the penumbra assets list: under each asset, a quiet
- * line per chain whose deposit addresses can hold it, and a row of its own
- * for an asset found only there. Nothing asks a node until a line is tapped,
- * and a tap asks only that line's chain. A chain's first tap asks which of
- * its nodes may be asked (saved as its node list in settings), and whether to
+ * The unshielded side of a penumbra token: a shield button on home once a
+ * check found it on a deposit address, and in the token sheet a line per
+ * chain it can sit on. Nothing asks a node until a line's check is tapped,
+ * and a tap asks only that chain. A chain's first tap asks which of its
+ * nodes may be asked (saved as its node list in settings), and whether to
  * check on its own from then on; after that a tap just checks.
  */
 
@@ -18,7 +18,7 @@ import { useTransparentHoldings, type Holding } from '../../../hooks/transparent
 import { refreshEgress } from '../../../net/egress';
 import { ago } from '../../../transparent/chain-check';
 import { useStore } from '../../../state';
-import { BalanceRow, Tile, UnshieldedLine } from '../../../components/wallet/balance-rows';
+import { UnshieldedLine, type LineAction } from '../../../components/wallet/balance-rows';
 import { useOpenIntent } from '../../../hooks/open-link';
 
 const chainName = (c: CosmosChainId) => getCosmosChain(c).name.toLowerCase();
@@ -151,12 +151,8 @@ const useAgreedChains = () => {
   };
 };
 
-/**
- * Lines for the penumbra assets list. `lineFor(symbol)` is the lines under a
- * shielded asset's row; `rows(shown)` are the rows for assets found only on a
- * deposit address (or, before anything is known, one row to check from).
- */
-export const useTransparentLines = () => {
+/** a token's transparent side: home's shield button, the sheet's chain lines */
+export const useTransparent = () => {
   const open = useOpenIntent();
   const t = useTransparentHoldings();
   const { agreed, add } = useAgreedChains();
@@ -173,93 +169,71 @@ export const useTransparentLines = () => {
   }, [auto, agreed.length, t.chains.length]);
 
   const press = (c: CosmosChainId) => (agreed.includes(c) ? check(c) : setAsking(c));
+  const shield = (h: Holding) =>
+    open({ kind: 'move', move: { action: 'shield', chain: h.chainId, index: h.index } });
+  const heldOf = (symbol: string) => t.holdings.get(symbol.toLowerCase()) ?? [];
 
-  /** one chain's line for one asset */
-  const chainLine = (symbol: string, c: CosmosChainId): ReactNode => {
-    const held = (t.holdings.get(symbol) ?? []).filter(h => h.chainId === c);
-    if (held.length) {
-      const h = held[0]!;
-      const gone = getCosmosChain(c).deprecation;
+  /** home: one small shield button, only once a check found this token */
+  const shieldButton = (symbol: string): LineAction | undefined => {
+    const h = heldOf(symbol)[0];
+    return h
+      ? {
+          icon: 'i-ph-shield',
+          label: `shield ${symbol.toLowerCase()} from ${chainName(h.chainId)}`,
+          onPress: () => shield(h),
+        }
+      : undefined;
+  };
+
+  /** the token sheet: each chain this token can sit on, its last check and what was found */
+  const chainLines = (symbol: string): ReactNode => {
+    const key = symbol.toLowerCase();
+    const chains = [...new Set([...t.chainsFor(key), ...heldOf(key).map(h => h.chainId)])];
+    return chains.map(c => {
+      const held = heldOf(key).filter(h => h.chainId === c);
+      const { status, at } = t.statusOf(c);
+      const said = held.length
+        ? `${amountOf(held)} · ${chainName(c)}`
+        : `${chainName(c)} · ${
+            {
+              unchecked: 'not checked',
+              checking: 'checking',
+              unanswered: "a node didn't answer",
+              checked: `none · ${ago(at)}`,
+            }[status]
+          }`;
       return (
         <UnshieldedLine
           key={c}
-          found
+          found={held.length > 0}
           actions={[
             {
-              icon: 'i-ph-shield',
-              label: `shield from ${chainName(c)}`,
-              onPress: () =>
-                open({ kind: 'move', move: { action: 'shield', chain: c, index: h.index } }),
+              icon: 'i-lucide-refresh-cw',
+              label: `check ${chainName(c)}`,
+              onPress: () => press(c),
+              busy: status === 'checking',
             },
           ]}
         >
-          {amountOf(held)} transparent · {chainName(c)}
-          {gone ? ' · closing, please move it' : ''}
+          {said}
+          {held.length && getCosmosChain(c).deprecation ? ' · closing, please move it' : ''}
         </UnshieldedLine>
       );
-    }
-    const { status, at } = t.statusOf(c);
-    const said = {
-      unchecked: 'not checked',
-      checking: 'checking',
-      unanswered: "a node didn't answer",
-      checked: `none · ${ago(at)}`,
-    }[status];
-    return (
-      <UnshieldedLine
-        key={c}
-        actions={[
-          {
-            icon: 'i-lucide-refresh-cw',
-            label: `check ${chainName(c)}`,
-            onPress: () => press(c),
-            busy: status === 'checking',
-          },
-        ]}
-      >
-        transparent · {chainName(c)} · {said}
-      </UnshieldedLine>
-    );
+    });
   };
 
-  const lines = (symbol: string, chains = t.chainsFor(symbol)) =>
-    chains.length ? <>{chains.map(c => chainLine(symbol, c))}</> : null;
-
   return {
-    /** some chain is in use, so there is an unshielded side to show */
-    active: t.chains.length > 0,
-    lineFor: (symbol: string): ReactNode => lines(symbol.toLowerCase()),
-    rows: (shown: string[]): ReactNode => {
-      if (!t.chains.length) {
-        return null;
-      }
+    shieldButton,
+    chainLines,
+    /** what a check found of a token, across its deposit addresses */
+    found: (symbol: string) => {
+      const held = heldOf(symbol);
+      return held.length ? amountOf(held) : undefined;
+    },
+    /** tokens found only on a deposit address, nothing shielded */
+    onlyThere: (shown: string[]) => {
       const have = new Set(shown.map(s => s.toLowerCase()));
-      const only = [...t.holdings.keys()].filter(s => !have.has(s));
-      const lined = new Set(shown.flatMap(s => t.chainsFor(s.toLowerCase())));
-      // a chain no shown asset carries a line for still gets one, to check from
-      const bare = t.chains.filter(c => !lined.has(c));
-      return (
-        <>
-          {only.map(s => (
-            <BalanceRow
-              key={s}
-              tile={<Tile tone='quiet'>{s.slice(0, 2)}</Tile>}
-              label={t.holdings.get(s)![0]!.asset.symbol}
-              tag='nothing shielded yet'
-              amount='0'
-              below={lines(s, [...new Set(t.holdings.get(s)!.map(h => h.chainId))])}
-            />
-          ))}
-          {bare.length > 0 && (
-            <BalanceRow
-              tile={<Tile tone='quiet'>tr</Tile>}
-              label='transparent'
-              tag='your deposit addresses'
-              below={<>{bare.map(c => chainLine('', c))}</>}
-            />
-          )}
-        </>
-      );
+      return [...t.holdings.keys()].filter(s => !have.has(s));
     },
     sheet: (
       <AskSheet
