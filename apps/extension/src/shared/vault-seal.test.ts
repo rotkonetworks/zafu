@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { base64ToUint8Array, uint8ArrayToBase64 } from '@rotko/penumbra-types/base64';
+import { base64ToUint8Array, uint8ArrayToBase64 } from '@penumbrafi/types/base64';
 import { Key } from '@repo/encryption/key';
 import { issueWorkerKey, openKeySeal, sealKeyTo } from './vault-seal';
 

@@ -12,7 +12,7 @@ import { useTransactionViewSwitcher } from './use-transaction-view-switcher';
 import { ViewTabs } from './view-tabs';
 import { ApproveDeny } from '../approve-deny';
 import { UserChoice } from '@repo/storage-chrome/records';
-import type { Jsonified } from '@rotko/penumbra-types/jsonified';
+import type { Jsonified } from '@penumbrafi/types/jsonified';
 import { TransactionViewTab } from './types';
 import { ChainRegistryClient } from '@penumbrafi/registry';
 import { viewClient } from '../../../../clients';

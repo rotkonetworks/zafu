@@ -1,4 +1,4 @@
-import { AuctionQuerierInterface } from '@rotko/penumbra-types/querier';
+import { AuctionQuerierInterface } from '@penumbrafi/types/querier';
 import { AuctionService } from '@penumbra-zone/protobuf';
 import { Client } from '@connectrpc/connect';
 import { createClient } from './utils';
@@ -6,7 +6,7 @@ import {
   AuctionId,
   DutchAuction,
 } from '@penumbra-zone/protobuf/penumbra/core/component/auction/v1/auction_pb';
-import { typeUrlMatchesTypeName } from '@rotko/penumbra-types/protobuf';
+import { typeUrlMatchesTypeName } from '@penumbrafi/types/protobuf';
 
 export class AuctionQuerier implements AuctionQuerierInterface {
   private readonly client: Client<typeof AuctionService>;

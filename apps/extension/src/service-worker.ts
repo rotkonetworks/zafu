@@ -58,8 +58,8 @@ import { connectChannelAdapter } from '@penumbra-zone/transport-dom/adapter';
 import { validateSessionPort } from './senders/session';
 
 // context
-import { fvkCtx } from '@rotko/penumbra-services/ctx/full-viewing-key';
-import { servicesCtx } from '@rotko/penumbra-services/ctx/prax';
+import { fvkCtx } from '@penumbrafi/services/ctx/full-viewing-key';
+import { servicesCtx } from '@penumbrafi/services/ctx/prax';
 import { getFullViewingKey } from './ctx/full-viewing-key';
 import { getWalletId } from './ctx/wallet-id';
 import { setCachedWallet, resetWalletCache } from './ctx/wallet-cache';
@@ -70,13 +70,13 @@ import { getAuthorization } from './ctx/authorization';
 
 // context clients
 import { CustodyService, StakeService, ViewService } from '@penumbra-zone/protobuf';
-import { custodyClientCtx } from '@rotko/penumbra-services/ctx/custody-client';
-import { stakeClientCtx } from '@rotko/penumbra-services/ctx/stake-client';
+import { custodyClientCtx } from '@penumbrafi/services/ctx/custody-client';
+import { stakeClientCtx } from '@penumbrafi/services/ctx/stake-client';
 import { createDirectClient } from '@penumbra-zone/transport-dom/direct';
 import { internalTransportOptions } from './transport-options';
 
 // idb, querier, block processor
-import { walletIdCtx } from '@rotko/penumbra-services/ctx/wallet-id';
+import { walletIdCtx } from '@penumbrafi/services/ctx/wallet-id';
 import type { Services } from '@repo/context';
 import { startWalletServices, penumbraGate, PENUMBRA_START_NEEDED } from './wallet-services';
 import { getWalletFromStorage } from '@repo/storage-chrome/onboard';

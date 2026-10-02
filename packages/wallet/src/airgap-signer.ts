@@ -34,7 +34,7 @@ import { EffectHash } from '@penumbra-zone/protobuf/penumbra/core/txhash/v1/txha
 
 /**
  * Encode a TransactionPlan to hex format for QR code display.
- * The effectHash must be pre-computed using WASM (computeEffectHash from @rotko/penumbra-wasm)
+ * The effectHash must be pre-computed using WASM (computeEffectHash from @penumbrafi/wasm)
  * since it requires the FullViewingKey to build the correct Penumbra structured hash.
  */
 export function encodePlanToQR(plan: TransactionPlan, effectHash: Uint8Array): string {

@@ -38,15 +38,35 @@
   ],
   "versionGroups": [
     {
+      "label": "LOCAL integration/penumbrafi-57: @penumbrafi/{wasm,types,services} come from local file: tarballs",
+      "dependencies": [
+        "@penumbrafi/wasm",
+        "@penumbrafi/types",
+        "@penumbrafi/services",
+        "@penumbra-zone/wasm",
+        "@penumbra-zone/types",
+        "@penumbra-zone/services"
+      ],
+      "isIgnored": true
+    },
+    {
       "label": "Pin @connectrpc for compatibility",
-      "packages": ["**"],
-      "dependencies": ["@connectrpc/**"],
+      "packages": [
+        "**"
+      ],
+      "dependencies": [
+        "@connectrpc/**"
+      ],
       "pinVersion": "^1.6.1"
     },
     {
       "label": "Pin @bufbuild for compatibility",
-      "packages": ["**"],
-      "dependencies": ["@bufbuild/**"],
+      "packages": [
+        "**"
+      ],
+      "dependencies": [
+        "@bufbuild/**"
+      ],
       "pinVersion": "^1.10.0"
     },
     {

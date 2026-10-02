@@ -11,7 +11,7 @@ import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view
 import { AddressIndex } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import { Height } from '@penumbra-zone/protobuf/ibc/core/client/v1/client_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
-import { splitLoHi } from '@rotko/penumbra-types/lo-hi';
+import { splitLoHi } from '@penumbrafi/types/lo-hi';
 import { viewClient } from '../clients';
 import { toBaseUnits } from './ibc-withdraw-amount';
 import { getCounterpartyHeight, timeoutBlocksForChain } from './ibc-withdraw-timeout';

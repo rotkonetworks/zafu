@@ -3,8 +3,8 @@ import { getDisplayDenomFromView, getEquivalentValues } from '@penumbra-zone/get
 import { asValueView } from '@penumbra-zone/getters/equivalent-value';
 import { getDisplayDenomExponent } from '@penumbra-zone/getters/metadata';
 import { bech32mAssetId } from '@penumbra-zone/bech32m/passet';
-import { fromValueView } from '@rotko/penumbra-types/amount';
-import { uint8ArrayToBase64 } from '@rotko/penumbra-types/base64';
+import { fromValueView } from '@penumbrafi/types/amount';
+import { uint8ArrayToBase64 } from '@penumbrafi/types/base64';
 import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import type { Metadata } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { filterFungibleBalances } from '../../../utils/is-fungible-asset';

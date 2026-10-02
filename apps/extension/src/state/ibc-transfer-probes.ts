@@ -19,7 +19,7 @@
 import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
 import { getAmount as getAmountFromView } from '@penumbra-zone/getters/value-view';
-import { joinLoHiAmount } from '@rotko/penumbra-types/amount';
+import { joinLoHiAmount } from '@penumbrafi/types/amount';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { viewClient } from '../clients';
 import {

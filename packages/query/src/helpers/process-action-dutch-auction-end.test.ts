@@ -6,12 +6,12 @@ import {
   AuctionId,
   DutchAuction,
 } from '@penumbra-zone/protobuf/penumbra/core/component/auction/v1/auction_pb';
-import { IndexedDbInterface } from '@rotko/penumbra-types/indexed-db';
+import { IndexedDbInterface } from '@penumbrafi/types/indexed-db';
 
 const inner0123 = Uint8Array.from({ length: 32 }, () => Math.floor(Math.random() * 256));
 const inner4567 = Uint8Array.from({ length: 32 }, () => Math.floor(Math.random() * 256));
 
-vi.mock('@rotko/penumbra-wasm/auction', () => ({
+vi.mock('@penumbrafi/wasm/auction', () => ({
   getAuctionNftMetadata: () =>
     Metadata.fromJson({
       penumbraAssetId: { inner: 'ARpgNbcWB8SkCuCBjlTsW8eDmEqeJQGWYDhbUk3Q1pc=' },

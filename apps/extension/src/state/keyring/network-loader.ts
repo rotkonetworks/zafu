@@ -37,12 +37,9 @@ export const loadNetworkFeatures = async (network: NetworkType): Promise<void> =
   if (isPrivacyNetwork(network)) {
     switch (network) {
       case 'penumbra':
-        // lazy import penumbra wasm - use initWasmWithParallel if available
+        // importing the package loads its wasm; only the proving worker starts threads
         try {
-          const wasmInit = await import('@rotko/penumbra-wasm/init');
-          const numThreads =
-            typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 4 : 4;
-          await wasmInit.initWasmWithParallel(numThreads);
+          await (await import('@penumbrafi/wasm/init')).initWasm();
           loadedNetworks.set('penumbra', { wasmLoaded: true, providers: {} });
         } catch {
           loadedNetworks.set('penumbra', { wasmLoaded: false, providers: {} });

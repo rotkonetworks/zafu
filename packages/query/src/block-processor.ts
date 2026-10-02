@@ -24,19 +24,15 @@ import {
   getExchangeRateFromValidatorInfoResponse,
   getIdentityKeyFromValidatorInfoResponse,
 } from '@penumbra-zone/getters/validator-info-response';
-import { addAmounts, toDecimalExchangeRate } from '@rotko/penumbra-types/amount';
-import { assetPatterns, PRICE_RELEVANCE_THRESHOLDS } from '@rotko/penumbra-types/assets';
-import type { BlockProcessorInterface } from '@rotko/penumbra-types/block-processor';
-import { uint8ArrayToHex } from '@rotko/penumbra-types/hex';
-import type { IndexedDbInterface } from '@rotko/penumbra-types/indexed-db';
-import type { ViewServerInterface } from '@rotko/penumbra-types/servers';
-import { ScanBlockResult } from '@rotko/penumbra-types/state-commitment-tree';
-import {
-  computePositionId,
-  getLpNftMetadata,
-  decryptPositionMetadata,
-} from '@rotko/penumbra-wasm/dex';
-import { customizeSymbol } from '@rotko/penumbra-wasm/metadata';
+import { addAmounts, toDecimalExchangeRate } from '@penumbrafi/types/amount';
+import { assetPatterns, PRICE_RELEVANCE_THRESHOLDS } from '@penumbrafi/types/assets';
+import type { BlockProcessorInterface } from '@penumbrafi/types/block-processor';
+import { uint8ArrayToHex } from '@penumbrafi/types/hex';
+import type { IndexedDbInterface } from '@penumbrafi/types/indexed-db';
+import type { ViewServerInterface } from '@penumbrafi/types/servers';
+import { ScanBlockResult } from '@penumbrafi/types/state-commitment-tree';
+import { computePositionId, getLpNftMetadata, decryptPositionMetadata } from '@penumbrafi/wasm/dex';
+import { customizeSymbol } from '@penumbrafi/wasm/metadata';
 import { backOff } from 'exponential-backoff';
 import { updatePricesFromSwaps } from './helpers/price-indexer';
 import { processActionDutchAuctionEnd } from './helpers/process-action-dutch-auction-end';
@@ -48,7 +44,7 @@ import {
   FullViewingKey,
   IdentityKey,
 } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
-import { getDelegationTokenMetadata } from '@rotko/penumbra-wasm/stake';
+import { getDelegationTokenMetadata } from '@penumbrafi/wasm/stake';
 import { toPlainMessage } from '@bufbuild/protobuf';
 import { getAssetIdFromGasPrices } from '@penumbra-zone/getters/compact-block';
 import { getSpendableNoteRecordCommitment } from '@penumbra-zone/getters/spendable-note-record';
@@ -60,7 +56,7 @@ import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { FmdParameters } from '@penumbra-zone/protobuf/penumbra/core/component/shielded_pool/v1/shielded_pool_pb';
 import { AppParameters } from '@penumbra-zone/protobuf/penumbra/core/app/v1/app_pb';
 import { shouldSkipTrialDecrypt } from './helpers/skip-trial-decrypt';
-import { assetIdFromBaseDenom } from '@rotko/penumbra-wasm/asset';
+import { assetIdFromBaseDenom } from '@penumbrafi/wasm/asset';
 
 declare global {
   var __DEV__: boolean | undefined;

@@ -20,8 +20,8 @@ import {
   getAssetIdFromValueView,
   getDisplayDenomExponentFromValueView,
 } from '@penumbra-zone/getters/value-view';
-import { fromValueView } from '@rotko/penumbra-types/amount';
-import { assetPatterns } from '@rotko/penumbra-types/assets';
+import { fromValueView } from '@penumbrafi/types/amount';
+import { assetPatterns } from '@penumbrafi/types/assets';
 import { Button } from '@repo/ui/components/ui/button';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { ScreenHeader } from '../../../components/screen-header';

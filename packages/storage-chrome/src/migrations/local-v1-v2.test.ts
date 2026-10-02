@@ -1,8 +1,8 @@
 import { AppParameters } from '@penumbra-zone/protobuf/penumbra/core/app/v1/app_pb';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
-import { Wallet, type WalletJson as OldWalletJson } from '@rotko/penumbra-types/wallet';
+import { Wallet, type WalletJson as OldWalletJson } from '@penumbrafi/types/wallet';
 import { Wallet as RepoWallet, type WalletJson as RepoWalletJson } from '@repo/wallet';
-import { generateSpendKey, getFullViewingKey, getWalletId } from '@rotko/penumbra-wasm/keys';
+import { generateSpendKey, getFullViewingKey, getWalletId } from '@penumbrafi/wasm/keys';
 import { Key } from '@repo/encryption/key';
 import { KeyPrint } from '@repo/encryption/key-print';
 import { MockStorageArea } from '@repo/mock-chrome/mocks/storage-area';

@@ -8,7 +8,7 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { getWalletFromStorage, getWalletsFromStorage } from '@repo/storage-chrome/onboard';
 import type { WalletJson } from '@repo/wallet';
 import { Services } from '@repo/context';
-import { WalletServices } from '@rotko/penumbra-types/services';
+import { WalletServices } from '@penumbrafi/types/services';
 import { getRootNetwork } from './config/networks';
 import { resolvePenumbraEndpoint } from './config/penumbra-endpoints';
 import type { NetworkType } from './state/keyring';
@@ -16,7 +16,7 @@ import { hasLiveDappSession } from './dapp-session-presence';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { ChainRegistryClient } from '@penumbrafi/registry';
 import { SENTINEL_U64_MAX } from './utils/sentinel';
-import { base64ToUint8Array } from '@rotko/penumbra-types/base64';
+import { base64ToUint8Array } from '@penumbrafi/types/base64';
 import { USDC_INJ_ID } from './penumbra/quotes';
 import {
   adoptLegacyStart,

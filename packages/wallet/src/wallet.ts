@@ -7,8 +7,8 @@ import {
   AuthorizationData,
   TransactionPlan,
 } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
-import { authorizePlan } from '@rotko/penumbra-wasm/build';
-import { generateSpendKey } from '@rotko/penumbra-wasm/keys';
+import { authorizePlan } from '@penumbrafi/wasm/build';
+import { generateSpendKey } from '@penumbrafi/wasm/keys';
 import { Box, BoxJson } from '@repo/encryption/box';
 import { Key } from '@repo/encryption/key';
 import {

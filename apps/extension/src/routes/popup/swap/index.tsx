@@ -24,7 +24,7 @@ import {
   getDisplayDenomExponentFromValueView,
 } from '@penumbra-zone/getters/value-view';
 import { symbolFromMetadata } from '../../../utils/asset-display';
-import { fromValueView } from '@rotko/penumbra-types/amount';
+import { fromValueView } from '@penumbrafi/types/amount';
 import { isFungibleMetadata, selectPickerBuckets } from '../../../utils/is-fungible-asset';
 import { balancesQueryOptions } from '../../../hooks/penumbra-balances';
 import type {

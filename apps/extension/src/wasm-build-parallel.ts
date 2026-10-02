@@ -1,24 +1,22 @@
 /**
- * Web Worker for rayon-based parallel transaction building.
- *
- * This worker initializes WASM with rayon thread pool support and builds
- * entire transactions in parallel using build_parallel_native.
- *
- * Unlike wasm-build-action.ts which builds individual actions, this worker
- * builds ALL actions concurrently via rayon's par_iter() in a single WASM call.
+ * The penumbra proving worker: owns @penumbrafi/wasm's thread pool and proves
+ * every action of a plan concurrently. It answers two jobs from the offscreen
+ * document: `prove` (all actions, no auth data - runs while the user reviews)
+ * and `build` (proofs plus auth in one call).
  */
 
 // egress guard first: nothing may capture fetch or open a socket before it
 import './net/egress-install-lite';
 import {
   AuthorizationData,
-  Transaction,
-  TransactionBody,
   TransactionPlan,
   WitnessData,
 } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
 import type { JsonValue } from '@bufbuild/protobuf';
-import type { ParallelBuildRequest } from '@rotko/penumbra-types/internal-msg/offscreen';
+import type {
+  ParallelBuildRequest,
+  ParallelProveRequest,
+} from '@penumbrafi/types/internal-msg/offscreen';
 import { FullViewingKey } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import actionKeys from '@penumbra-zone/keys';
 import { assessAmbientRayonIsolation, RAYON_ISOLATION_WARNING } from './perf/rayon-isolation';
@@ -53,52 +51,22 @@ self.addEventListener(
   { once: true },
 );
 
-// Track initialization state
-let wasmInitialized = false;
-let wasmInitPromise: Promise<void> | null = null;
+let threads: Promise<void> | undefined;
 
-/**
- * Initialize WASM with rayon parallel support.
- * Must be called before building transactions.
- */
-const initParallelWasm = async () => {
-  if (wasmInitialized) {
-    return;
-  }
-  if (wasmInitPromise) {
-    return wasmInitPromise;
-  }
-
-  wasmInitPromise = (async () => {
-    try {
-      const wasmInit = await import('@rotko/penumbra-wasm/init');
-
-      if (typeof SharedArrayBuffer === 'undefined') {
-        throw new Error('SharedArrayBuffer not available - parallel WASM requires it');
-      }
-
-      // Regression guard: even when SharedArrayBuffer exists, a lost
-      // cross-origin-isolated context degrades rayon to a single thread. No
-      // COOP/COEP is set anywhere - this depends on current Chrome policy for
-      // extension realms; shout loudly if that ever slips.
-      const isolation = assessAmbientRayonIsolation();
-      if (!isolation.ok) {
-        console.error(`${RAYON_ISOLATION_WARNING} (penumbra parallel build: ${isolation.reason})`);
-      }
-
-      const numThreads = navigator.hardwareConcurrency || 4;
-      await wasmInit.initWasmWithParallel(numThreads);
-      console.log(`[Parallel Build Worker] Initialized with ${numThreads} rayon threads`);
-      wasmInitialized = true;
-    } catch (error) {
-      console.error('[Parallel Build Worker] Failed to initialize:', error);
-      wasmInitPromise = null;
-      throw error;
+/** Start the thread pool once; this dedicated worker owns it. */
+const startPool = () =>
+  (threads ??= (async () => {
+    // Regression guard: without shared memory rayon has no threads to start.
+    const isolation = assessAmbientRayonIsolation();
+    if (!isolation.ok) {
+      console.error(`${RAYON_ISOLATION_WARNING} (penumbra prover: ${isolation.reason})`);
     }
-  })();
-
-  return wasmInitPromise;
-};
+    const { startThreads } = await import('@penumbrafi/wasm/init');
+    await startThreads(navigator.hardwareConcurrency || 4);
+  })().catch((e: unknown) => {
+    threads = undefined;
+    throw e;
+  }));
 
 // Proving keys are loaded once per KEY FILE, not per action type:
 // delegatorVote and actionLiquidityTournamentVote share delegator_vote_pk.bin
@@ -114,7 +82,7 @@ const keyFileLoads = new Map<string, Promise<void>>();
  */
 const loadProvingKeyIfNeeded = (
   actionType: string,
-  loadKey: (key: Uint8Array, type: string) => void,
+  loadKey: (key: Uint8Array, type: string) => Promise<void>,
 ): Promise<void> => {
   const keyFile = ACTION_KEY_FILES[actionType];
   if (!keyFile) {
@@ -142,7 +110,7 @@ const loadProvingKeyIfNeeded = (
     const keyBytes = new Uint8Array(await response.arrayBuffer());
     for (const [action, file] of Object.entries(ACTION_KEY_FILES)) {
       if (file === keyFile) {
-        loadKey(keyBytes, action);
+        await loadKey(keyBytes, action);
       }
     }
   })().catch((e: unknown) => {
@@ -195,38 +163,21 @@ const getRequiredProvingKeys = (txPlan: TransactionPlan): Set<string> => {
   return required;
 };
 
-/**
- * PROVE_PARALLEL from @penumbrafi/services: prove every action before the user
- * approves, from viewing data only. Mirrors ParallelBuildRequest without
- * authData; import it from @penumbrafi/types once zafu moves there.
- */
-export interface ParallelProveRequest {
-  transactionPlan: ParallelBuildRequest['transactionPlan'];
-  witness: ParallelBuildRequest['witness'];
-  fullViewingKey: ParallelBuildRequest['fullViewingKey'];
-}
-
 export type ParallelWorkerRequest =
   | { kind: 'build'; request: ParallelBuildRequest }
   | { kind: 'prove'; request: ParallelProveRequest };
 
 /**
  * Reply shape for a refused job. The success reply is the bare JSON result, so
- * failures are marked with this key instead of a wrapper. `unimplemented` means
- * this wasm cannot prove without auth data; the caller falls back to a build.
+ * failures are marked with this key instead of a wrapper.
  */
 export interface ParallelWorkerFailure {
-  __buildError: { message: string; unimplemented?: boolean };
+  __buildError: { message: string };
 }
-
-class ProveUnsupportedError extends Error {}
 
 const postFailure = (e: unknown): void => {
   self.postMessage({
-    __buildError: {
-      message: e instanceof Error ? e.message : String(e),
-      unimplemented: e instanceof ProveUnsupportedError,
-    },
+    __buildError: { message: e instanceof Error ? e.message : String(e) },
   } satisfies ParallelWorkerFailure);
 };
 
@@ -242,45 +193,27 @@ const workerListener = ({ data }: MessageEvent<ParallelWorkerRequest>) => {
 // Listen for all messages - worker is persistent
 self.addEventListener('message', workerListener);
 
-/** Initialize wasm and load every proving key the plan needs; both stay cached. */
+/** Start the pool and load every proving key the plan needs; both stay cached. */
 async function prepare(transactionPlan: TransactionPlan) {
-  await initParallelWasm();
-
-  // Import parallel WASM module directly - keys must be loaded into the same module that uses them
-  const parallelWasm = await import('@rotko/penumbra-wasm/wasm-parallel');
-
+  await startPool();
+  const build = await import('@penumbrafi/wasm/build');
   await Promise.all(
     Array.from(getRequiredProvingKeys(transactionPlan)).map(actionType =>
-      loadProvingKeyIfNeeded(actionType, parallelWasm.load_proving_key),
+      loadProvingKeyIfNeeded(actionType, build.loadProvingKey),
     ),
   );
-  return parallelWasm;
-}
-
-/** wasm-parallel exports added after @rotko/penumbra-wasm@55.0.2 */
-interface ProveOnlyWasm {
-  build_actions_native?: (
-    full_viewing_key: Uint8Array,
-    transaction_plan: Uint8Array,
-    witness_data: Uint8Array,
-  ) => Uint8Array;
+  return build;
 }
 
 /** Prove all actions without authorization data; returns them in plan order. */
 async function executeProve(req: ParallelProveRequest): Promise<JsonValue> {
   const transactionPlan = TransactionPlan.fromJson(req.transactionPlan);
-  const parallelWasm = (await prepare(transactionPlan)) as ProveOnlyWasm;
-  if (typeof parallelWasm.build_actions_native !== 'function') {
-    throw new ProveUnsupportedError('wasm-parallel has no build_actions_native');
-  }
-
+  const { proveActions } = await prepare(transactionPlan);
   const start = performance.now();
-  const { actions } = TransactionBody.fromBinary(
-    parallelWasm.build_actions_native(
-      FullViewingKey.fromJson(req.fullViewingKey).toBinary(),
-      transactionPlan.toBinary(),
-      WitnessData.fromJson(req.witness).toBinary(),
-    ),
+  const actions = await proveActions(
+    FullViewingKey.fromJson(req.fullViewingKey),
+    transactionPlan,
+    WitnessData.fromJson(req.witness),
   );
   console.debug(
     `[Parallel Build Worker] proved ${actions.length} actions in ${(performance.now() - start).toFixed(0)}ms`,
@@ -291,16 +224,13 @@ async function executeProve(req: ParallelProveRequest): Promise<JsonValue> {
 /** Proofs and authorization in one call (the pre-approval path is executeProve). */
 async function executeBuild(req: ParallelBuildRequest): Promise<JsonValue> {
   const transactionPlan = TransactionPlan.fromJson(req.transactionPlan);
-  const parallelWasm = await prepare(transactionPlan);
-
+  const { buildTransaction } = await prepare(transactionPlan);
   const start = performance.now();
-  const transaction = Transaction.fromBinary(
-    parallelWasm.build_parallel_native(
-      FullViewingKey.fromJson(req.fullViewingKey).toBinary(),
-      transactionPlan.toBinary(),
-      WitnessData.fromJson(req.witness).toBinary(),
-      AuthorizationData.fromJson(req.authData).toBinary(),
-    ),
+  const transaction = await buildTransaction(
+    FullViewingKey.fromJson(req.fullViewingKey),
+    transactionPlan,
+    WitnessData.fromJson(req.witness),
+    AuthorizationData.fromJson(req.authData),
   );
   console.debug(
     `[Parallel Build Worker] built transaction in ${(performance.now() - start).toFixed(0)}ms`,
