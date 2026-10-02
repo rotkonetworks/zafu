@@ -4,10 +4,13 @@ import { Sensitive } from '../../../components/sensitive';
 import { zafuListBps } from '../../../config/swap-fee';
 import { fromUnits, pct, type Cost, type CostPart } from '../../../state/swap/provider';
 
-/** zafu's rate; below the production list rate, that rate shows struck through */
+/**
+ * zafu's rate; a discount on the list rate shows that rate struck through. A
+ * route zafu takes nothing on (thorchain) is a plain 0%, never a discount.
+ */
 const ZafuRate = ({ bps }: { bps: number }) => {
   const list = zafuListBps();
-  return bps < list ? (
+  return bps > 0 && bps < list ? (
     <>
       <s>{pct(list)}</s>{' '}
       <span className='text-success'>
