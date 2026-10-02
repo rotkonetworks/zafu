@@ -45,6 +45,13 @@ export interface EgressRule {
   destination: string;
   allow: boolean;
   reason?: Exclude<EgressReason, 'content-script' | 'not-ready' | 'unknown'>;
+  /**
+   * An optional service's rule. Two optional services can use one url (the
+   * bucket relay serves both contact discovery and people messages): a
+   * request cannot say which feature made it, so the url passes when either
+   * is on, and each feature gates itself on its own destination.
+   */
+  shared?: boolean;
 }
 
 export interface EgressTable {
@@ -67,25 +74,33 @@ const pathOf = (url: string): string => {
   }
 };
 
-/** The rule that owns `url`: same host, longest path prefix, first in table order on a tie. */
-export const matchRule = (table: EgressTable, url: string): EgressRule | undefined => {
+/**
+ * Every rule tied for `url`: same host, longest path prefix, in table order.
+ * The first owns it; the rest share it only when all of them are `shared`.
+ */
+export const matchRules = (table: EgressTable, url: string): EgressRule[] => {
   const host = hostOf(url);
   if (!host) {
-    return undefined;
+    return [];
   }
   const path = pathOf(url);
-  let best: EgressRule | undefined;
+  let best: EgressRule[] = [];
   for (const rule of table.rules) {
-    if (
-      rule.host === host &&
-      path.startsWith(rule.path) &&
-      rule.path.length > (best?.path.length ?? -1)
-    ) {
-      best = rule;
+    if (rule.host === host && path.startsWith(rule.path)) {
+      const len = best[0]?.path.length ?? -1;
+      if (rule.path.length > len) {
+        best = [rule];
+      } else if (rule.path.length === len) {
+        best.push(rule);
+      }
     }
   }
-  return best;
+  return best.every(r => r.shared) ? best : best.slice(0, 1);
 };
+
+/** The rule that owns `url`: same host, longest path prefix, first in table order on a tie. */
+export const matchRule = (table: EgressTable, url: string): EgressRule | undefined =>
+  matchRules(table, url)[0];
 
 /**
  * Precedence:
@@ -117,7 +132,9 @@ export const decideEgress = (
   if (isLocalDeviceHost(host)) {
     return { allow: true, host };
   }
-  const rule = matchRule(table, url);
+  const ties = matchRules(table, url);
+  // shared optional rules: the url passes when any of them is on
+  const rule = ties.find(r => r.allow) ?? ties[0];
   const destination = rule?.destination;
   const override = table.hosts[host];
   if (override === 'blocked' || rule?.reason === 'blocked') {

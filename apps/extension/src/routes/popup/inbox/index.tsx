@@ -3,10 +3,10 @@
  * something does), your groups with their balance, then direct threads by
  * recency.
  *
- * NO AUTOCONNECT: opening this tab reads the chain memos the light client
- * already syncs (zidecar for zcash, the view service for penumbra) and
- * nothing else. No relay, no group chat, no discovery. A group's chat
- * connects only when that group is opened.
+ * Opening this tab is T1 of the no-autoconnect contract: the chain memos the
+ * light client already syncs, plus one catch-up pass over the rooms this
+ * wallet joined on the people relay. With no rooms that pass is nothing at
+ * all: no request, no question. No discovery runs from here.
  */
 
 import { memo, useEffect, useMemo, useState } from 'react';
@@ -25,10 +25,15 @@ import { useZcashMemos } from '../../../hooks/zcash-memos';
 import { useMultisigBalances } from '../../../hooks/multisig-balances';
 import { ScreenHeader } from '../../../components/screen-header';
 import { Sensitive } from '../../../components/sensitive';
-import { PopupPath, threadPath } from '../paths';
+import { PopupPath, groupPath, threadPath } from '../paths';
 import { useIdentity } from '../identity/use-identity';
 import { deriveThreads, previewOf, shortAddress, whenOf, type DirectThread } from './threads';
 import { useThreadName } from './use-thread-name';
+import { useMyRooms, useOpenPeople, usePeople, useThread } from '../../../people/client';
+import { RelaySlot } from '../../../people/relay-slot';
+import { InviteRows } from '../../../people/invite-rows';
+import { usePairCards } from '../../../people/use-invites';
+import { threadKey, unreadOf, type PeopleRoom } from '../../../people/vault';
 
 const zec = (zat: bigint) => (Number(zat) / 1e8).toFixed(2);
 
@@ -101,13 +106,7 @@ const GroupRow = memo(({ wallet, balance }: { wallet: ZcashWalletJson; balance?:
   return (
     <button
       type='button'
-      onClick={() =>
-        navigate(
-          ms.relayPeerKeys?.length
-            ? PopupPath.INBOX_GROUP.replace(':walletId', wallet.id)
-            : PopupPath.MULTISIG,
-        )
-      }
+      onClick={() => navigate(PopupPath.MULTISIG)}
       className='flex h-16 items-center gap-3 px-1 text-left transition-colors hover:bg-elev-2'
     >
       <span className='flex size-10 shrink-0 items-center justify-center border border-border-hard bg-elev-1 font-display text-lg text-zigner-gold'>
@@ -127,17 +126,58 @@ const GroupRow = memo(({ wallet, balance }: { wallet: ZcashWalletJson; balance?:
 });
 GroupRow.displayName = 'GroupRow';
 
+/** a group on the people relay: its last line, and how many you have not read */
+const RoomRow = memo(({ room }: { room: PeopleRoom }) => {
+  const navigate = useNavigate();
+  const thread = useThread(room);
+  const last = thread?.items[thread.items.length - 1];
+  const unread = unreadOf(thread);
+  const who = last && (last.mine ? 'you' : (room.group?.names?.[last.author] ?? last.name));
+  return (
+    <button
+      type='button'
+      onClick={() => navigate(groupPath(room.group!.G))}
+      className='flex h-16 items-center gap-3 px-1 text-left transition-colors hover:bg-elev-2'
+    >
+      <span className='flex size-10 shrink-0 items-center justify-center border border-border-hard bg-elev-1 font-display text-lg text-zigner-gold'>
+        蔵
+      </span>
+      <span className='flex min-w-0 grow flex-col gap-[3px]'>
+        <span className='flex items-baseline gap-2'>
+          <span className='truncate text-sm text-fg-high lowercase'>{room.name}</span>
+          <span className='shrink-0 text-[11px] text-fg-muted'>
+            {room.group?.members.length || 1}
+          </span>
+        </span>
+        <span className='truncate text-[11px] text-fg-muted'>
+          {last ? `${who}: ${last.body}` : 'no messages yet'}
+        </span>
+      </span>
+      {unread > 0 && (
+        <span className='flex h-[18px] min-w-[18px] shrink-0 items-center justify-center bg-hanko px-[5px] text-[11px] text-fg-high'>
+          {unread}
+        </span>
+      )}
+    </button>
+  );
+});
+RoomRow.displayName = 'RoomRow';
+
 const Groups = () => {
   const wallets = useStore(selectVisibleMultisigWallets);
   const onZcash = useStore(s => selectActiveNetwork(s) === 'zcash');
   const balances = useMultisigBalances(wallets, onZcash);
-  if (!wallets.length) {
+  const rooms = useMyRooms().filter(r => r.kind === 'group' && r.joined);
+  if (!wallets.length && !rooms.length) {
     return null;
   }
   return (
     <section className='flex flex-col gap-1.5'>
       <h2 className='text-xs tracking-[0.04em] text-fg-muted'>groups</h2>
       <div className='flex flex-col'>
+        {rooms.map(r => (
+          <RoomRow key={r.id} room={r} />
+        ))}
         {wallets.map(w => (
           <GroupRow key={w.id} wallet={w} balance={balances[w.id]} />
         ))}
@@ -146,7 +186,25 @@ const Groups = () => {
   );
 };
 
-const DirectRow = memo(({ thread }: { thread: DirectThread }) => {
+/** one person: their newest line, memo or relay */
+interface DirectRowData {
+  id: string;
+  address?: string;
+  line: string;
+  /** ms */
+  ts: number;
+  unread: number;
+}
+
+const rowOf = (t: DirectThread): DirectRowData => ({
+  id: t.id,
+  address: t.address,
+  line: previewOf(t.last),
+  ts: t.last.timestamp,
+  unread: t.unread,
+});
+
+const DirectRow = memo(({ thread }: { thread: DirectRowData }) => {
   const navigate = useNavigate();
   const name = useThreadName(thread.address);
   const unread = thread.unread > 0;
@@ -161,10 +219,10 @@ const DirectRow = memo(({ thread }: { thread: DirectThread }) => {
       </span>
       <span className='flex min-w-0 grow flex-col gap-[3px]'>
         <span className={cn('truncate text-sm', unread ? 'text-fg-high' : 'text-fg')}>{name}</span>
-        <span className='truncate text-[11px] text-fg-muted'>{previewOf(thread.last)}</span>
+        <span className='truncate text-[11px] text-fg-muted'>{thread.line}</span>
       </span>
       <span className='flex shrink-0 flex-col items-end gap-1'>
-        <span className='text-[11px] text-fg-dim'>{whenOf(thread.last.timestamp)}</span>
+        <span className='text-[11px] text-fg-dim'>{whenOf(thread.ts)}</span>
         {unread && <span className='size-2 bg-zigner-gold' aria-label='unread' />}
       </span>
     </button>
@@ -178,11 +236,37 @@ const Direct = ({ canCard }: { canCard: boolean }) => {
   const navigate = useNavigate();
   const network = useStore(selectActiveNetwork);
   const messages = useStore(selectThreads);
-  const threads = useMemo(
-    () =>
-      deriveThreads((Array.isArray(messages) ? messages : []).filter(m => m.network === network)),
-    [messages, network],
-  );
+  const contacts = useStore(s => s.contacts.contacts);
+  const rooms = useMyRooms();
+  const pairRooms = useMemo(() => rooms.filter(r => r.kind === 'pair' && r.joined), [rooms]);
+  const { threads: relayThreads } = usePeople();
+  const threads = useMemo(() => {
+    const rows = new Map(
+      deriveThreads(
+        (Array.isArray(messages) ? messages : []).filter(m => m.network === network),
+      ).map(t => [t.id, rowOf(t)]),
+    );
+    // relay lines from pair rooms join the person's row, newest wins
+    for (const room of network === 'zcash' ? pairRooms : []) {
+      const t = relayThreads[threadKey(room)];
+      const last = t?.items[t.items.length - 1];
+      const address = (Array.isArray(contacts) ? contacts : [])
+        .find(c => c.id === room.pair?.personId)
+        ?.addresses.find(a => a.network === 'zcash')?.address;
+      if (!last || !address) {
+        continue;
+      }
+      const id = address.toLowerCase();
+      const row = rows.get(id);
+      const unread = unreadOf(t) + (row?.unread ?? 0);
+      if (!row || last.ts * 1000 > row.ts) {
+        rows.set(id, { id, address, line: last.body, ts: last.ts * 1000, unread });
+      } else {
+        rows.set(id, { ...row, unread });
+      }
+    }
+    return [...rows.values()].sort((a, b) => b.ts - a.ts);
+  }, [messages, network, pairRooms, relayThreads, contacts]);
   return (
     <section className='flex flex-col gap-1.5'>
       <div className='flex items-baseline justify-between'>
@@ -291,7 +375,10 @@ export function InboxPage() {
   const [composing, setComposing] = useState(false);
   const canCard = !!keyInfo && keyInfoSupportsNetwork(keyInfo, 'zcash');
 
-  // the chain memos the light client already reads; never a relay
+  useOpenPeople();
+  usePairCards();
+  const hasRooms = useMyRooms().some(r => r.joined);
+  // the chain memos the light client already reads
   const { syncMemos: syncPenumbra } = usePenumbraMemos(walletId);
   const { syncMemos: syncZcash } = useZcashMemos(walletId, zidecarUrl);
   useEffect(() => {
@@ -312,7 +399,7 @@ export function InboxPage() {
             <button
               type='button'
               aria-label='new group'
-              onClick={() => navigate(PopupPath.MULTISIG_CREATE)}
+              onClick={() => navigate(PopupPath.INBOX_NEW_GROUP)}
               className='flex h-9 items-center gap-1.5 border border-border-soft px-2.5 text-xs text-fg-high transition-colors hover:bg-elev-2'
             >
               <span className='i-zafu-torii size-[15px]' aria-hidden='true' />
@@ -329,9 +416,11 @@ export function InboxPage() {
           </>
         }
       />
+      {hasRooms && <RelaySlot />}
       <div className='flex flex-col gap-[18px] px-4 pb-4 pt-3.5'>
         <YouRow />
         <NeedsYou />
+        <InviteRows />
         <Groups />
         <Direct canCard={canCard} />
       </div>

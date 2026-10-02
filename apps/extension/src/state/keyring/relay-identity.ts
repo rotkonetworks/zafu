@@ -3,13 +3,11 @@
  *
  * A relay identity is NOT a wallet key and is deliberately unrelated to one.
  * Its X25519 private key authenticates to the relay and keys the Noise_K
- * sessions that keep the relay from reading anything - but that is not its
- * only role. The same scalar is the static private half of the pairwise DH that
- * seals group-chat frames (see group-chat-crypto), so it is the group-chat
- * confidentiality key. Leaking it is therefore not "impersonation only": an
- * attacker who holds it can decrypt every group-chat message encrypted to that
- * identity, and impersonate the device to the relay besides. Losing it costs a
- * session and read access to history sealed to it, not funds.
+ * sessions that keep the relay from reading anything. It also was the
+ * pairwise key of the retired frostd group chat, whose history (`groupChats`)
+ * stays sealed to it: leaking it is not "impersonation only" while that
+ * history exists. Group chat now lives on the people relay (people/), keyed
+ * by room keys, not by this.
  *
  * It is generated per multisig group rather than once per device. Reusing one
  * identity across groups would let a relay operator - or anyone watching -

@@ -47,6 +47,20 @@ vi.mock('../../../hooks/use-contact-address-source', () => ({
   useContactAddressSource: () => () => ({}),
 }));
 vi.mock('../../../hooks/use-address', () => ({ useActiveAddress: () => ({}) }));
+// the people relay is the worker's: nobody here holds a card, so it stays out
+vi.mock('../../../people/client', () => ({
+  peopleCall: vi.fn(async () => undefined),
+  peopleSay: vi.fn(async () => undefined),
+  useMyRooms: () => [],
+  useThread: () => undefined,
+  useWatchRoom: () => undefined,
+}));
+vi.mock('../../../people/use-invites', () => ({
+  allowRelay: vi.fn(),
+  useMemoInvite: () => vi.fn(async () => undefined),
+  usePairCards: () => undefined,
+}));
+vi.mock('../../../people/relay-slot', () => ({ RelaySlot: () => null }));
 vi.mock('../../../utils/navigate', () => ({ useBackNav: () => vi.fn() }));
 vi.mock('../../../services/zcashme/config', () => ({
   useZcashMeDirectoryLookup: () => () => undefined,

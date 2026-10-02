@@ -8,6 +8,7 @@
 
 import { useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { ingestMemoInvites } from '../people/client';
 import { useStore } from '../state';
 import { messagesSelector } from '../state/messages';
 import { getDiversifiedAddresses } from '../state/diversified-addresses';
@@ -135,6 +136,21 @@ export function useZcashMemos(walletId: string, zidecarUrl: string = DEFAULT_ZID
           amount: memo.amount,
         });
       }
+
+      // a memo that carries a zafu chat invite goes to the people relay's inbox
+      ingestMemoInvites(
+        results.map(m => {
+          const { content, returnAddress } = parseReturnAddress(m.content);
+          return {
+            network: 'zcash' as const,
+            txId: m.txId,
+            content,
+            timestamp: m.timestamp,
+            from: returnAddress,
+            direction: m.direction,
+          };
+        }),
+      );
 
       // also feed raw memo bytes into the structured inbox for binary-encoded messages
       // (FROST coordination, fragmented text, address shares, etc.)

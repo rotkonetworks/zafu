@@ -8,8 +8,14 @@ export enum PopupPath {
   INBOX = '/inbox',
   /** one direct thread: a counterparty address, or `s:<txid>` for an unknown sender */
   INBOX_THREAD = '/inbox/t/:threadId',
-  /** multisig group coordination chat, one thread per group (wallet id param) */
-  INBOX_GROUP = '/inbox/group/:walletId',
+  /** a group (Group.dc.html): its room on the people relay, by genesis id */
+  INBOX_GROUP = '/inbox/g/:groupId',
+  /** the founder's door: the code, and who asks to join (GroupInvite.dc.html) */
+  INBOX_GROUP_INVITE = '/inbox/g/:groupId/invite',
+  /** make a group (NewGroup.dc.html) */
+  INBOX_NEW_GROUP = '/inbox/new-group',
+  /** join one from a code or a link (GroupJoin.dc.html), `?code=&via=` */
+  INBOX_JOIN = '/inbox/join',
   CONTACTS = '/contacts',
   CONTACT = '/contacts/:contactId',
   /** a card someone gave you, to review and save (`?card=<payload>&via=`) */
@@ -131,6 +137,12 @@ export enum PopupPath {
 /** a direct thread's route */
 export const threadPath = (threadId: string): string =>
   PopupPath.INBOX_THREAD.replace(':threadId', encodeURIComponent(threadId));
+
+/** a group's route, by genesis id */
+export const groupPath = (G: string): string => PopupPath.INBOX_GROUP.replace(':groupId', G);
+
+export const groupInvitePath = (G: string): string =>
+  PopupPath.INBOX_GROUP_INVITE.replace(':groupId', G);
 
 /** one saved contact's route */
 export const contactPath = (contactId: string): string =>

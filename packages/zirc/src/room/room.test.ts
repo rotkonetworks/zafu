@@ -17,6 +17,7 @@ import {
   maxBodyBytes,
   parseInvite,
   relayLimitsFor,
+  ROOM_WINDOW_ENTRIES,
   sealedBlobBytes,
   DEFAULT_CHANNEL,
   roomShard,
@@ -1233,5 +1234,112 @@ describe('room: Room.syncSince (blocker 2 - catching up past historyWindows)', (
     // stands in for.
     await room.sync(1);
     expect(calls).toBeGreaterThan(0);
+  });
+});
+
+describe('room: shardFor (a shard per window)', () => {
+  const perWindow =
+    (secret: Uint8Array) =>
+    async (epoch: number): Promise<string> =>
+      toHex(await hkdfBytes(secret, 'shard', fromHex(epoch.toString(16).padStart(16, '0')), 8));
+
+  it('writes each window to its own shard and reads back across 300 windows', async () => {
+    const { transport, shardOf } = fakeRelay();
+    let now = T0;
+    const secret = createRoomSecret();
+    const alice = openRoom(asIdentity(guest(1), 'alice'), {
+      relay: transport,
+      roomSecret: secret,
+      shardFor: perWindow(secret),
+      now: () => now,
+    });
+    const first = alice.currentEpoch();
+    await alice.send('early');
+    now += WINDOW * 300;
+    const later = alice.currentEpoch();
+    await alice.send('late');
+    expect(shardOf(SCOPE, first)).not.toBe(shardOf(SCOPE, later));
+    expect(shardOf(SCOPE, first)).toBe(await perWindow(secret)(first));
+
+    const bob = openRoom(asIdentity(guest(2), 'bob'), {
+      relay: transport,
+      roomSecret: secret,
+      shardFor: perWindow(secret),
+      now: () => now,
+    });
+    const read = await bob.syncSince(first, 301);
+    expect(read.messages.map(m => m.body)).toEqual(['early', 'late']);
+    expect(read.dropped).toEqual([]);
+  });
+
+  it('a reader on the room-long shard sees none of it', async () => {
+    const { transport } = fakeRelay();
+    const secret = createRoomSecret();
+    const now = () => T0;
+    const alice = openRoom(asIdentity(guest(1), 'alice'), {
+      relay: transport,
+      roomSecret: secret,
+      shardFor: perWindow(secret),
+      now,
+    });
+    await alice.send('hello');
+    const fixed = openRoom(asIdentity(guest(2), 'bob'), {
+      relay: transport,
+      roomSecret: secret,
+      now,
+    });
+    expect((await fixed.sync(1)).messages).toEqual([]);
+  });
+
+  it('refuses a shard that is not 16 hex characters', async () => {
+    const { transport } = fakeRelay();
+    const room = openRoom(asIdentity(guest(1), 'alice'), {
+      relay: transport,
+      roomSecret: createRoomSecret(),
+      shardFor: () => Promise.resolve('nope'),
+      now: () => T0,
+    });
+    await expect(room.send('x')).rejects.toThrow(/16 lowercase hex/);
+  });
+});
+
+describe('room: a read is bounded by the room, not by discovery', () => {
+  it('a room caps its window at ROOM_WINDOW_ENTRIES and a few MiB, not the 16384-entry default', () => {
+    const group = relayLimitsFor(GROUP_ROOM_PLAINTEXT_BYTES);
+    expect(group.maxEntries).toBe(ROOM_WINDOW_ENTRIES);
+    expect(group.maxBodyBytes).toBe(2 * 1024 * 1024);
+    expect(relayLimitsFor(ROOM_PLAINTEXT_BYTES).maxBodyBytes).toBe(1024 * 1024);
+    // what one honest full window weighs fits inside it
+    expect(ROOM_WINDOW_ENTRIES * (group.maxEntryBase64 + 64)).toBeLessThanOrEqual(
+      group.maxBodyBytes,
+    );
+  });
+
+  it('a hostile relay cannot make a room read buffer beyond the cap', async () => {
+    const limits = relayLimitsFor(GROUP_ROOM_PLAINTEXT_BYTES);
+    let pulled = 0;
+    const chunk = new TextEncoder().encode('x'.repeat(64 * 1024));
+    // an endless body: the relay keeps sending as long as anyone reads
+    const fetch = () =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            pull(c) {
+              pulled += chunk.byteLength;
+              c.enqueue(chunk);
+            },
+          }),
+        ),
+      );
+    const relay = createHttpRelayTransport({
+      endpoint: 'https://relay.example',
+      fetch: fetch as unknown as typeof globalThis.fetch,
+      ...limits,
+    });
+    await expect(
+      relay.getBucket({ appScope: 'zafu-group-v1', epoch: 1, shard: 'ab' }),
+    ).rejects.toThrow(/exceeds/);
+    // read up to the cap, one chunk past it at most, then stopped
+    expect(pulled).toBeLessThanOrEqual(limits.maxBodyBytes + 2 * chunk.byteLength);
   });
 });

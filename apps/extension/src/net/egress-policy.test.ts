@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, test } from 'vitest';
 import { compileEgress, describeEgress, type EgressInputs } from './egress-policy';
 import { decideEgress, type EgressRealm } from './egress-table';
 
@@ -370,5 +370,37 @@ describe('thorchain names are their own opt-in', () => {
       zcashWallets: { encrypted: { c: 'x' } },
     } as unknown as EgressInputs);
     expect(t.rules.find(r => r.destination === 'zcash')).toMatchObject({ allow: true });
+  });
+});
+
+describe('two optional services on one url', () => {
+  // contact discovery and the people relay both default to zcash.rotko.net/bucket
+  const url = 'https://zcash.rotko.net/bucket?appScope=zafu-group-v1&epoch=1&shard=ab';
+  const decide = (optIns: Record<string, 'allowed' | 'blocked'>) =>
+    decideEgress(url, 'service-worker', compileEgress({ netEgress: { optIns } }));
+
+  test('off until one of them is on', () => {
+    expect(decide({}).allow).toBe(false);
+  });
+
+  test('the people relay on lets the shared url through', () => {
+    expect(decide({ 'people-relay': 'allowed' })).toMatchObject({
+      allow: true,
+      destination: 'people-relay',
+    });
+  });
+
+  test('both rows list the host in settings', () => {
+    const view = describeEgress({});
+    for (const id of ['people-relay', 'contact-discovery']) {
+      expect(view.find(d => d.id === id)?.hosts).toContain('zcash.rotko.net/bucket');
+    }
+  });
+
+  test('a network endpoint still owns its url alone', () => {
+    const i = { enabledNetworks: [] as string[] };
+    const zcash = describeEgress(i).find(d => d.id === 'zcash-servers');
+    const light = describeEgress(i).find(d => d.id === 'zcash');
+    expect(light?.hosts.every(h => !zcash?.hosts.includes(h))).toBe(true);
   });
 });

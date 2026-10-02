@@ -55,6 +55,11 @@ holding no key can find it by typing the name - guessable on purpose, and
 therefore a choice a room makes rather than a default it falls into. Either way
 the relay serving the request sees the shard; pinned `shard` overrides both.
 
+`shardFor: (epoch) => Promise<string>` replaces that one coordinate with one
+per window: a two-member pair room passes a shard derived from its secret
+and the epoch, so the relay cannot follow the same pair across windows by
+shard. It still sees which addresses touched one shard in one window.
+
 A direct message is sealed under a key derived from the room secret **and** the
 recipient's pubkey, so it never appears in the public lane and the relay cannot
 tell who is talking to whom. That key is not private _between members_: every
@@ -97,7 +102,9 @@ was not sized for it has every one of its entries refused by the transport
 before `Room` ever sees them - which is exactly the bug that made every zirc
 room unreadable (the entries were there; the client silently would not look at
 them). `relayLimitsFor(plaintextBytes)` computes the `maxEntryBase64`,
-`maxEntries` and `maxBodyBytes` a room of that size needs; pass its result into
+`maxEntries` and `maxBodyBytes` a room of that size needs - its own read cap,
+`ROOM_WINDOW_ENTRIES` (256) entries per window, so a 4 KiB room reads at most
+2 MiB per window and never inherits discovery's 16384-entry bucket cap; pass its result into
 `createHttpRelayTransport`, and nothing else about contact discovery's own
 defaults changes - they are a separate caller with its own options.
 

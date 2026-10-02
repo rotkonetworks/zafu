@@ -4,6 +4,7 @@
  * extracts memos from transaction history and adds them to messages store
  */
 
+import { ingestMemoInvites } from '../people/client';
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { viewClient, sctClient } from '../clients';
@@ -287,6 +288,17 @@ export function usePenumbraMemos(walletId: string) {
           read: false,
           amount: m.amount,
           asset: m.asset,
+        })),
+      );
+      // a memo that carries a zafu chat invite goes to the people relay's inbox
+      ingestMemoInvites(
+        extracted.map(m => ({
+          network: 'penumbra' as const,
+          txId: m.txId,
+          content: m.content,
+          timestamp: m.timestamp,
+          from: m.senderAddress,
+          direction: m.direction,
         })),
       );
     }

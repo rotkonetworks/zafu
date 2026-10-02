@@ -12,19 +12,23 @@ export interface UiOpenSession {
   readonly open: boolean;
 }
 
-export const startUiOpenSession = (sync: {
-  resume: () => void;
-  pause: () => void;
-}): UiOpenSession => {
+/**
+ * One registration for every feature that lives with the windows: the
+ * presence counter is shared, so a second `trackUiOpenPresence` would count
+ * each window twice.
+ */
+export const startUiOpenSession = (
+  ...hooks: { resume: () => void; pause: () => void }[]
+): UiOpenSession => {
   const session = { open: false };
   trackUiOpenPresence(
     () => {
       session.open = true;
-      sync.resume();
+      hooks.forEach(h => h.resume());
     },
     () => {
       session.open = false;
-      sync.pause();
+      hooks.forEach(h => h.pause());
     },
   );
   return session;

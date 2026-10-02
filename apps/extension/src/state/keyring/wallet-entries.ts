@@ -509,6 +509,14 @@ export async function purgeWalletData(
 
   await purgePockets(vaultId, local);
 
+  // people rooms this wallet is in (secrets included) and their messages
+  try {
+    const { purgePeople } = await import('../../people/vault');
+    await purgePeople(vaultId);
+  } catch {
+    // locked: the sealed blobs stay unreadable, and go with the last wallet
+  }
+
   // static per-wallet keys, batched into one remove call
   const staticKeys = [
     `zcashBirthday_${vaultId}`,

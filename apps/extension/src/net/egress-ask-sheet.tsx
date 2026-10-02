@@ -40,6 +40,8 @@ export const EgressAskSheet = () => {
   };
 
   const host = pending?.view.hosts[0] ?? pending?.view.label;
+  // the people relay has its own words (design-social 5.0)
+  const people = pending?.view.id === 'people-relay';
 
   return (
     <Sheet
@@ -49,16 +51,26 @@ export const EgressAskSheet = () => {
           respond(false);
         }
       }}
-      title='allow this connection'
+      title={people ? 'use a relay for messages?' : 'allow this connection'}
     >
       {pending && (
         <div className='flex flex-col gap-4 px-1 text-sm text-fg-muted lowercase'>
-          <p>
-            {pending.view.label} needs to talk to{' '}
-            <span className='font-mono text-fg-high'>{host}</span> - zafu hasn't contacted it
-            before.
-          </p>
-          <p className='text-xs text-fg-dim'>{NET_PURPOSE_LABEL[pending.view.purpose]}</p>
+          {people ? (
+            <p>
+              messages go through{' '}
+              <span className='font-mono text-fg-high'>{host?.split('/')[0]}</span>. it sees when
+              you check in, never what you say.
+            </p>
+          ) : (
+            <>
+              <p>
+                {pending.view.label} needs to talk to{' '}
+                <span className='font-mono text-fg-high'>{host}</span> - zafu hasn't contacted it
+                before.
+              </p>
+              <p className='text-xs text-fg-dim'>{NET_PURPOSE_LABEL[pending.view.purpose]}</p>
+            </>
+          )}
           <div className='flex gap-2 pt-1'>
             <Button variant='secondary' size='md' className='flex-1' onClick={() => respond(false)}>
               not now

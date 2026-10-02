@@ -149,9 +149,13 @@ const ENCRYPTED_KEYS = new Set<string>([
   'dismissedContactSuggestions',
   'messages',
   'diversifiedAddresses',
+  // the retired frostd group chat's history: still sealed, read by nothing
   'groupChats',
   'frostRelayIdentities',
   'passwordLogins',
+  'peopleRooms',
+  'peopleThreads',
+  'peopleInvites',
 ]);
 
 /** should this storage key be encrypted? */

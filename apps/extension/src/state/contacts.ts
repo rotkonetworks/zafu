@@ -17,6 +17,7 @@ import { readSentRecords, writeSentRecords, readTxNotes, writeTxNotes } from './
 import type { SentTxRecord } from '../workers/sent-tx-reconcile';
 import { pocketOwner } from './pockets';
 import type { ContactCardKey } from './identity';
+import { readPeopleBackup, restorePeopleBackup } from '../people/vault';
 import { exportEgressChoices, importEgressChoices, type EgressChoices } from '../net/ledger';
 import {
   exportSettings,
@@ -88,6 +89,21 @@ export interface Contact {
    */
   card?: ContactCardKey;
   /**
+   * the relationship you gave them (xid-rel-v1): which wallet, generation and
+   * index the card you handed them was minted from. With their card's `zid`
+   * (its inception key) and `card` (its KA key) it makes the pair room;
+   * nothing secret is stored, the keys come from the seed and these numbers.
+   */
+  rel?: ContactRel;
+  /**
+   * their relationship's pair-room key-agreement key (card TLV 0x06), hex:
+   * with `rel` and `zid` it makes your 1:1 pair room. Not `card`, which is
+   * the discovery key and the same for every card they give.
+   */
+  pairKa?: string;
+  /** the relay your chats with them go through, when not the default (a base url) */
+  relay?: string;
+  /**
    * zcash.me username this contact was saved from (or linked to). A
    * directory handle, not an identity anchor - it says where the address
    * came from so the UI can show the profile link and verification state.
@@ -106,6 +122,18 @@ export interface Contact {
   /** addresses across different networks */
   addresses: ContactAddress[];
 }
+
+export interface ContactRel {
+  walletId: string;
+  gen: number;
+  j: number;
+}
+
+/** both cards are exchanged: a pair room is possible (design-social 2.1 `mutual`) */
+export const isMutual = (
+  c: Pick<Contact, 'rel' | 'pairKa' | 'zid'> | undefined,
+  walletId: string | undefined,
+): boolean => !!c?.rel && c.rel.walletId === walletId && !!c.pairKa && !!c.zid;
 
 /** portable export format - encrypted with a password-derived key */
 export interface ContactsExport {
@@ -129,6 +157,10 @@ export interface ContactsSlice {
     website?: string;
     /** contact-card KA key; supplied when a discovery-capable share is imported */
     card?: ContactCardKey;
+    rel?: ContactRel;
+    pairKa?: string;
+    /** addresses to save with them, in the same write */
+    addresses?: Omit<ContactAddress, 'id'>[];
   }) => Promise<Contact>;
 
   /** update contact info (name, notes, zid, website, card) */
@@ -140,6 +172,9 @@ export interface ContactsSlice {
       zid?: string;
       website?: string;
       card?: ContactCardKey;
+      rel?: ContactRel;
+      pairKa?: string;
+      relay?: string;
     },
   ) => Promise<void>;
 
@@ -264,8 +299,14 @@ export const createContactsSlice =
           website: data.website?.trim() || undefined,
           notes: data.notes?.trim() || undefined,
           card: data.card,
+          ...(data.rel ? { rel: data.rel } : {}),
+          ...(data.pairKa ? { pairKa: data.pairKa } : {}),
           createdAt: Date.now(),
-          addresses: [],
+          addresses: (data.addresses ?? []).map(a => ({
+            ...a,
+            id: generateId(),
+            address: a.address.trim(),
+          })),
         };
 
         set(state => {
@@ -299,6 +340,15 @@ export const createContactsSlice =
             }
             if (updates.card !== undefined) {
               contact.card = updates.card;
+            }
+            if (updates.rel !== undefined) {
+              contact.rel = updates.rel;
+            }
+            if (updates.pairKa !== undefined) {
+              contact.pairKa = updates.pairKa;
+            }
+            if (updates.relay !== undefined) {
+              contact.relay = updates.relay || undefined;
             }
           }
         });
@@ -582,7 +632,10 @@ export const createContactsSlice =
           get().keyRing.keyInfos.map(k => [pocketOwner(k), k.name]),
         );
         const passwordLogins = await readPasswordLogins();
+        // rooms you are in and their relay history, capped per thread
+        const people = await readPeopleBackup();
         const plaintext = JSON.stringify({
+          people,
           passwordLogins,
           contacts,
           sent,
@@ -631,6 +684,8 @@ export const createContactsSlice =
           walletNames?: Record<string, string>;
           /** the passwords tool's saved logins (absent in older backups) */
           passwordLogins?: unknown;
+          /** people rooms and relay history (absent in older backups) */
+          people?: unknown;
         };
 
         const newContacts = restoreContacts(parsed.contacts ?? [], safeContacts(), mode);
@@ -661,6 +716,9 @@ export const createContactsSlice =
         await importEgressChoices(parsed.egress);
         if (parsed.passwordLogins !== undefined) {
           await restorePasswordLogins(parsed.passwordLogins, mode);
+        }
+        if (parsed.people !== undefined) {
+          await restorePeopleBackup(parsed.people, mode);
         }
         const current = get().privacy.settings;
         const privacy = restoredPrivacy(current, parsed.settings?.privacy);

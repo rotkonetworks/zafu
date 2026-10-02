@@ -73,16 +73,7 @@
  *     `roomShardFromSecret`.
  */
 
-import {
-  concat,
-  lpText,
-  MAX_RELAY_BODY_BYTES,
-  MAX_RELAY_ENTRIES,
-  PresenceEntry,
-  presenceEpoch,
-  RelayTransport,
-  u32be,
-} from '@zafu/zid';
+import { concat, lpText, PresenceEntry, presenceEpoch, RelayTransport, u32be } from '@zafu/zid';
 
 // ---------------------------------------------------------------------------
 // wire format
@@ -165,6 +156,16 @@ export const ZAFU_GROUP_APP_SCOPE = 'zafu-group-v1';
 export const sealedBlobBytes = (plaintextBytes: number): number => 1 + 12 + plaintextBytes + 16;
 
 /**
+ * How many entries one window of a room may hold before a reader stops
+ * buffering: every member's lines and presence for five minutes. Its own
+ * number, not the relay client's default: that one is sized for a discovery
+ * bucket (16384 small entries), and a room's entries are kilobytes each, so
+ * borrowing it would let one hostile window make a reader buffer hundreds of
+ * megabytes (groups design 0.1 sizes a group window at 256).
+ */
+export const ROOM_WINDOW_ENTRIES = 256;
+
+/**
  * The `createHttpRelayTransport` limits a room of this plaintext size needs.
  *
  * `MAX_RELAY_ENTRY_BASE64` in `@zafu/zid` defaults to 1024 base64 chars, sized
@@ -175,9 +176,14 @@ export const sealedBlobBytes = (plaintextBytes: number): number => 1 + 12 + plai
  * bug this function exists to make impossible to repeat. Every `Room` built
  * against a real relay MUST wire these into {@link RelayTransport}'s
  * constructor options (`createHttpRelayTransport({ ...opts, ...relayLimitsFor(plaintextBytes) })`).
+ *
+ * The read is bounded by `maxEntries` windows' worth of this room's records,
+ * never by the discovery defaults: `maxBodyBytes` is what the transport stops
+ * reading at, so it is the most one window can ever make a reader hold.
  */
 export const relayLimitsFor = (
   plaintextBytes: number,
+  maxEntries: number = ROOM_WINDOW_ENTRIES,
 ): { maxEntryBase64: number; maxEntries: number; maxBodyBytes: number } => {
   const sealed = sealedBlobBytes(plaintextBytes);
   const rawBase64 = Math.ceil(sealed / 3) * 4;
@@ -185,15 +191,10 @@ export const relayLimitsFor = (
   // version (different fixed-field widths, same plaintext budget) is never
   // pushed just over the line.
   const maxEntryBase64 = Math.ceil(rawBase64 / 1024) * 1024;
-  const maxEntries = MAX_RELAY_ENTRIES; // unchanged: one padded batch per publisher
-  // Two base64 fields (tag + blob) per entry; rounded up to a whole MiB so a
-  // hostile relay still cannot make a reader buffer unboundedly, just a larger
-  // bound than discovery's.
-  const worstCase = maxEntries * maxEntryBase64 * 2;
-  const maxBodyBytes = Math.max(
-    MAX_RELAY_BODY_BYTES,
-    Math.ceil(worstCase / (1024 * 1024)) * 1024 * 1024,
-  );
+  // one entry on the wire: the blob, a 16-byte tag (24 base64 chars) and its
+  // JSON punctuation; rounded up to a whole MiB
+  const perEntry = maxEntryBase64 + 64;
+  const maxBodyBytes = Math.ceil((maxEntries * perEntry) / (1024 * 1024)) * 1024 * 1024;
   return { maxEntryBase64, maxEntries, maxBodyBytes };
 };
 
@@ -304,6 +305,14 @@ export interface RoomConfig {
    * records stay readable by whoever holds the board.
    */
   public?: boolean;
+  /**
+   * A shard per window instead of one for the room's life (design-social
+   * 2.5): a pair room passes `HKDF(pairSecret, "shard" || u64be(epoch))` so
+   * the relay cannot line up one pair's windows across months by shard.
+   * Wins over `shard` and `public`. Must return 16 lowercase hex characters,
+   * the width {@link roomShardFromSecret} uses.
+   */
+  shardFor?: (epoch: number) => Promise<string>;
   /**
    * Fixed plaintext size this room's entries pad to - {@link ROOM_PLAINTEXT_BYTES}
    * (chat) by default, {@link GROUP_ROOM_PLAINTEXT_BYTES} for a group or door
@@ -736,6 +745,7 @@ export class Room {
   private readonly now: () => number;
   private readonly relay: RelayTransport;
   private readonly shardPin: string | undefined;
+  private readonly shardFor: ((epoch: number) => Promise<string>) | undefined;
   /** a public room addresses by channel name; a sealed one by the room secret. */
   private readonly isPublic: boolean;
 
@@ -777,17 +787,31 @@ export class Room {
     this.now = config.now ?? (() => Math.floor(Date.now() / 1000));
     this.relay = config.relay;
     this.shardPin = config.shard;
+    this.shardFor = config.shardFor;
     this.isPublic = config.public ?? false;
     this.seq = config.head?.seq ?? 0;
     this.head = config.head?.hash ?? '';
   }
 
-  /** resolve derived coordinates once, then reuse. */
-  private async coords(): Promise<{
+  /** resolve derived coordinates once, then reuse; a per-window shard per window. */
+  private async coords(epoch: number): Promise<{
     shard: string;
     shardHash: Uint8Array;
     appScopeHash: Uint8Array;
   }> {
+    if (this.shardFor) {
+      const shard = await this.shardFor(epoch);
+      if (!/^[0-9a-f]{16}$/.test(shard)) {
+        throw new Error('room: shardFor must return 16 lowercase hex characters');
+      }
+      const shardHash = new Uint8Array(SHA256_BYTES);
+      shardHash.set(fromHex(shard));
+      if (!this.shard) {
+        this.shard = shard;
+        this.appScopeHash.set(await sha256(enc.encode(this.appScope)));
+      }
+      return { shard, shardHash, appScopeHash: this.appScopeHash };
+    }
     if (!this.shard) {
       // A pinned shard wins - tests, and a relay with pre-provisioned
       // coordinates. Otherwise the mode decides: a public room is addressed by
@@ -881,8 +905,8 @@ export class Room {
     if (opts.plain && kind === 'dm') {
       throw new Error('room: a direct message cannot be sent in the clear');
     }
-    const { shardHash, appScopeHash } = await this.coords();
     const epoch = opts.epoch ?? this.currentEpoch();
+    const { shardHash, appScopeHash } = await this.coords(epoch);
     const name = opts.name ?? this.identity.name ?? this.identity.pubkey.slice(0, 8);
     const to = opts.to ?? '';
     const bytes = enc.encode(body);
@@ -941,7 +965,7 @@ export class Room {
     await this.relay.putBucket({
       appScope: this.appScope,
       epoch,
-      shard: await this.shardOrThrow(),
+      shard: await this.shardOrThrow(epoch),
       entries: [{ tag, blob }],
     });
 
@@ -971,8 +995,8 @@ export class Room {
    * all they need, since presence is "I am here", not a secret.
    */
   async announce(name?: string, opts: { plain?: boolean; epoch?: number } = {}): Promise<void> {
-    const { shardHash, appScopeHash } = await this.coords();
     const win = opts.epoch ?? this.currentEpoch();
+    const { shardHash, appScopeHash } = await this.coords(win);
     const display = name ?? this.identity.name ?? this.identity.pubkey.slice(0, 8);
     const rec = {
       kind: 'presence' as const,
@@ -1001,7 +1025,7 @@ export class Room {
     await this.relay.putBucket({
       appScope: this.appScope,
       epoch: win,
-      shard: await this.shardOrThrow(),
+      shard: await this.shardOrThrow(win),
       entries: [{ tag, blob }],
     });
   }
@@ -1053,7 +1077,6 @@ export class Room {
   }
 
   private async syncWindows(windows: number[]): Promise<RoomSync> {
-    const { shardHash, appScopeHash } = await this.coords();
     const keysFor = new Map<number, { msg: CryptoKey; presence: CryptoKey; dm: CryptoKey }>();
     const dropped: { hash: string; reason: string; kind: DropKind }[] = [];
     const messages: RoomMessage[] = [];
@@ -1062,12 +1085,13 @@ export class Room {
     const seen = new Set<string>();
 
     for (const epoch of windows) {
+      const { shard, shardHash, appScopeHash } = await this.coords(epoch);
       let entries: PresenceEntry[];
       try {
         entries = await this.relay.getBucket({
           appScope: this.appScope,
           epoch,
-          shard: await this.shardOrThrow(),
+          shard,
         });
       } catch (e) {
         dropped.push({
@@ -1362,8 +1386,8 @@ export class Room {
     }
   }
 
-  private async shardOrThrow(): Promise<string> {
-    const { shard } = await this.coords();
+  private async shardOrThrow(epoch: number): Promise<string> {
+    const { shard } = await this.coords(epoch);
     return shard;
   }
 }

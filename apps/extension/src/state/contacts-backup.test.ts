@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, test } from 'vitest';
 import { create } from 'zustand';
 import { AllSlices, initializeStore, TestStore } from '.';
 import { restoreContacts, type Contact } from './contacts';
+import { readRooms, readThreads, writeRooms, writeThreads, THREAD_CAP } from '../people/vault';
+import type { PeopleRoom, ThreadItem } from '../people/vault';
 
 const localMock = (chrome.storage.local as unknown as { mock: Map<string, unknown> }).mock;
 const sessionMock = (chrome.storage.session as unknown as { mock: Map<string, unknown> }).mock;
@@ -43,6 +45,75 @@ describe('personal-data backup keeps relationships', () => {
     const n = await useStore.getState().contacts.importPersonalData(backup, 'backup-pass', 'merge');
     expect(n.contacts).toBe(0);
     expect(useStore.getState().contacts.contacts).toHaveLength(1);
+  });
+});
+
+describe('personal-data backup keeps people rooms', () => {
+  let useStore: TestStore;
+
+  beforeEach(async () => {
+    localMock.clear();
+    sessionMock.clear();
+    useStore = create<AllSlices>()(initializeStore(sessionExtStorage, localExtStorage));
+    await useStore.getState().keyRing.setPassword('s0meUs3rP@ssword');
+  });
+
+  const room: PeopleRoom = {
+    id: 'g:00112233445566778899aabbccddeeff',
+    walletId: 'w1',
+    kind: 'group',
+    name: 'treasury',
+    appScope: 'zafu-group-v1',
+    secret: '07'.repeat(32),
+    size: 4096,
+    relay: 'https://zcash.rotko.net',
+    signer: { gen: 0, G: '00112233445566778899aabbccddeeff' },
+    nick: 'alice',
+    joined: true,
+    createdAt: 1,
+  };
+  const item = (n: number): ThreadItem => ({
+    hash: n.toString(16).padStart(64, '0'),
+    author: 'ab'.repeat(32),
+    name: 'bob',
+    body: `line ${n}`,
+    ts: 1_000 + n,
+    epoch: 1,
+    kind: 'msg',
+    mine: false,
+  });
+
+  test('rooms, nicks and the newest 500 lines per thread survive a wipe', async () => {
+    await writeRooms([room]);
+    const items = Array.from({ length: THREAD_CAP + 20 }, (_, i) => item(i));
+    await writeThreads({ 'w1/g:00112233445566778899aabbccddeeff': { items, read: 3 } });
+    // rooms are sealed at rest like contacts
+    expect(JSON.stringify(localMock.get('peopleRooms'))).not.toContain('treasury');
+
+    const backup = await useStore.getState().contacts.exportPersonalData('backup-pass');
+    await writeRooms([]);
+    await writeThreads({});
+    await useStore.getState().contacts.importPersonalData(backup, 'backup-pass', 'merge');
+
+    expect(await readRooms()).toEqual([room]);
+    const t = (await readThreads())!['w1/g:00112233445566778899aabbccddeeff']!;
+    expect(t.items).toHaveLength(THREAD_CAP);
+    expect(t.items[0]!.body).toBe('line 20');
+    expect(t.read).toBe(3);
+  });
+
+  test('a backup made before people rooms restores and leaves them alone', async () => {
+    await writeRooms([room]);
+    const backup = await useStore.getState().contacts.exportPersonalData('backup-pass');
+    // an older backup: same envelope, no people field (rooms empty at export)
+    await writeRooms([]);
+    const old = await useStore.getState().contacts.exportPersonalData('backup-pass');
+    await writeRooms([room]);
+    await useStore.getState().contacts.importPersonalData(old, 'backup-pass', 'merge');
+    expect(await readRooms()).toEqual([room]);
+    // and restoring twice never duplicates a room
+    await useStore.getState().contacts.importPersonalData(backup, 'backup-pass', 'merge');
+    expect(await readRooms()).toHaveLength(1);
   });
 });
 

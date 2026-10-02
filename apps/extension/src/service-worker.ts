@@ -101,6 +101,7 @@ import { backOff } from 'exponential-backoff';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { networkAllowsBackgroundSync } from './state/privacy';
 import { startUiOpenSession } from './ui-open-session';
+import { startPeopleRelay } from './people/sw';
 import { penumbraTiming } from './penumbra/timing';
 import { requestStopAllSync } from './state/keyring/network-worker';
 import { stampSeenVersion } from './state/moved-notice';
@@ -140,19 +141,26 @@ chrome.storage.onChanged.addListener(
 // syncing (and polling mempool) with nobody watching. Stop network activity
 // only - the offscreen document and its worker stay up for proving - and the
 // next popup/page open resumes sync on its own (zcash-auto-sync.ts).
-const ui = startUiOpenSession({
-  resume: () => {
-    penumbraSync('resume');
-    runChainCheck();
+// people: group and pair rooms on the people relay. Starts nothing by
+// itself; the first request is the person opening people.
+const people = startPeopleRelay();
+
+const ui = startUiOpenSession(
+  {
+    resume: () => {
+      penumbraSync('resume');
+      runChainCheck();
+    },
+    pause: () => {
+      console.log('[sw] last UI surface closed, requesting zcash sync stop');
+      requestStopAllSync('zcash');
+      if (!keepPenumbraSyncing) {
+        penumbraSync('pause');
+      }
+    },
   },
-  pause: () => {
-    console.log('[sw] last UI surface closed, requesting zcash sync stop');
-    requestStopAllSync('zcash');
-    if (!keepPenumbraSyncing) {
-      penumbraSync('pause');
-    }
-  },
-});
+  people.hooks,
+);
 
 /**
  * Services start on the stored chain id, so a start never waits on the node.
