@@ -190,6 +190,69 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
       zcash: false,
     },
   },
+  celestia: {
+    name: 'Celestia',
+    color: 'bg-violet-400',
+    focusColor: 'focus:border-violet-400',
+    transparent: true,
+    // Penumbra subnetwork, standard cosmos. secp256k1, coin type 118. Offered only while the
+    // penumbra node reports a live route to it (transparent/penumbra-routes).
+    launched: true,
+    parent: 'penumbra',
+    ibcChainId: 'celestia',
+    ibcBlockTimeMs: 6_000,
+    features: {
+      stake: false,
+      swap: false,
+      vote: false,
+      inbox: false,
+      multisig: false,
+      cosmos: true,
+      zcash: false,
+    },
+  },
+  kava: {
+    name: 'Kava',
+    color: 'bg-red-400',
+    focusColor: 'focus:border-red-400',
+    transparent: true,
+    // Penumbra subnetwork, standard cosmos. secp256k1 on coin type 459. Offered only while the
+    // penumbra node reports a live route to it (transparent/penumbra-routes).
+    launched: true,
+    parent: 'penumbra',
+    ibcChainId: 'kava_2222-10',
+    ibcBlockTimeMs: 6_000,
+    features: {
+      stake: false,
+      swap: false,
+      vote: false,
+      inbox: false,
+      multisig: false,
+      cosmos: true,
+      zcash: false,
+    },
+  },
+  axelar: {
+    name: 'Axelar',
+    color: 'bg-slate-400',
+    focusColor: 'focus:border-slate-400',
+    transparent: true,
+    // Penumbra subnetwork, standard cosmos. secp256k1, coin type 118. Offered only while the
+    // penumbra node reports a live route to it (transparent/penumbra-routes).
+    launched: true,
+    parent: 'penumbra',
+    ibcChainId: 'axelar-dojo-1',
+    ibcBlockTimeMs: 6_000,
+    features: {
+      stake: false,
+      swap: false,
+      vote: false,
+      inbox: false,
+      multisig: false,
+      cosmos: true,
+      zcash: false,
+    },
+  },
   ethereum: {
     name: 'Ethereum',
     color: 'bg-blue-500',

@@ -28,7 +28,14 @@
  */
 
 export type PrivacyNetwork = 'zcash' | 'penumbra';
-export type IbcNetwork = 'noble' | 'cosmoshub' | 'osmosis' | 'injective';
+export type IbcNetwork =
+  | 'noble'
+  | 'cosmoshub'
+  | 'osmosis'
+  | 'injective'
+  | 'celestia'
+  | 'kava'
+  | 'axelar';
 export type TransparentNetwork = 'ethereum' | 'bitcoin';
 export type NetworkType = PrivacyNetwork | IbcNetwork | TransparentNetwork;
 
@@ -52,6 +59,9 @@ export const NETWORK_DEFAULT_ENCRYPTION: Record<NetworkType, EncryptionType> = {
   noble: 'cosmos',
   cosmoshub: 'cosmos',
   osmosis: 'cosmos',
+  celestia: 'cosmos',
+  kava: 'cosmos',
+  axelar: 'cosmos',
   // injective is Ethermint: eth_secp256k1 (ethereum curve + keccak), not the
   // cosmos secp256k1 path - so its encryption type is ethereum.
   injective: 'ethereum',
@@ -130,6 +140,37 @@ export const NETWORK_CONFIGS: Record<NetworkType, NetworkConfig> = {
     type: 'ibc',
     bech32Prefix: 'osmo',
     denom: 'uosmo',
+    derivationPath: "m/44'/118'/0'/0/0",
+  },
+  celestia: {
+    id: 'celestia',
+    name: 'Celestia',
+    symbol: 'TIA',
+    decimals: 6,
+    type: 'ibc',
+    bech32Prefix: 'celestia',
+    denom: 'utia',
+    derivationPath: "m/44'/118'/0'/0/0",
+  },
+  kava: {
+    id: 'kava',
+    name: 'Kava',
+    symbol: 'KAVA',
+    decimals: 6,
+    type: 'ibc',
+    bech32Prefix: 'kava',
+    denom: 'ukava',
+    // the registry's slip44 and Keplr's default; signer.ts derives it on its own path
+    derivationPath: "m/44'/459'/0'/0/0",
+  },
+  axelar: {
+    id: 'axelar',
+    name: 'Axelar',
+    symbol: 'AXL',
+    decimals: 6,
+    type: 'ibc',
+    bech32Prefix: 'axelar',
+    denom: 'uaxl',
     derivationPath: "m/44'/118'/0'/0/0",
   },
   injective: {
