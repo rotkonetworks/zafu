@@ -1,4 +1,3 @@
-
 // Define a canonical default RPC.
 export const DEFAULT_GRPC = 'https://penumbra.rotko.net';
 
