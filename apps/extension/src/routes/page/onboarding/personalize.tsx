@@ -254,12 +254,6 @@ export const Personalize = () => {
               checked={settings.openZafuLinks}
               onChange={v => void setSetting('openZafuLinks', v)}
             />
-            <Row
-              type='toggle'
-              label='background sync'
-              checked={settings.enableBackgroundSync}
-              onChange={v => void setSetting('enableBackgroundSync', v)}
-            />
           </RowGroup>
           {settings.enableIdentity && <ContactDiscoverySection />}
         </div>
