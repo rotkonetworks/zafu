@@ -44,8 +44,6 @@ untrusted:
   websites / dapps (sandboxed by extension transport)
   network observers (shielded on zcash/penumbra; transparent on noble/USDC)
   frost multisig relay (Noise_K ciphertext + session metadata only)
-  zid direct-message / call relay (E2EE payloads + metadata only)
-  zitadel public-chat relay (sees room messages in cleartext - see below)
   cross-chain swap service (1Click/NEAR Intents - may custody deposited funds)
 ```
 
@@ -58,18 +56,10 @@ zafu uses several relays; each sees a different amount.
   keys, amounts, or recipients. the per-group relay identity is encrypted at
   rest: its x25519 key also seals group-chat frames, so it protects message
   confidentiality, not relay authentication alone. see [frost](frost.md).
-- **zid direct messages and calls**: DMs use a Noise IK channel between two ZID
-  keypairs, and voice/video call setup rides the same end-to-end encrypted
-  channel (media is then direct peer-to-peer, which reveals your IP to the peer).
-  the channel handshake is hybrid post-quantum (see below).
-- **zitadel public chat**: public rooms are **not** encrypted - messages are
-  cleartext to the relay and anyone it forwards them to. messages and nicknames
-  are ed25519-signed for authenticity, so the relay cannot forge them, but it
-  can read them. do not put anything private in a public room.
 
 ### post-quantum identity layer
 
-the zid messaging channel (DMs and call setup) is hybrid post-quantum: the Noise
+the zid Noise channel that `@zafu/zid` offers apps is hybrid post-quantum: the Noise
 IK handshake mixes ML-KEM-768 into the classical X25519 key agreement, so the
 transport stays secure even if X25519 is later broken. `@zafu/pq` also provides
 an X-Wing hybrid KEM (X25519 + ML-KEM-768) for one-shot sealed boxes. this is
