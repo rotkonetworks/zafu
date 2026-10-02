@@ -681,11 +681,11 @@ describe('near intents', () => {
     );
   });
 
-  it("charges zafu's app fee at half off once a recipient is set", async () => {
+  it("charges zafu's app fee at full price once a recipient is set", async () => {
     fee.recipient = 'zafu.near';
     const quote = await nearProvider.quote(req());
-    expect(near.requestQuote).toHaveBeenLastCalledWith(expect.objectContaining({ appFeeBps: 5 }));
-    expect(quote.cost?.parts.at(-1)).toMatchObject({ label: 'zafu fee', bps: 5, zafu: true });
+    expect(near.requestQuote).toHaveBeenLastCalledWith(expect.objectContaining({ appFeeBps: 10 }));
+    expect(quote.cost?.parts.at(-1)).toMatchObject({ label: 'zafu fee', bps: 10, zafu: true });
   });
 
   it("splits a 1click quote's cost into near's and zafu's, from its own prices", () => {
@@ -715,13 +715,13 @@ describe('near intents', () => {
 });
 
 describe("zafu's fee", () => {
-  it('is half the near list rate, inert without a recipient, and 0 on thorchain', async () => {
+  it('is the near rate less any discount, inert without a recipient, and 0 on thorchain', async () => {
     const { zafuFeeBps, zafuListBps } =
       await vi.importActual<typeof import('../../config/swap-fee')>('../../config/swap-fee');
     expect(zafuListBps('', 10)).toBe(0);
     expect(zafuListBps('zafu.near', 10)).toBe(10);
-    expect(zafuFeeBps('near', 10)).toBe(5);
-    expect(zafuFeeBps('near', 10, 0)).toBe(10);
+    expect(zafuFeeBps('near', 10)).toBe(10);
+    expect(zafuFeeBps('near', 10, 50)).toBe(5);
     expect(zafuFeeBps('thor', 10)).toBe(0);
     expect(zafuFeeBps('near', 0)).toBe(0);
   });

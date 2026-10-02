@@ -8,7 +8,7 @@
 export const NEAR_APP_FEE_BPS = 10;
 
 /** the launch discount on that rate, shown as the list rate struck through */
-export const NEAR_APP_FEE_OFF_PCT = 50;
+export const NEAR_APP_FEE_OFF_PCT = 0;
 
 /**
  * The near account that receives the app fee (the same account the 1click
