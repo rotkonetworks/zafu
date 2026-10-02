@@ -1093,3 +1093,91 @@ export const verifyZid = (
     return false;
   }
 };
+
+// ========================================================================
+// XIDs: one per room (groups design 4.1), never the anchor or a site key
+// ========================================================================
+
+/**
+ * `d9 9c56 82 02 58 20`: CBOR tag 40022 (signing public key), array(2),
+ * scheme 2 (Ed25519), bytes(32). An XID is the SHA-256 of this prefix and the
+ * key (xid plan, checked against @bcts/xid), so computing one needs no library.
+ */
+const XID_PREIMAGE_PREFIX = hexToBytes('d99c5682025820');
+
+/** XID of an ed25519 public key (hex in, hex out). */
+export const xidOf = (ed25519PubHex: string): string =>
+  bytesToHex(sha256(new Uint8Array([...XID_PREIMAGE_PREFIX, ...hexToBytes(ed25519PubHex)])));
+
+/** the short form a person sees, `b2b14788` (rendered `XID(b2b14788)`) */
+export const shortXid = (xid: string): string => xid.slice(0, 8);
+
+/**
+ * The keys one XID context hands out. `seed` is the ed25519 secret and
+ * `xwingSeed` the X-Wing decapsulation secret: the caller zeroizes both.
+ */
+export interface XidKeys {
+  /** ed25519 inception key, hex: signs every record under this XID */
+  pubkey: string;
+  xid: string;
+  seed: Uint8Array;
+  /** X-Wing public key, hex: what a peer seals to */
+  xwingPublicKey: string;
+  xwingSeed: Uint8Array;
+}
+
+/** `HKDF-SHA256(ikm = material, no salt, info = label)`, 32 bytes */
+const hkdfLabel = (material: Uint8Array, label: string): Uint8Array =>
+  hkdf(sha256, material, undefined, enc.encode(label), 32);
+
+const xidKeysFrom = (material: Uint8Array): XidKeys => {
+  const seed = hkdfLabel(material, 'inception');
+  const pubkey = bytesToHex(ed25519.getPublicKey(seed));
+  const xwingSeed = hkdfLabel(material, 'xwing');
+  material.fill(0);
+  return {
+    pubkey,
+    xid: xidOf(pubkey),
+    seed,
+    xwingPublicKey: bytesToHex(xwingPublicKeyFromSeed(xwingSeed)),
+    xwingSeed,
+  };
+};
+
+/** `lp(text)`: u32be byte length, then the UTF-8 bytes (zid's `lpText`) */
+const lpText = (text: string): Uint8Array => {
+  const b = enc.encode(text);
+  return new Uint8Array([
+    (b.length >>> 24) & 0xff,
+    (b.length >>> 16) & 0xff,
+    (b.length >>> 8) & 0xff,
+    b.length & 0xff,
+    ...b,
+  ]);
+};
+
+/** a group's genesis id: 16 random bytes, lowercase hex, chosen before anyone signs */
+export const GENESIS_ID_RE = /^[0-9a-f]{32}$/;
+
+/**
+ * This member's key in one room (groups design 4.1):
+ *
+ *   room[gen, G] = HMAC-SHA512(identity[gen], "xid-room-v1" || lp(G))
+ *   inception    = ed25519 seed HKDF(room, "inception")
+ *   xwing        = X-Wing seed  HKDF(room, "xwing")
+ *
+ * `G` is the genesis id as its 32-character hex text. It is not secret; the
+ * HMAC key is, so a room key links to no other room, relationship or anchor.
+ * Pinned to `gen`: a room keeps the generation it was joined under, so
+ * rotating the identity never re-keys a room.
+ */
+export const deriveRoomKeys = (mnemonic: string, gen: number, genesisId: string): XidKeys => {
+  if (!GENESIS_ID_RE.test(genesisId)) {
+    throw new Error('a genesis id is 16 bytes of lowercase hex');
+  }
+  return withIdentity(mnemonic, rotatedIdentity(DEFAULT_IDENTITY, gen), id =>
+    xidKeysFrom(
+      hmac(sha512, id, new Uint8Array([...enc.encode('xid-room-v1'), ...lpText(genesisId)])),
+    ),
+  );
+};
