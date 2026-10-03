@@ -353,14 +353,19 @@ export const reserveNow = async () => {
       return;
     }
     stepTo(1);
-    const draft = startBuy({
-      app: s.app,
-      currency: s.currency,
-      base: s.base,
-      zcash: s.zcash,
-      walletLabel: s.walletLabel,
-      offer: o,
-    });
+    const draft: OpenBuy = {
+      ...startBuy({
+        app: s.app,
+        currency: s.currency,
+        base: s.base,
+        zcash: s.zcash,
+        walletLabel: s.walletLabel,
+        offer: o,
+      }),
+      ...(s.estimate && {
+        estimate: { amountOut: s.estimate.amountOut.toString(), cost: s.estimate.cost.toString() },
+      }),
+    };
     await save(draft);
     let sent: `0x${string}` | undefined;
     try {
