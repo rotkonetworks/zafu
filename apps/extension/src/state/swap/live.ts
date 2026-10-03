@@ -62,7 +62,7 @@ export const plain = (route: RouteId, e: unknown): string => {
     : typeof e === 'string'
       ? e
       : (e instanceof Error && e.message) || 'could not quote this right now';
-  return text.startsWith(`${name} `) ? text.slice(name.length + 1) : text;
+  return text.startsWith(`${name} `) ? text.slice(name.length + 1).replace(/^· /, '') : text;
 };
 
 /** every route for a pair: the ones allowed to be asked, the rest with their line */

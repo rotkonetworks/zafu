@@ -14,6 +14,7 @@ import {
 import { isEgressBlocked } from '../../net/egress';
 import {
   costOf,
+  durationText,
   type Cost,
   type Quote,
   type QuoteRequest,
@@ -150,7 +151,7 @@ const nearQuote = async (req: QuoteRequest, signal?: AbortSignal): Promise<Quote
       Number(q.amountOutUsd) || usd(q.amountOut, to?.decimals ?? 8, to?.price ?? null),
       zafuBps,
     ),
-    timeText: q.timeEstimate ? `~${Math.max(1, Math.round(q.timeEstimate / 60))} min` : undefined,
+    timeText: q.timeEstimate ? durationText(q.timeEstimate) : undefined,
     expiresAt: q.deadline ? new Date(q.deadline).getTime() : undefined,
     depositAddress: q.depositAddress,
     recipient: fromZec ? req.otherAddress : req.zcashAddress,

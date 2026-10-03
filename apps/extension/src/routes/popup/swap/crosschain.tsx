@@ -359,6 +359,7 @@ const RouteMeta = ({
 }) => (
   <>
     {quote.timeText && <span>{quote.timeText}</span>}
+    {quote.atLeastText && <span>{`at least ${quote.atLeastText} ${unit}`}</span>}
     {more && (
       <span>
         <Sensitive className='text-success'>{`${more} ${unit}`}</Sensitive> more
@@ -1202,6 +1203,9 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
                 [
                   ['you send', `${deal.amountInText || amountIn} ${inUnit}`, true],
                   ['you receive', `${deal.amountOutText} ${outUnit}`, true],
+                  ...(deal.atLeastText
+                    ? [['at least', `${deal.atLeastText} ${outUnit}`, true]]
+                    : []),
                   ['route', ROUTES[deal.route].label],
                   ['recipient', deal.recipient],
                   [isFromZec ? 'deposit address' : 'pay to', deal.depositAddress || 'on confirm'],
@@ -1230,6 +1234,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
               </p>
             )}
             {note && <p className='text-xs text-fg-muted'>{note}</p>}
+            {deal.streamLine && <p className='text-xs text-fg-muted'>{deal.streamLine}</p>}
             {deal.refundLine && <p className='text-xs text-fg-muted'>{deal.refundLine}</p>}
             <p className='text-xs text-fg-muted'>
               {ROUTES[deal.route].label} · {ROUTES[deal.route].custody}

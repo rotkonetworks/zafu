@@ -22,6 +22,7 @@ import {
   rescale,
   toUnits,
   costOf,
+  durationText,
   type Cost,
   type Quote,
   type SwapProvider,
@@ -32,6 +33,23 @@ import { POOLS, poolAsset, ROUTES } from './routes';
 export const ZEC_ASSET = 'ZEC.ZEC';
 const ZEC_CHAIN = 'ZEC';
 const NODE_DECIMALS = 8;
+/**
+ * How far below the quoted output a swap may fill, asked of the node as
+ * liquidity_tolerance_bps: the memo then carries a real price limit, and a
+ * streamed sub-swap that can't meet it is refunded instead of filled at any
+ * price. (tolerance_bps checks the first sub-swap against the whole limit, so
+ * the node refuses every streamed swap with it.)
+ */
+export const PRICE_TOLERANCE_BPS = 300;
+/** the most sub-swaps the node streams a swap over */
+const MAX_STREAMING = 14_400n;
+
+/** the price limit a swap memo carries (`=:ASSET:DEST:LIMIT/INTERVAL/QUANTITY:...`), 1e8; 0 when none */
+export const memoLimit = (memo: string): bigint => {
+  const m = /^(\d+)(?:e(\d+))?$/.exec(memo.split(':')[3]?.split('/')[0] ?? '');
+  return m ? BigInt(m[1]!) * 10n ** BigInt(m[2] ?? 0) : 0n;
+};
+
 /** observers relay at most 80 bytes of OP_RETURN, and zcash allows no more */
 export const MAX_MEMO_BYTES = 80;
 
@@ -183,6 +201,10 @@ export const checkQuote = (
   if (q.expiry <= nowSec) {
     throw new Error('this quote expired · please get a new one');
   }
+  // a limit of 0 fills at any price, however thin the pool: never signed
+  if (!memoLimit(q.memo)) {
+    throw new Error(`${name}'s quote carries no price limit · zafu won't sign it`);
+  }
 };
 
 /** an amount below what the route swaps; `min` in the inbound asset, 1e8 */
@@ -202,12 +224,21 @@ export class BelowMinimum extends Error {
  * N)" even when the amount is far above N (a near-empty pool), so a minimum
  * the amount already clears is read as "cannot fill", never as "too little".
  */
+const minIn = (text: string): bigint | undefined => {
+  const n = /recommended_min_amount_in:\s*(\d+)/.exec(text)?.[1];
+  return n === undefined ? undefined : BigInt(n);
+};
+
 export const nodeRefusal = (name: string, e: unknown, amountIn: bigint, unit: string): Error => {
   const text = e instanceof Error ? e.message : String(e);
-  const min = /recommended_min_amount_in:\s*(\d+)/.exec(text)?.[1];
+  // the price limit can't be met: the pool is too thin to fill this fairly
+  if (text.includes('less than price limit')) {
+    return new Error(`${name} · its zec pool can't fill this at a fair price`);
+  }
+  const min = minIn(text);
   if (min !== undefined) {
-    return amountIn < BigInt(min)
-      ? new BelowMinimum(BigInt(min), unit, name)
+    return amountIn < min
+      ? new BelowMinimum(min, unit, name)
       : new Error(`${name} can't fill this right now · its pool is too small`);
   }
   return new Error(`${name} could not quote this right now`);
@@ -326,6 +357,7 @@ export const nodeProvider = (chain: NodeChain): SwapProvider => {
         amount: amount.toString(),
         destination,
         streaming_interval: '1',
+        liquidity_tolerance_bps: String(PRICE_TOLERANCE_BPS),
       });
       const sourceChain = (into ? pool.asset : ZEC_ASSET).split('.')[0]!;
       // utxo deposits carry the memo in an 80-byte OP_RETURN, where dest/refund
@@ -343,7 +375,18 @@ export const nodeProvider = (chain: NodeChain): SwapProvider => {
       const plainly = (e: unknown) => {
         throw nodeRefusal(name, e, amount, unitIn);
       };
-      const quoted = nodeFetch<NodeQuote>(chain, `/quote/swap?${query}`, signal);
+      const ask = () => nodeFetch<NodeQuote>(chain, `/quote/swap?${query}`, signal);
+      // the node's own streaming count can cut a swap into parts below its minimum, and it
+      // then refuses an amount it can fill: asked again in parts that each clear the minimum
+      const quoted = ask().catch((e: unknown) => {
+        const n = minIn(e instanceof Error ? e.message : '');
+        if (!n || amount < n) {
+          throw e;
+        }
+        const parts = amount / n;
+        query.set('streaming_quantity', String(parts < MAX_STREAMING ? parts : MAX_STREAMING));
+        return ask();
+      });
       quoted.catch(() => {});
       // a halted chain is said plainly, before whatever the quote makes of it
       const inbound = await nodeFetch<InboundAddress[]>(chain, '/inbound_addresses', signal).catch(
@@ -372,9 +415,12 @@ export const nodeProvider = (chain: NodeChain): SwapProvider => {
           into && q.recommended_gas_rate
             ? `use a fast fee · ${q.recommended_gas_rate} ${gas?.unit ?? q.gas_rate_units ?? ''}`.trim()
             : undefined,
-        timeText: q.total_swap_seconds
-          ? `~${Math.max(1, Math.round(q.total_swap_seconds / 60))} min`
-          : undefined,
+        timeText: q.total_swap_seconds ? durationText(q.total_swap_seconds) : undefined,
+        atLeastText: fromUnits(rescale(memoLimit(q.memo), NODE_DECIMALS, outDecimals), outDecimals),
+        streamLine:
+          (q.streaming_swap_blocks ?? 0) > 1 && (q.total_swap_seconds ?? 0) >= 3600
+            ? `streams over ${durationText(q.total_swap_seconds!)} · unfilled parts come back`
+            : undefined,
         expiresAt: q.expiry * 1000,
         depositAddress: q.inbound_address,
         memo: q.memo,

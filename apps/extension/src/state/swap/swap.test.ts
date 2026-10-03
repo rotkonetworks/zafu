@@ -44,6 +44,7 @@ import {
 import { OFFERED, routeLabel, ROUTES, type RouteId, type SwapPair } from './routes';
 import {
   BelowMinimum,
+  memoLimit,
   checkQuote as nodeCheckQuote,
   nodeCost,
   nodeStatus,
@@ -54,7 +55,7 @@ import { thorProvider } from './thor';
 import { mayaProvider } from './maya';
 import { nearCost, nearProvider } from './near';
 import { PROVIDERS, routeTokens } from '.';
-import { gates } from './live';
+import { gates, plain } from './live';
 import type { DestinationView } from '../../net/egress-policy';
 
 /** every destination on: the routes a pair would ask */
@@ -108,7 +109,7 @@ const inbound = (over: Partial<InboundAddress> = {}): InboundAddress[] => [
 const thorQuote = (over: Partial<NodeQuote> = {}): NodeQuote => ({
   inbound_address: BTC_VAULT,
   expiry: NOW + 600,
-  memo: `=:ZEC.ZEC:${T}/bc1qrefundexample:0/1/0`,
+  memo: `=:ZEC.ZEC:${T}/bc1qrefundexample:400000000/1/0`,
   expected_amount_out: '412000000',
   recommended_min_amount_in: '6123',
   dust_threshold: '1000',
@@ -274,7 +275,7 @@ describe('thorchain', () => {
       timeText: '~12 min',
       expiresAt: (NOW + 600) * 1000,
       depositAddress: BTC_VAULT,
-      memo: `=:ZEC.ZEC:${T}/bc1qrefundexample:0/1/0`,
+      memo: `=:ZEC.ZEC:${T}/bc1qrefundexample:400000000/1/0`,
       recipient: 't1PTs8DQifJxg6HmUq7AgYYFNkbyQa1zjgf',
     });
     expect(quote.notYet).toBeUndefined();
@@ -294,7 +295,7 @@ describe('thorchain', () => {
     thornode(
       thorQuote({
         inbound_address: ZEC_VAULT,
-        memo: '=:BTC.BTC:bc1qdestexample:0/1/0',
+        memo: '=:BTC.BTC:bc1qdestexample:400000000/1/0',
         expected_amount_out: '24000',
         fees: { asset: 'BTC.BTC', total: '1' },
       }),
@@ -400,7 +401,7 @@ describe('thorchain', () => {
     thornode(
       thorQuote({
         inbound_address: ZEC_VAULT,
-        memo: '=:BTC.BTC:bc1qdestexample:0/1/0',
+        memo: '=:BTC.BTC:bc1qdestexample:400000000/1/0',
         recommended_min_amount_in: '5000',
         dust_threshold: undefined,
       }),
@@ -434,7 +435,7 @@ describe('thorchain', () => {
     expect(quote.gasLine).toBe('use a fast fee · 3 sat/byte');
     expect(quote.refundLine).toBeUndefined();
     // zafu's affiliate is asked for, and the memo the quote returns (the one signed) carries it
-    const memo = `=:z:${T}:0/1/0:zafu:20`;
+    const memo = `=:z:${T}:400000000/1/0:zafu:20`;
     const urls = thornode(
       thorQuote(),
       inbound(),
@@ -493,7 +494,7 @@ const mayaInbound: InboundAddress[] = [
 const mayaIntoZec: NodeQuote = {
   inbound_address: MAYA_BTC_VAULT,
   expiry: NOW + 900,
-  memo: `=:z:${T}:0/1/0`,
+  memo: `=:z:${T}:400000000/1/0`,
   expected_amount_out: '63176359',
   recommended_min_amount_in: '2188',
   dust_threshold: '10000',
@@ -514,7 +515,7 @@ const mayaIntoZec: NodeQuote = {
 const mayaFromZec: NodeQuote = {
   inbound_address: MAYA_ZEC_VAULT,
   expiry: NOW + 900,
-  memo: '=:b:bc1qdest:0/1/0',
+  memo: '=:b:bc1qdest:400000000/1/0',
   expected_amount_out: '1574493',
   recommended_min_amount_in: '138456',
   dust_threshold: '10000',
@@ -577,6 +578,7 @@ describe('maya', () => {
       amount: '1000000',
       destination: T,
       streaming_interval: '1',
+      liquidity_tolerance_bps: '300',
     });
     expect(quote).toMatchObject({
       route: 'maya',
@@ -584,7 +586,7 @@ describe('maya', () => {
       amountOutText: '0.63176359',
       timeText: '~10 min',
       depositAddress: MAYA_BTC_VAULT,
-      memo: `=:z:${T}:0/1/0`,
+      memo: `=:z:${T}:400000000/1/0`,
       recipient: T,
       watch: undefined,
       notYet: undefined,
@@ -602,7 +604,7 @@ describe('maya', () => {
     expect(await mayaProvider.quote(out)).toMatchObject({
       amountOut: 1_574_493n,
       depositAddress: MAYA_ZEC_VAULT,
-      memo: '=:b:bc1qdest:0/1/0',
+      memo: '=:b:bc1qdest:400000000/1/0',
       recipient: 'bc1qdest',
       notYet: 'not available yet',
       watch: 'txid',
@@ -786,6 +788,120 @@ describe('best route', () => {
     const tokens = await routeTokens(['near', 'thor']);
     expect(tokens.filter(t => t.symbol === 'BTC' && t.chain === 'btc')).toHaveLength(1);
     expect(tokens.some(t => t.symbol === 'DOGE')).toBe(true);
+  });
+});
+
+// recorded from gateway.liquify.com/chain/thorchain_api on 2026-10-04: 0.1 / 1 btc into zec,
+// affiliate zafu:20, liquidity_tolerance_bps 300 (the zec pool held ~0.35 zec)
+const MIN_REFUSAL =
+  'amount less than min swap amount (recommended_min_amount_in: 9258): invalid request';
+const LIMIT_REFUSAL =
+  'failed to simulate swap: failed to simulate handler: emit asset 137088 less than price limit 6482895646: invalid request';
+const live01 = thorQuote({
+  memo: `=:z:${T}:623969074/1/1080:zafu:20`,
+  expected_amount_out: '643267087',
+  recommended_min_amount_in: '9258',
+  recommended_gas_rate: '6',
+  max_streaming_quantity: 14400,
+  streaming_swap_blocks: 1079,
+  total_swap_seconds: 7074,
+  fees: {
+    asset: 'ZEC.ZEC',
+    affiliate: '1289202',
+    outbound: '44951',
+    liquidity: '12496680',
+    total: '13830833',
+    slippage_bps: 190,
+    total_bps: 210,
+  },
+});
+const live1 = thorQuote({
+  memo: `=:z:${T}:6294550476/1/0:zafu:20`,
+  expected_amount_out: '6489227295',
+  max_streaming_quantity: 14400,
+  streaming_swap_blocks: 14399,
+  total_swap_seconds: 86994,
+  fees: {
+    asset: 'ZEC.ZEC',
+    affiliate: '13004554',
+    outbound: '44951',
+    liquidity: '95400000',
+    total: '108449505',
+    slippage_bps: 144,
+    total_bps: 164,
+  },
+});
+/** a node that answers each quote url as told; inbound addresses as recorded */
+const node = (answer: (url: string) => [number, unknown]) => {
+  const urls: string[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string) => {
+      urls.push(url);
+      const [status, body] = url.includes('/quote/swap') ? answer(url) : [200, inbound()];
+      return Promise.resolve(new Response(JSON.stringify(body), { status }));
+    }),
+  );
+  return urls;
+};
+const zeroOne = req({ amountIn: '0.1', otherAddress: '' });
+
+describe('thorchain streaming, minimums and price limits', () => {
+  it('asks again in parts that clear the minimum when its own streaming count refuses an amount it can fill', async () => {
+    const urls = node(url =>
+      url.includes('streaming_quantity') ? [200, live01] : [400, { message: MIN_REFUSAL }],
+    );
+    const quote = await thorProvider.quote(zeroOne);
+    const asks = urls.filter(u => u.includes('/quote/swap')).map(u => new URL(u).searchParams);
+    expect(asks).toHaveLength(2);
+    expect(asks[0]!.has('streaming_quantity')).toBe(false);
+    // 0.1 btc in parts of at least 9258 sat: 1080 parts
+    expect(asks[1]!.get('streaming_quantity')).toBe('1080');
+    expect(asks[1]!.get('liquidity_tolerance_bps')).toBe('300');
+    expect(quote).toMatchObject({
+      amountOutText: '6.43267087',
+      atLeastText: '6.23969074',
+      memo: `=:z:${T}:623969074/1/1080:zafu:20`,
+      timeText: 'about 2 h',
+      streamLine: 'streams over about 2 h · unfilled parts come back',
+    });
+    expect(new TextEncoder().encode(quote.memo).length).toBeLessThanOrEqual(80);
+  });
+
+  it('shows a real shortfall, and a retry that fails says its own reason', async () => {
+    node(() => [400, { message: MIN_REFUSAL }]);
+    await expect(thorProvider.quote(req({ amountIn: '0.00005' }))).rejects.toBeInstanceOf(
+      BelowMinimum,
+    );
+    node(() => [400, { message: MIN_REFUSAL }]);
+    await expect(thorProvider.quote(zeroOne)).rejects.toThrow(
+      "thorchain can't fill this right now · its pool is too small",
+    );
+    node(url =>
+      url.includes('streaming_quantity')
+        ? [400, { message: LIMIT_REFUSAL }]
+        : [400, { message: MIN_REFUSAL }],
+    );
+    const e = await thorProvider.quote(zeroOne).catch((x: unknown) => x);
+    expect(plain('thor', e)).toBe("its zec pool can't fill this at a fair price");
+  });
+
+  it('signs only a memo with a price limit, and says a day-long stream as about 24 h', async () => {
+    node(() => [200, live1]);
+    const quote = await thorProvider.quote(req({ amountIn: '1', otherAddress: '' }));
+    expect(quote).toMatchObject({
+      atLeastText: '62.94550476',
+      timeText: 'about 24 h',
+      streamLine: 'streams over about 24 h · unfilled parts come back',
+    });
+    expect(quote.memo).toContain(':zafu:20');
+    expect(memoLimit(quote.memo!)).toBe(6_294_550_476n);
+    expect(memoLimit('=:z:t1x:62945e5/1/0')).toBe(6_294_500_000n);
+    // a quote whose memo fills at any price is never shown, so never signed
+    node(() => [200, { ...live1, memo: `=:z:${T}:0/1/0:zafu:20` }]);
+    await expect(thorProvider.quote(req({ amountIn: '1', otherAddress: '' }))).rejects.toThrow(
+      "thorchain's quote carries no price limit · zafu won't sign it",
+    );
   });
 });
 

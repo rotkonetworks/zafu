@@ -77,6 +77,10 @@ export interface Quote {
   /** the fee rate to set when paying from another wallet */
   gasLine?: string;
   timeText?: string;
+  /** the least the route may pay out (its signed price limit), display, in the destination asset */
+  atLeastText?: string;
+  /** one honest line when the swap streams for hours */
+  streamLine?: string;
   /** ms epoch */
   expiresAt?: number;
   /** where the source asset goes; empty on a dry quote */
@@ -108,6 +112,12 @@ export interface SwapProvider {
   /** absent when the route can't be watched from here; `txid` for `watch: 'txid'` quotes */
   status?: (quote: Quote, txid?: string) => Promise<SwapStatusView>;
 }
+
+/** how long a swap takes, said roughly: "~12 min", "about 24 h" */
+export const durationText = (seconds: number): string =>
+  seconds < 3600
+    ? `~${Math.max(1, Math.round(seconds / 60))} min`
+    : `about ${Math.round(seconds / 3600)} h`;
 
 /** base units for a decimal string, exact (no float) */
 export const toUnits = (text: string, decimals: number): bigint => {
