@@ -15,6 +15,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { CopyButton } from '@repo/ui/components/ui/copy-button';
+import { requestEgressOptIn } from '../../../net/egress-opt-in';
 import {
   announceSession,
   generateRoomCode,
@@ -104,6 +105,13 @@ export function RendezvousHost({
 
     void (async () => {
       try {
+        // opening a room is the moment of intent: ask for the relay before any request
+        if (!(await requestEgressOptIn('multisig-relay'))) {
+          if (!stopped) {
+            setError('a room code needs the multisig relay · please allow it to continue');
+          }
+          return;
+        }
         const myKey = await prepare();
         // regenerate on collision: a code someone already used comes back
         // without a creator token, and a room we don't own is not ours to run
@@ -235,6 +243,10 @@ export function RendezvousJoin({ relayUrl, prepare, onState }: JoinProps): React
       clearTimeout(timer);
     };
     try {
+      if (!(await requestEgressOptIn('multisig-relay'))) {
+        setError('a room code needs the multisig relay · please allow it to continue');
+        return;
+      }
       const myKey = await prepare();
       const roomId = await roomIdFromCode(code);
       await publishKey(relayUrl, roomId, myKey);
