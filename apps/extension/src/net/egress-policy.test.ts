@@ -18,9 +18,9 @@ describe('a fresh zcash-only wallet', () => {
       ['https://zcash.rotko.net/zidecar.v1.Zidecar/GetCompactBlocks', 'allow'],
       ['https://zcash.rotko.net/cash.z.wallet.sdk.rpc.CompactTxStreamer/GetLightdInfo', 'allow'],
       // other services on the same host are their own, optional destinations
-      ['wss://zcash.rotko.net/ws', 'opt-in'],
+      ['wss://relay.zafu.pro/ws', 'opt-in'],
       ['https://relay.zafu.pro/bucket?appScope=x', 'opt-in'],
-      ['https://zcash.rotko.net/rendezvous/open', 'opt-in'],
+      ['https://relay.zafu.pro/rendezvous/open', 'opt-in'],
       // networks the user did not enable
       ['https://penumbra.rotko.net/penumbra.core.app.v1.QueryService/AppParameters', 'network-off'],
       // the registry is bundled at build time - no destination owns this host any more
@@ -37,7 +37,8 @@ describe('a fresh zcash-only wallet', () => {
       // nothing asks hosh for a reference tip any more
       ['https://hosh.zec.rocks/api/v0/zec.json', 'unknown'],
       ['https://zcash.me/api/lookup', 'opt-in'],
-      ['wss://zrelay.rotko.net/ws', 'opt-in'],
+      // the old relay hosts are no destination of zafu's any more
+      ['wss://zrelay.rotko.net/ws', 'unknown'],
       ['https://relay.zafu.pro/login', 'opt-in'],
       ['https://1click.chaindefuser.com/v0/tokens', 'opt-in'],
       ['https://api.skip.build/v2/info/chains', 'opt-in'],
@@ -167,8 +168,7 @@ describe('optional services', () => {
       netEgress: { optIns },
       zcashWallets: [{ multisig: { relayUrl: 'https://frost.example' } }, {}],
     };
-    expect(outcome(inputs, 'wss://zrelay.rotko.net/ws')).toBe('allow');
-    expect(outcome(inputs, 'wss://zcash.rotko.net/ws/zid')).toBe('allow');
+    expect(outcome(inputs, 'wss://relay.zafu.pro/ws')).toBe('allow');
     expect(outcome(inputs, 'https://frost.example/rendezvous/x')).toBe('allow');
     expect(outcome(inputs, 'https://zcash.me/api/lookup')).toBe('opt-in');
   });
@@ -280,7 +280,7 @@ describe('describeEgress', () => {
       'zcash-tip-check': 'default-off',
     });
     expect(view.find(d => d.id === 'zcash')?.hosts).toEqual(['zcash.rotko.net']);
-    expect(view.find(d => d.id === 'chat-relay')?.hosts).toContain('zcash.rotko.net/ws');
+    expect(view.find(d => d.id === 'chat-relay')?.hosts).toContain('relay.zafu.pro/ws');
   });
 
   it('lists each host under the destination that owns it, and what is needed', () => {

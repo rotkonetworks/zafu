@@ -31,7 +31,8 @@ import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanne
  * participant list to anyone on the path; it would NOT expose ceremony
  * contents, which are end-to-end encrypted before they leave the device.
  */
-export const DEFAULT_RELAY_URL = 'https://relay.zafu.pro';
+import { DEFAULT_RELAY_URL } from '../../../config/multisig-relay';
+export { DEFAULT_RELAY_URL };
 
 /** Running your own: ZF's frostd, which is what this speaks. */
 export const RELAY_RUNBOOK_URL = 'https://github.com/ZcashFoundation/frost-tools';

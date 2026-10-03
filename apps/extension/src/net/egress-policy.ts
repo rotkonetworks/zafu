@@ -272,18 +272,15 @@ export const DESTINATIONS: DestinationSpec[] = [
     label: 'chat relay',
     purpose: 'relay',
     gate: { kind: 'optional' },
-    urls: () => ['wss://zrelay.rotko.net/ws', 'wss://zcash.rotko.net/ws'],
+    // the websocket relay lives on relay.zafu.pro with every other relay
+    urls: () => ['wss://relay.zafu.pro/ws'],
   },
   {
     id: 'multisig-relay',
     label: 'multisig relay',
     purpose: 'relay',
     gate: { kind: 'optional' },
-    urls: i => [
-      'https://relay.zafu.pro',
-      'https://zcash.rotko.net/rendezvous/',
-      ...multisigRelays(i),
-    ],
+    urls: i => ['https://relay.zafu.pro', ...multisigRelays(i)],
   },
   {
     id: 'voting',

@@ -27,6 +27,7 @@
  *     (dapp handoff, e.g. Veil's "deposit from Injective"); nothing crosses back.
  */
 
+import { DEFAULT_RELAY_URL } from '../../config/multisig-relay';
 import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
 import { getCapabilityMode, setCapabilityMode } from '../../state/capability-modes';
 import {
@@ -633,7 +634,7 @@ export const externalMessageListener = (
           }
           const threshold = Number(msg['threshold']) || 2;
           const maxSigners = Number(msg['maxSigners']) || 3;
-          const relayUrl = String(msg['relayUrl'] || 'wss://zcash.rotko.net/ws');
+          const relayUrl = String(msg['relayUrl'] || DEFAULT_RELAY_URL);
           const appOrigin = sender.origin || sender.url || 'unknown';
           const requestId = crypto.randomUUID();
 
@@ -677,7 +678,7 @@ export const externalMessageListener = (
         }
         const threshold = Number(msg['threshold']) || 2;
         const maxSigners = Number(msg['maxSigners']) || 3;
-        const relayUrl = String(msg['relayUrl'] || 'wss://zcash.rotko.net/ws');
+        const relayUrl = String(msg['relayUrl'] || DEFAULT_RELAY_URL);
         const requestId = crypto.randomUUID();
 
         const params = new URLSearchParams({
@@ -713,7 +714,7 @@ export const externalMessageListener = (
         }
         const threshold = Number(msg['threshold']) || 2;
         const maxSigners = Number(msg['maxSigners']) || 3;
-        const relayUrl = String(msg['relayUrl'] || 'wss://zcash.rotko.net');
+        const relayUrl = String(msg['relayUrl'] || DEFAULT_RELAY_URL);
         const appOrigin = sender.origin || sender.url || 'unknown';
         // new URL() throws on non-URL strings (e.g. 'unknown'); fall back safely.
         let originHost = 'multisig';
@@ -799,7 +800,7 @@ export const externalMessageListener = (
           sendResponse({ error: 'plan array required' });
           return;
         }
-        const relayUrl = String(msg['relayUrl'] || 'wss://zcash.rotko.net');
+        const relayUrl = String(msg['relayUrl'] || DEFAULT_RELAY_URL);
         const feeZat = Number(msg['feeZat']) || 10_000;
         // Empty is allowed here because the popup falls back to the default
         // multisigVault; the popup looks up via startsWith - same charset rules.
