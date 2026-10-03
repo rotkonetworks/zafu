@@ -6,6 +6,56 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.0.0
+
+The redesign. A new zafu, built around two networks, privacy by default and
+fewer, calmer screens.
+
+### One shell, two networks
+
+- Header and tabs (wallet, people, tools, settings) on every screen; sumi and
+  washi themes, the 匿 seal.
+- Zcash and Penumbra are the networks. Noble, Cosmos Hub, Osmosis, Injective
+  and the other IBC chains are transparent burners that appear only inside the
+  flows that use them.
+- Onboarding asks for 24 words; a 12-word phrase is accepted for Penumbra only.
+
+### Swap, buy and liquidity
+
+- Swap across NEAR Intents and THORChain with live prices that update as you
+  type, every fee shown, and zafu's own fee free during the beta.
+- THORChain swaps carry a real price limit, stream when a pool is thin, and use
+  a fresh transparent address per swap.
+- Buy ZEC with cash through Peer, on its own page, with a tracker that survives
+  closing the browser.
+
+### People
+
+- Chat on zirc: groups by invite code and 1:1 rooms for contacts who swapped
+  cards, over relay.zafu.pro.
+- Contact discovery, per site and off until you turn it on.
+
+### Privacy and safety
+
+- Egress default-deny: every destination is visible and blockable, and nothing
+  is contacted while every zafu window is closed.
+- A full security, cryptography, Penumbra and fund-safety review, with its
+  findings fixed: web pages can no longer pose as zafu, passkey signatures are
+  correct, presence and chat records are harder to tell apart or replay, and
+  Penumbra's note tree survives closing zafu mid-sync.
+- Every setting explains itself; tap its name.
+
+### Speed
+
+- Screens load their code and local data as soon as you reach for them.
+- Penumbra proves before you approve; sync resumes where it stopped.
+
+### Good to know
+
+- Penumbra wallets that turned Penumbra on with "sync from now" on an earlier
+  beta may be missing older payments. Settings > networks > penumbra > sync
+  again from the start finds them.
+
 ## 28.3.2
 
 ### Passkey registration works again
