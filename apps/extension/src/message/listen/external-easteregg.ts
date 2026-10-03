@@ -49,6 +49,8 @@ import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { isPro } from '../../state/license';
 import { isValidExternalSender } from '../../senders/external';
 import { isValidInternalSender } from '../../senders/internal';
+import { sessionExtStorage } from '@repo/storage-chrome/session';
+import { rpIdMatchesOrigin } from '../../state/public-suffix';
 import { ZAFU_PROTOCOL_VERSION, ZAFU_SUPPORTED_PROTOCOL_VERSIONS } from '@zafu/protocol';
 import { getApprovalSurface } from '../../side-panel-pref';
 import { isSidePanelOpen } from '../../side-panel-presence';
@@ -87,25 +89,6 @@ const OPEN_SHIELD_CHAINS = new Set<string>(['injective']);
 // in the zafu-method-names leaf. Keep the switch below in sync with that list;
 // the protocol contract test fails on drift.
 
-/**
- * WebAuthn rpId must be the caller origin's host or a registrable domain
- * suffix of it (the spec's "registrable domain suffix" rule, minus the
- * public-suffix-list check). Without this, a connected origin could request
- * an assertion for any other RP. `origin` is the browser-attested
- * `sender.origin`, never a caller-supplied field.
- */
-const rpIdMatchesOrigin = (rpId: string, origin: string): boolean => {
-  if (!rpId) {
-    return false;
-  }
-  try {
-    const host = new URL(origin).hostname;
-    return host === rpId || host.endsWith('.' + rpId);
-  } catch {
-    return false;
-  }
-};
-
 // Gates the zafu_frost_sign_orchard external entry. The joiner now receives
 // a full PCZT from the host and verifies sighash + OVK-decrypted outputs
 // on zigner before signing (gh #17), so the display↔sighash binding gap
@@ -121,7 +104,13 @@ const pendingPicks = new Map<string, (r: unknown) => void>();
 // result arrives; the origin is kept for the same reason, so approval can grant
 // the `passkey` capability to the origin that actually asked. Kept here, not in
 // the popup round-trip: an extension page must not choose either value.
-const pendingPasskeyRequests = new Map<string, { origin: string; rpId: string }>();
+const pendingPasskeyRequests = new Map<
+  string,
+  { origin: string; rpId: string; verified: boolean }
+>();
+
+/** is the wallet locked right now? read before an unlock, so a request knows it made the person type their password */
+const walletLocked = async (): Promise<boolean> => !(await sessionExtStorage.get('passwordKey'));
 
 /**
  * Register a pending popup callback keyed by `requestId`. Other external
@@ -1222,6 +1211,10 @@ export const externalMessageListener = (
           // script turned into a silent fallback to the platform authenticator
           // (the browser's own prompt / NotAllowedError). Asking for the unlock
           // FIRST makes the popup appear only when approving can actually work.
+          // UV is claimed only when this request made the person enter their
+          // password; an approve tap on an unlocked wallet is presence, not
+          // verification
+          const verified = await walletLocked();
           try {
             const { throwIfNeedsLogin } = await import('../../needs-login');
             await throwIfNeedsLogin();
@@ -1231,13 +1224,14 @@ export const externalMessageListener = (
             return;
           }
           const requestId = crypto.randomUUID();
-          const params = new URLSearchParams({ app: reqOrigin, requestId });
+          // the rpId rides along for display only; the worker keeps its own copy
+          const params = new URLSearchParams({ app: reqOrigin, rp: rpId, requestId });
           const url = chrome.runtime.getURL(`popup.html#/passkey-approve?${params.toString()}`);
           // Register the pending callback and the validated origin+rpId BEFORE
           // opening the popup so the onRemoved sweep can find them if the window
           // closes fast; clear both if openApprovalPopup rejects the request.
           pendingPicks.set(requestId, sendResponse);
-          pendingPasskeyRequests.set(requestId, { origin: reqOrigin, rpId });
+          pendingPasskeyRequests.set(requestId, { origin: reqOrigin, rpId, verified });
           if (!(await openApprovalPopup(reqOrigin, url, requestId))) {
             pendingPicks.delete(requestId);
             pendingPasskeyRequests.delete(requestId);
@@ -1280,7 +1274,7 @@ export const externalMessageListener = (
               return;
             }
             const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
-            const result = createCredential(mnemonic, pending.rpId);
+            const result = createCredential(mnemonic, pending.rpId, pending.verified);
             // the credential exists only after this approval, so the origin earns
             // the narrow `passkey` grant HERE - that is what lets a later
             // zafu_passkey_get sign in without a second popup. Never granted
@@ -1311,12 +1305,16 @@ export const externalMessageListener = (
     case 'zafu_passkey_get': {
       const {
         rpId,
+        challenge: challengeHex,
         clientDataHash: clientDataHashHex,
         prfSalts,
+        allowCredentials,
       } = msg as {
         rpId: string;
+        challenge?: string;
         clientDataHash: string;
         prfSalts?: { first: string; second?: string };
+        allowCredentials?: { id?: unknown }[];
       };
       // origin is the browser-attested sender, never a caller-supplied field - // otherwise any site could spoof a connected origin and forge assertions
       // for an arbitrary rpId (account takeover at the relying party).
@@ -1329,6 +1327,27 @@ export const externalMessageListener = (
         try {
           if (!rpIdMatchesOrigin(rpId, getOrigin)) {
             sendResponse({ success: false, error: 'rpId does not match origin' });
+            return;
+          }
+          // The page builds the client data the relying party will check, so
+          // rebuild it here from the challenge and the browser-attested origin
+          // and sign only that: a page cannot get a signature over client data
+          // naming another origin, or over a hash it chose.
+          const { hexToBytes: h2b0, bytesToHex: b2h0 } = await import('@noble/hashes/utils');
+          const { sha256 } = await import('@noble/hashes/sha256');
+          const { clientDataJson } = await import('../../content-scripts/passkey-wire');
+          let clientDataMatches = false;
+          try {
+            clientDataMatches =
+              typeof challengeHex === 'string' &&
+              typeof clientDataHashHex === 'string' &&
+              b2h0(sha256(clientDataJson('webauthn.get', h2b0(challengeHex), getOrigin))) ===
+                clientDataHashHex.toLowerCase();
+          } catch {
+            clientDataMatches = false;
+          }
+          if (!clientDataMatches) {
+            sendResponse({ success: false, error: 'client data does not match the request' });
             return;
           }
           // Global switch: a `passkey` the user turned off must not sign, and
@@ -1364,12 +1383,33 @@ export const externalMessageListener = (
           // ordering zafu_passkey_create uses and for the same reason:
           // approving a popup that then hits 'keyring locked' reads as "the
           // wallet stopped working" right after the user clicked approve.
+          const verified = await walletLocked();
           try {
             const { throwIfNeedsLogin } = await import('../../needs-login');
             await throwIfNeedsLogin();
           } catch {
             // the user closed the unlock surface without logging in
             sendResponse({ success: false, error: 'wallet locked', code: 'cancelled' });
+            return;
+          }
+          const { signAssertion, pickCredentialId } = await import('../../state/webauthn');
+          const { useStore } = await import('../../state');
+          const { bytesToHex, hexToBytes: h2b } = await import('@noble/hashes/utils');
+          const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
+          if (!keyInfo) {
+            sendResponse({ success: false, error: 'no wallet selected', code: 'no-wallet' });
+            return;
+          }
+          const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
+          // the relying party lists the credentials it knows; when none is this
+          // wallet's (new or legacy id) the request belongs to another
+          // authenticator, so let the page fall back to it
+          const allowIds = Array.isArray(allowCredentials)
+            ? allowCredentials.map(c => c?.id).filter((id): id is string => typeof id === 'string')
+            : undefined;
+          const credentialId = pickCredentialId(mnemonic, rpId, allowIds);
+          if (!credentialId) {
+            sendResponse({ success: false, error: 'no zafu credential for this request' });
             return;
           }
           if (!hasCapability(perms, 'passkey')) {
@@ -1389,23 +1429,13 @@ export const externalMessageListener = (
               return;
             }
           }
-          const { signAssertion, buildCredentialId } = await import('../../state/webauthn');
-          const { useStore } = await import('../../state');
-          const { bytesToHex, hexToBytes: h2b } = await import('@noble/hashes/utils');
-          const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
-          if (!keyInfo) {
-            sendResponse({ success: false, error: 'no wallet selected', code: 'no-wallet' });
-            return;
-          }
-          const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
-
-          // clientDataHash comes from the content script (SHA-256 of its clientDataJSON)
+          // checked above against the challenge and the sender's origin
           const clientDataHash = h2b(clientDataHashHex);
 
-          const result = signAssertion(mnemonic, rpId, clientDataHash, prfSalts);
+          const result = signAssertion(mnemonic, rpId, clientDataHash, prfSalts, verified);
           sendResponse({
             success: true,
-            credentialId: bytesToHex(buildCredentialId(rpId)),
+            credentialId: bytesToHex(credentialId),
             authenticatorData: bytesToHex(result.authenticatorData),
             signature: bytesToHex(result.signature),
             prfResults: result.prfResults

@@ -859,17 +859,18 @@ export const deriveP256ForSite = (
   });
 
 /**
- * sign a WebAuthn challenge with the P-256 key for an origin.
- * produces an ECDSA signature (DER-encoded) compatible with ES256.
- * used for sites that only support WebAuthn/passkeys.
+ * sign a challenge with the P-256 key for an origin: ES256, i.e. ECDSA over
+ * SHA-256(challenge), DER-encoded, low-S. Bound to the ZID generation like
+ * signZid, so burning a generation retires this key too.
  */
 export const signP256 = (
   mnemonic: string,
   origin: string,
   challenge: Uint8Array,
   pref?: ZidSitePreference,
+  zidIndex = 0,
 ): { signature: string; publicKey: string } => {
-  const identityName = pref?.identity ?? DEFAULT_IDENTITY;
+  const identityName = rotatedIdentity(pref?.identity ?? DEFAULT_IDENTITY, zidIndex);
   const root = deriveRoot(mnemonic);
   const identity = deriveIdentity(root, identityName);
   root.fill(0);
@@ -881,7 +882,9 @@ export const signP256 = (
   identity.fill(0);
 
   const { privateKey, publicKey } = p256KeypairFromSeed(seed);
-  const signature = p256.sign(challenge, privateKey);
+  // prehash: noble's default treats the input as a digest and keeps only its
+  // first 32 bytes, so a longer challenge was signed on its prefix alone
+  const signature = p256.sign(challenge, privateKey, { prehash: true, lowS: true });
 
   privateKey.fill(0);
 
@@ -892,7 +895,7 @@ export const signP256 = (
 };
 
 /**
- * verify a P-256 signature.
+ * verify an ES256 signature: ECDSA P-256 over SHA-256(challenge).
  */
 export const verifyP256 = (
   publicKeyHex: string,
@@ -900,7 +903,9 @@ export const verifyP256 = (
   challenge: Uint8Array,
 ): boolean => {
   try {
-    return p256.verify(hexToBytes(signatureHex), challenge, hexToBytes(publicKeyHex));
+    return p256.verify(hexToBytes(signatureHex), challenge, hexToBytes(publicKeyHex), {
+      prehash: true,
+    });
   } catch {
     return false;
   }
@@ -931,8 +936,8 @@ export const derivePasskeyForSite = (
   });
 
 /**
- * sign with the passkey P-256 key (non-rotating).
- * message is NOT pre-hashed - p256.sign handles SHA-256 internally.
+ * sign with the passkey P-256 key (non-rotating): ES256 over SHA-256(message),
+ * as WebAuthn relying parties verify it.
  */
 export const signPasskey = (
   mnemonic: string,
@@ -943,12 +948,29 @@ export const signPasskey = (
   withIdentity(mnemonic, identity, id => {
     const seed = deriveSeedForPasskey(id, rpId);
     const { privateKey, publicKey } = p256KeypairFromSeed(seed);
-    const sig = p256.sign(message, privateKey, { lowS: true });
+    const sig = p256.sign(message, privateKey, { prehash: true, lowS: true });
     privateKey.fill(0);
     return {
       signature: sig.toDERRawBytes(),
       publicKey: bytesToHex(publicKey),
     };
+  });
+
+/**
+ * the passkey's credential id: 16 bytes keyed by the passkey seed, so it is
+ * different for every user and every relying party, and says nothing about
+ * the wallet that made it. Same seed + rpId gives the same id on every device.
+ */
+export const derivePasskeyCredentialId = (
+  mnemonic: string,
+  identity: string,
+  rpId: string,
+): Uint8Array =>
+  withIdentity(mnemonic, identity, id => {
+    const seed = deriveSeedForPasskey(id, rpId);
+    const credId = hmac(sha256, seed.slice(0, 32), enc.encode('zafu passkey credential id v2'));
+    seed.fill(0);
+    return credId.slice(0, 16);
   });
 
 // -- PRF (WebAuthn pseudo-random function) --

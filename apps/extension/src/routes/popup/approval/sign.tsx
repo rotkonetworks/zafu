@@ -126,7 +126,7 @@ export const SignApproval = () => {
       const zidIndex = await getZidIndex();
       const result =
         algorithm === 'es256'
-          ? signP256(mnemonic, origin, challenge, pref)
+          ? signP256(mnemonic, origin, challenge, pref, zidIndex)
           : signZid(mnemonic, origin, challenge, pref, zidIndex);
 
       // share log is written by the service worker (sign-request.ts) after popup closes

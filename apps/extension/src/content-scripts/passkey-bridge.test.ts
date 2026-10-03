@@ -79,6 +79,7 @@ describe('passkeyMessage', () => {
     expect(
       passkeyMessage('get', {
         rpId: 'a.example',
+        challenge: 'ccdd',
         clientDataHash: 'aabb',
         prfSalts: { first: '01' },
         allowCredentials: [{ id: 'cc', type: 'public-key' }],
@@ -86,6 +87,7 @@ describe('passkeyMessage', () => {
     ).toEqual({
       type: 'zafu_passkey_get',
       rpId: 'a.example',
+      challenge: 'ccdd',
       clientDataHash: 'aabb',
       prfSalts: { first: '01' },
       allowCredentials: [{ id: 'cc', type: 'public-key' }],

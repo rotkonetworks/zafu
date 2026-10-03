@@ -33,6 +33,8 @@ export const PasskeyApprove = () => {
   const [params] = useSearchParams();
   const origin = params.get('app') || '';
   const requestId = params.get('requestId') || '';
+  // the domain the passkey signs in to; a site may name a parent of its own host
+  const rpId = params.get('rp') || '';
   const keyInfo = useStore(selectSelectedKeyInfo);
 
   const respond = async (approved: boolean) => {
@@ -83,14 +85,20 @@ export const PasskeyApprove = () => {
       }
     >
       <div className='flex w-full flex-col gap-3 px-[30px]'>
-        {keyInfo && (
-          <RowGroup>
+        <RowGroup>
+          {rpId && (
+            <div className='flex h-12 items-center justify-between gap-3 px-3.5 text-sm'>
+              <span className='text-fg-muted'>signs in to</span>
+              <span className='truncate text-fg-high'>{rpId}</span>
+            </div>
+          )}
+          {keyInfo && (
             <div className='flex h-12 items-center justify-between px-3.5 text-sm'>
               <span className='text-fg-muted'>account</span>
               <span className='text-fg-high'>{keyInfo.name}</span>
             </div>
-          </RowGroup>
-        )}
+          )}
+        </RowGroup>
         <p className='text-xs text-fg-muted'>
           the key stays in zafu and comes back with your recovery phrase.
         </p>

@@ -88,14 +88,43 @@ export const passkeyMessage = (
   }
   const prfSalts = prfSaltsOf(p['prfSalts']);
   const allowCredentials = allowOf(p['allowCredentials']);
-  if (!hex(p['clientDataHash']) || prfSalts === null || allowCredentials === null) {
+  if (
+    !hex(p['challenge']) ||
+    !hex(p['clientDataHash']) ||
+    prfSalts === null ||
+    allowCredentials === null
+  ) {
     return undefined;
   }
   return {
     rpId: p['rpId'],
+    // the worker rebuilds the client data from this and the sender's origin,
+    // and signs only when it hashes to clientDataHash
+    challenge: p['challenge'],
     clientDataHash: p['clientDataHash'],
     prfSalts,
     allowCredentials,
     type: PASSKEY_MESSAGE_TYPES.get,
   };
 };
+
+const b64url = (bytes: Uint8Array): string =>
+  btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+
+/**
+ * The CollectedClientData a browser would write, byte for byte. Shared by the
+ * page-side intercept (which hands it to the site) and the service worker
+ * (which rebuilds it from the browser-attested origin and refuses to sign a
+ * hash of anything else), so the two can never drift apart.
+ */
+export const clientDataJson = (
+  type: 'webauthn.create' | 'webauthn.get',
+  challenge: Uint8Array,
+  origin: string,
+): Uint8Array<ArrayBuffer> =>
+  new TextEncoder().encode(
+    JSON.stringify({ type, challenge: b64url(challenge), origin, crossOrigin: false }),
+  );
