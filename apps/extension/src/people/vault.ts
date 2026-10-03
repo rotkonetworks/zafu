@@ -209,6 +209,23 @@ export const mergeItems = (thread: Thread | undefined, items: ThreadItem[]): Thr
   };
 };
 
+/**
+ * A group's lines from the people on its roster, and yours. Holding the room
+ * secret is what lets someone write, and every holder can; the roster is who
+ * the founder put on it. Filtered when shown, not when stored, so a member's
+ * early lines appear as soon as their `+v` arrives instead of being lost. A
+ * pair room, or anything that is not a group, is returned as it is.
+ */
+export const onRoster = (room: PeopleRoom | undefined, t?: Thread): Thread | undefined => {
+  const g = room?.kind === 'group' ? room.group : undefined;
+  if (!t || !g) {
+    return t;
+  }
+  const voiced = new Set([g.founder, ...g.members.map(m => m.key)]);
+  const items = t.items.filter(i => i.mine || voiced.has(i.author));
+  return items.length === t.items.length ? t : { ...t, items };
+};
+
 /** unread: other people's lines after `read` */
 export const unreadOf = (t?: Thread): number =>
   t ? t.items.filter(i => !i.mine && i.ts > t.read).length : 0;

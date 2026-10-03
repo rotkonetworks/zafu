@@ -9,7 +9,15 @@
  * approval puts it in the frostd session, and frostd admits nobody else.
  *
  * The code is a number + two bip39 words (~32 bits) against the old three-of-256
- * (~24 bits), and the server never sees it - only its hash.
+ * (~24 bits). The server is sent only SHA-256 of it, but that is no secret: a
+ * space of ~2^32 codes inverts in seconds, so treat the code as known to the
+ * relay. That costs little - the relay already serves the room and sees what
+ * is posted in it, and joining still needs the coordinator's approval and the
+ * relay-key whitelist. The id is deliberately an unsalted, unstretched hash:
+ * zcli and pokerbot derive the same id (bin/zcli/src/rendezvous.rs,
+ * bin/pokerbot/src/rendezvous.rs), and a public salt would not slow the
+ * enumeration anyway; hiding the code from the relay needs a stretched hash
+ * changed in all three together.
  *
  * Stock frostd relays don't have these routes; `hasRendezvous` probes so the
  * UI can fall back to the manual key-exchange + session-id flow.
@@ -42,13 +50,22 @@ export function generateRoomCode(): string {
   if (WORDS.length !== 2048) {
     throw new Error('bip39 EN wordlist unavailable');
   }
-  const rnd = new Uint16Array(3);
-  crypto.getRandomValues(rnd);
-  const number = (rnd[0]! % 999) + 1; // 1..999
-  const w1 = WORDS[rnd[1]! % 2048]!;
-  const w2 = WORDS[rnd[2]! % 2048]!;
+  const number = uniform(999) + 1; // 1..999
+  const w1 = WORDS[uniform(2048)]!;
+  const w2 = WORDS[uniform(2048)]!;
   return `${number}-${w1}-${w2}`;
 }
+
+/** uniform integer in [0, n) by rejection sampling: `x % n` alone favours the low values */
+export const uniform = (n: number): number => {
+  const limit = Math.floor(0x1_0000_0000 / n) * n;
+  for (;;) {
+    const [x] = crypto.getRandomValues(new Uint32Array(1));
+    if (x! < limit) {
+      return x! % n;
+    }
+  }
+};
 
 /**
  * Room id = SHA-256 of the normalized code, hex. Normalization forgives the

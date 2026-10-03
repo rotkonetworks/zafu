@@ -5,7 +5,9 @@ import { UserChoice } from '@repo/storage-chrome/records';
 const popup = vi.hoisted(() => vi.fn());
 vi.mock('../../popup', () => ({ popup }));
 
-import { signRequestListener, type SignResponse } from './sign-request';
+import { isReservedChallenge, signRequestListener, type SignResponse } from './sign-request';
+import { pqKeyAuthMessage } from '@zafu/pq';
+import { bytesToHex } from '@noble/hashes/utils';
 import { SIGN_REQUEST_TYPE } from './zafu-method-names';
 
 const ORIGIN = 'https://login.example';
@@ -70,5 +72,27 @@ describe('zafu_sign: only a signer that can sign a ZID is offered it', () => {
     await ask();
     expect(popup).toHaveBeenCalledTimes(1);
     expect(popup.mock.calls[0]![1]).toMatchObject({ isAirgap: false });
+  });
+});
+
+describe("zafu_sign: zafu's own messages are not signable", () => {
+  const askHex = (challengeHex: string): Promise<SignResponse> =>
+    new Promise(resolve => {
+      signRequestListener({ type: SIGN_REQUEST_TYPE, challengeHex }, sender, resolve);
+    });
+
+  it('refuses a PQ prekey authentication message before any popup', async () => {
+    const msg = pqKeyAuthMessage('xwing-v1', ORIGIN, 7, new Uint8Array(32).fill(1));
+    const res = await askHex(bytesToHex(msg));
+    expect(res).toMatchObject({ success: false, code: 'invalid_request' });
+    expect(popup).not.toHaveBeenCalled();
+  });
+
+  it('leaves ordinary challenges alone, including ones that mention zafu', () => {
+    expect(isReservedChallenge(bytesToHex(new TextEncoder().encode('zafu-login nonce 42')))).toBe(
+      false,
+    );
+    expect(isReservedChallenge('abcd')).toBe(false);
+    expect(isReservedChallenge('00000005' + '7a6166752d')).toBe(true);
   });
 });
