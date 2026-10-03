@@ -35,6 +35,7 @@ import { useGasSponsor } from '../../../transparent/sponsor';
 import { formatBaseUnits, fullDecimalString } from '../../../transparent/assets';
 import { penumbraRouteStatus, usePenumbraRoutes } from '../../../transparent/penumbra-routes';
 import { shortAddress } from '../../../transparent/hd';
+import { isAddress as isPenumbraAddress } from '@penumbra-zone/bech32m/penumbra';
 import {
   parseInjectiveRecipient,
   type InjectiveRecipientProblem,
@@ -415,9 +416,11 @@ export function CosmosSend({
       return ethermintRecipient.ok;
     }
     // penumbra addresses are bech32m and much longer than a cosmos address, so
-    // isValidCosmosAddress would reject them - match the prefix directly.
+    // isValidCosmosAddress would reject them. A full decode (checksum and
+    // length), as withdraw does: a typo would otherwise sit in flight until
+    // the error ack refunds it.
     if (isPenumbraDest) {
-      return recipient.startsWith('penumbra1');
+      return isPenumbraAddress(recipient);
     }
     if (destChainId) {
       const destPrefix = skipChains.find(c => c.chainId === destChainId)?.bech32Prefix;
