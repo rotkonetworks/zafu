@@ -47,6 +47,7 @@ const ChainSheet = ({ id, onClose }: { id: Chain; onClose: () => void }) => {
   const disable = useDisableNetwork();
   const enable = useEnableNetwork();
   const gone = getCosmosChain(id).deprecation;
+  const { explainProps, sheet } = useExplain();
   return (
     <RpcPoolSheet chainId={id} open onOpenChange={o => !o && onClose()}>
       {gone && <StatusSlot tone='warn'>please move funds out by {gone.moveOutBy}</StatusSlot>}
@@ -56,8 +57,10 @@ const ChainSheet = ({ id, onClose }: { id: Chain; onClose: () => void }) => {
           label={`use ${chainName(id)}`}
           checked={on}
           onChange={v => void (v ? enable(id) : disable(id))}
+          {...explainProps('network.ibcChainToggle')}
         />
       </RowGroup>
+      {sheet}
     </RpcPoolSheet>
   );
 };
@@ -88,6 +91,7 @@ export const SettingsPenumbraNetwork = () => {
             label='node'
             value={hostOf(endpoint) ?? 'auto'}
             onPress={() => setOpen('node')}
+            {...explainProps('network.penumbraNode')}
           />
           <Row
             type='value'
@@ -100,12 +104,14 @@ export const SettingsPenumbraNetwork = () => {
                   : `${chainsOn.map(chainName).join(', ')} on`
             }
             onPress={() => setOpen('ibc')}
+            {...explainProps('network.ibcChains')}
           />
           <Row
             type='value'
             label='total in'
             value={totalIn}
             onPress={() => void setTotalIn(totalIn === 'usd' ? 'um' : 'usd')}
+            {...explainProps('network.totalIn')}
           />
           <Row
             type='toggle'
@@ -136,6 +142,7 @@ export const SettingsPenumbraNetwork = () => {
         egress='penumbra-servers'
         measure={speedTest}
         onPick={url => setEndpoint('penumbra', url)}
+        onExplain={explainProps('network.ownNode').onExplain}
       />
 
       <Sheet open={open === 'ibc'} onOpenChange={sheet('ibc')} title='ibc chains'>
@@ -147,11 +154,12 @@ export const SettingsPenumbraNetwork = () => {
               label={chainName(c)}
               value={enabled.includes(c) ? 'on' : 'off'}
               onPress={() => setOpen(c)}
+              {...explainProps('network.ibcChainToggle')}
             />
           ))}
         </RowGroup>
         <RowGroup>
-          <KeplrCompatToggle />
+          <KeplrCompatToggle {...explainProps('devices.actAsKeplr')} />
         </RowGroup>
       </Sheet>
 

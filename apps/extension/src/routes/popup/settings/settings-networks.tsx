@@ -8,15 +8,32 @@ import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { Section, SettingsScreen } from './settings-screen';
 import { Row } from '@repo/ui/components/ui/row';
+import { useExplain } from './settings-explain';
 
 /** each chain's own screen, and its label here */
 const CHAINS = [
-  { id: 'zcash', label: 'zcash', screen: PopupPath.SETTINGS_ZCASH_NETWORK },
-  { id: 'penumbra', label: 'penumbra', screen: PopupPath.SETTINGS_PENUMBRA_NETWORK },
-] as const satisfies readonly { id: NetworkId; label: string; screen: PopupPath }[];
+  { id: 'zcash', label: 'zcash', screen: PopupPath.SETTINGS_ZCASH_NETWORK, explainId: 'network.zcashEnable' },
+  {
+    id: 'penumbra',
+    label: 'penumbra',
+    screen: PopupPath.SETTINGS_PENUMBRA_NETWORK,
+    explainId: 'network.penumbraEnable',
+  },
+] as const satisfies readonly {
+  id: NetworkId;
+  label: string;
+  screen: PopupPath;
+  explainId: string;
+}[];
 
 /** a chain shows the node it reads from when on, and turns on when off */
-const ChainRow = ({ chain }: { chain: (typeof CHAINS)[number] }) => {
+const ChainRow = ({
+  chain,
+  onExplain,
+}: {
+  chain: (typeof CHAINS)[number];
+  onExplain?: (label: string) => void;
+}) => {
   const navigate = usePopupNav();
   const on = useStore(s => selectEnabledNetworks(s).includes(chain.id));
   const endpoint = useStore(s => s.networks.networks[chain.id].endpoint);
@@ -28,6 +45,7 @@ const ChainRow = ({ chain }: { chain: (typeof CHAINS)[number] }) => {
       value={on ? (endpoint && hostOf(endpoint)) || 'auto' : 'turn on'}
       preload={on ? chain.screen : undefined}
       onPress={() => (on ? navigate(chain.screen) : void enable(chain.id))}
+      onExplain={onExplain}
     />
   );
 };
@@ -39,6 +57,7 @@ export const SettingsNetworks = () => {
   const [params] = useSearchParams();
   // the home "switch node" links arrive as ?network=<id>
   const linked = CHAINS.find(c => c.id === params.get('network'));
+  const { explainProps, sheet: explainSheet } = useExplain();
   if (linked) {
     return <Navigate replace to={`${linked.screen}?sheet=node`} />;
   }
@@ -47,7 +66,7 @@ export const SettingsNetworks = () => {
       <div className='flex flex-col gap-4'>
         <Section title='chains'>
           {CHAINS.map(c => (
-            <ChainRow key={c.id} chain={c} />
+            <ChainRow key={c.id} chain={c} {...explainProps(c.explainId)} />
           ))}
         </Section>
         {zcashOn && (
@@ -61,6 +80,7 @@ export const SettingsNetworks = () => {
           </Section>
         )}
       </div>
+      {explainSheet}
     </SettingsScreen>
   );
 };

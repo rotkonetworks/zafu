@@ -21,6 +21,7 @@ import type { NetEgressState } from '../../../net/destination';
 import { readNetEgress, setDestinationDecision, setDestinationOptIn } from '../../../net/ledger';
 import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
+import { ExplainSheet, type Explain } from './settings-explain';
 
 interface Connections {
   destinations: DestinationView[];
@@ -54,12 +55,27 @@ const hostsLine = (hosts: string[]) => {
   return names.length > 1 ? `${names[0]} +${names.length - 1}` : (names[0] ?? '');
 };
 
+/** what toggling a destination means, built from its own data - these hosts
+ *  come from the egress policy at runtime, so there is no static copy to key
+ *  by id; the row's own label, hosts and "needed" state are the explanation. */
+const explainOf = (d: DestinationView): Explain => ({
+  blurb: d.needed
+    ? 'a host one of your enabled networks needs to work.'
+    : 'off until you turn it on; zafu never contacts it otherwise.',
+  on: `zafu can reach ${hostsLine(d.hosts)}`,
+  off: d.needed
+    ? `the networks that need it stop syncing: ${d.networks.join(', ') || 'this'}`
+    : `zafu never contacts ${hostsLine(d.hosts)}`,
+});
+
 const DestinationRow = ({
   dest,
   onToggle,
+  onExplain,
 }: {
   dest: DestinationView;
   onToggle: (dest: DestinationView, next: boolean) => void;
+  onExplain: () => void;
 }) => (
   <Row
     type='toggle'
@@ -67,6 +83,7 @@ const DestinationRow = ({
     description={hostsLine(dest.hosts)}
     checked={dest.on}
     onChange={next => onToggle(dest, next)}
+    onExplain={onExplain}
   />
 );
 
@@ -74,6 +91,12 @@ export const SettingsConnections = () => {
   const data = useConnections();
   const [confirm, setConfirm] = useState<DestinationView>();
   const [unusedOpen, setUnusedOpen] = useState(false);
+  const [explainDest, setExplainDest] = useState<DestinationView | null>(null);
+  const [explainHost, setExplainHost] = useState<{
+    host: string;
+    label: string | undefined;
+    state: string;
+  } | null>(null);
 
   if (!data) {
     return (
@@ -108,7 +131,12 @@ export const SettingsConnections = () => {
           <p className='kicker mb-2'>in use</p>
           <RowGroup>
             {inUse.map(d => (
-              <DestinationRow key={d.id} dest={d} onToggle={toggle} />
+              <DestinationRow
+                key={d.id}
+                dest={d}
+                onToggle={toggle}
+                onExplain={() => setExplainDest(d)}
+              />
             ))}
           </RowGroup>
         </section>
@@ -117,7 +145,12 @@ export const SettingsConnections = () => {
           <p className='kicker mb-2'>optional, off until you ask</p>
           <RowGroup>
             {optional.map(d => (
-              <DestinationRow key={d.id} dest={d} onToggle={toggle} />
+              <DestinationRow
+                key={d.id}
+                dest={d}
+                onToggle={toggle}
+                onExplain={() => setExplainDest(d)}
+              />
             ))}
           </RowGroup>
         </section>
@@ -134,6 +167,9 @@ export const SettingsConnections = () => {
                   description={record.label || undefined}
                   checked={record.state === 'allowed'}
                   onChange={next => void setDestinationDecision(host, next ? 'allowed' : 'blocked')}
+                  onExplain={() =>
+                    setExplainHost({ host, label: record.label, state: record.state })
+                  }
                 />
               ))}
             </RowGroup>
@@ -142,6 +178,7 @@ export const SettingsConnections = () => {
 
         {unused.length > 0 && (
           <RowGroup>
+            {/* no-explain: opens a sheet whose own text is the full explanation */}
             <Row
               type='value'
               label='networks you have not turned on'
@@ -151,6 +188,25 @@ export const SettingsConnections = () => {
           </RowGroup>
         )}
       </div>
+
+      {explainDest && (
+        <ExplainSheet
+          title={explainDest.label}
+          explain={explainOf(explainDest)}
+          onOpenChange={() => setExplainDest(null)}
+        />
+      )}
+      {explainHost && (
+        <ExplainSheet
+          title={explainHost.host}
+          explain={{
+            blurb: explainHost.label || 'a host you set an answer for yourself.',
+            on: `zafu can reach ${explainHost.host}`,
+            off: `zafu never contacts ${explainHost.host}`,
+          }}
+          onOpenChange={() => setExplainHost(null)}
+        />
+      )}
 
       <Sheet open={unusedOpen} onOpenChange={setUnusedOpen} title='not turned on'>
         <p className='text-label text-fg-muted lowercase'>

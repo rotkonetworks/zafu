@@ -60,7 +60,7 @@ export const useZafuTheme = () => {
   return { theme: value, loaded, set, restore };
 };
 
-export const ThemeRow = () => {
+export const ThemeRow = ({ onExplain }: { onExplain?: (label: string) => void } = {}) => {
   const { theme, set } = useZafuTheme();
   return (
     <OptionsRow
@@ -71,6 +71,7 @@ export const ThemeRow = () => {
         { value: 'washi', label: 'washi', desc: 'ink on unbleached paper' },
       ]}
       onPick={set}
+      onExplain={onExplain}
     />
   );
 };
@@ -88,7 +89,13 @@ export const useZafuFont = () => {
 };
 
 /** uncontrolled by default (own hook instance); pass `state` to share one instance with a parent that needs to read or revert it */
-export const FontRow = ({ state }: { state?: ReturnType<typeof useZafuFont> }) => {
+export const FontRow = ({
+  state,
+  onExplain,
+}: {
+  state?: ReturnType<typeof useZafuFont>;
+  onExplain?: (label: string) => void;
+} = {}) => {
   const own = useZafuFont();
   const { font, set } = state ?? own;
   return (
@@ -100,6 +107,7 @@ export const FontRow = ({ state }: { state?: ReturnType<typeof useZafuFont> }) =
         { value: 'system', label: 'system mono' },
       ]}
       onPick={set}
+      onExplain={onExplain}
     />
   );
 };
@@ -118,7 +126,13 @@ export const useApprovalSurface = () => {
 };
 
 /** uncontrolled by default (own hook instance); pass `state` to share one instance with a parent that needs to read or revert it */
-export const ApprovalsRow = ({ state }: { state?: ReturnType<typeof useApprovalSurface> }) => {
+export const ApprovalsRow = ({
+  state,
+  onExplain,
+}: {
+  state?: ReturnType<typeof useApprovalSurface>;
+  onExplain?: (label: string) => void;
+} = {}) => {
   const own = useApprovalSurface();
   const { surface, set } = state ?? own;
   return (
@@ -131,6 +145,7 @@ export const ApprovalsRow = ({ state }: { state?: ReturnType<typeof useApprovalS
         { value: 'popup', label: 'a window' },
       ]}
       onPick={set}
+      onExplain={onExplain}
     />
   );
 };

@@ -35,6 +35,7 @@ import { CustodyBadge, custodyOf } from '../../../components/custody-badge';
 import { PhraseGrid } from './settings-passphrase';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
+import { useExplain } from './settings-explain';
 import { ZCASH_ORCHARD_ACTIVATION } from '../../../config/networks';
 import {
   describeZcashHeight,
@@ -208,6 +209,7 @@ const WalletSheet = ({
   const [error, setError] = useState<string | null>(null);
   const hasZcash = networks.includes('zcash');
   const birthday = useBirthday(vault.id, hasZcash);
+  const { explainProps, sheet: explainSheet } = useExplain();
 
   const rename = async () => {
     const name = draft.trim();
@@ -251,6 +253,7 @@ const WalletSheet = ({
   };
 
   return (
+    <>
     <Sheet
       open
       onOpenChange={o => {
@@ -275,6 +278,7 @@ const WalletSheet = ({
                 label='zcash sync start'
                 value={birthday.valid ? formatDateInput(blockToDate(birthday.height)) : 'auto'}
                 onPress={() => setStep('birthday')}
+                {...explainProps('network.zcashStartsFrom')}
               />
             )}
             {vault.type === 'zigner-zafu' && hasZcash && (
@@ -377,6 +381,8 @@ const WalletSheet = ({
         </>
       )}
     </Sheet>
+    {explainSheet}
+    </>
   );
 };
 

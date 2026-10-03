@@ -72,11 +72,14 @@ export const OptionsRow = <T extends string | number>({
   value,
   options,
   onPick,
+  onExplain,
 }: {
   label: string;
   value: T;
   options: readonly { value: T; label: string; desc?: string }[];
   onPick: (v: T) => void;
+  /** opens a Sheet explaining this setting, via a small "?" after the label */
+  onExplain?: (label: string) => void;
 }) => {
   const [open, setOpen] = useState(false);
   return (
@@ -86,6 +89,7 @@ export const OptionsRow = <T extends string | number>({
         label={label}
         value={options.find(o => o.value === value)?.label ?? String(value)}
         onPress={() => setOpen(true)}
+        onExplain={onExplain}
       />
       <Sheet open={open} onOpenChange={setOpen} title={label}>
         <SheetOptions

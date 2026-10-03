@@ -23,6 +23,7 @@ import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Button } from '@repo/ui/components/ui/button';
 import { Segmented } from '@repo/ui/components/ui/segmented';
 import { cn } from '@repo/ui/lib/utils';
+import { useExplain } from './settings-explain';
 
 /** the wallet's stored birthday (an external system, read once per wallet) */
 const useBirthday = (vaultId: string | undefined) => {
@@ -62,10 +63,12 @@ export const ZcashNodeSheet = ({
   open,
   onOpenChange,
   className,
+  onExplain,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   className?: string;
+  onExplain?: (label: string) => void;
 }) => {
   const endpoint = useStore(s => s.networks.networks.zcash.endpoint) ?? '';
   const saved = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
@@ -96,6 +99,7 @@ export const ZcashNodeSheet = ({
           options={BACKENDS}
         />
       }
+      onExplain={onExplain}
     />
   );
 };
@@ -121,6 +125,7 @@ export const SettingsZcashNetwork = () => {
   const [date, setDate] = useState('');
   const [resyncing, setResyncing] = useState(false);
   const fromDate = rescanHeightOf(date);
+  const { explainProps, sheet: explainSheet } = useExplain();
 
   const rescan = async (h: number) => {
     setSheet(null);
@@ -192,6 +197,7 @@ export const SettingsZcashNetwork = () => {
               setSheet('date');
             }}
             disabled={resyncing}
+            {...explainProps('network.zcashStartsFrom')}
           />
           <Row
             type='value'
@@ -199,6 +205,7 @@ export const SettingsZcashNetwork = () => {
             description={kind}
             value={(endpoint && hostOf(endpoint)) || 'auto'}
             onPress={() => setSheet('node')}
+            {...explainProps('network.zcashNode')}
           />
         </Section>
 
@@ -213,7 +220,11 @@ export const SettingsZcashNetwork = () => {
         </Section>
       </div>
 
-      <ZcashNodeSheet open={sheet === 'node'} onOpenChange={o => setSheet(o ? 'node' : null)} />
+      <ZcashNodeSheet
+        open={sheet === 'node'}
+        onOpenChange={o => setSheet(o ? 'node' : null)}
+        onExplain={explainProps('network.ownNode').onExplain}
+      />
 
       <Sheet
         open={sheet === 'start'}
@@ -264,6 +275,7 @@ export const SettingsZcashNetwork = () => {
           </Button>
         </div>
       </Sheet>
+      {explainSheet}
     </SettingsScreen>
   );
 };

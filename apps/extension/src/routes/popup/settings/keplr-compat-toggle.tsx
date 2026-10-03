@@ -7,7 +7,7 @@ import { Row } from '@repo/ui/components/ui/row';
  * off leaves a real keplr extension untouched. Plaintext local storage, since
  * the content script reads it without a session key.
  */
-export function KeplrCompatToggle() {
+export function KeplrCompatToggle({ onExplain }: { onExplain?: (label: string) => void } = {}) {
   const [enabled, setEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -30,6 +30,7 @@ export function KeplrCompatToggle() {
         setEnabled(v);
         void localExtStorage.set('keplrCompat', v);
       }}
+      onExplain={onExplain}
     />
   );
 }

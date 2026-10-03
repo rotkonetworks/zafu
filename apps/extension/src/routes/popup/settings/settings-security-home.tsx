@@ -11,6 +11,7 @@ import { useAutoLock, AUTO_LOCK_OPTIONS } from './use-auto-lock';
 import { OptionsRow } from './sheet-options';
 import { TintedRow } from './tinted-row';
 import { selectUnbackedSeatCount } from './settings-status';
+import { useExplain } from './settings-explain';
 
 const SIGNING_OPTIONS: readonly { value: TxSigningSecurity; label: string; desc: string }[] = [
   { value: 'unlock-only', label: 'unlock only', desc: 'unlocked means you can sign' },
@@ -23,12 +24,20 @@ const useZcashOn = () => {
   return enabled.length === 0 || enabled.includes('zcash');
 };
 
-const AutoLockRow = () => {
+const AutoLockRow = ({ onExplain }: { onExplain?: (label: string) => void }) => {
   const { minutes, set } = useAutoLock();
-  return <OptionsRow label='auto-lock' value={minutes} options={AUTO_LOCK_OPTIONS} onPick={set} />;
+  return (
+    <OptionsRow
+      label='auto-lock'
+      value={minutes}
+      options={AUTO_LOCK_OPTIONS}
+      onPick={set}
+      onExplain={onExplain}
+    />
+  );
 };
 
-const SigningRow = () => {
+const SigningRow = ({ onExplain }: { onExplain?: (label: string) => void }) => {
   const setSetting = useStore(s => s.privacy.setSetting);
   return (
     <OptionsRow
@@ -36,6 +45,7 @@ const SigningRow = () => {
       value={useStore(selectTxSigningSecurity)}
       options={SIGNING_OPTIONS}
       onPick={v => void setSetting('txSigningSecurity', v)}
+      onExplain={onExplain}
     />
   );
 };
@@ -73,6 +83,7 @@ const RemoveWalletRow = () => {
 export const SettingsSecurityHome = () => {
   const navigate = usePopupNav();
   const zcashOn = useZcashOn();
+  const { explainProps, sheet } = useExplain();
 
   return (
     <SettingsScreen title='security' category='security' backPath={PopupPath.SETTINGS}>
@@ -94,8 +105,8 @@ export const SettingsSecurityHome = () => {
         </Section>
 
         <Section title='locking'>
-          <AutoLockRow />
-          <SigningRow />
+          <AutoLockRow {...explainProps('security.autoLock')} />
+          <SigningRow {...explainProps('security.txSigning')} />
         </Section>
 
         {/* zcash resync lives on settings > networks > zcash ("sync again from
@@ -112,6 +123,7 @@ export const SettingsSecurityHome = () => {
 
         <RemoveWalletRow />
       </div>
+      {sheet}
     </SettingsScreen>
   );
 };
