@@ -5,6 +5,7 @@ import { lazy, StrictMode, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { AppErrorBoundary, reportRenderError } from '../components/error-boundary';
+import { trackActivity } from '../state/idle-activity';
 
 import '@repo/ui/styles/globals.css';
 import '@repo/ui/styles/icons.css';
@@ -16,6 +17,9 @@ import '@repo/ui/styles/icons.css';
 const BuyPage = lazy(() =>
   import(/* webpackChunkName: "buy-page" */ '../routes/buy').then(m => ({ default: m.BuyPage })),
 );
+
+// the person using this page is what keeps the wallet unlocked (auto-lock)
+trackActivity();
 
 void localExtStorage.get('zafuTheme').then(v => {
   if (v === 'washi') {

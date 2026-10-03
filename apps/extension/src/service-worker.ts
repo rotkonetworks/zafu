@@ -104,6 +104,7 @@ import { startPeopleRelay } from './people/sw';
 import { penumbraTiming } from './penumbra/timing';
 import { requestStopAllSync } from './state/keyring/network-worker';
 import { stampSeenVersion } from './state/moved-notice';
+import { idleFor } from './state/idle-activity';
 
 // performance.now() counts from the worker's start, so this is wake to here:
 // the wasm-backed imports above are what the entry body waits on
@@ -621,26 +622,10 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
 });
 
 // ── idle auto-lock ──
-// track last activity timestamp. only UI and dapp interactions reset it.
-// background service messages (sync, alarms) must NOT reset the timer.
-let lastActivityMs = Date.now();
-const touchActivity = () => {
-  lastActivityMs = Date.now();
-};
-
-// reset on external messages (dapp interactions - always user-initiated)
-chrome.runtime.onMessageExternal.addListener(() => {
-  touchActivity();
-});
-
-// reset on internal messages that originate from UI (popup/sidepanel/page),
-// not from the service worker itself. check sender for a tab (UI has tabs,
-// service worker does not).
-chrome.runtime.onMessage.addListener((_msg, sender) => {
-  if (sender.tab || sender.url?.includes('popup.html') || sender.url?.includes('sidepanel.html')) {
-    touchActivity();
-  }
-});
+// The clock lives in chrome.storage.session (state/idle-activity.ts), written
+// only by zafu's own pages on real input. Nothing here counts messages: a site
+// pinging the wallet, or a content script, must not keep it unlocked, and an
+// in-memory clock reset itself every time Chrome evicted this worker.
 
 // https://developer.chrome.com/docs/extensions/reference/api/alarms
 void chrome.alarms.create('blockSync', {
@@ -670,8 +655,7 @@ chrome.alarms.onAlarm.addListener(async alarm => {
     if (minutes <= 0) {
       return;
     } // disabled
-    const idleMs = Date.now() - lastActivityMs;
-    if (idleMs >= minutes * 60_000) {
+    if (await idleFor(minutes)) {
       // check if actually unlocked before locking
       const key = await chrome.storage.session.get('passwordKey');
       if (key?.['passwordKey']) {

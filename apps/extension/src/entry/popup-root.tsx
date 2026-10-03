@@ -22,6 +22,7 @@ import { loadBalancesSnapshot } from '../hooks/balances-snapshot';
 import { balancesQueryKey } from '../hooks/penumbra-balances';
 import { EgressAskSheet } from '../net/egress-ask-sheet';
 import { installRegistryIcons } from '../shared/components/registry-icons';
+import { trackActivity } from '../state/idle-activity';
 
 import '@repo/ui/styles/globals.css';
 import '@repo/ui/styles/icons.css';
@@ -35,6 +36,8 @@ import '../styles/view-transitions.css';
 // real bugs are not hidden. Installed before first render on purpose.
 installGracefulNetworkErrorHandler();
 installRegistryIcons();
+// the person using this page is what keeps the wallet unlocked (auto-lock)
+trackActivity();
 
 // A popup left open across an extension reload/auto-update is alive but dead:
 // `runtime.id` is gone and every call throws "Extension context invalidated".
