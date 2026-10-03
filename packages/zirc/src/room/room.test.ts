@@ -478,8 +478,9 @@ describe('room', () => {
 
     now = T0 + WINDOW;
     // the relay is not limited to serving the bytes verbatim: it rewrites the
-    // window field to the current one. The unsigned presence record cannot prove
-    // its window that way - the old stable tag still names the old window.
+    // window field to the current one. The presence record's signature covers
+    // that field, so the rewrite is refused (and the old stable tag still names
+    // the old window).
     const replay = new Uint8Array(entry!.blob);
     replay.set(u32be(alice.currentEpoch()), 3);
     await transport.putBucket({
@@ -496,9 +497,150 @@ describe('room', () => {
     });
     const seen = await bob.sync(1);
     expect(seen.present).toEqual([]);
+    expect(seen.dropped).toEqual([expect.objectContaining({ reason: 'bad signature' })]);
+  });
+
+  /** what any member can do: open a sealed message in one window, seal it into another */
+  const resealer = (secret: Uint8Array) => {
+    const msgKey = async (shard: string, epoch: number) => {
+      const appScopeHash = new Uint8Array(
+        await crypto.subtle.digest('SHA-256', new TextEncoder().encode(SCOPE)),
+      );
+      const shardHash = new Uint8Array(32);
+      shardHash.set(fromHex(shard));
+      const raw = await hkdfBytes(
+        secret,
+        'veil-room-msg-v1',
+        concat([appScopeHash, shardHash, u32be(epoch)]),
+        32,
+      );
+      const key = await crypto.subtle.importKey('raw', ab(raw), 'AES-GCM', false, [
+        'encrypt',
+        'decrypt',
+      ]);
+      const aadBytes = ab(
+        concat([Uint8Array.of(0x01), appScopeHash, shardHash, u32be(epoch), Uint8Array.of(0x01)]),
+      );
+      return { key, aadBytes };
+    };
+    return async (blob: Uint8Array, shard: string, from: number, to: number) => {
+      const a = await msgKey(shard, from);
+      const plain = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: ab(blob.subarray(1, 13)), additionalData: a.aadBytes },
+        a.key,
+        ab(blob.subarray(13)),
+      );
+      const b = await msgKey(shard, to);
+      const nonce = crypto.getRandomValues(new Uint8Array(12));
+      const ct = new Uint8Array(
+        await crypto.subtle.encrypt(
+          { name: 'AES-GCM', iv: nonce, additionalData: b.aadBytes },
+          b.key,
+          plain,
+        ),
+      );
+      return concat([Uint8Array.of(0x01), nonce, ct]);
+    };
+  };
+
+  it('refuses a signed message a member re-sealed into a later window', async () => {
+    const { transport, shardOf } = fakeRelay();
+    const secret = createRoomSecret();
+    let now = T0;
+    const alice = openRoom(asIdentity(guest(1), 'alice'), {
+      relay: transport,
+      roomSecret: secret,
+      now: () => now,
+    });
+    await alice.send('pay bob 5');
+    const from = alice.currentEpoch();
+    const shard = shardOf(SCOPE, from);
+    const [entry] = await transport.getBucket({ appScope: SCOPE, epoch: from, shard });
+
+    // much later, after the original aged out of every reader's horizon
+    now = T0 + WINDOW * 20;
+    const to = alice.currentEpoch();
+    const blob = await resealer(secret)(entry!.blob, shard, from, to);
+    await transport.putBucket({
+      appScope: SCOPE,
+      epoch: to,
+      shard,
+      entries: [{ tag: crypto.getRandomValues(new Uint8Array(16)), blob }],
+    });
+
+    const bob = openRoom(asIdentity(guest(2), 'bob'), {
+      relay: transport,
+      roomSecret: secret,
+      now: () => now,
+    });
+    const seen = await bob.sync(1);
+    expect(seen.messages).toEqual([]);
     expect(seen.dropped).toEqual([
-      expect.objectContaining({ reason: 'plain presence tag mismatch' }),
+      expect.objectContaining({ reason: 'record from another window' }),
     ]);
+  });
+
+  it('refuses a record whose signed time is far from the window it sits in', async () => {
+    const { transport } = fakeRelay();
+    const secret = createRoomSecret();
+    const alice = openRoom(asIdentity(guest(1), 'alice'), { relay: transport, roomSecret: secret });
+    // written for a window three ahead of its own clock
+    await alice.send('from the future', { epoch: alice.currentEpoch() + 3 });
+    const bob = openRoom(asIdentity(guest(2), 'bob'), {
+      relay: transport,
+      roomSecret: secret,
+      now: () => T0 + WINDOW * 3,
+    });
+    const seen = await bob.sync(1);
+    expect(seen.messages).toEqual([]);
+    expect(seen.dropped).toEqual([
+      expect.objectContaining({ reason: 'record time outside its window' }),
+    ]);
+  });
+
+  it('a record signed for one room does not verify in another the same key writes in', async () => {
+    const signed: Uint8Array[] = [];
+    const id = guest(1);
+    const capturing: RoomIdentity = {
+      pubkey: id.pubkey,
+      name: 'alice',
+      sign: async (data: Uint8Array) => {
+        signed.push(data);
+        return id.sign(data);
+      },
+      verify: id.verify,
+    };
+    const { transport } = fakeRelay();
+    const room = openRoom(capturing, { relay: transport, roomSecret: createRoomSecret() });
+    await room.send('hi');
+    await room.announce('alice');
+    const scopeHash = new Uint8Array(
+      await crypto.subtle.digest('SHA-256', new TextEncoder().encode(SCOPE)),
+    );
+    expect(signed).toHaveLength(2);
+    for (const bytes of signed) {
+      const text = new TextDecoder().decode(bytes.subarray(4, 4 + 'zirc-record-v4'.length));
+      expect(text).toBe('zirc-record-v4');
+      expect(toHex(bytes.subarray(18, 50))).toBe(toHex(scopeHash));
+    }
+  });
+
+  it("refuses presence a member announces under someone else's key", async () => {
+    const { transport } = fakeRelay();
+    const secret = createRoomSecret();
+    const mallory = guest(3);
+    const alicePub = guest(1).pubkey;
+    const forger: RoomIdentity = {
+      pubkey: alicePub,
+      name: 'alice',
+      sign: mallory.sign,
+      verify: mallory.verify,
+    };
+    await openRoom(forger, { relay: transport, roomSecret: secret }).announce('alice');
+    const bob = openRoom(asIdentity(guest(2), 'bob'), { relay: transport, roomSecret: secret });
+    const seen = await bob.sync(1);
+    expect(seen.present).toEqual([]);
+    expect(seen.dropped).toEqual([expect.objectContaining({ reason: 'bad signature' })]);
   });
 
   it('continues a persisted chain head across a fresh session', async () => {
