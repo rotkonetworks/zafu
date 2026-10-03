@@ -293,6 +293,25 @@ const CountUp = ({ text }: { text: string }) => {
   return <Sensitive>{between ?? text}</Sensitive>;
 };
 
+/** the amount the swap pays out, counting up to each new price */
+const YouGet = ({ view, stale, struck }: { view?: Quote; stale: boolean; struck: boolean }) => (
+  <span className='min-w-0 truncate font-display text-2xl text-fg-high'>
+    {view ? (
+      <span
+        className={cn(
+          'transition-opacity duration-300',
+          stale && 'opacity-50',
+          struck && 'line-through',
+        )}
+      >
+        <CountUp text={view.amountOutText} />
+      </span>
+    ) : (
+      <span className='text-fg-dim'>0</span>
+    )}
+  </span>
+);
+
 /** rows glide from where they were when their order changes (FLIP), instead of jumping */
 const useFlip = (list: RefObject<HTMLElement | null>, order: string) => {
   const was = useRef(new Map<string, number>());
@@ -1203,32 +1222,29 @@ export const CrosschainSwap = ({
             <span className='text-xs text-fg-muted'>
               you get{token && isFromZec ? ` · on ${chainName(token.chain)}` : ''}
             </span>
-            <button
-              type='button'
-              onClick={isFromZec ? () => setPickerOpen(true) : flip}
-              aria-label={isFromZec ? 'choose what you get' : undefined}
-              className='flex h-14 items-center justify-between border border-border-soft bg-elev-1 px-3 text-left'
-            >
-              <span className='min-w-0 truncate font-display text-2xl text-fg-high'>
-                {view ? (
-                  <span
-                    className={cn(
-                      'transition-opacity duration-300',
-                      stale && 'opacity-50',
-                      expiredLive && 'line-through',
-                    )}
-                  >
-                    <CountUp text={view.amountOutText} />
-                  </span>
-                ) : (
-                  <span className='text-fg-dim'>0</span>
-                )}
-              </span>
-              <span className='flex items-center gap-1 text-[13px] text-fg-muted lowercase'>
-                {isFromZec ? (tokenQuery.isFetching ? 'reading' : unit) : 'zec'}
-                <span className='i-lucide-chevron-down size-3' />
-              </span>
-            </button>
+            {/* out of zec it picks the token; into zec it only shows the figure (the flip button reverses) */}
+            {isFromZec ? (
+              <button
+                type='button'
+                onClick={() => setPickerOpen(true)}
+                aria-label={`choose what you get · now ${unit}`}
+                className='flex h-14 items-center justify-between border border-border-soft bg-elev-1 px-3 text-left'
+              >
+                <YouGet view={view} stale={stale} struck={expiredLive} />
+                <span className='flex items-center gap-1 text-[13px] text-fg-muted lowercase'>
+                  {tokenQuery.isFetching ? 'reading' : unit}
+                  <span className='i-lucide-chevron-down size-3' />
+                </span>
+              </button>
+            ) : (
+              <output
+                aria-label='what you get, in zec'
+                className='flex h-14 items-center justify-between border border-border-soft bg-elev-1 px-3'
+              >
+                <YouGet view={view} stale={stale} struck={expiredLive} />
+                <span className='text-[13px] text-fg-muted lowercase'>zec</span>
+              </output>
+            )}
           </div>
           {token && (
             <div className='flex flex-col gap-1.5'>
