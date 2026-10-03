@@ -13,6 +13,8 @@ export interface SwapToken {
   /** lowercase, near's chain naming */
   chain: string;
   decimals: number;
+  /** a usd price from the route's list, when it gives one: only ever a default's hint */
+  usd?: number;
 }
 
 export interface QuoteRequest {
@@ -28,6 +30,8 @@ export interface QuoteRequest {
   otherAddress: string;
   /** this wallet signs a t->t with an OP_RETURN (CAPS.opReturn) */
   signsOpReturn?: boolean;
+  /** a price only: no deposit address is issued (1click's dry quote) */
+  dry?: boolean;
 }
 
 /** one part of what a swap costs: a share of what is paid, and its worth in the destination asset */
@@ -75,7 +79,7 @@ export interface Quote {
   timeText?: string;
   /** ms epoch */
   expiresAt?: number;
-  /** where the source asset goes */
+  /** where the source asset goes; empty on a dry quote */
   depositAddress: string;
   /** must travel with the deposit, exactly as given */
   memo?: string;
@@ -100,7 +104,7 @@ export interface SwapProvider {
   id: RouteId;
   /** what the token picker offers; may ask for this route's egress */
   tokens: () => Promise<SwapToken[]>;
-  quote: (req: QuoteRequest) => Promise<Quote>;
+  quote: (req: QuoteRequest, signal?: AbortSignal) => Promise<Quote>;
   /** absent when the route can't be watched from here; `txid` for `watch: 'txid'` quotes */
   status?: (quote: Quote, txid?: string) => Promise<SwapStatusView>;
 }

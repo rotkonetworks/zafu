@@ -13,6 +13,7 @@ import { hasFeature } from '../../../config/networks';
 import { IRONWOOD_MIGRATION } from '../../../config/feature-flags';
 import { PopupPath } from '../paths';
 import { screenTransition } from '../../../utils/navigate';
+import { useSwapPreload } from '../../../hooks/swap-preload';
 
 interface Tile {
   icon: string;
@@ -25,6 +26,7 @@ export const ToolsPage = () => {
   const navigate = useNavigate();
   const activeNetwork = useStore(selectActiveNetwork);
   const identityEnabled = useStore(isIdentityEnabled);
+  const preloadSwap = useSwapPreload();
 
   const go = (path: string) =>
     path.startsWith('https://')
@@ -102,6 +104,7 @@ export const ToolsPage = () => {
               <button
                 key={t.path}
                 onClick={() => go(t.path)}
+                {...(t.path === PopupPath.SWAP ? preloadSwap : {})}
                 className={cn(
                   'flex h-[104px] flex-col justify-between border border-surface-border-soft',
                   'bg-surface-elev-1 p-3.5 text-left transition-colors hover:bg-surface-elev-2',

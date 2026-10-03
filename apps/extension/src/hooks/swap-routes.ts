@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import type { RouteId } from '../state/swap/routes';
+import { lastQuery, saveLast, type SwapLast } from '../state/swap/live';
 
 const KEY = ['swapRoutes'];
 type Chosen = Partial<Record<string, RouteId>>;
@@ -19,4 +20,17 @@ export const useSwapRoutes = () => {
     await localExtStorage.set('swapRoutes', next as Record<string, RouteId>);
   };
   return { chosen, choose };
+};
+
+/** the pair the swap screen reopens on, for this wallet */
+export const useSwapLast = (wallet: string | undefined) => {
+  const queryClient = useQueryClient();
+  const { data } = useQuery(lastQuery);
+  const remember = (last: SwapLast) => {
+    if (wallet) {
+      queryClient.setQueryData(lastQuery.queryKey, { ...data, [wallet]: last });
+      void saveLast(wallet, last).catch(() => undefined);
+    }
+  };
+  return { last: wallet ? data?.[wallet] : undefined, read: !!data, remember };
 };

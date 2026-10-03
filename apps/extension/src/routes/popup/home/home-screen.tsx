@@ -6,6 +6,7 @@ import { PEER_REFERRAL_CODE, PEER_REFERRAL_URL } from '../../../config/ramps';
 import { BalanceHero, type BalanceView } from '../../../components/wallet/balance-hero';
 import { PopupPath } from '../paths';
 import { HomeActions } from './actions';
+import { useSwapPreload } from '../../../hooks/swap-preload';
 import type { HomeLook } from './look';
 
 /**
@@ -58,6 +59,7 @@ export const HomeScreen = ({
 /** the first-funds box, in place of the balance rows */
 export const EmptyBox = ({ look }: { look: HomeLook }) => {
   const navigate = useNavigate();
+  const preloadSwap = useSwapPreload();
   const [buying, setBuying] = useState(false);
   return (
     <section className='flex flex-1 flex-col items-center justify-center gap-3.5 border border-dashed border-surface-border py-10'>
@@ -71,6 +73,7 @@ export const EmptyBox = ({ look }: { look: HomeLook }) => {
             variant='secondary'
             className='h-10 px-[18px] text-[13px]'
             onClick={() => navigate(PopupPath.SWAP)}
+            {...preloadSwap}
           >
             {look.swapInto}
           </Button>
@@ -104,7 +107,11 @@ export const EmptyBox = ({ look }: { look: HomeLook }) => {
             </li>
             <li className='flex flex-col gap-2 border border-border-soft bg-elev-1 p-3'>
               <span className='text-sm text-fg-high'>2 · swap it into zec</span>
-              <Button className='h-10 text-[13px]' onClick={() => navigate(PopupPath.SWAP)}>
+              <Button
+                className='h-10 text-[13px]'
+                onClick={() => navigate(PopupPath.SWAP)}
+                {...preloadSwap}
+              >
                 {look.swapInto ?? 'swap'}
               </Button>
             </li>

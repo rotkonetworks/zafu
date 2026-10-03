@@ -11,7 +11,15 @@ import {
   type SwapQuoteResponse,
   type SwapStatus,
 } from '../near-swap';
-import { costOf, type Cost, type Quote, type SwapProvider, type SwapStatusView } from './provider';
+import { isEgressBlocked } from '../../net/egress';
+import {
+  costOf,
+  type Cost,
+  type Quote,
+  type QuoteRequest,
+  type SwapProvider,
+  type SwapStatusView,
+} from './provider';
 import { toUnits } from './provider';
 
 const TOKENS_FOR_MS = 300_000;
@@ -80,53 +88,73 @@ export const nearProvider: SwapProvider = {
       symbol: t.symbol,
       chain: t.blockchain.toLowerCase(),
       decimals: t.decimals,
+      usd: t.price ?? undefined,
     })),
 
-  quote: async req => {
-    const all = await nearTokens();
-    const zecAssetId = findZecAssetId(all);
-    const token = filterSwappableTokens(all).find(
-      t => t.symbol === req.token.symbol && t.blockchain.toLowerCase() === req.token.chain,
-    );
-    if (!zecAssetId || !token) {
-      throw new Error(`near intents doesn't offer ${req.token.symbol.toLowerCase()} right now`);
-    }
-    const fromZec = req.direction === 'from_zec';
-    const zafuBps = zafuFeeBps('near');
-    const resp: SwapQuoteResponse = await requestQuote({
-      swapType: 'EXACT_INPUT',
-      amount: toUnits(req.amountIn, fromZec ? 8 : token.decimals).toString(),
-      originAsset: fromZec ? zecAssetId : token.assetId,
-      destinationAsset: fromZec ? token.assetId : zecAssetId,
-      recipient: fromZec ? req.otherAddress : req.zcashAddress,
-      refundTo: fromZec ? req.zcashAddress : req.otherAddress,
-      appFeeBps: zafuBps,
-    });
-    const q = resp.quote;
-    const zec = all.find(t => t.assetId === zecAssetId);
-    const [from, to] = fromZec ? [zec, token] : [token, zec];
-    const amountOut = BigInt(q.amountOut || '0');
-    return {
-      route: 'near',
-      amountOut,
-      amountOutText: q.amountOutFormatted,
-      amountInText: q.amountInFormatted,
-      // 1click folds every fee into the amount out; its usd figures, or the
-      // listed prices, tell how much that was
-      cost: nearCost(
-        amountOut,
-        Number(q.amountInUsd) || usd(q.amountIn, from?.decimals ?? 8, from?.price ?? null),
-        Number(q.amountOutUsd) || usd(q.amountOut, to?.decimals ?? 8, to?.price ?? null),
-        zafuBps,
-      ),
-      timeText: q.timeEstimate ? `~${Math.max(1, Math.round(q.timeEstimate / 60))} min` : undefined,
-      expiresAt: q.deadline ? new Date(q.deadline).getTime() : undefined,
-      depositAddress: q.depositAddress,
-      recipient: fromZec ? req.otherAddress : req.zcashAddress,
-      watch: 'deposit',
-      raw: resp,
-    } satisfies Quote;
-  },
+  quote: (req, signal) =>
+    nearQuote(req, signal).catch((e: unknown) => {
+      throw nearRefusal(e, signal);
+    }),
 
   status: async quote => STATUS[(await checkSwapStatus(quote.depositAddress)).status ?? 'none'],
+};
+
+/** 1click's own words never reach the screen: a line of zafu's, or a calm stand-in */
+export const nearRefusal = (e: unknown, signal?: AbortSignal): unknown => {
+  const text = e instanceof Error ? e.message : '';
+  return signal?.aborted || isEgressBlocked(e) || text.startsWith('near intents')
+    ? e
+    : new Error(
+        /too low|at least|minimum/i.test(text)
+          ? 'near intents needs a larger amount for this one'
+          : 'near intents could not quote this right now',
+      );
+};
+
+const nearQuote = async (req: QuoteRequest, signal?: AbortSignal): Promise<Quote> => {
+  const all = await nearTokens();
+  const zecAssetId = findZecAssetId(all);
+  const token = filterSwappableTokens(all).find(
+    t => t.symbol === req.token.symbol && t.blockchain.toLowerCase() === req.token.chain,
+  );
+  if (!zecAssetId || !token) {
+    throw new Error(`near intents doesn't offer ${req.token.symbol.toLowerCase()} right now`);
+  }
+  const fromZec = req.direction === 'from_zec';
+  const zafuBps = zafuFeeBps('near');
+  const resp: SwapQuoteResponse = await requestQuote({
+    swapType: 'EXACT_INPUT',
+    amount: toUnits(req.amountIn, fromZec ? 8 : token.decimals).toString(),
+    originAsset: fromZec ? zecAssetId : token.assetId,
+    destinationAsset: fromZec ? token.assetId : zecAssetId,
+    recipient: fromZec ? req.otherAddress : req.zcashAddress,
+    refundTo: fromZec ? req.zcashAddress : req.otherAddress,
+    appFeeBps: zafuBps,
+    dry: req.dry,
+    signal,
+  });
+  const q = resp.quote;
+  const zec = all.find(t => t.assetId === zecAssetId);
+  const [from, to] = fromZec ? [zec, token] : [token, zec];
+  const amountOut = BigInt(q.amountOut || '0');
+  return {
+    route: 'near',
+    amountOut,
+    amountOutText: q.amountOutFormatted,
+    amountInText: q.amountInFormatted,
+    // 1click folds every fee into the amount out; its usd figures, or the
+    // listed prices, tell how much that was
+    cost: nearCost(
+      amountOut,
+      Number(q.amountInUsd) || usd(q.amountIn, from?.decimals ?? 8, from?.price ?? null),
+      Number(q.amountOutUsd) || usd(q.amountOut, to?.decimals ?? 8, to?.price ?? null),
+      zafuBps,
+    ),
+    timeText: q.timeEstimate ? `~${Math.max(1, Math.round(q.timeEstimate / 60))} min` : undefined,
+    expiresAt: q.deadline ? new Date(q.deadline).getTime() : undefined,
+    depositAddress: q.depositAddress,
+    recipient: fromZec ? req.otherAddress : req.zcashAddress,
+    watch: 'deposit',
+    raw: resp,
+  } satisfies Quote;
 };

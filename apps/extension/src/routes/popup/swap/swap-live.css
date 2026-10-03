@@ -1,0 +1,32 @@
+/* a route's request in flight: a thin line that appears after the route's
+   usual quick answer and fills over its real expected wait, then holds */
+.swap-wait {
+  transform-origin: left;
+  animation: swap-fill var(--over) linear var(--after) both;
+}
+@keyframes swap-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* the time to the next price, draining */
+.swap-drain {
+  animation: swap-drain var(--over) linear both;
+}
+@keyframes swap-drain {
+  to {
+    stroke-dashoffset: var(--len);
+  }
+}
+
+/* still screens: nothing moves, only the words change */
+@media (prefers-reduced-motion: reduce) {
+  .swap-wait,
+  .swap-drain {
+    display: none;
+  }
+}
