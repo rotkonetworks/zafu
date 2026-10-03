@@ -76,7 +76,6 @@ import { useYourAddresses } from '../../../hooks/use-your-addresses';
 import { chainName } from '../../../state/swap/tokens';
 import { TokenSheet } from './token-sheet';
 import { CostList, CostMeta } from './cost-lines';
-import { ThorNameResolver } from '../../../components/thorname-resolver';
 
 export type Step =
   | 'input'
@@ -298,9 +297,6 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const [pickerOpen, setPickerOpen] = useState(!!link);
   const [contactsOpen, setContactsOpen] = useState(false);
   const [otherAddress, setOtherAddress] = useState(link?.link.address ?? '');
-  // the THORName the address was resolved from; it counts only while that address is still in the field
-  const [resolvedName, setResolvedName] = useState<{ name: string; address: string }>();
-  const otherName = resolvedName?.address === otherAddress ? resolvedName.name : undefined;
   const [results, setResults] = useState<RouteResult[]>([]);
   const [picked, setPicked] = useState<RouteId>();
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -342,8 +338,6 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   // only routes zafu can't send yet: shown for comparison, nothing to review
   const view = quote ?? quotes[0];
   const carrier = pair && quote && poolAsset(quote.route, pair)?.carrier;
-  // thornames resolve to thorchain's own chain naming
-  const aliasChain = pair && poolAsset('thor', pair)?.asset.split('.')[0];
   // the deadline on routes is the price's; on the deposit screen it is the window to pay in
   const left = useDeadlineCountdown(
     step === 'routes' || step === 'deposit' ? (view?.expiresAt ?? null) : null,
@@ -436,7 +430,6 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
         zcashAddress,
         zcashTransparent: tAddresses[0],
         otherAddress,
-        otherName,
         signsOpReturn: !!kind && !!CAPS[kind].opReturn,
       });
       const failed = got.find(r => 'error' in r);
@@ -703,14 +696,6 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
             placeholder={isFromZec ? 'recipient address' : 'your address'}
             onContacts={fieldChain ? () => setContactsOpen(true) : undefined}
           >
-            <ThorNameResolver
-              input={otherAddress}
-              chain={aliasChain}
-              onResolve={(address, name) => {
-                setResolvedName({ name, address });
-                setOtherAddress(address);
-              }}
-            />
             {!isFromZec && fieldChain && (
               <label
                 className={cn(
@@ -857,10 +842,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
                   ['you send', `${quote.amountInText || amountIn} ${inUnit}`, true],
                   ['you receive', `${quote.amountOutText} ${outUnit}`, true],
                   ['route', ROUTES[quote.route].label],
-                  [
-                    'recipient',
-                    isFromZec && otherName ? `${otherName} · ${quote.recipient}` : quote.recipient,
-                  ],
+                  ['recipient', quote.recipient],
                   [isFromZec ? 'deposit address' : 'pay to', quote.depositAddress],
                   ...(quote.memo ? [['memo', quote.memo]] : []),
                 ] as [string, string, boolean?][]

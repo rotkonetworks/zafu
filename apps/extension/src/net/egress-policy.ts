@@ -23,7 +23,7 @@ import {
 } from '@repo/wallet/networks/cosmos/chains';
 import { LIVE_REGISTRY_DIR, REGISTRY_EGRESS } from '../transparent/registry-endpoint';
 import { ZCASHME_BASE_URL } from '../services/zcashme/api';
-import { THORNAME_PATH, THORNODE_URLS } from '../services/thornode';
+import { THORNODE_URLS } from '../services/thornode';
 import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../config/contact-discovery-relay';
 import {
   PEOPLE_RELAY,
@@ -322,14 +322,6 @@ export const DESTINATIONS: DestinationSpec[] = [
     gate: { kind: 'optional' },
     urls: () => ['https://mayanode.mayachain.info'],
     hidden: !MAYA_ENABLED,
-  },
-  {
-    id: 'thorname',
-    // the lookup path only (longest prefix wins): a swap opt-in is not a name opt-in
-    label: 'thorchain name lookups',
-    purpose: 'registry',
-    gate: { kind: 'optional' },
-    urls: () => THORNODE_URLS.map(u => `${u}${THORNAME_PATH}`),
   },
   {
     id: 'skip',

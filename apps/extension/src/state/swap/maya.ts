@@ -10,7 +10,7 @@
  * so zec goes in as the same t->t with an OP_RETURN that thorchain takes.
  *
  * Refunds go to whoever paid: naming the refund address in the memo pushes a
- * btc or dash memo past its 80 bytes. Maya resolves MAYANames, not THORNames.
+ * btc or dash memo past its 80 bytes.
  */
 
 import { nodeProvider } from './thornode';
@@ -20,5 +20,4 @@ export const mayaProvider = nodeProvider({
   prefix: '/mayachain',
   urls: ['https://mayanode.mayachain.info'],
   refundInMemo: false,
-  thorNames: false,
 });

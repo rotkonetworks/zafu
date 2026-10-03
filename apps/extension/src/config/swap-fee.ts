@@ -17,13 +17,6 @@ export const NEAR_APP_FEE_OFF_PCT = 0;
 export const NEAR_APP_FEE_RECIPIENT =
   'bdb384d8c6273bf4e40757d57d49ff7931c12b4ddaa838c323e4f93a7263744f';
 
-/**
- * A registered THORName for a future thorchain affiliate; unused while zafu
- * takes nothing there. If that changes, quote with `affiliate` and
- * `affiliate_bps` so the price shown matches the swap that runs.
- */
-export const ZAFU_THORNAME = '';
-
 /** what the production build really charges on near: nothing without a recipient */
 export const zafuListBps = (recipient = NEAR_APP_FEE_RECIPIENT, bps = NEAR_APP_FEE_BPS): number =>
   recipient ? bps : 0;

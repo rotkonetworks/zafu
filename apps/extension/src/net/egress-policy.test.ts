@@ -339,31 +339,7 @@ describe('the zcash tip cross-check', () => {
   });
 });
 
-describe('thorchain names are their own opt-in', () => {
-  const NAME = 'https://thornode.ninerealms.com/thorchain/thorname/alice';
-  const QUOTE = 'https://thornode.ninerealms.com/thorchain/quote/swap?x=1';
-  const optedIn = (optIns: Record<string, 'allowed' | 'blocked'>): EgressInputs => ({
-    ...ZCASH_ONLY,
-    netEgress: { optIns },
-  });
-
-  it('is off by default', () => {
-    expect(outcome(ZCASH_ONLY, NAME)).toBe('opt-in');
-  });
-
-  it('a yes to swaps is not a yes to name lookups, nor the other way', () => {
-    expect(outcome(optedIn({ thorchain: 'allowed' }), QUOTE)).toBe('allow');
-    expect(outcome(optedIn({ thorchain: 'allowed' }), NAME)).toBe('opt-in');
-    expect(outcome(optedIn({ thorname: 'allowed' }), NAME)).toBe('allow');
-    expect(outcome(optedIn({ thorname: 'allowed' }), QUOTE)).toBe('opt-in');
-    expect(
-      outcome(
-        optedIn({ thorname: 'allowed' }),
-        'https://gateway.liquify.com/chain/thorchain_api/thorchain/thorname/alice',
-      ),
-    ).toBe('allow');
-  });
-
+describe('wallets sealed at rest', () => {
   it('still allows the zcash node while the wallets list is sealed at rest', () => {
     const t = compileEgress({
       enabledNetworks: ['zcash'],

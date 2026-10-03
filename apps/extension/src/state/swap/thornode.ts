@@ -44,8 +44,6 @@ export interface NodeChain {
   urls: string[];
   /** name the payer's refund address in the memo; else the chain refunds whoever paid */
   refundInMemo: boolean;
-  /** resolves THORNames in a memo (see `nameInMemo`) */
-  thorNames: boolean;
 }
 
 export interface InboundAddress {
@@ -231,21 +229,6 @@ export const checkMinimum = (
   }
 };
 
-/**
- * A from-zec memo too long for the OP_RETURN may name the destination by its
- * THORName instead, which THORChain resolves to the target chain's alias when
- * it pays. Only then: an address pins what the user reviewed, while a name
- * pays wherever its owner points it by the time the swap runs.
- */
-export const nameInMemo = (memo: string, address: string, name?: string): string => {
-  const parts = memo.split(':');
-  if (!name || parts[2] !== address || memoBytes(memo) <= MAX_MEMO_BYTES) {
-    return memo;
-  }
-  parts[2] = name;
-  return parts.join(':');
-};
-
 /** inbound fee = txSize * gasRate (thorchain docs, Fees), per `gas_rate_units` */
 const GAS: Record<string, { size: bigint; to1e8: bigint; unit: string }> = {
   satsperbyte: { size: 250n, to1e8: 1n, unit: 'sat/byte' },
@@ -349,17 +332,7 @@ export const nodeProvider = (chain: NodeChain): SwapProvider => {
       const q = await quoted.catch((e: unknown) => {
         throw nodeRefusal(name, e, amount, unitIn);
       });
-      // a name stands in only for the destination: thorchain never resolves a refund name
-      const memo =
-        into || !chain.thorNames ? q.memo : nameInMemo(q.memo, destination, req.otherName);
-      checkQuote(
-        name,
-        { ...q, memo },
-        inbound,
-        sourceChain,
-        !into || pool.carrier === 'op_return',
-        memo === q.memo ? destination : req.otherName!,
-      );
+      checkQuote(name, q, inbound, sourceChain, !into || pool.carrier === 'op_return', destination);
       const inUnit = into ? pair.symbol : 'zec';
       checkMinimum(name, q, source, amount, inUnit);
       const outDecimals = into ? 8 : pool.decimals;
@@ -385,7 +358,7 @@ export const nodeProvider = (chain: NodeChain): SwapProvider => {
           : undefined,
         expiresAt: q.expiry * 1000,
         depositAddress: q.inbound_address,
-        memo,
+        memo: q.memo,
         recipient: destination,
         // sending zec in is a t->t transaction with an OP_RETURN output
         notYet: into || req.signsOpReturn ? undefined : 'not available yet',

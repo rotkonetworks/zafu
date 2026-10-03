@@ -1,11 +1,8 @@
 /**
  * THORNode's HTTP API, one GET with failover across public nodes. MAYANode
  * serves the same API, so the nodes are a parameter. No egress ask here: each
- * caller wraps it with its own destination (swap quotes and name lookups are
- * separate opt-ins).
+ * caller wraps it with its own destination.
  */
-
-export const THORNAME_PATH = '/thorchain/thorname';
 
 export const THORNODE_URLS = [
   'https://thornode.ninerealms.com',

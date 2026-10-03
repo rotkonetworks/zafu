@@ -39,8 +39,6 @@ import { FrostAirgapSignFlow } from './frost-multisig';
 import { DontQuitIcon } from './frost-multisig/helpers';
 import { SaveContactModal } from '../../../components/save-contact-modal';
 import { ZcashMeRecipientResolver } from '../../../components/zcashme-recipient-resolver';
-import { ThorNameResolver } from '../../../components/thorname-resolver';
-import { isThorName } from '../../../services/thorname';
 import { parseZcashMeHandle, type ZcashMeProfile } from '../../../services/zcashme/api';
 import { zcashMeLabel } from '../../../services/zcashme/label';
 import { directoryProfileByAddress } from '../../../services/zcashme/directory';
@@ -525,7 +523,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const toLabel = toName ?? shortAddress(to);
   const toHelper: [warn: boolean, text: string] = requestError
     ? [true, requestError]
-    : to && !toValid && !parseZcashMeHandle(to) && !isThorName(to)
+    : to && !toValid && !parseZcashMeHandle(to)
       ? [true, 'please check the address · zafu pays u1 and t1 addresses']
       : toValid
         ? [
@@ -1274,7 +1272,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     setRecipient(p.address);
                   }}
                 />
-                <ThorNameResolver input={recipient} chain='ZEC' onResolve={setRecipient} />
               </ToField>
 
               {/* the active pool only, so it can differ from home's total; max is

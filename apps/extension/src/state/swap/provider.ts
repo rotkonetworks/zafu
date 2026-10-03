@@ -26,8 +26,6 @@ export interface QuoteRequest {
   zcashTransparent?: string;
   /** into zec: the payer's refund address; from zec: where the token goes */
   otherAddress: string;
-  /** the THORName `otherAddress` was resolved from, when it was */
-  otherName?: string;
   /** this wallet signs a t->t with an OP_RETURN (CAPS.opReturn) */
   signsOpReturn?: boolean;
 }

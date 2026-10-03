@@ -2,8 +2,6 @@
  * cosmos chain send form (skip-routed transparent sends)
  */
 
-import { ThorNameResolver } from '../../../components/thorname-resolver';
-import { isThorName, thorChainOf } from '../../../services/thorname';
 import { useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from 'react';
 import { Sensitive } from '../../../components/sensitive';
 import { PopupPath } from '../paths';
@@ -687,9 +685,7 @@ export function CosmosSend({
       {verb} <Sensitive>{`${amount} ${unit}`}</Sensitive> to {toLabel}
     </>
   );
-  const thorChain = thorChainOf('cosmos', effectiveDestChainId);
-  const badRecipient =
-    !!recipient && !recipientValid && !(thorChain && isThorName(recipient.trim()));
+  const badRecipient = !!recipient && !recipientValid;
   const toHelper = badRecipient
     ? ethermintRecipient && !ethermintRecipient.ok
       ? ETHERMINT_RECIPIENT_PROBLEM[ethermintRecipient.problem](ethermintRecipient.prefix)
@@ -761,7 +757,6 @@ export function CosmosSend({
             helper={toHelper}
             onContacts={isPenumbraDest ? undefined : () => setPick('book')}
           >
-            <ThorNameResolver input={recipient} chain={thorChain} onResolve={setRecipient} />
             {isPenumbraDest && selectedKeyInfo?.type === 'mnemonic' && (
               <Button
                 variant='quiet'
