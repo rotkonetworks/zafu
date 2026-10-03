@@ -85,6 +85,7 @@ import {
   type SyncErrorCode,
 } from '../state/sync-failure';
 import { startRun, stopRun, STOP_WAIT_MS, type RunSlot } from './sync-runs';
+import { mergeLoadedNotes, mergeLoadedSpent } from './wallet-state-merge';
 
 export type { SentTxRecord } from './sent-tx-reconcile';
 
@@ -1009,9 +1010,10 @@ interface IronwoodWitnessRecord {
 
 const loadState = async (walletId: string): Promise<WalletState> => {
   const state = getOrCreateWalletState(walletId);
-  state.notes = await idbGetAllByIndex<DecryptedNote>('notes', 'byWallet', walletId);
+  // Read everything before touching `state`: the sync loop can run between
+  // these awaits, and must never see notes whose witnesses aren't attached yet.
+  const notes = await idbGetAllByIndex<DecryptedNote>('notes', 'byWallet', walletId);
   const spentRecords = await idbGetAllByIndex<{ nullifier: string }>('spent', 'byWallet', walletId);
-  state.spentNullifiers = new Set(spentRecords.map(r => r.nullifier));
 
   // attach ironwood witnesses from their dedicated store (orchard witnesses
   // live on the note record itself; ironwood ones are stored separately per
@@ -1023,7 +1025,7 @@ const loadState = async (walletId: string): Promise<WalletState> => {
   );
   if (iwWitnesses.length > 0) {
     const byNullifier = new Map(iwWitnesses.map(w => [w.nullifier, w]));
-    for (const note of state.notes) {
+    for (const note of notes) {
       if (poolOf(note) !== 'ironwood') {
         continue;
       }
@@ -1034,6 +1036,14 @@ const loadState = async (walletId: string): Promise<WalletState> => {
       }
     }
   }
+  // A live sync run owns the note objects (see wallet-state-merge.ts).
+  const syncing = !!state.stop && !state.stop.signal.aborted;
+  state.notes = mergeLoadedNotes(state.notes, notes, syncing);
+  state.spentNullifiers = mergeLoadedSpent(
+    state.spentNullifiers,
+    spentRecords.map(r => r.nullifier),
+    syncing,
+  );
   return state;
 };
 
