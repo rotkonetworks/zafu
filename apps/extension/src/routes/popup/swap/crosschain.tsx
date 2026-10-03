@@ -29,7 +29,7 @@ import { Sensitive } from '../../../components/sensitive';
 import { ScreenHeader } from '../../../components/screen-header';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectGetVaultUnlock } from '../../../state/keyring';
-import { selectActiveZcashWallet } from '../../../state/wallets';
+import { selectActiveZcashWallet, selectZcashIsMainnet } from '../../../state/wallets';
 import { activeAccountIndex, activeZcashStoreId } from '../../../state/pockets';
 import { CAPS, walletKind } from '../../../signing/wallet-kind';
 import { isEgressBlocked } from '../../../net/egress';
@@ -437,7 +437,8 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const navigate = usePopupNav();
   const queryClient = useQueryClient();
   const { address: zcashAddress } = useActiveAddress();
-  const { tAddresses } = useTransparentAddresses(true);
+  const isMainnet = useStore(selectZcashIsMainnet);
+  const { tAddresses } = useTransparentAddresses(isMainnet);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const getVaultUnlock = useStore(selectGetVaultUnlock);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';

@@ -16,7 +16,7 @@ import {
 } from '../../state/keyring';
 import { activePockets, activeZcashStoreId, visiblePockets } from '../../state/pockets';
 import { pocketStoreId } from '../../state/pocket-id';
-import { selectActiveZcashWallet } from '../../state/wallets';
+import { selectZcashIsMainnet } from '../../state/wallets';
 import { checkEgress } from '../../net/egress';
 import { getRootNetwork } from '../../config/networks';
 import { balancesQueryOptions } from '../../hooks/penumbra-balances';
@@ -83,9 +83,8 @@ const history = async ({ client, state }: PreloadCtx) => {
   if (!isZcash(state) || !checkEgress(zidecar).allow) {
     return;
   }
-  const isMainnet = !zidecar.includes('testnet');
   const { tAddresses } = await client.ensureQueryData(
-    activeTransparentAddressesQuery(state, isMainnet),
+    activeTransparentAddressesQuery(state, selectZcashIsMainnet(state)),
   );
   return client.prefetchQuery(
     zcashHistoryQuery(activeZcashStoreId(state), zidecar, tAddresses, true),
@@ -95,9 +94,7 @@ const history = async ({ client, state }: PreloadCtx) => {
 /** the transparent addresses receive shows, keyed as receive reads them (local derivation, cached) */
 const tAddresses: Preload = ({ client, state }) =>
   isZcash(state) &&
-  client.prefetchQuery(
-    activeTransparentAddressesQuery(state, selectActiveZcashWallet(state)?.mainnet ?? true),
-  );
+  client.prefetchQuery(activeTransparentAddressesQuery(state, selectZcashIsMainnet(state)));
 
 const all =
   (...preloads: Preload[]): Preload =>
@@ -127,7 +124,7 @@ export const routePreloads = {
     return (
       isZcash(state) &&
       Promise.all([
-        client.prefetchQuery(activeTransparentAddressesQuery(state, true)),
+        client.prefetchQuery(activeTransparentAddressesQuery(state, selectZcashIsMainnet(state))),
         client.prefetchQuery(zcashWorkerQuery.notes(wallet)),
         wallet && preloadSwapQuote({ client, wallet }),
       ])
