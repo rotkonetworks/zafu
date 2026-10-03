@@ -148,3 +148,37 @@ export const groupInvitePath = (G: string): string =>
 /** one saved contact's route */
 export const contactPath = (contactId: string): string =>
   PopupPath.CONTACT.replace(':contactId', encodeURIComponent(contactId));
+
+/**
+ * Windows that answer a pending request from a site or a device. Closing one
+ * answers that request (as cancelled); sending it home abandons it.
+ */
+export const APPROVAL_ROUTES: readonly string[] = [
+  PopupPath.TRANSACTION_APPROVAL,
+  PopupPath.ORIGIN_APPROVAL,
+  PopupPath.SIGN_APPROVAL,
+  PopupPath.CAPABILITY_APPROVAL,
+  PopupPath.ZCASH_SEND_APPROVAL,
+  PopupPath.KEPLR_APPROVAL,
+  PopupPath.CONTACT_DISCOVERY_APPROVAL,
+  PopupPath.DESTINATION_APPROVAL,
+  PopupPath.CONTACT_PICKER,
+  PopupPath.FROST_APPROVE,
+  PopupPath.PASSKEY_APPROVE,
+  PopupPath.COSMOS_SIGN,
+];
+
+/**
+ * Screens that live outside the app shell: welcome, unlock and the approval
+ * windows. Every other screen keeps the header and the tabs.
+ */
+export const BARE_ROUTES: readonly string[] = [
+  PopupPath.LOGIN,
+  PopupPath.FORGOT_PASSWORD,
+  PopupPath.WELCOME,
+  ...APPROVAL_ROUTES,
+];
+
+/** is `pathname` one of `routes`, or below one? */
+export const matchesRoute = (pathname: string, routes: readonly string[]): boolean =>
+  routes.some(route => pathname === route || pathname.startsWith(route + '/'));
