@@ -32,7 +32,7 @@ const ChainRow = ({
   onExplain,
 }: {
   chain: (typeof CHAINS)[number];
-  onExplain?: () => void;
+  onExplain?: (label: string) => void;
 }) => {
   const navigate = usePopupNav();
   const on = useStore(s => selectEnabledNetworks(s).includes(chain.id));

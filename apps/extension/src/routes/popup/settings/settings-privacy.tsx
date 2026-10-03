@@ -28,7 +28,7 @@ const ZCASHME_MODE_LABEL: Record<ZcashMeMode, string> = {
 /** zcash.me - a Row(value) reading the persisted mode (an external system,
  *  so this is a plain effect, not derived state); the detail screen owns
  *  the mode picker itself (settings-zcashme.tsx). */
-export function ZcashMeRow({ onExplain }: { onExplain?: () => void }) {
+export function ZcashMeRow({ onExplain }: { onExplain?: (label: string) => void }) {
   const navigate = usePopupNav();
   const [mode, setMode] = useState<ZcashMeMode>('off');
   useEffect(() => {
@@ -46,8 +46,15 @@ export function ZcashMeRow({ onExplain }: { onExplain?: () => void }) {
   );
 }
 
-/** what the zcash node learns: memo decoys and the mempool watch, both zidecar's own (a lightwalletd has neither) */
-function ZcashWireRows() {
+/** what the zcash node learns: memo decoys and the mempool watch, both
+ *  zidecar's own (a lightwalletd has neither). shares the screen's one
+ *  explain sheet, like ContactDiscoverySection does, rather than opening
+ *  a second instance. */
+function ZcashWireRows({
+  explainProps,
+}: {
+  explainProps: (id: string) => { onExplain?: (label: string) => void };
+}) {
   const memo = useStore(s => s.networks.networks.zcash.memoSyncStrategy ?? 'private');
   const mempool = useStore(s => s.networks.networks.zcash.mempoolWatch ?? 'off');
   const zidecar = useStore(
@@ -55,7 +62,6 @@ function ZcashWireRows() {
   );
   const setMemo = useStore(s => s.networks.setMemoSyncStrategy);
   const setMempool = useStore(s => s.networks.setMempoolWatch);
-  const { explainProps, sheet } = useExplain();
   if (!zidecar) {
     return null;
   }
@@ -75,7 +81,6 @@ function ZcashWireRows() {
         onChange={v => void setMempool('zcash', v ? 'on' : 'off')}
         {...explainProps('privacy.zcashInstantPending')}
       />
-      {sheet}
     </>
   );
 }
@@ -135,7 +140,7 @@ const PRIVACY_ROWS: readonly {
  * is a standalone section rather than a boolean privacy-slice row. Default OFF:
  * absent/false means `zafu_discover_contacts` refuses with `not_available`.
  */
-export function ContactDiscoverySection({ onExplain }: { onExplain?: () => void }) {
+export function ContactDiscoverySection({ onExplain }: { onExplain?: (label: string) => void }) {
   const { explainProps, sheet: relaySheet } = useExplain();
   const [saved, setSaved] = useState<{
     enabled: boolean;
@@ -254,7 +259,7 @@ export function SettingsPrivacy() {
         <Section title='on screen'>{rows('on screen')}</Section>
         <Section title='network'>
           {rows('network')}
-          {hasFeature(activeNetwork, 'zcash') && <ZcashWireRows />}
+          {hasFeature(activeNetwork, 'zcash') && <ZcashWireRows explainProps={explainProps} />}
           <Row
             type='screen'
             label='everything zafu talks to'

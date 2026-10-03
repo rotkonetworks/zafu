@@ -79,7 +79,7 @@ export const OptionsRow = <T extends string | number>({
   options: readonly { value: T; label: string; desc?: string }[];
   onPick: (v: T) => void;
   /** opens a Sheet explaining this setting, via a small "?" after the label */
-  onExplain?: () => void;
+  onExplain?: (label: string) => void;
 }) => {
   const [open, setOpen] = useState(false);
   return (

@@ -60,7 +60,7 @@ const hostsLine = (hosts: string[]) => {
  *  by id; the row's own label, hosts and "needed" state are the explanation. */
 const explainOf = (d: DestinationView): Explain => ({
   blurb: d.needed
-    ? `a host the networks you have on need to work.`
+    ? 'a host one of your enabled networks needs to work.'
     : 'off until you turn it on; zafu never contacts it otherwise.',
   on: `zafu can reach ${hostsLine(d.hosts)}`,
   off: d.needed

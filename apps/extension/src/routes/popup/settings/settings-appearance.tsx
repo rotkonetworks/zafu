@@ -60,7 +60,7 @@ export const useZafuTheme = () => {
   return { theme: value, loaded, set, restore };
 };
 
-export const ThemeRow = ({ onExplain }: { onExplain?: () => void } = {}) => {
+export const ThemeRow = ({ onExplain }: { onExplain?: (label: string) => void } = {}) => {
   const { theme, set } = useZafuTheme();
   return (
     <OptionsRow
@@ -94,7 +94,7 @@ export const FontRow = ({
   onExplain,
 }: {
   state?: ReturnType<typeof useZafuFont>;
-  onExplain?: () => void;
+  onExplain?: (label: string) => void;
 } = {}) => {
   const own = useZafuFont();
   const { font, set } = state ?? own;
@@ -131,7 +131,7 @@ export const ApprovalsRow = ({
   onExplain,
 }: {
   state?: ReturnType<typeof useApprovalSurface>;
-  onExplain?: () => void;
+  onExplain?: (label: string) => void;
 } = {}) => {
   const own = useApprovalSurface();
   const { surface, set } = state ?? own;

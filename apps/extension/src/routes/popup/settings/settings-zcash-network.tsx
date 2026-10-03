@@ -68,7 +68,7 @@ export const ZcashNodeSheet = ({
   open: boolean;
   onOpenChange: (o: boolean) => void;
   className?: string;
-  onExplain?: () => void;
+  onExplain?: (label: string) => void;
 }) => {
   const endpoint = useStore(s => s.networks.networks.zcash.endpoint) ?? '';
   const saved = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';

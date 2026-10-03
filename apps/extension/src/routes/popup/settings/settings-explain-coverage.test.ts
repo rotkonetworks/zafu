@@ -31,7 +31,11 @@ const WRAPPER_TAGS = [
   'AutoLockRow',
   'SigningRow',
   'NodeSheet',
+  'ZcashNodeSheet',
   'DestinationRow',
+  'ZcashMeRow',
+  'ContactDiscoverySection',
+  'ChainRow',
 ];
 
 interface Finding {

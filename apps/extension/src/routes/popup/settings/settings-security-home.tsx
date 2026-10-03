@@ -24,7 +24,7 @@ const useZcashOn = () => {
   return enabled.length === 0 || enabled.includes('zcash');
 };
 
-const AutoLockRow = ({ onExplain }: { onExplain?: () => void }) => {
+const AutoLockRow = ({ onExplain }: { onExplain?: (label: string) => void }) => {
   const { minutes, set } = useAutoLock();
   return (
     <OptionsRow
@@ -37,7 +37,7 @@ const AutoLockRow = ({ onExplain }: { onExplain?: () => void }) => {
   );
 };
 
-const SigningRow = ({ onExplain }: { onExplain?: () => void }) => {
+const SigningRow = ({ onExplain }: { onExplain?: (label: string) => void }) => {
   const setSetting = useStore(s => s.privacy.setSetting);
   return (
     <OptionsRow

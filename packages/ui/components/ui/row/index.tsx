@@ -20,8 +20,10 @@ export interface RowBaseProps {
   description?: string;
   disabled?: boolean;
   className?: string;
-  /** opens a Sheet explaining this setting, via a small "?" after the label */
-  onExplain?: () => void;
+  /** opens a Sheet explaining this setting, via a small "?" after the label.
+   *  called with the row's own label, so the sheet can title itself without
+   *  the caller repeating the label a second time. */
+  onExplain?: (label: string) => void;
   /** where a press goes (a route path), so the app can preload it on intent */
   preload?: string;
 }
@@ -55,7 +57,7 @@ export function Row(props: RowProps) {
               type='button'
               onClick={e => {
                 e.stopPropagation();
-                onExplain();
+                onExplain(label);
               }}
               aria-label={`explain ${label}`}
               className='inline-flex size-4 shrink-0 items-center justify-center border border-surface-border text-[10px] text-fg-dim'

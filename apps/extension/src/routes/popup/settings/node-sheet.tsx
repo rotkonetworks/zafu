@@ -77,7 +77,7 @@ export const NodeSheet = ({
   /** column-align the sheet where the page itself isn't full width (onboarding) */
   className?: string;
   /** opens a Sheet explaining node choice, via a small "?" after the label */
-  onExplain?: () => void;
+  onExplain?: (label: string) => void;
 }) => {
   const [step, setStep] = useState<'list' | 'own'>('list');
   const [draft, setDraft] = useState('');

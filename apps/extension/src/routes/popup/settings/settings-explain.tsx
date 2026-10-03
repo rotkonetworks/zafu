@@ -74,23 +74,34 @@ export const SETTINGS_EXPLAIN: Record<string, Explain> = {
   },
   'privacy.contactDiscoveryRelay': {
     blurb: 'which relay carries the sealed presence signs for contact discovery.',
-    on: 'a relay you set yourself; the default still never sees your contact list, only that your sign was left',
-    off: 'leaving it blank uses the built-in default relay',
+    footer:
+      'leaving it blank uses the built-in default relay; either way, the relay never sees your contact list, only that a sealed sign was left',
   },
   'privacy.zcashMe': {
-    blurb: 'find people by their zcash.me name.',
-    on: 'zafu asks zcash.me about the names you look up',
-    off: 'zafu never contacts zcash.me',
+    blurb: 'find people by their zcash.me name (opt-in; off by default).',
+    states: [
+      { label: 'off', text: 'nothing ever leaves the wallet for this' },
+      {
+        label: 'local directory',
+        text: 'one bulk download of the whole directory; every lookup after that is a local read - zcash.me learns that you use the feature, not who you pay',
+      },
+      {
+        label: 'live lookup',
+        text: '/name is resolved on demand - zcash.me sees your ip and every name you look up',
+      },
+    ],
   },
   'privacy.zcashMemoDecoys': {
     blurb: 'how zafu asks your node for the memos on your zcash transactions.',
-    on: 'zafu mixes in extra, random bucket requests alongside the real ones, so the node cannot tell which buckets are actually yours',
-    off: 'zafu asks only for the exact buckets your memos are in - fewer requests, roughly twice as fast, but the node sees precisely which ones you wanted',
+    on: 'zafu adds 2 random decoy buckets for every real one it needs (and shuffles the order), so the node cannot tell which of the buckets it fetched are actually yours',
+    off: 'zafu fetches only the real buckets - a third as many requests, at double the concurrency',
+    footer:
+      'either way zafu asks for a bucket of blocks, never one transaction by id - the node learns a range of blocks you were interested in, never which transaction inside it is yours',
   },
   'privacy.zcashInstantPending': {
     blurb: 'shows an incoming or outgoing zcash payment before it is mined.',
-    on: 'zafu keeps a live connection to your node polling the mempool every 10 seconds, so the node sees you checking in continuously',
-    off: 'zafu never opens that connection; a payment only appears once it is mined into a block',
+    on: 'while zafu is open, it asks your node for the whole mempool roughly every 10 seconds, so the node sees a wallet checking in on that cadence - it does not learn which pending payment is yours, since it hands back the whole mempool each time',
+    off: 'zafu never asks about the mempool; a payment only appears once it is mined into a block',
   },
   'network.keepSyncingClosed': {
     blurb: 'lets penumbra keep reading new blocks after the last zafu window closes.',
@@ -99,25 +110,19 @@ export const SETTINGS_EXPLAIN: Record<string, Explain> = {
   },
   'network.zcashNode': {
     blurb: 'which node zafu reads the zcash chain from, and asks for your memos.',
-    on: 'a node you pick yourself, run by whoever operates it',
-    off: 'the recommended default node',
-    footer: 'any node you use learns your ip and roughly when you sync, never your keys',
+    footer: 'any node you pick - preset or your own - learns your ip and roughly when you sync, never your keys',
   },
   'network.penumbraNode': {
     blurb: 'which node zafu reads the penumbra chain from.',
-    on: 'a node you pick yourself, run by whoever operates it',
-    off: 'the recommended default node',
-    footer: 'any node you use learns your ip and roughly when you sync, never your keys',
+    footer: 'any node you pick - preset or your own - learns your ip and roughly when you sync, never your keys',
   },
   'network.ownNode': {
-    blurb: 'point zafu at a node address you choose, instead of a built-in preset.',
-    on: 'that node (and whoever runs it) is who zafu now talks to',
-    off: 'a built-in preset, picked for you',
+    blurb: 'point zafu at a node address you choose, instead of one of the built-in presets.',
+    footer: 'whoever runs that node sees the same things a preset node would: your ip and roughly when you sync',
   },
   'network.ibcChains': {
     blurb: 'cosmos chains reachable over ibc from your penumbra balance.',
-    on: 'zafu also talks to that chain\'s own node when you use it',
-    off: 'zafu never contacts a chain you have not turned on',
+    footer: 'zafu only contacts a chain\'s own node once you turn that chain on',
   },
   'network.ibcChainToggle': {
     blurb: 'turns this ibc chain on, so you can hold and move its asset.',
@@ -127,14 +132,17 @@ export const SETTINGS_EXPLAIN: Record<string, Explain> = {
   'network.totalIn': {
     blurb: 'the unit the penumbra total on your home screen is shown in.',
     states: [
-      { label: 'um', text: 'the native unit; no price lookup' },
-      { label: 'usd', text: 'a fiat estimate; uses the same price lookup as "price display"' },
+      { label: 'um', text: 'the native unit; no price lookup at all' },
+      {
+        label: 'usd',
+        text: 'a fiat estimate from recent swap prices your own penumbra node already recorded - no separate external price service is asked',
+      },
     ],
   },
   'network.zcashStartsFrom': {
     blurb: 'the block zafu starts scanning from for this wallet.',
-    on: 'a date or block you set yourself - good when you know roughly when it was first used',
-    off: 'auto; zafu scans recent blocks for you, which can miss an old wallet\'s early activity',
+    footer:
+      'leaving it on auto scans recent blocks for you, which can miss an old wallet\'s early activity - set a date or block if you know roughly when it was first used',
   },
   'network.zcashEnable': {
     blurb: 'turns the zcash network on or off in zafu.',
@@ -170,8 +178,11 @@ export const SETTINGS_EXPLAIN: Record<string, Explain> = {
   },
   'security.autoLock': {
     blurb: 'how long zafu stays unlocked with nothing happening before it locks itself.',
-    on: 'a shorter time means less of a window if you leave zafu open and walk away',
-    off: 'a longer time is more convenient, with more of that window open',
+    states: [
+      { label: 'off', text: 'zafu never locks itself on idle time' },
+      { label: '1, 5, 15, 30 or 60 min', text: 'the shorter the time, the less of a window if you leave zafu open and walk away' },
+    ],
+    footer: '15 min by default',
   },
   'security.txSigning': {
     blurb: 'when zafu asks for your password to sign a transaction.',
@@ -188,25 +199,23 @@ export const SETTINGS_EXPLAIN: Record<string, Explain> = {
   },
 };
 
-/** one id open at a time, so every row in a screen shares one sheet */
+/** one id open at a time, so every row in a screen shares one sheet. the
+ *  sheet's title is the row's own label (handed back by onExplain), not the
+ *  lookup id - ids are for the table key, never UI copy. */
 export const useExplain = () => {
-  const [id, setId] = useState<string | null>(null);
-  const explain = id ? SETTINGS_EXPLAIN[id] : undefined;
+  const [open, setOpen] = useState<{ id: string; label: string } | null>(null);
+  const explain = open ? SETTINGS_EXPLAIN[open.id] : undefined;
   return {
     /** spread onto a Row - a no-op when the id has no explain copy */
     explainProps: (explainId: string) =>
-      SETTINGS_EXPLAIN[explainId] ? { onExplain: () => setId(explainId) } : {},
-    sheet: id && explain && (
-      <ExplainSheet title={id} explain={explain} onOpenChange={() => setId(null)} />
+      SETTINGS_EXPLAIN[explainId]
+        ? { onExplain: (label: string) => setOpen({ id: explainId, label }) }
+        : {},
+    sheet: open && explain && (
+      <ExplainSheet title={open.label} explain={explain} onOpenChange={() => setOpen(null)} />
     ),
   };
 };
-
-/** the title a sheet opened by id shows: the id's last segment, de-camelCased
- *  ('zcashMemoDecoys' -> 'zcash memo decoys'). ids are for lookup, never UI
- *  copy, so this is only a fallback where the caller has no nicer label. */
-const titleOf = (id: string): string =>
-  (id.split('.').pop() ?? id).replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase();
 
 export const ExplainSheet = ({
   title,
@@ -217,7 +226,7 @@ export const ExplainSheet = ({
   explain: Explain;
   onOpenChange: (open: boolean) => void;
 }) => (
-  <Sheet open title={titleOf(title)} onOpenChange={onOpenChange}>
+  <Sheet open title={title} onOpenChange={onOpenChange}>
     <p className='text-sm leading-relaxed text-fg'>{explain.blurb}</p>
     {(explain.on != null || explain.off != null) && (
       <div className='flex flex-col border border-surface-border-soft'>
