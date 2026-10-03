@@ -157,6 +157,8 @@ const ENCRYPTED_KEYS = new Set<string>([
   'peopleRooms',
   'peopleThreads',
   'peopleInvites',
+  // an open buy: the seller's handle, the base address, the 1click deposit
+  'openBuy',
 ]);
 
 /** should this storage key be encrypted? */
