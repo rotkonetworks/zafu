@@ -6,6 +6,7 @@ import i021f225fc5 from '../../assets/registry-icons/021f225fc5.png';
 import i030f5b0e47 from '../../assets/registry-icons/030f5b0e47.svg';
 import i03667423f6 from '../../assets/registry-icons/03667423f6.svg';
 import i04d1004375 from '../../assets/registry-icons/04d1004375.png';
+import i05516edcea from '../../assets/registry-icons/05516edcea.svg';
 import i055b238dbc from '../../assets/registry-icons/055b238dbc.png';
 import i094aef24b8 from '../../assets/registry-icons/094aef24b8.png';
 import i09d3558d61 from '../../assets/registry-icons/09d3558d61.png';
@@ -15,35 +16,46 @@ import i0e091992b8 from '../../assets/registry-icons/0e091992b8.png';
 import i0eaba6fb93 from '../../assets/registry-icons/0eaba6fb93.png';
 import i0f23654af5 from '../../assets/registry-icons/0f23654af5.svg';
 import i10b805e232 from '../../assets/registry-icons/10b805e232.png';
+import i10c519d288 from '../../assets/registry-icons/10c519d288.png';
 import i1109c55323 from '../../assets/registry-icons/1109c55323.svg';
 import i12c54c243c from '../../assets/registry-icons/12c54c243c.svg';
 import i1508b32c6d from '../../assets/registry-icons/1508b32c6d.svg';
 import i15ef186680 from '../../assets/registry-icons/15ef186680.svg';
+import i16495ceff1 from '../../assets/registry-icons/16495ceff1.svg';
 import i173c7ff18d from '../../assets/registry-icons/173c7ff18d.png';
 import i17fb8d83eb from '../../assets/registry-icons/17fb8d83eb.svg';
 import i182a31712b from '../../assets/registry-icons/182a31712b.png';
 import i18ded46569 from '../../assets/registry-icons/18ded46569.png';
+import i18eaddb26d from '../../assets/registry-icons/18eaddb26d.png';
 import i1923bd6069 from '../../assets/registry-icons/1923bd6069.png';
+import i195ac6e068 from '../../assets/registry-icons/195ac6e068.svg';
 import i1a2f86a165 from '../../assets/registry-icons/1a2f86a165.png';
 import i1b294209cc from '../../assets/registry-icons/1b294209cc.png';
+import i1b6550ca94 from '../../assets/registry-icons/1b6550ca94.svg';
 import i1baa8fe565 from '../../assets/registry-icons/1baa8fe565.png';
 import i1be53c44a4 from '../../assets/registry-icons/1be53c44a4.svg';
+import i1f1e4b28e7 from '../../assets/registry-icons/1f1e4b28e7.png';
+import i1f652839e8 from '../../assets/registry-icons/1f652839e8.svg';
 import i210971545d from '../../assets/registry-icons/210971545d.svg';
 import i216c6efea4 from '../../assets/registry-icons/216c6efea4.svg';
+import i2305741ed0 from '../../assets/registry-icons/2305741ed0.svg';
 import i2465aa073c from '../../assets/registry-icons/2465aa073c.png';
 import i254d6b3e49 from '../../assets/registry-icons/254d6b3e49.png';
 import i259850e3f4 from '../../assets/registry-icons/259850e3f4.png';
 import i26915a1426 from '../../assets/registry-icons/26915a1426.png';
 import i27d6bd057f from '../../assets/registry-icons/27d6bd057f.svg';
 import i2a03e698ce from '../../assets/registry-icons/2a03e698ce.png';
+import i2acae9f1b3 from '../../assets/registry-icons/2acae9f1b3.png';
 import i2b00b8ddab from '../../assets/registry-icons/2b00b8ddab.png';
 import i2f0a3ef718 from '../../assets/registry-icons/2f0a3ef718.png';
 import i306596012a from '../../assets/registry-icons/306596012a.png';
 import i310dd877df from '../../assets/registry-icons/310dd877df.png';
 import i31fa83f2c2 from '../../assets/registry-icons/31fa83f2c2.png';
+import i32652c8f55 from '../../assets/registry-icons/32652c8f55.svg';
 import i333ea8b1d8 from '../../assets/registry-icons/333ea8b1d8.svg';
 import i3368ee443d from '../../assets/registry-icons/3368ee443d.svg';
 import i34b8468c3b from '../../assets/registry-icons/34b8468c3b.png';
+import i355cae6342 from '../../assets/registry-icons/355cae6342.svg';
 import i3581aca4aa from '../../assets/registry-icons/3581aca4aa.png';
 import i35b6e74b8e from '../../assets/registry-icons/35b6e74b8e.svg';
 import i372d6a99b0 from '../../assets/registry-icons/372d6a99b0.png';
@@ -53,11 +65,14 @@ import i397847b876 from '../../assets/registry-icons/397847b876.svg';
 import i39798ab9cb from '../../assets/registry-icons/39798ab9cb.png';
 import i3a0c96d473 from '../../assets/registry-icons/3a0c96d473.png';
 import i3a7002721a from '../../assets/registry-icons/3a7002721a.png';
+import i3b6d8d5d0f from '../../assets/registry-icons/3b6d8d5d0f.svg';
 import i3bc9dcbde5 from '../../assets/registry-icons/3bc9dcbde5.svg';
 import i3f00fb7ec3 from '../../assets/registry-icons/3f00fb7ec3.png';
 import i3ff85848ca from '../../assets/registry-icons/3ff85848ca.png';
 import i40c2da483c from '../../assets/registry-icons/40c2da483c.png';
 import i41d943dd96 from '../../assets/registry-icons/41d943dd96.png';
+import i42db579db1 from '../../assets/registry-icons/42db579db1.svg';
+import i437256e19e from '../../assets/registry-icons/437256e19e.svg';
 import i441417b857 from '../../assets/registry-icons/441417b857.png';
 import i468f93f10c from '../../assets/registry-icons/468f93f10c.png';
 import i47256f25ce from '../../assets/registry-icons/47256f25ce.png';
@@ -67,7 +82,9 @@ import i4a2f48e34b from '../../assets/registry-icons/4a2f48e34b.png';
 import i4d07206805 from '../../assets/registry-icons/4d07206805.png';
 import i4ee7b0fc7a from '../../assets/registry-icons/4ee7b0fc7a.png';
 import i4f1d5c10b7 from '../../assets/registry-icons/4f1d5c10b7.png';
+import i5239e837b7 from '../../assets/registry-icons/5239e837b7.svg';
 import i52d3c2bb10 from '../../assets/registry-icons/52d3c2bb10.png';
+import i537e96ab93 from '../../assets/registry-icons/537e96ab93.png';
 import i559401a29e from '../../assets/registry-icons/559401a29e.png';
 import i580b8f217c from '../../assets/registry-icons/580b8f217c.png';
 import i596f810aeb from '../../assets/registry-icons/596f810aeb.svg';
@@ -81,12 +98,15 @@ import i63a61e5db4 from '../../assets/registry-icons/63a61e5db4.png';
 import i651fd1c3fd from '../../assets/registry-icons/651fd1c3fd.png';
 import i66441b161c from '../../assets/registry-icons/66441b161c.svg';
 import i66c14b9469 from '../../assets/registry-icons/66c14b9469.svg';
+import i67874348ee from '../../assets/registry-icons/67874348ee.svg';
 import i68f65fd331 from '../../assets/registry-icons/68f65fd331.svg';
+import i6ac397b47d from '../../assets/registry-icons/6ac397b47d.png';
 import i6ae4668bb3 from '../../assets/registry-icons/6ae4668bb3.svg';
 import i6d0420ff93 from '../../assets/registry-icons/6d0420ff93.png';
 import i71479bc69c from '../../assets/registry-icons/71479bc69c.svg';
 import i7177b164b2 from '../../assets/registry-icons/7177b164b2.svg';
 import i72d41db298 from '../../assets/registry-icons/72d41db298.svg';
+import i763de23890 from '../../assets/registry-icons/763de23890.svg';
 import i76a215ca49 from '../../assets/registry-icons/76a215ca49.svg';
 import i76b58bf33f from '../../assets/registry-icons/76b58bf33f.png';
 import i772f5ae348 from '../../assets/registry-icons/772f5ae348.svg';
@@ -99,6 +119,7 @@ import i7f6edc5f10 from '../../assets/registry-icons/7f6edc5f10.png';
 import i825f611496 from '../../assets/registry-icons/825f611496.png';
 import i853a575510 from '../../assets/registry-icons/853a575510.png';
 import i853b0190e7 from '../../assets/registry-icons/853b0190e7.png';
+import i896eda8b98 from '../../assets/registry-icons/896eda8b98.png';
 import i8989afdca1 from '../../assets/registry-icons/8989afdca1.png';
 import i89a2b79afa from '../../assets/registry-icons/89a2b79afa.png';
 import i8bc1674803 from '../../assets/registry-icons/8bc1674803.png';
@@ -107,9 +128,11 @@ import i90d13fdbeb from '../../assets/registry-icons/90d13fdbeb.png';
 import i90d9d74757 from '../../assets/registry-icons/90d9d74757.png';
 import i952480dd23 from '../../assets/registry-icons/952480dd23.png';
 import i96a43f3561 from '../../assets/registry-icons/96a43f3561.png';
+import i9765513cf0 from '../../assets/registry-icons/9765513cf0.svg';
 import i97a5ee4b50 from '../../assets/registry-icons/97a5ee4b50.png';
 import i98239ebcd8 from '../../assets/registry-icons/98239ebcd8.png';
 import i9836891aec from '../../assets/registry-icons/9836891aec.png';
+import i98d6466451 from '../../assets/registry-icons/98d6466451.svg';
 import i99b7c8b38c from '../../assets/registry-icons/99b7c8b38c.svg';
 import i99f0ded1df from '../../assets/registry-icons/99f0ded1df.png';
 import i9a350ee8f7 from '../../assets/registry-icons/9a350ee8f7.png';
@@ -122,6 +145,7 @@ import ia06fdbda1d from '../../assets/registry-icons/a06fdbda1d.svg';
 import ia2206a48af from '../../assets/registry-icons/a2206a48af.svg';
 import ia26b545c11 from '../../assets/registry-icons/a26b545c11.png';
 import ia2be258f84 from '../../assets/registry-icons/a2be258f84.png';
+import ia2fe7b18d0 from '../../assets/registry-icons/a2fe7b18d0.svg';
 import ia4e123cb6a from '../../assets/registry-icons/a4e123cb6a.png';
 import ia5625149a8 from '../../assets/registry-icons/a5625149a8.png';
 import ia5bfd7cf2c from '../../assets/registry-icons/a5bfd7cf2c.svg';
@@ -141,19 +165,24 @@ import ib9daafa508 from '../../assets/registry-icons/b9daafa508.png';
 import ibd201b6ebb from '../../assets/registry-icons/bd201b6ebb.png';
 import ibe07b30e31 from '../../assets/registry-icons/be07b30e31.png';
 import ibef990e9d2 from '../../assets/registry-icons/bef990e9d2.png';
+import ibfcef7d025 from '../../assets/registry-icons/bfcef7d025.svg';
 import ic0234644b7 from '../../assets/registry-icons/c0234644b7.png';
+import ic065da09b1 from '../../assets/registry-icons/c065da09b1.svg';
 import ic12b3a66dd from '../../assets/registry-icons/c12b3a66dd.png';
 import ic1eae3bc4f from '../../assets/registry-icons/c1eae3bc4f.svg';
 import ic35402c892 from '../../assets/registry-icons/c35402c892.svg';
 import ic46726e45e from '../../assets/registry-icons/c46726e45e.svg';
 import ic4f4df77dc from '../../assets/registry-icons/c4f4df77dc.png';
+import ic65ff6e1d6 from '../../assets/registry-icons/c65ff6e1d6.svg';
 import ic6ae2a6eed from '../../assets/registry-icons/c6ae2a6eed.png';
 import ic6c2c8bb5e from '../../assets/registry-icons/c6c2c8bb5e.svg';
 import icb61bc6307 from '../../assets/registry-icons/cb61bc6307.png';
 import icbb7bcbf4c from '../../assets/registry-icons/cbb7bcbf4c.png';
 import icbbed31233 from '../../assets/registry-icons/cbbed31233.png';
+import id14e044256 from '../../assets/registry-icons/d14e044256.png';
 import id242921d7f from '../../assets/registry-icons/d242921d7f.svg';
 import id35e262080 from '../../assets/registry-icons/d35e262080.png';
+import id6105a934c from '../../assets/registry-icons/d6105a934c.png';
 import id6bd3c857c from '../../assets/registry-icons/d6bd3c857c.svg';
 import id9defa02a3 from '../../assets/registry-icons/d9defa02a3.png';
 import idec2a2b971 from '../../assets/registry-icons/dec2a2b971.svg';
@@ -173,6 +202,7 @@ import if06927e235 from '../../assets/registry-icons/f06927e235.svg';
 import if34c63bf0a from '../../assets/registry-icons/f34c63bf0a.png';
 import if3518d2c3d from '../../assets/registry-icons/f3518d2c3d.png';
 import if3d610bea8 from '../../assets/registry-icons/f3d610bea8.png';
+import if67c166211 from '../../assets/registry-icons/f67c166211.svg';
 import if728596cce from '../../assets/registry-icons/f728596cce.png';
 import if7e98cc438 from '../../assets/registry-icons/f7e98cc438.png';
 import ifa2d1608dd from '../../assets/registry-icons/fa2d1608dd.png';
@@ -180,6 +210,7 @@ import ifa90b737ca from '../../assets/registry-icons/fa90b737ca.svg';
 import ifb4962443e from '../../assets/registry-icons/fb4962443e.png';
 import ifc3aaa441c from '../../assets/registry-icons/fc3aaa441c.png';
 import ifefe569bb4 from '../../assets/registry-icons/fefe569bb4.png';
+import iff91a93148 from '../../assets/registry-icons/ff91a93148.png';
 import iffa1bb4e17 from '../../assets/registry-icons/ffa1bb4e17.png';
 
 const BY_URL: Record<string, string> = {
@@ -199,10 +230,22 @@ const BY_URL: Record<string, string> = {
     ie119d2e96f,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/avail/images/avail.svg':
     ie119d2e96f,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/avalanche/images/wavax.svg':
+    ic065da09b1,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/base/images/cbbtc.png':
+    i437256e19e,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/base/images/cbbtc.svg':
+    i437256e19e,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/base/images/cbdoge.png':
+    i537e96ab93,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/binancesmartchain/images/bnb.png':
     if06927e235,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/binancesmartchain/images/bnb.svg':
     if06927e235,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/binancesmartchain/images/wbnb.png':
+    ic65ff6e1d6,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/binancesmartchain/images/wbnb.svg':
+    ic65ff6e1d6,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/bitcoin/images/btc.png':
     i35b6e74b8e,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/bitcoin/images/btc.svg':
@@ -215,8 +258,20 @@ const BY_URL: Record<string, string> = {
     icbbed31233,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/dogecoin/images/doge.svg':
     icbbed31233,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/aave.svg':
+    ibfcef7d025,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/ape.png':
+    i2acae9f1b3,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/axs.svg':
+    i05516edcea,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/beast.png':
     i825f611496,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/busd.png':
+    i3b6d8d5d0f,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/busd.svg':
+    i3b6d8d5d0f,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/cbeth.png':
+    i18eaddb26d,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/eth-white.png':
     i3368ee443d,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/eth-white.svg':
@@ -225,20 +280,38 @@ const BY_URL: Record<string, string> = {
     ifa90b737ca,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/eure.svg':
     ifa90b737ca,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/frax.svg':
+    i2305741ed0,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/glto.png':
     i1b294209cc,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/glto.svg':
     i1b294209cc,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/lbtc.png':
+    i9765513cf0,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/lbtc.svg':
+    i9765513cf0,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/link.png':
     i1be53c44a4,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/link.svg':
     i1be53c44a4,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/mkr.svg':
+    i42db579db1,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/ox.png':
+    i1f1e4b28e7,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/pepe.png':
     i39798ab9cb,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/pepe.svg':
     i39798ab9cb,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/rai.png':
+    i896eda8b98,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/reth.png':
+    i10c519d288,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/sfrxeth.svg':
+    i16495ceff1,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/shib.svg':
     ia6d5c18819,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/steth.svg':
+    i1b6550ca94,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/uni.svg':
     i306596012a,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/usdc.png':
@@ -255,10 +328,30 @@ const BY_URL: Record<string, string> = {
     ib68f66b0bd,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/wbtc.svg':
     ib68f66b0bd,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/weth.svg':
+    ia2fe7b18d0,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/wsteth.svg':
+    i195ac6e068,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/xcn.png':
+    i6ac397b47d,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/yieldeth.png':
+    i1f652839e8,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/yieldeth.svg':
+    i1f652839e8,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/ethereum/images/yum.png':
+    id6105a934c,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/fantom/images/ftm.png':
+    if67c166211,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/fantom/images/ftm.svg':
+    if67c166211,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/filecoin/images/fil.png':
     i68f65fd331,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/filecoin/images/fil.svg':
     i68f65fd331,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/filecoin/images/wfil.png':
+    id14e044256,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/filecoin/images/wfil.svg':
+    id14e044256,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/internetcomputer/images/ckbtc.png':
     i216c6efea4,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/internetcomputer/images/ckbtc.svg':
@@ -271,6 +364,14 @@ const BY_URL: Record<string, string> = {
     ia5bfd7cf2c,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/litecoin/images/ltc.svg':
     ia5bfd7cf2c,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/mantle/images/fbtc.png':
+    i763de23890,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/mantle/images/fbtc.svg':
+    i763de23890,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/moonbeam/images/glmr.png':
+    iff91a93148,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/moonbeam/images/glmr.svg':
+    iff91a93148,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/movement/images/move.png':
     i094aef24b8,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/movement/images/move.svg':
@@ -287,6 +388,10 @@ const BY_URL: Record<string, string> = {
     ia2206a48af,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/polygon/images/matic-purple.svg':
     ia2206a48af,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/polygon/images/wmatic.png':
+    i355cae6342,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/polygon/images/wmatic.svg':
+    i355cae6342,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/rootstock/images/rbtc.png':
     i66441b161c,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/_non-cosmos/rootstock/images/rbtc.svg':
@@ -321,6 +426,18 @@ const BY_URL: Record<string, string> = {
     i00e7309216,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/aioz/images/aioz.svg':
     i00e7309216,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/axelar/images/axl.png':
+    i5239e837b7,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/axelar/images/axl.svg':
+    i5239e837b7,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/axelar/images/dai.png':
+    i32652c8f55,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/axelar/images/dai.svg':
+    i32652c8f55,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/axelar/images/usdc.png':
+    i67874348ee,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/axelar/images/usdc.svg':
+    i67874348ee,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/babylon/images/eBABY.svg':
     i3bc9dcbde5,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/celestia/images/celestia.png':
@@ -623,6 +740,10 @@ const BY_URL: Record<string, string> = {
     iaf2488d2ef,
   'https://raw.githubusercontent.com/cosmos/chain-registry/master/osmosis/images/ymos.png':
     i853a575510,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/zigchain/images/zigchain.png':
+    i98d6466451,
+  'https://raw.githubusercontent.com/cosmos/chain-registry/master/zigchain/images/zigchain.svg':
+    i98d6466451,
   'https://raw.githubusercontent.com/penumbrafi/registry/main/images/ghostinnet.png': i98239ebcd8,
   'https://raw.githubusercontent.com/penumbrafi/registry/main/images/penumbra-favicon.png':
     i41d943dd96,
@@ -650,7 +771,21 @@ const BY_URL: Record<string, string> = {
   'https://raw.githubusercontent.com/penumbrafi/registry/main/images/zec-hub.png': i4a2f48e34b,
 };
 
+/** registry.penumbra.fi mirrors these GitHub paths; both forms name one icon */
+const MIRROR: [string, string][] = [
+  [
+    'https://registry.penumbra.fi/images/',
+    'https://raw.githubusercontent.com/penumbrafi/registry/main/images/',
+  ],
+  [
+    'https://registry.penumbra.fi/cosmos/chain-registry/',
+    'https://raw.githubusercontent.com/cosmos/chain-registry/',
+  ],
+];
+const canonical = (url: string) =>
+  MIRROR.reduce((s, [m, g]) => (s.startsWith(m) ? g + s.slice(m.length) : s), url);
+
 /** the registry icons this build ships; any other url falls back to a monogram */
 export const installRegistryIcons = (): void => {
-  setBundledIconResolver((url: string) => BY_URL[url]);
+  setBundledIconResolver((url: string) => BY_URL[canonical(url)]);
 };
