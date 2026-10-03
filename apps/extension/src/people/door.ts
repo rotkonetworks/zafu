@@ -3,9 +3,9 @@
  *
  * A group is a sealed zirc room (`zafu-group-v1`, 4 KiB entries) whose roster
  * is a zirc channel log the founder writes: genesis, `+v` per member. The
- * room secret never goes into a code or a link. The code (`673-chaos-mail`)
+ * room secret never goes into a code or a link. The code (`673-chaos-mail-kite`)
  * opens a DOOR: a second sealed room, `zafu-door-v1`, keyed by
- * HKDF(code, "zafu-group-door-v1"), where
+ * scrypt(code, "zafu-group-door-v2"), where
  *
  *   founder  -> `card`   the group's name, its genesis id G and the founder's key
  *   joiner   -> `ask`    their room key for G, their name, their X-Wing key
@@ -13,18 +13,38 @@
  *
  * and nothing else. The relay keeps a door an hour.
  *
- * What the door protects, plainly: the code is low entropy, so whoever guesses
- * it reads the card and the asks (names and public keys). They cannot open an
- * invite: it is sealed to the joiner's own X-Wing key, derived per room. A
- * guesser can post a fake ask; the founder's "allow" is the defence, and it
- * shows the seal and short XID of who is asking.
+ * The code: three digits and three words, about 43 bits. The last word is
+ * not random: it is 11 bits of SHA-256 over the first three parts and the
+ * founder's key, so the code names who made the door.
+ *
+ * What the door protects, plainly:
+ *
+ *   - Whoever holds the code reads the card and the asks (names and public
+ *     keys). They cannot open an invite: it is sealed to the joiner's own
+ *     X-Wing key, derived per room. A holder can post a fake ask; the
+ *     founder's "allow" is the defence, and it shows the seal and short XID of
+ *     who is asking.
+ *   - The relay sees the door's shard on every read and write, so it could try
+ *     every code offline. The code is stretched with scrypt (N 2^16, r 8, p 1:
+ *     64 MiB, a quarter to half a second in a popup), so that is about 2^43
+ *     memory-hard evaluations per door within its hour: not a table lookup.
+ *   - A joiner takes the card whose founder the code's last word names, signed
+ *     by that founder's key (every zirc record is signed by its author). A
+ *     self-chosen timestamp decides nothing. If two different founders both
+ *     match - someone who holds the code ground a key to fit the 11 bits - the
+ *     joiner refuses the door instead of guessing. The real founder's card is
+ *     there from the moment the code exists, so a code holder can deny the
+ *     door, not take it over.
+ *
+ * Doors from before the scrypt code (two words) open nothing here; a door
+ * lives an hour, so the founder makes a new one.
  *
  * Every body is `zg1:<kind>:<base64url(lp(field) || lp(field) ...)>`, the
  * length-prefixed shape zid signs with, so a second implementation can parse
  * it without guessing.
  */
 
-import { hkdf } from '@noble/hashes/hkdf';
+import { scryptAsync } from '@noble/hashes/scrypt';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { openXWing, sealXWing } from '@zafu/pq';
@@ -52,15 +72,44 @@ const pick = (n: number): number => {
   }
 };
 
-export const makeCode = (): string => {
-  const words = wordlists['english'] ?? [];
-  const word = () => words[pick(words.length)]!;
-  return `${String(pick(1000)).padStart(3, '0')}-${word()}-${word()}`;
+const WORDS = (): string[] => wordlists['english'] ?? [];
+
+/** the first three parts of a code, `673-chaos-mail` */
+const codeBase = (code: string): string => normalizeCode(code).split('-').slice(0, 3).join('-');
+
+/**
+ * The code's last word: 11 bits of
+ * SHA-256(lp("zafu-door-founder-v1") || lp(base) || founderKey).
+ */
+export const founderWord = (base: string, founder: string): string => {
+  const h = sha256(lpAll(['zafu-door-founder-v1', base, hexToBytes(founder)]));
+  return WORDS()[((h[0]! << 3) | (h[1]! >> 5)) & 0x7ff]!;
 };
 
-/** the door's room secret: HKDF-SHA256(code, info "zafu-group-door-v1") */
-export const doorSecret = (code: string): Uint8Array =>
-  hkdf(sha256, enc.encode(normalizeCode(code)), undefined, enc.encode('zafu-group-door-v1'), 32);
+/** a fresh code for a door this founder opens: three digits, two words, the founder's word */
+export const makeCode = (founder: string): string => {
+  const words = WORDS();
+  const word = () => words[pick(words.length)]!;
+  const base = `${String(pick(1000)).padStart(3, '0')}-${word()}-${word()}`;
+  return `${base}-${founderWord(base, founder)}`;
+};
+
+/** the code was made by this founder: its last word names their key */
+export const codeNames = (code: string, founder: string): boolean =>
+  normalizeCode(code).split('-')[3] === founderWord(codeBase(code), founder);
+
+/**
+ * scrypt cost for the door secret: N 2^16, r 8, p 1, so 64 MiB and roughly a
+ * quarter to half a second in a popup, paid once per code by the founder and
+ * once by each joiner. The relay, which sees each door's shard, pays it for
+ * every code it tries; at ~2^43 codes that keeps a door's code out of reach for
+ * its hour, and the memory keeps GPUs from making it cheap.
+ */
+export const DOOR_KDF = { N: 2 ** 16, r: 8, p: 1, dkLen: 32 } as const;
+
+/** the door's room secret: scrypt(code, salt "zafu-group-door-v2") */
+export const doorSecret = (code: string): Promise<Uint8Array> =>
+  scryptAsync(enc.encode(normalizeCode(code)), enc.encode('zafu-group-door-v2'), DOOR_KDF);
 
 // -- the record codec --------------------------------------------------------
 

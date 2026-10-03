@@ -13,7 +13,7 @@ import { ScreenHeader } from '../../../components/screen-header';
 import { viaLine } from '../../../links/land';
 import { peopleAsk, useMyRooms, useWatchRoom } from '../../../people/client';
 import { RelaySlot } from '../../../people/relay-slot';
-import { CODE_RE, normalizeCode } from '../../../people/protocol';
+import { CODE_RE, OLD_CODE_RE, normalizeCode } from '../../../people/protocol';
 import type { DoorCard } from '../../../people/groups';
 import { PopupPath, groupPath } from '../paths';
 
@@ -22,6 +22,7 @@ type Step =
   | { kind: 'card'; card: DoorCard }
   | { kind: 'nothing' }
   | { kind: 'no-relay' }
+  | { kind: 'unclear' }
   | { kind: 'failed' };
 
 export function GroupJoinPage() {
@@ -59,7 +60,11 @@ export function GroupJoinPage() {
         live &&
         setStep({
           kind:
-            e instanceof Error && /not allowed yet|blocked/.test(e.message) ? 'no-relay' : 'failed',
+            e instanceof Error && /not allowed yet|blocked/.test(e.message)
+              ? 'no-relay'
+              : e instanceof Error && e.message.includes('unclear')
+                ? 'unclear'
+                : 'failed',
         }),
     );
     return () => {
@@ -87,7 +92,7 @@ export function GroupJoinPage() {
         >
           <Input
             aria-label='code'
-            placeholder='673-chaos-mail'
+            placeholder='673-chaos-mail-kite'
             value={typed}
             onChange={e => setTyped(e.target.value)}
             autoFocus
@@ -95,6 +100,11 @@ export function GroupJoinPage() {
           <Button type='submit' disabled={!CODE_RE.test(normalizeCode(typed))}>
             open
           </Button>
+          {OLD_CODE_RE.test(code || normalizeCode(typed)) && (
+            <span className='text-[11px] text-fg-muted'>
+              this code is from an older zafu. please ask for a new one.
+            </span>
+          )}
         </form>
       </div>
     );
@@ -131,7 +141,9 @@ export function GroupJoinPage() {
                 ? 'this code opens nothing right now. a code works for an hour after it is made.'
                 : step.kind === 'no-relay'
                   ? 'a group needs the relay · nothing was read'
-                  : 'sorry, zafu could not read this code. please try again.'}
+                  : step.kind === 'unclear'
+                    ? 'this code fits two different people, so zafu will not guess. please ask for a new code.'
+                    : 'sorry, zafu could not read this code. please try again.'}
           </span>
         )}
       </div>

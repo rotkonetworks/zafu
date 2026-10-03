@@ -26,6 +26,7 @@ import { bytesToHex } from '@noble/hashes/utils';
 import { shortXid, xidOf, type XidKeys } from '../state/identity';
 import {
   CODE_RE,
+  codeNames,
   DOOR_MS,
   DOOR_SCOPE,
   decodeWire,
@@ -130,7 +131,7 @@ export const createGroups = (deps: GroupDeps) => {
       }),
     ];
     const names = { [me.pubkey]: me.name! };
-    const code = makeCode();
+    const code = makeCode(me.pubkey);
     const at = now();
     const base = {
       walletId,
@@ -156,7 +157,7 @@ export const createGroups = (deps: GroupDeps) => {
         members: rosterOf({ genesis, records }, names, at),
       },
     };
-    const door = openDoor(room, code, at);
+    const door = await openDoor(room, code, at);
     await svc.api.addRoom(room);
     await svc.api.addRoom(door);
     await postRoster(svc.api, room);
@@ -164,13 +165,13 @@ export const createGroups = (deps: GroupDeps) => {
     return { id: room.id, code };
   };
 
-  const openDoor = (room: PeopleRoom, code: string, at: number): PeopleRoom => ({
+  const openDoor = async (room: PeopleRoom, code: string, at: number): Promise<PeopleRoom> => ({
     id: doorId(room.group!.G),
     walletId: room.walletId,
     kind: 'door',
     name: room.name,
     appScope: DOOR_SCOPE,
-    secret: bytesToHex(doorSecret(code)),
+    secret: bytesToHex(await doorSecret(code)),
     size: GROUP_ROOM_PLAINTEXT_BYTES,
     relay: room.relay,
     signer: room.signer,
@@ -258,8 +259,8 @@ export const createGroups = (deps: GroupDeps) => {
       throw new Error('only the founder can invite');
     }
     await ensureGate(deps, room.relay);
-    const code = makeCode();
-    const door = openDoor(room, code, now());
+    const code = makeCode(room.group.founder);
+    const door = await openDoor(room, code, now());
     await svc.api.addRoom(door);
     await postCard(svc.api, door, room);
     return { code };
@@ -289,17 +290,29 @@ export const createGroups = (deps: GroupDeps) => {
     const room = new Room(ephemeralIdentity(), {
       appScope: DOOR_SCOPE,
       channel: '#zafu',
-      roomSecret: doorSecret(code),
+      roomSecret: await doorSecret(code),
       relay: deps.transport(relay, GROUP_ROOM_PLAINTEXT_BYTES, svc.signal()),
       plaintextBytes: GROUP_ROOM_PLAINTEXT_BYTES,
       now: () => Math.floor(now() / 1000),
     });
     const { messages } = await room.sync(12);
-    const card = messages
-      .map(m => ({ m, w: decodeWire(m.body) }))
-      .filter(x => x.w?.kind === 'card' && x.w.founder === x.m.author)
-      .sort((a, b) => b.m.ts - a.m.ts)[0];
-    if (!card || card.w?.kind !== 'card') {
+    // a card counts when it is signed by the founder it names (zirc verified
+    // the author's signature) and the code's last word names that founder.
+    // Nobody's timestamp decides: two different founders that both fit mean
+    // someone holding the code ground a key to match, and the door is refused.
+    const cards = messages.flatMap(m => {
+      const w = decodeWire(m.body);
+      return w?.kind === 'card' && w.founder === m.author && codeNames(code, w.founder)
+        ? [{ m, w }]
+        : [];
+    });
+    const founders = new Set(cards.map(c => c.w.founder));
+    if (founders.size > 1) {
+      throw new Error('this door is unclear');
+    }
+    // the founder's own newest card: the count may have grown since the first
+    const card = cards.sort((a, b) => b.m.seq - a.m.seq)[0];
+    if (!card) {
       return null;
     }
     const { G, group, from, count, founder } = card.w;
@@ -326,7 +339,7 @@ export const createGroups = (deps: GroupDeps) => {
       kind: 'door',
       name: card.group,
       appScope: DOOR_SCOPE,
-      secret: bytesToHex(doorSecret(code)),
+      secret: bytesToHex(await doorSecret(code)),
       size: GROUP_ROOM_PLAINTEXT_BYTES,
       relay,
       signer: { gen, G: card.G },

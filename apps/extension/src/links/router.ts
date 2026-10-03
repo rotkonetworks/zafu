@@ -81,7 +81,7 @@ const CHAIN = /^[a-z0-9]{1,16}$/;
 /** chain addresses across the swap service: ascii, no spaces, no markup */
 const FOREIGN_ADDRESS = /^[A-Za-z0-9._:-]{3,128}$/;
 const AMOUNT = /^(\d{1,12})(?:\.(\d{1,18}))?$/;
-const ROOM_CODE = /^\d{3}-[a-z]{2,12}-[a-z]{2,12}$/;
+const ROOM_CODE = /^\d{3}(?:-[a-z]{2,12}){3}$/;
 const CARD = /^[A-Za-z0-9_-]{16,2048}$/;
 /** a penumbra base denom: `upenumbra`, `transfer/channel-4/uusdc`, ... */
 const DENOM = /^[A-Za-z0-9][A-Za-z0-9/._-]{0,127}$/;

@@ -16,8 +16,17 @@ import { GROUP_ROOM_PLAINTEXT_BYTES, Room, ZAFU_GROUP_APP_SCOPE } from '@zafu/zi
 import { deriveRoomKeys } from '../state/identity';
 import { createPeopleService, threadKey } from './service';
 import { createGroups, doorId, groupId } from './groups';
-import { decodeWire, DOOR_SCOPE, doorSecret, encodeWire, openInviteBody, CODE_RE } from './door';
-import { identityOf } from './keys';
+import {
+  codeNames,
+  decodeWire,
+  DOOR_SCOPE,
+  doorSecret,
+  encodeWire,
+  makeCode,
+  openInviteBody,
+  CODE_RE,
+} from './door';
+import { ephemeralIdentity, identityOf } from './keys';
 import type { PeopleRoom, Thread } from './vault';
 
 const relayBoard = () => {
@@ -168,7 +177,7 @@ describe('a group through its door', () => {
     const eve = deriveRoomKeys('zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong', 0, G);
     const door = new Room(identityOf(eve), {
       appScope: DOOR_SCOPE,
-      roomSecret: doorSecret(code),
+      roomSecret: await doorSecret(code),
       relay: transport(),
       plaintextBytes: GROUP_ROOM_PLAINTEXT_BYTES,
       now: () => Math.floor(clock.t / 1000),
@@ -186,6 +195,63 @@ describe('a group through its door', () => {
       (invite as { sealed: Uint8Array }).sealed,
     );
     expect(body.secret).toBe(a.room(groupId(G))?.secret);
+  });
+
+  test('the code names its founder: a code holder posting a newer card does not take the door', async () => {
+    const transport = relayBoard();
+    const clock = { t: Date.UTC(2026, 9, 3, 12) };
+    const a = wallet('wa', ALICE, transport, clock);
+    const b = wallet('wb', BOB, transport, clock);
+    const { id, code } = (await a.op('group-create', { name: 'treasury' })) as unknown as {
+      id: string;
+      code: string;
+    };
+    const G = id.slice(2);
+    const door = async (who: ReturnType<typeof ephemeralIdentity>) =>
+      new Room(who, {
+        appScope: DOOR_SCOPE,
+        roomSecret: await doorSecret(code),
+        relay: transport(),
+        plaintextBytes: GROUP_ROOM_PLAINTEXT_BYTES,
+        now: () => Math.floor(clock.t / 1000),
+      });
+    const fakeCard = (founder: string) =>
+      encodeWire({
+        kind: 'card',
+        G: 'ee'.repeat(16),
+        founder,
+        group: 'treasury',
+        from: 'alice',
+        count: 1,
+      });
+
+    // a later card from someone the code does not name: ignored
+    clock.t += 60_000;
+    let eve = ephemeralIdentity();
+    while (codeNames(code, eve.pubkey)) {
+      eve = ephemeralIdentity();
+    }
+    await (await door(eve)).send(fakeCard(eve.pubkey), { kind: 'action' });
+    expect(await b.op('door-peek', { code })).toMatchObject({ G, group: 'treasury' });
+
+    // a key ground to fit the code's last word: two founders fit, so the door is refused
+    let ground = ephemeralIdentity();
+    while (!codeNames(code, ground.pubkey)) {
+      ground = ephemeralIdentity();
+    }
+    await (await door(ground)).send(fakeCard(ground.pubkey), { kind: 'action' });
+    await expect(b.op('door-peek', { code })).rejects.toThrow(/unclear/);
+  });
+
+  test('a code is three digits and three words, the last naming its founder', () => {
+    const founder = ephemeralIdentity().pubkey;
+    const code = makeCode(founder);
+    expect(code).toMatch(CODE_RE);
+    expect(codeNames(code, founder)).toBe(true);
+    // the same digits and words with any other last word do not name them
+    const parts = code.split('-');
+    const swapped = [...parts.slice(0, 3), parts[3] === 'kite' ? 'mail' : 'kite'].join('-');
+    expect(codeNames(swapped, founder)).toBe(false);
   });
 
   test('a roster record the founder did not write is refused', async () => {
