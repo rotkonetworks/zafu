@@ -269,6 +269,10 @@ reliability fixes.
 - Withdrawing to Noble or Injective offers your own wallet as the destination,
   with a max-amount shortcut.
 - Burner addresses rotate: a fresh chain address per use, rate-limited.
+- Cosmos and Injective sends now have a memo field - the tag most exchanges
+  require to credit a deposit - threaded through both same-chain sends and IBC
+  transfers. A memo that looks like a recovery phrase (mostly BIP-39 words) is
+  flagged, since that free-text field is published on-chain in the clear.
 
 ### Reliability
 
