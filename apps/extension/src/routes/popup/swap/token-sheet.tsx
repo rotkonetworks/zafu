@@ -4,7 +4,7 @@
  * a token or chain without one gets a monogram.
  */
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
@@ -42,8 +42,11 @@ export function TokenSheet({
   tokens,
   loading,
   onPick,
+  lead,
 }: {
   title: string;
+  /** a row above the chains (pay with cash, into zec) */
+  lead?: ReactNode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tokens: readonly SwapToken[];
@@ -87,6 +90,7 @@ export function TokenSheet({
         </Button>
       )}
       <div className='min-h-0 overflow-y-auto'>
+        {!searching && !chain && lead}
         {loading && tokens.length === 0 ? (
           empty('reading the routes')
         ) : searching || chain ? (

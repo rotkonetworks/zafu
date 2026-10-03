@@ -104,6 +104,7 @@ import { chainLabel, chainOfSwap, isAddressOn } from '../../../addresses/kind';
 import { useYourAddresses } from '../../../hooks/use-your-addresses';
 import { chainName } from '../../../state/swap/tokens';
 import { TokenSheet } from './token-sheet';
+import { BuyCashRow } from '../../../components/buy-cash-row';
 import { CostList, CostMeta } from './cost-lines';
 import './swap-live.css';
 
@@ -1165,6 +1166,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
           tokens={tokens}
           loading={tokenQuery.isFetching}
           onPick={t => choosePair(direction, t)}
+          lead={isFromZec ? undefined : <BuyCashRow />}
         />
         {fieldChain && (
           <AddressSheet

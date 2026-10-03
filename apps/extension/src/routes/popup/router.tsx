@@ -10,7 +10,8 @@ import { settingsRoutes } from './settings/routes';
 import { IRONWOOD_MIGRATION } from '../../config/feature-flags';
 import { screen, type PreloadHandle } from './route-modules';
 import { routePreloads } from './route-preloads';
-import { preloadTarget, registerRoutePreload } from './preload';
+import { registerRoutePreload } from './preload';
+import { BUY_PRELOAD, preloadBuyPage } from '../../buy/open';
 
 /**
  * Skeleton placeholder while the first screen hydrates (its loaders and its
@@ -261,7 +262,7 @@ export const popupRoutes: RouteObject[] = [
 
 // targets that are not routes: the wallets panel opens over any screen
 registerRoutePreload('sheet:wallets', routePreloads.wallets);
-// the buy sheet's next step is the swap: opening it warms the swap
-registerRoutePreload('sheet:buy', () => preloadTarget(PopupPath.SWAP));
+// buy.html opens in its own tab: intent on a buy entry warms its code, never its data
+registerRoutePreload(BUY_PRELOAD, preloadBuyPage);
 
 export const popupRouter = createHashRouter(popupRoutes);
