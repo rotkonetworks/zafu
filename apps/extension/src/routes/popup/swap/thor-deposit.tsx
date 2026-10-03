@@ -1,10 +1,10 @@
 /**
  * Swap zec out over a THORNode-protocol route. The deposit is a t->t from
- * this pocket's transparent address to the vault with the memo in an
- * OP_RETURN, and refunds come back to that address. When
- * the address holds too little, a first step moves the shortfall there from
- * the shielded pool. Each step is reviewed and confirmed on its own; nothing
- * moves on until the user says so.
+ * the swap's own fresh transparent address (claimed for this swap alone) to
+ * the vault with the memo in an OP_RETURN, and change and refunds come back
+ * to that same address. When the address holds too little, a first step
+ * moves the shortfall there from the shielded pool. Each step is reviewed and
+ * confirmed on its own; nothing moves on until the user says so.
  */
 
 import { useEffect, useState } from 'react';
@@ -26,7 +26,7 @@ import { fromUnits } from '../../../state/swap/provider';
 import { ROUTES } from '../../../state/swap/routes';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { usePoolNotes } from '../../../hooks/zcash-pool-balances';
-import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
+import type { SwapTAddress } from '../../../hooks/use-transparent-addresses';
 import { quoteSend } from '../send/spendable';
 import { Main, PrivacyLine, Review, Stopped, shortAddress } from '../send/send-ui';
 
@@ -55,17 +55,20 @@ const SHORT = {
 export const ThorDeposit = ({
   quote,
   amountZat,
+  swapT,
   onSent,
   onBack,
   onExpired,
 }: {
   quote: Quote;
   amountZat: bigint;
+  /** the swap's own transparent address, claimed when it was confirmed */
+  swapT: SwapTAddress;
   onSent: (txid: string) => void;
   onBack: () => void;
   onExpired: () => void;
 }) => {
-  const tAddress = useTransparentAddresses(true).tAddresses[0];
+  const tAddress = swapT.address;
   const walletId = useStore(selectEffectiveKeyInfo)?.id;
   const storeId = useStore(activeZcashStoreId) ?? walletId;
   const pocket = useStore(activeAccountIndex);
@@ -76,19 +79,18 @@ export const ThorDeposit = ({
   const [phase, setPhase] = useState<Phase>({ at: 'planning' });
   const [moved, setMoved] = useState(false);
 
-  const req = tAddress
-    ? {
-        tAddress,
-        to: quote.depositAddress,
-        amountZat: amountZat.toString(),
-        memo: quote.memo ?? '',
-        mainnet: true,
-      }
-    : undefined;
+  const req = {
+    tAddress,
+    tIndex: swapT.index,
+    to: quote.depositAddress,
+    amountZat: amountZat.toString(),
+    memo: quote.memo ?? '',
+    mainnet: true,
+  };
 
   // price the deposit from the address's coins, and again while a move confirms
   useEffect(() => {
-    if (!req || (phase.at !== 'planning' && phase.at !== 'moving')) {
+    if (phase.at !== 'planning' && phase.at !== 'moving') {
       return;
     }
     let live = true;
@@ -135,7 +137,7 @@ export const ThorDeposit = ({
         'zcash',
         storeId!,
         zidecarUrl,
-        tAddress!,
+        tAddress,
         plan.short,
         '',
         pocket,
@@ -154,7 +156,7 @@ export const ThorDeposit = ({
       const { txid } = await sendTransparentDepositInWorker(
         storeId!,
         zidecarUrl,
-        { ...req!, reviewedFee: plan.fee },
+        { ...req, reviewedFee: plan.fee },
         vault,
       );
       onSent(txid);
@@ -189,14 +191,14 @@ export const ThorDeposit = ({
         <Review
           title='first, move zec'
           meta='1 / 2'
-          lead='to your transparent address'
+          lead="to this swap's own transparent address"
           amount={zec(phase.plan.short)}
           unit='zec'
           rows={[
             [
               'to',
               <span key='to' className='font-mono'>
-                {shortAddress(tAddress!)}
+                {shortAddress(tAddress)}
               </span>,
             ],
             ['fee', <Sensitive key='fee'>{`${zec(fee)} zec`}</Sensitive>],
@@ -225,7 +227,7 @@ export const ThorDeposit = ({
             [
               'refunds to',
               <span key='refund' className='font-mono'>
-                {shortAddress(tAddress!)}
+                {shortAddress(tAddress)}
               </span>,
             ],
           ]}
@@ -250,7 +252,7 @@ export const ThorDeposit = ({
     planning: 'reading your transparent address',
     moving: moved
       ? 'moved · waiting for the network to confirm it, then the swap'
-      : 'moving zec to your transparent address',
+      : "moving zec to this swap's transparent address",
     paying: 'sending the deposit',
   };
   return (

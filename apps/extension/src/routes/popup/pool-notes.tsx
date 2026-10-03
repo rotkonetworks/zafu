@@ -369,6 +369,7 @@ const TransparentSection = ({
         hasMnemonic={hasMnemonic}
         watchOnly={watchOnly}
         tAddresses={tAddresses}
+        funded={new Set(utxos.map(u => u.address)).size}
         isMainnet={isMainnet}
         zidecarUrl={zidecarUrl}
       />

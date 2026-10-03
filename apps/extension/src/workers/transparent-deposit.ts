@@ -5,16 +5,20 @@
  * public data, has SpendKeys sign it, checks the signed bytes pay exactly what
  * was reviewed, and broadcasts.
  *
- * Every input comes from the one address `tAddress` (the pocket's index 0), and
- * change returns to it, because THORChain refunds to whoever funded vin[0].
+ * Every input comes from the one address `tAddress` (the swap's own fresh
+ * t-branch index `tIndex`), and change returns to it, because THORChain
+ * refunds to whoever funded vin[0]. Each swap has its own address, so no two
+ * swaps share inputs, change or refunds on chain.
  */
 
 import { transparentAddressToScriptHex } from '../ledger/address';
 import type { SpendKeys } from './hot-sign';
 
 export interface DepositRequest {
-  /** the pocket's transparent address at index 0: funds, change and refunds */
+  /** the swap's own transparent address: funds, change and refunds */
   tAddress: string;
+  /** its t-branch index in the pocket: the key that signs */
+  tIndex: number;
   /** the vault, paid at vout 0 */
   to: string;
   amountZat: string;
@@ -170,7 +174,7 @@ export const sendDeposit = async (
   const built = JSON.parse(
     wasm.build_unsigned_transparent_transaction(
       utxosJson(utxos),
-      keys.transparent_pubkey(0),
+      keys.transparent_pubkey(req.tIndex),
       req.to,
       BigInt(req.amountZat),
       height + 1,
@@ -182,7 +186,11 @@ export const sendDeposit = async (
   if (String(built.fee) !== req.reviewedFee) {
     throw new Error(FEE_MOVED);
   }
-  const txHex = keys.sign_shielding(0, built.unsigned_tx_hex, JSON.stringify(built.sighashes));
+  const txHex = keys.sign_shielding(
+    req.tIndex,
+    built.unsigned_tx_hex,
+    JSON.stringify(built.sighashes),
+  );
   checkDeposit(txHex, {
     toScript: await transparentAddressToScriptHex(req.to, req.mainnet),
     amountZat: BigInt(req.amountZat),

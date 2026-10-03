@@ -36,7 +36,7 @@ import { isEgressBlocked } from '../../../net/egress';
 import { requestEgressOptIn } from '../../../net/egress-opt-in';
 import { EgressBlockedStatus } from '../../../shared/components/egress-blocked-status';
 import { useActiveAddress } from '../../../hooks/use-address';
-import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
+import { useSwapTAddress, type SwapTAddress } from '../../../hooks/use-transparent-addresses';
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
 import { useSwapLast, useSwapRoutes } from '../../../hooks/swap-routes';
 import { swapWallet } from '../../../hooks/swap-preload';
@@ -437,7 +437,8 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const navigate = usePopupNav();
   const queryClient = useQueryClient();
   const { address: zcashAddress } = useActiveAddress();
-  const { tAddresses } = useTransparentAddresses(true);
+  // a thorchain swap's own transparent address: a look for prices, claimed on confirm
+  const swapTNext = useSwapTAddress(true, queryClient);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const getVaultUnlock = useStore(selectGetVaultUnlock);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
@@ -478,6 +479,9 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
     was?: Quote;
     checked?: true;
   }>();
+  // the fresh t-address this swap claimed (thorchain); kept across a backed-out
+  // review or an expired price so a retry reuses it, dropped once the swap ends
+  const [swapT, setSwapT] = useState<SwapTAddress>();
   const [checking, setChecking] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [riskAcknowledged, setRiskAcknowledged] = useState(false);
@@ -546,7 +550,8 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const askAmount = typedAmount === undefined ? amountIn : settledAmount;
   const askAddress = typedAddress === undefined ? otherAddress : settledAddress;
   const signsOpReturn = !!kind && !!CAPS[kind].opReturn;
-  const zcashTransparent = tAddresses[0];
+  // thorchain pays (and refunds) a t-address: each swap its own, never the pocket's shown one
+  const zcashTransparent = swapT?.address ?? swapTNext.next?.address;
   const usable = parseFloat(askAmount ?? '') > 0 && !!askAddress && fits(askAddress);
   const req = useMemo<QuoteRequest | undefined>(
     () =>
@@ -773,13 +778,16 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
     if (!firm) {
       return;
     }
-    const { req } = firm;
     if (firm.checked) {
-      return confirm(firm.quote, req);
+      return confirm(firm.quote, firm.req);
     }
     const ask = (firmAsk.current = new AbortController());
     setChecking(true);
     try {
+      // a THORNode route touches a t-address: this swap claims its own before the firm price
+      const t = firm.quote.route !== 'near' ? (swapT ?? (await swapTNext.claim())) : undefined;
+      setSwapT(t);
+      const req = t ? { ...firm.req, zcashTransparent: t.address } : firm.req;
       const got = await PROVIDERS[firm.quote.route]!.quote({ ...req, dry: false }, ask.signal);
       if (ask.signal.aborted) {
         return;
@@ -945,6 +953,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const reset = () => {
     setStep('input');
     setFirm(undefined);
+    setSwapT(undefined);
     setStatus(undefined);
     setDepositTxid(undefined);
     setError(undefined);
@@ -1307,11 +1316,12 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
     );
   }
 
-  if (step === 'thor-out' && deal && firm) {
+  if (step === 'thor-out' && deal && firm && swapT) {
     return (
       <ThorDeposit
         quote={deal}
         amountZat={toUnits(firm.req.amountIn, 8)}
+        swapT={swapT}
         onSent={txid => {
           setDepositTxid(txid);
           setStep('polling');

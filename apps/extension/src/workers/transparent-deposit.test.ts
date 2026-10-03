@@ -95,7 +95,7 @@ describe('deposit on the real wasm', () => {
     return { chain, broadcast };
   };
 
-  const req = { tAddress: 'unused-by-the-fake', to: VAULT, memo: MEMO, mainnet: false };
+  const req = { tAddress: 'unused-by-the-fake', tIndex: 0, to: VAULT, memo: MEMO, mainnet: false };
 
   test('plans with no key, then builds, signs and pays exactly the review', async () => {
     const keys = new wasm.SpendKeys(SEED, 0, false);
@@ -123,6 +123,26 @@ describe('deposit on the real wasm', () => {
         { value: 0n, script: opReturnScript(MEMO_HEX) },
         { value: 275_000n, script: own },
       ]);
+    } finally {
+      keys.free();
+    }
+  });
+
+  test("a swap's own address signs with its own index, and only that one", async () => {
+    const keys = new wasm.SpendKeys(SEED, 0, false);
+    try {
+      const own = p2pkh(keys.transparent_pubkey(7));
+      const { chain, broadcast } = chainWith(own, [900_000n]);
+      const plan = await planDeposit(wasm, chain, { ...req, tIndex: 7, amountZat: '500000' });
+      const deposit = { ...req, amountZat: '500000', reviewedFee: plan.fee };
+      // the pocket's shown address (index 0) never signs a swap's inputs
+      await expect(sendDeposit(wasm, chain, keys, deposit)).rejects.toThrow(
+        /not a P2PKH output of this key/,
+      );
+      const sent = await sendDeposit(wasm, chain, keys, { ...deposit, tIndex: 7 });
+      expect(broadcast).toHaveBeenCalledTimes(1);
+      // change and any refund go back to the swap's own address
+      expect(transparentOutputs(sent.txHex).at(-1)?.script).toBe(own);
     } finally {
       keys.free();
     }

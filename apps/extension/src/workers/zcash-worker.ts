@@ -8137,7 +8137,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           reviewedFee: string;
         };
         const chain = depositChain(await makeZcashClient(serverUrl), serverUrl);
-        // signs with this pocket's t-branch, index 0: the address that funds it
+        // signs with this pocket's t-branch at the swap's own index: the address that funds it
         const sent = await withSpendKeys(
           wasm.SpendKeys,
           vault,

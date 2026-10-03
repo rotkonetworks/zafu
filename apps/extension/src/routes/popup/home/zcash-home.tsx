@@ -415,6 +415,7 @@ export const ZcashContent = ({
           hasMnemonic={hasMnemonic}
           watchOnly={watchOnly}
           tAddresses={tAddresses}
+          funded={new Set(transparent.utxos.map(u => u.address)).size}
           isMainnet={isMainnet}
           zidecarUrl={zidecarUrl}
         />
