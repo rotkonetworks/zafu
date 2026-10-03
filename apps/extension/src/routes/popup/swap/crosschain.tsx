@@ -41,6 +41,16 @@ import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
 import { useSwapLast, useSwapRoutes } from '../../../hooks/swap-routes';
 import { swapWallet } from '../../../hooks/swap-preload';
 import { keepSwapPreload, keepSwapQuotes, seedSwapQuotes } from '../../../state/swap/preload';
+import {
+  forgetOpenSwap,
+  openSwapOf,
+  patchOpenSwap,
+  quoteOf,
+  readOpenSwaps,
+  saveOpenSwap,
+  STAGE_FOR,
+  type OpenSwap,
+} from '../../../state/swap/open-swaps';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { buildSendTxInWorker, completeSendTxInWorker } from '../../../state/keyring/network-worker';
 import type { VaultUnlock } from '../../../state/keyring/types';
@@ -432,7 +442,28 @@ const RouteLine = ({
   );
 };
 
-export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
+/** where a remembered swap reopens */
+const stepOf = (s: OpenSwap): Step =>
+  s.stage === 'thor-out'
+    ? 'thor-out'
+    : s.stage === 'deposit'
+      ? s.direction === 'into_zec'
+        ? 'deposit'
+        : 'polling'
+      : s.stage === 'sent'
+        ? 'polling'
+        : s.stage === 'failed'
+          ? 'error'
+          : s.stage;
+
+export const CrosschainSwap = ({
+  link,
+  resume,
+}: {
+  link?: SwapLinkState;
+  /** an open swap's id: the screen reopens it where it stood */
+  resume?: string;
+}) => {
   const goBack = useBackNav(PopupPath.INDEX);
   const navigate = usePopupNav();
   const queryClient = useQueryClient();
@@ -482,6 +513,58 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   // the fresh t-address this swap claimed (thorchain); kept across a backed-out
   // review or an expired price so a retry reuses it, dropped once the swap ends
   const [swapT, setSwapT] = useState<SwapTAddress>();
+  // the sealed record of the swap in flight (state/swap/open-swaps); every step writes it
+  const openId = useRef<string>(undefined);
+  const track = (patch: Partial<OpenSwap>) => {
+    if (openId.current) {
+      void patchOpenSwap(openId.current, patch);
+    }
+  };
+  /** the swap ended here, or the person let it go: home stops showing it */
+  const forget = () => {
+    if (openId.current) {
+      void forgetOpenSwap(openId.current);
+    }
+    openId.current = undefined;
+  };
+  // a remembered swap reopens where it stood; nothing is asked of the network to find it
+  const [resuming, setResuming] = useState(!!resume);
+  useEffect(() => {
+    if (!resume) {
+      return;
+    }
+    void readOpenSwaps().then(list => {
+      const o = list.find(x => x.id === resume);
+      setResuming(false);
+      if (!o) {
+        return;
+      }
+      openId.current = o.id;
+      setDirection(o.direction);
+      setToken(o.token);
+      setSwapT(o.swapT);
+      setDepositTxid(o.depositTxid);
+      setFirm({
+        quote: quoteOf(o),
+        req: {
+          direction: o.direction,
+          token: o.token,
+          amountIn: o.amountIn,
+          zcashAddress: o.direction === 'into_zec' ? o.recipient : '',
+          otherAddress: o.otherAddress,
+          zcashTransparent: o.swapT?.address,
+        },
+        checked: true,
+      });
+      if (o.line) {
+        setStatus({ phase: o.stage === 'failed' ? 'failed' : 'waiting', line: o.line });
+        if (o.stage === 'failed') {
+          setError(o.line);
+        }
+      }
+      setStep(stepOf(o));
+    });
+  }, [resume]);
   const [checking, setChecking] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [riskAcknowledged, setRiskAcknowledged] = useState(false);
@@ -796,7 +879,8 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
         setFirm({ quote: got, req, was: firm.quote, checked: true });
         return;
       }
-      return confirm(got, req);
+      // `t` by hand: the swapT state set above is not this closure's yet
+      return confirm(got, req, t);
     } catch (e) {
       if (!ask.signal.aborted) {
         setReviewOpen(false);
@@ -808,20 +892,30 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
     }
   };
 
-  /** `r` is the request `d` answered: what is sent, whatever the form says by now */
-  const confirm = async (d: Quote, r: QuoteRequest) => {
-    if (!selectedKeyInfo) {
+  /**
+   * `r` is the request `d` answered: what is sent, whatever the form says by
+   * now. `t` is the swap's own t-address when it claimed one.
+   */
+  const confirm = async (d: Quote, r: QuoteRequest, t = swapT) => {
+    if (!selectedKeyInfo || !wallet) {
       return;
     }
     setFirm({ quote: d, req: r, checked: true });
     setReviewOpen(false);
     setError(undefined);
+    // remembered (sealed) before the deposit is shown or sent, so a closed popup loses nothing
+    const remember = async (stage: OpenSwap['stage']) => {
+      const o = openSwapOf(d, r, wallet, stage, t);
+      openId.current = o.id;
+      await saveOpenSwap(o);
+    };
 
     // into zcash: the user pays from their other wallet; zafu shows where and watches
     if (r.direction === 'into_zec') {
       if (rememberIt && otherValid && !known && r.otherAddress === otherAddress) {
         void rememberYours(r.otherAddress).catch(() => undefined);
       }
+      await remember('deposit');
       setStep('deposit');
       return;
     }
@@ -830,6 +924,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
     }
     // a memo deposit is never a shielded send: a t->t with an OP_RETURN, its own steps
     if (d.memo) {
+      await remember('thor-out');
       setStep('thor-out');
       return;
     }
@@ -851,10 +946,13 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
         }
         buildStartRef.current = Date.now();
         setStep('sending');
+        // the worker finishes the send even if the popup closes: the record goes first
+        await remember('deposit');
         const result = await buildDeposit({ ...deposit, vault: await getVaultUnlock(walletId) });
         if (!('txid' in result)) {
           throw new Error('failed to broadcast deposit transaction');
         }
+        track({ stage: 'sent', depositTxid: result.txid });
         setStep('polling');
         return;
       }
@@ -882,6 +980,8 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
       setStep('sign');
     } catch (err) {
       console.error('[swap] send failed', err);
+      // nothing was broadcast: there is no swap to come back to
+      forget();
       setErrorCause(err);
       setError(err instanceof Error ? err.message : 'failed to send deposit');
       setStep('error');
@@ -900,6 +1000,11 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
         throw new Error('missing unsigned tx');
       }
       setStep('sending');
+      if (firm && wallet) {
+        const o = openSwapOf(firm.quote, firm.req, wallet, 'deposit', swapT);
+        openId.current = o.id;
+        await saveOpenSwap(o);
+      }
       // the same pocket store the build read, so the spent notes are marked there
       const result = await completeSendTxInWorker(
         'zcash',
@@ -918,15 +1023,18 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
       if (!('txid' in result)) {
         throw new Error('failed to broadcast');
       }
+      track({ stage: 'sent', depositTxid: result.txid });
       setStep('polling');
     } catch (err) {
       console.error(err);
+      forget();
       setError(err instanceof Error ? err.message : 'failed to complete zigner tx');
       setStep('error');
     }
   };
 
   // watch the swap while the deposit is out, on routes that can be watched
+  const trackedLine = useRef<string>(undefined);
   useEffect(() => {
     if ((step !== 'deposit' && step !== 'polling') || !deal || !watchable) {
       return;
@@ -935,6 +1043,16 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
     const interval = setInterval(async () => {
       try {
         const next = await watch(deal, depositTxid);
+        // the record learns each new line, not every poll
+        if (trackedLine.current !== next.line) {
+          trackedLine.current = next.line;
+          // still waiting for a deposit is not "sent": an unpaid window must stay prunable
+          track(
+            next.phase === 'waiting'
+              ? { line: next.line }
+              : { line: next.line, stage: STAGE_FOR[next.phase] ?? 'sent' },
+          );
+        }
         setStatus(next);
         if (next.phase === 'failed') {
           setError(next.line);
@@ -951,6 +1069,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   }, [step, deal, provider, watchable, depositTxid]);
 
   const reset = () => {
+    forget();
     setStep('input');
     setFirm(undefined);
     setSwapT(undefined);
@@ -979,7 +1098,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
 
   const header = (meta?: ReactNode) => <ScreenHeader title='swap' onBack={goBack} meta={meta} />;
 
-  if (step === 'input' && !decided) {
+  if (resuming || (step === 'input' && !decided)) {
     return <div className='flex h-full flex-col bg-canvas'>{header()}</div>;
   }
 
@@ -1323,13 +1442,23 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
         amountZat={toUnits(firm.req.amountIn, 8)}
         swapT={swapT}
         onSent={txid => {
+          track({ stage: 'sent', depositTxid: txid });
           setDepositTxid(txid);
           setStep('polling');
         }}
-        onBack={() => setStep('input')}
+        onBack={() => {
+          forget();
+          setStep('input');
+        }}
         // a fresh price for the same swap: its address (and any zec moved there) is kept
-        onExpired={() => setStep('input')}
-        onShield={() => navigate(PopupPath.INDEX)}
+        onExpired={() => {
+          forget();
+          setStep('input');
+        }}
+        onShield={() => {
+          forget();
+          navigate(PopupPath.INDEX);
+        }}
       />
     );
   }
@@ -1451,18 +1580,25 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
             scan signature
           </Button>
         )}
-        {(step === 'deposit' || step === 'polling') &&
-          (watchable ? (
-            <Button variant='secondary' className='w-full' onClick={reset}>
-              cancel
-            </Button>
-          ) : (
-            <Button className='w-full' onClick={() => navigate(PopupPath.INDEX)}>
-              done
-            </Button>
-          ))}
+        {/* the swap stays on home until it ends; only "stop watching" lets it go */}
+        {(step === 'deposit' || step === 'polling') && watchable && (
+          <Button variant='secondary' className='grow' onClick={reset}>
+            stop watching
+          </Button>
+        )}
+        {(step === 'deposit' || step === 'polling') && (
+          <Button className='grow' onClick={() => navigate(PopupPath.INDEX)}>
+            done
+          </Button>
+        )}
         {step === 'refunded' && (
-          <Button className='w-full' onClick={() => navigate(PopupPath.INDEX)}>
+          <Button
+            className='w-full'
+            onClick={() => {
+              forget();
+              navigate(PopupPath.INDEX);
+            }}
+          >
             done
           </Button>
         )}

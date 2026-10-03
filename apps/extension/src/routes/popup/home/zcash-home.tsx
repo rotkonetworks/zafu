@@ -49,6 +49,7 @@ import type { BalanceView } from '../../../components/wallet/balance-hero';
 import { MultisigOverview } from './multisig-overview';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { BuyInFlight } from '../../../components/buy-in-flight';
+import { SwapInFlight } from '../../../components/swap-in-flight';
 import { BUY_PRELOAD, openBuyPage } from '../../../buy/open';
 import { PAY_APPS } from '../../../buy/apps';
 
@@ -332,6 +333,7 @@ export const ZcashContent = ({
         )}
       </InFlightCard>
       <BuyInFlight />
+      <SwapInFlight />
 
       {messageSlot}
 
