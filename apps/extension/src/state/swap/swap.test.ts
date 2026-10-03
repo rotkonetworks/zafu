@@ -829,3 +829,30 @@ describe('best route', () => {
     expect(tokens.some(t => t.symbol === 'DOGE')).toBe(true);
   });
 });
+
+describe('thornode refusals, said plainly', () => {
+  it('reads a minimum the amount already clears as a pool that cannot fill it', async () => {
+    const { nodeRefusal } = await import('./thornode');
+    const e = new Error(
+      'amount less than min swap amount (recommended_min_amount_in: 6129): invalid request',
+    );
+    expect(nodeRefusal('thorchain', e, 1_000_000n, 'btc').message).toBe(
+      "thorchain can't fill this right now · its pool is too small",
+    );
+  });
+  it('a real shortfall says the minimum, in the asset', async () => {
+    const { nodeRefusal, BelowMinimum } = await import('./thornode');
+    const e = new Error(
+      'amount less than min swap amount (recommended_min_amount_in: 6129): invalid request',
+    );
+    const r = nodeRefusal('thorchain', e, 5000n, 'btc');
+    expect(r).toBeInstanceOf(BelowMinimum);
+    expect(r.message).toBe('thorchain swaps 0.00006129 btc or more');
+  });
+  it('never shows the node raw text', async () => {
+    const { nodeRefusal } = await import('./thornode');
+    expect(
+      nodeRefusal('maya', new Error('pool ZEC.ZEC not found: invalid request'), 1n, 'zec').message,
+    ).toBe('maya could not quote this right now');
+  });
+});

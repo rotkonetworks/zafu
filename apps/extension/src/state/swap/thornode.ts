@@ -196,6 +196,23 @@ export class BelowMinimum extends Error {
 }
 
 /**
+ * What the node's refusal means, said plainly. THORNode answers a pool it
+ * cannot fill with "amount less than min swap amount (recommended_min_amount_in:
+ * N)" even when the amount is far above N (a near-empty pool), so a minimum
+ * the amount already clears is read as "cannot fill", never as "too little".
+ */
+export const nodeRefusal = (name: string, e: unknown, amountIn: bigint, unit: string): Error => {
+  const text = e instanceof Error ? e.message : String(e);
+  const min = /recommended_min_amount_in:\s*(\d+)/.exec(text)?.[1];
+  if (min !== undefined) {
+    return amountIn < BigInt(min)
+      ? new BelowMinimum(BigInt(min), unit, name)
+      : new Error(`${name} can't fill this right now · its pool is too small`);
+  }
+  return new Error(`${name} could not quote this right now`);
+};
+
+/**
  * The quote's recommended minimum is what keeps a refund paying for itself
  * (it covers both chains' outbound fees with headroom); below it, or at the
  * source chain's dust, the deposit is not worth sending.
@@ -328,7 +345,10 @@ export const nodeProvider = (chain: NodeChain): SwapProvider => {
       // a halted chain is said plainly, before whatever the quote makes of it
       const inbound = await nodeFetch<InboundAddress[]>(chain, '/inbound_addresses');
       const source = checkOpen(name, inbound, sourceChain);
-      const q = await quoted;
+      const unitIn = (into ? req.token.symbol : 'zec').toLowerCase();
+      const q = await quoted.catch((e: unknown) => {
+        throw nodeRefusal(name, e, amount, unitIn);
+      });
       // a name stands in only for the destination: thorchain never resolves a refund name
       const memo =
         into || !chain.thorNames ? q.memo : nameInMemo(q.memo, destination, req.otherName);
