@@ -175,7 +175,6 @@ export const SettingsWallets = ({
           onRemove={() => rawNavigate(`${PopupPath.SETTINGS_REMOVE_WALLET}?id=${open.id}`)}
         />
       )}
-
     </>
   );
 };
