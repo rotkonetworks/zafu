@@ -86,11 +86,13 @@ import {
   WAIT,
   watchEgress,
 } from '../../../state/swap/live';
+import { NeedsRefundAddress } from '../../../state/swap/near';
 import {
   pairKey,
   ROUTES,
   routeLabel,
   poolAsset,
+  refundsToPayer,
   type MemoCarrier,
   type RouteId,
   type SwapPair,
@@ -182,16 +184,19 @@ const NOTE: Record<RouteId, Record<SwapPair['direction'], string>> = {
   },
   thor: {
     into_zec:
-      'thorchain pays transparent addresses only. the zec lands at your t-address, ready to shield.',
+      "thorchain pays transparent addresses only. the zec lands at this swap's own t-address, ready to shield.",
     from_zec: 'leaves the shielded pool through your transparent address. that step is public.',
   },
   maya: {
     into_zec:
-      "maya can't pay zafu's shielded address yet, so the zec lands at your t-address. refunds go back to the address that paid.",
+      "maya can't pay zafu's shielded address yet, so the zec lands at this swap's own t-address.",
     from_zec: 'leaves the shielded pool through your transparent address. that step is public.',
   },
   penumbra: { into_zec: '', from_zec: '' },
 };
+
+/** into zec on a route that refunds the payer: the one honest line in place of a refund address */
+const PAYER_REFUNDS = "refunds go back to the address that pays · don't pay from an exchange";
 
 const MEMO_HOW: Record<MemoCarrier, string> = {
   op_return: 'add it to the payment as an op_return output, exactly as shown',
@@ -635,7 +640,10 @@ export const CrosschainSwap = ({
   const signsOpReturn = !!kind && !!CAPS[kind].opReturn;
   // thorchain pays (and refunds) a t-address: each swap its own, never the pocket's shown one
   const zcashTransparent = swapT?.address ?? swapTNext.next?.address;
-  const usable = parseFloat(askAmount ?? '') > 0 && !!askAddress && fits(askAddress);
+  // into zec from an OP_RETURN chain, thorchain refunds the payer: it needs no address typed
+  const addressOptional = !isFromZec && !!pair && refundsToPayer('thor', pair);
+  const usable =
+    parseFloat(askAmount ?? '') > 0 && (askAddress ? fits(askAddress) : addressOptional);
   const req = useMemo<QuoteRequest | undefined>(
     () =>
       decided && token && zcashAddress && usable
@@ -645,7 +653,7 @@ export const CrosschainSwap = ({
             amountIn: askAmount!,
             zcashAddress,
             zcashTransparent,
-            otherAddress: askAddress,
+            otherAddress: askAddress ?? '',
             signsOpReturn,
             // out of zec, the send to the deposit pays its own ZIP-317 fee: part of the cost
             sourceFeeZat: isFromZec
@@ -691,6 +699,9 @@ export const CrosschainSwap = ({
   const live = (id?: RouteId) => quotes.find(q => q.route === id && !q.notYet);
   const quote = live(picked) ?? live(key ? chosen[key] : undefined) ?? best;
   const view = quote ?? quotes[0];
+  // the route the person is looking at; into zec, it decides whether a refund address means anything
+  const focusRoute = picked ?? (key ? chosen[key] : undefined) ?? view?.route;
+  const payerRefunds = !!pair && refundsToPayer(focusRoute, pair);
   const answerOf = (id?: RouteId) => answers[asked.findIndex(g => g.route === id)];
   const shown = answerOf(view?.route);
   const stale = typing || !!shown?.isPlaceholderData || !!shown?.isFetching;
@@ -725,7 +736,14 @@ export const CrosschainSwap = ({
         on: !!q && q.route === view?.route,
         waiting: !!a?.isFetching,
         stale: !!a?.isPlaceholderData || !!a?.isFetching,
-        onPress: q ? () => setRoutesOpen(true) : g.ask ? () => void askFor([g.route]) : undefined,
+        onPress: q
+          ? () => setRoutesOpen(true)
+          : g.ask
+            ? () => void askFor([g.route])
+            : // near wants a refund address: choosing it brings the field back
+              a?.error instanceof NeedsRefundAddress
+              ? () => setPicked(g.route)
+              : undefined,
         rank: q ? quotes.indexOf(q) : g.line || a?.error ? 99 : 50,
       };
     })
@@ -1252,44 +1270,51 @@ export const CrosschainSwap = ({
               </div>
             </div>
           )}
-          <ToField
-            id='swap-other'
-            label={
-              isFromZec
-                ? `${token ? chainName(token.chain) : 'destination'} recipient`
-                : `your ${token ? chainName(token.chain) : 'source'} address · for refunds`
-            }
-            value={typedAddress ?? otherAddress}
-            onChange={v => {
-              if (looksLikeLink(v)) {
-                navigate(PopupPath.LINK, { state: { uri: v, via: 'pasted' } });
-                return;
+          {payerRefunds ? (
+            <p className='flex items-center gap-2 text-[11px] text-fg-muted'>
+              <span className='i-ph-arrow-u-up-left size-3.5 shrink-0' aria-hidden='true' />
+              {PAYER_REFUNDS}
+            </p>
+          ) : (
+            <ToField
+              id='swap-other'
+              label={
+                isFromZec
+                  ? `${token ? chainName(token.chain) : 'destination'} recipient`
+                  : `your ${token ? chainName(token.chain) : 'source'} address · for refunds`
               }
-              setAddress(v);
-            }}
-            placeholder={isFromZec ? 'recipient address' : 'your address'}
-            onContacts={fieldChain ? () => setContactsOpen(true) : undefined}
-          >
-            {!isFromZec && fieldChain && (
-              <label
-                className={cn(
-                  'flex items-center gap-2 text-[11px] text-fg-muted',
-                  otherValid && !known ? 'cursor-pointer' : 'opacity-60',
-                )}
-              >
-                <input
-                  type='checkbox'
-                  checked={known || rememberIt}
-                  disabled={known || !otherValid}
-                  onChange={e => setRememberIt(e.target.checked)}
-                  className='size-3.5 shrink-0 accent-[var(--zigner-gold)]'
-                />
-                {known
-                  ? `one of your ${chainLabel(fieldChain)} addresses`
-                  : `remember as my ${chainLabel(fieldChain)} address`}
-              </label>
-            )}
-          </ToField>
+              value={typedAddress ?? otherAddress}
+              onChange={v => {
+                if (looksLikeLink(v)) {
+                  navigate(PopupPath.LINK, { state: { uri: v, via: 'pasted' } });
+                  return;
+                }
+                setAddress(v);
+              }}
+              placeholder={isFromZec ? 'recipient address' : 'your address'}
+              onContacts={fieldChain ? () => setContactsOpen(true) : undefined}
+            >
+              {!isFromZec && fieldChain && (
+                <label
+                  className={cn(
+                    'flex items-center gap-2 text-[11px] text-fg-muted',
+                    otherValid && !known ? 'cursor-pointer' : 'opacity-60',
+                  )}
+                >
+                  <input
+                    type='checkbox'
+                    checked={known || rememberIt}
+                    disabled={known || !otherValid}
+                    onChange={e => setRememberIt(e.target.checked)}
+                    className='size-3.5 shrink-0 accent-[var(--zigner-gold)]'
+                  />
+                  {known
+                    ? `one of your ${chainLabel(fieldChain)} addresses`
+                    : `remember as my ${chainLabel(fieldChain)} address`}
+                </label>
+              )}
+            </ToField>
+          )}
           {shareLink && (
             <CopyButton text={shareLink} label='copy swap link' className='self-start px-0' />
           )}
@@ -1533,6 +1558,9 @@ export const CrosschainSwap = ({
                     </p>
                   )}
                   {deal.gasLine && <p className='text-xs text-fg-muted'>{deal.gasLine}</p>}
+                  {pair && refundsToPayer(deal.route, pair) && (
+                    <p className='text-xs text-warn'>{PAYER_REFUNDS}</p>
+                  )}
                   <div className='flex w-full items-center gap-2'>
                     <span className='min-w-0 flex-1 break-all font-mono text-xs'>
                       {deal.depositAddress}

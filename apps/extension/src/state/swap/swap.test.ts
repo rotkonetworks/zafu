@@ -41,7 +41,7 @@ import {
   type Quote,
   type QuoteRequest,
 } from './provider';
-import { OFFERED, routeLabel, ROUTES, type RouteId, type SwapPair } from './routes';
+import { OFFERED, refundsToPayer, routeLabel, ROUTES, type RouteId, type SwapPair } from './routes';
 import {
   BelowMinimum,
   memoLimit,
@@ -53,7 +53,7 @@ import {
 } from './thornode';
 import { thorProvider } from './thor';
 import { mayaProvider } from './maya';
-import { nearCost, nearProvider } from './near';
+import { NeedsRefundAddress, nearCost, nearProvider } from './near';
 import { PROVIDERS, routeTokens } from '.';
 import { gates, plain } from './live';
 import type { DestinationView } from '../../net/egress-policy';
@@ -999,5 +999,50 @@ describe('thornode refusals, said plainly', () => {
     expect(
       nodeRefusal('maya', new Error('pool ZEC.ZEC not found: invalid request'), 1n, 'zec').message,
     ).toBe('maya could not quote this right now');
+  });
+});
+
+describe('into zec, who a refund goes to', () => {
+  const into = (symbol: string, chain: string): SwapPair => ({
+    direction: 'into_zec',
+    symbol,
+    chain,
+  });
+
+  it('thorchain refunds the payer from an OP_RETURN chain; a memo chain names the address', () => {
+    for (const [sym, chain] of [
+      ['btc', 'btc'],
+      ['ltc', 'ltc'],
+      ['bch', 'bch'],
+      ['doge', 'doge'],
+    ] as const) {
+      expect(refundsToPayer('thor', into(sym, chain))).toBe(true);
+    }
+    expect(refundsToPayer('thor', into('atom', 'gaia'))).toBe(false);
+    expect(refundsToPayer('thor', into('xrp', 'xrp'))).toBe(false);
+    expect(refundsToPayer('near', into('btc', 'btc'))).toBe(false);
+    expect(refundsToPayer('maya', into('eth', 'eth'))).toBe(true);
+    expect(refundsToPayer('thor', { ...into('btc', 'btc'), direction: 'from_zec' })).toBe(false);
+  });
+
+  it('thorchain asks no refund address of a btc payer; near says it needs one', async () => {
+    const urls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        urls.push(url);
+        return Promise.resolve(
+          new Response(
+            JSON.stringify(url.includes('/inbound_addresses') ? inbound() : thorQuote()),
+            { status: 200 },
+          ),
+        );
+      }),
+    );
+    await thorProvider.quote(req({ otherAddress: '' }));
+    expect(urls.find(u => u.includes('/quote/swap'))).not.toMatch(/refund_address/);
+    await expect(nearProvider.quote(req({ otherAddress: '' }))).rejects.toBeInstanceOf(
+      NeedsRefundAddress,
+    );
   });
 });
