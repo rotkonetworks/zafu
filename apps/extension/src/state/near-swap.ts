@@ -231,25 +231,3 @@ const chainRank = (t: NearToken): number => {
 export function filterSwappableTokens(tokens: NearToken[]): NearToken[] {
   return tokens.filter(t => t.symbol !== 'ZEC').sort((a, b) => chainRank(a) - chainRank(b));
 }
-
-/** Map NEAR 1Click blockchain name to our ContactNetwork type. */
-const BLOCKCHAIN_TO_NETWORK: Record<string, string> = {
-  btc: 'bitcoin',
-  eth: 'ethereum',
-  sol: 'solana',
-  arb: 'arbitrum',
-  avax: 'avalanche',
-  pol: 'polygon',
-  ethereum: 'ethereum',
-  bitcoin: 'bitcoin',
-  solana: 'solana',
-  near: 'near',
-  base: 'base',
-  arbitrum: 'arbitrum',
-  avalanche: 'avalanche',
-  polygon: 'polygon',
-};
-
-export function blockchainToContactNetwork(blockchain: string): string | undefined {
-  return BLOCKCHAIN_TO_NETWORK[blockchain.toLowerCase()];
-}

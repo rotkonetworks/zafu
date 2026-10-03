@@ -10,16 +10,12 @@ import { Input } from '@repo/ui/components/ui/input';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { ZidSeal } from '@repo/ui/components/ui/zid-seal';
 import { useStore } from '../../../state';
-import type { Contact, ContactNetwork } from '../../../state/contacts';
+import type { Contact } from '../../../state/contacts';
 import { ScreenHeader } from '../../../components/screen-header';
 import { PopupPath, contactPath } from '../paths';
 import { looksLikeLink } from '../../../links/router';
 import { QrScanner } from '../../../shared/components/qr-scanner';
-import { addressKind, refusalOf } from './address-kind';
-
-/** the network a payable address is on; only call after refusalOf() passed */
-export const networkOf = (address: string): ContactNetwork =>
-  addressKind(address).kind === 'penumbra' ? 'penumbra' : 'zcash';
+import { ChainRow, useAddressDraft } from './chain-row';
 
 /**
  * a contact's line under the name: whether friends on sites can find each
@@ -41,7 +37,7 @@ export const AddContactSheet = ({ open, onClose }: { open: boolean; onClose: () 
   const navigate = useNavigate();
   const { addContact, addAddress } = useStore(s => s.contacts);
   const [name, setName] = useState('');
-  const [address, setAddress] = useState('');
+  const { address, setAddress, chain, pick, refused } = useAddressDraft();
   const [scanning, setScanning] = useState(false);
   /** a card link (or any zafu/zcash link) goes to the link reader, which opens the card */
   const follow = (text: string, via: 'pasted' | 'scanned'): boolean => {
@@ -52,14 +48,13 @@ export const AddContactSheet = ({ open, onClose }: { open: boolean; onClose: () 
     navigate(PopupPath.LINK, { state: { uri: text.trim(), via } });
     return true;
   };
-  const refused = address.trim() ? refusalOf(address) : undefined;
   const save = async () => {
-    if (refused) {
+    if (refused || (address.trim() && !chain)) {
       return;
     }
     const contact = await addContact({ name: name.trim() });
-    if (address.trim()) {
-      await addAddress(contact.id, { network: networkOf(address), address: address.trim() });
+    if (address.trim() && chain) {
+      await addAddress(contact.id, { network: chain, address: address.trim() });
     }
     onClose();
     navigate(contactPath(contact.id));
@@ -97,6 +92,7 @@ export const AddContactSheet = ({ open, onClose }: { open: boolean; onClose: () 
             value={name}
             onChange={e => setName(e.target.value)}
           />
+          <ChainRow chain={chain} onPick={pick} />
           {refused && <span className='text-[11px] text-warn'>{refused}</span>}
           <Button type='submit' disabled={!name.trim() || !!refused}>
             save

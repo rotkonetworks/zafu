@@ -33,7 +33,7 @@ import { SaveContactModal } from '../../../components/save-contact-modal';
 import { IbcTransferStatusLine } from '../ibc-transfer-status';
 import { EMPTY_BALANCES } from './shared';
 import { Footer, Main, shortAddress } from './send-ui';
-import { AmountField, ContactsSheet, PickSheet, ToField } from './send-fields';
+import { AmountField, AddressSheet, PickSheet, ToField } from './send-fields';
 import { BalanceSheet, balanceLook } from './balance-sheet';
 import { PenumbraFlow } from './penumbra-flow';
 import { useChainInUse } from '../../../hooks/enable-network';
@@ -429,10 +429,11 @@ export function PenumbraIbcSend({ onClose, meta }: { onClose: () => void; meta?:
               }
             }}
           />
-          <ContactsSheet
-            network='cosmos'
+          <AddressSheet
+            chain='cosmos'
             open={bookOpen}
             onOpenChange={setBookOpen}
+            own={ownAddress ? [{ label: 'your own address', address: ownAddress }] : []}
             onPick={row => ibcState.setDestinationAddress(row.address)}
           />
         </>

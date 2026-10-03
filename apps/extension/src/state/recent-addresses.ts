@@ -9,19 +9,10 @@ import type { AllSlices, SliceCreator } from '.';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { SessionStorageState } from '@repo/storage-chrome/session';
+import type { ContactNetwork } from './contacts';
 
-export type AddressNetwork =
-  | 'penumbra'
-  | 'zcash'
-  | 'cosmos'
-  | 'ethereum'
-  | 'bitcoin'
-  | 'solana'
-  | 'near'
-  | 'base'
-  | 'arbitrum'
-  | 'avalanche'
-  | 'polygon';
+/** the chains an address is remembered on: the contacts book's */
+export type AddressNetwork = ContactNetwork;
 
 export interface RecentAddress {
   address: string;

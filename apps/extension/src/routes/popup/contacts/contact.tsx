@@ -22,8 +22,15 @@ import { useShareCard } from '../../../hooks/use-share-card';
 import { ScreenHeader } from '../../../components/screen-header';
 import { PopupPath, threadPath } from '../paths';
 import { shortAddress } from '../inbox/threads';
-import { contactStatus, networkOf } from '.';
-import { addressLabel, isRealAddress, refusalOf } from './address-kind';
+import { contactStatus } from '.';
+import {
+  addressLabel,
+  effectiveNetwork,
+  isPayable,
+  isRealAddress,
+  type AddressChain,
+} from '../../../addresses/kind';
+import { ChainRow, useAddressDraft } from './chain-row';
 
 type Open =
   | { kind: 'address'; address: ContactAddress }
@@ -34,8 +41,10 @@ const useSendTo = () => {
   const navigate = useNavigate();
   const keyInfo = useStore(selectEffectiveKeyInfo);
   return (addr: ContactAddress | undefined): (() => void) | undefined => {
-    const network = addr?.network;
-    if (!addr || (network !== 'zcash' && network !== 'penumbra')) {
+    // the chain the address is really on, never only the stored network: an
+    // older zafu filed other chains' addresses under zcash
+    const network = addr && effectiveNetwork(addr);
+    if (!addr || !isPayable(network)) {
       return undefined;
     }
     if (!keyInfo || !keyInfoSupportsNetwork(keyInfo, network)) {
@@ -93,6 +102,47 @@ const TextSheet = ({
   );
 };
 
+/** an address on any chain: read from the address, or picked in the chain row */
+const AddAddressSheet = ({
+  open,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSave: (network: AddressChain, address: string) => Promise<unknown>;
+}) => {
+  const { address, setAddress, chain, pick, refused } = useAddressDraft();
+  const ready = !!address.trim() && !!chain && !refused;
+  return (
+    <Sheet open={open} onOpenChange={o => !o && onClose()} title='add an address'>
+      <form
+        className='flex flex-col gap-3'
+        onSubmit={e => {
+          e.preventDefault();
+          if (ready) {
+            void onSave(chain, address.trim()).then(onClose);
+          }
+        }}
+      >
+        <Input
+          aria-label='address'
+          placeholder='an address'
+          value={address}
+          onChange={e => setAddress(e.target.value)}
+          className='font-mono text-xs'
+          autoFocus
+        />
+        <ChainRow chain={chain} onPick={pick} />
+        {refused && <span className='text-[11px] text-warn'>{refused}</span>}
+        <Button type='submit' disabled={!ready}>
+          add
+        </Button>
+      </form>
+    </Sheet>
+  );
+};
+
 const ContactView = ({ contact }: { contact: Contact }) => {
   const navigate = useNavigate();
   const sendTo = useSendTo();
@@ -105,7 +155,7 @@ const ContactView = ({ contact }: { contact: Contact }) => {
   // the first address this wallet can act on
   const usable = contact.addresses.filter(isRealAddress).find(a => sendTo(a));
   const pay = sendTo(usable);
-  const hasZcash = contact.addresses.some(a => isRealAddress(a) && a.network === 'zcash');
+  const hasZcash = contact.addresses.some(a => effectiveNetwork(a) === 'zcash');
 
   return (
     <div className='flex flex-col gap-4 px-4 py-[18px]'>
@@ -139,7 +189,7 @@ const ContactView = ({ contact }: { contact: Contact }) => {
           <Row
             key={a.id}
             type='value'
-            label={addressLabel(a.address)}
+            label={addressLabel(a) ?? ''}
             value={shortAddress(a.address)}
             onPress={() => setOpen({ kind: 'address', address: a })}
           />
@@ -195,9 +245,7 @@ const ContactView = ({ contact }: { contact: Contact }) => {
         <Sheet
           open
           onOpenChange={o => !o && close()}
-          title={
-            isRealAddress(open.address) ? addressLabel(open.address.address) : 'not an address'
-          }
+          title={addressLabel(open.address) ?? 'not an address'}
         >
           <span className='break-all font-mono text-xs text-fg-high'>{open.address.address}</span>
           <div className='flex gap-2'>
@@ -222,21 +270,11 @@ const ContactView = ({ contact }: { contact: Contact }) => {
           </Button>
         </Sheet>
       )}
-      <TextSheet
+      <AddAddressSheet
         key={`add-${open?.kind === 'add'}`}
-        title='add an address'
-        placeholder='a zcash or penumbra address'
-        action='add'
         open={open?.kind === 'add'}
         onClose={close}
-        onSave={async address => {
-          const refused = refusalOf(address);
-          if (refused) {
-            return refused;
-          }
-          await addAddress(contact.id, { network: networkOf(address), address });
-          return undefined;
-        }}
+        onSave={(network, address) => addAddress(contact.id, { network, address })}
       />
       <TextSheet
         key={`rename-${open?.kind === 'rename'}`}

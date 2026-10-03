@@ -34,7 +34,6 @@ import { buildSendTxInWorker, completeSendTxInWorker } from '../../../state/keyr
 import type { VaultUnlock } from '../../../state/keyring/types';
 import { usePoolNotes } from '../../../hooks/zcash-pool-balances';
 import { maxSendable } from '../send/spendable';
-import { blockchainToContactNetwork } from '../../../state/near-swap';
 import { PROVIDERS, quoteRoutes, routeTokens, type RouteResult } from '../../../state/swap';
 import {
   fromUnits,
@@ -65,14 +64,15 @@ import {
   hexToBytes,
   bytesToHex,
 } from '@repo/wallet/networks';
-import type { ContactNetwork } from '../../../state/contacts';
 import { useBackNav, usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { looksLikeLink, toUri } from '../../../links/router';
 import { viaLine, type SwapLinkState } from '../../../links/land';
 import { Footer, Main } from '../send/send-ui';
 import { ThorDeposit } from './thor-deposit';
-import { AmountField, ContactsSheet, ToField } from '../send/send-fields';
+import { AmountField, AddressSheet, ToField } from '../send/send-fields';
+import { chainLabel, chainOfSwap, isAddressOn } from '../../../addresses/kind';
+import { useYourAddresses } from '../../../hooks/use-your-addresses';
 import { chainName } from '../../../state/swap/tokens';
 import { TokenSheet } from './token-sheet';
 import { CostList, CostMeta } from './cost-lines';
@@ -406,14 +406,19 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
     }
   }, [linkToken, tokenQuery.data]);
 
-  const contactNetwork = token
-    ? (blockchainToContactNetwork(token.chain) as ContactNetwork | undefined)
-    : undefined;
+  // the chain the other address is on; the picker and "yours" follow it
+  const fieldChain = chainOfSwap(token?.chain);
+  const { yours, remember } = useYourAddresses(fieldChain);
+  // your refund address, offered to "yours" the first time it is used
+  const [rememberIt, setRememberIt] = useState(true);
+  const otherValid = !!fieldChain && isAddressOn(otherAddress, fieldChain);
+  const known = yours.some(y => y.address === otherAddress.trim());
 
   const flip = () => {
     setDirection(d => (d === 'from_zec' ? 'into_zec' : 'from_zec'));
     setAmountIn('');
     setOtherAddress('');
+    setRememberIt(true);
   };
 
   const requestQuotes = async () => {
@@ -479,6 +484,9 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
 
     // into zcash: the user pays from their other wallet; zafu shows where and watches
     if (!isFromZec) {
+      if (rememberIt && otherValid && !known) {
+        void remember(otherAddress.trim()).catch(() => undefined);
+      }
       setStep('deposit');
       return;
     }
@@ -693,7 +701,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
               setOtherAddress(v);
             }}
             placeholder={isFromZec ? 'recipient address' : 'your address'}
-            onContacts={contactNetwork ? () => setContactsOpen(true) : undefined}
+            onContacts={fieldChain ? () => setContactsOpen(true) : undefined}
           >
             <ThorNameResolver
               input={otherAddress}
@@ -703,6 +711,25 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
                 setOtherAddress(address);
               }}
             />
+            {!isFromZec && fieldChain && (
+              <label
+                className={cn(
+                  'flex items-center gap-2 text-[11px] text-fg-muted',
+                  otherValid && !known ? 'cursor-pointer' : 'opacity-60',
+                )}
+              >
+                <input
+                  type='checkbox'
+                  checked={known || rememberIt}
+                  disabled={known || !otherValid}
+                  onChange={e => setRememberIt(e.target.checked)}
+                  className='size-3.5 shrink-0 accent-[var(--zigner-gold)]'
+                />
+                {known
+                  ? `one of your ${chainLabel(fieldChain)} addresses`
+                  : `remember as my ${chainLabel(fieldChain)} address`}
+              </label>
+            )}
           </ToField>
           {shareLink && (
             <CopyButton text={shareLink} label='copy swap link' className='self-start px-0' />
@@ -727,14 +754,16 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
           onPick={t => {
             setToken(t);
             setOtherAddress('');
+            setRememberIt(true);
           }}
         />
-        {contactNetwork && (
-          <ContactsSheet
-            network={contactNetwork}
+        {fieldChain && (
+          <AddressSheet
+            chain={fieldChain}
             open={contactsOpen}
             onOpenChange={setContactsOpen}
             onPick={row => setOtherAddress(row.address)}
+            onPaste={() => document.getElementById('swap-other')?.focus()}
           />
         )}
       </div>

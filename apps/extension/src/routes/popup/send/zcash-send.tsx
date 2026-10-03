@@ -94,7 +94,7 @@ import {
   isTransparentAddress,
   shortAddress,
 } from './send-ui';
-import { AmountField, ContactsSheet, ToField } from './send-fields';
+import { AmountField, AddressSheet, ToField } from './send-fields';
 import { STAGES } from './send-stage';
 
 import { unwrapCborSinglePczt, parsePreludeSinglePcztResponse } from './zcash-send-cbor-helpers';
@@ -1347,10 +1347,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 title='scan an address'
               />
             )}
-            <ContactsSheet
-              network='zcash'
+            <AddressSheet
+              chain='zcash'
               open={showAddressBook}
               onOpenChange={setShowAddressBook}
+              onScan={() => setShowQrScanner(true)}
               own={ownWallets}
               onPick={row => {
                 setRecipient(row.address);

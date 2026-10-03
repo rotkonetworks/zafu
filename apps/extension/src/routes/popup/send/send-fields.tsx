@@ -1,7 +1,7 @@
 /**
  * The send form's fields and pickers, shared by every network's form: the
- * "to" field with its contacts and scan buttons, the big amount field, the
- * contacts sheet and the one-of-many picker sheet. Board Send.
+ * "to" field with its address book and scan buttons, the big amount field,
+ * the address picker sheet and the one-of-many picker sheet. Board Send.
  */
 
 import { useState, type ReactNode } from 'react';
@@ -11,8 +11,15 @@ import { Input } from '@repo/ui/components/ui/input';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { useStore } from '../../../state';
-import { contactsSelector, type Contact, type ContactNetwork } from '../../../state/contacts';
-import { recentAddressesSelector, type AddressNetwork } from '../../../state/recent-addresses';
+import { contactsSelector, type Contact } from '../../../state/contacts';
+import { recentAddressesSelector } from '../../../state/recent-addresses';
+import { useYourAddresses } from '../../../hooks/use-your-addresses';
+import {
+  chainLabel,
+  effectiveNetwork,
+  isAddressOn,
+  type AddressChain,
+} from '../../../addresses/kind';
 import { Sensitive } from '../../../components/sensitive';
 import { Helper, shortAddress } from './send-ui';
 
@@ -23,95 +30,187 @@ export interface BookRow {
   addressId?: string;
 }
 
-const lastUsed = (contact: Contact, network: ContactNetwork) =>
+const lastUsed = (contact: Contact, chain: AddressChain) =>
   contact.addresses.reduce(
-    (max, a) => (a.network === network ? Math.max(max, a.lastUsedAt ?? 0) : max),
+    (max, a) => (effectiveNetwork(a) === chain ? Math.max(max, a.lastUsedAt ?? 0) : max),
     0,
   );
 
 /**
- * Contacts with an address on this network (favorites first, then most
- * recently used), then the caller's own other wallets, then recent payees.
+ * The picker's rows for one chain: yours (zafu's own, derived, then the ones
+ * you saved), then contacts with an address really on that chain (favorites
+ * first, then most recently used), then recent payees. Each address once.
  */
-export function ContactsSheet({
-  network,
-  open,
-  onOpenChange,
-  onPick,
-  own = [],
+export const pickerRows = ({
+  chain,
+  yours = [],
+  contacts,
+  favoriteIds = new Set<string>(),
+  recent = [],
+  query = '',
 }: {
-  network: ContactNetwork & AddressNetwork;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onPick: (row: BookRow) => void;
-  own?: readonly BookRow[];
-}) {
-  const [query, setQuery] = useState('');
-  const { contacts, getFavorites } = useStore(contactsSelector);
-  const recent = useStore(recentAddressesSelector).getRecent(network, 10);
-  const favoriteIds = new Set(getFavorites().map(c => c.id));
-  const listed = (Array.isArray(contacts) ? contacts : []).filter(c =>
-    c.addresses.some(a => a.network === network),
-  );
+  chain: AddressChain;
+  yours?: readonly BookRow[];
+  contacts: readonly Contact[];
+  favoriteIds?: ReadonlySet<string>;
+  recent?: readonly { address: string; network: AddressChain }[];
+  query?: string;
+}): { yours: BookRow[]; contacts: BookRow[] } => {
+  const listed = contacts.filter(c => c.addresses.some(a => effectiveNetwork(a) === chain));
   const ranked = [
     ...listed.filter(c => favoriteIds.has(c.id)),
     ...listed
       .filter(c => !favoriteIds.has(c.id))
-      .sort((a, b) => lastUsed(b, network) - lastUsed(a, network)),
+      .sort((a, b) => lastUsed(b, chain) - lastUsed(a, chain)),
   ];
   const seen = new Set<string>();
-  const rows: BookRow[] = [
-    ...ranked.flatMap(contact =>
-      contact.addresses
-        .filter(a => a.network === network)
-        .map(a => ({
-          label: contact.name,
-          address: a.address,
-          contactId: contact.id,
-          addressId: a.id,
-        })),
-    ),
-    ...own,
-    ...recent.map(r => ({ label: shortAddress(r.address), address: r.address })),
-  ].filter(r => !!r.address && !seen.has(r.address) && !!seen.add(r.address));
   const q = query.trim().toLowerCase();
-  const shown = rows.filter(
-    r => !q || r.label.toLowerCase().includes(q) || r.address.toLowerCase().includes(q),
-  );
+  const keep = (r: BookRow) =>
+    !!r.address &&
+    !seen.has(r.address) &&
+    !!seen.add(r.address) &&
+    (!q || r.label.toLowerCase().includes(q) || r.address.toLowerCase().includes(q));
+  return {
+    yours: yours.filter(r => isAddressOn(r.address, chain)).filter(keep),
+    contacts: [
+      ...ranked.flatMap(contact =>
+        contact.addresses
+          .filter(a => effectiveNetwork(a) === chain)
+          .map(a => ({
+            label: contact.name,
+            address: a.address,
+            contactId: contact.id,
+            addressId: a.id,
+          })),
+      ),
+      ...recent
+        .filter(r => r.network === chain && isAddressOn(r.address, chain))
+        .map(r => ({ label: shortAddress(r.address), address: r.address })),
+    ].filter(keep),
+  };
+};
+
+const Rows = ({
+  title,
+  rows,
+  onPick,
+}: {
+  title: string;
+  rows: readonly BookRow[];
+  onPick: (row: BookRow) => void;
+}) =>
+  rows.length ? (
+    <>
+      <span className='pt-1 text-[11px] text-fg-muted'>{title}</span>
+      <RowGroup>
+        {rows.map(row => (
+          <Row
+            key={row.address}
+            type='screen'
+            label={row.label}
+            description={shortAddress(row.address)}
+            onPress={() => onPick(row)}
+          />
+        ))}
+      </RowGroup>
+    </>
+  ) : null;
+
+/**
+ * The address picker over a field, for one chain: yours first, then
+ * contacts, then paste or scan. A swap or send field opens it; nothing in
+ * the form below it moves.
+ */
+export function AddressSheet({
+  chain,
+  open,
+  onOpenChange,
+  onPick,
+  own = [],
+  onPaste,
+  onScan,
+}: {
+  chain: AddressChain;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onPick: (row: BookRow) => void;
+  /** zafu's own addresses on this chain, derived by the caller, never stored */
+  own?: readonly BookRow[];
+  /** back to the field, to paste into it */
+  onPaste?: () => void;
+  onScan?: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  const { contacts, getFavorites } = useStore(contactsSelector);
+  const recent = useStore(recentAddressesSelector).getRecent(chain, 10);
+  const { yours: saved } = useYourAddresses(chain);
+  const rows = pickerRows({
+    chain,
+    yours: [
+      ...own,
+      ...saved.map(y => ({ label: `your ${chainLabel(chain)}`, address: y.address })),
+    ],
+    contacts: Array.isArray(contacts) ? contacts : [],
+    favoriteIds: new Set(getFavorites().map(c => c.id)),
+    recent,
+    query,
+  });
   const close = (next: boolean) => {
     onOpenChange(next);
     setQuery('');
   };
+  const pick = (row: BookRow) => {
+    onPick(row);
+    close(false);
+  };
+  const none = !rows.yours.length && !rows.contacts.length;
 
   return (
-    <Sheet open={open} onOpenChange={close} title='contacts'>
+    <Sheet open={open} onOpenChange={close} title={`${chainLabel(chain)} addresses`}>
       <Input
         placeholder='search name or address'
         value={query}
         onChange={e => setQuery(e.target.value)}
       />
-      <div className='min-h-0 overflow-y-auto'>
-        {shown.length > 0 ? (
-          <RowGroup>
-            {shown.map(row => (
-              <Row
-                key={row.address}
-                type='screen'
-                label={row.label}
-                description={shortAddress(row.address)}
-                onPress={() => {
-                  onPick(row);
-                  close(false);
-                }}
-              />
-            ))}
-          </RowGroup>
-        ) : (
+      <div className='flex min-h-0 flex-col gap-1.5 overflow-y-auto'>
+        <Rows title='yours' rows={rows.yours} onPick={pick} />
+        <Rows title='contacts' rows={rows.contacts} onPick={pick} />
+        {none && (
           <p className='py-6 text-center text-xs text-fg-muted'>
-            {q ? 'nothing matches that' : 'no saved addresses yet'}
+            {query.trim() ? 'nothing matches that' : 'no saved addresses yet'}
           </p>
         )}
       </div>
+      {(onPaste ?? onScan) && (
+        <div className='flex gap-2'>
+          {onPaste && (
+            <Button
+              variant='secondary'
+              className='flex-1'
+              onClick={() => {
+                close(false);
+                onPaste();
+              }}
+            >
+              <span className='i-lucide-clipboard size-4' aria-hidden='true' />
+              paste one
+            </Button>
+          )}
+          {onScan && (
+            <Button
+              variant='secondary'
+              className='flex-1'
+              onClick={() => {
+                close(false);
+                onScan();
+              }}
+            >
+              <span className='i-lucide-scan size-4' aria-hidden='true' />
+              scan
+            </Button>
+          )}
+        </div>
+      )}
     </Sheet>
   );
 }
@@ -162,10 +261,10 @@ export const ToField = ({
           variant='secondary'
           onClick={onContacts}
           disabled={disabled}
-          aria-label='contacts'
+          aria-label='saved addresses'
           className='size-12 shrink-0 bg-elev-1 px-0 text-fg-muted'
         >
-          <span className='i-lucide-user size-4' />
+          <span className='i-lucide-book-user size-4' />
         </Button>
       )}
       {onScan && (
