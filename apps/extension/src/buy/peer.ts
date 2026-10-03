@@ -5,7 +5,7 @@
  */
 
 import type { PrivateKeyAccount } from 'viem/accounts';
-import { http } from 'viem';
+import { http, parseAbiItem, parseEventLogs } from 'viem';
 import { BASE_CHAIN_ID, BASE_RPC, BASE_USDC, PEER_API, PEER_ATTESTATION } from '../config/ramps';
 import { byBest, toOffer, zafuReferral, type Offer, type PeerQuoteRow } from './fees';
 import { baseReader, baseWriter } from './base-chain';
@@ -134,6 +134,76 @@ export const cancel = async (
 ): Promise<void> => {
   const hash = await (await clientFor(account)).cancelIntent({ intentHash });
   await baseReader().waitForTransactionReceipt({ hash });
+};
+
+/**
+ * Peer's orchestrators on Base (sdk 0.14.5 contracts, production): whichever
+ * the escrow uses emits IntentFulfilled when the usdc is released.
+ */
+const ORCHESTRATORS = [
+  '0x88888883Ed048FF0a415271B28b2F52d431810D0',
+  '0x888888359E981B5225CA48fbCdCeff702FC3b888',
+  '0x014025fDE093f8701d86e9f38e2C3a9b779cb5c7',
+] as const;
+
+const INTENT_FULFILLED = parseAbiItem(
+  'event IntentFulfilled(bytes32 indexed intentHash, address indexed fundsTransferredTo, uint256 amount, bool isManualRelease)',
+);
+
+/** blocks per log read: small enough for a public rpc's range limit */
+const LOG_SPAN = 5_000n;
+/** at most this far past the reserve (about 3 days of base blocks), then undecided */
+const LOG_REACH = 130_000n;
+/** how far each intent's log read got, so a lapsed buy re-reads only new blocks */
+const readTo = new Map<string, bigint>();
+
+/**
+ * Was this intent released to `to`? Read on chain, never inferred from a
+ * balance (leftover usdc from a refunded swap would look the same). The
+ * page's own release tx is read first; else the orchestrators' IntentFulfilled
+ * logs from the reserve's block on. A release by hand (`isManualRelease`, a
+ * seller after a dispute) counts. Undefined when it can't tell yet.
+ */
+export const intentFulfilled = async (p: {
+  intentHash: `0x${string}`;
+  to: `0x${string}`;
+  fulfillTx?: `0x${string}`;
+  reserveTx?: `0x${string}`;
+}): Promise<boolean | undefined> => {
+  const chain = baseReader();
+  const ours = (log: { args: { intentHash?: string; fundsTransferredTo?: string } }) =>
+    log.args.intentHash?.toLowerCase() === p.intentHash.toLowerCase() &&
+    log.args.fundsTransferredTo?.toLowerCase() === p.to.toLowerCase();
+  if (p.fulfillTx) {
+    const r = await chain.getTransactionReceipt({ hash: p.fulfillTx }).catch(() => undefined);
+    if (r?.status === 'success') {
+      if (parseEventLogs({ abi: [INTENT_FULFILLED], logs: r.logs }).some(ours)) {
+        return true;
+      }
+    }
+  }
+  if (!p.reserveTx) {
+    return undefined;
+  }
+  const reserved = await chain.getTransactionReceipt({ hash: p.reserveTx });
+  const tip = await chain.getBlockNumber();
+  const last = reserved.blockNumber + LOG_REACH < tip ? reserved.blockNumber + LOG_REACH : tip;
+  for (let from = readTo.get(p.intentHash) ?? reserved.blockNumber; from <= last; ) {
+    const to = from + LOG_SPAN - 1n < last ? from + LOG_SPAN - 1n : last;
+    const logs = await chain.getLogs({
+      address: [...ORCHESTRATORS],
+      event: INTENT_FULFILLED,
+      args: { intentHash: p.intentHash },
+      fromBlock: from,
+      toBlock: to,
+    });
+    if (logs.some(ours)) {
+      return true;
+    }
+    from = to + 1n;
+    readTo.set(p.intentHash, from);
+  }
+  return last === tip ? false : undefined;
 };
 
 /** is this intent still held for the person? */

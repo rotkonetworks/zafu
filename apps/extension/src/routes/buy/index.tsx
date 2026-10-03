@@ -12,7 +12,7 @@ import { ScrollShell, type ScrollArt } from '../../components/scroll-shell';
 import { allowEgress, check, init, unlock, type BuyState } from './store';
 import { Column, useBuy } from './ui';
 import { AmountScreen, Sheets, Ticket } from './amount';
-import { AskScreen, ChooseScreen, FailedScreen, GasScreen, PayScreen } from './pay';
+import { AskScreen, ChooseScreen, FailedScreen, GasScreen, LapsedScreen, PayScreen } from './pay';
 import { DoneScreen, ProgressScreen, TrackScreen } from './progress';
 
 type Screen =
@@ -29,6 +29,7 @@ type Screen =
   | 'choose'
   | 'verify'
   | 'failed'
+  | 'lapsed'
   | 'track'
   | 'refund'
   | 'done';
@@ -49,7 +50,9 @@ const screenOf = (s: BuyState): Screen =>
                 ? 'refund'
                 : s.buy.stage === 'done'
                   ? 'done'
-                  : 'pay'));
+                  : s.buy.stage === 'lapsed'
+                    ? 'lapsed'
+                    : 'pay'));
 
 const STEP: Partial<Record<Screen, readonly [number, number, string]>> = {
   amount: [1, 4, 'amount'],
@@ -61,6 +64,7 @@ const STEP: Partial<Record<Screen, readonly [number, number, string]>> = {
   choose: [3, 4, 'confirm'],
   verify: [3, 4, 'confirm'],
   failed: [3, 4, 'confirm'],
+  lapsed: [3, 4, 'confirm'],
   track: [4, 4, 'arrive'],
   refund: [4, 4, 'arrive'],
 };
@@ -94,6 +98,7 @@ const SCREENS: Record<Screen, () => ReactNode> = {
   choose: () => <ChooseScreen />,
   verify: () => <ProgressScreen title='confirming your payment' usually='usually under a minute' />,
   failed: () => <FailedScreen />,
+  lapsed: () => <LapsedScreen />,
   track: () => <TrackScreen />,
   refund: () => <TrackScreen />,
   done: () => <DoneScreen />,

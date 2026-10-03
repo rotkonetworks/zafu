@@ -26,7 +26,7 @@ import { PopupPath, groupPath, threadPath } from '../routes/popup/paths';
 import { peopleAsk, peopleCall, peopleSay, useMyRooms } from './client';
 import { encodeMemoInvite, PENUMBRA_MEMO_TEXT_BYTES, ZCASH_MEMO_BYTES } from './memo-door';
 import { pairId } from './protocol';
-import type { StoredInvite } from './vault';
+import type { PairCard, StoredInvite } from './vault';
 
 const readRelaySetting = async (): Promise<PeopleRelaySetting | undefined> =>
   (await chrome.storage.local.get(PEOPLE_RELAY_KEY))[PEOPLE_RELAY_KEY] as
@@ -172,8 +172,11 @@ export const useMemoInvite = () => {
 };
 
 /**
- * A memo answer put the other side's card on a waiting pair room; keep it on
- * the contact, so the thread knows you now hold each other's cards.
+ * A memo answer you confirmed (or one carrying the key you already hold for
+ * them) put the other side's card on the pair room; keep it on the contact,
+ * so the thread knows you now hold each other's cards. This only fills what
+ * the contact lacks: a zid or pair key they already have is never replaced
+ * here. Replacing one is `useChooseAnswer`, after you say so.
  */
 export const usePairCards = (): void => {
   const rooms = useMyRooms();
@@ -184,9 +187,32 @@ export const usePairCards = (): void => {
       const card = r.pair?.card;
       const c =
         card && (Array.isArray(contacts) ? contacts : []).find(x => x.id === r.pair!.personId);
-      if (card && c && (c.pairKa !== card.pairKa || c.zid !== card.zid)) {
-        void updateContact(c.id, { zid: card.zid, pairKa: card.pairKa });
+      if (!card || !c) {
+        continue;
+      }
+      const fill = {
+        ...(!c.zid ? { zid: card.zid } : {}),
+        ...(!c.pairKa && (!c.zid || c.zid === card.zid) ? { pairKa: card.pairKa } : {}),
+      };
+      if (Object.keys(fill).length) {
+        void updateContact(c.id, fill);
       }
     }
   }, [rooms, contacts, updateContact]);
+};
+
+/**
+ * You looked at an answer to your memo invite and said it is them: it
+ * becomes the person in the pair room and its keys go on the contact, in
+ * place of any they had. The only path that replaces a contact's keys.
+ */
+export const useChooseAnswer = () => {
+  const updateContact = useStore(s => s.contacts.updateContact);
+  return useCallback(
+    async (contactId: string, card: PairCard) => {
+      await peopleCall('pair-choose', { contactId, zid: card.zid });
+      await updateContact(contactId, { zid: card.zid, pairKa: card.pairKa });
+    },
+    [updateContact],
+  );
 };

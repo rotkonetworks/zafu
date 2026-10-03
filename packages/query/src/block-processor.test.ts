@@ -83,7 +83,7 @@ describe('BlockProcessor sync loop', () => {
     expect(streamsOpened).toBe(before);
   });
 
-  describe('holds (a send goes ahead of sync)', () => {
+  describe('holds (sync waits on the chain-id check)', () => {
     const settle = () =>
       new Promise(r => {
         setTimeout(r, 200);
@@ -163,4 +163,70 @@ describe('BlockProcessor sync loop', () => {
       expect(streamsOpened).toBe(0);
     });
   });
+
+  it('a node that is down is not asked again once every window closes', async () => {
+    let asked = 0;
+    const processor = new BlockProcessor({
+      querier: {
+        tendermint: {
+          latestBlockHeight: () => {
+            asked++;
+            return Promise.reject(new Error('node down'));
+          },
+        },
+      },
+      indexedDb: { getFullSyncHeight: () => Promise.resolve(undefined) },
+      viewServer: {},
+      numeraires: [],
+      stakingAssetId: new AssetId({}),
+      genesisBlock: undefined,
+      walletCreationBlockHeight: undefined,
+      compactFrontierBlockHeight: undefined,
+      fullViewingKey: new FullViewingKey({}),
+    } as unknown as BlockProcessorDeps);
+    const run = processor.sync();
+    await vi.waitFor(() => expect(asked).toBeGreaterThanOrEqual(2));
+
+    processor.pause();
+    // the run winds down instead of retrying forever
+    await run;
+    const closed = asked;
+    await new Promise(r => {
+      setTimeout(r, 1_000);
+    });
+    expect(asked).toBe(closed);
+    processor.stop('test done');
+  });
+
+  it('a retry that starts after the pause asks the node nothing', async () => {
+    let reads = 0;
+    let calls = 0;
+    const down = () => {
+      calls++;
+      return Promise.reject(new Error('node down'));
+    };
+    const processor = new BlockProcessor({
+      querier: { tendermint: { latestBlockHeight: down }, cnidarium: { fetchRemoteRoot: down } },
+      indexedDb: {
+        // the first attempt fails on its own, so backOff waits before the next
+        getFullSyncHeight: () =>
+          ++reads === 1 ? Promise.reject(new Error('busy')) : Promise.resolve(10n),
+      },
+      viewServer: { getSctRoot: () => ({}) },
+      numeraires: [],
+      stakingAssetId: new AssetId({}),
+      genesisBlock: undefined,
+      walletCreationBlockHeight: undefined,
+      compactFrontierBlockHeight: undefined,
+      fullViewingKey: new FullViewingKey({}),
+    } as unknown as BlockProcessorDeps);
+    const run = processor.sync().catch(() => undefined);
+    await vi.waitFor(() => expect(reads).toBe(1));
+    // every window closes during backOff's wait
+    processor.pause();
+    await run;
+    expect(calls).toBe(0);
+    expect(reads).toBe(1);
+    processor.stop('test done');
+  }, 15_000);
 });

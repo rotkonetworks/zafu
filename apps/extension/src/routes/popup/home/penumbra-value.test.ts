@@ -9,7 +9,14 @@ import {
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { base64ToUint8Array } from '@penumbrafi/types/base64';
 import { EquivalentValue } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
-import { fmtIn, heroOf, localPrices, selectHome, valueOf } from './penumbra-value';
+import {
+  fmtIn,
+  heroOf,
+  LOCAL_PRICE_MAX_AGE_BLOCKS,
+  localPrices,
+  selectHome,
+  valueOf,
+} from './penumbra-value';
 import { combine, fixedBook, type Simulate } from '../../../penumbra/price';
 import { QUOTES, UNIVERSE } from '../../../penumbra/quotes';
 
@@ -61,7 +68,7 @@ const DELEGATION = meta(
 );
 const UNNAMED = meta('transfer/channel-20/unknown', '', 'transfer/channel-20/unknown', 6);
 
-const balance = (m: Metadata, units: bigint, worth: [Metadata, bigint][] = []) =>
+const balance = (m: Metadata, units: bigint, worth: [Metadata, bigint][] = [], asOfHeight = 0n) =>
   new BalancesResponse({
     balanceView: new ValueView({
       valueView: {
@@ -74,6 +81,7 @@ const balance = (m: Metadata, units: bigint, worth: [Metadata, bigint][] = []) =
               new EquivalentValue({
                 numeraire: n,
                 equivalentAmount: new Amount({ lo: v, hi: 0n }),
+                asOfHeight,
               }),
           ),
         },
@@ -232,5 +240,24 @@ describe('registry-first display', () => {
     expect(usdt!.symbol).toBe('axlUSDT');
     expect(usdt!.name).toBe('Tether USD');
     vi.mocked(registryMetadata).mockReset();
+  });
+});
+
+describe('recorded prices expire', () => {
+  const at = 1_000_000;
+  const osmoAt = (h: number) =>
+    selectAssets([balance(OSMO, 2_000_000n, [[USDC, 3_000_000n]], BigInt(h))]);
+
+  test('a price recorded within the window is used', () => {
+    const local = localPrices(osmoAt(at - LOCAL_PRICE_MAX_AGE_BLOCKS), at);
+    expect(local[OSMO_ID]?.usd).toBeCloseTo(1.5, 9);
+  });
+
+  test('an older one is dropped, so the dex pass prices the asset instead', () => {
+    expect(localPrices(osmoAt(at - LOCAL_PRICE_MAX_AGE_BLOCKS - 1), at)[OSMO_ID]).toEqual({});
+  });
+
+  test('a price at no known height is dropped once the height is known', () => {
+    expect(localPrices(osmoAt(0), at)[OSMO_ID]).toEqual({});
   });
 });

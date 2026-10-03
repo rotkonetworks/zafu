@@ -32,29 +32,41 @@ export const usdcOf = (address: `0x${string}`): Promise<bigint> =>
     args: [address],
   });
 
-/** gas for the person's three transactions (reserve, release, send to the swap), at today's price */
-const GAS_UNITS = 3n * 400_000n;
+/** what one of the person's transactions (reserve, release, send to the swap) may burn */
+const GAS_PER_TX = 400_000n;
 
 export interface GasState {
   have: bigint;
   need: bigint;
 }
 
-export const gasState = async (address: `0x${string}`): Promise<GasState> => {
+/** eth on the address against `txs` transactions still to send, at today's price */
+export const gasState = async (address: `0x${string}`, txs = 3): Promise<GasState> => {
   const [have, price] = await Promise.all([
     baseReader().getBalance({ address }),
     baseReader().getGasPrice(),
   ]);
-  return { have, need: price * GAS_UNITS };
+  return { have, need: price * GAS_PER_TX * BigInt(txs) };
 };
 
 export const enoughGas = (g: GasState): boolean => g.have >= g.need;
 
-/** send `amount` usdc from the person's key; resolves when it is in a block */
+export class TransferReverted extends Error {
+  constructor(readonly hash: `0x${string}`) {
+    super("the usdc transfer didn't go through · nothing moved");
+  }
+}
+
+/**
+ * Send `amount` usdc from the person's key; resolves once it is in a block and
+ * succeeded. `onSent` hears the hash the moment it is out. A reverted transfer
+ * moved nothing and throws TransferReverted (viem's receipt doesn't throw).
+ */
 export const sendUsdc = async (
   account: PrivateKeyAccount,
   to: `0x${string}`,
   amount: bigint,
+  onSent?: (hash: `0x${string}`) => void | Promise<void>,
 ): Promise<`0x${string}`> => {
   const hash = await baseWriter(account).writeContract({
     address: BASE_USDC,
@@ -64,6 +76,10 @@ export const sendUsdc = async (
     account,
     chain: base,
   });
-  await baseReader().waitForTransactionReceipt({ hash });
+  await onSent?.(hash);
+  const receipt = await baseReader().waitForTransactionReceipt({ hash });
+  if (receipt.status !== 'success') {
+    throw new TransferReverted(hash);
+  }
   return hash;
 };

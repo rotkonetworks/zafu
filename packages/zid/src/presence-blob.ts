@@ -27,14 +27,33 @@ const enc = new TextEncoder();
 // ---------------------------------------------------------------------------
 
 /**
- * HKDF domain label for the AEAD key. MUST differ from the rendezvous tag's
- * `'zid-rvz-v1'` - this difference IS the key-separation guarantee: the same
- * `rootSecret` never yields both the public tag and the secret key.
+ * HKDF domain labels for the AEAD key, one per blob version. Both MUST differ
+ * from the rendezvous tag's `'zid-rvz-v1'` - that difference IS the
+ * key-separation guarantee: the same `rootSecret` never yields both the public
+ * tag and the secret key. The version is part of the label, so a v1 key never
+ * opens a v2 blob or the reverse.
  */
-const PRESENCE_KDF_LABEL = 'zid-presence-v1';
+const PRESENCE_KDF_LABEL_V1 = 'zid-presence-v1';
+const PRESENCE_KDF_LABEL_V2 = 'zid-presence-v2';
 
-/** presence-blob wire-format version (first byte of every blob). */
-export const PRESENCE_BLOB_VERSION = 0x01;
+/**
+ * Presence-blob version this writer emits.
+ *
+ * v2 puts NOTHING in the clear but the random nonce: the version rides as the
+ * first plaintext byte, under the AEAD, and in the HKDF label and AAD. On the
+ * wire a v2 blob is `nonce(12) ‖ ciphertext+tag`, which is uniformly random
+ * to anyone without the key - the same distribution as a dummy or a withdraw
+ * blob, so a relay cannot count the real entries in a padded batch.
+ *
+ * v1 was `0x01 ‖ nonce ‖ ciphertext+tag`. That constant first byte made every
+ * real entry stand out from the random padding and leaked the publisher's
+ * friend count. It is still READ for one transition (a peer on an older build
+ * keeps being found), and never written.
+ */
+export const PRESENCE_BLOB_VERSION = 0x02;
+
+/** the old cleartext-version layout, read only. */
+const PRESENCE_BLOB_V1 = 0x01;
 
 /** AES-256-GCM key length, bytes. */
 const AEAD_KEY_BYTES = 32;
@@ -45,8 +64,11 @@ const NONCE_BYTES = 12;
 /** GCM authentication-tag length, bytes (128-bit). */
 const TAG_BYTES = 16;
 
-/** smallest possible blob: version + nonce + (empty ct + tag). */
-const MIN_BLOB_BYTES = 1 + NONCE_BYTES + TAG_BYTES;
+/** smallest v2 blob: nonce + (version byte + tag). */
+const MIN_BLOB_V2 = NONCE_BYTES + 1 + TAG_BYTES;
+
+/** smallest v1 blob: version + nonce + (empty ct + tag). */
+const MIN_BLOB_V1 = 1 + NONCE_BYTES + TAG_BYTES;
 
 /**
  * Direction of a pairwise presence beacon. A pairwise link has two independent
@@ -105,34 +127,41 @@ const asArrayBuffer = (u: Uint8Array): Uint8Array<ArrayBuffer> => {
 };
 
 /**
- * Additional authenticated data. Binds the epoch (anti-replay), app origin, and
- * direction into the GCM tag. Because the relay cannot forge this tag, it cannot
- * lift a previous epoch's blob into the current epoch's tag slot - the epoch in
- * the AAD will not match and `open` returns null. Every field is fixed-length,
- * so the concatenation is unambiguous.
+ * Additional authenticated data. Binds the version, the epoch (anti-replay),
+ * app origin, and direction into the GCM tag. Because the relay cannot forge
+ * this tag, it cannot lift a previous epoch's blob into the current epoch's tag
+ * slot - the epoch in the AAD will not match and `open` returns null. Every
+ * field is fixed-length, so the concatenation is unambiguous.
  */
-const presenceAad = (appOrigin: string, epoch: number, dir: PresenceDir): Uint8Array<ArrayBuffer> =>
+const presenceAad = (
+  version: number,
+  appOrigin: string,
+  epoch: number,
+  dir: PresenceDir,
+): Uint8Array<ArrayBuffer> =>
   concatBytes(
-    Uint8Array.of(PRESENCE_BLOB_VERSION), // 1
+    Uint8Array.of(version), // 1
     sha256(enc.encode(appOrigin)), // 32
     u32be(epoch), // 4
     Uint8Array.of(dirByte(dir)), // 1
   );
 
 /**
- * Derive the per-(app, epoch, dir) AES-256-GCM key from the pairwise root
- * secret. Epoch-in-`info` gives cross-epoch key rotation; the `'zid-presence-v1'`
- * label separates this key from the rendezvous tag. Fixed-length fields keep the
- * `info` string unambiguous regardless of `appOrigin` length.
+ * Derive the per-(version, app, epoch, dir) AES-256-GCM key from the pairwise
+ * root secret. Epoch-in-`info` gives cross-epoch key rotation; the versioned
+ * `'zid-presence-vN'` label separates this key from the rendezvous tag and from
+ * the other version's key. Fixed-length fields keep the `info` string
+ * unambiguous regardless of `appOrigin` length.
  */
 const deriveAeadKey = async (
+  version: number,
   rootSecret: Uint8Array,
   appOrigin: string,
   epoch: number,
   dir: PresenceDir,
 ): Promise<CryptoKey> => {
   const info = concatBytes(
-    enc.encode(PRESENCE_KDF_LABEL),
+    enc.encode(version === PRESENCE_BLOB_V1 ? PRESENCE_KDF_LABEL_V1 : PRESENCE_KDF_LABEL_V2),
     sha256(enc.encode(appOrigin)), // fixed 32
     u32be(epoch), // fixed 4
     Uint8Array.of(dirByte(dir)), // fixed 1
@@ -150,9 +179,10 @@ const deriveAeadKey = async (
 
 /**
  * Seal a presence record for `(appOrigin, epoch, dir)` under the pairwise
- * `rootSecret`. Output layout: `version(1) ‖ nonce(12) ‖ ciphertext+tag`. The
- * 12-byte GCM nonce is random per call and prepended in the clear (safe - GCM
- * only needs nonce uniqueness, not secrecy).
+ * `rootSecret`. Output layout (v2): `nonce(12) ‖ AEAD(version(1) ‖ plaintext)`.
+ * The 12-byte GCM nonce is random per call and sent in the clear (safe - GCM
+ * only needs nonce uniqueness, not secrecy); every other byte is ciphertext or
+ * tag, so the blob is indistinguishable from random bytes of the same length.
  */
 export const sealPresence = async (
   rootSecret: Uint8Array,
@@ -161,16 +191,44 @@ export const sealPresence = async (
   dir: PresenceDir,
   plaintext: Uint8Array,
 ): Promise<Uint8Array> => {
-  const key = await deriveAeadKey(rootSecret, appOrigin, epoch, dir);
+  const v = PRESENCE_BLOB_VERSION;
+  const key = await deriveAeadKey(v, rootSecret, appOrigin, epoch, dir);
   const nonce = crypto.getRandomValues(new Uint8Array(NONCE_BYTES));
   const ct = new Uint8Array(
     await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv: nonce, additionalData: presenceAad(appOrigin, epoch, dir) },
+      { name: 'AES-GCM', iv: nonce, additionalData: presenceAad(v, appOrigin, epoch, dir) },
       key,
-      asArrayBuffer(plaintext),
+      concatBytes(Uint8Array.of(v), plaintext),
     ),
   );
-  return concatBytes(Uint8Array.of(PRESENCE_BLOB_VERSION), nonce, ct);
+  return concatBytes(nonce, ct);
+};
+
+/** try one layout; null on any failure. */
+const tryOpen = async (
+  version: number,
+  rootSecret: Uint8Array,
+  appOrigin: string,
+  epoch: number,
+  dir: PresenceDir,
+  nonce: Uint8Array,
+  ct: Uint8Array,
+): Promise<Uint8Array | null> => {
+  try {
+    const key = await deriveAeadKey(version, rootSecret, appOrigin, epoch, dir);
+    const pt = await crypto.subtle.decrypt(
+      {
+        name: 'AES-GCM',
+        iv: asArrayBuffer(nonce),
+        additionalData: presenceAad(version, appOrigin, epoch, dir),
+      },
+      key,
+      asArrayBuffer(ct),
+    );
+    return new Uint8Array(pt);
+  } catch {
+    return null;
+  }
 };
 
 /**
@@ -179,6 +237,10 @@ export const sealPresence = async (
  * epoch/app/dir, or a replayed cross-epoch blob). Never throws: garbage from an
  * untrusted relay is dropped silently client-side, so callers can treat a slot
  * as "no valid presence" without a try/catch.
+ *
+ * v2 is tried first. A blob that does not open as v2 and starts with 0x01 is
+ * tried as the legacy v1 layout, so a peer still on an older build is found
+ * during the transition.
  */
 export const openPresence = async (
   rootSecret: Uint8Array,
@@ -187,26 +249,34 @@ export const openPresence = async (
   dir: PresenceDir,
   blob: Uint8Array,
 ): Promise<Uint8Array | null> => {
-  if (blob.length < MIN_BLOB_BYTES) {
-    return null;
-  }
-  if (blob[0] !== PRESENCE_BLOB_VERSION) {
-    return null;
-  }
-
-  const nonce = asArrayBuffer(blob.subarray(1, 1 + NONCE_BYTES));
-  const ct = asArrayBuffer(blob.subarray(1 + NONCE_BYTES));
-  try {
-    const key = await deriveAeadKey(rootSecret, appOrigin, epoch, dir);
-    const pt = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: nonce, additionalData: presenceAad(appOrigin, epoch, dir) },
-      key,
-      ct,
+  if (blob.length >= MIN_BLOB_V2) {
+    const pt = await tryOpen(
+      PRESENCE_BLOB_VERSION,
+      rootSecret,
+      appOrigin,
+      epoch,
+      dir,
+      blob.subarray(0, NONCE_BYTES),
+      blob.subarray(NONCE_BYTES),
     );
-    return new Uint8Array(pt);
-  } catch {
-    return null;
+    // the version inside the AEAD must say v2 too: the label already binds it,
+    // this keeps the two places from ever disagreeing
+    if (pt?.[0] === PRESENCE_BLOB_VERSION) {
+      return pt.slice(1);
+    }
   }
+  if (blob.length >= MIN_BLOB_V1 && blob[0] === PRESENCE_BLOB_V1) {
+    return tryOpen(
+      PRESENCE_BLOB_V1,
+      rootSecret,
+      appOrigin,
+      epoch,
+      dir,
+      blob.subarray(1, 1 + NONCE_BYTES),
+      blob.subarray(1 + NONCE_BYTES),
+    );
+  }
+  return null;
 };
 
 // ---------------------------------------------------------------------------

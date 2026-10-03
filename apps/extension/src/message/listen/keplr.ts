@@ -7,6 +7,7 @@
  */
 
 import { isValidExternalSender } from '../../senders/external';
+import { isValidInternalSender } from '../../senders/internal';
 import {
   isKeplrMessage,
   isKeplrApprovalResult,
@@ -230,8 +231,13 @@ export const keplrMessageListener = (
   sender: chrome.runtime.MessageSender,
   sendResponse: (response?: unknown) => void,
 ): boolean => {
-  // the approval popup posting its result back
+  // the approval popup posting its result back - only from zafu's own pages:
+  // a content script carries this extension's id too, and a forged result
+  // would answer an approval the person never saw
   if (isKeplrApprovalResult(message)) {
+    if (!isValidInternalSender(sender)) {
+      return false;
+    }
     const resolve = pending.get(message.requestId);
     if (resolve) {
       pending.delete(message.requestId);
@@ -254,10 +260,12 @@ export const keplrMessageListener = (
     return false;
   }
 
+  // the origin is the browser-attested sender's, never a field of the message:
+  // the page writes the message, so it could name a site the person trusts
   void handleMethod(
     message.method,
     (message.params as Record<string, unknown>) ?? {},
-    message.origin,
+    sender.origin,
     sender,
   )
     .then(result => sendResponse({ ok: true, result }))

@@ -95,6 +95,8 @@ export interface ShieldTransparentProps {
   watchOnly?: { label: string; mainnet: boolean; orchardFvk?: string; ufvk?: string; id?: string };
   /** the pocket's t-addresses; position is the derivation index the worker signs with */
   tAddresses: string[];
+  /** how many of them hold funds right now (each swap has its own address) */
+  funded?: number;
   isMainnet: boolean;
   zidecarUrl: string;
 }
@@ -105,6 +107,7 @@ export const ShieldTransparent = ({
   hasMnemonic,
   watchOnly,
   tAddresses,
+  funded,
   isMainnet,
   zidecarUrl,
 }: ShieldTransparentProps) => {
@@ -484,7 +487,7 @@ export const ShieldTransparent = ({
         <div className='flex items-center justify-between px-4 py-3 text-sm'>
           <span className='text-fg-muted'>from</span>
           <span>
-            {tAddresses.length} transparent address{tAddresses.length === 1 ? '' : 'es'}
+            {funded ?? 'your'} transparent address{funded === 1 ? '' : 'es'}
           </span>
         </div>
         <div className='flex items-center justify-between px-4 py-3 text-sm'>
@@ -497,6 +500,14 @@ export const ShieldTransparent = ({
         </div>
       </div>
 
+      {/* hot and ledger shield one address per transaction; zigner signs them all in one */}
+      {!!funded && funded > 1 && (
+        <p className='text-label text-fg-muted lowercase'>
+          {method === 'zigner'
+            ? `these ${funded} addresses are shielded together in one transaction · that links them on chain`
+            : `each address is shielded in its own transaction, each with its own fee · they stay unlinked`}
+        </p>
+      )}
       <p className='text-label text-fg-muted lowercase'>after this, these funds stay private</p>
 
       {txid && !error && (

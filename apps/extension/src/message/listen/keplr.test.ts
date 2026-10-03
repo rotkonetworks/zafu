@@ -79,3 +79,38 @@ describe('ZafuKeplr Ethermint guard', () => {
     expect(res).toMatchObject({ ok: false, error: 'unsupported method nonsense' });
   });
 });
+
+describe('ZafuKeplr origin and result senders', () => {
+  it('keys state by the browser-attested sender, never a message `origin`', async () => {
+    const res = await call(
+      {
+        type: 'ZafuKeplr',
+        method: 'experimentalSuggestChain',
+        params: { chainInfo: { chainId: 'x' } },
+        origin: 'https://app.skip.build',
+      },
+      sender('https://evil.example'),
+    );
+    expect(res).toMatchObject({ ok: true });
+    const stored = await chrome.storage.session.get(null);
+    expect(stored).toHaveProperty(['keplrSuggested:https://evil.example']);
+    expect(stored).not.toHaveProperty(['keplrSuggested:https://app.skip.build']);
+  });
+
+  it('drops an approval result that a content script sends', () => {
+    const respond = vi.fn();
+    const result = { type: 'zafu_keplr_result', requestId: 'r', result: { approved: true } };
+    // a content script carries the extension id, like zafu's own pages
+    const contentScript = { ...sender('https://evil.example'), id: chrome.runtime.id };
+    expect(keplrMessageListener(result, contentScript, respond)).toBe(false);
+    expect(respond).not.toHaveBeenCalled();
+    // zafu's own approval page is still heard
+    const page: chrome.runtime.MessageSender = {
+      id: chrome.runtime.id,
+      origin: `chrome-extension://${chrome.runtime.id}`,
+      url: `chrome-extension://${chrome.runtime.id}/popup.html`,
+    };
+    keplrMessageListener(result, page, respond);
+    expect(respond).toHaveBeenCalledWith({ ok: true });
+  });
+});

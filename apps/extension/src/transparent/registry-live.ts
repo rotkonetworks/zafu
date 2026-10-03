@@ -4,7 +4,8 @@
  * channel to a chain zafu doesn't know. It is used only when it carries a valid
  * signature by the key below over its exact bytes and a version newer than the
  * bundled copy and any copy already stored. Anything else is ignored and the
- * bundled registry stays.
+ * bundled registry stays. Even a verified copy only adds chains zafu does not
+ * know: it never re-pins a known chain's channels (see applyLiveConnections).
  *
  * Signed in penumbrafi/registry with `just sign` (tools/sign/sign.mjs), whose
  * message format this mirrors.

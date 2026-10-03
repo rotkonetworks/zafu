@@ -66,6 +66,25 @@ export const signRequestListener = (
   return true;
 };
 
+/**
+ * The site's ed25519 key signs `zafu_sign` challenges as they are (the v1
+ * contract every relying party verifies) and also signs zafu's own messages,
+ * such as the PQ prekey authentication (`lp("zafu-pq-key-auth-v1") || ...`).
+ * Without a domain prefix on `zafu_sign`, a site could have the user sign a
+ * crafted prekey message for a PQ key of its choosing. Adding a prefix would
+ * break every verifier, so instead a challenge shaped like one of zafu's own -
+ * a big-endian u32 length followed by "zafu-" - is refused.
+ */
+export const isReservedChallenge = (challengeHex: string): boolean => {
+  const head = challengeHex.slice(0, 18).toLowerCase();
+  if (head.length < 18) {
+    return false;
+  }
+  const len = Number.parseInt(head.slice(0, 8), 16);
+  // "zafu-" in hex
+  return head.slice(8) === '7a6166752d' && len >= 5 && len <= challengeHex.length / 2 - 4;
+};
+
 const handleSignRequest = async (
   req: SignRequestMessage,
   sender: { origin: string; tab: chrome.tabs.Tab },
@@ -83,6 +102,14 @@ const handleSignRequest = async (
     return {
       success: false,
       error: 'invalid challenge: must be 1-1024 bytes hex-encoded',
+      code: 'invalid_request',
+    };
+  }
+
+  if (isReservedChallenge(req.challengeHex)) {
+    return {
+      success: false,
+      error: 'invalid challenge: these bytes are reserved for zafu itself',
       code: 'invalid_request',
     };
   }

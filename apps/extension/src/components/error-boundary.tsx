@@ -3,6 +3,7 @@ import { useRouteError } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
 import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import { Mark } from '@repo/ui/components/ui/mark';
+import { APPROVAL_ROUTES, matchesRoute } from '../routes/popup/paths';
 
 /**
  * App-wide crash recovery.
@@ -86,12 +87,12 @@ export const reportRenderError = (
 };
 
 // Approval popups serve a pending dapp request in a dedicated window; "go home"
-// there silently abandons the request, so on those paths we offer "close"
-// instead. Hash-routed, so match on location.hash.
-const isApprovalHash = (): boolean =>
-  /#\/?(transaction-approval|origin-approval|sign-approval|capability-approval|zcash-send-approval|keplr-approval)/i.test(
-    typeof location === 'undefined' ? '' : location.hash,
-  );
+// there silently abandons the request, so on those paths we offer "close",
+// which answers it as cancelled. Hash-routed: the path is the hash, minus its
+// query. The list is the one the layout uses for its bare screens, so the two
+// cannot drift apart again.
+export const isApprovalHash = (hash: string): boolean =>
+  matchesRoute(hash.replace(/^#/, '').split('?')[0] ?? '', APPROVAL_ROUTES);
 
 // set once the guarded auto-reload has run for this version, so the screen can say so
 const triedOnce = (): boolean => {
@@ -117,7 +118,7 @@ const ErrorScreen = ({ error }: { error: unknown }) => {
     `version: ${chrome.runtime.getManifest().version}`,
     `hash: ${location.hash}`,
   ].join('\n');
-  const approval = isApprovalHash();
+  const approval = isApprovalHash(typeof location === 'undefined' ? '' : location.hash);
 
   return (
     <div className='relative isolate mx-auto flex h-full min-h-[628px] w-full max-w-[400px] flex-col justify-center gap-4 bg-canvas px-7 text-fg'>

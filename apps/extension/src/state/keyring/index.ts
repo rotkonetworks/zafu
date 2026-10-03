@@ -400,6 +400,15 @@ export const createKeyRingSlice =
         set(state => {
           state.keyRing.status = 'locked';
         });
+        // Locking drops what the seed unlocked, not just the session key: the
+        // zcash worker holds keys derived from the phrase and its sync loops
+        // run with them. Terminating it (in the offscreen document, for every
+        // window) ends the syncs and frees that memory; the next unlock spawns
+        // a fresh one. The same as auto-lock's reload, without closing the
+        // window the person is looking at.
+        void import('./network-worker').then(({ stopNetworkWorker }) =>
+          Promise.all([stopNetworkWorker('zcash'), stopNetworkWorker('penumbra')]),
+        );
       },
 
       checkPassword: async (password: string) => {

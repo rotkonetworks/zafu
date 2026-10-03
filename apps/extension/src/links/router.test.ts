@@ -251,16 +251,21 @@ describe('contact and join', () => {
   });
 
   it('reads a group code, in both forms', () => {
-    expect(intent('zafu:join/673-chaos-mail')).toEqual({ kind: 'join', code: '673-chaos-mail' });
-    expect(intent('https://zafu.pro/j#673-chaos-mail')).toEqual({
+    expect(intent('zafu:join/673-chaos-mail-kite')).toEqual({
       kind: 'join',
-      code: '673-chaos-mail',
+      code: '673-chaos-mail-kite',
     });
-    expect(intent('https://www.zafu.pro/j/#673-chaos-mail')).toEqual({
+    expect(intent('https://zafu.pro/j#673-chaos-mail-kite')).toEqual({
       kind: 'join',
-      code: '673-chaos-mail',
+      code: '673-chaos-mail-kite',
     });
-    expect(toUri({ kind: 'join', code: '673-chaos-mail' })).toBe('zafu:join/673-chaos-mail');
+    expect(intent('https://www.zafu.pro/j/#673-chaos-mail-kite')).toEqual({
+      kind: 'join',
+      code: '673-chaos-mail-kite',
+    });
+    expect(toUri({ kind: 'join', code: '673-chaos-mail-kite' })).toBe(
+      'zafu:join/673-chaos-mail-kite',
+    );
   });
 
   it.each([
@@ -268,13 +273,14 @@ describe('contact and join', () => {
     'zafu:contact#has spaces in it here',
     `zafu:contact/x#${card}`,
     'zafu:join/673-chaos',
+    'zafu:join/673-chaos-mail',
     'zafu:join/../../settings',
     'zafu:join/673-CHAOS-MAIL',
-    'https://zafu.pro/j?code=673-chaos-mail',
-    'https://zafu.pro.evil.example/j#673-chaos-mail',
-    'https://evil.example/zafu.pro/j#673-chaos-mail',
-    'http://zafu.pro/j#673-chaos-mail',
-    'https://zafu.pro/x#673-chaos-mail',
+    'https://zafu.pro/j?code=673-chaos-mail-kite',
+    'https://zafu.pro.evil.example/j#673-chaos-mail-kite',
+    'https://evil.example/zafu.pro/j#673-chaos-mail-kite',
+    'http://zafu.pro/j#673-chaos-mail-kite',
+    'https://zafu.pro/x#673-chaos-mail-kite',
   ])('refuses %s', uri => {
     expect(parseLink(uri).ok).toBe(false);
   });
@@ -307,7 +313,7 @@ describe('anything else', () => {
   it('knows what looks like a link', () => {
     expect(looksLikeLink(`zcash:${T}`)).toBe(true);
     expect(looksLikeLink(' zafu:open/receive')).toBe(true);
-    expect(looksLikeLink('https://zafu.pro/j#673-chaos-mail')).toBe(true);
+    expect(looksLikeLink('https://zafu.pro/j#673-chaos-mail-kite')).toBe(true);
     expect(looksLikeLink(U)).toBe(false);
     expect(looksLikeLink('https://example.com')).toBe(false);
   });

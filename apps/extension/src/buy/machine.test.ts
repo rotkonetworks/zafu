@@ -10,6 +10,7 @@ import {
   cardLines,
   clock,
   loadOffer,
+  migrateBuy,
   resume,
   startBuy,
   type OpenBuy,
@@ -52,11 +53,42 @@ describe('the buy state machine', () => {
     );
   });
 
-  it('moves on to released when the intent is gone and the usdc is here', () => {
+  it('moves on to released only when the chain says the intent was released', () => {
     const b = advance(paying(), 'confirming', {}, T0 + 70_000);
-    expect(resume(b, { now: T0 + 80_000, intent: 'gone', usdc: offer.net }).stage).toBe('released');
-    // gone without the usdc: returned to the seller
-    expect(resume(b, { now: T0 + 80_000, intent: 'gone', usdc: 0n }).stage).toBe('expired');
+    expect(resume(b, { now: T0 + 80_000, intent: 'fulfilled' }).stage).toBe('released');
+    expect(resume(paying(), { now: T0 + 80_000, intent: 'fulfilled' }).stage).toBe('released');
+    // nothing about a balance moves it: leftover usdc from a refund is not a release
+    expect(resume(b, { now: T0 + 80_000 })).toBe(b);
+  });
+
+  it('never ends a paid buy on time alone: held past 6 h keeps going', () => {
+    const b = advance(paying(), 'confirming', {}, T0 + 70_000);
+    const late = T0 + INTENT_LIFETIME_MS + 60_000;
+    expect(resume(b, { now: late, intent: 'held' })).toBe(b);
+    expect(resume(b, { now: late })).toBe(b);
+  });
+
+  it('a paid buy whose hold ended without a release is lapsed, still watched for a release', () => {
+    const b = advance(paying(), 'confirming', {}, T0 + 70_000);
+    const lapsed = resume(b, { now: T0 + INTENT_LIFETIME_MS + 1, intent: 'gone' });
+    expect(lapsed.stage).toBe('lapsed');
+    expect(resume(lapsed, { now: T0 + INTENT_LIFETIME_MS + 9, intent: 'gone' })).toBe(lapsed);
+    // a seller's release by hand, after a dispute
+    expect(resume(lapsed, { now: T0 + 2 * INTENT_LIFETIME_MS, intent: 'fulfilled' }).stage).toBe(
+      'released',
+    );
+    const card = cardLines(lapsed, T0 + INTENT_LIFETIME_MS + 9);
+    expect(card.status).not.toMatch(/nothing was taken/);
+    expect(card.title).toMatch(/you paid/);
+  });
+
+  it("reads an older build's 'expired after i've paid' as lapsed", () => {
+    const paid = advance(paying(), 'confirming', {}, T0 + 70_000);
+    const old = advance(paid, 'expired', {}, T0 + INTENT_LIFETIME_MS);
+    expect(migrateBuy(old)).toMatchObject({ stage: 'lapsed' });
+    // never paid: it really did just expire
+    const unpaid = advance(paying(), 'expired', {}, T0 + INTENT_LIFETIME_MS);
+    expect(migrateBuy(unpaid)).toBe(unpaid);
   });
 
   it('settles a swap from 1click status only', () => {
@@ -75,6 +107,27 @@ describe('the buy state machine', () => {
       arrived: '7370000',
     });
     expect(resume(s, { now: T0, swap: 'refunded' }).stage).toBe('refunded');
+  });
+
+  it('a leg saved before its send whose deposit never came is quoted afresh after its deadline', () => {
+    const near = {
+      depositAddress: '0xd',
+      amountIn: '97107843',
+      amountOut: '7368542',
+      minAmountOut: '7294856',
+      quotedAt: T0,
+      deadline: new Date(T0 + 7_200_000).toISOString(),
+    };
+    const s = advance(paying(), 'swapping', { near });
+    expect(resume(s, { now: T0 + 60_000, swap: 'pending', noDeposit: true })).toBe(s);
+    expect(resume(s, { now: T0 + 7_300_000, swap: 'pending', noDeposit: true })).toMatchObject({
+      stage: 'released',
+      near: undefined,
+    });
+    // a deposit it saw, or a send it recorded, keeps being followed
+    expect(resume(s, { now: T0 + 7_300_000, swap: 'pending', noDeposit: false })).toBe(s);
+    const sent = { ...s, depositTx: '0xabc' as const };
+    expect(resume(sent, { now: T0 + 7_300_000, swap: 'pending', noDeposit: true })).toBe(sent);
   });
 
   it('gives the home card the stage and the real clock', () => {
@@ -116,6 +169,21 @@ describe('the open buy at rest', () => {
     expect(Object.keys((await chrome.storage.local.get('openBuy'))['openBuy'] as object)).toEqual([
       'encrypted',
     ]);
+  });
+
+  it("an older build's sealed 'expired after i've paid' opens as lapsed", async () => {
+    await unlock();
+    const old = advance(
+      advance(paying(), 'confirming', {}, T0 + 70_000),
+      'expired',
+      {},
+      T0 + INTENT_LIFETIME_MS,
+    );
+    await writeOpenBuy(old);
+    expect(Object.keys((await chrome.storage.local.get('openBuy'))['openBuy'] as object)).toEqual([
+      'encrypted',
+    ]);
+    expect(await readOpenBuy()).toMatchObject({ stage: 'lapsed', offer: old.offer });
   });
 
   it('ignores an old or foreign shape instead of crashing', async () => {

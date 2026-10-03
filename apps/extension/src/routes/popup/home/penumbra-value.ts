@@ -28,6 +28,8 @@ export interface Asset {
   unit?: Unit;
   /** its price per display unit as the view service recorded it from recent batch swaps */
   local: Partial<Record<TotalIn, number>>;
+  /** the height each recorded price is from (see LOCAL_PRICE_MAX_AGE_BLOCKS) */
+  localAt?: Partial<Record<TotalIn, number>>;
   /** the identifier of an asset with no registry symbol, to look it up */
   rawId?: string;
 }
@@ -58,9 +60,17 @@ const NUMERAIRE: Record<string, TotalIn> = { [USDC_INJ_ID]: 'usd', [UM_ID]: 'um'
  *  at $940,300, so the exponent is ours, never the metadata's. */
 const NUMERAIRE_EXPONENT = 6;
 
-/** recorded prices per display unit, from the equivalent values the view service attaches */
-const localOf = (b: BalancesResponse, amount: number) =>
-  Object.fromEntries(
+/**
+ * How old a recorded price may be, in blocks behind the synced height (about
+ * an hour). The view service records prices from batch swaps near the tip
+ * and never expires them, so without this a price from one thin batch months
+ * ago would still be shown as current, ahead of the fresh dex pass.
+ */
+export const LOCAL_PRICE_MAX_AGE_BLOCKS = 720;
+
+/** recorded prices per display unit, and their heights, from the equivalent values the view service attaches */
+const localOf = (b: BalancesResponse, amount: number) => {
+  const entries =
     amount > 0
       ? (getEquivalentValues.optional(b.balanceView) ?? []).flatMap(e => {
           const id = e.numeraire?.penumbraAssetId?.inner;
@@ -69,11 +79,21 @@ const localOf = (b: BalancesResponse, amount: number) =>
             ? (e.equivalentAmount.hi << 64n) + e.equivalentAmount.lo
             : undefined;
           return q && units !== undefined
-            ? [[q, Number(units) / 10 ** NUMERAIRE_EXPONENT / amount]]
+            ? [
+                [
+                  q,
+                  Number(units) / 10 ** NUMERAIRE_EXPONENT / amount,
+                  Number(e.asOfHeight),
+                ] as const,
+              ]
             : [];
         })
-      : [],
-  ) as Asset['local'];
+      : [];
+  return {
+    local: Object.fromEntries(entries.map(([q, p]) => [q, p])) as Asset['local'],
+    localAt: Object.fromEntries(entries.map(([q, , at]) => [q, at])) as Asset['localAt'],
+  };
+};
 
 const assetOf = (b: BalancesResponse, i: number): Asset => {
   const meta = getMetadataFromBalancesResponse.optional(b);
@@ -88,7 +108,7 @@ const assetOf = (b: BalancesResponse, i: number): Asset => {
     um: ['penumbra', 'UM'].includes(b.balanceView ? getDisplayDenomFromView(b.balanceView) : ''),
     amount,
     unit: unitOf(meta),
-    local: localOf(b, amount),
+    ...localOf(b, amount),
     // the registry's symbol counts as "named" too - once it knows the asset,
     // base denom goes in the token sheet's dedicated denom line, not here
     rawId: rawIdOf(b, base, displayMetadata(meta)?.symbol),
@@ -132,8 +152,32 @@ export const valueOf = (a: Asset, prices?: Prices) => {
 };
 
 /** the held assets' recorded prices, by asset id, for {@link combine} */
-export const localPrices = (assets: Asset[]): Local<TotalIn> =>
-  Object.fromEntries(assets.flatMap(a => (a.unit ? [[a.unit.id, a.local]] : [])));
+/**
+ * The recorded prices still fresh at the synced `height`: one recorded more
+ * than LOCAL_PRICE_MAX_AGE_BLOCKS before it, or at a height unknown, is left
+ * out (the dex pass prices it instead). With no height known, prices without
+ * a height are kept, as before.
+ */
+export const localPrices = (assets: Asset[], height?: number): Local<TotalIn> =>
+  Object.fromEntries(
+    assets.flatMap(a =>
+      a.unit
+        ? [
+            [
+              a.unit.id,
+              height === undefined
+                ? a.local
+                : Object.fromEntries(
+                    Object.entries(a.local).filter(([q]) => {
+                      const at = a.localAt?.[q as TotalIn];
+                      return !!at && height - at <= LOCAL_PRICE_MAX_AGE_BLOCKS;
+                    }),
+                  ),
+            ],
+          ]
+        : [],
+    ),
+  );
 
 /**
  * The hero's figure: the worth of every priced asset in the chosen quote,

@@ -8,6 +8,7 @@
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { readEncryptedWithMigration, writeEncryptedDirect } from './encrypted-storage';
+import type { PasswordScheme } from './identity';
 
 export interface PasswordLogin {
   /** the wallet whose phrase derives it: its zid, else its vault id */
@@ -15,9 +16,19 @@ export interface PasswordLogin {
   site: string;
   username: string;
   length: number;
+  /** the rotation: the password's version as the screen counts it, from 0 */
   version: number;
+  /**
+   * the derivation scheme that made it. Absent on logins saved before v2
+   * existed: those are v1, and stay v1 so the password never changes.
+   */
+  scheme?: PasswordScheme;
   savedAt: number;
 }
+
+/** the scheme a saved login derives with */
+export const schemeOf = (l: Pick<PasswordLogin, 'scheme'>): PasswordScheme =>
+  l.scheme === 2 ? 2 : 1;
 
 /** one saved login per wallet, site and username */
 const same = (a: PasswordLogin, b: Pick<PasswordLogin, 'owner' | 'site' | 'username'>) =>
@@ -61,7 +72,8 @@ export const restorePasswordLogins = async (
       typeof l.site === 'string' &&
       typeof l.username === 'string' &&
       typeof l.length === 'number' &&
-      typeof l.version === 'number',
+      typeof l.version === 'number' &&
+      (l.scheme === undefined || l.scheme === 1 || l.scheme === 2),
   );
   const here = mode === 'merge' ? await readPasswordLogins() : [];
   await write([...here, ...valid.filter(l => !here.some(h => same(h, l)))]);

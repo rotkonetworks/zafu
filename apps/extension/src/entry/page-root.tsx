@@ -15,6 +15,7 @@ import { AppErrorBoundary, reportRenderError } from '../components/error-boundar
 import { EgressAskSheet } from '../net/egress-ask-sheet';
 import { installRegistryIcons } from '../shared/components/registry-icons';
 import { announceUiOpenPresence } from '../state/ui-open-presence';
+import { trackActivity } from '../state/idle-activity';
 
 import '@repo/ui/styles/globals.css';
 import '@repo/ui/styles/icons.css';
@@ -24,6 +25,8 @@ import '@repo/ui/styles/icons.css';
 // loud. See utils/graceful-network-errors.ts.
 installGracefulNetworkErrorHandler();
 installRegistryIcons();
+// the person using this page is what keeps the wallet unlocked (auto-lock)
+trackActivity();
 
 // This page survives an extension reload/auto-update with its chrome.* bindings
 // gone: `runtime.id` disappears and every call throws "Extension context

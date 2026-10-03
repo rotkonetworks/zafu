@@ -33,11 +33,19 @@
  *                    key is derived per (appScope, shard, epoch, kind) with
  *                    HKDF-SHA256, so compromising one window's key does not open
  *                    another's and messages and presence never share one.
- *   authenticity     every record is signed by its author's ed25519 key and the
- *                    signature covers the room, the window and the sequence
- *                    number, so a member cannot rewrite another's message or
- *                    replay one into a different window (the AEAD's AAD binds the
- *                    window too).
+ *   authenticity     every record - message, action, direct message and
+ *                    presence - is signed by its author's ed25519 key. From
+ *                    record version 0x04 the signature covers the room (the
+ *                    app scope's and the shard's hashes), the window, the
+ *                    author's `ts` and sequence number, so a member cannot
+ *                    rewrite another's record, re-seal it into another window
+ *                    or carry it to another room, and cannot announce someone
+ *                    else's presence. A reader refuses any record whose signed
+ *                    `ts` falls outside the window it was served in (one window
+ *                    of clock skew either side); that check also covers older
+ *                    0x02 records, whose `ts` was already signed. The AEAD's
+ *                    AAD binds the window too, but every member can recompute
+ *                    it, so it is not what stops a member.
  *   tamper-evidence  each author's records form a hash chain (`prev`). Rewriting
  *                    your own history is detectable by anyone who saw the earlier
  *                    link.
@@ -89,7 +97,7 @@ import { concat, lpText, PresenceEntry, presenceEpoch, RelayTransport, u32be } f
  * is writing the old shape, so the format moves forward one way and the records
  * already on a relay stay readable until they age out.
  */
-export const ROOM_VERSION = 0x02;
+export const ROOM_VERSION = 0x04;
 
 /**
  * Record version for the unsealed lane: 0x02 plus the window the record was
@@ -104,8 +112,28 @@ export const ROOM_VERSION = 0x02;
  */
 const ROOM_PLAIN_VERSION = 0x03;
 
+/**
+ * Record version that signs its context: 0x03's layout (window field
+ * included), with the signature taken over
+ * `"zirc-record-v4" ‖ sha256(appScope) ‖ shardHash ‖ record`.
+ *
+ * Before it, a sealed record's window and room were bound only by the AEAD's
+ * AAD, which any holder of the room secret can recompute: a member could
+ * re-seal another member's signed record into a later window, once the
+ * original had aged out of the read horizon, or into another room the same
+ * key writes in. Presence carries a signature from this version on too. Both
+ * lanes write it; the room context is not sent, each reader supplies its own.
+ */
+const ROOM_BOUND_VERSION = 0x04;
+
+/** domain tag in front of a 0x04 record's signed bytes */
+const RECORD_SIG_DOMAIN = 'zirc-record-v4';
+
+/** a record's `ts` may sit this many windows either side of the one it is in */
+const TS_WINDOW_SKEW = 1;
+
 /** versions a reader will open, newest first. */
-const ROOM_READ_VERSIONS: readonly number[] = [0x03, 0x02, 0x01];
+const ROOM_READ_VERSIONS: readonly number[] = [0x04, 0x03, 0x02, 0x01];
 
 /** the first version that carries a recipient field. */
 const RECIPIENT_FIELD_VERSION = 0x02;
@@ -710,6 +738,28 @@ const recordBytes = (
     lpText(r.body),
   ]);
 
+/**
+ * What an author signs: the record itself, and from 0x04 on the room and the
+ * window it was written for. The context is not on the wire; a reader signs
+ * over its own coordinates, so a record carried anywhere else fails.
+ */
+const signedMessage = (
+  record: Uint8Array,
+  version: number,
+  ctx: { appScopeHash: Uint8Array; shardHash: Uint8Array },
+): Uint8Array =>
+  version >= ROOM_BOUND_VERSION
+    ? concat([lpText(RECORD_SIG_DOMAIN), ctx.appScopeHash, ctx.shardHash, record])
+    : record;
+
+/**
+ * Why a record's signed `ts` cannot be in the window it was served in, or
+ * null. A member re-sealing someone's record into a later window can change
+ * the window, never the signed `ts`.
+ */
+const tsWindowError = (ts: number, epoch: number): string | null =>
+  Math.abs(presenceEpoch(ts) - epoch) > TS_WINDOW_SKEW ? 'record time outside its window' : null;
+
 /** max body bytes that still fit one record. Callers get a clear error, not a cut. */
 export const maxBodyBytes = (
   name: string,
@@ -910,12 +960,7 @@ export class Room {
     const name = opts.name ?? this.identity.name ?? this.identity.pubkey.slice(0, 8);
     const to = opts.to ?? '';
     const bytes = enc.encode(body);
-    const room = maxBodyBytes(
-      name,
-      to,
-      opts.plain ? ROOM_PLAIN_VERSION : ROOM_VERSION,
-      this.plaintextBytes,
-    );
+    const room = maxBodyBytes(name, to, ROOM_VERSION, this.plaintextBytes);
     if (bytes.length > room) {
       throw new Error(`room: message is ${bytes.length} bytes, the limit is ${room}`);
     }
@@ -924,7 +969,8 @@ export class Room {
     const prev = opts.prev ?? (seq === 1 ? '' : this.head);
     const ts = this.now();
     const rec = { kind, ts, seq, prev, author: this.identity.pubkey, to, name, body };
-    const signed = recordBytes(rec, opts.plain ? ROOM_PLAIN_VERSION : ROOM_VERSION, epoch);
+    const record = recordBytes(rec, ROOM_VERSION, epoch);
+    const signed = signedMessage(record, ROOM_VERSION, { appScopeHash, shardHash });
     const sig = await this.identity.sign(signed);
     if (sig.length !== SIG_HEX) {
       throw new Error('room: identity returned a malformed signature');
@@ -933,7 +979,7 @@ export class Room {
     const hash = toHex(await sha256(concat([signed, fromHex(sig)])));
     const sigBytes = fromHex(sig);
     const plaintext = new Uint8Array(this.plaintextBytes);
-    plaintext.set(concat([signed, sigBytes]));
+    plaintext.set(concat([record, sigBytes]));
     // the remaining bytes are the pad; zeroes are inside the AEAD, so they leak
     // nothing an attacker can use, and the size is constant either way.
 
@@ -1008,8 +1054,16 @@ export class Room {
       name: display,
       body: '',
     };
+    // signed like any record, so a member cannot announce someone else
+    const record = recordBytes(rec, ROOM_VERSION, win);
+    const sig = await this.identity.sign(
+      signedMessage(record, ROOM_VERSION, { appScopeHash, shardHash }),
+    );
+    if (sig.length !== SIG_HEX) {
+      throw new Error('room: identity returned a malformed signature');
+    }
     const plaintext = new Uint8Array(this.plaintextBytes);
-    plaintext.set(recordBytes(rec, opts.plain ? ROOM_PLAIN_VERSION : ROOM_VERSION, win));
+    plaintext.set(concat([record, fromHex(sig)]));
     const blob = opts.plain
       ? plainBlob(plaintext)
       : await seal(
@@ -1215,7 +1269,10 @@ export class Room {
         }
 
         if (opened.kind === 'presence') {
-          const fan = decodePresence(opened.plain);
+          const fan = await this.verifyPresence(opened.plain, epoch, {
+            appScopeHash,
+            shardHash,
+          });
           if (typeof fan === 'string') {
             dropped.push({ hash: toHex(entry.tag), reason: fan, kind: dropKindFor(fan) });
             continue;
@@ -1226,10 +1283,10 @@ export class Room {
               dropped.push({ hash: toHex(entry.tag), reason: stale, kind: 'invalid' });
               continue;
             }
-            // presence is unsigned, so the window is also enforced by the tag: a
-            // plain presence tag is HKDF(appScope, epoch, author, stable), which
-            // a reader can recompute. A record replayed from another window - even
-            // with its epoch field rewritten - cannot carry the expected tag.
+            // the window is also enforced by the tag: a plain presence tag is
+            // HKDF(appScope, epoch, author, stable), which a reader can
+            // recompute. A record replayed from another window - even with its
+            // epoch field rewritten - cannot carry the expected tag.
             const expected = await plainTag(this.appScope, epoch, fan.author, true);
             if (toHex(expected) !== toHex(entry.tag)) {
               dropped.push({
@@ -1249,7 +1306,13 @@ export class Room {
           continue;
         }
 
-        const parsed = await this.parse(opened.plain, epoch, opened.kind, opened.plaintext);
+        const parsed = await this.parse(
+          opened.plain,
+          epoch,
+          opened.kind,
+          { appScopeHash, shardHash },
+          opened.plaintext,
+        );
         if (typeof parsed === 'string') {
           dropped.push({ hash: toHex(entry.tag), reason: parsed, kind: dropKindFor(parsed) });
           continue;
@@ -1340,6 +1403,7 @@ export class Room {
     plain: Uint8Array,
     epoch: number,
     kind: MessageKind,
+    ctx: { appScopeHash: Uint8Array; shardHash: Uint8Array },
     plaintext = false,
   ): Promise<RoomMessage | string> {
     try {
@@ -1353,17 +1417,20 @@ export class Room {
       if (kind === 'dm' && fields.to !== this.identity.pubkey) {
         return 'dm not addressed here';
       }
-      // an unsealed record proves its own window; one that does not is refused,
-      // so a relay cannot replay a plain line as if it were written now.
-      if (plaintext) {
-        const stale = plainWindowError(body, epoch);
-        if (stale) {
-          return stale;
-        }
+      // an unsealed record proves its own window, and so does any record that
+      // carries one; a record that does not match is refused, so neither a
+      // relay nor a member can replay a line as if it were written now.
+      const stale = windowError(body, epoch, plaintext);
+      if (stale) {
+        return stale;
       }
       // re-encode in the record's OWN version: a signature only verifies against
       // the layout its author wrote.
-      const signed = recordBytes({ ...fields, kind }, body.version, body.epoch);
+      const signed = signedMessage(
+        recordBytes({ ...fields, kind }, body.version, body.epoch),
+        body.version,
+        ctx,
+      );
       const sig = toHex(plain.subarray(sigAt, sigAt + SIG_HEX / 2));
       if (!(await this.identity.verify(signed, sig, fields.author))) {
         return 'bad signature';
@@ -1384,6 +1451,37 @@ export class Room {
     } catch (e) {
       return e instanceof Error ? e.message : 'malformed record';
     }
+  }
+
+  /**
+   * Decode and verify one presence record: signed (0x04 on), in its window,
+   * by the key it names. An unsigned presence record, which any member could
+   * write for anyone, is refused.
+   */
+  private async verifyPresence(
+    plain: Uint8Array,
+    epoch: number,
+    ctx: { appScopeHash: Uint8Array; shardHash: Uint8Array },
+  ): Promise<DecodedFields | string> {
+    const version = plain[0] ?? 0;
+    if (ROOM_READ_VERSIONS.includes(version) && version < ROOM_BOUND_VERSION) {
+      return 'unsigned presence';
+    }
+    const fan = decodeRecord(plain, 'presence', SIG_HEX / 2);
+    if (typeof fan === 'string') {
+      return fan;
+    }
+    const stale = windowError(fan, epoch, false);
+    if (stale) {
+      return stale;
+    }
+    const signed = signedMessage(
+      recordBytes({ ...fan, kind: 'presence' }, fan.version, fan.epoch),
+      fan.version,
+      ctx,
+    );
+    const sig = toHex(plain.subarray(fan.sigAt, fan.sigAt + SIG_HEX / 2));
+    return (await this.identity.verify(signed, sig, fan.author)) ? fan : 'bad signature';
   }
 
   private async shardOrThrow(epoch: number): Promise<string> {
@@ -1521,10 +1619,6 @@ function decodeRecord(plain: Uint8Array, kind: RoomKind, sigBytes: number): Deco
 const dropKindFor = (reason: string): DropKind =>
   reason.startsWith('unsupported record version') ? 'unsupported' : 'invalid';
 
-function decodePresence(plain: Uint8Array): DecodedFields | string {
-  return decodeRecord(plain, 'presence', 0);
-}
-
 /**
  * The window a plain record claims must be the window it was served in, or the
  * reason it is refused.
@@ -1540,6 +1634,23 @@ const plainWindowError = (body: DecodedFields, epoch: number): string | null => 
     return 'plain record without a window';
   }
   return body.epoch === epoch ? null : 'plain record from another window';
+};
+
+/**
+ * Every window check one record must pass, or the reason it fails: a plain
+ * record must carry its window, any record that carries one must carry this
+ * one, and the signed `ts` must sit in (or one window beside) the window.
+ */
+const windowError = (body: DecodedFields, epoch: number, plaintext: boolean): string | null => {
+  if (plaintext) {
+    const stale = plainWindowError(body, epoch);
+    if (stale) {
+      return stale;
+    }
+  } else if (body.version >= ROOM_PLAIN_VERSION && body.epoch !== epoch) {
+    return 'record from another window';
+  }
+  return tsWindowError(body.ts, epoch);
 };
 
 /**

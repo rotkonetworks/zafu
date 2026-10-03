@@ -13,7 +13,7 @@
 
 // egress guard first: nothing may capture fetch or open a socket before it
 import '../net/egress-install-lite';
-import { fixOrchardAddress, encodeOrchardUfvk } from '@repo/wallet/networks/zcash/unified-address';
+import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { blockRangeFetcher } from '../services/memo-sync/block-range-fetcher';
 import { buildStrategy } from '../services/memo-sync/strategy';
 import { idbBucketStore } from '../services/memo-sync/filters/cache';
@@ -227,7 +227,6 @@ interface WorkerMessage {
     | 'finalize-delegation'
     | 'cast-vote-hot-wire'
     | 'pir-fetch-imt-proofs'
-    | 'get-orchard-account-info'
     | 'get-consensus-branch-id'
     | 'get-merkle-witnesses';
   id: string;
@@ -5120,14 +5119,20 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
       case 'derive-address': {
         await initWasm();
-        const { mnemonic, accountIndex, diversifierHex, pocket } = payload as {
-          mnemonic: string;
+        const { vault, accountIndex, diversifierHex, pocket } = payload as {
+          /** the sealed vault this worker opens itself; the phrase never rides the bus */
+          vault?: SealedVault;
           accountIndex: number;
           diversifierHex?: string;
           /** zip32 account; accountIndex above is a diversifier index */
           pocket?: number;
         };
-        const address = deriveAddress(mnemonic, accountIndex, diversifierHex, pocket);
+        const address = deriveAddress(
+          await unsealVault(vault),
+          accountIndex,
+          diversifierHex,
+          pocket,
+        );
         workerSelf.postMessage({
           type: 'address',
           id,
@@ -8456,7 +8461,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           reviewedFee: string;
         };
         const chain = depositChain(await makeZcashClient(serverUrl), serverUrl);
-        // signs with this pocket's t-branch, index 0: the address that funds it
+        // signs with this pocket's t-branch at the swap's own index: the address that funds it
         const sent = await withSpendKeys(
           wasm.SpendKeys,
           vault,
@@ -9032,47 +9037,6 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           network: 'zcash',
           walletId,
           payload: { imtProofsJson },
-        });
-        return;
-      }
-
-      case 'get-orchard-account-info': {
-        await initWasm();
-        if (!wasmModule) {
-          throw new Error('wasm not initialized');
-        }
-        const {
-          mnemonic,
-          mainnet: infoMainnet,
-          pocket,
-        } = payload as {
-          mnemonic: string;
-          mainnet: boolean;
-          pocket?: number;
-        };
-        const infoKeys = walletKeysFor(mnemonic, pocket ?? 0);
-        let fvkHex: string;
-        try {
-          fvkHex = infoKeys.get_fvk_hex();
-        } finally {
-          infoKeys.free();
-        }
-        // WalletKeys has no ufvk-string export (only watch-only imports carry
-        // one directly) - encode it ourselves (ZIP-316) and self-check with
-        // the wasm module's own decoder so an encoder bug fails loudly here
-        // instead of surfacing as an opaque proof-build error downstream.
-        const ufvkStr = encodeOrchardUfvk(hexDecode(fvkHex), infoMainnet);
-        if (!wasmModule.validate_ufvk(ufvkStr)) {
-          throw new Error(
-            'internal error: locally-encoded UFVK failed wasm validation (encoder bug)',
-          );
-        }
-        workerSelf.postMessage({
-          type: 'result',
-          id,
-          network: 'zcash',
-          walletId,
-          payload: { fvkHex, ufvkStr },
         });
         return;
       }

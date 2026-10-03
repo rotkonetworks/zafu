@@ -254,134 +254,138 @@ const WalletSheet = ({
 
   return (
     <>
-    <Sheet
-      open
-      onOpenChange={o => {
-        if (!o) {
-          setPhrase([]);
-          onClose();
-        }
-      }}
-      title={titles[step]}
-    >
-      {step === 'main' && (
-        <>
-          <div className='flex items-center gap-2 text-[11px] text-fg-muted'>
-            <CustodyBadge vault={vault} />
-            {networks.join(' · ')}
-          </div>
-          <RowGroup>
-            <Row type='screen' label='rename' onPress={() => setStep('rename')} />
-            {hasZcash && (
-              <Row
-                type='value'
-                label='zcash sync start'
-                value={birthday.valid ? formatDateInput(blockToDate(birthday.height)) : 'auto'}
-                onPress={() => setStep('birthday')}
-                {...explainProps('network.zcashStartsFrom')}
-              />
-            )}
-            {vault.type === 'zigner-zafu' && hasZcash && (
-              <Row
-                type='screen'
-                label='sync to zigner'
-                description='check your notes on zigner'
-                preload={PopupPath.NOTE_SYNC}
-                onPress={() => navigate(PopupPath.NOTE_SYNC)}
-              />
-            )}
-            {multisig &&
-              (multisig.multisig?.hidden ? (
-                // an app-managed table is hidden from the multisig tab: offer it back
+      <Sheet
+        open
+        onOpenChange={o => {
+          if (!o) {
+            setPhrase([]);
+            onClose();
+          }
+        }}
+        title={titles[step]}
+      >
+        {step === 'main' && (
+          <>
+            <div className='flex items-center gap-2 text-[11px] text-fg-muted'>
+              <CustodyBadge vault={vault} />
+              {networks.join(' · ')}
+            </div>
+            <RowGroup>
+              <Row type='screen' label='rename' onPress={() => setStep('rename')} />
+              {hasZcash && (
+                <Row
+                  type='value'
+                  label='zcash sync start'
+                  value={birthday.valid ? formatDateInput(blockToDate(birthday.height)) : 'auto'}
+                  onPress={() => setStep('birthday')}
+                  {...explainProps('network.zcashStartsFrom')}
+                />
+              )}
+              {vault.type === 'zigner-zafu' && hasZcash && (
                 <Row
                   type='screen'
-                  label='take control of this multisig'
-                  onPress={() => void setMultisigHidden(vault.id, false)}
+                  label='sync to zigner'
+                  description='check your notes on zigner'
+                  preload={PopupPath.NOTE_SYNC}
+                  onPress={() => navigate(PopupPath.NOTE_SYNC)}
                 />
-              ) : (
+              )}
+              {multisig &&
+                (multisig.multisig?.hidden ? (
+                  // an app-managed table is hidden from the multisig tab: offer it back
+                  <Row
+                    type='screen'
+                    label='take control of this multisig'
+                    onPress={() => void setMultisigHidden(vault.id, false)}
+                  />
+                ) : (
+                  <Row
+                    type='screen'
+                    label='manage in multisig'
+                    preload={PopupPath.MULTISIG}
+                    onPress={() => navigate(PopupPath.MULTISIG)}
+                  />
+                ))}
+              {vault.type === 'mnemonic' && (
                 <Row
                   type='screen'
-                  label='manage in multisig'
-                  preload={PopupPath.MULTISIG}
-                  onPress={() => navigate(PopupPath.MULTISIG)}
+                  label='show recovery phrase'
+                  onPress={() => setStep('password')}
                 />
-              ))}
-            {vault.type === 'mnemonic' && (
-              <Row type='screen' label='show recovery phrase' onPress={() => setStep('password')} />
-            )}
-          </RowGroup>
-          <RowGroup>
-            <TintedRow label='remove wallet' onPress={onRemove} />
-          </RowGroup>
-        </>
-      )}
+              )}
+            </RowGroup>
+            <RowGroup>
+              <TintedRow label='remove wallet' onPress={onRemove} />
+            </RowGroup>
+          </>
+        )}
 
-      {step === 'rename' && (
-        <form
-          onSubmit={e => {
-            e.preventDefault();
-            void rename();
-          }}
-          className='flex flex-col gap-3'
-        >
-          <Input value={draft} autoFocus onChange={e => setDraft(e.target.value)} />
-          <Button type='submit' className='w-full' disabled={!draft.trim()}>
-            save
-          </Button>
-          <Button variant='quiet' className='w-full' onClick={() => setStep('main')}>
-            back
-          </Button>
-        </form>
-      )}
-
-      {step === 'birthday' && <BirthdayStep birthday={birthday} onDone={() => setStep('main')} />}
-
-      {step === 'password' && (
-        <form onSubmit={e => void reveal(e)} className='flex flex-col gap-3'>
-          <p className='text-xs text-fg-muted'>your password, to show this wallet's phrase.</p>
-          <Input
-            type='password'
-            autoFocus
-            value={password}
-            placeholder='password'
-            onChange={e => {
-              setPassword(e.target.value);
-              setWrong(false);
+        {step === 'rename' && (
+          <form
+            onSubmit={e => {
+              e.preventDefault();
+              void rename();
             }}
-          />
-          {(wrong || error) && (
-            <StatusSlot tone='warn' icon='i-ph-warning'>
-              {wrong ? 'that password does not match. please try again.' : error}
-            </StatusSlot>
-          )}
-          <Button type='submit' className='w-full' disabled={!password}>
-            show
-          </Button>
-          <Button variant='quiet' className='w-full' onClick={() => setStep('main')}>
-            back
-          </Button>
-        </form>
-      )}
-
-      {step === 'phrase' && (
-        <>
-          <p className='text-xs text-fg-muted'>
-            write it down and keep it offline. anyone with it controls this wallet.
-          </p>
-          <PhraseGrid words={phrase} revealed onReveal={() => undefined} />
-          <Button
-            className='w-full'
-            onClick={() => {
-              setPhrase([]);
-              setStep('main');
-            }}
+            className='flex flex-col gap-3'
           >
-            done
-          </Button>
-        </>
-      )}
-    </Sheet>
-    {explainSheet}
+            <Input value={draft} autoFocus onChange={e => setDraft(e.target.value)} />
+            <Button type='submit' className='w-full' disabled={!draft.trim()}>
+              save
+            </Button>
+            <Button variant='quiet' className='w-full' onClick={() => setStep('main')}>
+              back
+            </Button>
+          </form>
+        )}
+
+        {step === 'birthday' && <BirthdayStep birthday={birthday} onDone={() => setStep('main')} />}
+
+        {step === 'password' && (
+          <form onSubmit={e => void reveal(e)} className='flex flex-col gap-3'>
+            <p className='text-xs text-fg-muted'>your password, to show this wallet's phrase.</p>
+            <Input
+              type='password'
+              autoFocus
+              value={password}
+              placeholder='password'
+              onChange={e => {
+                setPassword(e.target.value);
+                setWrong(false);
+              }}
+            />
+            {(wrong || error) && (
+              <StatusSlot tone='warn' icon='i-ph-warning'>
+                {wrong ? 'that password does not match. please try again.' : error}
+              </StatusSlot>
+            )}
+            <Button type='submit' className='w-full' disabled={!password}>
+              show
+            </Button>
+            <Button variant='quiet' className='w-full' onClick={() => setStep('main')}>
+              back
+            </Button>
+          </form>
+        )}
+
+        {step === 'phrase' && (
+          <>
+            <p className='text-xs text-fg-muted'>
+              write it down and keep it offline. anyone with it controls this wallet.
+            </p>
+            <PhraseGrid words={phrase} revealed onReveal={() => undefined} />
+            <Button
+              className='w-full'
+              onClick={() => {
+                setPhrase([]);
+                setStep('main');
+              }}
+            >
+              done
+            </Button>
+          </>
+        )}
+      </Sheet>
+      {explainSheet}
     </>
   );
 };

@@ -40,7 +40,7 @@ export const selectPrivateDefaults = (s: AllSlices) => {
   return !(
     p.enableTransparentBalances ||
     p.enableTransactionHistory ||
-    p.enableBackgroundSync ||
+    p.transparentBackgroundSync ||
     p.enablePriceFetching ||
     p.enableExplorerLinks
   );

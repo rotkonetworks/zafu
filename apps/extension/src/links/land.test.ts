@@ -47,11 +47,11 @@ describe('land', () => {
   });
 
   it('opens a group code on the join screen, the code in the query', () => {
-    expect(landOf('zafu:join/673-chaos-mail')).toEqual({
-      to: `${PopupPath.INBOX_JOIN}?code=673-chaos-mail`,
+    expect(landOf('zafu:join/673-chaos-mail-kite')).toEqual({
+      to: `${PopupPath.INBOX_JOIN}?code=673-chaos-mail-kite`,
     });
-    expect(land(parseLink('https://zafu.pro/j#673-chaos-mail'), 'pasted')).toEqual({
-      to: `${PopupPath.INBOX_JOIN}?code=673-chaos-mail&via=pasted`,
+    expect(land(parseLink('https://zafu.pro/j#673-chaos-mail-kite'), 'pasted')).toEqual({
+      to: `${PopupPath.INBOX_JOIN}?code=673-chaos-mail-kite&via=pasted`,
     });
   });
 

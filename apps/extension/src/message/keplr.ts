@@ -14,7 +14,6 @@ export interface KeplrMessage {
   type: 'ZafuKeplr';
   method: string;
   params: unknown;
-  origin: string;
 }
 
 export const isKeplrMessage = (m: unknown): m is KeplrMessage =>

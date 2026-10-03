@@ -23,13 +23,29 @@ import {
   type TemplateKey,
 } from '../../buy/apps';
 import { baseAddressOf, withBaseAccount } from '../../buy/base-key';
-import { baseReader, enoughGas, gasState, sendUsdc, usdcOf } from '../../buy/base-chain';
+import {
+  baseReader,
+  enoughGas,
+  gasState,
+  sendUsdc,
+  TransferReverted,
+  usdcOf,
+} from '../../buy/base-chain';
 import { fiatUnits, type Offer } from '../../buy/fees';
-import { advance, isTerminal, loadOffer, resume, startBuy, type OpenBuy } from '../../buy/machine';
+import {
+  advance,
+  isTerminal,
+  loadOffer,
+  resume,
+  startBuy,
+  type Facts,
+  type OpenBuy,
+} from '../../buy/machine';
 import {
   cancel,
   fetchQuotes,
   heldIntent,
+  intentFulfilled,
   intentHeld,
   preloadPeerSdk,
   release,
@@ -48,6 +64,7 @@ import { askForGas } from '../../buy/sponsor';
 import { readBuyPrefs, readOpenBuy, writeBuyPrefs, writeOpenBuy } from '../../buy/store';
 import templates from '../../buy/capture/templates.json';
 import { pinTemplate, wantsIndex, type Row, type Template } from '../../buy/capture/template';
+import { dropCaptureAccess, keepCaptureAccess, keptCaptureAccess } from '../../buy/capture/kept';
 import {
   capturePayment,
   releaseCaptureAccess,
@@ -90,8 +107,12 @@ export interface BuyState {
   amount: string;
   offerIdx: number;
   quotes?: Quotes;
+  /** the form (amount, currency, app) `quotes` answered: continue waits until it is the current one */
+  quotedFor?: string;
   quoting: boolean;
   estimate?: SwapEstimate;
+  /** the offer `estimate` was made for: an estimate for another one never shows or sticks */
+  estimateFor?: string;
   gas: 'unknown' | 'sponsored' | 'needs-eth' | 'ok';
   buy: OpenBuy | null;
   overlay: Overlay | null;
@@ -130,6 +151,21 @@ export const buyStore = createStore<BuyState>()(() => initial);
 const set = (p: Partial<BuyState>) => buyStore.setState(p);
 const get = () => buyStore.getState();
 
+/** the form a quote answers */
+export const formKey = (s: Pick<BuyState, 'amount' | 'currency' | 'app'>): string =>
+  `${fiatUnits(s.amount) ?? ''}|${s.currency}|${s.app}`;
+
+/** one offer, as its estimate is keyed */
+export const offerKey = (o: Offer): string => `${o.depositId}|${o.net}`;
+
+/** the quotes on screen answer the form as it is now */
+export const quoteIsCurrent = (s: BuyState): boolean =>
+  !s.quoting && !!s.quotes && s.quotedFor === formKey(s);
+
+/** the estimate on screen belongs to `o` */
+export const estimateOf = (s: BuyState, o?: Offer): SwapEstimate | undefined =>
+  o && s.estimate && s.estimateFor === offerKey(o) ? s.estimate : undefined;
+
 /** the offer the page would reserve right now */
 export const chosenOffer = (s: BuyState): Offer | undefined =>
   s.buy
@@ -152,14 +188,19 @@ const mnemonic = async (): Promise<string> => {
 };
 
 /** a fresh shielded address of the active pocket, never the one on the receive screen */
-const freshShielded = async (phrase: string): Promise<string> => {
+const freshShielded = async (): Promise<string> => {
+  const k = hotKey();
+  if (!k) {
+    throw new Error('this wallet cannot sign here');
+  }
+  const vault = await useStore.getState().keyRing.getVaultUnlock(k.id);
   const d = Array.from(crypto.getRandomValues(new Uint8Array(11)), b =>
     b.toString(16).padStart(2, '0'),
   ).join('');
   await spawnNetworkWorker('zcash');
   const raw = await deriveAddressInWorker(
     'zcash',
-    phrase,
+    vault,
     0,
     d,
     activeAccountIndex(useStore.getState()),
@@ -223,7 +264,13 @@ export const init = async () => {
     set({ phase: 'cannot' });
     return;
   }
-  const [prefs, buy, view] = await Promise.all([readBuyPrefs(), readOpenBuy(), readEgressView()]);
+  const [prefs, buy, view, keep] = await Promise.all([
+    readBuyPrefs(),
+    readOpenBuy(),
+    readEgressView(),
+    // the box shows what is really kept (and an expired keep is given back here)
+    keptCaptureAccess(),
+  ]);
   const currency = prefs.currency ?? localCurrency();
   const app = defaultApp(currency, prefs.app)?.id ?? 'revolut';
   const egress = BUY_EGRESS.every(id => view.find(d => d.id === id)?.on) ? 'ok' : 'ask';
@@ -233,6 +280,7 @@ export const init = async () => {
     currency,
     app,
     firstTime: !prefs.app,
+    keep,
     buy,
     resumed: !!buy && !isTerminal(buy.stage),
     walletLabel: key.name,
@@ -262,14 +310,16 @@ const afterAllowed = async () => {
   }
   // the zec address is derived locally, off the screen's way
   if (!get().zcash) {
-    set({ zcash: get().buy?.zcash ?? (await freshShielded(await mnemonic())) });
+    set({ zcash: get().buy?.zcash ?? (await freshShielded()) });
   }
   // a buy that is waiting on the person keeps its estimate current
   const b = get().buy;
   if (b && !b.near && (b.stage === 'pay' || b.stage === 'confirming')) {
-    set({
-      estimate: await estimateSwap(BigInt(b.offer.net), b.base, b.zcash).catch(() => undefined),
-    });
+    const o = loadOffer(b.offer);
+    const estimate = await estimateSwap(o.net, b.base, b.zcash).catch(() => undefined);
+    if (estimate) {
+      set({ estimate, estimateFor: offerKey(o) });
+    }
   }
 };
 
@@ -291,6 +341,8 @@ const runQuote = async () => {
   }
   quoteCtl?.abort();
   const ctl = (quoteCtl = new AbortController());
+  // what this answer is for: the form may move on while it is out
+  const asked = formKey(s);
   set({ quoting: true });
   try {
     const quotes = await fetchQuotes({
@@ -303,11 +355,15 @@ const runQuote = async () => {
     if (ctl.signal.aborted) {
       return;
     }
-    set({ quotes, offerIdx: 0, quoting: false, error: undefined });
+    set({ quotes, quotedFor: asked, offerIdx: 0, quoting: false, error: undefined });
     const best = quotes.kind === 'offers' ? quotes.offers[0] : undefined;
     const zcash = get().zcash;
     if (best && zcash) {
-      set({ estimate: await estimateSwap(best.net, s.base, zcash).catch(() => undefined) });
+      const estimate = await estimateSwap(best.net, s.base, zcash).catch(() => undefined);
+      // a newer quote went out meanwhile: this estimate is for an offer no longer shown
+      if (estimate && !ctl.signal.aborted) {
+        set({ estimate, estimateFor: offerKey(best) });
+      }
     }
   } catch (e) {
     if (!ctl.signal.aborted) {
@@ -316,18 +372,26 @@ const runQuote = async () => {
   }
 };
 
+/** the offers on screen stay, dimmed, until the new amount's answer is in; continue waits for it */
 export const setAmount = (amount: string) => {
   set({ amount });
   requote(400);
 };
 export const setCurrency = (currency: string) => {
   const app = defaultApp(currency, get().app)?.id ?? get().app;
-  set({ currency, app, sheet: null, quotes: undefined, estimate: undefined });
+  set({
+    currency,
+    app,
+    sheet: null,
+    quotes: undefined,
+    estimate: undefined,
+    estimateFor: undefined,
+  });
   void writeBuyPrefs({ currency });
   requote();
 };
 export const setApp = (app: string) => {
-  set({ app, quotes: undefined, estimate: undefined });
+  set({ app, quotes: undefined, estimate: undefined, estimateFor: undefined });
   void writeBuyPrefs({ app });
   requote();
 };
@@ -338,9 +402,11 @@ export const openSheet = (sheet: Sheet | null) => set({ sheet });
 export const reserveNow = async () => {
   const s = get();
   const o = chosenOffer(s);
-  if (!o || !s.base || !s.zcash) {
+  // never an offer made for another amount than the one on screen
+  if (!o || !s.base || !s.zcash || !quoteIsCurrent(s)) {
     return;
   }
+  const estimate = estimateOf(s, o);
   const lines: [string, string?][] = [
     ['base gas', 'a few cents of eth for the network fee'],
     ['signed with your zafu base key', `asking for ${(Number(o.gross) / 1e6).toFixed(2)} usdc`],
@@ -349,7 +415,7 @@ export const reserveNow = async () => {
   ];
   set({ overlay: 'reserve', steps: stepsOf(lines, 0), since: Date.now(), error: undefined });
   try {
-    if (!(await ensureGas(o))) {
+    if (!(await ensureGas(o, 3, reserveNow))) {
       return;
     }
     stepTo(1);
@@ -362,8 +428,8 @@ export const reserveNow = async () => {
         walletLabel: s.walletLabel,
         offer: o,
       }),
-      ...(s.estimate && {
-        estimate: { amountOut: s.estimate.amountOut.toString(), cost: s.estimate.cost.toString() },
+      ...(estimate && {
+        estimate: { amountOut: estimate.amountOut.toString(), cost: estimate.cost.toString() },
       }),
     };
     await save(draft);
@@ -404,39 +470,65 @@ export const reserveNow = async () => {
   }
 };
 
-/** enough eth on the base address: from zafu's sponsor, or the person */
-const ensureGas = async (o: Offer): Promise<boolean> => {
+/** what "check again" on the gas screen resumes: the step that found too little eth */
+let afterGas: (() => Promise<void>) | undefined;
+
+/**
+ * Enough eth on the base address for the `txs` transactions still to send,
+ * from zafu's sponsor or the person. Checked before each step that sends, not
+ * only at the reserve: the price of gas moves over the hours a buy can take.
+ * When there is too little, the gas screen shows and "check again" runs `then`.
+ */
+const ensureGas = async (o: Offer, txs: number, then: () => Promise<void>): Promise<boolean> => {
   const s = get();
   const base = s.base!;
-  if (enoughGas(await gasState(base))) {
+  if (enoughGas(await gasState(base, txs))) {
     set({ gas: get().gas === 'sponsored' ? 'sponsored' : 'ok' });
     return true;
   }
-  const drip = await askForGas(base, o, s.currency);
+  const drip = await askForGas(base, o, get().buy?.currency ?? s.currency);
   if (drip.ok) {
     set({ gas: 'sponsored' });
     for (let i = 0; i < 30; i++) {
-      if (enoughGas(await gasState(base))) {
+      if (enoughGas(await gasState(base, txs))) {
         return true;
       }
       await new Promise(r => setTimeout(r, 2000));
     }
   }
+  afterGas = then;
   set({ gas: 'needs-eth', overlay: 'gas' });
   return false;
 };
 
-/** "i've paid": the person says the money went; ask to look once */
+/** the gas screen's "check again": the step that stopped for eth, else the reserve */
+export const gasAgain = async () => {
+  const then = afterGas ?? reserveNow;
+  afterGas = undefined;
+  set({ overlay: null });
+  await then();
+};
+
+/**
+ * "i've paid" (or "i did pay" once the time ran out): the person says the
+ * money went. From here the buy is never ended on time alone; ask to look once.
+ */
 export const paid = async () => {
   const b = get().buy;
-  if (b && b.stage === 'pay') {
+  if (b && (b.stage === 'pay' || b.stage === 'expired')) {
     await save(advance(b, 'confirming'));
   }
   set({ overlay: 'ask', error: undefined });
 };
 
 export const setBank = (bank: TemplateKey) => set({ bank });
-export const setKeep = (keep: boolean) => set({ keep });
+export const setKeep = (keep: boolean) => {
+  set({ keep });
+  // unticking a kept grant gives it back now, not at the next buy
+  if (!keep) {
+    void keptCaptureAccess().then(on => (on ? dropCaptureAccess() : undefined));
+  }
+};
 
 const liveTemplate = async (key: TemplateKey, hosts: readonly string[]): Promise<Template> => {
   const bundled = templates[key] as Template;
@@ -464,8 +556,7 @@ export const allowRead = async () => {
   await setDestinationOptIn(`pay-${app.id}`, 'allowed');
   await refreshEgress();
   if (s.keep) {
-    const kept = new Set((await readBuyPrefs()).kept ?? []);
-    await writeBuyPrefs({ kept: [...kept.add(app.id)] });
+    await keepCaptureAccess(app.id);
   }
   await readPayment(app.id, key);
 };
@@ -537,6 +628,10 @@ const VERIFY_LINES: [string, string?][] = [
 
 const verify = async (row: Row, sealed: string, template: Template, key: TemplateKey) => {
   const b = get().buy!;
+  // the release and the send to the swap still need eth: checked now, at today's price
+  if (!(await ensureGas(loadOffer(b.offer), 2, () => verify(row, sealed, template, key)))) {
+    return;
+  }
   set({ overlay: 'verify', steps: stepsOf(VERIFY_LINES, 1, [Date.now()]), since: Date.now() });
   try {
     const params = { ...row.params, ...(wantsIndex(key) ? { index: row.originalIndex } : {}) };
@@ -562,25 +657,54 @@ const verify = async (row: Row, sealed: string, template: Template, key: Templat
   }
 };
 
-/** usdc is on the base address: a fresh near quote, then send it */
-export const swapNow = async () => {
+/** one swap leg at a time: the 15 s check and the release can both reach swapNow */
+let swapping: Promise<void> | undefined;
+
+/**
+ * Usdc is on the base address: a fresh near quote, then send it. The leg
+ * (deposit address, quote) is saved before the usdc moves and the transfer's
+ * hash the moment it is out, so a closed tab can always find where it went.
+ */
+export const swapNow = (): Promise<void> =>
+  (swapping ??= swapOnce().finally(() => (swapping = undefined)));
+
+const swapOnce = async () => {
   const b = get().buy;
   if (!b || (b.stage !== 'released' && b.stage !== 'refunded')) {
     return;
   }
+  let sent = false;
   try {
     const usdc = await usdcOf(b.base);
     const amount = usdc < BigInt(b.offer.net) ? usdc : BigInt(b.offer.net);
+    if (amount === 0n) {
+      set({ error: 'the usdc has not reached your zafu base account yet' });
+      return;
+    }
+    if (!(await ensureGas(loadOffer(b.offer), 1, swapNow))) {
+      return;
+    }
     const near = await quoteSwap(amount, b.base, b.zcash);
+    // a retry after a refund starts its own clock
+    const leg = advance({ ...b, at: { ...b.at, swapping: undefined } }, 'swapping', {
+      near,
+      depositTx: undefined,
+    });
+    await save(leg);
     const tx = await withBaseAccount(await mnemonic(), account =>
-      sendUsdc(account, near.depositAddress as `0x${string}`, BigInt(near.amountIn)),
+      sendUsdc(account, near.depositAddress as `0x${string}`, BigInt(near.amountIn), hash => {
+        sent = true;
+        return save({ ...leg, depositTx: hash });
+      }),
     );
     await announceDeposit(tx, near.depositAddress);
-    // a retry after a refund starts its own clock
-    await save(
-      advance({ ...b, at: { ...b.at, swapping: undefined } }, 'swapping', { near, depositTx: tx }),
-    );
+    set({ error: undefined });
   } catch (e) {
+    // nothing left the base account (refused, or reverted): the usdc waits for a fresh try
+    const cur = get().buy;
+    if ((!sent || e instanceof TransferReverted) && cur?.stage === 'swapping') {
+      await save({ ...cur, stage: b.stage, near: undefined, depositTx: undefined });
+    }
     set({ error: (e as Error).message });
   }
 };
@@ -613,18 +737,23 @@ export const check = async () => {
       return;
     }
     const now = Date.now();
-    const facts =
-      b.stage === 'pay' || b.stage === 'confirming'
-        ? {
-            now,
-            intent: (await intentHeld(b.base, b.intentHash!))
-              ? ('held' as const)
-              : ('gone' as const),
-            usdc: await usdcOf(b.base),
-          }
+    const facts: Facts =
+      b.stage === 'pay' || b.stage === 'confirming' || b.stage === 'lapsed'
+        ? { now, intent: await intentNow(b) }
         : b.stage === 'swapping' && b.near
           ? { now, ...(await swapFacts(b.near.depositAddress)) }
           : { now };
+    // a sent transfer that reverted moved nothing: the usdc waits for a fresh quote
+    if (b.stage === 'swapping' && b.depositTx && facts.swap === 'pending') {
+      const r = await baseReader()
+        .getTransactionReceipt({ hash: b.depositTx })
+        .catch(() => undefined);
+      if (r && r.status !== 'success') {
+        await save({ ...b, stage: 'released', near: undefined, depositTx: undefined });
+        await swapNow();
+        return;
+      }
+    }
     const next = resume(b, facts);
     if (next !== b) {
       await save(next);
@@ -635,6 +764,23 @@ export const check = async () => {
   } catch {
     // a read that failed is retried on the next visible tick
   }
+};
+
+/** where the intent stands on chain: held, released to this buy, gone, or not known yet */
+const intentNow = async (b: OpenBuy): Promise<'held' | 'fulfilled' | 'gone' | undefined> => {
+  if (!b.intentHash) {
+    return undefined;
+  }
+  if (await intentHeld(b.base, b.intentHash)) {
+    return 'held';
+  }
+  const released = await intentFulfilled({
+    intentHash: b.intentHash,
+    to: b.base,
+    fulfillTx: b.fulfillTx,
+    reserveTx: b.reserveTx,
+  });
+  return released === undefined ? undefined : released ? 'fulfilled' : 'gone';
 };
 
 /** cancel before paying: the seller's usdc goes back at once, nothing was taken */

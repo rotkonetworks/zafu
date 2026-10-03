@@ -86,11 +86,17 @@ export interface PrivacySettings {
   historyAsked: boolean;
 
   /**
-   * keep penumbra syncing after the last zafu window closes. read as
-   * `=== true` by the service worker: false (default) pauses penumbra with
-   * the last window, as zcash always does.
+   * keep penumbra syncing after the last zafu window closes. false (default)
+   * pauses penumbra with the last window, as zcash always does.
    */
-  enableBackgroundSync: boolean;
+  keepPenumbraSyncing: boolean;
+
+  /**
+   * transparent (cosmos) networks may be synced by the background alarm.
+   * false (default). Penumbra's own switch is `keepPenumbraSyncing`; the two
+   * were one flag before storage v5.
+   */
+  transparentBackgroundSync: boolean;
 
   /**
    * check the transparent deposit addresses on their own each time the
@@ -211,7 +217,8 @@ export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   enableTransparentBalances: false,
   enableTransactionHistory: false,
   historyAsked: false,
-  enableBackgroundSync: false,
+  keepPenumbraSyncing: false,
+  transparentBackgroundSync: false,
   autoCheckTransparent: false,
   enablePriceFetching: false,
   enableExplorerLinks: false,
@@ -298,7 +305,7 @@ export const createPrivacySlice =
       return (
         settings.enableTransparentBalances ||
         settings.enableTransactionHistory ||
-        settings.enableBackgroundSync
+        settings.transparentBackgroundSync
       );
     },
   });
@@ -333,19 +340,14 @@ export const canFetchHistory = (state: AllSlices) =>
   state.privacy.settings.enableTransactionHistory;
 
 /**
- * check if we can background sync for a given network
- * - shielded (penumbra, zcash): always allowed (trial decryption)
- * - transparent (cosmos): only if enableBackgroundSync is true
- */
-/**
  * Pure form of the per-network background-sync rule - usable outside React
  * (e.g. the service worker, which only has chrome.storage, not the Zustand
  * store). Shielded and light-client networks are always allowed; transparent
- * networks honor the `enableBackgroundSync` flag.
+ * networks honor the `transparentBackgroundSync` flag.
  */
 export const networkAllowsBackgroundSync = (
   network: string,
-  enableBackgroundSync: boolean,
+  transparentBackgroundSync: boolean,
 ): boolean => {
   if ((SHIELDED_NETWORKS as readonly string[]).includes(network)) {
     return true; // trial decryption, rpc never learns addresses
@@ -353,11 +355,11 @@ export const networkAllowsBackgroundSync = (
   if ((LIGHT_CLIENT_NETWORKS as readonly string[]).includes(network)) {
     return true; // p2p network, no central rpc to leak to
   }
-  return enableBackgroundSync;
+  return transparentBackgroundSync;
 };
 
 export const canBackgroundSyncForNetwork = (state: AllSlices, network: NetworkType) =>
-  networkAllowsBackgroundSync(network, state.privacy.settings.enableBackgroundSync);
+  networkAllowsBackgroundSync(network, state.privacy.settings.transparentBackgroundSync);
 
 export const canFetchPrices = (state: AllSlices) => state.privacy.settings.enablePriceFetching;
 

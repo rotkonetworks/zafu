@@ -19,10 +19,7 @@ import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { Value, Metadata } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
-import {
-  getAssetIdFromValueView,
-  getDisplayDenomExponentFromValueView,
-} from '@penumbra-zone/getters/value-view';
+import { getAssetIdFromValueView } from '@penumbra-zone/getters/value-view';
 import { symbolFromMetadata } from '../../../utils/asset-display';
 import { fromValueView } from '@penumbrafi/types/amount';
 import { isFungibleMetadata, selectPickerBuckets } from '../../../utils/is-fungible-asset';
@@ -41,7 +38,8 @@ import { hasFeature } from '../../../config/networks';
 import type { SwapLinkState } from '../../../links/land';
 import { CrosschainSwap } from './crosschain';
 import { splitLoHi } from '@penumbrafi/types/lo-hi';
-import { fromUnits, toUnits } from '../../../state/swap/provider';
+import { fromUnits } from '../../../state/swap/provider';
+import { toBaseUnits } from '../../../state/ibc-withdraw-amount';
 import { traceOut, u128 } from './penumbra-units';
 import { reachOf, splitByReach } from './reachable';
 import { usePenumbraRoutes } from '../../../transparent/penumbra-routes';
@@ -52,6 +50,8 @@ import { chainByChainId } from '@repo/wallet/networks/cosmos/chains';
  * quick-action on the home asset list so the from-leg boots pre-selected.
  */
 interface SwapLocationState extends Partial<SwapLinkState> {
+  /** an open swap to reopen where it stood (home's in-flight card) */
+  resume?: string;
   /** Base denom of the asset to preselect as the FROM leg. Falls back to
    *  top-priority balance when the denom is not found. */
   prefillFromAsset?: string;
@@ -69,6 +69,25 @@ interface InputAsset {
 
 /** stable empty list so memo/effect deps don't churn while balances load */
 const EMPTY_BALANCES: BalancesResponse[] = [];
+
+/**
+ * The display unit's exponent from the asset's own metadata, or undefined
+ * when the metadata does not say. Never a guess: an exponent off by k shows
+ * a quote off by 10^k, and Penumbra swaps have no minimum output, so the
+ * quote is the only safeguard the user gets. An asset without one is not
+ * offered here.
+ */
+const displayExponent = (meta: Metadata | undefined): number | undefined =>
+  meta?.denomUnits.find(u => u.denom === meta.display)?.exponent;
+
+/** exact base units of what is typed, or undefined when it can't be sent as typed */
+const typedUnits = (text: string, exponent: number): bigint | undefined => {
+  try {
+    return toBaseUnits(text, exponent);
+  } catch {
+    return undefined;
+  }
+};
 
 const sameId = (a?: Uint8Array, b?: Uint8Array) =>
   !!a && !!b && a.length === b.length && a.every((v, i) => v === b[i]);
@@ -109,6 +128,7 @@ export const SwapPage = () => {
       <CrosschainSwap
         key={location.key}
         link={swapState?.link ? { link: swapState.link, via: swapState.via } : undefined}
+        resume={swapState?.resume}
       />
     );
   }
@@ -166,24 +186,30 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
   });
 
   const inputAssets: InputAsset[] = useMemo(() => {
-    return balances.map(b => {
+    return balances.flatMap(b => {
       const metadata = getMetadataFromBalancesResponse.optional(b);
+      const exponent = displayExponent(metadata);
+      if (exponent === undefined) {
+        return [];
+      }
       const symbol = symbolFromMetadata(metadata);
       const amt = b.balanceView ? fromValueView(b.balanceView) : 0;
       const amount = typeof amt === 'string' ? amt : amt.toString();
       const assetId = b.balanceView ? getAssetIdFromValueView(b.balanceView)?.inner : undefined;
-      const exponent = b.balanceView ? getDisplayDenomExponentFromValueView(b.balanceView) : 6;
-      return { balance: b, symbol, amount, assetId, exponent, metadata };
+      return [{ balance: b, symbol, amount, assetId, exponent, metadata }];
     });
   }, [balances]);
 
   const outputAssets: OutputAsset[] = useMemo(() => {
-    return allAssets.map(resp => {
+    return allAssets.flatMap(resp => {
       const meta = resp.denomMetadata;
+      const exponent = displayExponent(meta);
+      if (exponent === undefined) {
+        return [];
+      }
       const symbol = symbolFromMetadata(meta);
       const assetId = meta?.penumbraAssetId?.inner;
-      const exponent = meta?.denomUnits?.find(u => u.denom === meta?.display)?.exponent ?? 6;
-      return { response: resp, symbol, assetId, exponent, metadata: meta };
+      return [{ response: resp, symbol, assetId, exponent, metadata: meta }];
     });
   }, [allAssets]);
 
@@ -200,8 +226,13 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
     setSelectedIn(match ?? inputAssets[0]);
   }, [inputAssets, selectedIn, prefillFromAsset]);
 
-  // exact base units of what is typed; never a float
-  const units = selectedIn ? toUnits(amountIn, selectedIn.exponent) : 0n;
+  // exact base units of what is typed; never a float, never cut short: digits
+  // past the asset's exponent are refused, not dropped, so what is reviewed
+  // is what is swapped
+  const typed = selectedIn && amountIn.trim() ? typedUnits(amountIn, selectedIn.exponent) : 0n;
+  const tooPrecise =
+    typed === undefined && (amountIn.split('.')[1]?.length ?? 0) > (selectedIn?.exponent ?? 0);
+  const units = typed ?? 0n;
   const {
     data: simulation,
     isLoading: simLoading,
@@ -352,15 +383,17 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
               onMax={handleMax}
               canMax={!!selectedIn}
               autoFocus={!!prefillFromAsset}
-              warn={!!simError}
+              warn={!!simError || tooPrecise}
               helper={
-                simError
-                  ? 'the dex could not price this right now · please try again'
-                  : simulation?.unfilled
-                    ? `only part fills at this price · ${simulation.unfilled.amount} ${simulation.unfilled.symbol.toLowerCase()} comes back`
-                    : simLoading
-                      ? 'pricing'
-                      : rate
+                tooPrecise
+                  ? `${(selectedIn?.symbol ?? 'this asset').toLowerCase()} goes to ${selectedIn?.exponent ?? 0} decimal places · please shorten the amount`
+                  : simError
+                    ? 'the dex could not price this right now · please try again'
+                    : simulation?.unfilled
+                      ? `only part fills at this price · ${simulation.unfilled.amount} ${simulation.unfilled.symbol.toLowerCase()} comes back`
+                      : simLoading
+                        ? 'pricing'
+                        : rate
               }
             />
             <RowGroup>

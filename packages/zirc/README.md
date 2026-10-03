@@ -42,10 +42,12 @@ channel needs no new server behaviour and no relay cooperation. A bouncer in
 front changes nothing: it is HTTP, and it is blind by construction because the
 relay behind it is.
 
-Per-window AES-256-GCM keys via HKDF, ed25519 per-record signatures,
-per-author hash chains, opaque tags, and fixed-size writes - so the relay
-cannot tell a one-word reply from a paragraph. `room.ts` states what that
-guarantees and, more usefully, what it does not.
+Per-window AES-256-GCM keys via HKDF, ed25519 per-record signatures (over
+the room, the window and the author's time, presence included, from record
+version 0x04), per-author hash chains, opaque tags, and fixed-size writes - so
+the relay cannot tell a one-word reply from a paragraph, and a member cannot
+move another's record to a different window or room. `room.ts` states what
+that guarantees and, more usefully, what it does not.
 
 The shard in that coordinate comes **from the room secret** by default, so the
 channel name is a label and not an address: two rooms sharing a name but not a

@@ -52,7 +52,7 @@ interface Snapshot {
   enableExplorerLinks: boolean;
   openZcashLinks: boolean;
   openZafuLinks: boolean;
-  enableBackgroundSync: boolean;
+  keepPenumbraSyncing: boolean;
 }
 
 export const Personalize = () => {
@@ -93,7 +93,7 @@ export const Personalize = () => {
       enableExplorerLinks: settings.enableExplorerLinks,
       openZcashLinks: settings.openZcashLinks,
       openZafuLinks: settings.openZafuLinks,
-      enableBackgroundSync: settings.enableBackgroundSync,
+      keepPenumbraSyncing: settings.keepPenumbraSyncing,
     };
   });
 
@@ -122,7 +122,7 @@ export const Personalize = () => {
       void setSetting('enableExplorerLinks', s.enableExplorerLinks);
       void setSetting('openZcashLinks', s.openZcashLinks);
       void setSetting('openZafuLinks', s.openZafuLinks);
-      void setSetting('enableBackgroundSync', s.enableBackgroundSync);
+      void setSetting('keepPenumbraSyncing', s.keepPenumbraSyncing);
     }
     navigate(PagePath.ONBOARDING_SUCCESS, { state, replace: true });
   };

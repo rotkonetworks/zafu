@@ -51,6 +51,15 @@ describe('a chain the bundle lacks, after a verified live registry loads', () =>
     expect(COSMOS_CHAINS['noble']?.penumbraSourceChannel).toBe('channel-2');
   });
 
+  it('a known chain is never re-pinned, bundled ones included', () => {
+    const before = COSMOS_CHAINS['celestia']?.penumbraSourceChannel;
+    expect(before).toBeDefined();
+    expect(applyLiveConnections([conn('celestia', 'celestia', 'channel-666')])).toEqual([]);
+    expect(COSMOS_CHAINS['celestia']?.penumbraSourceChannel).toBe(before);
+    expect(applyLiveConnections([conn('stargaze', 'stargaze-1', 'channel-666')])).toEqual([]);
+    expect(COSMOS_CHAINS['stargaze']?.penumbraSourceChannel).toBe('channel-30');
+  });
+
   it('the registry update row is opt-in only', () => {
     expect(DESTINATIONS.find(d => d.id === 'penumbra-registry')?.gate).toEqual({
       kind: 'optional',

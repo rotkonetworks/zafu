@@ -23,7 +23,6 @@ import type { ZafuDiscoverContactsResponse } from '@zafu/protocol';
 import { createHttpRelayTransport, type RelayTransport } from '@zafu/zid';
 import { useStore } from '.';
 import { readEncryptedWithMigration } from './encrypted-storage';
-import { currentIdentityName } from './identity';
 import type { Contact } from './contacts';
 import { discoverForScope } from './contact-discovery';
 import {
@@ -52,8 +51,8 @@ export interface ContactDiscoveryDeps {
   siteAllowed: (origin: string) => Promise<boolean>;
   /** the wallet's contacts (decrypted). */
   contacts: () => Promise<Contact[]>;
-  /** mnemonic + active identity name, or null when no key is selected. */
-  identity: () => Promise<{ mnemonic: string; identityName: string } | null>;
+  /** mnemonic + the selected wallet's id, or null when no key is selected. */
+  identity: () => Promise<{ mnemonic: string; walletId: string } | null>;
   /** build a relay transport for a configured endpoint, token and all. */
   transport: (endpoint: string, token: string) => RelayTransport;
 }
@@ -82,7 +81,7 @@ export const contactDiscoveryDeps: ContactDiscoveryDeps = {
       return null;
     }
     const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
-    return { mnemonic, identityName: await currentIdentityName() };
+    return { mnemonic, walletId: keyInfo.id };
   },
   transport: (endpoint, token) =>
     createHttpRelayTransport({
@@ -123,7 +122,7 @@ export const runDiscoveryForScope = async (
       appScope,
       contacts,
       mnemonic: identity.mnemonic,
-      identityName: identity.identityName,
+      walletId: identity.walletId,
       transport: deps.transport(relayEndpoint, relayToken),
     });
     return { contacts: discovered };

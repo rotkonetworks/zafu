@@ -33,8 +33,9 @@ import { openInDedicatedWindow } from '../../../utils/navigate';
 import { keyRingSelector, selectEffectiveKeyInfo } from '../../../state/keyring';
 import { useGasSponsor } from '../../../transparent/sponsor';
 import { formatBaseUnits, fullDecimalString } from '../../../transparent/assets';
-import { routeForChain, usePenumbraRoutes } from '../../../transparent/penumbra-routes';
+import { penumbraRouteStatus, usePenumbraRoutes } from '../../../transparent/penumbra-routes';
 import { shortAddress } from '../../../transparent/hd';
+import { isAddress as isPenumbraAddress } from '@penumbra-zone/bech32m/penumbra';
 import {
   parseInjectiveRecipient,
   type InjectiveRecipientProblem,
@@ -137,15 +138,19 @@ export function CosmosSend({
 }) {
   const sourceChain = getCosmosChain(sourceChainId);
   useChainInUse(sourceChainId);
-  // the live chain -> penumbra channel (discovered, never an expired pin);
-  // undefined when the chain has no route into penumbra right now
-  const penumbraChannel = routeForChain(sourceChainId, usePenumbraRoutes())?.penumbraChannel;
+  // the chain -> penumbra channel the registry pins, while its client is
+  // Active; never another channel in its place (see pinnedRouteStatus)
+  const penumbraRoute = penumbraRouteStatus(sourceChainId, usePenumbraRoutes());
+  const penumbraChannel =
+    penumbraRoute.status === 'active' ? penumbraRoute.route.penumbraChannel : undefined;
+  // the pinned channel is resting (its client expired): a shield waits for it
+  const penumbraResting = penumbraRoute.status === 'inactive';
   const isEthermint = sourceChain.keyAlgo === 'eth_secp256k1';
   // two ways to move funds out of a cosmos/burner wallet: same-chain (e.g. to a
   // Noble exchange deposit address) or cross-chain via IBC (Skip routing).
   // a shield has exactly one destination (penumbra over IBC), so the mode and
   // destination-chain pickers don't apply to it
-  const isShield = intent === 'shield' && !!penumbraChannel;
+  const isShield = intent === 'shield' && (!!penumbraChannel || penumbraResting);
   const [destChainId, setDestChainId] = useState<string | undefined>(
     isShield ? PENUMBRA_CHAIN_ID : undefined,
   );
@@ -208,15 +213,16 @@ export function CosmosSend({
   const { data: skipChains = [], isLoading: chainsLoading } = useSkipChains();
 
   // Penumbra is always offered when there is a direct channel, listed or not
+  // (a resting one too, so choosing it explains the wait instead of hiding it)
   const destChains = useMemo(
     () =>
-      penumbraChannel
+      penumbraChannel || penumbraResting
         ? [
             { chainId: PENUMBRA_CHAIN_ID, chainName: 'Penumbra (shielded)' },
             ...skipChains.filter(c => c.chainId !== PENUMBRA_CHAIN_ID),
           ]
         : skipChains,
-    [skipChains, penumbraChannel],
+    [skipChains, penumbraChannel, penumbraResting],
   );
 
   // assets hook - uses accountIndex
@@ -410,9 +416,11 @@ export function CosmosSend({
       return ethermintRecipient.ok;
     }
     // penumbra addresses are bech32m and much longer than a cosmos address, so
-    // isValidCosmosAddress would reject them - match the prefix directly.
+    // isValidCosmosAddress would reject them. A full decode (checksum and
+    // length), as withdraw does: a typo would otherwise sit in flight until
+    // the error ack refunds it.
     if (isPenumbraDest) {
-      return recipient.startsWith('penumbra1');
+      return isPenumbraAddress(recipient);
     }
     if (destChainId) {
       const destPrefix = skipChains.find(c => c.chainId === destChainId)?.bech32Prefix;
@@ -429,6 +437,7 @@ export function CosmosSend({
       : 0n;
   const exceeds = amountBase > spendable;
   const canSubmit =
+    !(isPenumbraDest && !penumbraChannel) &&
     recipient &&
     recipientValid &&
     amountBase > 0n &&
@@ -695,17 +704,20 @@ export function CosmosSend({
       : !isSameChain && detectedChain && !destChainId
         ? `on ${detectedChain.name}`
         : toName;
-  const amountHelper = exceeds
-    ? 'a little more than this address holds'
-    : !canPayFee
-      ? `no ${gas.gasAsset.symbol.toLowerCase()} on this address for the fee`
-      : routeError && !isPenumbraDest
-        ? routeError.message.toLowerCase()
-        : route
-          ? `arrives as ${(parseFloat(route.amountOut) / 1e6).toFixed(6)}${route.doesSwap && route.swapVenue ? ` via ${route.swapVenue.name}` : ''}`
-          : routeLoading
-            ? 'finding a route'
-            : `fee ${fee}`;
+  const amountHelper =
+    isPenumbraDest && penumbraResting
+      ? `the way into penumbra from ${sourceChain.name.toLowerCase()} is resting for now · please try again a little later`
+      : exceeds
+        ? 'a little more than this address holds'
+        : !canPayFee
+          ? `no ${gas.gasAsset.symbol.toLowerCase()} on this address for the fee`
+          : routeError && !isPenumbraDest
+            ? routeError.message.toLowerCase()
+            : route
+              ? `arrives as ${(parseFloat(route.amountOut) / 1e6).toFixed(6)}${route.doesSwap && route.swapVenue ? ` via ${route.swapVenue.name}` : ''}`
+              : routeLoading
+                ? 'finding a route'
+                : `fee ${fee}`;
 
   const steps = {
     idle: () => (

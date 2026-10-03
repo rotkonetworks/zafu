@@ -9,38 +9,11 @@ import { BottomTabs, BOTTOM_TABS_HEIGHT } from '../../components/bottom-tabs';
 import { AppHeader } from '../../components/app-header';
 import { TxTrackerWatcher } from '../../components/tx-tracker-watcher';
 import { clearStaleChunkGuard } from '../../components/error-boundary';
-import { PopupPath } from './paths';
+import { BARE_ROUTES, matchesRoute } from './paths';
 import { schedulePreloadTabRoots } from './route-modules';
 import { intentHandlers, navTimingOn, Painted } from './preload';
 import { useStore } from '../../state';
 import { selectActiveNetwork, selectPenumbraAccount } from '../../state/keyring';
-
-/**
- * Screens that live outside the app shell: welcome, unlock and the approval windows a
- * site or a device opens. Every other screen keeps the header and the tabs,
- * so moving around never changes the frame.
- */
-const bareRoutes = [
-  PopupPath.LOGIN,
-  PopupPath.FORGOT_PASSWORD,
-  PopupPath.WELCOME,
-  PopupPath.TRANSACTION_APPROVAL,
-  PopupPath.ORIGIN_APPROVAL,
-  PopupPath.SIGN_APPROVAL,
-  PopupPath.CAPABILITY_APPROVAL,
-  PopupPath.ZCASH_SEND_APPROVAL,
-  PopupPath.KEPLR_APPROVAL,
-  PopupPath.CONTACT_DISCOVERY_APPROVAL,
-  PopupPath.DESTINATION_APPROVAL,
-  PopupPath.CONTACT_PICKER,
-  PopupPath.FROST_APPROVE,
-  PopupPath.PASSKEY_APPROVE,
-  PopupPath.COSMOS_SIGN,
-];
-
-/** check if current path matches any hidden routes */
-const matchesRoute = (pathname: string, routes: string[]) =>
-  routes.some(route => pathname === route || pathname.startsWith(route + '/'));
 
 export const PopupLayout = () => {
   usePopupReady();
@@ -59,7 +32,7 @@ export const PopupLayout = () => {
   // followed a stale-chunk reload, the guard has done its job
   useEffect(clearStaleChunkGuard, []);
 
-  const showChrome = !matchesRoute(location.pathname, bareRoutes);
+  const showChrome = !matchesRoute(location.pathname, BARE_ROUTES);
 
   return (
     <div

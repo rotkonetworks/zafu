@@ -30,6 +30,7 @@ import {
   type SwapStatusView,
 } from './provider';
 import { POOLS, poolAsset, ROUTES } from './routes';
+import { depositFeeZat } from '../../workers/transparent-deposit';
 
 export const ZEC_ASSET = 'ZEC.ZEC';
 const ZEC_CHAIN = 'ZEC';
@@ -51,8 +52,14 @@ export const memoLimit = (memo: string): bigint => {
   return m ? BigInt(m[1]!) * 10n ** BigInt(m[2] ?? 0) : 0n;
 };
 
+/** out of zec the move to the swap's address confirms first: a block or two, 75 s apart */
+const MOVE_SECONDS = 150;
+
 /** observers relay at most 80 bytes of OP_RETURN, and zcash allows no more */
 export const MAX_MEMO_BYTES = 80;
+
+/** a zec vault a t->t deposit can pay: base58 t1/t3, or a tex1 (ZIP 320, a P2PKH key hash) */
+export const PAYABLE_ZEC_VAULT = /^(t[13][1-9A-HJ-NP-Za-km-z]{33}|tex1[02-9ac-hj-np-z]{38})$/;
 
 /** source chains whose deposit memo rides in an OP_RETURN */
 export const OP_RETURN_CHAINS = new Set(['BTC', 'LTC', 'BCH', 'DOGE', 'DASH', 'ZEC']);
@@ -194,6 +201,11 @@ export const checkQuote = (
   }
   if (!q.memo || (opReturn && memoBytes(q.memo) > MAX_MEMO_BYTES)) {
     throw new Error(`${name}'s memo doesn't fit this chain · please try another route`);
+  }
+  // out of zec the deposit is a t->t: a vault that isn't a base58 t-address or a
+  // ZIP 320 tex address could never be paid, so it is refused before anything moves
+  if (sourceChain === ZEC_CHAIN && !PAYABLE_ZEC_VAULT.test(q.inbound_address)) {
+    throw new Error(`${name}'s zec vault is an address zafu can't pay · please try another route`);
   }
   // `=:ASSET:DEST[/REFUND]:...`: the memo must pay where zafu asked, or it is not shown at all
   if (q.memo.split(':')[2]?.split('/')[0] !== destination) {
@@ -417,7 +429,15 @@ export const nodeProvider = (chain: NodeChain): SwapProvider => {
           into && q.recommended_gas_rate
             ? `use a fast fee · ${q.recommended_gas_rate} ${gas?.unit ?? q.gas_rate_units ?? ''}`.trim()
             : undefined,
-        timeText: q.total_swap_seconds ? durationText(q.total_swap_seconds) : undefined,
+        // out of zec the move confirms before the deposit is sent
+        timeText: q.total_swap_seconds
+          ? durationText(q.total_swap_seconds + (into ? 0 : MOVE_SECONDS))
+          : undefined,
+        // out of zec zafu sends twice: the move out of the shielded pool, then the deposit
+        ...(!into && {
+          sourceFeeZat: String(BigInt(req.sourceFeeZat ?? 0) + depositFeeZat(memoBytes(q.memo))),
+          sourceFeeNote: 'the move and the deposit',
+        }),
         atLeastText: figure(rescale(memoLimit(q.memo), NODE_DECIMALS, outDecimals), outDecimals),
         streamLine:
           (q.streaming_swap_blocks ?? 0) > 1 && (q.total_swap_seconds ?? 0) >= 3600

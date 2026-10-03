@@ -11,7 +11,7 @@
 import { localExtStorage, type LocalStorageState } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { readEncrypted, writeEncrypted } from '../state/encrypted-storage';
-import type { OpenBuy } from './machine';
+import { migrateBuy, type OpenBuy } from './machine';
 
 export const OPEN_BUY_KEY = 'openBuy';
 const OPEN = OPEN_BUY_KEY as keyof LocalStorageState;
@@ -35,7 +35,7 @@ export const readOpenBuy = async (): Promise<OpenBuy | null> => {
   const v = await readEncrypted<unknown>(localExtStorage, sessionExtStorage, OPEN).catch(
     () => null,
   );
-  return isOpenBuy(v) ? v : null;
+  return isOpenBuy(v) ? migrateBuy(v) : null;
 };
 
 /** seal the buy; null forgets it. False when the wallet is locked (nothing written). */
@@ -63,6 +63,8 @@ export interface BuyPrefs {
   currency?: string;
   /** apps whose read access the person chose to keep */
   kept?: string[];
+  /** when that kept access is given back (see capture/kept.ts) */
+  keptUntil?: number;
 }
 
 export const readBuyPrefs = async (): Promise<BuyPrefs> => {

@@ -29,18 +29,28 @@ import { Sensitive } from '../../../components/sensitive';
 import { ScreenHeader } from '../../../components/screen-header';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectGetVaultUnlock } from '../../../state/keyring';
-import { selectActiveZcashWallet, selectZcashIsMainnet } from '../../../state/wallets';
+import { selectActiveZcashWallet } from '../../../state/wallets';
 import { activeAccountIndex, activeZcashStoreId } from '../../../state/pockets';
 import { CAPS, walletKind } from '../../../signing/wallet-kind';
 import { isEgressBlocked } from '../../../net/egress';
 import { requestEgressOptIn } from '../../../net/egress-opt-in';
 import { EgressBlockedStatus } from '../../../shared/components/egress-blocked-status';
 import { useActiveAddress } from '../../../hooks/use-address';
-import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
+import { useSwapTAddress, type SwapTAddress } from '../../../hooks/use-transparent-addresses';
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
 import { useSwapLast, useSwapRoutes } from '../../../hooks/swap-routes';
 import { swapWallet } from '../../../hooks/swap-preload';
 import { keepSwapPreload, keepSwapQuotes, seedSwapQuotes } from '../../../state/swap/preload';
+import {
+  forgetOpenSwap,
+  openSwapOf,
+  patchOpenSwap,
+  quoteOf,
+  readOpenSwaps,
+  saveOpenSwap,
+  STAGE_FOR,
+  type OpenSwap,
+} from '../../../state/swap/open-swaps';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { buildSendTxInWorker, completeSendTxInWorker } from '../../../state/keyring/network-worker';
 import type { VaultUnlock } from '../../../state/keyring/types';
@@ -76,11 +86,13 @@ import {
   WAIT,
   watchEgress,
 } from '../../../state/swap/live';
+import { NeedsRefundAddress } from '../../../state/swap/near';
 import {
   pairKey,
   ROUTES,
   routeLabel,
   poolAsset,
+  refundsToPayer,
   type MemoCarrier,
   type RouteId,
   type SwapPair,
@@ -172,16 +184,19 @@ const NOTE: Record<RouteId, Record<SwapPair['direction'], string>> = {
   },
   thor: {
     into_zec:
-      'thorchain pays transparent addresses only. the zec lands at your t-address, ready to shield.',
+      "thorchain pays transparent addresses only. the zec lands at this swap's own t-address, ready to shield.",
     from_zec: 'leaves the shielded pool through your transparent address. that step is public.',
   },
   maya: {
     into_zec:
-      "maya can't pay zafu's shielded address yet, so the zec lands at your t-address. refunds go back to the address that paid.",
+      "maya can't pay zafu's shielded address yet, so the zec lands at this swap's own t-address.",
     from_zec: 'leaves the shielded pool through your transparent address. that step is public.',
   },
   penumbra: { into_zec: '', from_zec: '' },
 };
+
+/** into zec on a route that refunds the payer: the one honest line in place of a refund address */
+const PAYER_REFUNDS = "refunds go back to the address that pays · don't pay from an exchange";
 
 const MEMO_HOW: Record<MemoCarrier, string> = {
   op_return: 'add it to the payment as an op_return output, exactly as shown',
@@ -277,6 +292,25 @@ const CountUp = ({ text }: { text: string }) => {
   }, [text]);
   return <Sensitive>{between ?? text}</Sensitive>;
 };
+
+/** the amount the swap pays out, counting up to each new price */
+const YouGet = ({ view, stale, struck }: { view?: Quote; stale: boolean; struck: boolean }) => (
+  <span className='min-w-0 truncate font-display text-2xl text-fg-high'>
+    {view ? (
+      <span
+        className={cn(
+          'transition-opacity duration-300',
+          stale && 'opacity-50',
+          struck && 'line-through',
+        )}
+      >
+        <CountUp text={view.amountOutText} />
+      </span>
+    ) : (
+      <span className='text-fg-dim'>0</span>
+    )}
+  </span>
+);
 
 /** rows glide from where they were when their order changes (FLIP), instead of jumping */
 const useFlip = (list: RefObject<HTMLElement | null>, order: string) => {
@@ -432,13 +466,34 @@ const RouteLine = ({
   );
 };
 
-export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
+/** where a remembered swap reopens */
+const stepOf = (s: OpenSwap): Step =>
+  s.stage === 'thor-out'
+    ? 'thor-out'
+    : s.stage === 'deposit'
+      ? s.direction === 'into_zec'
+        ? 'deposit'
+        : 'polling'
+      : s.stage === 'sent'
+        ? 'polling'
+        : s.stage === 'failed'
+          ? 'error'
+          : s.stage;
+
+export const CrosschainSwap = ({
+  link,
+  resume,
+}: {
+  link?: SwapLinkState;
+  /** an open swap's id: the screen reopens it where it stood */
+  resume?: string;
+}) => {
   const goBack = useBackNav(PopupPath.INDEX);
   const navigate = usePopupNav();
   const queryClient = useQueryClient();
   const { address: zcashAddress } = useActiveAddress();
-  const isMainnet = useStore(selectZcashIsMainnet);
-  const { tAddresses } = useTransparentAddresses(isMainnet);
+  // a thorchain swap's own transparent address: a look for prices, claimed on confirm
+  const swapTNext = useSwapTAddress(true, queryClient);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const getVaultUnlock = useStore(selectGetVaultUnlock);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
@@ -470,9 +525,70 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const [contactsOpen, setContactsOpen] = useState(false);
   const [routesOpen, setRoutesOpen] = useState(false);
   const [picked, setPicked] = useState<RouteId>();
-  // the firm quote review was opened with, and the live price it replaced
-  // the price review froze; once confirm re-checked it, `was` holds the one it replaced
-  const [firm, setFirm] = useState<{ quote: Quote; was?: Quote; checked?: true }>();
+  // the price review froze, with the request it answered (amount, addresses) frozen beside
+  // it: the deposit is built from that request, never the live form. once confirm
+  // re-checked it, `was` holds the price it replaced
+  const [firm, setFirm] = useState<{
+    quote: Quote;
+    req: QuoteRequest;
+    was?: Quote;
+    checked?: true;
+  }>();
+  // the fresh t-address this swap claimed (thorchain); kept across a backed-out
+  // review or an expired price so a retry reuses it, dropped once the swap ends
+  const [swapT, setSwapT] = useState<SwapTAddress>();
+  // the sealed record of the swap in flight (state/swap/open-swaps); every step writes it
+  const openId = useRef<string>(undefined);
+  const track = (patch: Partial<OpenSwap>) => {
+    if (openId.current) {
+      void patchOpenSwap(openId.current, patch);
+    }
+  };
+  /** the swap ended here, or the person let it go: home stops showing it */
+  const forget = () => {
+    if (openId.current) {
+      void forgetOpenSwap(openId.current);
+    }
+    openId.current = undefined;
+  };
+  // a remembered swap reopens where it stood; nothing is asked of the network to find it
+  const [resuming, setResuming] = useState(!!resume);
+  useEffect(() => {
+    if (!resume) {
+      return;
+    }
+    void readOpenSwaps().then(list => {
+      const o = list.find(x => x.id === resume);
+      setResuming(false);
+      if (!o) {
+        return;
+      }
+      openId.current = o.id;
+      setDirection(o.direction);
+      setToken(o.token);
+      setSwapT(o.swapT);
+      setDepositTxid(o.depositTxid);
+      setFirm({
+        quote: quoteOf(o),
+        req: {
+          direction: o.direction,
+          token: o.token,
+          amountIn: o.amountIn,
+          zcashAddress: o.direction === 'into_zec' ? o.recipient : '',
+          otherAddress: o.otherAddress,
+          zcashTransparent: o.swapT?.address,
+        },
+        checked: true,
+      });
+      if (o.line) {
+        setStatus({ phase: o.stage === 'failed' ? 'failed' : 'waiting', line: o.line });
+        if (o.stage === 'failed') {
+          setError(o.line);
+        }
+      }
+      setStep(stepOf(o));
+    });
+  }, [resume]);
   const [checking, setChecking] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [riskAcknowledged, setRiskAcknowledged] = useState(false);
@@ -541,8 +657,12 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const askAmount = typedAmount === undefined ? amountIn : settledAmount;
   const askAddress = typedAddress === undefined ? otherAddress : settledAddress;
   const signsOpReturn = !!kind && !!CAPS[kind].opReturn;
-  const zcashTransparent = tAddresses[0];
-  const usable = parseFloat(askAmount ?? '') > 0 && !!askAddress && fits(askAddress);
+  // thorchain pays (and refunds) a t-address: each swap its own, never the pocket's shown one
+  const zcashTransparent = swapT?.address ?? swapTNext.next?.address;
+  // into zec from an OP_RETURN chain, thorchain refunds the payer: it needs no address typed
+  const addressOptional = !isFromZec && !!pair && refundsToPayer('thor', pair);
+  const usable =
+    parseFloat(askAmount ?? '') > 0 && (askAddress ? fits(askAddress) : addressOptional);
   const req = useMemo<QuoteRequest | undefined>(
     () =>
       decided && token && zcashAddress && usable
@@ -552,7 +672,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
             amountIn: askAmount!,
             zcashAddress,
             zcashTransparent,
-            otherAddress: askAddress,
+            otherAddress: askAddress ?? '',
             signsOpReturn,
             // out of zec, the send to the deposit pays its own ZIP-317 fee: part of the cost
             sourceFeeZat: isFromZec
@@ -598,6 +718,9 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const live = (id?: RouteId) => quotes.find(q => q.route === id && !q.notYet);
   const quote = live(picked) ?? live(key ? chosen[key] : undefined) ?? best;
   const view = quote ?? quotes[0];
+  // the route the person is looking at; into zec, it decides whether a refund address means anything
+  const focusRoute = picked ?? (key ? chosen[key] : undefined) ?? view?.route;
+  const payerRefunds = !!pair && refundsToPayer(focusRoute, pair);
   const answerOf = (id?: RouteId) => answers[asked.findIndex(g => g.route === id)];
   const shown = answerOf(view?.route);
   const stale = typing || !!shown?.isPlaceholderData || !!shown?.isFetching;
@@ -632,7 +755,14 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
         on: !!q && q.route === view?.route,
         waiting: !!a?.isFetching,
         stale: !!a?.isPlaceholderData || !!a?.isFetching,
-        onPress: q ? () => setRoutesOpen(true) : g.ask ? () => void askFor([g.route]) : undefined,
+        onPress: q
+          ? () => setRoutesOpen(true)
+          : g.ask
+            ? () => void askFor([g.route])
+            : // near wants a refund address: choosing it brings the field back
+              a?.error instanceof NeedsRefundAddress
+              ? () => setPicked(g.route)
+              : undefined,
         rank: q ? quotes.indexOf(q) : g.line || a?.error ? 99 : 50,
       };
     })
@@ -752,9 +882,9 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   // review freezes the price shown: nothing refreshes behind it, and only confirm re-checks it
   const firmAsk = useRef<AbortController>(undefined);
   const openReview = () => {
-    if (reviewable) {
+    if (reviewable && req) {
       setError(undefined);
-      setFirm({ quote });
+      setFirm({ quote, req });
       setRiskAcknowledged(false);
       setReviewOpen(true);
     }
@@ -765,24 +895,29 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   };
   // the first confirm asks the route for its firm quote; a moved price is shown, struck, for a second look
   const recheck = async () => {
-    if (!firm || !req) {
+    if (!firm) {
       return;
     }
     if (firm.checked) {
-      return confirm(firm.quote);
+      return confirm(firm.quote, firm.req);
     }
     const ask = (firmAsk.current = new AbortController());
     setChecking(true);
     try {
+      // a THORNode route touches a t-address: this swap claims its own before the firm price
+      const t = firm.quote.route !== 'near' ? (swapT ?? (await swapTNext.claim())) : undefined;
+      setSwapT(t);
+      const req = t ? { ...firm.req, zcashTransparent: t.address } : firm.req;
       const got = await PROVIDERS[firm.quote.route]!.quote({ ...req, dry: false }, ask.signal);
       if (ask.signal.aborted) {
         return;
       }
       if (got.amountOut !== firm.quote.amountOut) {
-        setFirm({ quote: got, was: firm.quote, checked: true });
+        setFirm({ quote: got, req, was: firm.quote, checked: true });
         return;
       }
-      return confirm(got);
+      // `t` by hand: the swapT state set above is not this closure's yet
+      return confirm(got, req, t);
     } catch (e) {
       if (!ask.signal.aborted) {
         setReviewOpen(false);
@@ -794,19 +929,30 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
     }
   };
 
-  const confirm = async (d: Quote) => {
-    if (!selectedKeyInfo) {
+  /**
+   * `r` is the request `d` answered: what is sent, whatever the form says by
+   * now. `t` is the swap's own t-address when it claimed one.
+   */
+  const confirm = async (d: Quote, r: QuoteRequest, t = swapT) => {
+    if (!selectedKeyInfo || !wallet) {
       return;
     }
-    setFirm({ quote: d, checked: true });
+    setFirm({ quote: d, req: r, checked: true });
     setReviewOpen(false);
     setError(undefined);
+    // remembered (sealed) before the deposit is shown or sent, so a closed popup loses nothing
+    const remember = async (stage: OpenSwap['stage']) => {
+      const o = openSwapOf(d, r, wallet, stage, t);
+      openId.current = o.id;
+      await saveOpenSwap(o);
+    };
 
     // into zcash: the user pays from their other wallet; zafu shows where and watches
-    if (!isFromZec) {
-      if (rememberIt && otherValid && !known) {
-        void rememberYours(otherAddress).catch(() => undefined);
+    if (r.direction === 'into_zec') {
+      if (rememberIt && otherValid && !known && r.otherAddress === otherAddress) {
+        void rememberYours(r.otherAddress).catch(() => undefined);
       }
+      await remember('deposit');
       setStep('deposit');
       return;
     }
@@ -815,6 +961,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
     }
     // a memo deposit is never a shielded send: a t->t with an OP_RETURN, its own steps
     if (d.memo) {
+      await remember('thor-out');
       setStep('thor-out');
       return;
     }
@@ -827,7 +974,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
         pocket,
         zidecarUrl,
         to: d.depositAddress,
-        amountIn,
+        amountIn: r.amountIn,
       };
       setSendSteps([]);
       if (selectedKeyInfo.type === 'mnemonic') {
@@ -836,10 +983,13 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
         }
         buildStartRef.current = Date.now();
         setStep('sending');
+        // the worker finishes the send even if the popup closes: the record goes first
+        await remember('deposit');
         const result = await buildDeposit({ ...deposit, vault: await getVaultUnlock(walletId) });
         if (!('txid' in result)) {
           throw new Error('failed to broadcast deposit transaction');
         }
+        track({ stage: 'sent', depositTxid: result.txid });
         setStep('polling');
         return;
       }
@@ -867,6 +1017,8 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
       setStep('sign');
     } catch (err) {
       console.error('[swap] send failed', err);
+      // nothing was broadcast: there is no swap to come back to
+      forget();
       setErrorCause(err);
       setError(err instanceof Error ? err.message : 'failed to send deposit');
       setStep('error');
@@ -885,6 +1037,11 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
         throw new Error('missing unsigned tx');
       }
       setStep('sending');
+      if (firm && wallet) {
+        const o = openSwapOf(firm.quote, firm.req, wallet, 'deposit', swapT);
+        openId.current = o.id;
+        await saveOpenSwap(o);
+      }
       // the same pocket store the build read, so the spent notes are marked there
       const result = await completeSendTxInWorker(
         'zcash',
@@ -903,15 +1060,18 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
       if (!('txid' in result)) {
         throw new Error('failed to broadcast');
       }
+      track({ stage: 'sent', depositTxid: result.txid });
       setStep('polling');
     } catch (err) {
       console.error(err);
+      forget();
       setError(err instanceof Error ? err.message : 'failed to complete zigner tx');
       setStep('error');
     }
   };
 
   // watch the swap while the deposit is out, on routes that can be watched
+  const trackedLine = useRef<string>(undefined);
   useEffect(() => {
     if ((step !== 'deposit' && step !== 'polling') || !deal || !watchable) {
       return;
@@ -920,6 +1080,16 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
     const interval = setInterval(async () => {
       try {
         const next = await watch(deal, depositTxid);
+        // the record learns each new line, not every poll
+        if (trackedLine.current !== next.line) {
+          trackedLine.current = next.line;
+          // still waiting for a deposit is not "sent": an unpaid window must stay prunable
+          track(
+            next.phase === 'waiting'
+              ? { line: next.line }
+              : { line: next.line, stage: STAGE_FOR[next.phase] ?? 'sent' },
+          );
+        }
         setStatus(next);
         if (next.phase === 'failed') {
           setError(next.line);
@@ -936,8 +1106,10 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   }, [step, deal, provider, watchable, depositTxid]);
 
   const reset = () => {
+    forget();
     setStep('input');
     setFirm(undefined);
+    setSwapT(undefined);
     setStatus(undefined);
     setDepositTxid(undefined);
     setError(undefined);
@@ -963,7 +1135,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
 
   const header = (meta?: ReactNode) => <ScreenHeader title='swap' onBack={goBack} meta={meta} />;
 
-  if (step === 'input' && !decided) {
+  if (resuming || (step === 'input' && !decided)) {
     return <div className='flex h-full flex-col bg-canvas'>{header()}</div>;
   }
 
@@ -1050,32 +1222,29 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
             <span className='text-xs text-fg-muted'>
               you get{token && isFromZec ? ` · on ${chainName(token.chain)}` : ''}
             </span>
-            <button
-              type='button'
-              onClick={isFromZec ? () => setPickerOpen(true) : flip}
-              aria-label={isFromZec ? 'choose what you get' : undefined}
-              className='flex h-14 items-center justify-between border border-border-soft bg-elev-1 px-3 text-left'
-            >
-              <span className='min-w-0 truncate font-display text-2xl text-fg-high'>
-                {view ? (
-                  <span
-                    className={cn(
-                      'transition-opacity duration-300',
-                      stale && 'opacity-50',
-                      expiredLive && 'line-through',
-                    )}
-                  >
-                    <CountUp text={view.amountOutText} />
-                  </span>
-                ) : (
-                  <span className='text-fg-dim'>0</span>
-                )}
-              </span>
-              <span className='flex items-center gap-1 text-[13px] text-fg-muted lowercase'>
-                {isFromZec ? (tokenQuery.isFetching ? 'reading' : unit) : 'zec'}
-                <span className='i-lucide-chevron-down size-3' />
-              </span>
-            </button>
+            {/* out of zec it picks the token; into zec it only shows the figure (the flip button reverses) */}
+            {isFromZec ? (
+              <button
+                type='button'
+                onClick={() => setPickerOpen(true)}
+                aria-label={`choose what you get · now ${unit}`}
+                className='flex h-14 items-center justify-between border border-border-soft bg-elev-1 px-3 text-left'
+              >
+                <YouGet view={view} stale={stale} struck={expiredLive} />
+                <span className='flex items-center gap-1 text-[13px] text-fg-muted lowercase'>
+                  {tokenQuery.isFetching ? 'reading' : unit}
+                  <span className='i-lucide-chevron-down size-3' />
+                </span>
+              </button>
+            ) : (
+              <output
+                aria-label='what you get, in zec'
+                className='flex h-14 items-center justify-between border border-border-soft bg-elev-1 px-3'
+              >
+                <YouGet view={view} stale={stale} struck={expiredLive} />
+                <span className='text-[13px] text-fg-muted lowercase'>zec</span>
+              </output>
+            )}
           </div>
           {token && (
             <div className='flex flex-col gap-1.5'>
@@ -1117,44 +1286,51 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
               </div>
             </div>
           )}
-          <ToField
-            id='swap-other'
-            label={
-              isFromZec
-                ? `${token ? chainName(token.chain) : 'destination'} recipient`
-                : `your ${token ? chainName(token.chain) : 'source'} address · for refunds`
-            }
-            value={typedAddress ?? otherAddress}
-            onChange={v => {
-              if (looksLikeLink(v)) {
-                navigate(PopupPath.LINK, { state: { uri: v, via: 'pasted' } });
-                return;
+          {payerRefunds ? (
+            <p className='flex items-center gap-2 text-[11px] text-fg-muted'>
+              <span className='i-ph-arrow-u-up-left size-3.5 shrink-0' aria-hidden='true' />
+              {PAYER_REFUNDS}
+            </p>
+          ) : (
+            <ToField
+              id='swap-other'
+              label={
+                isFromZec
+                  ? `${token ? chainName(token.chain) : 'destination'} recipient`
+                  : `your ${token ? chainName(token.chain) : 'source'} address · for refunds`
               }
-              setAddress(v);
-            }}
-            placeholder={isFromZec ? 'recipient address' : 'your address'}
-            onContacts={fieldChain ? () => setContactsOpen(true) : undefined}
-          >
-            {!isFromZec && fieldChain && (
-              <label
-                className={cn(
-                  'flex items-center gap-2 text-[11px] text-fg-muted',
-                  otherValid && !known ? 'cursor-pointer' : 'opacity-60',
-                )}
-              >
-                <input
-                  type='checkbox'
-                  checked={known || rememberIt}
-                  disabled={known || !otherValid}
-                  onChange={e => setRememberIt(e.target.checked)}
-                  className='size-3.5 shrink-0 accent-[var(--zigner-gold)]'
-                />
-                {known
-                  ? `one of your ${chainLabel(fieldChain)} addresses`
-                  : `remember as my ${chainLabel(fieldChain)} address`}
-              </label>
-            )}
-          </ToField>
+              value={typedAddress ?? otherAddress}
+              onChange={v => {
+                if (looksLikeLink(v)) {
+                  navigate(PopupPath.LINK, { state: { uri: v, via: 'pasted' } });
+                  return;
+                }
+                setAddress(v);
+              }}
+              placeholder={isFromZec ? 'recipient address' : 'your address'}
+              onContacts={fieldChain ? () => setContactsOpen(true) : undefined}
+            >
+              {!isFromZec && fieldChain && (
+                <label
+                  className={cn(
+                    'flex items-center gap-2 text-[11px] text-fg-muted',
+                    otherValid && !known ? 'cursor-pointer' : 'opacity-60',
+                  )}
+                >
+                  <input
+                    type='checkbox'
+                    checked={known || rememberIt}
+                    disabled={known || !otherValid}
+                    onChange={e => setRememberIt(e.target.checked)}
+                    className='size-3.5 shrink-0 accent-[var(--zigner-gold)]'
+                  />
+                  {known
+                    ? `one of your ${chainLabel(fieldChain)} addresses`
+                    : `remember as my ${chainLabel(fieldChain)} address`}
+                </label>
+              )}
+            </ToField>
+          )}
           {shareLink && (
             <CopyButton text={shareLink} label='copy swap link' className='self-start px-0' />
           )}
@@ -1242,7 +1418,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
               {/* only the amounts hide; the addresses and memo are what gets reviewed */}
               {(
                 [
-                  ['you send', `${deal.amountInText || amountIn} ${inUnit}`, true],
+                  ['you send', `${deal.amountInText || firm.req.amountIn} ${inUnit}`, true],
                   ['you receive', `${deal.amountOutText} ${outUnit}`, true],
                   ...(deal.atLeastText
                     ? [['at least', `${deal.atLeastText} ${outUnit}`, true]]
@@ -1310,17 +1486,30 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
     );
   }
 
-  if (step === 'thor-out' && deal) {
+  if (step === 'thor-out' && deal && firm && swapT) {
     return (
       <ThorDeposit
         quote={deal}
-        amountZat={toUnits(amountIn, 8)}
+        amountZat={toUnits(firm.req.amountIn, 8)}
+        swapT={swapT}
         onSent={txid => {
+          track({ stage: 'sent', depositTxid: txid });
           setDepositTxid(txid);
           setStep('polling');
         }}
-        onBack={() => setStep('input')}
-        onExpired={() => setStep('input')}
+        onBack={() => {
+          forget();
+          setStep('input');
+        }}
+        // a fresh price for the same swap: its address (and any zec moved there) is kept
+        onExpired={() => {
+          forget();
+          setStep('input');
+        }}
+        onShield={() => {
+          forget();
+          navigate(PopupPath.INDEX);
+        }}
       />
     );
   }
@@ -1395,6 +1584,9 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
                     </p>
                   )}
                   {deal.gasLine && <p className='text-xs text-fg-muted'>{deal.gasLine}</p>}
+                  {pair && refundsToPayer(deal.route, pair) && (
+                    <p className='text-xs text-warn'>{PAYER_REFUNDS}</p>
+                  )}
                   <div className='flex w-full items-center gap-2'>
                     <span className='min-w-0 flex-1 break-all font-mono text-xs'>
                       {deal.depositAddress}
@@ -1442,18 +1634,25 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
             scan signature
           </Button>
         )}
-        {(step === 'deposit' || step === 'polling') &&
-          (watchable ? (
-            <Button variant='secondary' className='w-full' onClick={reset}>
-              cancel
-            </Button>
-          ) : (
-            <Button className='w-full' onClick={() => navigate(PopupPath.INDEX)}>
-              done
-            </Button>
-          ))}
+        {/* the swap stays on home until it ends; only "stop watching" lets it go */}
+        {(step === 'deposit' || step === 'polling') && watchable && (
+          <Button variant='secondary' className='grow' onClick={reset}>
+            stop watching
+          </Button>
+        )}
+        {(step === 'deposit' || step === 'polling') && (
+          <Button className='grow' onClick={() => navigate(PopupPath.INDEX)}>
+            done
+          </Button>
+        )}
         {step === 'refunded' && (
-          <Button className='w-full' onClick={() => navigate(PopupPath.INDEX)}>
+          <Button
+            className='w-full'
+            onClick={() => {
+              forget();
+              navigate(PopupPath.INDEX);
+            }}
+          >
             done
           </Button>
         )}

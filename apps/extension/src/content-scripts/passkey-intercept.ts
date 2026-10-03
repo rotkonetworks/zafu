@@ -16,7 +16,7 @@
  * adapted from KeePassXC-Browser's passkeys-inject.js pattern.
  */
 
-export {}; // module scope - keeps CHANNEL out of the shared MAIN-world global
+import { clientDataJson } from './passkey-wire';
 
 const CHANNEL = 'zafu-passkey';
 
@@ -173,16 +173,10 @@ navigator.credentials.create = async function (
     // build PublicKeyCredential from zafu's response
     const credentialId = hexToBuf(response.credentialId!);
     const authenticatorData = hexToBuf(response.authenticatorData!);
-    const clientDataJSON = new TextEncoder().encode(
-      JSON.stringify({
-        type: 'webauthn.create',
-        challenge: btoa(String.fromCharCode(...new Uint8Array(hexToBuf(challenge))))
-          .replace(/\+/g, '-')
-          .replace(/\//g, '_')
-          .replace(/=/g, ''),
-        origin: window.location.origin,
-        crossOrigin: false,
-      }),
+    const clientDataJSON = clientDataJson(
+      'webauthn.create',
+      new Uint8Array(hexToBuf(challenge)),
+      window.location.origin,
     );
 
     // construct attestation object (none attestation)
@@ -241,16 +235,10 @@ navigator.credentials.get = async function (
   const prfSalts = extractPrfSalts(pk.extensions);
 
   // build clientDataJSON first - the service worker needs its hash to sign
-  const clientDataJSON = new TextEncoder().encode(
-    JSON.stringify({
-      type: 'webauthn.get',
-      challenge: btoa(String.fromCharCode(...new Uint8Array(hexToBuf(challenge))))
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=/g, ''),
-      origin: window.location.origin,
-      crossOrigin: false,
-    }),
+  const clientDataJSON = clientDataJson(
+    'webauthn.get',
+    new Uint8Array(hexToBuf(challenge)),
+    window.location.origin,
   );
   // SHA-256 hash of clientDataJSON - this is what gets signed
   const clientDataHash = bufToHex(
@@ -260,6 +248,7 @@ navigator.credentials.get = async function (
   try {
     const response = await askWallet('get', {
       rpId,
+      challenge,
       clientDataHash,
       prfSalts,
       allowCredentials: pk.allowCredentials?.map(c => ({

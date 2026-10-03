@@ -113,6 +113,13 @@ export const nearProvider: SwapProvider = {
   status: async quote => STATUS[(await checkSwapStatus(quote.depositAddress)).status ?? 'none'],
 };
 
+/** into zec with no refund address typed: near's line asks for one */
+export class NeedsRefundAddress extends Error {
+  constructor(chain: string) {
+    super(`near intents needs your ${chain} address for refunds · tap to add it`);
+  }
+}
+
 /** 1click's own words never reach the screen: a line of zafu's, or a calm stand-in */
 export const nearRefusal = (e: unknown, signal?: AbortSignal): unknown => {
   const text = e instanceof Error ? e.message : '';
@@ -135,10 +142,15 @@ const nearQuote = async (req: QuoteRequest, signal?: AbortSignal): Promise<Quote
     throw new Error(`near intents doesn't offer ${req.token.symbol.toLowerCase()} right now`);
   }
   const fromZec = req.direction === 'from_zec';
+  // into zec, 1click refunds to the payer's own address: it can't quote without one
+  if (!fromZec && !req.otherAddress) {
+    throw new NeedsRefundAddress(req.token.chain);
+  }
   const zafuBps = zafuFeeBps('near');
   const [inDecimals, outDecimals] = fromZec ? [8, token.decimals] : [token.decimals, 8];
   const resp: SwapQuoteResponse = await requestQuote({
     // by what arrives: 1click asks a deposit of amountIn, and sends back any excess
+    // (exact output is kept for the unified swap screen; see QuoteRequest.exactOut)
     swapType: req.exactOut ? 'EXACT_OUTPUT' : 'EXACT_INPUT',
     amount: (req.exactOut
       ? toUnits(req.exactOut, outDecimals)
