@@ -247,20 +247,22 @@ export function onCosmosChainsAdded(listener: ChainsListener): () => void {
 }
 
 /**
- * Layers a verified live copy of the registry over the bundled one, in place
- * (every holder of COSMOS_CHAINS sees it): its chains replace bundled ones of
- * the same id, the presets still win. Returns the chains that are new.
+ * Adds the chains of a verified live copy of the registry that zafu does not
+ * know yet, in place (every holder of COSMOS_CHAINS sees them). A chain zafu
+ * already knows - a preset, a bundled one, or one an earlier live copy added
+ * this session - is never touched: the live copy exists for chains zafu
+ * doesn't know, and a channel pin decides where funds go, so one compromised
+ * registry key must not be able to re-pin the chains users already rely on.
+ * Returns the chains it added.
  */
 export function applyLiveConnections(connections: readonly Chain[]): CosmosChainId[] {
   const live = chainsFromRegistry(connections);
   const added: CosmosChainId[] = [];
   for (const [id, config] of Object.entries(live)) {
-    if (id in PRESETS) {
+    if (id in COSMOS_CHAINS) {
       continue;
     }
-    if (!(id in COSMOS_CHAINS)) {
-      added.push(id);
-    }
+    added.push(id);
     COSMOS_CHAINS[id] = config;
   }
   if (added.length) {
