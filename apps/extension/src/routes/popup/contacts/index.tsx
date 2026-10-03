@@ -19,13 +19,15 @@ import { ChainRow, useAddressDraft } from './chain-row';
 
 /**
  * a contact's line under the name: whether friends on sites can find each
- * other (their card carried the key), or only an address is known. Said
+ * other (you hold each other's cards), or only an address is known. Said
  * calmly: address only is not a fault, it just cannot be found.
  */
 export const contactStatus = (c: Contact): { line: string; warn?: boolean } =>
-  c.card
-    ? { line: 'from a card · can be found' }
-    : c.zid
+  c.zid && c.pairKa
+    ? c.rel
+      ? { line: 'from a card · can be found' }
+      : { line: 'from a card · send them yours' }
+    : c.zid || c.card
       ? { line: 'from an older card · ask for their new one' }
       : { line: 'address only · ask for their card' };
 

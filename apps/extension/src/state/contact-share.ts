@@ -66,16 +66,16 @@ export const myAddressForContact = async (
 
 /**
  * a contact card memo, as hex, carrying the sender's name and address, and
- * (`ka`) the contact key-agreement key that lets the two of you find each
- * other on sites with private contact discovery
+ * the keys of the relationship you give this one person: its inception key
+ * and its pair KA key, which opens your pair room and lets the two of you find
+ * each other on sites. It carries no identity-wide key (the old `ka` TLV): that
+ * key was the same in every card, so any two of your cards could be linked.
  */
 export const contactCardMemoHex = (card: {
   senderName: string;
   myAddress: string;
   /** the relationship's inception key */
   zid?: string;
-  /** the discovery key-agreement key */
-  ka?: string;
   /** the relationship's pair-room key-agreement key */
   pairKa?: string;
   /** their inception key, when this card answers theirs */
@@ -86,7 +86,6 @@ export const contactCardMemoHex = (card: {
     address: card.myAddress,
     flags: 0,
     zid: card.zid,
-    ka: card.ka,
     pairKa: card.pairKa,
     answers: card.answers,
   });
@@ -146,15 +145,3 @@ export const readCardPayload = (payload: string): ContactCard | undefined => {
     return undefined;
   }
 };
-
-/**
- * The discovery key a card carries, in the shape a contact stores it. Only
- * x25519-v1 exists today; a card without the key gives an address-only
- * person for discovery.
- */
-export const cardDiscoveryKey = (
-  card: Pick<ContactCard, 'ka'>,
-): { suite: 'x25519-v1'; publicKey: string } | undefined =>
-  card.ka && /^[0-9a-f]{64}$/.test(card.ka)
-    ? { suite: 'x25519-v1', publicKey: card.ka }
-    : undefined;

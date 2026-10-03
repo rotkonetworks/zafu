@@ -21,7 +21,6 @@ import {
   deriveRelationshipKeys,
   getZidIndex,
   mintRelationshipIndex,
-  myDiscoveryKey,
   setZidIndex,
 } from '../../../state/identity';
 import {
@@ -70,14 +69,12 @@ const useCardLink = (open: boolean) => {
       const rel = mnemonic
         ? deriveRelationshipKeys(mnemonic, gen, await mintRelationshipIndex(keyInfo.id, gen))
         : undefined;
-      const ka = mnemonic && (await myDiscoveryKey(mnemonic));
       const hex =
         mine &&
         contactCardMemoHex({
           senderName: '',
           myAddress: mine.address,
           zid: rel?.pubkey,
-          ka,
           pairKa: rel?.kaPublicKey,
         });
       if (!mine || !hex) {

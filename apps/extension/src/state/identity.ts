@@ -257,16 +257,6 @@ const deriveSeedForContact = (identity: Uint8Array, contactId: string): Uint8Arr
   deriveSeed(identity, enc.encode('contact:' + contactId));
 
 /**
- * derive the long-term contact key-agreement seed. ONE per identity, published
- * (its public half) in the contact card for non-interactive pairwise rendezvous
- * (contact discovery). the tag `contact-ka-v1` is suite-independent: the same
- * hash-derived seed feeds whichever KA suite the card declares. reserved future
- * tag `contact-ka-xwing-v1` if a hybrid ever needs a distinct seed.
- */
-const deriveSeedForContactKa = (identity: Uint8Array): Uint8Array =>
-  deriveSeed(identity, enc.encode('contact-ka-v1'));
-
-/**
  * derive the site-scoped X-Wing (X25519 + ML-KEM-768) seed. Domain-separated
  * from the ed25519 site key (tag 'xwing-site:' vs 'site:') so the two algorithms
  * never share key material. This is the recipient's post-quantum sealed-box key:
@@ -327,16 +317,6 @@ const deriveSeedForHotWallet = (identity: Uint8Array): Uint8Array =>
 const keypairFromSeed = (seed: Uint8Array): { privateKey: Uint8Array; publicKey: Uint8Array } => {
   const privateKey = seed.slice(0, 32);
   const publicKey = ed25519.getPublicKey(privateKey);
-  seed.fill(0);
-  return { privateKey, publicKey };
-};
-
-/** extract an X25519 keypair from seed (for contact key-agreement). zeroizes the seed. */
-const x25519KeypairFromSeed = (
-  seed: Uint8Array,
-): { privateKey: Uint8Array; publicKey: Uint8Array } => {
-  const privateKey = seed.slice(0, 32);
-  const publicKey = x25519.getPublicKey(privateKey);
   seed.fill(0);
   return { privateKey, publicKey };
 };
@@ -448,76 +428,25 @@ export const deriveZidCrossSite = (mnemonic: string, identity: string): Zid =>
   });
 
 // ========================================================================
-// CONTACT KEY-AGREEMENT (for private, non-interactive contact discovery)
+// CONTACT KEY-AGREEMENT (legacy card shape)
 // ========================================================================
 //
-// Everything downstream of the pairwise ROOT SECRET (rendezvous tags, epoch
-// rotation, the forward-secrecy ratchet, presence-blob AEAD) consumes the
-// secret as opaque bytes and is SUITE-BLIND. The suite matters only here, at
-// establishment. That is what makes the PQ migration a localized change:
-//
-//   - today  'x25519-v1' : a NIKE. static-static X25519 DH; both sides compute
-//                          the same secret from static keys, no wire ciphertext.
-//   - soon   'xwing-v1'  : X-Wing (X25519 + ML-KEM-768) hybrid, a KEM. asymmetric
-//                          encapsulate/decapsulate, so it DOES carry a ciphertext
-//                          established once at contact-add and cached. The cached
-//                          root secret is suite-agnostic bytes; tags never change.
-//
-// Callers MUST establish the root secret once (at contact-add) and cache it -
-// do NOT re-derive per tag, or the KEM suite can't slot in (a KEM is not a NIKE).
+// Cards used to carry ONE identity-wide discovery key (`ka`, tag
+// `contact-ka-v1`), the same in every card, so any two cards could be linked
+// to each other. Discovery now runs per relationship (see `discoverySecret`),
+// and new cards carry no `ka`. The stored shape below stays only because
+// contacts saved from an older card still hold it; nothing derives or reads
+// it for discovery any more.
 
-/** contact key-agreement suite id. carried in the contact card so a peer knows
- *  how to establish the pairwise secret. */
-export type ContactSuite = 'x25519-v1'; // future: | 'xwing-v1'
+/** contact key-agreement suite id an older card declared. */
+export type ContactSuite = 'x25519-v1';
 
-/** default (and currently only) contact KA suite. */
-export const CONTACT_SUITE_DEFAULT: ContactSuite = 'x25519-v1';
-
-/** the public half of a contact's key-agreement key, as it appears in the card. */
+/** the public half of an older card's discovery key, as a contact stores it. */
 export interface ContactCardKey {
   suite: ContactSuite;
-  /** hex. X25519 public key for 'x25519-v1'; the KEM encapsulation key for a hybrid. */
+  /** hex. X25519 public key. */
   publicKey: string;
 }
-
-/** derive THIS identity's contact-card key (public half only). goes in the card. */
-export const deriveZidContactCardKey = (
-  mnemonic: string,
-  identity: string,
-  suite: ContactSuite = CONTACT_SUITE_DEFAULT,
-): ContactCardKey =>
-  withIdentity(mnemonic, identity, id => {
-    if (suite !== 'x25519-v1') {
-      throw new Error(`unsupported contact suite: ${suite}`);
-    }
-    const { privateKey, publicKey } = x25519KeypairFromSeed(deriveSeedForContactKa(id));
-    privateKey.fill(0);
-    return { suite, publicKey: bytesToHex(publicKey) };
-  });
-
-/**
- * Establish the pairwise ROOT secret with a peer's contact card. This is the
- * ONLY suite-specific step; the caller caches the result and derives all
- * rendezvous tags from it (see packages/zid). Caller must zeroize the return.
- *
- * For 'x25519-v1' this is static-static X25519 DH (symmetric, no ciphertext).
- * A future KEM suite changes this signature to also return/consume a ciphertext,
- * but the cached secret's role is unchanged.
- */
-export const zidContactRootSecret = (
-  mnemonic: string,
-  identity: string,
-  peer: ContactCardKey,
-): Uint8Array =>
-  withIdentity(mnemonic, identity, id => {
-    if (peer.suite !== 'x25519-v1') {
-      throw new Error(`unsupported contact suite: ${peer.suite}`);
-    }
-    const { privateKey } = x25519KeypairFromSeed(deriveSeedForContactKa(id));
-    const shared = x25519.getSharedSecret(privateKey, hexToBytes(peer.publicKey));
-    privateKey.fill(0);
-    return shared; // 32 bytes; run HKDF (tag layer) then zeroize
-  });
 
 /**
  * derive the ring VRF seed for anonymous pro membership.
@@ -736,14 +665,6 @@ export function rotatedIdentity(baseIdentity: string, zidIndex: number): string 
 export async function currentIdentityName(base: string = DEFAULT_IDENTITY): Promise<string> {
   return rotatedIdentity(base, await getZidIndex());
 }
-
-/**
- * The contact key-agreement key a card carries: the same key presence is
- * published under (contact-discovery-service uses `currentIdentityName()`
- * too), so the two always agree or discovery finds nobody.
- */
-export const myDiscoveryKey = async (mnemonic: string): Promise<string> =>
-  deriveZidContactCardKey(mnemonic, await currentIdentityName()).publicKey;
 
 /** chrome.storage.local key prefix: per wallet, a map of generation index ->
  * zid public key hex. Populated whenever a generation is actually derived, so
@@ -1232,6 +1153,27 @@ export const deriveRelationshipKeys = (
   });
 };
 
+/** X25519 of the two relationship KA keys, then HKDF bound to both XIDs */
+const relationshipSecret = (
+  salt: string,
+  kaSeed: Uint8Array,
+  peerKa: string,
+  myXid: string,
+  peerXid: string,
+): Uint8Array => {
+  const root = x25519.getSharedSecret(kaSeed, hexToBytes(peerKa));
+  const [lo, hi] = myXid < peerXid ? [myXid, peerXid] : [peerXid, myXid];
+  const out = hkdf(
+    sha256,
+    root,
+    enc.encode(salt),
+    new Uint8Array([...hexToBytes(lo), ...hexToBytes(hi)]),
+    32,
+  );
+  root.fill(0);
+  return out;
+};
+
 /**
  * The secret two people's pair room is keyed by (design-social 2.2):
  *
@@ -1246,19 +1188,26 @@ export const pairSecret = (
   peerKa: string,
   myXid: string,
   peerXid: string,
-): Uint8Array => {
-  const root = x25519.getSharedSecret(kaSeed, hexToBytes(peerKa));
-  const [lo, hi] = myXid < peerXid ? [myXid, peerXid] : [peerXid, myXid];
-  const out = hkdf(
-    sha256,
-    root,
-    enc.encode('zafu-pair-v1'),
-    new Uint8Array([...hexToBytes(lo), ...hexToBytes(hi)]),
-    32,
-  );
-  root.fill(0);
-  return out;
-};
+): Uint8Array => relationshipSecret('zafu-pair-v1', kaSeed, peerKa, myXid, peerXid);
+
+/**
+ * The root secret private contact discovery runs on for one relationship:
+ * the same X25519 as the pair room, under its own salt, so the two secrets
+ * are independent.
+ *
+ *   discoveryRoot = HKDF(X25519(ka_mine, ka_theirs), salt "zafu-discovery-v1",
+ *                        info min(XID) || max(XID))
+ *
+ * Each person holds a different KA key from you (xid-rel-v1), so nothing a
+ * card carries links one person's card to another's, and a site that holds
+ * one of your cards cannot test whether a visitor knows you.
+ */
+export const discoverySecret = (
+  kaSeed: Uint8Array,
+  peerKa: string,
+  myXid: string,
+  peerXid: string,
+): Uint8Array => relationshipSecret('zafu-discovery-v1', kaSeed, peerKa, myXid, peerXid);
 
 /** chrome.storage.local, per wallet: the next unused `j` per generation */
 export const XID_REL_NEXT_KEY = 'xidRelNext';

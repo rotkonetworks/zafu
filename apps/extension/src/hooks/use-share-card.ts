@@ -5,7 +5,7 @@ import { selectEffectiveKeyInfo, selectGetMnemonic } from '../state/keyring';
 import { keyInfoSupportsNetwork } from '../state/keyring/vault-ops';
 import type { Contact } from '../state/contacts';
 import { contactCardMemoHex, myAddressForContact } from '../state/contact-share';
-import { deriveRelationshipKeys, myDiscoveryKey } from '../state/identity';
+import { deriveRelationshipKeys } from '../state/identity';
 import { getDiversifiedAddresses, setDiversifiedAddresses } from '../state/diversified-addresses';
 import { PopupPath } from '../routes/popup/paths';
 import { useContactAddressSource } from './use-contact-address-source';
@@ -51,15 +51,14 @@ export const useMintCard = () => {
       }
       const mnemonic = keyInfo.type === 'mnemonic' ? await getMnemonic(keyInfo.id) : undefined;
       // the relationship you give this person: its inception key is the card's
-      // seal, its own KA key opens your pair room; the discovery key rides too
+      // seal, its own KA key opens your pair room and finds them on sites. No
+      // key in it is shared with any other person's card.
       const rel = mnemonic && (await relationshipOf(contactId, keyInfo.id, updateContact));
       const keys = mnemonic && rel ? deriveRelationshipKeys(mnemonic, rel.gen, rel.j) : undefined;
-      const ka = mnemonic && (await myDiscoveryKey(mnemonic));
       return contactCardMemoHex({
         senderName: '',
         myAddress: mine.address,
         zid: keys?.pubkey,
-        ka,
         pairKa: keys?.kaPublicKey,
         answers: contactNow(contactId)?.zid,
       });
