@@ -26,6 +26,7 @@
  */
 
 import type { NetworkType, VaultUnlock } from './types';
+import { isValidInternalSender } from '../../senders/internal';
 import type { SealedVault, WorkerKey } from '../../shared/vault-seal';
 import type { DepositPlan, DepositRequest } from '../../workers/transparent-deposit';
 
@@ -406,8 +407,10 @@ const ensureClientListener = (): void => {
     return;
   }
   clientListenerInstalled = true;
-  chrome.runtime.onMessage.addListener(msg => {
-    if (msg?.type !== 'NW_EVENT' || !msg.network) {
+  chrome.runtime.onMessage.addListener((msg, sender) => {
+    // worker events come from the offscreen host; a content script in a web tab
+    // must not feed this window a forged sync state
+    if (msg?.type !== 'NW_EVENT' || !msg.network || !isValidInternalSender(sender)) {
       return false;
     }
     const state = workers.get(msg.network as NetworkType);
@@ -509,7 +512,13 @@ const ensureHostListener = (): void => {
     return;
   }
   hostListenerInstalled = true;
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    // only zafu's own pages and worker drive the hosted workers: a content
+    // script carries the extension id too, and could otherwise stop or kill a
+    // sync mid-send, queue proving jobs, or start a sync with its own keys
+    if (!isValidInternalSender(sender)) {
+      return false;
+    }
     if (msg?.type === 'NW_SPAWN' && msg.network) {
       void (async () => {
         try {

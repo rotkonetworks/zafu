@@ -6,14 +6,24 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-type Listener = (msg: { type?: string; network?: string; msg?: unknown }) => unknown;
+type Listener = (
+  msg: { type?: string; network?: string; msg?: unknown },
+  sender: chrome.runtime.MessageSender,
+) => unknown;
+
+/** the offscreen document, as a window sees it: the extension's own origin */
+const HOST: chrome.runtime.MessageSender = {
+  id: 'ext',
+  origin: 'chrome-extension://ext',
+  url: 'chrome-extension://ext/offscreen.html',
+};
 
 /** a fake runtime bus with one offscreen host whose worker can disappear */
 const fakeHost = () => {
   const listeners: Listener[] = [];
   const host = { hasWorker: true, syncing: ['w1'] };
   const emit = (msg: unknown) =>
-    listeners.forEach(l => l({ type: 'NW_EVENT', network: 'zcash', msg }));
+    listeners.forEach(l => l({ type: 'NW_EVENT', network: 'zcash', msg }, HOST));
   const sendMessage = vi.fn(async (m: { type: string; message?: { type: string; id: string } }) => {
     switch (m.type) {
       case 'ZCASH_ENSURE_OFFSCREEN':
@@ -55,6 +65,7 @@ beforeEach(() => {
   lost = [];
   vi.stubGlobal('chrome', {
     runtime: {
+      id: 'ext',
       sendMessage: bus.sendMessage,
       onMessage: { addListener: (l: Listener) => bus.listeners.push(l) },
     },
@@ -109,11 +120,14 @@ describe('a window outliving the offscreen host', () => {
     for (let i = 0; i < 6; i++) {
       await vi.advanceTimersByTimeAsync(10_000);
       bus.listeners.forEach(l =>
-        l({
-          type: 'NW_EVENT',
-          network: 'zcash',
-          msg: { type: 'sync-progress', walletId: 'w1', payload: {} },
-        }),
+        l(
+          {
+            type: 'NW_EVENT',
+            network: 'zcash',
+            msg: { type: 'sync-progress', walletId: 'w1', payload: {} },
+          },
+          HOST,
+        ),
       );
     }
     expect(bus.sendMessage.mock.calls.some(([m]) => m.type === 'NW_PING')).toBe(false);
