@@ -73,7 +73,7 @@ type Token = { asset: Asset } | { symbol: string };
 const symbolOf = (t: Token) => ('asset' in t ? t.asset.symbol : t.symbol);
 
 /** one token's whole control: price, shielded amount, its deposit addresses, every move */
-const TokenSheet = ({
+export const TokenSheet = ({
   token,
   book,
   transparent,
@@ -125,6 +125,17 @@ const TokenSheet = ({
               ))}
             {shield && (
               <Row type='screen' icon={shield.icon} label={shield.label} onPress={shield.onPress} />
+            )}
+            {/* a bridged asset's base denom (transfer/channel-24/uusdt): tells
+                a power user which chain's wrapped USDT (or similar) this is,
+                when the symbol alone can't */}
+            {asset?.base?.includes('/') && asset.base !== asset.rawId && (
+              <div className='flex min-h-12 items-center gap-2 px-3.5'>
+                <span className='min-w-0 flex-1 truncate font-mono text-[11px] text-fg-muted'>
+                  {asset.base}
+                </span>
+                <CopyButton text={asset.base} className='h-8 px-1' />
+              </div>
             )}
             {asset?.rawId && (
               <div className='flex min-h-12 items-center gap-2 px-3.5'>

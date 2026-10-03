@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import {
   AssetId,
@@ -12,6 +12,9 @@ import { EquivalentValue } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/
 import { fmtIn, heroOf, localPrices, selectHome, valueOf } from './penumbra-value';
 import { combine, fixedBook, type Simulate } from '../../../penumbra/price';
 import { QUOTES, UNIVERSE } from '../../../penumbra/quotes';
+
+vi.mock('../../../penumbra/asset-registry', () => ({ registryMetadata: vi.fn() }));
+import { registryMetadata } from '../../../penumbra/asset-registry';
 
 const selectAssets = (b: BalancesResponse[]) => selectHome(b).assets;
 
@@ -202,5 +205,32 @@ describe('recorded prices', () => {
     const bareUsdc = new Metadata({ penumbraAssetId: USDC.penumbraAssetId });
     const [usdt] = selectAssets([balance(OSMO, 20_000_000n, [[bareUsdc, 18_800_000n]])]);
     expect(usdt!.local['usd']).toBeCloseTo(0.94, 6);
+  });
+});
+
+describe('registry-first display', () => {
+  test('a registry rename overrides the view service symbol and name', () => {
+    // the view service hasn't caught up to the registry's rename yet: no
+    // symbol, and a name an exchange would use ("Tether USDT")
+    const AXLUSDT_ID = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxA=';
+    const viewOnly = meta('transfer/channel-24/uusdt', '', 'transfer/channel-24/usdt', 6);
+    const usdtView = new Metadata({
+      ...viewOnly,
+      penumbraAssetId: new AssetId({ inner: base64ToUint8Array(AXLUSDT_ID) }),
+      name: 'Tether USDT',
+    });
+    const usdtRegistry = new Metadata({
+      ...meta('transfer/channel-24/uusdt', 'axlUSDT', 'transfer/channel-24/usdt', 6, AXLUSDT_ID),
+      name: 'Tether USD',
+    });
+    vi.mocked(registryMetadata).mockImplementation(m =>
+      m?.penumbraAssetId?.inner.length && m.penumbraAssetId.equals(usdtView.penumbraAssetId)
+        ? usdtRegistry
+        : undefined,
+    );
+    const [usdt] = selectAssets([balance(usdtView, 1_000_000n)]);
+    expect(usdt!.symbol).toBe('axlUSDT');
+    expect(usdt!.name).toBe('Tether USD');
+    vi.mocked(registryMetadata).mockReset();
   });
 });

@@ -20,6 +20,7 @@ import type { NoteView } from '@penumbra-zone/protobuf/penumbra/core/component/s
 import type { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { Denom } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { ChainRegistryClient, type Registry } from '@penumbrafi/registry';
+import { penumbraRegistry } from '../penumbra/asset-registry';
 import { unpackIbcRelay } from '@penumbra-zone/perspective/action-view/ibc';
 import { MsgRecvPacket } from '@penumbra-zone/protobuf/ibc/core/channel/v1/tx_pb';
 import { bech32mAddress } from '@penumbra-zone/bech32m/penumbra';
@@ -97,14 +98,20 @@ const stakingAssetId = () =>
   (staking ??= new ChainRegistryClient().bundled.globals().stakingAssetId);
 
 let bundled: { registry?: Registry; validatorNames: Map<string, string> } | undefined;
+/**
+ * The registry zafu currently trusts (live if stored, else bundled - see
+ * ../penumbra/asset-registry), with its validator names cached alongside;
+ * recomputed only when the trusted registry itself changes (the live one
+ * loads once, at boot).
+ */
 const bundledRegistry = () => {
-  if (!bundled) {
-    let registry: Registry | undefined;
-    try {
-      registry = new ChainRegistryClient().bundled.get('penumbra-1');
-    } catch {
-      // another chain id (a testnet): local metadata only
-    }
+  let registry: Registry | undefined;
+  try {
+    registry = penumbraRegistry();
+  } catch {
+    // another chain id (a testnet): local metadata only
+  }
+  if (!bundled || bundled.registry !== registry) {
     const validatorNames = new Map<string, string>();
     for (const m of registry?.getAllAssets() ?? []) {
       const v = /delegation_(penumbravalid1[0-9a-z]+)$/.exec(m.display);

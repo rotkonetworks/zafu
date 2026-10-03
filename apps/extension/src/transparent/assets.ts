@@ -4,15 +4,19 @@
  *
  * "Shieldable" = the asset has come over the chain's Penumbra channel: the
  * Penumbra registry lists it as `transfer/<penumbra-side channel>/<denom>`.
- * Read from the penumbrafi registry: the copy bundled in the extension at
- * first, swapped for the live one (github main, the same file withdraw already
- * reads) once `refreshRegistryAssets` has fetched it, so a registry merge
- * relabels assets without a zafu release. The chain's own native and gas
+ * Read from ../penumbra/asset-registry - the one place that holds the live
+ * registry when one is stored (transparent/registry-live), else the bundled
+ * copy - so a registry merge relabels assets without a zafu release, the same
+ * way it relabels the Penumbra home row. The chain's own native and gas
  * assets are known from its config.
  */
 
-import { ChainRegistryClient, Registry } from '@penumbrafi/registry';
-import { storedRegistryJson } from './registry-live';
+import type { Registry } from '@penumbrafi/registry';
+import {
+  refreshPenumbraRegistry,
+  forgetPenumbraRegistry,
+  penumbraRegistry,
+} from '../penumbra/asset-registry';
 import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 
 export interface TransparentAsset {
@@ -29,40 +33,34 @@ export interface HeldAsset extends TransparentAsset {
 }
 
 const registryCache = new Map<string, Map<string, TransparentAsset>>();
-
-let liveRegistry: Registry | undefined;
-let refreshing: Promise<void> | undefined;
+/** which registry object `registryCache` was built from; cleared on change */
+let seenRegistry: Registry | undefined;
 
 /**
- * Use the signed newer registry when one is stored (transparent/registry-live),
- * else the bundled copy. Never the network. Resolves when later `knownAssets`
- * calls will see it.
+ * Re-check the stored live registry (../penumbra/asset-registry); resolves
+ * once later `knownAssets` calls will see it. Never touches the network.
  */
-export const refreshRegistryAssets = (): Promise<void> =>
-  (refreshing ??= storedRegistryJson()
-    .then(json => {
-      if (json) {
-        liveRegistry = new Registry(json);
-        registryCache.clear();
-      }
-    })
-    .catch(() => undefined));
+export const refreshRegistryAssets = (): Promise<void> => refreshPenumbraRegistry();
 
 /** after a newer signed registry was fetched: read it again on next use */
 export const forgetRegistryAssets = () => {
-  refreshing = undefined;
+  forgetPenumbraRegistry();
 };
 
 /** assets Penumbra accepts over `penumbraChannel` (penumbra side), by lower-cased denom */
 function registryAssets(penumbraChannel: string): Map<string, TransparentAsset> {
-  const cached = registryCache.get(penumbraChannel);
-  if (cached) {
-    return cached;
-  }
   const out = new Map<string, TransparentAsset>();
   try {
+    const registry = penumbraRegistry();
+    if (registry !== seenRegistry) {
+      seenRegistry = registry;
+      registryCache.clear();
+    }
+    const cached = registryCache.get(penumbraChannel);
+    if (cached) {
+      return cached;
+    }
     const prefix = `transfer/${penumbraChannel}/`;
-    const registry = liveRegistry ?? new ChainRegistryClient().bundled.get('penumbra-1');
     for (const m of registry.getAllAssets()) {
       if (!m.base.startsWith(prefix)) {
         continue;
