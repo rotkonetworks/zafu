@@ -26,7 +26,10 @@ export const ToolsPage = () => {
   const activeNetwork = useStore(selectActiveNetwork);
   const identityEnabled = useStore(isIdentityEnabled);
 
-  const go = (path: string) => navigate(path, screenTransition('push'));
+  const go = (path: string) =>
+    path.startsWith('https://')
+      ? window.open(path, '_blank', 'noopener,noreferrer')
+      : navigate(path, screenTransition('push'));
 
   const tiles: Tile[] = [
     hasFeature(activeNetwork, 'zcash') && {
@@ -52,6 +55,12 @@ export const ToolsPage = () => {
       label: 'stake',
       desc: activeNetwork,
       path: PopupPath.STAKE,
+    },
+    activeNetwork === 'penumbra' && {
+      icon: 'i-ph-chart-line-up',
+      label: 'trade',
+      desc: 'penumbra.fi',
+      path: 'https://penumbra.fi',
     },
     hasFeature(activeNetwork, 'multisig') && {
       icon: 'i-zafu-torii',

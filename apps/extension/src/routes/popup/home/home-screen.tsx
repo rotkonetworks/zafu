@@ -18,10 +18,9 @@ export const HomeScreen = ({
   view,
   amount,
   unit = look.unit,
-  hint,
+  note,
   spendable,
   watermark,
-  control,
   children,
 }: {
   look: HomeLook;
@@ -30,10 +29,9 @@ export const HomeScreen = ({
   amount: string;
   /** when the figure is not in the network's own unit (penumbra's dollars) */
   unit?: string;
-  hint?: string;
+  note?: string;
   spendable: boolean;
   watermark: boolean;
-  control?: ReactNode;
   children: ReactNode;
 }) => (
   <div className='flex min-h-full flex-col overflow-x-hidden'>
@@ -43,11 +41,12 @@ export const HomeScreen = ({
         view={view}
         amount={amount}
         unit={unit}
-        hint={hint}
+        label={look.label}
+        eye={look.eye}
+        note={note}
         watermark={watermark ? look.watermark : undefined}
-        control={control}
       >
-        <HomeActions spendable={spendable} />
+        <HomeActions spendable={spendable} icons={look.actionIcons} />
       </BalanceHero>
       {children}
     </div>

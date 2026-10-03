@@ -1,5 +1,8 @@
 import { useEffect } from 'react';
+import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../state';
+import { startsOf } from '../penumbra/start';
+import { askPenumbraStart } from '../components/wallet/penumbra-start-sheet';
 import { refreshEgress } from '../net/egress';
 import type { NetworkType } from '../state/keyring';
 import { isIbcNetwork } from '../state/keyring/network-types';
@@ -11,10 +14,24 @@ import { getNetwork, getSubnetworks } from '../config/networks';
  */
 export const useEnableNetwork = () => {
   const toggleNetwork = useStore(s => s.keyRing.toggleNetwork);
+  const penumbraWallets = useStore(s => s.wallets.all);
   const setActive = useStore(s => s.keyRing.setActiveNetwork);
   const setSetting = useStore(s => s.privacy.setSetting);
   const transparentOn = useStore(s => s.privacy.settings.enableTransparentBalances);
   return async (n: NetworkType) => {
+    // penumbra's start is chosen here, as it is turned on, and never on home
+    if (n === 'penumbra') {
+      const starts = startsOf(await localExtStorage.get('penumbraStarts')) ?? {};
+      const unasked = penumbraWallets.filter(w => !starts[w.id]);
+      const start = unasked.length ? await askPenumbraStart() : 'tip';
+      if (!start) {
+        return;
+      }
+      await localExtStorage.set('penumbraStarts', {
+        ...starts,
+        ...Object.fromEntries(unasked.map(w => [w.id, start])),
+      });
+    }
     await toggleNetwork(n);
     if (isIbcNetwork(n) && !transparentOn) {
       await setSetting('enableTransparentBalances', true);

@@ -9,7 +9,7 @@ import {
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { base64ToUint8Array } from '@penumbrafi/types/base64';
 import { EquivalentValue } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
-import { fmtIn, heroOf, localPrices, selectHome, unpricedOf, valueOf } from './penumbra-value';
+import { fmtIn, heroOf, localPrices, selectHome, valueOf } from './penumbra-value';
 import { combine, fixedBook, type Simulate } from '../../../penumbra/price';
 import { QUOTES, UNIVERSE } from '../../../penumbra/quotes';
 
@@ -171,7 +171,8 @@ describe('penumbra portfolio value', () => {
       9,
     );
     expect(hero.amount).toBeCloseTo(102.03 + 250 * 0.006612 + 5, 6);
-    expect(unpricedOf(assets, book.usd).map(a => a.symbol)).toEqual(['OSMO']);
+    // an asset with no route is left out of the total
+    expect(valueOf(assets.find(a => a.symbol === 'OSMO')!, book.usd)).toBeUndefined();
 
     expect(heroOf(assets, book.um, 'um').amount).toBeCloseTo(100 * 152.4 + 250 + 5 * 149.4, 6);
   });

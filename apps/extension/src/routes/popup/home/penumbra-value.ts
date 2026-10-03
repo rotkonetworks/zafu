@@ -121,10 +121,6 @@ export const valueOf = (a: Asset, prices?: Prices) => {
 export const localPrices = (assets: Asset[]): Local<TotalIn> =>
   Object.fromEntries(assets.flatMap(a => (a.unit ? [[a.unit.id, a.local]] : [])));
 
-/** held assets the DEX has no route for, left out of the total */
-export const unpricedOf = (assets: Asset[], prices: Prices | undefined) =>
-  prices ? assets.filter(a => a.amount > 0 && !valueOf(a, prices)) : [];
-
 /**
  * The hero's figure: the worth of every priced asset in the chosen quote,
  * the rest left out (their rows say "no price"). With nothing priced it is
@@ -154,4 +150,5 @@ export const fmtIn = (n: number, unit: TotalIn, price = false) =>
   n.toLocaleString('en-US', { ...FMT[unit], ...(price && { maximumSignificantDigits: 4 }) }) +
   (unit === 'um' ? ' um' : '');
 
-export const fmtAmount = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 6 });
+export const fmtAmount = (n: number) =>
+  n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 });

@@ -10,14 +10,25 @@ import { PopupPath } from '../paths';
  * empty wallet keeps receive and swap (swapping into zec needs none) and
  * greys send.
  */
-export const HomeActions = ({ spendable = true }: { spendable?: boolean }) => {
+export const HomeActions = ({
+  spendable = true,
+  icons = true,
+}: {
+  spendable?: boolean;
+  /** the boards differ: Main draws icons, HomePenumbra plain words */
+  icons?: boolean;
+}) => {
   const navigate = useNavigate();
   const viewOnly = useStore(
     s => selectEffectiveKeyInfo(s)?.insensitive['coldSignerType'] === 'viewing-key',
   );
   const receive = (
-    <Button variant='secondary' className='flex-1' onClick={() => navigate(PopupPath.RECEIVE)}>
-      <span className='i-lucide-arrow-down size-[15px]' />
+    <Button
+      variant='secondary'
+      className='h-11 flex-1 text-[13px]'
+      onClick={() => navigate(PopupPath.RECEIVE)}
+    >
+      {icons && <span className='i-lucide-arrow-down size-[15px]' />}
       receive
     </Button>
   );
@@ -35,17 +46,21 @@ export const HomeActions = ({ spendable = true }: { spendable?: boolean }) => {
   return (
     <div className='flex gap-2'>
       {receive}
-      <Button variant='secondary' className='flex-1' onClick={() => navigate(PopupPath.SWAP)}>
-        <span className='i-lucide-arrow-left-right size-[15px]' />
+      <Button
+        variant='secondary'
+        className='h-11 flex-1 text-[13px]'
+        onClick={() => navigate(PopupPath.SWAP)}
+      >
+        {icons && <span className='i-lucide-arrow-left-right size-[15px]' />}
         swap
       </Button>
       <Button
         variant={spendable ? 'primary' : 'secondary'}
-        className='flex-1'
+        className='h-11 flex-1 text-[13px]'
         disabled={!spendable}
         onClick={() => navigate(PopupPath.SEND)}
       >
-        {spendable && <span className='i-lucide-arrow-up size-[15px]' />}
+        {icons && spendable && <span className='i-lucide-arrow-up size-[15px]' />}
         send
       </Button>
     </div>

@@ -6,6 +6,12 @@
 export interface HomeLook {
   /** the hero's unit, next to the figure */
   unit: string;
+  /** the hero's label */
+  label: string;
+  /** the hide-balances eye beside it (board Main has it, HomePenumbra not) */
+  eye: boolean;
+  /** icons in receive / swap / send (board Main has them, HomePenumbra not) */
+  actionIcons: boolean;
   /** heading of the balance rows */
   heading: string;
   /** the faint mark behind the hero (boards Main, HomePenumbra) */
@@ -20,6 +26,9 @@ export interface HomeLook {
 export const HOME_LOOK = {
   zcash: {
     unit: 'zec',
+    label: 'balance',
+    eye: true,
+    actionIcons: true,
     heading: 'balances',
     watermark: 'i-zafu-enso',
     empty: 'no zec yet',
@@ -28,6 +37,9 @@ export const HOME_LOOK = {
   },
   penumbra: {
     unit: 'um',
+    label: 'total value',
+    eye: false,
+    actionIcons: false,
     heading: 'assets',
     watermark: 'i-zafu-enso',
     empty: 'no assets yet',

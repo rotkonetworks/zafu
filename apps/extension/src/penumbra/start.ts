@@ -97,17 +97,8 @@ export const sameTarget = (running: PenumbraTarget, next: PenumbraTarget) =>
     next.chainId === undefined ||
     running.chainId === next.chainId);
 
-/**
- * What a finished start actually runs: its wallet, and nothing while that
- * wallet's start is still to be chosen - so choosing it differs from what is
- * running, and the scheduler builds the real services then.
- */
+/** what a finished start actually runs: its wallet */
 export const settledTarget = (
   target: PenumbraTarget,
   walletId: string | undefined,
-  waitingForStart: boolean,
-): PenumbraTarget => ({
-  ...target,
-  walletId: walletId ?? target.walletId,
-  run: target.run && !waitingForStart,
-});
+): PenumbraTarget => ({ ...target, walletId: walletId ?? target.walletId });

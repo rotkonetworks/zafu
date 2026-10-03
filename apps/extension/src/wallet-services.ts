@@ -23,7 +23,6 @@ import {
   resolveStart,
   startsOf,
   type PenumbraStart,
-  type ResolvedStart,
 } from './penumbra/start';
 import { penumbraTiming } from './penumbra/timing';
 import type { BlockProcessor } from '@penumbra-zone/query/block-processor';
@@ -134,14 +133,11 @@ export const startWalletServices = async (
   }
 
   await adoptLegacy();
-  const asked = startsOf(await localExtStorage.get('penumbraStarts'))?.[wallet.id];
+  // chosen as penumbra turns on; a wallet that came another way reads the whole chain
+  let asked = startsOf(await localExtStorage.get('penumbraStarts'))?.[wallet.id];
   if (!asked) {
-    // nothing is read (or asked of the node) until the home asks once where
-    // this wallet starts; its addresses still work from the viewing key
-    if (!signal?.aborted) {
-      await localExtStorage.set('penumbraSync', { walletId: wallet.id, ask: true });
-    }
-    return { ...stubServices(PENUMBRA_START_NEEDED), wallet };
+    asked = { since: 0 };
+    await setStart(wallet.id, asked);
   }
 
   const grpcEndpoint = await resolvePenumbraEndpoint();
@@ -183,9 +179,6 @@ export const startWalletServices = async (
   return { services, wallet, chainId };
 };
 
-/** why the services are a stub while the wallet's start is not chosen */
-export const PENUMBRA_START_NEEDED = 'penumbra start not chosen yet';
-
 /**
  * A start the ui asked for (the tip, a date), resolved against the node's tip
  * once and stored, so every later start reads the same height. The wait is
@@ -209,7 +202,7 @@ const resolveAt = async (
   return resolved;
 };
 
-const setStart = async (walletId: string, start: ResolvedStart) =>
+const setStart = async (walletId: string, start: PenumbraStart) =>
   localExtStorage.set('penumbraStarts', {
     ...startsOf(await localExtStorage.get('penumbraStarts')),
     [walletId]: start,

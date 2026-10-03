@@ -1,3 +1,4 @@
+import { PenumbraStartSheet } from '../../components/wallet/penumbra-start-sheet';
 import { useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { usePopupReady } from '../../hooks/popup-ready';
@@ -79,6 +80,7 @@ export const PopupLayout = () => {
       {/* one toast per finished transaction, whichever page started it (the
           page may be gone after a side-panel approval reload) */}
       <TxTrackerWatcher />
+      <PenumbraStartSheet />
     </div>
   );
 };

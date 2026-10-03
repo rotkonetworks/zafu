@@ -125,19 +125,10 @@ describe('penumbra rebuild targets', () => {
     return { s, built, want: (t: PenumbraTarget) => (desired = t) };
   };
 
-  it('builds the real services once the start is chosen, after waiting for it', async () => {
-    const t = { walletId: 'w1', run: true };
-    const { s, built } = setup(t);
-    // boot ran for w1 and came back waiting for a start
-    s.setRunning(settledTarget(t, 'w1', true));
-    await s.request('start chosen');
-    expect(built).toEqual([t]);
-  });
-
   it('a running wallet is not rebuilt for an unrelated change', async () => {
     const t = { walletId: 'w1', run: true };
     const { s, built } = setup(t);
-    s.setRunning(settledTarget(t, 'w1', false));
+    s.setRunning(settledTarget(t, 'w1'));
     await s.request('wallets changed');
     await s.request('network switch');
     expect(built).toEqual([]);
@@ -166,7 +157,7 @@ describe('penumbra rebuild targets', () => {
   it('a chain id the node changed rebuilds; an unknown one does not', async () => {
     const t = { walletId: 'w1', run: true, chainId: 'penumbra-1' };
     const { s, built, want } = setup(t);
-    s.setRunning(settledTarget(t, 'w1', false));
+    s.setRunning(settledTarget(t, 'w1'));
     want({ ...t, chainId: undefined });
     await s.request('params unknown');
     expect(built).toEqual([]);

@@ -21,8 +21,6 @@ export const useSyncProgress = () => {
     tip,
     height: sync?.height,
     from: sync?.from ?? 0,
-    ask: !!sync?.ask,
-    walletId: sync?.walletId,
     error,
   };
 };

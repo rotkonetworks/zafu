@@ -1,76 +1,60 @@
-import { useState } from 'react';
+/** penumbra's start, asked as it is turned on (board PenumbraOnUse), never on home */
+
+import { useEffect, useState } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
 import { Sheet } from '@repo/ui/components/ui/sheet';
-import { localExtStorage } from '@repo/storage-chrome/local';
-import { startsOf, type PenumbraStart } from '../../penumbra/start';
-import { StartPresets } from './start-presets';
+import type { PenumbraStart } from '../../penumbra/start';
 
-const DAY = 86_400_000;
+// the one sheet, mounted in the popup layout, and the question it is answering
+let show: ((open: boolean) => void) | undefined;
+let asking: ((start: PenumbraStart | null) => void) | undefined;
 
-const month = (ms: number) =>
-  new Date(ms)
-    .toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' })
-    .toLowerCase();
-
-/** the same choices the zcash birthday offers; the worker maps a date to a height */
-const presets = (now = new Date()): { label: string; start: PenumbraStart; note: string }[] => {
-  const y = now.getUTCFullYear();
-  const since = (ms: number) => ({
-    start: { since: ms },
-    note: `reads the whole chain · yours from ${month(ms)}`,
+/** the start the person picks, or null when they decide not to turn it on */
+export const askPenumbraStart = () =>
+  new Promise<PenumbraStart | null>(resolve => {
+    asking?.(null);
+    asking = resolve;
+    show?.(true);
   });
-  return [
-    { label: 'today', start: 'tip', note: 'starts now · nothing earlier will show' },
-    { label: 'this week', ...since(now.getTime() - 7 * DAY) },
-    { label: 'this month', ...since(Date.UTC(y, now.getUTCMonth(), 1)) },
-    { label: 'this year', ...since(Date.UTC(y, 0, 1)) },
-    { label: String(y - 1), ...since(Date.UTC(y - 1, 0, 1)) },
-    { label: 'not sure', start: { since: 0 }, note: 'reads the whole chain · finds everything' },
-  ];
+
+const answer = (start: PenumbraStart | null) => {
+  asking?.(start);
+  asking = undefined;
+  show?.(false);
 };
 
-/** a wallet's start, chosen once: never over one the worker already holds */
-const choose = async (walletId: string, start: PenumbraStart) => {
-  const starts = startsOf(await localExtStorage.get('penumbraStarts'));
-  if (!starts?.[walletId]) {
-    await localExtStorage.set('penumbraStarts', { ...starts, [walletId]: start });
-  }
-};
-
-/** asked once per penumbra wallet, before its first sync */
-export const PenumbraStartSheet = ({
-  walletId,
-  open,
-  onClose,
-}: {
-  walletId: string | undefined;
-  open: boolean;
-  onClose: () => void;
-}) => {
-  const [options] = useState(presets);
-  const [pick, setPick] = useState(3);
-
+export const PenumbraStartSheet = () => {
+  const [open, setOpen] = useState(false);
+  const [earlier, setEarlier] = useState(false);
+  useEffect(() => {
+    show = setOpen;
+    return () => {
+      show = undefined;
+    };
+  }, []);
   return (
-    <Sheet
-      open={open}
-      onOpenChange={o => !o && onClose()}
-      title='when did you start using this wallet?'
-    >
+    <Sheet open={open} onOpenChange={o => !o && answer(null)} title='turn on penumbra'>
       <div className='flex flex-col gap-4'>
-        <StartPresets labels={options.map(o => o.label)} pick={pick} onPick={setPick} />
-        <span className='h-[18px] text-label text-fg-muted'>{options[pick]!.note}</span>
-        <Button
-          className='w-full'
-          disabled={!walletId}
-          onClick={() => {
-            onClose();
-            void choose(walletId!, options[pick]!.start);
-          }}
-        >
-          continue
+        <label className='flex min-h-12 cursor-pointer items-center gap-3 border border-dashed border-border-hard px-3.5 has-[:checked]:border-zigner-gold-dark has-[:checked]:bg-zigner-gold/10'>
+          <input
+            type='checkbox'
+            checked={earlier}
+            onChange={e => setEarlier(e.target.checked)}
+            className='size-[18px] shrink-0 accent-[var(--zigner-gold)]'
+          />
+          <span className='text-xs text-fg-muted'>
+            used penumbra with this phrase before? sync from earlier
+          </span>
+        </label>
+        <span className='text-[11px] text-fg-dim'>
+          {earlier ? 'reads the whole chain · finds everything' : 'syncs from now'} · zcash stays as
+          it is
+        </span>
+        <Button className='w-full' onClick={() => answer(earlier ? { since: 0 } : 'tip')}>
+          turn on
         </Button>
-        <Button variant='quiet' className='w-full' onClick={onClose}>
-          not now
+        <Button variant='quiet' className='w-full' onClick={() => answer(null)}>
+          no, thank you
         </Button>
       </div>
     </Sheet>

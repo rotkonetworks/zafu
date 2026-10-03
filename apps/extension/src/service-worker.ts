@@ -84,7 +84,6 @@ import type { Services } from '@repo/context';
 import {
   startWalletServices,
   penumbraGate,
-  PENUMBRA_START_NEEDED,
   refreshPenumbraChainId,
   storedPenumbraChainId,
 } from './wallet-services';
@@ -238,11 +237,7 @@ const settle = (
   target: PenumbraTarget,
 ) => {
   rebuilds.setRunning(
-    settledTarget(
-      { ...target, chainId: r.chainId ?? target.chainId },
-      r.wallet?.id,
-      r.reason === PENUMBRA_START_NEEDED,
-    ),
+    settledTarget({ ...target, chainId: r.chainId ?? target.chainId }, r.wallet?.id),
   );
   // confirm the stored chain id now if a window is open, else on the next open
   if (ui.open) {

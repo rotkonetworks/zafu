@@ -17,14 +17,12 @@ const BalanceFigure = ({
   view,
   amount,
   unit,
-  hint,
 }: {
   view: BalanceView;
   amount: string;
   unit: string;
-  hint?: string;
 }) => (
-  <div className='flex h-11 min-w-0 items-baseline gap-2.5' title={hint}>
+  <div className='flex h-11 min-w-0 items-baseline gap-2.5'>
     {view === 'loading' || view === 'unknown' ? (
       <span className='h-9 w-[170px] self-center bg-elev-2' aria-label='reading balance' />
     ) : view === 'error' ? (
@@ -39,7 +37,8 @@ const BalanceFigure = ({
         >
           <Sensitive>{amount}</Sensitive>
         </span>
-        <span className='shrink-0 text-lg text-network-accent'>{unit}</span>
+        {/* dollars read as "$12.40"; a token's own unit sits beside the figure */}
+        {unit !== 'usd' && <span className='shrink-0 text-lg text-network-accent'>{unit}</span>}
       </>
     )}
   </div>
@@ -74,20 +73,22 @@ export const BalanceHero = ({
   view,
   amount,
   unit,
-  hint,
+  label = 'balance',
+  eye = true,
+  note,
   watermark,
-  control,
   children,
 }: {
+  label?: string;
+  /** the hide-balances eye */
+  eye?: boolean;
+  /** one quiet line under the figure (penumbra's "3 assets · shielded") */
+  note?: string;
   view: BalanceView;
   amount: string;
   unit: string;
-  /** what the figure is measured in, when the unit alone does not say */
-  hint?: string;
   /** an icon class (i-zafu-*), painted in the network accent; omit for none */
   watermark?: string;
-  /** a small control at the end of the top line (penumbra's usd | um) */
-  control?: ReactNode;
   children?: ReactNode;
 }) => (
   // isolate + -z-10: the watermark sits behind the figure and the buttons
@@ -103,11 +104,13 @@ export const BalanceHero = ({
     )}
     <div className='flex flex-col gap-1.5'>
       <div className='flex h-5 items-center gap-1.5'>
-        <span className='text-xs tracking-[0.04em] text-fg-muted'>balance</span>
-        {(view === 'ready' || view === 'partial') && <HideToggle />}
-        {control}
+        <span className='text-xs tracking-[0.04em] text-fg-muted'>{label}</span>
+        {eye && (view === 'ready' || view === 'partial') && <HideToggle />}
       </div>
-      <BalanceFigure view={view} amount={amount} unit={unit} hint={hint} />
+      <BalanceFigure view={view} amount={amount} unit={unit} />
+      {note && view !== 'loading' && view !== 'error' && (
+        <span className='text-[13px] text-fg-muted'>{note}</span>
+      )}
       {view !== 'loading' && <LastKnown />}
     </div>
     {children}
