@@ -31,7 +31,9 @@ import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectGetVaultUnlock } from '../../../state/keyring';
 import { selectActiveZcashWallet } from '../../../state/wallets';
 import { activeAccountIndex, activeZcashStoreId } from '../../../state/pockets';
-import { buildMultiSendTxInWorker } from '../../../state/keyring/network-worker';
+import { buildMultiSendTxInWorker, stopBuildInWorker } from '../../../state/keyring/network-worker';
+import { isBuildStopped } from '../../../workers/build-abort';
+import type { SendingNote } from '../send/send-ui';
 
 interface Output {
   address: string;
@@ -65,6 +67,22 @@ export function ZcashSendApproval() {
   const [status, setStatus] = useState<Status>({ at: 'review' });
   const [outputs, setOutputs] = useState<Output[]>([]);
   const resultSentRef = useRef(false);
+  // the build in the worker, stoppable until its first broadcast
+  const buildKeyRef = useRef<string | null>(null);
+  const [note, setNote] = useState<Exclude<SendingNote, 'slow'>>('leave');
+
+  // closing this window cancels a build that has not broadcast: it is killed,
+  // never left running for an app that is no longer waiting on it
+  useEffect(() => {
+    const onHide = () => {
+      const key = buildKeyRef.current;
+      if (key) {
+        void stopBuildInWorker('zcash', key);
+      }
+    };
+    window.addEventListener('pagehide', onHide);
+    return () => window.removeEventListener('pagehide', onHide);
+  }, []);
 
   const app = params.get('app') || '';
   const requestId = params.get('requestId') || '';
@@ -151,6 +169,9 @@ export function ZcashSendApproval() {
     }
 
     setStatus({ at: 'signing', since: Date.now(), steps: [], completed: 0 });
+    setNote('leave');
+    const key = crypto.randomUUID();
+    buildKeyRef.current = key;
     try {
       const vault = await getVaultUnlock(selectedKeyInfo.id);
       const mainnet = activeZcashWallet?.mainnet !== false;
@@ -167,11 +188,31 @@ export function ZcashSendApproval() {
         pocketAccount,
         mainnet,
         vault,
+        key,
       );
+      buildKeyRef.current = null;
       setStatus({ at: 'done', txids: result.txids });
       sendResult({ success: true, txids: result.txids, fees: result.fees });
     } catch (e: unknown) {
+      buildKeyRef.current = null;
+      if (isBuildStopped(e)) {
+        // stopped here: back to the request, which can still be approved or denied
+        setStatus({ at: 'review' });
+        return;
+      }
       setStatus({ at: 'error', message: e instanceof Error ? e.message : String(e) });
+    }
+  };
+
+  /** stop this send: nothing has left yet, or the worker says it is on its way */
+  const stop = async () => {
+    const key = buildKeyRef.current;
+    if (!key) {
+      return;
+    }
+    setNote('stopping');
+    if ((await stopBuildInWorker('zcash', key)) === 'committed') {
+      setNote('on-its-way');
     }
   };
 
@@ -193,6 +234,15 @@ export function ZcashSendApproval() {
         floor={0}
         since={status.since}
         hot
+        note={note}
+        // stoppable only before the first payment is broadcast
+        onStop={
+          note !== 'on-its-way' &&
+          status.completed === 0 &&
+          !status.steps.some(p => p.step.includes('broadcasting'))
+            ? () => void stop()
+            : undefined
+        }
         onClose={() => window.close()}
       />
     );

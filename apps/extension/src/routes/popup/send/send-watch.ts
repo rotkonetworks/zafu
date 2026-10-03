@@ -24,16 +24,14 @@ export const LIMITS: Record<WatchPhase, { slowMs: number; hardMs: number }> = {
   broadcast: { slowMs: 45_000, hardMs: 3 * 60_000 },
 };
 
-const HEARTBEAT = /^proving \(halo2\)/;
-
-export const isHeartbeat = (step: string) => HEARTBEAT.test(step);
+export const isHeartbeat = (step: string) => step.startsWith('proving (halo2)');
 
 export const phaseOf = (step: string | undefined): WatchPhase =>
   !step
     ? 'default'
     : step.startsWith('catch-up') || step.startsWith('witness corrupt')
       ? 'catch-up'
-      : /broadcasting/.test(step)
+      : step.includes('broadcasting')
         ? 'broadcast'
         : /proving|PCZT \(halo2\)|building & proving|building, proving/.test(step)
           ? 'proving'

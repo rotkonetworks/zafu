@@ -336,7 +336,8 @@ export const SendingFooter = ({
   note?: SendingNote;
   /** offered only before anything is broadcast */
   onStop?: () => void;
-  onClose: () => void;
+  /** the way back to the wallet; a sheet has its own */
+  onClose?: () => void;
 }) => (
   <Footer className='flex-col'>
     <span
@@ -353,14 +354,16 @@ export const SendingFooter = ({
           variant='quiet'
           onClick={onStop}
           disabled={note === 'stopping'}
-          className='h-11 w-[132px] text-[13px]'
+          className={cn('h-11 text-[13px]', onClose ? 'w-[132px]' : 'grow')}
         >
           stop this send
         </Button>
       )}
-      <Button variant='secondary' onClick={onClose} className='h-11 grow'>
-        back to wallet
-      </Button>
+      {onClose && (
+        <Button variant='secondary' onClick={onClose} className='h-11 grow'>
+          back to wallet
+        </Button>
+      )}
     </div>
   </Footer>
 );

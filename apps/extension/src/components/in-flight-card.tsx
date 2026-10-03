@@ -6,8 +6,11 @@
 
 import type { ReactNode } from 'react';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
-import { isTerminal, removeTxOps, type TxOp } from '../tx-ops';
+import { discardTxOp, isTerminal, removeTxOps, writeTxOp, type TxOp } from '../tx-ops';
 import { useTxOps } from '../tx-ops/use-tx-ops';
+import { useStore } from '../state';
+import { messagesSelector } from '../state/messages';
+import { stopBuildInWorker } from '../state/keyring/network-worker';
 
 const SLOT = {
   pending: { tone: 'gold', icon: 'i-zafu-enso', text: (op: TxOp) => op.step ?? 'working' },
@@ -39,7 +42,28 @@ export const PendingLine = ({
   </StatusSlot>
 );
 
+/**
+ * Stop a zcash build from home, after the screen that started it has gone:
+ * the worker stops it unless it is already broadcasting, which it says.
+ */
+const useStopFromHome = () => {
+  const messages = useStore(messagesSelector);
+  return async (op: TxOp) => {
+    await writeTxOp(op.opId, { status: 'pending', step: 'stopping this send', stoppable: false });
+    const outcome = await stopBuildInWorker('zcash', op.opId);
+    if (outcome === 'committed') {
+      await writeTxOp(op.opId, { status: 'pending', step: 'it is already on its way' });
+      return;
+    }
+    await discardTxOp(op.opId);
+    if (op.outboxId) {
+      await messages.markOutgoingDiscarded(op.outboxId);
+    }
+  };
+};
+
 export const InFlightCard = ({ children }: { children?: ReactNode }) => {
+  const stop = useStopFromHome();
   // a finished send was already announced once (toast or its own screen), and
   // a stopped one was stopped by the person looking at this
   const ops = useTxOps().filter(
@@ -64,7 +88,9 @@ export const InFlightCard = ({ children }: { children?: ReactNode }) => {
             action={
               isTerminal(op.status)
                 ? { label: 'dismiss', onClick: () => void removeTxOps([op.opId]) }
-                : undefined
+                : op.stoppable && op.network === 'zcash'
+                  ? { label: 'stop', onClick: () => void stop(op) }
+                  : undefined
             }
           />
         );

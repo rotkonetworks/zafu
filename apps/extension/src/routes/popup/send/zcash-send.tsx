@@ -28,7 +28,7 @@ import {
 } from '../../../state/keyring/network-worker';
 import { BuildStopped, isBuildStopped } from '../../../workers/build-abort';
 import { SendRun } from './send-run';
-import { phaseOf, useSendWatch } from './send-watch';
+import { isHeartbeat, phaseOf, useSendWatch } from './send-watch';
 import { usePoolNotes } from '../../../hooks/zcash-pool-balances';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
 import { nu63ActivationHeight } from '../../../config/feature-flags';
@@ -620,7 +620,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       // what home's card says while this page is gone, and when it stops
       // offering to stop: the worker refuses from the broadcast on
       const op = trackOpRef.current;
-      if (/broadcasting/.test(detail.step)) {
+      if (detail.step.includes('broadcasting')) {
         runRef.current?.broadcasting();
         if (op) {
           void writeTxOp(op, { status: 'pending', step: 'broadcasting', stoppable: false });
@@ -664,7 +664,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       return;
     }
     const run = runRef.current;
-    const quietAt = sendSteps.findLast(p => !/^proving \(halo2\)/.test(p.step))?.step;
+    const quietAt = sendSteps.findLast(p => !isHeartbeat(p.step))?.step;
     if (run?.sent || step === 'broadcast' || phaseOf(quietAt) === 'broadcast') {
       const reason =
         'zafu did not hear back from the network · it may still arrive, so please look at home before sending again';
@@ -1141,7 +1141,15 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       })();
     } catch (err) {
       // a cancelled attempt was already discarded and put back on review
-      if (run.discarded || isBuildStopped(err)) {
+      if (run.discarded) {
+        return;
+      }
+      if (isBuildStopped(err)) {
+        // stopped from another window (home's card): the records are its
+        run.finish();
+        pendingTempTxIdRef.current = null;
+        trackOpRef.current = null;
+        setStep('review');
         return;
       }
       failSend(err);

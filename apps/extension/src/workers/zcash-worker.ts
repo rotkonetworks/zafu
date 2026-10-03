@@ -4464,8 +4464,10 @@ const syncLoop = async (
         const seedInput = newNotes.map(n => ({ id: n.nullifier, position: n.position }));
 
         try {
+          const wasm = wasmModule;
           const result = advanceWitnesses(
-            wasmModule.witness_sync_update,
+            (frontier, blocksJson, existingJson, seedJson) =>
+              wasm.witness_sync_update(frontier, blocksJson, existingJson, seedJson),
             runningFrontier,
             JSON.stringify(compact),
             existingInput,
