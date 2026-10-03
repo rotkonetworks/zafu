@@ -15,9 +15,10 @@ const askOptIn = vi.fn();
 vi.mock('../../net/egress-opt-in', () => ({ requestEgressOptIn: askOptIn }));
 // the worker's history read is what asks the light-client server
 const getHistory = vi.fn(async () => []);
+const getBalance = vi.fn(async () => '0');
 vi.mock('../../state/keyring/network-worker', () => ({
   getHistoryInWorker: getHistory,
-  getBalanceInWorker: vi.fn(async () => '0'),
+  getBalanceInWorker: getBalance,
   getPoolBalancesInWorker: vi.fn(async () => ({})),
   getPoolNotesInWorker: vi.fn(async () => ({ orchard: [], ironwood: [] })),
   getPendingSendsInWorker: vi.fn(async () => []),
@@ -33,7 +34,18 @@ const state = {
     enabledNetworks: ['zcash'],
     getMnemonic: vi.fn(),
   },
-  pockets: { book: {} },
+  pockets: {
+    book: {
+      w1: {
+        active: 0,
+        pockets: [
+          { account: 0, name: 'main' },
+          { account: 1, name: 'rent' },
+          { account: 2, name: 'old', hidden: true },
+        ],
+      },
+    },
+  },
   wallets: { zcashWallets: [], activeZcashIndex: 0 },
   privacy: { settings: { enableTransactionHistory: true } },
   networks: { networks: { zcash: { endpoint: 'https://zcash.rotko.net' } } },
@@ -70,10 +82,12 @@ const settle = () => act(() => new Promise(r => setTimeout(r, 20)));
 
 let client: QueryClient;
 let seq = 0;
+let registered = false;
 
 beforeEach(() => {
   allowed.clear();
   getHistory.mockClear();
+  getBalance.mockClear();
   askOptIn.mockClear();
   fetchSpy.mockClear();
   visibility = 'visible';
@@ -99,6 +113,10 @@ beforeEach(() => {
       { path: `/home${seq}`, handle: { preload: routePreloads.home } },
     ],
   });
+  if (!registered) {
+    registered = true;
+    registerRoutePreload('sheet:wallets', routePreloads.wallets);
+  }
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
@@ -149,6 +167,16 @@ describe('intent preloading', () => {
     expect(askOptIn).not.toHaveBeenCalled();
     expect(getHistory).not.toHaveBeenCalled();
     expect(client.getQueryData(['zcashWorker', 'w1', 'balance'])).toBe(0n);
+  });
+
+  it('opening the wallets panel warms every listed pocket, locally, so a switch is instant', async () => {
+    press(renderNav('sheet:wallets'));
+    await settle();
+    expect(getBalance.mock.calls.map(c => (c as unknown[])[1]).sort()).toEqual(
+      ['w1', 'w1#1'].sort(),
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(client.getQueryData(['zcashWorker', 'w1#1', 'balance'])).toBe(0n);
   });
 
   it('fires once per target per window, and runs registered preloads beside the route', async () => {

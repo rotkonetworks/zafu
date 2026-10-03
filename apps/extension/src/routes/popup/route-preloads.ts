@@ -14,7 +14,8 @@ import {
   selectEffectiveKeyInfo,
   selectPenumbraAccount,
 } from '../../state/keyring';
-import { activeZcashStoreId } from '../../state/pockets';
+import { activePockets, activeZcashStoreId, visiblePockets } from '../../state/pockets';
+import { pocketStoreId } from '../../state/pocket-id';
 import { selectActiveZcashWallet } from '../../state/wallets';
 import { checkEgress } from '../../net/egress';
 import { getRootNetwork } from '../../config/networks';
@@ -39,14 +40,34 @@ const penumbraBalances: Preload = ({ client, state }) =>
     staleTime: 30_000,
   });
 
-/** the active pocket's worker figures: balance, pools, in-flight sends */
-const zcashFigures: Preload = ({ client, state }) => {
-  const store = activeZcashStoreId(state);
-  if (!isZcash(state) || !store) {
-    return;
-  }
+/** a pocket store's worker figures: balance, pools, in-flight sends (all local) */
+const figuresOf = ({ client }: PreloadCtx, store: string | undefined) => {
   for (const q of [zcashWorkerQuery.balance, zcashWorkerQuery.pools, zcashWorkerQuery.pending]) {
     void client.prefetchQuery(q(store) as Parameters<typeof client.prefetchQuery>[0]);
+  }
+};
+
+/** the active pocket's figures */
+const zcashFigures: Preload = ctx =>
+  isZcash(ctx.state) && figuresOf(ctx, activeZcashStoreId(ctx.state));
+
+/**
+ * The wallets panel: every pocket it lists, so picking one shows its own
+ * figures at once. Local worker reads only - a pocket's transparent UTXOs ask
+ * the light-client server, which the panel itself never does, so they are not
+ * fetched ahead; home holds the last figure, dimmed, while they come.
+ */
+const everyPocket: Preload = ctx => {
+  const key = selectEffectiveKeyInfo(ctx.state);
+  if (!isZcash(ctx.state) || key?.type !== 'mnemonic') {
+    void zcashFigures(ctx);
+    return;
+  }
+  for (const account of new Set([
+    0,
+    ...visiblePockets(activePockets(ctx.state)).map(p => p.account),
+  ])) {
+    figuresOf(ctx, pocketStoreId(key.id, account));
   }
 };
 
@@ -115,6 +136,6 @@ export const routePreloads = {
   /** "you": the active wallet's named identities */
   identity: ({ client, state }: PreloadCtx) =>
     client.prefetchQuery(zidPinsQuery(selectEffectiveKeyInfo(state)?.id ?? '')),
-  /** the wallets panel (a sheet): the active pocket's figure, as home reads it */
-  wallets: zcashFigures,
+  /** the wallets panel (a sheet): every listed pocket's figures */
+  wallets: everyPocket,
 } satisfies Record<string, Preload>;

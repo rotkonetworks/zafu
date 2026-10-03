@@ -13,19 +13,23 @@
  */
 
 import { useEffect } from 'react';
-import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  queryOptions,
+  useQuery,
+  useQueryClient,
+  type UseQueryOptions,
+} from '@tanstack/react-query';
 import {
   getBalanceInWorker,
   getPendingSendsInWorker,
   getPoolBalancesInWorker,
   getPoolNotesInWorker,
-  type HistoryEntry,
   type PoolBalances,
   type PoolNotes,
 } from '../state/keyring/network-worker';
 
 /** Zeroed balances - the value before the first fetch resolves. */
-const EMPTY_POOL_BALANCES: PoolBalances = {
+export const EMPTY_POOL_BALANCES: PoolBalances = {
   orchard: 0n,
   ironwood: 0n,
   total: 0n,
@@ -80,7 +84,7 @@ export const zcashBirthdayQuery = (walletId: string | undefined) =>
  * (usually workerSyncHeight) moves. The cached value shows at once on mount.
  */
 export function useWorkerValue<T>(
-  options: ReturnType<ReturnType<typeof workerQuery<T>>>,
+  options: UseQueryOptions<T, Error, T, (string | undefined)[]>,
   syncTick?: number,
 ) {
   const client = useQueryClient();
@@ -109,39 +113,10 @@ export function useWorkerValue<T>(
 }
 
 /**
- * Per-pool spendable balances (zatoshi bigints) for a wallet.
- *
- * `total` equals the single balance the home screen reads via
- * getBalanceInWorker; `orchard` / `ironwood` are that total split by pool.
- * Pass `syncTick` (e.g. workerSyncHeight from useZcashSyncStatus) to also
- * refetch when the local scan height advances.
- */
-export function usePoolBalances(walletId: string | undefined, syncTick?: number): PoolBalances {
-  return useWorkerValue(zcashWorkerQuery.pools(walletId), syncTick).data ?? EMPTY_POOL_BALANCES;
-}
-
-/**
  * Per-pool note lists (orchard / ironwood) for the notes view. Each note
  * carries value / height / spent status (see DecryptedNoteWithTxid). Refetch
- * cadence matches usePoolBalances.
+ * cadence matches the home figures.
  */
 export function usePoolNotes(walletId: string | undefined, syncTick?: number): PoolNotes {
   return useWorkerValue(zcashWorkerQuery.notes(walletId), syncTick).data ?? EMPTY_POOL_NOTES;
-}
-
-/** No sends in flight - the value before the first fetch resolves. */
-const EMPTY_PENDING: HistoryEntry[] = [];
-
-/**
- * Sends this wallet has broadcast that the chain has not confirmed, plus any
- * that provably expired. Same refetch cadence as the balances beside them,
- * which matters: the two numbers are read together and must not disagree.
- *
- * This exists so the balance can explain itself. `markNotesSpentLocally`
- * already deducts an in-flight send the instant we broadcast, so the figure
- * drops immediately - correct, but unexplained, and an unexplained drop is
- * indistinguishable from money going missing.
- */
-export function usePendingSends(walletId: string | undefined, syncTick?: number): HistoryEntry[] {
-  return useWorkerValue(zcashWorkerQuery.pending(walletId), syncTick).data ?? EMPTY_PENDING;
 }
