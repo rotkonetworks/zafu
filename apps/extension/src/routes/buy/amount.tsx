@@ -288,11 +288,16 @@ export const Ticket = () => {
                 ? ['expired', 'text-fg-muted']
                 : ['on its way', 'text-zigner-gold'];
   const near = s.buy?.near;
-  const swapCost = near?.cost !== undefined ? BigInt(near.cost) : s.estimate?.cost;
+  // a reserved buy keeps the estimate it was made with (a resumed one too)
+  const saved = s.buy?.estimate;
+  const estimate = saved
+    ? { amountOut: BigInt(saved.amountOut), cost: BigInt(saved.cost) }
+    : s.estimate;
+  const swapCost = near?.cost !== undefined ? BigInt(near.cost) : estimate?.cost;
   const get =
     stage === 'done' && s.buy?.arrived
       ? zec4(s.buy.arrived)
-      : `≈ ${near ? zec4(near.amountOut) : s.estimate ? zec4(s.estimate.amountOut) : '-'}`;
+      : `≈ ${near ? zec4(near.amountOut) : estimate ? zec4(estimate.amountOut) : '-'}`;
   const min =
     stage === 'done'
       ? near && `estimate was ≈ ${zec4(near.amountOut)}`

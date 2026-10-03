@@ -65,6 +65,8 @@ export interface OpenBuy {
   depositTx?: `0x${string}`;
   /** zec that arrived, 8 decimals */
   arrived?: string;
+  /** the amount step's dry near estimate (zec, 8 decimals; near's cost, usdc units), shown until the real quote */
+  estimate?: { amountOut: string; cost: string };
 }
 
 /** Peer's escrow keeps an unpaid intent this long (EscrowV2 intentExpirationPeriod) */
@@ -167,7 +169,8 @@ export const cardLines = (
   b: OpenBuy,
   now = Date.now(),
 ): { title: string; status: string; tone: 'gold' | 'danger' } => {
-  const zec = b.near ? `≈ ${(Number(b.near.amountOut) / 1e8).toFixed(4)} zec` : 'zec';
+  const out = b.near?.amountOut ?? b.estimate?.amountOut;
+  const zec = out ? `≈ ${(Number(out) / 1e8).toFixed(4)} zec` : 'zec';
   const fiat = money(BigInt(b.offer.fiat), b.currency);
   const left = b.expiresAt ? clock(b.expiresAt - now) : '';
   const title = `buying ${zec}`;
