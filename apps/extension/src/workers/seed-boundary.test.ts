@@ -86,6 +86,7 @@ describe('seed boundary', () => {
       'shield',
       'transparent-deposit',
       'sync',
+      'derive-address',
     ]) {
       const sent = calls(NETWORK, 'callWorker(').filter(c => c.includes(`'${type}'`));
       expect(sent.length, type).toBeGreaterThan(0);
@@ -105,6 +106,12 @@ describe('seed boundary', () => {
     expect(NETWORK).toMatch(/data: await hostProver\(request\)/);
   });
 
+  test('no call to any network worker carries a mnemonic', () => {
+    for (const call of calls(NETWORK, 'callWorker(')) {
+      expect(call, call.slice(0, 80)).not.toMatch(/\bmnemonic\b/);
+    }
+  });
+
   test('the worker reads a vault, never a mnemonic, from its spend payloads', () => {
     for (const handler of [
       'send-tx',
@@ -112,6 +119,7 @@ describe('seed boundary', () => {
       'send-turnstile-migration',
       'shield',
       'transparent-deposit',
+      'derive-address',
     ]) {
       const start = WORKER.indexOf(`case '${handler}': {`);
       const body = WORKER.slice(start, WORKER.indexOf('\n      case ', start + 1));

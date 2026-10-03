@@ -152,14 +152,19 @@ const mnemonic = async (): Promise<string> => {
 };
 
 /** a fresh shielded address of the active pocket, never the one on the receive screen */
-const freshShielded = async (phrase: string): Promise<string> => {
+const freshShielded = async (): Promise<string> => {
+  const k = hotKey();
+  if (!k) {
+    throw new Error('this wallet cannot sign here');
+  }
+  const vault = await useStore.getState().keyRing.getVaultUnlock(k.id);
   const d = Array.from(crypto.getRandomValues(new Uint8Array(11)), b =>
     b.toString(16).padStart(2, '0'),
   ).join('');
   await spawnNetworkWorker('zcash');
   const raw = await deriveAddressInWorker(
     'zcash',
-    phrase,
+    vault,
     0,
     d,
     activeAccountIndex(useStore.getState()),
@@ -262,7 +267,7 @@ const afterAllowed = async () => {
   }
   // the zec address is derived locally, off the screen's way
   if (!get().zcash) {
-    set({ zcash: get().buy?.zcash ?? (await freshShielded(await mnemonic())) });
+    set({ zcash: get().buy?.zcash ?? (await freshShielded()) });
   }
   // a buy that is waiting on the person keeps its estimate current
   const b = get().buy;

@@ -24,4 +24,6 @@ export const phraseIsNotAVault = () => [
   nw.shieldInWorker('zcash', 'w', 'a phrase', 'url', [], true),
   // @ts-expect-error a phrase is not a VaultUnlock
   nw.startSyncInWorker('zcash', 'w', 'a phrase', 'url'),
+  // @ts-expect-error a phrase is not a VaultUnlock
+  nw.deriveAddressInWorker('zcash', 'a phrase', 0),
 ];

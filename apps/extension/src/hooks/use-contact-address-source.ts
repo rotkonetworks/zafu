@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useStore } from '../state';
-import { selectEffectiveKeyInfo, selectGetMnemonic } from '../state/keyring';
+import { selectEffectiveKeyInfo, selectGetVaultUnlock } from '../state/keyring';
 import { keyInfoSupportsNetwork } from '../state/keyring/vault-ops';
 import { selectActiveZcashWallet } from '../state/wallets';
 import { activeAccountIndex } from '../state/pockets';
@@ -14,7 +14,7 @@ import type { AddressSource } from '../state/contact-share';
  */
 export const useContactAddressSource = (): (() => AddressSource) => {
   const keyInfo = useStore(selectEffectiveKeyInfo);
-  const getMnemonic = useStore(selectGetMnemonic);
+  const getVaultUnlock = useStore(selectGetVaultUnlock);
   const zcashWallet = useStore(selectActiveZcashWallet);
   const pocket = useStore(activeAccountIndex);
 
@@ -22,13 +22,13 @@ export const useContactAddressSource = (): (() => AddressSource) => {
     if (keyInfo?.type === 'mnemonic' && keyInfoSupportsNetwork(keyInfo, 'zcash')) {
       return {
         seed: async index => {
-          const mnemonic = await getMnemonic(keyInfo.id);
+          const vault = await getVaultUnlock(keyInfo.id);
           await spawnNetworkWorker('zcash');
-          return deriveAddressInWorker('zcash', mnemonic, index, undefined, pocket);
+          return deriveAddressInWorker('zcash', vault, index, undefined, pocket);
         },
       };
     }
     const ufvk = zcashWallet?.ufvk ?? zcashWallet?.orchardFvk;
     return { ufvk: typeof ufvk === 'string' ? ufvk : undefined };
-  }, [keyInfo, getMnemonic, zcashWallet, pocket]);
+  }, [keyInfo, getVaultUnlock, zcashWallet, pocket]);
 };
