@@ -31,12 +31,18 @@ import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { getAllPermissions } from '@repo/storage-chrome/origin';
 import { useStore } from '../../../state';
 import { selectSelectedKeyInfo, selectGetMnemonic } from '../../../state/keyring';
-import { derivePassword, normalizeOrigin, DEFAULT_IDENTITY } from '../../../state/identity';
+import {
+  derivePassword,
+  normalizeOriginFor,
+  DEFAULT_IDENTITY,
+  PASSWORD_SCHEME,
+} from '../../../state/identity';
 import { pocketOwner } from '../../../state/pockets';
 import {
   forgetPasswordLogin,
   readPasswordLogins,
   savePasswordLogin,
+  schemeOf,
   type PasswordLogin,
 } from '../../../state/password-logins';
 import { SettingsScreen } from '../settings/settings-screen';
@@ -72,6 +78,9 @@ export const PasswordsPage = () => {
   const [username, setUsername] = useState('');
   const [length, setLength] = useState<(typeof LENGTHS)[number]>(32);
   const [rotation, setRotation] = useState(0);
+  // a password made before saved logins recorded their scheme, never saved:
+  // the person can still ask for the older derivation
+  const [older, setOlder] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [password, setPassword] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -86,8 +95,17 @@ export const PasswordsPage = () => {
   }, []);
 
   const mine = logins.filter(l => l.owner === owner);
-  const here = { owner: owner ?? '', site: normalizeOrigin(site), username: username.trim() };
-  const saved = mine.find(l => l.site === here.site && l.username === here.username);
+  // a saved login keeps the scheme it was made with, so its password never
+  // changes; anything new is made with the current one
+  const saved = mine.find(
+    l => l.site === normalizeOriginFor(schemeOf(l), site) && l.username === username.trim(),
+  );
+  const scheme = saved ? schemeOf(saved) : older ? 1 : PASSWORD_SCHEME;
+  const here = {
+    owner: owner ?? '',
+    site: normalizeOriginFor(scheme, site),
+    username: username.trim(),
+  };
   const unchanged = saved?.length === length && saved.version === rotation;
   const fill = (l: PasswordLogin) => {
     setSite(l.site);
@@ -123,6 +141,7 @@ export const PasswordsPage = () => {
             username.trim(),
             length,
             rotation,
+            scheme,
           ),
         );
       } catch {
@@ -138,7 +157,7 @@ export const PasswordsPage = () => {
     return () => {
       cancelled = true;
     };
-  }, [canDerive, keyInfo, site, username, length, rotation, getMnemonic]);
+  }, [canDerive, keyInfo, site, username, length, rotation, scheme, getMnemonic]);
 
   return (
     <SettingsScreen title='passkeys and passwords' backPath={PopupPath.IDENTITY}>
@@ -191,8 +210,8 @@ export const PasswordsPage = () => {
               className='w-28'
             />
           </div>
-          {site.trim() && normalizeOrigin(site) !== site.trim().toLowerCase() && (
-            <span className='text-label text-fg-dim'>-&gt; {normalizeOrigin(site)}</span>
+          {site.trim() && here.site !== site.trim().toLowerCase() && (
+            <span className='text-label text-fg-dim'>-&gt; {here.site}</span>
           )}
 
           <div className='flex h-[52px] items-center gap-2.5 border border-border-hard bg-elev-1 px-3'>
@@ -227,6 +246,17 @@ export const PasswordsPage = () => {
               {deriving ? ' · deriving...' : ''}
             </button>
             <span className='flex items-center gap-3'>
+              {!saved && (
+                <button
+                  type='button'
+                  disabled={!canDerive}
+                  aria-pressed={older}
+                  onClick={() => setOlder(o => !o)}
+                  className='hover:text-fg-high'
+                >
+                  {older ? 'as an older zafu made it' : 'made by an older zafu?'}
+                </button>
+              )}
               {rotation > 0 && (
                 <button
                   type='button'
@@ -260,7 +290,15 @@ export const PasswordsPage = () => {
               variant='secondary'
               disabled={!canDerive || unchanged}
               onClick={() =>
-                keep(savePasswordLogin({ ...here, length, version: rotation, savedAt: Date.now() }))
+                keep(
+                  savePasswordLogin({
+                    ...here,
+                    length,
+                    version: rotation,
+                    scheme,
+                    savedAt: Date.now(),
+                  }),
+                )
               }
             >
               {saved ? (unchanged ? 'saved' : 'save this version') : 'save login'}

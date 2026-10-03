@@ -21,7 +21,7 @@ import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
 import { findRelationship } from '../../../state/identity';
 import { peopleCall } from '../../../people/client';
-import { cardDiscoveryKey, cardLinkPayload, readCardPayload } from '../../../state/contact-share';
+import { cardLinkPayload, readCardPayload } from '../../../state/contact-share';
 import { getDiversifiedAddresses } from '../../../state/diversified-addresses';
 import { useMintCard } from '../../../hooks/use-share-card';
 import { viaLine } from '../../../links/land';
@@ -165,7 +165,6 @@ export function CardPage() {
     const contact = await addContact({
       name: name.trim(),
       zid: card.zid,
-      card: cardDiscoveryKey(card),
       pairKa: card.pairKa,
       ...(rel && keyInfo ? { rel: { walletId: keyInfo.id, ...rel } } : {}),
     });
@@ -177,17 +176,17 @@ export function CardPage() {
     setDone({ id: contact.id, name: contact.name, answered: !!rel });
   };
 
-  // someone already saved hands you their card again: keep the key it carries,
-  // so a person saved from an address (or an older card) becomes findable
+  // someone saved from an address hands you their card: keep the keys it
+  // carries, so they become findable. A person who already has keys keeps
+  // them; a different key is never taken from a card without asking.
   const updateContact = useStore(s => s.contacts.updateContact);
   const savedId = saved?.id;
-  const savedKey = saved?.card?.publicKey;
+  const savedHasKeys = !!(saved?.zid || saved?.pairKa);
   useEffect(() => {
-    const key = card && cardDiscoveryKey(card);
-    if (savedId && key && savedKey !== key.publicKey) {
-      void updateContact(savedId, { card: key });
+    if (savedId && !savedHasKeys && card?.zid && card.pairKa) {
+      void updateContact(savedId, { zid: card.zid, pairKa: card.pairKa });
     }
-  }, [card, savedId, savedKey, updateContact]);
+  }, [card, savedId, savedHasKeys, updateContact]);
 
   const state = cardState(card, saved, mine === true);
   const close = () => navigate(PopupPath.CONTACTS, { replace: true });

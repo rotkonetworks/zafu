@@ -90,8 +90,22 @@ export interface PeopleRoom {
     /** waiting for them to answer a memo invite */
     waiting?: boolean;
     /** the card their answer carried, until the screen saves it on the contact */
-    card?: { zid: string; pairKa: string; address: string; name: string };
+    card?: PairCard;
+    /**
+     * answers to your memo invite you have not confirmed: anyone who can read
+     * that memo can answer, so none of them becomes the person until you say
+     * which one is them (or it carries the key you already hold for them)
+     */
+    answers?: PairCard[];
   };
+}
+
+/** what an answering card says about the person on the other side */
+export interface PairCard {
+  zid: string;
+  pairKa: string;
+  address: string;
+  name: string;
 }
 
 export interface ThreadItem {
@@ -193,6 +207,23 @@ export const mergeItems = (thread: Thread | undefined, items: ThreadItem[]): Thr
     read: thread?.read ?? 0,
     items: [...byHash.values(), ...pending].sort(order).slice(-THREAD_CAP),
   };
+};
+
+/**
+ * A group's lines from the people on its roster, and yours. Holding the room
+ * secret is what lets someone write, and every holder can; the roster is who
+ * the founder put on it. Filtered when shown, not when stored, so a member's
+ * early lines appear as soon as their `+v` arrives instead of being lost. A
+ * pair room, or anything that is not a group, is returned as it is.
+ */
+export const onRoster = (room: PeopleRoom | undefined, t?: Thread): Thread | undefined => {
+  const g = room?.kind === 'group' ? room.group : undefined;
+  if (!t || !g) {
+    return t;
+  }
+  const voiced = new Set([g.founder, ...g.members.map(m => m.key)]);
+  const items = t.items.filter(i => i.mine || voiced.has(i.author));
+  return items.length === t.items.length ? t : { ...t, items };
 };
 
 /** unread: other people's lines after `read` */

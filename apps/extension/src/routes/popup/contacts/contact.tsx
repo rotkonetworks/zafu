@@ -222,8 +222,8 @@ const ContactView = ({ contact }: { contact: Contact }) => {
         {contact.zid && (
           <Row type='screen' label='check seal again' onPress={() => setOpen({ kind: 'seal' })} />
         )}
-        {/* until both cards carry the discovery key, neither side can be found */}
-        {!contact.card && shareCard && hasZcash && (
+        {/* until each holds the other's card, neither side can be found */}
+        {!contact.rel && shareCard && hasZcash && (
           <Row
             type='screen'
             label='send them your card'

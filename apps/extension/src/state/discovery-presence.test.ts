@@ -10,7 +10,7 @@ import { PRESENCE_PAD_TO, presenceEpoch, type PresenceEntry, type RelayTransport
 import { createDiscoveryPresence, type PresenceHold } from './discovery-presence';
 import { runDiscoveryForScope, type ContactDiscoveryDeps } from './contact-discovery-service';
 import { computeContactHandle } from './contact-discovery';
-import { deriveZidContactCardKey } from './identity';
+import { deriveRelationshipKeys, discoverySecret } from './identity';
 import type { Contact } from './contacts';
 
 vi.mock('.', () => ({ useStore: { getState: () => ({}) } }));
@@ -43,15 +43,35 @@ const OTHER_APP = 'http://127.0.0.1:8123';
 const A_PHRASE =
   'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const B_PHRASE = 'zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong';
-const kaOf = (phrase: string) => deriveZidContactCardKey(phrase, 'default');
+/** a wallet's id in these tests: one per phrase */
+const walletOf = (phrase: string) => `w-${phrase.split(' ')[0]}`;
 
-const contactWith = (id: string, phrase: string): Contact => ({
-  id,
-  name: id,
-  createdAt: 0,
-  addresses: [],
-  card: kaOf(phrase),
-});
+/**
+ * `me` holds `them` as a contact, the two having swapped relationship cards:
+ * `me` gave relationship `myJ`, `them` gave `theirJ`.
+ */
+const contactWith = (id: string, me: string, them: string, myJ = 0, theirJ = 0): Contact => {
+  const theirs = deriveRelationshipKeys(them, 0, theirJ);
+  return {
+    id,
+    name: id,
+    createdAt: 0,
+    addresses: [],
+    rel: { walletId: walletOf(me), gen: 0, j: myJ },
+    pairKa: theirs.kaPublicKey,
+    zid: theirs.pubkey,
+  };
+};
+
+/** the handle `me` shows a site for `them`: from the pair's own secret */
+const handleOf = (me: string, them: string, app: string, myJ = 0, theirJ = 0) => {
+  const mine = deriveRelationshipKeys(me, 0, myJ);
+  const theirs = deriveRelationshipKeys(them, 0, theirJ);
+  return computeContactHandle(
+    discoverySecret(mine.kaSeed, theirs.kaPublicKey, mine.xid, theirs.xid),
+    app,
+  );
+};
 
 interface Wallet {
   deps: ContactDiscoveryDeps;
@@ -74,7 +94,7 @@ const wallet = (relay: RelayTransport, phrase: string, contacts: Contact[] = [])
       locked: async () => state.locked,
       siteAllowed: async origin => grants.has(origin),
       contacts: async () => state.contacts,
-      identity: async () => ({ mnemonic: phrase, identityName: 'default' }),
+      identity: async () => ({ mnemonic: phrase, walletId: walletOf(phrase) }),
       transport: () => relay,
     },
   };
@@ -124,7 +144,7 @@ describe('cadence', () => {
 
   it('writes 64 entries with friends too, so the count says nothing', async () => {
     const relay = new MergingRelay();
-    const a = wallet(relay, A_PHRASE, [contactWith('bob', B_PHRASE)]);
+    const a = wallet(relay, A_PHRASE, [contactWith('bob', A_PHRASE, B_PHRASE)]);
     a.grants.add(APP);
     await createDiscoveryPresence(a.deps).hold(APP, hold());
     expect(relay.puts.map(p => p.count)).toEqual([64]);
@@ -201,8 +221,9 @@ describe('no publish', () => {
 describe('matching', () => {
   const setup = async () => {
     const relay = new MergingRelay();
-    const a = wallet(relay, A_PHRASE, [contactWith('bob', B_PHRASE)]);
-    const b = wallet(relay, B_PHRASE, [contactWith('alice', A_PHRASE)]);
+    // alice gave bob relationship 0, bob gave alice relationship 5
+    const a = wallet(relay, A_PHRASE, [contactWith('bob', A_PHRASE, B_PHRASE, 0, 5)]);
+    const b = wallet(relay, B_PHRASE, [contactWith('alice', B_PHRASE, A_PHRASE, 5, 0)]);
     a.grants.add(APP);
     b.grants.add(APP);
     const pa = createDiscoveryPresence(a.deps);
@@ -230,7 +251,7 @@ describe('matching', () => {
     expect(seenByA).toEqual({
       contacts: [
         {
-          handle: await computeContactHandle(kaOf(B_PHRASE).publicKey, APP),
+          handle: handleOf(A_PHRASE, B_PHRASE, APP, 0, 5),
           sessionPubHex: expect.stringMatching(/^[0-9a-f]{64}$/) as unknown as string,
           caps: 0,
         },
@@ -239,7 +260,7 @@ describe('matching', () => {
     expect('contacts' in seenByB && seenByB.contacts).toHaveLength(1);
 
     // the same friend on another site is another handle
-    const there = await computeContactHandle(kaOf(B_PHRASE).publicKey, OTHER_APP);
+    const there = handleOf(A_PHRASE, B_PHRASE, OTHER_APP, 0, 5);
     expect('contacts' in seenByA && seenByA.contacts[0]!.handle).not.toBe(there);
   });
 
@@ -259,9 +280,20 @@ describe('matching', () => {
     expect(await runDiscoveryForScope(APP, a.deps)).toMatchObject({ code: 'not_available' });
   });
 
+  it('a contact who holds a card but has not been given yours is never looked for', async () => {
+    const relay = new MergingRelay();
+    const b = wallet(relay, B_PHRASE, [contactWith('alice', B_PHRASE, A_PHRASE)]);
+    b.grants.add(APP);
+    await createDiscoveryPresence(b.deps).hold(APP, hold());
+    const { rel: _rel, ...noRel } = contactWith('bob', A_PHRASE, B_PHRASE);
+    const a = wallet(relay, A_PHRASE, [noRel]);
+    a.grants.add(APP);
+    expect(await runDiscoveryForScope(APP, a.deps)).toEqual({ contacts: [] });
+  });
+
   it('an address-only contact (no card key) is never looked for', async () => {
     const relay = new MergingRelay();
-    const b = wallet(relay, B_PHRASE, [contactWith('alice', A_PHRASE)]);
+    const b = wallet(relay, B_PHRASE, [contactWith('alice', B_PHRASE, A_PHRASE)]);
     b.grants.add(APP);
     await createDiscoveryPresence(b.deps).hold(APP, hold());
     const a = wallet(relay, A_PHRASE, [{ id: 'bob', name: 'bob', createdAt: 0, addresses: [] }]);

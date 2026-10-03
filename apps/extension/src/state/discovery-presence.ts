@@ -31,7 +31,6 @@ import {
   type PresenceService,
   type PublishArgs,
 } from '@zafu/zid';
-import { deriveZidContactCardKey } from './identity';
 import {
   buildDiscoveryPeers,
   buildPresenceRecord,
@@ -76,7 +75,7 @@ interface Ready {
   endpoint: string;
   token: string;
   mnemonic: string;
-  identityName: string;
+  walletId: string;
 }
 
 export const createDiscoveryPresence = (
@@ -104,17 +103,16 @@ export const createDiscoveryPresence = (
   };
 
   const scopeFor = (origin: string, r: Ready): ScopeState => {
-    const key = `${r.endpoint}|${r.token}|${r.identityName}`;
+    const key = `${r.endpoint}|${r.token}|${r.walletId}`;
     const existing = scopes.get(origin);
     if (existing?.key === key) {
       return existing;
     }
-    // first use, or the relay or identity changed: build against the current ones
-    const myPubHex = deriveZidContactCardKey(r.mnemonic, r.identityName).publicKey;
+    // first use, or the relay or wallet changed: build against the current ones.
+    // Each peer carries the key you gave that person; there is no wallet-wide one.
     const service = createPresenceService(
       createContactRelay(deps.transport(r.endpoint, r.token), origin),
       origin,
-      myPubHex,
     );
     const box: { args: PublishArgs } = { args: null };
     const state: ScopeState = {
@@ -129,7 +127,7 @@ export const createDiscoveryPresence = (
 
   const peersFor = async (origin: string, r: Ready): Promise<DiscoveryPeer[]> => {
     const contacts = await deps.contacts();
-    const secrets = deriveContactRootSecrets(contacts, r.mnemonic, r.identityName);
+    const secrets = deriveContactRootSecrets(contacts, r.mnemonic, r.walletId);
     return buildDiscoveryPeers(contacts, origin, secrets);
   };
 

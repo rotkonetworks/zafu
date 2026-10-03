@@ -11,6 +11,7 @@ import { requestEgressOptIn } from '../net/egress-opt-in';
 import { PEOPLE_RELAY } from '../config/people-relay';
 import { PEOPLE_MESSAGE, PEOPLE_STATUS_KEY, PEOPLE_WATCH_PORT } from './protocol';
 import {
+  onRoster,
   readInvites,
   readRooms,
   readThreads,
@@ -127,9 +128,11 @@ export const useMyRooms = (): PeopleRoom[] => {
   return useMemo(() => rooms.filter(r => r.walletId === walletId), [rooms, walletId]);
 };
 
+/** a room's thread as it is shown: a group's only from its roster (see `onRoster`) */
 export const useThread = (room: PeopleRoom | undefined): Thread | undefined => {
   const { threads } = usePeople();
-  return room ? threads[threadKey(room)] : undefined;
+  const t = room ? threads[threadKey(room)] : undefined;
+  return useMemo(() => onRoster(room, t), [room, t]);
 };
 
 /** say a line in a room; the first time, ask for the relay and say it again */

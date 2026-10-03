@@ -5,8 +5,14 @@ export const PEOPLE_WATCH_PORT = 'zafu-people-watch:';
 /** chrome.storage.session: the slot under a title */
 export const PEOPLE_STATUS_KEY = 'peopleStatus';
 
-/** `673-chaos-mail`: three digits and two words, as the link router reads it */
-export const CODE_RE = /^\d{3}-[a-z]{2,12}-[a-z]{2,12}$/;
+/**
+ * `673-chaos-mail-kite`: three digits and three words, as the link router
+ * reads it. The last word names the founder's key (see people/door.ts).
+ */
+export const CODE_RE = /^\d{3}(?:-[a-z]{2,12}){3}$/;
+
+/** the shorter code an older zafu made: it opens nothing here */
+export const OLD_CODE_RE = /^\d{3}-[a-z]{2,12}-[a-z]{2,12}$/;
 
 export const normalizeCode = (raw: string): string => raw.trim().toLowerCase().replace(/\s+/g, '-');
 

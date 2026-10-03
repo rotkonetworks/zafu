@@ -132,7 +132,10 @@ export type ZafuZidPubkeyResponse =
        */
       pq_sig?: Hex;
       /**
-       * the rotation epoch `pq_pubkey` was derived at (P2 coarse recipient FS).
+       * the rotation epoch `pq_pubkey` was derived at (P2 epoch
+       * compartmentalization: a leaked epoch seed opens that epoch only. This
+       * is not forward secrecy - the wallet's recovery phrase re-derives every
+       * epoch's seed, so it opens all of them).
        * Carry it back as `pq_epoch` on zafu_decrypt so the recipient derives the
        * matching seed. Present iff pq_pubkey is.
        */

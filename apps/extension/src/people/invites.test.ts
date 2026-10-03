@@ -23,6 +23,7 @@ import type { PeopleRoom, StoredInvite, Thread } from './vault';
 const ALICE =
   'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const BOB = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
+const EVE = 'zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong';
 const UA_A = 'u1' + 'a'.repeat(104);
 const UA_B = 'u1' + 'c'.repeat(104); // bech32 has no 'b'
 
@@ -163,14 +164,22 @@ describe('a chat invite in a memo', () => {
     expect(bob.invites()[0]!.state).toBe('accepted');
     expect(bob.room(pairId('alice'))).toMatchObject({ secret, pair: { peer: a0.pubkey } });
 
-    // alice's next pass reads the answer: now she knows who is on the other side
+    // alice's next pass reads the answer. Anyone who can read the memo could
+    // have sent it, so it waits for her to say it is bob
     clock.t += 30_000;
     await alice.service.open();
+    expect(alice.room(pairId('bob'))?.pair).toMatchObject({
+      waiting: false,
+      answers: [{ zid: b5.pubkey, pairKa: b5.kaPublicKey, address: UA_B, name: 'bob' }],
+    });
+    expect(alice.room(pairId('bob'))?.pair?.peer).toBeUndefined();
+    await alice.op('pair-choose', { contactId: 'bob', zid: b5.pubkey });
     expect(alice.room(pairId('bob'))?.pair).toMatchObject({
       peer: b5.pubkey,
       waiting: false,
       card: { zid: b5.pubkey, pairKa: b5.kaPublicKey, address: UA_B, name: 'bob' },
     });
+    expect(alice.room(pairId('bob'))?.pair?.answers).toBeUndefined();
 
     expect(await alice.service.say(pairId('bob'), 'final logo files are up')).toBe('sent');
     clock.t += 10_000;
@@ -185,6 +194,96 @@ describe('a chat invite in a memo', () => {
       'them: final logo files are up',
       'me: looks great',
     ]);
+  });
+
+  /** someone who can read the memo (a viewing key, say) answers it as themselves */
+  const answerAs = async (
+    phrase: string,
+    walletId: string,
+    j: number,
+    answers: string,
+    memo: string,
+    relay: ReturnType<typeof relayBoard>,
+    clock: { t: number },
+    contact?: Contact,
+  ) => {
+    const keys = deriveRelationshipKeys(phrase, 0, j);
+    const aliceForThem: Contact = contact ?? {
+      id: 'alice',
+      name: 'alice',
+      rel: { walletId, gen: 0, j },
+      createdAt: 0,
+      addresses: [],
+    };
+    const them = device(walletId, phrase, [aliceForThem], relay.transport, clock);
+    await them.op('memo-ingest', { network: 'zcash', txId: `tx-${walletId}`, content: memo });
+    const card = cardLinkPayload(
+      contactCardMemoHex({
+        senderName: walletId,
+        myAddress: UA_B,
+        zid: keys.pubkey,
+        pairKa: keys.kaPublicKey,
+        answers,
+      })!,
+    );
+    await them.op('invite-accept', { id: `tx-${walletId}`, contactId: 'alice', card });
+    return keys;
+  };
+
+  const opened = async (contacts: Contact[]) => {
+    const relay = relayBoard();
+    const clock = { t: Date.UTC(2026, 9, 3, 12) };
+    const a0 = deriveRelationshipKeys(ALICE, 0, 0);
+    const secret = '5a'.repeat(32);
+    const alice = device('wa', ALICE, contacts, relay.transport, clock);
+    await alice.op('invite-open', { contactId: 'bob', secret, relay: '' });
+    const memo = encodeMemoInvite({
+      kind: 'pair',
+      secret,
+      inception: a0.pubkey,
+      pairKa: a0.kaPublicKey,
+      name: 'alice',
+      address: UA_A,
+      relay: '',
+    });
+    return { relay, clock, a0, alice, memo };
+  };
+
+  test('two people answer one memo: both are shown, neither is picked', async () => {
+    const { relay, clock, a0, alice, memo } = await opened([bobForAlice]);
+    const eve = await answerAs(EVE, 'we', 2, a0.pubkey, memo, relay, clock);
+    const bob = await answerAs(BOB, 'wb', 5, a0.pubkey, memo, relay, clock);
+    clock.t += 30_000;
+    await alice.service.open();
+    const pair = alice.room(pairId('bob'))?.pair;
+    expect(pair?.peer).toBeUndefined();
+    expect(pair?.answers?.map(a => a.zid).sort()).toEqual([bob.pubkey, eve.pubkey].sort());
+  });
+
+  test('an answer to another relationship is not an answer to this invite', async () => {
+    const { relay, clock, alice, memo } = await opened([bobForAlice]);
+    await answerAs(EVE, 'we', 2, deriveRelationshipKeys(ALICE, 0, 7).pubkey, memo, relay, clock);
+    clock.t += 30_000;
+    await alice.service.open();
+    expect(alice.room(pairId('bob'))?.pair?.answers).toBeUndefined();
+    expect(alice.room(pairId('bob'))?.pair?.waiting).toBe(true);
+  });
+
+  test("a contact whose key you hold: their answer is them, a stranger's is not", async () => {
+    const b5 = deriveRelationshipKeys(BOB, 0, 5);
+    const known: Contact = { ...bobForAlice, zid: b5.pubkey };
+    const { relay, clock, a0, alice, memo } = await opened([known]);
+    const eve = await answerAs(EVE, 'we', 2, a0.pubkey, memo, relay, clock);
+    await answerAs(BOB, 'wb', 5, a0.pubkey, memo, relay, clock);
+    clock.t += 30_000;
+    await alice.service.open();
+    const pair = alice.room(pairId('bob'))?.pair;
+    expect(pair?.peer).toBe(b5.pubkey);
+    // eve's answer names a key alice never held for bob: it is not him, and
+    // nothing of it reaches the room's person
+    expect(pair?.card?.zid).toBe(b5.pubkey);
+    expect(pair?.answers).toBeUndefined();
+    expect(eve.pubkey).not.toBe(b5.pubkey);
   });
 
   test('no, thank you: the invite closes and nothing reaches a relay', async () => {

@@ -5,7 +5,6 @@ import {
   cardLinkPayload,
   contactCardMemoHex,
   readCardPayload,
-  cardDiscoveryKey,
   myAddressForContact,
   replyAddress,
   type DeriveAddress,
@@ -127,26 +126,31 @@ describe('a card link', () => {
     expect(readCardPayload(payload)).toMatchObject({ name: '', address, zid });
   });
 
-  it('carries the discovery key next to the seal key, and back', () => {
+  it('carries no identity-wide discovery key: two cards share no key', () => {
     const address = 'u1' + 'q'.repeat(140);
-    const zid = 'ab'.repeat(32);
-    const ka = 'cd'.repeat(32);
-    const card = readCardPayload(
-      cardLinkPayload(contactCardMemoHex({ senderName: '', myAddress: address, zid, ka })!),
-    );
-    expect(card).toMatchObject({ address, zid, ka });
-    expect(cardDiscoveryKey(card!)).toEqual({ suite: 'x25519-v1', publicKey: ka });
-  });
-
-  it('a card without the discovery key is address-only for discovery', () => {
-    const address = 'u1' + 'q'.repeat(140);
-    const card = readCardPayload(
+    const one = readCardPayload(
       cardLinkPayload(
-        contactCardMemoHex({ senderName: '', myAddress: address, zid: 'ab'.repeat(32) })!,
+        contactCardMemoHex({
+          senderName: '',
+          myAddress: address,
+          zid: 'ab'.repeat(32),
+          pairKa: 'cd'.repeat(32),
+        })!,
       ),
     );
-    expect(card?.ka).toBeUndefined();
-    expect(cardDiscoveryKey(card!)).toBeUndefined();
+    const two = readCardPayload(
+      cardLinkPayload(
+        contactCardMemoHex({
+          senderName: '',
+          myAddress: address,
+          zid: 'ef'.repeat(32),
+          pairKa: '12'.repeat(32),
+        })!,
+      ),
+    );
+    expect(one?.ka).toBeUndefined();
+    expect(two?.ka).toBeUndefined();
+    expect(one?.pairKa).not.toBe(two?.pairKa);
   });
 
   it('is nothing when the link carries something else', () => {
@@ -163,22 +167,21 @@ describe('a card that can open a pair room', () => {
   const UA = 'u1' + 'q'.repeat(140); // a full unified address is ~141 characters
   const inception = 'aa'.repeat(32);
   const pairKa = 'bb'.repeat(32);
-  const ka = 'dd'.repeat(32);
   const answers = 'cc'.repeat(32);
 
-  it('carries the pair key, the discovery key and what it answers', () => {
+  it('carries the pair key and what it answers', () => {
     const hex = contactCardMemoHex({
       senderName: 'alice',
       myAddress: UA,
       zid: inception,
-      ka,
+      pairKa,
       answers,
     });
     expect(decodeHex(hex!)).toMatchObject({
       name: 'alice',
       address: UA,
       zid: inception,
-      ka,
+      pairKa,
       answers,
     });
     // one memo: 512 bytes, padded
@@ -191,13 +194,12 @@ describe('a card that can open a pair room', () => {
       senderName: name,
       myAddress: UA,
       zid: inception,
-      ka,
       pairKa,
       answers,
     });
     expect(hex!.length).toBe(1024);
     // and the link form carries the same card
-    expect(readCardPayload(cardLinkPayload(hex!))).toMatchObject({ name, ka, pairKa, answers });
+    expect(readCardPayload(cardLinkPayload(hex!))).toMatchObject({ name, pairKa, answers });
   });
 
   it('a card without them still reads as a plain card', () => {

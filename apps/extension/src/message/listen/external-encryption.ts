@@ -35,10 +35,14 @@ import { isValidExternalSender } from '../../senders/external';
 import { requestCapabilityApprovalPopup } from './external-easteregg';
 
 // PQ prekey rotation epoch: a coarse 1-week time bucket that indexes the site's
-// X-Wing seed (P2 - coarse recipient forward secrecy). Advertised alongside the
-// key and echoed back on decrypt so the recipient derives the same epoch's seed.
-// The seed stays mnemonic-derivable, so this is COARSE FS (a leak of one epoch's
-// seed does not expose other epochs), NOT discard-after-use FS.
+// X-Wing seed (P2 - epoch compartmentalization). Advertised alongside the key
+// and echoed back on decrypt so the recipient derives the same epoch's seed.
+//
+// This is NOT forward secrecy, of any grain. Every epoch's seed is re-derived
+// from the mnemonic on demand, and the epoch a decrypt uses comes from the
+// caller, so whoever holds the mnemonic opens every past epoch, forever. What
+// the rotation does buy: a leak of ONE epoch's seed (not the mnemonic) opens
+// that week's boxes and no other.
 const PQ_EPOCH_MS = 7 * 24 * 60 * 60 * 1000;
 const pqEpoch = (): number => Math.floor(Date.now() / PQ_EPOCH_MS);
 
@@ -373,7 +377,8 @@ const handleZidPubkey = async (origin: string): Promise<ZafuZidPubkeyResponse> =
 
     // advertise the hybrid post-quantum sealed-box key too, so dapps can seal
     // messages that stay confidential against a future quantum attacker. Derive
-    // it at the CURRENT rotation epoch (P2 coarse recipient FS).
+    // it at the CURRENT rotation epoch (P2 epoch compartmentalization; not
+    // forward secrecy - the mnemonic re-derives every epoch).
     const pq_epoch = pqEpoch();
     const pq_pubkey = deriveZidPqPublicKey(mnemonic, identityName, origin, pq_epoch);
 
