@@ -236,7 +236,7 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
   const book =
     fixture?.book ??
     (assets && (fixed.data || fixed.isError)
-      ? combine(QUOTES, localPrices(assets), fixed.data?.book)
+      ? combine(QUOTES, localPrices(assets, height), fixed.data?.book)
       : undefined);
   const hero = heroOf(assets ?? [], book?.[totalIn], totalIn);
   const held = (assets ?? []).filter(a => a.amount > 0).length;
