@@ -71,14 +71,6 @@ const MIN_BLOB_V2 = NONCE_BYTES + 1 + TAG_BYTES;
 const MIN_BLOB_V1 = 1 + NONCE_BYTES + TAG_BYTES;
 
 /**
- * Sealed size of a `plaintextBytes` payload: nonce + version + payload + tag.
- * For a 35-byte PresenceRecord this is 64, the same as v1, so the relay's
- * fixed blob size does not move.
- */
-export const sealedPresenceBytes = (plaintextBytes: number): number =>
-  NONCE_BYTES + 1 + plaintextBytes + TAG_BYTES;
-
-/**
  * Direction of a pairwise presence beacon. A pairwise link has two independent
  * streams; each uses a DISTINCT AEAD key so one direction's blob can never be
  * opened (or replayed) as the other's.
