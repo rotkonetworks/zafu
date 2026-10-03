@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { Button } from '@repo/ui/components/ui/button';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { Sensitive } from '../../../components/sensitive';
 import { ScreenHeader } from '../../../components/screen-header';
@@ -20,7 +21,7 @@ import {
   sendTransparentDepositInWorker,
 } from '../../../state/keyring/network-worker';
 import type { VaultUnlock } from '../../../state/keyring/types';
-import type { DepositPlan } from '../../../workers/transparent-deposit';
+import { checkVault, type DepositPlan } from '../../../workers/transparent-deposit';
 import type { Quote } from '../../../state/swap/provider';
 import { fromUnits } from '../../../state/swap/provider';
 import { ROUTES } from '../../../state/swap/routes';
@@ -28,7 +29,7 @@ import { usePasswordGate } from '../../../hooks/password-gate';
 import { usePoolNotes } from '../../../hooks/zcash-pool-balances';
 import type { SwapTAddress } from '../../../hooks/use-transparent-addresses';
 import { quoteSend } from '../send/spendable';
-import { Main, PrivacyLine, Review, Stopped, shortAddress } from '../send/send-ui';
+import { Footer, Main, PrivacyLine, Review, Stopped, Strip, shortAddress } from '../send/send-ui';
 
 type Phase =
   | { at: 'planning' }
@@ -36,10 +37,24 @@ type Phase =
   | { at: 'moving' }
   | { at: 'pay'; plan: DepositPlan }
   | { at: 'paying' }
-  | { at: 'stopped'; error: string };
+  | { at: 'stopped'; error: string }
+  /** the price ran out: before anything moved, or with the zec already on the swap's address */
+  | { at: 'expired'; moved: boolean };
 
 /** a shield-out confirms in a block or two; asking the light client is all this costs */
 const MOVED_POLL_MS = 15_000;
+
+/**
+ * How much of the price's life the move needs: build, a block or two (75 s
+ * apart on average, often longer) and the poll. THORNode's ZEC quotes live
+ * about 15 minutes (890 s measured live, 2026-10-04), so a price with less
+ * than this left is asked again before any zec leaves the shielded pool.
+ */
+export const MOVE_NEEDS_MS = 6 * 60_000;
+
+/** true when the price can't outlast the move: ask again before moving */
+export const tooLateToMove = (expiresAt: number | undefined, now = Date.now()): boolean =>
+  !!expiresAt && expiresAt - now < MOVE_NEEDS_MS;
 
 const zec = (zat: string | bigint) => fromUnits(BigInt(zat), 8);
 
@@ -59,6 +74,7 @@ export const ThorDeposit = ({
   onSent,
   onBack,
   onExpired,
+  onShield,
 }: {
   quote: Quote;
   amountZat: bigint;
@@ -66,7 +82,10 @@ export const ThorDeposit = ({
   swapT: SwapTAddress;
   onSent: (txid: string) => void;
   onBack: () => void;
+  /** ask a fresh price; the swap keeps its address, so moved zec is used as it is */
   onExpired: () => void;
+  /** take the moved zec back into the shielded pool instead */
+  onShield: () => void;
 }) => {
   const tAddress = swapT.address;
   const walletId = useStore(selectEffectiveKeyInfo)?.id;
@@ -94,15 +113,26 @@ export const ThorDeposit = ({
       return;
     }
     let live = true;
+    // the vault is checked first: nothing moves toward a deposit that could never be paid
     const ask = () =>
-      planTransparentDepositInWorker(zidecarUrl, req).then(
-        plan => {
-          if (live && (plan.short === '0' || phase.at === 'planning')) {
-            setPhase(plan.short === '0' ? { at: 'pay', plan } : { at: 'move', plan });
-          }
-        },
-        e => live && phase.at === 'planning' && setPhase({ at: 'stopped', error: lineOf(e) }),
-      );
+      checkVault(req.to, req.mainnet)
+        .then(() => planTransparentDepositInWorker(zidecarUrl, req))
+        .then(
+          plan => {
+            if (!live || (plan.short !== '0' && phase.at !== 'planning')) {
+              return;
+            }
+            // a move this price can't outlast is never offered
+            setPhase(
+              plan.short === '0'
+                ? { at: 'pay', plan }
+                : tooLateToMove(quote.expiresAt)
+                  ? { at: 'expired', moved: false }
+                  : { at: 'move', plan },
+            );
+          },
+          e => live && phase.at === 'planning' && setPhase({ at: 'stopped', error: lineOf(e) }),
+        );
     if (phase.at === 'planning') {
       void ask();
       return () => void (live = false);
@@ -131,8 +161,13 @@ export const ThorDeposit = ({
     }
   };
 
-  const move = (plan: DepositPlan) =>
-    step({ at: 'moving' }, async vault => {
+  const move = (plan: DepositPlan) => {
+    // the review may have sat open: the price must still outlast the move
+    if (tooLateToMove(quote.expiresAt)) {
+      setPhase({ at: 'expired', moved: false });
+      return;
+    }
+    return step({ at: 'moving' }, async vault => {
       await buildSendTxInWorker(
         'zcash',
         storeId!,
@@ -146,10 +181,12 @@ export const ThorDeposit = ({
       );
       setMoved(true);
     });
+  };
 
   const pay = (plan: DepositPlan) => {
+    // the zec is on the swap's address by now: say so, and let the person choose
     if (quote.expiresAt && quote.expiresAt <= Date.now()) {
-      onExpired();
+      setPhase({ at: 'expired', moved: true });
       return;
     }
     return step({ at: 'paying' }, async vault => {
@@ -175,6 +212,45 @@ export const ThorDeposit = ({
           onCancel={onBack}
           onRetry={() => setPhase({ at: 'planning' })}
         />
+      </div>
+    );
+  }
+
+  if (phase.at === 'expired') {
+    return (
+      <div className='flex h-full flex-col bg-canvas'>
+        <ScreenHeader title='the price ran out' onBack={onBack} />
+        <Strip>
+          <Sensitive>{`${zec(amountZat)} zec · ${shortAddress(quote.depositAddress)}`}</Sensitive>
+        </Strip>
+        <Main className='pt-5'>
+          <StatusSlot tone='info' icon='i-ph-clock'>
+            {phase.moved
+              ? `the zec now sits on this swap's transparent address, ${shortAddress(tAddress)} · nothing went to the vault`
+              : 'nothing was moved · a fresh price is a tap away'}
+          </StatusSlot>
+        </Main>
+        <Footer>
+          {phase.moved ? (
+            <>
+              <Button variant='secondary' onClick={onShield} className='grow'>
+                shield it back
+              </Button>
+              <Button onClick={onExpired} className='grow'>
+                swap again
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant='secondary' onClick={onBack} className='w-[110px]'>
+                back
+              </Button>
+              <Button onClick={onExpired} className='grow'>
+                get a new price
+              </Button>
+            </>
+          )}
+        </Footer>
       </div>
     );
   }

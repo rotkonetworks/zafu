@@ -80,7 +80,8 @@ const thorCost = (...a: Parameters<typeof nodeCost> extends [string, ...infer R]
 
 const NOW = 1_790_000_000;
 const T = 't1PTs8DQifJxg6HmUq7AgYYFNkbyQa1zjgf';
-const ZEC_VAULT = 't1ZecVaultxxxxxxxxxxxxxxxxxxxxxxxx';
+// THORChain's live ZEC vault on 2026-10-04 is a ZIP 320 tex address
+const ZEC_VAULT = 'tex1zclnr35llscdedzrwdmemm70es05ngg9m2d3lv';
 const BTC_VAULT = 'bc1qbtcvaultxxxxxxxxxxxxxxxxxxxxxxxxxx';
 // shapes recorded from gateway.liquify.com/chain/thorchain_api on 2026-10-02.
 // mainnet lists no ZEC pool or vault yet, so the ZEC side mirrors BTC's.
@@ -368,6 +369,22 @@ describe('thorchain', () => {
     expect(() => check(thorQuote({ expiry: NOW }))).toThrow(/expired/);
     // a node answering with a memo that pays someone else is never shown
     expect(() => check(thorQuote(), inbound(), 't1SomeoneElse')).toThrow(/another address/);
+  });
+
+  it('out of zec, refuses a vault no t->t deposit could pay, before anything moves', () => {
+    const out = (vault: string) => () =>
+      checkQuote(
+        thorQuote({ inbound_address: vault }),
+        inbound().map(a => (a.chain === 'ZEC' ? { ...a, address: vault } : a)),
+        'ZEC',
+        true,
+        T,
+        NOW,
+      );
+    expect(out(ZEC_VAULT)).not.toThrow();
+    expect(out(T)).not.toThrow();
+    expect(out('u1shieldedvault')).toThrow(/can't pay/);
+    expect(out('zs1saplingvault')).toThrow(/can't pay/);
   });
 
   it('says plainly when thorchain is not taking a chain, before reading the quote', async () => {

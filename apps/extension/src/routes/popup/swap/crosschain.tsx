@@ -1327,7 +1327,9 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
           setStep('polling');
         }}
         onBack={() => setStep('input')}
+        // a fresh price for the same swap: its address (and any zec moved there) is kept
         onExpired={() => setStep('input')}
+        onShield={() => navigate(PopupPath.INDEX)}
       />
     );
   }

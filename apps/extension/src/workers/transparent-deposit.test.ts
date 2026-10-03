@@ -10,8 +10,15 @@ import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import type { SpendKeysCtor } from './hot-sign';
 import {
+  decodeTexAddress,
+  payableTransparentAddress,
+  transparentAddressToScriptHex,
+} from '../ledger/address';
+import {
   checkDeposit,
+  checkVault,
   FEE_MOVED,
+  VAULT_UNPAYABLE,
   opReturnScript,
   planDeposit,
   sendDeposit,
@@ -162,6 +169,71 @@ describe('deposit on the real wasm', () => {
     } finally {
       keys.free();
       other.free();
+    }
+  });
+});
+
+describe('a tex vault (ZIP 320) is paid as its P2PKH', () => {
+  // THORChain's ZEC and BTC vaults on 2026-10-04: one key, so one 20-byte hash
+  const TEX = 'tex1zclnr35llscdedzrwdmemm70es05ngg9m2d3lv';
+  const BTC = 'bc1qzclnr35llscdedzrwdmemm70es05ngg904l66z';
+
+  test('decodes to the same key hash as the twin bitcoin vault', async () => {
+    const hash = decodeTexAddress(TEX, true);
+    expect(hash).toHaveLength(20);
+    // both carry the hash as the same bech32 groups, before their own checksums
+    expect(BTC.slice(4, 36)).toBe(TEX.slice(4, 36));
+    expect(await transparentAddressToScriptHex(TEX, true)).toBe(`76a914${bytesToHex(hash)}88ac`);
+    const twin = await payableTransparentAddress(TEX, true);
+    expect(twin).toMatch(/^t1/);
+    expect(await transparentAddressToScriptHex(twin, true)).toBe(
+      await transparentAddressToScriptHex(TEX, true),
+    );
+  });
+
+  test('a mistyped tex, or anything not transparent, is refused before anything moves', async () => {
+    await expect(checkVault(TEX, true)).resolves.toBeUndefined();
+    await expect(checkVault(`${TEX.slice(0, -1)}q`, true)).rejects.toThrow(VAULT_UNPAYABLE);
+    await expect(checkVault(TEX, false)).rejects.toThrow(VAULT_UNPAYABLE);
+    await expect(checkVault('u1notatransparentaddress', true)).rejects.toThrow(VAULT_UNPAYABLE);
+  });
+
+  test('the signed deposit pays the tex key hash, from transparent inputs only', async () => {
+    const wasm = (await import('@repo/zcash-wasm')) as unknown as Wasm;
+    wasm.initSync({
+      module: readFileSync(resolve(process.cwd(), '../../packages/zcash-wasm/zafu_wasm_bg.wasm')),
+    });
+    const keys = new wasm.SpendKeys(SEED, 0, true);
+    try {
+      const own = p2pkh(keys.transparent_pubkey(3));
+      const chain: DepositChain = {
+        utxos: () =>
+          Promise.resolve([
+            {
+              txid: new Uint8Array(32).fill(9),
+              outputIndex: 0,
+              valueZat: 900_000n,
+              script: hexToBytes(own),
+            },
+          ]),
+        tip: () => Promise.resolve(3_000_000),
+        branchId: () => Promise.resolve(0xc8e71055),
+        broadcast: (txHex: string) => Promise.resolve(txHex.slice(0, 64)),
+      };
+      const req = { tAddress: 'fake', tIndex: 3, to: TEX, memo: MEMO, mainnet: true };
+      const plan = await planDeposit(wasm, chain, { ...req, amountZat: '500000' });
+      const sent = await sendDeposit(wasm, chain, keys, {
+        ...req,
+        amountZat: '500000',
+        reviewedFee: plan.fee,
+      });
+      const [pay] = transparentOutputs(sent.txHex);
+      expect(pay).toEqual({
+        value: 500_000n,
+        script: await transparentAddressToScriptHex(TEX, true),
+      });
+    } finally {
+      keys.free();
     }
   });
 });
