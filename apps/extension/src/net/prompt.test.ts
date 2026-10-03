@@ -118,7 +118,10 @@ describe('requestDestinationConsent', () => {
 });
 
 describe('destinationConsentResultListener', () => {
-  const sender = (id: string) => ({ id }) as chrome.runtime.MessageSender;
+  // zafu's own page has the extension id and origin; a content script has the
+  // id but a web origin
+  const sender = (id: string, origin = `chrome-extension://${id}`) =>
+    ({ id, origin, url: `${origin}/popup.html` }) as chrome.runtime.MessageSender;
   const sendResponse = () => vi.fn();
 
   it('settles the pending prompt from the wallet itself', async () => {
@@ -132,6 +135,25 @@ describe('destinationConsentResultListener', () => {
     expect(claimed).toBe(true);
     expect(await decision).toBe('approved');
     expect(respond).toHaveBeenCalled();
+  });
+
+  it('ignores an answer from a content script, which carries the extension id', async () => {
+    const { requestId } = await startPrompt();
+    const respond = sendResponse();
+    const fromContentScript = {
+      ...sender(chrome.runtime.id, 'https://evil.example'),
+      tab: { id: 3 },
+    } as chrome.runtime.MessageSender;
+    expect(
+      destinationConsentResultListener(
+        { type: 'zafu_destination_approval_result', requestId, result: { approved: true } },
+        fromContentScript,
+        respond,
+      ),
+    ).toBe(false);
+    expect(respond).not.toHaveBeenCalled();
+    const [, reply] = [...h.pending.entries()][0];
+    reply({ cancelled: true });
   });
 
   it('ignores an answer from a page that guessed the requestId', async () => {

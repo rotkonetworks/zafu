@@ -13,6 +13,7 @@ import { payApp, ZELLE_BANKS, type TemplateKey } from '../../buy/apps';
 import { loadOffer, clock, INTENT_LIFETIME_MS } from '../../buy/machine';
 import { Column, useBuy, useNow } from './ui';
 import { money } from '../../buy/fees';
+import { KEEP_DAYS } from '../../buy/capture/kept';
 import {
   allowRead,
   cancelBuy,
@@ -282,7 +283,7 @@ export const AskScreen = () => {
           onChange={e => setKeep(e.target.checked)}
           className='accent-zigner-gold'
         />
-        keep this for my next buy
+        keep this for {KEEP_DAYS} days
       </label>
       <div className='flex gap-2.5'>
         <Button variant='secondary' className='h-14 w-[140px]' onClick={closeOverlay}>

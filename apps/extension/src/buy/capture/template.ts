@@ -62,22 +62,71 @@ export interface Row {
 const INDEXED = new Set<TemplateKey>(['revolut', 'zelle_chase', 'zelle_bofa', 'zelle_citi']);
 export const wantsIndex = (key: TemplateKey): boolean => INDEXED.has(key);
 
-const hostIn = (s: string | undefined): string | undefined =>
-  s ? /^https:\/\/([a-z0-9.-]+)/i.exec(s.replace(/\\/g, ''))?.[1]?.toLowerCase() : undefined;
+// whitespace, control characters and backslashes: URL parsing trims or rewrites
+// them, so a string carrying one may not mean the host it appears to name
+// eslint-disable-next-line no-control-regex -- control characters are exactly what it refuses
+const UNSAFE = /[\s\\\u0000-\u001f\u007f]/;
+
+/**
+ * The host of a URL zafu will fetch or open, or undefined. It must be written
+ * out as an absolute https URL (no protocol-relative `//host`, no leading
+ * whitespace, nothing the parser rewrites), parse against the template's own
+ * base, and carry no credentials or port.
+ */
+export const urlHost = (s: unknown, base: string): string | undefined => {
+  if (typeof s !== 'string' || !s.startsWith('https://') || UNSAFE.test(s)) {
+    return undefined;
+  }
+  try {
+    const u = new URL(s, base);
+    return u.protocol === 'https:' && !u.username && !u.password && !u.port
+      ? u.hostname
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * The host a request pattern is anchored to, or undefined. Patterns are regexes
+ * over request urls; one that does not open with a literal https host, or that
+ * alternates (`|`), could match a request anywhere.
+ */
+export const patternHost = (s: unknown): string | undefined => {
+  if (typeof s !== 'string' || s.includes('|') || /\s/.test(s)) {
+    return undefined;
+  }
+  return /^\^?https:\/\/([a-z0-9.-]+)(?=[/:?]|\\\?|$)/i
+    .exec(s.replace(/\\\./g, '.'))?.[1]
+    ?.toLowerCase();
+};
+
+type Pinned = Pick<Template, 'authLink' | 'url' | 'metadata'>;
+
+/** every host a template can make zafu read or open; undefined marks a field that fails its check */
+const hostsOf = (t: Pinned, base: string): (string | undefined)[] => {
+  const m = t.metadata;
+  return [
+    urlHost(t.authLink, base),
+    urlHost(t.url, base),
+    patternHost(m.urlRegex),
+    // optional: absent, null and '' all mean "none" to the code that reads them
+    ...(m.fallbackUrlRegex ? [patternHost(m.fallbackUrlRegex)] : []),
+    ...(m.metadataUrl ? [urlHost(m.metadataUrl, base)] : []),
+  ];
+};
 
 /** every host a template can make zafu read or open */
-export const templateHosts = (t: Pick<Template, 'authLink' | 'url' | 'metadata'>): string[] => [
-  ...new Set(
-    [t.authLink, t.url, t.metadata.urlRegex, t.metadata.fallbackUrlRegex, t.metadata.metadataUrl]
-      .map(hostIn)
-      .filter((h): h is string => !!h),
-  ),
+export const templateHosts = (t: Pinned): string[] => [
+  ...new Set(hostsOf(t, t.authLink).filter((h): h is string => !!h)),
 ];
 
 /**
  * A live template from api.zkp2p.xyz is remote config deciding what zafu
- * reads. Take it only when it is the same action and stays on the app's
- * pinned hosts; otherwise keep the bundled copy.
+ * reads, opens and replays with the bank's headers. Take it only when it is the
+ * same action and EVERY url and pattern in it parses to one of the app's
+ * pinned hosts; a single field that fails sends the whole template back to the
+ * bundled copy (never "skip the field and check the rest").
  */
 export const pinTemplate = (
   live: unknown,
@@ -88,11 +137,11 @@ export const pinTemplate = (
   const ok =
     !!t &&
     t.actionType === bundled.actionType &&
-    typeof t.authLink === 'string' &&
-    typeof t.metadata?.urlRegex === 'string' &&
+    typeof t.metadata === 'object' &&
+    t.metadata !== null &&
     Array.isArray(t.paramNames) &&
     Array.isArray(t.paramSelectors) &&
-    templateHosts(t as Template).every(h => hosts.includes(h));
+    hostsOf(t as Template, bundled.authLink).every(h => !!h && hosts.includes(h));
   return ok ? (t as Template) : bundled;
 };
 

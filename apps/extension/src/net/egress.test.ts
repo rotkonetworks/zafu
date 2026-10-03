@@ -74,6 +74,24 @@ describe('installEgress', () => {
     expect(nativeFetch).toHaveBeenCalledTimes(1);
   });
 
+  it('refuses the answer of a redirect that landed off-policy', async () => {
+    const { isEgressBlocked } = await install(ALLOW_ZCASH);
+    const redirected = (url: string) => {
+      const r = new Response('secret');
+      Object.defineProperty(r, 'redirected', { value: true });
+      Object.defineProperty(r, 'url', { value: url });
+      return r;
+    };
+    nativeFetch.mockResolvedValueOnce(redirected('https://tracker.example/landing'));
+    const err = await fetch('https://zcash.rotko.net/x').catch((e: unknown) => e);
+    expect(isEgressBlocked(err)).toBe(true);
+    expect((err as { refusal: { host: string } }).refusal.host).toBe('tracker.example');
+
+    // a redirect that stays on an allowed host is answered as before
+    nativeFetch.mockResolvedValueOnce(redirected('https://zcash.rotko.net/y'));
+    expect(await (await fetch('https://zcash.rotko.net/x')).text()).toBe('secret');
+  });
+
   it('refuses a socket, an event stream and an xhr in their constructors', async () => {
     await install(ALLOW_ZCASH);
     expect(() => new WebSocket('wss://zrelay.rotko.net/ws')).toThrow(/did not contact zrelay/);

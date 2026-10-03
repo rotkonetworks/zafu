@@ -71,7 +71,13 @@ const buildRequest = (): unknown => ({
 
 const dispatch = async (req: unknown): Promise<unknown> => {
   const response = Promise.withResolvers<unknown>();
-  const handled = listeners.some(listener => listener(req, {}, response.resolve));
+  // zafu's own page: the handler refuses any sender without the extension origin
+  const page = {
+    id: 'ext',
+    origin: 'chrome-extension://ext',
+    url: 'chrome-extension://ext/popup.html',
+  };
+  const handled = listeners.some(listener => listener(req, page, response.resolve));
   expect(handled, 'the offscreen listener claimed the request').toBe(true);
   return response.promise;
 };
@@ -88,7 +94,10 @@ describe('offscreen parallel build', () => {
     workers.length = 0;
     vi.resetModules();
     vi.stubGlobal('chrome', {
-      runtime: { onMessage: { addListener: (l: OffscreenListener) => listeners.push(l) } },
+      runtime: {
+        id: 'ext',
+        onMessage: { addListener: (l: OffscreenListener) => listeners.push(l) },
+      },
     });
     vi.stubGlobal(
       'Worker',

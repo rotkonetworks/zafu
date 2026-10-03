@@ -26,6 +26,7 @@
  */
 
 import type { NetworkType, VaultUnlock } from './types';
+import { isValidInternalSender } from '../../senders/internal';
 import type { SealedVault, WorkerKey } from '../../shared/vault-seal';
 import type { DepositPlan, DepositRequest } from '../../workers/transparent-deposit';
 
@@ -116,7 +117,6 @@ export interface NetworkWorkerMessage {
     | 'finalize-delegation'
     | 'cast-vote-hot-wire'
     | 'pir-fetch-imt-proofs'
-    | 'get-orchard-account-info'
     | 'get-consensus-branch-id'
     | 'get-merkle-witnesses';
   id: string;
@@ -406,8 +406,10 @@ const ensureClientListener = (): void => {
     return;
   }
   clientListenerInstalled = true;
-  chrome.runtime.onMessage.addListener(msg => {
-    if (msg?.type !== 'NW_EVENT' || !msg.network) {
+  chrome.runtime.onMessage.addListener((msg, sender) => {
+    // worker events come from the offscreen host; a content script in a web tab
+    // must not feed this window a forged sync state
+    if (msg?.type !== 'NW_EVENT' || !msg.network || !isValidInternalSender(sender)) {
       return false;
     }
     const state = workers.get(msg.network as NetworkType);
@@ -509,7 +511,13 @@ const ensureHostListener = (): void => {
     return;
   }
   hostListenerInstalled = true;
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    // only zafu's own pages and worker drive the hosted workers: a content
+    // script carries the extension id too, and could otherwise stop or kill a
+    // sync mid-send, queue proving jobs, or start a sync with its own keys
+    if (!isValidInternalSender(sender)) {
+      return false;
+    }
     if (msg?.type === 'NW_SPAWN' && msg.network) {
       void (async () => {
         try {
@@ -757,14 +765,20 @@ const sealFor = async (network: NetworkType, vault: VaultUnlock): Promise<Sealed
  */
 export const deriveAddressInWorker = async (
   network: NetworkType,
-  mnemonic: string,
+  /** the sealed vault: the phrase never crosses the message bus */
+  vault: VaultUnlock,
   accountIndex: number,
   /** zcash: the 11-byte diversifier index as 22 hex chars (see shielded-receive-index) */
   diversifierHex?: string,
   /** zcash: the pocket (zip32 account); accountIndex above is a diversifier index */
   pocket = 0,
 ): Promise<string> => {
-  return callWorker(network, 'derive-address', { mnemonic, accountIndex, diversifierHex, pocket });
+  return callWorker(network, 'derive-address', {
+    vault: await sealFor(network, vault),
+    accountIndex,
+    diversifierHex,
+    pocket,
+  });
 };
 
 /**
@@ -2052,18 +2066,6 @@ export const pirFetchImtProofsInWorker = async (a: {
   nullifiersJson: string;
 }): Promise<{ imtProofsJson: string }> => {
   return callWorker('zcash', 'pir-fetch-imt-proofs', a);
-};
-
-/** Raw Orchard FVK hex + a freshly ZIP-316-encoded UFVK string for a mnemonic
- *  wallet's account. `WalletKeys` only exports the raw FVK bytes; there is no
- *  stored UFVK for a hot wallet the way there is for watch-only/Ledger
- *  imports, so the worker encodes (and self-validates) one on demand. */
-export const getOrchardAccountInfoInWorker = async (
-  mnemonic: string,
-  mainnet: boolean,
-  pocket = 0,
-): Promise<{ fvkHex: string; ufvkStr: string }> => {
-  return callWorker('zcash', 'get-orchard-account-info', { mnemonic, mainnet, pocket });
 };
 
 /** Live consensus branch id (as a number) from the endpoint's GetLightdInfo,

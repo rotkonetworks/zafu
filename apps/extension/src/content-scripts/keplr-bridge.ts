@@ -63,7 +63,7 @@ window.addEventListener('message', (ev: MessageEvent) => {
   }
 
   chrome.runtime
-    .sendMessage({ type: 'ZafuKeplr', method, params, origin: window.origin })
+    .sendMessage({ type: 'ZafuKeplr', method, params })
     .then((res: { ok?: boolean; result?: unknown; error?: string } | undefined) => {
       if (res?.ok) {
         respond({ ok: true, result: res.result });

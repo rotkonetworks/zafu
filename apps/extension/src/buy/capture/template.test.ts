@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import templates from './templates.json';
+import { PAY_APPS } from '../apps';
 import {
   extractRows,
   isPaymentRequest,
@@ -115,6 +116,59 @@ describe('peer templates', () => {
     const same = structuredClone(revolut);
     expect(pinTemplate(same, revolut, ['app.revolut.com'])).toBe(same);
     expect(pinTemplate({ success: false }, revolut, ['app.revolut.com'])).toBe(revolut);
+  });
+
+  it('refuses a live template whose urls only look pinned', () => {
+    const hosts = ['app.revolut.com'];
+    const withMeta = (metadataUrl: string) => ({
+      ...revolut,
+      metadata: { ...revolut.metadata, metadataUrl },
+    });
+    for (const bad of [
+      '//evil.example/x', // protocol-relative: resolves to evil.example
+      ' https://evil.example/x', // the old check never saw a host here
+      '\thttps://app.revolut.com/x',
+      'https://evil.example\\@app.revolut.com/x', // backslash reads as a path
+      'https://app.revolut.com@evil.example/x',
+      'https://app.revolut.com.evil.example/x',
+      'https://app.revolut.com:8443/x',
+      'http://app.revolut.com/x',
+      'javascript:alert(1)',
+      '/relative',
+    ]) {
+      expect(pinTemplate(withMeta(bad), revolut, hosts), bad).toBe(revolut);
+    }
+    // the open-a-tab link and the patterns are held to the same rule
+    expect(pinTemplate({ ...revolut, authLink: '//evil.example/login' }, revolut, hosts)).toBe(
+      revolut,
+    );
+    expect(
+      pinTemplate(
+        { ...revolut, metadata: { ...revolut.metadata, urlRegex: '.*' } },
+        revolut,
+        hosts,
+      ),
+    ).toBe(revolut);
+    expect(
+      pinTemplate(
+        {
+          ...revolut,
+          metadata: { ...revolut.metadata, urlRegex: 'https://app.revolut.com/x|https://evil' },
+        },
+        revolut,
+        hosts,
+      ),
+    ).toBe(revolut);
+  });
+
+  it('accepts every bundled template as its own live copy', () => {
+    for (const app of PAY_APPS) {
+      for (const key of app.templates) {
+        const bundled = templates[key] as Template;
+        const live = structuredClone(bundled);
+        expect(pinTemplate(live, bundled, app.hosts), key).toBe(live);
+      }
+    }
   });
 
   it('seals every captured header and the body', () => {

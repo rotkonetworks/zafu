@@ -41,6 +41,7 @@ import type {
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { isValidExternalSender } from '../../senders/external';
+import { isValidInternalSender } from '../../senders/internal';
 import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../../config/contact-discovery-relay';
 import { setSiteFindsFriends, siteFindsFriends } from '../../state/find-friends';
 import { PopupPath } from '../../routes/popup/paths';
@@ -240,7 +241,8 @@ export const contactDiscoveryRequestResultListener = (
   if (typeof req !== 'object' || req === null || (req as { type?: unknown }).type !== RESULT_TYPE) {
     return false;
   }
-  if (sender.id !== chrome.runtime.id) {
+  // the extension origin, not just its id: content scripts carry the id too
+  if (!isValidInternalSender(sender)) {
     return false;
   }
   const requestId = String((req as { requestId?: unknown }).requestId ?? '');

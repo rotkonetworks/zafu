@@ -27,6 +27,7 @@ import {
 import { NET_EGRESS_INTERNAL_METHODS } from '../message/listen/zafu-method-names';
 import { PopupPath } from '../routes/popup/paths';
 import { setDestinationDecision } from './ledger';
+import { isValidInternalSender } from '../senders/internal';
 import { NET_PURPOSE_LABEL, type NetPurpose } from './purpose';
 
 export type ConsentDecision = 'approved' | 'denied' | 'cancelled';
@@ -126,7 +127,8 @@ export const destinationConsentResultListener = (
   if (typeof req !== 'object' || req === null || (req as { type?: unknown }).type !== RESULT_TYPE) {
     return false;
   }
-  if (sender.id !== chrome.runtime.id) {
+  // the extension origin, not just its id: content scripts carry the id too
+  if (!isValidInternalSender(sender)) {
     return false;
   }
   const requestId = String((req as { requestId?: unknown }).requestId ?? '');

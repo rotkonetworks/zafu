@@ -12,7 +12,13 @@
 
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
-import { derivePasskeyForSite, signPasskey, derivePrf, DEFAULT_IDENTITY } from './identity';
+import {
+  derivePasskeyCredentialId,
+  derivePasskeyForSite,
+  signPasskey,
+  derivePrf,
+  DEFAULT_IDENTITY,
+} from './identity';
 
 const enc = new TextEncoder();
 
@@ -29,11 +35,11 @@ const FLAGS = {
 };
 
 /**
- * credential ID = "zafu:" + SHA-256(rpId)[:8]
- * deterministic - same rpId always produces the same credential ID.
- * no rotation encoded (passkeys don't rotate).
+ * The credential id passkeys made before v2: "zafu:" + SHA-256(rpId)[:8], the
+ * same for every zafu user at a relying party. Only recognised, never issued:
+ * a relying party that stored one still gets it back (the key is unchanged).
  */
-export function buildCredentialId(rpId: string): Uint8Array {
+export function legacyCredentialId(rpId: string): Uint8Array {
   const hash = sha256(enc.encode(rpId)).slice(0, 8);
   const prefix = enc.encode('zafu:');
   const id = new Uint8Array(prefix.length + hash.length);
@@ -42,13 +48,25 @@ export function buildCredentialId(rpId: string): Uint8Array {
   return id;
 }
 
-/** check if a credential ID belongs to zafu */
-export function isZafuCredential(credentialId: Uint8Array): boolean {
-  if (credentialId.length < 5) {
-    return false;
+/**
+ * Which of this user's credential ids to answer `get` with: the one the
+ * relying party asked for (new or legacy), the new one when it asked for none
+ * (a discoverable sign-in), or undefined when every id it listed belongs to
+ * some other authenticator.
+ */
+export function pickCredentialId(
+  mnemonic: string,
+  rpId: string,
+  allowHex: readonly string[] | undefined,
+  identity = DEFAULT_IDENTITY,
+): Uint8Array | undefined {
+  const current = derivePasskeyCredentialId(mnemonic, identity, rpId);
+  if (!allowHex?.length) {
+    return current;
   }
-  const prefix = enc.encode('zafu:');
-  return credentialId.slice(0, 5).every((b, i) => b === prefix[i]);
+  const allow = new Set(allowHex.map(h => h.toLowerCase()));
+  const legacy = legacyCredentialId(rpId);
+  return [current, legacy].find(id => allow.has(bytesToHex(id)));
 }
 
 /** CBOR-encode a P-256 COSE public key */
@@ -121,6 +139,8 @@ function attestedCredentialData(credentialId: Uint8Array, publicKey: Uint8Array)
 export function createCredential(
   mnemonic: string,
   rpId: string,
+  /** the person entered their password for this request (sets UV) */
+  verified: boolean,
   identity = DEFAULT_IDENTITY,
 ): {
   credentialId: Uint8Array;
@@ -129,25 +149,27 @@ export function createCredential(
 } {
   const { publicKey: pubHex } = derivePasskeyForSite(mnemonic, identity, rpId);
   const publicKey = hexToBytes(pubHex);
-  const credentialId = buildCredentialId(rpId);
+  const credentialId = derivePasskeyCredentialId(mnemonic, identity, rpId);
   const rpIdHash = sha256(enc.encode(rpId));
   const acd = attestedCredentialData(credentialId, publicKey);
-  const ad = authData(rpIdHash, FLAGS.UP | FLAGS.UV | FLAGS.AT, 0, acd);
+  const ad = authData(rpIdHash, FLAGS.UP | (verified ? FLAGS.UV : 0) | FLAGS.AT, 0, acd);
 
   return { credentialId, authenticatorData: ad, publicKey };
 }
 
 /**
- * sign a WebAuthn assertion.
- *
- * clientDataHash = SHA-256(clientDataJSON) - provided by the browser.
- * we sign: authData || clientDataHash (p256.sign hashes internally with SHA-256).
+ * sign a WebAuthn assertion: ES256 over authData || clientDataHash, i.e.
+ * ECDSA P-256 over SHA-256(authData || clientDataHash), as the spec has it.
+ * The caller checks clientDataHash against the challenge and the sender's
+ * origin first.
  */
 export function signAssertion(
   mnemonic: string,
   rpId: string,
   clientDataHash: Uint8Array,
-  prfSalts?: { first: string; second?: string },
+  prfSalts: { first: string; second?: string } | undefined,
+  /** the person entered their password for this request (sets UV) */
+  verified: boolean,
   identity = DEFAULT_IDENTITY,
 ): {
   authenticatorData: Uint8Array;
@@ -155,11 +177,10 @@ export function signAssertion(
   prfResults?: { first: Uint8Array; second?: Uint8Array };
 } {
   const rpIdHash = sha256(enc.encode(rpId));
-  const flags = FLAGS.UP | FLAGS.UV;
+  const flags = FLAGS.UP | (verified ? FLAGS.UV : 0);
   const ad = authData(rpIdHash, flags, 0);
 
-  // message to sign: authData || clientDataHash
-  // p256.sign handles SHA-256 internally - do NOT pre-hash
+  // message to sign: authData || clientDataHash (signPasskey hashes it)
   const message = new Uint8Array(ad.length + clientDataHash.length);
   message.set(ad, 0);
   message.set(clientDataHash, ad.length);

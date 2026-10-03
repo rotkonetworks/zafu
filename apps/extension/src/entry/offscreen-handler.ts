@@ -8,6 +8,7 @@ import {
   isOffscreenRequest,
 } from '@penumbrafi/types/internal-msg/offscreen';
 import { assertProveRequest } from '../shared/prove-guard';
+import { isValidInternalSender } from '../senders/internal';
 import { hostedWorkerCount, initNetworkWorkerHost } from '../state/keyring/network-worker';
 import type { ParallelProveRequest } from '@penumbrafi/types/internal-msg/offscreen';
 import type { ParallelWorkerFailure, ParallelWorkerRequest } from '../wasm-build-parallel';
@@ -45,7 +46,11 @@ const isProveParallel = (
   req.request !== null &&
   !('authData' in req.request);
 
-chrome.runtime.onMessage.addListener((req: unknown, _sender, respond) => {
+chrome.runtime.onMessage.addListener((req: unknown, sender, respond) => {
+  // proving and building are for zafu's own pages, never a content script
+  if (!isValidInternalSender(sender)) {
+    return false;
+  }
   if (typeof req === 'object' && req !== null && 'type' in req && req.type === 'OFFSCREEN_STATUS') {
     respond({
       inFlight: jobsInFlight + (hostedWorkerCount() > 0 ? 1 : 0),

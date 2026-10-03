@@ -10,6 +10,19 @@ import { externalMessageListener } from './external-easteregg';
 import { grantCapability, getOriginPermissions } from '@repo/storage-chrome/origin';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
+import { sha256 } from '@noble/hashes/sha256';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
+import { clientDataJson } from '../../content-scripts/passkey-wire';
+
+/** a get as the intercept sends it: challenge aabb, client data for https://<rpId> */
+const getReq = (rpId: string) => ({
+  type: 'zafu_passkey_get',
+  rpId,
+  challenge: 'aabb',
+  clientDataHash: bytesToHex(
+    sha256(clientDataJson('webauthn.get', Uint8Array.from([0xaa, 0xbb]), `https://${rpId}`)),
+  ),
+});
 
 // the mint/sign run in the service worker via a dynamic import of
 // state/webauthn; stub it so the tests can assert mint-vs-no-mint without
@@ -29,7 +42,7 @@ const { createCredentialMock, signAssertionMock } = vi.hoisted(() => ({
 vi.mock('../../state/webauthn', () => ({
   createCredential: createCredentialMock,
   signAssertion: signAssertionMock,
-  buildCredentialId: () => Uint8Array.from([0xab, 0xcd]),
+  pickCredentialId: () => Uint8Array.from([0xab, 0xcd]),
 }));
 vi.mock('../../state', async importOriginal => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -59,8 +72,14 @@ const validSender = (origin: string): chrome.runtime.MessageSender => ({
 });
 
 /** drives an INTERNAL popup->worker result message (must come from the extension) */
+// zafu's own page: the extension id AND the extension origin (a content script
+// carries the id too, so the id alone is not enough)
 const internalSender = (): chrome.runtime.MessageSender =>
-  ({ id: chrome.runtime.id }) as chrome.runtime.MessageSender;
+  ({
+    id: chrome.runtime.id,
+    origin: `chrome-extension://${chrome.runtime.id}`,
+    url: `chrome-extension://${chrome.runtime.id}/popup.html`,
+  }) as chrome.runtime.MessageSender;
 
 /** pull the requestId the create handler embedded in the approval-popup URL */
 const requestIdFromPopup = (origin: string): string => {
@@ -277,10 +296,7 @@ describe('zafu_passkey_create - per-credential consent', () => {
     await grantCapability(origin, 'passkey');
     await sessionExtStorage.remove('passwordKey');
 
-    const res = await call(
-      { type: 'zafu_passkey_get', rpId: 'passkey-signlocked.example', clientDataHash: 'aabb' },
-      validSender(origin),
-    );
+    const res = await call(getReq('passkey-signlocked.example'), validSender(origin));
 
     expect(res).toMatchObject({ success: false, code: 'cancelled' });
     expect(signAssertionMock).not.toHaveBeenCalled();
@@ -328,6 +344,8 @@ describe('zafu_passkey_create - per-credential consent', () => {
     const params = new URLSearchParams(url.slice(url.indexOf('?') + 1));
     expect(params.get('app')).toBe(origin);
     expect(params.get('requestId')).toBeTruthy();
+    // the approval screen shows which domain the passkey signs in to
+    expect(params.get('rp')).toBe('passkey-a.example');
     // no credential exists until the popup approves
     expect(createCredentialMock).not.toHaveBeenCalled();
   });
@@ -351,6 +369,28 @@ describe('zafu_passkey_create - per-credential consent', () => {
     );
 
     expect(await pending).toEqual({ success: false, error: 'denied' });
+    expect(createCredentialMock).not.toHaveBeenCalled();
+  });
+
+  it('(b2) an approval forged by a content script answers nothing', async () => {
+    const origin = 'https://passkey-b2.example';
+    void call({ type: 'zafu_passkey_create', rpId: 'passkey-b2.example' }, validSender(origin));
+    await waitForPopup(origin);
+    // a content script in a web tab carries this extension's id
+    const contentScript = { ...validSender('https://evil.example'), id: chrome.runtime.id };
+    const respond = vi.fn();
+    const claimed = externalMessageListener(
+      {
+        type: 'zafu_passkey_create_result',
+        requestId: requestIdFromPopup(origin),
+        result: { approved: true },
+      },
+      contentScript,
+      respond,
+    );
+    await flush();
+    expect(claimed).toBe(false);
+    expect(respond).not.toHaveBeenCalled();
     expect(createCredentialMock).not.toHaveBeenCalled();
   });
 
@@ -379,7 +419,8 @@ describe('zafu_passkey_create - per-credential consent', () => {
       publicKey: '04aa',
       prfEnabled: true,
     });
-    expect(createCredentialMock).toHaveBeenCalledWith('test mnemonic', 'passkey-c.example');
+    // unlocked before the request: an approve tap is presence, not UV
+    expect(createCredentialMock).toHaveBeenCalledWith('test mnemonic', 'passkey-c.example', false);
   });
 
   it('(d) consent is the gate: an origin with no grant still gets the popup', async () => {
@@ -442,26 +483,43 @@ describe('zafu_passkey_create - per-credential consent', () => {
     const origin = 'https://passkey-f.example';
     await grantCapability(origin, 'passkey');
 
-    const res = await call(
-      { type: 'zafu_passkey_get', rpId: 'passkey-f.example', clientDataHash: 'aabb' },
-      validSender(origin),
-    );
+    const res = await call(getReq('passkey-f.example'), validSender(origin));
 
     expect(res).toMatchObject({ success: true, credentialId: 'abcd', signature: '22' });
     expect(signAssertionMock).toHaveBeenCalledWith(
       'test mnemonic',
       'passkey-f.example',
-      Uint8Array.from([0xaa, 0xbb]),
+      hexToBytes(getReq('passkey-f.example').clientDataHash),
       undefined,
+      // the wallet was already unlocked: no password, so no UV
+      false,
     );
     expect(createMock).not.toHaveBeenCalled();
   });
 
-  it('(f2) an assertion from an origin with neither passkey nor connect is refused', async () => {
+  it('(f4) client data naming another origin is never signed', async () => {
+    // a subdomain may claim its parent's rpId, but the client data it hands the
+    // parent must still name the subdomain: here it claims the parent's origin
+    const origin = 'https://sub.passkey-f4.example';
+    await grantCapability(origin, 'passkey');
+    const res = await call(getReq('passkey-f4.example'), validSender(origin));
+    expect(res).toEqual({ success: false, error: 'client data does not match the request' });
+    expect(signAssertionMock).not.toHaveBeenCalled();
+  });
+
+  it('(f5) a hash that is not of the challenge is never signed', async () => {
+    const origin = 'https://passkey-f5.example';
+    await grantCapability(origin, 'passkey');
     const res = await call(
-      { type: 'zafu_passkey_get', rpId: 'nogrant.example', clientDataHash: 'aabb' },
-      validSender('https://nogrant.example'),
+      { ...getReq('passkey-f5.example'), clientDataHash: 'aa'.repeat(32) },
+      validSender(origin),
     );
+    expect(res).toMatchObject({ success: false });
+    expect(signAssertionMock).not.toHaveBeenCalled();
+  });
+
+  it('(f2) an assertion from an origin with neither passkey nor connect is refused', async () => {
+    const res = await call(getReq('nogrant.example'), validSender('https://nogrant.example'));
 
     expect(res).toEqual({ success: false, error: 'not connected' });
     expect(signAssertionMock).not.toHaveBeenCalled();
@@ -513,10 +571,7 @@ describe('zafu_passkey_get - expired or legacy grants re-ask instead of failing 
       ) as never,
     );
 
-    const pending = call(
-      { type: 'zafu_passkey_get', rpId: 'legacy-grant.example', clientDataHash: 'aabb' },
-      validSender(origin),
-    );
+    const pending = call(getReq('legacy-grant.example'), validSender(origin));
     await waitForCapabilityPopup(origin);
     const requestId = new URLSearchParams(
       capabilityPopupUrlFor(origin)!.slice(capabilityPopupUrlFor(origin)!.indexOf('?') + 1),
@@ -544,10 +599,7 @@ describe('zafu_passkey_get - expired or legacy grants re-ask instead of failing 
       ) as never,
     );
 
-    const pending = call(
-      { type: 'zafu_passkey_get', rpId: 'lapsed-deny.example', clientDataHash: 'aabb' },
-      validSender(origin),
-    );
+    const pending = call(getReq('lapsed-deny.example'), validSender(origin));
     await waitForCapabilityPopup(origin);
     const requestId = new URLSearchParams(
       capabilityPopupUrlFor(origin)!.slice(capabilityPopupUrlFor(origin)!.indexOf('?') + 1),
@@ -572,10 +624,7 @@ describe('zafu_passkey_get - expired or legacy grants re-ask instead of failing 
     const origin = 'https://connect-only.example';
     await grantCapability(origin, 'connect');
 
-    const pending = call(
-      { type: 'zafu_passkey_get', rpId: 'connect-only.example', clientDataHash: 'aabb' },
-      validSender(origin),
-    );
+    const pending = call(getReq('connect-only.example'), validSender(origin));
     await waitForCapabilityPopup(origin);
     const requestId = new URLSearchParams(
       capabilityPopupUrlFor(origin)!.slice(capabilityPopupUrlFor(origin)!.indexOf('?') + 1),
@@ -602,17 +651,11 @@ describe('zafu_passkey_get - expired or legacy grants re-ask instead of failing 
       ) as never,
     );
 
-    const first = call(
-      { type: 'zafu_passkey_get', rpId: 'dedup.example', clientDataHash: 'aabb' },
-      validSender(origin),
-    );
+    const first = call(getReq('dedup.example'), validSender(origin));
     await waitForCapabilityPopup(origin);
     const popupsAfterFirst = createMock.mock.calls.length;
 
-    const second = call(
-      { type: 'zafu_passkey_get', rpId: 'dedup.example', clientDataHash: 'aabb' },
-      validSender(origin),
-    );
+    const second = call(getReq('dedup.example'), validSender(origin));
     await flush();
     // the per-origin guard (openApprovalPopup's originsWithOpenPopup) drops
     // the second request - no new window for the same origin while one is
@@ -680,5 +723,53 @@ describe('zafu_zcash_send - top-frame gate and same-origin popup dedup', () => {
     expect(url).toBeDefined();
     expect(url).not.toContain('favIconUrl');
     expect(url).not.toContain('evil.example');
+  });
+});
+
+describe('send - own address only for a connected site', () => {
+  const sendUrl = (origin: string) =>
+    createMock.mock.calls
+      .map((c: unknown[]) => String((c[0] as { url?: string } | undefined)?.url ?? ''))
+      .filter(u => u.includes('#/send?'))
+      .at(-1) ?? `no send window for ${origin}`;
+  const memoOf = (url: string) => new URLSearchParams(url.slice(url.indexOf('?') + 1)).get('memo');
+
+  it('drops [primary] and [self] for a site the person never connected', async () => {
+    const origin = 'https://send-unconnected.example';
+    const res = await call(
+      { type: 'send', address: 'u1x', memo: 'pay back to [primary] or [self] thanks' },
+      validSender(origin),
+    );
+    expect(res).toEqual({ ok: true });
+    expect(memoOf(sendUrl(origin))).toBe('pay back to  or  thanks');
+  });
+
+  it('keeps them for a connected site', async () => {
+    const origin = 'https://send-connected.example';
+    await grantCapability(origin, 'connect');
+    await call({ type: 'send', address: 'u1x', memo: 'reply to [primary]' }, validSender(origin));
+    expect(memoOf(sendUrl(origin))).toBe('reply to [primary]');
+  });
+});
+
+describe('ping', () => {
+  it('tells an unconnected site the protocol, not the release version', async () => {
+    const res = await call({ type: 'ping' }, validSender('https://ping-stranger.example'));
+    expect(res).toMatchObject({ zafu: true, version: '' });
+    expect(typeof res.protocolVersion).toBe('number');
+  });
+
+  it('tells a connected site the release version', async () => {
+    const origin = 'https://ping-friend.example';
+    await grantCapability(origin, 'connect');
+    const runtime = chrome.runtime as unknown as { getManifest?: () => { version: string } };
+    const before = runtime.getManifest;
+    runtime.getManifest = () => ({ version: '9.9.9' });
+    try {
+      const res = await call({ type: 'ping' }, validSender(origin));
+      expect(res.version).toBe('9.9.9');
+    } finally {
+      runtime.getManifest = before;
+    }
   });
 });

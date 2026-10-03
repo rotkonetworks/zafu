@@ -13,6 +13,7 @@ import {
   selectEffectiveKeyInfo,
   selectPenumbraAccount,
   selectGetMnemonic,
+  selectGetVaultUnlock,
 } from '../state/keyring';
 import { getActiveWalletJson, selectActiveZcashWallet } from '../state/wallets';
 import { activeAccountIndex } from '../state/pockets';
@@ -131,6 +132,7 @@ export function useActiveAddress() {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const penumbraAccount = useStore(selectPenumbraAccount);
   const getMnemonic = useStore(selectGetMnemonic);
+  const getVaultUnlock = useStore(selectGetVaultUnlock);
   const penumbraWallet = useStore(getActiveWalletJson);
   const zcashWallet = useStore(selectActiveZcashWallet);
   const pocket = useStore(activeAccountIndex);
@@ -187,7 +189,11 @@ export function useActiveAddress() {
         // mnemonic vault - derive addresses from seed for all networks
         if (selectedKeyInfo?.type === 'mnemonic') {
           try {
-            const mnemonic = await getMnemonic(selectedKeyInfo.id);
+            // zcash derives in its worker from the sealed vault: the phrase is
+            // neither decrypted here nor sent over the message bus
+            const mnemonic = activeNetwork === 'zcash' ? '' : await getMnemonic(selectedKeyInfo.id);
+            const vault =
+              activeNetwork === 'zcash' ? await getVaultUnlock(selectedKeyInfo.id) : undefined;
 
             // penumbra - derive from seed
             if (activeNetwork === 'penumbra') {
@@ -202,14 +208,14 @@ export function useActiveAddress() {
             }
 
             // zcash - derive orchard address via worker (avoids main-thread wasm)
-            if (activeNetwork === 'zcash') {
+            if (activeNetwork === 'zcash' && vault) {
               // retry worker spawn - rescan may have terminated it
               for (let attempt = 0; attempt < 3 && !cancelled; attempt++) {
                 try {
                   await spawnNetworkWorker('zcash');
                   const rawAddr = await deriveAddressInWorker(
                     'zcash',
-                    mnemonic,
+                    vault,
                     0,
                     diversifier,
                     pocket,
@@ -438,6 +444,7 @@ export function useActiveAddress() {
     zcashWallet?.orchardFvk,
     zcashWallet?.ufvk,
     getMnemonic,
+    getVaultUnlock,
     diversifier,
     pocket,
   ]);
