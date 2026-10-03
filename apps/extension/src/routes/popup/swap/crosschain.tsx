@@ -1,17 +1,17 @@
 /**
- * Swap zec with another chain over whichever route carries it (board Swap,
- * StSwapExpired). Nothing is asked of any route until "get quote": then every
- * route that can carry the pair is quoted side by side (or only the one a link
- * pinned with `xc=`), the most out after fees is preselected, and the user
- * reviews before anything is signed or shown to pay.
+ * Swap zec with another chain over whichever route carries it (board Swap).
+ * The form opens filled (the last pair, 10% of the zec out, your address on
+ * the other side) and prices arrive as it is typed: every allowed route is
+ * asked, the best so far leads, and a route that can't quote says why in one
+ * quiet line. A firm quote is asked for only at review, before anything is
+ * signed or shown to pay.
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
 import { CopyButton } from '@repo/ui/components/ui/copy-button';
-import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { StepList } from '@repo/ui/components/ui/step-list';
@@ -24,31 +24,49 @@ import { selectActiveZcashWallet } from '../../../state/wallets';
 import { activeAccountIndex, activeZcashStoreId } from '../../../state/pockets';
 import { CAPS, walletKind } from '../../../signing/wallet-kind';
 import { isEgressBlocked } from '../../../net/egress';
+import { requestEgressOptIn } from '../../../net/egress-opt-in';
 import { EgressBlockedStatus } from '../../../shared/components/egress-blocked-status';
 import { useActiveAddress } from '../../../hooks/use-address';
 import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
-import { useSwapRoutes } from '../../../hooks/swap-routes';
+import { useSwapLast, useSwapRoutes } from '../../../hooks/swap-routes';
+import { swapWallet } from '../../../hooks/swap-preload';
+import { keepSwapPreload, keepSwapQuotes, seedSwapQuotes } from '../../../state/swap/preload';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { buildSendTxInWorker, completeSendTxInWorker } from '../../../state/keyring/network-worker';
 import type { VaultUnlock } from '../../../state/keyring/types';
 import { usePoolNotes } from '../../../hooks/zcash-pool-balances';
 import { maxSendable } from '../send/spendable';
-import { PROVIDERS, quoteRoutes, routeTokens, type RouteResult } from '../../../state/swap';
+import { PROVIDERS, routeTokens } from '../../../state/swap';
 import {
   fromUnits,
   lead,
+  rank,
   toUnits,
+  type Quote,
+  type QuoteRequest,
   type SwapPhase,
   type SwapStatusView,
   type SwapToken,
 } from '../../../state/swap/provider';
 import { BelowMinimum } from '../../../state/swap/thornode';
 import {
-  candidates,
+  chips,
+  DEBOUNCE_MS,
+  defaultAmount,
+  egressViewQuery,
+  gates,
+  lastOfPair,
+  pairOf,
+  plain,
+  QUOTABLE,
+  quoteQuery,
+  refreshIn,
+  watchEgress,
+} from '../../../state/swap/live';
+import {
   pairKey,
   ROUTES,
-  OFFERED,
   routeLabel,
   poolAsset,
   type MemoCarrier,
@@ -79,8 +97,6 @@ import { CostList, CostMeta } from './cost-lines';
 
 export type Step =
   | 'input'
-  | 'quoting'
-  | 'routes'
   | 'thor-out'
   | 'sign'
   | 'scan'
@@ -134,9 +150,6 @@ export const buildDeposit = (o: {
     o.ufvk,
   );
 
-/** routes with an implementation: the picker and best-route draw from these */
-const QUOTABLE = OFFERED.filter(id => PROVIDERS[id]);
-
 /** the one note under the routes, per route and direction */
 const NOTE: Record<RouteId, Record<SwapPair['direction'], string>> = {
   near: {
@@ -171,9 +184,6 @@ export const untilLabel = (s: number) =>
       ? `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`
       : `${Math.floor(s / 86400)} days`;
 
-const errorLine = (e: unknown) =>
-  e instanceof Error && e.message ? e.message : 'the route did not answer · please try again';
-
 function LiveTimer({ startMs }: { startMs: number }) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
@@ -185,9 +195,40 @@ function LiveTimer({ startMs }: { startMs: number }) {
   return <div className='font-mono text-2xl tabular-nums text-zigner-gold'>{elapsed}s</div>;
 }
 
-/** one route in the board's route choice: a square mark, name, amount, one meta line */
+/** a typed value once it has rested for a moment and is usable; the last usable one meanwhile */
+export const useSettled = (value: string, usable: boolean) => {
+  const [settled, setSettled] = useState(usable ? value : undefined);
+  useEffect(() => {
+    if (!usable || value === settled) {
+      return;
+    }
+    const t = setTimeout(() => setSettled(value), settled ? DEBOUNCE_MS : 0);
+    return () => clearTimeout(t);
+  }, [value, usable, settled]);
+  return settled;
+};
+
+/** the header's quiet clock to the next price */
+const RefreshIn = ({ at }: { at: number }) => {
+  const left = useDeadlineCountdown(at);
+  return <>{left ? `refreshes in ${left}s` : 'updating'}</>;
+};
+
+/** a figure that fades in when it changes, and dims while a newer one is asked for */
+const Figure = ({ text, stale, struck }: { text: string; stale?: boolean; struck?: boolean }) => (
+  <span className={cn('transition-opacity duration-300', stale && 'opacity-50')}>
+    <Sensitive
+      key={text}
+      className={cn('duration-300 animate-in fade-in', struck && 'line-through')}
+    >
+      {text}
+    </Sensitive>
+  </span>
+);
+
+/** one route in the routes sheet: a square mark, name, amount, one meta line */
 const RouteChoice = ({
-  result,
+  quote,
   unit,
   on,
   best,
@@ -195,7 +236,7 @@ const RouteChoice = ({
   decimals,
   onPick,
 }: {
-  result: RouteResult;
+  quote: Quote;
   unit: string;
   decimals: number;
   on: boolean;
@@ -203,72 +244,94 @@ const RouteChoice = ({
   /** how much more than the next route, on the best one */
   more?: string;
   onPick: () => void;
-}) => {
-  const quote = 'quote' in result ? result.quote : undefined;
-  const live = !!quote && !quote.notYet;
-  return (
-    <button
-      type='button'
-      onClick={onPick}
-      disabled={!live}
-      aria-pressed={on}
-      className={cn(
-        'flex w-full flex-col gap-2 border px-4 py-3.5 text-left transition-colors',
-        on ? 'border-zigner-gold bg-zigner-gold/10' : 'border-border-soft bg-elev-1',
-        live ? 'hover:border-border-hard' : 'cursor-default opacity-70',
-      )}
+}) => (
+  <button
+    type='button'
+    onClick={onPick}
+    disabled={!!quote.notYet}
+    aria-pressed={on}
+    className={cn(
+      'flex w-full flex-col gap-2 border px-4 py-3.5 text-left transition-colors',
+      on ? 'border-zigner-gold bg-zigner-gold/10' : 'border-border-soft bg-elev-1',
+      quote.notYet ? 'cursor-default opacity-70' : 'hover:border-border-hard',
+    )}
+  >
+    <span className='flex items-center gap-3'>
+      <span
+        className={cn(
+          'grid size-4 shrink-0 place-items-center border',
+          on ? 'border-zigner-gold' : 'border-border-hard',
+        )}
+      >
+        {on && <span className='size-2 bg-zigner-gold' />}
+      </span>
+      <span className='grow text-sm text-fg-high'>{routeLabel(quote.route, best)}</span>
+      <span className='text-sm text-fg-high'>
+        <Figure text={`${quote.amountOutText} ${unit}`} />
+      </span>
+    </span>
+    <span className='flex flex-wrap gap-x-3 pl-7 text-[11px] text-fg-muted'>
+      <RouteMeta quote={quote} unit={unit} decimals={decimals} more={more} />
+    </span>
+  </button>
+);
+
+const RouteMeta = ({
+  quote,
+  unit,
+  decimals,
+  more,
+}: {
+  quote: Quote;
+  unit: string;
+  decimals: number;
+  more?: string;
+}) => (
+  <>
+    {quote.timeText && <span>{quote.timeText}</span>}
+    {more && (
+      <span>
+        <Sensitive className='text-success'>{`${more} ${unit}`}</Sensitive> more
+      </span>
+    )}
+    {quote.cost && <CostMeta cost={quote.cost} unit={unit} decimals={decimals} />}
+    <span
+      className={
+        quote.notYet ? 'text-fg-muted' : quote.route === 'near' ? 'text-warn' : 'text-success'
+      }
     >
-      <span className='flex items-center gap-3'>
-        <span
-          className={cn(
-            'grid size-4 shrink-0 place-items-center border',
-            on ? 'border-zigner-gold' : 'border-border-hard',
-          )}
-        >
-          {on && <span className='size-2 bg-zigner-gold' />}
-        </span>
-        <span className='grow text-sm text-fg-high'>{routeLabel(result.route, best)}</span>
-        {quote && (
-          <span className='text-sm text-fg-high'>
-            <Sensitive>{`${quote.amountOutText} ${unit}`}</Sensitive>
-          </span>
-        )}
-      </span>
-      <span className='flex flex-wrap gap-x-3 pl-7 text-[11px] text-fg-muted'>
-        {quote ? (
-          <>
-            {quote.timeText && <span>{quote.timeText}</span>}
-            {more && (
-              <span>
-                <Sensitive className='text-success'>{`${more} ${unit}`}</Sensitive> more
-              </span>
-            )}
-            {quote.cost && <CostMeta cost={quote.cost} unit={unit} decimals={decimals} />}
-            <span
-              className={
-                quote.notYet
-                  ? 'text-fg-muted'
-                  : result.route === 'near'
-                    ? 'text-warn'
-                    : 'text-success'
-              }
-            >
-              {quote.notYet ?? ROUTES[result.route].custody}
-            </span>
-          </>
-        ) : (
-          <span className='lowercase'>
-            {errorLine('error' in result ? result.error : undefined)}
-          </span>
-        )}
-      </span>
-    </button>
-  );
-};
+      {quote.notYet ?? ROUTES[quote.route].custody}
+    </span>
+  </>
+);
+
+/** a route that has no price here: its name and one plain line, muted; a tap asks when it can */
+const QuietRow = ({
+  route,
+  line,
+  onPress,
+}: {
+  route: RouteId;
+  line: string;
+  onPress?: () => void;
+}) => (
+  <button
+    type='button'
+    onClick={onPress}
+    disabled={!onPress}
+    className={cn(
+      'truncate text-left text-[11px] text-fg-muted',
+      onPress ? 'underline-offset-4 hover:text-fg-high hover:underline' : 'cursor-default',
+    )}
+  >
+    {ROUTES[route].label} · {line}
+  </button>
+);
 
 export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const goBack = useBackNav(PopupPath.INDEX);
   const navigate = usePopupNav();
+  const queryClient = useQueryClient();
   const { address: zcashAddress } = useActiveAddress();
   const { tAddresses } = useTransparentAddresses(true);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
@@ -277,35 +340,38 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const storeId = useStore(activeZcashStoreId);
   const pocket = useStore(activeAccountIndex);
+  const wallet = useStore(swapWallet);
   const kind = selectedKeyInfo && walletKind(selectedKeyInfo, activeZcashWallet);
   const ufvk =
     activeZcashWallet?.ufvk ??
     (activeZcashWallet?.orchardFvk?.startsWith('uview') ? activeZcashWallet.orchardFvk : undefined);
   const { requestAuth, PasswordModal } = usePasswordGate();
   const { chosen, choose } = useSwapRoutes();
+  const { last, remember } = useSwapLast(wallet);
 
   // a link to a route zafu doesn't offer opens the normal router, with that one line
   const off = link?.link.route && ROUTES[link.link.route].off;
   const pinned = off ? undefined : link?.link.route;
   const [step, setStep] = useState<Step>('input');
-  const [direction, setDirection] = useState(link?.link.direction ?? 'into_zec');
-  const [amountIn, setAmountIn] = useState(link?.link.amount ?? '');
-  const [token, setToken] = useState<SwapToken>();
+  // what the user chose; anything left undefined is derived from defaults below
+  const [pickedDirection, setDirection] = useState(link?.link.direction);
+  const [pickedToken, setToken] = useState<SwapToken>();
+  const [typedAmount, setAmount] = useState(link?.link.amount);
+  const [typedAddress, setAddress] = useState(link?.link.address);
   // a link names its token by symbol: the picker opens (its list is the
   // fetch the egress sheet asks about) and picks it once the list is here
   const [linkToken, setLinkToken] = useState(link?.link);
   const [pickerOpen, setPickerOpen] = useState(!!link);
   const [contactsOpen, setContactsOpen] = useState(false);
-  const [otherAddress, setOtherAddress] = useState(link?.link.address ?? '');
-  const [results, setResults] = useState<RouteResult[]>([]);
+  const [routesOpen, setRoutesOpen] = useState(false);
   const [picked, setPicked] = useState<RouteId>();
+  // the firm quote review was opened with, and the live price it replaced
+  const [firm, setFirm] = useState<{ quote: Quote; was: Quote }>();
   const [reviewOpen, setReviewOpen] = useState(false);
   const [riskAcknowledged, setRiskAcknowledged] = useState(false);
   const [status, setStatus] = useState<SwapStatusView>();
   const [depositTxid, setDepositTxid] = useState<string>();
   const [error, setError] = useState<string>();
-  // a route's minimum, kept when it was the only thing in the way
-  const [minimum, setMinimum] = useState<{ key: string; min: bigint; line: string }>();
   // kept alongside the message so a blocked destination can offer an inline allow
   const [errorCause, setErrorCause] = useState<unknown>();
   const [signRequestQr, setSignRequestQr] = useState<string | null>(null);
@@ -315,38 +381,153 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   >([]);
   const buildStartRef = useRef(0);
 
+  // the spending pocket's own pool (as thor-deposit); nothing shows before its notes are read
+  const { ironwood } = usePoolNotes(storeId ?? selectedKeyInfo?.id);
+  const notes = useMemo(() => ironwood.filter(n => !n.spent).map(n => BigInt(n.value)), [ironwood]);
+  const balanceZec = notes.length
+    ? fromUnits(
+        notes.reduce((a, v) => a + v, 0n),
+        8,
+      )
+    : undefined;
+  // every note, the real ZIP-317 fee, priced as the dearer transparent output: the deposit
+  // address isn't known yet. thorchain's two-step pays a second fee (its own screen checks)
+  const maxZat = maxSendable(notes, { transparentRecipient: true }).amountZat;
+
+  const direction = pickedDirection ?? last?.direction ?? (notes.length ? 'from_zec' : 'into_zec');
+  const token = pickedToken ?? (link ? undefined : last?.token);
   const isFromZec = direction === 'from_zec';
-  const pair: SwapPair | undefined = token && {
-    direction,
-    symbol: token.symbol.toLowerCase(),
-    chain: token.chain,
-  };
+  const pair: SwapPair | undefined = token && pairOf({ direction, token });
   const key = pair && pairKey(pair);
   const pinnedRefusal = pinned && pair ? ROUTES[pinned].refuses(pair) : undefined;
   const unit = token?.symbol.toLowerCase() ?? 'select';
   const outUnit = isFromZec ? unit : 'zec';
   const inUnit = isFromZec ? 'zec' : unit;
+  const outDecimals = isFromZec ? (token?.decimals ?? 8) : 8;
+  const amountIn = typedAmount ?? defaultAmount(direction, maxZat, token);
+  const quick = isFromZec ? chips(maxZat) : [];
 
-  const quotes = results.flatMap(r => ('quote' in r ? [r.quote] : []));
+  // the chain the other address is on; the picker and "yours" follow it
+  const fieldChain = chainOfSwap(token?.chain);
+  const { yours, remember: rememberYours } = useYourAddresses(fieldChain);
+  const otherAddress = (typedAddress ?? yours[0]?.address ?? '').trim();
+  const fits = (a: string) => (fieldChain ? isAddressOn(a, fieldChain) : !!a);
+  // your refund address, offered to "yours" the first time it is used
+  const [rememberIt, setRememberIt] = useState(true);
+  const otherValid = !!fieldChain && isAddressOn(otherAddress, fieldChain);
+  const known = yours.some(y => y.address === otherAddress);
+
+  // what the routes are asked: a default at once, a typed value once it rests
+  const settledAmount = useSettled(amountIn, parseFloat(amountIn) > 0);
+  const settledAddress = useSettled(otherAddress, fits(otherAddress));
+  const askAmount = typedAmount === undefined ? amountIn : settledAmount;
+  const askAddress = typedAddress === undefined ? otherAddress : settledAddress;
+  const signsOpReturn = !!kind && !!CAPS[kind].opReturn;
+  const zcashTransparent = tAddresses[0];
+  const usable = parseFloat(askAmount ?? '') > 0 && !!askAddress && fits(askAddress);
+  const req = useMemo<QuoteRequest | undefined>(
+    () =>
+      token && zcashAddress && usable
+        ? {
+            direction,
+            token,
+            amountIn: askAmount!,
+            zcashAddress,
+            zcashTransparent,
+            otherAddress: askAddress,
+            signsOpReturn,
+          }
+        : undefined,
+    [
+      direction,
+      token,
+      zcashAddress,
+      usable,
+      askAmount,
+      askAddress,
+      zcashTransparent,
+      signsOpReturn,
+    ],
+  );
+  const typing = amountIn !== askAmount || otherAddress !== askAddress;
+
+  // every route for the pair: allowed ones are asked, the rest say why in one line
+  const egress = useQuery(egressViewQuery).data;
+  const gated = pair && egress && !pinnedRefusal ? gates(pair, egress, pinned) : [];
+  const asked = req && wallet ? gated.filter(g => !g.line) : [];
+  const answers = useQueries({
+    queries: asked.map(({ route }) => {
+      const q = quoteQuery(route, wallet!, req!);
+      return {
+        ...q,
+        // the last price of this pair stays, dimmed, while the next amount is asked
+        placeholderData: () => lastOfPair(queryClient, q.queryKey),
+        // the review holds its own firm quote; nothing is asked behind it
+        enabled: step === 'input' && !reviewOpen,
+      };
+    }),
+  });
+  const quotes = rank(answers.flatMap(a => (a.data ? [a.data] : [])));
   const best = quotes.find(q => !q.notYet);
   const live = (id?: RouteId) => quotes.find(q => q.route === id && !q.notYet);
   const quote = live(picked) ?? live(key ? chosen[key] : undefined) ?? best;
-  const outDecimals = isFromZec ? (token?.decimals ?? 8) : 8;
+  const view = quote ?? quotes[0];
+  const answerOf = (id?: RouteId) => answers[asked.findIndex(g => g.route === id)];
+  const shown = answerOf(view?.route);
+  const stale = typing || !!shown?.isPlaceholderData || !!shown?.isFetching;
+  const fetching = answers.some(a => a.isFetching);
+  const expiredLive = !!view?.expiresAt && view.expiresAt <= Date.now();
+  const reviewable =
+    !!quote && !typing && !answerOf(quote.route)?.isPlaceholderData && !expiredLive;
   const ahead = lead(quotes);
   const more = ahead ? fromUnits(ahead, outDecimals) : undefined;
-  const belowMin = !!minimum && minimum.key === key && toUnits(amountIn, 8) < minimum.min;
-  // only routes zafu can't send yet: shown for comparison, nothing to review
-  const view = quote ?? quotes[0];
-  const carrier = pair && quote && poolAsset(quote.route, pair)?.carrier;
-  // the deadline on routes is the price's; on the deposit screen it is the window to pay in
+  // the routes with no price: refused, failed, blocked or not asked yet
+  const quiet = [
+    ...asked.flatMap((g, i) => {
+      const a = answers[i];
+      return a && !a.data && a.error ? [{ route: g.route, line: plain(g.route, a.error) }] : [];
+    }),
+    ...gated.flatMap(g => (g.line ? [{ ...g, line: g.line }] : [])),
+  ];
+  const below = answers.find(a => a.error instanceof BelowMinimum && !a.data)?.error;
+  const askable = gated.filter(g => g.ask).map(g => g.route);
+  const allFailed =
+    !!req && !quotes.length && !fetching && asked.length > 0 && quiet.length >= asked.length;
+
+  // a route not yet allowed asks once, on a tap; then its price is asked like the rest
+  const askFor = async (routes: RouteId[]) => {
+    for (const r of routes) {
+      await requestEgressOptIn(ROUTES[r].egress);
+    }
+  };
+
+  // the prices shown are kept for a reopened popup, and put back as this one opens
+  useEffect(() => {
+    if (!wallet) {
+      return;
+    }
+    void seedSwapQuotes(queryClient, wallet);
+    return keepSwapQuotes(queryClient, wallet);
+  }, [queryClient, wallet]);
+  useEffect(() => watchEgress(queryClient), [queryClient]);
+
+  // the opening request, kept for the next swap tap to warm (only an untouched form)
+  useEffect(() => {
+    if (wallet && req && typedAmount === undefined && typedAddress === undefined) {
+      void keepSwapPreload(wallet, req);
+    }
+  }, [wallet, req, typedAmount, typedAddress]);
+
+  const deal = firm?.quote;
+  const carrier = pair && deal && poolAsset(deal.route, pair)?.carrier;
+  // the deadline in review is the price's; on the deposit screen it is the window to pay in
   const left = useDeadlineCountdown(
-    step === 'routes' || step === 'deposit' ? (view?.expiresAt ?? null) : null,
+    reviewOpen || step === 'deposit' ? (deal?.expiresAt ?? null) : null,
   );
-  const expired = step === 'routes' && !!view?.expiresAt && view.expiresAt <= Date.now();
-  const provider = quote && PROVIDERS[quote.route];
+  const expired = reviewOpen && !!deal?.expiresAt && deal.expiresAt <= Date.now();
+  const provider = deal && PROVIDERS[deal.route];
   const watchable =
-    !!provider?.status &&
-    (quote?.watch === 'deposit' || (quote?.watch === 'txid' && !!depositTxid));
+    !!provider?.status && (deal?.watch === 'deposit' || (deal?.watch === 'txid' && !!depositTxid));
 
   // zcash-send-progress
   useEffect(() => {
@@ -364,15 +545,6 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
     window.addEventListener('zcash-send-progress', handler);
     return () => window.removeEventListener('zcash-send-progress', handler);
   }, [step]);
-
-  // the spending pocket's own pool (as thor-deposit); nothing shows before its notes are read
-  const { ironwood } = usePoolNotes(storeId ?? selectedKeyInfo?.id);
-  const notes = useMemo(() => ironwood.filter(n => !n.spent).map(n => BigInt(n.value)), [ironwood]);
-  const total = notes.reduce((a, v) => a + v, 0n);
-  const balanceZec = notes.length ? fromUnits(total, 8) : undefined;
-  // every note, the real ZIP-317 fee, priced as the dearer transparent output: the deposit
-  // address isn't known yet. thorchain's two-step pays a second fee (its own screen checks)
-  const maxZec = fromUnits(maxSendable(notes, { transparentRecipient: true }).amountZat, 8);
 
   // the picker's tokens, fetched only once the user opens it, never merely from opening swap
   const pickerRoutes = pinned ? [pinned] : QUOTABLE;
@@ -400,76 +572,67 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
     }
   }, [linkToken, tokenQuery.data]);
 
-  // the chain the other address is on; the picker and "yours" follow it
-  const fieldChain = chainOfSwap(token?.chain);
-  const { yours, remember } = useYourAddresses(fieldChain);
-  // your refund address, offered to "yours" the first time it is used
-  const [rememberIt, setRememberIt] = useState(true);
-  const otherValid = !!fieldChain && isAddressOn(otherAddress, fieldChain);
-  const known = yours.some(y => y.address === otherAddress.trim());
-
-  const flip = () => {
-    setDirection(d => (d === 'from_zec' ? 'into_zec' : 'from_zec'));
-    setAmountIn('');
-    setOtherAddress('');
+  // a new pair starts from its defaults again, and is where the screen reopens
+  const choosePair = (d: SwapPair['direction'], t: SwapToken | undefined) => {
+    setDirection(d);
+    setToken(t);
+    setAddress(undefined);
     setRememberIt(true);
-  };
-
-  const requestQuotes = async () => {
-    if (!token || !pair || !zcashAddress) {
-      return;
-    }
-    setStep('quoting');
-    setError(undefined);
     setPicked(undefined);
-    try {
-      const got = await quoteRoutes(candidates(pair, pinned), {
-        direction,
-        token,
-        amountIn,
-        zcashAddress,
-        zcashTransparent: tAddresses[0],
-        otherAddress,
-        signsOpReturn: !!kind && !!CAPS[kind].opReturn,
-      });
-      const failed = got.find(r => 'error' in r);
-      if (!got.some(r => 'quote' in r)) {
-        const below = got.flatMap(r =>
-          'error' in r && r.error instanceof BelowMinimum ? [r.error] : [],
-        )[0];
-        if (below && key) {
-          setMinimum({ key, min: below.min, line: below.message });
-          setStep('input');
-          return;
-        }
-        const cause = failed && 'error' in failed ? failed.error : undefined;
-        setErrorCause(cause);
-        setError(
-          got.length ? errorLine(cause) : 'no route was allowed · nothing was asked of anyone',
-        );
-        setStep('error');
-        return;
-      }
-      setResults(got);
-      setRiskAcknowledged(false);
-      setStep('routes');
-    } catch (err) {
-      setErrorCause(err);
-      setError(errorLine(err));
-      setStep('error');
+    setError(undefined);
+    if (d !== direction || d === 'into_zec') {
+      setAmount(undefined);
     }
+    remember({ direction: d, token: t });
   };
+  const flip = () => choosePair(isFromZec ? 'into_zec' : 'from_zec', token);
 
   const pickRoute = (route: RouteId) => {
     setPicked(route);
+    setRoutesOpen(false);
     // remember only a change from the best route, and never over a link's pin
     if (key && !pinned) {
       void choose(key, route === best?.route ? undefined : route);
     }
   };
 
+  // review opens at once on the live price; a dry one is made firm behind it,
+  // and nothing can be confirmed until it is
+  const firmAsk = useRef<AbortController>(undefined);
+  const openReview = async () => {
+    if (!reviewable || !req) {
+      return;
+    }
+    const was = quote;
+    setError(undefined);
+    setFirm({ quote: was, was });
+    setRiskAcknowledged(false);
+    setReviewOpen(true);
+    if (was.depositAddress) {
+      return;
+    }
+    firmAsk.current?.abort();
+    const ask = (firmAsk.current = new AbortController());
+    try {
+      const got = await PROVIDERS[was.route]!.quote({ ...req, dry: false }, ask.signal);
+      if (!ask.signal.aborted) {
+        setFirm({ quote: got, was });
+      }
+    } catch (e) {
+      if (!ask.signal.aborted) {
+        setReviewOpen(false);
+        setErrorCause(e);
+        setError(`${ROUTES[was.route].label} · ${plain(was.route, e)}`);
+      }
+    }
+  };
+  const closeReview = () => {
+    firmAsk.current?.abort();
+    setReviewOpen(false);
+  };
+
   const confirm = async () => {
-    if (!quote || !selectedKeyInfo) {
+    if (!deal?.depositAddress || !selectedKeyInfo) {
       return;
     }
     setReviewOpen(false);
@@ -478,27 +641,33 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
     // into zcash: the user pays from their other wallet; zafu shows where and watches
     if (!isFromZec) {
       if (rememberIt && otherValid && !known) {
-        void remember(otherAddress.trim()).catch(() => undefined);
+        void rememberYours(otherAddress).catch(() => undefined);
       }
       setStep('deposit');
       return;
     }
-    if (quote.notYet) {
+    if (deal.notYet) {
       return;
     }
     // a memo deposit is never a shielded send: a t->t with an OP_RETURN, its own steps
-    if (quote.memo) {
+    if (deal.memo) {
       setStep('thor-out');
       return;
     }
 
     try {
       const walletId = selectedKeyInfo.id;
-      const deposit = { storeId, walletId, pocket, zidecarUrl, to: quote.depositAddress, amountIn };
+      const deposit = {
+        storeId,
+        walletId,
+        pocket,
+        zidecarUrl,
+        to: deal.depositAddress,
+        amountIn,
+      };
       setSendSteps([]);
       if (selectedKeyInfo.type === 'mnemonic') {
         if (!(await requestAuth())) {
-          setStep('routes');
           return;
         }
         buildStartRef.current = Date.now();
@@ -527,7 +696,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
           accountIndex: pocket,
           sighash: hexToBytes(result.sighash),
           orchardAlphas: result.alphas.map(a => hexToBytes(a)),
-          summary: `swap ${amountIn} ZEC`,
+          summary: `swap ${deposit.amountIn} ZEC`,
           mainnet: true,
         }),
       );
@@ -580,13 +749,13 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
 
   // watch the swap while the deposit is out, on routes that can be watched
   useEffect(() => {
-    if ((step !== 'deposit' && step !== 'polling') || !quote || !watchable) {
+    if ((step !== 'deposit' && step !== 'polling') || !deal || !watchable) {
       return;
     }
     const watch = provider.status!;
     const interval = setInterval(async () => {
       try {
-        const next = await watch(quote, depositTxid);
+        const next = await watch(deal, depositTxid);
         setStatus(next);
         if (next.phase === 'failed') {
           setError(next.line);
@@ -600,24 +769,17 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
       }
     }, 5000);
     return () => clearInterval(interval);
-  }, [step, quote, provider, watchable, depositTxid]);
+  }, [step, deal, provider, watchable, depositTxid]);
 
   const reset = () => {
     setStep('input');
-    setResults([]);
+    setFirm(undefined);
     setStatus(undefined);
     setDepositTxid(undefined);
     setError(undefined);
-    setAmountIn('');
+    setAmount(undefined);
   };
 
-  const canQuote =
-    !!token &&
-    parseFloat(amountIn) > 0 &&
-    !!zcashAddress &&
-    !!otherAddress &&
-    !pinnedRefusal &&
-    !belowMin;
   // what this form would fill for someone else: never this wallet's own refund
   // address, and a route only when the user pinned one
   const sharedRoute = pinned ?? (key ? chosen[key] : undefined);
@@ -635,31 +797,73 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
       },
     });
 
-  const header = (meta?: ReactNode) => (
-    <ScreenHeader
-      title='swap'
-      onBack={step === 'routes' ? () => setStep('input') : goBack}
-      meta={meta}
-    />
-  );
+  const header = (meta?: ReactNode) => <ScreenHeader title='swap' onBack={goBack} meta={meta} />;
 
-  if (step === 'input' || step === 'quoting') {
+  if (step === 'input') {
+    const updatedAt = shown?.dataUpdatedAt ?? 0;
+    const next = view && updatedAt + (refreshIn(view, updatedAt, updatedAt) || 0);
+    const note = deal && NOTE[deal.route][direction];
+    const helper =
+      error ?? pinnedRefusal ?? (quote ? undefined : below?.message) ?? (off || undefined);
     return (
-      <div className='flex h-full flex-col bg-canvas'>
+      <div
+        className='flex h-full flex-col bg-canvas'
+        // enter goes to review once a price is here
+        onKeyDown={e => {
+          if (e.key === 'Enter' && e.target instanceof HTMLInputElement && reviewable) {
+            e.preventDefault();
+            void openReview();
+          }
+        }}
+      >
         {PasswordModal}
-        {header(pinned ? `via ${ROUTES[pinned].label}` : undefined)}
+        {header(
+          pinned ? (
+            `via ${ROUTES[pinned].label}`
+          ) : expiredLive ? (
+            <span className='text-hanko-light'>quote expired</span>
+          ) : fetching || !next ? (
+            fetching && 'updating'
+          ) : (
+            <RefreshIn at={next} />
+          ),
+        )}
         <Main className='gap-[18px] pt-5'>
-          <AmountField
-            label='you pay'
-            value={amountIn}
-            onChange={setAmountIn}
-            unit={isFromZec ? 'zec' : tokenQuery.isFetching ? 'reading' : unit}
-            onUnit={isFromZec ? undefined : () => setPickerOpen(true)}
-            available={isFromZec ? balanceZec : undefined}
-            onMax={isFromZec && balanceZec ? () => setAmountIn(maxZec) : undefined}
-            helper={error ?? pinnedRefusal ?? (belowMin ? minimum.line : off || undefined)}
-            warn={!!(error ?? pinnedRefusal) || belowMin}
-          />
+          <div className='flex flex-col gap-2'>
+            <AmountField
+              label='you pay'
+              value={amountIn}
+              onChange={v => {
+                setAmount(v);
+                setError(undefined);
+              }}
+              unit={isFromZec ? 'zec' : tokenQuery.isFetching ? 'reading' : unit}
+              onUnit={isFromZec ? undefined : () => setPickerOpen(true)}
+              available={isFromZec ? balanceZec : undefined}
+              helper={helper}
+              warn={!!helper && helper !== off}
+            />
+            {quick.length > 0 && (
+              <div className='-mt-1 flex justify-end gap-1.5'>
+                {quick.map(c => (
+                  <button
+                    key={c.label}
+                    type='button'
+                    onClick={() => setAmount(c.amount)}
+                    aria-pressed={c.amount === amountIn}
+                    className={cn(
+                      'h-7 border px-2.5 text-[11px] transition-colors',
+                      c.amount === amountIn
+                        ? 'border-zigner-gold text-fg-high'
+                        : 'border-border-soft text-fg-muted hover:border-border-hard hover:text-fg-high',
+                    )}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <Button
             variant='secondary'
             size='sm'
@@ -669,15 +873,82 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
           >
             <span className='i-lucide-arrow-up-down size-4' aria-hidden='true' />
           </Button>
-          <RowGroup>
-            <Row
-              type='value'
-              label='you get'
-              description={token && isFromZec ? `on ${chainName(token.chain)}` : undefined}
-              value={isFromZec ? (tokenQuery.isFetching ? 'reading' : unit) : 'zec'}
-              onPress={isFromZec ? () => setPickerOpen(true) : flip}
-            />
-          </RowGroup>
+          <div className='flex flex-col gap-1.5'>
+            <span className='text-xs text-fg-muted'>
+              you get{token && isFromZec ? ` · on ${chainName(token.chain)}` : ''}
+            </span>
+            <button
+              type='button'
+              onClick={isFromZec ? () => setPickerOpen(true) : flip}
+              aria-label={isFromZec ? 'choose what you get' : undefined}
+              className='flex h-14 items-center justify-between border border-border-soft bg-elev-1 px-3 text-left'
+            >
+              <span className='min-w-0 truncate font-display text-2xl text-fg-high'>
+                {view ? (
+                  <Figure text={view.amountOutText} stale={stale} struck={expiredLive} />
+                ) : (
+                  <span className='text-fg-dim'>0</span>
+                )}
+              </span>
+              <span className='flex items-center gap-1 text-[13px] text-fg-muted lowercase'>
+                {isFromZec ? (tokenQuery.isFetching ? 'reading' : unit) : 'zec'}
+                <span className='i-lucide-chevron-down size-3' />
+              </span>
+            </button>
+          </div>
+          {token && (
+            <div className='flex flex-col gap-1.5'>
+              <button
+                type='button'
+                onClick={() => setRoutesOpen(true)}
+                disabled={!quotes.length}
+                className='flex min-h-[58px] flex-col justify-center gap-1 border border-border-soft bg-elev-1 px-4 py-2.5 text-left disabled:cursor-default'
+              >
+                {view ? (
+                  <>
+                    <span className='flex items-center justify-between text-sm text-fg-high'>
+                      {routeLabel(view.route, view.route === best?.route)}
+                      <span className='i-lucide-chevron-right size-3.5 text-fg-muted' />
+                    </span>
+                    <span
+                      className={cn(
+                        'flex flex-wrap gap-x-3 text-[11px] text-fg-muted transition-opacity duration-300',
+                        stale && 'opacity-50',
+                      )}
+                    >
+                      <RouteMeta quote={view} unit={outUnit} decimals={outDecimals} />
+                    </span>
+                  </>
+                ) : (
+                  <span className='text-[11px] text-fg-muted'>
+                    {allFailed
+                      ? 'no route can take this right now · nothing was sent'
+                      : fetching
+                        ? 'asking for prices'
+                        : 'route'}
+                  </span>
+                )}
+              </button>
+              {quotes
+                .filter(q => q.route !== view?.route)
+                .map(q => (
+                  <QuietRow
+                    key={q.route}
+                    route={q.route}
+                    line={`${q.amountOutText} ${outUnit}${q.notYet ? ` · ${q.notYet}` : ''}`}
+                    onPress={() => setRoutesOpen(true)}
+                  />
+                ))}
+              {quiet.map(r => (
+                <QuietRow
+                  key={r.route}
+                  route={r.route}
+                  line={r.line}
+                  onPress={'ask' in r && r.ask ? () => void askFor([r.route]) : undefined}
+                />
+              ))}
+            </div>
+          )}
           <ToField
             id='swap-other'
             label={
@@ -685,13 +956,13 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
                 ? `${token ? chainName(token.chain) : 'destination'} recipient`
                 : `your ${token ? chainName(token.chain) : 'source'} address · for refunds`
             }
-            value={otherAddress}
+            value={typedAddress ?? otherAddress}
             onChange={v => {
               if (looksLikeLink(v)) {
                 navigate(PopupPath.LINK, { state: { uri: v, via: 'pasted' } });
                 return;
               }
-              setOtherAddress(v);
+              setAddress(v);
             }}
             placeholder={isFromZec ? 'recipient address' : 'your address'}
             onContacts={fieldChain ? () => setContactsOpen(true) : undefined}
@@ -721,14 +992,15 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
           )}
         </Main>
         <Footer>
-          <Button
-            className='w-full'
-            onClick={() => void requestQuotes()}
-            disabled={!canQuote}
-            loading={step === 'quoting'}
-          >
-            get quote
-          </Button>
+          {!quotes.length && req && askable.length > 0 && !fetching ? (
+            <Button className='w-full' onClick={() => void askFor(askable)}>
+              ask for prices
+            </Button>
+          ) : (
+            <Button className='w-full' onClick={() => void openReview()} disabled={!reviewable}>
+              review swap
+            </Button>
+          )}
         </Footer>
         <TokenSheet
           title={isFromZec ? 'you get' : 'you pay'}
@@ -736,136 +1008,75 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
           onOpenChange={setPickerOpen}
           tokens={tokens}
           loading={tokenQuery.isFetching}
-          onPick={t => {
-            setToken(t);
-            setOtherAddress('');
-            setRememberIt(true);
-          }}
+          onPick={t => choosePair(direction, t)}
         />
         {fieldChain && (
           <AddressSheet
             chain={fieldChain}
             open={contactsOpen}
             onOpenChange={setContactsOpen}
-            onPick={row => setOtherAddress(row.address)}
+            onPick={row => setAddress(row.address)}
             onPaste={() => document.getElementById('swap-other')?.focus()}
           />
         )}
-      </div>
-    );
-  }
-
-  if (step === 'thor-out' && quote) {
-    return (
-      <ThorDeposit
-        quote={quote}
-        amountZat={toUnits(amountIn, 8)}
-        onSent={txid => {
-          setDepositTxid(txid);
-          setStep('polling');
-        }}
-        onBack={() => setStep('routes')}
-        onExpired={() => void requestQuotes()}
-      />
-    );
-  }
-
-  if (step === 'routes' && view) {
-    const note = quote && NOTE[quote.route][direction];
-    return (
-      <div className='flex h-full flex-col bg-canvas'>
-        {PasswordModal}
-        {header(
-          expired ? (
-            <span className='text-hanko-light'>quote expired</span>
-          ) : (
-            `good for ${untilLabel(left)}`
-          ),
-        )}
-        <Main className='gap-3 pt-4'>
-          <div className='flex flex-col border border-border-soft bg-elev-1'>
-            {[
-              ['you pay', amountIn, inUnit],
-              ['you get', view.amountOutText, outUnit],
-            ].map(([label, figure, u], i) => (
-              <div
-                key={label}
-                className={cn(
-                  'flex items-center justify-between px-4 py-2.5',
-                  i && 'border-t border-border-soft',
-                )}
-              >
-                <span className='flex flex-col gap-1.5'>
-                  <span className='text-[11px] text-fg-muted'>{label}</span>
-                  <span className='font-display text-[22px] leading-none text-fg-high'>
-                    <Sensitive className={cn(expired && i && 'line-through')}>{figure}</Sensitive>
-                  </span>
-                </span>
-                <span className='border border-border-hard px-3 py-2 text-[13px] text-fg'>{u}</span>
-              </div>
-            ))}
-          </div>
-          <span className='pt-2 text-[11px] text-fg-muted'>route</span>
-          {results.map(r => (
+        <Sheet open={routesOpen} onOpenChange={setRoutesOpen} title='route'>
+          {quotes.map(q => (
             <RouteChoice
-              key={r.route}
-              result={r}
+              key={q.route}
+              quote={q}
               unit={outUnit}
-              on={r.route === quote?.route}
-              best={r.route === best?.route}
-              more={r.route === best?.route ? more : undefined}
+              on={q.route === quote?.route}
+              best={q.route === best?.route}
+              more={q.route === best?.route ? more : undefined}
               decimals={outDecimals}
-              onPick={() => pickRoute(r.route)}
+              onPick={() => pickRoute(q.route)}
             />
           ))}
-          {note && (
-            <StatusSlot tone={quote.route === 'near' ? 'warn' : 'info'} icon='i-lucide-eye'>
-              {note}
-            </StatusSlot>
-          )}
-        </Main>
-        <Footer>
-          <Button
-            className='w-full'
-            onClick={() => setReviewOpen(true)}
-            disabled={expired || !quote}
-          >
-            review swap
-          </Button>
-        </Footer>
-        {quote && (
-          <Sheet open={reviewOpen} onOpenChange={setReviewOpen} title='review swap'>
+          {quiet.map(r => (
+            <QuietRow key={r.route} route={r.route} line={r.line} />
+          ))}
+        </Sheet>
+        {deal && firm && (
+          <Sheet open={reviewOpen} onOpenChange={o => !o && closeReview()} title='review swap'>
             <div className='flex flex-col gap-1.5 text-xs'>
               {/* only the amounts hide; the addresses and memo are what gets reviewed */}
               {(
                 [
-                  ['you send', `${quote.amountInText || amountIn} ${inUnit}`, true],
-                  ['you receive', `${quote.amountOutText} ${outUnit}`, true],
-                  ['route', ROUTES[quote.route].label],
-                  ['recipient', quote.recipient],
-                  [isFromZec ? 'deposit address' : 'pay to', quote.depositAddress],
-                  ...(quote.memo ? [['memo', quote.memo]] : []),
+                  ['you send', `${deal.amountInText || amountIn} ${inUnit}`, true],
+                  ['you receive', `${deal.amountOutText} ${outUnit}`, true],
+                  ['route', ROUTES[deal.route].label],
+                  ['recipient', deal.recipient],
+                  [isFromZec ? 'deposit address' : 'pay to', deal.depositAddress || 'issuing'],
+                  ...(deal.memo ? [['memo', deal.memo]] : []),
                 ] as [string, string, boolean?][]
               ).map(([k, v, amount]) => (
                 <div key={k} className='flex justify-between gap-3'>
                   <span className='shrink-0 text-fg-muted'>{k}</span>
                   <span className='break-all text-right font-mono'>
+                    {/* a firm price that moved from the live one shows the old one struck */}
+                    {k === 'you receive' && firm.was.amountOut !== deal.amountOut && (
+                      <Sensitive className='mr-2 text-fg-muted line-through'>
+                        {firm.was.amountOutText}
+                      </Sensitive>
+                    )}
                     {amount ? <Sensitive>{v}</Sensitive> : v}
                   </span>
                 </div>
               ))}
-              {quote.cost && <CostList cost={quote.cost} unit={outUnit} decimals={outDecimals} />}
+              {deal.cost && <CostList cost={deal.cost} unit={outUnit} decimals={outDecimals} />}
             </div>
-            {quote.route === best?.route && more && (
+            {deal.route === best?.route && more && (
               <p className='text-xs text-fg-muted'>
                 you get <Sensitive className='text-success'>{`${more} ${outUnit}`}</Sensitive> more
                 than the next route
               </p>
             )}
-            {quote.refundLine && <p className='text-xs text-fg-muted'>{quote.refundLine}</p>}
+            {note && <p className='text-xs text-fg-muted'>{note}</p>}
+            {deal.refundLine && <p className='text-xs text-fg-muted'>{deal.refundLine}</p>}
             <p className='text-xs text-fg-muted'>
-              {ROUTES[quote.route].label} · {ROUTES[quote.route].custody}
-              {quote.route === 'near' && (
+              {ROUTES[deal.route].label} · {ROUTES[deal.route].custody}
+              {deal.expiresAt && !expired && ` · good for ${untilLabel(left)}`}
+              {deal.route === 'near' && (
                 <>
                   {' · '}
                   <a
@@ -890,39 +1101,44 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
             </label>
             {link?.via && <p className='text-[11px] text-fg-muted'>{viaLine(link.via)}</p>}
             <div className='flex gap-2'>
-              <Button variant='secondary' className='flex-1' onClick={() => setReviewOpen(false)}>
+              <Button variant='secondary' className='flex-1' onClick={closeReview}>
                 back
               </Button>
-              <Button
-                className='flex-1'
-                onClick={() => void confirm()}
-                disabled={!riskAcknowledged || expired}
-              >
-                {/* a memo deposit has its own reviews next; nothing is signed here */}
-                {isFromZec ? (quote.memo ? 'continue' : 'confirm & send') : 'show deposit address'}
-              </Button>
+              {expired ? (
+                // the price moved on: closing review asks again, nothing was sent
+                <Button className='flex-1' onClick={closeReview}>
+                  get a new quote
+                </Button>
+              ) : (
+                <Button
+                  className='flex-1'
+                  onClick={() => void confirm()}
+                  disabled={!riskAcknowledged || !deal.depositAddress}
+                  loading={!deal.depositAddress}
+                >
+                  {/* a memo deposit has its own reviews next; nothing is signed here */}
+                  {isFromZec ? (deal.memo ? 'continue' : 'confirm & send') : 'show deposit address'}
+                </Button>
+              )}
             </div>
           </Sheet>
         )}
-        <Sheet
-          open={expired}
-          onOpenChange={open => !open && setStep('input')}
-          title='this quote expired'
-        >
-          <p className='text-sm text-fg-muted'>
-            rates move quickly, so a swap quote is only good for a short window. nothing was sent -
-            your {inUnit} is still yours. get a fresh quote to continue.
-          </p>
-          <div className='mt-2 flex gap-2'>
-            <Button variant='secondary' className='flex-1' onClick={() => setStep('input')}>
-              not now
-            </Button>
-            <Button className='flex-1' onClick={() => void requestQuotes()}>
-              get a new quote
-            </Button>
-          </div>
-        </Sheet>
       </div>
+    );
+  }
+
+  if (step === 'thor-out' && deal) {
+    return (
+      <ThorDeposit
+        quote={deal}
+        amountZat={toUnits(amountIn, 8)}
+        onSent={txid => {
+          setDepositTxid(txid);
+          setStep('polling');
+        }}
+        onBack={() => setStep('input')}
+        onExpired={() => setStep('input')}
+      />
     );
   }
 
@@ -966,17 +1182,17 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
           </div>
         )}
 
-        {(step === 'deposit' || step === 'polling') && quote && (
+        {(step === 'deposit' || step === 'polling') && deal && (
           <>
             {step === 'deposit' && !isFromZec && (
               <>
-                {quote.memo && (
+                {deal.memo && (
                   <div className='flex flex-col gap-2 border border-zigner-gold bg-zigner-gold/10 p-3'>
                     <span className='flex items-center justify-between'>
                       <span className='text-xs text-fg-high'>memo · required</span>
-                      <CopyButton text={quote.memo} label='copy memo' />
+                      <CopyButton text={deal.memo} label='copy memo' />
                     </span>
-                    <span className='break-all font-mono text-sm text-fg-high'>{quote.memo}</span>
+                    <span className='break-all font-mono text-sm text-fg-high'>{deal.memo}</span>
                     {carrier && (
                       <span className='text-[11px] text-fg-muted'>{MEMO_HOW[carrier]}</span>
                     )}
@@ -984,23 +1200,23 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
                 )}
                 <div className='flex flex-col items-center gap-3 border border-border-soft bg-elev-1 p-3'>
                   <p className='text-xs text-fg-muted'>
-                    send exactly <Sensitive>{`${quote.amountInText} ${inUnit}`}</Sensitive> on{' '}
+                    send exactly <Sensitive>{`${deal.amountInText} ${inUnit}`}</Sensitive> on{' '}
                     {token && chainName(token.chain)} to
                   </p>
-                  <QrCode value={quote.depositAddress} size={160} label='deposit address' />
-                  {quote.expiresAt && (
+                  <QrCode value={deal.depositAddress} size={160} label='deposit address' />
+                  {deal.expiresAt && (
                     <p className={cn('text-xs', left ? 'text-zigner-gold' : 'text-fg-muted')}>
                       {left
                         ? `pay within ${untilLabel(left)}`
                         : "the deposit window has closed · please don't send to it now"}
                     </p>
                   )}
-                  {quote.gasLine && <p className='text-xs text-fg-muted'>{quote.gasLine}</p>}
+                  {deal.gasLine && <p className='text-xs text-fg-muted'>{deal.gasLine}</p>}
                   <div className='flex w-full items-center gap-2'>
                     <span className='min-w-0 flex-1 break-all font-mono text-xs'>
-                      {quote.depositAddress}
+                      {deal.depositAddress}
                     </span>
-                    <CopyButton text={quote.depositAddress} label='copy' />
+                    <CopyButton text={deal.depositAddress} label='copy' />
                   </div>
                 </div>
               </>
@@ -1020,12 +1236,12 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
         {step === 'done' && (
           <StatusSlot tone='gold' icon='i-ph-check'>
             swap complete ·{' '}
-            <Sensitive>{`${quote?.amountInText ?? ''} ${inUnit} - ${quote?.amountOutText ?? ''} ${outUnit}`}</Sensitive>
+            <Sensitive>{`${deal?.amountInText ?? ''} ${inUnit} - ${deal?.amountOutText ?? ''} ${outUnit}`}</Sensitive>
           </StatusSlot>
         )}
-        {step === 'done' && quote?.cost && (
+        {step === 'done' && deal?.cost && (
           <div className='flex flex-col gap-1.5 text-xs'>
-            <CostList cost={quote.cost} unit={outUnit} decimals={outDecimals} />
+            <CostList cost={deal.cost} unit={outUnit} decimals={outDecimals} />
           </div>
         )}
 

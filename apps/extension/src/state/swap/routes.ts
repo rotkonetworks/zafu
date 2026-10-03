@@ -130,7 +130,3 @@ export const routeLabel = (id: RouteId, best: boolean): string =>
 
 /** the routes zafu offers at all */
 export const OFFERED = ROUTE_IDS.filter(id => !ROUTES[id].off);
-
-/** the routes that may carry a pair: the pinned one, or every offered route that can */
-export const candidates = (pair: SwapPair, pinned?: RouteId): RouteId[] =>
-  pinned && !ROUTES[pinned].off ? [pinned] : OFFERED.filter(id => !ROUTES[id].refuses(pair));

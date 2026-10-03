@@ -37,7 +37,7 @@ import {
   type Quote,
   type QuoteRequest,
 } from './provider';
-import { candidates, OFFERED, routeLabel, ROUTES } from './routes';
+import { OFFERED, routeLabel, ROUTES, type RouteId, type SwapPair } from './routes';
 import {
   BelowMinimum,
   checkQuote as nodeCheckQuote,
@@ -49,7 +49,22 @@ import {
 import { thorProvider } from './thor';
 import { mayaProvider } from './maya';
 import { nearCost, nearProvider } from './near';
-import { quoteRoutes, routeTokens } from '.';
+import { PROVIDERS, routeTokens } from '.';
+import { gates } from './live';
+import type { DestinationView } from '../../net/egress-policy';
+
+/** every destination on: the routes a pair would ask */
+const ALL_ON = ['near-swap', 'thorchain', 'mayachain'].map(id => ({
+  id,
+  on: true,
+  why: 'you-allowed',
+}));
+const candidates = (pair: SwapPair, pinned?: RouteId) =>
+  gates(pair, ALL_ON as DestinationView[], pinned)
+    .filter(g => !g.line)
+    .map(g => g.route);
+const quoteEach = (ids: RouteId[], r: QuoteRequest) =>
+  Promise.allSettled(ids.map(id => PROVIDERS[id]!.quote(r)));
 
 const checkQuote = (
   ...a: Parameters<typeof nodeCheckQuote> extends [string, ...infer R] ? R : never
@@ -525,7 +540,7 @@ describe('maya', () => {
   it('asks nothing of mayanode on a quote round while off', async () => {
     allow.add('near-swap').add('thorchain').add('mayachain');
     const urls = thornode(thorQuote());
-    await quoteRoutes(candidates({ direction: 'into_zec', symbol: 'btc', chain: 'btc' }), req());
+    await quoteEach(candidates({ direction: 'into_zec', symbol: 'btc', chain: 'btc' }), req());
     expect(asked).not.toContain('mayachain');
     expect(urls.some(u => u.includes('mayachain'))).toBe(false);
   });
@@ -732,46 +747,20 @@ describe('router', () => {
 });
 
 describe('best route', () => {
-  it('asks each route one at a time, then ranks every quote', async () => {
-    allow.add('near-swap').add('thorchain');
-    thornode(thorQuote());
-    const results = await quoteRoutes(['near', 'thor'], req());
-    expect(asked.slice(0, 2)).toEqual(['near-swap', 'thorchain']);
-    expect(results.map(r => r.route)).toEqual(['near', 'thor']);
-  });
-
-  it('leaves out a route the user declined, and keeps a failed route with its reason', async () => {
-    allow.add('thorchain');
-    thornode(thorQuote(), inbound().slice(1));
-    const results = await quoteRoutes(['near', 'thor'], req());
-    expect(near.requestQuote).not.toHaveBeenCalled();
-    expect(results).toHaveLength(1);
-    expect(results[0]).toMatchObject({ route: 'thor', error: expect.any(Error) });
-  });
-
-  it('quotes only the pinned route', async () => {
-    allow.add('near-swap').add('thorchain');
-    vi.stubGlobal('fetch', vi.fn());
-    const results = await quoteRoutes(['near'], req());
-    expect(results.map(r => r.route)).toEqual(['near']);
-    expect(asked).toEqual(['near-swap']);
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
   it('ranks by what arrives after every fee, zafu near fee included', async () => {
     allow.add('near-swap').add('thorchain');
     fee.recipient = 'zafu.near';
     // 1click nets its app fee into amountOut: 4.15 zec here beats thorchain's 4.12
+    const ranked = async () =>
+      rank(
+        (await quoteEach(['near', 'thor'], req())).flatMap(s =>
+          s.status === 'fulfilled' ? [s.value] : [],
+        ),
+      ).map(q => q.route);
     thornode(thorQuote());
-    expect((await quoteRoutes(['near', 'thor'], req())).map(r => r.route)).toEqual([
-      'near',
-      'thor',
-    ]);
+    expect(await ranked()).toEqual(['near', 'thor']);
     thornode(thorQuote({ expected_amount_out: '416000000' }));
-    expect((await quoteRoutes(['near', 'thor'], req())).map(r => r.route)).toEqual([
-      'thor',
-      'near',
-    ]);
+    expect(await ranked()).toEqual(['thor', 'near']);
   });
 
   it('merges the pickers, one row per token and chain', async () => {

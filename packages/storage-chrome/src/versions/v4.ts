@@ -330,6 +330,14 @@ type LOCAL = {
   penumbraRowsInUsd?: string[];
   /** the swap route the user chose per pair (`into_zec:btc@btc`), kept only when they changed it */
   swapRoutes?: Record<string, 'near' | 'thor' | 'maya' | 'penumbra'>;
+  /** the pair the swap screen reopens on, per wallet (a ui convenience, not a setting) */
+  swapLast?: Record<
+    string,
+    {
+      direction: 'into_zec' | 'from_zec';
+      token?: { symbol: string; chain: string; decimals: number; usd?: number };
+    }
+  >;
 
   zafuFeeMultiplier?: number;
 

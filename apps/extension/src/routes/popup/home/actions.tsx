@@ -3,6 +3,7 @@ import { Button } from '@repo/ui/components/ui/button';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { PopupPath } from '../paths';
+import { useSwapPreload } from '../../../hooks/swap-preload';
 
 /**
  * receive / swap / send under the balance. A viewing key can never sign, so
@@ -19,6 +20,7 @@ export const HomeActions = ({
   icons?: boolean;
 }) => {
   const navigate = useNavigate();
+  const preloadSwap = useSwapPreload();
   const viewOnly = useStore(
     s => selectEffectiveKeyInfo(s)?.insensitive['coldSignerType'] === 'viewing-key',
   );
@@ -50,6 +52,7 @@ export const HomeActions = ({
         variant='secondary'
         className='h-11 flex-1 text-[13px]'
         onClick={() => navigate(PopupPath.SWAP)}
+        {...preloadSwap}
       >
         {icons && <span className='i-lucide-arrow-left-right size-[15px]' />}
         swap

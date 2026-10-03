@@ -162,6 +162,7 @@ export async function requestQuote(params: {
   dry?: boolean;
   /** zafu's app fee in bps, taken from the amount out; 0 = none */
   appFeeBps?: number;
+  signal?: AbortSignal;
 }): Promise<SwapQuoteResponse> {
   const deadline = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 
@@ -188,6 +189,7 @@ export async function requestQuote(params: {
   return nearFetch<SwapQuoteResponse>('/v0/quote', {
     method: 'POST',
     body: JSON.stringify(request),
+    signal: params.signal,
   });
 }
 

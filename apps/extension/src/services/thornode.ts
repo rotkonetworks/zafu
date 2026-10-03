@@ -19,11 +19,15 @@ export class ThornodeRefusal extends Error {
   }
 }
 
-export const thornodeGet = async <T>(path: string, urls = THORNODE_URLS): Promise<T> => {
+export const thornodeGet = async <T>(
+  path: string,
+  urls = THORNODE_URLS,
+  signal?: AbortSignal,
+): Promise<T> => {
   let last: unknown;
   for (const base of urls) {
     try {
-      const resp = await fetch(`${base}${path}`);
+      const resp = await fetch(`${base}${path}`, { signal });
       const body = (await resp.json().catch(() => ({}))) as T & {
         message?: string;
         error?: string;
@@ -38,7 +42,8 @@ export const thornodeGet = async <T>(path: string, urls = THORNODE_URLS): Promis
       }
       last = new Error(message);
     } catch (e) {
-      if (e instanceof ThornodeRefusal) {
+      // a refusal or a cancelled ask: the next node changes nothing
+      if (e instanceof ThornodeRefusal || signal?.aborted) {
         throw e;
       }
       last = e;

@@ -87,9 +87,9 @@ export interface NodeQuote {
   };
 }
 
-const nodeFetch = async <T>(chain: NodeChain, path: string): Promise<T> => {
+const nodeFetch = async <T>(chain: NodeChain, path: string, signal?: AbortSignal): Promise<T> => {
   await requestEgressOptIn(ROUTES[chain.id].egress);
-  return thornodeGet<T>(`${chain.prefix}${path}`, chain.urls);
+  return thornodeGet<T>(`${chain.prefix}${path}`, chain.urls, signal);
 };
 
 interface NodeTxStatus {
@@ -293,7 +293,7 @@ export const nodeProvider = (chain: NodeChain): SwapProvider => {
         }),
       ),
 
-    quote: async req => {
+    quote: async (req, signal) => {
       const pair = {
         direction: req.direction,
         symbol: req.token.symbol.toLowerCase(),
@@ -323,15 +323,19 @@ export const nodeProvider = (chain: NodeChain): SwapProvider => {
       if (into && chain.refundInMemo && !OP_RETURN_CHAINS.has(sourceChain)) {
         query.set('refund_address', req.otherAddress);
       }
-      const quoted = nodeFetch<NodeQuote>(chain, `/quote/swap?${query}`);
+      const unitIn = (into ? req.token.symbol : 'zec').toLowerCase();
+      // the node's own words never reach the screen
+      const plainly = (e: unknown) => {
+        throw nodeRefusal(name, e, amount, unitIn);
+      };
+      const quoted = nodeFetch<NodeQuote>(chain, `/quote/swap?${query}`, signal);
       quoted.catch(() => {});
       // a halted chain is said plainly, before whatever the quote makes of it
-      const inbound = await nodeFetch<InboundAddress[]>(chain, '/inbound_addresses');
+      const inbound = await nodeFetch<InboundAddress[]>(chain, '/inbound_addresses', signal).catch(
+        plainly,
+      );
       const source = checkOpen(name, inbound, sourceChain);
-      const unitIn = (into ? req.token.symbol : 'zec').toLowerCase();
-      const q = await quoted.catch((e: unknown) => {
-        throw nodeRefusal(name, e, amount, unitIn);
-      });
+      const q = await quoted.catch(plainly);
       checkQuote(name, q, inbound, sourceChain, !into || pool.carrier === 'op_return', destination);
       const inUnit = into ? pair.symbol : 'zec';
       checkMinimum(name, q, source, amount, inUnit);
