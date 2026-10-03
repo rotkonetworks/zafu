@@ -9,25 +9,20 @@
  * keyInfoSupportsNetwork, so a 12-word vault reads penumbra only.
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../../state';
 import {
   keyRingSelector,
   selectEnabledNetworks,
   type KeyInfo,
   type NetworkType,
-  type ZignerZafuImport,
 } from '../../../state/keyring';
 import { keyInfoSupportsNetwork } from '../../../state/keyring/vault-ops';
 import { walletsSelector, type ZcashWalletJson } from '../../../state/wallets';
-import { zignerConnectSelector } from '../../../state/zigner';
 import { passwordSelector } from '../../../state/password';
 import { Section, SettingsScreen } from './settings-screen';
 import { TintedRow } from './tinted-row';
-import { QrScanner } from '../../../shared/components/qr-scanner';
-import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
-import { keystoneDeviceId } from '../../../utils/viewing-key';
 import { openPageInTab } from '../../../utils/popup-detection';
 import { PagePath } from '../../page/paths';
 import { HARDWARE_WALLET_ENABLED, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
@@ -73,131 +68,14 @@ export const SettingsWallets = ({
   /** the networks section, composed into this screen (settings-wallets-networks) */
   appendSlot?: React.ReactNode;
 } = {}) => {
-  const location = useLocation();
-  const autoScan = (location.state as { autoScan?: boolean } | null)?.autoScan;
   const navigate = usePopupNav();
   const rawNavigate = useNavigate();
 
-  const { keyInfos, addZignerUnencrypted } = useStore(keyRingSelector);
+  const { keyInfos } = useStore(keyRingSelector);
   const { all: penumbraWallets, zcashWallets } = useStore(walletsSelector);
   const enabledNetworks = useStore(selectEnabledNetworks);
-  const zignerState = useStore(zignerConnectSelector);
-  const {
-    scanState,
-    walletLabel,
-    walletImport,
-    zcashWalletImport,
-    detectedNetwork,
-    errorMessage,
-    processQrData,
-    processZcashAccountsBytes,
-    setWalletLabel,
-    setScanState,
-    setError,
-    clearZignerState,
-  } = zignerState;
 
   const [openId, setOpenId] = useState<string | null>(null);
-  const [scanning, setScanning] = useState(false);
-  const [scanningKeystone, setScanningKeystone] = useState(false);
-  const [added, setAdded] = useState(false);
-  const [isAdding, setIsAdding] = useState(false);
-  const [pasting, setPasting] = useState(false);
-
-  // developer paste mode: ten taps on the zigner line within three seconds
-  const taps = useRef({ n: 0, t: 0 });
-  const secretTap = () => {
-    const now = Date.now();
-    taps.current = { n: now - taps.current.t < 3000 ? taps.current.n + 1 : 1, t: now };
-    if (taps.current.n >= 10) {
-      taps.current.n = 0;
-      setScanState('idle');
-      setPasting(true);
-    }
-  };
-
-  useEffect(() => () => clearZignerState(), [clearZignerState]);
-  useEffect(() => {
-    if (autoScan && scanState === 'idle') {
-      setScanning(true);
-    }
-    // only on arrival
-  }, [autoScan]);
-
-  const handleQrScan = useCallback(
-    (data: string) => {
-      setScanning(false);
-      processQrData(data);
-    },
-    [processQrData],
-  );
-
-  const importOf = (): { data: ZignerZafuImport; label: string } | undefined => {
-    if (detectedNetwork === 'penumbra' && walletImport) {
-      const fvkBytes = walletImport.fullViewingKey.inner;
-      return {
-        data: {
-          fullViewingKey: btoa(String.fromCharCode(...fvkBytes)),
-          accountIndex: walletImport.accountIndex,
-          deviceId: walletImport.zidPublicKey ?? `penumbra-${Date.now()}`,
-          zidPublicKey: walletImport.zidPublicKey,
-        },
-        label: walletLabel || walletImport.label || 'zigner penumbra',
-      };
-    }
-    if (detectedNetwork === 'zcash' && zcashWalletImport) {
-      const viewingKey =
-        zcashWalletImport.ufvk ||
-        (zcashWalletImport.orchardFvk
-          ? btoa(String.fromCharCode(...zcashWalletImport.orchardFvk))
-          : undefined);
-      const kind = zcashWalletImport.coldSignerType ?? 'zigner';
-      return {
-        data: {
-          viewingKey,
-          accountIndex: zcashWalletImport.accountIndex,
-          deviceId:
-            zcashWalletImport.zidPublicKey ??
-            (kind === 'keystone' && viewingKey
-              ? keystoneDeviceId(viewingKey)
-              : `zcash-${Date.now()}`),
-          zidPublicKey: zcashWalletImport.zidPublicKey,
-          coldSignerType: kind,
-        },
-        label:
-          walletLabel ||
-          zcashWalletImport.label ||
-          (kind === 'keystone' ? 'keystone zcash' : 'zigner zcash'),
-      };
-    }
-    return undefined;
-  };
-  const pending = importOf();
-
-  const addWallet = async () => {
-    if (!pending) {
-      return;
-    }
-    try {
-      setIsAdding(true);
-      await addZignerUnencrypted(pending.data, pending.label);
-      clearZignerState();
-      setPasting(false);
-      setAdded(true);
-      setTimeout(() => setAdded(false), 3000);
-    } catch (cause) {
-      setError(
-        `zafu could not add this wallet: ${cause instanceof Error ? cause.message : String(cause)}`,
-      );
-    } finally {
-      setIsAdding(false);
-    }
-  };
-
-  const cancelAdd = () => {
-    clearZignerState();
-    setPasting(false);
-  };
 
   const zcashOn = enabledNetworks.includes('zcash');
   const hasSeed = keyInfos.some(v => v.type === 'mnemonic');
@@ -206,43 +84,9 @@ export const SettingsWallets = ({
     penumbra: penumbraWallets.some(w => w.vaultId === v.id),
     zcash: zcashWallets.some(w => w.vaultId === v.id),
   });
-  // a scanned key zafu does not hold as a network (a cosmos export)
-  const unusable = scanState === 'scanned' && !pending;
 
   return (
     <>
-      {scanning && (
-        <QrScanner
-          onScan={handleQrScan}
-          onError={err => {
-            setError(err);
-            setScanning(false);
-          }}
-          onClose={() => setScanning(false)}
-          title='scan zafu zigner'
-          description="point the camera at your zigner's viewing key qr"
-        />
-      )}
-      {scanningKeystone && (
-        <AnimatedQrScanner
-          onComplete={(bytes, urType) => {
-            setScanningKeystone(false);
-            if (urType !== 'zcash-accounts') {
-              setError(`this qr is ur:${urType}; zafu needs ur:zcash-accounts`);
-              return;
-            }
-            processZcashAccountsBytes(bytes, 'keystone');
-          }}
-          onError={err => {
-            setError(err);
-            setScanningKeystone(false);
-          }}
-          onClose={() => setScanningKeystone(false)}
-          title='scan keystone'
-          description='hold the camera steady on the moving zcash-accounts qr'
-          urTypeFilter='zcash-accounts'
-        />
-      )}
       <SettingsScreen title={title} backPath={PopupPath.INDEX}>
         <div className='flex flex-col gap-5'>
           <Section title='wallets'>
@@ -263,31 +107,16 @@ export const SettingsWallets = ({
             )}
           </Section>
 
-          {added && <StatusSlot icon='i-ph-check'>wallet added</StatusSlot>}
-          {scanState === 'error' && errorMessage && (
-            <StatusSlot tone='warn' icon='i-ph-warning'>
-              {errorMessage}
-            </StatusSlot>
-          )}
-
           <section className='flex flex-col gap-1.5'>
             <h2 className='text-[11px]/[14px] tracking-[0.06em] text-fg-muted'>add a wallet</h2>
             <RowGroup>
               <Row
                 type='screen'
                 icon='i-ph-scan'
-                label='scan zafu zigner'
-                onPress={() => setScanning(true)}
+                label='scan a signer'
+                description='zigner, keystone'
+                onPress={() => navigate(PopupPath.SETTINGS_CONNECT_DEVICE)}
               />
-              {zcashOn && (
-                <Row
-                  type='screen'
-                  icon='i-ph-qr-code'
-                  label='scan keystone'
-                  description='zcash'
-                  onPress={() => setScanningKeystone(true)}
-                />
-              )}
               {zcashOn && (HARDWARE_WALLET_ENABLED || LEDGER_TRANSPARENT_ENABLED) && (
                 <Row
                   type='screen'
@@ -317,7 +146,7 @@ export const SettingsWallets = ({
               )}
             </RowGroup>
             <p className='flex items-center justify-between gap-3 px-0.5 text-[11px] text-fg-dim'>
-              <span onClick={secretTap}>zafu zigner keeps spending keys offline</span>
+              <span>zafu zigner keeps spending keys offline</span>
               <a
                 href='https://zafu.pro/zigner'
                 target='_blank'
@@ -347,49 +176,6 @@ export const SettingsWallets = ({
         />
       )}
 
-      <Sheet
-        open={(scanState === 'scanned' || pasting) && !scanning}
-        onOpenChange={o => !o && cancelAdd()}
-        title='add this wallet'
-      >
-        {pasting && scanState !== 'scanned' && (
-          <Input
-            placeholder='paste qr hex (530301...)'
-            onChange={e => e.target.value.trim() && processQrData(e.target.value)}
-            className='font-mono text-xs'
-          />
-        )}
-        {pending && (
-          <p className='text-xs text-fg-muted'>
-            {detectedNetwork} · account{' '}
-            {walletImport?.accountIndex ?? zcashWalletImport?.accountIndex ?? 0}
-            {zcashWalletImport && !zcashWalletImport.mainnet ? ' · testnet' : ''}
-          </p>
-        )}
-        {unusable && (
-          <StatusSlot tone='warn' icon='i-ph-info'>
-            zafu takes zcash and penumbra keys from zigner. please show one of those.
-          </StatusSlot>
-        )}
-        {pending && (
-          <Input
-            placeholder='name (optional)'
-            value={walletLabel}
-            onChange={e => setWalletLabel(e.target.value)}
-          />
-        )}
-        {errorMessage && scanState !== 'error' && (
-          <StatusSlot tone='warn' icon='i-ph-warning'>
-            {errorMessage}
-          </StatusSlot>
-        )}
-        <Button className='w-full' disabled={!pending || isAdding} onClick={() => void addWallet()}>
-          {isAdding ? 'adding' : 'add wallet'}
-        </Button>
-        <Button variant='quiet' className='w-full' onClick={cancelAdd}>
-          not now
-        </Button>
-      </Sheet>
     </>
   );
 };

@@ -1,17 +1,11 @@
-import { EyeOpenIcon, TrashIcon, ExternalLinkIcon } from '@radix-ui/react-icons';
+import { EyeOpenIcon, TrashIcon } from '@radix-ui/react-icons';
 import { useStore } from '../../../state';
-import { zignerConnectSelector } from '../../../state/zigner';
-import { keyRingSelector, type ZignerZafuImport } from '../../../state/keyring';
-import { isPro } from '../../../state/license';
+import { keyRingSelector } from '../../../state/keyring';
 import { SettingsScreen } from './settings-screen';
 import { Button } from '@repo/ui/components/ui/button';
-import { Input } from '@repo/ui/components/ui/input';
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { PagePath } from '../../page/paths';
 import { openPageInTab } from '../../../utils/popup-detection';
-import { ZCASH_ORCHARD_ACTIVATION } from '../../../config/networks';
-import { describeZcashHeight } from '../../../utils/zcash-blocks';
-import { cn } from '@repo/ui/lib/utils';
 
 /** network color for zigner vault badges */
 const networkColors: Record<string, string> = {
@@ -23,58 +17,19 @@ const networkColors: Record<string, string> = {
 };
 
 /**
- * Settings page for Zigner cold wallet integration.
- *
- * Camera permission is requested automatically when user clicks "Scan QR Code".
- * The QrScanner component handles permission prompts and error states.
+ * Settings page for zigner cold wallet integration: lists paired vaults and
+ * links out to the shared scanner (components/device-scanner, opened as its
+ * own page - better camera access than a popup gets). Pairing itself does
+ * not live here.
  */
 export const SettingsZigner = () => {
-  const pro = useStore(isPro);
-  const {
-    scanState,
-    walletLabel,
-    walletImport,
-    zcashWalletImport,
-    parsedCosmosExport,
-    detectedNetwork,
-    errorMessage,
-    processQrData,
-    setWalletLabel,
-    setError,
-    clearZignerState,
-  } = useStore(zignerConnectSelector);
-  const { addZignerUnencrypted, keyInfos, deleteKeyRing } = useStore(keyRingSelector);
-
-  const [success, setSuccess] = useState(false);
-  const [isAdding, setIsAdding] = useState(false);
+  const { keyInfos, deleteKeyRing } = useStore(keyRingSelector);
   const [deletingVaultId, setDeletingVaultId] = useState<string | null>(null);
   const [confirmDeleteVault, setConfirmDeleteVault] = useState<string | null>(null);
-  // optional zcash start block (birthday) entered at import time. blank = sync
-  // from near the chain tip. Stored per-vault as zcashBirthday_<vaultId>.
-  const [startBlock, setStartBlock] = useState<string>('');
-
-  const startBlockNum = parseInt(startBlock, 10);
-  const startBlockValid = !isNaN(startBlockNum) && startBlockNum >= ZCASH_ORCHARD_ACTIVATION;
-  const startBlockHint = startBlock.trim() ? describeZcashHeight(startBlockNum) : null;
+  const [error, setError] = useState<string | null>(null);
 
   // All zigner vaults from the keyring (single source of truth)
   const zignerVaults = keyInfos.filter(k => k.type === 'zigner-zafu');
-
-  // Hidden paste mode - activated by clicking icon 10 times
-  const manualInputRef = useRef(false);
-
-  // Clear zigner state on unmount
-  useEffect(() => {
-    return () => {
-      clearZignerState();
-    };
-  }, [clearZignerState]);
-
-  const handleManualInput = (value: string) => {
-    if (value.trim()) {
-      processQrData(value);
-    }
-  };
 
   const handleDeleteVault = async (vaultId: string) => {
     try {
@@ -83,88 +38,11 @@ export const SettingsZigner = () => {
       setConfirmDeleteVault(null);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
-      setError(`Failed to remove wallet: ${message}`);
+      setError(`failed to remove wallet: ${message}`);
     } finally {
       setDeletingVaultId(null);
     }
   };
-
-  const handleAddWallet = async () => {
-    if (!walletImport && !zcashWalletImport && !parsedCosmosExport) {
-      setError('please scan a qr code first');
-      return;
-    }
-
-    try {
-      setIsAdding(true);
-
-      if (detectedNetwork === 'penumbra' && walletImport) {
-        // Convert protobuf FVK to base64 for ZignerZafuImport
-        const fvkBase64 = btoa(String.fromCharCode(...walletImport.fullViewingKey.inner));
-        const zignerData: ZignerZafuImport = {
-          fullViewingKey: fvkBase64,
-          accountIndex: walletImport.accountIndex,
-          deviceId: walletImport.zidPublicKey ?? `penumbra-${Date.now()}`,
-          zidPublicKey: walletImport.zidPublicKey,
-        };
-        await addZignerUnencrypted(zignerData, walletLabel || walletImport.label);
-      } else if (detectedNetwork === 'zcash' && zcashWalletImport) {
-        // Convert zcash FVK to string for ZignerZafuImport
-        const viewingKey =
-          zcashWalletImport.ufvk ??
-          (zcashWalletImport.orchardFvk
-            ? btoa(String.fromCharCode(...zcashWalletImport.orchardFvk))
-            : '');
-        const zignerData: ZignerZafuImport = {
-          viewingKey,
-          accountIndex: zcashWalletImport.accountIndex,
-          deviceId: zcashWalletImport.zidPublicKey ?? `zcash-${Date.now()}`,
-          zidPublicKey: zcashWalletImport.zidPublicKey,
-        };
-        const vaultId = await addZignerUnencrypted(
-          zignerData,
-          walletLabel || zcashWalletImport.label,
-        );
-        // persist an explicitly-entered start block as the wallet birthday, so an
-        // older cold wallet doesn't silently start syncing near the chain tip
-        // (which would hide every pre-existing shielded note).
-        if (startBlock.trim() !== '' && startBlockValid) {
-          const clamped = Math.max(ZCASH_ORCHARD_ACTIVATION, startBlockNum);
-          await chrome.storage.local.set({ [`zcashBirthday_${vaultId}`]: clamped });
-        }
-      } else if (detectedNetwork === 'cosmos' && parsedCosmosExport) {
-        const zignerData: ZignerZafuImport = {
-          cosmosAddresses: parsedCosmosExport.addresses,
-          publicKey: parsedCosmosExport.publicKey || undefined,
-          accountIndex: parsedCosmosExport.accountIndex,
-          deviceId: `cosmos-${Date.now()}`,
-        };
-        await addZignerUnencrypted(zignerData, walletLabel || 'zigner cosmos');
-      }
-
-      setSuccess(true);
-      clearZignerState();
-      setStartBlock('');
-      manualInputRef.current = false;
-
-      setTimeout(() => setSuccess(false), 3000);
-    } catch (cause) {
-      const message = cause instanceof Error ? cause.message : String(cause);
-      setError(`failed to add wallet: ${message}`);
-    } finally {
-      setIsAdding(false);
-    }
-  };
-
-  const resetForm = () => {
-    clearZignerState();
-    manualInputRef.current = false;
-  };
-
-  const showManualInput = manualInputRef.current && scanState !== 'scanned';
-  const showScannedState =
-    scanState === 'scanned' && (walletImport || zcashWalletImport || parsedCosmosExport);
-  const showInitialState = scanState === 'idle' && !showManualInput;
 
   return (
     <SettingsScreen title='zafu zigner'>
@@ -191,7 +69,7 @@ export const SettingsZigner = () => {
             <div className='flex gap-2'>
               <Button
                 size='sm'
-                onClick={() => openPageInTab(PagePath.IMPORT_ZIGNER)}
+                onClick={() => openPageInTab(PagePath.IMPORT_SIGNER)}
                 title='scan the pairing QR from your zigner'
               >
                 pair zigner
@@ -216,7 +94,7 @@ export const SettingsZigner = () => {
               <p className='kicker'>wallets</p>
               <button
                 type='button'
-                onClick={() => openPageInTab(PagePath.IMPORT_ZIGNER)}
+                onClick={() => openPageInTab(PagePath.IMPORT_SIGNER)}
                 className='text-label text-zigner-gold hover:underline underline-offset-2 lowercase'
                 title='scan the pairing QR from another zigner'
               >
@@ -294,165 +172,7 @@ export const SettingsZigner = () => {
           </div>
         )}
 
-        {/* Success message */}
-        {pro && success && (
-          <div className='border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-400'>
-            wallet added successfully!
-          </div>
-        )}
-
-        {/* Add Wallet section */}
-        {pro && (
-          <div className='border-t border-border-hard pt-4'>
-            <p className='text-sm mb-3'>add wallet</p>
-
-            {/* Manual input (hidden by default, developer mode) */}
-            {showManualInput && (
-              <div className='flex flex-col gap-3'>
-                <p className='text-xs text-fg-muted'>developer mode: paste QR hex data</p>
-
-                <Input
-                  placeholder='paste QR code hex (530301...)'
-                  onChange={e => handleManualInput(e.target.value)}
-                  className='font-mono text-xs'
-                />
-
-                <Input
-                  placeholder='wallet label (optional)'
-                  value={walletLabel}
-                  onChange={e => setWalletLabel(e.target.value)}
-                />
-
-                {errorMessage && <p className='text-xs text-red-400'>{errorMessage}</p>}
-
-                <div className='flex gap-2'>
-                  <Button variant='secondary' className='flex-1' onClick={resetForm}>
-                    cancel
-                  </Button>
-                  <Button
-                    variant='primary'
-                    className='flex-1'
-                    onClick={handleAddWallet}
-                    disabled={
-                      (!walletImport && !zcashWalletImport && !parsedCosmosExport) || isAdding
-                    }
-                  >
-                    {isAdding ? 'adding...' : 'add wallet'}
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Scanned QR - ready to add */}
-            {showScannedState && (
-              <div className='flex flex-col gap-3'>
-                <div className='border border-green-500/30 bg-green-500/10 p-3'>
-                  <div className='flex items-center gap-2'>
-                    <p className='text-sm text-green-400'>qr code scanned</p>
-                    <span className='text-label px-1.5 py-0.5 bg-elev-2 text-fg-muted'>
-                      {detectedNetwork}
-                    </span>
-                  </div>
-                  <p className='text-xs text-fg-muted mt-1'>
-                    {parsedCosmosExport ? (
-                      <span className='font-mono'>
-                        {parsedCosmosExport.addresses.map(a => a.address.slice(0, 10)).join(', ')}
-                        ...
-                      </span>
-                    ) : (
-                      <>
-                        account #
-                        {walletImport?.accountIndex ?? zcashWalletImport?.accountIndex ?? 0}
-                        {zcashWalletImport && (
-                          <span className='ml-2'>
-                            {zcashWalletImport.mainnet ? 'mainnet' : 'testnet'}
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </p>
-                </div>
-
-                <Input
-                  placeholder='wallet label (optional)'
-                  value={walletLabel}
-                  onChange={e => setWalletLabel(e.target.value)}
-                />
-
-                {detectedNetwork === 'zcash' && (
-                  <div className='flex flex-col gap-1'>
-                    <label className='text-label text-fg-muted'>
-                      start block (optional) - blank syncs from near the chain tip
-                    </label>
-                    <Input
-                      type='text'
-                      inputMode='numeric'
-                      placeholder='e.g. 2910104'
-                      value={startBlock}
-                      onChange={e => setStartBlock(e.target.value)}
-                      className='font-mono text-xs'
-                    />
-                    {startBlockHint && (
-                      <p
-                        className={cn(
-                          'text-label',
-                          startBlockHint.ok ? 'text-fg-dim' : 'text-hanko',
-                        )}
-                      >
-                        {startBlockHint.text}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {errorMessage && <p className='text-xs text-red-400'>{errorMessage}</p>}
-
-                <div className='flex gap-2'>
-                  <Button variant='secondary' className='flex-1' onClick={resetForm}>
-                    cancel
-                  </Button>
-                  <Button
-                    variant='primary'
-                    className='flex-1'
-                    onClick={handleAddWallet}
-                    disabled={isAdding}
-                  >
-                    {isAdding ? 'adding...' : 'add wallet'}
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Initial state - show scan button */}
-            {showInitialState && (
-              <div className='flex flex-col gap-2'>
-                {/* Always open scanner in new tab for better camera experience */}
-                <p className='text-xs text-fg-muted text-center mb-2'>
-                  opens camera in a new tab for scanning
-                </p>
-                <Button
-                  variant='secondary'
-                  className='w-full'
-                  onClick={() => openPageInTab(PagePath.IMPORT_ZIGNER)}
-                >
-                  <ExternalLinkIcon className='size-4 mr-2' />
-                  scan QR code
-                </Button>
-                {errorMessage && <p className='text-xs text-red-400 text-center'>{errorMessage}</p>}
-              </div>
-            )}
-
-            {/* Error state */}
-            {scanState === 'error' && !showManualInput && (
-              <div className='flex flex-col gap-3'>
-                <p className='text-sm text-red-400'>{errorMessage}</p>
-                <Button variant='secondary' onClick={resetForm}>
-                  try again
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
+        {error && <p className='text-xs text-red-400'>{error}</p>}
       </div>
     </SettingsScreen>
   );

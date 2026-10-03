@@ -38,6 +38,10 @@ export const settingsRoutes: RouteObject[] = [
     lazy: lazyScreen('settingsZigner'),
   },
   {
+    path: PopupPath.SETTINGS_CONNECT_DEVICE,
+    lazy: lazyScreen('settingsConnectDevice'),
+  },
+  {
     // ?network=zcash|penumbra (the home "switch node" links) opens that network's node sheet
     path: PopupPath.SETTINGS_NETWORKS,
     lazy: lazyScreen('settingsNetworks'),

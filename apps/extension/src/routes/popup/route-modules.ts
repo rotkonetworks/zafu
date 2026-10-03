@@ -34,6 +34,8 @@ export const popupScreens = {
   settingsMultisigBackup: () =>
     import('./settings/settings-multisig-backup').then(m => m.SettingsMultisigBackup),
   settingsZigner: () => import('./settings/settings-zigner').then(m => m.SettingsZigner),
+  settingsConnectDevice: () =>
+    import('./settings/settings-connect-device').then(m => m.SettingsConnectDevice),
   settingsOta: () => import('./settings/settings-ota').then(m => m.SettingsOta),
   settingsVoting: () => import('./settings/settings-voting').then(m => m.SettingsVoting),
   settingsZcashMe: () => import('./settings/settings-zcashme').then(m => m.SettingsZcashMe),

@@ -83,7 +83,7 @@ export const PopupWelcome = () => {
         <div className='flex h-9 items-center justify-center gap-[18px] text-label text-fg-muted'>
           <button
             type='button'
-            onClick={go(PagePath.IMPORT_ZIGNER)}
+            onClick={go(PagePath.IMPORT_SIGNER)}
             className='flex items-center gap-1.5 bg-transparent transition-colors hover:text-fg-high'
           >
             <span className='i-zafu-hanko size-[15px]' aria-hidden='true' />
