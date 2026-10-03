@@ -130,12 +130,21 @@ const penumbraSync = (act: 'pause' | 'resume') =>
 /** the user's "keep syncing when closed": penumbra alone may go on with every window closed */
 let keepPenumbraSyncing = false;
 const readKeepSyncing = () =>
-  void localExtStorage.get('privacySettings').then(p => {
-    keepPenumbraSyncing = p?.enableBackgroundSync === true;
-  });
-readKeepSyncing();
+  localExtStorage
+    .get('privacySettings')
+    .then(p => {
+      keepPenumbraSyncing = p?.enableBackgroundSync === true;
+    })
+    .catch(() => undefined);
+/**
+ * The first read of the setting. Services are only built once it has landed
+ * (see initHandler and rebuildServices): a block processor built before it
+ * would take every worker start - a browser restart, MV3 recycling the worker
+ * - for "keep syncing" off, and pause with every window closed.
+ */
+const keepSyncingRead = readKeepSyncing();
 chrome.storage.onChanged.addListener(
-  (c, area) => area === 'local' && 'privacySettings' in c && readKeepSyncing(),
+  (c, area) => void (area === 'local' && 'privacySettings' in c && readKeepSyncing()),
 );
 // zafu is fully closed: the offscreen-hosted zcash worker otherwise keeps
 // syncing (and polling mempool) with nobody watching. Stop network activity
@@ -236,8 +245,12 @@ const settle = (
   rebuilds.setRunning(
     settledTarget({ ...target, chainId: r.chainId ?? target.chainId }, r.wallet?.id),
   );
-  // confirm the stored chain id now if a window is open, else on the next open
-  if (ui.open) {
+  // confirm the stored chain id now if a window is open, else on the next
+  // open. With "keep syncing when closed" on, now in any case: the hold would
+  // otherwise keep penumbra from syncing until a window opens, which is the
+  // one thing the setting promises not to do, and this is the one call to the
+  // node the user opted into.
+  if (ui.open || keepPenumbraSyncing) {
     runChainCheck();
   }
 };
@@ -266,6 +279,7 @@ const rebuildServices = async (target: PenumbraTarget, _previous: unknown, why: 
   currentSyncAbort = new AbortController();
   // the old services' chain check is moot: it must not ask a node for them
   chainCheck.drop();
+  await keepSyncingRead;
   walletServicesResult = startWalletServices(currentSyncAbort.signal, onBlockProcessor);
   walletServices = walletServicesResult.then(r => r.services);
   const result = await walletServicesResult;
@@ -400,6 +414,8 @@ const initHandler = async () => {
   const bootTarget = await desiredPenumbraTarget();
   rebuilds.setRunning(bootTarget);
   currentSyncAbort = new AbortController();
+  // the processor decides at birth whether to pause with every window closed
+  await keepSyncingRead;
   walletServicesResult = startWalletServices(currentSyncAbort.signal, onBlockProcessor);
   walletServices = walletServicesResult.then(r => r.services);
   // cache decrypted wallet as soon as it's available - unblocks RPC context getters
