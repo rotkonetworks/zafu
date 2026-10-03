@@ -180,7 +180,19 @@ export const installEgress = (where: EgressRealm, host: EgressHost = {}): void =
           refuse(decision);
         }
       }
-      return nativeFetch(input, init);
+      const response = await nativeFetch(input, init);
+      // A followed redirect lands wherever the server says. The request itself
+      // has already gone (a CSP connect-src cannot list user-chosen and LAN
+      // nodes, so nothing stops the hop), but its answer never reaches the
+      // caller unless the final url passes the same policy.
+      if (response.redirected) {
+        const landed = checkEgress(response.url);
+        if (!landed.allow) {
+          void response.body?.cancel().catch(() => undefined);
+          refuse(landed);
+        }
+      }
+      return response;
     };
   }
 
@@ -216,6 +228,16 @@ export const installEgress = (where: EgressRealm, host: EgressHost = {}): void =
       ...rest: unknown[]
     ) {
       enforce(url);
+      // an xhr follows redirects too: drop the answer when it landed off-policy
+      this.addEventListener('readystatechange', () => {
+        if (
+          this.readyState === XMLHttpRequest.HEADERS_RECEIVED &&
+          this.responseURL &&
+          !checkEgress(this.responseURL).allow
+        ) {
+          this.abort();
+        }
+      });
       return (nativeOpen as (...a: unknown[]) => void).call(this, method, url, ...rest);
     } as typeof xhr.open;
   }
