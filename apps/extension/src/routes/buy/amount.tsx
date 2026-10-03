@@ -13,7 +13,10 @@ import { loadOffer } from '../../buy/machine';
 import { peerBuyUrl } from '../../config/ramps';
 import { Column, useBuy, useNow } from './ui';
 import {
+  chosenOffer,
+  estimateOf,
   openSheet,
+  quoteIsCurrent,
   requote,
   reserveNow,
   setAmount,
@@ -79,8 +82,12 @@ export const AmountScreen = () => {
       currency: s.currency,
       appId: s.app,
       quotes: s.quotes,
-      quoting: s.quoting,
-      estimate: s.estimate,
+      // the offers answer the amount on screen (not the one before it), and the estimate this offer
+      current: quoteIsCurrent(s),
+      estimate: estimateOf(
+        s,
+        s.quotes?.kind === 'offers' ? s.quotes.offers[s.offerIdx] : undefined,
+      ),
       firstTime: s.firstTime,
       offerIdx: s.offerIdx,
       base: s.base,
@@ -91,7 +98,7 @@ export const AmountScreen = () => {
   const offer = s.quotes?.kind === 'offers' ? s.quotes.offers[s.offerIdx] : undefined;
   const unsupported = s.quotes?.kind === 'unsupported';
   const limit = s.quotes?.kind === 'limit' ? s.quotes.max : undefined;
-  const canGo = !!offer && !s.quoting && !!fiatUnits(s.amount);
+  const canGo = !!offer && s.current && !!fiatUnits(s.amount);
 
   return (
     <Column
@@ -174,7 +181,7 @@ export const AmountScreen = () => {
             <span
               className={cn(
                 'font-display text-[26px] text-fg-high transition-opacity',
-                s.quoting && 'opacity-50',
+                !s.current && 'opacity-50',
               )}
             >
               ≈ {s.estimate ? zec4(s.estimate.amountOut) : offer ? '…' : '-'}
@@ -260,9 +267,10 @@ export const Ticket = () => {
       offerIdx: s.offerIdx,
       formCurrency: s.currency,
       formApp: s.app,
-      estimate: s.estimate,
       gas: s.gas,
       walletLabel: s.walletLabel,
+      // only ever the estimate made for the offer on this ticket
+      liveEstimate: estimateOf(s, chosenOffer(s)),
     })),
   );
   const o: Offer | undefined = s.buy
@@ -286,13 +294,15 @@ export const Ticket = () => {
               ? ['usdc returned', 'text-warn']
               : stage === 'expired'
                 ? ['expired', 'text-fg-muted']
-                : ['on its way', 'text-zigner-gold'];
+                : stage === 'lapsed'
+                  ? ['paid · hold ended', 'text-warn']
+                  : ['on its way', 'text-zigner-gold'];
   const near = s.buy?.near;
   // a reserved buy keeps the estimate it was made with (a resumed one too)
   const saved = s.buy?.estimate;
   const estimate = saved
     ? { amountOut: BigInt(saved.amountOut), cost: BigInt(saved.cost) }
-    : s.estimate;
+    : s.liveEstimate;
   const swapCost = near?.cost !== undefined ? BigInt(near.cost) : estimate?.cost;
   const get =
     stage === 'done' && s.buy?.arrived

@@ -89,7 +89,7 @@ export const announceDeposit = (tx: string, depositAddress: string): Promise<voi
 
 export const swapFacts = async (
   depositAddress: string,
-): Promise<Pick<Facts, 'swap' | 'swapOut'>> => {
+): Promise<Pick<Facts, 'swap' | 'swapOut' | 'noDeposit'>> => {
   const s = await checkSwapStatus(depositAddress);
   const swap =
     s.status === 'SUCCESS'
@@ -99,5 +99,9 @@ export const swapFacts = async (
         : s.status === 'FAILED'
           ? 'failed'
           : 'pending';
-  return { swap, swapOut: s.swapDetails?.amountOut };
+  return {
+    swap,
+    noDeposit: !s.status || s.status === 'PENDING_DEPOSIT',
+    swapOut: s.swapDetails?.amountOut,
+  };
 };
