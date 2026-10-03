@@ -23,6 +23,7 @@ import { ScreenHeader } from '../../../components/screen-header';
 import { PopupPath, threadPath } from '../paths';
 import { shortAddress } from '../inbox/threads';
 import { contactStatus, networkOf } from '.';
+import { addressLabel, isRealAddress, refusalOf } from './address-kind';
 
 type Open =
   | { kind: 'address'; address: ContactAddress }
@@ -59,25 +60,31 @@ const TextSheet = ({
   action: string;
   open: boolean;
   onClose: () => void;
-  onSave: (value: string) => Promise<void>;
+  /** resolves a refusal to show in place, or nothing when saved */
+  onSave: (value: string) => Promise<string | void>;
 }) => {
   const [value, setValue] = useState(initial);
+  const [refusal, setRefusal] = useState<string>();
   return (
     <Sheet open={open} onOpenChange={o => !o && onClose()} title={title}>
       <form
         className='flex flex-col gap-3'
         onSubmit={e => {
           e.preventDefault();
-          void onSave(value.trim()).then(onClose);
+          void onSave(value.trim()).then(r => (r ? setRefusal(r) : onClose()));
         }}
       >
         <Input
           aria-label={placeholder}
           placeholder={placeholder}
           value={value}
-          onChange={e => setValue(e.target.value)}
+          onChange={e => {
+            setValue(e.target.value);
+            setRefusal(undefined);
+          }}
           autoFocus
         />
+        {refusal && <span className='text-[11px] text-warn'>{refusal}</span>}
         <Button type='submit' disabled={!value.trim()}>
           {action}
         </Button>
@@ -96,9 +103,9 @@ const ContactView = ({ contact }: { contact: Contact }) => {
   const close = () => setOpen(undefined);
   const status = contactStatus(contact);
   // the first address this wallet can act on
-  const usable = contact.addresses.find(a => sendTo(a));
+  const usable = contact.addresses.filter(isRealAddress).find(a => sendTo(a));
   const pay = sendTo(usable);
-  const hasZcash = contact.addresses.some(a => a.network === 'zcash');
+  const hasZcash = contact.addresses.some(a => isRealAddress(a) && a.network === 'zcash');
 
   return (
     <div className='flex flex-col gap-4 px-4 py-[18px]'>
@@ -128,17 +135,37 @@ const ContactView = ({ contact }: { contact: Contact }) => {
       )}
 
       <RowGroup>
-        {contact.addresses.map(a => (
+        {contact.addresses.filter(isRealAddress).map(a => (
           <Row
             key={a.id}
             type='value'
-            label={a.network}
+            label={addressLabel(a.address)}
             value={shortAddress(a.address)}
             onPress={() => setOpen({ kind: 'address', address: a })}
           />
         ))}
         <Row type='screen' label='add an address' onPress={() => setOpen({ kind: 'add' })} />
       </RowGroup>
+
+      {/* saved by an older zafu under the wrong kind: shown apart, never paid */}
+      {contact.addresses.some(a => !isRealAddress(a)) && (
+        <span className='-mb-2 text-xs text-fg-muted'>not addresses</span>
+      )}
+      {contact.addresses.some(a => !isRealAddress(a)) && (
+        <RowGroup>
+          {contact.addresses
+            .filter(a => !isRealAddress(a))
+            .map(a => (
+              <Row
+                key={a.id}
+                type='value'
+                label={/^[0-9a-f]{64}$/i.test(a.address.trim()) ? 'a zafu identity' : 'unknown'}
+                value={shortAddress(a.address)}
+                onPress={() => setOpen({ kind: 'address', address: a })}
+              />
+            ))}
+        </RowGroup>
+      )}
 
       <RowGroup>
         <Row type='screen' label='rename' onPress={() => setOpen({ kind: 'rename' })} />
@@ -165,7 +192,13 @@ const ContactView = ({ contact }: { contact: Contact }) => {
       </Button>
 
       {open?.kind === 'address' && (
-        <Sheet open onOpenChange={o => !o && close()} title={open.address.network}>
+        <Sheet
+          open
+          onOpenChange={o => !o && close()}
+          title={
+            isRealAddress(open.address) ? addressLabel(open.address.address) : 'not an address'
+          }
+        >
           <span className='break-all font-mono text-xs text-fg-high'>{open.address.address}</span>
           <div className='flex gap-2'>
             <CopyButton
@@ -175,7 +208,7 @@ const ContactView = ({ contact }: { contact: Contact }) => {
               size='md'
               className='flex-1'
             />
-            {sendTo(open.address) && (
+            {isRealAddress(open.address) && sendTo(open.address) && (
               <Button className='flex-1' onClick={sendTo(open.address)}>
                 send
               </Button>
@@ -197,7 +230,12 @@ const ContactView = ({ contact }: { contact: Contact }) => {
         open={open?.kind === 'add'}
         onClose={close}
         onSave={async address => {
+          const refused = refusalOf(address);
+          if (refused) {
+            return refused;
+          }
           await addAddress(contact.id, { network: networkOf(address), address });
+          return undefined;
         }}
       />
       <TextSheet

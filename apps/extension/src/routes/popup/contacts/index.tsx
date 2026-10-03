@@ -15,10 +15,11 @@ import { ScreenHeader } from '../../../components/screen-header';
 import { PopupPath, contactPath } from '../paths';
 import { looksLikeLink } from '../../../links/router';
 import { QrScanner } from '../../../shared/components/qr-scanner';
+import { addressKind, refusalOf } from './address-kind';
 
-/** the network an address is on, read from its prefix */
+/** the network a payable address is on; only call after refusalOf() passed */
 export const networkOf = (address: string): ContactNetwork =>
-  /^penumbra/i.test(address.trim()) ? 'penumbra' : 'zcash';
+  addressKind(address).kind === 'penumbra' ? 'penumbra' : 'zcash';
 
 /**
  * a contact's line under the name: whether friends on sites can find each
@@ -51,7 +52,11 @@ export const AddContactSheet = ({ open, onClose }: { open: boolean; onClose: () 
     navigate(PopupPath.LINK, { state: { uri: text.trim(), via } });
     return true;
   };
+  const refused = address.trim() ? refusalOf(address) : undefined;
   const save = async () => {
+    if (refused) {
+      return;
+    }
     const contact = await addContact({ name: name.trim() });
     if (address.trim()) {
       await addAddress(contact.id, { network: networkOf(address), address: address.trim() });
@@ -92,7 +97,8 @@ export const AddContactSheet = ({ open, onClose }: { open: boolean; onClose: () 
             value={name}
             onChange={e => setName(e.target.value)}
           />
-          <Button type='submit' disabled={!name.trim()}>
+          {refused && <span className='text-[11px] text-warn'>{refused}</span>}
+          <Button type='submit' disabled={!name.trim() || !!refused}>
             save
           </Button>
         </form>
