@@ -101,6 +101,7 @@ export const ToolsPage = () => {
             {tiles.map(t => (
               <button
                 key={t.path}
+                data-preload={t.path}
                 onClick={() => go(t.path)}
                 className={cn(
                   'flex h-[104px] flex-col justify-between border border-surface-border-soft',
@@ -124,6 +125,7 @@ export const ToolsPage = () => {
           {everywhere.map(t => (
             <button
               key={t.path}
+              data-preload={t.path}
               onClick={() => go(t.path)}
               className='flex min-h-[52px] items-center gap-3 px-3.5 text-left transition-colors hover:bg-surface-elev-2'
             >

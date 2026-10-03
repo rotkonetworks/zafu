@@ -39,6 +39,7 @@ export function ZcashMeRow({ onExplain }: { onExplain?: () => void }) {
       type='value'
       label='zcash.me'
       value={ZCASHME_MODE_LABEL[mode]}
+      preload={PopupPath.SETTINGS_ZCASHME}
       onPress={() => navigate(PopupPath.SETTINGS_ZCASHME)}
       onExplain={onExplain}
     />
@@ -240,6 +241,7 @@ export function SettingsPrivacy() {
           <Row
             type='screen'
             label='everything zafu talks to'
+            preload={PopupPath.SETTINGS_CONNECTIONS}
             onPress={() => navigate(PopupPath.SETTINGS_CONNECTIONS)}
           />
         </Section>
@@ -256,6 +258,7 @@ export function SettingsPrivacy() {
             type='value'
             label='connected sites'
             value={String(sites)}
+            preload={PopupPath.SETTINGS_CONNECTED_SITES}
             onPress={() => navigate(PopupPath.SETTINGS_CONNECTED_SITES)}
           />
         </Section>

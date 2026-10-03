@@ -76,6 +76,7 @@ export const AppHeader = () => {
   return (
     <header className='sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border-soft bg-canvas pl-3 pr-2'>
       <button
+        data-preload='sheet:wallets'
         onClick={() => setOpenSheet('accounts')}
         className='flex h-10 min-w-0 items-center gap-2.5 pl-1 pr-2.5 transition-colors hover:bg-elev-2'
         aria-label='accounts'

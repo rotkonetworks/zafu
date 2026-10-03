@@ -1,5 +1,5 @@
 import { useMemo, useRef, useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
 import { useStore } from '../../../state';
@@ -61,6 +61,97 @@ export const AskHistorySheet = ({ hasFunds }: { hasFunds: boolean }) => {
 };
 
 /**
+ * Penumbra's history from the local view service, as the query home's section,
+ * activity and their intent preloads share.
+ */
+export const penumbraHistoryQuery = (account: number, enabled: boolean) =>
+  queryOptions({
+    queryKey: ['homeHistory', 'penumbra', account],
+    enabled,
+    staleTime: 10_000,
+    queryFn: async (): Promise<ParsedTransaction[]> => {
+      const infos = [];
+      for await (const r of viewClient.transactionInfo({})) {
+        if (r.txInfo) {
+          infos.push(r.txInfo);
+        }
+      }
+      const txs = describePenumbraHistory(infos).map(penumbraRow);
+      const heights = [...new Set(txs.map(t => t.height))];
+      const tsMap = new Map<number, number>();
+      await Promise.all(
+        heights.map(async h => {
+          try {
+            const { timestamp } = await sctClient.timestampByHeight({ height: BigInt(h) });
+            if (timestamp) {
+              tsMap.set(h, timestamp.toDate().getTime());
+            }
+          } catch {
+            /* */
+          }
+        }),
+      );
+      for (const t of txs) {
+        t.timestamp = tsMap.get(t.height) ?? null;
+      }
+      return txs;
+    },
+  });
+
+/** a zcash pocket's history from the worker, keyed as home's section and activity read it */
+export const zcashHistoryQuery = (
+  storeId: string | undefined,
+  zidecarUrl: string,
+  tAddresses: string[],
+  enabled: boolean,
+) =>
+  queryOptions({
+    queryKey: ['homeHistory', 'zcash', storeId, tAddresses.length],
+    enabled: enabled && !!storeId,
+    staleTime: 10_000,
+    queryFn: async (): Promise<ParsedTransaction[]> => {
+      const entries = await getHistoryInWorker('zcash', storeId!, zidecarUrl, tAddresses);
+      return entries.map(e => ({
+        id: e.id,
+        height: e.height,
+        // a pending row has no block and therefore no block time; its broadcast
+        // time is the only honest thing to date it by
+        timestamp: e.sentAt ?? null,
+        type: e.type as ParsedTransaction['type'],
+        // The verb has to match the state. "sent" for something that may never
+        // confirm is the overstatement that started all this.
+        description:
+          e.status === 'pending'
+            ? e.kind === 'migrate'
+              ? 'migrating'
+              : e.kind === 'shield'
+                ? 'shielding'
+                : 'sending'
+            : e.status === 'failed'
+              ? 'did not confirm'
+              : e.kind === 'migrate'
+                ? 'migrated'
+                : e.type === 'send'
+                  ? 'sent'
+                  : e.type === 'shield'
+                    ? 'shielded'
+                    : 'received',
+        amount: zatToZec(BigInt(e.amount)),
+        asset: e.asset,
+        // our own record's memo is what the user actually typed; the scanned
+        // one (merged in at render) is only ever recoverable for incoming notes
+        memo: e.memo,
+        status: e.status,
+        amountUpperBound: e.amountUpperBound,
+        recipientAmount: e.recipientAmount ? zatToZec(BigInt(e.recipientAmount)) : undefined,
+        feeAmount: e.fee ? zatToZec(BigInt(e.fee)) : undefined,
+        recipient: e.recipient,
+        sentAt: e.sentAt,
+      }));
+    },
+  });
+
+/**
  * Transaction history. Fetched only after the user chose to keep it
  * (`enableTransactionHistory`, asked once on the first payment); off means
  * nothing is queried and nothing renders. With `limit`, the home section:
@@ -101,87 +192,12 @@ export const HistoryContent = ({
   }, [messages, network]);
 
   // hooks must always be called in the same order - queries use `enabled` flag instead
-  const penumbraQ = useQuery({
-    queryKey: ['homeHistory', 'penumbra', penumbraAccount],
-    enabled: getRootNetwork(network) === 'penumbra' && historyEnabled,
-    staleTime: 10_000,
-    queryFn: async () => {
-      const infos = [];
-      for await (const r of viewClient.transactionInfo({})) {
-        if (r.txInfo) {
-          infos.push(r.txInfo);
-        }
-      }
-      const txs = describePenumbraHistory(infos).map(penumbraRow);
-      const heights = [...new Set(txs.map(t => t.height))];
-      const tsMap = new Map<number, number>();
-      await Promise.all(
-        heights.map(async h => {
-          try {
-            const { timestamp } = await sctClient.timestampByHeight({ height: BigInt(h) });
-            if (timestamp) {
-              tsMap.set(h, timestamp.toDate().getTime());
-            }
-          } catch {
-            /* */
-          }
-        }),
-      );
-      for (const t of txs) {
-        t.timestamp = tsMap.get(t.height) ?? null;
-      }
-      return txs;
-    },
-  });
-
-  const zcashQ = useQuery({
-    queryKey: ['homeHistory', 'zcash', zcashStoreId, tAddresses.length],
-    enabled: network === 'zcash' && !!zcashStoreId && historyEnabled,
-    staleTime: 10_000,
-    queryFn: async () => {
-      if (!zcashStoreId) {
-        return [];
-      }
-      const entries = await getHistoryInWorker('zcash', zcashStoreId, zidecarUrl, tAddresses);
-      return entries.map(e => ({
-        id: e.id,
-        height: e.height,
-        // a pending row has no block and therefore no block time; its broadcast
-        // time is the only honest thing to date it by
-        timestamp: e.sentAt ?? null,
-        type: e.type as ParsedTransaction['type'],
-        // The verb has to match the state. "sent" for something that may never
-        // confirm is the overstatement that started all this.
-        description:
-          e.status === 'pending'
-            ? e.kind === 'migrate'
-              ? 'migrating'
-              : e.kind === 'shield'
-                ? 'shielding'
-                : 'sending'
-            : e.status === 'failed'
-              ? 'did not confirm'
-              : e.kind === 'migrate'
-                ? 'migrated'
-                : e.type === 'send'
-                  ? 'sent'
-                  : e.type === 'shield'
-                    ? 'shielded'
-                    : 'received',
-        amount: zatToZec(BigInt(e.amount)),
-        asset: e.asset,
-        // our own record's memo is what the user actually typed; the scanned
-        // one is only ever recoverable for incoming notes
-        memo: e.memo ?? memoByTxId.get(e.id),
-        status: e.status,
-        amountUpperBound: e.amountUpperBound,
-        recipientAmount: e.recipientAmount ? zatToZec(BigInt(e.recipientAmount)) : undefined,
-        feeAmount: e.fee ? zatToZec(BigInt(e.fee)) : undefined,
-        recipient: e.recipient,
-        sentAt: e.sentAt,
-      }));
-    },
-  });
+  const penumbraQ = useQuery(
+    penumbraHistoryQuery(penumbraAccount, getRootNetwork(network) === 'penumbra' && historyEnabled),
+  );
+  const zcashQ = useQuery(
+    zcashHistoryQuery(zcashStoreId, zidecarUrl, tAddresses, network === 'zcash' && historyEnabled),
+  );
 
   // refetch history when block heights advance (live update, no flicker)
   const prevPenumbraHeight = useRef(latestBlockHeight);
@@ -219,7 +235,9 @@ export const HistoryContent = ({
   const q = network === 'zcash' ? zcashQ : penumbraQ;
   // for penumbra, filter by the selected account index - a tx belongs to an
   // account if any of its visible spend or output notes reference that index
-  const allTxs = (q.data ?? []) as ParsedTransaction[];
+  const allTxs = (q.data ?? []).map(tx =>
+    network !== 'zcash' || tx.memo != null ? tx : { ...tx, memo: memoByTxId.get(tx.id) },
+  );
   const byAccount =
     network === 'penumbra'
       ? allTxs.filter(
@@ -257,7 +275,11 @@ export const HistoryContent = ({
       {limit && (
         <div className='flex h-[18px] items-center justify-between'>
           <h2 className='text-xs tracking-[0.04em] text-fg-muted'>activity</h2>
-          <Link to={PopupPath.ACTIVITY} className='text-xs text-network-accent'>
+          <Link
+            to={PopupPath.ACTIVITY}
+            data-preload={PopupPath.ACTIVITY}
+            className='text-xs text-network-accent'
+          >
             see all
           </Link>
         </div>

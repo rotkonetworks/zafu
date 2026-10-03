@@ -3,7 +3,7 @@
  * wallets and cold signers, add wallet, then lock and open in window.
  */
 
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { cn } from '@repo/ui/lib/utils';
@@ -26,7 +26,8 @@ import {
   visiblePockets,
 } from '../state/pockets';
 import { pocketStoreId } from '../state/pocket-id';
-import { getBalanceInWorker } from '../state/keyring/network-worker';
+import { zcashWorkerQuery } from '../hooks/zcash-pool-balances';
+import { navTimingOn, Painted } from '../routes/popup/preload';
 import { PopupPath } from '../routes/popup/paths';
 import { isSidePanel } from '../utils/popup-detection';
 import { custodyOf, type Custody } from './custody-badge';
@@ -55,14 +56,14 @@ const CUSTODY_ICON: Record<Custody, string> = {
 export interface PocketTarget {
   active: (s: AllSlices) => number;
   pick: (s: AllSlices, owner: string, account: number) => unknown;
-  balance?: (keyId: string, account: number) => Promise<bigint>;
+  /** the worker store holding this pocket's notes, where it has its own */
+  store?: (keyId: string, account: number) => string;
 }
 
 const ZCASH_POCKET: PocketTarget = {
   active: activeAccountIndex,
   pick: (s, owner, account) => s.pockets.select(owner, account),
-  balance: async (keyId, account) =>
-    BigInt(await getBalanceInWorker('zcash', pocketStoreId(keyId, account))),
+  store: pocketStoreId,
 };
 
 const POCKET_TARGET: Partial<Record<NetworkType, PocketTarget>> = {
@@ -200,29 +201,16 @@ export const AccountsSheet = ({
   const hidePocket = useStore(s => s.pockets.hide);
   const renameKeyRing = useStore(selectRenameKeyRing);
   const owner = selectedKeyInfo ? pocketOwner(selectedKeyInfo) : undefined;
-  const [activeBalanceZat, setActiveBalanceZat] = useState<bigint>();
-
-  useEffect(() => {
-    if (!open || !isHotWallet || !selectedKeyInfo || !target.balance) {
-      return;
-    }
-    let cancelled = false;
-    target
-      .balance(selectedKeyInfo.id, activeAccount)
-      .then(bal => {
-        if (!cancelled) {
-          setActiveBalanceZat(bal);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setActiveBalanceZat(undefined);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open, isHotWallet, selectedKeyInfo, activeAccount, target]);
+  // the active pocket's figure is home's own cached one (same query), so the
+  // panel opens with it; it re-reads only while open
+  const activeStore =
+    isHotWallet && selectedKeyInfo && target.store
+      ? target.store(selectedKeyInfo.id, activeAccount)
+      : undefined;
+  const { data: activeBalanceZat } = useQuery({
+    ...zcashWorkerQuery.balance(activeStore),
+    enabled: open && !!activeStore,
+  });
 
   const pickWallet = (id: string) => {
     if (id !== selectedKeyInfo?.id) {
@@ -262,6 +250,7 @@ export const AccountsSheet = ({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title='accounts' className='gap-0 pb-0'>
+      {open && navTimingOn && <Painted target='sheet:wallets' />}
       {isHotWallet && selectedKeyInfo && (
         <div className='-mx-4 flex flex-col px-3 pb-2'>
           <div className='flex items-center gap-2 px-2'>
@@ -293,7 +282,7 @@ export const AccountsSheet = ({
               name={p.name}
               account={p.account}
               active={p.account === activeAccount}
-              balanceZat={target.balance && activeBalanceZat}
+              balanceZat={target.store && activeBalanceZat}
               onPick={() => pickPocket(p.account)}
               onRename={() =>
                 owner &&

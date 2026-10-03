@@ -79,6 +79,7 @@ export function NewGroupPage() {
           </Button>
           <button
             type='button'
+            data-preload={PopupPath.INBOX_JOIN}
             onClick={() => navigate(PopupPath.INBOX_JOIN)}
             className='self-center text-xs text-zigner-gold hover:underline'
           >

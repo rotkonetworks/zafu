@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -21,8 +22,14 @@ import { PopupPath } from '../paths';
 import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
 import { useTransparentBalance } from '../../../hooks/zcash-transparent-balance';
-import { getBalanceInWorker, type HistoryEntry } from '../../../state/keyring/network-worker';
-import { usePendingSends, usePoolBalances } from '../../../hooks/zcash-pool-balances';
+import type { HistoryEntry } from '../../../state/keyring/network-worker';
+import {
+  usePendingSends,
+  usePoolBalances,
+  useWorkerValue,
+  zcashBirthdayQuery,
+  zcashWorkerQuery,
+} from '../../../hooks/zcash-pool-balances';
 import { ShieldTransparent } from '../../../components/zcash/shield-transparent';
 import { InFlightCard, PendingLine } from '../../../components/in-flight-card';
 import { IRONWOOD_MIGRATION, nu63ActivationHeight } from '../../../config/feature-flags';
@@ -82,6 +89,7 @@ export const ZcashContent = ({
     failure: syncFailure,
   } = useZcashSyncStatus();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const penumbraOnly = useStore(selectPenumbraOnly);
@@ -101,62 +109,17 @@ export const ZcashContent = ({
   const { findByAddress } = useStore(contactsSelector);
   const [shieldOpen, setShieldOpen] = useState(false);
 
-  // shielded balance from worker (zatoshi string)
-  const [shieldedZat, setShieldedZat] = useState(0n);
-  // Whether that figure means anything yet. `0n` is both "no funds" and "not
-  // asked yet"; conflating them rendered a bare dash that read as "your
-  // money is gone".
-  const [balanceState, setBalanceState] = useState<'loading' | 'ready' | 'error'>('loading');
+  // shielded balance from the worker, cached per pocket store and re-read on
+  // sync progress and height changes. No figure yet is "loading" (`0n` is
+  // both "no funds" and "not asked yet"; conflating them read as "your money
+  // is gone"); a failed re-read keeps the figure it had.
+  const balance = useWorkerValue(zcashWorkerQuery.balance(storeId), workerSyncHeight);
+  const shieldedZat = balance.data ?? 0n;
+  const balanceState = balance.data !== undefined ? 'ready' : balance.isError ? 'error' : 'loading';
 
   // wallet birthday - used to show progress relative to start, not block 0
-  const [walletBirthday, setWalletBirthday] = useState(0);
-  useEffect(() => {
-    if (!hasWallet || !selectedKeyInfo) {
-      return;
-    }
-    const key = `zcashBirthday_${selectedKeyInfo.id}`;
-    chrome.storage.local.get(key, r => {
-      if (typeof r[key] === 'number') {
-        setWalletBirthday(r[key]);
-      }
-    });
-  }, [hasWallet, selectedKeyInfo?.id]);
-
-  // sync lifecycle is managed by useZcashAutoSync in PopupLayout; this reads
-  // status and balance, re-fetched on sync progress and height changes
-  useEffect(() => {
-    if (!storeId) {
-      return;
-    }
-
-    const fetchBalance = () => {
-      getBalanceInWorker('zcash', storeId)
-        .then(bal => {
-          setShieldedZat(BigInt(bal));
-          setBalanceState('ready');
-        })
-        .catch(() => {
-          // keep a figure we already had - a worker hiccup is not evidence
-          // the balance changed - but stop presenting it as current
-          setBalanceState(prev => (prev === 'ready' ? 'ready' : 'error'));
-        });
-    };
-
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.network !== 'zcash') {
-        return;
-      }
-      if (detail.walletId && detail.walletId !== storeId) {
-        return;
-      }
-      fetchBalance();
-    };
-
-    window.addEventListener('network-sync-progress', handler);
-    fetchBalance();
-    return () => window.removeEventListener('network-sync-progress', handler);
-  }, [storeId, workerSyncHeight]);
+  const birthdayQuery = zcashBirthdayQuery(hasWallet ? selectedKeyInfo?.id : undefined);
+  const walletBirthday = useQuery(birthdayQuery).data ?? 0;
 
   // derive transparent addresses for UTXO lookup (shared hook with caching)
   const { tAddresses } = useTransparentAddresses(isMainnet);
@@ -179,9 +142,8 @@ export const ZcashContent = ({
     void rescanZcash(h)
       .then(height => {
         if (height !== undefined) {
-          setWalletBirthday(height);
-          setShieldedZat(0n);
-          setBalanceState('loading');
+          queryClient.setQueryData(birthdayQuery.queryKey, height);
+          void queryClient.resetQueries({ queryKey: zcashWorkerQuery.balance(storeId).queryKey });
         }
       })
       .catch(err => console.error('[zcash] rescan failed:', err));

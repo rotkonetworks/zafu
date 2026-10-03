@@ -26,6 +26,7 @@ export const HomeActions = ({
     <Button
       variant='secondary'
       className='h-11 flex-1 text-[13px]'
+      data-preload={PopupPath.RECEIVE}
       onClick={() => navigate(PopupPath.RECEIVE)}
     >
       {icons && <span className='i-lucide-arrow-down size-[15px]' />}
@@ -49,6 +50,7 @@ export const HomeActions = ({
       <Button
         variant='secondary'
         className='h-11 flex-1 text-[13px]'
+        data-preload={PopupPath.SWAP}
         onClick={() => navigate(PopupPath.SWAP)}
       >
         {icons && <span className='i-lucide-arrow-left-right size-[15px]' />}
@@ -58,6 +60,7 @@ export const HomeActions = ({
         variant={spendable ? 'primary' : 'secondary'}
         className='h-11 flex-1 text-[13px]'
         disabled={!spendable}
+        data-preload={PopupPath.SEND}
         onClick={() => navigate(PopupPath.SEND)}
       >
         {icons && spendable && <span className='i-lucide-arrow-up size-[15px]' />}

@@ -180,6 +180,7 @@ export function ContactsPage() {
                 <button
                   key={c.id}
                   type='button'
+                  data-preload={contactPath(c.id)}
                   onClick={() => navigate(contactPath(c.id))}
                   className='flex h-14 items-center gap-3 px-3 text-left transition-colors hover:bg-elev-2'
                 >
