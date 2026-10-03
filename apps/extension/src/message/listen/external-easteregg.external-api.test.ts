@@ -751,3 +751,25 @@ describe('send - own address only for a connected site', () => {
     expect(memoOf(sendUrl(origin))).toBe('reply to [primary]');
   });
 });
+
+describe('ping', () => {
+  it('tells an unconnected site the protocol, not the release version', async () => {
+    const res = await call({ type: 'ping' }, validSender('https://ping-stranger.example'));
+    expect(res).toMatchObject({ zafu: true, version: '' });
+    expect(typeof res.protocolVersion).toBe('number');
+  });
+
+  it('tells a connected site the release version', async () => {
+    const origin = 'https://ping-friend.example';
+    await grantCapability(origin, 'connect');
+    const runtime = chrome.runtime as unknown as { getManifest?: () => { version: string } };
+    const before = runtime.getManifest;
+    runtime.getManifest = () => ({ version: '9.9.9' });
+    try {
+      const res = await call({ type: 'ping' }, validSender(origin));
+      expect(res.version).toBe('9.9.9');
+    } finally {
+      runtime.getManifest = before;
+    }
+  });
+});

@@ -63,6 +63,8 @@ export interface BuyPrefs {
   currency?: string;
   /** apps whose read access the person chose to keep */
   kept?: string[];
+  /** when that kept access is given back (see capture/kept.ts) */
+  keptUntil?: number;
 }
 
 export const readBuyPrefs = async (): Promise<BuyPrefs> => {

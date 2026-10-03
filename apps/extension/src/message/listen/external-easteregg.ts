@@ -2,7 +2,7 @@
  * external message listener - handles messages from websites via externally_connectable
  *
  * supports:
- * - { type: 'ping' } → responds with { zafu: true, version }
+ * - { type: 'ping' } → responds with { zafu: true, version (connected sites only) }
  * - { type: 'send', address } → opens send popup
  * - { type: 'zafu_sign', challengeHex, ... } → sign request (handled elsewhere)
  * - { type: 'zafu_request_capability', capability } → request a specific capability
@@ -513,14 +513,25 @@ export const externalMessageListener = (
   }
 
   switch (type) {
-    case 'ping':
-      sendResponse({
-        zafu: true,
-        version: chrome.runtime.getManifest().version,
-        protocolVersion: ZAFU_PROTOCOL_VERSION,
-        protocolVersions: [...ZAFU_SUPPORTED_PROTOCOL_VERSIONS],
-      });
+    case 'ping': {
+      // the release version narrows down who someone is; a site the person
+      // connected may read it, any other gets an empty string (the shape the
+      // protocol pins) and only the protocol versions it needs to talk to us
+      const origin = sender.origin;
+      void (async () => {
+        const connected =
+          !!origin &&
+          isValidExternalSender(sender) &&
+          hasCapability(await getOriginPermissions(origin), 'connect');
+        sendResponse({
+          zafu: true,
+          version: connected ? chrome.runtime.getManifest().version : '',
+          protocolVersion: ZAFU_PROTOCOL_VERSION,
+          protocolVersions: [...ZAFU_SUPPORTED_PROTOCOL_VERSIONS],
+        });
+      })().catch(() => sendResponse({ error: 'ping failed' }));
       return true;
+    }
 
     case 'send': {
       const address = msg['address'];

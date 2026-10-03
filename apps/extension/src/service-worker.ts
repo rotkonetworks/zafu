@@ -105,6 +105,7 @@ import { penumbraTiming } from './penumbra/timing';
 import { requestStopAllSync } from './state/keyring/network-worker';
 import { stampSeenVersion } from './state/moved-notice';
 import { idleFor } from './state/idle-activity';
+import { keptCaptureAccess } from './buy/capture/kept';
 
 // performance.now() counts from the worker's start, so this is wake to here:
 // the wasm-backed imports above are what the entry body waits on
@@ -144,6 +145,11 @@ chrome.storage.onChanged.addListener(
 // people: group and pair rooms on the people relay. Starts nothing by
 // itself; the first request is the person opening people.
 const people = startPeopleRelay();
+
+// a Peer capture grant kept "for the next buy" (webRequest + scripting, which
+// reach every site) is given back once its time is up, even if the buy page is
+// never opened again
+void keptCaptureAccess().catch(() => undefined);
 
 const ui = startUiOpenSession(
   {

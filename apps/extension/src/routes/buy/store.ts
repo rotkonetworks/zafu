@@ -48,6 +48,7 @@ import { askForGas } from '../../buy/sponsor';
 import { readBuyPrefs, readOpenBuy, writeBuyPrefs, writeOpenBuy } from '../../buy/store';
 import templates from '../../buy/capture/templates.json';
 import { pinTemplate, wantsIndex, type Row, type Template } from '../../buy/capture/template';
+import { dropCaptureAccess, keepCaptureAccess, keptCaptureAccess } from '../../buy/capture/kept';
 import {
   capturePayment,
   releaseCaptureAccess,
@@ -228,7 +229,13 @@ export const init = async () => {
     set({ phase: 'cannot' });
     return;
   }
-  const [prefs, buy, view] = await Promise.all([readBuyPrefs(), readOpenBuy(), readEgressView()]);
+  const [prefs, buy, view, keep] = await Promise.all([
+    readBuyPrefs(),
+    readOpenBuy(),
+    readEgressView(),
+    // the box shows what is really kept (and an expired keep is given back here)
+    keptCaptureAccess(),
+  ]);
   const currency = prefs.currency ?? localCurrency();
   const app = defaultApp(currency, prefs.app)?.id ?? 'revolut';
   const egress = BUY_EGRESS.every(id => view.find(d => d.id === id)?.on) ? 'ok' : 'ask';
@@ -238,6 +245,7 @@ export const init = async () => {
     currency,
     app,
     firstTime: !prefs.app,
+    keep,
     buy,
     resumed: !!buy && !isTerminal(buy.stage),
     walletLabel: key.name,
@@ -441,7 +449,13 @@ export const paid = async () => {
 };
 
 export const setBank = (bank: TemplateKey) => set({ bank });
-export const setKeep = (keep: boolean) => set({ keep });
+export const setKeep = (keep: boolean) => {
+  set({ keep });
+  // unticking a kept grant gives it back now, not at the next buy
+  if (!keep) {
+    void keptCaptureAccess().then(on => (on ? dropCaptureAccess() : undefined));
+  }
+};
 
 const liveTemplate = async (key: TemplateKey, hosts: readonly string[]): Promise<Template> => {
   const bundled = templates[key] as Template;
@@ -469,8 +483,7 @@ export const allowRead = async () => {
   await setDestinationOptIn(`pay-${app.id}`, 'allowed');
   await refreshEgress();
   if (s.keep) {
-    const kept = new Set((await readBuyPrefs()).kept ?? []);
-    await writeBuyPrefs({ kept: [...kept.add(app.id)] });
+    await keepCaptureAccess(app.id);
   }
   await readPayment(app.id, key);
 };
