@@ -197,4 +197,36 @@ describe('BlockProcessor sync loop', () => {
     expect(asked).toBe(closed);
     processor.stop('test done');
   });
+
+  it('a retry that starts after the pause asks the node nothing', async () => {
+    let reads = 0;
+    let calls = 0;
+    const down = () => {
+      calls++;
+      return Promise.reject(new Error('node down'));
+    };
+    const processor = new BlockProcessor({
+      querier: { tendermint: { latestBlockHeight: down }, cnidarium: { fetchRemoteRoot: down } },
+      indexedDb: {
+        // the first attempt fails on its own, so backOff waits before the next
+        getFullSyncHeight: () =>
+          ++reads === 1 ? Promise.reject(new Error('busy')) : Promise.resolve(10n),
+      },
+      viewServer: { getSctRoot: () => ({}) },
+      numeraires: [],
+      stakingAssetId: new AssetId({}),
+      genesisBlock: undefined,
+      walletCreationBlockHeight: undefined,
+      compactFrontierBlockHeight: undefined,
+      fullViewingKey: new FullViewingKey({}),
+    } as unknown as BlockProcessorDeps);
+    const run = processor.sync().catch(() => undefined);
+    await vi.waitFor(() => expect(reads).toBe(1));
+    // every window closes during backOff's wait
+    processor.pause();
+    await run;
+    expect(calls).toBe(0);
+    expect(reads).toBe(1);
+    processor.stop('test done');
+  }, 15_000);
 });

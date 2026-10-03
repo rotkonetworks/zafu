@@ -204,6 +204,9 @@ export class BlockProcessor implements BlockProcessorInterface {
   private run = async (): Promise<void> => {
     const signal = this.abortController.signal;
     try {
+      // an attempt that backOff starts after a pause landed in its delay ends
+      // here: no tree reload, and no call to the node with every window closed
+      signal.throwIfAborted();
       // every run starts from what is stored, never from a tree ahead of it
       if (this.unflushed) {
         await this.viewServer.resetTreeToStored();
