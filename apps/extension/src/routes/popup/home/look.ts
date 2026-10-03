@@ -21,6 +21,8 @@ export interface HomeLook {
   receive: string;
   /** buying in from another asset, where the swap route exists */
   swapInto?: string;
+  /** buying with money: peer sells usdc, then the swap brings it in */
+  buy?: string;
 }
 
 export const HOME_LOOK = {
@@ -34,6 +36,7 @@ export const HOME_LOOK = {
     empty: 'no zec yet',
     receive: 'receive zec',
     swapInto: 'swap into zec',
+    buy: 'buy zec',
   },
   penumbra: {
     unit: 'um',
