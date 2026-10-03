@@ -163,4 +163,38 @@ describe('BlockProcessor sync loop', () => {
       expect(streamsOpened).toBe(0);
     });
   });
+
+  it('a node that is down is not asked again once every window closes', async () => {
+    let asked = 0;
+    const processor = new BlockProcessor({
+      querier: {
+        tendermint: {
+          latestBlockHeight: () => {
+            asked++;
+            return Promise.reject(new Error('node down'));
+          },
+        },
+      },
+      indexedDb: { getFullSyncHeight: () => Promise.resolve(undefined) },
+      viewServer: {},
+      numeraires: [],
+      stakingAssetId: new AssetId({}),
+      genesisBlock: undefined,
+      walletCreationBlockHeight: undefined,
+      compactFrontierBlockHeight: undefined,
+      fullViewingKey: new FullViewingKey({}),
+    } as unknown as BlockProcessorDeps);
+    const run = processor.sync();
+    await vi.waitFor(() => expect(asked).toBeGreaterThanOrEqual(2));
+
+    processor.pause();
+    // the run winds down instead of retrying forever
+    await run;
+    const closed = asked;
+    await new Promise(r => {
+      setTimeout(r, 1_000);
+    });
+    expect(asked).toBe(closed);
+    processor.stop('test done');
+  });
 });

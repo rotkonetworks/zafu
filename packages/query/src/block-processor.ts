@@ -328,16 +328,19 @@ export class BlockProcessor implements BlockProcessorInterface {
       this.compactFrontierBlockHeight >= currentHeight;
 
     // this is the first network query of the block processor. use backoff to
-    // delay until network is available
+    // delay until network is available - but only while this run is wanted: a
+    // pause (every window closed) or hold ends the retries, so a node that is
+    // down is not asked again and again with nobody looking
     let latestKnownBlockHeight = await backOff(
       async () => {
+        signal.throwIfAborted();
         const latest = await this.querier.tendermint.latestBlockHeight();
         if (!latest) {
           throw new Error('Unknown latest block height');
         }
         return latest;
       },
-      { retry: () => true },
+      { retry: () => !signal.aborted },
     );
 
     // Check that 'currentHeight' and 'compactFrontierBlockHeight' local extension
