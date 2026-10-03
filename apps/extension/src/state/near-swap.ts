@@ -146,6 +146,9 @@ export async function getSupportedTokens(): Promise<NearToken[]> {
   return nearFetch<NearToken[]>('/v0/tokens');
 }
 
+/** how long 1click gathers solver quotes before it answers */
+export const NEAR_QUOTE_WAIT_MS = 3000;
+
 /** Request a swap quote. Returns deposit address + amounts. */
 export async function requestQuote(params: {
   swapType: 'EXACT_INPUT' | 'EXACT_OUTPUT';
@@ -179,7 +182,7 @@ export async function requestQuote(params: {
     recipient: params.recipient,
     recipientType: 'DESTINATION_CHAIN',
     deadline,
-    quoteWaitingTimeMs: 3000,
+    quoteWaitingTimeMs: NEAR_QUOTE_WAIT_MS,
     appFees: params.appFeeBps
       ? [{ recipient: NEAR_APP_FEE_RECIPIENT, fee: params.appFeeBps }]
       : undefined,

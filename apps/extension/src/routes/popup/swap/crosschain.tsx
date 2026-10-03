@@ -7,7 +7,16 @@
  * signed or shown to pay.
  */
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
@@ -61,7 +70,9 @@ import {
   plain,
   QUOTABLE,
   quoteQuery,
+  quoteStatus,
   refreshIn,
+  WAIT,
   watchEgress,
 } from '../../../state/swap/live';
 import {
@@ -94,6 +105,7 @@ import { useYourAddresses } from '../../../hooks/use-your-addresses';
 import { chainName } from '../../../state/swap/tokens';
 import { TokenSheet } from './token-sheet';
 import { CostList, CostMeta } from './cost-lines';
+import './swap-live.css';
 
 export type Step =
   | 'input'
@@ -208,23 +220,80 @@ export const useSettled = (value: string, usable: boolean) => {
   return settled;
 };
 
-/** the header's quiet clock to the next price */
-const RefreshIn = ({ at }: { at: number }) => {
-  const left = useDeadlineCountdown(at);
-  return <>{left ? `refreshes in ${left}s` : 'updating'}</>;
-};
+const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** the time to the next price, as a thin ring draining (no ticking renders) */
+const Drain = ({ at }: { at: number }) => (
+  <svg viewBox='0 0 12 12' className='size-3 -rotate-90' aria-hidden='true'>
+    <circle
+      key={at}
+      cx='6'
+      cy='6'
+      r='5'
+      fill='none'
+      strokeWidth='1.5'
+      strokeDasharray='31.4'
+      className='swap-drain stroke-zigner-gold/60'
+      style={{ '--over': `${Math.max(0, at - Date.now())}ms`, '--len': '31.4' } as CSSProperties}
+    />
+  </svg>
+);
 
 /** a figure that fades in when it changes, and dims while a newer one is asked for */
 const Figure = ({ text, stale, struck }: { text: string; stale?: boolean; struck?: boolean }) => (
   <span className={cn('transition-opacity duration-300', stale && 'opacity-50')}>
     <Sensitive
       key={text}
-      className={cn('duration-300 animate-in fade-in', struck && 'line-through')}
+      className={cn(
+        'duration-300 animate-in fade-in motion-reduce:animate-none',
+        struck && 'line-through',
+      )}
     >
       {text}
     </Sensitive>
   </span>
 );
+
+/** the amount you get, counting from the last figure to the new one */
+const CountUp = ({ text }: { text: string }) => {
+  const [between, setBetween] = useState<string>();
+  const from = useRef(text);
+  useEffect(() => {
+    const [a, b] = [parseFloat(from.current), parseFloat(text)];
+    from.current = text;
+    if (!(a > 0 && b > 0) || a === b || calm()) {
+      return;
+    }
+    const places = text.split('.')[1]?.length ?? 0;
+    const t0 = performance.now();
+    let frame = requestAnimationFrame(function tick(t) {
+      const k = Math.min(1, (t - t0) / 250);
+      setBetween(k < 1 ? (a + (b - a) * (1 - (1 - k) ** 3)).toFixed(places) : undefined);
+      frame = k < 1 ? requestAnimationFrame(tick) : 0;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [text]);
+  return <Sensitive>{between ?? text}</Sensitive>;
+};
+
+/** rows glide from where they were when their order changes (FLIP), instead of jumping */
+const useFlip = (list: RefObject<HTMLElement | null>, order: string) => {
+  const was = useRef(new Map<string, number>());
+  useLayoutEffect(() => {
+    for (const row of list.current?.children ?? []) {
+      const { key = '' } = (row as HTMLElement).dataset;
+      const top = (row as HTMLElement).offsetTop;
+      const before = was.current.get(key);
+      if (before !== undefined && before !== top && !calm()) {
+        row.animate([{ transform: `translateY(${before - top}px)` }, { transform: 'none' }], {
+          duration: 200,
+          easing: 'ease-out',
+        });
+      }
+      was.current.set(key, top);
+    }
+  }, [list, order]);
+};
 
 /** one route in the routes sheet: a square mark, name, amount, one meta line */
 const RouteChoice = ({
@@ -305,28 +374,60 @@ const RouteMeta = ({
   </>
 );
 
-/** a route that has no price here: its name and one plain line, muted; a tap asks when it can */
-const QuietRow = ({
+/**
+ * One route on one line: its name, then its price or why it has none. While
+ * its request is out, a thin gold line fills over the route's real wait.
+ */
+const RouteLine = ({
   route,
   line,
+  on,
+  waiting,
+  stale,
   onPress,
 }: {
   route: RouteId;
-  line: string;
+  line?: string;
+  on?: boolean;
+  waiting?: boolean;
+  /** an older price, kept while the next is asked */
+  stale?: boolean;
   onPress?: () => void;
-}) => (
-  <button
-    type='button'
-    onClick={onPress}
-    disabled={!onPress}
-    className={cn(
-      'truncate text-left text-[11px] text-fg-muted',
-      onPress ? 'underline-offset-4 hover:text-fg-high hover:underline' : 'cursor-default',
-    )}
-  >
-    {ROUTES[route].label} · {line}
-  </button>
-);
+}) => {
+  const wait = WAIT[route];
+  return (
+    <button
+      type='button'
+      data-key={route}
+      onClick={onPress}
+      disabled={!onPress}
+      className={cn(
+        'relative flex h-6 shrink-0 items-center truncate text-left text-[11px]',
+        on ? 'text-fg-high' : 'text-fg-muted',
+        onPress ? 'underline-offset-4 hover:text-fg-high hover:underline' : 'cursor-default',
+      )}
+    >
+      {ROUTES[route].label}
+      {line && (
+        <span
+          key={line}
+          className={cn(
+            'transition-opacity duration-300 animate-in fade-in motion-reduce:animate-none',
+            stale && 'opacity-50',
+          )}
+        >
+          &nbsp;· {line}
+        </span>
+      )}
+      {waiting && wait && (
+        <span
+          className='swap-wait absolute inset-x-0 bottom-0.5 h-px bg-zigner-gold'
+          style={{ '--after': `${wait.after}ms`, '--over': `${wait.over}ms` } as CSSProperties}
+        />
+      )}
+    </button>
+  );
+};
 
 export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const goBack = useBackNav(PopupPath.INDEX);
@@ -506,6 +607,33 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const askable = gated.filter(g => g.ask).map(g => g.route);
   const allFailed =
     !!req && !quotes.length && !fetching && asked.length > 0 && quiet.length >= asked.length;
+  // every route keeps its one line, best first: an arrival reorders rows, never adds or removes one
+  const lines = gated
+    .map(g => {
+      const a = answerOf(g.route);
+      const q = a?.data;
+      return {
+        route: g.route,
+        line: q
+          ? `${q.amountOutText} ${outUnit}${q.notYet ? ` · ${q.notYet}` : ''}`
+          : (g.line ?? (a?.error ? plain(g.route, a.error) : undefined)),
+        on: !!q && q.route === view?.route,
+        waiting: !!a?.isFetching,
+        stale: !!a?.isPlaceholderData || !!a?.isFetching,
+        onPress: q ? () => setRoutesOpen(true) : g.ask ? () => void askFor([g.route]) : undefined,
+        rank: q ? quotes.indexOf(q) : g.line || a?.error ? 99 : 50,
+      };
+    })
+    .sort((x, y) => x.rank - y.rank);
+  const routeList = useRef<HTMLDivElement>(null);
+  useFlip(routeList, lines.map(l => l.route).join());
+  const asking = quoteStatus(
+    asked.map((g, i) => ({
+      route: g.route,
+      out: !!answers[i]?.isFetching,
+      priced: !!answers[i]?.data,
+    })),
+  );
 
   // a route not yet allowed asks once, on a tap; then its price is asked like the rest
   const askFor = async (routes: RouteId[]) => {
@@ -854,10 +982,11 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
             `via ${ROUTES[pinned].label}`
           ) : expiredLive ? (
             <span className='text-hanko-light'>quote expired</span>
-          ) : fetching || !next || reviewOpen ? (
-            fetching && 'updating'
           ) : (
-            <RefreshIn at={next} />
+            <>
+              {asking}
+              {!!next && !fetching && !reviewOpen && <Drain at={next} />}
+            </>
           ),
         )}
         <Main className='gap-[18px] pt-5'>
@@ -917,7 +1046,15 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
             >
               <span className='min-w-0 truncate font-display text-2xl text-fg-high'>
                 {view ? (
-                  <Figure text={view.amountOutText} stale={stale} struck={expiredLive} />
+                  <span
+                    className={cn(
+                      'transition-opacity duration-300',
+                      stale && 'opacity-50',
+                      expiredLive && 'line-through',
+                    )}
+                  >
+                    <CountUp text={view.amountOutText} />
+                  </span>
                 ) : (
                   <span className='text-fg-dim'>0</span>
                 )}
@@ -934,7 +1071,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
                 type='button'
                 onClick={() => setRoutesOpen(true)}
                 disabled={!quotes.length}
-                className='flex min-h-[58px] flex-col justify-center gap-1 border border-border-soft bg-elev-1 px-4 py-2.5 text-left disabled:cursor-default'
+                className='flex h-24 flex-col justify-center gap-1 overflow-hidden border border-border-soft bg-elev-1 px-4 py-2.5 text-left disabled:cursor-default'
               >
                 {view ? (
                   <>
@@ -961,24 +1098,11 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
                   </span>
                 )}
               </button>
-              {quotes
-                .filter(q => q.route !== view?.route)
-                .map(q => (
-                  <QuietRow
-                    key={q.route}
-                    route={q.route}
-                    line={`${q.amountOutText} ${outUnit}${q.notYet ? ` · ${q.notYet}` : ''}`}
-                    onPress={() => setRoutesOpen(true)}
-                  />
+              <div ref={routeList} className='flex flex-col'>
+                {lines.map(l => (
+                  <RouteLine key={l.route} {...l} />
                 ))}
-              {quiet.map(r => (
-                <QuietRow
-                  key={r.route}
-                  route={r.route}
-                  line={r.line}
-                  onPress={'ask' in r && r.ask ? () => void askFor([r.route]) : undefined}
-                />
-              ))}
+              </div>
             </div>
           )}
           <ToField
@@ -1065,7 +1189,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
             />
           ))}
           {quiet.map(r => (
-            <QuietRow key={r.route} route={r.route} line={r.line} />
+            <RouteLine key={r.route} route={r.route} line={r.line} />
           ))}
         </Sheet>
         {deal && firm && (

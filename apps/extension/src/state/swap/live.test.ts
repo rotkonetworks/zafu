@@ -291,3 +291,17 @@ describe('prices kept for a reopened popup', () => {
     expect(late.getQueryData(q.queryKey)).toBeUndefined();
   });
 });
+
+describe('the quiet status as answers come in', () => {
+  it('says who is asked, who answered, then how many to choose from', async () => {
+    const { quoteStatus } = await import('./live');
+    const r = (route: 'near' | 'thor', out: boolean, priced: boolean) => ({ route, out, priced });
+    expect(quoteStatus([r('near', true, false), r('thor', true, false)])).toBe(
+      'asking near, thorchain',
+    );
+    expect(quoteStatus([r('near', false, true), r('thor', true, false)])).toBe('near answered');
+    expect(quoteStatus([r('near', false, true), r('thor', false, true)])).toBe('best of 2');
+    expect(quoteStatus([r('near', false, true), r('thor', false, false)])).toBe('near answered');
+    expect(quoteStatus([r('near', false, false)])).toBeUndefined();
+  });
+});

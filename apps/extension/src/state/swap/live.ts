@@ -10,11 +10,35 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { readEgressView } from '../../net/egress-opt-in';
 import { isEgressBlocked } from '../../net/egress';
 import { EGRESS_INPUT_KEYS, type DestinationView } from '../../net/egress-policy';
+import { NEAR_QUOTE_WAIT_MS } from '../near-swap';
 import { PROVIDERS } from '.';
 import { fromUnits, toUnits, type Quote, type QuoteRequest, type SwapToken } from './provider';
 import { OFFERED, ROUTES, type RouteId, type SwapPair } from './routes';
 
 export const DEBOUNCE_MS = 400;
+
+/** how long a route's answer really takes: its waiting line shows after `after` ms and fills over `over` */
+export const WAIT: Partial<Record<RouteId, { after: number; over: number }>> = {
+  near: { after: 0, over: NEAR_QUOTE_WAIT_MS },
+  thor: { after: 300, over: 1_700 },
+  maya: { after: 300, over: 1_700 },
+};
+
+/** the header's one quiet line as answers come in: who is asked, who answered, how many to choose from */
+export const quoteStatus = (
+  routes: readonly { route: RouteId; out: boolean; priced: boolean }[],
+): string | undefined => {
+  const short = (r: { route: RouteId }) => ROUTES[r.route].label.split(' ')[0];
+  const out = routes.filter(r => r.out);
+  const priced = routes.filter(r => r.priced && !r.out);
+  return out.length
+    ? priced.length
+      ? `${priced.map(short).join(', ')} answered`
+      : `asking ${out.map(short).join(', ')}`
+    : priced.length > 1
+      ? `best of ${priced.length}`
+      : priced[0] && `${short(priced[0])} answered`;
+};
 /** a seen price is asked again this often, and always before it expires */
 export const REFRESH_MS = 30_000;
 const LEAD_MS = 15_000;
