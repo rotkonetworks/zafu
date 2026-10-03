@@ -109,7 +109,7 @@ export class BlockProcessor implements BlockProcessorInterface {
   private abortController: AbortController = new AbortController();
   /** every window is closed: nobody is looking */
   private paused = false;
-  /** work that goes ahead of sync (a send being planned or built); nests */
+  /** something sync must wait for (the chain-id check); nests */
   private holds = 0;
   /** stopped for good (wallet switch, shutdown): nothing may start it again */
   private stopped = false;
@@ -248,10 +248,20 @@ export class BlockProcessor implements BlockProcessorInterface {
   };
 
   /**
-   * Yield to work that must not wait on catch-up sync (planning or building a
-   * send). Holds nest with each other and with pause(): sync runs again only
-   * once every hold is released and a window is open. The release is
-   * idempotent, so a caller can release from a finally without counting.
+   * Keep sync from running until something it depends on is settled. Its one
+   * user is the service worker's chain-id check: services start on the
+   * stored chain id, and no block is read until the node confirms it (see
+   * apps/extension/src/penumbra/chain-check.ts).
+   *
+   * Sends do NOT hold sync. Holding would not make planning safer: notes and
+   * witnesses come from the consistent stored state either way, and a note
+   * spent in a block not yet scanned is caught by the chain as a double
+   * spend, which no hold can see sooner. Planning during catch-up can
+   * therefore fail at broadcast; it never risks funds.
+   *
+   * Holds nest with each other and with pause(): sync runs again only once
+   * every hold is released and a window is open. The release is idempotent,
+   * so a caller can release from a finally without counting.
    */
   public hold = (): (() => void) => {
     this.holds += 1;

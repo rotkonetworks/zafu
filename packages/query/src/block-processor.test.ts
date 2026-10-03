@@ -83,7 +83,7 @@ describe('BlockProcessor sync loop', () => {
     expect(streamsOpened).toBe(before);
   });
 
-  describe('holds (a send goes ahead of sync)', () => {
+  describe('holds (sync waits on the chain-id check)', () => {
     const settle = () =>
       new Promise(r => {
         setTimeout(r, 200);
