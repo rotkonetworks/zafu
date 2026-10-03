@@ -208,6 +208,7 @@ export class BlockProcessor implements BlockProcessorInterface {
       if (this.unflushed) {
         await this.viewServer.resetTreeToStored();
         this.unflushed = false;
+        console.debug('[sync] tree put back to what is stored before reading on');
       }
       await this.syncAndStore(signal);
     } catch (e) {
@@ -854,6 +855,7 @@ export class BlockProcessor implements BlockProcessorInterface {
       return 'unknown';
     }
     if (remote.equals(local)) {
+      console.debug(`[sync] the stored tree at ${height} is the chain's`);
       return 'ok';
     }
     console.warn(
