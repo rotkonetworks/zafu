@@ -23,6 +23,8 @@ import { zcashWorkerQuery } from '../../hooks/zcash-pool-balances';
 import { activeTransparentAddressesQuery } from '../../hooks/use-transparent-addresses';
 import { penumbraHistoryQuery, zcashHistoryQuery } from './home/history';
 import { zidPinsQuery } from './identity/use-identity';
+import { swapWallet } from '../../hooks/swap-preload';
+import { preloadSwapQuote } from '../../state/swap/preload';
 import type { Preload, PreloadCtx } from './route-modules';
 
 const zidecarOf = (s: AllSlices) => s.networks.networks.zcash.endpoint || 'https://zcash.rotko.net';
@@ -94,17 +96,19 @@ export const routePreloads = {
   receive: tAddresses,
   /**
    * swap entry: the local reads the screen opens on (penumbra balances; on
-   * zcash the transparent refund address and the spendable notes). Quotes are
-   * the swap screen's own and plug in beside this through
-   * `registerRoutePreload(PopupPath.SWAP, ...)` - only for routes already allowed.
+   * zcash the transparent refund address and the spendable notes), and the
+   * swap's own price preload: the last prices it was shown, put back from
+   * session memory, and a fresh quote from routes already allowed - a route
+   * not yet allowed is never asked (state/swap/preload.ts).
    */
   swap: all(penumbraBalances, ({ client, state }) => {
-    const store = activeZcashStoreId(state) ?? selectEffectiveKeyInfo(state)?.id;
+    const wallet = swapWallet(state);
     return (
       isZcash(state) &&
       Promise.all([
         client.prefetchQuery(activeTransparentAddressesQuery(state, true)),
-        client.prefetchQuery(zcashWorkerQuery.notes(store)),
+        client.prefetchQuery(zcashWorkerQuery.notes(wallet)),
+        wallet && preloadSwapQuote({ client, wallet }),
       ])
     );
   }),

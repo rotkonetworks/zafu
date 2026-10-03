@@ -35,7 +35,7 @@ const EMPTY_POOL_BALANCES: PoolBalances = {
 };
 
 /** Empty per-pool note lists - the value before the first fetch resolves. */
-const EMPTY_POOL_NOTES: PoolNotes = { orchard: [], ironwood: [] };
+export const EMPTY_POOL_NOTES: PoolNotes = { orchard: [], ironwood: [] };
 
 const workerQuery = <T>(what: string, read: (walletId: string) => Promise<T>) => {
   const options = (walletId: string | undefined) =>
