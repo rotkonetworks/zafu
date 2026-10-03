@@ -15,6 +15,7 @@ export function Sheet({
   onOpenChange,
   title,
   children,
+  footer,
   className,
 }: {
   open: boolean;
@@ -22,6 +23,10 @@ export function Sheet({
   /** the sheet's accessible name; also rendered as its heading. */
   title: string;
   children: React.ReactNode;
+  /** an action row pinned below the scrolling body (e.g. confirm/back), for
+   *  sheets whose content can outgrow the 85vh cap. Omit it and the whole
+   *  body (including any action row inside `children`) scrolls together. */
+  footer?: React.ReactNode;
   className?: string;
 }) {
   return (
@@ -57,7 +62,8 @@ export function Sheet({
               <span className='i-lucide-x size-[18px]' aria-hidden='true' />
             </DialogPrimitive.Close>
           </div>
-          {children}
+          <div className='flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto'>{children}</div>
+          {footer && <div className='shrink-0'>{footer}</div>}
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
