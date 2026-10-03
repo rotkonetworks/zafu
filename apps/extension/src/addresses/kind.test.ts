@@ -104,7 +104,14 @@ describe('addressKind', () => {
   it('reads cosmos bech32 with a known prefix and a good checksum', () => {
     expect(addressKind(OSMO)).toEqual({ kind: 'cosmos', prefix: 'osmo' });
     expect(addressKind(flip(OSMO)).kind).toBe('unknown');
-    expect(addressKind(toBech32('nope', Array(20).fill(1))).kind).toBe('unknown');
+    // ibc chains come from the registry: an unlisted prefix is still cosmos
+    expect(addressKind(toBech32('nope', Array(20).fill(1)))).toEqual({
+      kind: 'cosmos',
+      prefix: 'nope',
+    });
+    // but never another chain's bech32, or a payload of the wrong size
+    expect(addressKind(toBech32('ltc', Array(20).fill(1))).kind).toBe('unknown');
+    expect(addressKind(toBech32('nope', Array(16).fill(1))).kind).toBe('unknown');
   });
 
   it('never calls a zid or garbage an address', () => {
@@ -138,6 +145,9 @@ describe('saved contact addresses', () => {
     expect(addressLabel({ network: 'base', address: ETH })).toBe('base');
     expect(addressLabel({ network: 'ethereum', address: ETH })).toBe('ethereum');
     expect(addressLabel({ network: 'cosmos', address: OSMO })).toBe('osmosis');
+    expect(addressLabel({ network: 'cosmos', address: toBech32('nope', Array(20).fill(1)) })).toBe(
+      'cosmos · nope',
+    );
     expect(addressLabel({ network: 'zcash', address: ZID })).toBeUndefined();
   });
 

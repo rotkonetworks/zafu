@@ -19,6 +19,7 @@ import { ScreenHeader } from '../../../components/screen-header';
 import { Sensitive } from '../../../components/sensitive';
 import { SaveContactModal } from '../../../components/save-contact-modal';
 import { QrScanner } from '../../../shared/components/qr-scanner';
+import { useActiveAddress } from '../../../hooks/use-address';
 import { EMPTY_BALANCES } from './shared';
 import { Footer, Main, shortAddress } from './send-ui';
 import { AmountField, AddressSheet, ToField } from './send-fields';
@@ -47,6 +48,8 @@ export function PenumbraSend({
   const penumbraAccount = useStore(selectPenumbraAccount);
   const { recordUsage, shouldSuggestSave } = useStore(recentAddressesSelector);
   const { findByAddress } = useStore(contactsSelector);
+  // this wallet's own address, offered under "yours" in the picker
+  const { address: ownAddress } = useActiveAddress();
   const [assetOpen, setAssetOpen] = useState(false);
   const [bookOpen, setBookOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
@@ -233,6 +236,7 @@ export function PenumbraSend({
             open={bookOpen}
             onOpenChange={setBookOpen}
             onScan={() => setScanOpen(true)}
+            own={ownAddress ? [{ label: 'this wallet', address: ownAddress }] : []}
             onPick={row => sendState.setRecipient(row.address)}
           />
           {scanOpen && (

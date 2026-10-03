@@ -20,8 +20,8 @@ export const useYourAddresses = (chain: AddressChain | undefined) => {
   const client = useQueryClient();
   const { data } = useQuery({
     queryKey: KEY,
+    // re-read on each open: a read while locked answers none, never for good
     queryFn: () => readYourAddresses().catch(() => []),
-    staleTime: Infinity,
   });
   const yours = owner && chain ? yoursOn(data ?? [], owner, chain) : [];
   const remember = async (address: string) => {

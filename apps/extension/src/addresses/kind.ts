@@ -155,10 +155,23 @@ const isSegwit = (s: string): boolean => {
     : d.spec === 'bech32m';
 };
 
+/** bech32 prefixes of other chains, never read as cosmos */
+const NOT_COSMOS = new Set(['bc', 'tb', 'bcrt', 'ltc', 'tltc', 'tex', 'zs', 'u', 'utest']);
+
+/**
+ * A cosmos-sdk account: classic bech32 over 20 or 32 bytes. The ibc chains
+ * come from the registry at runtime, so any plain lowercase prefix counts,
+ * not only the ones named above.
+ */
 const cosmosPrefix = (s: string): string | undefined => {
   const d = bech32(s);
   const bytes = d?.spec === 'bech32' ? fromWords(d.words) : undefined;
-  return d && bytes && (bytes.length === 20 || bytes.length === 32) && d.hrp in COSMOS_PREFIXES
+  return d &&
+    bytes &&
+    (bytes.length === 20 || bytes.length === 32) &&
+    /^[a-z]+$/.test(d.hrp) &&
+    !NOT_COSMOS.has(d.hrp) &&
+    !d.hrp.startsWith('penumbra')
     ? d.hrp
     : undefined;
 };
@@ -346,6 +359,6 @@ export const addressLabel = (
   return k.kind === 'zcash'
     ? `zcash · ${k.pool}`
     : k.kind === 'cosmos'
-      ? (COSMOS_PREFIXES[k.prefix] ?? 'cosmos')
+      ? (COSMOS_PREFIXES[k.prefix] ?? `cosmos · ${k.prefix}`)
       : chainLabel(network);
 };
