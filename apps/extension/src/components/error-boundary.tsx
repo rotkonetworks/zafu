@@ -31,22 +31,48 @@ const isChunkLoadError = (err: unknown): boolean => {
 
 const RELOAD_GUARD = 'zafu:chunk-reload';
 
+// nothing ever cleared this before: in a long-lived side panel or pinned
+// popup window, the first stale-chunk reload used up the guard for the rest
+// of that document's life, so a second update (no reload in between) fell
+// straight to the manual screen with a false "already tried once". Clearing
+// it once the router commits a screen after a reload (clearStaleChunkGuard,
+// called from the layout) fixes the common case; keying it to the version
+// that set it is the belt-and-suspenders fallback for the rare case where
+// the app crashes again before ever reaching that layout.
+const currentVersion = (): string => {
+  try {
+    return chrome.runtime.getManifest().version;
+  } catch {
+    return '';
+  }
+};
+
 // Returns true when it has kicked off a reload (caller should render nothing).
 const reloadOnceForStaleChunk = (err: unknown): boolean => {
   if (!isChunkLoadError(err)) {
     return false;
   }
   try {
-    if (sessionStorage.getItem(RELOAD_GUARD)) {
-      return false; // already tried once - fall through to the manual screen
+    if (sessionStorage.getItem(RELOAD_GUARD) === currentVersion()) {
+      return false; // already tried once this version - fall through to the manual screen
     }
-    sessionStorage.setItem(RELOAD_GUARD, '1');
+    sessionStorage.setItem(RELOAD_GUARD, currentVersion());
   } catch {
     // private mode / storage blocked: fall through to the manual screen
     return false;
   }
   window.location.reload();
   return true;
+};
+
+/** clear the guard once the router has committed a screen after a reload, so
+ *  a later stale-chunk error (the next update) gets its own auto-reload. */
+export const clearStaleChunkGuard = (): void => {
+  try {
+    sessionStorage.removeItem(RELOAD_GUARD);
+  } catch {
+    // private mode / storage blocked: nothing to clear
+  }
 };
 
 // Telemetry seam - console.error today; wire real reporting here later without
@@ -67,10 +93,10 @@ const isApprovalHash = (): boolean =>
     typeof location === 'undefined' ? '' : location.hash,
   );
 
-// set once the guarded auto-reload has run, so the screen can say so
+// set once the guarded auto-reload has run for this version, so the screen can say so
 const triedOnce = (): boolean => {
   try {
-    return !!sessionStorage.getItem(RELOAD_GUARD);
+    return sessionStorage.getItem(RELOAD_GUARD) === currentVersion();
   } catch {
     return false;
   }
