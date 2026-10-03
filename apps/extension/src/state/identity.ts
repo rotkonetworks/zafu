@@ -135,6 +135,7 @@ import { hmac } from '@noble/hashes/hmac';
 import { hkdf } from '@noble/hashes/hkdf';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { xwingPublicKeyFromSeed, XWING_LENGTHS } from '@zafu/pq';
+import { isPublicSuffix } from './public-suffix';
 
 /**
  * ZID domain separator - v2 uses two-stage KDF.
@@ -904,21 +905,86 @@ export const derivePrf = (
 const B85 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~';
 
 /**
- * derive a deterministic password for a site + username.
- * same seed → same password, always. nothing stored.
+ * Deterministic passwords. Same seed, same site, same username, same rotation
+ * -> same password, always; nothing is stored but the saved login's inputs.
  *
- * derivation: HMAC-SHA512(identity, "password:" + origin + "\0" + username)
- * output: first 32 bytes → base85 → 40-char string, truncated to len.
+ * Two schemes, and a saved login records which one made it, so a password a
+ * person already uses never changes under them:
+ *
+ *   v1  HMAC-SHA512(identity, "password:" + v1site + "\0" + username [+ "\0" + index])
+ *       v1site strips one leading common label (www, mail, my, app, id, ...)
+ *       with no public suffix check, so mail.com, my.com, app.com and id.com
+ *       all became "com" and shared a password; and a username ending in
+ *       "\0<digits>" collided with a rotation. Kept only for saved logins.
+ *   v2  HMAC-SHA512(identity, "password:v2" || lp(site) || lp(username) || u32be(index))
+ *       site strips a common label only while what is left is still a
+ *       registrable domain (not a public suffix), and every field is
+ *       length-prefixed, so no two inputs share bytes.
+ *
+ * output: first 32 bytes -> base85 -> at most 40 characters, cut to `length`.
  */
-/** normalize origin for password derivation - strip protocol, www/common subdomains, trailing slash */
+export type PasswordScheme = 1 | 2;
+
+/** the scheme a new login is made with */
+export const PASSWORD_SCHEME: PasswordScheme = 2;
+
+/** leading labels that usually share the account of the domain below them */
+const COMMON_LABEL = /^(www|api|app|login|auth|sso|accounts|mail|my|portal|secure|id)\./i;
+
+/** the host of what someone typed: no scheme, path or port, lowercase */
+const hostOfTyped = (raw: string): string =>
+  raw
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '')
+    .replace(/:\d+$/, '');
+
+/** v1 site normalization, byte for byte as it was: only for v1 saved logins */
+export const normalizeOriginV1 = (raw: string): string =>
+  hostOfTyped(raw).replace(COMMON_LABEL, '');
+
+/**
+ * normalize a site for password derivation: strip the scheme, path and port,
+ * and one leading common label (`www.`, `login.`, ...) when what is left is
+ * still a registrable domain. `www.forum.z.cash` -> `forum.z.cash`, but
+ * `mail.com`, `mail.ru`, `id.me` and `app.github.io` stay as they are.
+ */
 export const normalizeOrigin = (raw: string): string => {
-  let s = raw.trim().toLowerCase();
-  s = s.replace(/^https?:\/\//, '');
-  s = s.replace(/\/.*$/, '');
-  s = s.replace(/:\d+$/, '');
-  // strip common subdomains that share the same account
-  s = s.replace(/^(www|api|app|login|auth|sso|accounts|mail|my|portal|secure|id)\./i, '');
-  return s;
+  const host = hostOfTyped(raw);
+  const rest = host.replace(COMMON_LABEL, '');
+  return rest !== host && !isPublicSuffix(rest) ? rest : host;
+};
+
+/** the site a scheme derives from */
+export const normalizeOriginFor = (scheme: PasswordScheme, raw: string): string =>
+  scheme === 1 ? normalizeOriginV1(raw) : normalizeOrigin(raw);
+
+const lpBytes = (b: Uint8Array): Uint8Array => {
+  const out = new Uint8Array(4 + b.length);
+  new DataView(out.buffer).setUint32(0, b.length);
+  out.set(b, 4);
+  return out;
+};
+
+const passwordTag = (
+  scheme: PasswordScheme,
+  site: string,
+  username: string,
+  index: number,
+): Uint8Array => {
+  if (scheme === 1) {
+    const suffix = index > 0 ? '\0' + index : '';
+    return enc.encode('password:' + site + '\0' + username + suffix);
+  }
+  const i = new Uint8Array(4);
+  new DataView(i.buffer).setUint32(0, index);
+  return new Uint8Array([
+    ...enc.encode('password:v2'),
+    ...lpBytes(enc.encode(site)),
+    ...lpBytes(enc.encode(username)),
+    ...i,
+  ]);
 };
 
 export const derivePassword = (
@@ -929,11 +995,14 @@ export const derivePassword = (
   length = 32,
   /** rotation index - increment when site requires password change */
   index = 0,
+  /** which scheme: a saved login's own, else the current one */
+  scheme: PasswordScheme = PASSWORD_SCHEME,
 ): string =>
   withIdentity(mnemonic, identity, id => {
-    const normalized = normalizeOrigin(origin);
-    const suffix = index > 0 ? '\0' + index : '';
-    const tag = enc.encode('password:' + normalized + '\0' + username + suffix);
+    if (!Number.isInteger(index) || index < 0 || index > 0xffffffff) {
+      throw new Error('a password rotation is a u32');
+    }
+    const tag = passwordTag(scheme, normalizeOriginFor(scheme, origin), username, index);
     const seed = deriveSeed(id, tag);
     const bytes = seed.slice(0, 32);
     seed.fill(0);
