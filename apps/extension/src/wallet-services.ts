@@ -25,6 +25,7 @@ import {
   type PenumbraStart,
 } from './penumbra/start';
 import { penumbraTiming } from './penumbra/timing';
+import { walletsWithStoredView } from './penumbra/stored-views';
 import type { BlockProcessor } from '@penumbra-zone/query/block-processor';
 
 /**
@@ -135,7 +136,10 @@ export const startWalletServices = async (
   await adoptLegacy();
   // chosen as penumbra turns on; a wallet that came another way reads the whole chain
   let asked = startsOf(await localExtStorage.get('penumbraStarts'))?.[wallet.id];
-  if (!asked) {
+  // "sync from now" written for a wallet that already holds part of the
+  // chain (an older build asked for every wallet at once) would skip every
+  // block between its stored height and now: it reads on instead
+  if (!asked || (asked === 'tip' && (await walletsWithStoredView([wallet.id])).has(wallet.id))) {
     asked = { since: 0 };
     await setStart(wallet.id, asked);
   }
