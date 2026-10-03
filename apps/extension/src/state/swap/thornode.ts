@@ -365,9 +365,10 @@ export const nodeProvider = (chain: NodeChain): SwapProvider => {
       if (into && chain.refundInMemo && !OP_RETURN_CHAINS.has(sourceChain)) {
         query.set('refund_address', req.otherAddress);
       }
+      // the affiliate rides even at 0 bps, so the volume is still zafu's THORName's
       const zafuBps = chain.affiliate ? zafuFeeBps(chain.id) : 0;
-      if (zafuBps) {
-        query.set('affiliate', chain.affiliate!);
+      if (chain.affiliate) {
+        query.set('affiliate', chain.affiliate);
         query.set('affiliate_bps', String(zafuBps));
       }
       const unitIn = (into ? req.token.symbol : 'zec').toLowerCase();

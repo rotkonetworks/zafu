@@ -1,13 +1,13 @@
 /** what a swap costs, as the route row, the review and the receipt show it */
 
 import { Sensitive } from '../../../components/sensitive';
-import { zafuListBps } from '../../../config/swap-fee';
+import { ZAFU_BETA_FREE, zafuListBps } from '../../../config/swap-fee';
 import { fromUnits, pct, type Cost, type CostPart } from '../../../state/swap/provider';
 
 /**
  * zafu's rate: the normal rate struck through, the beta price, and how much
- * that takes off, all from the two configured rates. A route zafu takes
- * nothing on is a plain 0%, never a discount.
+ * that takes off, all from the two configured rates; in the free beta, the
+ * normal rate struck through and "free in beta". Otherwise a plain 0%.
  */
 const ZafuRate = ({ bps }: { bps: number }) => {
   const list = zafuListBps();
@@ -15,6 +15,10 @@ const ZafuRate = ({ bps }: { bps: number }) => {
     <>
       <s>{pct(list)}</s> <span className='text-success'>{pct(bps)}</span>{' '}
       <span className='text-fg-muted'>{Math.round(100 - (bps * 100) / list)}% off in beta</span>
+    </>
+  ) : bps === 0 && list > 0 && ZAFU_BETA_FREE ? (
+    <>
+      <s>{pct(list)}</s> <span className='text-success'>free in beta</span>
     </>
   ) : (
     <>{pct(bps)}</>

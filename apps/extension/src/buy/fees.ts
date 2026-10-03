@@ -8,6 +8,7 @@
  */
 
 import { ZAFU_BUY_FEE_BPS, ZAFU_BUY_FEE_BPS_LIST, ZAFU_BUY_FEE_RECIPIENT } from '../config/ramps';
+import { ZAFU_BETA_FREE } from '../config/swap-fee';
 
 /** one seller's offer, as the buy page needs it */
 export interface Offer {
@@ -131,16 +132,19 @@ export const ticketRows = (
   { k: 'seller rate', v: `${rate3(o.rate)} ${currency} per usdc` },
   { k: 'usdc from the seller', v: usdc2(o.gross) },
   { k: `peer · ${pct(o.peerBps)}`, v: `−${usdc2(o.peerFee)}` },
-  ...(o.zafuFee > 0n
-    ? [
-        {
-          k: 'zafu',
-          struck: pct(ZAFU_BUY_FEE_BPS_LIST),
-          v: `${pct(ZAFU_BUY_FEE_BPS)} · −${usdc2(o.zafuFee)}`,
-          note: `${offPct()}% off in beta`,
-        },
-      ]
-    : []),
+  // the free beta still shows zafu's line: the normal rate struck through, then "free in beta"
+  ...(ZAFU_BETA_FREE
+    ? [{ k: 'zafu', struck: pct(ZAFU_BUY_FEE_BPS_LIST), v: 'free in beta', tone: 'green' as const }]
+    : o.zafuFee > 0n
+      ? [
+          {
+            k: 'zafu',
+            struck: pct(ZAFU_BUY_FEE_BPS_LIST),
+            v: `${pct(ZAFU_BUY_FEE_BPS)} · −${usdc2(o.zafuFee)}`,
+            note: `${offPct()}% off in beta`,
+          },
+        ]
+      : []),
   { k: 'swap · near intents', v: swapCost === undefined ? 'at the swap' : `−${usdc2(swapCost)}` },
   gas === 'sponsored'
     ? { k: 'base gas', v: 'covered by zafu', tone: 'green' as const }

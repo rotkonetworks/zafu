@@ -435,23 +435,15 @@ describe('thorchain', () => {
     expect(quote.gasLine).toBe('use a fast fee · 3 sat/byte');
     expect(quote.refundLine).toBeUndefined();
     // zafu's affiliate is asked for, and the memo the quote returns (the one signed) carries it
-    const memo = `=:z:${T}:400000000/1/0:zafu:20`;
-    const urls = thornode(
-      thorQuote(),
-      inbound(),
-      thorQuote({ memo, fees: { ...thorQuote().fees, affiliate: '82400', total: '154225' } }),
-    );
+    // free in beta: the affiliate rides at 0 bps, so the volume is still zafu's
+    const memo = `=:z:${T}:400000000/1/0:zafu:0`;
+    const urls = thornode(thorQuote(), inbound(), thorQuote({ memo }));
     const paid = await thorProvider.quote(req());
     const asked = new URL(urls.find(u => u.includes('/quote/swap'))!).searchParams;
-    expect([asked.get('affiliate'), asked.get('affiliate_bps')]).toEqual(['zafu', '20']);
+    expect([asked.get('affiliate'), asked.get('affiliate_bps')]).toEqual(['zafu', '0']);
     expect(paid.memo).toBe(memo);
-    expect(paid.memo).toContain(':zafu:20');
-    expect(paid.cost?.parts.at(-1)).toEqual({
-      label: 'zafu fee',
-      bps: 20,
-      out: 82_400n,
-      zafu: true,
-    });
+    expect(paid.memo).toContain(':zafu:0');
+    expect(paid.cost?.parts.at(-1)).toEqual({ label: 'zafu fee', bps: 0, out: 0n, zafu: true });
 
     // zec out: zafu's own zip-317 fee is priced on the deposit step, not here
     expect(thorCost(thorQuote(), false, 'zec', 100_000_000n, 8).parts.map(p => p.label)).toEqual([
@@ -701,8 +693,8 @@ describe('near intents', () => {
   it("charges zafu's app fee at full price once a recipient is set", async () => {
     fee.recipient = 'zafu.near';
     const quote = await nearProvider.quote(req());
-    expect(near.requestQuote).toHaveBeenLastCalledWith(expect.objectContaining({ appFeeBps: 20 }));
-    expect(quote.cost?.parts.at(-1)).toMatchObject({ label: 'zafu fee', bps: 20, zafu: true });
+    expect(near.requestQuote).toHaveBeenLastCalledWith(expect.objectContaining({ appFeeBps: 0 }));
+    expect(quote.cost?.parts.at(-1)).toMatchObject({ label: 'zafu fee', bps: 0, zafu: true });
   });
 
   it("splits a 1click quote's cost into near's and zafu's, from its own prices", () => {
@@ -734,16 +726,23 @@ describe('near intents', () => {
 });
 
 describe("zafu's fee", () => {
-  it('is one beta rate on every route that can be paid, from the normal rate, inert without a recipient', async () => {
-    const { zafuFeeBps, zafuListBps, ZAFU_FEE_OFF_PCT, NEAR_APP_FEE_BPS, THOR_AFFILIATE_BPS } =
-      await vi.importActual<typeof import('../../config/swap-fee')>('../../config/swap-fee');
+  it('is free in beta on every route, from one flag, with the normal rate kept', async () => {
+    const {
+      zafuFeeBps,
+      zafuListBps,
+      ZAFU_BETA_FREE,
+      ZAFU_PAID_FEE_BPS,
+      ZAFU_FEE_OFF_PCT,
+      NEAR_APP_FEE_BPS,
+      THOR_AFFILIATE_BPS,
+    } = await vi.importActual<typeof import('../../config/swap-fee')>('../../config/swap-fee');
+    expect(ZAFU_BETA_FREE).toBe(true);
     expect(zafuListBps('')).toBe(0);
     expect(zafuListBps('zafu.near')).toBe(50);
-    expect(zafuFeeBps('near')).toBe(20);
-    expect(zafuFeeBps('thor')).toBe(20);
-    expect(zafuFeeBps('maya')).toBe(0);
-    expect(zafuFeeBps('near', 0)).toBe(0);
-    expect([NEAR_APP_FEE_BPS, THOR_AFFILIATE_BPS, ZAFU_FEE_OFF_PCT]).toEqual([20, 20, 60]);
+    expect([zafuFeeBps('near'), zafuFeeBps('thor'), zafuFeeBps('maya')]).toEqual([0, 0, 0]);
+    expect([NEAR_APP_FEE_BPS, THOR_AFFILIATE_BPS, ZAFU_FEE_OFF_PCT]).toEqual([0, 0, 100]);
+    // the paid rate after the beta: 0.2% of a 0.5% list
+    expect([ZAFU_PAID_FEE_BPS, Math.round(100 - (ZAFU_PAID_FEE_BPS * 100) / 50)]).toEqual([20, 60]);
   });
 
   it('adds every part into an estimated total', () => {

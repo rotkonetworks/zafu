@@ -22,9 +22,11 @@ const rows = (d: { responseObject: { quotes: unknown[] } }) =>
 describe('buy fees', () => {
   it('keeps the list rate and the beta rate as the constants the founder set', () => {
     expect(ZAFU_BUY_FEE_BPS_LIST).toBe(50);
-    expect(ZAFU_BUY_FEE_BPS).toBe(20);
-    expect(offPct()).toBe(60);
-    expect([pct(ZAFU_BUY_FEE_BPS_LIST), pct(ZAFU_BUY_FEE_BPS)]).toEqual(['0.5%', '0.2%']);
+    // free in beta: nothing charged, the normal rate kept to show struck through
+    expect(ZAFU_BUY_FEE_BPS).toBe(0);
+    expect(offPct()).toBe(100);
+    expect(offPct(50, 20)).toBe(60);
+    expect([pct(ZAFU_BUY_FEE_BPS_LIST), pct(20)]).toEqual(['0.5%', '0.2%']);
   });
 
   it("reconciles a live quote: gross - peer's fee - zafu's fee = what lands", () => {
@@ -39,21 +41,18 @@ describe('buy fees', () => {
     expect(rate3(o!.rate)).toBe('1.020');
   });
 
-  it('shows no zafu line when the quote carries no zafu fee', () => {
+  it('shows zafu in the free beta as the normal rate struck through, then free', () => {
     const [o] = rows(noFee);
     expect(o!.zafuFee).toBe(0n);
-    expect(ticketRows(o!, 'usd', undefined, 'unknown').some(r => r.k === 'zafu')).toBe(false);
-  });
-
-  it('shows the zafu line as struck list rate, beta rate, and the discount', () => {
-    const [o] = rows(withFee);
-    const zafu = ticketRows(o!, 'usd', 1_234_567n, 'sponsored').find(r => r.k === 'zafu');
-    expect(zafu).toEqual({ k: 'zafu', struck: '0.5%', v: '0.2% · −0.20', note: '60% off in beta' });
+    const zafu = ticketRows(o!, 'usd', undefined, 'unknown').find(r => r.k === 'zafu');
+    expect(zafu).toEqual({ k: 'zafu', struck: '0.5%', v: 'free in beta', tone: 'green' });
   });
 
   it('asks Peer for no fee without a recipient, and never an empty array', () => {
     expect(ZAFU_BUY_FEE_RECIPIENT).toBeNull();
+    // no referralFees entry while the fee is 0, even once a recipient is set
     expect(zafuReferral()).toBeUndefined();
+    expect(zafuReferral('0x2222222222222222222222222222222222222222')).toBeUndefined();
     expect(zafuReferral('0x2222222222222222222222222222222222222222', 20)).toEqual({
       recipient: '0x2222222222222222222222222222222222222222',
       feeBps: 20,
