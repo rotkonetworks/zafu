@@ -515,7 +515,12 @@ export function ThreadPage() {
   // the memo door (people/memo-door): someone saved, with no card from you yet
   const memoInvite = useMemoInvite();
   const invites =
-    !!contact && !mutual && network === 'zcash' && keyInfo?.type === 'mnemonic' && !waiting;
+    !!contact &&
+    !mutual &&
+    network === 'zcash' &&
+    keyInfo?.type === 'mnemonic' &&
+    !waiting &&
+    answers.length === 0;
   const [picking, setPicking] = useState(false);
   usePairCards();
 
