@@ -12,22 +12,16 @@
 // egress guard first: nothing may capture fetch or open a socket before it
 import '../net/egress-install-lite';
 
-export {}; // module scope - keeps CHANNEL out of the shared ISOLATED-world global
+import { passkeyMessage } from './passkey-wire';
 
 const CHANNEL = 'zafu-passkey';
-
-// relayed kinds -> service worker message types
-const MESSAGE_TYPES: Record<string, string | undefined> = {
-  create: 'zafu_passkey_create',
-  get: 'zafu_passkey_get',
-};
 
 interface PasskeyWireRequest {
   channel: string;
   direction: string;
   id: string;
   kind: string;
-  payload: Record<string, unknown> & { rpId: string };
+  payload: unknown;
 }
 
 const isPasskeyRequest = (d: unknown): d is PasskeyWireRequest =>
@@ -36,8 +30,7 @@ const isPasskeyRequest = (d: unknown): d is PasskeyWireRequest =>
   (d as { channel?: unknown }).channel === CHANNEL &&
   (d as { direction?: unknown }).direction === 'request' &&
   typeof (d as { id?: unknown }).id === 'string' &&
-  typeof (d as { kind?: unknown }).kind === 'string' &&
-  typeof (d as { payload?: { rpId?: unknown } }).payload?.rpId === 'string';
+  typeof (d as { kind?: unknown }).kind === 'string';
 
 window.addEventListener('message', (ev: MessageEvent) => {
   if (ev.source !== window || !isPasskeyRequest(ev.data)) {
@@ -50,15 +43,16 @@ window.addEventListener('message', (ev: MessageEvent) => {
   const respond = (result?: unknown) =>
     window.postMessage({ channel: CHANNEL, direction: 'response', id, result }, window.origin);
 
-  const type = MESSAGE_TYPES[kind];
+  // only the fields this kind uses, with `type` set here - never the page's
+  const message = passkeyMessage(kind, payload);
   // orphaned content script (extension reloaded in an open tab) - fail cleanly
-  if (!type || !chrome.runtime?.id || chrome.runtime.id === 'invalid') {
+  if (!message || !chrome.runtime?.id || chrome.runtime.id === 'invalid') {
     respond(undefined);
     return;
   }
 
   chrome.runtime
-    .sendMessage({ type, ...payload })
+    .sendMessage(message)
     .then((res: unknown) => respond(res))
     .catch(() => respond(undefined));
 });

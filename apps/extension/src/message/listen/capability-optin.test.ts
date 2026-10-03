@@ -26,8 +26,14 @@ const validSender = (origin: string): chrome.runtime.MessageSender =>
     url: `${origin}/index.html`,
   }) as chrome.runtime.MessageSender;
 
+// zafu's own page: the extension id AND the extension origin (a content script
+// carries the id too, so the id alone is not enough)
 const internalSender = (): chrome.runtime.MessageSender =>
-  ({ id: chrome.runtime.id }) as chrome.runtime.MessageSender;
+  ({
+    id: chrome.runtime.id,
+    origin: `chrome-extension://${chrome.runtime.id}`,
+    url: `chrome-extension://${chrome.runtime.id}/popup.html`,
+  }) as chrome.runtime.MessageSender;
 
 const call = (req: unknown, sender: chrome.runtime.MessageSender): Promise<any> =>
   new Promise(resolve => {

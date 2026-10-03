@@ -59,8 +59,14 @@ const validSender = (origin: string): chrome.runtime.MessageSender => ({
 });
 
 /** drives an INTERNAL popup->worker result message (must come from the extension) */
+// zafu's own page: the extension id AND the extension origin (a content script
+// carries the id too, so the id alone is not enough)
 const internalSender = (): chrome.runtime.MessageSender =>
-  ({ id: chrome.runtime.id }) as chrome.runtime.MessageSender;
+  ({
+    id: chrome.runtime.id,
+    origin: `chrome-extension://${chrome.runtime.id}`,
+    url: `chrome-extension://${chrome.runtime.id}/popup.html`,
+  }) as chrome.runtime.MessageSender;
 
 /** pull the requestId the create handler embedded in the approval-popup URL */
 const requestIdFromPopup = (origin: string): string => {
@@ -351,6 +357,28 @@ describe('zafu_passkey_create - per-credential consent', () => {
     );
 
     expect(await pending).toEqual({ success: false, error: 'denied' });
+    expect(createCredentialMock).not.toHaveBeenCalled();
+  });
+
+  it('(b2) an approval forged by a content script answers nothing', async () => {
+    const origin = 'https://passkey-b2.example';
+    void call({ type: 'zafu_passkey_create', rpId: 'passkey-b2.example' }, validSender(origin));
+    await waitForPopup(origin);
+    // a content script in a web tab carries this extension's id
+    const contentScript = { ...validSender('https://evil.example'), id: chrome.runtime.id };
+    const respond = vi.fn();
+    const claimed = externalMessageListener(
+      {
+        type: 'zafu_passkey_create_result',
+        requestId: requestIdFromPopup(origin),
+        result: { approved: true },
+      },
+      contentScript,
+      respond,
+    );
+    await flush();
+    expect(claimed).toBe(false);
+    expect(respond).not.toHaveBeenCalled();
     expect(createCredentialMock).not.toHaveBeenCalled();
   });
 

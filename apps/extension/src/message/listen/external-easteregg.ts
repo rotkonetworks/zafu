@@ -48,6 +48,7 @@ import {
 import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { isPro } from '../../state/license';
 import { isValidExternalSender } from '../../senders/external';
+import { isValidInternalSender } from '../../senders/internal';
 import { ZAFU_PROTOCOL_VERSION, ZAFU_SUPPORTED_PROTOCOL_VERSIONS } from '@zafu/protocol';
 import { getApprovalSurface } from '../../side-panel-pref';
 import { isSidePanelOpen } from '../../side-panel-presence';
@@ -501,7 +502,9 @@ export const externalMessageListener = (
     'zafu_passkey_create_result',
   ]);
   if (INTERNAL_RESULT_TYPES.has(type)) {
-    if (sender.id !== chrome.runtime.id) {
+    // a content script carries this extension's id too, so the id alone is not
+    // "zafu's own page": require the extension origin
+    if (!isValidInternalSender(sender)) {
       return false;
     }
   } else if (
