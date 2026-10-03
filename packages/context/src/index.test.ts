@@ -122,4 +122,11 @@ describe('snapshot start', () => {
     expect((ws.viewServer as unknown as { kind: string }).kind).toBe('stored');
     expect(h.processorArgs?.['compactFrontierBlockHeight']).toBeUndefined();
   });
+
+  it('a wallet that stored height 0 (a genesis read) is never given a snapshot', async () => {
+    h.stored = 0n;
+    const ws = await start({ creation: 4000, frontier: 4000 });
+    expect(h.saved).toEqual([]);
+    expect((ws.viewServer as unknown as { kind: string }).kind).toBe('stored');
+  });
 });

@@ -127,7 +127,9 @@ export class Services implements ServicesInterface {
     // wrong nullifiers, an anchor no chain ever had. Saving the frontier now,
     // rather than at the first flush, also means a sync paused before its
     // first flush resets to this frontier, never to an empty tree.
-    if (!fullSyncHeight && walletCreationBlockHeight && compactFrontierBlockHeight) {
+    // `=== undefined`, not falsy: a genesis read stores height 0 at its first
+    // flush, and a snapshot written over that tree would mix the two
+    if (fullSyncHeight === undefined && walletCreationBlockHeight && compactFrontierBlockHeight) {
       try {
         // Request frontier snapshot from full node (~1KB payload) and initialize
         // the view server from that snapshot.
