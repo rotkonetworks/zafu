@@ -6,10 +6,10 @@ import { getNetwork, getTopLevelNetworks } from '../../../config/networks';
 import { Section } from './settings-screen';
 import { Row } from '@repo/ui/components/ui/row';
 import { SettingsWallets } from './settings-wallets';
-import { useExplain } from './settings-explain';
+import { useExplain, type ExplainId } from './settings-explain';
 
 /** the privacy/network explain for a top-level chain is keyed by its network id, not its label */
-const explainIdOf = (n: string): string => `network.${n}Enable`;
+const explainIdOf = (n: string): ExplainId => `network.${n}Enable` as ExplainId;
 
 /** each top-level network on or off; its node and chains live under settings > networks */
 export const NetworkSwitches = () => {

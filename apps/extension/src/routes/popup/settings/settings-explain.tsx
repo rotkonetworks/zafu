@@ -24,7 +24,7 @@ export interface Explain {
   footer?: string;
 }
 
-export const SETTINGS_EXPLAIN: Record<string, Explain> = {
+export const SETTINGS_EXPLAIN = {
   'privacy.hideBalances': {
     blurb: 'blurs every amount on screen until you tap to reveal it.',
     on: 'a shoulder-surfer sees shapes, not numbers',
@@ -197,17 +197,20 @@ export const SETTINGS_EXPLAIN: Record<string, Explain> = {
     on: 'those sites can connect to zafu; takes effect on the next page load',
     off: 'those sites see no wallet from zafu; a real keplr extension, if installed, is left untouched',
   },
-};
+} as const satisfies Record<string, Explain>;
+
+/** a table key - a typo here fails tsc instead of silently dropping the "?" */
+export type ExplainId = keyof typeof SETTINGS_EXPLAIN;
 
 /** one id open at a time, so every row in a screen shares one sheet. the
  *  sheet's title is the row's own label (handed back by onExplain), not the
  *  lookup id - ids are for the table key, never UI copy. */
 export const useExplain = () => {
-  const [open, setOpen] = useState<{ id: string; label: string } | null>(null);
+  const [open, setOpen] = useState<{ id: ExplainId; label: string } | null>(null);
   const explain = open ? SETTINGS_EXPLAIN[open.id] : undefined;
   return {
     /** spread onto a Row - a no-op when the id has no explain copy */
-    explainProps: (explainId: string) =>
+    explainProps: (explainId: ExplainId) =>
       SETTINGS_EXPLAIN[explainId]
         ? { onExplain: (label: string) => setOpen({ id: explainId, label }) }
         : {},

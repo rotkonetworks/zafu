@@ -16,7 +16,7 @@ import {
 } from '../../../config/contact-discovery-relay';
 import { usePopupNav } from '../../../utils/navigate';
 import { readZcashMeConfig, type ZcashMeMode } from '../../../services/zcashme/config';
-import { useExplain } from './settings-explain';
+import { useExplain, type ExplainId } from './settings-explain';
 import { ZCASH_BACKENDS } from '../../../state/keyring/zcash-backend';
 
 const ZCASHME_MODE_LABEL: Record<ZcashMeMode, string> = {
@@ -53,7 +53,7 @@ export function ZcashMeRow({ onExplain }: { onExplain?: (label: string) => void 
 function ZcashWireRows({
   explainProps,
 }: {
-  explainProps: (id: string) => { onExplain?: (label: string) => void };
+  explainProps: (id: ExplainId) => { onExplain?: (label: string) => void };
 }) {
   const memo = useStore(s => s.networks.networks.zcash.memoSyncStrategy ?? 'private');
   const mempool = useStore(s => s.networks.networks.zcash.mempoolWatch ?? 'off');
@@ -91,7 +91,7 @@ type Group = 'on screen' | 'network' | 'people';
 const PRIVACY_ROWS: readonly {
   key: keyof PrivacySettings;
   label: string;
-  explainId: string;
+  explainId: ExplainId;
   group: Group;
   visible?: (network: NetworkType) => boolean;
 }[] = [

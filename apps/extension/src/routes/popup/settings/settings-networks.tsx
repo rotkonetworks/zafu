@@ -8,7 +8,7 @@ import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { Section, SettingsScreen } from './settings-screen';
 import { Row } from '@repo/ui/components/ui/row';
-import { useExplain } from './settings-explain';
+import { useExplain, type ExplainId } from './settings-explain';
 
 /** each chain's own screen, and its label here */
 const CHAINS = [
@@ -23,7 +23,7 @@ const CHAINS = [
   id: NetworkId;
   label: string;
   screen: PopupPath;
-  explainId: string;
+  explainId: ExplainId;
 }[];
 
 /** a chain shows the node it reads from when on, and turns on when off */

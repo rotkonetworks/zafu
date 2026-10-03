@@ -118,7 +118,7 @@ export const SettingsPenumbraNetwork = () => {
             label='keep syncing when closed'
             checked={keepSyncing}
             onChange={v => void setSetting('enableBackgroundSync', v)}
-            {...explainProps('keep syncing when closed')}
+            {...explainProps('network.keepSyncingClosed')}
           />
         </RowGroup>
         <RowGroup>
