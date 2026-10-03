@@ -1,5 +1,5 @@
 /**
- * A newer penumbrafi registry than the one bundled, fetched from registry.zafu.pro only
+ * A newer penumbrafi registry than the one bundled, fetched from registry.penumbra.fi only
  * after the user says yes, and only when their Penumbra node reports a live
  * channel to a chain zafu doesn't know. It is used only when it carries a valid
  * signature by the key below over its exact bytes and a version newer than the
@@ -16,7 +16,7 @@ import { bytesToHex } from '@noble/hashes/utils';
 import type { Chain, Registry } from '@penumbrafi/registry';
 import bundledPackage from '@penumbrafi/registry/package.json';
 import { applyLiveConnections } from '@repo/wallet/networks/cosmos/chains';
-import { LIVE_REGISTRY_URL } from './registry-endpoint';
+import { LIVE_REGISTRY_SIG_URL, LIVE_REGISTRY_URL } from './registry-endpoint';
 
 type JsonRegistry = ConstructorParameters<typeof Registry>[0];
 
@@ -132,7 +132,7 @@ export const fetchLiveRegistry = async (): Promise<string[]> => {
         : BUNDLED_REGISTRY_VERSION;
     const [text, sig] = await Promise.all([
       fetch(LIVE_REGISTRY_URL, { cache: 'no-cache' }).then(r => (r.ok ? r.text() : '')),
-      fetch(`${LIVE_REGISTRY_URL}.sig`, { cache: 'no-cache' }).then(r =>
+      fetch(LIVE_REGISTRY_SIG_URL, { cache: 'no-cache' }).then(r =>
         r.ok ? (r.json() as Promise<RegistrySig>) : undefined,
       ),
     ]);

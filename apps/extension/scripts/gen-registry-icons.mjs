@@ -40,6 +40,27 @@ const live = m => {
   return !ch || active.has(ch) || m.priorityScore > 0n;
 };
 
+/**
+ * Since @penumbrafi/registry 13.4.0 its image urls point at the registry.penumbra.fi
+ * mirror; older data (and penumbra metadata already stored on a device) names the
+ * same files on GitHub. Keys stay in the GitHub form so both match, and downloads
+ * go through the mirror.
+ */
+const MIRROR = [
+  [
+    'https://registry.penumbra.fi/images/',
+    'https://raw.githubusercontent.com/penumbrafi/registry/main/images/',
+  ],
+  [
+    'https://registry.penumbra.fi/cosmos/chain-registry/',
+    'https://raw.githubusercontent.com/cosmos/chain-registry/',
+  ],
+];
+const canonical = u =>
+  MIRROR.reduce((s, [m, g]) => (s.startsWith(m) ? g + s.slice(m.length) : s), u);
+const viaMirror = u =>
+  MIRROR.reduce((s, [m, g]) => (s.startsWith(g) ? m + s.slice(g.length) : s), u);
+
 /** each image as the urls that name it; AssetIcon reads png first, RegistryIcon svg first */
 const images = [
   ...reg
@@ -49,7 +70,7 @@ const images = [
   ...reg.ibcConnections.filter(c => c.status === 'active').flatMap(c => c.images),
   ...[...globals.rpcs, ...globals.frontends, ...globals.wallets].flatMap(e => e.images),
 ]
-  .map(i => [i.png, i.svg].filter(Boolean))
+  .map(i => [i.png, i.svg].filter(Boolean).map(canonical))
   .filter(urls => urls.length);
 
 const hash = s => crypto.createHash('sha256').update(s).digest('hex').slice(0, 10);
@@ -68,7 +89,7 @@ const unsafe = svg => /<(script|foreignObject|image|iframe)|javascript:|url\((?!
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'zafu-icons-'));
 const fetchOnce = async url => {
-  const res = await fetch(url);
+  const res = await fetch(viaMirror(url));
   if (!res.ok) {
     throw new Error(`${res.status} ${url}`);
   }
@@ -150,9 +171,16 @@ const main = async () => {
     ...Object.entries(sorted).map(([u, f]) => `  '${u}': ${id(f)},`),
     '};',
     '',
+    '/** registry.penumbra.fi mirrors these GitHub paths; both forms name one icon */',
+    'const MIRROR: [string, string][] = [',
+    ...MIRROR.map(([m, g]) => `  ['${m}', '${g}'],`),
+    '];',
+    'const canonical = (url: string) =>',
+    '  MIRROR.reduce((s, [m, g]) => (s.startsWith(m) ? g + s.slice(m.length) : s), url);',
+    '',
     '/** the registry icons this build ships; any other url falls back to a monogram */',
     'export const installRegistryIcons = (): void => {',
-    '  setBundledIconResolver((url: string) => BY_URL[url]);',
+    '  setBundledIconResolver((url: string) => BY_URL[canonical(url)]);',
     '};',
     '',
   ].join('\n');
