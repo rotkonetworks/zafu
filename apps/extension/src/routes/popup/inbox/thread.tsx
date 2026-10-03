@@ -49,6 +49,7 @@ import {
   type PeopleRelaySetting,
 } from '../../../config/people-relay';
 import { useThreadName } from './use-thread-name';
+import { RequestSheet } from '../send/send-fields';
 import { cardOf, counterparty, shortAddress, threadIdOf, whenOf } from './threads';
 
 const ZCASH_LINK = /zcash:[^\s]+/i;
@@ -242,57 +243,41 @@ const MoneySheet = ({
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const zat = parseZecAmount(amount);
+  const close = (o: boolean) => {
+    if (!o) {
+      setAsking(false);
+      onClose();
+    }
+  };
+
+  if (asking && onRequest) {
+    return (
+      <RequestSheet
+        open={open}
+        onOpenChange={close}
+        title='request'
+        amount={amount}
+        onAmount={setAmount}
+        note={{ value: note, onChange: setNote, label: 'what for', maxLength: 200 }}
+        confirmLabel='ask for it'
+        confirmDisabled={!zat}
+        onConfirm={() => zat && onRequest(zat, note.trim())}
+      />
+    );
+  }
+
   return (
-    <Sheet
-      open={open}
-      onOpenChange={o => {
-        if (!o) {
-          setAsking(false);
-          onClose();
-        }
-      }}
-      title={asking ? 'request' : 'send or request'}
-    >
-      {asking && onRequest ? (
-        <form
-          className='flex flex-col gap-3'
-          onSubmit={e => {
-            e.preventDefault();
-            if (zat) {
-              onRequest(zat, note.trim());
-            }
-          }}
-        >
-          <Input
-            aria-label='amount'
-            inputMode='decimal'
-            placeholder='amount in zec'
-            value={amount}
-            onChange={e => setAmount(e.target.value)}
-            className='font-display text-xl'
-          />
-          <Input
-            aria-label='what for'
-            placeholder='what for (optional)'
-            value={note}
-            onChange={e => setNote(e.target.value)}
-          />
-          <Button type='submit' disabled={!zat}>
-            ask for it
+    <Sheet open={open} onOpenChange={close} title='send or request'>
+      <div className='flex gap-2'>
+        <Button className='flex-1' onClick={onPay}>
+          pay
+        </Button>
+        {onRequest && (
+          <Button variant='secondary' className='flex-1' onClick={() => setAsking(true)}>
+            request
           </Button>
-        </form>
-      ) : (
-        <div className='flex gap-2'>
-          <Button className='flex-1' onClick={onPay}>
-            pay
-          </Button>
-          {onRequest && (
-            <Button variant='secondary' className='flex-1' onClick={() => setAsking(true)}>
-              request
-            </Button>
-          )}
-        </div>
-      )}
+        )}
+      </div>
     </Sheet>
   );
 };

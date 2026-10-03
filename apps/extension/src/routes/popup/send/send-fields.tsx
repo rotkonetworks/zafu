@@ -373,6 +373,78 @@ export const AmountField = ({
   </div>
 );
 
+/**
+ * "Request zec" sheet: an amount field (this module's own AmountField) plus
+ * an optional note, over a pinned confirm button. Shared by the receive
+ * screen's payment-link sheet and the thread composer's "ask for it" sheet -
+ * each keeps its own amount/note state and validation (a link request allows
+ * no amount at all; a chat request requires one), this only shares the markup.
+ */
+export function RequestSheet({
+  open,
+  onOpenChange,
+  title,
+  amount,
+  onAmount,
+  amountWarn,
+  note,
+  confirmLabel,
+  confirmDisabled,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  amount: string;
+  onAmount: (v: string) => void;
+  amountWarn?: boolean;
+  /** omitted hides the note field (e.g. nothing to say beyond the amount) */
+  note?: { value: string; onChange: (v: string) => void; label: string; maxLength?: number };
+  confirmLabel: string;
+  confirmDisabled?: boolean;
+  onConfirm: () => void;
+}) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange} title={title}>
+      <form
+        className='flex flex-col gap-3'
+        onSubmit={e => {
+          e.preventDefault();
+          if (!confirmDisabled) {
+            onConfirm();
+          }
+        }}
+      >
+        <AmountField
+          id='request-amount'
+          value={amount}
+          onChange={onAmount}
+          unit='zec'
+          warn={amountWarn}
+        />
+        {note && (
+          <div className='flex flex-col gap-1.5'>
+            <label htmlFor='request-note' className='text-label text-fg-muted lowercase'>
+              {note.label}
+            </label>
+            <Input
+              id='request-note'
+              type='text'
+              value={note.value}
+              onChange={e => note.onChange(e.target.value)}
+              maxLength={note.maxLength}
+              placeholder='optional'
+            />
+          </div>
+        )}
+        <Button type='submit' disabled={confirmDisabled}>
+          {confirmLabel}
+        </Button>
+      </form>
+    </Sheet>
+  );
+}
+
 export interface Pick<K extends string | number> {
   key: K;
   label: string;

@@ -6,11 +6,9 @@
  */
 
 import { useState } from 'react';
-import { Sheet } from '@repo/ui/components/ui/sheet';
-import { Button } from '@repo/ui/components/ui/button';
-import { Input } from '@repo/ui/components/ui/input';
 import { useCopy } from '@repo/ui/hooks/use-copy';
 import { buildZip321, parseZecAmount } from '@repo/wallet/networks/zcash/zip321';
+import { RequestSheet } from '../send/send-fields';
 
 export function PaymentRequestSheet({
   open,
@@ -35,53 +33,21 @@ export function PaymentRequestSheet({
   const memoText = isShielded ? memo.trim() : '';
   const link = buildZip321({ address, amountZat: zat, memo: memoText || undefined });
 
-  const confirm = () => {
-    copy(link);
-    onCopied(link);
-  };
-
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} title='request amount'>
-      <div className='flex flex-col gap-3'>
-        <div className='flex flex-col gap-1.5'>
-          <label htmlFor='request-amount' className='text-label text-fg-muted lowercase'>
-            amount
-          </label>
-          <div className='relative'>
-            <Input
-              id='request-amount'
-              type='text'
-              inputMode='decimal'
-              value={amount}
-              onChange={e => setAmount(e.target.value)}
-              placeholder='0.00'
-              variant={amountInvalid ? 'error' : 'default'}
-              className='h-14 pr-14 font-display text-2xl'
-            />
-            <span className='pointer-events-none absolute right-3.5 top-0 flex h-14 items-center text-label text-fg-muted'>
-              zec
-            </span>
-          </div>
-        </div>
-        {isShielded && (
-          <div className='flex flex-col gap-1.5'>
-            <label htmlFor='request-memo' className='text-label text-fg-muted lowercase'>
-              memo
-            </label>
-            <Input
-              id='request-memo'
-              type='text'
-              value={memo}
-              onChange={e => setMemo(e.target.value)}
-              maxLength={512}
-              placeholder='optional'
-            />
-          </div>
-        )}
-        <Button onClick={confirm} disabled={amountInvalid}>
-          {copied ? 'copied' : 'copy payment link'}
-        </Button>
-      </div>
-    </Sheet>
+    <RequestSheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title='request amount'
+      amount={amount}
+      onAmount={setAmount}
+      amountWarn={amountInvalid}
+      note={isShielded ? { value: memo, onChange: setMemo, label: 'memo', maxLength: 512 } : undefined}
+      confirmLabel={copied ? 'copied' : 'copy payment link'}
+      confirmDisabled={amountInvalid}
+      onConfirm={() => {
+        copy(link);
+        onCopied(link);
+      }}
+    />
   );
 }
