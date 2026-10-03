@@ -24,7 +24,10 @@ const TABS = [
 
 const UnreadDot = () =>
   useStore(selectUnread) ? (
-    <span className='absolute left-[58%] top-2 size-[7px] bg-hanko' aria-label='unread' />
+    <>
+      <span className='absolute left-[58%] top-2 size-[7px] bg-hanko' aria-hidden='true' />
+      <span className='sr-only'>, unread</span>
+    </>
   ) : null;
 
 const TabButton = memo(
@@ -39,6 +42,7 @@ const TabButton = memo(
   }) => (
     <button
       data-preload={tab.path}
+      aria-current={isActive ? 'page' : undefined}
       onClick={() => onNavigate(tab.path)}
       className={cn(
         'relative flex flex-1 flex-col items-center justify-center gap-[5px]',
