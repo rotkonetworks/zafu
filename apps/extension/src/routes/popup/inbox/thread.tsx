@@ -37,8 +37,13 @@ import { isMutual } from '../../../state/contacts';
 import { peopleCall, peopleSay, useMyRooms, useThread, useWatchRoom } from '../../../people/client';
 import { RelaySlot } from '../../../people/relay-slot';
 import { pairId } from '../../../people/protocol';
-import type { ThreadItem } from '../../../people/vault';
-import { allowRelay, useMemoInvite, usePairCards } from '../../../people/use-invites';
+import type { PairCard, ThreadItem } from '../../../people/vault';
+import {
+  allowRelay,
+  useChooseAnswer,
+  useMemoInvite,
+  usePairCards,
+} from '../../../people/use-invites';
 import {
   DEFAULT_PEOPLE_RELAY,
   PEOPLE_RELAY_KEY,
@@ -419,6 +424,42 @@ const useDefaultRelay = (): string => {
   return relay;
 };
 
+/**
+ * Answers to your memo invite, waiting for you: anyone who can read that memo
+ * could have answered, so the seal is shown and you say which one is them.
+ * Two different answers are both shown; zafu never picks.
+ */
+const Answers = ({ contactId, answers }: { contactId: string; answers: PairCard[] }) => {
+  const choose = useChooseAnswer();
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className='flex shrink-0 flex-col gap-2 border-t border-border-soft px-4 py-3'>
+      <span className='text-[11px] text-fg-muted'>
+        {answers.length > 1
+          ? 'two different answers came back. please check the seal with them before you choose.'
+          : 'your invite was answered. please check the seal with them.'}
+      </span>
+      {answers.map(a => (
+        <div key={a.zid} className='flex items-center gap-3'>
+          <ZidSeal hex={a.zid} size={32} />
+          <span className='grow truncate text-xs text-fg'>{a.name || shortAddress(a.address)}</span>
+          <button
+            type='button'
+            disabled={busy}
+            onClick={() => {
+              setBusy(true);
+              void choose(contactId, a).finally(() => setBusy(false));
+            }}
+            className='shrink-0 text-xs text-zigner-gold hover:underline'
+          >
+            this is them
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 export function ThreadPage() {
   const navigate = useNavigate();
   const goBack = useBackNav(PopupPath.INBOX);
@@ -459,6 +500,8 @@ export function ThreadPage() {
   const relay = useThread(room)?.items;
   // your invite to someone with no card from you, waiting for their answer
   const waiting = myRooms.some(r => contact && r.id === pairId(contact.id) && r.pair?.waiting);
+  // answers to that invite you have not confirmed: anyone who reads the memo can answer
+  const answers = myRooms.find(r => contact && r.id === pairId(contact.id))?.pair?.answers ?? [];
   const [asMemo, setAsMemo] = useState(false);
   const via: 'relay' | 'memo' = room && !asMemo ? 'relay' : 'memo';
   // the pair room, or the one waiting for an answer to your invite: read while on screen (T2)
@@ -585,6 +628,7 @@ export function ThreadPage() {
         ))}
       </div>
 
+      {contact && answers.length > 0 && <Answers contactId={contact.id} answers={answers} />}
       {canSend && (invites || waiting) && (
         <div className='flex h-8 shrink-0 items-center justify-between gap-3 border-t border-border-soft px-4 text-[11px] text-fg-muted'>
           <span className='truncate'>

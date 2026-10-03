@@ -90,8 +90,22 @@ export interface PeopleRoom {
     /** waiting for them to answer a memo invite */
     waiting?: boolean;
     /** the card their answer carried, until the screen saves it on the contact */
-    card?: { zid: string; pairKa: string; address: string; name: string };
+    card?: PairCard;
+    /**
+     * answers to your memo invite you have not confirmed: anyone who can read
+     * that memo can answer, so none of them becomes the person until you say
+     * which one is them (or it carries the key you already hold for them)
+     */
+    answers?: PairCard[];
   };
+}
+
+/** what an answering card says about the person on the other side */
+export interface PairCard {
+  zid: string;
+  pairKa: string;
+  address: string;
+  name: string;
 }
 
 export interface ThreadItem {

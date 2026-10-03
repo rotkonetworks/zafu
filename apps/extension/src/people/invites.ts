@@ -25,7 +25,13 @@ import { hasMemoInvite, readMemoInvite } from './memo-door';
 import { PAIR_SCOPE } from './pairs';
 import { pairId } from './protocol';
 import type { PeopleService, RecordHandler } from './service';
-import { readInvites, writeInvites, type PeopleRoom, type StoredInvite } from './vault';
+import {
+  readInvites,
+  writeInvites,
+  type PairCard,
+  type PeopleRoom,
+  type StoredInvite,
+} from './vault';
 
 export interface InviteDeps {
   walletId: () => Promise<string | undefined>;
@@ -198,31 +204,67 @@ export const createInvites = (deps: InviteDeps) => {
     return { id: pairId(contact.id) };
   };
 
-  /** a waiting pair room: the answer's card names who is on the other side */
+  /**
+   * A pair room waiting on a memo invite: read the answers. An answer counts
+   * when its card is signed by the key it names (the record's author) and
+   * answers THIS relationship (its `answers` is the inception key the invite
+   * carried, which is this room's own signer). That ties it to this invite,
+   * not to the person: whoever can read the memo - its recipient, a viewing
+   * key on either side, anything that later sees the memo's plaintext - can
+   * answer the same way. So an answer becomes the person only when it carries
+   * the key you already hold for them; otherwise it waits for you to say
+   * which one is them (`pair-choose`), and a second, different answer is
+   * shown beside the first instead of being dropped.
+   */
   const onPair: RecordHandler = async (room, records, api) => {
-    if (room.pair?.peer) {
-      return undefined;
-    }
     const me = await api.me(room);
-    for (const m of records) {
+    const fresh = records.flatMap(m => {
       const card =
         m.author !== me && m.body.startsWith('zp1:card:')
           ? readCardPayload(m.body.slice('zp1:card:'.length))
           : undefined;
-      // the card is signed by the key it names: the record's own author
-      if (card?.zid === m.author && card.pairKa) {
-        return r => ({
-          ...r,
-          pair: {
-            ...r.pair!,
-            peer: card.zid,
-            waiting: false,
-            card: { zid: card.zid!, pairKa: card.pairKa!, address: card.address, name: card.name },
-          },
-        });
+      return card?.zid === m.author && card.pairKa && card.answers === me
+        ? [{ zid: card.zid, pairKa: card.pairKa, address: card.address, name: card.name }]
+        : [];
+    });
+    const seen = new Map<string, PairCard>();
+    for (const c of [...(room.pair?.answers ?? []), ...fresh]) {
+      if (c.zid !== room.pair?.peer && !seen.has(c.zid)) {
+        seen.set(c.zid, c);
       }
     }
-    return undefined;
+    if (!fresh.some(c => c.zid !== room.pair?.peer)) {
+      return undefined;
+    }
+    const contact = (await deps.contacts()).find(c => c.id === room.pair?.personId);
+    const all = [...seen.values()];
+    // the key you already hold for them, on the same pair key: that is them
+    const known =
+      !room.pair?.peer && contact?.zid
+        ? all.find(c => c.zid === contact.zid && (!contact.pairKa || c.pairKa === contact.pairKa))
+        : undefined;
+    return r => ({
+      ...r,
+      pair: known
+        ? { ...r.pair!, peer: known.zid, waiting: false, card: known, answers: undefined }
+        : { ...r.pair!, waiting: false, answers: all },
+    });
+  };
+
+  /** you said which answer is them: they become the person in this room */
+  const choose = async (svc: PeopleService, r: Record<string, unknown>) => {
+    const id = pairId(String(r['contactId'] ?? ''));
+    const zid = String(r['zid'] ?? '');
+    const room = await svc.api.room(id);
+    const card = room?.pair?.answers?.find(c => c.zid === zid);
+    if (!card) {
+      throw new Error('that answer is not here');
+    }
+    await svc.api.updateRoom(id, x => ({
+      ...x,
+      pair: { ...x.pair!, peer: card.zid, waiting: false, card, answers: undefined },
+    }));
+    return { ok: true };
   };
 
   return {
@@ -231,6 +273,7 @@ export const createInvites = (deps: InviteDeps) => {
       'invite-decline': (r: Record<string, unknown>) => settle(String(r['id']), 'declined'),
       'invite-accept': (r: Record<string, unknown>, s: PeopleService) => accept(s, r),
       'invite-open': (r: Record<string, unknown>, s: PeopleService) => open(s, r),
+      'pair-choose': (r: Record<string, unknown>, s: PeopleService) => choose(s, r),
       invites: async () => {
         const walletId = await deps.walletId();
         return (await read()).filter(i => i.walletId === walletId && i.state === 'open');
