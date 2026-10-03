@@ -95,7 +95,12 @@ const PRIVACY_ROWS: readonly {
   group: Group;
   visible?: (network: NetworkType) => boolean;
 }[] = [
-  { key: 'hideBalances', label: 'hide balances', explainId: 'privacy.hideBalances', group: 'on screen' },
+  {
+    key: 'hideBalances',
+    label: 'hide balances',
+    explainId: 'privacy.hideBalances',
+    group: 'on screen',
+  },
   {
     key: 'enableTransactionHistory',
     label: 'transaction history',
@@ -131,7 +136,12 @@ const PRIVACY_ROWS: readonly {
     visible: n => hasFeature(n, 'zcash'),
   },
   { key: 'openZafuLinks', label: 'zafu: links', explainId: 'privacy.zafuLinks', group: 'people' },
-  { key: 'enableIdentity', label: 'zid identity', explainId: 'privacy.zidIdentity', group: 'people' },
+  {
+    key: 'enableIdentity',
+    label: 'zid identity',
+    explainId: 'privacy.zidIdentity',
+    group: 'people',
+  },
 ];
 
 /**
@@ -272,7 +282,9 @@ export function SettingsPrivacy() {
           {settings.enableIdentity && (
             <ContactDiscoverySection {...explainProps('privacy.contactDiscovery')} />
           )}
-          {hasFeature(activeNetwork, 'zcash') && <ZcashMeRow {...explainProps('privacy.zcashMe')} />}
+          {hasFeature(activeNetwork, 'zcash') && (
+            <ZcashMeRow {...explainProps('privacy.zcashMe')} />
+          )}
           {rows('people')}
         </Section>
         <Section title='sites'>
