@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { usePopupNav } from '../../../utils/navigate';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
+import { Button } from '@repo/ui/components/ui/button';
 import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { useStore } from '../../../state';
 import { selectEnabledNetworks, type NetworkType } from '../../../state/keyring';
@@ -13,8 +14,10 @@ import { getRegistryEndpoints } from '../../../config/penumbra-endpoints';
 import { getSubnetworks } from '../../../config/networks';
 import { probeAllPenumbra } from '../../../state/keyring/penumbra-endpoint-latency';
 import { hostOf } from '../../../net/destination';
+import { getClearCacheStepLabel, type ClearCacheProgress } from '../../../message/services';
+import { resyncPenumbraFromStart } from '../../../services/penumbra-resync';
 import { PopupPath } from '../paths';
-import { SettingsScreen } from './settings-screen';
+import { Section, SettingsScreen } from './settings-screen';
 import { NodeSheet } from './node-sheet';
 import { TintedRow } from './tinted-row';
 import { KeplrCompatToggle } from './keplr-compat-toggle';
@@ -34,7 +37,7 @@ const speedTest = async () => {
 
 const chainName = (id: Chain) => getCosmosChain(id).name.toLowerCase();
 
-type Open = 'node' | 'ibc' | Chain | null;
+type Open = 'node' | 'ibc' | 'resync' | Chain | null;
 
 const openFrom = (params: URLSearchParams): Open => {
   const chain = params.get('chain');
@@ -78,6 +81,36 @@ export const SettingsPenumbraNetwork = () => {
   const keepSyncing = useStore(s => s.privacy.settings.keepPenumbraSyncing);
   const setSetting = useStore(s => s.privacy.setSetting);
   const { explainProps, sheet: explainSheet } = useExplain();
+  const [resyncing, setResyncing] = useState(false);
+  const [progress, setProgress] = useState<ClearCacheProgress | null>(null);
+
+  useEffect(() => {
+    const handler = (message: unknown) => {
+      if (
+        typeof message === 'object' &&
+        message !== null &&
+        (message as { type?: string }).type === 'ClearCacheProgress'
+      ) {
+        setProgress(message as ClearCacheProgress);
+      }
+    };
+    chrome.runtime.onMessage.addListener(handler);
+    return () => chrome.runtime.onMessage.removeListener(handler);
+  }, []);
+
+  const resync = async () => {
+    setOpen(null);
+    setResyncing(true);
+    try {
+      await resyncPenumbraFromStart();
+    } catch (err) {
+      console.error('[penumbra] resync failed:', err);
+      setResyncing(false);
+    }
+  };
+
+  const progressPercent =
+    progress && progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0;
 
   const chainsOn = CHAINS.filter(c => enabled.includes(c));
   const sheet = (o: Open) => (next: boolean) => setOpen(next ? o : null);
@@ -85,6 +118,11 @@ export const SettingsPenumbraNetwork = () => {
   return (
     <SettingsScreen title='penumbra' category='networks' backPath={PopupPath.SETTINGS_NETWORKS}>
       <div className='flex flex-col gap-4'>
+        {resyncing && (
+          <StatusSlot tone='gold' progress={progress ? progressPercent : undefined}>
+            <span>{progress ? getClearCacheStepLabel(progress.step) : 'starting over...'}</span>
+          </StatusSlot>
+        )}
         <RowGroup>
           <Row
             type='value'
@@ -121,6 +159,16 @@ export const SettingsPenumbraNetwork = () => {
             {...explainProps('network.keepSyncingClosed')}
           />
         </RowGroup>
+        <Section title='if something looks wrong'>
+          <Row
+            type='value'
+            label='sync again from the start'
+            description='for a missing payment or a wrong balance'
+            onPress={() => setOpen('resync')}
+            disabled={resyncing}
+            {...explainProps('network.penumbraResync')}
+          />
+        </Section>
         <RowGroup>
           <TintedRow
             label='turn off penumbra'
@@ -164,6 +212,22 @@ export const SettingsPenumbraNetwork = () => {
       </Sheet>
 
       {open && CHAINS.includes(open) && <ChainSheet id={open} onClose={() => setOpen('ibc')} />}
+
+      <Sheet open={open === 'resync'} onOpenChange={sheet('resync')} title='sync penumbra again?'>
+        <p className='text-[13px]/[1.6] text-fg'>
+          this resyncs penumbra for every wallet on this computer, each read again from its own
+          start. your keys and your funds are not touched.
+        </p>
+        <span className='text-label text-fg-muted'>zafu reloads once the sync is cleared</span>
+        <div className='flex gap-2 pt-1'>
+          <Button variant='secondary' className='w-[110px]' onClick={() => setOpen(null)}>
+            not now
+          </Button>
+          <Button className='flex-1' onClick={() => void resync()}>
+            sync again
+          </Button>
+        </div>
+      </Sheet>
       {explainSheet}
     </SettingsScreen>
   );
