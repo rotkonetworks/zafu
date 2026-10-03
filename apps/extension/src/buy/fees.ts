@@ -148,3 +148,23 @@ export const ticketRows = (
       ? { k: 'base gas', v: 'a little eth, from you', tone: 'warn' as const }
       : { k: 'base gas', v: 'cents' },
 ];
+
+export const SYM: Record<string, string> = {
+  usd: '$',
+  eur: '€',
+  gbp: '£',
+  cad: '$',
+  brl: 'r$',
+  ars: '$',
+  inr: '₹',
+};
+
+/** fiat as people read it: "$100.00", "100.00 isk" */
+export const money = (fiat: bigint | number, cur: string): string =>
+  `${SYM[cur] ?? ''}${(typeof fiat === 'bigint' ? Number(fiat) / 1e6 : fiat).toLocaleString(
+    'en-US',
+    {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    },
+  )}${SYM[cur] ? '' : ` ${cur}`}`;

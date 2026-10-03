@@ -3,9 +3,11 @@ import { Button } from '@repo/ui/components/ui/button';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { PopupPath } from '../paths';
+import { BUY_PRELOAD, openBuyPage } from '../../../buy/open';
 
 /**
- * receive / swap / send under the balance. A viewing key can never sign, so
+ * receive / buy / swap / send under the balance (buy where the network can
+ * be bought with cash: zcash). A viewing key can never sign, so
  * it gets receive and a quiet "watching" slot instead of dead buttons; an
  * empty wallet keeps receive and swap (swapping into zec needs none) and
  * greys send.
@@ -13,8 +15,11 @@ import { PopupPath } from '../paths';
 export const HomeActions = ({
   spendable = true,
   icons = true,
+  buy = false,
 }: {
   spendable?: boolean;
+  /** buy zec with cash, beside receive (opens buy.html) */
+  buy?: boolean;
   /** the boards differ: Main draws icons, HomePenumbra plain words */
   icons?: boolean;
 }) => {
@@ -47,6 +52,17 @@ export const HomeActions = ({
   return (
     <div className='flex gap-2'>
       {receive}
+      {buy && (
+        <Button
+          variant='secondary'
+          className='h-11 flex-1 text-[13px]'
+          data-preload={BUY_PRELOAD}
+          onClick={openBuyPage}
+        >
+          {icons && <span className='i-lucide-plus size-[15px]' />}
+          buy
+        </Button>
+      )}
       <Button
         variant='secondary'
         className='h-11 flex-1 text-[13px]'

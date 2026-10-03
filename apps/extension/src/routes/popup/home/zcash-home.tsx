@@ -47,6 +47,10 @@ import { EmptyBox, HomeScreen } from './home-screen';
 import { BalanceGroup, BalanceRow, Tile } from '../../../components/wallet/balance-rows';
 import type { BalanceView } from '../../../components/wallet/balance-hero';
 import { MultisigOverview } from './multisig-overview';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { BuyInFlight } from '../../../components/buy-in-flight';
+import { BUY_PRELOAD, openBuyPage } from '../../../buy/open';
+import { PAY_APPS } from '../../../buy/apps';
 
 const zec = (zat: bigint) => fmtZecHero(Number(zat) / 1e8);
 
@@ -109,6 +113,7 @@ export const ZcashContent = ({
   // hooks stay above the no-wallet early return below
   const { findByAddress } = useStore(contactsSelector);
   const [shieldOpen, setShieldOpen] = useState(false);
+  const [zecOpen, setZecOpen] = useState(false);
 
   // shielded balance from the worker, cached per pocket store and re-read on
   // sync progress and height changes. No figure yet is "loading" (`0n` is
@@ -326,6 +331,7 @@ export const ZcashContent = ({
           </>
         )}
       </InFlightCard>
+      <BuyInFlight />
 
       {messageSlot}
 
@@ -343,7 +349,7 @@ export const ZcashContent = ({
               </span>
             }
             amount={zec(shieldedTotal)}
-            onPress={openPoolNotes('ironwood')}
+            onPress={() => setZecOpen(true)}
           />
           <BalanceRow
             tile={<Tile tone='warn'>t</Tile>}
@@ -373,6 +379,35 @@ export const ZcashContent = ({
 
       {/* the shield flow (hot one-tap or zigner QR) rises in a sheet - the
           transparent row never grows */}
+      {/* the zec row: buying with cash first, then what moves zec */}
+      <Sheet open={zecOpen} onOpenChange={setZecOpen} title='zec · shielded'>
+        <RowGroup>
+          <Row
+            type='screen'
+            media={<Tile tone='accent'>+</Tile>}
+            label='buy with cash'
+            preload={BUY_PRELOAD}
+            description={PAY_APPS.filter(a => !a.off)
+              .map(a => a.name)
+              .join(', ')}
+            onPress={openBuyPage}
+          />
+          <Row
+            type='screen'
+            label='swap'
+            description='to or from another coin'
+            onPress={() => navigate(PopupPath.SWAP)}
+          />
+          {totalZat > 0n && (
+            <Row type='screen' label='send' onPress={() => navigate(PopupPath.SEND)} />
+          )}
+          <Row type='screen' label='receive' onPress={() => navigate(PopupPath.RECEIVE)} />
+          {IRONWOOD_MIGRATION && (
+            <Row type='screen' label='notes' onPress={() => void openPoolNotes('ironwood')?.()} />
+          )}
+        </RowGroup>
+      </Sheet>
+
       <Sheet open={shieldOpen} onOpenChange={setShieldOpen} title='shield'>
         <ShieldTransparent
           transparentZat={transparentZat}

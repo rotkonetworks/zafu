@@ -79,7 +79,7 @@ describe('the buy state machine', () => {
 
   it('gives the home card the stage and the real clock', () => {
     const line = cardLines(paying(), T0 + 3000 + 60_000);
-    expect(line.status).toBe(`pay ${offer.handle} 100.00 usd on revolut · 5:58:57 left`);
+    expect(line.status).toBe(`pay ${offer.handle} $100.00 on revolut · 5:58:57 left`);
     expect(clock(-5)).toBe('0:00');
     expect(clock(83_000)).toBe('1:23');
   });

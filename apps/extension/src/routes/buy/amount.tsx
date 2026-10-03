@@ -8,7 +8,7 @@ import { Sheet } from '@repo/ui/components/ui/sheet';
 import { cn } from '@repo/ui/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
 import { appNote, CURRENCIES, PAY_APPS, payApp } from '../../buy/apps';
-import { fiatUnits, rate3, ticketRows, usdc2, type Offer } from '../../buy/fees';
+import { fiatUnits, money, rate3, SYM, ticketRows, usdc2, type Offer } from '../../buy/fees';
 import { loadOffer } from '../../buy/machine';
 import { peerBuyUrl } from '../../config/ramps';
 import { Column, useBuy, useNow } from './ui';
@@ -23,23 +23,6 @@ import {
   type BuyState,
 } from './store';
 
-const SYM: Record<string, string> = {
-  usd: '$',
-  eur: '€',
-  gbp: '£',
-  cad: '$',
-  brl: 'r$',
-  ars: '$',
-  inr: '₹',
-};
-export const money = (fiat: bigint | number, cur: string) =>
-  `${SYM[cur] ?? ''}${(typeof fiat === 'bigint' ? Number(fiat) / 1e6 : fiat).toLocaleString(
-    'en-US',
-    {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    },
-  )}${SYM[cur] ? '' : ` ${cur}`}`;
 export const zec4 = (units: bigint | string | number) => (Number(units) / 1e8).toFixed(4);
 const CHIPS = ['50', '100', '250', '500'];
 

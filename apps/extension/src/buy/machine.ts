@@ -5,7 +5,7 @@
  * one: the intent's on-chain time, the moments each step landed.
  */
 
-import type { Offer } from './fees';
+import { money, type Offer } from './fees';
 import type { TemplateKey } from './apps';
 
 /**
@@ -168,7 +168,7 @@ export const cardLines = (
   now = Date.now(),
 ): { title: string; status: string; tone: 'gold' | 'danger' } => {
   const zec = b.near ? `≈ ${(Number(b.near.amountOut) / 1e8).toFixed(4)} zec` : 'zec';
-  const fiat = `${(Number(b.offer.fiat) / 1e6).toFixed(2)} ${b.currency}`;
+  const fiat = money(BigInt(b.offer.fiat), b.currency);
   const left = b.expiresAt ? clock(b.expiresAt - now) : '';
   const title = `buying ${zec}`;
   switch (b.stage) {

@@ -12,7 +12,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { payApp, ZELLE_BANKS, type TemplateKey } from '../../buy/apps';
 import { loadOffer, clock, INTENT_LIFETIME_MS } from '../../buy/machine';
 import { Column, useBuy, useNow } from './ui';
-import { money } from './amount';
+import { money } from '../../buy/fees';
 import {
   allowRead,
   cancelBuy,

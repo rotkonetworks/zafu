@@ -10,9 +10,9 @@ import { cn } from '@repo/ui/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
 import { payApp } from '../../buy/apps';
 import { clock, loadOffer, type OpenBuy } from '../../buy/machine';
-import { usdc2 } from '../../buy/fees';
 import { Column, useBuy, useNow } from './ui';
-import { money, zec4 } from './amount';
+import { money, usdc2 } from '../../buy/fees';
+import { zec4 } from './amount';
 import { finish, swapNow, type BuyState, type Step } from './store';
 
 const hhmm = (t?: number) => (t ? new Date(t).toTimeString().slice(0, 5) : '');
