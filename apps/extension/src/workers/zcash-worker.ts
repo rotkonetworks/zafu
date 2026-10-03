@@ -2157,6 +2157,8 @@ const fetchCompactBlocksRange = async (
   pool: NotePool = 'orchard',
   /** blocks fetched so far of the range, after each batch */
   onBatch?: (done: number, total: number) => void,
+  /** a stopped send fetches no further batch */
+  signal?: AbortSignal,
 ): Promise<{
   blocks: { height: number; actions: { cmx_hex: string }[] }[];
   actions: number;
@@ -2181,6 +2183,7 @@ const fetchCompactBlocksRange = async (
   const total = end - start + 1;
   const worker = async () => {
     while (true) {
+      signal?.throwIfAborted();
       const i = next++;
       const range = ranges[i];
       if (!range) {
@@ -2625,6 +2628,8 @@ const buildWitnessesIronwood = async (
   notes: DecryptedNote[],
   anchorHeight: number,
   emitProgress?: (stage: string, detail?: string) => void,
+  /** a stopped send stops fetching blocks */
+  signal?: AbortSignal,
 ): Promise<{ anchorHex: string; paths: unknown[] }> => {
   if (!wasmModule) {
     throw new Error('wasm not initialized');
@@ -2754,6 +2759,8 @@ const buildWitnessesIronwood = async (
         frontierHeight + 1,
         anchorHeight,
         'ironwood',
+        undefined,
+        signal,
       );
       const existingInput = notes.map(n => ({
         id: n.nullifier,
@@ -2807,6 +2814,7 @@ const buildWitnessesIronwood = async (
     anchorHeight,
     'ironwood',
     onBatch,
+    signal,
   );
   emitProgress?.('catch-up: replaying', `${blocks.length} blocks`);
   const positions = notes.map(n => n.position);
@@ -2871,6 +2879,8 @@ const buildWitnessesIronwood = async (
         endHeight + 1,
         now.height,
         'ironwood',
+        undefined,
+        signal,
       );
       const moved = JSON.parse(
         iwSync(
@@ -2974,6 +2984,8 @@ const buildWitnesses = async (
   anchorHeight: number,
   pool: NotePool = 'orchard',
   onProgress?: (step: string, detail?: string) => void,
+  /** ironwood: a stopped send stops fetching blocks */
+  signal?: AbortSignal,
 ): Promise<{ anchorHex: string; paths: unknown[] }> => {
   if (!wasmModule) {
     throw new Error('wasm not initialized');
@@ -2982,7 +2994,7 @@ const buildWitnesses = async (
     throw new Error('buildWitnesses called with no notes');
   }
   if (pool === 'ironwood') {
-    return buildWitnessesIronwood(client, walletId, notes, anchorHeight, onProgress);
+    return buildWitnessesIronwood(client, walletId, notes, anchorHeight, onProgress, signal);
   }
 
   const positions = notes.map(n => n.position);
@@ -6444,6 +6456,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           anchorHeight,
           sendActivePool,
           emitProgress,
+          build.signal,
         );
         const { anchorHex, paths } = await build.race(witnessing);
 
@@ -7024,6 +7037,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           anchorHeight,
           pcztPool,
           emitProgress,
+          build.signal,
         );
         const { anchorHex, paths } = await build.race(witnessing);
         console.log(
@@ -7514,6 +7528,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           migrateAnchorHeight,
           'orchard',
           emitProgress,
+          build.signal,
         );
         const { anchorHex, paths } = await build.race(witnessing);
 
