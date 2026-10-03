@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode, useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { loadStoredRegistry } from '../transparent/registry-live';
+import { refreshPenumbraRegistry } from '../penumbra/asset-registry';
 import { RouterProvider } from 'react-router-dom';
 import { popupRouter } from '../routes/popup/router';
 import { isSidePanel } from '../utils/popup-detection';
@@ -143,8 +144,9 @@ void localExtStorage.get('zafuFont').then(v => {
 });
 
 // a verified newer registry, if one is stored, before the first render so
-// every chain list is complete; storage only, never the network
-void loadStoredRegistry()
+// every chain list is complete, and every asset's symbol/name/image is
+// registry-first from the start; storage only, never the network
+void Promise.all([loadStoredRegistry(), refreshPenumbraRegistry()])
   .catch(() => undefined)
   .finally(() =>
     createRoot(rootElement, {

@@ -396,6 +396,7 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
           />
           <PickSheet
             title='you get'
+            search
             open={pick === 'out'}
             onOpenChange={o => setPick(o ? 'out' : undefined)}
             picks={outChoices.map((a, i) => ({

@@ -44,6 +44,7 @@ export function BalanceSheet({
   return (
     <PickSheet
       title='asset'
+      search
       open={open}
       onOpenChange={next => {
         onOpenChange(next);

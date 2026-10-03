@@ -7,7 +7,11 @@ import { uint8ArrayToBase64 } from '@penumbrafi/types/base64';
 import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import type { Metadata } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { filterFungibleBalances } from '../../../utils/is-fungible-asset';
-import { symbolFromMetadata } from '../../../utils/asset-display';
+import {
+  displayMetadata,
+  nameFromMetadata,
+  symbolFromMetadata,
+} from '../../../utils/asset-display';
 import type { Local, Prices, Unit } from '../../../penumbra/price';
 import { UM_ID, USDC_INJ_ID } from '../../../penumbra/quotes';
 
@@ -80,12 +84,14 @@ const assetOf = (b: BalancesResponse, i: number): Asset => {
     key: base ?? String(i),
     base,
     symbol,
-    name: meta?.name || symbol,
+    name: nameFromMetadata(meta),
     um: ['penumbra', 'UM'].includes(b.balanceView ? getDisplayDenomFromView(b.balanceView) : ''),
     amount,
     unit: unitOf(meta),
     local: localOf(b, amount),
-    rawId: rawIdOf(b, base, meta?.symbol),
+    // the registry's symbol counts as "named" too - once it knows the asset,
+    // base denom goes in the token sheet's dedicated denom line, not here
+    rawId: rawIdOf(b, base, displayMetadata(meta)?.symbol),
   };
 };
 

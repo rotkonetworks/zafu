@@ -381,6 +381,18 @@ export interface Pick<K extends string | number> {
   value?: string;
 }
 
+/**
+ * Whether a pick's label matches a typed search query: plain case-insensitive
+ * substring, so "usdt" matches every registry-named USDT variant a wallet
+ * might hold or trade - `USDT.axl`, `nUSDT`, `USDT.eth.rt` - the same way it
+ * matches a plain `USDT`. Matching happens against the already-resolved
+ * (registry-first) label, never a raw base denom.
+ */
+export const matchesSearch = (label: string, query: string): boolean => {
+  const q = query.trim().toLowerCase();
+  return !q || label.toLowerCase().includes(q);
+};
+
 /** choose one of many (asset, validator, chain): a sheet of rows */
 export function PickSheet<K extends string | number>({
   title,
@@ -391,6 +403,7 @@ export function PickSheet<K extends string | number>({
   empty = 'nothing here yet',
   head,
   foot,
+  search = false,
 }: {
   title: string;
   open: boolean;
@@ -402,14 +415,27 @@ export function PickSheet<K extends string | number>({
   head?: ReactNode;
   /** below the rows, e.g. a show-more switch */
   foot?: ReactNode;
+  /** a search box above the rows, filtering by label (e.g. a long asset list) */
+  search?: boolean;
 }) {
+  const [query, setQuery] = useState('');
+  const shown = search ? picks.filter(p => matchesSearch(p.label, query)) : picks;
+  const close = (next: boolean) => {
+    onOpenChange(next);
+    if (!next) {
+      setQuery('');
+    }
+  };
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} title={title}>
+    <Sheet open={open} onOpenChange={close} title={title}>
       {head}
+      {search && (
+        <Input placeholder='search' value={query} onChange={e => setQuery(e.target.value)} />
+      )}
       <div className='min-h-0 overflow-y-auto'>
-        {picks.length > 0 ? (
+        {shown.length > 0 ? (
           <RowGroup>
-            {picks.map(p => (
+            {shown.map(p => (
               <Row
                 key={p.key}
                 type='value'
@@ -418,7 +444,7 @@ export function PickSheet<K extends string | number>({
                 value={p.value}
                 onPress={() => {
                   onPick(p.key);
-                  onOpenChange(false);
+                  close(false);
                 }}
               />
             ))}

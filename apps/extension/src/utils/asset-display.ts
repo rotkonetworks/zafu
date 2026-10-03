@@ -8,6 +8,7 @@
  */
 
 import type { Metadata } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
+import { registryMetadata } from '../penumbra/asset-registry';
 
 const IBC_HASH = /^[0-9a-f]{40,}$/i;
 
@@ -47,16 +48,37 @@ export const shortSymbol = (input?: string): string => {
 };
 
 /**
- * Symbol for a penumbra asset from its metadata. Prefers the registry symbol,
- * then a sanitized display / base - never the raw path.
+ * Registry-first display metadata for `meta`'s asset: the registry's own
+ * metadata when it knows the id (it may have renamed the asset since the view
+ * service last saw it), else `meta` unchanged. Every symbol / name / image
+ * path below reads from here, so a registry rename shows everywhere at once.
+ */
+export const displayMetadata = (meta?: Metadata): Metadata | undefined =>
+  registryMetadata(meta) ?? meta;
+
+/**
+ * Symbol for a penumbra asset from its metadata. Registry-first: the
+ * registry's symbol when it knows the asset id, then the view service's own
+ * symbol, then a sanitized display / base - never the raw path.
  */
 export const symbolFromMetadata = (meta?: Metadata): string => {
-  if (!meta) {
+  const m = displayMetadata(meta);
+  if (!m) {
     return 'Unknown';
   }
-  if (meta.symbol) {
-    return meta.symbol;
+  if (m.symbol) {
+    return m.symbol;
   }
   // display and base can be raw paths for unregistered IBC assets
-  return shortSymbol(meta.display || meta.base);
+  return shortSymbol(m.display || m.base);
+};
+
+/**
+ * Name for a penumbra asset from its metadata. Registry-first, same as
+ * {@link symbolFromMetadata}; falls back to the resolved symbol when neither
+ * the registry nor the view service names it.
+ */
+export const nameFromMetadata = (meta?: Metadata): string => {
+  const m = displayMetadata(meta);
+  return m?.name || symbolFromMetadata(meta);
 };
