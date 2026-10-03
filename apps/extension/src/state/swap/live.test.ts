@@ -8,6 +8,11 @@ import {
 } from '@tanstack/react-query';
 
 const egress = vi.hoisted(() => ({ asked: [] as string[], views: [] as unknown[] }));
+// no market list is fetched in these tests: 1click's prices are none
+vi.mock('./near', async orig => ({
+  ...(await orig<object>()),
+  nearPrices: () => Promise.resolve(new Map()),
+}));
 vi.mock('../../net/egress-opt-in', () => ({
   readEgressView: () => Promise.resolve(egress.views),
   requestEgressOptIn: (id: string) => {

@@ -146,6 +146,12 @@ export async function getSupportedTokens(): Promise<NearToken[]> {
   return nearFetch<NearToken[]>('/v0/tokens');
 }
 
+/**
+ * How far below the quoted output a 1click swap may settle, in bps (1click's
+ * slippageTolerance: 100 = 1%). Its floor, minAmountOut, is shown as "at least".
+ */
+export const NEAR_SLIPPAGE_BPS = 100;
+
 /** how long 1click gathers solver quotes before it answers */
 export const NEAR_QUOTE_WAIT_MS = 3000;
 
@@ -172,7 +178,7 @@ export async function requestQuote(params: {
   const request: SwapQuoteRequest = {
     dry: params.dry ?? false,
     swapType: params.swapType,
-    slippageTolerance: params.slippageTolerance ?? 200,
+    slippageTolerance: params.slippageTolerance ?? NEAR_SLIPPAGE_BPS,
     originAsset: params.originAsset,
     depositType: 'ORIGIN_CHAIN',
     destinationAsset: params.destinationAsset,

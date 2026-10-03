@@ -10,10 +10,14 @@ import {
   type NearToken,
   type SwapQuoteResponse,
   type SwapStatus,
+  NEAR_SLIPPAGE_BPS,
 } from '../near-swap';
 import { isEgressBlocked } from '../../net/egress';
 import {
   costOf,
+  durationText,
+  figure,
+  fromUnits,
   type Cost,
   type Quote,
   type QuoteRequest,
@@ -34,6 +38,14 @@ const nearTokens = (): Promise<NearToken[]> => {
   }
   return list.tokens;
 };
+
+/** the market's usd price of each token in 1click's list, keyed `SYMBOL@chain` */
+export const nearPrices = async (): Promise<Map<string, number>> =>
+  new Map(
+    (await nearTokens()).flatMap(t =>
+      t.price ? [[`${t.symbol}@${t.blockchain.toLowerCase()}`, t.price] as const] : [],
+    ),
+  );
 
 const STATUS: Record<SwapStatus | 'none', SwapStatusView> = {
   SUCCESS: { phase: 'done', line: 'swap complete' },
@@ -91,6 +103,8 @@ export const nearProvider: SwapProvider = {
       usd: t.price ?? undefined,
     })),
 
+  exactOut: true,
+
   quote: (req, signal) =>
     nearQuote(req, signal).catch((e: unknown) => {
       throw nearRefusal(e, signal);
@@ -122,9 +136,15 @@ const nearQuote = async (req: QuoteRequest, signal?: AbortSignal): Promise<Quote
   }
   const fromZec = req.direction === 'from_zec';
   const zafuBps = zafuFeeBps('near');
+  const [inDecimals, outDecimals] = fromZec ? [8, token.decimals] : [token.decimals, 8];
   const resp: SwapQuoteResponse = await requestQuote({
-    swapType: 'EXACT_INPUT',
-    amount: toUnits(req.amountIn, fromZec ? 8 : token.decimals).toString(),
+    // by what arrives: 1click asks a deposit of amountIn, and sends back any excess
+    swapType: req.exactOut ? 'EXACT_OUTPUT' : 'EXACT_INPUT',
+    amount: (req.exactOut
+      ? toUnits(req.exactOut, outDecimals)
+      : toUnits(req.amountIn, inDecimals)
+    ).toString(),
+    slippageTolerance: NEAR_SLIPPAGE_BPS,
     originAsset: fromZec ? zecAssetId : token.assetId,
     destinationAsset: fromZec ? token.assetId : zecAssetId,
     recipient: fromZec ? req.otherAddress : req.zcashAddress,
@@ -140,8 +160,10 @@ const nearQuote = async (req: QuoteRequest, signal?: AbortSignal): Promise<Quote
   return {
     route: 'near',
     amountOut,
-    amountOutText: q.amountOutFormatted,
-    amountInText: q.amountInFormatted,
+    amountOutText: figure(amountOut, outDecimals),
+    // exact: on an exact-output quote, this is what must be deposited
+    amountInText: fromUnits(BigInt(q.amountIn || '0'), inDecimals),
+    atLeastText: q.minAmountOut ? figure(BigInt(q.minAmountOut), outDecimals) : undefined,
     // 1click folds every fee into the amount out; its usd figures, or the
     // listed prices, tell how much that was
     cost: nearCost(
@@ -150,7 +172,7 @@ const nearQuote = async (req: QuoteRequest, signal?: AbortSignal): Promise<Quote
       Number(q.amountOutUsd) || usd(q.amountOut, to?.decimals ?? 8, to?.price ?? null),
       zafuBps,
     ),
-    timeText: q.timeEstimate ? `~${Math.max(1, Math.round(q.timeEstimate / 60))} min` : undefined,
+    timeText: q.timeEstimate ? durationText(q.timeEstimate) : undefined,
     expiresAt: q.deadline ? new Date(q.deadline).getTime() : undefined,
     depositAddress: q.depositAddress,
     recipient: fromZec ? req.otherAddress : req.zcashAddress,

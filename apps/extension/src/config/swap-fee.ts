@@ -10,10 +10,16 @@
 /** the normal rate, shown struck through beside the beta price */
 export const ZAFU_LIST_FEE_BPS = 50;
 
-/** what zafu charges on every route in this build */
-export const ZAFU_FEE_BPS = 20;
+/** beta: zafu charges nothing on any route or buy. The one flag to flip when the beta ends */
+export const ZAFU_BETA_FREE = true;
 
-/** the beta discount, derived from the two rates above (60) */
+/** the rate zafu charges once the beta ends */
+export const ZAFU_PAID_FEE_BPS = 20;
+
+/** what zafu charges on every route in this build */
+export const ZAFU_FEE_BPS = ZAFU_BETA_FREE ? 0 : ZAFU_PAID_FEE_BPS;
+
+/** the beta discount, derived from the two rates above (100 while free, 60 at 0.2%) */
 export const ZAFU_FEE_OFF_PCT = Math.round(100 - (ZAFU_FEE_BPS * 100) / ZAFU_LIST_FEE_BPS);
 
 export const NEAR_APP_FEE_BPS = ZAFU_FEE_BPS;

@@ -45,9 +45,10 @@ import { usePasswordGate } from '../../../hooks/password-gate';
 import { buildSendTxInWorker, completeSendTxInWorker } from '../../../state/keyring/network-worker';
 import type { VaultUnlock } from '../../../state/keyring/types';
 import { EMPTY_POOL_NOTES, usePoolNotes } from '../../../hooks/zcash-pool-balances';
-import { maxSendable } from '../send/spendable';
+import { maxSendable, quoteSend } from '../send/spendable';
 import { PROVIDERS, routeTokens } from '../../../state/swap';
 import {
+  figure,
   fromUnits,
   lead,
   rank,
@@ -359,6 +360,7 @@ const RouteMeta = ({
 }) => (
   <>
     {quote.timeText && <span>{quote.timeText}</span>}
+    {quote.atLeastText && <span>{`at least ${quote.atLeastText} ${unit}`}</span>}
     {more && (
       <span>
         <Sensitive className='text-success'>{`${more} ${unit}`}</Sensitive> more
@@ -551,6 +553,12 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
             zcashTransparent,
             otherAddress: askAddress,
             signsOpReturn,
+            // out of zec, the send to the deposit pays its own ZIP-317 fee: part of the cost
+            sourceFeeZat: isFromZec
+              ? String(
+                  quoteSend(notes, toUnits(askAmount!, 8), { transparentRecipient: true }).feeZat,
+                )
+              : undefined,
           }
         : undefined,
     [
@@ -562,6 +570,8 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
       askAddress,
       zcashTransparent,
       signsOpReturn,
+      isFromZec,
+      notes,
     ],
   );
   const typing = amountIn !== askAmount || otherAddress !== askAddress;
@@ -595,7 +605,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const reviewable =
     !!quote && !typing && !overMax && !answerOf(quote.route)?.isPlaceholderData && !expiredLive;
   const ahead = lead(quotes);
-  const more = ahead ? fromUnits(ahead, outDecimals) : undefined;
+  const more = ahead ? figure(ahead, outDecimals) : undefined;
   // the routes with no price: refused, failed, blocked or not asked yet
   const quiet = [
     ...asked.flatMap((g, i) => {
@@ -1202,6 +1212,9 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
                 [
                   ['you send', `${deal.amountInText || amountIn} ${inUnit}`, true],
                   ['you receive', `${deal.amountOutText} ${outUnit}`, true],
+                  ...(deal.atLeastText
+                    ? [['at least', `${deal.atLeastText} ${outUnit}`, true]]
+                    : []),
                   ['route', ROUTES[deal.route].label],
                   ['recipient', deal.recipient],
                   [isFromZec ? 'deposit address' : 'pay to', deal.depositAddress || 'on confirm'],
@@ -1230,6 +1243,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
               </p>
             )}
             {note && <p className='text-xs text-fg-muted'>{note}</p>}
+            {deal.streamLine && <p className='text-xs text-fg-muted'>{deal.streamLine}</p>}
             {deal.refundLine && <p className='text-xs text-fg-muted'>{deal.refundLine}</p>}
             <p className='text-xs text-fg-muted'>
               {ROUTES[deal.route].label} · {ROUTES[deal.route].custody}

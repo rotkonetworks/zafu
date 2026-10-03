@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 const list = vi.hoisted(() => ({ bps: 0 }));
-vi.mock('../../../config/swap-fee', () => ({ zafuListBps: () => list.bps }));
+vi.mock('../../../config/swap-fee', () => ({ zafuListBps: () => list.bps, ZAFU_BETA_FREE: true }));
 vi.mock('../../../components/sensitive', () => ({
   Sensitive: ({ children }: { children: unknown }) => <span>{children as string}</span>,
 }));
@@ -22,11 +22,11 @@ const cost = costOf([
 ]);
 
 describe('cost lines', () => {
-  it('shows a route zafu takes nothing on as a plain 0%, not a discount', () => {
+  it('shows the free beta as the normal rate struck through, then free', () => {
     list.bps = 50;
     const { container } = render(<CostList cost={cost} unit='zec' decimals={8} />);
-    expect(container.querySelector('s')).toBeNull();
-    expect(container.textContent).toContain('zafu fee0% · 0 zec');
+    expect(container.querySelector('s')?.textContent).toBe('0.5%');
+    expect(container.textContent).toContain('free in beta · 0 zec');
     expect(container.textContent).toContain('total ≈0.3% · 0.00071825 zec');
   });
 
