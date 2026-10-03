@@ -469,9 +469,15 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const [contactsOpen, setContactsOpen] = useState(false);
   const [routesOpen, setRoutesOpen] = useState(false);
   const [picked, setPicked] = useState<RouteId>();
-  // the firm quote review was opened with, and the live price it replaced
-  // the price review froze; once confirm re-checked it, `was` holds the one it replaced
-  const [firm, setFirm] = useState<{ quote: Quote; was?: Quote; checked?: true }>();
+  // the price review froze, with the request it answered (amount, addresses) frozen beside
+  // it: the deposit is built from that request, never the live form. once confirm
+  // re-checked it, `was` holds the price it replaced
+  const [firm, setFirm] = useState<{
+    quote: Quote;
+    req: QuoteRequest;
+    was?: Quote;
+    checked?: true;
+  }>();
   const [checking, setChecking] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [riskAcknowledged, setRiskAcknowledged] = useState(false);
@@ -751,9 +757,9 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   // review freezes the price shown: nothing refreshes behind it, and only confirm re-checks it
   const firmAsk = useRef<AbortController>(undefined);
   const openReview = () => {
-    if (reviewable) {
+    if (reviewable && req) {
       setError(undefined);
-      setFirm({ quote });
+      setFirm({ quote, req });
       setRiskAcknowledged(false);
       setReviewOpen(true);
     }
@@ -764,11 +770,12 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   };
   // the first confirm asks the route for its firm quote; a moved price is shown, struck, for a second look
   const recheck = async () => {
-    if (!firm || !req) {
+    if (!firm) {
       return;
     }
+    const { req } = firm;
     if (firm.checked) {
-      return confirm(firm.quote);
+      return confirm(firm.quote, req);
     }
     const ask = (firmAsk.current = new AbortController());
     setChecking(true);
@@ -778,10 +785,10 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
         return;
       }
       if (got.amountOut !== firm.quote.amountOut) {
-        setFirm({ quote: got, was: firm.quote, checked: true });
+        setFirm({ quote: got, req, was: firm.quote, checked: true });
         return;
       }
-      return confirm(got);
+      return confirm(got, req);
     } catch (e) {
       if (!ask.signal.aborted) {
         setReviewOpen(false);
@@ -793,18 +800,19 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
     }
   };
 
-  const confirm = async (d: Quote) => {
+  /** `r` is the request `d` answered: what is sent, whatever the form says by now */
+  const confirm = async (d: Quote, r: QuoteRequest) => {
     if (!selectedKeyInfo) {
       return;
     }
-    setFirm({ quote: d, checked: true });
+    setFirm({ quote: d, req: r, checked: true });
     setReviewOpen(false);
     setError(undefined);
 
     // into zcash: the user pays from their other wallet; zafu shows where and watches
-    if (!isFromZec) {
-      if (rememberIt && otherValid && !known) {
-        void rememberYours(otherAddress).catch(() => undefined);
+    if (r.direction === 'into_zec') {
+      if (rememberIt && otherValid && !known && r.otherAddress === otherAddress) {
+        void rememberYours(r.otherAddress).catch(() => undefined);
       }
       setStep('deposit');
       return;
@@ -826,7 +834,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
         pocket,
         zidecarUrl,
         to: d.depositAddress,
-        amountIn,
+        amountIn: r.amountIn,
       };
       setSendSteps([]);
       if (selectedKeyInfo.type === 'mnemonic') {
@@ -1210,7 +1218,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
               {/* only the amounts hide; the addresses and memo are what gets reviewed */}
               {(
                 [
-                  ['you send', `${deal.amountInText || amountIn} ${inUnit}`, true],
+                  ['you send', `${deal.amountInText || firm.req.amountIn} ${inUnit}`, true],
                   ['you receive', `${deal.amountOutText} ${outUnit}`, true],
                   ...(deal.atLeastText
                     ? [['at least', `${deal.atLeastText} ${outUnit}`, true]]
@@ -1299,11 +1307,11 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
     );
   }
 
-  if (step === 'thor-out' && deal) {
+  if (step === 'thor-out' && deal && firm) {
     return (
       <ThorDeposit
         quote={deal}
-        amountZat={toUnits(amountIn, 8)}
+        amountZat={toUnits(firm.req.amountIn, 8)}
         onSent={txid => {
           setDepositTxid(txid);
           setStep('polling');
