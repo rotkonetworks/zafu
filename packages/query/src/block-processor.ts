@@ -124,6 +124,18 @@ export class BlockProcessor implements BlockProcessorInterface {
    * next run first puts the tree back to what is stored.
    */
   private unflushed = false;
+  /**
+   * A block is part way through processBlock (scanned, but its nullifiers,
+   * transactions or flush not yet done). Only a tree between blocks may be
+   * saved as it is.
+   */
+  private inBlock = false;
+  /**
+   * A flush moved the wasm tree's checkpoint but its save failed: flushing
+   * again would only save what came after, leaving a hole. Only a reset
+   * clears it.
+   */
+  private checkpointAhead = false;
   /** the stored tree was compared with the chain once (see checkStoredTree) */
   private treeChecked = false;
   private readonly genesisBlock: CompactBlock | undefined;
@@ -211,6 +223,8 @@ export class BlockProcessor implements BlockProcessorInterface {
       if (this.unflushed) {
         await this.viewServer.resetTreeToStored();
         this.unflushed = false;
+        this.checkpointAhead = false;
+        this.inBlock = false;
         console.debug('[sync] tree put back to what is stored before reading on');
       }
       await this.syncAndStore(signal);
@@ -218,8 +232,29 @@ export class BlockProcessor implements BlockProcessorInterface {
       if (!signal.aborted) {
         throw e;
       }
+      await this.keepProgress();
     }
   };
+
+  /**
+   * A pause or hold ended the run between blocks: save the blocks scanned
+   * since the last flush, so a short window open during a long catch-up
+   * still moves the stored height on, instead of the next run reading them
+   * all again. Those blocks found nothing for the wallet (a block that does
+   * flushes at once), so this is the tree and the height alone. Anything
+   * less certain - a block part way through, a save that failed, a stop for
+   * good - is left to the reset at the next run's start.
+   */
+  private async keepProgress(): Promise<void> {
+    if (!this.unflushed || this.inBlock || this.checkpointAhead || this.stopped) {
+      return;
+    }
+    try {
+      await this.flushAndSave();
+    } catch (e) {
+      console.debug('[sync] progress not kept at pause; the next run reads it again:', e);
+    }
+  }
 
   /** flush the wasm tree's updates and store them with the height they reach */
   private async flushAndSave(height?: bigint): Promise<ScanBlockResult> {
@@ -227,7 +262,9 @@ export class BlockProcessor implements BlockProcessorInterface {
     // tree is ahead of storage even when no block was scanned
     this.unflushed = true;
     const flush = this.viewServer.flushUpdates();
+    this.checkpointAhead = true;
     await this.indexedDb.saveScanResult(height === undefined ? flush : { ...flush, height });
+    this.checkpointAhead = false;
     this.unflushed = false;
     return flush;
   }
@@ -494,6 +531,8 @@ export class BlockProcessor implements BlockProcessorInterface {
 
           // trial decrypts a chunk, according to some chunking policy, of the genesis block.
           this.unflushed = true;
+          // the genesis block is whole only once processBlock below is done
+          this.inBlock = true;
           await this.viewServer.scanGenesisChunk(BigInt(start), chunkedBlock, skipTrialDecrypt);
 
           // after trial decrypting all the chunks, check if this is the last chunk
@@ -664,6 +703,7 @@ export class BlockProcessor implements BlockProcessorInterface {
     skipTrialDecrypt = false,
     skipScanBlock = false,
   }: ProcessBlockParams) {
+    this.inBlock = true;
     if (compactBlock.appParametersUpdated) {
       await this.indexedDb.saveAppParams(await this.querier.app.appParams());
     }
@@ -825,6 +865,7 @@ export class BlockProcessor implements BlockProcessorInterface {
     if (globalThis.__ASSERT_ROOT__) {
       await this.assertRootValid(compactBlock.height);
     }
+    this.inBlock = false;
   }
 
   /**

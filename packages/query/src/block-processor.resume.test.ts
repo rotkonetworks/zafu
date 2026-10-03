@@ -36,7 +36,7 @@ const tick = () =>
   });
 
 const makeChain = (start: { height: bigint | undefined; tree: bigint[] }) => {
-  const db = { height: start.height, tree: [...start.tree], cleared: 0 };
+  const db = { height: start.height, tree: [...start.tree], cleared: 0, failSaves: 0 };
   let memory = [...start.tree];
 
   const viewServer = {
@@ -60,6 +60,10 @@ const makeChain = (start: { height: bigint | undefined; tree: bigint[] }) => {
   const indexedDb = {
     getFullSyncHeight: () => Promise.resolve(db.height),
     saveScanResult: (r: { height: bigint; sctUpdates: bigint[] }) => {
+      if (db.failSaves > 0) {
+        db.failSaves--;
+        return Promise.reject(new Error('quota'));
+      }
       db.tree = [...r.sctUpdates];
       db.height = r.height;
       return Promise.resolve();
@@ -144,16 +148,36 @@ describe('BlockProcessor resume', () => {
     await vi.waitFor(() => expect(memory().length).toBeGreaterThan(15));
 
     processor.pause();
-    // nothing was flushed: storage is still at the start
-    expect(db.height).toBe(0n);
     await new Promise(r => {
       setTimeout(r, 50);
     });
+    // the blocks read before the pause are kept, as one tree with its height
+    const last = memory()[memory().length - 1]!;
+    expect(db.height).toBe(last);
+    expect(db.tree).toEqual(chainAt(last));
     processor.resume();
 
     await caughtUp(memory);
     expect(memory()).toEqual(chainAt(TIP));
     expect(rootOf(memory()).equals(rootOf(chainAt(TIP)))).toBe(true);
+    processor.stop('test done');
+  });
+
+  it('a pause whose save fails is read again from storage, never doubled', async () => {
+    const { processor, db, memory } = makeChain({ height: 0n, tree: [0n] });
+    void processor.sync().catch(() => undefined);
+    await vi.waitFor(() => expect(memory().length).toBeGreaterThan(15));
+
+    db.failSaves = 1;
+    processor.pause();
+    await new Promise(r => {
+      setTimeout(r, 50);
+    });
+    expect(db.height).toBe(0n);
+    processor.resume();
+
+    await caughtUp(memory);
+    expect(memory()).toEqual(chainAt(TIP));
     processor.stop('test done');
   });
 
