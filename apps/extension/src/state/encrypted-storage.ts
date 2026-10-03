@@ -177,6 +177,8 @@ const ENCRYPTED_KEYS = new Set<string>([
   'peopleInvites',
   // an open buy: the seller's handle, the base address, the 1click deposit
   'openBuy',
+  // swaps in flight: deposit addresses, memos, the swap's own t-address
+  'openSwaps',
 ]);
 
 /** should this storage key be encrypted? */

@@ -52,6 +52,8 @@ import { chainByChainId } from '@repo/wallet/networks/cosmos/chains';
  * quick-action on the home asset list so the from-leg boots pre-selected.
  */
 interface SwapLocationState extends Partial<SwapLinkState> {
+  /** an open swap to reopen where it stood (home's in-flight card) */
+  resume?: string;
   /** Base denom of the asset to preselect as the FROM leg. Falls back to
    *  top-priority balance when the denom is not found. */
   prefillFromAsset?: string;
@@ -109,6 +111,7 @@ export const SwapPage = () => {
       <CrosschainSwap
         key={location.key}
         link={swapState?.link ? { link: swapState.link, via: swapState.via } : undefined}
+        resume={swapState?.resume}
       />
     );
   }

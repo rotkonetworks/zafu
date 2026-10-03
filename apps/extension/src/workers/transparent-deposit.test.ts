@@ -10,8 +10,16 @@ import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import type { SpendKeysCtor } from './hot-sign';
 import {
+  decodeTexAddress,
+  payableTransparentAddress,
+  transparentAddressToScriptHex,
+} from '../ledger/address';
+import {
   checkDeposit,
+  checkVault,
+  depositFeeZat,
   FEE_MOVED,
+  VAULT_UNPAYABLE,
   opReturnScript,
   planDeposit,
   sendDeposit,
@@ -95,7 +103,7 @@ describe('deposit on the real wasm', () => {
     return { chain, broadcast };
   };
 
-  const req = { tAddress: 'unused-by-the-fake', to: VAULT, memo: MEMO, mainnet: false };
+  const req = { tAddress: 'unused-by-the-fake', tIndex: 0, to: VAULT, memo: MEMO, mainnet: false };
 
   test('plans with no key, then builds, signs and pays exactly the review', async () => {
     const keys = new wasm.SpendKeys(SEED, 0, false);
@@ -128,6 +136,57 @@ describe('deposit on the real wasm', () => {
     }
   });
 
+  test('the quoted deposit fee is the one the planner charges', () => {
+    const script = p2pkh(new wasm.SpendKeys(SEED, 0, false).transparent_pubkey(0));
+    for (const memoBytes of [0, 20, 33, 40, 60, 75, 76, 80]) {
+      for (const inputs of [1, 2, 3]) {
+        const utxos = JSON.stringify(
+          Array.from({ length: inputs }, (_, i) => ({
+            txid: String(i + 1)
+              .padStart(2, '0')
+              .repeat(32),
+            vout: 0,
+            value: '150000',
+            script,
+          })),
+        );
+        const memo = memoBytes ? '61'.repeat(memoBytes) : null;
+        // every input is needed, so the planner spends all of them
+        const amount = BigInt(150_000 * inputs - 40_000);
+        const plan = JSON.parse(wasm.plan_transparent_transaction(utxos, amount, memo)) as {
+          fee: number;
+          inputs: number;
+        };
+        expect(plan.inputs).toBe(inputs);
+        expect([memoBytes, inputs, depositFeeZat(memoBytes, inputs)]).toEqual([
+          memoBytes,
+          inputs,
+          BigInt(plan.fee),
+        ]);
+      }
+    }
+  });
+
+  test("a swap's own address signs with its own index, and only that one", async () => {
+    const keys = new wasm.SpendKeys(SEED, 0, false);
+    try {
+      const own = p2pkh(keys.transparent_pubkey(7));
+      const { chain, broadcast } = chainWith(own, [900_000n]);
+      const plan = await planDeposit(wasm, chain, { ...req, tIndex: 7, amountZat: '500000' });
+      const deposit = { ...req, amountZat: '500000', reviewedFee: plan.fee };
+      // the pocket's shown address (index 0) never signs a swap's inputs
+      await expect(sendDeposit(wasm, chain, keys, deposit)).rejects.toThrow(
+        /not a P2PKH output of this key/,
+      );
+      const sent = await sendDeposit(wasm, chain, keys, { ...deposit, tIndex: 7 });
+      expect(broadcast).toHaveBeenCalledTimes(1);
+      // change and any refund go back to the swap's own address
+      expect(transparentOutputs(sent.txHex).at(-1)?.script).toBe(own);
+    } finally {
+      keys.free();
+    }
+  });
+
   test('a fee that moved since the review, or another pocket, sends nothing', async () => {
     const keys = new wasm.SpendKeys(SEED, 0, false);
     const other = new wasm.SpendKeys(SEED, 1, false);
@@ -142,6 +201,71 @@ describe('deposit on the real wasm', () => {
     } finally {
       keys.free();
       other.free();
+    }
+  });
+});
+
+describe('a tex vault (ZIP 320) is paid as its P2PKH', () => {
+  // THORChain's ZEC and BTC vaults on 2026-10-04: one key, so one 20-byte hash
+  const TEX = 'tex1zclnr35llscdedzrwdmemm70es05ngg9m2d3lv';
+  const BTC = 'bc1qzclnr35llscdedzrwdmemm70es05ngg904l66z';
+
+  test('decodes to the same key hash as the twin bitcoin vault', async () => {
+    const hash = decodeTexAddress(TEX, true);
+    expect(hash).toHaveLength(20);
+    // both carry the hash as the same bech32 groups, before their own checksums
+    expect(BTC.slice(4, 36)).toBe(TEX.slice(4, 36));
+    expect(await transparentAddressToScriptHex(TEX, true)).toBe(`76a914${bytesToHex(hash)}88ac`);
+    const twin = await payableTransparentAddress(TEX, true);
+    expect(twin).toMatch(/^t1/);
+    expect(await transparentAddressToScriptHex(twin, true)).toBe(
+      await transparentAddressToScriptHex(TEX, true),
+    );
+  });
+
+  test('a mistyped tex, or anything not transparent, is refused before anything moves', async () => {
+    await expect(checkVault(TEX, true)).resolves.toBeUndefined();
+    await expect(checkVault(`${TEX.slice(0, -1)}q`, true)).rejects.toThrow(VAULT_UNPAYABLE);
+    await expect(checkVault(TEX, false)).rejects.toThrow(VAULT_UNPAYABLE);
+    await expect(checkVault('u1notatransparentaddress', true)).rejects.toThrow(VAULT_UNPAYABLE);
+  });
+
+  test('the signed deposit pays the tex key hash, from transparent inputs only', async () => {
+    const wasm = (await import('@repo/zcash-wasm')) as unknown as Wasm;
+    wasm.initSync({
+      module: readFileSync(resolve(process.cwd(), '../../packages/zcash-wasm/zafu_wasm_bg.wasm')),
+    });
+    const keys = new wasm.SpendKeys(SEED, 0, true);
+    try {
+      const own = p2pkh(keys.transparent_pubkey(3));
+      const chain: DepositChain = {
+        utxos: () =>
+          Promise.resolve([
+            {
+              txid: new Uint8Array(32).fill(9),
+              outputIndex: 0,
+              valueZat: 900_000n,
+              script: hexToBytes(own),
+            },
+          ]),
+        tip: () => Promise.resolve(3_000_000),
+        branchId: () => Promise.resolve(0xc8e71055),
+        broadcast: (txHex: string) => Promise.resolve(txHex.slice(0, 64)),
+      };
+      const req = { tAddress: 'fake', tIndex: 3, to: TEX, memo: MEMO, mainnet: true };
+      const plan = await planDeposit(wasm, chain, { ...req, amountZat: '500000' });
+      const sent = await sendDeposit(wasm, chain, keys, {
+        ...req,
+        amountZat: '500000',
+        reviewedFee: plan.fee,
+      });
+      const [pay] = transparentOutputs(sent.txHex);
+      expect(pay).toEqual({
+        value: 500_000n,
+        script: await transparentAddressToScriptHex(TEX, true),
+      });
+    } finally {
+      keys.free();
     }
   });
 });

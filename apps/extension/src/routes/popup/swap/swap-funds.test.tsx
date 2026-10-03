@@ -9,6 +9,7 @@ vi.mock('../../../state/keyring/network-worker', async orig => ({
 }));
 
 import { buildDeposit, RefundedSlot, STEP_FOR } from './crosschain';
+import { MOVE_NEEDS_MS, tooLateToMove } from './thor-deposit';
 import { traceOut, u128 } from './penumbra-units';
 import { maxSendable, quoteSend } from '../send/spendable';
 import { nodeStatus } from '../../../state/swap/thornode';
@@ -93,5 +94,15 @@ describe('a refund is a calm end', () => {
     expect(html).not.toContain('hanko');
     expect(html).not.toMatch(/try again|swap again/);
     expect(html).toContain('it is safe');
+  });
+});
+
+describe('a thorchain price must outlast the move out of the shielded pool', () => {
+  it('asks again before moving when too little of the price is left', () => {
+    const now = 1_000_000;
+    expect(tooLateToMove(undefined, now)).toBe(false);
+    expect(tooLateToMove(now + MOVE_NEEDS_MS, now)).toBe(false);
+    expect(tooLateToMove(now + MOVE_NEEDS_MS - 1, now)).toBe(true);
+    expect(tooLateToMove(now - 1, now)).toBe(true);
   });
 });

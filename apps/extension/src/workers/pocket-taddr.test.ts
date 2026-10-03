@@ -137,12 +137,13 @@ describe('receive hands out no new transparent index', () => {
   // vitest runs from apps/extension
   const src = (p: string) => readFileSync(resolve(process.cwd(), 'src', p), 'utf8');
 
-  test('the legacy index key is only ever read', () => {
+  test('only a swap claims an index, under the lock; receive never does', () => {
     const hook = src('hooks/use-transparent-addresses.ts');
-    expect(hook).toMatch(
-      /pocketTransparentIndices\(\s*\(await chrome\.storage\.local\.get\(indexKey\)\)/,
-    );
-    expect(hook).not.toMatch(/\[indexKey\]:/);
-    expect(src('routes/popup/receive/receive-tab.tsx')).not.toMatch(/zcashTransparentIndex/);
+    expect(hook).toMatch(/pocketTransparentIndices\(await highestIndex\(indexKeyOf\(source\)\)\)/);
+    // the one write is the claim's, inside navigator.locks
+    expect(hook.match(/storage\.local\.set\(\{ \[key\]: /g)).toHaveLength(1);
+    expect(hook).toMatch(/navigator\.locks\.request\(T_INDEX_LOCK\(\)[^]*\[key\]: next/);
+    const receive = src('routes/popup/receive/receive-tab.tsx');
+    expect(receive).not.toMatch(/zcashTransparentIndex|claimSwapTAddress|useSwapTAddress/);
   });
 });

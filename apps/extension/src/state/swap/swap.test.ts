@@ -41,7 +41,7 @@ import {
   type Quote,
   type QuoteRequest,
 } from './provider';
-import { OFFERED, routeLabel, ROUTES, type RouteId, type SwapPair } from './routes';
+import { OFFERED, refundsToPayer, routeLabel, ROUTES, type RouteId, type SwapPair } from './routes';
 import {
   BelowMinimum,
   memoLimit,
@@ -52,8 +52,9 @@ import {
   type NodeQuote,
 } from './thornode';
 import { thorProvider } from './thor';
+import { depositFeeZat } from '../../workers/transparent-deposit';
 import { mayaProvider } from './maya';
-import { nearCost, nearProvider } from './near';
+import { NeedsRefundAddress, nearCost, nearProvider } from './near';
 import { PROVIDERS, routeTokens } from '.';
 import { gates, plain } from './live';
 import type { DestinationView } from '../../net/egress-policy';
@@ -80,7 +81,8 @@ const thorCost = (...a: Parameters<typeof nodeCost> extends [string, ...infer R]
 
 const NOW = 1_790_000_000;
 const T = 't1PTs8DQifJxg6HmUq7AgYYFNkbyQa1zjgf';
-const ZEC_VAULT = 't1ZecVaultxxxxxxxxxxxxxxxxxxxxxxxx';
+// THORChain's live ZEC vault on 2026-10-04 is a ZIP 320 tex address
+const ZEC_VAULT = 'tex1zclnr35llscdedzrwdmemm70es05ngg9m2d3lv';
 const BTC_VAULT = 'bc1qbtcvaultxxxxxxxxxxxxxxxxxxxxxxxxxx';
 // shapes recorded from gateway.liquify.com/chain/thorchain_api on 2026-10-02.
 // mainnet lists no ZEC pool or vault yet, so the ZEC side mirrors BTC's.
@@ -319,6 +321,31 @@ describe('thorchain', () => {
     expect(signs).toMatchObject({ notYet: undefined, watch: 'txid', memo: expect.any(String) });
   });
 
+  it('out of zec, the fee out is the move and the deposit, and the time counts the move', async () => {
+    const memo = '=:BTC.BTC:bc1qdestexample:400000000/1/0';
+    thornode(
+      thorQuote({
+        inbound_address: ZEC_VAULT,
+        memo,
+        expected_amount_out: '24000',
+        fees: { asset: 'BTC.BTC', total: '1' },
+        total_swap_seconds: 600,
+      }),
+    );
+    const quote = await thorProvider.quote(
+      req({
+        direction: 'from_zec',
+        amountIn: '1',
+        otherAddress: 'bc1qdestexample',
+        signsOpReturn: true,
+        sourceFeeZat: '15000',
+      }),
+    );
+    expect(quote.sourceFeeZat).toBe(String(15_000n + depositFeeZat(memo.length)));
+    expect(quote.sourceFeeNote).toBe('the move and the deposit');
+    expect(quote.timeText).toBe('~13 min');
+  });
+
   it('watches a zec deposit by its txid through every thornode stage', async () => {
     const done = { completed: true };
     const open = { completed: false };
@@ -368,6 +395,22 @@ describe('thorchain', () => {
     expect(() => check(thorQuote({ expiry: NOW }))).toThrow(/expired/);
     // a node answering with a memo that pays someone else is never shown
     expect(() => check(thorQuote(), inbound(), 't1SomeoneElse')).toThrow(/another address/);
+  });
+
+  it('out of zec, refuses a vault no t->t deposit could pay, before anything moves', () => {
+    const out = (vault: string) => () =>
+      checkQuote(
+        thorQuote({ inbound_address: vault }),
+        inbound().map(a => (a.chain === 'ZEC' ? { ...a, address: vault } : a)),
+        'ZEC',
+        true,
+        T,
+        NOW,
+      );
+    expect(out(ZEC_VAULT)).not.toThrow();
+    expect(out(T)).not.toThrow();
+    expect(out('u1shieldedvault')).toThrow(/can't pay/);
+    expect(out('zs1saplingvault')).toThrow(/can't pay/);
   });
 
   it('says plainly when thorchain is not taking a chain, before reading the quote', async () => {
@@ -982,5 +1025,50 @@ describe('thornode refusals, said plainly', () => {
     expect(
       nodeRefusal('maya', new Error('pool ZEC.ZEC not found: invalid request'), 1n, 'zec').message,
     ).toBe('maya could not quote this right now');
+  });
+});
+
+describe('into zec, who a refund goes to', () => {
+  const into = (symbol: string, chain: string): SwapPair => ({
+    direction: 'into_zec',
+    symbol,
+    chain,
+  });
+
+  it('thorchain refunds the payer from an OP_RETURN chain; a memo chain names the address', () => {
+    for (const [sym, chain] of [
+      ['btc', 'btc'],
+      ['ltc', 'ltc'],
+      ['bch', 'bch'],
+      ['doge', 'doge'],
+    ] as const) {
+      expect(refundsToPayer('thor', into(sym, chain))).toBe(true);
+    }
+    expect(refundsToPayer('thor', into('atom', 'gaia'))).toBe(false);
+    expect(refundsToPayer('thor', into('xrp', 'xrp'))).toBe(false);
+    expect(refundsToPayer('near', into('btc', 'btc'))).toBe(false);
+    expect(refundsToPayer('maya', into('eth', 'eth'))).toBe(true);
+    expect(refundsToPayer('thor', { ...into('btc', 'btc'), direction: 'from_zec' })).toBe(false);
+  });
+
+  it('thorchain asks no refund address of a btc payer; near says it needs one', async () => {
+    const urls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        urls.push(url);
+        return Promise.resolve(
+          new Response(
+            JSON.stringify(url.includes('/inbound_addresses') ? inbound() : thorQuote()),
+            { status: 200 },
+          ),
+        );
+      }),
+    );
+    await thorProvider.quote(req({ otherAddress: '' }));
+    expect(urls.find(u => u.includes('/quote/swap'))).not.toMatch(/refund_address/);
+    await expect(nearProvider.quote(req({ otherAddress: '' }))).rejects.toBeInstanceOf(
+      NeedsRefundAddress,
+    );
   });
 });

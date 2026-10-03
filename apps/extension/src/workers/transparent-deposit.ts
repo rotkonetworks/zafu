@@ -5,16 +5,20 @@
  * public data, has SpendKeys sign it, checks the signed bytes pay exactly what
  * was reviewed, and broadcasts.
  *
- * Every input comes from the one address `tAddress` (the pocket's index 0), and
- * change returns to it, because THORChain refunds to whoever funded vin[0].
+ * Every input comes from the one address `tAddress` (the swap's own fresh
+ * t-branch index `tIndex`), and change returns to it, because THORChain
+ * refunds to whoever funded vin[0]. Each swap has its own address, so no two
+ * swaps share inputs, change or refunds on chain.
  */
 
-import { transparentAddressToScriptHex } from '../ledger/address';
+import { payableTransparentAddress, transparentAddressToScriptHex } from '../ledger/address';
 import type { SpendKeys } from './hot-sign';
 
 export interface DepositRequest {
-  /** the pocket's transparent address at index 0: funds, change and refunds */
+  /** the swap's own transparent address: funds, change and refunds */
   tAddress: string;
+  /** its t-branch index in the pocket: the key that signs */
+  tIndex: number;
   /** the vault, paid at vout 0 */
   to: string;
   amountZat: string;
@@ -68,6 +72,21 @@ export interface DepositWasm {
 type Keys = Pick<SpendKeys, 'transparent_pubkey' | 'sign_shielding'>;
 
 export const FEE_MOVED = 'the network fee changed since your review · please review it again';
+
+export const VAULT_UNPAYABLE = "this vault is an address zafu can't pay · nothing was moved";
+
+/**
+ * Throws unless `to` is a transparent address this deposit can pay: base58
+ * t1/t3, or a ZIP 320 tex address (its P2PKH; this deposit spends only
+ * transparent inputs, as tex requires). Asked before anything moves.
+ */
+export const checkVault = async (to: string, mainnet: boolean): Promise<void> => {
+  try {
+    await transparentAddressToScriptHex(to, mainnet);
+  } catch {
+    throw new Error(VAULT_UNPAYABLE);
+  }
+};
 
 const hex = (b: Uint8Array) => Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
 const fromHex = (h: string) => Uint8Array.from(h.match(/../g) ?? [], x => parseInt(x, 16));
@@ -143,6 +162,21 @@ export const checkDeposit = (
   }
 };
 
+/**
+ * The ZIP-317 fee of a deposit with a `memoBytes` OP_RETURN, as the wasm
+ * planner (plan_transparent_transaction) prices it: 5,000 zat per logical
+ * action, at least 2; a P2PKH input is 150 bytes, and the outputs are the
+ * vault and a change output (always counted, 34 bytes each) plus the
+ * OP_RETURN (8 value + 1 length + its script). A swap's own fresh address is
+ * funded by one move, so it spends one input. Checked against the wasm in
+ * transparent-deposit.test.ts.
+ */
+export const depositFeeZat = (memoBytes: number, inputs = 1): bigint => {
+  const opReturn = memoBytes ? 9 + 1 + (memoBytes > 75 ? 2 : 1) + memoBytes : 0;
+  const actions = Math.max(2, inputs, Math.ceil((34 + 34 + opReturn) / 34));
+  return 5000n * BigInt(actions);
+};
+
 export const planDeposit = async (
   wasm: DepositWasm,
   chain: DepositChain,
@@ -164,14 +198,20 @@ export const sendDeposit = async (
   keys: Keys,
   req: DepositRequest & { reviewedFee: string },
 ): Promise<{ txid: string; fee: string; txHex: string }> => {
+  await checkVault(req.to, req.mainnet);
+  // a tex vault is paid as its P2PKH twin: the same output bytes, from transparent inputs only
+  const [recipient, toScript] = await Promise.all([
+    payableTransparentAddress(req.to, req.mainnet),
+    transparentAddressToScriptHex(req.to, req.mainnet),
+  ]);
   const utxos = await chain.utxos(req.tAddress);
   const [height, branchId] = await Promise.all([chain.tip(), chain.branchId()]);
   const data = memoHex(req.memo);
   const built = JSON.parse(
     wasm.build_unsigned_transparent_transaction(
       utxosJson(utxos),
-      keys.transparent_pubkey(0),
-      req.to,
+      keys.transparent_pubkey(req.tIndex),
+      recipient,
       BigInt(req.amountZat),
       height + 1,
       branchId,
@@ -182,9 +222,13 @@ export const sendDeposit = async (
   if (String(built.fee) !== req.reviewedFee) {
     throw new Error(FEE_MOVED);
   }
-  const txHex = keys.sign_shielding(0, built.unsigned_tx_hex, JSON.stringify(built.sighashes));
+  const txHex = keys.sign_shielding(
+    req.tIndex,
+    built.unsigned_tx_hex,
+    JSON.stringify(built.sighashes),
+  );
   checkDeposit(txHex, {
-    toScript: await transparentAddressToScriptHex(req.to, req.mainnet),
+    toScript,
     amountZat: BigInt(req.amountZat),
     memoHex: data,
     ownScript: hex(utxos[0]!.script),

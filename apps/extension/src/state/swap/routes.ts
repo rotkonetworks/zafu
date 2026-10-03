@@ -70,6 +70,17 @@ export const poolAsset = (route: RouteId, { symbol, chain }: SwapPair): PoolAsse
   );
 };
 
+/**
+ * Into zec, a route that refunds whoever paid instead of an address zafu
+ * names: THORChain from a chain whose memo rides in an 80-byte OP_RETURN
+ * (a refund address doesn't fit; THORNode answers "generated memo too long
+ * for source chain"), and Maya always. Paying from an exchange there sends a
+ * refund to the exchange.
+ */
+export const refundsToPayer = (route: RouteId | undefined, pair: SwapPair): boolean =>
+  pair.direction === 'into_zec' &&
+  (route === 'maya' || (route === 'thor' && poolAsset('thor', pair)?.carrier === 'op_return'));
+
 /** why a THORNode-protocol route can't carry a pair, or undefined */
 const nodeRefuses =
   (route: keyof typeof POOLS, name: string) =>
@@ -105,13 +116,14 @@ export const ROUTES: Record<RouteId, RouteMeta> = {
   thor: {
     label: 'thorchain',
     egress: 'thorchain',
-    custody: 'no middleman',
+    // its vaults are threshold-signed by the node set: no one holds them, many do
+    custody: "no single custodian · thorchain's nodes hold the vault",
     refuses: nodeRefuses('thor', 'thorchain'),
   },
   maya: {
     label: 'maya',
     egress: 'mayachain',
-    custody: 'no middleman',
+    custody: "no single custodian · maya's nodes hold the vault",
     refuses: nodeRefuses('maya', 'maya'),
     off: MAYA_ENABLED ? undefined : "maya isn't offered right now",
   },

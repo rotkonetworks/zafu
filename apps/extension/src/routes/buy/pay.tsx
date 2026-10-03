@@ -20,9 +20,9 @@ import {
   chooseRow,
   closeOverlay,
   finish,
+  gasAgain,
   lookAgain,
   paid,
-  reserveNow,
   setBank,
   setKeep,
   type BuyState,
@@ -194,11 +194,12 @@ export const PayScreen = () => {
         className='mx-auto max-w-[620px]'
       >
         <p className='text-sm text-fg-muted'>
-          the seller's usdc went back to them on its own. nothing was taken from you. if you already
-          sent the money, please let us know and we will help.
+          the seller's usdc went back to them on its own. if you didn't send the money, nothing was
+          taken from you. if you did, please tell zafu, and it looks for your payment and helps you
+          from there.
         </p>
         <div className='flex gap-2.5'>
-          <Button variant='secondary' className='flex-1' onClick={() => lookAgain()}>
+          <Button variant='secondary' className='flex-1' onClick={() => void paid()}>
             i did pay
           </Button>
           <Button className='flex-1' onClick={() => void finish()}>
@@ -407,8 +408,75 @@ export const GasScreen = () => {
         <Button variant='secondary' className='h-14 w-[140px]' onClick={closeOverlay}>
           not now
         </Button>
-        <Button className='h-14 flex-1' onClick={() => void reserveNow()}>
+        <Button className='h-14 flex-1' onClick={() => void gasAgain()}>
           check again
+        </Button>
+      </div>
+    </Column>
+  );
+};
+
+/** where peer explains what to do when a payment isn't confirmed in time */
+const PEER_HELP = 'https://docs.peer.xyz/guides/for-buyers/handling-verification-issues';
+
+/**
+ * The person said they paid, and the seller's hold ended before peer confirmed
+ * it. Honest about what happened, what to keep, and where to go; still
+ * watched, because a seller can release the usdc by hand after a dispute.
+ */
+export const LapsedScreen = () => {
+  const buy = useBuy(s => s.buy);
+  if (!buy) {
+    return null;
+  }
+  const o = loadOffer(buy.offer);
+  const app = payApp(buy.app);
+  const what = `${money(o.fiat, buy.currency)} to ${o.handle} on ${app?.name ?? buy.app}`;
+  const steps = [
+    `keep ${app?.name ?? buy.app}'s receipt for this payment`,
+    "open a dispute with peer's support, with the record below",
+    'if the seller releases the usdc, zafu sees it here and swaps it to zec on its own',
+  ];
+  return (
+    <Column
+      title={
+        <>
+          you paid ·
+          <br />
+          the seller's hold ended
+        </>
+      }
+      sub={`your ${what} went out, and the seller's usdc went back before peer could confirm it. here is what to do.`}
+    >
+      <div className='flex flex-col border border-border-soft bg-elev-1'>
+        {steps.map((t, i) => (
+          <div
+            key={t}
+            className={cn(
+              'flex min-h-12 items-center gap-3 px-[18px] py-2 text-[13px]',
+              i && 'border-t border-border-soft',
+            )}
+          >
+            <span className='w-4 shrink-0 text-fg-muted'>{i + 1}</span>
+            {t}
+          </div>
+        ))}
+      </div>
+      <div className='flex flex-col border border-border-soft bg-elev-1'>
+        {buy.intentHash && <CopyRow first k='intent' v={buy.intentHash} hint='peer' />}
+        {buy.reserveTx && (
+          <CopyRow first={!buy.intentHash} k='hold tx' v={buy.reserveTx} hint='base' />
+        )}
+      </div>
+      <span className='text-xs text-fg-muted'>zafu checks again while this tab is open</span>
+      <div className='flex gap-2.5'>
+        <Button variant='secondary' className='h-14 w-[160px]' onClick={() => void finish()}>
+          close this buy
+        </Button>
+        <Button className='h-14 flex-1' asChild>
+          <a href={PEER_HELP} target='_blank' rel='noopener noreferrer'>
+            get help from peer
+          </a>
         </Button>
       </div>
     </Column>
