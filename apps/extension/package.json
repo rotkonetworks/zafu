@@ -53,6 +53,7 @@
     "@zafu/service": "workspace:*",
     "@zafu/zid": "workspace:*",
     "@zafu/zirc": "workspace:*",
+    "@zkp2p/sdk": "0.14.5",
     "@penumbra-zone/services": "npm:@penumbrafi/services@72.0.0",
     "@penumbra-zone/types": "npm:@penumbrafi/types@38.0.0",
     "@penumbra-zone/wasm": "npm:@penumbrafi/wasm@57.0.0",
@@ -72,6 +73,7 @@
     "reflect-metadata": "^0.2.2",
     "stream-browserify": "^3.0.0",
     "usehooks-ts": "^3.1.1",
+    "viem": "^2.38.0",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
