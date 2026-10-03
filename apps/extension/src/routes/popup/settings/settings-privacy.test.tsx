@@ -43,14 +43,16 @@ const byPlaceholder = (placeholder: string): HTMLInputElement => {
   return hit as HTMLInputElement;
 };
 
-/** the "relay" Row(value) - its button's textContent is "relay" + the
- *  current endpoint, so match on the label span instead of the whole text. */
+/** the "relay" Row(value) - its own "?" explain button makes it a
+ *  div[role=button] rather than a <button> (see Row), and the outer label
+ *  span's textContent now runs "relay" + the "?" button's own text, so
+ *  match on the start of the label rather than full equality. */
 const openRelaySheet = (): void => {
-  const hit = [...document.querySelectorAll('button')].find(
-    b => [...b.querySelectorAll('span')][0]?.textContent === 'relay',
+  const hit = [...document.querySelectorAll('button, [role="button"]')].find(b =>
+    [...b.querySelectorAll('span')][0]?.textContent?.startsWith('relay'),
   );
   if (!hit) throw new Error('no "relay" row');
-  hit.click();
+  (hit as HTMLElement).click();
 };
 
 describe('ContactDiscoverySection', () => {

@@ -6,12 +6,17 @@ import { getNetwork, getTopLevelNetworks } from '../../../config/networks';
 import { Section } from './settings-screen';
 import { Row } from '@repo/ui/components/ui/row';
 import { SettingsWallets } from './settings-wallets';
+import { useExplain } from './settings-explain';
+
+/** the privacy/network explain for a top-level chain is keyed by its network id, not its label */
+const explainIdOf = (n: string): string => `network.${n}Enable`;
 
 /** each top-level network on or off; its node and chains live under settings > networks */
 export const NetworkSwitches = () => {
   const enabled = useStore(selectEnabledNetworks);
   const disable = useDisableNetwork();
   const enable = useEnableNetwork();
+  const { explainProps, sheet } = useExplain();
   return (
     <Section title='networks'>
       {getTopLevelNetworks().map(n => (
@@ -22,8 +27,10 @@ export const NetworkSwitches = () => {
           description={NETWORK_BLURB[n]}
           checked={enabled.includes(n)}
           onChange={on => void (on ? enable(n) : disable(n))}
+          {...explainProps(explainIdOf(n))}
         />
       ))}
+      {sheet}
     </Section>
   );
 };

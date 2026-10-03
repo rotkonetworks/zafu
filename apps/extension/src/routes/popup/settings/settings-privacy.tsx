@@ -55,6 +55,7 @@ function ZcashWireRows() {
   );
   const setMemo = useStore(s => s.networks.setMemoSyncStrategy);
   const setMempool = useStore(s => s.networks.setMempoolWatch);
+  const { explainProps, sheet } = useExplain();
   if (!zidecar) {
     return null;
   }
@@ -65,13 +66,16 @@ function ZcashWireRows() {
         label='zcash: memo decoys'
         checked={memo === 'private'}
         onChange={v => void setMemo('zcash', v ? 'private' : 'fast')}
+        {...explainProps('privacy.zcashMemoDecoys')}
       />
       <Row
         type='toggle'
         label='zcash: instant pending'
         checked={mempool === 'on'}
         onChange={v => void setMempool('zcash', v ? 'on' : 'off')}
+        {...explainProps('privacy.zcashInstantPending')}
       />
+      {sheet}
     </>
   );
 }
@@ -82,37 +86,47 @@ type Group = 'on screen' | 'network' | 'people';
 const PRIVACY_ROWS: readonly {
   key: keyof PrivacySettings;
   label: string;
+  explainId: string;
   group: Group;
   visible?: (network: NetworkType) => boolean;
 }[] = [
-  { key: 'hideBalances', label: 'hide balances', group: 'on screen' },
-  { key: 'enableTransactionHistory', label: 'transaction history', group: 'on screen' },
+  { key: 'hideBalances', label: 'hide balances', explainId: 'privacy.hideBalances', group: 'on screen' },
+  {
+    key: 'enableTransactionHistory',
+    label: 'transaction history',
+    explainId: 'privacy.txHistory',
+    group: 'on screen',
+  },
   {
     key: 'enablePriceFetching',
     label: 'price display',
+    explainId: 'privacy.priceDisplay',
     group: 'on screen',
     visible: n => hasFeature(n, 'cosmos'),
   },
   {
     key: 'enableTransparentBalances',
     label: 'transparent balances',
+    explainId: 'privacy.transparentBalances',
     group: 'network',
     visible: n => hasFeature(n, 'cosmos'),
   },
   {
     key: 'enableExplorerLinks',
     label: 'explorer links',
+    explainId: 'privacy.explorerLinks',
     group: 'network',
     visible: n => hasFeature(n, 'zcash'),
   },
   {
     key: 'openZcashLinks',
     label: 'zcash: links',
+    explainId: 'privacy.zcashLinks',
     group: 'people',
     visible: n => hasFeature(n, 'zcash'),
   },
-  { key: 'openZafuLinks', label: 'zafu: links', group: 'people' },
-  { key: 'enableIdentity', label: 'zid identity', group: 'people' },
+  { key: 'openZafuLinks', label: 'zafu: links', explainId: 'privacy.zafuLinks', group: 'people' },
+  { key: 'enableIdentity', label: 'zid identity', explainId: 'privacy.zidIdentity', group: 'people' },
 ];
 
 /**
@@ -122,6 +136,7 @@ const PRIVACY_ROWS: readonly {
  * absent/false means `zafu_discover_contacts` refuses with `not_available`.
  */
 export function ContactDiscoverySection({ onExplain }: { onExplain?: () => void }) {
+  const { explainProps, sheet: relaySheet } = useExplain();
   const [saved, setSaved] = useState<{
     enabled: boolean;
     relayEndpoint: string;
@@ -176,7 +191,9 @@ export function ContactDiscoverySection({ onExplain }: { onExplain?: () => void 
         label='relay'
         value={saved.relayEndpoint || DEFAULT_CONTACT_DISCOVERY_RELAY}
         onPress={() => setOpen(true)}
+        {...explainProps('privacy.contactDiscoveryRelay')}
       />
+      {relaySheet}
       <Sheet open={open} onOpenChange={setOpen} title='contact-discovery relay'>
         <div className='flex flex-col gap-3'>
           <div className='flex flex-col gap-2'>
@@ -226,7 +243,7 @@ export function SettingsPrivacy() {
           label={r.label}
           checked={settings[r.key] as boolean}
           onChange={v => setSetting(r.key, v as never)}
-          {...explainProps(r.label)}
+          {...explainProps(r.explainId)}
         />
       ),
     );
@@ -248,9 +265,9 @@ export function SettingsPrivacy() {
         <Section title='people'>
           {/* discovery derives from the zid contact layer; hide it when zid is off */}
           {settings.enableIdentity && (
-            <ContactDiscoverySection {...explainProps('private contact discovery')} />
+            <ContactDiscoverySection {...explainProps('privacy.contactDiscovery')} />
           )}
-          {hasFeature(activeNetwork, 'zcash') && <ZcashMeRow {...explainProps('zcash.me')} />}
+          {hasFeature(activeNetwork, 'zcash') && <ZcashMeRow {...explainProps('privacy.zcashMe')} />}
           {rows('people')}
         </Section>
         <Section title='sites'>

@@ -61,6 +61,7 @@ export const NodeSheet = ({
   measure,
   custom,
   className,
+  onExplain,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -75,6 +76,8 @@ export const NodeSheet = ({
   custom?: ReactNode;
   /** column-align the sheet where the page itself isn't full width (onboarding) */
   className?: string;
+  /** opens a Sheet explaining node choice, via a small "?" after the label */
+  onExplain?: () => void;
 }) => {
   const [step, setStep] = useState<'list' | 'own'>('list');
   const [draft, setDraft] = useState('');
@@ -139,6 +142,7 @@ export const NodeSheet = ({
                 setDraft(preset ? '' : current);
                 setStep('own');
               }}
+              onExplain={onExplain}
             />
           </RowGroup>
           {/* a speed test compares nodes; one node has nothing to compare */}

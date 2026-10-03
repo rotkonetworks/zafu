@@ -9,6 +9,7 @@ import { Section, SettingsScreen } from './settings-screen';
 import { Row } from '@repo/ui/components/ui/row';
 import { ApprovalsRow, FontRow, ThemeRow } from './settings-appearance';
 import { selectZignerPaired } from './settings-status';
+import { useExplain } from './settings-explain';
 
 export const ZignerRow = () => {
   const navigate = usePopupNav();
@@ -42,6 +43,7 @@ export const AboutRow = () => {
 export const SettingsDevicesHome = () => {
   const navigate = usePopupNav();
   const zcashOn = useStore(selectEnabledNetworks).includes('zcash');
+  const { explainProps, sheet } = useExplain();
 
   return (
     <SettingsScreen title='devices and app' category='devices' backPath={PopupPath.SETTINGS}>
@@ -63,9 +65,9 @@ export const SettingsDevicesHome = () => {
           />
         </Section>
         <Section title='app'>
-          <ThemeRow />
-          <FontRow />
-          <ApprovalsRow />
+          <ThemeRow {...explainProps('appearance.theme')} />
+          <FontRow {...explainProps('appearance.font')} />
+          <ApprovalsRow {...explainProps('appearance.approvals')} />
           <Row
             type='screen'
             label='features'
@@ -84,6 +86,7 @@ export const SettingsDevicesHome = () => {
           />
         </Section>
       </div>
+      {sheet}
     </SettingsScreen>
   );
 };
