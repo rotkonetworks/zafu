@@ -1,5 +1,5 @@
 /**
- * A newer penumbrafi registry than the one bundled, fetched from zafu.pro only
+ * A newer penumbrafi registry than the one bundled, fetched from registry.zafu.pro only
  * after the user says yes, and only when their Penumbra node reports a live
  * channel to a chain zafu doesn't know. It is used only when it carries a valid
  * signature by the key below over its exact bytes and a version newer than the
