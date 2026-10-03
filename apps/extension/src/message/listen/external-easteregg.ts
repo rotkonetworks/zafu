@@ -538,12 +538,23 @@ export const externalMessageListener = (
       // in the memo and the send popup substitutes the user's oldest non-multisig Zcash UA.
       // Saves a separate "what's my address" round-trip; user can still edit before send.
       const memo = msg['memo'];
-      if (typeof memo === 'string' && memo.length > 0 && memo.length <= 512) {
-        params.set('memo', memo);
-      }
-      const url = chrome.runtime.getURL(`popup.html#/send?${params.toString()}`);
-      void chrome.windows.create({ url, type: 'popup', width: 400, height: 628 });
-      sendResponse({ ok: true });
+      // a valid top-frame https sender (checked above), so the origin is attested
+      const origin = sender.origin ?? '';
+      void (async () => {
+        // `[primary]`/`[self]` put the person's own address in the memo the
+        // site's recipient reads: only a site they connected may ask for that.
+        // An unconnected site still gets its prefilled send, minus the tokens.
+        const connected = hasCapability(await getOriginPermissions(origin), 'connect');
+        if (typeof memo === 'string' && memo.length > 0 && memo.length <= 512) {
+          const kept = connected ? memo : memo.replaceAll('[primary]', '').replaceAll('[self]', '');
+          if (kept.trim()) {
+            params.set('memo', kept);
+          }
+        }
+        const url = chrome.runtime.getURL(`popup.html#/send?${params.toString()}`);
+        void chrome.windows.create({ url, type: 'popup', width: 400, height: 628 });
+        sendResponse({ ok: true });
+      })().catch(() => sendResponse({ ok: false }));
       return true;
     }
 

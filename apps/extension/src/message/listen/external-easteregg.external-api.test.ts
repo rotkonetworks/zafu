@@ -725,3 +725,29 @@ describe('zafu_zcash_send - top-frame gate and same-origin popup dedup', () => {
     expect(url).not.toContain('evil.example');
   });
 });
+
+describe('send - own address only for a connected site', () => {
+  const sendUrl = (origin: string) =>
+    createMock.mock.calls
+      .map((c: unknown[]) => String((c[0] as { url?: string } | undefined)?.url ?? ''))
+      .filter(u => u.includes('#/send?'))
+      .at(-1) ?? `no send window for ${origin}`;
+  const memoOf = (url: string) => new URLSearchParams(url.slice(url.indexOf('?') + 1)).get('memo');
+
+  it('drops [primary] and [self] for a site the person never connected', async () => {
+    const origin = 'https://send-unconnected.example';
+    const res = await call(
+      { type: 'send', address: 'u1x', memo: 'pay back to [primary] or [self] thanks' },
+      validSender(origin),
+    );
+    expect(res).toEqual({ ok: true });
+    expect(memoOf(sendUrl(origin))).toBe('pay back to  or  thanks');
+  });
+
+  it('keeps them for a connected site', async () => {
+    const origin = 'https://send-connected.example';
+    await grantCapability(origin, 'connect');
+    await call({ type: 'send', address: 'u1x', memo: 'reply to [primary]' }, validSender(origin));
+    expect(memoOf(sendUrl(origin))).toBe('reply to [primary]');
+  });
+});
