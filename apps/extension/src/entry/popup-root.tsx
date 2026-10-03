@@ -9,7 +9,8 @@ import { createRoot } from 'react-dom/client';
 import { loadStoredRegistry } from '../transparent/registry-live';
 import { refreshPenumbraRegistry } from '../penumbra/asset-registry';
 import { RouterProvider } from 'react-router-dom';
-import { popupRouter } from '../routes/popup/router';
+import { popupRouter, popupRoutes } from '../routes/popup/router';
+import { installPreload } from '../routes/popup/preload';
 import { isSidePanel } from '../utils/popup-detection';
 import { announceSidePanelPresence } from '../side-panel-presence';
 import { announceUiOpenPresence } from '../state/ui-open-presence';
@@ -42,14 +43,14 @@ if (!chrome.runtime?.id) {
   noteContextInvalidated();
 }
 
+// refetch only when a screen asks: never on focus or reconnect. One cache for
+// the popup's life, shared with the intent preloads (routes/popup/preload.ts).
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { refetchOnWindowFocus: false, refetchOnReconnect: false } },
+});
+installPreload({ routes: popupRoutes, client: queryClient });
+
 const MainPopup = () => {
-  const [queryClient] = useState(
-    // refetch only when a screen asks: never on focus or reconnect
-    () =>
-      new QueryClient({
-        defaultOptions: { queries: { refetchOnWindowFocus: false, refetchOnReconnect: false } },
-      }),
-  );
   const [wasmReady, setWasmReady] = useState(false);
   const [cacheSeeded, setCacheSeeded] = useState(false);
 
@@ -67,7 +68,7 @@ const MainPopup = () => {
         }
       })
       .finally(() => setCacheSeeded(true));
-  }, [queryClient]);
+  }, []);
 
   useEffect(() => {
     // initialize standard wasm module for keys, addresses

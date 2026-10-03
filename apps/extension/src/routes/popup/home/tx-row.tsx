@@ -43,6 +43,7 @@ export function TxRow({ tx, network }: { tx: ParsedTransaction; network: Network
   return (
     <button
       type='button'
+      data-preload={PopupPath.TX_DETAIL}
       onClick={() => navigate(PopupPath.TX_DETAIL, { state: { tx, network } })}
       className='flex h-[54px] items-center gap-3 px-1 text-left transition-colors hover:bg-elev-1'
     >

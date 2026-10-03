@@ -8,9 +8,10 @@ import { useOnline } from '../../hooks/use-online';
  * What the hero figure is allowed to claim: loading - not read yet; error -
  * the read failed, nothing to fall back on; unknown - zero while still
  * scanning ("nothing found YET"); partial - positive while scanning (a
- * floor); ready - read to the tip.
+ * floor); ready - read to the tip; held - still the pocket switched away
+ * from, dimmed until this one's figure lands (never shown as current).
  */
-export type BalanceView = 'loading' | 'error' | 'unknown' | 'partial' | 'ready';
+export type BalanceView = 'loading' | 'error' | 'unknown' | 'partial' | 'ready' | 'held';
 
 /** a dash where a number belongs reads as "gone", so not-yet is a skeleton */
 const BalanceFigure = ({
@@ -30,9 +31,11 @@ const BalanceFigure = ({
     ) : (
       <>
         <span
+          aria-busy={view === 'held'}
           className={cn(
             'min-w-0 truncate font-display text-[44px] leading-none tracking-[-0.01em] text-fg-high',
             view === 'partial' && 'animate-pulse',
+            view === 'held' && 'opacity-40',
           )}
         >
           <Sensitive>{amount}</Sensitive>
@@ -105,7 +108,7 @@ export const BalanceHero = ({
     <div className='flex flex-col gap-1.5'>
       <div className='flex h-5 items-center gap-1.5'>
         <span className='text-xs tracking-[0.04em] text-fg-muted'>{label}</span>
-        {eye && (view === 'ready' || view === 'partial') && <HideToggle />}
+        {eye && (view === 'ready' || view === 'partial' || view === 'held') && <HideToggle />}
       </div>
       <BalanceFigure view={view} amount={amount} unit={unit} />
       {note && view !== 'loading' && view !== 'error' && (

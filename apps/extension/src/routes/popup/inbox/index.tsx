@@ -47,6 +47,7 @@ const YouRow = () => {
   return (
     <button
       type='button'
+      data-preload={PopupPath.IDENTITY}
       onClick={() => navigate(PopupPath.IDENTITY)}
       className='flex items-center gap-3.5 border border-border-soft bg-elev-1 px-3.5 py-3 text-left transition-colors hover:bg-elev-2'
     >
@@ -85,6 +86,7 @@ const NeedsYou = () => {
   return (
     <button
       type='button'
+      data-preload={item.to}
       onClick={() => navigate(item.to)}
       className='flex items-center gap-3 border border-hanko bg-hanko/10 p-3.5 text-left transition-colors hover:bg-hanko/15'
     >
@@ -106,6 +108,7 @@ const GroupRow = memo(({ wallet, balance }: { wallet: ZcashWalletJson; balance?:
   return (
     <button
       type='button'
+      data-preload={PopupPath.MULTISIG}
       onClick={() => navigate(PopupPath.MULTISIG)}
       className='flex h-16 items-center gap-3 px-1 text-left transition-colors hover:bg-elev-2'
     >
@@ -136,6 +139,7 @@ const RoomRow = memo(({ room }: { room: PeopleRoom }) => {
   return (
     <button
       type='button'
+      data-preload={groupPath(room.group!.G)}
       onClick={() => navigate(groupPath(room.group!.G))}
       className='flex h-16 items-center gap-3 px-1 text-left transition-colors hover:bg-elev-2'
     >
@@ -211,6 +215,7 @@ const DirectRow = memo(({ thread }: { thread: DirectRowData }) => {
   return (
     <button
       type='button'
+      data-preload={threadPath(thread.id)}
       onClick={() => navigate(threadPath(thread.id))}
       className='flex h-[60px] items-center gap-3 px-1 text-left transition-colors hover:bg-elev-2'
     >
@@ -273,6 +278,7 @@ const Direct = ({ canCard }: { canCard: boolean }) => {
         <h2 className='text-xs tracking-[0.04em] text-fg-muted'>direct</h2>
         <button
           type='button'
+          data-preload={PopupPath.CONTACTS}
           onClick={() => navigate(PopupPath.CONTACTS)}
           className='text-xs text-zigner-gold hover:underline'
         >
@@ -290,7 +296,12 @@ const Direct = ({ canCard }: { canCard: boolean }) => {
           <span className='text-[13px] text-fg-muted'>no one here yet</span>
           <div className='flex gap-2'>
             {canCard && (
-              <Button variant='secondary' size='sm' onClick={() => navigate(PopupPath.IDENTITY)}>
+              <Button
+                variant='secondary'
+                size='sm'
+                data-preload={PopupPath.IDENTITY}
+                onClick={() => navigate(PopupPath.IDENTITY)}
+              >
                 share my card
               </Button>
             )}
@@ -399,6 +410,7 @@ export function InboxPage() {
             <button
               type='button'
               aria-label='new group'
+              data-preload={PopupPath.INBOX_NEW_GROUP}
               onClick={() => navigate(PopupPath.INBOX_NEW_GROUP)}
               className='flex h-9 items-center gap-1.5 border border-border-soft px-2.5 text-xs text-fg-high transition-colors hover:bg-elev-2'
             >

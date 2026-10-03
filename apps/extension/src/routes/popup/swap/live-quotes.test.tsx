@@ -31,6 +31,9 @@ import { PROVIDERS } from '../../../state/swap';
 import { keepSwapPreload } from '../../../state/swap/preload';
 import type { Quote } from '../../../state/swap/provider';
 import { HomeActions } from '../home/actions';
+import { installPreload, intentHandlers } from '../preload';
+import { routePreloads } from '../route-preloads';
+import { PopupPath } from '../paths';
 import { useSettled } from './crosschain';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -92,10 +95,17 @@ describe('the swap button warms the price', () => {
       otherAddress: 'bc1qmine',
     });
     const client = new QueryClient();
+    // the swap route's intent preload, fired by the layout's delegated listener
+    installPreload({
+      client,
+      routes: [{ path: PopupPath.SWAP, handle: { preload: routePreloads.swap } }],
+    });
     const { el, unmount } = mount(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <HomeActions />
+          <div {...intentHandlers}>
+            <HomeActions />
+          </div>
         </MemoryRouter>
       </QueryClientProvider>,
     );

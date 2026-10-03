@@ -38,6 +38,7 @@ const TabButton = memo(
     onNavigate: (path: string) => void;
   }) => (
     <button
+      data-preload={tab.path}
       onClick={() => onNavigate(tab.path)}
       className={cn(
         'relative flex flex-1 flex-col items-center justify-center gap-[5px]',

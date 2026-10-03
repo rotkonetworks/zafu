@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { useActiveZid } from '../../../hooks/use-active-zid';
@@ -17,22 +18,29 @@ export const identityLabel = (index: number, pins: readonly ZidPin[]): string =>
  * per wallet under `zidPins:<walletId>`; the listener keeps every screen that
  * shows the name in step when another one renames or switches.
  */
+export const zidPinsQuery = (walletId: string) =>
+  queryOptions({
+    queryKey: ['zidPins', walletId],
+    queryFn: () => getZidPins(walletId).catch((): ZidPin[] => []),
+  });
+
+const NO_PINS: ZidPin[] = [];
+
 export const useIdentity = () => {
   const keyInfo = useStore(selectEffectiveKeyInfo);
   const walletId = keyInfo?.id ?? '';
   const { zidIndex, zidPubkey } = useActiveZid(keyInfo);
-  const [pins, setPins] = useState<ZidPin[]>([]);
+  const client = useQueryClient();
+  const pins = useQuery(zidPinsQuery(walletId)).data ?? NO_PINS;
 
   useEffect(() => {
-    const load = () => void getZidPins(walletId).then(setPins, () => setPins([]));
-    load();
     const onChange = (changes: Record<string, chrome.storage.StorageChange>, area: string) =>
       area === 'local' &&
       Object.keys(changes).some(k => k.startsWith(ZID_PINS_STORAGE_KEY)) &&
-      load();
+      void client.invalidateQueries({ queryKey: ['zidPins'] });
     chrome.storage.onChanged.addListener(onChange);
     return () => chrome.storage.onChanged.removeListener(onChange);
-  }, [walletId]);
+  }, [client]);
 
   return { keyInfo, walletId, zidIndex, zidPubkey, pins, label: identityLabel(zidIndex, pins) };
 };

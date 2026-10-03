@@ -143,7 +143,12 @@ export function GroupJoinPage() {
           </span>
         )}
         <div className='flex gap-2'>
-          <Button variant='secondary' className='flex-1' onClick={() => navigate(PopupPath.INBOX)}>
+          <Button
+            variant='secondary'
+            className='flex-1'
+            data-preload={PopupPath.INBOX}
+            onClick={() => navigate(PopupPath.INBOX)}
+          >
             not now
           </Button>
           <Button

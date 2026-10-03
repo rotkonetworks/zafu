@@ -22,6 +22,8 @@ export interface RowBaseProps {
   className?: string;
   /** opens a Sheet explaining this setting, via a small "?" after the label */
   onExplain?: () => void;
+  /** where a press goes (a route path), so the app can preload it on intent */
+  preload?: string;
 }
 
 export type RowProps = RowBaseProps &
@@ -32,7 +34,7 @@ export type RowProps = RowBaseProps &
   );
 
 export function Row(props: RowProps) {
-  const { icon, media, label, description, disabled, className, onExplain } = props;
+  const { icon, media, label, description, disabled, className, onExplain, preload } = props;
 
   const rowClass = cn(
     'flex min-h-[50px] w-full items-center gap-3 px-3.5 py-2 text-left transition-colors',
@@ -112,6 +114,7 @@ export function Row(props: RowProps) {
           }
         }}
         aria-disabled={disabled}
+        data-preload={preload}
         className={rowClass}
       >
         {content}
@@ -120,7 +123,13 @@ export function Row(props: RowProps) {
   }
 
   return (
-    <button type='button' onClick={props.onPress} disabled={disabled} className={rowClass}>
+    <button
+      type='button'
+      onClick={props.onPress}
+      disabled={disabled}
+      data-preload={preload}
+      className={rowClass}
+    >
       {content}
     </button>
   );

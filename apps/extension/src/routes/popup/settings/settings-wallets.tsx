@@ -141,6 +141,7 @@ export const SettingsWallets = ({
                   icon='i-ph-eye'
                   label='add a viewing key'
                   description='watch only'
+                  preload={PopupPath.SETTINGS_ADD_VIEWING_KEY}
                   onPress={() => navigate(PopupPath.SETTINGS_ADD_VIEWING_KEY)}
                 />
               )}
@@ -281,6 +282,7 @@ const WalletSheet = ({
                 type='screen'
                 label='sync to zigner'
                 description='check your notes on zigner'
+                preload={PopupPath.NOTE_SYNC}
                 onPress={() => navigate(PopupPath.NOTE_SYNC)}
               />
             )}
@@ -296,6 +298,7 @@ const WalletSheet = ({
                 <Row
                   type='screen'
                   label='manage in multisig'
+                  preload={PopupPath.MULTISIG}
                   onPress={() => navigate(PopupPath.MULTISIG)}
                 />
               ))}

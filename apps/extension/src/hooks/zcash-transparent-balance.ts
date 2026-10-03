@@ -5,7 +5,7 @@
  * sums valueZat for display in the home page.
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { Utxo } from '../state/keyring/zidecar-client';
 import { zcashClient } from '../state/keyring/zcash-backend';
 import { useStore } from '../state';
@@ -17,12 +17,21 @@ export interface TransparentBalance {
   utxos: Utxo[];
   isLoading: boolean;
   error: Error | null;
+  /** still the previous addresses' figure (see `holdPrevious`) */
+  held: boolean;
 }
 
-export function useTransparentBalance(addresses: string[]): TransparentBalance {
+/**
+ * `holdPrevious`: while the addresses change (a pocket switch), keep the last
+ * figure as a placeholder, flagged `held`, instead of dropping to zero.
+ */
+export function useTransparentBalance(
+  addresses: string[],
+  holdPrevious = false,
+): TransparentBalance {
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || DEFAULT_ZIDECAR_URL;
   const backend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, isPlaceholderData } = useQuery({
     queryKey: ['zcashTransparentUtxos', zidecarUrl, backend, ...addresses],
     queryFn: async () => {
       if (addresses.length === 0) {
@@ -33,6 +42,7 @@ export function useTransparentBalance(addresses: string[]): TransparentBalance {
       return { totalZat, utxos };
     },
     enabled: addresses.length > 0,
+    placeholderData: holdPrevious ? keepPreviousData : undefined,
     staleTime: 30_000,
     refetchInterval: 60_000,
     retry: 2,
@@ -45,5 +55,6 @@ export function useTransparentBalance(addresses: string[]): TransparentBalance {
     utxos: data?.utxos ?? [],
     isLoading,
     error: error,
+    held: isPlaceholderData,
   };
 }

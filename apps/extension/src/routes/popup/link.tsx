@@ -32,7 +32,12 @@ export const LinkPage = () => {
         <p className='text-[11px] text-fg-muted'>{viaLine(via)}</p>
       </Main>
       <Footer>
-        <Button variant='secondary' onClick={() => navigate(PopupPath.INDEX)} className='grow'>
+        <Button
+          variant='secondary'
+          data-preload={PopupPath.INDEX}
+          onClick={() => navigate(PopupPath.INDEX)}
+          className='grow'
+        >
           back to wallet
         </Button>
       </Footer>

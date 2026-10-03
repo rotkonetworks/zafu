@@ -12,18 +12,24 @@
  * orchard - that classification lives in the worker / relay, not here.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import {
+  queryOptions,
+  useQuery,
+  useQueryClient,
+  type UseQueryOptions,
+} from '@tanstack/react-query';
+import {
+  getBalanceInWorker,
   getPendingSendsInWorker,
   getPoolBalancesInWorker,
   getPoolNotesInWorker,
-  type HistoryEntry,
   type PoolBalances,
   type PoolNotes,
 } from '../state/keyring/network-worker';
 
 /** Zeroed balances - the value before the first fetch resolves. */
-const EMPTY_POOL_BALANCES: PoolBalances = {
+export const EMPTY_POOL_BALANCES: PoolBalances = {
   orchard: 0n,
   ironwood: 0n,
   total: 0n,
@@ -35,113 +41,82 @@ const EMPTY_POOL_BALANCES: PoolBalances = {
 /** Empty per-pool note lists - the value before the first fetch resolves. */
 export const EMPTY_POOL_NOTES: PoolNotes = { orchard: [], ironwood: [] };
 
-/**
- * Subscribe to a worker fetch that re-runs on `network-sync-progress` for the
- * given wallet. Returns the latest resolved value (or `empty` before the first
- * resolve / when no wallet is selected). Shared by the two hooks below so the
- * refetch wiring lives in exactly one place.
- *
- * `walletId` is included in the effect deps: switching wallets re-subscribes
- * and re-fetches. `syncTick` (usually workerSyncHeight) lets a caller force a
- * refetch on cadence changes it already tracks.
- */
-function useWorkerPoolValue<T>(
-  fetcher: (walletId: string) => Promise<T>,
-  empty: T,
-  walletId: string | undefined,
-  syncTick?: number,
-): T {
-  const [value, setValue] = useState<T>(empty);
+const workerQuery = <T>(what: string, read: (walletId: string) => Promise<T>) => {
+  const options = (walletId: string | undefined) =>
+    queryOptions({
+      queryKey: ['zcashWorker', walletId, what],
+      queryFn: () => read(walletId!),
+      enabled: !!walletId,
+      // a worker hiccup is not evidence the value changed: keep the last one
+      retry: false,
+    });
+  return options;
+};
 
+/**
+ * The zcash worker's local reads for one wallet store, as query options the
+ * screens and their intent preloads share (routes/popup/route-preloads.ts),
+ * so a screen that opens finds its numbers already in the cache.
+ */
+export const zcashWorkerQuery = {
+  /** the shielded balance in zatoshi (home's figure, the wallets panel's) */
+  balance: workerQuery('balance', async id => BigInt(await getBalanceInWorker('zcash', id))),
+  pools: workerQuery('pools', id => getPoolBalancesInWorker('zcash', id)),
+  notes: workerQuery('notes', id => getPoolNotesInWorker('zcash', id)),
+  pending: workerQuery('pending', id => getPendingSendsInWorker('zcash', id)),
+};
+
+/** a wallet's stored birthday height (0 when it has none); shown from cache, re-read on mount */
+export const zcashBirthdayQuery = (walletId: string | undefined) =>
+  queryOptions({
+    queryKey: ['zcashBirthday', walletId],
+    queryFn: async () => {
+      const key = `zcashBirthday_${walletId}`;
+      const h = (await chrome.storage.local.get(key))[key];
+      return typeof h === 'number' ? h : 0;
+    },
+    enabled: !!walletId,
+  });
+
+/**
+ * Read a worker value from the cache, and re-read it on every
+ * `network-sync-progress` tick for this wallet and whenever `syncTick`
+ * (usually workerSyncHeight) moves. The cached value shows at once on mount.
+ */
+export function useWorkerValue<T>(
+  options: UseQueryOptions<T, Error, T, (string | undefined)[]>,
+  syncTick?: number,
+) {
+  const client = useQueryClient();
+  const query = useQuery(options);
+  const [, walletId, what] = options.queryKey;
   useEffect(() => {
     if (!walletId) {
-      setValue(empty);
       return;
     }
-    let cancelled = false;
-    const refetch = () => {
-      fetcher(walletId)
-        .then(v => {
-          if (!cancelled) {
-            setValue(v);
-          }
-        })
-        .catch(() => {});
-    };
+    const queryKey = ['zcashWorker', walletId, what];
+    const reread = () => void client.invalidateQueries({ queryKey, exact: true });
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (detail?.network !== 'zcash') {
-        return;
-      }
       // sync-progress events carry a walletId; ignore other wallets' ticks
-      if (detail.walletId && detail.walletId !== walletId) {
-        return;
+      if (detail?.network === 'zcash' && (!detail.walletId || detail.walletId === walletId)) {
+        reread();
       }
-      refetch();
     };
+    if (syncTick !== undefined) {
+      reread();
+    }
     window.addEventListener('network-sync-progress', handler);
-    refetch();
-    return () => {
-      cancelled = true;
-      window.removeEventListener('network-sync-progress', handler);
-    };
-    // re-subscribe + refetch on wallet switch or sync-height change. fetcher /
-    // empty are caller-inlined but semantically stable, so they're left out of
-    // the deps deliberately to avoid a refetch every render.
-  }, [walletId, syncTick]);
-
-  return value;
-}
-
-/**
- * Per-pool spendable balances (zatoshi bigints) for a wallet.
- *
- * `total` equals the single balance the home screen reads via
- * getBalanceInWorker; `orchard` / `ironwood` are that total split by pool.
- * Pass `syncTick` (e.g. workerSyncHeight from useZcashSyncStatus) to also
- * refetch when the local scan height advances.
- */
-export function usePoolBalances(walletId: string | undefined, syncTick?: number): PoolBalances {
-  return useWorkerPoolValue(
-    id => getPoolBalancesInWorker('zcash', id),
-    EMPTY_POOL_BALANCES,
-    walletId,
-    syncTick,
-  );
+    return () => window.removeEventListener('network-sync-progress', handler);
+  }, [client, walletId, what, syncTick]);
+  return query;
 }
 
 /**
  * Per-pool note lists (orchard / ironwood) for the notes view. Each note
  * carries value / height / spent status (see DecryptedNoteWithTxid). Refetch
- * cadence matches usePoolBalances.
+ * cadence matches the home figures.
  */
 export function usePoolNotes(walletId: string | undefined, syncTick?: number): PoolNotes {
-  return useWorkerPoolValue(
-    id => getPoolNotesInWorker('zcash', id),
-    EMPTY_POOL_NOTES,
-    walletId,
-    syncTick,
-  );
-}
-
-/** No sends in flight - the value before the first fetch resolves. */
-const EMPTY_PENDING: HistoryEntry[] = [];
-
-/**
- * Sends this wallet has broadcast that the chain has not confirmed, plus any
- * that provably expired. Same refetch cadence as the balances beside them,
- * which matters: the two numbers are read together and must not disagree.
- *
- * This exists so the balance can explain itself. `markNotesSpentLocally`
- * already deducts an in-flight send the instant we broadcast, so the figure
- * drops immediately - correct, but unexplained, and an unexplained drop is
- * indistinguishable from money going missing.
- */
-export function usePendingSends(walletId: string | undefined, syncTick?: number): HistoryEntry[] {
-  return useWorkerPoolValue(
-    id => getPendingSendsInWorker('zcash', id),
-    EMPTY_PENDING,
-    walletId,
-    syncTick,
-  );
+  return useWorkerValue(zcashWorkerQuery.notes(walletId), syncTick).data ?? EMPTY_POOL_NOTES;
 }

@@ -3,10 +3,24 @@ import { cn } from '@repo/ui/lib/utils';
 import { Sensitive } from '../sensitive';
 
 /** a titled group of balance rows, one hairline between them */
-export const BalanceGroup = ({ heading, children }: { heading: string; children: ReactNode }) => (
-  <section className='flex flex-col gap-2'>
+export const BalanceGroup = ({
+  heading,
+  held,
+  children,
+}: {
+  heading: string;
+  /** still another pocket's rows: dimmed until this one's land */
+  held?: boolean;
+  children: ReactNode;
+}) => (
+  <section className='flex flex-col gap-2' aria-busy={held}>
     <h2 className='text-xs tracking-[0.04em] text-fg-muted'>{heading}</h2>
-    <div className='flex flex-col divide-y divide-border-soft border border-border-soft'>
+    <div
+      className={cn(
+        'flex flex-col divide-y divide-border-soft border border-border-soft',
+        held && 'opacity-40',
+      )}
+    >
       {children}
     </div>
   </section>

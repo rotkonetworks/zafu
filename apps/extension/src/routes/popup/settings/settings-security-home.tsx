@@ -49,6 +49,7 @@ const BackupsRow = () => {
       label='backups'
       value={unbacked ? `${unbacked} not backed up` : undefined}
       tone='warn'
+      preload={PopupPath.SETTINGS_MULTISIG_BACKUP}
       onPress={() => navigate(PopupPath.SETTINGS_MULTISIG_BACKUP)}
     />
   );
@@ -80,12 +81,14 @@ export const SettingsSecurityHome = () => {
           <Row
             type='screen'
             label='recovery phrase'
+            preload={PopupPath.SETTINGS_RECOVERY_PASSPHRASE}
             onPress={() => navigate(PopupPath.SETTINGS_RECOVERY_PASSPHRASE)}
           />
           {zcashOn && <BackupsRow />}
           <Row
             type='screen'
             label='change password'
+            preload={PopupPath.SETTINGS_CHANGE_PASSWORD}
             onPress={() => navigate(PopupPath.SETTINGS_CHANGE_PASSWORD)}
           />
         </Section>
@@ -102,6 +105,7 @@ export const SettingsSecurityHome = () => {
           <Row
             type='screen'
             label='resync or clear local data'
+            preload={PopupPath.SETTINGS_CLEAR_CACHE}
             onPress={() => navigate(PopupPath.SETTINGS_CLEAR_CACHE)}
           />
         </Section>

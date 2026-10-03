@@ -499,6 +499,7 @@ export const MultisigPage = () => {
         <>
           {/* primary CTA: co-sign */}
           <button
+            data-preload={PopupPath.MULTISIG_SIGN}
             onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
             className='flex items-center justify-center gap-2 bg-primary/15 px-4 py-4 text-base text-zigner-gold transition-colors hover:bg-primary/25'
           >
@@ -595,6 +596,7 @@ export const MultisigPage = () => {
             </div>
             {walletsWithIndex.length > 0 && (
               <button
+                data-preload={PopupPath.MULTISIG_SIGN}
                 onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
                 className='flex items-center justify-center gap-1.5 border border-border-soft px-3 py-2.5 text-sm text-fg transition-colors hover:bg-elev-1'
               >
@@ -603,6 +605,7 @@ export const MultisigPage = () => {
               </button>
             )}
             <button
+              data-preload={PopupPath.SETTINGS_MULTISIG_BACKUP}
               onClick={() => navigate(PopupPath.SETTINGS_MULTISIG_BACKUP)}
               className='flex items-center justify-center gap-1.5 border border-border-soft px-3 py-2 text-xs text-fg-muted transition-colors hover:bg-elev-1'
             >

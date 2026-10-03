@@ -1,6 +1,6 @@
 import { Navigate, type RouteObject } from 'react-router-dom';
 import { PopupPath } from '../paths';
-import { lazyScreen } from '../route-modules';
+import { screen } from '../route-modules';
 
 // every settings screen is route-level lazy (see route-modules.ts): the router
 // loads the chunk before committing, so the previous screen stays up meanwhile
@@ -8,34 +8,34 @@ import { lazyScreen } from '../route-modules';
 export const settingsRoutes: RouteObject[] = [
   {
     path: PopupPath.SETTINGS,
-    lazy: lazyScreen('settingsMain'),
+    ...screen('settingsMain'),
   },
   {
     path: PopupPath.SUBSCRIBE,
-    lazy: lazyScreen('subscribe'),
+    ...screen('subscribe'),
   },
   {
     path: PopupPath.SETTINGS_DEFAULT_FRONTEND,
-    lazy: lazyScreen('settingsDefaultFrontend'),
+    ...screen('settingsDefaultFrontend'),
   },
   {
     path: PopupPath.SETTINGS_CLEAR_CACHE,
-    lazy: lazyScreen('settingsClearCache'),
+    ...screen('settingsClearCache'),
   },
   {
     path: PopupPath.SETTINGS_CONNECTED_SITES,
-    lazy: lazyScreen('settingsConnectedSites'),
+    ...screen('settingsConnectedSites'),
   },
   {
     path: PopupPath.SETTINGS_RECOVERY_PASSPHRASE,
-    lazy: lazyScreen('settingsPassphrase'),
+    ...screen('settingsPassphrase'),
   },
   {
     // real zigner screen - a "zigner" link that silently redirected to the
     // wallets list made the label lie. wallets still handles vault import;
     // this screen owns zigner-specific settings (vault legacy mode, scan).
     path: PopupPath.SETTINGS_ZIGNER,
-    lazy: lazyScreen('settingsZigner'),
+    ...screen('settingsZigner'),
   },
   {
     path: PopupPath.SETTINGS_CONNECT_DEVICE,
@@ -44,7 +44,7 @@ export const settingsRoutes: RouteObject[] = [
   {
     // ?network=zcash|penumbra (the home "switch node" links) opens that network's node sheet
     path: PopupPath.SETTINGS_NETWORKS,
-    lazy: lazyScreen('settingsNetworks'),
+    ...screen('settingsNetworks'),
   },
   // the old two-level networks menu; kept so saved back stacks still land
   ...['/settings/networks/home', '/settings/networks/all'].map(path => ({
@@ -68,70 +68,70 @@ export const settingsRoutes: RouteObject[] = [
   },
   {
     path: PopupPath.SETTINGS_PRIVACY,
-    lazy: lazyScreen('settingsPrivacy'),
+    ...screen('settingsPrivacy'),
   },
   {
     path: PopupPath.SETTINGS_FEATURES,
-    lazy: lazyScreen('settingsFeatures'),
+    ...screen('settingsFeatures'),
   },
   {
     path: PopupPath.SETTINGS_WALLETS,
-    lazy: lazyScreen('settingsWalletsNetworks'),
+    ...screen('settingsWalletsNetworks'),
   },
   {
     path: PopupPath.SETTINGS_ABOUT,
-    lazy: lazyScreen('settingsAbout'),
+    ...screen('settingsAbout'),
   },
   {
     path: PopupPath.SETTINGS_MULTISIG,
-    lazy: lazyScreen('settingsMultisig'),
+    ...screen('settingsMultisig'),
   },
   {
     path: PopupPath.SETTINGS_MULTISIG_BACKUP,
-    lazy: lazyScreen('settingsMultisigBackup'),
+    ...screen('settingsMultisigBackup'),
   },
   {
     path: PopupPath.SETTINGS_OTA,
-    lazy: lazyScreen('settingsOta'),
+    ...screen('settingsOta'),
   },
   {
     path: PopupPath.SETTINGS_VOTING,
-    lazy: lazyScreen('settingsVoting'),
+    ...screen('settingsVoting'),
   },
   {
     path: PopupPath.SETTINGS_ZCASHME,
-    lazy: lazyScreen('settingsZcashMe'),
+    ...screen('settingsZcashMe'),
   },
   {
     path: PopupPath.SETTINGS_CHANGE_PASSWORD,
-    lazy: lazyScreen('settingsChangePassword'),
+    ...screen('settingsChangePassword'),
   },
   {
     path: PopupPath.SETTINGS_ADD_VIEWING_KEY,
-    lazy: lazyScreen('settingsAddViewingKey'),
+    ...screen('settingsAddViewingKey'),
   },
   {
     path: PopupPath.SETTINGS_SECURITY,
-    lazy: lazyScreen('settingsSecurityHome'),
+    ...screen('settingsSecurityHome'),
   },
   {
     path: PopupPath.SETTINGS_ZCASH_NETWORK,
-    lazy: lazyScreen('settingsZcashNetwork'),
+    ...screen('settingsZcashNetwork'),
   },
   {
     path: PopupPath.SETTINGS_PENUMBRA_NETWORK,
-    lazy: lazyScreen('settingsPenumbraNetwork'),
+    ...screen('settingsPenumbraNetwork'),
   },
   {
     path: PopupPath.SETTINGS_DEVICES,
-    lazy: lazyScreen('settingsDevicesHome'),
+    ...screen('settingsDevicesHome'),
   },
   {
     path: PopupPath.SETTINGS_REMOVE_WALLET,
-    lazy: lazyScreen('settingsRemoveWallet'),
+    ...screen('settingsRemoveWallet'),
   },
   {
     path: PopupPath.SETTINGS_CONNECTIONS,
-    lazy: lazyScreen('settingsConnections'),
+    ...screen('settingsConnections'),
   },
 ];

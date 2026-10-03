@@ -8,7 +8,9 @@ import { PopupPath } from './paths';
 import { PopupLayout } from './popup-layout';
 import { settingsRoutes } from './settings/routes';
 import { IRONWOOD_MIGRATION } from '../../config/feature-flags';
-import { lazyScreen } from './route-modules';
+import { screen, type PreloadHandle } from './route-modules';
+import { routePreloads } from './route-preloads';
+import { preloadTarget, registerRoutePreload } from './preload';
 
 /**
  * Skeleton placeholder while the first screen hydrates (its loaders and its
@@ -55,132 +57,133 @@ export const popupRoutes: RouteObject[] = [
             path: PopupPath.INDEX,
             element: <PopupIndex />,
             loader: popupIndexLoader,
+            handle: { preload: routePreloads.home } satisfies PreloadHandle,
           },
           {
             path: PopupPath.STAKE,
-            lazy: lazyScreen('stake'),
+            ...screen('stake'),
           },
           {
             path: PopupPath.SWAP,
-            lazy: lazyScreen('swap'),
+            ...screen('swap', routePreloads.swap),
           },
           {
             path: PopupPath.VOTE,
-            lazy: lazyScreen('vote'),
+            ...screen('vote'),
           },
           {
             path: PopupPath.INBOX,
-            lazy: lazyScreen('inbox'),
+            ...screen('inbox'),
           },
           {
             path: PopupPath.INBOX_THREAD,
-            lazy: lazyScreen('thread'),
+            ...screen('thread'),
           },
           {
             path: PopupPath.INBOX_GROUP,
-            lazy: lazyScreen('group'),
+            ...screen('group'),
           },
           {
             path: PopupPath.INBOX_GROUP_INVITE,
-            lazy: lazyScreen('groupInvite'),
+            ...screen('groupInvite'),
           },
           {
             path: PopupPath.INBOX_NEW_GROUP,
-            lazy: lazyScreen('newGroup'),
+            ...screen('newGroup'),
           },
           {
             path: PopupPath.INBOX_JOIN,
-            lazy: lazyScreen('groupJoin'),
+            ...screen('groupJoin'),
           },
           {
             path: PopupPath.CONTACTS,
-            lazy: lazyScreen('contacts'),
+            ...screen('contacts'),
           },
           {
             path: PopupPath.CONTACT_CARD,
-            lazy: lazyScreen('contactCard'),
+            ...screen('contactCard'),
           },
           {
             path: PopupPath.CONTACT,
-            lazy: lazyScreen('contact'),
+            ...screen('contact'),
           },
           {
             path: PopupPath.TOOLS,
-            lazy: lazyScreen('tools'),
+            ...screen('tools'),
           },
           {
             path: PopupPath.SETTINGS,
-            lazy: lazyScreen('settings'),
+            ...screen('settings'),
             children: settingsRoutes,
           },
 
           // Identity
           {
             path: PopupPath.IDENTITY,
-            lazy: lazyScreen('identity'),
+            ...screen('identity', routePreloads.identity),
           },
           {
             path: PopupPath.IDENTITY_SITES,
-            lazy: lazyScreen('identitySites'),
+            ...screen('identitySites'),
           },
           {
             path: PopupPath.IDENTITY_CONTROLS,
-            lazy: lazyScreen('identityControls'),
+            ...screen('identityControls'),
           },
           {
             path: PopupPath.PASSWORDS,
-            lazy: lazyScreen('passwords'),
+            ...screen('passwords'),
           },
 
           {
             path: PopupPath.LINK,
-            lazy: lazyScreen('link'),
+            ...screen('link'),
           },
 
           // Send/Receive
           {
             path: PopupPath.SEND,
-            lazy: lazyScreen('send'),
+            ...screen('send', routePreloads.send),
           },
           {
             path: PopupPath.RECEIVE,
-            lazy: lazyScreen('receive'),
+            ...screen('receive', routePreloads.receive),
           },
 
           // Cosmos airgap signing (dedicated window)
           {
             path: PopupPath.COSMOS_SIGN,
-            lazy: lazyScreen('cosmosSign'),
+            ...screen('cosmosSign'),
           },
 
           // Multisig
           {
             path: PopupPath.MULTISIG,
-            lazy: lazyScreen('multisigSessions'),
+            ...screen('multisigSessions'),
           },
           {
             path: PopupPath.MULTISIG_CREATE,
-            lazy: lazyScreen('multisigCreate'),
+            ...screen('multisigCreate'),
           },
           {
             path: PopupPath.MULTISIG_JOIN,
-            lazy: lazyScreen('multisigJoin'),
+            ...screen('multisigJoin'),
           },
           {
             path: PopupPath.MULTISIG_SIGN,
-            lazy: lazyScreen('multisigSign'),
+            ...screen('multisigSign'),
           },
           {
             path: PopupPath.NOTE_SYNC,
-            lazy: lazyScreen('noteSync'),
+            ...screen('noteSync'),
           },
           {
             path: PopupPath.ACTIVITY,
-            lazy: lazyScreen('activity'),
+            ...screen('activity', routePreloads.activity),
           },
           {
             path: PopupPath.TX_DETAIL,
-            lazy: lazyScreen('txDetail'),
+            ...screen('txDetail'),
           },
 
           // Per-pool notes (orchard legacy vs ironwood). Registered only when the
@@ -189,7 +192,7 @@ export const popupRoutes: RouteObject[] = [
             ? [
                 {
                   path: PopupPath.POOL_NOTES,
-                  lazy: lazyScreen('poolNotes'),
+                  ...screen('poolNotes'),
                 },
               ]
             : []),
@@ -197,15 +200,15 @@ export const popupRoutes: RouteObject[] = [
           // zid contact picker (external app requests)
           {
             path: PopupPath.CONTACT_PICKER,
-            lazy: lazyScreen('contactPicker'),
+            ...screen('contactPicker'),
           },
           {
             path: PopupPath.FROST_APPROVE,
-            lazy: lazyScreen('frostApprove'),
+            ...screen('frostApprove'),
           },
           {
             path: PopupPath.PASSKEY_APPROVE,
-            lazy: lazyScreen('passkeyApprove'),
+            ...screen('passkeyApprove'),
           },
 
           // Auth
@@ -215,45 +218,50 @@ export const popupRoutes: RouteObject[] = [
             loader: popupLoginLoader,
           },
           { path: PopupPath.WELCOME, element: <PopupWelcome /> },
-          { path: PopupPath.FORGOT_PASSWORD, lazy: lazyScreen('forgotPassword') },
+          { path: PopupPath.FORGOT_PASSWORD, ...screen('forgotPassword') },
 
           // Approvals
           {
             path: PopupPath.TRANSACTION_APPROVAL,
-            lazy: lazyScreen('transactionApproval'),
+            ...screen('transactionApproval'),
           },
           {
             path: PopupPath.ORIGIN_APPROVAL,
-            lazy: lazyScreen('originApproval'),
+            ...screen('originApproval'),
           },
           {
             path: PopupPath.SIGN_APPROVAL,
-            lazy: lazyScreen('signApproval'),
+            ...screen('signApproval'),
           },
           {
             path: PopupPath.CAPABILITY_APPROVAL,
-            lazy: lazyScreen('capabilityApproval'),
+            ...screen('capabilityApproval'),
           },
           {
             path: PopupPath.CONTACT_DISCOVERY_APPROVAL,
-            lazy: lazyScreen('contactDiscoveryApproval'),
+            ...screen('contactDiscoveryApproval'),
           },
           {
             path: PopupPath.DESTINATION_APPROVAL,
-            lazy: lazyScreen('destinationApproval'),
+            ...screen('destinationApproval'),
           },
           {
             path: PopupPath.ZCASH_SEND_APPROVAL,
-            lazy: lazyScreen('zcashSendApproval'),
+            ...screen('zcashSendApproval'),
           },
           {
             path: PopupPath.KEPLR_APPROVAL,
-            lazy: lazyScreen('keplrApproval'),
+            ...screen('keplrApproval'),
           },
         ],
       },
     ],
   },
 ];
+
+// targets that are not routes: the wallets panel opens over any screen
+registerRoutePreload('sheet:wallets', routePreloads.wallets);
+// the buy sheet's next step is the swap: opening it warms the swap
+registerRoutePreload('sheet:buy', () => preloadTarget(PopupPath.SWAP));
 
 export const popupRouter = createHashRouter(popupRoutes);

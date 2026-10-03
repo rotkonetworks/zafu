@@ -116,6 +116,7 @@ export const SettingsMultisigBackup = () => {
               <button
                 key={k.id}
                 type='button'
+                data-preload={PopupPath.SETTINGS_RECOVERY_PASSPHRASE}
                 onClick={() => navigate(PopupPath.SETTINGS_RECOVERY_PASSPHRASE)}
                 className='text-left transition-colors hover:bg-surface-elev-2'
               >
