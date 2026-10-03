@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, test } from 'vitest';
 import { create } from 'zustand';
 import { AllSlices, initializeStore, TestStore } from '.';
 import { restoreContacts, type Contact } from './contacts';
+import { mintRelationshipIndex } from './identity';
 import { readRooms, readThreads, writeRooms, writeThreads, THREAD_CAP } from '../people/vault';
 import type { PeopleRoom, ThreadItem } from '../people/vault';
 
@@ -131,5 +132,56 @@ describe('restoreContacts', () => {
     expect(restored.map(c => c.name)).toEqual(['carol']);
     expect(restored[0]!.id).toBeTruthy();
     expect(restored[0]!.addresses[0]!.id).toBeTruthy();
+  });
+});
+
+describe('personal-data backup keeps the relationship counter', () => {
+  const PHRASE =
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+  let useStore: TestStore;
+
+  beforeEach(async () => {
+    localMock.clear();
+    sessionMock.clear();
+    useStore = create<AllSlices>()(initializeStore(sessionExtStorage, localExtStorage));
+    await useStore.getState().keyRing.setPassword('s0meUs3rP@ssword');
+  });
+
+  test('a restore on a fresh install never hands out a j already given', async () => {
+    const id = await useStore.getState().keyRing.newMnemonicKey(PHRASE, 'main');
+    // three cards shown (no contact for them), and a contact holding j 1
+    for (let i = 0; i < 3; i++) {
+      await mintRelationshipIndex(id, 0);
+    }
+    await useStore
+      .getState()
+      .contacts.addContact({ name: 'bob', rel: { walletId: id, gen: 0, j: 1 } });
+    const backup = await useStore.getState().contacts.exportPersonalData('backup-pass');
+
+    // a fresh install: storage wiped, the same seed imported under a new vault id
+    localMock.clear();
+    sessionMock.clear();
+    useStore = create<AllSlices>()(initializeStore(sessionExtStorage, localExtStorage));
+    await useStore.getState().keyRing.setPassword('s0meUs3rP@ssword');
+    const again = await useStore.getState().keyRing.newMnemonicKey(PHRASE, 'main');
+    expect(again).not.toBe(id);
+    await useStore.getState().contacts.importPersonalData(backup, 'backup-pass', 'merge');
+
+    // the counter came back, and bob's relationship names the wallet it is on now
+    expect(await mintRelationshipIndex(again, 0)).toBe(3);
+    const bob = (useStore.getState().contacts.contacts as Contact[]).find(c => c.name === 'bob');
+    expect(bob?.rel).toEqual({ walletId: again, gen: 0, j: 1 });
+  });
+
+  test('a contact holding a j past the backed-up counter raises it', async () => {
+    const id = await useStore.getState().keyRing.newMnemonicKey(PHRASE, 'main');
+    await useStore
+      .getState()
+      .contacts.addContact({ name: 'carol', rel: { walletId: id, gen: 2, j: 9 } });
+    const backup = await useStore.getState().contacts.exportPersonalData('backup-pass');
+    await chrome.storage.local.remove(`xidRelNext:${id}`);
+    await useStore.getState().contacts.importPersonalData(backup, 'backup-pass', 'merge');
+    expect(await mintRelationshipIndex(id, 2)).toBe(10);
+    expect(await mintRelationshipIndex(id, 0)).toBe(0);
   });
 });

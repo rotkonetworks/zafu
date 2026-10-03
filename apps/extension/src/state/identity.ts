@@ -1212,16 +1212,63 @@ export const discoverySecret = (
 /** chrome.storage.local, per wallet: the next unused `j` per generation */
 export const XID_REL_NEXT_KEY = 'xidRelNext';
 
+/** per generation, the next unused relationship index */
+export type RelationshipCounters = Record<string, number>;
+
+const relNextKey = (walletId: string) => `${XID_REL_NEXT_KEY}:${walletId}`;
+
 /** take the next relationship index for this wallet and generation; never reused */
 export async function mintRelationshipIndex(walletId: string, gen: number): Promise<number> {
-  const key = `${XID_REL_NEXT_KEY}:${walletId}`;
+  const key = relNextKey(walletId);
   return navigator.locks.request(key, async () => {
-    const next = ((await chrome.storage.local.get(key))[key] ?? {}) as Record<string, number>;
+    const next = ((await chrome.storage.local.get(key))[key] ?? {}) as RelationshipCounters;
     const j = next[gen] ?? 0;
     await chrome.storage.local.set({ [key]: { ...next, [gen]: j + 1 } });
     return j;
   });
 }
+
+/** this wallet's counters, for the encrypted personal-data backup */
+export async function readRelationshipCounters(walletId: string): Promise<RelationshipCounters> {
+  const key = relNextKey(walletId);
+  return ((await chrome.storage.local.get(key))[key] ?? {}) as RelationshipCounters;
+}
+
+/**
+ * Raise this wallet's counters to at least `floor`, never lower them. A
+ * restore calls it with max(backed-up counter, 1 + every `j` its contacts
+ * hold), so a `j` already handed out - on a card, in a memo, to a person -
+ * is never handed out again to someone new.
+ */
+export async function raiseRelationshipCounters(
+  walletId: string,
+  floor: RelationshipCounters,
+): Promise<void> {
+  const key = relNextKey(walletId);
+  await navigator.locks.request(key, async () => {
+    const next = ((await chrome.storage.local.get(key))[key] ?? {}) as RelationshipCounters;
+    const raised = { ...next };
+    for (const [gen, n] of Object.entries(floor)) {
+      if (Number.isSafeInteger(n) && n > (raised[gen] ?? 0)) {
+        raised[gen] = n;
+      }
+    }
+    await chrome.storage.local.set({ [key]: raised });
+  });
+}
+
+/** per generation, 1 + the highest `j` these relationships use */
+export const relationshipFloor = (
+  rels: readonly { gen: number; j: number }[],
+): RelationshipCounters => {
+  const floor: RelationshipCounters = {};
+  for (const { gen, j } of rels) {
+    if (Number.isSafeInteger(gen) && Number.isSafeInteger(j) && j + 1 > (floor[gen] ?? 0)) {
+      floor[gen] = j + 1;
+    }
+  }
+  return floor;
+};
 
 /**
  * Which of your relationships an answering card names (its TLV 0x05): try
@@ -1233,8 +1280,7 @@ export async function findRelationship(
   walletId: string,
   inceptionPub: string,
 ): Promise<{ gen: number; j: number } | undefined> {
-  const key = `${XID_REL_NEXT_KEY}:${walletId}`;
-  const next = ((await chrome.storage.local.get(key))[key] ?? {}) as Record<string, number>;
+  const next = await readRelationshipCounters(walletId);
   for (const [g, n] of Object.entries(next)) {
     for (let j = 0; j < n; j++) {
       const k = deriveRelationshipKeys(mnemonic, Number(g), j);

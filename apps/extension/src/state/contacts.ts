@@ -17,7 +17,13 @@ import type { KeyPrintJson } from '@repo/encryption/key-print';
 import { readSentRecords, writeSentRecords, readTxNotes, writeTxNotes } from './personal-data';
 import type { SentTxRecord } from '../workers/sent-tx-reconcile';
 import { pocketOwner } from './pockets';
-import type { ContactCardKey } from './identity';
+import {
+  raiseRelationshipCounters,
+  readRelationshipCounters,
+  relationshipFloor,
+  type ContactCardKey,
+  type RelationshipCounters,
+} from './identity';
 import { readPeopleBackup, restorePeopleBackup } from '../people/vault';
 import { exportEgressChoices, importEgressChoices, type EgressChoices } from '../net/ledger';
 import {
@@ -39,7 +45,7 @@ import type { PrivacySettings } from './privacy';
 export interface PersonalDataBackup {
   version: 4;
   exportedAt: number;
-  /** encrypted { contacts, sent, txNotes, pockets, egress, settings, walletNames, passwordLogins, yourAddresses } JSON */
+  /** encrypted { contacts, sent, txNotes, pockets, egress, settings, walletNames, passwordLogins, yourAddresses, relNext } JSON */
   data: BoxJson;
   keyPrint: KeyPrintJson;
 }
@@ -124,6 +130,13 @@ export interface Contact {
   createdAt: number;
   /** addresses across different networks */
   addresses: ContactAddress[];
+}
+
+/** one wallet's relationship counters, as the backup carries them */
+interface BackupRelNext {
+  /** the vault id they were counted under */
+  walletId: string;
+  next: RelationshipCounters;
 }
 
 export interface ContactRel {
@@ -636,9 +649,16 @@ export const createContactsSlice =
         );
         const passwordLogins = await readPasswordLogins();
         const yourAddresses = await readYourAddresses();
+        // the relationship counters, keyed like walletNames: the vault id a
+        // restore makes is new, so the old one rides along to map contacts
+        const relNext: Record<string, BackupRelNext> = {};
+        for (const k of get().keyRing.keyInfos) {
+          relNext[pocketOwner(k)] = { walletId: k.id, next: await readRelationshipCounters(k.id) };
+        }
         // rooms you are in and their relay history, capped per thread
         const people = await readPeopleBackup();
         const plaintext = JSON.stringify({
+          relNext,
           people,
           passwordLogins,
           yourAddresses,
@@ -693,9 +713,25 @@ export const createContactsSlice =
           yourAddresses?: unknown;
           /** people rooms and relay history (absent in older backups) */
           people?: unknown;
+          /** relationship counters by owner key (absent in older backups) */
+          relNext?: Record<string, BackupRelNext>;
         };
 
-        const newContacts = restoreContacts(parsed.contacts ?? [], safeContacts(), mode);
+        // the vault id a backup's relationships name may be one this restore
+        // replaced: map it to the wallet with the same owner key here
+        const walletFor = new Map<string, string>();
+        for (const k of get().keyRing.keyInfos) {
+          walletFor.set(k.id, k.id);
+          const old = parsed.relNext?.[pocketOwner(k)]?.walletId;
+          if (typeof old === 'string') {
+            walletFor.set(old, k.id);
+          }
+        }
+        const backupContacts = (parsed.contacts ?? []).map(c => {
+          const here = c.rel && walletFor.get(c.rel.walletId);
+          return here && c.rel ? { ...c, rel: { ...c.rel, walletId: here } } : c;
+        });
+        const newContacts = restoreContacts(backupContacts, safeContacts(), mode);
         set(state => {
           if (mode === 'replace') {
             state.contacts.contacts = newContacts;
@@ -719,6 +755,19 @@ export const createContactsSlice =
               .keyRing.renameKeyRing(key.id, name)
               .catch(() => {});
           }
+        }
+        // never hand a `j` out twice: each wallet's counter goes to at least
+        // max(backed-up counter, 1 + every j its contacts hold)
+        for (const k of get().keyRing.keyInfos) {
+          const rels = [...safeContacts(), ...backupContacts]
+            .map(c => c.rel)
+            .filter((r): r is ContactRel => !!r && r.walletId === k.id);
+          const floor = relationshipFloor(rels);
+          const backed = parsed.relNext?.[pocketOwner(k)]?.next ?? {};
+          for (const [gen, n] of Object.entries(backed)) {
+            floor[gen] = Math.max(floor[gen] ?? 0, n);
+          }
+          await raiseRelationshipCounters(k.id, floor);
         }
         await importEgressChoices(parsed.egress);
         if (parsed.passwordLogins !== undefined) {
