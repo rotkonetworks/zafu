@@ -18,11 +18,29 @@ interface EncryptedWrapper {
   encrypted: BoxJson;
 }
 
-export const isEncryptedWrapper = (v: unknown): v is EncryptedWrapper =>
-  typeof v === 'object' &&
-  v !== null &&
-  'encrypted' in v &&
-  typeof (v as EncryptedWrapper).encrypted === 'object';
+/**
+ * true only when `v` is a genuine `{ encrypted: BoxJson }` wrapper - the inner
+ * box must actually have its `nonce`/`cipherText` strings, not just be *an
+ * object*. A shape that merely looks sealed (e.g. an interrupted write, or a
+ * value another realm wrote mid-migration) must never reach `Box.fromJson`:
+ * its base64 decode asserts `nonce`/`cipherText` are present strings and
+ * throws (uncaught, since callers fire-and-forget `hydrateEncryptedData()`)
+ * when they are not. Treating a malformed wrapper as "not encrypted" instead
+ * routes it through the same "absent - ignore stale data" path already used
+ * for genuinely missing values.
+ */
+export const isEncryptedWrapper = (v: unknown): v is EncryptedWrapper => {
+  if (typeof v !== 'object' || v === null || !('encrypted' in v)) {
+    return false;
+  }
+  const encrypted = (v as EncryptedWrapper).encrypted;
+  return (
+    typeof encrypted === 'object' &&
+    encrypted !== null &&
+    typeof (encrypted as Partial<BoxJson>).nonce === 'string' &&
+    typeof (encrypted as Partial<BoxJson>).cipherText === 'string'
+  );
+};
 
 async function getKey(session: ExtensionStorage<SessionStorageState>): Promise<Key | null> {
   const keyJson = await session.get('passwordKey');
@@ -207,6 +225,17 @@ export async function readEncryptedWithMigration<T>(
     const key = await getKey(session);
     if (!key) {
       throw new SealedReadError(String(storageKey));
+    }
+    const looksSealed = typeof raw === 'object' && raw !== null && 'encrypted' in raw;
+    if (looksSealed && !isEncryptedWrapper(raw)) {
+      // shaped like a sealed wrapper (has an `encrypted` property) but the
+      // inner box is malformed/corrupt - never attempt to decrypt it (that
+      // throws), and never fall through to the "legacy plaintext" branch
+      // below, which would reseal the garbage itself as the new value
+      await chrome.storage.local.set({ [`${String(storageKey)}.unopened`]: raw });
+      await local.remove(storageKey);
+      console.warn(`[encrypted-storage] '${String(storageKey)}' is malformed; kept aside`);
+      return null;
     }
     if (isEncryptedWrapper(raw)) {
       const plaintext = await key.unseal(Box.fromJson(raw.encrypted));
