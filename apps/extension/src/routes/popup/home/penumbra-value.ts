@@ -1,6 +1,5 @@
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
 import { getDisplayDenomFromView, getEquivalentValues } from '@penumbra-zone/getters/value-view';
-import { asValueView } from '@penumbra-zone/getters/equivalent-value';
 import { getDisplayDenomExponent } from '@penumbra-zone/getters/metadata';
 import { bech32mAssetId } from '@penumbra-zone/bech32m/passet';
 import { fromValueView } from '@penumbrafi/types/amount';
@@ -50,6 +49,10 @@ const unitOf = (meta?: Metadata): Unit | undefined =>
     : undefined;
 
 const NUMERAIRE: Record<string, TotalIn> = { [USDC_INJ_ID]: 'usd', [UM_ID]: 'um' };
+/** both numeraires have 6 decimals. The view service's numeraire metadata can
+ *  arrive without display units, which read as exponent 0 and priced one usdt
+ *  at $940,300, so the exponent is ours, never the metadata's. */
+const NUMERAIRE_EXPONENT = 6;
 
 /** recorded prices per display unit, from the equivalent values the view service attaches */
 const localOf = (b: BalancesResponse, amount: number) =>
@@ -58,7 +61,12 @@ const localOf = (b: BalancesResponse, amount: number) =>
       ? (getEquivalentValues.optional(b.balanceView) ?? []).flatMap(e => {
           const id = e.numeraire?.penumbraAssetId?.inner;
           const q = id?.length ? NUMERAIRE[uint8ArrayToBase64(id)] : undefined;
-          return q ? [[q, Number(fromValueView(asValueView(e))) / amount]] : [];
+          const units = e.equivalentAmount
+            ? (e.equivalentAmount.hi << 64n) + e.equivalentAmount.lo
+            : undefined;
+          return q && units !== undefined
+            ? [[q, Number(units) / 10 ** NUMERAIRE_EXPONENT / amount]]
+            : [];
         })
       : [],
   ) as Asset['local'];

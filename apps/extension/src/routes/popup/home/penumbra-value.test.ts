@@ -195,3 +195,12 @@ describe('penumbra portfolio value', () => {
     expect(a.some(q => q.includes(':5000000000000000000'))).toBe(false);
   });
 });
+
+describe('recorded prices', () => {
+  test('a numeraire without display units still prices in dollars, not base units', () => {
+    // the view service's numeraire metadata with no denom units: exponent would read as 0
+    const bareUsdc = new Metadata({ penumbraAssetId: USDC.penumbraAssetId });
+    const [usdt] = selectAssets([balance(OSMO, 20_000_000n, [[bareUsdc, 18_800_000n]])]);
+    expect(usdt!.local['usd']).toBeCloseTo(0.94, 6);
+  });
+});
