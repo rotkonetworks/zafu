@@ -47,7 +47,9 @@ export const peerBuyUrl = (o: {
 /** Peer's curator (quotes, intent signing) and its payment verifier */
 export const PEER_API = 'https://api.zkp2p.xyz';
 export const PEER_ATTESTATION = 'https://attestation-service.zkp2p.xyz';
-export const PEER_HOSTS = [PEER_API, PEER_ATTESTATION];
+/** the sdk reads intents from Base first and falls back to Peer's indexer */
+export const PEER_INDEXER = 'https://indexer.zkp2p.xyz';
+export const PEER_HOSTS = [PEER_API, PEER_ATTESTATION, PEER_INDEXER];
 
 /** Base's public rpc: reads, and the person's own transactions */
 export const BASE_RPC = 'https://mainnet.base.org';

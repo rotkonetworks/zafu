@@ -23,7 +23,7 @@ import {
   type TemplateKey,
 } from '../../buy/apps';
 import { baseAddressOf, withBaseAccount } from '../../buy/base-key';
-import { enoughGas, gasState, sendUsdc, usdcOf } from '../../buy/base-chain';
+import { baseReader, enoughGas, gasState, sendUsdc, usdcOf } from '../../buy/base-chain';
 import { fiatUnits, type Offer } from '../../buy/fees';
 import { advance, isTerminal, loadOffer, resume, startBuy, type OpenBuy } from '../../buy/machine';
 import {
@@ -362,28 +362,39 @@ export const reserveNow = async () => {
       offer: o,
     });
     await save(draft);
-    const held = await withBaseAccount(await mnemonic(), account =>
-      reserve(account, o, () => stepTo(2)),
-    );
-    stepTo(3);
-    await save(
-      advance(draft, 'pay', {
-        reserveTx: held.tx,
-        intentHash: held.intentHash,
-        expiresAt: held.expiresAt,
-      }),
-    );
+    let sent: `0x${string}` | undefined;
+    try {
+      const held = await withBaseAccount(await mnemonic(), account =>
+        reserve(account, o, tx => {
+          sent = tx;
+          stepTo(2);
+        }),
+      );
+      stepTo(3);
+      await save(
+        advance(draft, 'pay', {
+          reserveTx: held.tx,
+          intentHash: held.intentHash,
+          expiresAt: held.expiresAt,
+        }),
+      );
+    } catch (e) {
+      if (!sent) {
+        throw e;
+      }
+      // the reserve went out: keep it, and let the visible check find the intent
+      await save({ ...draft, reserveTx: sent });
+      set({ overlay: null, error: undefined });
+      return;
+    }
     void writeBuyPrefs({ app: s.app, currency: s.currency });
     set({ overlay: null, resumed: false });
   } catch (e) {
     await save(null);
     const msg = (e as Error).message;
-    // the seller filled up between the quote and the reserve
-    set({
-      overlay: null,
-      sheet: /liquidity|insufficient|deposit/i.test(msg) ? 'gone' : null,
-      error: /liquidity|insufficient|deposit/i.test(msg) ? undefined : msg,
-    });
+    // a guess from the sdk's words: the seller filled up between the quote and the reserve
+    const gone = /liquidity|insufficient|deposit/i.test(msg);
+    set({ overlay: null, sheet: gone ? 'gone' : null, error: gone ? undefined : msg });
     requote();
   }
 };
@@ -560,7 +571,10 @@ export const swapNow = async () => {
       sendUsdc(account, near.depositAddress as `0x${string}`, BigInt(near.amountIn)),
     );
     await announceDeposit(tx, near.depositAddress);
-    await save(advance(b, 'swapping', { near, depositTx: tx }));
+    // a retry after a refund starts its own clock
+    await save(
+      advance({ ...b, at: { ...b.at, swapping: undefined } }, 'swapping', { near, depositTx: tx }),
+    );
   } catch (e) {
     set({ error: (e as Error).message });
   }
@@ -574,8 +588,22 @@ export const check = async () => {
   }
   try {
     if (b.stage === 'reserving') {
-      // the reserve may have landed while the page was closed
-      const held = await heldIntent(b.base, b.offer.depositId);
+      // a reserve that went out while the page was busy or closed: wait for
+      // its block, then pick up the intent; one never sent is forgotten
+      if (!b.reserveTx) {
+        if (Date.now() - (b.at.reserving ?? 0) > 120_000) {
+          await save(null);
+        }
+        return;
+      }
+      const receipt = await baseReader()
+        .getTransactionReceipt({ hash: b.reserveTx })
+        .catch(() => undefined);
+      if (!receipt) {
+        return;
+      }
+      const held =
+        receipt.status === 'success' ? await heldIntent(b.base, b.offer.depositId) : undefined;
       await save(held ? advance(b, 'pay', held) : null);
       return;
     }

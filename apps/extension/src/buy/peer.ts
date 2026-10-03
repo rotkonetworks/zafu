@@ -88,7 +88,7 @@ const clientFor = async (account: PrivateKeyAccount | `0x${string}`) => {
 export const reserve = async (
   account: PrivateKeyAccount,
   o: Offer,
-  onSent?: () => void,
+  onSent?: (tx: `0x${string}`) => void,
 ): Promise<{ tx: `0x${string}`; intentHash: `0x${string}`; expiresAt: number }> => {
   const client = await clientFor(account);
   const referral = zafuReferral();
@@ -103,7 +103,7 @@ export const reserve = async (
     escrowAddress: o.escrow,
     ...(referral ? { referrerFeeConfig: referral } : {}),
   });
-  onSent?.();
+  onSent?.(tx);
   await baseReader().waitForTransactionReceipt({ hash: tx });
   const held = await heldIntent(account.address, o.depositId);
   if (!held) {

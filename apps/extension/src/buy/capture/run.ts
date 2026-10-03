@@ -193,7 +193,8 @@ export const capturePayment = (p: {
           const rows = matchingRows(last, p.expect);
           if (rows.length) {
             p.onStep('found');
-            done({ kind: 'found', rows, seen: s });
+            // the verifier replays what was read: the replay request, captured headers
+            done({ kind: 'found', rows, seen: replay });
           }
         })
         .catch(() => undefined)

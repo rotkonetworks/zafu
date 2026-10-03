@@ -135,7 +135,7 @@ const HOSTS = [
     mark: 'p',
     name: 'peer',
     does: 'finds a seller and checks your payment',
-    host: 'api.zkp2p.xyz\nattestation-service.zkp2p.xyz',
+    host: 'api.zkp2p.xyz\nattestation-service.zkp2p.xyz\nindexer.zkp2p.xyz',
     c: 'text-zigner-gold',
   },
   {
