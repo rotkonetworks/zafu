@@ -87,6 +87,7 @@ import {
 import { startRun, stopRun, STOP_WAIT_MS, type RunSlot } from './sync-runs';
 import { mergeLoadedNotes, mergeLoadedSpent } from './wallet-state-merge';
 import { createBuildRegistry } from './build-abort';
+import { advanceWitnesses, frontierHolds } from './witness-advance';
 
 export type { SentTxRecord } from './sent-tx-reconcile';
 
@@ -328,6 +329,13 @@ interface WalletState extends RunSlot {
    * so a follow-up runSync can't race a still-alive watcher.
    */
   mempoolTask?: Promise<void>;
+  /**
+   * The running sync's ironwood frontier, its height and tree size, read live.
+   * The loop changes them together with the notes' witnesses in one
+   * synchronous step, so a send reading this and the witnesses in one tick
+   * sees one consistent tree; the stored copies trail it by a write.
+   */
+  ironwoodLive?: () => { frontier: string; height: number; size: number };
 }
 
 interface WasmModule extends DepositWasm {
@@ -2632,6 +2640,32 @@ const buildWitnessesIronwood = async (
     throw new Error('ironwood not supported by this wasm build');
   }
 
+  // One consistent view of the frontier, its height and every selected
+  // note's witness. A live sync moves all of them between awaits, so they are
+  // read from the loop in one tick, with no await in between; a send that
+  // read them at different moments saw a size mismatch or a drifted root and
+  // fell to the full replay even though nothing was wrong.
+  const state = walletStates.get(walletId);
+  const live = state?.stop && !state.stop.signal.aborted ? state.ironwoodLive?.() : undefined;
+  const snapOf = () =>
+    new Map(notes.map(n => [n.nullifier, { w: n.witness_hex, s: n.witness_tree_size }]));
+  let frontier: string | null;
+  let frontierHeight: number;
+  let snap: ReturnType<typeof snapOf>;
+  if (live) {
+    frontier = live.frontier || null;
+    frontierHeight = live.height;
+    snap = snapOf();
+  } else {
+    frontier = await getIronwoodTreeFrontier(walletId);
+    frontierHeight = await getIronwoodTreeFrontierHeight(walletId);
+    snap = snapOf();
+  }
+  // anchor where the witnesses are: the fast-forward gap is then empty
+  if (frontier && frontierHeight > 0) {
+    anchorHeight = frontierHeight;
+  }
+
   // network root at the anchor - cross-checked against whatever we build
   const anchorTs = await client.getTreeState(anchorHeight);
   if (!anchorTs.ironwoodTree) {
@@ -2664,14 +2698,19 @@ const buildWitnessesIronwood = async (
   };
 
   // Fast path: cached frontier + aligned witnesses -> fast-forward.
-  const frontier = await getIronwoodTreeFrontier(walletId);
-  const frontierHeight = await getIronwoodTreeFrontierHeight(walletId);
   const frontierSize = frontier ? Number(iwSize(frontier)) : -1;
-  const witnessTreeSize = notes[0]?.witness_tree_size ?? -1;
+  const witnessTreeSize = snap.get(notes[0]?.nullifier ?? '')?.s ?? -1;
   const aligned =
     !!frontier &&
     frontierSize === witnessTreeSize &&
-    notes.every(n => n.witness_hex && n.witness_tree_size === witnessTreeSize);
+    notes.every(n => {
+      const at = snap.get(n.nullifier);
+      return !!at?.w && at.s === witnessTreeSize;
+    });
+  console.log(
+    `[zcash-timing] ironwood witnesses: ${aligned ? 'fast' : 'replay'} source=${live ? 'live' : 'store'} ` +
+      `frontier@${frontierHeight} size=${frontierSize} witness size=${witnessTreeSize} anchor=${anchorHeight}`,
+  );
 
   // Say WHY the fast path was skipped. Falling back costs ~40s of block
   // replay on a real send, and until now the only signal was the wall clock -
@@ -2679,10 +2718,11 @@ const buildWitnessesIronwood = async (
   // drifted one from a note that never got a witness. Each cause has a
   // different fix, so guessing between them is the expensive part.
   if (!aligned) {
-    const missingWitness = notes.filter(n => !n.witness_hex).length;
-    const wrongSize = notes.filter(
-      n => n.witness_hex && n.witness_tree_size !== witnessTreeSize,
-    ).length;
+    const missingWitness = notes.filter(n => !snap.get(n.nullifier)?.w).length;
+    const wrongSize = notes.filter(n => {
+      const at = snap.get(n.nullifier);
+      return at?.w && at.s !== witnessTreeSize;
+    }).length;
     const why = !frontier
       ? 'no cached frontier (never synced, or the frontier was wiped/rebootstrapped)'
       : frontierSize !== witnessTreeSize
@@ -2695,7 +2735,10 @@ const buildWitnessesIronwood = async (
   let reason: CatchUpReason = !frontier
     ? 'unsynced'
     : frontierSize !== witnessTreeSize ||
-        notes.some(n => n.witness_hex && n.witness_tree_size !== witnessTreeSize)
+        notes.some(n => {
+          const at = snap.get(n.nullifier);
+          return at?.w && at.s !== witnessTreeSize;
+        })
       ? 'moved'
       : 'unwitnessed';
 
@@ -2712,7 +2755,10 @@ const buildWitnessesIronwood = async (
         anchorHeight,
         'ironwood',
       );
-      const existingInput = notes.map(n => ({ id: n.nullifier, witness_hex: n.witness_hex! }));
+      const existingInput = notes.map(n => ({
+        id: n.nullifier,
+        witness_hex: snap.get(n.nullifier)!.w!,
+      }));
       const result = JSON.parse(
         iwSync(frontier, JSON.stringify(gapBlocks), JSON.stringify(existingInput), '[]') as string,
       ) as { end_frontier_hex: string; witnesses: { id: string; witness_hex: string }[] };
@@ -2807,7 +2853,61 @@ const buildWitnessesIronwood = async (
       end_frontier_hex: string;
       witnesses: { id: string; witness_hex: string }[];
     };
-    const endTreeSize = Number(iwSize(seeded.end_frontier_hex));
+    // A running sync owns the frontier and has likely moved on during the
+    // replay. Writing the replay's older frontier under it (as this used to)
+    // left the loop advancing witnesses from the wrong size, so every later
+    // send failed the root check and replayed again. Instead bring the rebuilt
+    // witnesses forward to exactly where the loop is, then hand them over.
+    const loop = walletStates.get(walletId);
+    const loopNow = () =>
+      loop?.stop && !loop.stop.signal.aborted ? loop.ironwoodLive?.() : undefined;
+    let witnesses = seeded.witnesses;
+    let endFrontier = seeded.end_frontier_hex;
+    let endHeight = anchorHeight;
+    let now = loopNow();
+    for (let tries = 0; now && now.frontier && now.height > endHeight && tries < 3; tries++) {
+      const { blocks: more } = await fetchCompactBlocksRange(
+        client,
+        endHeight + 1,
+        now.height,
+        'ironwood',
+      );
+      const moved = JSON.parse(
+        iwSync(
+          endFrontier,
+          JSON.stringify(more),
+          JSON.stringify(witnesses.map(w => ({ id: w.id, witness_hex: w.witness_hex }))),
+          '[]',
+        ) as string,
+      ) as { end_frontier_hex: string; witnesses: { id: string; witness_hex: string }[] };
+      witnesses = moved.witnesses;
+      endFrontier = moved.end_frontier_hex;
+      endHeight = now.height;
+      now = loopNow();
+    }
+    const endTreeSize = Number(iwSize(endFrontier));
+    // checked and adopted in this one tick, with the loop unable to move between
+    if (
+      now &&
+      (now.height !== endHeight ||
+        now.size !== endTreeSize ||
+        !now.frontier ||
+        iwRoot(now.frontier) !== iwRoot(endFrontier))
+    ) {
+      console.log(
+        `[zcash-worker] ironwood: sync moved on (${endHeight} -> ${now.height}); ` +
+          'leaving the rebuilt witnesses to the background rebuild',
+      );
+      return { anchorHex: networkRoot, paths: result.paths };
+    }
+    const noteByNullifierLive = new Map(notes.map(n => [n.nullifier, n]));
+    for (const w of witnesses) {
+      const note = noteByNullifierLive.get(w.id);
+      if (note) {
+        note.witness_hex = w.witness_hex;
+        note.witness_tree_size = endTreeSize;
+      }
+    }
     const db = await getDb();
     const tx = db.transaction(['witnesses-ironwood', 'meta'], 'readwrite');
     const wstore = tx.objectStore('witnesses-ironwood');
@@ -2816,26 +2916,23 @@ const buildWitnessesIronwood = async (
     // caller keeps seeing the pre-replay note (witness_hex undefined) until a
     // reload - which strands the note in the sync loop's `iwExisting` gate and
     // leaves a spend-time rebuild uncached in memory for a follow-up send.
-    const noteByNullifier = new Map(notes.map(n => [n.nullifier, n]));
-    for (const w of seeded.witnesses) {
+    for (const w of witnesses) {
       wstore.put({
         walletId,
         nullifier: w.id,
         witness_hex: w.witness_hex,
         witness_tree_size: endTreeSize,
       } satisfies IronwoodWitnessRecord);
-      const note = noteByNullifier.get(w.id);
-      if (note) {
-        note.witness_hex = w.witness_hex;
-        note.witness_tree_size = endTreeSize;
-      }
     }
-    // The frontier has to advance with them. Witnesses at a tree size the
+    // With a running sync, its own write keeps the frontier; without one the
+    // frontier has to advance with the witnesses. Witnesses at a tree size the
     // stored frontier does not match fail the `aligned` check just as surely
     // as no witnesses at all.
     const metaStore = tx.objectStore('meta');
-    metaStore.put({ walletId, key: 'ironwoodTreeFrontier', value: seeded.end_frontier_hex });
-    metaStore.put({ walletId, key: 'ironwoodTreeFrontierHeight', value: anchorHeight });
+    if (!now) {
+      metaStore.put({ walletId, key: 'ironwoodTreeFrontier', value: endFrontier });
+      metaStore.put({ walletId, key: 'ironwoodTreeFrontierHeight', value: endHeight });
+    }
     // Persist the tree size for this exact frontier too. Without it the stored
     // `ironwoodTreeSize` stays at its pre-send value while the frontier moves to
     // `endTreeSize`, so the next sync-start validity check
@@ -2843,11 +2940,13 @@ const buildWitnessesIronwood = async (
     // and it wipes the very witnesses we just cached - putting every send back
     // on the full-replay slow path. Writing endTreeSize keeps the
     // (frontier, size) pair self-consistent so the fast path survives.
-    metaStore.put({ walletId, key: 'ironwoodTreeSize', value: endTreeSize });
+    if (!now) {
+      metaStore.put({ walletId, key: 'ironwoodTreeSize', value: endTreeSize });
+    }
     await txComplete(tx);
     console.log(
-      `[zcash-worker] ironwood: cached ${seeded.witnesses.length} witnesses at tree size ` +
-        `${endTreeSize} (height ${anchorHeight}) - the next send should take the fast path`,
+      `[zcash-worker] ironwood: cached ${witnesses.length} witnesses at tree size ` +
+        `${endTreeSize} (height ${endHeight}) - the next send should take the fast path`,
     );
   } catch (e) {
     console.warn('[zcash-worker] ironwood: could not cache witnesses after replay:', e);
@@ -3327,6 +3426,8 @@ const syncLoop = async (
   if (!wasmModule) {
     throw new Error('wasm not initialized');
   }
+  // the previous run's live view is not this run's; it is published below
+  state.ironwoodLive = undefined;
 
   // free old keys if re-syncing
   if (state.keys) {
@@ -3377,10 +3478,17 @@ const syncLoop = async (
       runningFrontier = '';
     }
   }
+  // Equal sizes mean no orchard action landed between the frontier's height
+  // and the synced height (the size counts every scanned action), so a
+  // frontier persisted a few empty blocks back is still this height's tree.
+  // Requiring the heights to be equal refetched it, and dropped every witness,
+  // on most starts.
   const frontierValid =
     !!runningFrontier &&
-    frontierSize === orchardTreeSize &&
-    runningFrontierHeight === currentHeight;
+    frontierHolds(frontierSize, orchardTreeSize, runningFrontierHeight, currentHeight);
+  if (frontierValid) {
+    runningFrontierHeight = currentHeight;
+  }
   // a stop that lands while the store opens must not be followed by a fetch
   if (signal.aborted) {
     return;
@@ -3391,15 +3499,14 @@ const syncLoop = async (
       runningFrontier = ts.orchardTree;
       runningFrontierHeight = currentHeight;
       orchardTreeSize = Number(wasmModule.frontier_tree_size(runningFrontier));
-      // frontier refetched => any in-memory ORCHARD witness may be stale
-      // relative to the new orchard tree size. Drop orchard witnesses so spend
-      // time triggers a clean backfill rather than silently advancing a gapped
-      // witness. Only the orchard frontier was refetched here - the ironwood
-      // frontier is validated separately just below - so ironwood witnesses
-      // must be left intact (clearing them would strand the ironwood fast path
-      // and force a full replay on the next ironwood send).
+      // frontier refetched => an ORCHARD witness at another tree size is
+      // stale; one at exactly the refetched size already describes this tree
+      // and is kept. Only the orchard frontier was refetched here - the
+      // ironwood frontier is validated separately just below - so ironwood
+      // witnesses must be left intact (clearing them would strand the ironwood
+      // fast path and force a full replay on the next ironwood send).
       for (const note of state.notes) {
-        if (poolOf(note) === 'ironwood') {
+        if (poolOf(note) === 'ironwood' || note.witness_tree_size === orchardTreeSize) {
           continue;
         }
         note.witness_hex = undefined;
@@ -3435,10 +3542,13 @@ const syncLoop = async (
         ironwoodFrontier = '';
       }
     }
+    // same reasoning as the orchard check: equal sizes, nothing in between
     const iwFrontierValid =
       !!ironwoodFrontier &&
-      iwFrontierSize === ironwoodTreeSize &&
-      ironwoodFrontierHeight === currentHeight;
+      frontierHolds(iwFrontierSize, ironwoodTreeSize, ironwoodFrontierHeight, currentHeight);
+    if (iwFrontierValid) {
+      ironwoodFrontierHeight = currentHeight;
+    }
     if (!iwFrontierValid && currentHeight > 0) {
       try {
         const ts = await client.getTreeState(currentHeight);
@@ -3448,9 +3558,10 @@ const syncLoop = async (
           ironwoodFrontier = ts.ironwoodTree;
           ironwoodFrontierHeight = currentHeight;
           ironwoodTreeSize = Number(iwSizeFn(ironwoodFrontier));
-          // mirror orchard: refetched frontier invalidates stored witnesses
+          // mirror orchard: a witness at another tree size than the refetched
+          // frontier is stale; one at exactly its size is kept
           for (const note of state.notes) {
-            if (poolOf(note) === 'ironwood') {
+            if (poolOf(note) === 'ironwood' && note.witness_tree_size !== ironwoodTreeSize) {
               note.witness_hex = undefined;
               note.witness_tree_size = undefined;
             }
@@ -3481,7 +3592,7 @@ const syncLoop = async (
       n =>
         poolOf(n) === 'ironwood' &&
         !state.spentNullifiers.has(n.nullifier) &&
-        (n.witness_hex === undefined || n.witness_tree_size === undefined),
+        (n.witness_hex === undefined || n.witness_tree_size !== ironwoodTreeSize),
     );
     if (strandedIronwood.length > 0) {
       try {
@@ -3503,6 +3614,14 @@ const syncLoop = async (
       }
     }
   }
+  // from here the loop owns the ironwood frontier; a send reads it live
+  state.ironwoodLive = () => ({
+    frontier: ironwoodFrontier,
+    height: ironwoodFrontierHeight,
+    size: ironwoodTreeSize,
+  });
+  // the caught-up rebuild of witnesses that fell behind runs once a run
+  let iwRescued = false;
 
   console.log(
     `[zcash-worker] sync start wallet=${walletId} height=${currentHeight} treeSize=${orchardTreeSize} (idb=${syncedHeight}, requested=${startHeight ?? 'none'})`,
@@ -4066,6 +4185,28 @@ const syncLoop = async (
           walletId,
           payload: { currentHeight, chainHeight, notesFound: state.notes.length, blocksScanned: 0 },
         });
+        // Caught up: rebuild here, in the background, any ironwood witness
+        // that fell behind during this run (a dropped one, or a note whose
+        // witness is at another size), so that no send has to.
+        if (!iwRescued && iwSupported && ironwoodFrontier) {
+          iwRescued = true;
+          const behind = state.notes.filter(
+            n =>
+              poolOf(n) === 'ironwood' &&
+              !state.spentNullifiers.has(n.nullifier) &&
+              (n.witness_hex === undefined || n.witness_tree_size !== ironwoodTreeSize),
+          );
+          if (behind.length > 0) {
+            try {
+              console.log(
+                `[zcash-worker] caught up: rebuilding ${behind.length} ironwood witness(es) in the background`,
+              );
+              await buildWitnessesIronwood(client, walletId, behind, ironwoodFrontierHeight);
+            } catch (e) {
+              console.warn('[zcash-worker] background ironwood witness rebuild failed:', e);
+            }
+          }
+        }
         await sleepUnlessAborted(signal, 10000);
         continue;
       }
@@ -4313,7 +4454,9 @@ const syncLoop = async (
           if (newNullifiers.has(note.nullifier)) {
             continue;
           }
-          if (!note.witness_hex) {
+          // only a witness at the pre-batch size can take this batch; one at
+          // another size would be advanced into a wrong tree
+          if (!note.witness_hex || note.witness_tree_size !== orchardTreeSize) {
             continue;
           }
           existingInput.push({ id: note.nullifier, witness_hex: note.witness_hex });
@@ -4321,17 +4464,20 @@ const syncLoop = async (
         const seedInput = newNotes.map(n => ({ id: n.nullifier, position: n.position }));
 
         try {
-          const raw = wasmModule.witness_sync_update(
+          const result = advanceWitnesses(
+            wasmModule.witness_sync_update,
             runningFrontier,
             JSON.stringify(compact),
-            JSON.stringify(existingInput),
-            JSON.stringify(seedInput),
+            existingInput,
+            seedInput,
           );
-          const result = JSON.parse(raw as string) as {
-            end_frontier_hex: string;
-            anchor_hex: string;
-            witnesses: { id: string; position: number; witness_hex: string }[];
-          };
+          for (const id of result.dropped) {
+            const note = state.notes.find(n => n.nullifier === id);
+            if (note) {
+              note.witness_hex = undefined;
+              note.witness_tree_size = undefined;
+            }
+          }
 
           const witnessById = new Map(result.witnesses.map(w => [w.id, w]));
           const newTreeSize = orchardTreeSize + actionCount;
@@ -4368,6 +4514,12 @@ const syncLoop = async (
 
       // advance tree size by total actions in this batch
       orchardTreeSize += actionCount;
+      // a batch without orchard actions leaves the tree as it was, so the
+      // frontier now stands for this height too (otherwise its height lags and
+      // the next start refetches it)
+      if (runningFrontier && actionCount === 0) {
+        runningFrontierHeight = endHeight;
+      }
 
       // ── NU6.3 ironwood pool: mirror of the orchard scan + witness path
       // above. Dormant until (a) the wasm blob exports the ironwood fns and
@@ -4504,23 +4656,32 @@ const syncLoop = async (
             if (iwNewNullifiers.has(note.nullifier)) {
               continue;
             }
-            if (!note.witness_hex) {
+            // only a witness at the pre-batch size can take this batch; one
+            // at another size (an old row, a send-time rebuild) would be
+            // advanced into a wrong tree and fail every later root check
+            if (!note.witness_hex || note.witness_tree_size !== ironwoodTreeSize) {
               continue;
             }
             iwExisting.push({ id: note.nullifier, witness_hex: note.witness_hex });
           }
           const iwSeed = newIronwoodNotes.map(n => ({ id: n.nullifier, position: n.position }));
           try {
-            const raw = iwSync(
+            // one witness it cannot read no longer costs the frontier
+            const result = advanceWitnesses(
+              iwSync,
               ironwoodFrontier,
               JSON.stringify(iwCompact),
-              JSON.stringify(iwExisting),
-              JSON.stringify(iwSeed),
+              iwExisting,
+              iwSeed,
             );
-            const result = JSON.parse(raw as string) as {
-              end_frontier_hex: string;
-              witnesses: { id: string; position: number; witness_hex: string }[];
-            };
+            for (const id of result.dropped) {
+              console.warn(`[zcash-worker] ironwood witness ${id.slice(0, 8)} dropped for rebuild`);
+              const note = state.notes.find(n => n.nullifier === id);
+              if (note) {
+                note.witness_hex = undefined;
+                note.witness_tree_size = undefined;
+              }
+            }
             const iwById = new Map(result.witnesses.map(w => [w.id, w]));
             const newIwTreeSize = ironwoodTreeSize + ironwoodActionCount;
             for (const note of state.notes) {
@@ -4550,6 +4711,13 @@ const syncLoop = async (
       // advance ironwood tree size by this batch's ironwood actions (kept
       // even when the blob can't scan them, so the count stays monotonic)
       ironwoodTreeSize += ironwoodActionCount;
+      // a batch without ironwood actions leaves the tree as it was, so the
+      // maintained frontier now stands for this height too. Before, its height
+      // lagged on every empty batch, and a stop in that window made the next
+      // start refetch the frontier and drop every ironwood witness.
+      if (ironwoodFrontier && ironwoodActionCount === 0) {
+        ironwoodFrontierHeight = endHeight;
+      }
 
       // merge witness-updated notes with spent-updated notes (dedupe by nullifier)
       const updatedDedup = new Map<string, DecryptedNote>();
