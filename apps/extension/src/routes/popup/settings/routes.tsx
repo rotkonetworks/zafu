@@ -32,14 +32,14 @@ export const settingsRoutes: RouteObject[] = [
   },
   {
     // real zigner screen - a "zigner" link that silently redirected to the
-    // wallets list made the label lie. wallets still handles vault import;
-    // this screen owns zigner-specific settings (vault legacy mode, scan).
+    // wallets list made the label lie. it lists the paired zigner vaults;
+    // pairing goes through the one device scanner (connect-device).
     path: PopupPath.SETTINGS_ZIGNER,
     ...screen('settingsZigner'),
   },
   {
     path: PopupPath.SETTINGS_CONNECT_DEVICE,
-    lazy: lazyScreen('settingsConnectDevice'),
+    ...screen('settingsConnectDevice'),
   },
   {
     // ?network=zcash|penumbra (the home "switch node" links) opens that network's node sheet
