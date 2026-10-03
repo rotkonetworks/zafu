@@ -4,9 +4,12 @@ import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { useActiveZid } from '../../../hooks/use-active-zid';
 import { ZID_PINS_STORAGE_KEY, getZidPins, type ZidPin } from '../../../state/identity';
 
-/** what an identity is called: its pin's name, "personal" for the first, else its number */
-export const identityLabel = (index: number, pins: readonly ZidPin[]): string =>
-  pins.find(p => p.index === index)?.label ?? (index === 0 ? 'personal' : `identity ${index}`);
+/** what an identity is called: its pin's name, "personal" for the first, else its number.
+ *  An unnamed pin, or an older build's "gen <n>" placeholder, is no name at all. */
+export const identityLabel = (index: number, pins: readonly ZidPin[]): string => {
+  const label = pins.find(p => p.index === index)?.label.trim();
+  return label && !/^gen \d+$/.test(label) ? label : index === 0 ? 'personal' : `identity ${index}`;
+};
 
 /**
  * The active wallet's identity right now: its generation, that generation's

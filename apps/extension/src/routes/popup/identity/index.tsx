@@ -42,7 +42,7 @@ import { PopupPath } from '../paths';
 import { identityLabel, useIdentity } from './use-identity';
 import { hostOf, shortDay, useSites } from './site-list';
 
-type Open = 'switch' | 'share' | 'qr' | 'new' | 'shared';
+type Open = 'switch' | 'share' | 'qr' | 'new' | 'shared' | 'rename';
 
 /**
  * Your card for one person, as a link: a fresh address and key each time it
@@ -222,7 +222,25 @@ export const IdentityPage = () => {
         <div className='flex items-center gap-4 border border-border-hard bg-elev-1 p-4'>
           <ZidSeal hex={zidPubkey} size={66} tone='hanko' />
           <span className='flex min-w-0 flex-col gap-1'>
-            <span className='truncate font-display text-xl text-fg-high'>{label}</span>
+            {zidPubkey && seeded ? (
+              <button
+                type='button'
+                aria-label={`rename ${label}`}
+                onClick={() => {
+                  setName(label);
+                  setOpen('rename');
+                }}
+                className='flex items-center gap-2 text-left hover:text-zigner-gold'
+              >
+                <span className='truncate font-display text-xl text-fg-high'>{label}</span>
+                <span
+                  className='i-lucide-pencil size-3.5 shrink-0 text-fg-dim'
+                  aria-hidden='true'
+                />
+              </button>
+            ) : (
+              <span className='truncate font-display text-xl text-fg-high'>{label}</span>
+            )}
             <span className='text-[11px] text-fg-muted'>
               {zidPubkey
                 ? 'your seal · compare it when you meet'
@@ -317,6 +335,29 @@ export const IdentityPage = () => {
           <Button type='submit' disabled={!name.trim()}>
             make it
           </Button>
+        </form>
+      </Sheet>
+
+      <Sheet open={open === 'rename'} onOpenChange={o => !o && close()} title='rename'>
+        <form
+          className='flex flex-col gap-3'
+          onSubmit={e => {
+            e.preventDefault();
+            void addZidPin(walletId, zidIndex, name).then(() => {
+              setName('');
+              close();
+            });
+          }}
+        >
+          <Input
+            aria-label='name'
+            placeholder={zidIndex === 0 ? 'personal' : `identity ${zidIndex}`}
+            value={name}
+            onChange={e => setName(e.target.value)}
+            autoFocus
+          />
+          <span className='text-[11px] text-fg-muted'>only you see this name</span>
+          <Button type='submit'>save</Button>
         </form>
       </Sheet>
 

@@ -704,7 +704,8 @@ export async function getZidPins(walletId: string): Promise<ZidPin[]> {
 export async function addZidPin(walletId: string, index: number, label: string): Promise<ZidPin[]> {
   const pins = await getZidPins(walletId);
   const next = pins.filter(p => p.index !== index);
-  next.push({ index, label: label.trim() || `gen ${index}` });
+  // blank stays blank: the screens name an unnamed identity, storage never invents one
+  next.push({ index, label: label.trim() });
   next.sort((a, b) => a.index - b.index);
   await chrome.storage.local.set({ [zidPinsKey(walletId)]: next });
   return next;
