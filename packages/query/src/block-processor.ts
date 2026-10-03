@@ -325,9 +325,12 @@ export class BlockProcessor implements BlockProcessorInterface {
       const appParams = await this.querier.app.appParams();
       await this.persistChainParams(appParams, currentHeight);
 
-      // Finally, persist the frontier to IndexedDB.
+      // Finally, persist the frontier to IndexedDB. Services save it as they
+      // start, so this is normally empty; the height is named here because a
+      // snapshot server that has scanned nothing reports u64::MAX as its own,
+      // and storing that would start the next run past the end of the chain.
       const flush = this.viewServer.flushUpdates();
-      await this.indexedDb.saveScanResult(flush);
+      await this.indexedDb.saveScanResult({ ...flush, height: currentHeight });
     }
 
     // FMD params: current mainnet serves `fmdMetaParams` (the deprecated

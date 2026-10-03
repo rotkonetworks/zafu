@@ -118,6 +118,15 @@ export class Services implements ServicesInterface {
 
     // note: we try-catch the snapshot initialization to fallback to normal initialization
     // if it fails for any reason to not block onboarding completion.
+    //
+    // Nothing is written until the snapshot is in hand: the frontier and its
+    // height are saved together, in one transaction, only once the view server
+    // holds that frontier. Writing the height first (as this once did) left a
+    // failed init with an EMPTY stored tree at the snapshot height, and the
+    // sync then read on from there with every position counted from zero -
+    // wrong nullifiers, an anchor no chain ever had. Saving the frontier now,
+    // rather than at the first flush, also means a sync paused before its
+    // first flush resets to this frontier, never to an empty tree.
     if (!fullSyncHeight && walletCreationBlockHeight && compactFrontierBlockHeight) {
       try {
         // Request frontier snapshot from full node (~1KB payload) and initialize
@@ -126,18 +135,28 @@ export class Services implements ServicesInterface {
           new SctFrontierRequest({ withProof: false }),
         );
 
-        await indexedDb.saveFullSyncHeight(compact_frontier.height);
-        frontierHeight = Number(compact_frontier.height);
-
-        viewServer = await ViewServer.initialize_from_snapshot({
+        const snapshot = await ViewServer.initialize_from_snapshot({
           fullViewingKey,
           getStoredTree: () => indexedDb.getStateCommitmentTree(),
 
           idbConstants: indexedDb.constants(),
           compact_frontier,
         });
-      } catch {
-        // Fall back to normal initialization
+
+        // a snapshot server reports no height of its own (u64::MAX until it
+        // scans a block), so the height is the frontier's
+        await indexedDb.saveScanResult({
+          ...snapshot.flushUpdates(),
+          height: compact_frontier.height,
+        });
+        viewServer = snapshot;
+        frontierHeight = Number(compact_frontier.height);
+      } catch (e) {
+        console.warn('[penumbra] snapshot start failed; reading the chain from genesis:', e);
+        // Fall back to normal initialization: nothing was stored, so this is
+        // a plain genesis read, and the block processor must not take it for
+        // a snapshot wallet
+        frontierHeight = undefined;
         viewServer = await ViewServer.initialize({
           fullViewingKey,
           getStoredTree: () => indexedDb.getStateCommitmentTree(),
