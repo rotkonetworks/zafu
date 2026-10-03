@@ -15,21 +15,22 @@ export interface SyncNoticeSpec {
 /**
  * The one notice the sync strip shows, from what zafu already knows: no
  * network beats everything (nothing else can be true about the node), a
- * witness rebuild in progress comes next, then a classified sync failure.
+ * send's note-tree catch-up comes next, then a classified sync failure.
  */
 export const syncNotice = ({
   online,
-  rebuildLeft,
+  catchingUp,
   failure,
 }: {
   online: boolean;
-  rebuildLeft?: string;
+  /** a send is catching up the note tree; `left` only from a measured rate */
+  catchingUp?: { left?: string };
   failure?: SyncFailure | null;
 }): SyncNoticeSpec | undefined =>
   !online
     ? { tone: 'warn', text: OFFLINE_MESSAGE, action: { label: 'retry now', kind: 'retry' } }
-    : rebuildLeft
-      ? { tone: 'gold', text: 'witness corrupt - rebuilding', meta: rebuildLeft }
+    : catchingUp
+      ? { tone: 'gold', text: 'catching up the note tree', meta: catchingUp.left }
       : failure
         ? { tone: 'warn', text: failure.message, detail: failure.raw, action: failure.action }
         : undefined;

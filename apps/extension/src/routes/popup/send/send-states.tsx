@@ -2,7 +2,13 @@ import type { ReactNode } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
 import { ScreenHeader } from '../../../components/screen-header';
 import type { LedgerSigningPhase } from '../../../ledger/zcash-app/contract';
-import { Footer, Main, Mark, Strip } from './send-ui';
+import { Footer, Main, Mark, SendingFooter, Strip, type SendingNote } from './send-ui';
+import {
+  REASON_LINE,
+  catchUpLeft,
+  catchUpShare,
+  type CatchUp,
+} from '../../../state/witness-rebuild';
 
 /** the eye line: what the person can rely on while this state lasts */
 const Assure = ({ warn, children }: { warn?: boolean; children: ReactNode }) => (
@@ -18,42 +24,63 @@ const Assure = ({ warn, children }: { warn?: boolean; children: ReactNode }) => 
   </div>
 );
 
-/** board StWitness: the note tree is rebuilt before this send can prove */
-export const WitnessRebuild = ({
-  step,
-  left,
-  onBackground,
+/**
+ * board StWitness: the note tree catches up before this send can prove. Shown
+ * the moment the worker says so, with the real block range and an estimate
+ * only from the measured rate.
+ */
+export const CatchUpNotice = ({
+  catchUp,
+  meta,
+  note,
+  onStop,
+  onClose,
 }: {
-  /** the worker's latest rebuild sub-step, if any */
-  step?: string;
-  left?: string;
-  onBackground: () => void;
-}) => (
-  <>
-    <ScreenHeader title='preparing to send' onBack={onBackground} />
-    <Main className='gap-[18px] pt-7'>
-      <p className='text-[13px] leading-relaxed text-fg'>
-        witness corrupt - rebuilding. this takes about 3 min.
-      </p>
-      <div className='flex h-[58px] shrink-0 items-center gap-3 border border-border-soft bg-elev-1 px-3.5'>
-        <span className='size-2 shrink-0 animate-pulse bg-zigner-gold' />
-        <span className='flex grow flex-col gap-[3px]'>
-          <span className='text-sm text-fg-high'>witness corrupt - rebuilding</span>
-          <span className='text-[11px] text-fg-muted'>{step ?? 'reading the note tree'}</span>
-        </span>
-      </div>
-      <Assure>your zec stays exactly where it is while this runs</Assure>
-    </Main>
-    <Footer>
-      <Button variant='secondary' onClick={onBackground} className='w-[110px] text-[13px]'>
-        wait in background
-      </Button>
-      <Button disabled className='grow'>
-        {left ?? 'rebuilding'}
-      </Button>
-    </Footer>
-  </>
-);
+  catchUp: CatchUp;
+  meta?: ReactNode;
+  note?: SendingNote;
+  onStop?: () => void;
+  onClose: () => void;
+}) => {
+  const share = catchUpShare(catchUp);
+  const left = catchUpLeft(catchUp);
+  const fmt = (n: number) => n.toLocaleString('en-US');
+  return (
+    <>
+      <ScreenHeader title='preparing to send' backPath={false} meta={meta} />
+      <Main className='gap-[18px] pt-7'>
+        <p className='text-[13px] leading-relaxed text-fg'>
+          catching up the note tree first · this takes a little longer
+        </p>
+        <div className='flex shrink-0 flex-col gap-2 border border-border-soft bg-elev-1 px-3.5 py-3'>
+          <div className='flex items-center justify-between gap-3 text-[11px] text-fg-muted'>
+            <span className='truncate'>
+              {catchUp.replaying
+                ? 'reading the tree'
+                : catchUp.done !== undefined && catchUp.total
+                  ? `${fmt(catchUp.done)} of ${fmt(catchUp.total)} blocks`
+                  : `${fmt(catchUp.to - catchUp.from + 1)} blocks to read`}
+            </span>
+            {left && <span className='shrink-0'>{left}</span>}
+          </div>
+          <div className='h-[3px] w-full overflow-hidden bg-border-soft'>
+            <div
+              className={
+                share === undefined
+                  ? 'h-full w-1/4 animate-pulse bg-zigner-gold'
+                  : 'h-full bg-zigner-gold transition-all duration-500 ease-out'
+              }
+              style={share === undefined ? undefined : { width: `${Math.max(2, share * 100)}%` }}
+            />
+          </div>
+        </div>
+        <span className='text-xs text-fg-muted'>{REASON_LINE[catchUp.reason]}</span>
+        <Assure>your zec stays exactly where it is while this runs</Assure>
+      </Main>
+      <SendingFooter note={note} onStop={onStop} onClose={onClose} />
+    </>
+  );
+};
 
 const LEDGER_STEPS = [
   'ledger connected',

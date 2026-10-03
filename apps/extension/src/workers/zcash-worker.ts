@@ -2087,6 +2087,30 @@ const selectNotes = (
 
 // ── witness building helpers ──
 
+/**
+ * Why a spend could not take the witness fast path, as the send screen names
+ * it. 'diverged' is the only one that means something was wrong; the rest are
+ * an ordinary catch-up.
+ */
+type CatchUpReason = 'unsynced' | 'moved' | 'unwitnessed' | 'diverged';
+
+/**
+ * Announce a note-tree catch-up the moment it starts, with its real block
+ * range, then report each fetched batch, so the page can say at once that
+ * this send takes longer and show true progress (state/witness-rebuild.ts).
+ */
+const catchUp = (
+  onProgress: ((step: string, detail?: string) => void) | undefined,
+  reason: CatchUpReason,
+  from: number,
+  to: number,
+) => {
+  console.log(`[zcash-timing] catch-up start: reason=${reason} blocks ${from}..${to}`);
+  onProgress?.('catch-up: start', `reason=${reason} from=${from} to=${to}`);
+  return (done: number, total: number) =>
+    onProgress?.('catch-up: blocks', `done=${done} total=${total}`);
+};
+
 const WITNESS_BATCH_SIZE = 1000;
 
 // Cap concurrent compact-block fetches. A from-corruption witness rebuild can
@@ -2123,6 +2147,8 @@ const fetchCompactBlocksRange = async (
   start: number,
   end: number,
   pool: NotePool = 'orchard',
+  /** blocks fetched so far of the range, after each batch */
+  onBatch?: (done: number, total: number) => void,
 ): Promise<{
   blocks: { height: number; actions: { cmx_hex: string }[] }[];
   actions: number;
@@ -2143,6 +2169,8 @@ const fetchCompactBlocksRange = async (
   // write results by index to preserve ascending-height order for the WASM replay
   const results = new Array<{ height: number; actions: { cmx_hex: string }[] }[]>(ranges.length);
   let next = 0;
+  let fetched = 0;
+  const total = end - start + 1;
   const worker = async () => {
     while (true) {
       const i = next++;
@@ -2161,6 +2189,8 @@ const fetchCompactBlocksRange = async (
           actions: poolActions.map(a => ({ cmx_hex: hexEncode(a.cmx) })),
         };
       });
+      fetched += e - s + 1;
+      onBatch?.(fetched, total);
     }
   };
   await Promise.all(
@@ -2183,6 +2213,7 @@ const backfillWitnesses = async (
   notes: DecryptedNote[],
   anchorHeight: number,
   onProgress?: (step: string, detail?: string) => void,
+  reason: CatchUpReason = 'unwitnessed',
 ): Promise<{
   byNullifier: Map<string, { witness_hex: string; tree_size: number }>;
   endFrontier: string;
@@ -2237,18 +2268,20 @@ const backfillWitnesses = async (
     client,
     frontierHeight + 1,
     anchorHeight,
+    'orchard',
+    catchUp(onProgress, reason, frontierHeight + 1, anchorHeight),
   );
   const fetchSecs = ((performance.now() - fetchStart) / 1000).toFixed(1);
   console.log(
     `[zcash-worker] backfill: fetch done in ${fetchSecs}s - ${compactBlocks.length} blocks, ${totalActions} actions`,
   );
-  onProgress?.('backfill: blocks downloaded', `${compactBlocks.length} blocks in ${fetchSecs}s`);
+  onProgress?.('catch-up: blocks downloaded', `${compactBlocks.length} blocks in ${fetchSecs}s`);
 
   const positions = notes.map(n => n.position);
   console.log(
     `[zcash-worker] backfill: wasm replay starting (${totalActions} actions, ${positions.length} notes)`,
   );
-  onProgress?.('backfill: replaying tree', `${totalActions} actions`);
+  onProgress?.('catch-up: replaying', `${totalActions} actions`);
   const wasmStart = performance.now();
   const raw = wasmModule.build_witnesses_and_paths(
     frontierHex,
@@ -2257,7 +2290,7 @@ const backfillWitnesses = async (
   );
   const wasmSecs = ((performance.now() - wasmStart) / 1000).toFixed(1);
   console.log(`[zcash-worker] backfill: wasm done in ${wasmSecs}s`);
-  onProgress?.('backfill: witness rebuilt', `took ${wasmSecs}s`);
+  onProgress?.('catch-up: witness rebuilt', `took ${wasmSecs}s`);
   const result = JSON.parse(raw as string) as {
     anchor_hex: string;
     end_frontier_hex: string;
@@ -2658,8 +2691,13 @@ const buildWitnessesIronwood = async (
           ? `${missingWitness}/${notes.length} selected notes have no stored witness`
           : `${wrongSize}/${notes.length} selected notes carry a witness at a different tree size`;
     console.warn(`[zcash-worker] ironwood witness fast path unavailable: ${why}`);
-    emitProgress?.('witness fast path unavailable', why);
   }
+  let reason: CatchUpReason = !frontier
+    ? 'unsynced'
+    : frontierSize !== witnessTreeSize ||
+        notes.some(n => n.witness_hex && n.witness_tree_size !== witnessTreeSize)
+      ? 'moved'
+      : 'unwitnessed';
 
   // The fast path is an OPTIMISATION, so a drifted witness must not fail the
   // send - it must fall back to the slow replay. Ironwood witnesses live in
@@ -2697,6 +2735,7 @@ const buildWitnessesIronwood = async (
         `[zcash-worker] ironwood witness drifted from the network tree at height ` +
           `${anchorHeight}; rebuilding from a checkpoint instead of failing the send`,
       );
+      reason = 'diverged';
       // fall through to the slow replay
     }
   }
@@ -2708,6 +2747,7 @@ const buildWitnessesIronwood = async (
     1,
     Math.floor((earliestNoteHeight - 1) / FRONTIER_SNAPSHOT_INTERVAL) * FRONTIER_SNAPSHOT_INTERVAL,
   );
+  const onBatch = catchUp(emitProgress, reason, roundedHeight + 1, anchorHeight);
   const checkpointTs = await client.getTreeState(roundedHeight);
   if (!checkpointTs.ironwoodTree) {
     throw syncError(
@@ -2720,7 +2760,9 @@ const buildWitnessesIronwood = async (
     roundedHeight + 1,
     anchorHeight,
     'ironwood',
+    onBatch,
   );
+  emitProgress?.('catch-up: replaying', `${blocks.length} blocks`);
   const positions = notes.map(n => n.position);
   const result = JSON.parse(
     iwBuildPaths(
@@ -2883,7 +2925,7 @@ const buildWitnesses = async (
       n.witness_hex = undefined;
       n.witness_tree_size = undefined;
     }
-    await backfillWitnesses(client, walletId, notes, anchorHeight, onProgress);
+    await backfillWitnesses(client, walletId, notes, anchorHeight, onProgress, 'moved');
     runningFrontier = (await getTreeFrontier(walletId)) ?? '';
     runningFrontierHeight =
       (await idbGet<{ value: number }>('meta', [walletId, 'orchardTreeFrontierHeight']))?.value ??
@@ -2982,7 +3024,6 @@ const buildWitnesses = async (
       `[zcash-worker] witness root mismatch (recovering via backfill): note=${mismatchNote.slice(0, 8)} ` +
         `(anchor=${anchorHeight}, frontierHeight=${runningFrontierHeight}, rebootstrapped=${rebootstrapped})`,
     );
-    onProgress?.('witness corrupt - rebuilding', 'this takes ~3 min');
     for (const n of notes) {
       n.witness_hex = undefined;
       n.witness_tree_size = undefined;
@@ -2995,6 +3036,7 @@ const buildWitnesses = async (
       notes,
       anchorHeight,
       onProgress,
+      'diverged',
     );
     // Use byNullifier (set from WASM result before any await inside backfillWitnesses) - note.witness_hex
     // may have been fast-forwarded past anchorHeight by the sync loop by the time backfill returns.
@@ -6236,6 +6278,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const { anchorHex, paths } = await build.race(witnessing);
 
         const witnessDuration = ((performance.now() - witnessStart) / 1000).toFixed(1);
+        // how fresh the witnesses were: a gap beyond a few blocks means sync was behind
+        console.log(
+          `[zcash-timing] witnesses ${witnessDuration}s: pool=${sendActivePool} anchor=${anchorHeight} ` +
+            `synced=${await getSyncHeight(walletId)} tip=${sendTip.height} gap=${sendTip.height - anchorHeight}`,
+        );
         emitProgress('witnesses built', `${witnessDuration}s`);
 
         if (sendPayload.vault) {
@@ -6809,6 +6856,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           emitProgress,
         );
         const { anchorHex, paths } = await build.race(witnessing);
+        console.log(
+          `[zcash-timing] witnesses: pool=${pcztPool} anchor=${anchorHeight} ` +
+            `synced=${await getSyncHeight(walletId)} tip=${sendTip.height} gap=${sendTip.height - anchorHeight}`,
+        );
 
         const notesForWasm = selected.map(n => ({
           value: Number(n.value),

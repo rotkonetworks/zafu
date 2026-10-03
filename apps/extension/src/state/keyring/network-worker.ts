@@ -28,6 +28,7 @@
 import type { NetworkType, VaultUnlock } from './types';
 import type { SealedVault, WorkerKey } from '../../shared/vault-seal';
 import type { DepositPlan, DepositRequest } from '../../workers/transparent-deposit';
+import type { StopOutcome } from '../../workers/build-abort';
 
 /** true only inside the offscreen document - the one place that owns real Workers */
 const isOffscreenHost = (): boolean =>
@@ -71,6 +72,7 @@ export interface NetworkWorkerMessage {
     | 'get-pool-balances'
     | 'vault-key'
     | 'send-tx'
+    | 'build-stop'
     | 'send-tx-multi'
     | 'send-tx-complete'
     | 'send-tx-pczt'
@@ -227,6 +229,9 @@ export const spawnNetworkWorker = async (network: NetworkType): Promise<void> =>
 const SEND_SHAPED_TYPES: ReadonlySet<string> = new Set([
   'send-tx',
   'send-tx-multi',
+  // their hot variants broadcast inside the same call
+  'send-turnstile-migration',
+  'shield',
   'send-tx-complete',
   'send-tx-pczt-complete',
   'send-turnstile-migration-complete',
@@ -455,8 +460,9 @@ const forwardToHost = async (network: NetworkType, message: unknown): Promise<vo
 };
 
 /**
- * A host that dies sends nothing, so a window whose sync went quiet asks
- * whether the host still has the worker and what it is syncing. Local
+ * A host that dies sends nothing, so a window whose sync (or a call it is
+ * waiting on, such as a send build) went quiet asks whether the host still
+ * has the worker and what it is syncing; a lost host fails the waiting calls. Local
  * messages only, and only while this window believes something is syncing.
  */
 const HOST_SILENCE_MS = 30_000;
@@ -464,7 +470,9 @@ let hostWatch: ReturnType<typeof setInterval> | undefined;
 const watchHost = (): void => {
   hostWatch ??= setInterval(() => {
     for (const [network, state] of workers) {
-      if (state.syncingWallets.size === 0 || Date.now() - state.heardAt < HOST_SILENCE_MS) {
+      // a send waiting on the host needs it alive just as much as a sync does
+      const waiting = state.syncingWallets.size > 0 || state.pendingCallbacks.size > 0;
+      if (!waiting || Date.now() - state.heardAt < HOST_SILENCE_MS) {
         continue;
       }
       state.heardAt = Date.now();
@@ -747,6 +755,15 @@ const callWorker = async <T>(
     } satisfies NetworkWorkerMessage);
   });
 };
+
+/**
+ * Stop the build a page started under `key`, if it has not broadcast yet. Any
+ * window may ask, including home after the sending screen closed. 'committed'
+ * means it is already on its way; 'stopped' and 'ended' mean nothing was sent.
+ * A host that is gone holds no build, so that counts as stopped.
+ */
+export const stopBuildInWorker = (network: NetworkType, key: string): Promise<StopOutcome> =>
+  callWorker<StopOutcome>(network, 'build-stop', { key }).catch(() => 'stopped' as const);
 
 /** the vault with the session key wrapped to a key the worker issued for this one call */
 const sealFor = async (network: NetworkType, vault: VaultUnlock): Promise<SealedVault> =>
@@ -1235,11 +1252,13 @@ export const shieldInWorker = async (
   serverUrl: string,
   tAddresses: string[],
   mainnet: boolean,
+  /** lets stopBuildInWorker stop this build before it broadcasts */
+  cancelKey?: string,
 ): Promise<ShieldResult> => {
   return callWorker(
     network,
     'shield',
-    { vault: await sealFor(network, vault), serverUrl, tAddresses, mainnet },
+    { vault: await sealFor(network, vault), serverUrl, tAddresses, mainnet, cancelKey },
     walletId,
   );
 };
@@ -1305,6 +1324,8 @@ export const buildSendTxInWorker = async (
   mainnet: boolean,
   vault?: VaultUnlock,
   ufvk?: string,
+  /** lets stopBuildInWorker stop this build before it broadcasts */
+  cancelKey?: string,
 ): Promise<SendTxUnsignedResult | { txid: string; fee: string }> => {
   return callWorker(
     network,
@@ -1318,6 +1339,7 @@ export const buildSendTxInWorker = async (
       mainnet,
       vault: vault && (await sealFor(network, vault)),
       ufvk,
+      cancelKey,
     },
     walletId,
   );
@@ -1342,11 +1364,20 @@ export const buildMultiSendTxInWorker = async (
   accountIndex: number,
   mainnet: boolean,
   vault: VaultUnlock,
+  /** lets stopBuildInWorker stop this build before its first broadcast */
+  cancelKey?: string,
 ): Promise<MultiSendResult> => {
   return callWorker(
     network,
     'send-tx-multi',
-    { serverUrl, outputs, accountIndex, mainnet, vault: await sealFor(network, vault) },
+    {
+      serverUrl,
+      outputs,
+      accountIndex,
+      mainnet,
+      vault: await sealFor(network, vault),
+      cancelKey,
+    },
     walletId,
   );
 };
@@ -1444,11 +1475,24 @@ export const buildSendTxPcztInWorker = async (
    */
   frost = false,
   fragmentSize = 400,
+  /** lets stopBuildInWorker stop this build */
+  cancelKey?: string,
 ): Promise<SendTxPcztUnsignedResult> => {
   return callWorker(
     network,
     'send-tx-pczt',
-    { serverUrl, recipient, amount, memo, targetHeight, mainnet, ufvk, fragmentSize, frost },
+    {
+      serverUrl,
+      recipient,
+      amount,
+      memo,
+      targetHeight,
+      mainnet,
+      ufvk,
+      fragmentSize,
+      frost,
+      cancelKey,
+    },
     walletId,
   );
 };
@@ -1551,6 +1595,8 @@ export const buildTurnstileMigrationInWorker = async (
   backend: 'zidecar' | 'lightwalletd' = 'zidecar',
   vault?: VaultUnlock,
   fragmentSize = 400,
+  /** lets stopBuildInWorker stop this build before it broadcasts */
+  cancelKey?: string,
 ): Promise<TurnstileMigrationUnsignedResult | { txid: string; fee: string }> => {
   return callWorker(
     network,
@@ -1563,6 +1609,7 @@ export const buildTurnstileMigrationInWorker = async (
       backend,
       vault: vault && (await sealFor(network, vault)),
       fragmentSize,
+      cancelKey,
     },
     walletId,
   );
@@ -1611,11 +1658,20 @@ export const buildUnsignedShieldInWorker = async (
   ufvk: string,
   /** Ledger: one round of at most this many inputs, with the account's ovk */
   ledger?: { maxInputs: number },
+  /** lets stopBuildInWorker stop this build */
+  cancelKey?: string,
 ): Promise<ShieldUnsignedResult> => {
   return callWorker(
     network,
     'shield-unsigned',
-    { serverUrl, tAddresses, mainnet, ufvk, ...(ledger && { ...ledger, ledgerOvk: true }) },
+    {
+      serverUrl,
+      tAddresses,
+      mainnet,
+      ufvk,
+      ...(ledger && { ...ledger, ledgerOvk: true }),
+      cancelKey,
+    },
     walletId,
   );
 };

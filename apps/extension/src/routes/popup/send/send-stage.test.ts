@@ -44,10 +44,10 @@ describe('stageMeta', () => {
     expect(stageMeta(hot.slice(0, 6), 0, 2)).toBe('done');
   });
 
-  it('names the witness rebuild', () => {
-    const slow = [{ step: 'witness corrupt - rebuilding', detail: 'this takes ~3 min' }];
-    expect(stageMeta(slow, 1, 1)).toBe('rebuilding · about 3 min');
-    expect(stageExplain(slow, 1, true)).toMatch(/about 3 min/);
+  it('names the note-tree catch-up', () => {
+    const slow = [{ step: 'catch-up: start', detail: 'reason=moved from=1 to=9' }];
+    expect(stageMeta(slow, 1, 1)).toBe('catching up');
+    expect(stageExplain(slow, 1, true)).toMatch(/a little longer/);
   });
 
   it('says nothing it does not know', () => {

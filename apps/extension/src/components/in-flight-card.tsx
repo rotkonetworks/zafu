@@ -40,9 +40,11 @@ export const PendingLine = ({
 );
 
 export const InFlightCard = ({ children }: { children?: ReactNode }) => {
-  // a finished send was already announced once (toast or its own screen)
+  // a finished send was already announced once (toast or its own screen), and
+  // a stopped one was stopped by the person looking at this
   const ops = useTxOps().filter(
-    (op): op is TxOp & { status: Exclude<TxOp['status'], 'done'> } => op.status !== 'done',
+    (op): op is TxOp & { status: Exclude<TxOp['status'], 'done' | 'discarded'> } =>
+      op.status !== 'done' && op.status !== 'discarded',
   );
   if (!ops.length && !children) {
     return null;

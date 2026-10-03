@@ -38,7 +38,9 @@ export type MessageStatus =
   | 'pending'
   | 'confirmed'
   | 'failed'
-  | 'interrupted';
+  | 'interrupted'
+  /** stopped before it was broadcast: nothing was sent */
+  | 'discarded';
 
 export interface Message {
   id: string;
@@ -124,6 +126,12 @@ export interface MessagesSlice {
    * through broadcasting → pending, overwriting this state.
    */
   markOutgoingInterrupted: (txIdOrTempId: string, reason: string) => Promise<void>;
+
+  /**
+   * The person stopped this send before it was broadcast. Only a record still
+   * being built qualifies; one that already has a txid may be on chain.
+   */
+  markOutgoingDiscarded: (tempTxId: string) => Promise<void>;
 
   /** mark a message as read */
   markRead: (id: string) => Promise<void>;
@@ -366,6 +374,22 @@ export const createMessagesSlice =
           if (msg && (msg.status === 'submitting' || msg.status === 'broadcasting')) {
             msg.status = 'interrupted';
             msg.failureReason = reason;
+          }
+        });
+        await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
+      },
+
+      markOutgoingDiscarded: async tempTxId => {
+        set(state => {
+          const list = Array.isArray(state.messages.messages) ? state.messages.messages : [];
+          const msg = list.find(m => m.txId === tempTxId);
+          if (
+            msg &&
+            tempTxId.startsWith('temp:') &&
+            (msg.status === 'submitting' || msg.status === 'interrupted')
+          ) {
+            msg.status = 'discarded';
+            msg.failureReason = undefined;
           }
         });
         await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
