@@ -44,12 +44,12 @@ export const useIbcChains = () => {
         registryClient.remote.get(chainId),
         getPenumbraRoutes(),
       ]);
-      // The registry lists connections whose penumbra-side client has since
-      // expired (cosmoshub channel-0, osmosis channel-4...), and a withdraw
-      // over one of those can't be relayed. The channel pair therefore comes
-      // from the live routes the penumbra node reports, not the registry; a
-      // chain with no live route isn't offered. `launched` still decides which
-      // chains zafu supports at all.
+      // The channel pair is the one zafu's own chain config pins (the bundled
+      // or signed registry), never one the penumbra node reports: anyone can
+      // open a channel that claims a chain's id. The node's answers only take
+      // a pinned pair away once its client has expired - a withdraw over it
+      // couldn't be relayed - so such a chain isn't offered until it is live
+      // again. `launched` still decides which chains zafu supports at all.
       const active = new Set(getActiveIbcChainIds('penumbra'));
       return registry.ibcConnections.flatMap(chain => {
         const ours = Object.values(COSMOS_CHAINS).find(c => c.chainId === chain.chainId);

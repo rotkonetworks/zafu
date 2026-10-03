@@ -1,12 +1,16 @@
 import { useEffect } from 'react';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../state';
-import { startsOf } from '../penumbra/start';
+import { startsOf, type PenumbraStart } from '../penumbra/start';
+import { walletsWithStoredView } from '../penumbra/stored-views';
 import { askPenumbraStart } from '../components/wallet/penumbra-start-sheet';
 import { refreshEgress } from '../net/egress';
 import type { NetworkType } from '../state/keyring';
 import { isIbcNetwork } from '../state/keyring/network-types';
 import { getNetwork, getSubnetworks } from '../config/networks';
+
+/** a wallet with a stored height decrypts everything from there */
+const READ_ON: PenumbraStart = { since: 0 };
 
 /**
  * turning a network on also makes a top-level one the active network; an ibc
@@ -23,13 +27,19 @@ export const useEnableNetwork = () => {
     if (n === 'penumbra') {
       const starts = startsOf(await localExtStorage.get('penumbraStarts')) ?? {};
       const unasked = penumbraWallets.filter(w => !starts[w.id]);
-      const start = unasked.length ? await askPenumbraStart() : 'tip';
+      // the answer is only for wallets with nothing stored: one that already
+      // read part of the chain reads on from there, every block decrypted
+      const stored = await walletsWithStoredView(unasked.map(w => w.id));
+      const fresh = unasked.filter(w => !stored.has(w.id));
+      const start = fresh.length ? await askPenumbraStart() : 'tip';
       if (!start) {
         return;
       }
       await localExtStorage.set('penumbraStarts', {
         ...starts,
-        ...Object.fromEntries(unasked.map(w => [w.id, start])),
+        ...Object.fromEntries(
+          unasked.map(w => [w.id, stored.has(w.id) ? READ_ON : start] as const),
+        ),
       });
     }
     await toggleNetwork(n);

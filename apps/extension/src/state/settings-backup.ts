@@ -65,6 +65,12 @@ export const restoredPrivacy = (
   incoming: Partial<PrivacySettings> | undefined,
 ): PrivacySettings => {
   const next = { ...current };
+  // a backup from before storage v5 names penumbra's "keep syncing when
+  // closed" by its old, shared name
+  const legacy = (incoming as { enableBackgroundSync?: unknown } | undefined)?.enableBackgroundSync;
+  if (typeof legacy === 'boolean' && incoming?.keepPenumbraSyncing === undefined) {
+    next.keepPenumbraSyncing = legacy;
+  }
   for (const [k, v] of Object.entries(withoutProxy(incoming ?? {}))) {
     const key = k as keyof PrivacySettings;
     if (key in DEFAULT_PRIVACY_SETTINGS && typeof v === typeof DEFAULT_PRIVACY_SETTINGS[key]) {

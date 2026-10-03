@@ -75,7 +75,7 @@ export const SettingsPenumbraNetwork = () => {
   const disable = useDisableNetwork();
   const navigate = usePopupNav();
   const { totalIn, setTotalIn } = usePenumbraTotalIn();
-  const keepSyncing = useStore(s => s.privacy.settings.enableBackgroundSync);
+  const keepSyncing = useStore(s => s.privacy.settings.keepPenumbraSyncing);
   const setSetting = useStore(s => s.privacy.setSetting);
   const { explainProps, sheet: explainSheet } = useExplain();
 
@@ -117,7 +117,7 @@ export const SettingsPenumbraNetwork = () => {
             type='toggle'
             label='keep syncing when closed'
             checked={keepSyncing}
-            onChange={v => void setSetting('enableBackgroundSync', v)}
+            onChange={v => void setSetting('keepPenumbraSyncing', v)}
             {...explainProps('network.keepSyncingClosed')}
           />
         </RowGroup>

@@ -5,17 +5,18 @@
  * endpoint which transfer channels have an Active client; the result is kept in
  * chrome.storage.local and refreshed at most hourly. Every place that needs a
  * chain's channel pair (receive, shield-in, withdraw) goes through
- * `routeForChain`, so a stale pinned channel can't be used once discovery has
- * run.
+ * `routeForChain`. The pair always comes from the chain config (the bundled or
+ * signed registry); discovery can only take it away once its client expires,
+ * never offer another (see pinnedRouteStatus).
  *
- * Until the first discovery succeeds (fresh install, endpoint down) the chain
- * config's pinned channels are used, as before.
+ * Until the first discovery succeeds (fresh install, endpoint down) the pinned
+ * pairs are used, as before.
  */
 
 import { useEffect, useState } from 'react';
 import {
   discoverPenumbraRoutes,
-  selectPenumbraRoute,
+  pinnedRouteStatus,
   type PenumbraRoute,
 } from '@repo/wallet/networks/cosmos/penumbra-routes';
 import {
@@ -82,25 +83,51 @@ export const getPenumbraRoutes = async (): Promise<PenumbraRoute[] | undefined> 
 };
 
 /**
- * The route for one chain. With discovered routes: the live one (pin first),
- * or undefined if the chain has none. Without: the config's pinned pair.
+ * A chain's way into Penumbra right now:
+ * - 'active': the registry's pinned pair, with discovery reporting it Active
+ *   (or discovery has never run, so nothing has shown it expired);
+ * - 'inactive': the pinned pair is not Active, so nothing goes over it - and
+ *   nothing goes over any other channel instead (see pinnedRouteStatus);
+ * - 'none': the registry pins no pair for this chain.
+ */
+export type PenumbraRouteStatus =
+  | { status: 'active'; route: ChainRoute }
+  | { status: 'inactive' }
+  | { status: 'none' };
+
+export const penumbraRouteStatus = (
+  chainId: CosmosChainId,
+  routes: PenumbraRoute[] | undefined,
+): PenumbraRouteStatus => {
+  const cfg = getCosmosChain(chainId);
+  if (!cfg.penumbraSourceChannel || !cfg.penumbraChannel) {
+    return { status: 'none' };
+  }
+  const route = {
+    penumbraSourceChannel: cfg.penumbraSourceChannel,
+    penumbraChannel: cfg.penumbraChannel,
+  };
+  if (routes && pinnedRouteStatus(routes, route) !== 'active') {
+    return { status: 'inactive' };
+  }
+  return { status: 'active', route };
+};
+
+/**
+ * The route for one chain: always the registry's pinned pair, and only while
+ * it is usable. Undefined when the pin is not Active or there is none.
  */
 export const routeForChain = (
   chainId: CosmosChainId,
   routes: PenumbraRoute[] | undefined,
 ): ChainRoute | undefined => {
-  const cfg = getCosmosChain(chainId);
-  if (!routes) {
-    return cfg.penumbraSourceChannel && cfg.penumbraChannel
-      ? { penumbraSourceChannel: cfg.penumbraSourceChannel, penumbraChannel: cfg.penumbraChannel }
-      : undefined;
-  }
-  return selectPenumbraRoute(routes, cfg.chainId, cfg.penumbraSourceChannel);
+  const s = penumbraRouteStatus(chainId, routes);
+  return s.status === 'active' ? s.route : undefined;
 };
 
 /**
- * The chains to offer, in the given order: those with a live route, or with
- * pinned channels while discovery has never run.
+ * The chains to offer, in the given order: those whose pinned pair is live, or
+ * pinned at all while discovery has never run.
  */
 export const offeredChains = (
   chains: readonly CosmosChainId[],

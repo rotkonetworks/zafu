@@ -102,6 +102,7 @@ import { networkAllowsBackgroundSync } from './state/privacy';
 import { startUiOpenSession } from './ui-open-session';
 import { startPeopleRelay } from './people/sw';
 import { penumbraTiming } from './penumbra/timing';
+import { createChainCheck } from './penumbra/chain-check';
 import { requestStopAllSync } from './state/keyring/network-worker';
 import { stampSeenVersion } from './state/moved-notice';
 import { idleFor } from './state/idle-activity';
@@ -131,12 +132,21 @@ const penumbraSync = (act: 'pause' | 'resume') =>
 /** the user's "keep syncing when closed": penumbra alone may go on with every window closed */
 let keepPenumbraSyncing = false;
 const readKeepSyncing = () =>
-  void localExtStorage.get('privacySettings').then(p => {
-    keepPenumbraSyncing = p?.enableBackgroundSync === true;
-  });
-readKeepSyncing();
+  localExtStorage
+    .get('privacySettings')
+    .then(p => {
+      keepPenumbraSyncing = p?.keepPenumbraSyncing === true;
+    })
+    .catch(() => undefined);
+/**
+ * The first read of the setting. Services are only built once it has landed
+ * (see initHandler and rebuildServices): a block processor built before it
+ * would take every worker start - a browser restart, MV3 recycling the worker
+ * - for "keep syncing" off, and pause with every window closed.
+ */
+const keepSyncingRead = readKeepSyncing();
 chrome.storage.onChanged.addListener(
-  (c, area) => area === 'local' && 'privacySettings' in c && readKeepSyncing(),
+  (c, area) => void (area === 'local' && 'privacySettings' in c && readKeepSyncing()),
 );
 // zafu is fully closed: the offscreen-hosted zcash worker otherwise keeps
 // syncing (and polling mempool) with nobody watching. Stop network activity
@@ -175,12 +185,20 @@ const ui = startUiOpenSession(
  * rebuilds the services, and the held sync means the old chain's database
  * never reads a block of the new one.
  */
-let chainCheck: (() => Promise<void>) | undefined;
-const runChainCheck = () => {
-  const check = chainCheck;
-  chainCheck = undefined;
-  void check?.();
-};
+const chainCheck = createChainCheck({
+  windowOpen: () => ui.open,
+  refresh: async () => {
+    const t = performance.now();
+    try {
+      return await refreshPenumbraChainId();
+    } finally {
+      penumbraTiming('params refresh (node)', t);
+    }
+  },
+  rebuild: why => void reinitializeServices(why),
+  retryMs: 60_000,
+});
+const runChainCheck = chainCheck.run;
 
 /** a fresh block processor, before anything can start it */
 const onBlockProcessor = (bp: BlockProcessor, chain: { id: string; confirmed: boolean }) => {
@@ -189,24 +207,12 @@ const onBlockProcessor = (bp: BlockProcessor, chain: { id: string; confirmed: bo
     bp.pause();
   }
   if (chain.confirmed) {
-    chainCheck = undefined;
+    chainCheck.drop();
     return;
   }
-  const release = bp.hold();
-  chainCheck = async () => {
-    const t = performance.now();
-    const node = await refreshPenumbraChainId().catch(() => undefined);
-    penumbraTiming('params refresh (node)', t);
-    if (node && node !== chain.id) {
-      // the refresh stored the node's params, so the rebuild reads the new
-      // chain; this processor stays held until the rebuild stops it
-      console.warn(`[sync] the node serves ${node}, not ${chain.id}; rebuilding`);
-      void reinitializeServices('chain id changed');
-      return;
-    }
-    // confirmed, or the node did not answer: sync goes on as it would have
-    release();
-  };
+  // confirmed, or the node did not answer in time: sync goes on as it would
+  // have (see penumbra/chain-check.ts)
+  chainCheck.arm(chain.id, bp.hold());
 };
 
 // The graceful network-error handler (unhandledrejection + error) is registered
@@ -246,8 +252,12 @@ const settle = (
   rebuilds.setRunning(
     settledTarget({ ...target, chainId: r.chainId ?? target.chainId }, r.wallet?.id),
   );
-  // confirm the stored chain id now if a window is open, else on the next open
-  if (ui.open) {
+  // confirm the stored chain id now if a window is open, else on the next
+  // open. With "keep syncing when closed" on, now in any case: the hold would
+  // otherwise keep penumbra from syncing until a window opens, which is the
+  // one thing the setting promises not to do, and this is the one call to the
+  // node the user opted into.
+  if (ui.open || keepPenumbraSyncing) {
     runChainCheck();
   }
 };
@@ -275,7 +285,8 @@ const rebuildServices = async (target: PenumbraTarget, _previous: unknown, why: 
 
   currentSyncAbort = new AbortController();
   // the old services' chain check is moot: it must not ask a node for them
-  chainCheck = undefined;
+  chainCheck.drop();
+  await keepSyncingRead;
   walletServicesResult = startWalletServices(currentSyncAbort.signal, onBlockProcessor);
   walletServices = walletServicesResult.then(r => r.services);
   const result = await walletServicesResult;
@@ -410,6 +421,8 @@ const initHandler = async () => {
   const bootTarget = await desiredPenumbraTarget();
   rebuilds.setRunning(bootTarget);
   currentSyncAbort = new AbortController();
+  // the processor decides at birth whether to pause with every window closed
+  await keepSyncingRead;
   walletServicesResult = startWalletServices(currentSyncAbort.signal, onBlockProcessor);
   walletServices = walletServicesResult.then(r => r.services);
   // cache decrypted wallet as soon as it's available - unblocks RPC context getters
@@ -687,13 +700,16 @@ chrome.alarms.onAlarm.addListener(async alarm => {
     }
     // privacy check: shielded (penumbra, zcash) networks always sync - trial
     // decryption / p2p never leak addresses, so they have no toggle. Only
-    // transparent networks honor enableBackgroundSync.
+    // transparent networks honor transparentBackgroundSync (off unless set;
+    // penumbra's "keep syncing when closed" is its own setting since v5).
     // (Gating ALL sync on the raw flag wrongly disabled zcash background sync
     // with no way to re-enable it, since zcash shows no toggle.)
     const privacySettings = await localExtStorage.get('privacySettings');
     const activeNetwork = await localExtStorage.get('activeNetwork');
-    const enableBg = privacySettings?.enableBackgroundSync !== false;
-    const allowed = activeNetwork ? networkAllowsBackgroundSync(activeNetwork, enableBg) : enableBg;
+    const transparentBg = privacySettings?.transparentBackgroundSync === true;
+    const allowed = activeNetwork
+      ? networkAllowsBackgroundSync(activeNetwork, transparentBg)
+      : true;
     if (!allowed) {
       if (globalThis.__DEV__) {
         console.info('Background sync disabled by user privacy settings');

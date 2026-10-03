@@ -25,6 +25,7 @@ import {
   type PenumbraStart,
 } from './penumbra/start';
 import { penumbraTiming } from './penumbra/timing';
+import { walletsWithStoredView } from './penumbra/stored-views';
 import type { BlockProcessor } from '@penumbra-zone/query/block-processor';
 
 /**
@@ -135,7 +136,10 @@ export const startWalletServices = async (
   await adoptLegacy();
   // chosen as penumbra turns on; a wallet that came another way reads the whole chain
   let asked = startsOf(await localExtStorage.get('penumbraStarts'))?.[wallet.id];
-  if (!asked) {
+  // "sync from now" written for a wallet that already holds part of the
+  // chain (an older build asked for every wallet at once) would skip every
+  // block between its stored height and now: it reads on instead
+  if (!asked || (asked === 'tip' && (await walletsWithStoredView([wallet.id])).has(wallet.id))) {
     asked = { since: 0 };
     await setStart(wallet.id, asked);
   }
@@ -255,11 +259,11 @@ const storedParams = () =>
     .get('params')
     .then(json => (json ? AppParameters.fromJsonString(json) : undefined));
 
-const paramsAt = (baseUrl: string): ParamsSource => ({
+const paramsAt = (baseUrl: string, timeoutMs?: number): ParamsSource => ({
   stored: storedParams,
   fetch: () =>
     createClient(AppService, createGrpcWebTransport({ baseUrl }))
-      .appParameters({})
+      .appParameters({}, { timeoutMs })
       .then(({ appParameters }) => appParameters),
   save: params => localExtStorage.set('params', params.toJsonString()),
 });
@@ -289,11 +293,28 @@ export const startChainId = async (
 };
 
 /**
- * Ask the node for its params after the services are up, and store them when
- * they changed. The node's chain id, or undefined when it did not answer.
+ * How long the chain-id check waits for the node. A node that takes the
+ * connection and never answers would otherwise keep sync held for the life of
+ * the worker.
  */
-export const refreshChainId = async (source: ParamsSource): Promise<string | undefined> => {
-  const fetched = await source.fetch().catch(() => undefined);
+export const CHAIN_CHECK_TIMEOUT_MS = 15_000;
+
+/**
+ * Ask the node for its params after the services are up, and store them when
+ * they changed. The node's chain id, or undefined when it did not answer in
+ * time.
+ */
+export const refreshChainId = async (
+  source: ParamsSource,
+  timeoutMs = CHAIN_CHECK_TIMEOUT_MS,
+): Promise<string | undefined> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<undefined>(resolve => {
+    timer = setTimeout(() => resolve(undefined), timeoutMs);
+  });
+  const fetched = await Promise.race([source.fetch().catch(() => undefined), late]).finally(() =>
+    clearTimeout(timer),
+  );
   if (!fetched?.chainId) {
     return undefined;
   }
@@ -305,7 +326,7 @@ export const refreshChainId = async (source: ParamsSource): Promise<string | und
 };
 
 export const refreshPenumbraChainId = async () =>
-  refreshChainId(paramsAt(await resolvePenumbraEndpoint()));
+  refreshChainId(paramsAt(await resolvePenumbraEndpoint(), CHAIN_CHECK_TIMEOUT_MS));
 
 /** the chain id of the stored params, without asking anyone */
 export const storedPenumbraChainId = async () =>
