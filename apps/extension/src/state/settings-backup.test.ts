@@ -50,6 +50,12 @@ describe('settings backup', () => {
     expect(next.proxy).toEqual(DEFAULT_PRIVACY_SETTINGS.proxy);
   });
 
+  it("a backup from before v5 restores penumbra's keep-syncing from the old shared name", () => {
+    const legacy = { enableBackgroundSync: true } as never;
+    expect(restoredPrivacy(DEFAULT_PRIVACY_SETTINGS, legacy).keepPenumbraSyncing).toBe(true);
+    expect(restoredPrivacy(DEFAULT_PRIVACY_SETTINGS, legacy).transparentBackgroundSync).toBe(false);
+  });
+
   it('writes back only the preferences a backup has', async () => {
     await importPrefs({
       zafuFont: 'system',

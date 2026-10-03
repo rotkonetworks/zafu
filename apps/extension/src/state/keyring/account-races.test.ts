@@ -182,7 +182,7 @@ describe('erase', () => {
     const reload = vi.fn();
     const rt = chrome.runtime as unknown as Record<string, unknown>;
     rt['reload'] = reload;
-    await chrome.storage.local.set({ zafuTheme: 'washi', dbVersion: 4, vaults: [{ id: 'v' }] });
+    await chrome.storage.local.set({ zafuTheme: 'washi', dbVersion: 5, vaults: [{ id: 'v' }] });
     const outcome = await Promise.race([
       nukeAllWalletData(sessionExtStorage, localExtStorage, '/welcome/import').then(() => 'done'),
       new Promise(r => setTimeout(() => r('restarting'), 100)),
@@ -193,7 +193,7 @@ describe('erase', () => {
     expect(left).toMatchObject({
       pendingWipe: { then: '/welcome/import' },
       zafuTheme: 'washi',
-      dbVersion: 4,
+      dbVersion: 5,
     });
     expect(left['vaults']).toBeUndefined();
 
