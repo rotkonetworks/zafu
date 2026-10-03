@@ -17,6 +17,10 @@ vi.mock('../../../net/egress-opt-in', async orig => ({
     return Promise.resolve(false);
   },
 }));
+vi.mock('../../../state/swap/near', async orig => ({
+  ...(await orig<object>()),
+  nearPrices: () => Promise.resolve(new Map()),
+}));
 vi.mock('../../../state/keyring', async orig => ({
   ...(await orig<object>()),
   selectActiveNetwork: () => 'zcash',

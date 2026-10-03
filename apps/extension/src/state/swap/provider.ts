@@ -32,6 +32,13 @@ export interface QuoteRequest {
   signsOpReturn?: boolean;
   /** a price only: no deposit address is issued (1click's dry quote) */
   dry?: boolean;
+  /**
+   * decimal, in the asset received: quote by what arrives instead. `amountIn`
+   * is then only a hint (the other field's last figure)
+   */
+  exactOut?: string;
+  /** out of zec: the ZIP-317 fee of the shielded send to the deposit, in zat (a string: it is stored) */
+  sourceFeeZat?: string;
 }
 
 /** one part of what a swap costs: a share of what is paid, and its worth in the destination asset */
@@ -81,6 +88,13 @@ export interface Quote {
   atLeastText?: string;
   /** one honest line when the swap streams for hours */
   streamLine?: string;
+  /**
+   * what arrives against what is paid, both at market prices from 1click's
+   * list, in bps (negative is lost); absent when no market price is known
+   */
+  vsMarketBps?: number;
+  /** quoted by what arrives through probes (a route with no exact-output mode): "about" */
+  approx?: true;
   /** ms epoch */
   expiresAt?: number;
   /** where the source asset goes; empty on a dry quote */
@@ -109,6 +123,8 @@ export interface SwapProvider {
   /** what the token picker offers; may ask for this route's egress */
   tokens: () => Promise<SwapToken[]>;
   quote: (req: QuoteRequest, signal?: AbortSignal) => Promise<Quote>;
+  /** quotes `exactOut` itself; any other route is inverted by probes */
+  exactOut?: true;
   /** absent when the route can't be watched from here; `txid` for `watch: 'txid'` quotes */
   status?: (quote: Quote, txid?: string) => Promise<SwapStatusView>;
 }
@@ -118,6 +134,16 @@ export const durationText = (seconds: number): string =>
   seconds < 3600
     ? `~${Math.max(1, Math.round(seconds / 60))} min`
     : `about ${Math.round(seconds / 3600)} h`;
+
+/**
+ * An amount as shown: six significant figures (every whole digit kept),
+ * rounded down so it never says more than arrives. Exact units stay inside.
+ */
+export const figure = (units: bigint, decimals: number, sig = 6): string => {
+  const digits = units.toString().length;
+  const cut = 10n ** BigInt(Math.max(0, digits - Math.max(sig, digits - decimals)));
+  return fromUnits((units / cut) * cut, decimals, decimals);
+};
 
 /** base units for a decimal string, exact (no float) */
 export const toUnits = (text: string, decimals: number): bigint => {

@@ -12,6 +12,7 @@ import { isEgressBlocked } from '../../net/egress';
 import { EGRESS_INPUT_KEYS, type DestinationView } from '../../net/egress-policy';
 import { NEAR_QUOTE_WAIT_MS } from '../near-swap';
 import { PROVIDERS } from '.';
+import { quoteRoute } from './market';
 import { fromUnits, toUnits, type Quote, type QuoteRequest, type SwapToken } from './provider';
 import { OFFERED, ROUTES, type RouteId, type SwapPair } from './routes';
 
@@ -122,14 +123,15 @@ export const quoteQuery = (route: RouteId, wallet: string, req: QuoteRequest) =>
     req.direction,
     req.token.symbol,
     req.token.chain,
-    req.amountIn,
+    // by what arrives, the paid figure is only a hint
+    req.exactOut ? `out:${req.exactOut}` : req.amountIn,
     req.otherAddress,
     !!req.zcashTransparent,
     !!req.signsOpReturn,
   ];
   return queryOptions({
     queryKey,
-    queryFn: ({ signal }) => PROVIDERS[route]!.quote({ ...req, dry: true }, signal),
+    queryFn: ({ signal }) => quoteRoute(PROVIDERS[route]!, { ...req, dry: true }, signal),
     retry: false,
     staleTime: REFRESH_MS,
     // seen again: a stale price is asked at once; hidden, the refresh waits

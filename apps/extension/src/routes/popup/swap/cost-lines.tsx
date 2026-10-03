@@ -2,7 +2,7 @@
 
 import { Sensitive } from '../../../components/sensitive';
 import { ZAFU_BETA_FREE, zafuListBps } from '../../../config/swap-fee';
-import { fromUnits, pct, type Cost, type CostPart } from '../../../state/swap/provider';
+import { figure, pct, type Cost, type CostPart } from '../../../state/swap/provider';
 
 /**
  * zafu's rate: the normal rate struck through, the beta price, and how much
@@ -32,7 +32,7 @@ const Rate = ({ part }: { part: CostPart }) =>
 export const CostMeta = ({ cost, unit, decimals }: Units & { cost: Cost }) => (
   <>
     <span>
-      total ≈ {pct(cost.bps)} · <Sensitive>{`${fromUnits(cost.out, decimals)} ${unit}`}</Sensitive>
+      total ≈ {pct(cost.bps)} · <Sensitive>{`${figure(cost.out, decimals)} ${unit}`}</Sensitive>
     </span>
     {cost.parts.map(p => (
       <span key={p.label}>
@@ -50,7 +50,7 @@ interface Units {
 /** review and receipt: the total, each part listed under it */
 export const CostList = ({ cost, unit, decimals }: Units & { cost: Cost }) => {
   const worth = (p: { out: bigint; inText?: string }) =>
-    p.inText ?? `${fromUnits(p.out, decimals)} ${unit}`;
+    p.inText ?? `${figure(p.out, decimals)} ${unit}`;
   return (
     <>
       {[{ label: 'total ≈', bps: cost.bps, out: cost.out } as CostPart, ...cost.parts].map(

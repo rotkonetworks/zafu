@@ -23,6 +23,7 @@ import {
   toUnits,
   costOf,
   durationText,
+  figure,
   type Cost,
   type Quote,
   type SwapProvider,
@@ -404,7 +405,7 @@ export const nodeProvider = (chain: NodeChain): SwapProvider => {
       return {
         route: chain.id,
         amountOut,
-        amountOutText: fromUnits(amountOut, outDecimals),
+        amountOutText: figure(amountOut, outDecimals),
         amountInText: fromUnits(amount, NODE_DECIMALS),
         cost: nodeCost(name, q, into, inUnit, amount, outDecimals, zafuBps),
         // a streamed swap can stop part way, and the chain sends the rest back
@@ -417,7 +418,7 @@ export const nodeProvider = (chain: NodeChain): SwapProvider => {
             ? `use a fast fee · ${q.recommended_gas_rate} ${gas?.unit ?? q.gas_rate_units ?? ''}`.trim()
             : undefined,
         timeText: q.total_swap_seconds ? durationText(q.total_swap_seconds) : undefined,
-        atLeastText: fromUnits(rescale(memoLimit(q.memo), NODE_DECIMALS, outDecimals), outDecimals),
+        atLeastText: figure(rescale(memoLimit(q.memo), NODE_DECIMALS, outDecimals), outDecimals),
         streamLine:
           (q.streaming_swap_blocks ?? 0) > 1 && (q.total_swap_seconds ?? 0) >= 3600
             ? `streams over ${durationText(q.total_swap_seconds!)} · unfilled parts come back`

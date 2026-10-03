@@ -575,7 +575,7 @@ describe('maya', () => {
     expect(quote).toMatchObject({
       route: 'maya',
       amountOut: 63_176_359n,
-      amountOutText: '0.63176359',
+      amountOutText: '0.631763',
       timeText: '~10 min',
       depositAddress: MAYA_BTC_VAULT,
       memo: `=:z:${T}:400000000/1/0`,
@@ -652,6 +652,7 @@ describe('near intents', () => {
       destinationAsset: 'nep141:zec.omft.near',
       recipient: 'u1shieldedexample',
       refundTo: 'bc1qrefundexample',
+      slippageTolerance: 100,
       appFeeBps: 0,
     });
     expect(quote).toMatchObject({
@@ -671,6 +672,59 @@ describe('near intents', () => {
         refundTo: 'u1shieldedexample',
       }),
     );
+  });
+
+  it("asks 1click's slippage of 1% outright, and shows its floor as at least", async () => {
+    near.requestQuote.mockResolvedValue({
+      ...nearQuote,
+      quote: { ...nearQuote.quote, minAmountOut: '410850000' },
+    });
+    const quote = await nearProvider.quote(req());
+    expect(near.requestQuote).toHaveBeenLastCalledWith(
+      expect.objectContaining({ slippageTolerance: 100, swapType: 'EXACT_INPUT' }),
+    );
+    expect(quote.atLeastText).toBe('4.1085');
+  });
+
+  it('quotes by what arrives: exact output, and the deposit it asks for', async () => {
+    // recorded 2026-10-04: 0.05 eth out of zec asks 0.10497108 zec in (the excess comes back)
+    near.requestQuote.mockResolvedValue({
+      ...nearQuote,
+      quote: {
+        ...nearQuote.quote,
+        amountIn: '10497108',
+        amountInFormatted: '0.10497108',
+        minAmountIn: '10392136',
+        amountOut: '50000000000000000',
+        amountOutFormatted: '0.05',
+        minAmountOut: '50000000000000000',
+      },
+    });
+    const eth = {
+      assetId: 'nep141:eth.omft.near',
+      decimals: 18,
+      blockchain: 'eth',
+      symbol: 'ETH',
+      price: 1,
+    };
+    near.getSupportedTokens.mockResolvedValue([...nearTokens, eth]);
+    vi.setSystemTime(NOW * 1000 + 301_000); // past the cached token list
+    const quote = await nearProvider.quote(
+      req({
+        direction: 'from_zec',
+        token: { symbol: 'ETH', chain: 'eth', decimals: 18 },
+        exactOut: '0.05',
+        otherAddress: '0xdest',
+      }),
+    );
+    expect(near.requestQuote).toHaveBeenLastCalledWith(
+      expect.objectContaining({ swapType: 'EXACT_OUTPUT', amount: '50000000000000000' }),
+    );
+    expect(quote).toMatchObject({
+      amountInText: '0.10497108',
+      amountOutText: '0.05',
+      atLeastText: '0.05',
+    });
   });
 
   it('asks for an 18-decimal amount exactly', async () => {
@@ -858,8 +912,8 @@ describe('thorchain streaming, minimums and price limits', () => {
     expect(asks[1]!.get('streaming_quantity')).toBe('1080');
     expect(asks[1]!.get('liquidity_tolerance_bps')).toBe('300');
     expect(quote).toMatchObject({
-      amountOutText: '6.43267087',
-      atLeastText: '6.23969074',
+      amountOutText: '6.43267',
+      atLeastText: '6.23969',
       memo: `=:z:${T}:623969074/1/1080:zafu:20`,
       timeText: 'about 2 h',
       streamLine: 'streams over about 2 h · unfilled parts come back',
@@ -889,7 +943,7 @@ describe('thorchain streaming, minimums and price limits', () => {
     node(() => [200, live1]);
     const quote = await thorProvider.quote(req({ amountIn: '1', otherAddress: '' }));
     expect(quote).toMatchObject({
-      atLeastText: '62.94550476',
+      atLeastText: '62.9455',
       timeText: 'about 24 h',
       streamLine: 'streams over about 24 h · unfilled parts come back',
     });
