@@ -18,6 +18,7 @@ export const ZignerRow = () => {
       type='value'
       label='zigner'
       value={paired ? 'paired' : 'not paired'}
+      preload={PopupPath.SETTINGS_ZIGNER}
       onPress={() => navigate(PopupPath.SETTINGS_ZIGNER)}
     />
   );
@@ -30,6 +31,7 @@ export const AboutRow = () => {
       type='value'
       label='about'
       value={chrome.runtime.getManifest().version}
+      preload={PopupPath.SETTINGS_ABOUT}
       onPress={() => navigate(PopupPath.SETTINGS_ABOUT)}
     />
   );
@@ -56,6 +58,7 @@ export const SettingsDevicesHome = () => {
           <Row
             type='screen'
             label='device update'
+            preload={PopupPath.SETTINGS_OTA}
             onPress={() => navigate(PopupPath.SETTINGS_OTA)}
           />
         </Section>
@@ -66,6 +69,7 @@ export const SettingsDevicesHome = () => {
           <Row
             type='screen'
             label='features'
+            preload={PopupPath.SETTINGS_FEATURES}
             onPress={() => navigate(PopupPath.SETTINGS_FEATURES)}
           />
           <AboutRow />
@@ -75,6 +79,7 @@ export const SettingsDevicesHome = () => {
           <Row
             type='screen'
             label='wallets & networks'
+            preload={PopupPath.SETTINGS_WALLETS}
             onPress={() => navigate(PopupPath.SETTINGS_WALLETS)}
           />
         </Section>

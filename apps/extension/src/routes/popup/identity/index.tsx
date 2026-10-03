@@ -267,12 +267,14 @@ export const IdentityPage = () => {
             type='value'
             label='sites that know you'
             value={String(sites.length)}
+            preload={PopupPath.IDENTITY_SITES}
             onPress={() => navigate(PopupPath.IDENTITY_SITES)}
           />
           <Row
             type='value'
             label='passkeys and passwords'
             value={passkeys ? `${passkeys} passkey${passkeys === 1 ? '' : 's'}` : undefined}
+            preload={PopupPath.PASSWORDS}
             onPress={() => navigate(PopupPath.PASSWORDS)}
           />
           <Row
@@ -295,6 +297,7 @@ export const IdentityPage = () => {
           <Row
             type='screen'
             label='all identity controls'
+            preload={PopupPath.IDENTITY_CONTROLS}
             onPress={() => navigate(PopupPath.IDENTITY_CONTROLS)}
           />
         </RowGroup>

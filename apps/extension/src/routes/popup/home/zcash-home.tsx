@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -21,8 +22,13 @@ import { PopupPath } from '../paths';
 import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
 import { useTransparentBalance } from '../../../hooks/zcash-transparent-balance';
-import { getBalanceInWorker, type HistoryEntry } from '../../../state/keyring/network-worker';
-import { usePendingSends, usePoolBalances } from '../../../hooks/zcash-pool-balances';
+import type { HistoryEntry } from '../../../state/keyring/network-worker';
+import {
+  EMPTY_POOL_BALANCES,
+  useWorkerValue,
+  zcashBirthdayQuery,
+  zcashWorkerQuery,
+} from '../../../hooks/zcash-pool-balances';
 import { ShieldTransparent } from '../../../components/zcash/shield-transparent';
 import { InFlightCard, PendingLine } from '../../../components/in-flight-card';
 import { IRONWOOD_MIGRATION, nu63ActivationHeight } from '../../../config/feature-flags';
@@ -43,6 +49,8 @@ import type { BalanceView } from '../../../components/wallet/balance-hero';
 import { MultisigOverview } from './multisig-overview';
 
 const zec = (zat: bigint) => fmtZecHero(Number(zat) / 1e8);
+
+const NO_PENDING: HistoryEntry[] = [];
 
 /** BigInt() throws on a malformed amount string from an older record */
 const zatOf = (s: string | undefined): bigint => {
@@ -82,6 +90,7 @@ export const ZcashContent = ({
     failure: syncFailure,
   } = useZcashSyncStatus();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const penumbraOnly = useStore(selectPenumbraOnly);
@@ -101,73 +110,43 @@ export const ZcashContent = ({
   const { findByAddress } = useStore(contactsSelector);
   const [shieldOpen, setShieldOpen] = useState(false);
 
-  // shielded balance from worker (zatoshi string)
-  const [shieldedZat, setShieldedZat] = useState(0n);
-  // Whether that figure means anything yet. `0n` is both "no funds" and "not
-  // asked yet"; conflating them rendered a bare dash that read as "your
-  // money is gone".
-  const [balanceState, setBalanceState] = useState<'loading' | 'ready' | 'error'>('loading');
+  // shielded balance from the worker, cached per pocket store and re-read on
+  // sync progress and height changes. No figure yet is "loading" (`0n` is
+  // both "no funds" and "not asked yet"; conflating them read as "your money
+  // is gone"); a failed re-read keeps the figure it had. A pocket switch keeps
+  // the last pocket's figure on screen, dimmed, until this pocket's lands
+  // (the pocket sheet's intent preload usually has it cached already).
+  const balance = useWorkerValue(
+    { ...zcashWorkerQuery.balance(storeId), placeholderData: keepPreviousData },
+    workerSyncHeight,
+  );
+  const shieldedZat = balance.data ?? 0n;
+  const balanceState = balance.data !== undefined ? 'ready' : balance.isError ? 'error' : 'loading';
 
   // wallet birthday - used to show progress relative to start, not block 0
-  const [walletBirthday, setWalletBirthday] = useState(0);
-  useEffect(() => {
-    if (!hasWallet || !selectedKeyInfo) {
-      return;
-    }
-    const key = `zcashBirthday_${selectedKeyInfo.id}`;
-    chrome.storage.local.get(key, r => {
-      if (typeof r[key] === 'number') {
-        setWalletBirthday(r[key]);
-      }
-    });
-  }, [hasWallet, selectedKeyInfo?.id]);
-
-  // sync lifecycle is managed by useZcashAutoSync in PopupLayout; this reads
-  // status and balance, re-fetched on sync progress and height changes
-  useEffect(() => {
-    if (!storeId) {
-      return;
-    }
-
-    const fetchBalance = () => {
-      getBalanceInWorker('zcash', storeId)
-        .then(bal => {
-          setShieldedZat(BigInt(bal));
-          setBalanceState('ready');
-        })
-        .catch(() => {
-          // keep a figure we already had - a worker hiccup is not evidence
-          // the balance changed - but stop presenting it as current
-          setBalanceState(prev => (prev === 'ready' ? 'ready' : 'error'));
-        });
-    };
-
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.network !== 'zcash') {
-        return;
-      }
-      if (detail.walletId && detail.walletId !== storeId) {
-        return;
-      }
-      fetchBalance();
-    };
-
-    window.addEventListener('network-sync-progress', handler);
-    fetchBalance();
-    return () => window.removeEventListener('network-sync-progress', handler);
-  }, [storeId, workerSyncHeight]);
+  const birthdayQuery = zcashBirthdayQuery(hasWallet ? selectedKeyInfo?.id : undefined);
+  const walletBirthday = useQuery(birthdayQuery).data ?? 0;
 
   // derive transparent addresses for UTXO lookup (shared hook with caching)
-  const { tAddresses } = useTransparentAddresses(isMainnet);
-  const { totalZat: transparentZat, isLoading: utxoLoading } = useTransparentBalance(tAddresses);
+  const { tAddresses, isLoading: tAddrLoading } = useTransparentAddresses(isMainnet);
+  const transparent = useTransparentBalance(tAddresses, tAddrLoading || tAddresses.length > 0);
+  const { totalZat: transparentZat, isLoading: utxoLoading } = transparent;
 
   // per-pool split (orchard legacy / ironwood active)
-  const pools = usePoolBalances(storeId, workerSyncHeight);
+  const poolsQ = useWorkerValue(
+    { ...zcashWorkerQuery.pools(storeId), placeholderData: keepPreviousData },
+    workerSyncHeight,
+  );
+  const pools = poolsQ.data ?? EMPTY_POOL_BALANCES;
 
   // Sends broadcast but not confirmed. Their inputs are already deducted from
   // the figure (markNotesSpentLocally runs at broadcast); these lines say why.
-  const pendingSends = usePendingSends(storeId, workerSyncHeight);
+  // Never another pocket's: these are not carried over a switch.
+  const pendingSends =
+    useWorkerValue(zcashWorkerQuery.pending(storeId), workerSyncHeight).data ?? NO_PENDING;
+
+  // the figures still show the pocket switched away from: dimmed, never current
+  const held = balance.isPlaceholderData || poolsQ.isPlaceholderData || transparent.held;
 
   // NU6.3 turnstile migration flow (feature-flagged; see feature-flags.ts)
   const [showIronwoodMigrate, setShowIronwoodMigrate] = useState(false);
@@ -179,9 +158,8 @@ export const ZcashContent = ({
     void rescanZcash(h)
       .then(height => {
         if (height !== undefined) {
-          setWalletBirthday(height);
-          setShieldedZat(0n);
-          setBalanceState('loading');
+          queryClient.setQueryData(birthdayQuery.queryKey, height);
+          void queryClient.resetQueries({ queryKey: zcashWorkerQuery.balance(storeId).queryKey });
         }
       })
       .catch(err => console.error('[zcash] rescan failed:', err));
@@ -223,8 +201,9 @@ export const ZcashContent = ({
   // server's own pipeline says nothing about this wallet's balance.
   const overallPct = caughtUp ? 100 : Math.min(100, (scanProgress / scanRange) * 100);
 
-  const balanceView: BalanceView =
-    balanceState === 'error' && totalZat === 0n
+  const balanceView: BalanceView = held
+    ? 'held'
+    : balanceState === 'error' && totalZat === 0n
       ? 'error'
       : balanceState === 'loading' && totalZat === 0n
         ? 'loading'
@@ -353,7 +332,7 @@ export const ZcashContent = ({
       {reading || balanceView === 'error' ? null : empty ? (
         <EmptyBox look={HOME_LOOK.zcash} />
       ) : (
-        <BalanceGroup heading={HOME_LOOK.zcash.heading}>
+        <BalanceGroup heading={HOME_LOOK.zcash.heading} held={held}>
           <BalanceRow
             tile={<Tile tone='accent'>z</Tile>}
             label='shielded'

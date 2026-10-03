@@ -10,6 +10,7 @@ import { AppHeader } from '../../components/app-header';
 import { TxTrackerWatcher } from '../../components/tx-tracker-watcher';
 import { PopupPath } from './paths';
 import { schedulePreloadAllScreens } from './route-modules';
+import { intentHandlers, navTimingOn, Painted } from './preload';
 import { useStore } from '../../state';
 import { selectActiveNetwork, selectPenumbraAccount } from '../../state/keyring';
 
@@ -59,7 +60,11 @@ export const PopupLayout = () => {
     <div
       data-network={activeNetwork}
       className='relative flex h-full flex-col bg-canvas contain-layout overflow-hidden'
+      // intent preloading: every nav primitive inside (sheets too, through
+      // React's portal bubbling) announces its target as data-preload
+      {...intentHandlers}
     >
+      {navTimingOn && <Painted target={location.pathname} />}
       {showChrome && <AppHeader />}
       <div
         className='min-h-0 flex-1 overflow-y-auto transform-gpu'

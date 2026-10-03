@@ -26,6 +26,7 @@ const ChainRow = ({ chain }: { chain: (typeof CHAINS)[number] }) => {
       type='value'
       label={chain.label}
       value={on ? (endpoint && hostOf(endpoint)) || 'auto' : 'turn on'}
+      preload={on ? chain.screen : undefined}
       onPress={() => (on ? navigate(chain.screen) : void enable(chain.id))}
     />
   );
@@ -54,6 +55,7 @@ export const SettingsNetworks = () => {
             <Row
               type='screen'
               label='voting endpoints'
+              preload={PopupPath.SETTINGS_VOTING}
               onPress={() => navigate(PopupPath.SETTINGS_VOTING)}
             />
           </Section>

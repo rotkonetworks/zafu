@@ -73,6 +73,7 @@ const CategoryCard = ({ c }: { c: (typeof CATEGORIES)[number] }) => {
   return (
     <button
       type='button'
+      data-preload={c.href}
       onClick={() => navigate(c.href)}
       className='flex w-full items-center gap-3.5 border border-border-soft bg-elev-1 p-4 text-left transition-colors hover:bg-elev-2'
     >

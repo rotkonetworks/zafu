@@ -6,8 +6,8 @@ import { PEER_REFERRAL_CODE, PEER_REFERRAL_URL } from '../../../config/ramps';
 import { BalanceHero, type BalanceView } from '../../../components/wallet/balance-hero';
 import { PopupPath } from '../paths';
 import { HomeActions } from './actions';
-import { useSwapPreload } from '../../../hooks/swap-preload';
 import type { HomeLook } from './look';
+import { navTimingOn, Painted } from '../preload';
 
 /**
  * One home for every shielded network (boards Main, HomeSync, HomePenumbra):
@@ -59,21 +59,24 @@ export const HomeScreen = ({
 /** the first-funds box, in place of the balance rows */
 export const EmptyBox = ({ look }: { look: HomeLook }) => {
   const navigate = useNavigate();
-  const preloadSwap = useSwapPreload();
   const [buying, setBuying] = useState(false);
   return (
     <section className='flex flex-1 flex-col items-center justify-center gap-3.5 border border-dashed border-surface-border py-10'>
       <span className='font-display text-xl text-fg-high'>{look.empty}</span>
       <div className='flex gap-2'>
-        <Button className='h-10 px-[18px] text-[13px]' onClick={() => navigate(PopupPath.RECEIVE)}>
+        <Button
+          className='h-10 px-[18px] text-[13px]'
+          data-preload={PopupPath.RECEIVE}
+          onClick={() => navigate(PopupPath.RECEIVE)}
+        >
           {look.receive}
         </Button>
         {look.swapInto && (
           <Button
             variant='secondary'
             className='h-10 px-[18px] text-[13px]'
+            data-preload={PopupPath.SWAP}
             onClick={() => navigate(PopupPath.SWAP)}
-            {...preloadSwap}
           >
             {look.swapInto}
           </Button>
@@ -82,6 +85,7 @@ export const EmptyBox = ({ look }: { look: HomeLook }) => {
       {look.buy && (
         <button
           type='button'
+          data-preload='sheet:buy'
           onClick={() => setBuying(true)}
           className='text-xs text-fg-muted underline-offset-4 hover:text-fg-high hover:underline'
         >
@@ -90,6 +94,7 @@ export const EmptyBox = ({ look }: { look: HomeLook }) => {
       )}
       {look.buy && (
         <Sheet open={buying} onOpenChange={setBuying} title={look.buy}>
+          {buying && navTimingOn && <Painted target='sheet:buy' />}
           <ol className='flex flex-col gap-3'>
             <li className='flex flex-col gap-2 border border-border-soft bg-elev-1 p-3'>
               <span className='text-sm text-fg-high'>1 · buy usdc on peer</span>
@@ -109,8 +114,8 @@ export const EmptyBox = ({ look }: { look: HomeLook }) => {
               <span className='text-sm text-fg-high'>2 · swap it into zec</span>
               <Button
                 className='h-10 text-[13px]'
+                data-preload={PopupPath.SWAP}
                 onClick={() => navigate(PopupPath.SWAP)}
-                {...preloadSwap}
               >
                 {look.swapInto ?? 'swap'}
               </Button>

@@ -133,6 +133,7 @@ export const SettingsPassphrase = () => {
             <Button
               variant='secondary'
               className='w-[110px]'
+              data-preload={PopupPath.SETTINGS_SECURITY}
               onClick={() => navigate(PopupPath.SETTINGS_SECURITY)}
             >
               not now
@@ -142,7 +143,11 @@ export const SettingsPassphrase = () => {
             </Button>
           </>
         ) : (
-          <Button className='flex-1' onClick={() => navigate(PopupPath.SETTINGS_SECURITY)}>
+          <Button
+            className='flex-1'
+            data-preload={PopupPath.SETTINGS_SECURITY}
+            onClick={() => navigate(PopupPath.SETTINGS_SECURITY)}
+          >
             done
           </Button>
         )}

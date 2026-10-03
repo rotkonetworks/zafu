@@ -20,6 +20,7 @@ const LinkChip = ({ uri }: { uri: string }) => {
   return (
     <button
       type='button'
+      data-preload={PopupPath.LINK}
       onClick={() => navigate(PopupPath.LINK, { state: { uri, via: 'message' } })}
       title={uri}
       className='my-0.5 inline-flex items-center gap-1 border border-zigner-gold/40 bg-zigner-gold/10 px-2 py-0.5 text-xs text-zigner-gold hover:bg-zigner-gold/20'

@@ -131,6 +131,7 @@ export const SettingsRemoveWallet = () => {
             {needsPhraseTick && (
               <button
                 type='button'
+                data-preload={PopupPath.SETTINGS_RECOVERY_PASSPHRASE}
                 onClick={() => navigate(PopupPath.SETTINGS_RECOVERY_PASSPHRASE)}
                 className='self-start text-label text-fg-muted underline-offset-2 hover:underline'
               >
@@ -205,6 +206,7 @@ export const SettingsRemoveWallet = () => {
             variant='secondary'
             size='md'
             className='w-full'
+            data-preload={PopupPath.SETTINGS}
             onClick={() => navigate(PopupPath.SETTINGS)}
           >
             back to settings

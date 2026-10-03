@@ -1,4 +1,6 @@
 import type { ComponentType } from 'react';
+import type { QueryClient } from '@tanstack/react-query';
+import type { AllSlices } from '../../state';
 
 type Load = () => Promise<ComponentType>;
 
@@ -103,18 +105,42 @@ export const popupScreens = {
 
 export type PopupScreen = keyof typeof popupScreens;
 
+/** what a route's preload is handed: the query cache, the store as it is now, the target's params */
+export interface PreloadCtx {
+  client: QueryClient;
+  state: AllSlices;
+  params: Readonly<Record<string, string | undefined>>;
+  search: URLSearchParams;
+}
+
 /**
- * Route-level `lazy` for a screen. The data router resolves it before it
- * commits the navigation, so the current screen stays up until the next one
- * is ready - no Suspense fallback flash in between.
+ * A route's data preload: warm the queries the screen will read, with the
+ * keys it reads them by. Local reads (storage, IndexedDB, the zcash worker,
+ * the view service) are free; the network only for a destination that is
+ * already allowed and that the screen contacts the moment it opens - never an
+ * egress ask, never a destination not yet allowed.
  */
-export const lazyScreen = (screen: PopupScreen) => async () => ({
-  Component: await popupScreens[screen](),
+export type Preload = (ctx: PreloadCtx) => unknown;
+
+/** what a route declares in its `handle`: its chunk and its data */
+export interface PreloadHandle {
+  screen?: PopupScreen;
+  preload?: Preload;
+}
+
+/**
+ * A lazily loaded route: its chunk (route-level `lazy`, which the data router
+ * resolves before it commits, so the current screen stays up until the next
+ * one is ready) and, optionally, its data preload. Intent fires both.
+ */
+export const screen = (name: PopupScreen, preload?: Preload) => ({
+  lazy: async () => ({ Component: await popupScreens[name]() }),
+  handle: { screen: name, preload } satisfies PreloadHandle,
 });
 
-/** warm one screen's chunk (e.g. on pointerdown); failures surface on navigation */
-export const preloadScreen = (screen: PopupScreen): void => {
-  void popupScreens[screen]().catch(() => undefined);
+/** warm one screen's chunk; failures surface on navigation */
+export const preloadScreen = (name: PopupScreen): void => {
+  void popupScreens[name]().catch(() => undefined);
 };
 
 let preloadScheduled = false;

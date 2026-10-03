@@ -40,6 +40,7 @@ import {
 } from '../../../components/wallet/balance-rows';
 import { useOpenIntent } from '../../../hooks/open-link';
 import { useTransparent } from './transparent-lines';
+import { PopupPath } from '../paths';
 import { homeFixture } from './fixture';
 import type { BalanceView } from '../../../components/wallet/balance-hero';
 
@@ -120,11 +121,18 @@ export const TokenSheet = ({
                   type='screen'
                   icon={icon}
                   label={`${action} ${symbol}`}
+                  preload={action === 'swap' ? PopupPath.SWAP : PopupPath.SEND}
                   onPress={() => move(action)}
                 />
               ))}
             {shield && (
-              <Row type='screen' icon={shield.icon} label={shield.label} onPress={shield.onPress} />
+              <Row
+                type='screen'
+                icon={shield.icon}
+                label={shield.label}
+                preload={PopupPath.SEND}
+                onPress={shield.onPress}
+              />
             )}
             {/* a bridged asset's base denom (transfer/channel-24/uusdt): tells
                 a power user which chain's wrapped USDT (or similar) this is,

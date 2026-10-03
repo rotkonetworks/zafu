@@ -23,12 +23,3 @@ export const usePreloadBalances = (account = 0) => {
     });
   }, [queryClient, account]);
 };
-
-/**
- * preload route components
- * call this on likely navigation targets
- */
-export const preloadRoute = (importFn: () => Promise<unknown>) => {
-  // trigger dynamic import in background
-  void importFn();
-};
