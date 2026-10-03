@@ -202,6 +202,9 @@ export function GroupInvitePage() {
                 <span className='text-[11px] text-fg-muted'>
                   works for 1h · you allow each person
                 </span>
+                <span className='text-[11px] text-fg-dim'>
+                  anyone with the code sees the group's name and who asks · the invite stays sealed
+                </span>
               </>
             ) : (
               <div className='flex items-center justify-between gap-3'>
