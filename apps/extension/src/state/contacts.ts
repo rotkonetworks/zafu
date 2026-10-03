@@ -6,6 +6,7 @@
  */
 
 import { readPasswordLogins, restorePasswordLogins } from './password-logins';
+import { readYourAddresses, restoreYourAddresses } from './your-addresses';
 import type { AllSlices, SliceCreator } from '.';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
@@ -38,7 +39,7 @@ import type { PrivacySettings } from './privacy';
 export interface PersonalDataBackup {
   version: 4;
   exportedAt: number;
-  /** encrypted { contacts, sent, txNotes, pockets, egress, settings, walletNames, passwordLogins } JSON */
+  /** encrypted { contacts, sent, txNotes, pockets, egress, settings, walletNames, passwordLogins, yourAddresses } JSON */
   data: BoxJson;
   keyPrint: KeyPrintJson;
 }
@@ -54,7 +55,9 @@ export type ContactNetwork =
   | 'base'
   | 'arbitrum'
   | 'avalanche'
-  | 'polygon';
+  | 'polygon'
+  | 'optimism'
+  | 'bsc';
 
 /** a single address entry within a contact */
 export interface ContactAddress {
@@ -632,11 +635,13 @@ export const createContactsSlice =
           get().keyRing.keyInfos.map(k => [pocketOwner(k), k.name]),
         );
         const passwordLogins = await readPasswordLogins();
+        const yourAddresses = await readYourAddresses();
         // rooms you are in and their relay history, capped per thread
         const people = await readPeopleBackup();
         const plaintext = JSON.stringify({
           people,
           passwordLogins,
+          yourAddresses,
           contacts,
           sent,
           txNotes,
@@ -684,6 +689,8 @@ export const createContactsSlice =
           walletNames?: Record<string, string>;
           /** the passwords tool's saved logins (absent in older backups) */
           passwordLogins?: unknown;
+          /** your own addresses on other chains (absent in older backups) */
+          yourAddresses?: unknown;
           /** people rooms and relay history (absent in older backups) */
           people?: unknown;
         };
@@ -716,6 +723,9 @@ export const createContactsSlice =
         await importEgressChoices(parsed.egress);
         if (parsed.passwordLogins !== undefined) {
           await restorePasswordLogins(parsed.passwordLogins, mode);
+        }
+        if (parsed.yourAddresses !== undefined) {
+          await restoreYourAddresses(parsed.yourAddresses, mode);
         }
         if (parsed.people !== undefined) {
           await restorePeopleBackup(parsed.people, mode);

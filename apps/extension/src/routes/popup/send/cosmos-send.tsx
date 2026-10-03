@@ -49,7 +49,7 @@ import { useCopy } from '@repo/ui/hooks/use-copy';
 import { ScreenHeader } from '../../../components/screen-header';
 import { SaveContactModal } from '../../../components/save-contact-modal';
 import { Done, Footer, Helper, Main, Review, Sending, Stopped } from './send-ui';
-import { AmountField, ContactsSheet, PickSheet, ToField } from './send-fields';
+import { AmountField, AddressSheet, PickSheet, ToField } from './send-fields';
 import { STAGES } from './send-stage';
 import { useChainInUse } from '../../../hooks/enable-network';
 
@@ -892,8 +892,8 @@ export function CosmosSend({
             setRecipient('');
           }}
         />
-        <ContactsSheet
-          network='cosmos'
+        <AddressSheet
+          chain='cosmos'
           open={pick === 'book'}
           onOpenChange={o => setPick(o ? 'book' : undefined)}
           onPick={row => setRecipient(row.address)}

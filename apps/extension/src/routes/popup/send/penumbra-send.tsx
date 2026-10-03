@@ -21,7 +21,7 @@ import { SaveContactModal } from '../../../components/save-contact-modal';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { EMPTY_BALANCES } from './shared';
 import { Footer, Main, shortAddress } from './send-ui';
-import { AmountField, ContactsSheet, ToField } from './send-fields';
+import { AmountField, AddressSheet, ToField } from './send-fields';
 import { BalanceSheet, balanceLook } from './balance-sheet';
 import { PenumbraFlow } from './penumbra-flow';
 
@@ -228,10 +228,11 @@ export function PenumbraSend({
               }
             }}
           />
-          <ContactsSheet
-            network='penumbra'
+          <AddressSheet
+            chain='penumbra'
             open={bookOpen}
             onOpenChange={setBookOpen}
+            onScan={() => setScanOpen(true)}
             onPick={row => sendState.setRecipient(row.address)}
           />
           {scanOpen && (

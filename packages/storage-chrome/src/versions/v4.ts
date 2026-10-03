@@ -300,6 +300,17 @@ type LOCAL = {
     savedAt: number;
   }[];
 
+  /**
+   * your own addresses on other chains, per wallet (owner = zid or vault id),
+   * offered again in swap fields. sealed at rest (ENCRYPTED_KEYS).
+   */
+  yourAddresses?: {
+    owner: string;
+    chain: string;
+    address: string;
+    savedAt: number;
+  }[];
+
   autoLockMinutes?: number;
 
   zafuTheme?: 'sumi' | 'washi' | 'terminal';
