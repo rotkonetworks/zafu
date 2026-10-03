@@ -255,11 +255,11 @@ const storedParams = () =>
     .get('params')
     .then(json => (json ? AppParameters.fromJsonString(json) : undefined));
 
-const paramsAt = (baseUrl: string): ParamsSource => ({
+const paramsAt = (baseUrl: string, timeoutMs?: number): ParamsSource => ({
   stored: storedParams,
   fetch: () =>
     createClient(AppService, createGrpcWebTransport({ baseUrl }))
-      .appParameters({})
+      .appParameters({}, { timeoutMs })
       .then(({ appParameters }) => appParameters),
   save: params => localExtStorage.set('params', params.toJsonString()),
 });
@@ -289,11 +289,28 @@ export const startChainId = async (
 };
 
 /**
- * Ask the node for its params after the services are up, and store them when
- * they changed. The node's chain id, or undefined when it did not answer.
+ * How long the chain-id check waits for the node. A node that takes the
+ * connection and never answers would otherwise keep sync held for the life of
+ * the worker.
  */
-export const refreshChainId = async (source: ParamsSource): Promise<string | undefined> => {
-  const fetched = await source.fetch().catch(() => undefined);
+export const CHAIN_CHECK_TIMEOUT_MS = 15_000;
+
+/**
+ * Ask the node for its params after the services are up, and store them when
+ * they changed. The node's chain id, or undefined when it did not answer in
+ * time.
+ */
+export const refreshChainId = async (
+  source: ParamsSource,
+  timeoutMs = CHAIN_CHECK_TIMEOUT_MS,
+): Promise<string | undefined> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<undefined>(resolve => {
+    timer = setTimeout(() => resolve(undefined), timeoutMs);
+  });
+  const fetched = await Promise.race([source.fetch().catch(() => undefined), late]).finally(() =>
+    clearTimeout(timer),
+  );
   if (!fetched?.chainId) {
     return undefined;
   }
@@ -305,7 +322,7 @@ export const refreshChainId = async (source: ParamsSource): Promise<string | und
 };
 
 export const refreshPenumbraChainId = async () =>
-  refreshChainId(paramsAt(await resolvePenumbraEndpoint()));
+  refreshChainId(paramsAt(await resolvePenumbraEndpoint(), CHAIN_CHECK_TIMEOUT_MS));
 
 /** the chain id of the stored params, without asking anyone */
 export const storedPenumbraChainId = async () =>

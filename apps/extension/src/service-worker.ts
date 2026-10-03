@@ -102,6 +102,7 @@ import { networkAllowsBackgroundSync } from './state/privacy';
 import { startUiOpenSession } from './ui-open-session';
 import { startPeopleRelay } from './people/sw';
 import { penumbraTiming } from './penumbra/timing';
+import { createChainCheck } from './penumbra/chain-check';
 import { requestStopAllSync } from './state/keyring/network-worker';
 import { stampSeenVersion } from './state/moved-notice';
 
@@ -168,12 +169,20 @@ const ui = startUiOpenSession(
  * rebuilds the services, and the held sync means the old chain's database
  * never reads a block of the new one.
  */
-let chainCheck: (() => Promise<void>) | undefined;
-const runChainCheck = () => {
-  const check = chainCheck;
-  chainCheck = undefined;
-  void check?.();
-};
+const chainCheck = createChainCheck({
+  windowOpen: () => ui.open,
+  refresh: async () => {
+    const t = performance.now();
+    try {
+      return await refreshPenumbraChainId();
+    } finally {
+      penumbraTiming('params refresh (node)', t);
+    }
+  },
+  rebuild: why => void reinitializeServices(why),
+  retryMs: 60_000,
+});
+const runChainCheck = chainCheck.run;
 
 /** a fresh block processor, before anything can start it */
 const onBlockProcessor = (bp: BlockProcessor, chain: { id: string; confirmed: boolean }) => {
@@ -182,24 +191,12 @@ const onBlockProcessor = (bp: BlockProcessor, chain: { id: string; confirmed: bo
     bp.pause();
   }
   if (chain.confirmed) {
-    chainCheck = undefined;
+    chainCheck.drop();
     return;
   }
-  const release = bp.hold();
-  chainCheck = async () => {
-    const t = performance.now();
-    const node = await refreshPenumbraChainId().catch(() => undefined);
-    penumbraTiming('params refresh (node)', t);
-    if (node && node !== chain.id) {
-      // the refresh stored the node's params, so the rebuild reads the new
-      // chain; this processor stays held until the rebuild stops it
-      console.warn(`[sync] the node serves ${node}, not ${chain.id}; rebuilding`);
-      void reinitializeServices('chain id changed');
-      return;
-    }
-    // confirmed, or the node did not answer: sync goes on as it would have
-    release();
-  };
+  // confirmed, or the node did not answer in time: sync goes on as it would
+  // have (see penumbra/chain-check.ts)
+  chainCheck.arm(chain.id, bp.hold());
 };
 
 // The graceful network-error handler (unhandledrejection + error) is registered
@@ -268,7 +265,7 @@ const rebuildServices = async (target: PenumbraTarget, _previous: unknown, why: 
 
   currentSyncAbort = new AbortController();
   // the old services' chain check is moot: it must not ask a node for them
-  chainCheck = undefined;
+  chainCheck.drop();
   walletServicesResult = startWalletServices(currentSyncAbort.signal, onBlockProcessor);
   walletServices = walletServicesResult.then(r => r.services);
   const result = await walletServicesResult;

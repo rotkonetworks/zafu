@@ -121,6 +121,15 @@ describe('params come from storage first', () => {
     expect(moved.saved()?.chainId).toBe('penumbra-2');
   });
 
+  it('a node that takes the connection and never answers is given up on', async () => {
+    const never = {
+      stored: () => Promise.resolve(new AppParameters({ chainId: 'penumbra-1' })),
+      fetch: () => new Promise<AppParameters | undefined>(() => undefined),
+      save: () => Promise.resolve(),
+    };
+    expect(await refreshChainId(never, 20)).toBeUndefined();
+  });
+
   it('a node that does not answer leaves the stored params alone', async () => {
     const s = source('penumbra-1', new Error('down'));
     expect(await refreshChainId(s.source)).toBeUndefined();
