@@ -15,7 +15,11 @@ vi.mock('../../config/swap-fee', async orig => {
   return {
     ...real,
     zafuListBps: () => real.zafuListBps(fee.recipient),
-    zafuFeeBps: (route: string) => real.zafuFeeBps(route, real.zafuListBps(fee.recipient)),
+    // near's recipient is switched per test; thorchain's affiliate is real
+    zafuFeeBps: (route: string) =>
+      route === 'near'
+        ? real.zafuFeeBps(route, real.zafuListBps(fee.recipient))
+        : real.zafuFeeBps(route),
   };
 });
 
@@ -408,7 +412,7 @@ describe('thorchain', () => {
     await expect(dust).rejects.toThrow('thorchain swaps 0.00010001 zec or more');
   });
 
-  it('costs a swap from the quote: the fee in, thorchain, and zafu at 0', async () => {
+  it('costs a swap from the quote: the fee in, thorchain, and zafu as the quote took it', async () => {
     thornode(thorQuote());
     const quote = await thorProvider.quote(req());
     // 750 sat of 0.01 btc is 7.5 bps, rounded up and worth 750 sat at the pre-fee rate;
@@ -429,10 +433,24 @@ describe('thorchain', () => {
     });
     expect(quote.gasLine).toBe('use a fast fee · 3 sat/byte');
     expect(quote.refundLine).toBeUndefined();
-    // no affiliate is ever asked for
-    const urls = thornode(thorQuote());
-    await thorProvider.quote(req());
-    expect(urls.join()).not.toContain('affiliate');
+    // zafu's affiliate is asked for, and the memo the quote returns (the one signed) carries it
+    const memo = `=:z:${T}:0/1/0:zafu:20`;
+    const urls = thornode(
+      thorQuote(),
+      inbound(),
+      thorQuote({ memo, fees: { ...thorQuote().fees, affiliate: '82400', total: '154225' } }),
+    );
+    const paid = await thorProvider.quote(req());
+    const asked = new URL(urls.find(u => u.includes('/quote/swap'))!).searchParams;
+    expect([asked.get('affiliate'), asked.get('affiliate_bps')]).toEqual(['zafu', '20']);
+    expect(paid.memo).toBe(memo);
+    expect(paid.memo).toContain(':zafu:20');
+    expect(paid.cost?.parts.at(-1)).toEqual({
+      label: 'zafu fee',
+      bps: 20,
+      out: 82_400n,
+      zafu: true,
+    });
 
     // zec out: zafu's own zip-317 fee is priced on the deposit step, not here
     expect(thorCost(thorQuote(), false, 'zec', 100_000_000n, 8).parts.map(p => p.label)).toEqual([
@@ -681,8 +699,8 @@ describe('near intents', () => {
   it("charges zafu's app fee at full price once a recipient is set", async () => {
     fee.recipient = 'zafu.near';
     const quote = await nearProvider.quote(req());
-    expect(near.requestQuote).toHaveBeenLastCalledWith(expect.objectContaining({ appFeeBps: 10 }));
-    expect(quote.cost?.parts.at(-1)).toMatchObject({ label: 'zafu fee', bps: 10, zafu: true });
+    expect(near.requestQuote).toHaveBeenLastCalledWith(expect.objectContaining({ appFeeBps: 20 }));
+    expect(quote.cost?.parts.at(-1)).toMatchObject({ label: 'zafu fee', bps: 20, zafu: true });
   });
 
   it("splits a 1click quote's cost into near's and zafu's, from its own prices", () => {
@@ -714,15 +732,16 @@ describe('near intents', () => {
 });
 
 describe("zafu's fee", () => {
-  it('is the near rate less any discount, inert without a recipient, and 0 on thorchain', async () => {
-    const { zafuFeeBps, zafuListBps } =
+  it('is one beta rate on every route that can be paid, from the normal rate, inert without a recipient', async () => {
+    const { zafuFeeBps, zafuListBps, ZAFU_FEE_OFF_PCT, NEAR_APP_FEE_BPS, THOR_AFFILIATE_BPS } =
       await vi.importActual<typeof import('../../config/swap-fee')>('../../config/swap-fee');
-    expect(zafuListBps('', 10)).toBe(0);
-    expect(zafuListBps('zafu.near', 10)).toBe(10);
-    expect(zafuFeeBps('near', 10)).toBe(10);
-    expect(zafuFeeBps('near', 10, 50)).toBe(5);
-    expect(zafuFeeBps('thor', 10)).toBe(0);
+    expect(zafuListBps('')).toBe(0);
+    expect(zafuListBps('zafu.near')).toBe(50);
+    expect(zafuFeeBps('near')).toBe(20);
+    expect(zafuFeeBps('thor')).toBe(20);
+    expect(zafuFeeBps('maya')).toBe(0);
     expect(zafuFeeBps('near', 0)).toBe(0);
+    expect([NEAR_APP_FEE_BPS, THOR_AFFILIATE_BPS, ZAFU_FEE_OFF_PCT]).toEqual([20, 20, 60]);
   });
 
   it('adds every part into an estimated total', () => {

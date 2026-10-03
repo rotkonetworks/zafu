@@ -1,14 +1,22 @@
 /**
- * zafu's own fee on swaps. Production lists NEAR_APP_FEE_BPS on near intents
- * routes and charges it less NEAR_APP_FEE_OFF_PCT, as a 1click app fee; thorchain carries none, since its own
- * dynamic minimum fee is how it competes. Every build charges the same; the
- * discount is the beta price, so the rate can rise later.
+ * zafu's own fee on swaps: one rate on every route, the single source the
+ * swap and buy flows both import. ZAFU_LIST_FEE_BPS is the normal rate, shown
+ * struck through; ZAFU_FEE_BPS is what this build charges (the beta price,
+ * so the rate can rise later). On near intents it is a 1click app fee; on
+ * thorchain it is an affiliate fee paid to the THORName `zafu` (in rune).
+ * Maya carries none.
  */
 
-export const NEAR_APP_FEE_BPS = 10;
+/** the normal rate, shown struck through beside the beta price */
+export const ZAFU_LIST_FEE_BPS = 50;
 
-/** the launch discount on that rate, shown as the list rate struck through */
-export const NEAR_APP_FEE_OFF_PCT = 0;
+/** what zafu charges on every route in this build */
+export const ZAFU_FEE_BPS = 20;
+
+/** the beta discount, derived from the two rates above (60) */
+export const ZAFU_FEE_OFF_PCT = Math.round(100 - (ZAFU_FEE_BPS * 100) / ZAFU_LIST_FEE_BPS);
+
+export const NEAR_APP_FEE_BPS = ZAFU_FEE_BPS;
 
 /**
  * The near account that receives the app fee (the same account the 1click
@@ -17,13 +25,17 @@ export const NEAR_APP_FEE_OFF_PCT = 0;
 export const NEAR_APP_FEE_RECIPIENT =
   'bdb384d8c6273bf4e40757d57d49ff7931c12b4ddaa838c323e4f93a7263744f';
 
-/** what the production build really charges on near: nothing without a recipient */
-export const zafuListBps = (recipient = NEAR_APP_FEE_RECIPIENT, bps = NEAR_APP_FEE_BPS): number =>
-  recipient ? bps : 0;
+/** zafu's THORName (owner thor1qnulc66wrfycz6takz9xqdvdmpk9kgd5rzy80k, paid in rune) */
+export const THOR_AFFILIATE = 'zafu';
+export const THOR_AFFILIATE_BPS = ZAFU_FEE_BPS;
+
+/** who receives zafu's fee on each route; a route without one charges nothing */
+const FEE_TO: Record<string, string> = { near: NEAR_APP_FEE_RECIPIENT, thor: THOR_AFFILIATE };
+
+/** the normal rate where a fee can be paid: nothing without a recipient */
+export const zafuListBps = (recipient = NEAR_APP_FEE_RECIPIENT): number =>
+  recipient ? ZAFU_LIST_FEE_BPS : 0;
 
 /** zafu's fee on a route in this build */
-export const zafuFeeBps = (
-  route: string,
-  list = zafuListBps(),
-  off = NEAR_APP_FEE_OFF_PCT,
-): number => (route !== 'near' ? 0 : Math.round((list * (100 - off)) / 100));
+export const zafuFeeBps = (route: string, list = zafuListBps(FEE_TO[route] ?? '')): number =>
+  Math.round((list * ZAFU_FEE_BPS) / ZAFU_LIST_FEE_BPS);

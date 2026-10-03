@@ -14,6 +14,7 @@
  * All amounts are 1e8 fixed point, whatever the asset's decimals.
  */
 
+import { zafuFeeBps } from '../../config/swap-fee';
 import { requestEgressOptIn } from '../../net/egress-opt-in';
 import { ThornodeRefusal, thornodeGet } from '../../services/thornode';
 import {
@@ -44,6 +45,8 @@ export interface NodeChain {
   urls: string[];
   /** name the payer's refund address in the memo; else the chain refunds whoever paid */
   refundInMemo: boolean;
+  /** zafu's THORName on this chain: its fee rides in the memo the quote returns */
+  affiliate?: string;
 }
 
 export interface InboundAddress {
@@ -247,7 +250,8 @@ export const inboundFee = (q: NodeQuote): bigint | undefined => {
 /**
  * What a swap costs, from the quote: the inbound fee the payer sets on the
  * source chain (the only computed part: txSize x gasRate), the chain's own
- * liquidity and outbound fees, and zafu's (none: no affiliate is sent).
+ * liquidity and outbound fees, and zafu's affiliate fee as the quote charged
+ * it (`zafuBps` is the rate asked for; none shows when the quote took none).
  * Shares are of what is paid; values are in the destination asset.
  */
 export const nodeCost = (
@@ -257,6 +261,7 @@ export const nodeCost = (
   inUnit: string,
   amountIn: bigint,
   outDecimals: number,
+  zafuBps = 0,
 ): Cost => {
   const out = (x: bigint) => rescale(x, NODE_DECIMALS, outDecimals);
   const expected = BigInt(q.expected_amount_out);
@@ -277,7 +282,12 @@ export const nodeCost = (
         ]
       : []),
     { label: name, bps: share(routeOut, gross), out: out(routeOut) },
-    { label: 'zafu fee', bps: 0, out: 0n, zafu: true },
+    ((zafu: bigint) => ({
+      label: 'zafu fee',
+      bps: zafu ? zafuBps : 0,
+      out: out(zafu),
+      zafu: true,
+    }))(BigInt(q.fees.affiliate ?? 0)),
   ]);
 };
 
@@ -323,6 +333,11 @@ export const nodeProvider = (chain: NodeChain): SwapProvider => {
       if (into && chain.refundInMemo && !OP_RETURN_CHAINS.has(sourceChain)) {
         query.set('refund_address', req.otherAddress);
       }
+      const zafuBps = chain.affiliate ? zafuFeeBps(chain.id) : 0;
+      if (zafuBps) {
+        query.set('affiliate', chain.affiliate!);
+        query.set('affiliate_bps', String(zafuBps));
+      }
       const unitIn = (into ? req.token.symbol : 'zec').toLowerCase();
       // the node's own words never reach the screen
       const plainly = (e: unknown) => {
@@ -347,7 +362,7 @@ export const nodeProvider = (chain: NodeChain): SwapProvider => {
         amountOut,
         amountOutText: fromUnits(amountOut, outDecimals),
         amountInText: fromUnits(amount, NODE_DECIMALS),
-        cost: nodeCost(name, q, into, inUnit, amount, outDecimals),
+        cost: nodeCost(name, q, into, inUnit, amount, outDecimals, zafuBps),
         // a streamed swap can stop part way, and the chain sends the rest back
         refundLine:
           (q.max_streaming_quantity ?? 1) > 1 && source.outbound_fee
