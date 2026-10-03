@@ -26,6 +26,8 @@ export type NetPurpose =
   | 'vote'
   /** swap aggregators (NEAR 1Click) */
   | 'swap'
+  /** a buy: peer's quotes and verifier, and the payment app it reads once */
+  | 'buy'
   /** extension update manifests */
   | 'ota'
   /** license/zid server */
@@ -45,6 +47,7 @@ export const NET_PURPOSES: readonly NetPurpose[] = [
   'price',
   'vote',
   'swap',
+  'buy',
   'ota',
   'license',
   'attest',
@@ -65,6 +68,7 @@ export const NET_PURPOSE_LABEL: Record<NetPurpose, string> = {
   price: 'fetch fiat prices',
   vote: 'cast and read governance votes',
   swap: 'quote and execute swaps',
+  buy: 'buy zec with cash',
   ota: 'check for extension updates',
   license: 'verify your license',
   attest: 'fetch proving parameters',

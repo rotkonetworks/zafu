@@ -39,3 +39,31 @@ export const peerBuyUrl = (o: {
   }
   return `https://app.peer.xyz/swap?${p.toString()}`;
 };
+
+/** Peer's curator (quotes, intent signing) and its payment verifier */
+export const PEER_API = 'https://api.zkp2p.xyz';
+export const PEER_ATTESTATION = 'https://attestation-service.zkp2p.xyz';
+export const PEER_HOSTS = [PEER_API, PEER_ATTESTATION];
+
+/** Base's public rpc: reads, and the person's own transactions */
+export const BASE_RPC = 'https://mainnet.base.org';
+
+/** zafu's gas sponsor: a few cents of eth so a fresh base address can signal */
+export const BASE_GAS_SPONSOR = 'https://sponsor.zafu.pro/base/gas';
+
+/**
+ * zafu's fee on a buy, paid by the buyer through signalIntent `referralFees`
+ * (Peer's curator adds it to the quote). One fee per buy: the swap leg after
+ * it carries no zafu fee. List rate struck through, then what beta charges.
+ */
+export {
+  ZAFU_LIST_FEE_BPS as ZAFU_BUY_FEE_BPS_LIST,
+  ZAFU_FEE_BPS as ZAFU_BUY_FEE_BPS,
+} from './swap-fee';
+
+/**
+ * The zafu-owned Base address that receives the buy fee. The founder provides
+ * it; until then it is null and a buy signals with no zafu fee entry and shows
+ * no zafu line. Never invent one.
+ */
+export const ZAFU_BUY_FEE_RECIPIENT: `0x${string}` | null = null;

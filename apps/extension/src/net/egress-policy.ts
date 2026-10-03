@@ -36,6 +36,8 @@ import { ZCASH_MAINNET_ENDPOINTS, defaultZcashEndpoint } from '../config/zcash-e
 import { BUNDLED_SERVICE_CONFIG } from '../services/voting/bundled-config';
 import { pickIndependentPeer } from '../workers/cross-verify';
 import { MAYA_ENABLED } from '../config/feature-flags';
+import { BASE_RPC, PEER_HOSTS } from '../config/ramps';
+import { PAY_APPS } from '../buy/apps';
 import { hostOf } from './destination';
 import { matchRules, type EgressRule, type EgressTable } from './egress-table';
 import type { NetPurpose } from './purpose';
@@ -294,9 +296,34 @@ export const DESTINATIONS: DestinationSpec[] = [
         s => s.url,
       ),
   },
+  // buying zec with cash: asked once, together, on the buy page's first screen
+  {
+    id: 'peer',
+    label: 'peer',
+    purpose: 'buy',
+    gate: { kind: 'optional' },
+    urls: () => PEER_HOSTS,
+  },
+  {
+    id: 'base',
+    label: 'base network',
+    purpose: 'buy',
+    gate: { kind: 'optional' },
+    urls: () => [BASE_RPC],
+  },
+  // the app a buy reads once, to find the payment: allowed at that tap
+  ...PAY_APPS.filter(a => a.hosts.length).map(
+    (a): DestinationSpec => ({
+      id: `pay-${a.id}`,
+      label: a.name,
+      purpose: 'buy',
+      gate: { kind: 'optional' },
+      urls: () => a.hosts.map(h => `https://${h}`),
+    }),
+  ),
   {
     id: 'sponsor',
-    label: 'injective gas sponsor',
+    label: 'zafu gas sponsor',
     purpose: 'chain-rpc',
     gate: { kind: 'optional' },
     urls: () => ['https://sponsor.zafu.pro'],
