@@ -86,10 +86,26 @@ import {
 } from '../state/sync-failure';
 import { startRun, stopRun, STOP_WAIT_MS, type RunSlot } from './sync-runs';
 import { mergeLoadedNotes, mergeLoadedSpent } from './wallet-state-merge';
+import { createBuildRegistry } from './build-abort';
 
 export type { SentTxRecord } from './sent-tx-reconcile';
 
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
+
+/** builds a page may stop before they broadcast (see build-abort.ts) */
+const builds = createBuildRegistry();
+
+/** a build's progress label for its page, in the send-progress shape */
+const buildProgress =
+  (walletId: string | undefined, start = performance.now()) =>
+  (step: string, detail?: string) =>
+    workerSelf.postMessage({
+      type: 'send-progress',
+      id: '',
+      network: 'zcash',
+      walletId,
+      payload: { step, detail, elapsedMs: Math.round(performance.now() - start) },
+    });
 
 // One line per real worker boot, for counting live instances (should be
 // exactly one, hosted in the offscreen document - see network-worker.ts).
@@ -164,6 +180,7 @@ interface WorkerMessage {
     | 'get-balance'
     | 'get-pool-balances'
     | 'send-tx'
+    | 'build-stop'
     | 'send-tx-multi'
     | 'send-tx-complete'
     | 'send-tx-pczt'
@@ -4851,9 +4868,17 @@ const getPoolBalances = async (walletId: string): Promise<PoolBalances> => {
 
 workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
   const { type, id, walletId, payload } = e.data;
+  // a build that can be stopped carries the key its page chose
+  const cancelKey = (payload as { cancelKey?: unknown } | undefined)?.cancelKey;
 
   try {
     switch (type) {
+      case 'build-stop': {
+        const { key } = payload as { key: string };
+        workerSelf.postMessage({ type: 'result', id, network: 'zcash', payload: builds.stop(key) });
+        return;
+      }
+
       case 'init':
         await initWasm();
         workerSelf.postMessage({ type: 'ready', id, network: 'zcash' });
@@ -6066,7 +6091,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           /** hot wallet: the sealed vault this worker opens itself */
           vault?: SealedVault;
           ufvk?: string;
+          /** the page's key for stopping this build before it broadcasts */
+          cancelKey?: string;
         };
+        const build = builds.begin(sendPayload.cancelKey);
         // a hot build signs with the account of the store its notes come from
         const spendAccount = sendPayload.vault
           ? hotSpendAccount(walletId, sendPayload.accountIndex)
@@ -6119,7 +6147,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const sendClient = makeZcashClient(sendPayload.serverUrl);
 
         emitProgress('fetching chain tip');
-        const sendTip = await sendClient.getTip();
+        const sendTip = await build.race(sendClient.getTip());
 
         // ── NU6.3 spend-pool selection ──────────────────────────────────────
         // Post-NU6.3 (synced tip >= activation height) orchard-to-orchard sends
@@ -6197,7 +6225,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         emitProgress('building merkle witnesses', `anchor=${anchorHeight} (tip=${sendTip.height})`);
         const witnessStart = performance.now();
 
-        const { anchorHex, paths } = await buildWitnesses(
+        const witnessing = buildWitnesses(
           sendClient,
           walletId,
           selected,
@@ -6205,6 +6233,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           sendActivePool,
           emitProgress,
         );
+        const { anchorHex, paths } = await build.race(witnessing);
 
         const witnessDuration = ((performance.now() - witnessStart) / 1000).toFixed(1);
         emitProgress('witnesses built', `${witnessDuration}s`);
@@ -6217,7 +6246,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // here, in this worker, and broadcast.
           if (sendActivePool === 'ironwood') {
             emitProgress('checking NU6.3 activation');
-            const iwLightdInfo = await sendClient.getLightdInfo();
+            const iwLightdInfo = await build.race(sendClient.getLightdInfo());
             const iwReportedBranchHex = (iwLightdInfo.consensusBranchId || '')
               .trim()
               .toLowerCase()
@@ -6273,7 +6302,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             try {
               // expected_branch_id is the live value validated above; the
               // producer refuses to build unless the branch id it binds equals it.
-              iwTxHex = await withSpendKeys(
+              const iwSigning = withSpendKeys(
                 wasmModule.SpendKeys,
                 sendPayload.vault,
                 spendAccount,
@@ -6299,6 +6328,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                   return keys.sign_pczt(built.retained_pczt_hex);
                 },
               );
+              iwTxHex = await build.race(iwSigning);
             } catch (e) {
               // message only, never the caught args
               console.error(
@@ -6311,6 +6341,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             }
 
             emitProgress('ironwood tx signed', `${iwTxHex.length / 2} bytes`);
+            // the point of no return: a stop from here on is refused
+            build.commit();
             emitProgress('broadcasting transaction');
             const iwTxData = hexDecode(iwTxHex);
             const iwBroadcastClient = makeZcashClient(sendPayload.serverUrl);
@@ -6377,7 +6409,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
           let txHex: string;
           try {
-            txHex = await withSpendKeys(
+            const signing = withSpendKeys(
               wasmModule.SpendKeys,
               sendPayload.vault,
               spendAccount,
@@ -6401,6 +6433,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 return keys.sign_pczt(built.pczt_hex);
               },
             );
+            txHex = await build.race(signing);
           } catch (e) {
             console.error(
               '[zcash-worker] orchard hot send failed:',
@@ -6414,7 +6447,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           const proveDuration = ((performance.now() - proveStart) / 1000).toFixed(1);
           emitProgress('transaction proved', `${proveDuration}s, ${txHex.length / 2} bytes`);
 
-          // broadcast
+          // broadcast; the point of no return: a stop from here on is refused
+          build.commit();
           emitProgress('broadcasting transaction');
           const txData = hexDecode(txHex);
           const broadcastClient = makeZcashClient(sendPayload.serverUrl);
@@ -6498,10 +6532,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }));
 
         // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe)
-        const sendBranchIdHex = await fetchBranchIdHex(sendClient);
+        const sendBranchIdHex = await build.race(fetchBranchIdHex(sendClient));
 
         // build unsigned transaction with real Halo 2 proofs (parallel via offscreen)
-        const unsignedResult = await proveViaOffscreen({
+        const proving = proveViaOffscreen({
           fn: 'build_unsigned',
           args: [
             sendPayload.ufvk,
@@ -6517,6 +6551,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             sendBranchIdHex,
           ],
         });
+        const unsignedResult = await build.race(proving);
 
         const proveDurationZ = ((performance.now() - proveStartZ) / 1000).toFixed(1);
         emitProgress('unsigned transaction proved', `${proveDurationZ}s`);
@@ -6532,6 +6567,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const totalDuration = ((performance.now() - sendStart) / 1000).toFixed(1);
         emitProgress('unsigned tx ready', `total=${totalDuration}s`);
 
+        // a stopped build leaves no stash behind
+        build.check();
         // Everything send-tx-complete will need and cannot recover from the
         // signed bytes. See the ColdSendContext comment.
         const coldSendId = await stashColdSend(walletId, {
@@ -6641,7 +6678,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
            * spend-pool resolution.
            */
           frost?: boolean;
+          /** the page's key for stopping this build (see build-abort.ts) */
+          cancelKey?: string;
         };
+        const build = builds.begin(sendPayload.cancelKey);
         if (!sendPayload.ufvk) {
           throw new Error('UFVK required for PCZT build');
         }
@@ -6694,7 +6734,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // keep spending orchard (legacy cold PCZT path).
         const sendClient = makeZcashClient(sendPayload.serverUrl);
         emitProgress('fetching chain tip');
-        const sendTip = await sendClient.getTip();
+        const sendTip = await build.race(sendClient.getTip());
         const pcztPool: NotePool =
           sendTip.height >= nu63ActivationHeight(sendPayload.mainnet) ? 'ironwood' : 'orchard';
 
@@ -6760,7 +6800,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // active pool is ironwood.
         const anchorHeight = await resolveAnchorHeight(walletId, sendTip.height);
         emitProgress('building merkle witnesses', `anchor=${anchorHeight} (tip=${sendTip.height})`);
-        const { anchorHex, paths } = await buildWitnesses(
+        const witnessing = buildWitnesses(
           sendClient,
           walletId,
           selected,
@@ -6768,6 +6808,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           pcztPool,
           emitProgress,
         );
+        const { anchorHex, paths } = await build.race(witnessing);
 
         const notesForWasm = selected.map(n => ({
           value: Number(n.value),
@@ -6798,7 +6839,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // refuse unless NU6.3 is really active (real 0x37a5165b, never the
           // 0xffffffff placeholder).
           emitProgress('checking NU6.3 activation');
-          const iwLightdInfo = await sendClient.getLightdInfo();
+          const iwLightdInfo = await build.race(sendClient.getLightdInfo());
           const iwReportedBranchHex = (iwLightdInfo.consensusBranchId || '')
             .trim()
             .toLowerCase()
@@ -6848,7 +6889,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             // target_height = live tip (selects TxVersion::V6). expected_branch_id
             // is the value validated above; the producer refuses to build unless
             // the branch id it binds equals it.
-            iwBuilt = await proveViaOffscreen({
+            const iwProving = proveViaOffscreen({
               fn: 'build_ironwood_send_pczt',
               args: [
                 sendPayload.ufvk,
@@ -6865,6 +6906,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 memoHex,
               ],
             });
+            iwBuilt = await build.race(iwProving);
           } catch (e) {
             console.error('[zcash-worker] build_ironwood_send_pczt failed');
             throw e;
@@ -6917,6 +6959,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
           // What send-tx-pczt-complete / complete-orchard-pczt cannot recover
           // from the signed bytes. See the ColdSendContext comment.
+          build.check();
           const iwColdSendId = await stashColdSend(walletId, {
             nullifiers: selected.map(n => n.nullifier),
             amount: amountZat.toString(),
@@ -6976,7 +7019,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // hardcoded constant) risks producing txs the network rejects on
         // testnet where activation heights diverge from mainnet.
         const targetHeight = sendTip.height;
-        const built = await proveViaOffscreen({
+        const proving = proveViaOffscreen({
           fn: 'build_unsigned_pczt',
           args: [
             sendPayload.ufvk,
@@ -6991,6 +7034,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             memoHex,
           ],
         });
+        const built = await build.race(proving);
 
         const parsed = built as {
           pczt_hex: string;
@@ -7021,6 +7065,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         // What send-tx-pczt-complete / complete-orchard-pczt cannot recover from
         // the signed bytes. See the ColdSendContext comment.
+        build.check();
         const orchardColdSendId = await stashColdSend(walletId, {
           nullifiers: selected.map(n => n.nullifier),
           amount: amountZat.toString(),
@@ -7154,7 +7199,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           backend?: ZcashBackend;
           /** UR fragment-size override; falls back to 200 for back-compat */
           fragmentSize?: number;
+          /** the page's key for stopping this build (see build-abort.ts) */
+          cancelKey?: string;
         };
+        const build = builds.begin(migratePayload.cancelKey);
         if (migratePayload.backend) {
           registerBackend(migratePayload.serverUrl, migratePayload.backend);
         }
@@ -7210,7 +7258,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // (0xffffffff) or any mismatch means NU6.3 has not activated here yet -
         // a migration built against it would be an invalid / unspendable tx.
         emitProgress('checking NU6.3 activation');
-        const lightdInfo = await migrateClient.getLightdInfo();
+        const lightdInfo = await build.race(migrateClient.getLightdInfo());
         const reportedBranchHex = (lightdInfo.consensusBranchId || '')
           .trim()
           .toLowerCase()
@@ -7230,7 +7278,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         emitProgress('NU6.3 active', `branch id 0x${reportedBranchHex}`);
 
         emitProgress('fetching chain tip');
-        const migrateTip = await migrateClient.getTip();
+        const migrateTip = await build.race(migrateClient.getTip());
         const migrateAnchorHeight = await resolveAnchorHeight(walletId, migrateTip.height);
         emitProgress(
           'building merkle witnesses',
@@ -7238,13 +7286,15 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         );
         // orchard spends -> orchard witnesses; the migration needs no
         // ironwood anchor (output-only on the ironwood side)
-        const { anchorHex, paths } = await buildWitnesses(
+        const witnessing = buildWitnesses(
           migrateClient,
           walletId,
           orchardNotes,
           migrateAnchorHeight,
           'orchard',
+          emitProgress,
         );
+        const { anchorHex, paths } = await build.race(witnessing);
 
         const notesForWasm = orchardNotes.map(n => ({
           value: Number(n.value),
@@ -7286,7 +7336,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             // or no spend accepts them. NU63_CONSENSUS_BRANCH_ID is the live value
             // validated from GetLightdInfo above (never the placeholder); the
             // producer refuses to build unless the branch id it binds equals it.
-            migrateTxHex = await withSpendKeys(
+            const signing = withSpendKeys(
               wasmModule.SpendKeys,
               migratePayload.vault,
               migrateAccount,
@@ -7310,6 +7360,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 return keys.sign_pczt(built.pczt_hex);
               },
             );
+            migrateTxHex = await build.race(signing);
           } catch (e) {
             // message only, never the caught args
             console.error(
@@ -7322,6 +7373,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           }
 
           emitProgress('turnstile tx signed', `${migrateTxHex.length / 2} bytes`);
+          // the point of no return: a stop from here on is refused
+          build.commit();
           emitProgress('broadcasting migration');
           const migrateHotTxData = hexDecode(migrateTxHex);
           const migrateHotClient = makeZcashClient(
@@ -7375,7 +7428,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         );
         // target_height = live tip; at/after NU6.3 activation this selects
         // TxVersion::V6 (orchard spends + ironwood outputs) in the builder.
-        const built = await proveViaOffscreen({
+        const proving = proveViaOffscreen({
           fn: 'build_turnstile_migration_pczt',
           args: [
             migratePayload.ufvk,
@@ -7394,6 +7447,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             null,
           ],
         });
+        const built = await build.race(proving);
         const migrateParsed = built as {
           pczt_hex: string;
           summary: unknown;
@@ -7426,6 +7480,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // not mark them leaves the whole legacy balance looking spendable - and
         // a second migration launched in that window builds a conflicting
         // spend. The hot branch above already does this; see ColdSendContext.
+        build.check();
         const migrateColdSendId = await stashColdSend(walletId, {
           nullifiers: orchardNotes.map(n => n.nullifier),
           amount: migrateAmount.toString(),
@@ -7533,7 +7588,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           accountIndex: number;
           mainnet: boolean;
           vault: SealedVault;
+          /** the page's key for stopping this build (see build-abort.ts) */
+          cancelKey?: string;
         };
+        const build = builds.begin(multiPayload.cancelKey);
 
         if (!multiPayload.outputs || multiPayload.outputs.length === 0) {
           throw new Error('outputs array required');
@@ -7589,7 +7647,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // build_ironwood_send_pczt per output.
         {
           const multiGuardClient = makeZcashClient(multiPayload.serverUrl);
-          const multiGuardTip = await multiGuardClient.getTip();
+          const multiGuardTip = await build.race(multiGuardClient.getTip());
           if (multiGuardTip.height >= nu63ActivationHeight(multiPayload.mainnet)) {
             throw new Error(
               'orchard sends are disabled at NU6.3 - multi-send does not support ironwood ' +
@@ -7660,7 +7718,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
           // build merkle witnesses
           const multiClient = makeZcashClient(multiPayload.serverUrl);
-          const multiTip = await multiClient.getTip();
+          const multiTip = await build.race(multiClient.getTip());
 
           const multiAnchorHeight = await resolveAnchorHeight(walletId, multiTip.height);
           emitMultiProgress(
@@ -7707,7 +7765,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
           let txHex: string;
           try {
-            txHex = await withSpendKeys(
+            const signing = withSpendKeys(
               wasmModule.SpendKeys,
               multiPayload.vault,
               multiAccount,
@@ -7731,11 +7789,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 return keys.sign_pczt(built.pczt_hex);
               },
             );
+            txHex = await build.race(signing);
           } finally {
             clearInterval(provingTicker);
           }
 
-          // broadcast
+          // broadcast; from the first one on, a stop is refused
+          build.commit();
           emitMultiProgress(`output ${outputIdx + 1}: broadcasting`);
           const txData = hexDecode(txHex);
           const broadcastClient = makeZcashClient(multiPayload.serverUrl);
@@ -7794,11 +7854,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           /** position is the t-branch index: legacy indices included */
           tAddresses: string[];
           mainnet: boolean;
+          /** the page's key for stopping this build (see build-abort.ts) */
+          cancelKey?: string;
         };
+        const build = builds.begin((payload as { cancelKey?: string }).cancelKey);
+        const progress = buildProgress(walletId);
 
         const client = makeZcashClient(serverUrl);
-        const tip = await client.getTip();
-        const allUtxos = await client.getAddressUtxos(tAddresses);
+        progress('fetching chain tip');
+        const tip = await build.race(client.getTip());
+        const allUtxos = await build.race(client.getAddressUtxos(tAddresses));
         if (allUtxos.length === 0) {
           throw new Error('no transparent UTXOs to shield');
         }
@@ -7807,7 +7872,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const byIndex = utxosByTIndex(allUtxos, tAddresses);
 
         // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe)
-        const shieldBranchIdHex = await fetchBranchIdHex(client);
+        const shieldBranchIdHex = await build.race(fetchBranchIdHex(client));
         // the same unsigned builders the cold path uses: ironwood from NU6.3,
         // where an orchard output would strand the funds
         const shieldIntoIronwood = tip.height >= nu63ActivationHeight(mainnet);
@@ -7853,42 +7918,48 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               })),
             );
 
-            const built = JSON.parse(
-              (await proveViaOffscreen(
-                shieldIntoIronwood
-                  ? {
-                      fn: 'build_unsigned_shielding_ironwood',
-                      args: [
-                        utxosJson,
-                        pubkeyHex,
-                        recipient,
-                        shieldAmount.toString(),
-                        fee.toString(),
-                        tip.height,
-                        parseInt(shieldBranchIdHex, 16),
-                        mainnet,
-                        null,
-                      ],
-                    }
-                  : {
-                      fn: 'build_unsigned_shielding',
-                      args: [
-                        utxosJson,
-                        recipient,
-                        shieldAmount.toString(),
-                        fee.toString(),
-                        tip.height,
-                        mainnet,
-                        shieldBranchIdHex,
-                      ],
-                    },
-              )) as string,
-            ) as { sighashes: string[]; unsigned_tx_hex: string };
+            progress('building & proving transaction', `${utxos.length} inputs`);
+            const proving = proveViaOffscreen(
+              shieldIntoIronwood
+                ? {
+                    fn: 'build_unsigned_shielding_ironwood',
+                    args: [
+                      utxosJson,
+                      pubkeyHex,
+                      recipient,
+                      shieldAmount.toString(),
+                      fee.toString(),
+                      tip.height,
+                      parseInt(shieldBranchIdHex, 16),
+                      mainnet,
+                      null,
+                    ],
+                  }
+                : {
+                    fn: 'build_unsigned_shielding',
+                    args: [
+                      utxosJson,
+                      recipient,
+                      shieldAmount.toString(),
+                      fee.toString(),
+                      tip.height,
+                      mainnet,
+                      shieldBranchIdHex,
+                    ],
+                  },
+            );
+            const built = JSON.parse((await build.race(proving)) as string) as {
+              sighashes: string[];
+              unsigned_tx_hex: string;
+            };
             const txHex = keys.sign_shielding(
               addrIndex,
               built.unsigned_tx_hex,
               JSON.stringify(built.sighashes),
             );
+            // the point of no return: a stop from here on is refused
+            build.commit();
+            progress('broadcasting transaction');
             const result = await client.sendTransaction(hexDecode(txHex));
             if (result.errorCode !== 0) {
               throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
@@ -7939,13 +8010,20 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           /** Ledger: the account's external ovk on the output, which the app
            *  needs to review it (it refuses an output it cannot decrypt) */
           ledgerOvk?: boolean;
+          /** the page's key for stopping this build (see build-abort.ts) */
+          cancelKey?: string;
         };
+        const build = builds.begin(shieldUnsignedPayload.cancelKey);
+        const progress = buildProgress(walletId);
 
         const shieldUClient = makeZcashClient(shieldUnsignedPayload.serverUrl);
-        const shieldUTip = await shieldUClient.getTip();
+        progress('fetching chain tip');
+        const shieldUTip = await build.race(shieldUClient.getTip());
         // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe)
-        const shieldUBranchIdHex = await fetchBranchIdHex(shieldUClient);
-        const shieldUAll = await shieldUClient.getAddressUtxos(shieldUnsignedPayload.tAddresses);
+        const shieldUBranchIdHex = await build.race(fetchBranchIdHex(shieldUClient));
+        const shieldUAll = await build.race(
+          shieldUClient.getAddressUtxos(shieldUnsignedPayload.tAddresses),
+        );
         const shieldUUtxos =
           shieldUnsignedPayload.maxInputs === undefined
             ? shieldUAll
@@ -8009,7 +8087,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             shieldUnsignedPayload.ufvk,
             shieldUAddrIndices[0] ?? 0,
           );
-          shieldUResult = (await proveViaOffscreen({
+          progress('building & proving transaction');
+          const proving = proveViaOffscreen({
             fn: 'build_unsigned_shielding_ironwood',
             args: [
               shieldUUtxosJson,
@@ -8023,10 +8102,12 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               null, // memo_hex
               shieldUnsignedPayload.ledgerOvk ? shieldUnsignedPayload.ufvk : null,
             ],
-          })) as string;
+          });
+          shieldUResult = (await build.race(proving)) as string;
           shieldUPubkeyHex = shieldUPubkey;
         } else {
-          shieldUResult = (await proveViaOffscreen({
+          progress('building & proving transaction');
+          const proving = proveViaOffscreen({
             fn: 'build_unsigned_shielding',
             args: [
               shieldUUtxosJson,
@@ -8037,8 +8118,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               shieldUnsignedPayload.mainnet,
               shieldUBranchIdHex,
             ],
-          })) as string;
+          });
+          shieldUResult = (await build.race(proving)) as string;
         }
+        progress('unsigned tx ready');
 
         const shieldUParsed = JSON.parse(shieldUResult) as {
           sighashes: string[];
@@ -8837,6 +8920,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       walletId,
       error: err instanceof Error ? err.message : String(err),
     });
+  } finally {
+    if (typeof cancelKey === 'string') {
+      builds.end(cancelKey);
+    }
   }
 };
 
