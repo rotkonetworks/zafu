@@ -32,6 +32,8 @@ export interface NearLeg {
   /** zec, 8 decimals */
   amountOut: string;
   minAmountOut: string;
+  /** what near's leg costs, usdc units (its usd in minus usd out) */
+  cost?: string;
   /** seconds 1click expects end to end */
   timeEstimate?: number;
   quotedAt: number;

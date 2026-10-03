@@ -1,7 +1,8 @@
 import { PagePath } from '../paths';
 import { SEED_PHRASE_ORIGIN } from './password/types';
+import type { ScrollArt } from '../../../components/scroll-shell';
 
-export type OnboardingArt = 'samurai' | 'enso' | 'castle' | 'bamboo';
+export type OnboardingArt = ScrollArt;
 
 export interface OnboardingScreen {
   readonly art: OnboardingArt;
