@@ -29,7 +29,7 @@ import { Sensitive } from '../../../components/sensitive';
 import { ScreenHeader } from '../../../components/screen-header';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectGetVaultUnlock } from '../../../state/keyring';
-import { selectActiveZcashWallet } from '../../../state/wallets';
+import { selectActiveZcashWallet, selectZcashIsMainnet } from '../../../state/wallets';
 import { activeAccountIndex, activeZcashStoreId } from '../../../state/pockets';
 import { CAPS, walletKind } from '../../../signing/wallet-kind';
 import { isEgressBlocked } from '../../../net/egress';
@@ -437,7 +437,8 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const navigate = usePopupNav();
   const queryClient = useQueryClient();
   const { address: zcashAddress } = useActiveAddress();
-  const { tAddresses } = useTransparentAddresses(true);
+  const isMainnet = useStore(selectZcashIsMainnet);
+  const { tAddresses } = useTransparentAddresses(isMainnet);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const getVaultUnlock = useStore(selectGetVaultUnlock);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
@@ -1205,7 +1206,38 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
           ))}
         </Sheet>
         {deal && firm && (
-          <Sheet open={reviewOpen} onOpenChange={o => !o && closeReview()} title='review swap'>
+          <Sheet
+            open={reviewOpen}
+            onOpenChange={o => !o && closeReview()}
+            title='review swap'
+            footer={
+              <div className='flex gap-2 pt-3'>
+                <Button variant='secondary' className='flex-1' onClick={closeReview}>
+                  back
+                </Button>
+                {expired ? (
+                  // the price moved on: closing review asks again, nothing was sent
+                  <Button className='flex-1' onClick={closeReview}>
+                    get a new quote
+                  </Button>
+                ) : (
+                  <Button
+                    className='flex-1'
+                    onClick={() => void recheck()}
+                    disabled={!riskAcknowledged}
+                    loading={checking}
+                  >
+                    {/* a memo deposit has its own reviews next; nothing is signed here */}
+                    {isFromZec
+                      ? deal.memo
+                        ? 'continue'
+                        : 'confirm & send'
+                      : 'show deposit address'}
+                  </Button>
+                )}
+              </div>
+            }
+          >
             <div className='flex flex-col gap-1.5 text-xs'>
               {/* only the amounts hide; the addresses and memo are what gets reviewed */}
               {(
@@ -1272,27 +1304,6 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
               i accept these risks.
             </label>
             {link?.via && <p className='text-[11px] text-fg-muted'>{viaLine(link.via)}</p>}
-            <div className='flex gap-2'>
-              <Button variant='secondary' className='flex-1' onClick={closeReview}>
-                back
-              </Button>
-              {expired ? (
-                // the price moved on: closing review asks again, nothing was sent
-                <Button className='flex-1' onClick={closeReview}>
-                  get a new quote
-                </Button>
-              ) : (
-                <Button
-                  className='flex-1'
-                  onClick={() => void recheck()}
-                  disabled={!riskAcknowledged}
-                  loading={checking}
-                >
-                  {/* a memo deposit has its own reviews next; nothing is signed here */}
-                  {isFromZec ? (deal.memo ? 'continue' : 'confirm & send') : 'show deposit address'}
-                </Button>
-              )}
-            </div>
           </Sheet>
         )}
       </div>

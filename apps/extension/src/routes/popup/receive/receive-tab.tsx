@@ -18,7 +18,7 @@ import {
   selectPenumbraAccount,
   keyRingSelector,
 } from '../../../state/keyring';
-import { getActiveWalletJson, selectActiveZcashWallet } from '../../../state/wallets';
+import { getActiveWalletJson, selectZcashIsMainnet } from '../../../state/wallets';
 import {
   derivePenumbraEphemeralFromMnemonic,
   derivePenumbraEphemeralFromFvk,
@@ -56,7 +56,7 @@ export function ZcashReceive({
   addrType: AddrType;
 }) {
   const transparent = addrType === 'transparent';
-  const isMainnet = useStore(s => selectActiveZcashWallet(s)?.mainnet ?? true);
+  const isMainnet = useStore(selectZcashIsMainnet);
   const t = useTransparentAddresses(isMainnet);
   const shown = transparent ? (t.tAddresses[0] ?? '') : address;
   // a retired shielded address stays on screen until its replacement lands,

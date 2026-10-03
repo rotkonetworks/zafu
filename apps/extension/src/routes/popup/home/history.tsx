@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { useStore } from '../../../state';
 import type { NetworkType } from '../../../state/keyring';
 import { activeZcashStoreId } from '../../../state/pockets';
+import { selectZcashIsMainnet } from '../../../state/wallets';
 import { messagesSelector } from '../../../state/messages';
 import { privacySelector } from '../../../state/privacy';
 import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
@@ -174,7 +175,7 @@ export const HistoryContent = ({
   const messages = useStore(messagesSelector);
   // the active pocket's own store: account 0 is the bare wallet id
   const zcashStoreId = useStore(activeZcashStoreId);
-  const isMainnet = !zidecarUrl.includes('testnet');
+  const isMainnet = useStore(selectZcashIsMainnet);
   const { tAddresses } = useTransparentAddresses(isMainnet);
   const { workerSyncHeight } = useZcashSyncStatus();
   const latestBlockHeight = useSyncProgress().tip;

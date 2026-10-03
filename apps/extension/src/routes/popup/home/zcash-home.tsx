@@ -10,7 +10,7 @@ import {
   keyRingSelector,
   selectPenumbraOnly,
 } from '../../../state/keyring';
-import { selectActiveZcashWallet } from '../../../state/wallets';
+import { selectActiveZcashWallet, selectZcashIsMainnet } from '../../../state/wallets';
 import { CAPS, walletKind } from '../../../signing/wallet-kind';
 import {
   activeAccountIndex,
@@ -83,7 +83,7 @@ export const ZcashContent = ({
   nudge?: ReactNode;
 }) => {
   const hasWallet = !!(hasMnemonic || watchOnly);
-  const isMainnet = watchOnly?.mainnet ?? true;
+  const isMainnet = useStore(selectZcashIsMainnet);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const zcashBackend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
   const {

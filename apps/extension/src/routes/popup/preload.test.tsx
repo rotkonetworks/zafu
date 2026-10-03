@@ -55,6 +55,8 @@ vi.mock('../../state', () => ({ useStore: { getState: () => state } }));
 const { installPreload, intentHandlers, preloadTarget, registerRoutePreload } =
   await import('./preload');
 const { routePreloads } = await import('./route-preloads');
+const { activeTransparentAddressesQuery } = await import('../../hooks/use-transparent-addresses');
+const { selectZcashIsMainnet } = await import('../../state/wallets');
 
 const fetchSpy = vi.fn(() => Promise.reject(new Error('no network in tests')));
 let root: Root;
@@ -111,6 +113,7 @@ beforeEach(() => {
     routes: [
       { path: `/activity${seq}`, handle: { preload: routePreloads.activity } },
       { path: `/home${seq}`, handle: { preload: routePreloads.home } },
+      { path: `/receive${seq}`, handle: { preload: routePreloads.receive } },
     ],
   });
   if (!registered) {
@@ -177,6 +180,16 @@ describe('intent preloading', () => {
     );
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(client.getQueryData(['zcashWorker', 'w1#1', 'balance'])).toBe(0n);
+  });
+
+  it('receive warms the exact key the receive screen reads (no re-derived isMainnet drift)', async () => {
+    press(renderNav(`/receive${seq}`));
+    await settle();
+    // the screen builds this same key via useTransparentAddresses(selectZcashIsMainnet(state));
+    // if the preload ever re-derives isMainnet its own way and drifts, this key won't be there
+    // and the screen falls back to a cold fetch - exactly the regression intent preloading guards.
+    const key = activeTransparentAddressesQuery(state, selectZcashIsMainnet(state)).queryKey;
+    expect(client.getQueryData(key)).toBeDefined();
   });
 
   it('fires once per target per window, and runs registered preloads beside the route', async () => {

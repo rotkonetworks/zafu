@@ -148,17 +148,27 @@ export const preloadScreen = (name: PopupScreen): void => {
 let preloadScheduled = false;
 
 /**
- * After first paint, import every screen in the background while the popup is
- * idle. They are local extension files, so this is cheap, and it makes first
- * visits as instant as repeat ones. Idempotent (StrictMode runs effects twice).
+ * The four bottom-tab roots (home has no chunk of its own: it is bundled
+ * eagerly, not route-level lazy). Intent preloading (preload.ts) already
+ * covers every other screen the moment a nav primitive is pressed or
+ * hovered - warming all ~70 chunks here on every open would parse and
+ * evaluate screens (settings, approvals, multisig, swap's icon registry...)
+ * that a short-lived popup may never visit.
  */
-export const schedulePreloadAllScreens = (): void => {
+const TAB_ROOT_SCREENS: readonly PopupScreen[] = ['inbox', 'tools', 'settings', 'settingsMain'];
+
+/**
+ * After first paint, import the tab roots in the background while the popup
+ * is idle, so the four taps everyone makes resolve from cache. Idempotent
+ * (StrictMode runs effects twice).
+ */
+export const schedulePreloadTabRoots = (): void => {
   if (preloadScheduled) {
     return;
   }
   preloadScheduled = true;
   const run = () => {
-    for (const screen of Object.keys(popupScreens) as PopupScreen[]) {
+    for (const screen of TAB_ROOT_SCREENS) {
       preloadScreen(screen);
     }
   };

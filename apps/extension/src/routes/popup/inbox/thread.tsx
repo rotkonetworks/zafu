@@ -49,6 +49,7 @@ import {
   type PeopleRelaySetting,
 } from '../../../config/people-relay';
 import { useThreadName } from './use-thread-name';
+import { RequestSheet } from '../send/send-fields';
 import { cardOf, counterparty, shortAddress, threadIdOf, whenOf } from './threads';
 
 const ZCASH_LINK = /zcash:[^\s]+/i;
@@ -242,57 +243,41 @@ const MoneySheet = ({
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const zat = parseZecAmount(amount);
+  const close = (o: boolean) => {
+    if (!o) {
+      setAsking(false);
+      onClose();
+    }
+  };
+
+  if (asking && onRequest) {
+    return (
+      <RequestSheet
+        open={open}
+        onOpenChange={close}
+        title='request'
+        amount={amount}
+        onAmount={setAmount}
+        note={{ value: note, onChange: setNote, label: 'what for', maxLength: 200 }}
+        confirmLabel='ask for it'
+        confirmDisabled={!zat}
+        onConfirm={() => zat && onRequest(zat, note.trim())}
+      />
+    );
+  }
+
   return (
-    <Sheet
-      open={open}
-      onOpenChange={o => {
-        if (!o) {
-          setAsking(false);
-          onClose();
-        }
-      }}
-      title={asking ? 'request' : 'send or request'}
-    >
-      {asking && onRequest ? (
-        <form
-          className='flex flex-col gap-3'
-          onSubmit={e => {
-            e.preventDefault();
-            if (zat) {
-              onRequest(zat, note.trim());
-            }
-          }}
-        >
-          <Input
-            aria-label='amount'
-            inputMode='decimal'
-            placeholder='amount in zec'
-            value={amount}
-            onChange={e => setAmount(e.target.value)}
-            className='font-display text-xl'
-          />
-          <Input
-            aria-label='what for'
-            placeholder='what for (optional)'
-            value={note}
-            onChange={e => setNote(e.target.value)}
-          />
-          <Button type='submit' disabled={!zat}>
-            ask for it
+    <Sheet open={open} onOpenChange={close} title='send or request'>
+      <div className='flex gap-2'>
+        <Button className='flex-1' onClick={onPay}>
+          pay
+        </Button>
+        {onRequest && (
+          <Button variant='secondary' className='flex-1' onClick={() => setAsking(true)}>
+            request
           </Button>
-        </form>
-      ) : (
-        <div className='flex gap-2'>
-          <Button className='flex-1' onClick={onPay}>
-            pay
-          </Button>
-          {onRequest && (
-            <Button variant='secondary' className='flex-1' onClick={() => setAsking(true)}>
-              request
-            </Button>
-          )}
-        </div>
-      )}
+        )}
+      </div>
     </Sheet>
   );
 };
@@ -485,14 +470,38 @@ export function ThreadPage() {
     [messages, relay],
   );
 
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-    for (const m of messages) {
-      if (m.direction === 'received' && !m.read) {
-        void markRead(m.id);
-      }
+  // whether the reader is at (or very near) the bottom right now; updated on
+  // every scroll so a later effect can tell "they're reading history" from
+  // "they're caught up"
+  const stuckToBottomRef = useRef(true);
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (el) {
+      stuckToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
     }
-  }, [messages, markRead, rows.length]);
+  };
+
+  // a new row snaps the view to the bottom only if the reader was already
+  // there, or the new row is the user's own send - scrolled-up history, or a
+  // read flag flipping on an older message, must never yank the view
+  useEffect(() => {
+    const last = rows.at(-1);
+    const mine = last ? ('m' in last ? last.m.direction === 'sent' : last.it.mine) : false;
+    if (stuckToBottomRef.current || mine) {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+    }
+  }, [rows.length]);
+
+  // mark incoming messages read as they appear, independent of scrolling
+  const unreadIds = useMemo(
+    () => messages.filter(m => m.direction === 'received' && !m.read).map(m => m.id),
+    [messages],
+  );
+  useEffect(() => {
+    for (const id of unreadIds) {
+      void markRead(id);
+    }
+  }, [unreadIds, markRead]);
   useEffect(() => {
     if (room && relay?.some(i => !i.mine)) {
       void peopleCall('read', { roomId: room.id }).catch(() => undefined);
@@ -570,7 +579,11 @@ export function ThreadPage() {
       </header>
 
       {room && <RelaySlot />}
-      <div ref={scrollRef} className='flex grow flex-col gap-3 overflow-y-auto px-3.5 pb-2 pt-3.5'>
+      <div
+        ref={scrollRef}
+        onScroll={onScroll}
+        className='flex grow flex-col gap-3 overflow-y-auto px-3.5 pb-2 pt-3.5'
+      >
         {rows.map((r, i) => (
           <div key={r.key} className='contents'>
             {dayOf(r.t) !== dayOf(rows[i - 1]?.t ?? 0) && (

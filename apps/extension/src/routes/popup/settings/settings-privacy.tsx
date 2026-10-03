@@ -16,7 +16,7 @@ import {
 } from '../../../config/contact-discovery-relay';
 import { usePopupNav } from '../../../utils/navigate';
 import { readZcashMeConfig, type ZcashMeMode } from '../../../services/zcashme/config';
-import { useExplain } from './settings-explain';
+import { useExplain, type ExplainId } from './settings-explain';
 import { ZCASH_BACKENDS } from '../../../state/keyring/zcash-backend';
 
 const ZCASHME_MODE_LABEL: Record<ZcashMeMode, string> = {
@@ -53,7 +53,7 @@ export function ZcashMeRow({ onExplain }: { onExplain?: (label: string) => void 
 function ZcashWireRows({
   explainProps,
 }: {
-  explainProps: (id: string) => { onExplain?: (label: string) => void };
+  explainProps: (id: ExplainId) => { onExplain?: (label: string) => void };
 }) {
   const memo = useStore(s => s.networks.networks.zcash.memoSyncStrategy ?? 'private');
   const mempool = useStore(s => s.networks.networks.zcash.mempoolWatch ?? 'off');
@@ -91,11 +91,16 @@ type Group = 'on screen' | 'network' | 'people';
 const PRIVACY_ROWS: readonly {
   key: keyof PrivacySettings;
   label: string;
-  explainId: string;
+  explainId: ExplainId;
   group: Group;
   visible?: (network: NetworkType) => boolean;
 }[] = [
-  { key: 'hideBalances', label: 'hide balances', explainId: 'privacy.hideBalances', group: 'on screen' },
+  {
+    key: 'hideBalances',
+    label: 'hide balances',
+    explainId: 'privacy.hideBalances',
+    group: 'on screen',
+  },
   {
     key: 'enableTransactionHistory',
     label: 'transaction history',
@@ -131,7 +136,12 @@ const PRIVACY_ROWS: readonly {
     visible: n => hasFeature(n, 'zcash'),
   },
   { key: 'openZafuLinks', label: 'zafu: links', explainId: 'privacy.zafuLinks', group: 'people' },
-  { key: 'enableIdentity', label: 'zid identity', explainId: 'privacy.zidIdentity', group: 'people' },
+  {
+    key: 'enableIdentity',
+    label: 'zid identity',
+    explainId: 'privacy.zidIdentity',
+    group: 'people',
+  },
 ];
 
 /**
@@ -272,7 +282,9 @@ export function SettingsPrivacy() {
           {settings.enableIdentity && (
             <ContactDiscoverySection {...explainProps('privacy.contactDiscovery')} />
           )}
-          {hasFeature(activeNetwork, 'zcash') && <ZcashMeRow {...explainProps('privacy.zcashMe')} />}
+          {hasFeature(activeNetwork, 'zcash') && (
+            <ZcashMeRow {...explainProps('privacy.zcashMe')} />
+          )}
           {rows('people')}
         </Section>
         <Section title='sites'>

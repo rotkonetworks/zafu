@@ -8,8 +8,9 @@ import { usePenumbraSwapClaim } from '../../hooks/penumbra-swap-claim';
 import { BottomTabs, BOTTOM_TABS_HEIGHT } from '../../components/bottom-tabs';
 import { AppHeader } from '../../components/app-header';
 import { TxTrackerWatcher } from '../../components/tx-tracker-watcher';
+import { clearStaleChunkGuard } from '../../components/error-boundary';
 import { PopupPath } from './paths';
-import { schedulePreloadAllScreens } from './route-modules';
+import { schedulePreloadTabRoots } from './route-modules';
 import { intentHandlers, navTimingOn, Painted } from './preload';
 import { useStore } from '../../state';
 import { selectActiveNetwork, selectPenumbraAccount } from '../../state/keyring';
@@ -51,8 +52,12 @@ export const PopupLayout = () => {
   const onLoginPage = location.pathname === '/login';
   usePenumbraSwapClaim(activeNetwork, onLoginPage, penumbraAccount);
 
-  // first screen is up - warm every other screen's chunk while idle
-  useEffect(schedulePreloadAllScreens, []);
+  // first screen is up - warm the four tab roots while idle; intent
+  // preloading (hover/press on a nav primitive) covers everything else
+  useEffect(schedulePreloadTabRoots, []);
+  // the layout mounting means the router committed a screen - if that
+  // followed a stale-chunk reload, the guard has done its job
+  useEffect(clearStaleChunkGuard, []);
 
   const showChrome = !matchesRoute(location.pathname, bareRoutes);
 

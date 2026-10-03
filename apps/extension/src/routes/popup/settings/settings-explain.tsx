@@ -24,7 +24,7 @@ export interface Explain {
   footer?: string;
 }
 
-export const SETTINGS_EXPLAIN: Record<string, Explain> = {
+export const SETTINGS_EXPLAIN = {
   'privacy.hideBalances': {
     blurb: 'blurs every amount on screen until you tap to reveal it.',
     on: 'a shoulder-surfer sees shapes, not numbers',
@@ -110,19 +110,22 @@ export const SETTINGS_EXPLAIN: Record<string, Explain> = {
   },
   'network.zcashNode': {
     blurb: 'which node zafu reads the zcash chain from, and asks for your memos.',
-    footer: 'any node you pick - preset or your own - learns your ip and roughly when you sync, never your keys',
+    footer:
+      'any node you pick - preset or your own - learns your ip and roughly when you sync, never your keys',
   },
   'network.penumbraNode': {
     blurb: 'which node zafu reads the penumbra chain from.',
-    footer: 'any node you pick - preset or your own - learns your ip and roughly when you sync, never your keys',
+    footer:
+      'any node you pick - preset or your own - learns your ip and roughly when you sync, never your keys',
   },
   'network.ownNode': {
     blurb: 'point zafu at a node address you choose, instead of one of the built-in presets.',
-    footer: 'whoever runs that node sees the same things a preset node would: your ip and roughly when you sync',
+    footer:
+      'whoever runs that node sees the same things a preset node would: your ip and roughly when you sync',
   },
   'network.ibcChains': {
     blurb: 'cosmos chains reachable over ibc from your penumbra balance.',
-    footer: 'zafu only contacts a chain\'s own node once you turn that chain on',
+    footer: "zafu only contacts a chain's own node once you turn that chain on",
   },
   'network.ibcChainToggle': {
     blurb: 'turns this ibc chain on, so you can hold and move its asset.',
@@ -142,7 +145,7 @@ export const SETTINGS_EXPLAIN: Record<string, Explain> = {
   'network.zcashStartsFrom': {
     blurb: 'the block zafu starts scanning from for this wallet.',
     footer:
-      'leaving it on auto scans recent blocks for you, which can miss an old wallet\'s early activity - set a date or block if you know roughly when it was first used',
+      "leaving it on auto scans recent blocks for you, which can miss an old wallet's early activity - set a date or block if you know roughly when it was first used",
   },
   'network.zcashEnable': {
     blurb: 'turns the zcash network on or off in zafu.',
@@ -165,13 +168,16 @@ export const SETTINGS_EXPLAIN: Record<string, Explain> = {
     blurb: 'the typeface used across zafu.',
     states: [
       { label: 'iosevka term', text: 'the built-in monospace face' },
-      { label: 'system mono', text: 'your device\'s own monospace font' },
+      { label: 'system mono', text: "your device's own monospace font" },
     ],
   },
   'appearance.approvals': {
-    blurb: 'where a dapp\'s approval request (sign, connect, send) opens.',
+    blurb: "where a dapp's approval request (sign, connect, send) opens.",
     states: [
-      { label: 'side panel or window', text: 'a side panel when the browser can open one, otherwise a small window' },
+      {
+        label: 'side panel or window',
+        text: 'a side panel when the browser can open one, otherwise a small window',
+      },
       { label: 'side panel only', text: 'always the side panel' },
       { label: 'a window', text: 'always a small separate window' },
     ],
@@ -180,7 +186,10 @@ export const SETTINGS_EXPLAIN: Record<string, Explain> = {
     blurb: 'how long zafu stays unlocked with nothing happening before it locks itself.',
     states: [
       { label: 'off', text: 'zafu never locks itself on idle time' },
-      { label: '1, 5, 15, 30 or 60 min', text: 'the shorter the time, the less of a window if you leave zafu open and walk away' },
+      {
+        label: '1, 5, 15, 30 or 60 min',
+        text: 'the shorter the time, the less of a window if you leave zafu open and walk away',
+      },
     ],
     footer: '15 min by default',
   },
@@ -188,7 +197,10 @@ export const SETTINGS_EXPLAIN: Record<string, Explain> = {
     blurb: 'when zafu asks for your password to sign a transaction.',
     states: [
       { label: 'unlock only', text: 'being unlocked is enough; no extra password step' },
-      { label: 'grace 15 min', text: 'the password is asked again if 15 minutes passed since you last typed it' },
+      {
+        label: 'grace 15 min',
+        text: 'the password is asked again if 15 minutes passed since you last typed it',
+      },
       { label: 'foil hat', text: 'the password is asked every single time, no exceptions' },
     ],
   },
@@ -197,17 +209,20 @@ export const SETTINGS_EXPLAIN: Record<string, Explain> = {
     on: 'those sites can connect to zafu; takes effect on the next page load',
     off: 'those sites see no wallet from zafu; a real keplr extension, if installed, is left untouched',
   },
-};
+} as const satisfies Record<string, Explain>;
+
+/** a table key - a typo here fails tsc instead of silently dropping the "?" */
+export type ExplainId = keyof typeof SETTINGS_EXPLAIN;
 
 /** one id open at a time, so every row in a screen shares one sheet. the
  *  sheet's title is the row's own label (handed back by onExplain), not the
  *  lookup id - ids are for the table key, never UI copy. */
 export const useExplain = () => {
-  const [open, setOpen] = useState<{ id: string; label: string } | null>(null);
+  const [open, setOpen] = useState<{ id: ExplainId; label: string } | null>(null);
   const explain = open ? SETTINGS_EXPLAIN[open.id] : undefined;
   return {
     /** spread onto a Row - a no-op when the id has no explain copy */
-    explainProps: (explainId: string) =>
+    explainProps: (explainId: ExplainId) =>
       SETTINGS_EXPLAIN[explainId]
         ? { onExplain: (label: string) => setOpen({ id: explainId, label }) }
         : {},

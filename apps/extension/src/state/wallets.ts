@@ -317,6 +317,16 @@ export const selectActiveZcashWallet = (state: AllSlices) => {
   return zcashWallets[activeZcashIndex];
 };
 /**
+ * Whether the active zcash wallet's keys are mainnet-shaped. The one place
+ * this is asked: history, receive and the zcash home screen each used to
+ * derive it their own way (a wallet flag here, a zidecar-url substring
+ * check there) - harmless while they agreed, but nothing would have caught
+ * it if one drifted and a preload warmed the wrong key. Defaults to mainnet
+ * when there is no active wallet yet (matches every prior call site).
+ */
+export const selectZcashIsMainnet = (state: AllSlices): boolean =>
+  selectActiveZcashWallet(state)?.mainnet ?? true;
+/**
  * The user's own zcash accounts, shaped as read-only `Contact`s so they can be
  * offered as send recipients (e.g. move Ledger-transparent ZEC into your own
  * shielded wallet, or any account-to-account transfer). Derived purely from the
