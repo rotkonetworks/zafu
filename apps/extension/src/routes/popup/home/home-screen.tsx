@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
 import { Sheet } from '@repo/ui/components/ui/sheet';
-import { PEER_REFERRAL_CODE, PEER_REFERRAL_URL } from '../../../config/ramps';
+import { peerBuyUrl } from '../../../config/ramps';
 import { BalanceHero, type BalanceView } from '../../../components/wallet/balance-hero';
 import { PopupPath } from '../paths';
 import { HomeActions } from './actions';
@@ -99,13 +99,12 @@ export const EmptyBox = ({ look }: { look: HomeLook }) => {
             <li className='flex flex-col gap-2 border border-border-soft bg-elev-1 p-3'>
               <span className='text-sm text-fg-high'>1 · buy usdc on peer</span>
               <span className='text-xs text-fg-muted'>
-                pay a seller in an app you already use, such as revolut, wise or venmo. referral
-                code {PEER_REFERRAL_CODE}.
+                pay a seller in an app you already use, such as revolut, wise or monzo.
               </span>
               <Button
                 variant='secondary'
                 className='h-10 text-[13px]'
-                onClick={() => window.open(PEER_REFERRAL_URL, '_blank', 'noopener')}
+                onClick={() => window.open(peerBuyUrl({}), '_blank', 'noopener')}
               >
                 open peer
               </Button>
