@@ -162,6 +162,21 @@ export const checkDeposit = (
   }
 };
 
+/**
+ * The ZIP-317 fee of a deposit with a `memoBytes` OP_RETURN, as the wasm
+ * planner (plan_transparent_transaction) prices it: 5,000 zat per logical
+ * action, at least 2; a P2PKH input is 150 bytes, and the outputs are the
+ * vault and a change output (always counted, 34 bytes each) plus the
+ * OP_RETURN (8 value + 1 length + its script). A swap's own fresh address is
+ * funded by one move, so it spends one input. Checked against the wasm in
+ * transparent-deposit.test.ts.
+ */
+export const depositFeeZat = (memoBytes: number, inputs = 1): bigint => {
+  const opReturn = memoBytes ? 9 + 1 + (memoBytes > 75 ? 2 : 1) + memoBytes : 0;
+  const actions = Math.max(2, inputs, Math.ceil((34 + 34 + opReturn) / 34));
+  return 5000n * BigInt(actions);
+};
+
 export const planDeposit = async (
   wasm: DepositWasm,
   chain: DepositChain,

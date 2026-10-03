@@ -17,6 +17,7 @@ import {
 import {
   checkDeposit,
   checkVault,
+  depositFeeZat,
   FEE_MOVED,
   VAULT_UNPAYABLE,
   opReturnScript,
@@ -132,6 +133,37 @@ describe('deposit on the real wasm', () => {
       ]);
     } finally {
       keys.free();
+    }
+  });
+
+  test('the quoted deposit fee is the one the planner charges', () => {
+    const script = p2pkh(new wasm.SpendKeys(SEED, 0, false).transparent_pubkey(0));
+    for (const memoBytes of [0, 20, 33, 40, 60, 75, 76, 80]) {
+      for (const inputs of [1, 2, 3]) {
+        const utxos = JSON.stringify(
+          Array.from({ length: inputs }, (_, i) => ({
+            txid: String(i + 1)
+              .padStart(2, '0')
+              .repeat(32),
+            vout: 0,
+            value: '150000',
+            script,
+          })),
+        );
+        const memo = memoBytes ? '61'.repeat(memoBytes) : null;
+        // every input is needed, so the planner spends all of them
+        const amount = BigInt(150_000 * inputs - 40_000);
+        const plan = JSON.parse(wasm.plan_transparent_transaction(utxos, amount, memo)) as {
+          fee: number;
+          inputs: number;
+        };
+        expect(plan.inputs).toBe(inputs);
+        expect([memoBytes, inputs, depositFeeZat(memoBytes, inputs)]).toEqual([
+          memoBytes,
+          inputs,
+          BigInt(plan.fee),
+        ]);
+      }
     }
   });
 

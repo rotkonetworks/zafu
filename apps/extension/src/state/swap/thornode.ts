@@ -30,6 +30,7 @@ import {
   type SwapStatusView,
 } from './provider';
 import { POOLS, poolAsset, ROUTES } from './routes';
+import { depositFeeZat } from '../../workers/transparent-deposit';
 
 export const ZEC_ASSET = 'ZEC.ZEC';
 const ZEC_CHAIN = 'ZEC';
@@ -50,6 +51,9 @@ export const memoLimit = (memo: string): bigint => {
   const m = /^(\d+)(?:e(\d+))?$/.exec(memo.split(':')[3]?.split('/')[0] ?? '');
   return m ? BigInt(m[1]!) * 10n ** BigInt(m[2] ?? 0) : 0n;
 };
+
+/** out of zec the move to the swap's address confirms first: a block or two, 75 s apart */
+const MOVE_SECONDS = 150;
 
 /** observers relay at most 80 bytes of OP_RETURN, and zcash allows no more */
 export const MAX_MEMO_BYTES = 80;
@@ -425,7 +429,15 @@ export const nodeProvider = (chain: NodeChain): SwapProvider => {
           into && q.recommended_gas_rate
             ? `use a fast fee · ${q.recommended_gas_rate} ${gas?.unit ?? q.gas_rate_units ?? ''}`.trim()
             : undefined,
-        timeText: q.total_swap_seconds ? durationText(q.total_swap_seconds) : undefined,
+        // out of zec the move confirms before the deposit is sent
+        timeText: q.total_swap_seconds
+          ? durationText(q.total_swap_seconds + (into ? 0 : MOVE_SECONDS))
+          : undefined,
+        // out of zec zafu sends twice: the move out of the shielded pool, then the deposit
+        ...(!into && {
+          sourceFeeZat: String(BigInt(req.sourceFeeZat ?? 0) + depositFeeZat(memoBytes(q.memo))),
+          sourceFeeNote: 'the move and the deposit',
+        }),
         atLeastText: figure(rescale(memoLimit(q.memo), NODE_DECIMALS, outDecimals), outDecimals),
         streamLine:
           (q.streaming_swap_blocks ?? 0) > 1 && (q.total_swap_seconds ?? 0) >= 3600

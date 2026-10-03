@@ -93,6 +93,14 @@ export interface Quote {
    * list, in bps (negative is lost); absent when no market price is known
    */
   vsMarketBps?: number;
+  /**
+   * out of zec: what the sends on zafu's side cost in all, when the route
+   * needs more than the one shielded send `QuoteRequest.sourceFeeZat` prices
+   * (thorchain: the move to the swap's address, then the t->t deposit), zat
+   */
+  sourceFeeZat?: string;
+  /** what that fee pays for, said after it */
+  sourceFeeNote?: string;
   /** quoted by what arrives through probes (a route with no exact-output mode): "about" */
   approx?: true;
   /** ms epoch */

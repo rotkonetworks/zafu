@@ -60,7 +60,7 @@ describe('a route against the market', () => {
     const got = BigInt(Math.round(((0.1 * 1271) / 2685.21) * (1 - 0.0039) * 1e18));
     const q = priced(quote(got, [{ label: 'thorchain', bps: 39 }]), out(), market);
     expect(q.vsMarketBps).toBe(-228);
-    expect(q.cost?.parts.at(-1)).toMatchObject({ label: 'price vs market', bps: 189 });
+    expect(q.cost?.parts.at(-1)).toMatchObject({ label: "vs near's price list", bps: 189 });
     expect(q.cost?.bps).toBe(228);
   });
 

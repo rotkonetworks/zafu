@@ -53,14 +53,14 @@ const worth = (units: bigint, decimals: number, usd: number) =>
 export const priced = (q: Quote, req: QuoteRequest, market?: Market): Quote => {
   const [inDecimals, outDecimals] = decimalsOf(req);
   const paid = toUnits(q.amountInText, inDecimals);
-  const fee = req.direction === 'from_zec' ? BigInt(req.sourceFeeZat ?? 0) : 0n;
+  const fee = req.direction === 'from_zec' ? BigInt(q.sourceFeeZat ?? req.sourceFeeZat ?? 0) : 0n;
   const parts = [...(q.cost?.parts ?? [])];
   if (fee && paid) {
     parts.unshift({
       label: 'network fee out',
       bps: Number((fee * 10_000n) / paid),
       out: (fee * q.amountOut) / paid,
-      inText: `~${fromUnits(fee, 8)} zec`,
+      inText: `~${fromUnits(fee, 8)} zec${q.sourceFeeNote ? ` · ${q.sourceFeeNote}` : ''}`,
     });
   }
   if (!market || !paid) {
@@ -76,7 +76,8 @@ export const priced = (q: Quote, req: QuoteRequest, market?: Market): Quote => {
     // the market value lost beyond the listed fees, in the asset that arrives
     const lost = spent / market.pOut - Number(q.amountOut) / 10 ** outDecimals;
     const out = BigInt(Math.max(0, Math.round(lost * 10 ** outDecimals))) - costOf(parts).out;
-    parts.push({ label: 'price vs market', bps: gap, out: out > 0n ? out : 0n });
+    // the market is near intents' own price list: the line says whose prices it is measured by
+    parts.push({ label: "vs near's price list", bps: gap, out: out > 0n ? out : 0n });
   }
   return { ...q, cost: costOf(parts), vsMarketBps };
 };

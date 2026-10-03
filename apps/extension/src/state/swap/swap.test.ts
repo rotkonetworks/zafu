@@ -52,6 +52,7 @@ import {
   type NodeQuote,
 } from './thornode';
 import { thorProvider } from './thor';
+import { depositFeeZat } from '../../workers/transparent-deposit';
 import { mayaProvider } from './maya';
 import { NeedsRefundAddress, nearCost, nearProvider } from './near';
 import { PROVIDERS, routeTokens } from '.';
@@ -318,6 +319,31 @@ describe('thorchain', () => {
       }),
     );
     expect(signs).toMatchObject({ notYet: undefined, watch: 'txid', memo: expect.any(String) });
+  });
+
+  it('out of zec, the fee out is the move and the deposit, and the time counts the move', async () => {
+    const memo = '=:BTC.BTC:bc1qdestexample:400000000/1/0';
+    thornode(
+      thorQuote({
+        inbound_address: ZEC_VAULT,
+        memo,
+        expected_amount_out: '24000',
+        fees: { asset: 'BTC.BTC', total: '1' },
+        total_swap_seconds: 600,
+      }),
+    );
+    const quote = await thorProvider.quote(
+      req({
+        direction: 'from_zec',
+        amountIn: '1',
+        otherAddress: 'bc1qdestexample',
+        signsOpReturn: true,
+        sourceFeeZat: '15000',
+      }),
+    );
+    expect(quote.sourceFeeZat).toBe(String(15_000n + depositFeeZat(memo.length)));
+    expect(quote.sourceFeeNote).toBe('the move and the deposit');
+    expect(quote.timeText).toBe('~13 min');
   });
 
   it('watches a zec deposit by its txid through every thornode stage', async () => {

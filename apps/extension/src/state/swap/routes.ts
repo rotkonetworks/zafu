@@ -116,13 +116,14 @@ export const ROUTES: Record<RouteId, RouteMeta> = {
   thor: {
     label: 'thorchain',
     egress: 'thorchain',
-    custody: 'no middleman',
+    // its vaults are threshold-signed by the node set: no one holds them, many do
+    custody: "no single custodian · thorchain's nodes hold the vault",
     refuses: nodeRefuses('thor', 'thorchain'),
   },
   maya: {
     label: 'maya',
     egress: 'mayachain',
-    custody: 'no middleman',
+    custody: "no single custodian · maya's nodes hold the vault",
     refuses: nodeRefuses('maya', 'maya'),
     off: MAYA_ENABLED ? undefined : "maya isn't offered right now",
   },
