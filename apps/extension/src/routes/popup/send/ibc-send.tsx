@@ -105,21 +105,33 @@ export function PenumbraIbcSend({ onClose, meta }: { onClose: () => void; meta?:
     [allBalances, ibcState.chain?.channelId],
   );
 
-  const [selectedAsset, setSelectedAsset] = useState<(typeof allBalances)[0] | undefined>();
+  // Derived, not synced: the picked denom (persisted in the ibcWithdraw slice)
+  // is the source of truth, and the balance row is looked up fresh from it
+  // every render, so a balances refetch (same or different shape) always
+  // shows the current amount instead of a stale snapshot.
+  const selectedAsset = useMemo(() => {
+    if (withdrawableAssets.length === 0) {
+      return undefined;
+    }
+    const byDenom = ibcState.denom
+      ? withdrawableAssets.find(
+          b => getMetadataFromBalancesResponse.optional(b)?.base === ibcState.denom,
+        )
+      : undefined;
+    return byDenom ?? withdrawableAssets[0];
+  }, [withdrawableAssets, ibcState.denom]);
 
-  // auto-select first withdrawable asset when chain changes
+  // keep the stored denom pointed at something withdrawable: clears it when
+  // nothing is withdrawable, and defaults it to the first asset on a chain
+  // switch (or the initial load) when the current pick no longer resolves
   useEffect(() => {
-    if (withdrawableAssets.length > 0) {
-      const meta = getMetadataFromBalancesResponse.optional(withdrawableAssets[0]);
-      setSelectedAsset(withdrawableAssets[0]);
-      if (meta?.base) {
-        ibcState.setDenom(meta.base, getDisplayDenomExponent.optional(meta));
-      }
-    } else {
-      setSelectedAsset(undefined);
+    const meta = selectedAsset ? getMetadataFromBalancesResponse.optional(selectedAsset) : undefined;
+    if (meta?.base && meta.base !== ibcState.denom) {
+      ibcState.setDenom(meta.base, getDisplayDenomExponent.optional(meta));
+    } else if (!selectedAsset && ibcState.denom) {
       ibcState.setDenom('', undefined);
     }
-  }, [ibcState.chain?.channelId, withdrawableAssets.length]);
+  }, [selectedAsset, ibcState.denom]);
 
   // recent addresses and contacts
   const { recordUsage, shouldSuggestSave } = useStore(recentAddressesSelector);
@@ -423,7 +435,6 @@ export function PenumbraIbcSend({ onClose, meta }: { onClose: () => void; meta?:
             assets={withdrawableAssets}
             onPick={b => {
               const meta = getMetadataFromBalancesResponse.optional(b);
-              setSelectedAsset(b);
               if (meta?.base) {
                 ibcState.setDenom(meta.base, getDisplayDenomExponent.optional(meta));
               }
