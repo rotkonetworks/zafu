@@ -33,7 +33,7 @@ const EMPTY_POOL_BALANCES: PoolBalances = {
 };
 
 /** Empty per-pool note lists - the value before the first fetch resolves. */
-const EMPTY_POOL_NOTES: PoolNotes = { orchard: [], ironwood: [] };
+export const EMPTY_POOL_NOTES: PoolNotes = { orchard: [], ironwood: [] };
 
 /**
  * Subscribe to a worker fetch that re-runs on `network-sync-progress` for the

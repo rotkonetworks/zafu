@@ -35,7 +35,7 @@ import { keepSwapPreload, keepSwapQuotes, seedSwapQuotes } from '../../../state/
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { buildSendTxInWorker, completeSendTxInWorker } from '../../../state/keyring/network-worker';
 import type { VaultUnlock } from '../../../state/keyring/types';
-import { usePoolNotes } from '../../../hooks/zcash-pool-balances';
+import { EMPTY_POOL_NOTES, usePoolNotes } from '../../../hooks/zcash-pool-balances';
 import { maxSendable } from '../send/spendable';
 import { PROVIDERS, routeTokens } from '../../../state/swap';
 import {
@@ -347,7 +347,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
     (activeZcashWallet?.orchardFvk?.startsWith('uview') ? activeZcashWallet.orchardFvk : undefined);
   const { requestAuth, PasswordModal } = usePasswordGate();
   const { chosen, choose } = useSwapRoutes();
-  const { last, remember } = useSwapLast(wallet);
+  const { last, read, remember } = useSwapLast(wallet);
 
   // a link to a route zafu doesn't offer opens the normal router, with that one line
   const off = link?.link.route && ROUTES[link.link.route].off;
@@ -366,7 +366,9 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const [routesOpen, setRoutesOpen] = useState(false);
   const [picked, setPicked] = useState<RouteId>();
   // the firm quote review was opened with, and the live price it replaced
-  const [firm, setFirm] = useState<{ quote: Quote; was: Quote }>();
+  // the price review froze; once confirm re-checked it, `was` holds the one it replaced
+  const [firm, setFirm] = useState<{ quote: Quote; was?: Quote; checked?: true }>();
+  const [checking, setChecking] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [riskAcknowledged, setRiskAcknowledged] = useState(false);
   const [status, setStatus] = useState<SwapStatusView>();
@@ -382,7 +384,8 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const buildStartRef = useRef(0);
 
   // the spending pocket's own pool (as thor-deposit); nothing shows before its notes are read
-  const { ironwood } = usePoolNotes(storeId ?? selectedKeyInfo?.id);
+  const pool = usePoolNotes(storeId ?? selectedKeyInfo?.id);
+  const { ironwood } = pool;
   const notes = useMemo(() => ironwood.filter(n => !n.spent).map(n => BigInt(n.value)), [ironwood]);
   const balanceZec = notes.length
     ? fromUnits(
@@ -394,7 +397,16 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   // address isn't known yet. thorchain's two-step pays a second fee (its own screen checks)
   const maxZat = maxSendable(notes, { transparentRecipient: true }).amountZat;
 
-  const direction = pickedDirection ?? last?.direction ?? (notes.length ? 'from_zec' : 'into_zec');
+  // with no pair remembered, the direction waits for the balance, so it never flips under the person
+  const [waited, setWaited] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setWaited(true), 1500);
+    return () => clearTimeout(t);
+  }, []);
+  const settled = read && (pool !== EMPTY_POOL_NOTES || waited);
+  const remembered = pickedDirection ?? last?.direction;
+  const decided = !!remembered || settled;
+  const direction = remembered ?? (notes.length || !settled ? 'from_zec' : 'into_zec');
   const token = pickedToken ?? (link ? undefined : last?.token);
   const isFromZec = direction === 'from_zec';
   const pair: SwapPair | undefined = token && pairOf({ direction, token });
@@ -405,6 +417,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const inUnit = isFromZec ? 'zec' : unit;
   const outDecimals = isFromZec ? (token?.decimals ?? 8) : 8;
   const amountIn = typedAmount ?? defaultAmount(direction, maxZat, token);
+  const overMax = isFromZec && toUnits(amountIn, 8) > maxZat;
   const quick = isFromZec ? chips(maxZat) : [];
 
   // the chain the other address is on; the picker and "yours" follow it
@@ -427,7 +440,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const usable = parseFloat(askAmount ?? '') > 0 && !!askAddress && fits(askAddress);
   const req = useMemo<QuoteRequest | undefined>(
     () =>
-      token && zcashAddress && usable
+      decided && token && zcashAddress && usable
         ? {
             direction,
             token,
@@ -478,7 +491,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
   const fetching = answers.some(a => a.isFetching);
   const expiredLive = !!view?.expiresAt && view.expiresAt <= Date.now();
   const reviewable =
-    !!quote && !typing && !answerOf(quote.route)?.isPlaceholderData && !expiredLive;
+    !!quote && !typing && !overMax && !answerOf(quote.route)?.isPlaceholderData && !expiredLive;
   const ahead = lead(quotes);
   const more = ahead ? fromUnits(ahead, outDecimals) : undefined;
   // the routes with no price: refused, failed, blocked or not asked yet
@@ -596,45 +609,56 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
     }
   };
 
-  // review opens at once on the live price; a dry one is made firm behind it,
-  // and nothing can be confirmed until it is
+  // review freezes the price shown: nothing refreshes behind it, and only confirm re-checks it
   const firmAsk = useRef<AbortController>(undefined);
-  const openReview = async () => {
-    if (!reviewable || !req) {
-      return;
-    }
-    const was = quote;
-    setError(undefined);
-    setFirm({ quote: was, was });
-    setRiskAcknowledged(false);
-    setReviewOpen(true);
-    if (was.depositAddress) {
-      return;
-    }
-    firmAsk.current?.abort();
-    const ask = (firmAsk.current = new AbortController());
-    try {
-      const got = await PROVIDERS[was.route]!.quote({ ...req, dry: false }, ask.signal);
-      if (!ask.signal.aborted) {
-        setFirm({ quote: got, was });
-      }
-    } catch (e) {
-      if (!ask.signal.aborted) {
-        setReviewOpen(false);
-        setErrorCause(e);
-        setError(`${ROUTES[was.route].label} · ${plain(was.route, e)}`);
-      }
+  const openReview = () => {
+    if (reviewable) {
+      setError(undefined);
+      setFirm({ quote });
+      setRiskAcknowledged(false);
+      setReviewOpen(true);
     }
   };
   const closeReview = () => {
     firmAsk.current?.abort();
     setReviewOpen(false);
   };
-
-  const confirm = async () => {
-    if (!deal?.depositAddress || !selectedKeyInfo) {
+  // the first confirm asks the route for its firm quote; a moved price is shown, struck, for a second look
+  const recheck = async () => {
+    if (!firm || !req) {
       return;
     }
+    if (firm.checked) {
+      return confirm(firm.quote);
+    }
+    const ask = (firmAsk.current = new AbortController());
+    setChecking(true);
+    try {
+      const got = await PROVIDERS[firm.quote.route]!.quote({ ...req, dry: false }, ask.signal);
+      if (ask.signal.aborted) {
+        return;
+      }
+      if (got.amountOut !== firm.quote.amountOut) {
+        setFirm({ quote: got, was: firm.quote, checked: true });
+        return;
+      }
+      return confirm(got);
+    } catch (e) {
+      if (!ask.signal.aborted) {
+        setReviewOpen(false);
+        setErrorCause(e);
+        setError(`${ROUTES[firm.quote.route].label} · ${plain(firm.quote.route, e)}`);
+      }
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const confirm = async (d: Quote) => {
+    if (!selectedKeyInfo) {
+      return;
+    }
+    setFirm({ quote: d, checked: true });
     setReviewOpen(false);
     setError(undefined);
 
@@ -646,11 +670,11 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
       setStep('deposit');
       return;
     }
-    if (deal.notYet) {
+    if (d.notYet) {
       return;
     }
     // a memo deposit is never a shielded send: a t->t with an OP_RETURN, its own steps
-    if (deal.memo) {
+    if (d.memo) {
       setStep('thor-out');
       return;
     }
@@ -662,7 +686,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
         walletId,
         pocket,
         zidecarUrl,
-        to: deal.depositAddress,
+        to: d.depositAddress,
         amountIn,
       };
       setSendSteps([]);
@@ -799,12 +823,20 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
 
   const header = (meta?: ReactNode) => <ScreenHeader title='swap' onBack={goBack} meta={meta} />;
 
+  if (step === 'input' && !decided) {
+    return <div className='flex h-full flex-col bg-canvas'>{header()}</div>;
+  }
+
   if (step === 'input') {
     const updatedAt = shown?.dataUpdatedAt ?? 0;
     const next = view && updatedAt + (refreshIn(view, updatedAt, updatedAt) || 0);
     const note = deal && NOTE[deal.route][direction];
     const helper =
-      error ?? pinnedRefusal ?? (quote ? undefined : below?.message) ?? (off || undefined);
+      error ??
+      pinnedRefusal ??
+      (overMax ? `${fromUnits(maxZat, 8)} zec can be sent` : undefined) ??
+      (quote ? undefined : below?.message) ??
+      (off || undefined);
     return (
       <div
         className='flex h-full flex-col bg-canvas'
@@ -812,7 +844,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
         onKeyDown={e => {
           if (e.key === 'Enter' && e.target instanceof HTMLInputElement && reviewable) {
             e.preventDefault();
-            void openReview();
+            openReview();
           }
         }}
       >
@@ -822,7 +854,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
             `via ${ROUTES[pinned].label}`
           ) : expiredLive ? (
             <span className='text-hanko-light'>quote expired</span>
-          ) : fetching || !next ? (
+          ) : fetching || !next || reviewOpen ? (
             fetching && 'updating'
           ) : (
             <RefreshIn at={next} />
@@ -997,7 +1029,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
               ask for prices
             </Button>
           ) : (
-            <Button className='w-full' onClick={() => void openReview()} disabled={!reviewable}>
+            <Button className='w-full' onClick={openReview} disabled={!reviewable}>
               review swap
             </Button>
           )}
@@ -1046,7 +1078,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
                   ['you receive', `${deal.amountOutText} ${outUnit}`, true],
                   ['route', ROUTES[deal.route].label],
                   ['recipient', deal.recipient],
-                  [isFromZec ? 'deposit address' : 'pay to', deal.depositAddress || 'issuing'],
+                  [isFromZec ? 'deposit address' : 'pay to', deal.depositAddress || 'on confirm'],
                   ...(deal.memo ? [['memo', deal.memo]] : []),
                 ] as [string, string, boolean?][]
               ).map(([k, v, amount]) => (
@@ -1054,7 +1086,7 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
                   <span className='shrink-0 text-fg-muted'>{k}</span>
                   <span className='break-all text-right font-mono'>
                     {/* a firm price that moved from the live one shows the old one struck */}
-                    {k === 'you receive' && firm.was.amountOut !== deal.amountOut && (
+                    {k === 'you receive' && firm.was && firm.was.amountOut !== deal.amountOut && (
                       <Sensitive className='mr-2 text-fg-muted line-through'>
                         {firm.was.amountOutText}
                       </Sensitive>
@@ -1112,9 +1144,9 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
               ) : (
                 <Button
                   className='flex-1'
-                  onClick={() => void confirm()}
-                  disabled={!riskAcknowledged || !deal.depositAddress}
-                  loading={!deal.depositAddress}
+                  onClick={() => void recheck()}
+                  disabled={!riskAcknowledged}
+                  loading={checking}
                 >
                   {/* a memo deposit has its own reviews next; nothing is signed here */}
                   {isFromZec ? (deal.memo ? 'continue' : 'confirm & send') : 'show deposit address'}
