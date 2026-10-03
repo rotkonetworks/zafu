@@ -34,7 +34,11 @@ export interface QuoteRequest {
   dry?: boolean;
   /**
    * decimal, in the asset received: quote by what arrives instead. `amountIn`
-   * is then only a hint (the other field's last figure)
+   * is then only a hint (the other field's last figure).
+   *
+   * Exact output is kept on purpose: the unified swap screen quotes by what
+   * arrives next. No screen sets `exactOut` yet; the tests in swap.test.ts
+   * and market.test.ts keep it working until one does.
    */
   exactOut?: string;
   /** out of zec: the ZIP-317 fee of the shielded send to the deposit, in zat (a string: it is stored) */
@@ -131,7 +135,7 @@ export interface SwapProvider {
   /** what the token picker offers; may ask for this route's egress */
   tokens: () => Promise<SwapToken[]>;
   quote: (req: QuoteRequest, signal?: AbortSignal) => Promise<Quote>;
-  /** quotes `exactOut` itself; any other route is inverted by probes */
+  /** quotes `exactOut` itself; any other route is inverted by probes (kept for the unified screen, see QuoteRequest.exactOut) */
   exactOut?: true;
   /** absent when the route can't be watched from here; `txid` for `watch: 'txid'` quotes */
   status?: (quote: Quote, txid?: string) => Promise<SwapStatusView>;

@@ -83,6 +83,9 @@ export const priced = (q: Quote, req: QuoteRequest, market?: Market): Quote => {
 };
 
 /**
+ * Exact output, kept for the unified swap screen (see QuoteRequest.exactOut):
+ * nothing calls it with `exactOut` set yet.
+ *
  * A route with no exact-output mode, quoted by what arrives: a first input
  * from the market (or the other field's figure), then refined in proportion
  * until it lands within 0.5% of what is wanted, at most three asks. Said

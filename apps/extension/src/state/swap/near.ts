@@ -150,6 +150,7 @@ const nearQuote = async (req: QuoteRequest, signal?: AbortSignal): Promise<Quote
   const [inDecimals, outDecimals] = fromZec ? [8, token.decimals] : [token.decimals, 8];
   const resp: SwapQuoteResponse = await requestQuote({
     // by what arrives: 1click asks a deposit of amountIn, and sends back any excess
+    // (exact output is kept for the unified swap screen; see QuoteRequest.exactOut)
     swapType: req.exactOut ? 'EXACT_OUTPUT' : 'EXACT_INPUT',
     amount: (req.exactOut
       ? toUnits(req.exactOut, outDecimals)
