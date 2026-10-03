@@ -107,3 +107,19 @@ describe("peer's buy link", () => {
     expect(new URL(peerBuyUrl({})).searchParams.has('recipientAddress')).toBe(false);
   });
 });
+
+describe('manifest permissions', () => {
+  it('asks for capture access only as optional, for exactly the pay apps', async () => {
+    const { readFileSync } = await import('node:fs');
+    for (const f of ['public/manifest.json', 'public/beta-manifest.json']) {
+      const m = JSON.parse(readFileSync(f, 'utf8')) as Record<string, string[]>;
+      expect(m['optional_permissions']).toEqual(['webRequest', 'scripting']);
+      expect(m['permissions']).not.toContain('webRequest');
+      expect(m['permissions']).not.toContain('scripting');
+      expect(m['permissions']).not.toContain('tabs');
+      expect([...m['optional_host_permissions']!].sort()).toEqual(
+        PAY_APPS.flatMap(a => a.hosts.map(h => `https://${h}/*`)).sort(),
+      );
+    }
+  });
+});
