@@ -41,7 +41,9 @@ export function PaymentRequestSheet({
       amount={amount}
       onAmount={setAmount}
       amountWarn={amountInvalid}
-      note={isShielded ? { value: memo, onChange: setMemo, label: 'memo', maxLength: 512 } : undefined}
+      note={
+        isShielded ? { value: memo, onChange: setMemo, label: 'memo', maxLength: 512 } : undefined
+      }
       confirmLabel={copied ? 'copied' : 'copy payment link'}
       confirmDisabled={amountInvalid}
       onConfirm={() => {

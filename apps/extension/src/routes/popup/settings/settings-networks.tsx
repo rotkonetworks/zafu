@@ -12,7 +12,12 @@ import { useExplain, type ExplainId } from './settings-explain';
 
 /** each chain's own screen, and its label here */
 const CHAINS = [
-  { id: 'zcash', label: 'zcash', screen: PopupPath.SETTINGS_ZCASH_NETWORK, explainId: 'network.zcashEnable' },
+  {
+    id: 'zcash',
+    label: 'zcash',
+    screen: PopupPath.SETTINGS_ZCASH_NETWORK,
+    explainId: 'network.zcashEnable',
+  },
   {
     id: 'penumbra',
     label: 'penumbra',

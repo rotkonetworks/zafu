@@ -1228,7 +1228,11 @@ export const CrosschainSwap = ({ link }: { link?: SwapLinkState }) => {
                     loading={checking}
                   >
                     {/* a memo deposit has its own reviews next; nothing is signed here */}
-                    {isFromZec ? (deal.memo ? 'continue' : 'confirm & send') : 'show deposit address'}
+                    {isFromZec
+                      ? deal.memo
+                        ? 'continue'
+                        : 'confirm & send'
+                      : 'show deposit address'}
                   </Button>
                 )}
               </div>

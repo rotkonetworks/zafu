@@ -125,7 +125,9 @@ export function PenumbraIbcSend({ onClose, meta }: { onClose: () => void; meta?:
   // nothing is withdrawable, and defaults it to the first asset on a chain
   // switch (or the initial load) when the current pick no longer resolves
   useEffect(() => {
-    const meta = selectedAsset ? getMetadataFromBalancesResponse.optional(selectedAsset) : undefined;
+    const meta = selectedAsset
+      ? getMetadataFromBalancesResponse.optional(selectedAsset)
+      : undefined;
     if (meta?.base && meta.base !== ibcState.denom) {
       ibcState.setDenom(meta.base, getDisplayDenomExponent.optional(meta));
     } else if (!selectedAsset && ibcState.denom) {
