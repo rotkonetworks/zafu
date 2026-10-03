@@ -15,7 +15,7 @@ import {
   Action,
   Transaction,
 } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
-import { StateCommitment } from '@penumbra-zone/protobuf/penumbra/crypto/tct/v1/tct_pb';
+import { MerkleRoot, StateCommitment } from '@penumbra-zone/protobuf/penumbra/crypto/tct/v1/tct_pb';
 import { SpendableNoteRecord, SwapRecord } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { auctionIdFromBech32 } from '@penumbra-zone/bech32m/pauctid';
 import { bech32mIdentityKey } from '@penumbra-zone/bech32m/penumbravalid';
@@ -93,6 +93,9 @@ interface ProcessBlockParams {
   skipScanBlock?: boolean;
 }
 
+/** what a snapshot view server reports as its height before it scans a block */
+const U64_MAX = 0xffffffffffffffffn;
+
 const POSITION_STATES: PositionState[] = [
   new PositionState({ state: PositionState_PositionStateEnum.OPENED }),
   new PositionState({ state: PositionState_PositionStateEnum.CLOSED }),
@@ -113,6 +116,16 @@ export class BlockProcessor implements BlockProcessorInterface {
   private numeraires: AssetId[];
   private readonly stakingAssetId: AssetId;
   private syncPromise: Promise<void> | undefined;
+  /**
+   * The wasm tree holds blocks (or a flush) that IndexedDB does not. A run
+   * that ends there - paused, held, or failed - leaves them in memory, and
+   * the next run reads on from the STORED height; scanning those blocks a
+   * second time inserts them twice and shifts every later position. So the
+   * next run first puts the tree back to what is stored.
+   */
+  private unflushed = false;
+  /** the stored tree was compared with the chain once (see checkStoredTree) */
+  private treeChecked = false;
   private readonly genesisBlock: CompactBlock | undefined;
   private readonly walletCreationBlockHeight: number | undefined;
   private readonly compactFrontierBlockHeight: number | undefined;
@@ -148,7 +161,7 @@ export class BlockProcessor implements BlockProcessorInterface {
     // the user switched away from
     this.paused || this.holds > 0 || this.stopped
       ? Promise.resolve()
-      : (this.syncPromise ??= backOff(() => this.syncAndStore().catch(this.endIfStopped), {
+      : (this.syncPromise ??= backOff(this.run, {
           delayFirstAttempt: false,
           startingDelay: 5_000, // 5 seconds
           numOfAttempts: Infinity,
@@ -169,21 +182,11 @@ export class BlockProcessor implements BlockProcessorInterface {
             if (shouldLog) {
               console.error(`Sync failure #${attemptNumber}: `, e);
             }
-            // The tree reset is best-effort recovery, NOT a precondition for
-            // retrying: when it threw, backOff gave up and cleared the sync promise,
-            // so the wallet stopped syncing until some unrelated view RPC poked
-            // sync() again - which restarted a doomed sync, failed the same way, and
-            // left the worker looping on GetStatus with no block ever processed.
-            // A stale tree still syncs (blocks are re-scanned from stored height),
-            // so a failed reset must not end the loop.
-            try {
-              await this.viewServer.resetTreeToStored();
-            } catch (resetError) {
-              if (shouldLog) {
-                console.error('Sync tree reset failed; retrying anyway:', resetError);
-              }
-            }
-            return true;
+            // The next attempt puts the tree back to what is stored before it
+            // reads a block (see `run`). A reset that throws is just a failed
+            // attempt, retried like any other: it never ends the loop, and the
+            // run never goes on over a tree that is ahead of storage.
+            return Promise.resolve(true);
           },
         })).finally(
           // if the above promise completes, exponential backoff has ended (aborted).
@@ -191,12 +194,39 @@ export class BlockProcessor implements BlockProcessorInterface {
           () => (this.syncPromise = undefined),
         );
 
-  /** an intentional stop or pause ends a run; it is not a failure anyone should log */
-  private endIfStopped = (e: unknown) => {
-    if (!this.abortController.signal.aborted) {
-      throw e;
+  /**
+   * One run of the loop, bound to the abort signal it started with. A resume
+   * swaps in a fresh controller before this run has wound down; reading
+   * `this.abortController` here would see the new one and take the old run's
+   * abort for a failure (or keep it streaming). An intentional stop or pause
+   * ends a run; it is not a failure anyone should log.
+   */
+  private run = async (): Promise<void> => {
+    const signal = this.abortController.signal;
+    try {
+      // every run starts from what is stored, never from a tree ahead of it
+      if (this.unflushed) {
+        await this.viewServer.resetTreeToStored();
+        this.unflushed = false;
+      }
+      await this.syncAndStore(signal);
+    } catch (e) {
+      if (!signal.aborted) {
+        throw e;
+      }
     }
   };
+
+  /** flush the wasm tree's updates and store them with the height they reach */
+  private async flushAndSave(height?: bigint): Promise<ScanBlockResult> {
+    // flushing moves the wasm tree's checkpoint, so until the save lands the
+    // tree is ahead of storage even when no block was scanned
+    this.unflushed = true;
+    const flush = this.viewServer.flushUpdates();
+    await this.indexedDb.saveScanResult(height === undefined ? flush : { ...flush, height });
+    this.unflushed = false;
+    return flush;
+  }
 
   public stop = (r: string) => {
     this.stopped = true;
@@ -263,7 +293,7 @@ export class BlockProcessor implements BlockProcessorInterface {
    * - query remote rpc to begin streaming at the next block
    * - iterate
    */
-  private async syncAndStore() {
+  private async syncAndStore(signal: AbortSignal) {
     const PRE_GENESIS_SYNC_HEIGHT = -1n;
 
     // Chunking policy is ~3x larger than the maximum number of state payloads that are supported
@@ -273,7 +303,21 @@ export class BlockProcessor implements BlockProcessorInterface {
     const GENESIS_CHUNK_SIZE = 2000;
 
     // start at next block, or genesis if height is undefined
-    const fullSyncHeight = await this.indexedDb.getFullSyncHeight();
+    let fullSyncHeight = await this.indexedDb.getFullSyncHeight();
+
+    // a wallet stored by an older build may already hold a tree the chain
+    // never had (blocks inserted twice); read it again from its start
+    if (fullSyncHeight !== undefined && !this.treeChecked) {
+      const verdict = await this.checkStoredTree(fullSyncHeight);
+      if (verdict === 'ok') {
+        this.treeChecked = true;
+      } else if (verdict === 'mismatch') {
+        await this.rescanFromStart(fullSyncHeight);
+        fullSyncHeight = undefined;
+        this.treeChecked = true;
+      }
+    }
+
     let currentHeight = fullSyncHeight ?? PRE_GENESIS_SYNC_HEIGHT;
 
     // detects if this is a freshly created wallet that skipped historical sync
@@ -329,8 +373,7 @@ export class BlockProcessor implements BlockProcessorInterface {
       // start, so this is normally empty; the height is named here because a
       // snapshot server that has scanned nothing reports u64::MAX as its own,
       // and storing that would start the next run past the end of the chain.
-      const flush = this.viewServer.flushUpdates();
-      await this.indexedDb.saveScanResult({ ...flush, height: currentHeight });
+      await this.flushAndSave(currentHeight);
     }
 
     // FMD params: current mainnet serves `fmdMetaParams` (the deprecated
@@ -433,6 +476,7 @@ export class BlockProcessor implements BlockProcessorInterface {
           });
 
           // trial decrypts a chunk, according to some chunking policy, of the genesis block.
+          this.unflushed = true;
           await this.viewServer.scanGenesisChunk(BigInt(start), chunkedBlock, skipTrialDecrypt);
 
           // after trial decrypting all the chunks, check if this is the last chunk
@@ -478,7 +522,7 @@ export class BlockProcessor implements BlockProcessorInterface {
       for await (const compactBlock of this.querier.compactBlock.compactBlockRange({
         startHeight: currentHeight + 1n,
         keepAlive: true,
-        abortSignal: this.abortController.signal,
+        abortSignal: signal,
       })) {
         // confirm block height to prevent corruption of local state
         if (compactBlock.height === currentHeight + 1n) {
@@ -509,7 +553,7 @@ export class BlockProcessor implements BlockProcessorInterface {
         }
       }
 
-      if (this.abortController.signal.aborted) {
+      if (signal.aborted) {
         return;
       }
       console.warn('[sync] compact block stream ended; resubscribing');
@@ -628,6 +672,9 @@ export class BlockProcessor implements BlockProcessorInterface {
     // - decrypts new notes
     // - decrypts new swaps
     // - updates idb with advice
+    if (!skipScanBlock) {
+      this.unflushed = true;
+    }
     const scannerWantsFlush = skipScanBlock
       ? true
       : await this.viewServer.scanBlock(compactBlock, skipTrialDecrypt);
@@ -645,14 +692,12 @@ export class BlockProcessor implements BlockProcessorInterface {
     const recordsByCommitment = new Map<StateCommitment, SpendableNoteRecord | SwapRecord>();
     let flush: ScanBlockResult | undefined;
     if (Object.values(flushReasons).some(Boolean)) {
-      flush = this.viewServer.flushUpdates();
-
       // in an atomic query, this
       // - saves 'sctUpdates'
       // - saves new decrypted notes
       // - saves new decrypted swaps
       // - updates last block synced
-      await this.indexedDb.saveScanResult(flush);
+      flush = await this.flushAndSave();
 
       // - detect unknown asset types
       // - shielded pool for asset metadata
@@ -763,6 +808,63 @@ export class BlockProcessor implements BlockProcessorInterface {
     if (globalThis.__ASSERT_ROOT__) {
       await this.assertRootValid(compactBlock.height);
     }
+  }
+
+  /**
+   * Compare the stored tree with the chain at the stored height, once per
+   * block processor, before a run reads on from it. The in-memory tree is the
+   * stored one here (`run` reset it if it was ahead), and the node keeps the
+   * anchor of every height, so one small query tells whether the stored tree
+   * is a tree the chain ever had. A root commits to every position in it, so
+   * a tree with blocks inserted twice, or positions counted from the wrong
+   * place, fails this check.
+   *
+   * 'unknown' (the node did not answer, or has no anchor for that height) is
+   * never taken for a mismatch: only a definite answer that disagrees starts
+   * a rescan.
+   */
+  private async checkStoredTree(height: bigint): Promise<'ok' | 'mismatch' | 'unknown'> {
+    // a snapshot flush stored before the fix names no real height
+    if (height === U64_MAX) {
+      return 'mismatch';
+    }
+    let remote: MerkleRoot;
+    let local: MerkleRoot;
+    try {
+      remote = await this.querier.cnidarium.fetchRemoteRoot(height);
+      local = this.viewServer.getSctRoot();
+    } catch (e) {
+      console.debug('[sync] stored tree not checked:', e);
+      return 'unknown';
+    }
+    if (!remote.inner.length) {
+      return 'unknown';
+    }
+    if (remote.equals(local)) {
+      return 'ok';
+    }
+    console.warn(
+      `[sync] the stored tree at ${height} is not the chain's ` +
+        `(local ${uint8ArrayToHex(local.inner)}, chain ${uint8ArrayToHex(remote.inner)}); ` +
+        'reading the chain again from the start',
+    );
+    return 'mismatch';
+  }
+
+  /**
+   * Throw away everything this wallet derived from the chain and read it
+   * again from the start. Storage keeps no earlier tree states to roll back
+   * to, so the last point known good is the start itself: genesis, with
+   * trial decryption still skipped before the wallet's start
+   * (`walletCreationBlockHeight`). Nothing here is the user's own: notes,
+   * swaps, history and positions all come back from the chain.
+   */
+  private async rescanFromStart(height: bigint): Promise<void> {
+    console.warn(`[sync] rescanning from the start; the stored height was ${height}`);
+    await this.indexedDb.clear();
+    this.unflushed = true;
+    await this.viewServer.resetTreeToStored();
+    this.unflushed = false;
   }
 
   /*
