@@ -222,6 +222,14 @@ const ContactView = ({ contact }: { contact: Contact }) => {
         {contact.zid && (
           <Row type='screen' label='check seal again' onPress={() => setOpen({ kind: 'seal' })} />
         )}
+        {/* a v2 card of yours they hold: a fresh address goes to them as a signed update */}
+        {contact.given && (
+          <Row
+            type='screen'
+            label={`a new address for ${contact.name}`}
+            onPress={() => void updateContact(contact.id, { addrGen: (contact.addrGen ?? 0) + 1 })}
+          />
+        )}
         {/* until each holds the other's card, neither side can be found */}
         {!contact.rel && shareCard && hasZcash && (
           <Row
