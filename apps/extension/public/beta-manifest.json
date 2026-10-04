@@ -87,16 +87,6 @@
     "contextMenus"
   ],
   "optional_permissions": ["webRequest", "scripting"],
-  "optional_host_permissions": [
-    "https://app.revolut.com/*",
-    "https://wise.com/*",
-    "https://secure.chase.com/*",
-    "https://secure.bankofamerica.com/*",
-    "https://online.citi.com/*",
-    "https://web.monzo.com/*",
-    "https://internal-api.monzo.com/*",
-    "https://api.monzo.com/*"
-  ],
   "host_permissions": ["<all_urls>"],
   "externally_connectable": {
     "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://[::1]/*"]

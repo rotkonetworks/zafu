@@ -109,7 +109,7 @@ describe("peer's buy link", () => {
 });
 
 describe('manifest permissions', () => {
-  it('asks for capture access only as optional, for exactly the pay apps', async () => {
+  it('asks for capture access only as optional; the pay hosts ride on <all_urls>', async () => {
     const { readFileSync } = await import('node:fs');
     for (const f of ['public/manifest.json', 'public/beta-manifest.json']) {
       const m = JSON.parse(readFileSync(f, 'utf8')) as Record<string, string[]>;
@@ -117,9 +117,12 @@ describe('manifest permissions', () => {
       expect(m['permissions']).not.toContain('webRequest');
       expect(m['permissions']).not.toContain('scripting');
       expect(m['permissions']).not.toContain('tabs');
-      expect([...m['optional_host_permissions']!].sort()).toEqual(
-        PAY_APPS.flatMap(a => a.hosts.map(h => `https://${h}/*`)).sort(),
-      );
+      // listing them again as optional is redundant: Chrome warns and drops them
+      expect(m['host_permissions']).toEqual(['<all_urls>']);
+      expect(m['optional_host_permissions']).toBeUndefined();
+      for (const h of PAY_APPS.flatMap(a => a.hosts)) {
+        expect(h).toMatch(/^[a-z0-9.-]+$/);
+      }
     }
   });
 });
