@@ -97,7 +97,6 @@ describe("peer's buy link", () => {
     );
     expect(u.pathname).toBe('/swap');
     expect(Object.fromEntries(u.searchParams)).toEqual({
-      referrer: 'zafu',
       inputCurrency: 'EUR',
       inputAmount: '100',
       paymentPlatform: 'revolut',
@@ -105,6 +104,7 @@ describe("peer's buy link", () => {
       recipientAddress: '0xabc',
     });
     expect(new URL(peerBuyUrl({})).searchParams.has('recipientAddress')).toBe(false);
+    expect(new URL(peerBuyUrl({})).searchParams.has('referrer')).toBe(false);
   });
 });
 

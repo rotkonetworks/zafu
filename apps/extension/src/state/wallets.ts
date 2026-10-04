@@ -8,6 +8,7 @@ import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { SessionStorageState } from '@repo/storage-chrome/session';
 import { AllSlices, SliceCreator } from '.';
 import { keyUse } from './keyring-lock';
+import type { SeatRoom } from './keyring/vault-ops';
 import type { Contact } from './contacts';
 
 /** Zcash wallet stored in extension */
@@ -56,6 +57,8 @@ export interface ZcashWalletJson {
     hidden?: boolean;
     /** when this seat's share was last exported to an encrypted backup file */
     backedUpAt?: number;
+    /** a shared wallet made in a people room: signs there, never the active wallet */
+    room?: SeatRoom;
   };
 }
 

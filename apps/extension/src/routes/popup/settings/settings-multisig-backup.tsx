@@ -30,11 +30,20 @@ const fmtDay = (ms: number) =>
 
 /** what a seat row says about its backup, as data */
 const seatState = (w: ZcashWalletJson) =>
-  w.multisig?.custody === 'airgapSigner'
-    ? { mark: 'i-ph-asterisk size-4 text-zafu-blue', meta: 'seat lives on zigner · back up there' }
-    : w.multisig?.backedUpAt
-      ? { mark: 'size-3.5 bg-success', meta: `encrypted file · ${fmtDay(w.multisig.backedUpAt)}` }
-      : { mark: 'size-3.5 border border-warn', meta: 'never backed up', warn: true };
+  w.multisig?.room && !w.multisig.backedUpAt
+    ? {
+        mark: 'size-3.5 border border-warn',
+        meta: `${w.multisig.room.roomId.startsWith('p:') ? 'a deal' : 'a group'} · never backed up`,
+        warn: true,
+      }
+    : w.multisig?.custody === 'airgapSigner'
+      ? {
+          mark: 'i-ph-asterisk size-4 text-zafu-blue',
+          meta: 'seat lives on zigner · back up there',
+        }
+      : w.multisig?.backedUpAt
+        ? { mark: 'size-3.5 bg-success', meta: `encrypted file · ${fmtDay(w.multisig.backedUpAt)}` }
+        : { mark: 'size-3.5 border border-warn', meta: 'never backed up', warn: true };
 
 const Line = ({
   mark,

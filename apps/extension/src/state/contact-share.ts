@@ -11,6 +11,7 @@ import {
   MemoType,
   type ContactCard,
 } from '@repo/wallet/networks/zcash/memo-codec';
+import { CARD_V2, fromB64url, readCardV2, type CardV2 } from '@repo/wallet/networks/zcash/card-v2';
 import { contactDiversifierIndex } from '@repo/wallet/networks/zcash/diversified-address';
 import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 
@@ -144,4 +145,23 @@ export const readCardPayload = (payload: string): ContactCard | undefined => {
   } catch {
     return undefined;
   }
+};
+
+/**
+ * Whatever a card link carries: a v2 card (checked: `card` is undefined when
+ * its signature does not hold), a v1 card (unsigned, the sender's word), or
+ * nothing zafu reads.
+ */
+export const readCardLink = (
+  payload: string,
+): { v: 2; card?: CardV2; b64: string } | { v: 1; card: ContactCard } | undefined => {
+  try {
+    if (fromB64url(payload)[0] === CARD_V2) {
+      return { v: 2, card: readCardV2(fromB64url(payload)) ?? undefined, b64: payload };
+    }
+  } catch {
+    return undefined;
+  }
+  const v1 = readCardPayload(payload);
+  return v1 && { v: 1, card: v1 };
 };

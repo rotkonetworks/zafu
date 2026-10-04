@@ -135,6 +135,12 @@ describe('encryption', () => {
 
         expect(json).toEqual({ nonce: testNonceBase64, cipherText: testCipherTextBase64 });
       });
+
+      test('a large box (a sealed vault of rooms) round-trips without overflowing the stack', () => {
+        const big = new Uint8Array(3_000_000).map((_, i) => (i * 31) & 0xff);
+        const json = new Box(testNonce, big).toJson();
+        expect(Box.fromJson(json).cipherText).toEqual(big);
+      });
     });
   });
 });

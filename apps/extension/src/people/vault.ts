@@ -14,9 +14,10 @@ import { sessionExtStorage } from '@repo/storage-chrome/session';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { ChannelGenesis, ChannelRecord } from '@zafu/zirc';
 import type { MemoDoorRead } from './memo-door';
+import type { Deal, FrostRoom } from './frost-room';
 import { readEncrypted, writeEncrypted } from '../state/encrypted-storage';
 
-export type PeopleRoomKind = 'group' | 'door' | 'pair';
+export type PeopleRoomKind = 'group' | 'door' | 'pair' | 'card';
 
 /** a group's roster as the founder wrote it: who is in, by room pubkey */
 export interface GroupMember {
@@ -37,7 +38,7 @@ export interface JoinRequest {
 }
 
 export interface PeopleRoom {
-  /** `g:<G>` a group, `d:<G>` its door, `p:<personId>` a pair room */
+  /** `g:<G>` a group, `d:<G>` its door, `p:<personId>` a pair room, `c:<key>` a card's room */
   id: string;
   walletId: string;
   kind: PeopleRoomKind;
@@ -81,7 +82,16 @@ export interface PeopleRoom {
     log?: { genesis: ChannelGenesis; records: ChannelRecord[] };
     /** what members call themselves, as the founder last posted it */
     names?: Record<string, string>;
+    /** a deal group's terms, founder side: what its shared wallet is for */
+    deal?: Deal;
   };
+  /**
+   * a card's room (people/cards): where the answer to a card you showed lands,
+   * or (answerer side) where you posted yours. Readable by whoever holds the card.
+   */
+  card?: CardRoom;
+  /** shared wallets made in this room: the FROST messages read so far (people/frost-room) */
+  frost?: FrostRoom;
   /** pair rooms */
   pair?: {
     personId: string;
@@ -97,7 +107,33 @@ export interface PeopleRoom {
      * which one is them (or it carries the key you already hold for them)
      */
     answers?: PairCard[];
+    /** v2: their latest verified card, base64url, and when they confirmed holding yours */
+    v2?: { latest?: string; confirmed?: number; confirmDue?: boolean; closed?: number };
+    /** they asked you into a deal group (people/deal): its code and name */
+    deal?: { code: string; group: string; at: number };
   };
+}
+
+export interface CardRoom {
+  /** the signed card, base64url */
+  bytes: string;
+  /** true: you made this card; false: it is theirs and you answered it */
+  mine: boolean;
+  /** the person who answers it is saved under this id (your address for them is derived from it) */
+  contactId: string;
+  /** ms */
+  shown: number;
+  copied?: number;
+  shared?: number;
+  state: 'waiting' | 'answered' | 'cancelled';
+  /** their verified answer, base64url */
+  answer?: string;
+  /** how the answer came */
+  via?: 'relay' | 'memo';
+  /** answered by memo: the block it was mined in */
+  height?: number;
+  /** ms */
+  at?: number;
 }
 
 /** what an answering card says about the person on the other side */
@@ -117,7 +153,8 @@ export interface ThreadItem {
   /** author clock, seconds */
   ts: number;
   epoch: number;
-  kind: 'msg' | 'action';
+  /** 'note': a line zafu writes about the relationship (people/cards `Note`) */
+  kind: 'msg' | 'action' | 'note';
   mine: boolean;
   status?: 'sending' | 'failed';
   /** local id of an item not yet on the relay */
@@ -243,7 +280,8 @@ export const readPeopleBackup = async (): Promise<PeopleBackup | undefined> => {
     return undefined;
   }
   return {
-    rooms,
+    // a ceremony's round secrets stay on this device; its saved seat has its own backup
+    rooms: rooms.map(r => (r.frost?.mine ? { ...r, frost: { ...r.frost, mine: undefined } } : r)),
     threads: Object.fromEntries(
       Object.entries(threads ?? {}).map(([id, t]) => [
         id,

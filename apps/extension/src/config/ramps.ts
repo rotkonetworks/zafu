@@ -29,7 +29,7 @@ export const BASE_USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
  * fallback; it earns zafu nothing. The page is a complete buy screen by
  * itself. The params are best-effort hints only: Peer documents no URL params
  * (its old deeplink/callbackUrl API was removed), and these are just the ones
- * its live bundle still reads today (`FT`: referrer, inputCurrency,
+ * its live bundle still reads today (`FT`: inputCurrency,
  * inputAmount, paymentPlatform, toToken, recipientAddress), so Peer may ignore
  * any of them at any time. No callbackUrl. The real buy (the SDK in buy.html)
  * depends on none of this.
@@ -40,7 +40,9 @@ export const peerBuyUrl = (o: {
   platform?: string;
   recipient?: string;
 }): string => {
-  const p = new URLSearchParams({ referrer: 'zafu' });
+  // no `referrer`: peer has no referral for buyers, and the label only told
+  // peer where the person came from
+  const p = new URLSearchParams();
   if (o.currency) {
     p.set('inputCurrency', o.currency.toUpperCase());
   }

@@ -10,6 +10,7 @@
 import { Key } from '@repo/encryption/key';
 import { KeyPrint, type KeyPrintJson } from '@repo/encryption/key-print';
 import { Box, type BoxJson } from '@repo/encryption/box';
+import type { SeatRoom } from './vault-ops';
 
 // ── plaintext payloads ──
 
@@ -30,6 +31,8 @@ export interface FrostSharePayload {
   /** relay url for FROST signing rounds. */
   relayUrl: string;
   createdAt: number;
+  /** a group's or a deal's seat: the room it was made in and signs in */
+  room?: SeatRoom;
 }
 
 export interface FrostShareBatchPayload {

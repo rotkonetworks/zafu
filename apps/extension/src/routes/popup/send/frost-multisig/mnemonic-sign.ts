@@ -37,6 +37,8 @@ export interface MnemonicFrostMultisig {
   /** this device's relay-identity pointer from DKG; falls back to
    *  publicKeyPackage for pre-frostd wallets (which need re-exchange anyway) */
   relayCeremonyId?: string;
+  /** a seat made in a people room signs there, never on frostd */
+  room?: unknown;
 }
 
 export interface RunMnemonicFrostSignArgs {
@@ -62,6 +64,9 @@ export async function runMnemonicFrostSign({
   setRoomCode,
   setProgress,
 }: RunMnemonicFrostSignArgs): Promise<string[]> {
+  if (ms.room) {
+    throw new Error('this shared wallet signs in its chat: please propose the payment there');
+  }
   const session = await openRelayRoom(
     ms.relayUrl || DEFAULT_RELAY_URL,
     ms.threshold,

@@ -5,136 +5,23 @@
  * stepper and the backup live under "all identity controls".
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
-import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import { Input } from '@repo/ui/components/ui/input';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { ZidSeal } from '@repo/ui/components/ui/zid-seal';
 import { useStore } from '../../../state';
-import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
 import { keyInfoSupportsNetwork } from '../../../state/keyring/vault-ops';
-import {
-  addZidPin,
-  deriveRelationshipKeys,
-  getZidIndex,
-  mintRelationshipIndex,
-  setZidIndex,
-} from '../../../state/identity';
-import {
-  cardLinkPayload,
-  contactCardMemoHex,
-  myAddressForContact,
-} from '../../../state/contact-share';
-import {
-  getDiversifiedAddresses,
-  setDiversifiedAddresses,
-} from '../../../state/diversified-addresses';
-import { useContactAddressSource } from '../../../hooks/use-contact-address-source';
+import { addZidPin, setZidIndex } from '../../../state/identity';
 import { useShareCard } from '../../../hooks/use-share-card';
-import { toUri } from '../../../links/router';
-import { QrCode } from '../../../components/qr-code';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
 import { identityLabel, useIdentity } from './use-identity';
 import { hostOf, shortDay, useSites } from './site-list';
 
-type Open = 'switch' | 'share' | 'qr' | 'new' | 'shared' | 'rename';
-
-/**
- * Your card for one person, as a link: a fresh address and key each time it
- * is shown, so two people who scan it never hold the same one. The address
- * is recorded so a payment to it can be traced back to "a card you showed".
- */
-const useCardLink = (open: boolean) => {
-  const keyInfo = useStore(selectEffectiveKeyInfo);
-  const getMnemonic = useStore(selectGetMnemonic);
-  const addressSource = useContactAddressSource();
-  const [link, setLink] = useState<string | null>();
-
-  useEffect(() => {
-    if (!open || !keyInfo) {
-      return;
-    }
-    setLink(undefined);
-    let live = true;
-    void (async () => {
-      const one = crypto.randomUUID();
-      const mine = await myAddressForContact(one, addressSource());
-      const mnemonic = keyInfo.type === 'mnemonic' ? await getMnemonic(keyInfo.id) : undefined;
-      // a fresh relationship for whoever scans this: their answer names it
-      const gen = await getZidIndex(keyInfo.id);
-      const rel = mnemonic
-        ? deriveRelationshipKeys(mnemonic, gen, await mintRelationshipIndex(keyInfo.id, gen))
-        : undefined;
-      const hex =
-        mine &&
-        contactCardMemoHex({
-          senderName: '',
-          myAddress: mine.address,
-          zid: rel?.pubkey,
-          pairKa: rel?.kaPublicKey,
-        });
-      if (!mine || !hex) {
-        return live && setLink(null);
-      }
-      const records = await getDiversifiedAddresses();
-      await setDiversifiedAddresses([
-        ...records,
-        {
-          diversifierIndex: mine.index,
-          sharedWith: 'a card you showed',
-          address: mine.address,
-          sharedAt: Date.now(),
-        },
-      ]);
-      if (live) {
-        setLink(toUri({ kind: 'contact', card: cardLinkPayload(hex) }));
-      }
-    })().catch(() => live && setLink(null));
-    return () => {
-      live = false;
-    };
-  }, [open, keyInfo, addressSource, getMnemonic]);
-
-  return link;
-};
-
-const QrSheet = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
-  const link = useCardLink(open);
-  return (
-    <Sheet open={open} onOpenChange={o => !o && onClose()} title='for one person'>
-      <div className='flex flex-col items-center gap-3 pb-1'>
-        {link ? (
-          <>
-            <QrCode value={link} size={220} label='your card' />
-            <CopyButton
-              text={link}
-              label='copy link'
-              variant='secondary'
-              size='md'
-              className='w-full'
-            />
-          </>
-        ) : (
-          <>
-            <span
-              className='size-[220px] border border-dashed border-border-hard'
-              aria-hidden='true'
-            />
-            <span className='text-xs text-fg-muted'>
-              {link === null
-                ? 'sorry, zafu could not make your card. please unlock and try again.'
-                : 'preparing your card'}
-            </span>
-          </>
-        )}
-      </div>
-    </Sheet>
-  );
-};
+type Open = 'switch' | 'share' | 'new' | 'shared' | 'rename';
 
 const ShareSheet = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
   const navigate = useNavigate();
@@ -253,7 +140,11 @@ export const IdentityPage = () => {
             <Button className='h-11 flex-1' onClick={() => setOpen('share')}>
               share my card
             </Button>
-            <Button variant='secondary' className='h-11 flex-1' onClick={() => setOpen('qr')}>
+            <Button
+              variant='secondary'
+              className='h-11 flex-1'
+              onClick={() => navigate(PopupPath.INBOX_ADD)}
+            >
               show qr
             </Button>
           </div>
@@ -384,7 +275,6 @@ export const IdentityPage = () => {
       </Sheet>
 
       <ShareSheet open={open === 'share'} onClose={close} />
-      <QrSheet open={open === 'qr'} onClose={close} />
     </SettingsScreen>
   );
 };

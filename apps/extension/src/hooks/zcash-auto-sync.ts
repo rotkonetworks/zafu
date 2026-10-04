@@ -43,7 +43,7 @@ const nodeUnclassified = () => !useStore.getState().networks.networks.zcash.back
 
 /** resolve wallet birthday height from storage or chain tip.
  *  never returns below orchard activation - no point scanning pre-orchard blocks. */
-async function resolveBirthday(
+export async function resolveBirthday(
   walletId: string,
   zidecarUrl: string,
   backend: ZcashBackend,

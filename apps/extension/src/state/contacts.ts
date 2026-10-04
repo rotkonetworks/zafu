@@ -112,6 +112,16 @@ export interface Contact {
   pairKa?: string;
   /** the relay your chats with them go through, when not the default (a base url) */
   relay?: string;
+  /** their latest verified v2 card (base64url): what you pay and reach them by */
+  cardV2?: string;
+  /** how their card came, shown until you check the seal in person */
+  source?: 'link' | 'scan' | 'memo';
+  /** ms: you compared the pair seal with them in person and it matched */
+  sealChecked?: number;
+  /** the card you last gave them (people/my-card), so a change sends an update */
+  given?: GivenCard;
+  /** bumped when you give them a new address */
+  addrGen?: number;
   /**
    * zcash.me username this contact was saved from (or linked to). A
    * directory handle, not an identity anchor - it says where the address
@@ -131,6 +141,18 @@ export interface Contact {
   /** addresses across different networks */
   addresses: ContactAddress[];
 }
+
+/** what the card you last gave someone said */
+export interface GivenCard {
+  rev: number;
+  zcash?: string;
+  penumbra?: string;
+  relay: string;
+  caps: number;
+}
+
+/** the v2 fields a contact carries */
+export type ContactV2 = Pick<Contact, 'cardV2' | 'source' | 'sealChecked' | 'given' | 'addrGen'>;
 
 /** one wallet's relationship counters, as the backup carries them */
 interface BackupRelNext {
@@ -165,19 +187,23 @@ export interface ContactsSlice {
   contacts: Contact[];
 
   /** add a new contact */
-  addContact: (data: {
-    name: string;
-    notes?: string;
-    zid?: string;
-    zcashme?: string;
-    website?: string;
-    /** contact-card KA key; supplied when a discovery-capable share is imported */
-    card?: ContactCardKey;
-    rel?: ContactRel;
-    pairKa?: string;
-    /** addresses to save with them, in the same write */
-    addresses?: Omit<ContactAddress, 'id'>[];
-  }) => Promise<Contact>;
+  addContact: (
+    data: ContactV2 & {
+      /** a fixed id: the one your card for them was made under */
+      id?: string;
+      name: string;
+      notes?: string;
+      zid?: string;
+      zcashme?: string;
+      website?: string;
+      /** contact-card KA key; supplied when a discovery-capable share is imported */
+      card?: ContactCardKey;
+      rel?: ContactRel;
+      pairKa?: string;
+      /** addresses to save with them, in the same write */
+      addresses?: Omit<ContactAddress, 'id'>[];
+    },
+  ) => Promise<Contact>;
 
   /** update contact info (name, notes, zid, website, card) */
   updateContact: (
@@ -191,7 +217,9 @@ export interface ContactsSlice {
       rel?: ContactRel;
       pairKa?: string;
       relay?: string;
-    },
+      /** their newest addresses: put first, the ones they had kept after */
+      addresses?: Omit<ContactAddress, 'id'>[];
+    } & ContactV2,
   ) => Promise<void>;
 
   /** remove a contact */
@@ -259,6 +287,13 @@ export interface ContactsSlice {
 
 const generateId = () => crypto.randomUUID();
 
+/** contacts writes this realm made: a read that one overtook is stale (state/persist) */
+export const contactsWrites = { n: 0 };
+
+const V2_KEYS = ['cardV2', 'source', 'sealChecked', 'given', 'addrGen'] as const;
+const v2Of = (d: ContactV2): ContactV2 =>
+  Object.fromEntries(V2_KEYS.filter(k => d[k] !== undefined).map(k => [k, d[k]]));
+
 /** a contact as a backup holds it; backups made before ids were kept have none */
 type BackupContact = Omit<Contact, 'id' | 'createdAt' | 'addresses'> & {
   id?: string;
@@ -301,14 +336,22 @@ export const createContactsSlice =
     };
     // use local.set (encrypted proxy) - NOT writeEncrypted directly,
     // since local is already the encrypted proxy and writeEncrypted would double-encrypt
-    const persist = () => local.set('contacts' as keyof LocalStorageState, safeContacts() as never);
+    const persist = () => {
+      contactsWrites.n++;
+      return local.set('contacts' as keyof LocalStorageState, safeContacts() as never);
+    };
 
     return {
       contacts: [],
 
       addContact: async data => {
+        // one person per id: a second add (two screens, a stale read) returns them
+        const have = data.id ? safeContacts().find(c => c.id === data.id) : undefined;
+        if (have) {
+          return have;
+        }
         const contact: Contact = {
-          id: generateId(),
+          id: data.id ?? generateId(),
           name: data.name.trim(),
           zid: data.zid?.trim() || undefined,
           zcashme: data.zcashme?.trim() || undefined,
@@ -317,6 +360,7 @@ export const createContactsSlice =
           card: data.card,
           ...(data.rel ? { rel: data.rel } : {}),
           ...(data.pairKa ? { pairKa: data.pairKa } : {}),
+          ...v2Of(data),
           createdAt: Date.now(),
           addresses: (data.addresses ?? []).map(a => ({
             ...a,
@@ -365,6 +409,19 @@ export const createContactsSlice =
             }
             if (updates.relay !== undefined) {
               contact.relay = updates.relay || undefined;
+            }
+            Object.assign(contact, v2Of(updates));
+            if (updates.addresses) {
+              // newest first (what you pay them at from now), older ones kept:
+              // a thread opened on one still finds them, earlier memos stay theirs
+              const next = updates.addresses;
+              const old = contact.addresses;
+              const same = (a: Omit<ContactAddress, 'id'>, o: ContactAddress) =>
+                o.network === a.network && o.address === a.address;
+              contact.addresses = [
+                ...next.map(a => old.find(o => same(a, o)) ?? { ...a, id: generateId() }),
+                ...old.filter(o => !next.some(a => same(a, o))),
+              ];
             }
           }
         });
@@ -759,9 +816,24 @@ export const createContactsSlice =
         // never hand a `j` out twice: each wallet's counter goes to at least
         // max(backed-up counter, 1 + every j its contacts hold)
         for (const k of get().keyRing.keyInfos) {
+          // and every card you showed, answered or not: its j was handed out too
+          const shown = (
+            Array.isArray((parsed.people as { rooms?: unknown } | undefined)?.rooms)
+              ? (
+                  parsed.people as {
+                    rooms: { walletId?: string; signer?: { gen?: number; j?: number } }[];
+                  }
+                ).rooms
+              : []
+          ).flatMap(r =>
+            r.walletId && walletFor.get(r.walletId) === k.id && typeof r.signer?.j === 'number'
+              ? [{ walletId: k.id, gen: Number(r.signer.gen), j: r.signer.j }]
+              : [],
+          );
           const rels = [...safeContacts(), ...backupContacts]
             .map(c => c.rel)
-            .filter((r): r is ContactRel => !!r && r.walletId === k.id);
+            .filter((r): r is ContactRel => !!r && r.walletId === k.id)
+            .concat(shown);
           const floor = relationshipFloor(rels);
           const backed = parsed.relNext?.[pocketOwner(k)]?.next ?? {};
           for (const [gen, n] of Object.entries(backed)) {

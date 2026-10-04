@@ -9,6 +9,7 @@
  * egress policy compiles from plaintext settings only.
  *
  * Plain data and no imports: the egress policy reads this in every realm.
+ * The setting (settings › privacy › people relay) is in the encrypted backup.
  */
 
 export const PEOPLE_RELAY = 'people-relay';
@@ -49,6 +50,22 @@ export const peopleRelays = (s?: PeopleRelaySetting): string[] => [
     ),
   ]),
 ];
+
+/**
+ * Make `relay` the default for new rooms and cards. The one it replaces stays
+ * allowed (rooms already live there); plain storage, read by the egress policy.
+ */
+export const movePeopleRelay = async (relay: string): Promise<void> => {
+  const s = ((await chrome.storage.local.get(PEOPLE_RELAY_KEY))[PEOPLE_RELAY_KEY] ??
+    {}) as PeopleRelaySetting;
+  const old = defaultPeopleRelay(s);
+  const hosts = [...new Set([...(Array.isArray(s.hosts) ? s.hosts : []), old])].filter(
+    h => h !== relay,
+  );
+  await chrome.storage.local.set({
+    [PEOPLE_RELAY_KEY]: { endpoint: relay === DEFAULT_PEOPLE_RELAY ? '' : relay, hosts },
+  });
+};
 
 /** the host a person sees for a relay */
 export const relayHost = (base: string): string => {

@@ -61,6 +61,14 @@ vi.mock('../../../people/use-invites', () => ({
   usePairCards: () => undefined,
 }));
 vi.mock('../../../people/relay-slot', () => ({ RelaySlot: () => null }));
+vi.mock('../../../people/my-card', () => ({ useCardSync: () => undefined, addressesOf: () => [] }));
+// shared wallets and deals ride the pair room, which nobody here has
+vi.mock('../../../people/use-frost-room', () => ({
+  useFrostRoom: () => ({ payments: [], kept: {} }),
+}));
+vi.mock('../../../hooks/password-gate', () => ({
+  usePasswordGate: () => ({ requestAuth: vi.fn(), PasswordModal: null }),
+}));
 vi.mock('../../../utils/navigate', () => ({ useBackNav: () => vi.fn() }));
 vi.mock('../../../services/zcashme/config', () => ({
   useZcashMeDirectoryLookup: () => () => undefined,

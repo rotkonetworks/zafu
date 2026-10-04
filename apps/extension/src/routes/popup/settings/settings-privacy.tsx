@@ -19,6 +19,12 @@ import { usePopupNav } from '../../../utils/navigate';
 import { readZcashMeConfig, type ZcashMeMode } from '../../../services/zcashme/config';
 import { useExplain, type ExplainId } from './settings-explain';
 import { ZCASH_BACKENDS } from '../../../state/keyring/zcash-backend';
+import {
+  DEFAULT_PEOPLE_RELAY,
+  movePeopleRelay,
+  relayBase,
+  relayHost,
+} from '../../../config/people-relay';
 
 const ZCASHME_MODE_LABEL: Record<ZcashMeMode, string> = {
   off: 'off',
@@ -241,6 +247,68 @@ export function ContactDiscoverySection({ onExplain }: { onExplain?: (label: str
   );
 }
 
+/**
+ * The relay chats, groups and new cards use. A stored url the person chose,
+ * read by the egress policy from plain storage; the one it replaces stays
+ * allowed, so rooms already living there keep working.
+ */
+export function PeopleRelayRow({ onExplain }: { onExplain?: (label: string) => void }) {
+  const [endpoint, setEndpoint] = useState<string>();
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState('');
+  useEffect(() => {
+    void localExtStorage.get('peopleRelay').then(v => setEndpoint(v?.endpoint ?? ''));
+  }, []);
+  if (endpoint === undefined) {
+    return null;
+  }
+  const current = relayBase(endpoint) ?? DEFAULT_PEOPLE_RELAY;
+  const next = typed.trim() ? relayBase(typed) : DEFAULT_PEOPLE_RELAY;
+  return (
+    <>
+      <Row
+        type='value'
+        label='people relay'
+        value={relayHost(current)}
+        onPress={() => {
+          setTyped(current === DEFAULT_PEOPLE_RELAY ? '' : current);
+          setOpen(true);
+        }}
+        onExplain={onExplain}
+      />
+      <Sheet open={open} onOpenChange={setOpen} title='people relay'>
+        <form
+          className='flex flex-col gap-3'
+          onSubmit={e => {
+            e.preventDefault();
+            if (next) {
+              void movePeopleRelay(next).then(() => {
+                setEndpoint(next === DEFAULT_PEOPLE_RELAY ? '' : next);
+                setOpen(false);
+              });
+            }
+          }}
+        >
+          <input
+            aria-label='relay'
+            value={typed}
+            onChange={e => setTyped(e.target.value)}
+            placeholder={DEFAULT_PEOPLE_RELAY}
+            className='border border-border-soft bg-transparent px-2 py-1.5 font-mono text-xs'
+          />
+          <button
+            type='submit'
+            disabled={!next}
+            className='border border-zigner-gold bg-zigner-gold/10 py-2 text-xs text-zigner-gold disabled:opacity-30'
+          >
+            save
+          </button>
+        </form>
+      </Sheet>
+    </>
+  );
+}
+
 /** privacy: one screen, no nested "all controls" (SetPrivacy.dc.html). proxy is shelved, so it has no row. */
 export function SettingsPrivacy() {
   const { settings, setSetting } = useStore(privacySelector);
@@ -282,6 +350,7 @@ export function SettingsPrivacy() {
           {settings.enableIdentity && (
             <ContactDiscoverySection {...explainProps('privacy.contactDiscovery')} />
           )}
+          <PeopleRelayRow {...explainProps('privacy.peopleRelay')} />
           {hasFeature(activeNetwork, 'zcash') && (
             <ZcashMeRow {...explainProps('privacy.zcashMe')} />
           )}

@@ -84,6 +84,20 @@ export type RecordHandler = (
   api: PeopleApi,
 ) => Promise<((r: PeopleRoom) => PeopleRoom) | undefined>;
 
+/** several handlers for one room kind, their patches applied in order */
+export const chain =
+  (...hs: (RecordHandler | undefined)[]): RecordHandler =>
+  async (room, records, api) => {
+    const ps: ((r: PeopleRoom) => PeopleRoom)[] = [];
+    for (const h of hs) {
+      const p = await h?.(room, records, api);
+      if (p) {
+        ps.push(p);
+      }
+    }
+    return ps.length ? r => ps.reduce((x, p) => p(x), r) : undefined;
+  };
+
 export interface PeopleApi {
   send(roomId: string, body: string, kind?: 'msg' | 'action'): Promise<RoomMessage>;
   addRoom(room: PeopleRoom): Promise<void>;
@@ -95,10 +109,23 @@ export interface PeopleApi {
   room(roomId: string): Promise<PeopleRoom | undefined>;
   /** this member's pubkey in a room */
   me(room: PeopleRoom): Promise<string>;
+  /** this wallet's rooms */
+  rooms(): Promise<PeopleRoom[]>;
+  /** a line zafu writes into a room's thread (a `note`, never sent) */
+  note(roomId: string, item: Pick<ThreadItem, 'hash' | 'body' | 'ts'>): Promise<void>;
   now(): number;
 }
 
 export { threadKey } from './vault';
+
+/** a pass that threw: said in the worker's console, shown as "the relay did not answer" */
+const unreadable = (e: unknown): 'unreachable' => {
+  console.warn(
+    '[people] a room could not be read:',
+    e instanceof Error ? (e.stack ?? e.message) : String(e),
+  );
+  return 'unreachable';
+};
 
 /** catch-up, every 5 minutes after the person opened people (T3) */
 export const T3_MS = 5 * 60_000;
@@ -215,7 +242,7 @@ export const createPeopleService = (
         roomSecret: hexBytes(rec.secret),
         relay: deps.transport(rec.relay, rec.size, s.abort.signal),
         plaintextBytes: rec.size,
-        ...(rec.kind === 'pair' ? { shardFor: pairShard(rec.secret) } : {}),
+        ...(rec.kind === 'pair' || rec.kind === 'card' ? { shardFor: pairShard(rec.secret) } : {}),
         now: () => Math.floor(now() / 1000),
         ...(rec.head ? { head: rec.head } : {}),
       },
@@ -261,13 +288,19 @@ export const createPeopleService = (
     // a pair room has two voices: a line signed by anyone else is not theirs
     const voices = rec.kind === 'pair' && rec.pair?.peer ? [me, rec.pair.peer] : undefined;
     const chat = msgs
-      .filter(m => !PROTOCOL_PREFIX.test(m.body) && (!voices || voices.includes(m.author)))
+      .filter(
+        m =>
+          rec.kind !== 'card' &&
+          !PROTOCOL_PREFIX.test(m.body) &&
+          (!voices || voices.includes(m.author)),
+      )
       .map(m => toItem(m, me));
     if (chat.length) {
       await writeItems(rec, t => mergeItems(t, chat));
     }
     const handle = handlers[rec.kind];
     const proto = msgs.filter(m => PROTOCOL_PREFIX.test(m.body));
+    // a card's room is not a conversation: nothing in it is ever shown as chat
     const patch = handle && proto.length ? await handle(rec, proto, api) : undefined;
     const head = room.chainHead();
     // a window that failed is read again next time
@@ -328,7 +361,7 @@ export const createPeopleService = (
         break; // the rest catch up when they are opened
       }
       budget -= need;
-      slots.push(await sync(rec.id, need).catch(() => 'unreachable' as const));
+      slots.push(await sync(rec.id, need).catch(unreadable));
     }
     const slot = WORST.find(s => slots.includes(s)) ?? 'checked';
     await status(slot);
@@ -356,7 +389,45 @@ export const createPeopleService = (
     sync: id => sync(id),
     room: id => findRoom(id),
     me: async room => (await deps.identity(room)).pubkey,
+    rooms: async () => (await mine()) ?? [],
+    note: async (roomId, n) => {
+      const rec = await findRoom(roomId);
+      if (rec) {
+        const item: ThreadItem = { ...n, author: '', name: '', epoch: 0, kind: 'note', mine: true };
+        await writeItems(rec, t => mergeItems(t, [item]));
+      }
+    },
     now,
+  };
+
+  /**
+   * Read a room that is not kept here, once, with a key of the caller's
+   * choosing: a card's room before you answer it. From `since` (an epoch),
+   * at most a day of windows; never before the gate.
+   */
+  const readOnce = async (
+    rec: PeopleRoom,
+    identity: RoomIdentity,
+    since: number,
+  ): Promise<RoomMessage[]> => {
+    const gate = await deps.gate(rec.relay);
+    if (gate !== 'on') {
+      throw new PeopleNeedsRelay(gate);
+    }
+    const room = new Room(identity, {
+      appScope: rec.appScope,
+      channel: '#zafu',
+      roomSecret: hexBytes(rec.secret),
+      relay: deps.transport(rec.relay, rec.size, ensure().abort.signal),
+      plaintextBytes: rec.size,
+      shardFor: pairShard(rec.secret),
+      now: () => Math.floor(now() / 1000),
+    });
+    const res = await room.syncSince(since, 288);
+    if (res.dropped.some(d => d.kind === 'unreachable')) {
+      throw new Error('the relay is not answering');
+    }
+    return res.messages.filter(m => m.kind !== 'dm');
   };
 
   return {
@@ -380,7 +451,7 @@ export const createPeopleService = (
       const tick = () =>
         void sync(roomId).then(
           slot => slot !== 'idle' && status(slot),
-          () => status('unreachable'),
+          (e: unknown) => status(unreadable(e)),
         );
       if (w) {
         w.n++;
@@ -421,7 +492,7 @@ export const createPeopleService = (
         }));
       }
       const local = crypto.randomUUID();
-      const draft: ThreadItem = {
+      const draft: ThreadItem & { kind: 'msg' | 'action' } = {
         hash: '',
         local,
         author: '',
@@ -472,6 +543,7 @@ export const createPeopleService = (
     get active() {
       return !!session;
     },
+    readOnce,
     /** the session's abort signal: requests made for this session die with it */
     signal: (): AbortSignal => ensure().abort.signal,
     /** resolves when no room is being read (tests) */

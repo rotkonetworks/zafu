@@ -77,6 +77,11 @@ export const SETTINGS_EXPLAIN = {
     footer:
       'leaving it blank uses the built-in default relay; either way, the relay never sees your contact list, only that a sealed sign was left',
   },
+  'privacy.peopleRelay': {
+    blurb: 'which relay carries your chats, groups and the cards you show.',
+    footer:
+      'every card you make names it, so the person who answers meets you there. the relay sees sealed boxes and when they come, never what is inside or who you are',
+  },
   'privacy.zcashMe': {
     blurb: 'find people by their zcash.me name (opt-in; off by default).',
     states: [
