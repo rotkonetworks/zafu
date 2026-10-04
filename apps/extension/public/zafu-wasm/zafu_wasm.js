@@ -87,6 +87,215 @@ export class FrostRelayCipher {
 if (Symbol.dispose) FrostRelayCipher.prototype[Symbol.dispose] = FrostRelayCipher.prototype.free;
 
 /**
+ * One pool's note commitment tree (orchard or ironwood: same hash, same
+ * shape). See `NoteTreeCore` for each method's contract.
+ */
+export class NoteTree {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        NoteTreeFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_notetree_free(ptr, 0);
+    }
+    /**
+     * @param {number} start_position
+     * @param {Uint8Array} blocks
+     * @param {Uint32Array} marked
+     * @param {number} checkpoint_from
+     */
+    append_blocks(start_position, blocks, marked, checkpoint_from) {
+        const ptr0 = passArray8ToWasm0(blocks, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArray32ToWasm0(marked, wasm.__wbindgen_malloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.notetree_append_blocks(this.__wbg_ptr, start_position, ptr0, len0, ptr1, len1, checkpoint_from);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * @param {string} frontier_hex
+     * @param {number} height
+     */
+    insert_frontier(frontier_hex, height) {
+        const ptr0 = passStringToWasm0(frontier_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.notetree_insert_frontier(this.__wbg_ptr, ptr0, len0, height);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * returns how many roots were taken (resume from start_index + n)
+     * @param {number} start_index
+     * @param {Uint8Array} roots
+     * @returns {number}
+     */
+    insert_subtree_roots(start_index, roots) {
+        const ptr0 = passArray8ToWasm0(roots, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.notetree_insert_subtree_roots(this.__wbg_ptr, start_index, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return ret[0] >>> 0;
+    }
+    /**
+     * @param {string} witness_hex
+     * @param {number} height
+     */
+    insert_witness(witness_hex, height) {
+        const ptr0 = passStringToWasm0(witness_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.notetree_insert_witness(this.__wbg_ptr, ptr0, len0, height);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * @param {number} position
+     * @returns {boolean}
+     */
+    is_marked(position) {
+        const ret = wasm.notetree_is_marked(this.__wbg_ptr, position);
+        return ret !== 0;
+    }
+    /**
+     * @returns {number | undefined}
+     */
+    latest_checkpoint() {
+        const ret = wasm.notetree_latest_checkpoint(this.__wbg_ptr);
+        return ret === Number.MAX_SAFE_INTEGER ? undefined : ret;
+    }
+    /**
+     * @param {Uint8Array} bytes
+     */
+    load_cap(bytes) {
+        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.notetree_load_cap(this.__wbg_ptr, ptr0, len0);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * @param {Uint8Array} bytes
+     */
+    load_checkpoints(bytes) {
+        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.notetree_load_checkpoints(this.__wbg_ptr, ptr0, len0);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * @param {number} index
+     * @param {Uint8Array} bytes
+     */
+    load_shard(index, bytes) {
+        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.notetree_load_shard(this.__wbg_ptr, index, ptr0, len0);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * @param {number} max_checkpoints
+     */
+    constructor(max_checkpoints) {
+        const ret = wasm.notetree_new(max_checkpoints);
+        this.__wbg_ptr = ret;
+        NoteTreeFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * tree size at the newest checkpoint, or undefined before seeding
+     * @returns {number | undefined}
+     */
+    next_position() {
+        const ret = wasm.notetree_next_position(this.__wbg_ptr);
+        return ret[0] === 0 ? undefined : ret[1];
+    }
+    /**
+     * @returns {number | undefined}
+     */
+    oldest_checkpoint() {
+        const ret = wasm.notetree_oldest_checkpoint(this.__wbg_ptr);
+        return ret === Number.MAX_SAFE_INTEGER ? undefined : ret;
+    }
+    /**
+     * hex root at the checkpoint, or undefined if it is not retained
+     * @param {number} height
+     * @returns {string | undefined}
+     */
+    root_at(height) {
+        const ret = wasm.notetree_root_at(this.__wbg_ptr, height);
+        if (ret[3]) {
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        let v1;
+        if (ret[0] !== 0) {
+            v1 = getStringFromWasm0(ret[0], ret[1]).slice();
+            wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        }
+        return v1;
+    }
+    /**
+     * `{rewrite, shards: [[index, Uint8Array]], cap?: Uint8Array, checkpoints?: Uint8Array}`
+     * @returns {any}
+     */
+    take_changes() {
+        const ret = wasm.notetree_take_changes(this.__wbg_ptr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {number} height
+     * @returns {boolean}
+     */
+    truncate(height) {
+        const ret = wasm.notetree_truncate(this.__wbg_ptr, height);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return ret[0] !== 0;
+    }
+    /**
+     * JSON `{position, root_hex, path: [{hash}]}`, as `witness_extract_path`
+     * @param {number} position
+     * @param {number} height
+     * @returns {string}
+     */
+    witness(position, height) {
+        let deferred2_0;
+        let deferred2_1;
+        try {
+            const ret = wasm.notetree_witness(this.__wbg_ptr, position, height);
+            var ptr1 = ret[0];
+            var len1 = ret[1];
+            if (ret[3]) {
+                ptr1 = 0; len1 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred2_0 = ptr1;
+            deferred2_1 = len1;
+            return getStringFromWasm0(ptr1, len1);
+        } finally {
+            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        }
+    }
+}
+if (Symbol.dispose) NoteTree.prototype[Symbol.dispose] = NoteTree.prototype.free;
+
+/**
  * The spend authority of one ZIP-32 account, held only inside the zcash worker
  * for the length of one send. Holds the 64-byte BIP39 seed in a zeroizing
  * buffer and derives each key at the moment of use; JS must call `free()` when
@@ -3882,17 +4091,17 @@ function __wbg_get_imports(memory) {
             return ret;
         },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 145, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 150, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue______true_);
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3713, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3779, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue__core_8266185441cb29e1___result__Result_____wasm_bindgen_aeea2c632802c019___JsError___true_);
             return ret;
         },
         __wbindgen_cast_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3715, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3781, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___futures__task__wait_async_polyfill__MessageEvent______true_);
             return ret;
         },
@@ -3939,7 +4148,7 @@ function __wbg_get_imports(memory) {
             getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
             getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
         },
-        memory: memory || new WebAssembly.Memory({initial:55,maximum:32768,shared:true}),
+        memory: memory || new WebAssembly.Memory({initial:56,maximum:32768,shared:true}),
     };
     return {
         __proto__: null,
@@ -3969,6 +4178,9 @@ function wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_7
 const FrostRelayCipherFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_frostrelaycipher_free(ptr, 1));
+const NoteTreeFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_notetree_free(ptr, 1));
 const SpendKeysFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_spendkeys_free(ptr, 1));
@@ -4074,6 +4286,14 @@ function getStringFromWasm0(ptr, len) {
     return decodeText(ptr >>> 0, len);
 }
 
+let cachedUint32ArrayMemory0 = null;
+function getUint32ArrayMemory0() {
+    if (cachedUint32ArrayMemory0 === null || cachedUint32ArrayMemory0.buffer !== wasm.memory.buffer) {
+        cachedUint32ArrayMemory0 = new Uint32Array(wasm.memory.buffer);
+    }
+    return cachedUint32ArrayMemory0;
+}
+
 let cachedUint8ArrayMemory0 = null;
 function getUint8ArrayMemory0() {
     if (cachedUint8ArrayMemory0 === null || cachedUint8ArrayMemory0.buffer !== wasm.memory.buffer) {
@@ -4121,6 +4341,13 @@ function makeMutClosure(arg0, arg1, f) {
     };
     CLOSURE_DTORS.register(real, state, state);
     return real;
+}
+
+function passArray32ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 4, 4) >>> 0;
+    getUint32ArrayMemory0().set(arg, ptr / 4);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
 }
 
 function passArray8ToWasm0(arg, malloc) {
@@ -4209,6 +4436,7 @@ function __wbg_finalize_init(instance, module, thread_stack_size) {
     wasm = instance.exports;
     wasmModule = module;
     cachedDataViewMemory0 = null;
+    cachedUint32ArrayMemory0 = null;
     cachedUint8ArrayMemory0 = null;
     if (typeof thread_stack_size !== 'undefined' && (typeof thread_stack_size !== 'number' || thread_stack_size === 0 || thread_stack_size % 65536 !== 0)) {
         throw new Error('invalid stack size');

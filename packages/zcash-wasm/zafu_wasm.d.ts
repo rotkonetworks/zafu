@@ -24,6 +24,46 @@ export class FrostRelayCipher {
 }
 
 /**
+ * One pool's note commitment tree (orchard or ironwood: same hash, same
+ * shape). See `NoteTreeCore` for each method's contract.
+ */
+export class NoteTree {
+    free(): void;
+    [Symbol.dispose](): void;
+    append_blocks(start_position: number, blocks: Uint8Array, marked: Uint32Array, checkpoint_from: number): void;
+    insert_frontier(frontier_hex: string, height: number): void;
+    /**
+     * returns how many roots were taken (resume from start_index + n)
+     */
+    insert_subtree_roots(start_index: number, roots: Uint8Array): number;
+    insert_witness(witness_hex: string, height: number): void;
+    is_marked(position: number): boolean;
+    latest_checkpoint(): number | undefined;
+    load_cap(bytes: Uint8Array): void;
+    load_checkpoints(bytes: Uint8Array): void;
+    load_shard(index: number, bytes: Uint8Array): void;
+    constructor(max_checkpoints: number);
+    /**
+     * tree size at the newest checkpoint, or undefined before seeding
+     */
+    next_position(): number | undefined;
+    oldest_checkpoint(): number | undefined;
+    /**
+     * hex root at the checkpoint, or undefined if it is not retained
+     */
+    root_at(height: number): string | undefined;
+    /**
+     * `{rewrite, shards: [[index, Uint8Array]], cap?: Uint8Array, checkpoints?: Uint8Array}`
+     */
+    take_changes(): any;
+    truncate(height: number): boolean;
+    /**
+     * JSON `{position, root_hex, path: [{hash}]}`, as `witness_extract_path`
+     */
+    witness(position: number, height: number): string;
+}
+
+/**
  * The spend authority of one ZIP-32 account, held only inside the zcash worker
  * for the length of one send. Holds the 64-byte BIP39 seed in a zeroizing
  * buffer and derives each key at the moment of use; JS must call `free()` when
@@ -1072,6 +1112,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly __wbg_frostrelaycipher_free: (a: number, b: number) => void;
+    readonly __wbg_notetree_free: (a: number, b: number) => void;
     readonly __wbg_spendkeys_free: (a: number, b: number) => void;
     readonly __wbg_walletkeys_free: (a: number, b: number) => void;
     readonly __wbg_watchonlywallet_free: (a: number, b: number) => void;
@@ -1138,6 +1179,22 @@ export interface InitOutput {
     readonly ledger_ufvk_plan: (a: number) => [number, number, number];
     readonly ledger_ufvk_remaining_bytes: (a: any) => [number, number, number];
     readonly ledger_validate_pczt: (a: number, b: number) => [number, number];
+    readonly notetree_append_blocks: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
+    readonly notetree_insert_frontier: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly notetree_insert_subtree_roots: (a: number, b: number, c: number, d: number) => [number, number, number];
+    readonly notetree_insert_witness: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly notetree_is_marked: (a: number, b: number) => number;
+    readonly notetree_latest_checkpoint: (a: number) => number;
+    readonly notetree_load_cap: (a: number, b: number, c: number) => [number, number];
+    readonly notetree_load_checkpoints: (a: number, b: number, c: number) => [number, number];
+    readonly notetree_load_shard: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly notetree_new: (a: number) => number;
+    readonly notetree_next_position: (a: number) => [number, number];
+    readonly notetree_oldest_checkpoint: (a: number) => number;
+    readonly notetree_root_at: (a: number, b: number) => [number, number, number, number];
+    readonly notetree_take_changes: (a: number) => [number, number, number];
+    readonly notetree_truncate: (a: number, b: number) => [number, number, number];
+    readonly notetree_witness: (a: number, b: number, c: number) => [number, number, number, number];
     readonly parse_signature_response: (a: number, b: number) => [number, number, number];
     readonly pczt_has_ironwood_actions: (a: number, b: number) => [number, number, number];
     readonly pir_fetch_imt_proofs: (a: number, b: number, c: number, d: number, e: any) => any;

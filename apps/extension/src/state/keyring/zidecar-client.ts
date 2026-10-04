@@ -5,6 +5,12 @@
  * uses raw protobuf encoding (no grpc-web library needed)
  */
 
+import {
+  encodeSubtreeRootsArg,
+  parseSubtreeRootStream,
+  type SubtreePool,
+  type SubtreeRoot,
+} from './subtree-roots';
 export interface CompactBlock {
   height: number;
   hash: Uint8Array;
@@ -131,6 +137,17 @@ export class ZidecarClient {
     // streaming RPC - need raw response with gRPC frames intact
     const resp = await this.grpcCallStream('GetCompactBlocks', new Uint8Array(parts));
     return this.parseBlockStream(resp);
+  }
+
+  /** lightwalletd GetSubtreeRoots, served on zidecar's CompactTxStreamer surface */
+  async getSubtreeRoots(pool: SubtreePool, startIndex: number): Promise<SubtreeRoot[]> {
+    const resp = await this.grpcCallStream(
+      'GetSubtreeRoots',
+      encodeSubtreeRootsArg(pool, startIndex),
+      undefined,
+      'cash.z.wallet.sdk.rpc.CompactTxStreamer',
+    );
+    return parseSubtreeRootStream(resp);
   }
 
   /**
@@ -382,8 +399,9 @@ export class ZidecarClient {
     method: string,
     msg: Uint8Array,
     signal?: AbortSignal,
+    service = 'zidecar.v1.Zidecar',
   ): Promise<Uint8Array> {
-    const path = `${this.serverUrl}/zidecar.v1.Zidecar/${method}`;
+    const path = `${this.serverUrl}/${service}/${method}`;
 
     const body = new Uint8Array(5 + msg.length);
     body[0] = 0;

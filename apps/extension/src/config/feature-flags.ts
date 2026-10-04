@@ -163,3 +163,19 @@ export const IS_BETA_BUILD = HARDWARE_WALLET_ENABLED;
  * device test is what hardens this from experimental to production-trusted.
  */
 export const LEDGER_TRANSPARENT_ENABLED = true;
+
+/**
+ * Spend witnesses read from per-pool ShardTrees (workers/note-trees.ts) instead
+ * of the per-note IncrementalWitness path, which falls back to replaying blocks
+ * from a 5000-block snapshot (60-120s) whenever a witness is out of step.
+ *
+ * While ON the sync loop also keeps the trees (seeded once from the stored
+ * frontier and witnesses, appended each batch, written with the batch) and a
+ * spend uses them whenever every selected note is in the tree and the tree's
+ * root matches the server at the anchor; otherwise it falls back. The old
+ * per-note maintenance keeps running either way, so turning this off again
+ * loses nothing.
+ *
+ * OFF until verified on real wallets. A build opts in with ZAFU_SHARDTREE=1.
+ */
+export const SHARDTREE_WITNESSES = process.env['ZAFU_SHARDTREE'] === '1';
