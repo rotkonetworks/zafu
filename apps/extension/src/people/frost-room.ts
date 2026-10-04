@@ -337,6 +337,28 @@ export const behind = (c: Ceremony): string[] => {
   return c.members.filter(m => stepOf(c, m) === low && low < 3);
 };
 
+/** how long a ceremony may stand still before the ones behind are shown as missing */
+export const MISSING_S = 120;
+
+/** the members holding a ceremony up: behind, and nothing heard for {@link MISSING_S} */
+export const missingOf = (c: Ceremony, nowS: number): string[] =>
+  nowS - c.last > MISSING_S ? behind(c) : [];
+
+/**
+ * "start again without them": new keys for the members left, the threshold
+ * kept where it still fits (never below two). Undefined when fewer than two
+ * would be left, since one person is not a shared wallet.
+ */
+export const restartOf = (
+  c: Ceremony,
+  gone: string[],
+): { members: string[]; k: number } | undefined => {
+  const members = c.members.filter(m => !gone.includes(m));
+  return members.length >= 2
+    ? { members, k: Math.max(2, Math.min(c.k, members.length)) }
+    : undefined;
+};
+
 /** every member checked their keys, and they do not match */
 export const mismatched = (c: Ceremony): boolean =>
   c.members.every(m => c.fvk.has(m)) && new Set([...c.fvk.values()].map(f => f.u + f.a)).size > 1;

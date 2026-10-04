@@ -13,10 +13,11 @@ import { Sheet } from '@repo/ui/components/ui/sheet';
 import { cn } from '@repo/ui/lib/utils';
 import { formatZecAmount } from '@repo/wallet/networks/zcash/zip321';
 import {
-  behind,
   COURT,
   majority,
+  missingOf,
   mismatched,
+  restartOf,
   roundOf,
   stepOf,
   type Deal,
@@ -24,9 +25,6 @@ import {
 import { agree, startKeys, type FrostView } from '../../../people/use-frost-room';
 import { PopupPath } from '../paths';
 import { shortAddress } from './threads';
-
-/** a member nobody heard from for this long is shown as not here yet */
-const MISSING_S = 120;
 
 const useNow = (ms: number) => {
   const [now, setNow] = useState(() => Date.now());
@@ -90,19 +88,20 @@ export const KeyCard = ({ view, roomId, nameOf, onMessage }: CardProps) => {
   }
   const mine = c.members.includes(me);
   const round = roundOf(c);
-  const late = c.members.length > 0 && now / 1000 - c.last > MISSING_S;
-  const missing = late ? behind(c) : [];
+  const missing = missingOf(c, now / 1000);
   const bad = mismatched(c);
   const label = c.deal ? 'deal' : 'shared wallet';
-  const again = (members: string[]) => {
-    setBusy(true);
-    const n = members.length;
-    void startKeys(roomId, members, Math.min(c.k, n) || majority(n), c.label, {
-      deal: c.deal,
-      replaces: c.id,
-    }).finally(() => setBusy(false));
+  const again = (gone: string[]) => {
+    const next = restartOf(c, gone);
+    if (next) {
+      setBusy(true);
+      void startKeys(roomId, next.members, next.k, c.label, {
+        deal: c.deal,
+        replaces: c.id,
+      }).finally(() => setBusy(false));
+    }
   };
-  const rest = c.members.filter(m => !missing.includes(m));
+  const rest = restartOf(c, missing);
   const who = (m: string) => (m === me ? 'you' : m === COURT ? 'zafu court' : nameOf(m));
 
   const head = (title: string) => (
@@ -221,7 +220,7 @@ export const KeyCard = ({ view, roomId, nameOf, onMessage }: CardProps) => {
             nothing was saved. please make the keys again together.
           </span>
           {mine && (
-            <Button size='sm' disabled={busy} onClick={() => again(c.members)}>
+            <Button size='sm' disabled={busy} onClick={() => again([])}>
               make them again
             </Button>
           )}
@@ -244,13 +243,13 @@ export const KeyCard = ({ view, roomId, nameOf, onMessage }: CardProps) => {
                   message {who(missing.find(m => m !== COURT && m !== me)!)}
                 </Button>
               )}
-              {rest.length >= 2 && rest.includes(me) && (
+              {rest?.members.includes(me) && (
                 <Button
                   variant='secondary'
                   size='sm'
                   className='flex-1'
                   disabled={busy}
-                  onClick={() => again(rest)}
+                  onClick={() => again(missing)}
                 >
                   start again without {missing.length > 1 ? 'them' : who(missing[0]!)}
                 </Button>

@@ -27,6 +27,10 @@ import {
   packFrost,
   startBody,
   foldFrost,
+  missingOf,
+  MISSING_S,
+  restartOf,
+  type Ceremony,
   type FrostCalls,
   type FrostStatus,
   type Seat,
@@ -247,6 +251,48 @@ describe('a shared wallet made in its group room', () => {
     // when they come back, the wallet is not theirs to join
     expect(await gone!.turn(G)).toBe('idle');
     expect(gone!.seats).toEqual([]);
+  });
+
+  test('the starter goes quiet after round one: another member starts again without them', async () => {
+    const { ws, G } = await group(3);
+    const [a, b, c] = ws;
+    await start(
+      a!,
+      G,
+      ws.map(w => w.me(G).pubkey),
+      2,
+    );
+    // the starter answers its own start, then never comes back: no viewing key is sent
+    expect(await a!.turn(G)).toBe('waiting');
+    expect(await run([b!, c!], G, 2)).toEqual(['waiting', 'waiting']);
+    await b!.service.check();
+    const cer = current(b!, G);
+    expect(cer.sk).toBeUndefined();
+    // the card shows the ones behind once the ceremony stands still
+    expect(missingOf(cer, cer.last + 10)).toEqual([]);
+    const gone = missingOf(cer, cer.last + MISSING_S + 1);
+    // only the starter holds it up: the others did all they could without it
+    expect(gone).toEqual([a!.me(G).pubkey]);
+    const next = restartOf(cer, gone)!;
+    expect(next).toEqual({ members: [b!.me(G).pubkey, c!.me(G).pubkey], k: 2 });
+    await b!.post(
+      G,
+      await packFrost(startBody(next.members, next.k, 'studio', { replaces: cer.id })),
+    );
+    expect(await run([b!, c!], G)).toEqual(['done', 'done']);
+    expect(b!.seats[0]!.address).toBe(c!.seats[0]!.address);
+    expect(await a!.turn(G)).toBe('idle');
+  });
+
+  test('starting again keeps the threshold where it fits, never below two', () => {
+    const c = { k: 3, members: ['a', 'b', 'c', 'd'] } as Ceremony;
+    expect(restartOf(c, ['d'])).toEqual({ members: ['a', 'b', 'c'], k: 3 });
+    expect(restartOf(c, ['c', 'd'])).toEqual({ members: ['a', 'b'], k: 2 });
+    expect(restartOf(c, ['b', 'c', 'd'])).toBeUndefined();
+    expect(restartOf({ k: 2, members: ['a', 'b', COURT] } as Ceremony, [COURT])).toEqual({
+      members: ['a', 'b'],
+      k: 2,
+    });
   });
 
   test('the threshold changed after the first start: the new start replaces it', async () => {
