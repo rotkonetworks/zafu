@@ -89,7 +89,6 @@ export const ZcashContent = ({
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const zcashBackend = useStore(selectZcashBackend);
   const {
-    syncStatus,
     chainTip,
     workerSyncHeight,
     error: syncError,
@@ -193,7 +192,7 @@ export const ZcashContent = ({
     );
   }
 
-  const chainHeight = chainTip?.height ?? syncStatus?.currentHeight ?? 0;
+  const chainHeight = chainTip?.height ?? 0;
   // A pocket's own birthday is the scan floor once it has one: its notes
   // cannot predate its creation. Account 0 falls back to the wallet's.
   const effectiveBirthday = pocketBirthday ?? walletBirthday;

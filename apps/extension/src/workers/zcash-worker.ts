@@ -31,7 +31,6 @@ import {
   type ZcashBackend,
   type ZcashClient,
 } from '../state/keyring/zcash-backend';
-import type { ZidecarClient } from '../state/keyring/zidecar-client';
 import { txidMemoFetcher } from '../services/memo-sync/txid-fetcher';
 import { COMPACT_SIGN_REQUEST } from '../config/feature-flags';
 import {
@@ -175,12 +174,11 @@ const suspectBackend = (serverUrl: string): void => {
 
 /**
  * One-shot warning latches for conditions that are stable for the life of the
- * worker. `verifySyncProofs` runs on every sync pass, so a per-pass `console`
+ * worker. Sync runs on every pass, so a per-pass `console`
  * line for a condition that cannot change turns a healthy sync into hundreds of
  * identical lines and hides the ones that matter. These warn once, then stay
  * silent; the condition itself is unaffected.
  */
-let warnedNonGenesisActionsCommitment = false;
 
 function registerBackend(serverUrl: string, backend: ZcashBackend): void {
   if (!isZcashBackend(backend)) {
@@ -1132,80 +1130,6 @@ const getTreeSize = async (walletId: string): Promise<number> => {
   return r?.value ?? 0;
 };
 
-const getActionsCommitment = async (walletId: string): Promise<string> => {
-  const r = await idbGet<{ value: string }>('meta', [walletId, 'actionsCommitment']);
-  return r?.value ?? '0'.repeat(64); // genesis: all zeros
-};
-
-const saveActionsCommitment = async (walletId: string, commitment: string): Promise<void> => {
-  const db = await getDb();
-  const tx = db.transaction('meta', 'readwrite');
-  tx.objectStore('meta').put({ walletId, key: 'actionsCommitment', value: commitment });
-  await txComplete(tx);
-};
-
-/**
- * Verify zidecar's header proof and, for genesis-anchored wallets, the actions
- * commitment, after sync catches up.
- *
- * Nothing here sends the server anything about this wallet's notes. Spend
- * detection is the scan's job: every block from the birthday on is walked, and
- * each action's nullifier is matched against our own notes (both pools), so a
- * spend is seen in the block that contains it. Note membership is the scan's
- * job too: trial decryption recomputes the cmx, and the wallet keeps its own
- * commitment-tree frontiers. The NOMT commitment and nullifier proof rounds
- * that used to run here added no answer the scan does not already give, and
- * paid for it by sending the server our unspent nullifiers and our notes'
- * (cmx, position) pairs (decoy-padded, anonymity set 3).
- */
-const verifySyncProofs = async (
-  client: ZidecarClient,
-  tip: number,
-  mainnet: boolean,
-  actionsCommitment: string,
-  /** whether this wallet's running actions commitment was folded from genesis
-   *  (start block 0). If it was started at a birthday/import height, the fold
-   *  is seeded from a non-genesis value and can NEVER equal the server's
-   *  genesis-anchored proven commitment, so verifying it is meaningless. */
-  genesisAnchoredActions: boolean,
-): Promise<void> => {
-  if (!zyncModule) {
-    return;
-  }
-  const t0 = performance.now();
-
-  // 1. verify header proof
-  const proven = await verifyHeaderProof(client, tip, mainnet);
-  console.log(`[zcash-worker] header proof valid, roots: tree=${proven.tree_root.slice(0, 16)}...`);
-
-  // 2. verify actions commitment chain
-  //
-  // Only meaningful when the wallet's fold is genesis-anchored. The actions
-  // commitment is a positional hash chain seeded from the previously-folded
-  // value, so a wallet whose sync begins at a birthday/import block (nearly
-  // all wallets - the default start is near tip, not genesis) folds from a
-  // seed that can never equal the server's genesis-anchored proven value. For
-  // those wallets any "mismatch" here is guaranteed by construction and was
-  // spamming the retry loop under a misleading "server tampered" label. See
-  // zcore crates/zync-core sync.rs verify_actions_commitment. We keep it for
-  // genuine genesis wallets, where it is sound and actually checks something.
-  const hasSaved = actionsCommitment !== '0'.repeat(64);
-  if (genesisAnchoredActions) {
-    zyncModule['verify_actions_commitment'](actionsCommitment, proven.actions_commitment, hasSaved);
-    console.log(`[zcash-worker] actions commitment verified`);
-  } else if (!warnedNonGenesisActionsCommitment) {
-    warnedNonGenesisActionsCommitment = true;
-    // expected for nearly every wallet (birthday/import start, not genesis) - not a warning
-    console.debug(
-      '[zcash-worker] actions commitment check skipped: wallet started at a non-genesis ' +
-        'height, so the fold is not genesis-anchored (verifying would always mismatch)',
-    );
-  }
-
-  const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
-  console.log(`[zcash-worker] header proof checks done in ${elapsed}s`);
-};
-
 /** get cached orchard tree frontier from IDB */
 const getTreeFrontier = async (walletId: string): Promise<string | null> => {
   const r = await idbGet<{ value: string }>('meta', [walletId, 'orchardTreeFrontier']);
@@ -1653,41 +1577,6 @@ const resolveBroadcastTxid = async (
   // users copy and what block explorers accept.
   const internal = wasmModule.compute_txid(txHex);
   return (internal.match(/../g) ?? []).reverse().join('');
-};
-
-// ── zync-core (verification) ──
-
-let zyncModule: Record<string, any> | null = null;
-
-// Same concurrency hazard as initWasm: a second `zync.default()` on the same
-// instance re-runs the module's start section and detaches the live views.
-const initZync = once(async (): Promise<void> => {
-  // @ts-expect-error dynamic import in worker
-  const zync = await import(/* webpackIgnore: true */ '/zync-core/zync_core.js');
-  await zync.default({ module_or_path: '/zync-core/zync_core_bg.wasm' });
-  zync.wasm_init();
-  zyncModule = zync;
-  console.log('[zcash-worker] zync-core ready');
-});
-
-interface ProvenRoots {
-  tree_root: string;
-  nullifier_root: string;
-  actions_commitment: string;
-}
-
-/** fetch and verify header proof from zidecar, returns proven NOMT roots */
-const verifyHeaderProof = async (
-  client: ZidecarClient,
-  tip: number,
-  mainnet: boolean,
-): Promise<ProvenRoots> => {
-  if (!zyncModule) {
-    throw new Error('zync-core not initialized');
-  }
-  const { proofBytes } = await client.getHeaderProof();
-  const json = zyncModule['verify_header_proof'](proofBytes, tip, mainnet) as string;
-  return JSON.parse(json) as ProvenRoots;
 };
 
 // ── offscreen proving ──
@@ -3427,18 +3316,6 @@ const syncLoop = async (
     `[zcash-worker] sync start wallet=${walletId} height=${currentHeight} treeSize=${orchardTreeSize} (idb=${syncedHeight}, requested=${startHeight ?? 'none'})`,
   );
 
-  if (zidecar) {
-    try {
-      await initZync();
-    } catch (e) {
-      console.warn(
-        `[zcash-worker] zync-core init failed, syncing without verification: ${errText(e)}`,
-      );
-    }
-  }
-  // a worker that synced a zidecar earlier keeps zync loaded; only this run's backend decides
-  const zync = zidecar ? zyncModule : null;
-
   // emit initial sync-progress so UI gets persisted height + can fetch balance immediately
   workerSelf.postMessage({
     type: 'sync-progress',
@@ -3549,14 +3426,6 @@ const syncLoop = async (
     // (IndexedDB keeps its copy either way, keyed by nullifier).
     state.notes = state.notes.filter(n => n.height <= target);
   };
-
-  // running actions commitment for integrity verification
-  let actionsCommitment = await getActionsCommitment(walletId);
-  // The actions commitment fold is only sound (and only equal to the server's
-  // proven value) when this wallet's sync has covered the chain from genesis.
-  // A birthday/import start (startHeight > 0) folds from a non-genesis seed,
-  // so the verify step must be skipped for those wallets - see verifySyncProofs.
-  const actionsGenesisAnchored = (startHeight ?? 0) === 0;
 
   // mempool watcher: only spawned when explicitly opted in AND on a zidecar
   // endpoint (lightwalletd has no compact-action mempool RPC, so the watcher
@@ -3899,38 +3768,6 @@ const syncLoop = async (
           console.warn(`[zcash-worker] failed to cache tree frontier: ${errText(e)}`);
         }
 
-        // Header-proof checks, whenever the backend supports them. They send
-        // nothing about this wallet; spends and notes come from the scan.
-        if (zidecar && zync) {
-          try {
-            await verifySyncProofs(
-              zidecar,
-              chainHeight,
-              true,
-              actionsCommitment,
-              actionsGenesisAnchored,
-            );
-          } catch (e) {
-            // Fail CLOSED only on checks that are actually sound. A header
-            // proof that does not verify is the server contradicting itself;
-            // an actions-commitment divergence is not (the indexer is still
-            // filling in stored per-block roots), so that one only retries.
-            const detail = e instanceof Error ? e.message : String(e);
-            if (/proof invalid/i.test(detail)) {
-              console.error(`[zcash-worker] INTEGRITY FAILURE, refusing batch: ${errText(e)}`, e);
-              throw syncError(
-                'consensus',
-                `server integrity check failed: ${detail}. ` +
-                  `refusing to trust this endpoint's data - switch node or retry`,
-              );
-            }
-            console.warn(
-              `[zcash-worker] proof verification unavailable, will retry: ${errText(e)}`,
-            );
-            suspectBackend(serverUrl);
-          }
-        }
-
         // mempool scanning lives in the separate watcher task spawned above
         // when mempoolWatch === 'on'. when off (default), no mempool calls.
 
@@ -4025,46 +3862,7 @@ const syncLoop = async (
         view.setUint32(0, actionCount, true);
         let off = 4;
 
-        // actions commitment buffer: reuse across blocks (max action count per block)
-        let commitBuf: Uint8Array | null = null;
-        let commitView: DataView | null = null;
-
         for (const block of blocks) {
-          // compute actions commitment inline (single pass, no second iteration)
-          if (zync) {
-            if (block.actions.length > 0) {
-              const needed = 4 + block.actions.length * 96;
-              if (!commitBuf || commitBuf.length < needed) {
-                commitBuf = new Uint8Array(needed);
-                commitView = new DataView(commitBuf.buffer);
-              }
-              commitView!.setUint32(0, block.actions.length, true);
-              let aoff = 4;
-              for (const a of block.actions) {
-                commitBuf.set(a.cmx, aoff);
-                aoff += 32;
-                commitBuf.set(a.nullifier, aoff);
-                aoff += 32;
-                commitBuf.set(a.ephemeralKey, aoff);
-                aoff += 32;
-              }
-              const actionsRoot = zync['compute_actions_root'](
-                commitBuf.subarray(0, needed),
-              ) as string;
-              actionsCommitment = zync['update_actions_commitment'](
-                actionsCommitment,
-                actionsRoot,
-                block.height,
-              ) as string;
-            } else {
-              actionsCommitment = zync['update_actions_commitment'](
-                actionsCommitment,
-                '0'.repeat(64),
-                block.height,
-              ) as string;
-            }
-          }
-
           for (const a of block.actions) {
             // pack binary for WASM scan
             if (a.nullifier.length === 32) {
@@ -4567,11 +4365,6 @@ const syncLoop = async (
         } catch {
           /* best-effort */
         }
-      }
-
-      // persist actions commitment
-      if (zync) {
-        await saveActionsCommitment(walletId, actionsCommitment);
       }
 
       workerSelf.postMessage({
