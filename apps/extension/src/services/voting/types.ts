@@ -85,6 +85,12 @@ export interface VotingRound {
   /** unix seconds */
   votingEnd: number;
   status: RoundStatus;
+  /** election-authority key (hex), present once the round's key ceremony confirmed */
+  eaPkHex?: string;
+  /** note-commitment tree root at the snapshot (hex); delegation proves against it */
+  ncRootHex?: string;
+  /** nullifier IMT root at the snapshot (hex); delegation proves against it */
+  nullifierImtRootHex?: string;
   proposals: VotingProposal[];
   /** present in the pinned dynamic config's rounds map (basic endorsement) */
   inConfig: boolean;

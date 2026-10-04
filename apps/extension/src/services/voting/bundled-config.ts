@@ -19,15 +19,12 @@
  *            the repo's `main` branch - eef477e was its tip at fetch time)
  *            sha256 9716ca40771b253caa185e84b33d6487e78048664fcb4cb5f0f8ef11402aff81
  *
- * TODO(voting, parked): `rounds` is bundled here too because the only place
- * that ever carried `ea_pk` is this same github file - the vote servers'
- * `/shielded-vote/v1/rounds` endpoint returns round titles/proposals but not
- * the per-round key phase-2 casting needs (see api.ts's ChainRoundDto). A
- * round opened after this build ships will list (toRound sets `inConfig:
- * false`, already handled) but can't be voted on until the app updates. If
- * casting lands, either the vote servers grow an endpoint for this map, or
- * refreshing this file becomes a release-checklist line - don't build a new
- * github fetch to "fix" this.
+ * `rounds` (each round id's `ea_pk` and endorsement signatures) is bundled
+ * too, as the endorsement cross-check. The vote servers' `/shielded-vote/v1/rounds`
+ * now also return each round's `ea_pk`, `nc_root` and `nullifier_imt_root`
+ * (vote-sdk 1.6, see api.ts's ChainRoundDto), so a round opened after this
+ * build ships still has the keys casting needs; it lists with `inConfig:
+ * false` until the bundled map is refreshed. Don't build a github fetch for it.
  */
 
 import type { StaticVotingConfig, VotingServiceConfig } from './types';

@@ -365,7 +365,7 @@ async function executeBuild(req: ProveRequest): Promise<unknown> {
 
     case 'finalize_delegation':
       // (delegation_context_json, merkle_witnesses_json, imt_proofs_json,
-      //  spend_auth_sig_hex, sighash_hex) - runs the real K=14 ZKP #1 proof.
+      //  spend_auth_sig_hex, sighash_hex) - runs the real ZKP #1 proof (K=12).
       result = wasm['finalize_delegation'](a[0], a[1], a[2], a[3], a[4]);
       break;
 

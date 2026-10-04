@@ -94,6 +94,63 @@ Reproduce by checking out the zcli rev below and running the commands.
 Verify: rebuild from the rev, sha256sum the outputs,
 diff against the values above. A mismatch means the vendored blob is stale.
 
+## voting-wasm (apps/extension/public/voting-wasm/) - separate blob
+
+The shielded-voting module ships as its own blob, lazy-loaded by
+`state/voting-wasm.ts` (light calls) and the offscreen prover
+(`zcash-build-parallel.ts`, proofs). It is NOT built from `crates/zcash-wasm`;
+refreshing zafu-wasm leaves it untouched, and vice versa.
+
+### 2026-10-05 - voting-circuits 0.12 / vote-sdk 1.6 (prod zvote-1)
+
+- source repo: zcli, branch `fix/voting-0.12`, rev `fd8d74b` (on master
+  `2e2a02a`): crate `crates/voting-wasm`, `--features parallel`.
+- why: zvote-1 runs vote-sdk v1.6.1-rc.5 on voting-circuits 0.12.0. The
+  previous blob was built on voting-circuits 0.9.0-rc.3: its proofs no longer
+  verify (0.10 and 0.12 changed the delegation and vote keys), proposals stop
+  at 15 (prod rounds have 37), and it sent `sighash` where the chain now takes
+  `tx1_effects`.
+- exports: `build_delegation_pczt` (V6/NU6.3 TX1 profile; context carries
+  `tx1_effects_hex`), `finalize_delegation` (wire has `tx1_effects`, no
+  `sighash`; checks the signature first), `cast_vote_hot_wire` (adds
+  `next_delegation_state_json`), new `build_vote_shares_from_recovery`;
+  `generate_voting_hotkey`, `pir_fetch_imt_proofs`, `build_vote_commitment_wire`,
+  `build_vote_shares_wire`, `selftest_prove_delegation`, `initThreadPool`
+  unchanged.
+- recipe (from `crates/voting-wasm`; RUSTFLAGS unset so the workspace
+  `.cargo/config.toml` shared-memory link args apply):
+
+      RUSTUP_TOOLCHAIN=nightly cargo build -p voting-wasm \
+        --target wasm32-unknown-unknown --release --features parallel \
+        -Zbuild-std=panic_abort,std
+      wasm-bindgen ../../target/wasm32-unknown-unknown/release/voting_wasm.wasm \
+        --out-dir pkg --target web
+      wasm-opt -Oz --enable-threads --enable-bulk-memory --enable-simd \
+        --enable-mutable-globals --enable-nontrapping-float-to-int \
+        pkg/voting_wasm_bg.wasm -o pkg/voting_wasm_bg.wasm
+
+  then copy `voting_wasm.js`, `voting_wasm.d.ts`, `voting_wasm_bg.wasm`,
+  `voting_wasm_bg.wasm.d.ts`. The rayon snippet hash is unchanged
+  (`wasm-bindgen-rayon-38edf6e439f6d70d`), so the patched `workerHelpers.js`
+  (`wbgRayonBase` -> `voting_wasm.js`) was kept as is.
+
+- toolchain: nightly `rustc 1.95.0-nightly (6a979b3e3 2026-02-26)`,
+  wasm-bindgen CLI 0.2.126, wasm-opt (binaryen) 130
+  (`/nix/store/azhmf1il8da9pps80bk2f4l6ql6bgfg7-binaryen-130`).
+- size: pre `wasm-opt` 11,514,649 bytes; post `-Oz` 6,435,786 bytes (the
+  previous blob was 9,914,592 bytes and not `-Oz`'d).
+- sha256(voting_wasm_bg.wasm) =
+  d3d98cd11ae5b6ba09960a8dcd808906c399f5e643c575cc9b08f23898438a84
+- sha256(voting_wasm.js) =
+  831f819ce4b328f72c1715cdd467c6c1989b67eeb0bbf763305aa73806a0323f
+  (both reproduced from a second build at the rev above).
+- shared imported memory confirmed post-bindgen:
+  `(memory $mimport$0 25 32768 shared)`.
+- tests: `cargo test -p zcash_voting --release --lib` 111 passed (includes the
+  chain's own TX1 fixture and PCZT sighash == TX1 digest); the ignored
+  `voting-wasm` `local_chain_e2e` ran these bindings against a local svoted
+  v1.6.1-rc.5 (37 proposals, votes on 37 and 17, tally finalized).
+
 ## 2026-10-05 rebuild (3) - Zakura Common 2.0, NU7 testnet; built from zcli master
 
 - source repo: zcli, branch `master`, rev `2e2a02a` (0fa1616 plus the

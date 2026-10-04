@@ -58,6 +58,12 @@ const firstReachable = async <T>(
 
 interface ChainRoundDto {
   vote_round_id: string;
+  /** base64 32 bytes: the round's election-authority key, set once its ceremony confirms */
+  ea_pk?: string;
+  /** base64 32 bytes: note-commitment tree root at the snapshot */
+  nc_root?: string;
+  /** base64 32 bytes: nullifier IMT root at the snapshot */
+  nullifier_imt_root?: string;
   title?: string;
   description?: string;
   snapshot_height: number;
@@ -69,16 +75,33 @@ interface ChainRoundDto {
     id: number;
     title?: string;
     description?: string;
-    options?: { id?: number; label?: string }[];
+    // `index` is the option's position (0 is omitted on the wire); older
+    // server builds sent `id`.
+    options?: { index?: number; id?: number; label?: string }[];
     zip_number?: string | null;
     forum_url?: string | null;
   }[];
 }
 
+// vote-sdk SessionStatus: 4 = PENDING (key ceremony running) and
+// 5 = CEREMONY_FAILED fall through to 'cancelled' - neither can take votes.
 const STATUS_BY_CODE: Record<number, RoundStatus> = {
   1: 'active',
   2: 'tallying',
   3: 'completed',
+};
+
+/** base64 (any padding) to lowercase hex; undefined for a missing field. */
+const b64ToHex = (raw: string | undefined): string | undefined => {
+  if (!raw) {
+    return undefined;
+  }
+  try {
+    const bytes = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
+    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    return undefined;
+  }
 };
 
 /** Round ids arrive as hex or base64 depending on server build; normalize to lowercase hex. */
@@ -111,23 +134,22 @@ const toRound = (dto: ChainRoundDto, configRoundIds: ReadonlySet<string>): Votin
         : 0,
     votingEnd: Number.isFinite(dto.vote_end_time) ? dto.vote_end_time : 0,
     status: STATUS_BY_CODE[dto.status ?? 1] ?? 'cancelled',
+    eaPkHex: b64ToHex(dto.ea_pk),
+    ncRootHex: b64ToHex(dto.nc_root),
+    nullifierImtRootHex: b64ToHex(dto.nullifier_imt_root),
     proposals: (dto.proposals ?? []).map(p => ({
       id: p.id,
       title: p.title ?? '',
       description: p.description ?? '',
-      // The server ships option rows with a label but NO id (the whole options
-      // array is positional), while the tally keys each weight by
-      // `vote_decision` - a 0-based index into that same array (index 0 arrives
-      // omitted on the wire, coalesced back to 0 in fetchTally). So the option
-      // id MUST be its position, or the tally-to-option match in the UI finds
-      // nothing and every bar renders 0%. Honour an explicit id if a future
-      // server build sends one, else fall back to the index. Casting is
-      // view-only today (phase 2), so nothing spends this id yet - it is a
-      // render key only.
-      options: (p.options ?? []).map((o, i) => ({
-        id: o.id ?? i,
-        label: o.label ?? `option ${o.id ?? i}`,
-      })),
+      // The tally keys each weight by `vote_decision`, a 0-based index into
+      // this options array, and a cast's `choice` is the same index. The
+      // server sends it as `index` with 0 omitted (proto3 default), so an
+      // option without one is index 0 only when it is first; fall back to the
+      // array position, which is what the index is.
+      options: (p.options ?? []).map((o, i) => {
+        const id = o.index ?? o.id ?? i;
+        return { id, label: o.label ?? `option ${id}` };
+      }),
       zipNumber: p.zip_number ?? undefined,
       forumUrl: p.forum_url ?? undefined,
     })),
@@ -205,7 +227,8 @@ export const submitDelegation = async (
   config: VotingServiceConfig,
   delegationWireJson: string,
 ): Promise<DelegationSubmissionResult> => {
-  const delegationPath = '/shielded-vote/v1/delegations';
+  // MsgDelegateVote; the body is finalize_delegation's wire JSON
+  const delegationPath = '/shielded-vote/v1/delegate-vote';
   try {
     return await firstReachable(
       config.vote_servers.map(s => s.url),
@@ -255,7 +278,8 @@ export const castVote = async (
   config: VotingServiceConfig,
   voteWireJson: string,
 ): Promise<VoteCastResult> => {
-  const votePath = '/shielded-vote/v1/votes';
+  // MsgCastVote; the body is cast_vote_hot_wire's `wire`
+  const votePath = '/shielded-vote/v1/cast-vote';
   try {
     return await firstReachable(
       config.vote_servers.map(s => s.url),
@@ -289,5 +313,44 @@ export const castVote = async (
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     return { ok: false, status: 0, message };
+  }
+};
+
+/** Result of handing one encrypted share to a helper. */
+export interface ShareSubmissionResult {
+  ok: boolean;
+  status: number;
+  message: string;
+}
+
+/**
+ * Hand one helper share (an element of build_vote_shares_from_recovery's
+ * output) to the helper on one vote server. Each vote server runs a helper;
+ * shares are spread over several so no single helper sees them all.
+ */
+export const submitShare = async (
+  helperBaseUrl: string,
+  shareJson: string,
+): Promise<ShareSubmissionResult> => {
+  try {
+    const resp = await fetch(`${helperBaseUrl.replace(/\/$/, '')}/shielded-vote/v1/shares`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: shareJson,
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (resp.ok) {
+      return { ok: true, status: resp.status, message: 'share queued' };
+    }
+    let message = `HTTP ${resp.status}`;
+    try {
+      const body = (await resp.json()) as { error?: string };
+      message = body.error || message;
+    } catch {
+      // ignore parse errors
+    }
+    return { ok: false, status: resp.status, message };
+  } catch (e) {
+    return { ok: false, status: 0, message: e instanceof Error ? e.message : String(e) };
   }
 };

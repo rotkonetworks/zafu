@@ -33,6 +33,18 @@ export function build_delegation_pczt(fvk_hex: string, seed_fingerprint_hex: str
 export function build_vote_commitment_wire(hotkey_secret_hex: string, round_params_json: string, delegation_state_json: string, van_witness_json: string, vote_json: string, network: string): string;
 
 /**
+ * Build the helper-share payloads (`[VoteShareWire]`, `POST {helper}/shielded-vote/v1/shares`)
+ * for a vote that is already on chain.
+ *
+ * `commitment_bundle_json` is the recovery bundle `cast_vote_hot_wire`
+ * returned for this vote; `vc_tree_position` is the vote commitment's leaf
+ * index in the round's commitment tree, known once the cast-vote transaction
+ * is included. No proof runs here, so the shares match the submitted
+ * commitment.
+ */
+export function build_vote_shares_from_recovery(commitment_bundle_json: string, vc_tree_position: bigint, submit_at: bigint): string;
+
+/**
  * Build the helper-server share payloads (`[VoteShareWire]`) for one HOT vote.
  *
  * `submit_at` is the unix-seconds submission time stamped into each share.
@@ -125,28 +137,28 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly build_delegation_pczt: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number) => [number, number, number, number];
-    readonly finalize_delegation: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
     readonly build_vote_commitment_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
+    readonly build_vote_shares_from_recovery: (a: number, b: number, c: bigint, d: bigint) => [number, number, number, number];
     readonly build_vote_shares_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: bigint) => [number, number, number, number];
     readonly cast_vote_hot_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: bigint) => [number, number, number, number];
+    readonly finalize_delegation: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
     readonly generate_voting_hotkey: (a: number, b: number) => [number, number, number, number];
+    readonly pir_fetch_imt_proofs: (a: number, b: number, c: number, d: number, e: any) => any;
     readonly selftest_prove_delegation: () => [number, number];
     readonly voting_wasm_init_panic_hook: () => void;
-    readonly pir_fetch_imt_proofs: (a: number, b: number, c: number, d: number, e: any) => any;
+    readonly rustsecp256k1_v0_10_0_context_create: (a: number) => number;
+    readonly rustsecp256k1_v0_10_0_context_destroy: (a: number) => void;
+    readonly rustsecp256k1_v0_10_0_default_error_callback_fn: (a: number, b: number) => void;
+    readonly rustsecp256k1_v0_10_0_default_illegal_callback_fn: (a: number, b: number) => void;
     readonly __wbg_wbg_rayon_poolbuilder_free: (a: number, b: number) => void;
     readonly initThreadPool: (a: number) => any;
     readonly wbg_rayon_poolbuilder_build: (a: number) => void;
     readonly wbg_rayon_poolbuilder_numThreads: (a: number) => number;
     readonly wbg_rayon_poolbuilder_receiver: (a: number) => number;
     readonly wbg_rayon_start_worker: (a: number) => void;
-    readonly rustsecp256k1_v0_10_0_default_error_callback_fn: (a: number, b: number) => void;
-    readonly rustsecp256k1_v0_10_0_default_illegal_callback_fn: (a: number, b: number) => void;
-    readonly rustsecp256k1_v0_10_0_context_destroy: (a: number) => void;
-    readonly rustsecp256k1_v0_10_0_context_create: (a: number) => number;
-    readonly wasm_bindgen_75fefa18e6030595___convert__closures_____invoke___wasm_bindgen_75fefa18e6030595___JsValue__core_2fb3c31ab891fe54___result__Result_____wasm_bindgen_75fefa18e6030595___JsError___true_: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen_75fefa18e6030595___convert__closures_____invoke___js_sys_9ec148cc023792e2___Function_fn_wasm_bindgen_75fefa18e6030595___JsValue_____wasm_bindgen_75fefa18e6030595___sys__Undefined___js_sys_9ec148cc023792e2___Function_fn_wasm_bindgen_75fefa18e6030595___JsValue_____wasm_bindgen_75fefa18e6030595___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen_75fefa18e6030595___convert__closures_____invoke___wasm_bindgen_75fefa18e6030595___JsValue______true_: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen_75fefa18e6030595___convert__closures_____invoke___js_sys_9ec148cc023792e2___futures__task__wait_async_polyfill__MessageEvent______true_: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen_80140066f03354e2___convert__closures_____invoke___wasm_bindgen_80140066f03354e2___JsValue__core_a76ab548e90a171e___result__Result_____wasm_bindgen_80140066f03354e2___JsError___true_: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_80140066f03354e2___convert__closures_____invoke___js_sys_22b816839ce642e1___Function_fn_wasm_bindgen_80140066f03354e2___JsValue_____wasm_bindgen_80140066f03354e2___sys__Undefined___js_sys_22b816839ce642e1___Function_fn_wasm_bindgen_80140066f03354e2___JsValue_____wasm_bindgen_80140066f03354e2___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
+    readonly wasm_bindgen_80140066f03354e2___convert__closures_____invoke___wasm_bindgen_80140066f03354e2___JsValue______true_: (a: number, b: number, c: any) => void;
     readonly memory: WebAssembly.Memory;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

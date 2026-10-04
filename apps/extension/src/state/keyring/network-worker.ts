@@ -119,6 +119,7 @@ export interface NetworkWorkerMessage {
     | 'build-delegation-pczt'
     | 'finalize-delegation'
     | 'cast-vote-hot-wire'
+    | 'build-vote-shares-from-recovery'
     | 'pir-fetch-imt-proofs'
     | 'get-consensus-branch-id'
     | 'get-merkle-witnesses';
@@ -2127,8 +2128,27 @@ export const castVoteHotInWorker = async (a: {
   vanWitnessJson: string;
   voteJson: string;
   submitAt: number;
-}): Promise<{ proposalId: number; wire: string; shares: string; commitmentBundleJson: string }> => {
+}): Promise<{
+  proposalId: number;
+  /** POST /shielded-vote/v1/cast-vote body */
+  wire: string;
+  /** recovery bundle: persist it, shares are rebuilt from it once the vote lands */
+  commitmentBundleJson: string;
+  /** the bundle's delegation state for its next cast (authority bit cleared) */
+  nextDelegationStateJson: string;
+}> => {
   return callWorker('zcash', 'cast-vote-hot-wire', a);
+};
+
+/** Helper shares (`[VoteShareWire]` JSON) for a vote already on chain. The
+ *  tree position is the vote commitment's leaf index, known once the cast-vote
+ *  tx is included. */
+export const buildVoteSharesFromRecoveryInWorker = async (a: {
+  commitmentBundleJson: string;
+  vcTreePosition: number;
+  submitAt: number;
+}): Promise<{ sharesJson: string }> => {
+  return callWorker('zcash', 'build-vote-shares-from-recovery', a);
 };
 
 export const pirFetchImtProofsInWorker = async (a: {
