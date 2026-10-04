@@ -133,6 +133,7 @@ refreshing zafu-wasm leaves it untouched, and vice versa.
   `voting_wasm_bg.wasm.d.ts`. The rayon snippet hash is unchanged
   (`wasm-bindgen-rayon-38edf6e439f6d70d`), so the patched `workerHelpers.js`
   (`wbgRayonBase` -> `voting_wasm.js`) was kept as is.
+
 - toolchain: nightly `rustc 1.95.0-nightly (6a979b3e3 2026-02-26)`,
   wasm-bindgen CLI 0.2.126, wasm-opt (binaryen) 130
   (`/nix/store/azhmf1il8da9pps80bk2f4l6ql6bgfg7-binaryen-130`).
