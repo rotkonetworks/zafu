@@ -373,6 +373,9 @@ importers:
       bip39:
         specifier: ^3.1.0
         version: 3.1.0
+      viem:
+        specifier: ^2.38.0
+        version: 2.57.2(typescript@5.9.3)(zod@3.25.76)
     devDependencies:
       cosmjs-types:
         specifier: ^0.9.0

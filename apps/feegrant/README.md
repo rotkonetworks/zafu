@@ -110,3 +110,22 @@ a hostname to the port, `systemctl enable --now feegrant`.
 
 Upgrades follow the license-server pattern: build, keep a `.bak` of the old
 binary, swap, `systemctl restart feegrant`.
+
+## Base gas drip (Peer buy)
+
+zafu's buy page signals a Peer intent from the person's own fresh Base address,
+which holds no eth. `POST /base/gas` sends that address a small eth drip
+(default 0.00002 eth) so it can pay for its own signal, release and USDC
+transfer. Funds never pass through the sponsor; only gas.
+
+- Off unless `BASE_KEY_FILE` is set. Create the key on the host with
+  `./feegrant init-base /root/feegrant/base.key` (0600, never overwritten); it
+  prints only the 0x address to fund. Separate from the Injective granter.
+- Request: `{ address, intent: { depositId, amount, platform, currency } }`.
+  200 `{ txHash, wei }`, 409 `{ error: 'funded' }` when the address already
+  holds `BASE_FUNDED_ABOVE_WEI`, 429 `{ error: 'rate', retryAfter }`.
+- Limits: one drip per address per day (memory only), per-IP caps and a daily
+  cap persisted in `BASE_STATE_FILE`. Sends are serialized so nonces never
+  collide. Below `BASE_MIN_SPONSOR_WEI` it answers 503.
+- `/health` carries a `base` block (sponsor address, drips today, balance in
+  micro-eth). The journal logs `base gas -> <status>` only, no address or IP.

@@ -2,7 +2,7 @@
   "name": "@repo/feegrant",
   "version": "0.1.0",
   "private": true,
-  "description": "Injective gas sponsor: x/feegrant allowances so USDC.inj holders can shield without INJ",
+  "description": "zafu gas sponsor: Injective x/feegrant allowances and a Base eth drip for the Peer buy",
   "type": "module",
   "scripts": {
     "dev": "bun src/server.ts",
@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@repo/wallet": "workspace:*",
-    "bip39": "^3.1.0"
+    "bip39": "^3.1.0",
+    "viem": "^2.38.0"
   },
   "devDependencies": {
     "cosmjs-types": "^0.9.0"
