@@ -804,9 +804,24 @@ export const createContactsSlice =
         // never hand a `j` out twice: each wallet's counter goes to at least
         // max(backed-up counter, 1 + every j its contacts hold)
         for (const k of get().keyRing.keyInfos) {
+          // and every card you showed, answered or not: its j was handed out too
+          const shown = (
+            Array.isArray((parsed.people as { rooms?: unknown } | undefined)?.rooms)
+              ? (
+                  parsed.people as {
+                    rooms: { walletId?: string; signer?: { gen?: number; j?: number } }[];
+                  }
+                ).rooms
+              : []
+          ).flatMap(r =>
+            r.walletId && walletFor.get(r.walletId) === k.id && typeof r.signer?.j === 'number'
+              ? [{ walletId: k.id, gen: Number(r.signer.gen), j: r.signer.j }]
+              : [],
+          );
           const rels = [...safeContacts(), ...backupContacts]
             .map(c => c.rel)
-            .filter((r): r is ContactRel => !!r && r.walletId === k.id);
+            .filter((r): r is ContactRel => !!r && r.walletId === k.id)
+            .concat(shown);
           const floor = relationshipFloor(rels);
           const backed = parsed.relNext?.[pocketOwner(k)]?.next ?? {};
           for (const [gen, n] of Object.entries(backed)) {

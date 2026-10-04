@@ -184,4 +184,79 @@ describe('personal-data backup keeps the relationship counter', () => {
     expect(await mintRelationshipIndex(id, 2)).toBe(10);
     expect(await mintRelationshipIndex(id, 0)).toBe(0);
   });
+
+  test('a card you showed and no one answered keeps its j through a restore', async () => {
+    const id = await useStore.getState().keyRing.newMnemonicKey(PHRASE, 'main');
+    await writeRooms([
+      {
+        id: 'c:' + 'ab'.repeat(32),
+        walletId: id,
+        kind: 'card',
+        name: '',
+        appScope: 'zafu-pair-v1',
+        secret: '07'.repeat(32),
+        size: 4096,
+        relay: 'https://relay.zafu.pro',
+        signer: { gen: 0, j: 7 },
+        joined: true,
+        createdAt: 1,
+        card: { bytes: '', mine: true, contactId: 'next', shown: 1, state: 'waiting' },
+      },
+    ]);
+    const backup = await useStore.getState().contacts.exportPersonalData('backup-pass');
+    await chrome.storage.local.remove(`xidRelNext:${id}`);
+    await useStore.getState().contacts.importPersonalData(backup, 'backup-pass', 'merge');
+    expect(await mintRelationshipIndex(id, 0)).toBe(8);
+  });
+});
+
+describe('a v2 person, sealed at rest and in the backup', () => {
+  let useStore: TestStore;
+
+  beforeEach(async () => {
+    localMock.clear();
+    sessionMock.clear();
+    useStore = create<AllSlices>()(initializeStore(sessionExtStorage, localExtStorage));
+    await useStore.getState().keyRing.setPassword('s0meUs3rP@ssword');
+  });
+
+  test('their card, how it came, the seal check and the card you gave survive a wipe', async () => {
+    const v2 = {
+      cardV2: 'AgAB',
+      source: 'link' as const,
+      sealChecked: 1_790_000_000_000,
+      given: { rev: 2, zcash: '11'.repeat(43), relay: 'https://relay.zafu.pro', caps: 3 },
+      addrGen: 1,
+    };
+    const ken = await useStore.getState().contacts.addContact({
+      id: 'ken-id',
+      name: 'ken',
+      zid: 'cd'.repeat(32),
+      pairKa: 'ef'.repeat(32),
+      ...v2,
+    });
+    expect(ken.id).toBe('ken-id');
+    // sealed at rest: nothing of the card is readable in storage
+    expect(JSON.stringify(localMock.get('contacts'))).not.toContain('ken');
+    const backup = await useStore.getState().contacts.exportPersonalData('backup-pass');
+    await useStore.getState().contacts.clearAll();
+    await useStore.getState().contacts.importPersonalData(backup, 'backup-pass', 'merge');
+    expect((useStore.getState().contacts.contacts as Contact[])[0]).toMatchObject({
+      id: 'ken-id',
+      ...v2,
+    });
+  });
+
+  test('a v1 person loads unchanged, with nothing v2 yet: the first v2 card is sent on first contact', async () => {
+    await useStore
+      .getState()
+      .contacts.addContact({ name: 'old', zid: 'cd'.repeat(32), pairKa: 'ef'.repeat(32) });
+    const backup = await useStore.getState().contacts.exportPersonalData('backup-pass');
+    await useStore.getState().contacts.clearAll();
+    await useStore.getState().contacts.importPersonalData(backup, 'backup-pass', 'merge');
+    const old = (useStore.getState().contacts.contacts as Contact[])[0]!;
+    expect(old.name).toBe('old');
+    expect(old.given).toBeUndefined();
+    expect(old.cardV2).toBeUndefined();
+  });
 });
