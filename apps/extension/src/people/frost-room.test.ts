@@ -9,7 +9,8 @@
 
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { beforeAll, describe, expect, test } from 'vitest';
+import { beforeAll, describe, expect, test, vi } from 'vitest';
+import { scryptAsync } from '@noble/hashes/scrypt';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import type { RelayTransport } from '@zafu/zid';
 import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified-address';
@@ -38,6 +39,27 @@ import {
 } from './frost-room';
 import type { PeopleRoom, Thread } from './vault';
 import { advanceSign, decline, proposalsOf, seal, type SignCalls } from './room-sign';
+
+// Real FROST rounds and real sealed room messages: several seconds per test on
+// a busy CI runner, well past the 5s default.
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
+
+// The door code's scrypt (N 2^16, 64 MiB) is paid by the founder and by every
+// joiner, so it was most of each test's set-up time. These tests are about the
+// wallet made in the room, not the door's cost; groups.test.ts keeps the real
+// one. Same scrypt and salt, a cheap N: still one secret per code everywhere.
+vi.mock('./door', async importOriginal => {
+  const door = await importOriginal<typeof import('./door')>();
+  return {
+    ...door,
+    doorSecret: (code: string) =>
+      scryptAsync(
+        new TextEncoder().encode(door.normalizeCode(code)),
+        new TextEncoder().encode('zafu-group-door-v2'),
+        { ...door.DOOR_KDF, N: 2 ** 4 },
+      ),
+  };
+});
 
 type Wasm = typeof import('@repo/zcash-wasm');
 let W: Wasm;
