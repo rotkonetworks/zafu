@@ -287,6 +287,9 @@ export interface ContactsSlice {
 
 const generateId = () => crypto.randomUUID();
 
+/** contacts writes this realm made: a read that one overtook is stale (state/persist) */
+export const contactsWrites = { n: 0 };
+
 const V2_KEYS = ['cardV2', 'source', 'sealChecked', 'given', 'addrGen'] as const;
 const v2Of = (d: ContactV2): ContactV2 =>
   Object.fromEntries(V2_KEYS.filter(k => d[k] !== undefined).map(k => [k, d[k]]));
@@ -333,7 +336,10 @@ export const createContactsSlice =
     };
     // use local.set (encrypted proxy) - NOT writeEncrypted directly,
     // since local is already the encrypted proxy and writeEncrypted would double-encrypt
-    const persist = () => local.set('contacts' as keyof LocalStorageState, safeContacts() as never);
+    const persist = () => {
+      contactsWrites.n++;
+      return local.set('contacts' as keyof LocalStorageState, safeContacts() as never);
+    };
 
     return {
       contacts: [],

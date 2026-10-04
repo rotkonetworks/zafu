@@ -5,6 +5,7 @@ import { create } from 'zustand';
 import { AllSlices, initializeStore, TestStore } from '.';
 import { restoreContacts, type Contact } from './contacts';
 import { mintRelationshipIndex } from './identity';
+import { readEncrypted } from './encrypted-storage';
 import { readRooms, readThreads, writeRooms, writeThreads, THREAD_CAP } from '../people/vault';
 import type { PeopleRoom, ThreadItem } from '../people/vault';
 
@@ -237,7 +238,8 @@ describe('a v2 person, sealed at rest and in the backup', () => {
     });
     expect(ken.id).toBe('ken-id');
     // sealed at rest: nothing of the card is readable in storage
-    expect(JSON.stringify(localMock.get('contacts'))).not.toContain('ken');
+    expect(localMock.get('contacts')).toHaveProperty('encrypted');
+    expect(JSON.stringify(localMock.get('contacts'))).not.toContain('cardV2');
     const backup = await useStore.getState().contacts.exportPersonalData('backup-pass');
     await useStore.getState().contacts.clearAll();
     await useStore.getState().contacts.importPersonalData(backup, 'backup-pass', 'merge');
@@ -285,5 +287,26 @@ describe('a v2 person, sealed at rest and in the backup', () => {
     expect(again).toEqual(first);
     expect(useStore.getState().contacts.contacts).toHaveLength(1);
     expect((useStore.getState().contacts.contacts as Contact[])[0]!.name).toBe('bob');
+  });
+
+  test('a quick second write is never reverted by the read the first one started', async () => {
+    const { contacts } = useStore.getState();
+    const ken = await contacts.addContact({ id: 'ken-id', name: 'someone' });
+    // named at once, as the add-a-person screen does
+    await useStore.getState().contacts.updateContact(ken.id, { name: 'bob' });
+    await new Promise(r => setTimeout(r, 200));
+    // a third write persists whatever this realm holds now
+    await useStore.getState().contacts.updateContact(ken.id, { sealChecked: 1 });
+    await new Promise(r => setTimeout(r, 200));
+    expect((useStore.getState().contacts.contacts as Contact[])[0]!.name).toBe('bob');
+    const stored = await readEncrypted<Contact[]>(
+      localExtStorage,
+      sessionExtStorage,
+      'contacts' as never,
+    );
+    expect(stored?.[0]).toMatchObject({
+      name: 'bob',
+      sealChecked: 1,
+    });
   });
 });

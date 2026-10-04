@@ -13,7 +13,7 @@ import { POCKETS_STORAGE_KEY } from './pockets';
 import type { WalletJson } from '@repo/wallet';
 import type { EncryptedVault } from './keyring/types';
 import type { ZcashWalletJson } from './wallets';
-import type { Contact } from './contacts';
+import { contactsWrites, type Contact } from './contacts';
 import type { RecentAddress } from './recent-addresses';
 
 export type Middleware = <
@@ -25,6 +25,21 @@ export type Middleware = <
 ) => StateCreator<T, Mps, Mcs>;
 
 type Persist = (f: StateCreator<AllSlices>) => StateCreator<AllSlices>;
+
+/**
+ * Reads of encrypted storage can finish out of order (every change starts
+ * one). A read is applied only while it is the newest one started, and its
+ * contacts only while no write in this realm overtook it - that write's own
+ * change starts a newer read.
+ */
+export const hydrationGuard = (writes: () => number) => {
+  let started = 0;
+  return () => {
+    const mine = ++started;
+    const at = writes();
+    return { newest: () => mine === started, unwritten: () => writes() === at };
+  };
+};
 
 export const customPersistImpl: Persist = f => (set, get, store) => {
   void (async function () {
@@ -69,8 +84,13 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
 
     type LK = keyof import('@repo/storage-chrome/local').LocalStorageState;
 
-    // hydrate encrypted data + plaintext knownSites
+    // hydrate encrypted data + plaintext knownSites. Reads can finish out of
+    // order (each change re-reads): only the newest read is applied, and never
+    // contacts a write in this realm overtook while it read - that write's own
+    // change brings them back, and applying the older read would revert it.
+    const nextRead = hydrationGuard(() => contactsWrites.n);
     const hydrateEncryptedData = async () => {
+      const read = nextRead();
       const [wallets, zcashWallets, contacts, recentAddresses, messages, rawKnownSites] =
         await Promise.all([
           readEncrypted<WalletJson[]>(localExtStorage, sessionExtStorage, 'penumbraWallets' as LK),
@@ -128,6 +148,9 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         backfilledMirrors = result.changed;
       }
 
+      if (!read.newest()) {
+        return;
+      }
       set(
         produce((state: AllSlices) => {
           if (Array.isArray(wallets)) {
@@ -142,7 +165,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
               vaultId: w.vaultId ?? '',
             })) as typeof state.wallets.zcashWallets;
           }
-          if (Array.isArray(contacts)) {
+          if (Array.isArray(contacts) && read.unwritten()) {
             state.contacts.contacts = contacts;
           }
           if (Array.isArray(recentAddresses)) {
