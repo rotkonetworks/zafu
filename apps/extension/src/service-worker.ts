@@ -75,7 +75,7 @@ import { getAuthorization } from './ctx/authorization';
 import { CustodyService, StakeService, ViewService } from '@penumbra-zone/protobuf';
 import { custodyClientCtx } from '@penumbrafi/services/ctx/custody-client';
 import { stakeClientCtx } from '@penumbrafi/services/ctx/stake-client';
-import { createDirectClient } from '@penumbra-zone/transport-dom/direct';
+import { createDirectClient } from './direct-client';
 import { internalTransportOptions } from './transport-options';
 
 // idb, querier, block processor
