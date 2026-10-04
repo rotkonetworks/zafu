@@ -1,16 +1,26 @@
 export enum PagePath {
   INDEX = '/',
   WELCOME = '/welcome',
+  CHOOSE = '/welcome/choose',
+  CREATE_PASSWORD = '/welcome/create',
   GENERATE_SEED_PHRASE = '/welcome/generate',
+  CHECK_SEED_PHRASE = '/welcome/generate/check',
   IMPORT_SEED_PHRASE = '/welcome/import',
-  /** Import: read-only confirm of the entered phrase before finalizing. */
-  IMPORT_REVIEW = '/welcome/import/review',
-  /** Import: guided wallet-birthday (sync start) step. */
   IMPORT_BIRTHDAY = '/welcome/import/birthday',
+  IMPORT_PASSWORD = '/welcome/import/password',
+  IMPORT_VIEWING_KEY = '/welcome/import-viewing-key',
+  VIEWING_KEY_BIRTHDAY = '/welcome/import-viewing-key/birthday',
+  VIEWING_KEY_PASSWORD = '/welcome/import-viewing-key/password',
+  /** one scanner for any cold signer (zigner, keystone); the old per-brand path redirects here */
+  IMPORT_SIGNER = '/welcome/import-signer',
+  ZIGNER_PASSWORD = '/welcome/import-signer/password',
+  /** @deprecated redirects to IMPORT_SIGNER */
   IMPORT_ZIGNER = '/welcome/import-zigner',
+  /** @deprecated redirects to ZIGNER_PASSWORD */
+  IMPORT_ZIGNER_PASSWORD_OLD = '/welcome/import-zigner/password',
   CONNECT_LEDGER = '/welcome/connect-ledger',
+  PERSONALIZE = '/welcome/personalize',
   ONBOARDING_SUCCESS = '/welcome/success',
-  SET_PASSWORD = '/welcome/set-password',
   /** Grant camera permission page - opened from popup, tells user to return */
   GRANT_CAMERA = '/grant-camera',
 }

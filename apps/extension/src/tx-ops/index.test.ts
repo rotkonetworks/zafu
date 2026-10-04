@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   awaitingConfirmation,
+  claimTxOp,
+  holdTxOp,
+  isTxOpShown,
+  readTxOps,
+  writeTxOp,
   KEEP_FINISHED_MS,
   STALE_PENDING_MS,
   isTerminal,
@@ -65,5 +70,41 @@ describe('tx-ops', () => {
       op({ opId: 'c', status: 'done', txId: 'h', restUrl: 'https://lcd' }),
     ];
     expect(awaitingConfirmation(ops).map(o => o.opId)).toEqual(['a']);
+  });
+});
+
+describe('announcing an op once', () => {
+  const done = (opId: string) =>
+    writeTxOp(opId, { status: 'done', label: 'send 1 UM', txId: 'ab' });
+
+  it('gives a finished op to exactly one of many claimers', async () => {
+    await done('race');
+    const wins = (await Promise.all([1, 2, 3, 4].map(() => claimTxOp('race')))).filter(Boolean);
+    expect(wins).toHaveLength(1);
+    expect((await readTxOps()).find(o => o.opId === 'race')?.notified).toBe(true);
+    expect(await claimTxOp('race')).toBeUndefined();
+  });
+
+  it('does not let a pending op be claimed', async () => {
+    await writeTxOp('busy', { status: 'pending' });
+    expect(await claimTxOp('busy')).toBeUndefined();
+  });
+
+  it('keeps the claim through a later write', async () => {
+    await done('later');
+    await Promise.all([claimTxOp('later'), writeTxOp('later', { status: 'done', txId: 'cd' })]);
+    expect((await readTxOps()).find(o => o.opId === 'later')).toMatchObject({
+      notified: true,
+      txId: 'cd',
+    });
+  });
+
+  it('knows while a screen shows the outcome itself', async () => {
+    expect(await isTxOpShown('screen')).toBe(false);
+    const release = await holdTxOp('screen');
+    expect(await isTxOpShown('screen')).toBe(true);
+    release();
+    await Promise.resolve();
+    expect(await isTxOpShown('screen')).toBe(false);
   });
 });

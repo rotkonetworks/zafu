@@ -1,3 +1,4 @@
+import { keyUse } from '../state/keyring-lock';
 import { Code, ConnectError } from '@connectrpc/connect';
 import {
   AuthorizationData,
@@ -5,27 +6,27 @@ import {
 } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
 import { AuthorizeRequest } from '@penumbra-zone/protobuf/penumbra/custody/v1/custody_pb';
 import { FullViewingKey } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
-import { Jsonified } from '@rotko/penumbra-types/jsonified';
+import { Jsonified } from '@penumbrafi/types/jsonified';
 import { Key } from '@repo/encryption/key';
 import { UserChoice } from '@repo/storage-chrome/records';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { Wallet, getCustodyTypeName } from '@repo/wallet';
 import { getWalletFromStorage } from '@repo/storage-chrome/onboard';
-import { computeEffectHash } from '@rotko/penumbra-wasm/build';
+import { computeEffectHash } from '@penumbrafi/wasm/build';
 import { PopupType } from '../message/popup';
 import { throwIfNeedsLogin } from '../needs-login';
 import { popup } from '../popup';
 
-/** swap claims don't require user approval — auto-authorize them */
+/** swap claims don't require user approval - auto-authorize them */
 const isSwapClaimOnly = (plan: TransactionPlan): boolean =>
   plan.actions.length > 0 && plan.actions.every(a => a.action.case === 'swapClaim');
 
 export const getAuthorization = async (plan: TransactionPlan): Promise<AuthorizationData> => {
-  // Swap claims don't require user interaction — sign without popup
+  // Swap claims don't require user interaction - sign without popup
   if (isSwapClaimOnly(plan)) {
     return new AuthorizationData();
   }
-  // Check if active wallet is airgap (Zigner) — use getWalletFromStorage
+  // Check if active wallet is airgap (Zigner) - use getWalletFromStorage
   // which handles decryption (wallets are encrypted at rest)
   const activeWallet = await getWalletFromStorage();
 
@@ -91,9 +92,13 @@ const getAirgapAuthorization = async (
   return AuthorizationData.fromJson(response.authorizationData);
 };
 
+// the key and the seed box are read together, as a key user (state/keyring-lock)
 const openWallet = async () => {
   await throwIfNeedsLogin();
+  return keyUse(openWalletUnlocked);
+};
 
+const openWalletUnlocked = async () => {
   const passKey = sessionExtStorage
     .get('passwordKey')
     .then(passKeyJson => Key.fromJson(passKeyJson!));

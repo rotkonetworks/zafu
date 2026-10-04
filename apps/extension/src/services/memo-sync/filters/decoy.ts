@@ -1,5 +1,5 @@
 /**
- * withDecoyBuckets — mix in N* random decoy buckets per real bucket.
+ * withDecoyBuckets - mix in N* random decoy buckets per real bucket.
  *
  * the privacy property: server sees (1 + ratio)*N bucket fetches and cannot
  * distinguish real from decoy. matches Penumbra's FMD shape, where the scanner
@@ -7,16 +7,16 @@
  *
  * decoys are sampled uniformly over [activation .. tip], skipping buckets that
  * are real OR already cached (we want decoys to land on buckets the server
- * hasn't seen this wallet touch before — fetching a bucket twice burns its
+ * hasn't seen this wallet touch before - fetching a bucket twice burns its
  * deniability).
  *
  * if the chain range is too small to accommodate the requested decoy count
  * after the skip set, we add as many as we can. that's a graceful degradation,
- * not an error — bandwidth/privacy ratio drops slightly but real buckets are
+ * not an error - bandwidth/privacy ratio drops slightly but real buckets are
  * still fetched.
  *
  * note: this filter does NOT shuffle. compose with withShuffle if you want
- * the fetch order randomized too — shuffling is a separate concern.
+ * the fetch order randomized too - shuffling is a separate concern.
  */
 
 import { BUCKET_SIZE } from '../types';

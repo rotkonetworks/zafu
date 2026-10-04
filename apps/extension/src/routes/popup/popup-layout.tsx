@@ -1,4 +1,5 @@
-import { useState, type JSX } from 'react';
+import { PenumbraStartSheet } from '../../components/wallet/penumbra-start-sheet';
+import { useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { usePopupReady } from '../../hooks/popup-ready';
 import { useSidePanelDelivery } from '../../hooks/side-panel-delivery';
@@ -6,146 +7,13 @@ import { useZcashAutoSync } from '../../hooks/zcash-auto-sync';
 import { usePenumbraSwapClaim } from '../../hooks/penumbra-swap-claim';
 import { BottomTabs, BOTTOM_TABS_HEIGHT } from '../../components/bottom-tabs';
 import { AppHeader } from '../../components/app-header';
-import { MenuDrawer } from '../../components/menu-drawer';
 import { TxTrackerWatcher } from '../../components/tx-tracker-watcher';
-import { PopupPath } from './paths';
+import { clearStaleChunkGuard } from '../../components/error-boundary';
+import { BARE_ROUTES, matchesRoute } from './paths';
+import { schedulePreloadTabRoots } from './route-modules';
+import { intentHandlers, navTimingOn, Painted } from './preload';
 import { useStore } from '../../state';
-import {
-  selectActiveNetwork,
-  selectEffectiveKeyInfo,
-  selectPenumbraAccount,
-  type NetworkType,
-} from '../../state/keyring';
-import { hasFeature } from '../../config/networks';
-
-type FeatureKey = 'stake' | 'swap' | 'vote' | 'inbox' | 'multisig';
-
-/**
- * Bottom-tabs are the places users navigate to, not one-shot actions.
- * Send / Receive are launched from buttons on the home hero (an action,
- * not a destination), so they aren't tabs. The bar is:
- *
- *   Home     — balance, recent activity
- *   Inbox    — encrypted memos
- *   Multisig — FROST threshold wallets + pending signing sessions
- *   Vote     — governance
- *
- * Inbox / Multisig / Vote are feature-gated by network (they only appear
- * on chains that support them — see config/networks.ts), so a transparent
- * chain collapses the bar down to Home plus whatever it supports.
- */
-const BOTTOM_TABS: readonly {
-  path: PopupPath;
-  icon: JSX.Element;
-  label: string;
-  feature?: FeatureKey;
-}[] = [
-  { path: PopupPath.INDEX, icon: <span className='i-zafu-mon h-5 w-5' />, label: 'home' },
-  {
-    path: PopupPath.INBOX,
-    icon: <span className='i-zafu-letter h-5 w-5' />,
-    label: 'inbox',
-    feature: 'inbox',
-  },
-  {
-    path: PopupPath.STAKE,
-    icon: <span className='i-ph-coins h-5 w-5' />,
-    label: 'stake',
-    feature: 'stake',
-  },
-  {
-    path: PopupPath.MULTISIG,
-    icon: <span className='i-zafu-torii h-5 w-5' />,
-    label: 'multisig',
-    feature: 'multisig',
-  },
-  {
-    path: PopupPath.VOTE,
-    icon: <span className='i-zafu-sensu h-5 w-5' />,
-    label: 'vote',
-    feature: 'vote',
-  },
-];
-
-const MULTISIG_TAB = {
-  path: PopupPath.MULTISIG,
-  icon: <span className='i-zafu-hanko h-5 w-5' />,
-  label: 'multisig',
-} as const;
-
-const getTabsForNetwork = (network: NetworkType) =>
-  BOTTOM_TABS.filter(tab => !tab.feature || hasFeature(network, tab.feature));
-
-/**
- * Routes where bottom-tabs should NOT be shown. The bar belongs on the
- * primary destinations (home / inbox / multisig / vote); it has no place
- * under a focused sub-flow. Send / Receive / Settings and their subtrees
- * are flows with their own screen chrome, so the tab rail is hidden there
- * (it would otherwise sit beneath a Send / Receive / settings screen). The
- * rest are auth / approval / multi-step flows - one-shot interactions.
- */
-const hiddenTabRoutes = [
-  PopupPath.LOGIN,
-  PopupPath.TRANSACTION_APPROVAL,
-  PopupPath.ORIGIN_APPROVAL,
-  PopupPath.SIGN_APPROVAL,
-  PopupPath.CAPABILITY_APPROVAL,
-  PopupPath.ZCASH_SEND_APPROVAL,
-  PopupPath.KEPLR_APPROVAL,
-  PopupPath.FROST_APPROVE,
-  PopupPath.PASSKEY_APPROVE,
-  PopupPath.COSMOS_SIGN,
-  PopupPath.CONTACTS,
-  PopupPath.IDENTITY,
-  PopupPath.SEND,
-  PopupPath.RECEIVE,
-  PopupPath.SWAP,
-  PopupPath.SETTINGS,
-  PopupPath.MULTISIG_CREATE,
-  PopupPath.MULTISIG_JOIN,
-  PopupPath.MULTISIG_SIGN,
-];
-
-/**
- * Routes where the persistent AppHeader should NOT be shown. A screen with
- * its own back-header would otherwise render two stacked bars, and the
- * AppHeader's network / wallet controls are meaningless mid-flow. Covers
- * auth / approval flows plus every secondary screen that carries its own
- * header: settings (whole subtree), identity, contacts, send, receive,
- * swap, the multisig sub-flows, and note-sync / pool-notes (both render the
- * settings-style header).
- *
- * Deliberately excluded: the multisig tab (/multisig) and stake are
- * primary destinations with no own back-header - they rely on the
- * AppHeader + bottom tabs to stay navigable, so their header stays.
- */
-const hiddenHeaderRoutes = [
-  PopupPath.LOGIN,
-  PopupPath.TRANSACTION_APPROVAL,
-  PopupPath.ORIGIN_APPROVAL,
-  PopupPath.SIGN_APPROVAL,
-  PopupPath.CAPABILITY_APPROVAL,
-  PopupPath.ZCASH_SEND_APPROVAL,
-  PopupPath.KEPLR_APPROVAL,
-  PopupPath.FROST_APPROVE,
-  PopupPath.PASSKEY_APPROVE,
-  PopupPath.COSMOS_SIGN,
-  PopupPath.SETTINGS,
-  PopupPath.IDENTITY,
-  PopupPath.CONTACTS,
-  PopupPath.SEND,
-  PopupPath.RECEIVE,
-  PopupPath.SWAP,
-  PopupPath.MULTISIG_CREATE,
-  PopupPath.MULTISIG_JOIN,
-  PopupPath.MULTISIG_SIGN,
-  PopupPath.NOTE_SYNC,
-  PopupPath.POOL_NOTES,
-];
-
-/** check if current path matches any hidden routes */
-const matchesRoute = (pathname: string, routes: string[]) =>
-  routes.some(route => pathname === route || pathname.startsWith(route + '/'));
+import { selectActiveNetwork, selectPenumbraAccount } from '../../state/keyring';
 
 export const PopupLayout = () => {
   usePopupReady();
@@ -154,44 +22,48 @@ export const PopupLayout = () => {
   const location = useLocation();
   const activeNetwork = useStore(selectActiveNetwork);
   const penumbraAccount = useStore(selectPenumbraAccount);
-  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const onLoginPage = location.pathname === '/login';
   usePenumbraSwapClaim(activeNetwork, onLoginPage, penumbraAccount);
-  const [menuOpen, setMenuOpen] = useState(false);
 
-  const networkTabs = getTabsForNetwork(activeNetwork);
-  // On a frost wallet, guarantee a multisig tab - but only append one if the
-  // network's own feature-gated tabs don't already include it, otherwise the
-  // rail shows two tabs both labeled "multisig". Also respect network support:
-  // a frost wallet viewing a network without multisig (e.g. Penumbra) must not
-  // force a tab for a feature that network cannot use.
-  const hasMultisigTab = networkTabs.some(tab => tab.path === PopupPath.MULTISIG);
-  const tabs =
-    selectedKeyInfo?.type === 'frost-multisig' &&
-    !hasMultisigTab &&
-    hasFeature(activeNetwork, 'multisig')
-      ? [...networkTabs, MULTISIG_TAB]
-      : networkTabs;
-  const showChrome = !matchesRoute(location.pathname, hiddenHeaderRoutes);
-  const showTabs = showChrome && !matchesRoute(location.pathname, hiddenTabRoutes);
+  // first screen is up - warm the four tab roots while idle; intent
+  // preloading (hover/press on a nav primitive) covers everything else
+  useEffect(schedulePreloadTabRoots, []);
+  // the layout mounting means the router committed a screen - if that
+  // followed a stale-chunk reload, the guard has done its job
+  useEffect(clearStaleChunkGuard, []);
+
+  const showChrome = !matchesRoute(location.pathname, BARE_ROUTES);
 
   return (
     <div
       data-network={activeNetwork}
       className='relative flex h-full flex-col bg-canvas contain-layout overflow-hidden'
+      // intent preloading: every nav primitive inside (sheets too, through
+      // React's portal bubbling) announces its target as data-preload
+      {...intentHandlers}
     >
-      {showChrome && <AppHeader onMenuClick={() => setMenuOpen(true)} />}
+      {navTimingOn && <Painted target={location.pathname} />}
+      {showChrome && <AppHeader />}
       <div
         className='min-h-0 flex-1 overflow-y-auto transform-gpu'
-        style={{ paddingBottom: showTabs ? BOTTOM_TABS_HEIGHT : 0 }}
+        style={{
+          paddingBottom: showChrome ? BOTTOM_TABS_HEIGHT : 0,
+          // the part that animates on navigation (styles/view-transitions.css)
+          viewTransitionName: 'popup-screen',
+        }}
       >
-        <Outlet />
+        {/* side-panel width rule: content never grows past the popup's own 400px,
+            however wide the panel is. the background, header and tabs still
+            stretch full width; only this column is capped. */}
+        <div className='mx-auto h-full max-w-[400px]'>
+          <Outlet />
+        </div>
       </div>
-      {showTabs && <BottomTabs tabs={tabs} />}
-      {showChrome && <MenuDrawer open={menuOpen} onClose={() => setMenuOpen(false)} />}
+      {showChrome && <BottomTabs />}
       {/* one toast per finished transaction, whichever page started it (the
           page may be gone after a side-panel approval reload) */}
       <TxTrackerWatcher />
+      <PenumbraStartSheet />
     </div>
   );
 };

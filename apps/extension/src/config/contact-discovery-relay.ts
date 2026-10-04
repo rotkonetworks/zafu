@@ -3,7 +3,7 @@
  * in but never named a relay of their own.
  *
  * A relay is a dumb key-value store keyed by `(appScope, epoch, shard)` holding
- * opaque tags and sealed blobs — `apps/minirelay` is the reference server, and
+ * opaque tags and sealed blobs - `apps/minirelay` is the reference server, and
  * this host is the deployment of it rotko networks runs. The value is a BASE
  * URL only: the client appends `/bucket` (see packages/zid/src/relay-http.ts
  * for the two-route contract).
@@ -12,12 +12,11 @@
  * this; the default exists so that opting in is enough to have working
  * discovery, and so an app that asks for it has something to enable.
  *
- * Why this host and not a `relay.*` name: the reference deployment is served on
- * the same vhost as the zcash light-client endpoints, and a default that does
- * not resolve is worse than no default at all — presence would be published
- * into the void with the UI claiming otherwise.
+ * relay.zafu.pro runs the reference minirelay (/bucket) beside frostd and
+ * rendezvous, so discovery, zirc rooms and multisig share one relay host and
+ * the zcash light-client container carries only zebrad and zidecar.
  */
-export const DEFAULT_CONTACT_DISCOVERY_RELAY = 'https://zcash.rotko.net';
+export const DEFAULT_CONTACT_DISCOVERY_RELAY = 'https://relay.zafu.pro';
 
 /**
  * What to persist when the user opts in. Blank is the stored spelling of "use
@@ -35,3 +34,14 @@ export function relayEndpointForStorage(endpoint: string): string {
   const trimmed = endpoint.trim();
   return trimmed === DEFAULT_CONTACT_DISCOVERY_RELAY ? '' : trimmed;
 }
+
+/** true when `endpoint` is an http(s) URL the relay transport can talk to.
+ *  Anything else (unset, garbage) leaves the feature unconfigured. */
+export const isUsableRelayEndpoint = (endpoint: string): boolean => {
+  try {
+    const url = new URL(endpoint);
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  } catch {
+    return false;
+  }
+};

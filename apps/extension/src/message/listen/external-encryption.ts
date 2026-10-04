@@ -20,7 +20,7 @@ import { hkdf } from '@noble/hashes/hkdf';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
 import { aesGcmEncrypt, aesGcmDecrypt } from '../../crypto/aes-gcm';
-import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
+import { getOriginPermissions } from '@repo/storage-chrome/origin';
 import { hasCapability, isDenied } from '@repo/storage-chrome/capabilities';
 import type {
   ZafuEncryptRequest,
@@ -29,15 +29,20 @@ import type {
   ZafuDecryptResponse,
   ZafuZidPubkeyResponse,
 } from '@zafu/protocol';
-import { ENCRYPTION_PUBLIC_METHODS, ENCRYPTION_INTERNAL_METHODS } from './zafu-method-names';
+import { ENCRYPTION_PUBLIC_METHODS } from './zafu-method-names';
 import { sealXWing, openXWing, XWING_LENGTHS, pqKeyAuthMessage } from '@zafu/pq';
 import { isValidExternalSender } from '../../senders/external';
+import { requestCapabilityApprovalPopup } from './external-easteregg';
 
 // PQ prekey rotation epoch: a coarse 1-week time bucket that indexes the site's
-// X-Wing seed (P2 - coarse recipient forward secrecy). Advertised alongside the
-// key and echoed back on decrypt so the recipient derives the same epoch's seed.
-// The seed stays mnemonic-derivable, so this is COARSE FS (a leak of one epoch's
-// seed does not expose other epochs), NOT discard-after-use FS.
+// X-Wing seed (P2 - epoch compartmentalization). Advertised alongside the key
+// and echoed back on decrypt so the recipient derives the same epoch's seed.
+//
+// This is NOT forward secrecy, of any grain. Every epoch's seed is re-derived
+// from the mnemonic on demand, and the epoch a decrypt uses comes from the
+// caller, so whoever holds the mnemonic opens every past epoch, forever. What
+// the rotation does buy: a leak of ONE epoch's seed (not the mnemonic) opens
+// that week's boxes and no other.
 const PQ_EPOCH_MS = 7 * 24 * 60 * 60 * 1000;
 const pqEpoch = (): number => Math.floor(Date.now() / PQ_EPOCH_MS);
 
@@ -71,34 +76,6 @@ const isRateLimited = (origin: string): boolean => {
 
 // -- permission tracking --
 
-/** pending approval callbacks: requestId -> resolve */
-const pendingApprovals = new Map<string, (r: unknown) => void>();
-
-/**
- * Track popup windowId -> approval requestId so a user closing the popup
- * without deciding resolves the pending approval instead of leaving the
- * caller's message channel open until the runtime times it out.
- *
- * Optional-chained: chrome.windows is absent in unit-test mocks, and this
- * runs at module load, so guard it rather than crash the import.
- */
-const popupWindowToRequestId = new Map<number, string>();
-chrome.windows?.onRemoved?.addListener(windowId => {
-  const requestId = popupWindowToRequestId.get(windowId);
-  if (requestId === undefined) {
-    return;
-  }
-  popupWindowToRequestId.delete(windowId);
-  const resolve = pendingApprovals.get(requestId);
-  if (resolve) {
-    pendingApprovals.delete(requestId);
-    // `cancelled` marks a "user closed the popup without deciding" outcome so
-    // ensureApproved returns false WITHOUT persisting a permanent denial - a
-    // deny the user never made would be a semantics change.
-    resolve({ approved: false, cancelled: true });
-  }
-});
-
 /**
  * check if origin has encryption permission, or prompt for approval.
  * returns true if approved, false if denied.
@@ -107,6 +84,21 @@ chrome.windows?.onRemoved?.addListener(windowId => {
  * approved-origins cache): a cache would keep granting access after the user
  * revokes the capability in Settings until the service worker restarted. This
  * matches the FROST path's per-call re-check.
+ *
+ * The approval popup itself is opened by the SHARED
+ * `requestCapabilityApprovalPopup` (external-easteregg.ts), not a local copy:
+ * this module used to run its own window-open-and-wait loop, keyed by its
+ * own `pendingApprovals` map, while the `#/approval/capability` screen it
+ * opened always replies with `zafu_capability_result` - a message type only
+ * external-easteregg.ts's listener ever read. Nothing in this file listened
+ * for that reply (the dead `zafu_encryption_approval_result` internal type
+ * this module DID listen for was never sent by anything), so every approval
+ * was silently lost and `ensureApproved` always resolved as "cancelled" -
+ * this was a real bug, made load-bearing once `encrypt` started expiring:
+ * every renewal now runs the popup path, where it always used to fail. Going
+ * through the shared helper fixes it by using the round-trip that actually
+ * works, and also picks up the per-origin popup-spam guard
+ * (`openApprovalPopup`'s `originsWithOpenPopup`) for free.
  */
 const ensureApproved = async (
   origin: string,
@@ -121,56 +113,8 @@ const ensureApproved = async (
     return false;
   }
 
-  // open approval popup
-  const requestId = crypto.randomUUID();
-  const resultPromise = new Promise<unknown>(resolve => {
-    pendingApprovals.set(requestId, resolve);
-  });
-
-  const params = new URLSearchParams({
-    app: origin,
-    capability: 'encrypt',
-    requestId,
-    favIconUrl: sender.tab?.favIconUrl || '',
-    title: sender.tab?.title || '',
-  });
-  const url = chrome.runtime.getURL(`popup.html#/approval/capability?${params.toString()}`);
-  // pendingApprovals was already registered above, so a create-failure resolves
-  // it with the same "cancelled" shape onRemoved uses; the caller sees a
-  // non-persisting denial rather than a hung message channel.
-  chrome.windows
-    .create({ url, type: 'popup', width: 400, height: 520 })
-    .then(win => {
-      if (win?.id !== undefined) {
-        popupWindowToRequestId.set(win.id, requestId);
-      } else {
-        const r = pendingApprovals.get(requestId);
-        if (r) {
-          pendingApprovals.delete(requestId);
-          r({ approved: false, cancelled: true });
-        }
-      }
-    })
-    .catch(() => {
-      const r = pendingApprovals.get(requestId);
-      if (r) {
-        pendingApprovals.delete(requestId);
-        r({ approved: false, cancelled: true });
-      }
-    });
-
-  const result = (await resultPromise) as { approved?: boolean; cancelled?: boolean };
-  if (result?.approved) {
-    await grantCapability(origin, 'encrypt');
-    return true;
-  }
-  if (result?.cancelled) {
-    // popup never got a user decision (closed or failed to open) - do not
-    // persist a denial the user did not make; caller can re-request.
-    return false;
-  }
-  await denyCapability(origin, 'encrypt');
-  return false;
+  const outcome = await requestCapabilityApprovalPopup(origin, 'encrypt', sender);
+  return outcome === 'approved';
 };
 
 // -- input validation --
@@ -433,7 +377,8 @@ const handleZidPubkey = async (origin: string): Promise<ZafuZidPubkeyResponse> =
 
     // advertise the hybrid post-quantum sealed-box key too, so dapps can seal
     // messages that stay confidential against a future quantum attacker. Derive
-    // it at the CURRENT rotation epoch (P2 coarse recipient FS).
+    // it at the CURRENT rotation epoch (P2 epoch compartmentalization; not
+    // forward secrecy - the mnemonic re-derives every epoch).
     const pq_epoch = pqEpoch();
     const pq_pubkey = deriveZidPqPublicKey(mnemonic, identityName, origin, pq_epoch);
 
@@ -460,15 +405,16 @@ const handleZidPubkey = async (origin: string): Promise<ZafuZidPubkeyResponse> =
 // -- main listener --
 
 /**
- * The message `type`s this listener owns: the public @zafu/protocol methods
- * plus internal popup->worker callbacks. Names are sourced from the
- * dependency-free zafu-method-names leaf so the protocol contract test can read
- * the same runtime values the dispatch uses.
+ * The message `type`s this listener owns: the public @zafu/protocol methods.
+ * Named from the dependency-free zafu-method-names leaf so the protocol
+ * contract test can read the same runtime values the dispatch uses.
+ *
+ * There is no internal popup->worker callback type here any more: the
+ * approval popup's reply (`zafu_capability_result`) is owned and consumed by
+ * `requestCapabilityApprovalPopup` in external-easteregg.ts, via the shared
+ * `pendingPicks` registry - see the comment on `ensureApproved` above.
  */
-export const ENCRYPTION_TYPES = new Set<string>([
-  ...ENCRYPTION_PUBLIC_METHODS,
-  ...ENCRYPTION_INTERNAL_METHODS,
-]);
+export const ENCRYPTION_TYPES = new Set<string>([...ENCRYPTION_PUBLIC_METHODS]);
 
 export const encryptionMessageListener = (
   req: unknown,
@@ -484,24 +430,6 @@ export const encryptionMessageListener = (
 
   if (!ENCRYPTION_TYPES.has(type)) {
     return false;
-  }
-
-  // handle approval result from the popup. This is an INTERNAL message from the
-  // extension's own popup - accept it ONLY from the extension itself, never from
-  // a web page (which could otherwise self-deliver {approved:true} if it learned
-  // a requestId).
-  if (type === 'zafu_encryption_approval_result') {
-    if (sender.id !== chrome.runtime.id) {
-      return false;
-    }
-    const requestId = String(msg['requestId'] || '');
-    const callback = pendingApprovals.get(requestId);
-    if (callback) {
-      callback(msg['result'] || { approved: false });
-      pendingApprovals.delete(requestId);
-    }
-    sendResponse({ ok: true });
-    return true;
   }
 
   // Public dapp methods: require a valid top-frame https sender. Without this a

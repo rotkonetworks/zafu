@@ -26,6 +26,8 @@ interface TestState {
   enabled: boolean;
   relayEndpoint: string;
   relayToken: string;
+  /** origins holding the "friends can find you here" grant */
+  sites?: string[];
 }
 
 interface TestDeps {
@@ -39,8 +41,10 @@ const makeDeps = (
   initial: Partial<TestState> = {},
 ): TestDeps => {
   const state: TestState = { enabled: false, relayEndpoint: '', relayToken: '', ...initial };
-  const enableSpy = vi.fn(async () => {
+  const granted = new Set<string>(initial.sites ?? []);
+  const enableSpy = vi.fn(async (origin: string) => {
     state.enabled = true;
+    granted.add(origin);
     // preserve endpoint/token, like the real deps
   });
   const deps: ContactDiscoveryRequestDeps = {
@@ -49,6 +53,7 @@ const makeDeps = (
       relayEndpoint: state.relayEndpoint.trim() || DEFAULT_CONTACT_DISCOVERY_RELAY,
     }),
     locked: async () => false,
+    siteAllowed: async origin => granted.has(origin),
     enable: enableSpy,
     prompt: async () => 'approved' as ConsentDecision,
     ...overrides,
@@ -95,10 +100,10 @@ describe('zafu_request_contact_discovery - consent flow', () => {
     expect(res).toEqual({ success: true, enabled: true });
     // the user consented to the endpoint that will actually be used
     expect(prompt).toHaveBeenCalledWith(APP, '', '', 'https://mine.example');
-    // the setting is global (not per-origin) and the custom endpoint survives
+    // discovery goes on, this one site is granted, and the custom endpoint survives
     expect(state.enabled).toBe(true);
     expect(state.relayEndpoint).toBe('https://mine.example');
-    expect(enableSpy).toHaveBeenCalledTimes(1);
+    expect(enableSpy).toHaveBeenCalledWith(APP);
   });
 
   it('a denied request resolves denied and persists nothing', async () => {
@@ -120,14 +125,31 @@ describe('zafu_request_contact_discovery - consent flow', () => {
     expect(state.enabled).toBe(false);
   });
 
-  it('an already-enabled wallet resolves success without prompting', async () => {
+  it('a site already granted resolves success without prompting', async () => {
     const prompt = vi.fn(async () => 'denied' as ConsentDecision);
-    const { deps } = makeDeps({ prompt }, { enabled: true, relayEndpoint: 'https://mine.example' });
+    const { deps } = makeDeps(
+      { prompt },
+      { enabled: true, relayEndpoint: 'https://mine.example', sites: [APP] },
+    );
 
     const res = await call(deps, request, senderFor(APP));
 
     expect(res).toEqual({ success: true, enabled: true });
     expect(prompt).not.toHaveBeenCalled();
+  });
+
+  it('discovery on for another site still asks this one', async () => {
+    const prompt = vi.fn(async () => 'approved' as ConsentDecision);
+    const { deps, enableSpy } = makeDeps(
+      { prompt },
+      { enabled: true, sites: ['https://other.example'] },
+    );
+
+    const res = await call(deps, request, senderFor(APP));
+
+    expect(res).toEqual({ success: true, enabled: true });
+    expect(prompt).toHaveBeenCalledTimes(1);
+    expect(enableSpy).toHaveBeenCalledWith(APP);
   });
 
   it('a locked wallet refuses not_available before prompting', async () => {
@@ -161,13 +183,15 @@ describe('zafu_request_contact_discovery - real deps storage shape', () => {
       relayToken: 'tok',
     });
 
-    await contactDiscoveryRequestDeps.enable();
+    await contactDiscoveryRequestDeps.enable(APP);
 
     expect(await localExtStorage.get('zidDiscovery')).toEqual({
       enabled: true,
       relayEndpoint: 'https://mine.example',
       relayToken: 'tok',
     });
+    expect(await contactDiscoveryRequestDeps.siteAllowed(APP)).toBe(true);
+    expect(await contactDiscoveryRequestDeps.siteAllowed('https://other.example')).toBe(false);
   });
 
   it('enable() on an untouched wallet leaves the endpoint blank (default relay)', async () => {
@@ -177,7 +201,7 @@ describe('zafu_request_contact_discovery - real deps storage shape', () => {
       relayToken: '',
     });
 
-    await contactDiscoveryRequestDeps.enable();
+    await contactDiscoveryRequestDeps.enable(APP);
 
     expect(await localExtStorage.get('zidDiscovery')).toEqual({
       enabled: true,

@@ -1,9 +1,9 @@
 /**
- * animated QR scanner — reassembles multipart QR frames from camera
+ * animated QR scanner - reassembles multipart QR frames from camera
  *
  * Supports two modes:
- * 1. legacy "P<frameIndex>/<totalFrames>/<urType>/<base64chunk>" — fixed parts
- * 2. BC-UR fountain-coded `ur:<type>/...` — variable parts, decode via WASM
+ * 1. legacy "P<frameIndex>/<totalFrames>/<urType>/<base64chunk>" - fixed parts
+ * 2. BC-UR fountain-coded `ur:<type>/...` - variable parts, decode via WASM
  *
  * Auto-detects mode from the first scanned frame's prefix.
  */
@@ -20,7 +20,7 @@ interface AnimatedQrScannerProps {
   onClose: () => void;
   title?: string;
   description?: string;
-  /** render inline (card) instead of fullscreen overlay — popup contexts trap `fixed` */
+  /** render inline (card) instead of fullscreen overlay - popup contexts trap `fixed` */
   inline?: boolean;
   /**
    * Optional: restrict to a specific UR type. If set and the first scanned
@@ -28,6 +28,8 @@ interface AnimatedQrScannerProps {
    * Useful when scanning a known-format response (e.g. zcash-pczt sign).
    */
   urTypeFilter?: string;
+  /** a code this scan is not reading (another UR type, a plain QR), as text */
+  onForeign?: (text: string) => void;
 }
 
 export const AnimatedQrScanner = ({
@@ -38,6 +40,7 @@ export const AnimatedQrScanner = ({
   description,
   inline = false,
   urTypeFilter,
+  onForeign,
 }: AnimatedQrScannerProps) => {
   const [progress, setProgress] = useState(0);
   const [isScanning, setIsScanning] = useState(false);
@@ -61,18 +64,18 @@ export const AnimatedQrScanner = ({
   const urTypeRef = useRef('');
 
   // BC-UR fountain mode state. Distinct set from legacy P-frames because
-  // UR fountain parts don't have a fixed total — we keep accumulating until
+  // UR fountain parts don't have a fixed total - we keep accumulating until
   // ur_decode_frames returns a complete payload.
   const urPartsRef = useRef(new Set());
   // 'p' = legacy P-format, 'ur' = BC-UR fountain, '' = undecided
   const modeRef = useRef<'' | 'p' | 'ur'>('');
   // The BC-UR fountain decode (ur_decode_frames) is O(n) per part and O(n^2)
-  // over a scan — running it in the scan callback dropped camera frames and
+  // over a scan - running it in the scan callback dropped camera frames and
   // janked the progress bar. It now lives in a dedicated worker; the scan
   // callback only posts each newly-seen part string. The worker maintains the
   // accumulating decode and posts back { progress | done | error }.
   const workerRef = useRef<Worker | null>(null);
-  // seqLen from UR header — drives honest progress vs the emitter's cycle
+  // seqLen from UR header - drives honest progress vs the emitter's cycle
   const urSeqLenRef = useRef(0);
   // Stall watchdog. A healthy fountain stream always yields *new* unique
   // parts; "need more frames" and "this will never complete" are otherwise
@@ -83,7 +86,7 @@ export const AnimatedQrScanner = ({
   // stream for as long as you hold the phone in the dark. Failing hard here
   // throws away every accumulated part the moment your display sleeps, which
   // is worse than the dead-signer case it exists to catch. So the watchdog
-  // now only *warns* — it keeps the camera and accumulated parts alive so a
+  // now only *warns* - it keeps the camera and accumulated parts alive so a
   // woken screen resumes the scan instead of forcing a restart.
   const lastNewPartAtRef = useRef(0);
   const STALL_MS = 45_000;
@@ -91,7 +94,7 @@ export const AnimatedQrScanner = ({
 
   // Hard caps on the accumulator. The stall watchdog catches "no new unique
   // frames" but is helpless against a hostile or buggy source emitting an
-  // endless stream of unique-but-junk frames — every frame would look healthy
+  // endless stream of unique-but-junk frames - every frame would look healthy
   // to the watchdog while the Set grows until tab OOM. Per-frame length cap
   // stops oversized single payloads.
   const MAX_UR_PARTS = 4096;
@@ -99,8 +102,10 @@ export const AnimatedQrScanner = ({
 
   const onCompleteRef = useRef(onComplete);
   const onErrorRef = useRef(onError);
+  const onForeignRef = useRef(onForeign);
   onCompleteRef.current = onComplete;
   onErrorRef.current = onError;
+  onForeignRef.current = onForeign;
 
   const stopScanning = useCallback(() => {
     // invalidate any in-flight startScanning so it aborts after its next await
@@ -119,7 +124,7 @@ export const AnimatedQrScanner = ({
   }, []);
 
   // Terminate the decode worker. Called only where the scan is truly over
-  // (unmount, completion, cap-abort) — NOT from stopScanning, because the
+  // (unmount, completion, cap-abort) - NOT from stopScanning, because the
   // retry button restarts the camera and the worker's accumulated parts must
   // survive that restart.
   const terminateWorker = useCallback(() => {
@@ -192,7 +197,7 @@ export const AnimatedQrScanner = ({
 
     try {
       setError(null);
-      // TRY_HARDER + QR_CODE-only + tight cadence — animated UR cycles at
+      // TRY_HARDER + QR_CODE-only + tight cadence - animated UR cycles at
       // 4 fps; ZXing default delay (500ms) misses ~half the frames. 30ms
       // is the worker thread's natural budget on a typical webcam.
       const hints = new Map<DecodeHintType, unknown>();
@@ -253,10 +258,11 @@ export const AnimatedQrScanner = ({
             return;
           }
 
-          // type filter — defends against unrelated QR contaminating the stream
+          // type filter - defends against unrelated QR contaminating the stream
           const slashIdx = text.indexOf('/');
           const urType = slashIdx > 3 ? text.slice(3, slashIdx) : '';
           if (urTypeFilter && urType.toLowerCase() !== urTypeFilter.toLowerCase()) {
+            onForeignRef.current?.(text);
             return;
           }
           if (urTypeRef.current === '') {
@@ -272,13 +278,13 @@ export const AnimatedQrScanner = ({
 
           const before = urPartsRef.current.size;
           // Cap the accumulator. Hitting the cap means either a hostile
-          // source or a degenerate (never-completing) fountain — abort
+          // source or a degenerate (never-completing) fountain - abort
           // the scanner the same way the stall watchdog does, otherwise
           // the camera + ZXing pipeline keep running and every new
           // unique frame re-enters this branch.
           if (before >= MAX_UR_PARTS) {
-            const msg = `UR fountain exceeded ${MAX_UR_PARTS} unique frames without completing — aborting scan.`;
-            completedRef.current = true; // latch — report once
+            const msg = `UR fountain exceeded ${MAX_UR_PARTS} unique frames without completing - aborting scan.`;
+            completedRef.current = true; // latch - report once
             stopScanning();
             terminateWorker();
             setError(msg);
@@ -290,9 +296,9 @@ export const AnimatedQrScanner = ({
             return;
           } // duplicate
 
-          // a genuinely new unique part — reset the stall clock
+          // a genuinely new unique part - reset the stall clock
           lastNewPartAtRef.current = Date.now();
-          // stream is alive again — clear any previous stall notice so a
+          // stream is alive again - clear any previous stall notice so a
           // woken/slept scan doesn't keep an obsolete warning on screen
           if (stallNotifiedRef.current) {
             stallNotifiedRef.current = false;
@@ -321,15 +327,16 @@ export const AnimatedQrScanner = ({
         }
 
         // ── legacy P-format mode ──
+        // a stray plain QR is reported, and never locks the scan into P mode
+        const match = /^P(\d+)\/(\d+)\/([^/]+)\/(.+)$/.exec(text);
+        if (!match) {
+          onForeignRef.current?.(text);
+          return;
+        }
         if (modeRef.current === '') {
           modeRef.current = 'p';
         }
         if (modeRef.current !== 'p') {
-          return;
-        }
-
-        const match = /^P(\d+)\/(\d+)\/([^/]+)\/(.+)$/.exec(text);
-        if (!match) {
           return;
         }
 
@@ -412,7 +419,7 @@ export const AnimatedQrScanner = ({
 
     // Stall watchdog: fires only once UR accumulation has actually started
     // (>=1 part) and only if no new unique part has arrived for STALL_MS.
-    // It warns but does NOT abort — the camera and accumulated parts stay
+    // It warns but does NOT abort - the camera and accumulated parts stay
     // alive so a woken screen resumes the scan instead of discarding it.
     const stallTimer = setInterval(() => {
       if (completedRef.current) {
@@ -430,9 +437,9 @@ export const AnimatedQrScanner = ({
       }
       stallNotifiedRef.current = true;
       const msg =
-        `scan paused — no new QR frames for ${Math.round(STALL_MS / 1000)}s ` +
+        `scan paused - no new QR frames for ${Math.round(STALL_MS / 1000)}s ` +
         `(${urPartsRef.current.size} parts received). Wake the signer to ` +
-        `continue — the scan is still running and will resume automatically.`;
+        `continue - the scan is still running and will resume automatically.`;
       if (mountedRef.current) {
         setError(msg);
       }
@@ -467,16 +474,16 @@ export const AnimatedQrScanner = ({
         <div className='absolute inset-0 pointer-events-none flex items-center justify-center'>
           <div className={`relative ${inline ? 'w-44 h-44' : 'w-64 h-64'}`}>
             <div
-              className={`absolute top-0 left-0 w-6 h-6 border-t-[3px] border-l-[3px] ${cornerColor} rounded-tl-lg`}
+              className={`absolute top-0 left-0 w-6 h-6 border-t-[3px] border-l-[3px] ${cornerColor}`}
             />
             <div
-              className={`absolute top-0 right-0 w-6 h-6 border-t-[3px] border-r-[3px] ${cornerColor} rounded-tr-lg`}
+              className={`absolute top-0 right-0 w-6 h-6 border-t-[3px] border-r-[3px] ${cornerColor}`}
             />
             <div
-              className={`absolute bottom-0 left-0 w-6 h-6 border-b-[3px] border-l-[3px] ${cornerColor} rounded-bl-lg`}
+              className={`absolute bottom-0 left-0 w-6 h-6 border-b-[3px] border-l-[3px] ${cornerColor}`}
             />
             <div
-              className={`absolute bottom-0 right-0 w-6 h-6 border-b-[3px] border-r-[3px] ${cornerColor} rounded-br-lg`}
+              className={`absolute bottom-0 right-0 w-6 h-6 border-b-[3px] border-r-[3px] ${cornerColor}`}
             />
           </div>
         </div>
@@ -494,7 +501,7 @@ export const AnimatedQrScanner = ({
       {error && (
         <div className='absolute inset-0 flex items-center justify-center bg-black p-4'>
           <div className='flex flex-col items-center gap-3 text-center'>
-            <div className='rounded-full bg-red-500/20 p-3'>
+            <div className='bg-red-500/20 p-3'>
               <span className='i-ph-camera size-6 text-red-400' />
             </div>
             <p className='text-xs text-red-400'>{error}</p>
@@ -515,11 +522,9 @@ export const AnimatedQrScanner = ({
   const progressBar = (
     <>
       <div className='flex items-center gap-3'>
-        <div
-          className={`flex-1 ${inline ? 'h-1' : 'h-1.5'} rounded-full bg-white/10 overflow-hidden`}
-        >
+        <div className={`flex-1 ${inline ? 'h-1' : 'h-1.5'} bg-white/10 overflow-hidden`}>
           <div
-            className={`h-full rounded-full ${progressColor} transition-all duration-300`}
+            className={`h-full ${progressColor} transition-all duration-300`}
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -530,7 +535,7 @@ export const AnimatedQrScanner = ({
         </span>
       </div>
       <p className={`mt-1.5 ${inline ? 'text-label' : 'text-label'} text-white/40 text-center`}>
-        {partsReceived} part{partsReceived !== 1 ? 's' : ''} received — hold camera steady over
+        {partsReceived} part{partsReceived !== 1 ? 's' : ''} received - hold camera steady over
         animated QR
       </p>
     </>
@@ -548,11 +553,11 @@ export const AnimatedQrScanner = ({
             <span className='i-ph-x h-3.5 w-3.5' />
           </button>
         </div>
-        <div className='relative aspect-square w-full overflow-hidden rounded-lg border border-yellow-500/40 bg-black'>
+        <div className='relative aspect-square w-full overflow-hidden border border-yellow-500/40 bg-black'>
           {cameraView}
         </div>
         {description && <p className='text-label text-fg-muted text-center'>{description}</p>}
-        <div className='rounded-md bg-black/60 p-2'>{progressBar}</div>
+        <div className='bg-black/60 p-2'>{progressBar}</div>
       </div>
     );
   }
@@ -561,13 +566,10 @@ export const AnimatedQrScanner = ({
     <div className='fixed inset-0 z-50 flex flex-col overflow-hidden bg-black'>
       <div className='flex-none flex items-center justify-between p-4 bg-black/80'>
         <div>
-          <h2 className='text-lg font-medium text-white'>{title}</h2>
+          <h2 className='text-lg text-white'>{title}</h2>
           {description && <p className='text-sm text-white/60'>{description}</p>}
         </div>
-        <button
-          onClick={handleClose}
-          className='rounded-full p-2 hover:bg-white/10 transition-colors'
-        >
+        <button onClick={handleClose} className='p-2 hover:bg-white/10 transition-colors'>
           <span className='i-ph-x size-6 text-white' />
         </button>
       </div>

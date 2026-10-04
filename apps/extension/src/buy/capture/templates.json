@@ -1,0 +1,195 @@
+{
+  "revolut": {
+    "actionType": "transfer_revolut",
+    "authLink": "https://app.revolut.com/home",
+    "body": "",
+    "metadata": {
+      "fallbackMethod": "GET",
+      "fallbackUrlRegex": "https://app.revolut.com/api/retail/user/current/transactions/last\\S+",
+      "metadataUrl": "https://app.revolut.com/api/retail/user/current/transactions/last?count=20",
+      "metadataUrlBody": "",
+      "metadataUrlMethod": "GET",
+      "method": "GET",
+      "platform": "revolut",
+      "preprocessRegex": "",
+      "shouldReplayRequestInPage": true,
+      "transactionsExtraction": {
+        "transactionJsonPathListSelector": "$",
+        "transactionJsonPathSelectors": {
+          "recipient": "$.recipient.username",
+          "amount": "$.amount",
+          "date": "$.completedDate",
+          "paymentId": "$.id",
+          "currency": "$.currency",
+          "state": "$.state",
+          "type": "$.type"
+        }
+      },
+      "urlRegex": "https://app.revolut.com/api/retail/user/current/transactions/last\\?count=20$"
+    },
+    "method": "GET",
+    "paramNames": [],
+    "paramSelectors": [],
+    "url": "https://app.revolut.com/api/retail/user/current/transactions/last?count=20"
+  },
+  "wise": {
+    "actionType": "transfer_wise",
+    "authLink": "https://wise.com/all-transactions?direction=OUTGOING",
+    "body": "",
+    "metadata": {
+      "fallbackMethod": "",
+      "fallbackUrlRegex": "",
+      "method": "POST",
+      "platform": "wise",
+      "preprocessRegex": "",
+      "transactionsExtraction": {
+        "transactionJsonPathListSelector": "$",
+        "transactionJsonPathSelectors": {
+          "amount": "$.primaryAmount",
+          "paymentId": "$.resource.id",
+          "recipient": "$.title",
+          "date": "$.visibleOn",
+          "currency": "$.currency"
+        }
+      },
+      "urlRegex": "https://wise.com/gateway/v1/profiles/\\S+/activities/list"
+    },
+    "method": "GET",
+    "paramNames": ["TRANSACTION_ID", "PROFILE_ID"],
+    "paramSelectors": [
+      {
+        "type": "jsonPath",
+        "value": "$.[{{INDEX}}].resource.id"
+      },
+      {
+        "type": "jsonPath",
+        "value": "$.[{{INDEX}}].ownedByProfile"
+      }
+    ],
+    "url": "https://wise.com/gateway/v3/profiles/{{PROFILE_ID}}/transfers/{{TRANSACTION_ID}}"
+  },
+  "monzo": {
+    "actionType": "transfer_monzo",
+    "authLink": "https://web.monzo.com/",
+    "body": "",
+    "metadata": {
+      "fallbackMethod": "",
+      "fallbackUrlRegex": "",
+      "method": "GET",
+      "platform": "monzo",
+      "preprocessRegex": "",
+      "transactionsExtraction": {
+        "transactionJsonPathListSelector": "$.transactions",
+        "transactionJsonPathSelectors": {
+          "recipient": "$.counterparty.user_id",
+          "recipientName": "$.counterparty.name",
+          "amount": "$.amount",
+          "date": "$.settled",
+          "paymentId": "$.id",
+          "currency": "$.currency"
+        }
+      },
+      "urlRegex": "https://internal-api.monzo.com//?minimal-banking/transactions\\?account_id=\\S+&limit=50"
+    },
+    "method": "GET",
+    "paramNames": ["TX_ID"],
+    "paramSelectors": [
+      {
+        "type": "jsonPath",
+        "value": "$.transactions[{{INDEX}}].id"
+      }
+    ],
+    "url": "https://api.monzo.com/transactions/{{TX_ID}}"
+  },
+  "zelle_chase": {
+    "actionType": "transfer_zelle_chase",
+    "authLink": "https://secure.chase.com/web/auth/dashboard#/dashboard/quickPay/paymentsActivity/index",
+    "body": "pageId=&sortBy=PROCESS_DATE&orderBy=DESC",
+    "metadata": {
+      "fallbackMethod": "",
+      "fallbackUrlRegex": "",
+      "method": "POST",
+      "platform": "zelle",
+      "preprocessRegex": "",
+      "transactionsExtraction": {
+        "transactionJsonPathListSelector": "$.listItems",
+        "transactionJsonPathSelectors": {
+          "amount": "$.amount",
+          "paymentId": "$.id",
+          "recipient": "$.recipientName",
+          "date": "$.date",
+          "currency": "$.currency",
+          "status": "$.verboseStatus"
+        }
+      },
+      "urlRegex": "https://secure.chase.com/svc/rr/payments/secure/v1/quickpay/payment/activity/list$",
+      "userInput": {
+        "promptText": "Click Money Sent to proceed with authentication",
+        "transactionXpath": "//a[@id='bottom-quickpay_money_sent_menu_item']"
+      }
+    },
+    "method": "POST",
+    "paramNames": [],
+    "paramSelectors": [],
+    "url": "https://secure.chase.com/svc/rr/payments/secure/v1/quickpay/payment/activity/list"
+  },
+  "zelle_bofa": {
+    "actionType": "transfer_zelle_bofa",
+    "authLink": "https://secure.bankofamerica.com/pay-transfer-pay-portal/?request_locale=en-us&returnSiteIndicator=GAIMW&target=paymentactivity#/",
+    "body": "{\"filterV1\":{\"dateFilter\":{\"timeframeForHistory\":\"DEFAULTDAYS\"}},\"sortCriteriaV1\":{\"fieldName\":\"DATE\",\"order\":\"DESCENDING\"},\"pageInfo\":{\"pageNum\":1,\"pageSize\":\"\"}}",
+    "metadata": {
+      "fallbackMethod": "GET",
+      "fallbackUrlRegex": "https://secure.bankofamerica.com/myaccounts/omni/rest/CommunicationBarkerCount",
+      "method": "POST",
+      "platform": "zelle",
+      "preprocessRegex": "",
+      "shouldReplayRequestInPage": true,
+      "transactionsExtraction": {
+        "transactionJsonPathListSelector": "$.completedTransactions",
+        "transactionJsonPathSelectors": {
+          "recipient": "$.targetAccount.displayName",
+          "amount": "$.amount",
+          "date": "$.transactionDate",
+          "paymentId": "$.confirmationNumber",
+          "status": "$.status",
+          "aliasToken": "$.targetAccount.aliasToken"
+        }
+      },
+      "urlRegex": "https://secure.bankofamerica.com/ogateway/payment-activity/api/v4/activity"
+    },
+    "method": "POST",
+    "paramNames": [],
+    "paramSelectors": [],
+    "url": "https://secure.bankofamerica.com/ogateway/payment-activity/api/v4/activity"
+  },
+  "zelle_citi": {
+    "actionType": "transfer_zelle_citi",
+    "authLink": "https://online.citi.com/US/nga/zelle/transfer",
+    "body": "{\"transactionType\":[\"OUTGOING_PAYMENT\",\"SCHEDULED_PAYMENT\"],\"transactionView\":\"LIST_VIEW\",\"transactionStatus\":[\"ALL\"],\"pageOptions\":{\"pageMode\":\"SLICE\",\"page\":1,\"pageSize\":20},\"fetchBlockInfo\":false}",
+    "metadata": {
+      "fallbackMethod": "",
+      "fallbackUrlRegex": "",
+      "metadataUrl": "https://online.citi.com/gcgapi/prod/public/v1/p2ppayments/activityTransactionDetails",
+      "metadataUrlBody": "{\"transactionType\":[\"OUTGOING_PAYMENT\",\"SCHEDULED_PAYMENT\"],\"transactionView\":\"LIST_VIEW\",\"transactionStatus\":[\"ALL\"],\"pageOptions\":{\"pageMode\":\"SLICE\",\"page\":1,\"pageSize\":20},\"fetchBlockInfo\":false}",
+      "metadataUrlMethod": "POST",
+      "method": "POST",
+      "platform": "zelle",
+      "preprocessRegex": "",
+      "transactionsExtraction": {
+        "transactionJsonPathListSelector": "$.transactionData[0].transactions",
+        "transactionJsonPathSelectors": {
+          "amount": "$.amount",
+          "paymentId": "$.transactionId",
+          "recipient": "$.partyToken",
+          "date": "$.initiationDate",
+          "status": "$.transactionStatus"
+        }
+      },
+      "urlRegex": "https://online.citi.com/gcgapi/prod/public/v1/p2ppayments/activityTransactionDetails"
+    },
+    "method": "POST",
+    "paramNames": [],
+    "paramSelectors": [],
+    "url": "https://online.citi.com/gcgapi/prod/public/v1/p2ppayments/activityTransactionDetails"
+  }
+}

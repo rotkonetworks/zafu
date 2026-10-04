@@ -16,7 +16,7 @@ export class PenumbraAdapter implements NetworkAdapter {
 
   async initialize(): Promise<void> {
     console.log('[penumbra] initializing adapter');
-    // Penumbra uses the existing @rotko/penumbra-wasm infrastructure
+    // Penumbra uses the existing @penumbrafi/wasm infrastructure
     // This will be dynamically imported when needed
     this.ready = true;
   }

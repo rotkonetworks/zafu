@@ -16,6 +16,7 @@ export const AUTO_LOCK_OPTIONS = [
   { label: '5 min', value: 5 },
   { label: '15 min', value: 15 },
   { label: '30 min', value: 30 },
+  { label: '60 min', value: 60 },
 ] as const;
 
 export const AUTO_LOCK_DEFAULT = 15;

@@ -4,15 +4,20 @@
  *
  * "Shieldable" = the asset has come over the chain's Penumbra channel: the
  * Penumbra registry lists it as `transfer/<penumbra-side channel>/<denom>`.
- * Read from the penumbrafi registry: the copy bundled in the extension at
- * first, swapped for the live one (github main, the same file withdraw already
- * reads) once `refreshRegistryAssets` has fetched it, so a registry merge
- * relabels assets without a zafu release. The chain's own native and gas
+ * Read from ../penumbra/asset-registry - the one place that holds the live
+ * registry when one is stored (transparent/registry-live), else the bundled
+ * copy - so a registry merge relabels assets without a zafu release, the same
+ * way it relabels the Penumbra home row. The chain's own native and gas
  * assets are known from its config.
  */
 
-import { ChainRegistryClient } from '@penumbrafi/registry';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import type { Registry } from '@penumbrafi/registry';
+import {
+  refreshPenumbraRegistry,
+  forgetPenumbraRegistry,
+  penumbraRegistry,
+} from '../penumbra/asset-registry';
+import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 
 export interface TransparentAsset {
   /** the denom as the chain's bank module spells it */
@@ -28,36 +33,34 @@ export interface HeldAsset extends TransparentAsset {
 }
 
 const registryCache = new Map<string, Map<string, TransparentAsset>>();
-
-type Registry = ReturnType<ChainRegistryClient['bundled']['get']>;
-let liveRegistry: Registry | undefined;
-let refreshing: Promise<void> | undefined;
+/** which registry object `registryCache` was built from; cleared on change */
+let seenRegistry: Registry | undefined;
 
 /**
- * Fetch the live penumbra registry once per session (bundled copy if it can't
- * be reached). Resolves when later `knownAssets` calls will see it.
+ * Re-check the stored live registry (../penumbra/asset-registry); resolves
+ * once later `knownAssets` calls will see it. Never touches the network.
  */
-export const refreshRegistryAssets = (): Promise<void> =>
-  (refreshing ??= new ChainRegistryClient().remote
-    .getWithBundledBackup('penumbra-1')
-    .then(r => {
-      liveRegistry = r;
-      registryCache.clear();
-    })
-    .catch(err => {
-      console.warn('[transparent] live registry unavailable, using the bundled one', err);
-    }));
+export const refreshRegistryAssets = (): Promise<void> => refreshPenumbraRegistry();
+
+/** after a newer signed registry was fetched: read it again on next use */
+export const forgetRegistryAssets = () => {
+  forgetPenumbraRegistry();
+};
 
 /** assets Penumbra accepts over `penumbraChannel` (penumbra side), by lower-cased denom */
 function registryAssets(penumbraChannel: string): Map<string, TransparentAsset> {
-  const cached = registryCache.get(penumbraChannel);
-  if (cached) {
-    return cached;
-  }
   const out = new Map<string, TransparentAsset>();
   try {
+    const registry = penumbraRegistry();
+    if (registry !== seenRegistry) {
+      seenRegistry = registry;
+      registryCache.clear();
+    }
+    const cached = registryCache.get(penumbraChannel);
+    if (cached) {
+      return cached;
+    }
     const prefix = `transfer/${penumbraChannel}/`;
-    const registry = liveRegistry ?? new ChainRegistryClient().bundled.get('penumbra-1');
     for (const m of registry.getAllAssets()) {
       if (!m.base.startsWith(prefix)) {
         continue;
@@ -95,7 +98,7 @@ const RETURNING_ASSETS: Partial<Record<CosmosChainId, TransparentAsset[]>> = {
 
 /** every asset on `chainId` we know the decimals of, by lower-cased denom */
 export function knownAssets(chainId: CosmosChainId): Map<string, TransparentAsset> {
-  const cfg = COSMOS_CHAINS[chainId];
+  const cfg = getCosmosChain(chainId);
   const out = new Map(
     cfg.penumbraSourceChannel ? registryAssets(cfg.penumbraSourceChannel) : undefined,
   );
@@ -134,7 +137,7 @@ export function heldAssets(
       out.push({ ...meta, denom: b.denom, amount: b.amount });
     }
   }
-  const prefer = COSMOS_CHAINS[chainId].denom.toLowerCase();
+  const prefer = getCosmosChain(chainId).denom.toLowerCase();
   return out.sort((a, b) =>
     a.denom.toLowerCase() === prefer
       ? -1

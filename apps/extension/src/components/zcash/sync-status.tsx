@@ -1,146 +1,65 @@
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@repo/ui/lib/utils';
-import { Hint } from '../hint';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+import { Button } from '@repo/ui/components/ui/button';
 import { ZCASH_ORCHARD_ACTIVATION } from '../../config/networks';
 import { blockToDate, dateToBlock, formatDateInput } from '../../utils/zcash-blocks';
 import { isSidePanel, isDedicatedWindow } from '../../utils/popup-detection';
 
 /**
- * SyncStatus - the one sync surface for the zcash home screen.
- *
- * Design intent: sync state is a *property of the balance*, not a sibling
- * feature. So it renders as a single quiet line attached to the balance -
- * an ensō that draws itself closed as the wallet becomes whole, one
- * humanized figure, and everything else (bar, stages, heights, rescan,
- * reassurance) behind one tap. Replaces the old trio of status line +
- * info card + progress card that repeated the same percent twice.
+ * The sync strip under the header (board HomeSync): 32px of progress
+ * while the wallet is not caught up, or a 44px notice in its place - offline,
+ * a node that isn't answering, a witness rebuild (boards StOffline, ErrNode,
+ * StWitness). Tapping it opens a sheet with the heights, the raw error and
+ * the rescan-from-a-date control.
  */
-
-export interface SyncStage {
-  key: string;
-  label: string;
-  state: 'done' | 'active' | 'pending';
-  /** short suffix shown on the active stage, e.g. "33%" or "12 blocks" */
+export interface SyncNotice {
+  tone: 'warn' | 'gold';
+  text: string;
+  /** a quiet second part, after the text */
+  meta?: string;
+  /** the raw error, behind "technical details" */
   detail?: string;
-  /** unocss icon class; the row is scanned visually before it is read */
-  icon?: string;
-  /**
-   * Filled variant, shown once the stage is done.
-   *
-   * Passed in rather than derived as `icon + '-fill'` because UnoCSS
-   * extracts class names statically - a template-built class is never
-   * generated and the icon silently renders as nothing.
-   */
-  iconDone?: string;
-  /** hover text saying what this stage actually does, in plain words */
-  hint?: string;
+  action?: { label: string; onClick: () => void };
 }
 
 export interface SyncStatusProps {
   /** 0..100 overall progress */
   percent: number;
-  synced: boolean;
-  /** chain tip unknown yet (connecting) */
+  /** chain tip unknown yet */
   connecting: boolean;
   currentHeight: number;
   targetHeight: number;
   startBlock: number;
-  stages: SyncStage[];
-  /** true during a wallet's first scan - adds the resume-on-reopen line */
-  firstSync: boolean;
-  /**
-   * The human message - a classified `SyncFailure.message`, never a raw
-   * worker or wasm error. See `state/sync-failure.ts`.
-   */
-  error?: string;
-  /**
-   * The raw error text. Diagnostics only: kept out of the message and shown
-   * behind the "technical details" disclosure, because a height, a hash, or
-   * a type name is not something a person holding money can act on.
-   */
-  errorDetail?: string;
-  errorAction?: { label: string; onClick: () => void };
-  /** resume the sync from where it stopped - for transient backend errors */
-  onRetry?: () => void;
+  notice?: SyncNotice;
+  /** a chain that can be read again from a date (zcash); absent hides it */
   onRescan?: (height: number) => void;
 }
 
-/**
- * The ensō arc. While syncing the circle stays open like a brush stroke
- * (caps at 92/100) - it only closes completely when the wallet is synced.
- */
-const EnsoArc = ({ percent, synced, dim }: { percent: number; synced: boolean; dim?: boolean }) => {
-  const fill = synced ? 100 : Math.min(Math.max(percent, 4) * 0.92, 92);
-  return (
-    <svg width='16' height='16' viewBox='0 0 16 16' className='-rotate-90 shrink-0'>
-      <circle
-        cx='8'
-        cy='8'
-        r='6.4'
-        pathLength='100'
-        fill='none'
-        strokeWidth='1.8'
-        strokeLinecap='round'
-        strokeDasharray='100'
-        strokeDashoffset={100 - fill}
-        className={cn(
-          'transition-[stroke-dashoffset] duration-700 ease-out',
-          dim ? 'stroke-fg-dim' : 'stroke-zigner-gold',
-        )}
-      />
-    </svg>
-  );
-};
+/** humanize a remaining-time estimate; empty when not worth showing */
+const fmtEta = (seconds: number): string =>
+  !Number.isFinite(seconds) || seconds <= 0
+    ? ''
+    : seconds < 90
+      ? 'about 1 min'
+      : seconds < 3600
+        ? `about ${Math.round(seconds / 60)} min`
+        : `about ${Math.round(seconds / 3600)} h`;
 
-/** humanize a remaining-time estimate; empty string when not worth showing */
-const fmtEta = (seconds: number): string => {
-  if (!Number.isFinite(seconds) || seconds <= 0) {
-    return '';
-  }
-  if (seconds < 90) {
-    return '~1 min';
-  }
-  if (seconds < 3600) {
-    return `~${Math.round(seconds / 60)} min`;
-  }
-  return `~${Math.round(seconds / 3600)} h`;
-};
-
-export const SyncStatus = ({
-  percent,
-  synced,
-  connecting,
-  currentHeight,
-  targetHeight,
-  startBlock,
-  stages,
-  firstSync,
-  error,
-  errorDetail,
-  errorAction,
-  onRetry,
-  onRescan,
-}: SyncStatusProps) => {
-  const [open, setOpen] = useState(false);
-  const [showDetail, setShowDetail] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [byDate, setByDate] = useState(true);
-  const [input, setInput] = useState('');
-
-  // scan-rate window for the ETA: ring of (height, t) samples over ~45s.
-  // Shown only once the rate is stable - a wrong ETA is worse than none.
+/** scan-rate ETA over a ~45s window; shown only once the rate is stable */
+const useEta = (current: number, target: number, active: boolean) => {
   const samples = useRef<{ h: number; t: number }[]>([]);
   const [eta, setEta] = useState('');
   useEffect(() => {
-    if (synced || connecting || currentHeight <= 0) {
+    if (!active || current <= 0) {
       samples.current = [];
       setEta('');
       return;
     }
     const now = Date.now();
     const s = samples.current;
-    if (s.length === 0 || currentHeight > s[s.length - 1]!.h) {
-      s.push({ h: currentHeight, t: now });
+    if (s.length === 0 || current > s[s.length - 1]!.h) {
+      s.push({ h: current, t: now });
     }
     while (s.length > 0 && now - s[0]!.t > 45_000) {
       s.shift();
@@ -148,321 +67,194 @@ export const SyncStatus = ({
     const first = s[0];
     const last = s[s.length - 1];
     if (first && last && last.t - first.t > 8_000 && last.h > first.h) {
-      const rate = ((last.h - first.h) / (last.t - first.t)) * 1000; // blocks/s
-      setEta(fmtEta((targetHeight - currentHeight) / rate));
+      setEta(fmtEta((target - current) / (((last.h - first.h) / (last.t - first.t)) * 1000)));
     }
-  }, [currentHeight, targetHeight, synced, connecting]);
+  }, [current, target, active]);
+  return eta;
+};
 
-  // Rescan asked as a date, matching the wallet birthday field: "when should
-  // this start from" is a question about time, and 2,910,104 is not an answer
-  // anyone holds in their head. The height still exists - sync consumes it,
-  // and it is shown live beside the picker so a destructive rescan is never
-  // committed to blind - but it is no longer what you have to type.
-  const rescanHeight = (): number =>
-    byDate ? (input ? dateToBlock(new Date(`${input}T00:00:00Z`)) : NaN) : parseInt(input, 10);
-
-  const submitRescan = () => {
-    const h = rescanHeight();
-    if (!isNaN(h) && h >= ZCASH_ORCHARD_ACTIVATION && onRescan) {
-      onRescan(h);
-    }
-    setEditing(false);
-    setInput('');
-  };
-
-  const line = error
-    ? 'sync error'
-    : connecting
-      ? 'connecting…'
-      : synced
-        ? `block ${currentHeight.toLocaleString()}`
-        : `syncing ${Math.floor(percent)}%${eta ? ` · ${eta}` : ''}`;
-
-  // What the ring means, for hover. The arc is the state indicator now, so it
-  // has to be able to explain itself.
-  const stateHint = error
-    ? 'sync failed - the node may be down or unreachable'
-    : connecting
-      ? 'connecting to the node'
-      : synced
-        ? 'synced - caught up to the chain tip'
-        : `syncing - ${Math.floor(percent)}% of the way to the tip`;
+export const SyncStatus = ({
+  percent,
+  connecting,
+  currentHeight,
+  targetHeight,
+  startBlock,
+  notice,
+  onRescan,
+}: SyncStatusProps) => {
+  const [open, setOpen] = useState(false);
+  const eta = useEta(currentHeight, targetHeight, !connecting && !notice);
+  const pct = Math.floor(percent);
+  const behind = targetHeight - currentHeight;
+  // until the rate settles into an eta, the plain distance
+  const left = eta || (behind > 0 ? `${behind.toLocaleString()} blocks behind` : '');
+  const warn = notice?.tone === 'warn';
 
   return (
-    <div>
-      {/* the one line - everything else is behind this tap */}
-      <button
-        type='button'
-        onClick={() => setOpen(v => !v)}
-        className='group/sync mt-1.5 flex items-center gap-2 text-label tabular transition-colors'
-        title={`${stateHint} · ${open ? 'hide detail' : 'show detail'}`}
-      >
-        <EnsoArc percent={percent} synced={synced} dim={connecting || !!error} />
-        <span
-          className={cn(
-            error ? 'text-red-400' : 'text-fg-dim group-hover/sync:text-fg-muted',
-            'lowercase',
-          )}
-        >
-          {line}
-        </span>
-        {/* Most sync errors are transient (a node restart, a 503 blip), so the
-            first offer is "try again" - resuming from the current height -
-            rather than "switch node", which permanently repoints the wallet
-            because of a ten-second outage. Switching lives in the panel. */}
-        {error && onRetry && (
-          <span
-            role='button'
-            tabIndex={0}
-            onClick={e => {
-              e.stopPropagation();
-              onRetry();
-            }}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                e.stopPropagation();
-                onRetry();
-              }
-            }}
-            className='text-zigner-gold underline-offset-2 hover:underline lowercase'
-          >
-            try again
-          </span>
-        )}
-        <span
-          className={cn(
-            'i-ph-caret-down h-3 w-3 text-fg-dim transition-transform duration-200',
-            open && 'rotate-180',
-          )}
-        />
-      </button>
-
-      {/* the panel - grid-rows trick for a measured slide */}
+    <>
       <div
         className={cn(
-          'grid transition-[grid-template-rows] duration-200',
-          open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+          'relative flex shrink-0 items-center gap-2 border-b text-xs',
+          notice ? 'h-11 pl-4 pr-2' : 'h-8 px-4',
+          warn ? 'border-warn/40 bg-warn/10' : 'border-border-soft bg-elev-1',
         )}
       >
-        <div className='overflow-hidden'>
-          <div className='mt-2 flex flex-col gap-2 rounded-md border border-border-soft bg-elev-1 p-3'>
-            {error && (
-              <div className='flex flex-col gap-1'>
-                <div className='flex flex-wrap items-baseline gap-x-2 gap-y-1'>
-                  <span className='text-xs text-red-400 break-words'>{error}</span>
-                  {errorAction && (
-                    <button
-                      type='button'
-                      onClick={errorAction.onClick}
-                      className='text-label text-zigner-gold underline-offset-2 hover:underline lowercase'
-                    >
-                      {errorAction.label}
-                    </button>
-                  )}
-                </div>
-                {/* The raw error still exists - it is just not the thing we
-                    say to someone holding money. One tap away, for a bug
-                    report or a support chat. */}
-                {errorDetail && errorDetail !== error && (
-                  <div>
-                    <button
-                      type='button'
-                      onClick={() => setShowDetail(v => !v)}
-                      className='text-label text-fg-dim underline-offset-2 hover:text-fg-muted hover:underline lowercase'
-                    >
-                      {showDetail ? 'hide technical details' : 'technical details'}
-                    </button>
-                    {showDetail && (
-                      <p className='mt-1 font-mono text-label text-fg-dim break-all whitespace-pre-wrap'>
-                        {errorDetail}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {!synced && (
-              <div className='h-1.5 w-full overflow-hidden rounded-full bg-elev-2'>
-                <div
-                  className='h-full rounded-full bg-zigner-gold transition-all duration-500 ease-out'
-                  style={{ width: `${Math.max(percent, 2)}%` }}
-                />
-              </div>
-            )}
-
-            {/* pipeline stages - steady row instead of a flickering label */}
-            <div className='flex flex-wrap items-center gap-x-2 gap-y-0.5 text-label lowercase'>
-              {stages.map((st, i) => (
-                <span key={st.key} className='flex items-center gap-2'>
-                  {i > 0 && <span className='text-fg-dim'>·</span>}
-                  <Hint label={st.hint ?? st.label}>
-                    <span
-                      className={cn(
-                        'flex items-center gap-1',
-                        // State is carried by weight and value, not by a second
-                        // hue. Gold stays the only chroma in the row, which is
-                        // the point of a palette built on ink, paper and one
-                        // seal colour - a saturated green here would be the
-                        // brightest thing on the panel and would own the eye
-                        // for the stage that least needs attention.
-                        //
-                        // done reads solid and receded, pending reads dim and
-                        // hollow, active is the only thing lit.
-                        st.state === 'done' && 'text-fg-muted',
-                        st.state === 'active' && 'text-zigner-gold',
-                        st.state === 'pending' && 'text-fg-dim',
-                      )}
-                    >
-                      {(st.state === 'done' ? (st.iconDone ?? st.icon) : st.icon) && (
-                        <span
-                          className={cn(
-                            st.state === 'done' ? (st.iconDone ?? st.icon) : st.icon,
-                            'size-3.5 shrink-0',
-                          )}
-                        />
-                      )}
-                      {st.label}
-                      {/* Show the detail on pending stages too, not just active
-                        ones. A stage that is waiting is exactly the one the
-                        user needs explained - dropping its detail left stages
-                        like ligerito rendering as a bare word with no state
-                        and no progress, indistinguishable from a hang. */}
-                      {st.state !== 'done' && st.detail ? ` ${st.detail}` : ''}
-                    </span>
-                  </Hint>
-                </span>
-              ))}
-            </div>
-
-            {/* heights + rescan */}
-            <div className='flex items-center justify-between text-label text-fg-muted font-mono tabular-nums'>
-              <span>
-                {currentHeight > 0 && targetHeight > 0
-                  ? `${currentHeight.toLocaleString()} / ${targetHeight.toLocaleString()}`
-                  : '-'}
-              </span>
-              {onRescan &&
-                (editing ? (
-                  <span className='flex items-center gap-1'>
-                    <input
-                      type={byDate ? 'date' : 'number'}
-                      min={
-                        byDate
-                          ? formatDateInput(blockToDate(ZCASH_ORCHARD_ACTIVATION))
-                          : ZCASH_ORCHARD_ACTIVATION
-                      }
-                      max={byDate ? formatDateInput(new Date()) : undefined}
-                      value={input}
-                      onChange={e => setInput(e.target.value)}
-                      placeholder={byDate ? undefined : String(startBlock)}
-                      className={cn(
-                        'bg-elev-2 px-1.5 py-0.5 text-label font-mono text-fg placeholder:text-fg-muted outline-none',
-                        byDate ? 'w-32' : 'w-20',
-                      )}
-                      autoFocus
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') {
-                          submitRescan();
-                        } else if (e.key === 'Escape') {
-                          setEditing(false);
-                          setInput('');
-                        }
-                      }}
-                    />
-                    {/* The height the date resolves to, live. A rescan throws
-                        away scanned state, so the number it will actually act
-                        on has to be visible before you commit - the date is
-                        the friendlier input, not a reason to hide what it
-                        means. */}
-                    {byDate && !isNaN(rescanHeight()) && (
-                      <span className='text-label text-fg-dim tabular-nums'>
-                        {rescanHeight().toLocaleString()}
-                      </span>
-                    )}
-                    <button
-                      onClick={() => {
-                        const h = rescanHeight();
-                        // Carry the value across rather than resetting it:
-                        // switching units should not lose what was picked.
-                        setInput(
-                          byDate
-                            ? isNaN(h)
-                              ? String(startBlock)
-                              : String(h)
-                            : formatDateInput(blockToDate(isNaN(h) ? startBlock : h)),
-                        );
-                        setByDate(v => !v);
-                      }}
-                      title={byDate ? 'enter a block height instead' : 'pick a date instead'}
-                      className='text-label text-fg-dim hover:text-fg-muted'
-                    >
-                      <span
-                        className={cn('size-3.5', byDate ? 'i-ph-hash' : 'i-ph-calendar-blank')}
-                      />
-                    </button>
-                    <button
-                      onClick={submitRescan}
-                      className='text-label text-zigner-gold hover:underline'
-                    >
-                      rescan
-                    </button>
-                    <button
-                      onClick={() => {
-                        setEditing(false);
-                        setInput('');
-                      }}
-                      className='text-label text-fg-muted hover:text-fg-high'
-                    >
-                      &times;
-                    </button>
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => {
-                      setEditing(true);
-                      setInput(
-                        byDate ? formatDateInput(blockToDate(startBlock)) : String(startBlock),
-                      );
-                    }}
-                    className='hover:text-fg-high transition-colors'
-                    title='rescan from a different block height'
-                  >
-                    from {startBlock > 0 ? startBlock.toLocaleString() : '0'}
-                  </button>
-                ))}
-            </div>
-
-            {firstSync && !synced && !error && <SyncPersistenceNote />}
-          </div>
-        </div>
+        <button
+          type='button'
+          onClick={() => setOpen(true)}
+          className='flex h-full min-w-0 flex-1 items-center gap-2 text-left'
+        >
+          {warn ? (
+            <span className='size-2 shrink-0 bg-warn' />
+          ) : (
+            <span className='i-zafu-enso size-3.5 shrink-0 text-network-accent' />
+          )}
+          <span className={notice ? 'line-clamp-2 leading-snug text-fg' : 'truncate text-fg'}>
+            {notice?.text ?? (connecting ? 'connecting' : 'syncing')}
+          </span>
+          {(notice ? notice.meta : !connecting) && (
+            <span className='truncate text-fg-muted tabular'>
+              {notice ? notice.meta : `${pct}%${left && ` · ${left}`}`}
+            </span>
+          )}
+        </button>
+        {notice?.action && (
+          <button
+            type='button'
+            onClick={notice.action.onClick}
+            className='flex h-7 shrink-0 items-center border border-surface-border px-2.5 text-[11px] text-zigner-gold hover:bg-elev-2'
+          >
+            {notice.action.label}
+          </button>
+        )}
+        {!notice && !connecting && (
+          <span
+            className='absolute bottom-[-1px] left-0 h-0.5 bg-network-accent transition-[width] duration-500'
+            style={{ width: `${Math.max(pct, 2)}%` }}
+          />
+        )}
       </div>
-    </div>
+
+      <Sheet open={open} onOpenChange={setOpen} title='sync'>
+        <SyncDetail
+          error={warn ? notice.text : undefined}
+          errorDetail={notice?.detail}
+          currentHeight={currentHeight}
+          targetHeight={targetHeight}
+          startBlock={startBlock}
+          onRescan={
+            onRescan &&
+            (h => {
+              setOpen(false);
+              onRescan(h);
+            })
+          }
+        />
+      </Sheet>
+    </>
   );
 };
 
-/**
- * Where the scan actually lives, stated honestly per context.
- *
- * Scanning runs in a Worker owned by whichever view spawned it. The toolbar
- * POPUP is destroyed on focus loss, taking the worker with it; the side panel
- * and a dedicated window are not. So the popup gets an actionable nudge rather
- * than a flat "this stops" - the side panel already gives background sync
- * today, without waiting on moving the worker into the offscreen document.
- */
-const SyncPersistenceNote = () => {
+const SyncDetail = ({
+  error,
+  errorDetail,
+  currentHeight,
+  targetHeight,
+  startBlock,
+  onRescan,
+}: Pick<SyncStatusProps, 'currentHeight' | 'targetHeight' | 'startBlock'> & {
+  error?: string;
+  errorDetail?: string;
+  onRescan?: (h: number) => void;
+}) => {
+  const [date, setDate] = useState(() => dateOfBlock(startBlock));
+  const [showDetail, setShowDetail] = useState(false);
+  const rescanAt = rescanHeightOf(date);
   const persists = isSidePanel() || isDedicatedWindow();
-  if (persists) {
-    return (
-      <div className='text-label text-fg-dim leading-snug'>
-        scanning continues while this stays open.
-      </div>
-    );
-  }
+
   return (
-    <div className='text-label text-fg-dim leading-snug'>
-      the popup closes when it loses focus, which pauses the scan (it resumes where it left off).
-      open zafu in the side panel to let it run in the background.
+    <div className='flex flex-col gap-3 text-xs'>
+      <div className='flex flex-col divide-y divide-border-soft border border-border-soft'>
+        <div className='flex h-12 items-center justify-between px-3.5'>
+          <span className='text-fg-muted'>block</span>
+          <span className='text-fg-high tabular'>
+            {currentHeight > 0 ? currentHeight.toLocaleString() : '-'}
+            {targetHeight > 0 && ` of ${targetHeight.toLocaleString()}`}
+          </span>
+        </div>
+        {onRescan && (
+          <label className='flex h-12 items-center justify-between gap-3 px-3.5'>
+            <span className='text-fg-muted'>starts from</span>
+            <RescanDateInput value={date} onChange={setDate} />
+          </label>
+        )}
+      </div>
+
+      {error && (
+        <div className='flex flex-col gap-1'>
+          <span className='text-hanko'>{error}</span>
+          {errorDetail && errorDetail !== error && (
+            <button
+              type='button'
+              onClick={() => setShowDetail(v => !v)}
+              className='self-start text-fg-dim hover:text-fg-muted'
+            >
+              {showDetail ? 'hide technical details' : 'technical details'}
+            </button>
+          )}
+          {showDetail && (
+            <p className='max-h-24 overflow-y-auto font-mono text-label text-fg-dim break-all'>
+              {errorDetail}
+            </p>
+          )}
+        </div>
+      )}
+
+      {onRescan && (
+        <>
+          <Button
+            variant='secondary'
+            disabled={!rescanHeightOk(rescanAt)}
+            onClick={() => onRescan(rescanAt)}
+          >
+            sync again from {isNaN(rescanAt) ? 'a date' : `block ${rescanAt.toLocaleString()}`}
+          </Button>
+          <span className='text-label text-fg-dim'>
+            {persists
+              ? 'scanning continues while this stays open'
+              : 'the scan pauses when the popup closes and resumes where it left off'}
+          </span>
+        </>
+      )}
     </div>
   );
 };
+
+/** the date a scan from `block` starts on, as an <input type=date> value; '' when unknown */
+export const dateOfBlock = (block: number) =>
+  block > 0 ? formatDateInput(blockToDate(block)) : '';
+
+/** the block a rescan from an <input type=date> value starts at; NaN when empty */
+export const rescanHeightOf = (date: string) =>
+  date ? dateToBlock(new Date(`${date}T00:00:00Z`)) : NaN;
+
+export const rescanHeightOk = (h: number) => !isNaN(h) && h >= ZCASH_ORCHARD_ACTIVATION;
+
+/** a date picker bounded by orchard activation and today */
+export const RescanDateInput = ({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (date: string) => void;
+}) => (
+  <input
+    type='date'
+    min={formatDateInput(blockToDate(ZCASH_ORCHARD_ACTIVATION))}
+    max={formatDateInput(new Date())}
+    value={value}
+    onChange={e => onChange(e.target.value)}
+    aria-label='starts from'
+    className='bg-transparent text-right text-fg-high outline-none'
+  />
+);

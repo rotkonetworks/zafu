@@ -34,7 +34,7 @@ export async function getFirmwareRecord(zidPubkeyHex: string): Promise<DeviceFwR
  * Persist a device-signed, verified `ur:zafu-result` as a firmware record.
  *
  * Caller MUST have verified `result_sig` against `zid_pubkey` (see
- * signature.verifyResult) before calling — this module does not re-verify and
+ * signature.verifyResult) before calling - this module does not re-verify and
  * records exactly what it is told.
  */
 export async function recordVerifiedResult(

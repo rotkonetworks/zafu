@@ -58,13 +58,13 @@ export const IRONWOOD_MIGRATION = true;
  *
  * REQUIRES the rebuilt wasm carrying the compact_resolvable_fields fix AND the
  * single-part UR decode fix (so the device's 1-frame signatures-only response
- * actually scans back — without it the scanner hangs at "1 part received")
+ * actually scans back - without it the scanner hangs at "1 part received")
  * (packages/zcash-wasm + apps/extension/public/zafu-wasm, sha 6b081213...).
  *
  * COMPATIBILITY: a zigner older than v0.8.2 does not know tx_type 0x05 and
  * fail-closes on the unknown prelude. The device also answers a compact
  * request with a compact (signatures-only) response, which needs the
- * `apply_signature_contributions` wasm export — present since the zcli
+ * `apply_signature_contributions` wasm export - present since the zcli
  * 70722f7 wasm rebuild. Turn this OFF to fall back to the fully
  * backward-compatible 0x03 request and full-PCZT response.
  */
@@ -123,19 +123,34 @@ export const PASSWORD_GENERATOR = false;
 export const SUBSCRIBE_ENABLED = false;
 
 /**
- * Ledger hardware-wallet support (WebHID connect + shielded/transparent
- * account import). Hidden for now - the onboarding "connect Ledger" card, its
- * route, and the connect screen stay in the codebase, just unreachable from the
- * UI. The backing pieces (the `src/ledger` WebHID module and the keyring's
- * `addLedgerUnencrypted`) land ahead of activation; flip to `true` once the
- * Ledger zcash app version we target ships and the flow is fully reviewed.
+ * Ledger SHIELDED support through the Ledger Zcash app (3.9.4+): connect
+ * exports the account's UFVK, sends and shielding are signed on the device
+ * (src/ledger/zcash-app). On in the BETA build only, until a physical device
+ * has signed a real send and a multi-round shield. The beta build differs from
+ * prod only by its manifest, so this reads the manifest name once.
  */
-export const HARDWARE_WALLET_ENABLED = false;
+export const HARDWARE_WALLET_ENABLED = (() => {
+  try {
+    return /\bbeta\b/i.test(chrome.runtime.getManifest().name);
+  } catch {
+    return false;
+  }
+})();
+
+/**
+ * MAYAChain as a swap route. Off: zafu takes no affiliate there, so it isn't
+ * offered for now. The provider, its pools and tests stay; while off it is
+ * never quoted, listed or asked for its egress, and an `xc=maya` link opens
+ * the normal router with one calm line. Flip to offer it.
+ */
+export const MAYA_ENABLED = false;
+
+/** the beta build, by its manifest name, as HARDWARE_WALLET_ENABLED reads it */
+export const IS_BETA_BUILD = HARDWARE_WALLET_ENABLED;
 
 /**
  * Ledger TRANSPARENT support via the legacy Bitcoin-app path (@ledgerhq/hw-app-btc),
- * separate from HARDWARE_WALLET_ENABLED above (which gates the DMK shielded path
- * that is blocked on LedgerHQ's unreleased NU6.3 app). The Bitcoin-app path signs
+ * separate from HARDWARE_WALLET_ENABLED above. The Bitcoin-app path signs
  * transparent Zcash on mainnet TODAY - it is how a Ledger holder can send/receive
  * t-address ZEC in zafu and migrate over.
  *

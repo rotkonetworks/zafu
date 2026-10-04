@@ -37,15 +37,21 @@ export const DestinationApproval = () => {
   const origin = params.get('app') || '';
   const detail = params.get('detail') || '';
 
-  const respond = (approved: boolean) => {
+  const respond = async (approved: boolean) => {
     // A missing requestId means the worker cannot match the answer; never send
     // it. Closing the window is treated worker-side as a cancellation.
+    // Await before closing (see passkey.tsx): window.close() tears this popup
+    // down synchronously and can race the send, dropping it unanswered.
     if (requestId) {
-      void chrome.runtime.sendMessage({
-        type: NET_EGRESS_INTERNAL_METHODS[0],
-        requestId,
-        result: { approved },
-      });
+      try {
+        await chrome.runtime.sendMessage({
+          type: NET_EGRESS_INTERNAL_METHODS[0],
+          requestId,
+          result: { approved },
+        });
+      } catch {
+        // service worker unreachable or reloaded - closing is all we can do
+      }
     }
     window.close();
   };
@@ -78,7 +84,7 @@ export const DestinationApproval = () => {
 
           {/* why - a human label for the purpose the wallet assigned */}
           {purposeLabel && (
-            <div className='rounded-lg border border-border-soft bg-canvas p-3'>
+            <div className='border border-border-soft bg-canvas p-3'>
               <p className='kicker mb-1'>purpose</p>
               <p className='text-xs text-fg-high'>{purposeLabel}</p>
             </div>
@@ -86,7 +92,7 @@ export const DestinationApproval = () => {
 
           {/* which site asked */}
           {origin && (
-            <div className='rounded-lg border border-border-soft bg-canvas p-3'>
+            <div className='border border-border-soft bg-canvas p-3'>
               <p className='kicker mb-1'>requested by</p>
               <p className='truncate text-xs text-fg-muted'>
                 <SafeOriginURL origin={origin} />

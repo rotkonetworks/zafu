@@ -9,7 +9,7 @@ interface PasswordInputProps {
   label: string | ReactElement;
   validations?: Validation[];
   onChange: InputProps['onChange'];
-  /** Focus on mount — for screens where the password is the only input. */
+  /** Focus on mount - for screens where the password is the only input. */
   autoFocus?: boolean;
   /** name/id for the underlying input (a11y + password managers). */
   name?: string;
@@ -30,7 +30,7 @@ export const PasswordInput = ({
   return (
     <div className='flex flex-col items-center justify-center gap-2'>
       <div className='flex items-center gap-2 self-start'>
-        <div className='text-sm font-medium'>{label}</div>
+        <div className='text-sm'>{label}</div>
         {validationResult ? (
           <div
             className={cn(

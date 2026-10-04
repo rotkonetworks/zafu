@@ -25,7 +25,7 @@ export interface BucketRange {
  * one fetched bucket: the raw transaction bytes from a 100-block range, plus
  * the bucket-start the caller asked for so the consumer can correlate.
  *
- * the fetcher does NOT decode memos — that lives in the wallet (and uses
+ * the fetcher does NOT decode memos - that lives in the wallet (and uses
  * private WASM keys). this keeps the fetcher narrow: it's transport + privacy
  * policy only.
  */
@@ -43,9 +43,9 @@ export interface BucketBlock {
 /** context threaded through every fetch. */
 export interface FetchContext {
   readonly signal: AbortSignal;
-  /** current chain tip height — used to bound decoy range, estimate block time. */
+  /** current chain tip height - used to bound decoy range, estimate block time. */
   readonly tip: number;
-  /** orchard activation height — lower bound for decoy bucket range. */
+  /** orchard activation height - lower bound for decoy bucket range. */
   readonly activation: number;
   /** progress callback. fires with (completed, total) bucket counts. */
   readonly onProgress?: (completed: number, total: number) => void;

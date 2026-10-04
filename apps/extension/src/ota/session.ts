@@ -5,7 +5,7 @@
  *
  * with explicit per-state deadlines (result timeout ~120s, stream
  * staleness) and an abort path that leaves device state untouched. A device
- * that discards a stream simply never sends a result — the wallet then shows
+ * that discards a stream simply never sends a result - the wallet then shows
  * "no update applied".
  *
  * Correlation is via a random 8-byte req_id (NOT crypto, spec §5.4). req_id
@@ -92,7 +92,7 @@ export function markRecorded(session: OtaSession): OtaSession {
   return { ...session, phase: SessionPhase.Recorded, recorded: true };
 }
 
-/** Abort — leaves device state untouched and returns to idle. */
+/** Abort - leaves device state untouched and returns to idle. */
 export function abort(session: OtaSession, error?: string): OtaSession {
   return { ...session, phase: SessionPhase.Error, error, recorded: session.recorded };
 }
@@ -115,7 +115,7 @@ export function isStreamStale(session: OtaSession, at: number = now()): boolean 
 
 /**
  * Tolerate a result whose req_id does not match this session (replay of a
- * signed image is not an attack — spec §5.4). Only recorded once verified.
+ * signed image is not an attack - spec §5.4). Only recorded once verified.
  */
 export function acceptsResultForReplay(session: OtaSession): boolean {
   return session.phase === SessionPhase.AwaitingResult;

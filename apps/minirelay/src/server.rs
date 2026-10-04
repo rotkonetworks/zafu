@@ -27,7 +27,13 @@ use crate::store::{Coord, Entry};
 /// decides what a tag may be.
 const TAG_MIN_BYTES: usize = 16;
 const TAG_MAX_BYTES: usize = 64;
-const BLOB_MAX_BYTES: usize = 4096;
+/// A `@zafu/zirc` room's sealed blob is `1 + 12 + plaintextBytes + 16` (see
+/// `packages/zirc/src/room/room.ts`'s `sealedBlobBytes`). A group or door room
+/// pads to 4096 (`GROUP_ROOM_PLAINTEXT_BYTES`), sealing to 4125 bytes - so this
+/// ceiling has to clear that, with room to spare rather than tracking the
+/// client's exact number byte-for-byte. 8192 covers up to an 8151-byte
+/// plaintext room without another server bump.
+const BLOB_MAX_BYTES: usize = 8192;
 const SCOPE_MAX_CHARS: usize = 256;
 const SHARD_MAX_CHARS: usize = 128;
 

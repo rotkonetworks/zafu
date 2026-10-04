@@ -143,14 +143,14 @@ export function FrostAirgapJoinerSignFlow({
               setStep(cur => (cur === 'awaiting-sign' ? 'review' : cur));
 
               // Verifier: verify host's claim against the PCZT-derived parse.
-              // Anything unverifiable refuses outright — the host decides whether
+              // Anything unverifiable refuses outright - the host decides whether
               // we can verify, so a soft warning is a bypass it can trigger.
               const fee = assessClaimedFee(captured.feeZat, captured.amountZat);
               if (!captured.pcztHex) {
                 setVerdict({
                   kind: 'refuse',
                   reasons: [
-                    'host did not publish the PCZT bytes — everything shown here would be host-authored text bound to nothing',
+                    'host did not publish the PCZT bytes - everything shown here would be host-authored text bound to nothing',
                     'refusing to release a share against an unverifiable request',
                   ],
                 });
@@ -349,7 +349,7 @@ export function FrostAirgapJoinerSignFlow({
           <span className='i-ph-arrow-left h-5 w-5' />
         </button>
       )}
-      <h2 className='text-lg font-medium flex-1'>co-sign multisig</h2>
+      <h2 className='text-lg flex-1'>co-sign multisig</h2>
       <DontQuitIcon />
     </div>
   );
@@ -378,13 +378,13 @@ export function FrostAirgapJoinerSignFlow({
       return (
         <div className='flex flex-col gap-3 p-4'>
           <Header onBack={cancel} />
-          <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3'>
+          <div className='border border-yellow-500/40 bg-yellow-500/5 p-3'>
             <p className='text-label tracking-wider text-yellow-400'>review transaction</p>
           </div>
-          <div className='rounded-lg border border-border-soft bg-elev-1 p-3 flex flex-col gap-2.5'>
+          <div className='border border-border-soft bg-elev-1 p-3 flex flex-col gap-2.5'>
             <div>
               <p className='text-label tracking-wider text-fg-muted'>from</p>
-              <p className='mt-0.5 text-xs font-medium'>{walletLabel}</p>
+              <p className='mt-0.5 text-xs'>{walletLabel}</p>
               <p className='mt-0.5 break-all font-mono text-label text-fg-muted'>{walletAddress}</p>
             </div>
             <div className='border-t border-border-soft' />
@@ -395,7 +395,7 @@ export function FrostAirgapJoinerSignFlow({
             <div className='border-t border-border-soft' />
             <div className='flex items-baseline justify-between'>
               <span className='text-label tracking-wider text-fg-muted'>amount</span>
-              <Sensitive className='text-sm font-medium tabular-nums'>
+              <Sensitive className='text-sm tabular-nums'>
                 {formatZec(tx?.amountZat ?? '')} ZEC
               </Sensitive>
             </div>
@@ -412,13 +412,13 @@ export function FrostAirgapJoinerSignFlow({
 
           {/* verifier verdict */}
           {verdict.kind === 'pending' && (
-            <div className='rounded-lg border border-border-soft bg-elev-1 p-2.5 text-label text-fg-muted flex items-center gap-2'>
+            <div className='border border-border-soft bg-elev-1 p-2.5 text-label text-fg-muted flex items-center gap-2'>
               <span className='i-ph-circle-notch size-3 animate-spin' />
               verifying tx bytes match host claim…
             </div>
           )}
           {verdict.kind === 'match' && (
-            <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-2.5 text-label text-green-400 flex items-start gap-2'>
+            <div className='border border-green-500/40 bg-green-500/5 p-2.5 text-label text-green-400 flex items-start gap-2'>
               <span className='i-ph-shield-check size-3.5 mt-0.5 shrink-0' />
               <span>
                 recipient, amount and sighash verified against the transaction bytes
@@ -434,8 +434,8 @@ export function FrostAirgapJoinerSignFlow({
             </div>
           )}
           {verdict.kind === 'refuse' && (
-            <div className='rounded-lg border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
-              <div className='flex items-center gap-2 text-body font-medium text-red-400'>
+            <div className='border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
+              <div className='flex items-center gap-2 text-body text-red-400'>
                 <span className='i-ph-shield-warning size-4' />
                 cannot verify - signing refused
               </div>
@@ -447,8 +447,8 @@ export function FrostAirgapJoinerSignFlow({
             </div>
           )}
           {verdict.kind === 'mismatch' && (
-            <div className='rounded-lg border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
-              <div className='flex items-center gap-2 text-body font-medium text-red-400'>
+            <div className='border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
+              <div className='flex items-center gap-2 text-body text-red-400'>
                 <span className='i-ph-shield-warning size-4' />
                 mismatch - host claim disagrees with tx bytes
               </div>
@@ -458,7 +458,7 @@ export function FrostAirgapJoinerSignFlow({
                 ))}
               </ul>
               {parsed && parsed.actions.some(a => a.decrypted && !a.is_change) && (
-                <div className='rounded border border-red-500/30 bg-red-500/5 p-2 text-label font-mono text-red-300/80'>
+                <div className='border border-red-500/30 bg-red-500/5 p-2 text-label font-mono text-red-300/80'>
                   <p className='text-label tracking-wider text-red-400/80 mb-1'>derived outputs</p>
                   {parsed.actions
                     .filter(a => a.decrypted && !a.is_change)
@@ -491,7 +491,7 @@ export function FrostAirgapJoinerSignFlow({
             <Button variant='secondary' onClick={cancel}>
               reject
             </Button>
-            <Button variant='gradient' onClick={approve} disabled={approveDisabled}>
+            <Button variant='primary' onClick={approve} disabled={approveDisabled}>
               {verdict.kind === 'mismatch' ? 'approve anyway' : 'approve & sign'}
             </Button>
           </div>
@@ -506,7 +506,7 @@ export function FrostAirgapJoinerSignFlow({
           <SignStepProgress current={1} />
           <p className='text-sm text-fg-high'>show this QR to zigner</p>
           {trigger1 && <AnimatedQrDisplay data={trigger1} urType='zafu-frost-sign' size={220} />}
-          <Button variant='gradient' onClick={() => setStep('r1-in')} className='w-full'>
+          <Button variant='primary' onClick={() => setStep('r1-in')} className='w-full'>
             scan qr from zigner
           </Button>
           <Button variant='secondary' onClick={cancel} className='w-full'>
@@ -547,10 +547,10 @@ export function FrostAirgapJoinerSignFlow({
             <span className='i-ph-circle-notch size-3.5 animate-spin' />
             exchanging commitments...
           </div>
-          <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
+          <div className='flex items-center gap-2 bg-elev-2 px-3 py-1.5'>
             <span className='i-ph-users size-3.5 text-fg-muted' />
             <span className='text-xs'>
-              <span className='font-medium text-fg'>{peersReady + 1}</span>
+              <span className='text-fg'>{peersReady + 1}</span>
               <span className='text-fg-muted'> / {ms.threshold} ready</span>
             </span>
           </div>
@@ -570,7 +570,7 @@ export function FrostAirgapJoinerSignFlow({
           <SignStepProgress current={2} />
           <p className='text-sm text-fg-high'>show this QR to zigner</p>
           {trigger2 && <AnimatedQrDisplay data={trigger2} urType='zafu-frost-sign' size={220} />}
-          <Button variant='gradient' onClick={() => setStep('r2-in')} className='w-full'>
+          <Button variant='primary' onClick={() => setStep('r2-in')} className='w-full'>
             scan qr from zigner
           </Button>
           <Button variant='secondary' onClick={cancel} className='w-full'>

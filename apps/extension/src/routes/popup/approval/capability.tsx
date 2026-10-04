@@ -1,6 +1,7 @@
 import { useSearchParams } from 'react-router-dom';
 import {
   CAPABILITY_META,
+  TIME_LIMITED_CAPABILITIES,
   type Capability,
   type RiskLevel,
 } from '@repo/storage-chrome/capabilities';
@@ -8,33 +9,23 @@ import { cn } from '@repo/ui/lib/utils';
 import { ApprovalScreen } from './approval-screen';
 import { ApproveDeny } from './approve-deny';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
-import { LinkGradientIcon } from '../../../icons/link-gradient';
+import { OriginIcon, hostnameOf } from '../../../shared/components/origin-icon';
+import { Mark } from '@repo/ui/components/ui/mark';
 
-const riskStyles: Record<RiskLevel, { border: string; bg: string; text: string; banner?: string }> =
-  {
-    low: {
-      border: 'border-border-soft',
-      bg: '',
-      text: 'text-fg-muted',
-    },
-    medium: {
-      border: 'border-yellow-500/30',
-      bg: 'bg-yellow-500/5',
-      text: 'text-yellow-400',
-    },
-    high: {
-      border: 'border-orange-500/40',
-      bg: 'bg-orange-500/5',
-      text: 'text-orange-400',
-      banner: 'this grants significant access to your wallet.',
-    },
-    critical: {
-      border: 'border-red-500/50',
-      bg: 'bg-red-500/10',
-      text: 'text-red-400',
-      banner: 'danger: this capability can sign transactions without your approval.',
-    },
-  };
+const riskStyles: Record<RiskLevel, { border: string; bg: string; text: string }> = {
+  low: { border: 'border-border-soft', bg: '', text: 'text-fg-muted' },
+  medium: { border: 'border-yellow-500/30', bg: 'bg-yellow-500/5', text: 'text-yellow-400' },
+  high: { border: 'border-orange-500/40', bg: 'bg-orange-500/5', text: 'text-orange-400' },
+  critical: { border: 'border-red-500/50', bg: 'bg-red-500/10', text: 'text-red-400' },
+};
+
+// the one-line consequence of approving, said plainly, in the site's terms:
+// [button label, hero-line lead-in before the host].
+const APPROVE_COPY: Partial<Record<Capability, [string, string]>> = {
+  encrypt: ['open it', 'open a message sent to you on'],
+  passkey: ['sign in', 'sign in to'],
+};
+const DEFAULT_APPROVE_COPY: [string, string] = ['allow', 'allow'];
 
 // `new URL()` throws on a malformed string; the `app` query param is only
 // truthiness-checked, so parse defensively and fall back to the raw text.
@@ -53,7 +44,6 @@ export const CapabilityApproval = () => {
   const origin = params.get('app') || '';
   const capability = params.get('capability') as Capability | null;
   const requestId = params.get('requestId') || '';
-  const favIconUrl = params.get('favIconUrl') || '';
   const title = params.get('title') || '';
   // Scope 'zafu' is the one-time global opt-in: the question is whether zafu
   // should offer this capability at all, so it is asked with no site attached
@@ -67,65 +57,70 @@ export const CapabilityApproval = () => {
   const meta = CAPABILITY_META[capability];
   const style = riskStyles[meta.risk];
 
-  const respond = (approved: boolean) => {
-    void chrome.runtime.sendMessage({
-      type: 'zafu_capability_result',
-      requestId,
-      result: { approved },
-    });
+  const respond = async (approved: boolean) => {
+    // Await before closing (see passkey.tsx): window.close() tears this popup
+    // down synchronously and can race the send, dropping it unanswered.
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'zafu_capability_result',
+        requestId,
+        result: { approved },
+      });
+    } catch {
+      // service worker unreachable or reloaded - closing is all we can do
+    }
     window.close();
   };
+
+  const [verb, lead] = APPROVE_COPY[capability] ?? DEFAULT_APPROVE_COPY;
+  const remembers = scope === 'site' && TIME_LIMITED_CAPABILITIES.has(capability);
+  const host = origin ? hostnameOf(origin) : 'this site';
 
   return (
     <ApprovalScreen
       header={
-        <header className='flex h-[70px] flex-col items-center justify-center border-b border-border-soft'>
-          <span className='kicker mb-1'>
-            {scope === 'zafu' ? 'zafu setting' : 'capability request'}
-          </span>
-          <h1 className='text-title text-fg-high lowercase tracking-[-0.01em]'>
-            {scope === 'zafu' ? 'enable this feature?' : 'permission request'}
-          </h1>
-        </header>
-      }
-      footer={<ApproveDeny approve={() => respond(true)} deny={() => respond(false)} />}
-    >
-      <div className='mx-auto size-20'>
-        <LinkGradientIcon />
-      </div>
-      <div className='w-full px-[30px]'>
-        <div className='flex flex-col gap-2'>
-          {/* origin display — omitted for the global opt-in, which is not
-              about any particular site */}
-          {scope === 'site' ? (
-            <div className='flex items-center gap-2 rounded-lg bg-canvas p-3'>
-              {!!favIconUrl && <img src={favIconUrl} alt='' className='size-8 rounded-full' />}
-              <div className='flex flex-col overflow-hidden'>
-                {title && <span className='text-sm truncate'>{title}</span>}
+        <header className='flex flex-col items-center justify-center gap-2 border-b border-border-soft px-4 py-4'>
+          {scope === 'site' && (
+            <div className='flex w-full items-center gap-2'>
+              {!!origin && <OriginIcon origin={origin} size={32} />}
+              <div className='flex min-w-0 flex-col'>
+                {title && <span className='truncate text-sm text-fg-high'>{title}</span>}
                 {origin && (
-                  <span className='text-xs text-fg-muted truncate'>
+                  <span className='truncate text-xs text-fg-muted'>
                     <SafeOriginURL origin={origin} />
                   </span>
                 )}
               </div>
             </div>
-          ) : (
-            <p className='text-sm text-fg-muted'>
-              zafu will ask you again before any individual site is allowed to use it.
-            </p>
           )}
-
-          {/* capability card */}
-          <div className={cn('rounded-lg border p-4', style.border, style.bg)}>
-            {style.banner && (
-              <div className={cn('mb-3 text-xs font-medium', style.text)}>{style.banner}</div>
+          <Mark variant='seal' size={40} />
+          <h1 className='text-title text-fg-high lowercase tracking-[-0.01em]'>
+            {scope === 'zafu' ? `enable ${meta.label.toLowerCase()}?` : `${lead} ${host}`}
+          </h1>
+        </header>
+      }
+      footer={
+        <ApproveDeny
+          approve={() => respond(true)}
+          deny={() => respond(false)}
+          approveLabel={verb}
+        />
+      }
+    >
+      <div className='w-full px-[30px]'>
+        <div className='flex flex-col gap-2'>
+          <div
+            className={cn(
+              'flex items-center justify-between gap-2 border p-3',
+              style.border,
+              style.bg,
             )}
-            <div className='flex items-center gap-2'>
-              <span className={cn('text-base font-medium', style.text)}>{meta.label}</span>
+          >
+            <span className={cn('text-sm lowercase', style.text)}>{meta.label}</span>
+            {meta.risk !== 'low' && (
               <span
                 className={cn(
-                  'rounded px-1.5 py-0.5 text-label',
-                  meta.risk === 'low' && 'bg-elev-2 text-fg-muted',
+                  'shrink-0 px-1.5 py-0.5 text-label',
                   meta.risk === 'medium' && 'bg-yellow-500/10 text-yellow-400',
                   meta.risk === 'high' && 'bg-orange-500/10 text-orange-400',
                   meta.risk === 'critical' && 'bg-red-500/10 text-red-400',
@@ -133,16 +128,18 @@ export const CapabilityApproval = () => {
               >
                 {meta.risk}
               </span>
-            </div>
-            <p className='mt-2 text-sm text-fg-muted'>{meta.description}</p>
+            )}
           </div>
 
-          {/* extra warning for critical */}
+          {remembers && (
+            <p className='text-xs text-fg-muted'>good for 30 days, then {host} asks again.</p>
+          )}
+
           {meta.risk === 'critical' && (
-            <div className='rounded-lg border border-red-500/50 bg-red-500/10 p-3 text-xs text-red-400'>
+            <div className='border border-red-500/50 bg-red-500/10 p-3 text-xs text-red-400'>
               {scope === 'zafu'
-                ? 'are you absolutely sure? once enabled, a site you approve can sign transactions without per-transaction confirmation.'
-                : 'are you absolutely sure? this site can sign transactions on your behalf without confirmation.'}
+                ? 'a site you approve can then sign without asking each time.'
+                : 'this site can sign on your behalf without asking each time.'}
             </div>
           )}
         </div>

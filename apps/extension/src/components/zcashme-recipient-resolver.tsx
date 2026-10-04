@@ -35,26 +35,34 @@ interface Props {
   onResolve: (profile: ZcashMeProfile) => void;
 }
 
-export function ProfileBadge({ profile, compact }: { profile: ZcashMeProfile; compact?: boolean }) {
-  const name = zcashMeLabel(profile);
+/** the PayName card: who the name points at, and whether it proved it */
+function ProfileCard({ profile, onPick }: { profile: ZcashMeProfile; onPick: () => void }) {
+  const name = zcashMeLabel(profile) ?? zcashMeUsername(profile);
+  const a = profile.address;
+  const links = profile.links.map(l => l.platform.toLowerCase()).join(' and ');
   return (
-    <span className='flex min-w-0 items-center gap-1.5'>
-      <span
-        className={cn(
-          'h-3.5 w-3.5 shrink-0',
-          profile.addressVerified
-            ? 'i-ph-seal-check text-network-accent'
-            : 'i-ph-warning text-amber-400',
-        )}
-      />
-      <span className='truncate text-xs'>{name}</span>
-      {!compact && (
-        <span className='truncate text-label text-fg-muted'>
-          zcash.me/{zcashMeUsername(profile)}
-          {profile.addressVerified ? '' : ' - unverified'}
+    <button
+      type='button'
+      onClick={onPick}
+      className='flex min-h-[62px] w-full items-center gap-3 border border-border-hard bg-elev-1 px-3 py-2.5 text-left transition-colors hover:bg-elev-2'
+    >
+      <span className='grid size-[34px] shrink-0 place-items-center bg-elev-2 text-sm text-fg-high'>
+        {Array.from(name)[0]}
+      </span>
+      <span className='flex min-w-0 flex-col gap-0.5'>
+        <span className='truncate text-[13px] text-fg-high'>{name} on zcash.me</span>
+        <span
+          className={cn(
+            'truncate text-[11px]',
+            profile.addressVerified ? 'text-green' : 'text-warn',
+          )}
+        >
+          {profile.addressVerified
+            ? `verified ${links || 'address'} · ${a.slice(0, 6)}…${a.slice(-5)}`
+            : 'not proven to be theirs · please confirm with them first'}
         </span>
-      )}
-    </span>
+      </span>
+    </button>
   );
 }
 
@@ -63,7 +71,11 @@ export function ZcashMeRecipientResolver({ input, onResolve }: Props) {
   const { config, index } = useZcashMe();
   const proxyEnabled = useStore(privacySettingsSelector).proxy.enabled;
   const [pending, setPending] = useState(false);
-  const [live, setLive] = useState<{ handle: string; profile: ZcashMeProfile } | null>(null);
+  const [live, setLive] = useState<{
+    handle: string;
+    profile: ZcashMeProfile;
+    decoys: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   // set when cover is on but no decoys are available, gating an uncovered lookup
   const [needBareConfirm, setNeedBareConfirm] = useState(false);
@@ -79,37 +91,26 @@ export function ZcashMeRecipientResolver({ input, onResolve }: Props) {
     return null;
   }
 
-  const box = 'mt-1.5 rounded-lg border border-border-soft bg-elev-1 p-2';
+  const box = 'border border-border-soft bg-elev-1 p-2';
 
   if (config.mode === 'off') {
-    return <ZcashMeOptIn reason={`pay /${handle}`} respectDismissal={false} className='mt-1.5' />;
+    return <ZcashMeOptIn reason={`pay /${handle}`} respectDismissal={false} />;
   }
 
   const local = index?.byName.get(handle.toLowerCase());
   const profile = local ?? (live?.handle === handle ? live.profile : undefined);
 
-  const accept = (p: ZcashMeProfile) => (
-    <button
-      type='button'
-      onClick={() => onResolve(p)}
-      className='flex w-full items-center justify-between gap-2 text-left'
-    >
-      <ProfileBadge profile={p} />
-      <span className='shrink-0 text-label text-network-accent'>use address</span>
-    </button>
-  );
-
   if (profile) {
+    const decoys = live?.profile === profile ? live.decoys : 0;
     return (
-      <div className={box}>
-        {accept(profile)}
-        {!profile.addressVerified && (
-          <p className='mt-1 text-label text-amber-400'>
-            this profile has not proven it controls the address. confirm with the person before
-            sending.
-          </p>
+      <>
+        <ProfileCard profile={profile} onPick={() => onResolve(profile)} />
+        {decoys > 0 && (
+          <span className='text-[11px] text-fg-dim'>
+            looked up with {decoys} decoy names · zcash.me can't tell which you wanted
+          </span>
         )}
-      </div>
+      </>
     );
   }
 
@@ -150,7 +151,7 @@ export function ZcashMeRecipientResolver({ input, onResolve }: Props) {
         : await lookupZcashMe(handle);
     setPending(false);
     if (res.ok) {
-      setLive({ handle, profile: res.profile });
+      setLive({ handle, profile: res.profile, decoys: decoyNames.length });
     } else {
       setError(res.message);
     }
@@ -173,34 +174,18 @@ export function ZcashMeRecipientResolver({ input, onResolve }: Props) {
         <span className='text-xs'>look up /{handle} on zcash.me</span>
       </button>
       <p className='mt-1 text-label text-fg-muted'>
-        {config.decoys > 0 && index
-          ? `sends /${handle} plus ${Math.min(config.decoys, index.snapshot.profiles.length - 1 > 0 ? config.decoys : 0)} decoy names in one burst, so zcash.me cannot tell which you want in this lookup. it still sees your ip; repeat lookups of the same name can be correlated across sessions.`
-          : 'sends the username and your ip to zcash.me. download the directory in settings to avoid per-name lookups.'}
+        zcash.me sees {proxyEnabled ? '' : 'your ip and '}/{handle}
+        {config.decoys > 0 && (index?.snapshot.profiles.length ?? 0) > 1 && ' among decoys'}
       </p>
-      {!proxyEnabled && (
-        <p className='mt-1 flex items-start gap-1 text-label text-amber-400'>
-          <span className='i-ph-warning mt-0.5 h-3 w-3 shrink-0' />
-          your ip is exposed to zcash.me. decoys hide the name, not your ip - turn on the proxy in
-          privacy settings to hide it.
-        </p>
-      )}
       {needBareConfirm && (
-        <div className='mt-1 rounded border border-amber-400/40 bg-amber-400/10 p-2'>
-          <p className='flex items-start gap-1 text-label text-amber-400'>
-            <span className='i-ph-warning mt-0.5 h-3 w-3 shrink-0' />
-            decoy cover is on, but there is no directory snapshot to draw decoys from, so this
-            lookup would send /{handle} to zcash.me with no cover. download the directory in
-            settings for cover, or look it up without cover.
-          </p>
-          <button
-            type='button'
-            disabled={pending}
-            onClick={() => void lookup(true)}
-            className='mt-1.5 rounded border border-border-soft px-2 py-1 text-label text-fg-muted hover:text-fg-high disabled:opacity-50'
-          >
-            look up without cover
-          </button>
-        </div>
+        <button
+          type='button'
+          disabled={pending}
+          onClick={() => void lookup(true)}
+          className='mt-1 text-left text-label text-warn hover:underline disabled:opacity-50'
+        >
+          no directory to draw decoys from · look up /{handle} without cover
+        </button>
       )}
       {error && <p className='mt-1 text-label text-red-400'>{error}</p>}
     </div>

@@ -7,7 +7,7 @@
  *   - strategy = named composition, picked by config
  *
  * privacy/perf tradeoff is sharper than memo-sync. opening a mempool stream
- * is a continuous transport-level signal — the server knows the wallet is
+ * is a continuous transport-level signal - the server knows the wallet is
  * watching the mempool for the entire session. that's why the only
  * strategies are 'off' (no stream) and 'on' (one stream). there's no
  * "private" mode that keeps the stream open but hides it; the only way to
@@ -20,7 +20,7 @@
  */
 
 /**
- * One mempool action — wire-compatible with the existing zidecar
+ * One mempool action - wire-compatible with the existing zidecar
  * CompactBlock format used for both block sync and mempool. Kept as
  * narrow as possible so the service module does not pull the full
  * CompactBlock proto.
@@ -46,7 +46,7 @@ export interface MempoolEntry {
 /**
  * A snapshot of the mempool at a point in time. The base fetcher emits
  * one of these per poll; filters may add more (decoy mempool draws are
- * not meaningful here — there's no anonymity-set padding on a stream
+ * not meaningful here - there's no anonymity-set padding on a stream
  * the server already attributes to this wallet).
  */
 export interface MempoolSnapshot {
@@ -67,7 +67,7 @@ export type MempoolStreamStatus =
 /** context threaded through every fetch. */
 export interface MempoolFetchContext {
   readonly signal: AbortSignal;
-  /** lifecycle callback — fires on connect / reconnect / error / disconnect. */
+  /** lifecycle callback - fires on connect / reconnect / error / disconnect. */
   readonly onStatus?: (status: MempoolStreamStatus) => void;
 }
 

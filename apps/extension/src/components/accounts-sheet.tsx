@@ -1,0 +1,395 @@
+/**
+ * accounts sheet (Accounts.dc.html) - the hot wallet's pockets, other
+ * wallets and cold signers, add wallet, then lock and open in window.
+ */
+
+import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
+import { useShallow } from 'zustand/react/shallow';
+import { cn } from '@repo/ui/lib/utils';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+import { useStore, type AllSlices } from '../state';
+import {
+  selectActiveNetwork,
+  selectEffectiveKeyInfo,
+  selectKeyInfosForActiveNetwork,
+  selectSelectKeyRing,
+  selectRenameKeyRing,
+  selectLock,
+  type NetworkType,
+} from '../state/keyring';
+import {
+  MAX_POCKETS,
+  activeAccountIndex,
+  activePockets,
+  pocketOwner,
+  visiblePockets,
+} from '../state/pockets';
+import { pocketStoreId } from '../state/pocket-id';
+import { zcashWorkerQuery } from '../hooks/zcash-pool-balances';
+import { navTimingOn, Painted } from '../routes/popup/preload';
+import { PopupPath } from '../routes/popup/paths';
+import { isSidePanel } from '../utils/popup-detection';
+import { custodyOf, type Custody } from './custody-badge';
+import { Mark } from '@repo/ui/components/ui/mark';
+import { Button } from '@repo/ui/components/ui/button';
+import { Sensitive } from './sensitive';
+import { fmtZec } from '../routes/popup/home/format';
+
+const CUSTODY_META: Record<Custody, string> = {
+  hot: 'hot · this device',
+  cold: 'cold · signs on its device',
+  shared: 'shared · co-signers approve',
+};
+
+const CUSTODY_ICON: Record<Custody, string> = {
+  hot: 'i-zafu-hi text-zigner-gold',
+  cold: 'i-zafu-kori text-device-blue',
+  shared: 'i-zafu-torii text-fg-muted',
+};
+
+/**
+ * What a pocket row stands for on each network. Both list the same named
+ * pockets; zcash moves its own pocket (a ZIP 32 account with its own worker
+ * store and balance), penumbra its view-service account index.
+ */
+export interface PocketTarget {
+  active: (s: AllSlices) => number;
+  pick: (s: AllSlices, owner: string, account: number) => unknown;
+  /** the worker store holding this pocket's notes, where it has its own */
+  store?: (keyId: string, account: number) => string;
+}
+
+const ZCASH_POCKET: PocketTarget = {
+  active: activeAccountIndex,
+  pick: (s, owner, account) => s.pockets.select(owner, account),
+  store: pocketStoreId,
+};
+
+const POCKET_TARGET: Partial<Record<NetworkType, PocketTarget>> = {
+  penumbra: {
+    active: s => s.keyRing.penumbraAccount,
+    pick: (s, _owner, account) => s.keyRing.setPenumbraAccount(account),
+  },
+};
+
+export const pocketTarget = (network: NetworkType): PocketTarget =>
+  POCKET_TARGET[network] ?? ZCASH_POCKET;
+
+/**
+ * Switch every network whose active pocket is the one about to be hidden
+ * away to main first. A pocket is one list shared across networks (zcash and
+ * penumbra each keep their own "active" elsewhere), so hiding it has to
+ * release whichever of them has it active, not just the network in view.
+ */
+export const releaseActive = async (
+  state: AllSlices,
+  owner: string,
+  account: number,
+  targets: PocketTarget[] = [ZCASH_POCKET, ...Object.values(POCKET_TARGET).filter(t => !!t)],
+): Promise<void> => {
+  for (const target of targets) {
+    if (target.active(state) === account) {
+      await target.pick(state, owner, 0);
+    }
+  }
+};
+
+/** what the rename/new-pocket sheet should do: create a fresh pocket, or
+ * rename something that already has a name (a pocket or the wallet itself).
+ * `pocket` is set only when renaming a pocket (never the wallet itself or
+ * main), and lets the sheet offer "hide this pocket". */
+export type PocketSheetTarget =
+  | {
+      name: string;
+      save: (name: string) => Promise<void>;
+      pocket?: { account: number; hide: () => Promise<void> };
+    }
+  | undefined;
+
+const PocketRow = ({
+  name,
+  account,
+  active,
+  balanceZat,
+  onPick,
+  onRename,
+}: {
+  name: string;
+  account: number;
+  active: boolean;
+  balanceZat: bigint | undefined;
+  onPick: () => void;
+  onRename: () => void;
+}) => (
+  <div className='flex items-center'>
+    <button
+      type='button'
+      onClick={onPick}
+      className='flex h-[54px] flex-1 items-center gap-3 px-2 text-left transition-colors hover:bg-surface-elev-2'
+    >
+      <span
+        className={cn(
+          'flex size-[18px] shrink-0 items-center justify-center border',
+          active ? 'border-zigner-gold' : 'border-surface-border',
+        )}
+        aria-hidden='true'
+      >
+        {active && <span className='size-2 bg-zigner-gold' />}
+      </span>
+      <span className='flex min-w-0 flex-1 flex-col gap-[3px]'>
+        <span className='truncate text-sm text-fg-high lowercase'>{name}</span>
+        <span className='truncate text-[11px] text-fg-muted lowercase'>account {account}</span>
+      </span>
+      {active && balanceZat !== undefined && (
+        <Sensitive className='shrink-0 tabular-nums text-sm text-fg-high'>
+          {fmtZec(Number(balanceZat) / 1e8)}
+        </Sensitive>
+      )}
+    </button>
+    <button
+      type='button'
+      onClick={onRename}
+      aria-label={`rename ${name}`}
+      className='flex size-11 shrink-0 items-center justify-center text-fg-muted transition-colors hover:text-fg-high'
+    >
+      <span className='i-ph-pencil-simple size-4' aria-hidden='true' />
+    </button>
+  </div>
+);
+
+export const AccountsSheet = ({
+  open,
+  onOpenChange,
+  onAddWallet,
+  onNewPocket,
+  onHiddenPockets,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** the add-wallet sheet replaces this one rather than stacking on top of
+   * it (see the canvas "nothing expands in place" rule - two bottom sheets
+   * at once would overlap at the same fixed position), so the parent owns
+   * that sheet and switches to it here. */
+  onAddWallet: () => void;
+  /** same pattern: the new-pocket sheet replaces this one, in create mode
+   * (no argument) or rename mode (the pocket being renamed). */
+  onNewPocket: (rename?: PocketSheetTarget) => void;
+  /** same pattern again: the hidden-pockets sheet replaces this one */
+  onHiddenPockets: () => void;
+}) => {
+  const navigate = useNavigate();
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  // perf: .filter()s a new array every read - shallow-equal it so this
+  // sheet's subscription doesn't re-render on unrelated state ticks.
+  const keyInfos = useStore(useShallow(selectKeyInfosForActiveNetwork));
+  const selectKeyRing = useStore(selectSelectKeyRing);
+  const lock = useStore(selectLock);
+  const inSidePanel = isSidePanel();
+
+  const isHotWallet = selectedKeyInfo?.type === 'mnemonic';
+  // the active hot wallet gets its own header + pockets block above; listing
+  // it again here would be the same wallet twice, and tapping it would do
+  // nothing (it is already selected).
+  const otherKeyInfos = isHotWallet ? keyInfos.filter(k => k.id !== selectedKeyInfo?.id) : keyInfos;
+  const pockets = useStore(useShallow(activePockets));
+  const shown = visiblePockets(pockets);
+  const hiddenCount = pockets.length - shown.length;
+  const target = pocketTarget(useStore(selectActiveNetwork));
+  const activeAccount = useStore(target.active);
+  const renamePocket = useStore(s => s.pockets.rename);
+  const hidePocket = useStore(s => s.pockets.hide);
+  const renameKeyRing = useStore(selectRenameKeyRing);
+  const owner = selectedKeyInfo ? pocketOwner(selectedKeyInfo) : undefined;
+  // the active pocket's figure is home's own cached one (same query), so the
+  // panel opens with it; it re-reads only while open
+  const activeStore =
+    isHotWallet && selectedKeyInfo && target.store
+      ? target.store(selectedKeyInfo.id, activeAccount)
+      : undefined;
+  const { data: activeBalanceZat } = useQuery({
+    ...zcashWorkerQuery.balance(activeStore),
+    enabled: open && !!activeStore,
+  });
+
+  const pickWallet = (id: string) => {
+    if (id !== selectedKeyInfo?.id) {
+      void selectKeyRing(id);
+    }
+    onOpenChange(false);
+  };
+
+  const pickPocket = (account: number) => {
+    if (!owner) {
+      return;
+    }
+    void target.pick(useStore.getState(), owner, account);
+    onOpenChange(false);
+  };
+
+  const handleLock = () => {
+    lock();
+    onOpenChange(false);
+    navigate(PopupPath.LOGIN);
+  };
+
+  const handleOpenPopupWindow = async () => {
+    onOpenChange(false);
+    try {
+      await chrome.windows.create({
+        url: chrome.runtime.getURL('popup.html'),
+        type: 'popup',
+        width: 400,
+        height: 628,
+      });
+      window.close();
+    } catch (e) {
+      console.error('Failed to open popup window:', e);
+    }
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange} title='accounts' className='gap-0 pb-0'>
+      {open && navTimingOn && <Painted target='sheet:wallets' />}
+      {isHotWallet && selectedKeyInfo && (
+        <div className='-mx-4 flex flex-col px-3 pb-2'>
+          <div className='flex items-center gap-2 px-2'>
+            <Mark variant='seal' size={20} />
+            <button
+              type='button'
+              onClick={() =>
+                onNewPocket({
+                  name: selectedKeyInfo.name,
+                  save: n => renameKeyRing(selectedKeyInfo.id, n),
+                })
+              }
+              aria-label={`rename ${selectedKeyInfo.name}`}
+              className='flex min-h-11 min-w-0 flex-1 items-center gap-1.5 text-left transition-colors hover:text-zigner-gold'
+            >
+              <span className='truncate text-[13px] text-fg-high lowercase'>
+                {selectedKeyInfo.name}
+              </span>
+              <span
+                className='i-ph-pencil-simple size-3 shrink-0 text-fg-muted'
+                aria-hidden='true'
+              />
+            </button>
+            <span className='shrink-0 text-[11px] text-fg-muted'>{CUSTODY_META.hot}</span>
+          </div>
+          {shown.map(p => (
+            <PocketRow
+              key={p.account}
+              name={p.name}
+              account={p.account}
+              active={p.account === activeAccount}
+              balanceZat={target.store && activeBalanceZat}
+              onPick={() => pickPocket(p.account)}
+              onRename={() =>
+                owner &&
+                onNewPocket({
+                  name: p.name,
+                  save: n => renamePocket(owner, p.account, n),
+                  pocket:
+                    p.account === 0
+                      ? undefined
+                      : {
+                          account: p.account,
+                          hide: async () => {
+                            await releaseActive(useStore.getState(), owner, p.account);
+                            await hidePocket(owner, p.account);
+                          },
+                        },
+                })
+              }
+            />
+          ))}
+          <Plus
+            label={
+              pockets.length >= MAX_POCKETS
+                ? `this wallet has ${MAX_POCKETS} pockets, the most it can hold`
+                : 'new pocket'
+            }
+            tone='text-zigner-gold'
+            disabled={pockets.length >= MAX_POCKETS}
+            onClick={() => onNewPocket()}
+          />
+          {hiddenCount > 0 && (
+            <button
+              type='button'
+              onClick={onHiddenPockets}
+              className='flex h-11 items-center px-2 text-left text-[11px] text-fg-muted transition-colors hover:text-fg-high'
+            >
+              hidden · {hiddenCount}
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className='-mx-4 flex flex-col border-t border-border-soft px-3 pb-3.5 pt-2.5'>
+        {otherKeyInfos.map(k => {
+          const custody = custodyOf(k.type);
+          return (
+            <button
+              key={k.id}
+              type='button'
+              onClick={() => pickWallet(k.id)}
+              className='flex h-[54px] items-center gap-3 px-2 text-left transition-colors hover:bg-surface-elev-2'
+            >
+              <span
+                className={cn('size-[18px] shrink-0', CUSTODY_ICON[custody])}
+                aria-hidden='true'
+              />
+              <span className='flex min-w-0 flex-1 flex-col gap-[3px]'>
+                <span className='truncate text-sm text-fg-high lowercase'>{k.name}</span>
+                <span className='truncate text-[11px] text-fg-muted'>{CUSTODY_META[custody]}</span>
+              </span>
+            </button>
+          );
+        })}
+        <Plus label='add wallet' tone='text-fg-muted' onClick={onAddWallet} />
+      </div>
+
+      <div className='-mx-4 flex gap-2 border-t border-border-soft px-5 pb-4 pt-3'>
+        <Button variant='secondary' className='h-11 flex-1 text-[13px]' onClick={handleLock}>
+          <span className='i-ph-lock size-[15px]' aria-hidden='true' />
+          lock
+        </Button>
+        {inSidePanel && (
+          <Button
+            variant='secondary'
+            className='h-11 flex-1 text-[13px]'
+            onClick={() => void handleOpenPopupWindow()}
+          >
+            <span className='i-ph-arrow-square-out size-[15px]' aria-hidden='true' />
+            open in window
+          </Button>
+        )}
+      </div>
+    </Sheet>
+  );
+};
+
+const Plus = ({
+  label,
+  tone,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  tone: string;
+  disabled?: boolean;
+  onClick: () => void;
+}) => (
+  <button
+    type='button'
+    onClick={onClick}
+    disabled={disabled}
+    className={cn(
+      'flex h-11 items-center gap-3 px-2 text-left text-[13px] transition-colors hover:bg-surface-elev-2 disabled:pointer-events-none disabled:opacity-50',
+      tone,
+    )}
+  >
+    <span className='i-ph-plus size-[18px] shrink-0' aria-hidden='true' />
+    {label}
+  </button>
+);

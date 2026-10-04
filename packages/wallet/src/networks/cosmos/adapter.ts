@@ -22,10 +22,20 @@ import {
 } from './client';
 import {
   COSMOS_CHAINS,
+  getCosmosChain,
   isValidCosmosAddress,
   getChainFromAddress,
   type CosmosChainId,
 } from './chains';
+
+/** the derived address on one chain; a chain with its own key path has none here */
+const addressOn = (addresses: Partial<Record<CosmosChainId, string>>, chain: CosmosChainId) => {
+  const address = addresses[chain];
+  if (!address) {
+    throw new Error(`no ${chain} address from this key`);
+  }
+  return address;
+};
 
 export class CosmosAdapter implements NetworkAdapter {
   readonly networkId = 'cosmos' as const;
@@ -61,12 +71,12 @@ export class CosmosAdapter implements NetworkAdapter {
       throw new Error('Wallet has no Cosmos keys');
     }
 
-    const config = COSMOS_CHAINS[this.defaultChain];
+    const config = getCosmosChain(this.defaultChain);
 
     try {
       // derive address for default chain from the stored address
       const addresses = deriveAllAddresses(cosmosKeys.address);
-      const chainAddress = addresses[this.defaultChain];
+      const chainAddress = addressOn(addresses, this.defaultChain);
 
       const balance = await getBalance(this.defaultChain, chainAddress);
 
@@ -102,10 +112,7 @@ export class CosmosAdapter implements NetworkAdapter {
     await Promise.all(
       Object.entries(COSMOS_CHAINS).map(async ([chainId, config]) => {
         try {
-          const balance = await getBalance(
-            chainId as CosmosChainId,
-            addresses[chainId as CosmosChainId],
-          );
+          const balance = await getBalance(chainId, addressOn(addresses, chainId));
           balances[chainId] = {
             total: balance.amount,
             available: balance.amount,
@@ -126,7 +133,7 @@ export class CosmosAdapter implements NetworkAdapter {
       }),
     );
 
-    return balances as Record<CosmosChainId, NetworkBalance>;
+    return balances;
   }
 
   async getTransactions(
@@ -156,7 +163,7 @@ export class CosmosAdapter implements NetworkAdapter {
 
     const chainId = targetChain.id;
     const addresses = deriveAllAddresses(cosmosKeys.address);
-    const fromAddress = addresses[chainId];
+    const fromAddress = addressOn(addresses, chainId);
 
     // build unsigned transaction
     const unsignedTx = await buildUnsignedSend(
@@ -204,7 +211,7 @@ export class CosmosAdapter implements NetworkAdapter {
   }
 
   formatAmount(amount: bigint): string {
-    const config = COSMOS_CHAINS[this.defaultChain];
+    const config = getCosmosChain(this.defaultChain);
     return this.formatAmountWithDecimals(amount, config.decimals, config.symbol);
   }
 
@@ -217,7 +224,7 @@ export class CosmosAdapter implements NetworkAdapter {
   }
 
   parseAmount(input: string): bigint {
-    const config = COSMOS_CHAINS[this.defaultChain];
+    const config = getCosmosChain(this.defaultChain);
     const cleaned = input.replace(/[^\d.]/g, '');
     const value = parseFloat(cleaned);
     if (isNaN(value)) {
@@ -236,7 +243,7 @@ export class CosmosAdapter implements NetworkAdapter {
     // just verify we can connect
     try {
       const addresses = deriveAllAddresses(cosmosKeys.address);
-      await getBalance(this.defaultChain, addresses[this.defaultChain]);
+      await getBalance(this.defaultChain, addressOn(addresses, this.defaultChain));
       onProgress?.(100);
     } catch (error) {
       console.error('[cosmos] sync failed:', error);

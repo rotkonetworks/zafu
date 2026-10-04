@@ -82,7 +82,7 @@ describe('padNullifierQuery', () => {
     }
   });
 
-  it('is STABLE — repeating the query is byte-identical', () => {
+  it('is STABLE - repeating the query is byte-identical', () => {
     const real = [nf(1), nf(2), nf(3)];
     const a = padNullifierQuery(real, seed, 2).query.map(hex);
     const b = padNullifierQuery(real, seed, 2).query.map(hex);
@@ -157,7 +157,7 @@ describe('padCommitmentQuery', () => {
     for (const c of out.cmxs) {
       counts.set(hex(c), (counts.get(hex(c)) ?? 0) + 1);
     }
-    // no duplicates — a repeated cmx would flag it as the real one
+    // no duplicates - a repeated cmx would flag it as the real one
     for (const n of counts.values()) {
       expect(n).toBe(1);
     }

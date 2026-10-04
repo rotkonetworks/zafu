@@ -4,10 +4,13 @@ import {
   isChainContinuityError,
   isEndpointFailoverCandidate,
   rewindDistanceForAttempt,
+  stalledFailure,
   syncFailureMessage,
+  syncRetryDelayMs,
   COMMITMENT_TREE_REWIND_DISTANCES,
   MAX_REWINDS_PER_RUN,
   SYNC_ERROR_CODES,
+  SYNC_STALL_ERRORS,
   type SyncFailureKind,
 } from './sync-failure';
 
@@ -28,12 +31,14 @@ const REAL_ERRORS = {
     "server integrity check failed: nullifier root mismatch: server=49c3a1b2c3d4e5f6 proven=509f8e7d6c5b4a39. refusing to trust this endpoint's data - switch node or retry",
   broadcast:
     'broadcast failed (-1): zebrad RPC error: RPC error -1: transaction dropped because it is already queued for download',
+  backendDown:
+    'gRPC GetTip: zebrad transport error: error sending request for url (http://127.0.0.1:8232/): connection refused',
 };
 
-describe('classifySyncFailure — structured codes', () => {
+describe('classifySyncFailure - structured codes', () => {
   it('honours a code emitted by the worker over anything in the text', () => {
     // The text looks like a chain rewind; the worker says it is consensus.
-    // The worker wins — it knows where it threw from.
+    // The worker wins - it knows where it threw from.
     expect(classifySyncFailure('tree root mismatch at height 100', 'consensus').kind).toBe(
       'consensus',
     );
@@ -57,7 +62,7 @@ describe('classifySyncFailure — structured codes', () => {
   });
 });
 
-describe('classifySyncFailure — sniffed', () => {
+describe('classifySyncFailure - sniffed', () => {
   it.each([
     ['network: connection reset by peer', 'network'],
     ['TypeError: Failed to fetch', 'network'],
@@ -122,6 +127,18 @@ describe('the three failures users actually hit', () => {
     // never phrased as the user's payment having failed
     expect(failure.message).not.toMatch(/fail|error|reject/i);
   });
+
+  it('a backend transport error is network, not a raw endpoint address', () => {
+    const failure = classifySyncFailure(REAL_ERRORS.backendDown);
+    expect(failure.kind).toBe('network');
+    expect(failure.autoRetries).toBe(true);
+    // the only user-visible string must never contain the node's address -
+    // that lives in `raw`, behind the "technical details" disclosure
+    expect(failure.message).not.toContain('127.0.0.1');
+    expect(failure.message).not.toContain('8232');
+    expect(failure.message).not.toContain('zebrad');
+    expect(failure.raw).toBe(REAL_ERRORS.backendDown);
+  });
 });
 
 describe('message copy discipline', () => {
@@ -161,11 +178,11 @@ describe('message copy discipline', () => {
       expect(syncFailureMessage(kind).length).toBeGreaterThan(20);
     }
     // self-healing kinds say so
-    expect(syncFailureMessage('network')).toMatch(/automatically/);
-    expect(syncFailureMessage('storageBusy')).toMatch(/automatically/);
-    expect(syncFailureMessage('chainRecovery')).toMatch(/keep trying/);
+    expect(syncFailureMessage('network')).toMatch(/keeps trying/);
+    expect(syncFailureMessage('storageBusy')).toMatch(/keeps trying/);
+    expect(syncFailureMessage('chainRecovery')).toMatch(/keeps trying/);
     // the rest name an action for the person
-    expect(syncFailureMessage('endpoint')).toMatch(/check your endpoint settings/);
+    expect(syncFailureMessage('endpoint')).toMatch(/choose another/);
     expect(syncFailureMessage('storageFatal')).toMatch(/reload zafu/);
     expect(syncFailureMessage('unknown')).toMatch(/try again/);
   });
@@ -244,5 +261,37 @@ describe('chain continuity recovery', () => {
     expect(MAX_REWINDS_PER_RUN).toBeGreaterThanOrEqual(1);
     expect(MAX_REWINDS_PER_RUN).toBeLessThanOrEqual(10);
     expect(COMMITMENT_TREE_REWIND_DISTANCES.length).toBe(MAX_REWINDS_PER_RUN);
+  });
+});
+
+describe('a failing sync never gives up, and never spins', () => {
+  it('doubles from 2s to 30s, then waits 2 minutes once stalled', () => {
+    expect([1, 2, 3, 4, 5, 6].map(syncRetryDelayMs)).toEqual([
+      2000, 4000, 8000, 16000, 30000, 30000,
+    ]);
+    expect(syncRetryDelayMs(SYNC_STALL_ERRORS - 1)).toBe(30_000);
+    expect(syncRetryDelayMs(SYNC_STALL_ERRORS)).toBe(120_000);
+    expect(syncRetryDelayMs(10_000)).toBe(120_000);
+  });
+
+  it('never waits less than 2s, whatever it is handed', () => {
+    for (const n of [-1, 0, 0.5, 1]) {
+      expect(syncRetryDelayMs(n)).toBeGreaterThanOrEqual(2000);
+    }
+  });
+
+  it('a stalled sync offers to try again, whatever the node did', () => {
+    for (const code of SYNC_ERROR_CODES.filter(c => c !== 'storage-fatal')) {
+      const stalled = stalledFailure(classifySyncFailure('x', code));
+      expect(stalled.action).toEqual({ label: 'try again', kind: 'retry' });
+      expect(stalled.autoRetries).toBe(false);
+    }
+    const node = stalledFailure(classifySyncFailure(REAL_ERRORS.backendDown));
+    expect(node.message).toBe(syncFailureMessage('network'));
+    expect(node.action?.kind).toBe('retry');
+  });
+
+  it('unreadable local data still offers the reload, which resumes too', () => {
+    expect(stalledFailure(classifySyncFailure('x', 'storage-fatal')).action?.kind).toBe('reload');
   });
 });

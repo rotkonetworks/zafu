@@ -66,3 +66,14 @@ export function frostSelfCustodySigner(ctx: FrostSelfCustodyCtx): ExternalSigner
     };
   };
 }
+
+/**
+ * The airgap FROST signer. FrostAirgapSignFlow runs the rounds with the zigner
+ * and the co-signers and hands back the aggregated sigs; this presents them as
+ * an `ExternalSigner` so the send completes through the shared cold tail, which
+ * carries the build's `coldSendId` (inputs marked spent, send recorded).
+ */
+export const frostAirgapSigner =
+  (spendAuthSigs: string[], unsigned: { spendIndices: number[] }): ExternalSigner =>
+  () =>
+    Promise.resolve({ kind: 'spendAuthSigs', spendAuthSigs, spendIndices: unsigned.spendIndices });

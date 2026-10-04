@@ -44,7 +44,15 @@ export { openChannel } from './channel-select';
 
 export { createGuestIdentity, type GuestOptions } from './guest';
 
-export { createHttpRelayTransport, type HttpRelayTransportOptions } from './relay-http';
+export {
+  createHttpRelayTransport,
+  type HttpRelayTransportOptions,
+  type GetBucketResult,
+  type DroppedOversizeEntry,
+  MAX_RELAY_ENTRIES,
+  MAX_RELAY_ENTRY_BASE64,
+  MAX_RELAY_BODY_BYTES,
+} from './relay-http';
 
 export {
   walletService,
@@ -88,8 +96,6 @@ export type {
 
 export { encodeNoiseInitMemo, decodeNoiseInitMemo, isNoiseInitMemo } from './noise-init-memo';
 export type { NoiseInitPayload } from './noise-init-memo';
-
-export { encodeSealedRemark, decodeSealedRemark, isSealedRemark } from './sealed-remark';
 
 export {
   jamTimeslot,

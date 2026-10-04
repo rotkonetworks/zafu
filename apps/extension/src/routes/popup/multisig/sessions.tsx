@@ -6,8 +6,10 @@
  * status indicators for active DKG/signing sessions.
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+import { Button } from '@repo/ui/components/ui/button';
 import { useStore } from '../../../state';
 import {
   selectZcashWallets,
@@ -21,8 +23,7 @@ import {
   keyRingSelector,
 } from '../../../state/keyring';
 import { frostDkgSelector, frostSigningSelector } from '../../../state/frost-session';
-import { getBalanceInWorker } from '../../../state/keyring/network-worker';
-import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
+import { useMultisigBalances } from '../../../hooks/multisig-balances';
 import { NetworkUnavailable } from '../../../shared/components/network-unavailable';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { hasFeature } from '../../../config/networks';
@@ -62,8 +63,8 @@ const SessionBadge = () => {
   const label = dkg ? `wallet setup - step ${dkg.round} of 3` : `signing - ${signing!.step}`;
 
   return (
-    <div className='flex items-center gap-1.5 rounded-md bg-yellow-500/10 px-2.5 py-1.5 text-xs text-yellow-400'>
-      <span className='h-2 w-2 rounded-full bg-yellow-400 animate-pulse' />
+    <div className='flex items-center gap-1.5 bg-yellow-500/10 px-2.5 py-1.5 text-xs text-yellow-400'>
+      <span className='h-2 w-2 bg-yellow-400 animate-pulse' />
       {label}
     </div>
   );
@@ -88,7 +89,7 @@ const WalletRow = ({
 }) => (
   <div
     className={cn(
-      'flex items-center w-full rounded-lg px-3 py-3 transition-colors',
+      'flex items-center w-full px-3 py-3 transition-colors',
       isActive ? 'bg-primary/10 ring-1 ring-primary/20' : 'hover:bg-elev-1',
     )}
   >
@@ -98,10 +99,10 @@ const WalletRow = ({
     >
       <div className='flex flex-col gap-1 min-w-0'>
         <div className='flex items-center gap-2'>
-          <span className='rounded bg-primary/15 px-1.5 py-0.5 text-label font-semibold text-zigner-gold leading-none shrink-0'>
+          <span className='bg-primary/15 px-1.5 py-0.5 text-label text-zigner-gold leading-none shrink-0'>
             {wallet.multisig!.threshold}-of-{wallet.multisig!.maxSigners}
           </span>
-          <span className='text-sm font-medium truncate'>{wallet.label}</span>
+          <span className='text-sm truncate'>{wallet.label}</span>
           {isActive && <span className='i-ph-check h-3 w-3 text-zigner-gold shrink-0' />}
         </div>
         <span className='text-body text-fg-muted font-mono'>{truncateAddr(wallet.address)}</span>
@@ -118,7 +119,7 @@ const WalletRow = ({
     {onBackup && (
       <button
         onClick={onBackup}
-        className='ml-1 p-1.5 rounded-md text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors shrink-0'
+        className='ml-1 p-1.5 text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors shrink-0'
         title='backup wallet'
       >
         <span className='i-ph-download-simple h-3.5 w-3.5' />
@@ -126,7 +127,7 @@ const WalletRow = ({
     )}
     <button
       onClick={onEdit}
-      className='ml-1 p-1.5 rounded-md text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors shrink-0'
+      className='ml-1 p-1.5 text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors shrink-0'
       title='wallet settings'
     >
       <span className='i-ph-gear h-3.5 w-3.5' />
@@ -178,58 +179,63 @@ const GuardedDeleteModal = (props: {
   };
 
   return (
-    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4'>
-      <div className='w-full max-w-sm rounded-lg border border-red-500/30 bg-elev-1 p-4'>
-        <h2 className='text-lg font-medium text-red-400'>delete "{label}"?</h2>
-        <div className='mt-3 rounded-md border border-red-500/40 bg-red-500/5 p-2 text-label text-red-300'>
-          <span className='i-ph-warning mr-1 inline-block size-3 align-text-bottom' />
-          You will permanently lose access to any funds in this table - it is NOT recoverable from
-          your seed. If other co-signers rely on your share to reach the signing threshold, they may
-          be unable to move funds either.
-        </div>
-        <button
-          onClick={props.onBackup}
-          className='mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border-soft px-3 py-2 text-xs text-fg-muted transition-colors hover:bg-elev-2'
-        >
-          <span className='i-ph-download-simple h-3.5 w-3.5' />
-          Export backup first
-        </button>
-        <label className='mt-3 block text-xs text-fg-muted'>
-          type <span className='font-mono text-fg'>{label}</span> (or{' '}
-          <span className='font-mono text-fg'>DELETE</span>) to confirm
-          <input
-            type='text'
-            autoFocus
-            autoComplete='off'
-            value={typed}
-            onChange={e => setTyped(e.target.value)}
-            className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-sm focus:border-red-500/50 focus:outline-none'
-            placeholder={label}
-          />
-        </label>
-        {error && (
-          <p className='mt-2 rounded-md border border-red-500/40 bg-red-500/5 p-2 text-body text-red-400'>
-            {error}
-          </p>
-        )}
-        <div className='mt-4 flex gap-2'>
-          <button
-            onClick={props.onClose}
-            disabled={working}
-            className='flex-1 rounded-lg border border-border-soft py-2 text-xs transition-colors hover:bg-elev-2 disabled:opacity-50'
-          >
-            cancel
-          </button>
-          <button
-            onClick={() => void confirm()}
-            disabled={!matches || working}
-            className='flex-1 rounded-lg border border-red-500/40 bg-red-500/15 py-2 text-xs text-red-400 transition-colors hover:bg-red-500/25 disabled:cursor-not-allowed disabled:opacity-40'
-          >
-            {working ? 'deleting…' : 'delete permanently'}
-          </button>
-        </div>
+    <Sheet
+      open
+      onOpenChange={next => !next && !working && props.onClose()}
+      title={`delete "${label}"?`}
+    >
+      <div className='border border-red-500/40 bg-red-500/5 p-2 text-label text-red-300'>
+        <span className='i-ph-warning mr-1 inline-block size-3 align-text-bottom' />
+        You will permanently lose access to any funds in this table - it is NOT recoverable from
+        your seed. If other co-signers rely on your share to reach the signing threshold, they may
+        be unable to move funds either.
       </div>
-    </div>
+      <Button
+        variant='secondary'
+        size='md'
+        className='w-full justify-center gap-1.5'
+        onClick={props.onBackup}
+      >
+        <span className='i-ph-download-simple h-3.5 w-3.5' />
+        Export backup first
+      </Button>
+      <label className='block text-xs text-fg-muted'>
+        type <span className='font-mono text-fg'>{label}</span> (or{' '}
+        <span className='font-mono text-fg'>DELETE</span>) to confirm
+        <input
+          type='text'
+          autoFocus
+          autoComplete='off'
+          value={typed}
+          onChange={e => setTyped(e.target.value)}
+          className='mt-1 w-full border border-border-soft bg-input px-3 py-2 font-mono text-sm focus:border-red-500/50 focus:outline-none'
+          placeholder={label}
+        />
+      </label>
+      {error && (
+        <p className='border border-red-500/40 bg-red-500/5 p-2 text-body text-red-400'>{error}</p>
+      )}
+      <div className='flex gap-2'>
+        <Button
+          variant='secondary'
+          size='md'
+          className='flex-1'
+          onClick={props.onClose}
+          disabled={working}
+        >
+          cancel
+        </Button>
+        <Button
+          variant='danger'
+          size='md'
+          className='flex-1'
+          onClick={() => void confirm()}
+          disabled={!matches || working}
+        >
+          {working ? 'deleting…' : 'delete permanently'}
+        </Button>
+      </div>
+    </Sheet>
   );
 };
 
@@ -244,10 +250,10 @@ const AppManagedRow = (props: {
     ? new Date(props.row.createdAt).toLocaleDateString()
     : 'unknown';
   return (
-    <div className='flex flex-col gap-2 rounded-lg border border-border-soft bg-elev-1 px-3 py-3'>
+    <div className='flex flex-col gap-2 border border-border-soft bg-elev-1 px-3 py-3'>
       <div className='flex min-w-0 items-center justify-between gap-2'>
         <div className='flex min-w-0 flex-col gap-0.5'>
-          <span className='truncate text-sm font-medium'>{props.row.wallet.label}</span>
+          <span className='truncate text-sm'>{props.row.wallet.label}</span>
           <span className='text-label text-fg-dim'>created {created}</span>
         </div>
         {props.row.balanceZat > 0n ? (
@@ -261,7 +267,7 @@ const AppManagedRow = (props: {
       <div className='flex gap-2'>
         <button
           onClick={props.onRecover}
-          className='flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border-soft px-2 py-1.5 text-xs text-fg-muted transition-colors hover:bg-elev-2 hover:text-zigner-gold'
+          className='flex flex-1 items-center justify-center gap-1.5 border border-border-soft px-2 py-1.5 text-xs text-fg-muted transition-colors hover:bg-elev-2 hover:text-zigner-gold'
           title='make this a normal, selectable multisig you can co-sign'
         >
           <span className='i-ph-arrow-up-right h-3.5 w-3.5' />
@@ -269,7 +275,7 @@ const AppManagedRow = (props: {
         </button>
         <button
           onClick={props.onBackup}
-          className='flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border-soft px-2 py-1.5 text-xs text-fg-muted transition-colors hover:bg-elev-2 hover:text-fg'
+          className='flex flex-1 items-center justify-center gap-1.5 border border-border-soft px-2 py-1.5 text-xs text-fg-muted transition-colors hover:bg-elev-2 hover:text-fg'
           title='export this share as an encrypted backup file'
         >
           <span className='i-ph-download-simple h-3.5 w-3.5' />
@@ -277,7 +283,7 @@ const AppManagedRow = (props: {
         </button>
         <button
           onClick={props.onDelete}
-          className='flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-500/30 px-2 py-1.5 text-xs text-red-400 transition-colors hover:bg-red-500/10'
+          className='flex flex-1 items-center justify-center gap-1.5 border border-red-500/30 px-2 py-1.5 text-xs text-red-400 transition-colors hover:bg-red-500/10'
           title='delete this table'
         >
           <span className='i-ph-trash h-3.5 w-3.5' />
@@ -310,7 +316,7 @@ const AppManagedTablesSection = () => {
   };
 
   return (
-    <div className='mt-3 rounded-lg border border-border-soft'>
+    <div className='mt-3 border border-border-soft'>
       {PasswordModal}
       <BackupModal
         open={backupTarget !== null}
@@ -337,8 +343,8 @@ const AppManagedTablesSection = () => {
       >
         <span className='flex items-center gap-2'>
           <span className='i-ph-squares-four h-4 w-4 text-fg-muted' />
-          <span className='text-sm font-medium'>App-managed tables</span>
-          <span className='rounded bg-elev-2 px-1.5 py-0.5 text-label font-mono text-fg-muted'>
+          <span className='text-sm'>App-managed tables</span>
+          <span className='bg-elev-2 px-1.5 py-0.5 text-label font-mono text-fg-muted'>
             {tables.length}
           </span>
         </span>
@@ -360,7 +366,7 @@ const AppManagedTablesSection = () => {
             value={filter.query ?? ''}
             onChange={e => setFilter(f => ({ ...f, query: e.target.value }))}
             placeholder='search tables…'
-            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2 text-sm focus:border-primary/50 focus:outline-none'
+            className='w-full border border-border-soft bg-input px-3 py-2 text-sm focus:border-primary/50 focus:outline-none'
           />
           <div className='flex flex-wrap gap-x-4 gap-y-2'>
             <label className='flex cursor-pointer select-none items-center gap-1.5 text-xs text-fg-muted'>
@@ -408,8 +414,6 @@ export const MultisigPage = () => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const multisigWallets = useStore(selectVisibleMultisigWallets);
   const { setActiveZcashWallet } = useStore(walletsSelector);
-  const { workerSyncHeight } = useZcashSyncStatus();
-  const [balances, setBalances] = useState<Record<string, bigint>>({});
 
   // per-wallet backup UI state. restore is on the settings backup page.
   const [backupTarget, setBackupTarget] = useState<ZcashWalletJson | null>(null);
@@ -429,39 +433,7 @@ export const MultisigPage = () => {
     [multisigWallets, zcashWallets],
   );
 
-  // fetch balances for all multisig wallets. sync writes notes keyed by
-  // vaultId (selectedKeyInfo.id), not zcashWallet.id, so the balance lookup
-  // must use vaultId; local state stays keyed by w.id for row identity.
-  // re-fetch on every sync-progress tick so the active vault's row stays
-  // in step with the home-page balance. skip entirely when off zcash -
-  // gate inside the effect, not around it (Rules of Hooks).
-  useEffect(() => {
-    if (!isZcash) {
-      return;
-    }
-    const fetchAll = () => {
-      for (const w of walletsWithIndex) {
-        if (!w.vaultId) {
-          continue;
-        }
-        const vaultId = w.vaultId;
-        const rowId = w.id;
-        getBalanceInWorker('zcash', vaultId)
-          .then(bal => setBalances(prev => ({ ...prev, [rowId]: BigInt(bal) })))
-          .catch(() => {});
-      }
-    };
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.network !== 'zcash') {
-        return;
-      }
-      fetchAll();
-    };
-    window.addEventListener('network-sync-progress', handler);
-    fetchAll();
-    return () => window.removeEventListener('network-sync-progress', handler);
-  }, [walletsWithIndex, workerSyncHeight, isZcash]);
+  const balances = useMultisigBalances(multisigWallets, isZcash);
 
   const totalZat = Object.values(balances).reduce((sum, b) => sum + b, 0n);
 
@@ -510,7 +482,7 @@ export const MultisigPage = () => {
       <div className='flex items-center justify-between'>
         <div className='flex items-center gap-2'>
           <span className='i-ph-shield h-5 w-5 text-zigner-gold' />
-          <h2 className='text-lg font-medium'>multisig</h2>
+          <h2 className='text-lg'>multisig</h2>
         </div>
         {walletsWithIndex.length > 0 && (
           <Sensitive className='text-sm font-mono text-fg-muted'>
@@ -527,8 +499,9 @@ export const MultisigPage = () => {
         <>
           {/* primary CTA: co-sign */}
           <button
+            data-preload={PopupPath.MULTISIG_SIGN}
             onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
-            className='flex items-center justify-center gap-2 rounded-lg bg-primary/15 px-4 py-4 text-base font-semibold text-zigner-gold transition-colors hover:bg-primary/25'
+            className='flex items-center justify-center gap-2 bg-primary/15 px-4 py-4 text-base text-zigner-gold transition-colors hover:bg-primary/25'
           >
             <span className='i-ph-pen-nib h-5 w-5' />
             Co-sign transaction
@@ -608,14 +581,14 @@ export const MultisigPage = () => {
             <div className='flex gap-2'>
               <button
                 onClick={() => navigate(createPath)}
-                className='flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary/10 px-3 py-2.5 text-sm font-medium text-zigner-gold transition-colors hover:bg-primary/20'
+                className='flex flex-1 items-center justify-center gap-1.5 bg-primary/10 px-3 py-2.5 text-sm text-zigner-gold transition-colors hover:bg-primary/20'
               >
                 <span className='i-ph-plus h-4 w-4' />
                 Create
               </button>
               <button
                 onClick={() => navigate(joinPath)}
-                className='flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary/10 px-3 py-2.5 text-sm font-medium text-zigner-gold transition-colors hover:bg-primary/20'
+                className='flex flex-1 items-center justify-center gap-1.5 bg-primary/10 px-3 py-2.5 text-sm text-zigner-gold transition-colors hover:bg-primary/20'
               >
                 <span className='i-ph-user-plus h-4 w-4' />
                 Join
@@ -623,16 +596,18 @@ export const MultisigPage = () => {
             </div>
             {walletsWithIndex.length > 0 && (
               <button
+                data-preload={PopupPath.MULTISIG_SIGN}
                 onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
-                className='flex items-center justify-center gap-1.5 rounded-lg border border-border-soft px-3 py-2.5 text-sm font-medium text-fg transition-colors hover:bg-elev-1'
+                className='flex items-center justify-center gap-1.5 border border-border-soft px-3 py-2.5 text-sm text-fg transition-colors hover:bg-elev-1'
               >
                 <span className='i-ph-pen-nib h-4 w-4' />
                 Co-sign transaction
               </button>
             )}
             <button
+              data-preload={PopupPath.SETTINGS_MULTISIG_BACKUP}
               onClick={() => navigate(PopupPath.SETTINGS_MULTISIG_BACKUP)}
-              className='flex items-center justify-center gap-1.5 rounded-lg border border-border-soft px-3 py-2 text-xs text-fg-muted transition-colors hover:bg-elev-1'
+              className='flex items-center justify-center gap-1.5 border border-border-soft px-3 py-2 text-xs text-fg-muted transition-colors hover:bg-elev-1'
             >
               <span className='i-ph-upload-simple h-3.5 w-3.5' />
               Restore backup / Import from zigner

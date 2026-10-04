@@ -59,11 +59,16 @@ function waitFor(check: () => boolean, timeoutMs: number): Promise<void> {
 }
 
 function sendResult(requestId: string, result: unknown) {
-  void chrome.runtime.sendMessage({
-    type: 'zafu_frost_result',
-    requestId,
-    result,
-  });
+  // the service worker may already be gone (reloaded, or this popup is
+  // closing right behind the call) - nobody awaits this, so an unhandled
+  // rejection would otherwise surface as "receiving end does not exist"
+  void chrome.runtime
+    .sendMessage({
+      type: 'zafu_frost_result',
+      requestId,
+      result,
+    })
+    .catch(() => {});
 }
 
 export const FrostApprove = () => {
@@ -129,7 +134,7 @@ export const FrostApprove = () => {
   >(null);
   const [reviewChangeZat, setReviewChangeZat] = useState<bigint>(0n);
   const [reviewSendZat, setReviewSendZat] = useState<bigint>(0n);
-  // the sighash recomputed from the PCZT — equal to the one our share signs,
+  // the sighash recomputed from the PCZT - equal to the one our share signs,
   // already asserted by computeEscrowVerdict. Shown so the user can see the bind.
   const [reviewSighash, setReviewSighash] = useState('');
 
@@ -187,7 +192,7 @@ export const FrostApprove = () => {
   /**
    * The DKG group shape is consent-bearing: a share issued into a 1-of-3 group
    * is a share the coordinator can spend from alone. The confirm screen shows
-   * `threshold`/`maxSigners`, so those are what the user approved — anything the
+   * `threshold`/`maxSigners`, so those are what the user approved - anything the
    * relay says must equal them, not replace them.
    */
   const assertApprovedGroup = (relayThreshold: number, relayMaxSigners: number) => {
@@ -389,7 +394,7 @@ export const FrostApprove = () => {
     sendResult(requestId, res);
   };
 
-  // generic DKG joiner — mirrors multisig/join.tsx's R1:T:N:SK / R2 / FVK-echo flow
+  // generic DKG joiner - mirrors multisig/join.tsx's R1:T:N:SK / R2 / FVK-echo flow
   const runDkgJoinV2 = async () => {
     const abort = new AbortController();
     const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
@@ -514,7 +519,7 @@ export const FrostApprove = () => {
     }
 
     // wallet-password gate before unsealing the FROST share. Mirrors
-    // runPokerSign — session-unlock alone is not enough to release the
+    // runPokerSign - session-unlock alone is not enough to release the
     // share for a sighash whose semantics the user can't independently
     // verify.
     setStatus('awaiting wallet password...');
@@ -565,7 +570,7 @@ export const FrostApprove = () => {
     // One fresh nonce pair PER alpha. FROST nonces are strictly single-use:
     // two signatures produced under the same nonces reveal the signing share by
     // simple algebra. `alphas` has length 1 today, so the old shared-`round1`
-    // loop was not yet exploitable — but that is an invariant held by a
+    // loop was not yet exploitable - but that is an invariant held by a
     // neighbouring line, not by the code that depends on it. Index the nonces
     // by alpha so growing `alphas` can never silently leak the share.
     const round1s = await Promise.all(
@@ -608,7 +613,7 @@ export const FrostApprove = () => {
     sendResult(requestId, res);
   };
 
-  // joiner-side PCZT signing — host (poker-escrow) drives SIGN/C/S wire same as multisig/sign.tsx
+  // joiner-side PCZT signing - host (poker-escrow) drives SIGN/C/S wire same as multisig/sign.tsx
   const runPokerSign = async () => {
     // Re-sanitize the URL param defensively (external-easteregg already does
     // this on the message-listener boundary, but the popup is its own trust
@@ -643,7 +648,7 @@ export const FrostApprove = () => {
 
     // Latched escrow request. Set once, by the FIRST SIGN:. The relay is
     // unauthenticated, so a later SIGN: is an attempt to swap the transaction
-    // out from under the review the user is in the middle of — it poisons the
+    // out from under the review the user is in the middle of - it poisons the
     // session rather than overwriting this.
     const latched: {
       req: { sighash: string; alphas: string[]; pcztHex: string } | null;
@@ -694,8 +699,8 @@ export const FrostApprove = () => {
     await waitFor(() => latched.req !== null, 120_000);
 
     // ── snapshot, then verify, then sign the snapshot ──
-    // `approved` is frozen here. Everything below — the verdict, the review the
-    // user confirms, and the shares we release — refers to this one object, so
+    // `approved` is frozen here. Everything below - the verdict, the review the
+    // user confirms, and the shares we release - refers to this one object, so
     // a SIGN: arriving during the review cannot become the thing we sign.
     const approved = latched.req;
     if (!approved) {
@@ -706,11 +711,11 @@ export const FrostApprove = () => {
     // are about to sign to the one recomputed from the PCZT, then show the user
     // its OVK-decoded outputs. The dapp's URL `plan` is never trusted here.
     if (!approved.pcztHex) {
-      throw new Error('escrow did not publish a PCZT — refusing to sign blind');
+      throw new Error('escrow did not publish a PCZT - refusing to sign blind');
     }
     const zw = zcashWallets.find(w => w.vaultId === vault.id);
     if (!zw?.orchardFvk) {
-      throw new Error('multisig wallet has no viewing key on file — cannot verify request');
+      throw new Error('multisig wallet has no viewing key on file - cannot verify request');
     }
     setStatus('verifying request against escrow PCZT...');
     const parsed = await frostInspectPcztOutputsInWorker(approved.pcztHex, zw.orchardFvk);
@@ -720,7 +725,7 @@ export const FrostApprove = () => {
       mainnet: zw.mainnet,
     });
     if (verdict.kind !== 'ok') {
-      throw new Error(verdict.reasons.join(' — '));
+      throw new Error(verdict.reasons.join(' - '));
     }
     // computeEscrowVerdict already asserted parsed.computed_sighash_hex === approved.sighash,
     // so either is the bound value; show the recomputed one as the on-device truth.
@@ -731,13 +736,13 @@ export const FrostApprove = () => {
       window.close();
       return;
     }
-    // The review is an unbounded human-time await — precisely the window an
+    // The review is an unbounded human-time await - precisely the window an
     // attacker aims at. Signing `approved` already makes a swap ineffective;
     // refuse outright so the user is told rather than silently signing #1 while
     // the escrow believes it asked for #2.
     if (latched.superseded) {
       throw new Error(
-        'the escrow published a second, different transaction while you were reviewing — ' +
+        'the escrow published a second, different transaction while you were reviewing - ' +
           'nothing was signed. re-request to review the new transaction.',
       );
     }
@@ -804,7 +809,7 @@ export const FrostApprove = () => {
 
       {phase === 'confirm' && (
         <div className='flex flex-col gap-4 flex-1'>
-          <div className='rounded-md border border-border-soft bg-elev-1 p-3 text-xs space-y-2 text-fg'>
+          <div className='border border-border-soft bg-elev-1 p-3 text-xs space-y-2 text-fg'>
             {action === 'frost-create' && (
               <>
                 <p>
@@ -826,7 +831,7 @@ export const FrostApprove = () => {
                   Join FROST DKG room: <span className='tabular text-zigner-gold'>{roomCode}</span>
                 </p>
                 {/* the group shape must be *shown* here, because it is what the
-                    ceremony is bound to — see assertApprovedGroup(). */}
+                    ceremony is bound to - see assertApprovedGroup(). */}
                 <p>
                   as a{' '}
                   <span className='tabular text-zigner-gold'>
@@ -907,17 +912,17 @@ export const FrostApprove = () => {
 
       {phase === 'review' && reviewOutputs && (
         <div className='flex flex-col gap-3 flex-1'>
-          <div className='flex items-center gap-2 rounded-md border border-green-500/40 bg-green-500/10 p-2.5'>
+          <div className='flex items-center gap-2 border border-green-500/40 bg-green-500/10 p-2.5'>
             <span className='i-ph-shield-check size-5 shrink-0 text-green-400' />
             <div className='leading-tight'>
               <p className='text-xs text-green-300'>verified on-device</p>
               <p className='text-[10px] text-fg-muted'>
-                outputs + sighash decoded from the escrow's signed PCZT — not the app's claim
+                outputs + sighash decoded from the escrow's signed PCZT - not the app's claim
               </p>
             </div>
           </div>
 
-          <div className='rounded-md border border-border-soft bg-elev-1 p-3 text-xs space-y-2 text-fg'>
+          <div className='border border-border-soft bg-elev-1 p-3 text-xs space-y-2 text-fg'>
             <div className='space-y-1'>
               {reviewOutputs.map((o, i) => (
                 <div key={i} className='flex items-baseline justify-between gap-2'>
@@ -948,7 +953,7 @@ export const FrostApprove = () => {
             </div>
           </div>
 
-          <div className='rounded-md border border-border-soft bg-elev-1 p-2.5 text-[10px] space-y-1'>
+          <div className='border border-border-soft bg-elev-1 p-2.5 text-[10px] space-y-1'>
             <div className='flex items-center gap-1.5 text-fg-muted'>
               <span className='i-ph-check size-3 shrink-0 text-green-400' />
               <span>sighash your share signs matches the PCZT</span>

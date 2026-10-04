@@ -15,7 +15,7 @@ interface SensitiveProps {
  *
  * Deliberately NOT a blur: blurring preserves glyph count and decimal
  * position, so "0.0100" and "12,438.0000" blur to visibly different
- * shapes — a shoulder-surfer still learns the magnitude. The mask is the
+ * shapes - a shoulder-surfer still learns the magnitude. The mask is the
  * same five dots for every value, and the real value is removed from the
  * DOM entirely while hidden (so devtools/copy can't recover it either).
  */

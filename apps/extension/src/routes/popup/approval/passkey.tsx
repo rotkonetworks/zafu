@@ -11,7 +11,11 @@ import { useSearchParams } from 'react-router-dom';
 import { ApprovalScreen } from './approval-screen';
 import { ApproveDeny } from './approve-deny';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
-import { LinkGradientIcon } from '../../../icons/link-gradient';
+import { OriginIcon, hostnameOf } from '../../../shared/components/origin-icon';
+import { Mark } from '@repo/ui/components/ui/mark';
+import { RowGroup } from '@repo/ui/components/ui/row';
+import { useStore } from '../../../state';
+import { selectSelectedKeyInfo } from '../../../state/keyring';
 
 // `new URL()` throws on a malformed string; the `app` query param is only
 // truthiness-checked, so parse defensively and fall back to the raw text.
@@ -29,6 +33,9 @@ export const PasskeyApprove = () => {
   const [params] = useSearchParams();
   const origin = params.get('app') || '';
   const requestId = params.get('requestId') || '';
+  // the domain the passkey signs in to; a site may name a parent of its own host
+  const rpId = params.get('rp') || '';
+  const keyInfo = useStore(selectSelectedKeyInfo);
 
   const respond = async (approved: boolean) => {
     // Deliver the decision BEFORE closing: `window.close()` removes the window
@@ -53,43 +60,48 @@ export const PasskeyApprove = () => {
   return (
     <ApprovalScreen
       header={
-        <header className='flex h-[70px] flex-col items-center justify-center border-b border-border-soft'>
-          <span className='kicker mb-1'>passkey request</span>
-          <h1 className='text-title text-fg-high lowercase tracking-[-0.01em]'>create a passkey</h1>
-        </header>
-      }
-      footer={<ApproveDeny approve={() => respond(true)} deny={() => respond(false)} />}
-    >
-      <div className='mx-auto size-20'>
-        <LinkGradientIcon />
-      </div>
-      <div className='w-full px-[30px]'>
-        <div className='flex flex-col gap-2'>
-          {/* origin display */}
-          <div className='flex items-center gap-2 rounded-lg bg-canvas p-3'>
-            {origin && (
-              <span className='text-xs text-fg-muted truncate'>
+        <header className='flex flex-col items-center justify-center gap-2 border-b border-border-soft px-4 py-4'>
+          {origin && (
+            <div className='flex w-full items-center gap-2'>
+              <OriginIcon origin={origin} size={32} />
+              <span className='truncate text-xs text-fg-muted'>
                 <SafeOriginURL origin={origin} />
               </span>
-            )}
-          </div>
-
-          {/* what is being granted */}
-          <div className='rounded-lg border border-orange-500/40 bg-orange-500/10 p-4'>
-            <div className='text-base font-medium text-orange-400'>sign in as you</div>
-            <p className='mt-2 text-sm text-fg-muted'>
-              this site is asking zafu to create a passkey for it. if you approve, a site-bound
-              credential derived from your wallet seed is created and stored in the wallet. the site
-              can then ask you to approve sign-ins with it.
-            </p>
-            <p className='mt-2 text-sm text-fg-muted'>
-              the passkey never leaves the wallet; only a public key and signatures are shared.
-              approving also lets this site sign you in with the passkey without asking again - you
-              can revoke it in connected sites. deny to keep this site from registering a
-              credential.
-            </p>
-          </div>
-        </div>
+            </div>
+          )}
+          <Mark variant='seal' size={40} />
+          <h1 className='text-title text-fg-high lowercase tracking-[-0.01em]'>
+            create a passkey for {origin ? hostnameOf(origin) : 'this site'}
+          </h1>
+        </header>
+      }
+      footer={
+        <ApproveDeny
+          approve={() => respond(true)}
+          deny={() => respond(false)}
+          approveLabel='create passkey'
+          denyLabel='not now'
+        />
+      }
+    >
+      <div className='flex w-full flex-col gap-3 px-[30px]'>
+        <RowGroup>
+          {rpId && (
+            <div className='flex h-12 items-center justify-between gap-3 px-3.5 text-sm'>
+              <span className='text-fg-muted'>signs in to</span>
+              <span className='truncate text-fg-high'>{rpId}</span>
+            </div>
+          )}
+          {keyInfo && (
+            <div className='flex h-12 items-center justify-between px-3.5 text-sm'>
+              <span className='text-fg-muted'>account</span>
+              <span className='text-fg-high'>{keyInfo.name}</span>
+            </div>
+          )}
+        </RowGroup>
+        <p className='text-xs text-fg-muted'>
+          the key stays in zafu and comes back with your recovery phrase.
+        </p>
       </div>
     </ApprovalScreen>
   );

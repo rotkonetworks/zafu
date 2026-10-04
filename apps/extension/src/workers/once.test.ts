@@ -75,7 +75,7 @@ describe('once', () => {
 /**
  * Source-level guard for the worker itself. The worker is a DedicatedWorker
  * module that touches IndexedDB and wasm at import time, so it cannot be
- * imported here — but the property that broke is textual: the wasm
+ * imported here - but the property that broke is textual: the wasm
  * initializers must go through `once`, not a bare null check.
  *
  * Without it, two concurrent `await initWasm()` calls both initialize the same

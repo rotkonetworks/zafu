@@ -5,60 +5,34 @@
  * - Camera settings for QR scanning
  * - QR code scanning state during onboarding or wallet addition
  *
- * Designed to be compatible with the upcoming onboarding restructure
- * (see prax-wallet/prax PR #402) while working standalone until that lands.
- *
- * ========================================================================
- * DESIGN: ZID-aware QR processing
- * ========================================================================
- *
- * processQrData currently handles: FVK exports (penumbra, zcash),
- * substrate addresses, cosmos accounts, UR formats, and zigner backups.
- *
- * New UR types to add for ZID:
- *   - ur:zid-response - scanned after zigner signs a ZID challenge.
- *     this should NOT be processed here (wallet import context).
- *     it belongs in a new zid-verify slice or the signing flow.
- *   - ur:zid-identity - NOT scanned by zafu. this is zafu -> zigner only.
- *
- * The DetectedNetwork type may need a 'zid' variant, OR zid verification
- * should bypass the wallet-import pipeline entirely since it is not
- * importing a wallet - it is verifying identity.
- *
- * Recommended approach: add a top-level check in processQrData for
- * ur:zid-response that delegates to a different handler (e.g., a callback
- * or a separate state slice) rather than trying to fit it into the
- * wallet-import state machine. This keeps the import flow clean and
- * avoids confusing users who scan a zid-response in the wrong context.
- * ========================================================================
+ * Zigner's scope is zcash and penumbra only (see AGENTS.md / the
+ * components/device-scanner rework) - `processQrData` delegates its actual
+ * parsing to the pure, unit-tested `parseConnectCode` in
+ * components/device-scanner/parse-connect-code.ts, which is also what the
+ * settings/popup device scanner uses directly. This slice exists so
+ * onboarding's multi-screen scan flow (import-zigner.tsx) keeps its current
+ * shape; `parsedCosmosExport` stays declared for that flow's types but
+ * is never populated - any other code reads as not a connect code.
  */
 
 import type { AllSlices, SliceCreator } from '.';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import {
-  parseZignerFvkQR,
   createWalletImport,
-  isZignerFvkQR,
-  type ZignerFvkExportData,
   type ZignerWalletImport,
+  type ZignerFvkExportData,
 } from '@repo/wallet/zigner-signer';
 import {
-  parseZcashFvkQR,
   createZcashWalletImport,
-  isZcashFvkQR,
-  detectQRNetwork,
-  type ZcashFvkExportData,
   type ZcashWalletImport,
+  type ZcashFvkExportData,
 } from '@repo/wallet/zcash-zigner';
+import { parseZcashAccountsCbor } from '@repo/wallet/ur-parser';
 import {
-  isUrString,
-  getUrType,
-  parsePenumbraUr,
-  parseZcashUr,
-  parseZcashAccountsCbor,
-  parseHotWalletUr,
-} from '@repo/wallet/ur-parser';
+  parseConnectCode,
+  type ParsedConnectCode,
+} from '../components/device-scanner/parse-connect-code';
 
 // ============================================================================
 // Types
@@ -70,41 +44,14 @@ import {
 export type ZignerScanState = 'idle' | 'scanning' | 'scanned' | 'importing' | 'complete' | 'error';
 
 /** Detected network type from QR code */
-export type DetectedNetwork =
-  | 'penumbra'
-  | 'zcash'
-  | 'polkadot'
-  | 'cosmos'
-  | 'backup'
-  | 'hot-wallet'
-  | 'unknown';
+export type DetectedNetwork = 'penumbra' | 'zcash' | 'cosmos' | 'unknown';
 
-/** Polkadot address import data from Zigner QR */
-export interface PolkadotImportData {
-  /** SS58 encoded address */
-  address: string;
-  /** Genesis hash (hex with 0x prefix) */
-  genesisHash: string;
-  /** Label for the wallet */
-  label: string;
-}
-
-/** Cosmos accounts import data from Zigner QR */
+/** Cosmos accounts import data - no longer produced (zigner scope is zcash + penumbra); kept for onboarding's types */
 export interface CosmosImportData {
-  /** Hex-encoded compressed secp256k1 public key (leaf .../0/0) */
   publicKey: string;
-  /**
-   * Change-level xpub (m/44'/118'/account'/0), base58. Present from zigner
-   * firmware that supports rotation; absent on older exports. When present the
-   * hot wallet can derive burner receive addresses .../0/i locally (watch-only),
-   * each signable on the device at the matching address_index.
-   */
   xpub?: string;
-  /** Account index */
   accountIndex: number;
-  /** Label for the wallet */
   label: string;
-  /** Addresses for each chain */
   addresses: { chainId: string; address: string; prefix: string }[];
 }
 
@@ -129,35 +76,23 @@ export interface ZignerSlice {
   parsedPenumbraExport?: ZignerFvkExportData;
   /** Parsed Zcash FVK export data from QR code */
   parsedZcashExport?: ZcashFvkExportData;
-  /** Parsed Polkadot address data from QR code */
-  parsedPolkadotExport?: PolkadotImportData;
-  /** Parsed Cosmos accounts data from QR code */
+  /** No longer populated - zigner's scope is zcash + penumbra only */
   parsedCosmosExport?: CosmosImportData;
-  /** Derived hot wallet mnemonic from zigner export */
-  hotWalletMnemonic?: string;
   /** User-provided label for the wallet */
   walletLabel: string;
   /** Error message if something went wrong */
   errorMessage?: string;
 
   // Scanning actions
-  /**
-   * Process scanned QR code data.
-   * Validates format and parses the FVK export (supports Penumbra and Zcash).
-   */
+  /** Process scanned QR code data (or pasted text) via parseConnectCode. */
   processQrData: (qrData: string) => void;
   /**
    * Process a `zcash-accounts` payload that has already been reassembled from
    * a multi-frame BC-UR scan (caller is expected to be `AnimatedQrScanner`
    * with `urTypeFilter: 'zcash-accounts'`). Useful for Keystone-class cold
    * signers that emit multipart UR.
-   *
-   * `declared` is the user's explicit cold-signer choice from the import
-   * UI ("Scan Zigner" vs "Scan Keystone"). We trust this over byte-level
-   * heuristics, which are kept only as a consistency check that warns on
-   * disagreement (logs to console) so future protocol drift is visible.
    */
-  processZcashAccountsBytes: (cbor: Uint8Array, declared: 'zigner' | 'keystone') => void;
+  processZcashAccountsBytes: (cbor: Uint8Array) => void;
   /** Set the wallet label */
   setWalletLabel: (label: string) => void;
   /** Set scan state */
@@ -171,6 +106,31 @@ export interface ZignerSlice {
 // ============================================================================
 // Slice Creator
 // ============================================================================
+
+function toPenumbraExport(parsed: Extract<ParsedConnectCode, { network: 'penumbra' }>) {
+  return {
+    accountIndex: parsed.accountIndex,
+    label: parsed.label,
+    fvkBytes: parsed.fvkBytes,
+    walletIdBytes: parsed.walletIdBytes,
+    fvkBech32m: parsed.fvkBech32m,
+    zidPublicKey: parsed.zidPublicKey,
+  } satisfies ZignerFvkExportData;
+}
+
+function toZcashExport(parsed: Extract<ParsedConnectCode, { network: 'zcash' }>) {
+  return {
+    accountIndex: parsed.accountIndex,
+    label: parsed.label,
+    orchardFvk: parsed.orchardFvk,
+    transparentXpub: null,
+    mainnet: parsed.mainnet,
+    address: null,
+    ufvk: parsed.ufvk ?? undefined,
+    zidPublicKey: parsed.zidPublicKey,
+    coldSignerType: parsed.device,
+  } satisfies ZcashFvkExportData;
+}
 
 export const createZignerSlice =
   (local: ExtensionStorage<LocalStorageState>): SliceCreator<ZignerSlice> =>
@@ -191,323 +151,32 @@ export const createZignerSlice =
     detectedNetwork: undefined,
     parsedPenumbraExport: undefined,
     parsedZcashExport: undefined,
-    parsedPolkadotExport: undefined,
     parsedCosmosExport: undefined,
-    hotWalletMnemonic: undefined,
     errorMessage: undefined,
 
     processQrData: (qrData: string) => {
-      const trimmed = qrData.trim();
-
-      // Check for Cosmos accounts JSON format from Zigner
-      if (trimmed.startsWith('{') && trimmed.includes('"cosmos-accounts"')) {
-        try {
-          const parsed = JSON.parse(trimmed) as {
-            type: string;
-            version: number;
-            label: string;
-            account_index: number;
-            public_key: string;
-            xpub?: string;
-            addresses: { chain_id: string; address: string; prefix: string }[];
-          };
-
-          if (parsed.type === 'cosmos-accounts' && parsed.public_key && parsed.addresses?.length) {
-            const cosmosData: CosmosImportData = {
-              publicKey: parsed.public_key,
-              xpub: parsed.xpub,
-              accountIndex: parsed.account_index ?? 0,
-              label: parsed.label || 'zigner cosmos',
-              addresses: parsed.addresses.map(a => ({
-                chainId: a.chain_id,
-                address: a.address,
-                prefix: a.prefix,
-              })),
-            };
-
-            set(state => {
-              state.zigner.qrData = trimmed;
-              state.zigner.detectedNetwork = 'cosmos';
-              state.zigner.parsedCosmosExport = cosmosData;
-              state.zigner.parsedPenumbraExport = undefined;
-              state.zigner.parsedZcashExport = undefined;
-              state.zigner.parsedPolkadotExport = undefined;
-              state.zigner.walletLabel = cosmosData.label;
-              state.zigner.scanState = 'scanned';
-              state.zigner.errorMessage = undefined;
-            });
-            return;
-          }
-        } catch {
-          // Not valid JSON, fall through to other checks
-        }
-      }
-
-      // Check for Substrate/Polkadot address format: substrate:address:0xgenesishash
-      if (trimmed.startsWith('substrate:')) {
-        const parts = trimmed.split(':');
-        if (parts.length >= 3) {
-          const address = parts[1]!;
-          const genesisHash = parts.slice(2).join(':'); // handle case where genesis has colons
-
-          // Validate the format
-          if (address && genesisHash && genesisHash.startsWith('0x')) {
-            const exportData: PolkadotImportData = {
-              address,
-              genesisHash,
-              label: 'zigner polkadot',
-            };
-
-            set(state => {
-              state.zigner.qrData = trimmed;
-              state.zigner.detectedNetwork = 'polkadot';
-              state.zigner.parsedPolkadotExport = exportData;
-              state.zigner.parsedPenumbraExport = undefined;
-              state.zigner.parsedZcashExport = undefined;
-              state.zigner.walletLabel = 'zigner polkadot';
-              state.zigner.scanState = 'scanned';
-              state.zigner.errorMessage = undefined;
-            });
-            return;
-          }
-        }
-
-        // Invalid substrate format
+      const result = parseConnectCode(qrData);
+      if (!result.ok) {
         set(state => {
           state.zigner.scanState = 'error';
-          state.zigner.errorMessage =
-            'invalid substrate qr format. expected: substrate:address:0xgenesishash';
+          state.zigner.errorMessage = result.message;
         });
         return;
       }
 
-      // Check for Cosmos address format: cosmos:address:0xgenesishash
-      if (trimmed.startsWith('cosmos:')) {
-        const parts = trimmed.split(':');
-        if (parts.length >= 3) {
-          const address = parts[1]!;
-          const genesisHash = parts.slice(2).join(':');
-
-          if (address && genesisHash && genesisHash.startsWith('0x')) {
-            // Detect chain from address prefix
-            const chainId = address.startsWith('noble')
-              ? 'noble'
-              : address.startsWith('cosmos')
-                ? 'cosmoshub'
-                : 'cosmos';
-
-            const cosmosData: CosmosImportData = {
-              publicKey: '', // not available from address-only QR
-              accountIndex: 0,
-              label: `zigner ${chainId}`,
-              addresses: [{ chainId, address, prefix: address.split('1')[0]! }],
-            };
-
-            set(state => {
-              state.zigner.qrData = trimmed;
-              state.zigner.detectedNetwork = 'cosmos';
-              state.zigner.parsedCosmosExport = cosmosData;
-              state.zigner.parsedPenumbraExport = undefined;
-              state.zigner.parsedZcashExport = undefined;
-              state.zigner.parsedPolkadotExport = undefined;
-              state.zigner.walletLabel = cosmosData.label;
-              state.zigner.scanState = 'scanned';
-              state.zigner.errorMessage = undefined;
-            });
-            return;
-          }
-        }
-
-        set(state => {
-          state.zigner.scanState = 'error';
-          state.zigner.errorMessage =
-            'invalid cosmos qr format. expected: cosmos:address:0xgenesishash';
-        });
-        return;
-      }
-
-      // Check for UR format first (preferred format)
-      if (isUrString(trimmed)) {
-        const urType = getUrType(trimmed);
-
-        if (urType === 'penumbra-accounts') {
-          try {
-            const urExport = parsePenumbraUr(trimmed);
-            // UR format gives us bech32m FVK string - we need to decode it
-            // For now, store the string and let createWalletImport handle conversion
-            // The bech32m FVK can be decoded to get ak||nk bytes
-            const exportData: ZignerFvkExportData = {
-              walletIdBytes: urExport.walletId,
-              fvkBytes: new Uint8Array(64), // placeholder - will be decoded from bech32m
-              accountIndex: urExport.accountIndex,
-              label: urExport.label,
-              fvkBech32m: urExport.fvk, // store bech32m for decoding
-              zidPublicKey: urExport.zidPublicKey,
-            };
-            const defaultLabel = urExport.label || 'zigner penumbra';
-
-            set(state => {
-              state.zigner.qrData = trimmed;
-              state.zigner.detectedNetwork = 'penumbra';
-              state.zigner.parsedPenumbraExport = exportData;
-              state.zigner.parsedZcashExport = undefined;
-              state.zigner.walletLabel = defaultLabel;
-              state.zigner.scanState = 'scanned';
-              state.zigner.errorMessage = undefined;
-            });
-          } catch (cause) {
-            const message = cause instanceof Error ? cause.message : String(cause);
-            set(state => {
-              state.zigner.scanState = 'error';
-              state.zigner.errorMessage = `failed to parse penumbra ur: ${message}`;
-            });
-          }
-          return;
-        }
-
-        if (urType === 'zcash-accounts') {
-          try {
-            const urExport = parseZcashUr(trimmed);
-            const exportData: ZcashFvkExportData = {
-              accountIndex: urExport.accountIndex,
-              label: urExport.label,
-              orchardFvk: null, // UR format uses UFVK string, not raw FVK bytes
-              transparentXpub: null,
-              mainnet: urExport.ufvk.startsWith('uview1'), // mainnet starts with uview1, testnet with uviewtest1
-              address: null, // not included in UR format
-              ufvk: urExport.ufvk, // store the UFVK string
-              zidPublicKey: urExport.zidPublicKey,
-            };
-            const defaultLabel = urExport.label || 'zigner zcash';
-
-            set(state => {
-              state.zigner.qrData = trimmed;
-              state.zigner.detectedNetwork = 'zcash';
-              state.zigner.parsedZcashExport = exportData;
-              state.zigner.parsedPenumbraExport = undefined;
-              state.zigner.walletLabel = defaultLabel;
-              state.zigner.scanState = 'scanned';
-              state.zigner.errorMessage = undefined;
-            });
-          } catch (cause) {
-            const message = cause instanceof Error ? cause.message : String(cause);
-            set(state => {
-              state.zigner.scanState = 'error';
-              state.zigner.errorMessage = `failed to parse zcash ur: ${message}`;
-            });
-          }
-          return;
-        }
-
-        if (urType === 'zafu-hot-wallet') {
-          try {
-            const hotWallet = parseHotWalletUr(trimmed);
-            set(state => {
-              state.zigner.qrData = trimmed;
-              state.zigner.detectedNetwork = 'hot-wallet';
-              state.zigner.hotWalletMnemonic = hotWallet.mnemonic;
-              state.zigner.parsedPenumbraExport = undefined;
-              state.zigner.parsedZcashExport = undefined;
-              state.zigner.parsedPolkadotExport = undefined;
-              state.zigner.parsedCosmosExport = undefined;
-              state.zigner.walletLabel = 'zigner hot wallet';
-              state.zigner.scanState = 'scanned';
-              state.zigner.errorMessage = undefined;
-            });
-          } catch (cause) {
-            const message = cause instanceof Error ? cause.message : String(cause);
-            set(state => {
-              state.zigner.scanState = 'error';
-              state.zigner.errorMessage = `failed to parse hot wallet ur: ${message}`;
-            });
-          }
-          return;
-        }
-
-        // Unknown UR type
-        set(state => {
-          state.zigner.scanState = 'error';
-          state.zigner.errorMessage = `unsupported ur type: ${urType}. expected penumbra-accounts, zcash-accounts, or zafu-hot-wallet`;
-        });
-        return;
-      }
-
-      // Legacy binary format support (for backwards compatibility)
-      const network = detectQRNetwork(trimmed);
-
-      if (network === 'penumbra' && isZignerFvkQR(trimmed)) {
-        try {
-          const exportData = parseZignerFvkQR(trimmed);
-          const defaultLabel = exportData.label || 'zigner penumbra';
-
-          set(state => {
-            state.zigner.qrData = trimmed;
-            state.zigner.detectedNetwork = 'penumbra';
-            state.zigner.parsedPenumbraExport = exportData;
-            state.zigner.parsedZcashExport = undefined;
-            state.zigner.walletLabel = defaultLabel;
-            state.zigner.scanState = 'scanned';
-            state.zigner.errorMessage = undefined;
-          });
-        } catch (cause) {
-          const message = cause instanceof Error ? cause.message : String(cause);
-          set(state => {
-            state.zigner.scanState = 'error';
-            state.zigner.errorMessage = `failed to parse penumbra fvk: ${message}`;
-          });
-        }
-      } else if (network === 'zcash' && isZcashFvkQR(trimmed)) {
-        try {
-          const exportData = parseZcashFvkQR(trimmed);
-          const defaultLabel = exportData.label || 'zigner zcash';
-
-          set(state => {
-            state.zigner.qrData = trimmed;
-            state.zigner.detectedNetwork = 'zcash';
-            state.zigner.parsedZcashExport = exportData;
-            state.zigner.parsedPenumbraExport = undefined;
-            state.zigner.walletLabel = defaultLabel;
-            state.zigner.scanState = 'scanned';
-            state.zigner.errorMessage = undefined;
-          });
-        } catch (cause) {
-          const message = cause instanceof Error ? cause.message : String(cause);
-          set(state => {
-            state.zigner.scanState = 'error';
-            state.zigner.errorMessage = `failed to parse zcash fvk: ${message}`;
-          });
-        }
-      } else {
-        // Build detailed error message
-        const preview = trimmed.slice(0, 24);
-        const len = trimmed.length;
-        let hint = '';
-
-        if (len < 6) {
-          hint = 'qr data too short';
-        } else if (/^[0-9a-fA-F]+$/.test(trimmed)) {
-          // It's hex but not recognized format
-          const byte0 = trimmed.slice(0, 2);
-          const byte1 = trimmed.slice(2, 4);
-          const byte2 = trimmed.slice(4, 6);
-          if (byte0 !== '53') {
-            hint = `expected 0x53, got 0x${byte0}`;
-          } else if (byte1 !== '03' && byte1 !== '04') {
-            hint = `unknown chain 0x${byte1} (penumbra=03, zcash=04)`;
-          } else if (byte2 !== '01') {
-            hint = `unknown op type 0x${byte2} (fvk export=01)`;
-          } else {
-            hint = `network=${network}, format check failed`;
-          }
-        } else {
-          hint = 'expected ur:penumbra-accounts or ur:zcash-accounts format';
-        }
-
-        set(state => {
-          state.zigner.scanState = 'error';
-          state.zigner.errorMessage = `invalid qr: ${hint}. got: ${preview}...`;
-        });
-      }
+      set(state => {
+        state.zigner.qrData = qrData.trim();
+        state.zigner.detectedNetwork = result.network;
+        state.zigner.parsedPenumbraExport =
+          result.network === 'penumbra' ? toPenumbraExport(result) : undefined;
+        state.zigner.parsedZcashExport =
+          result.network === 'zcash' ? toZcashExport(result) : undefined;
+        state.zigner.parsedCosmosExport = undefined;
+        state.zigner.walletLabel =
+          result.label ?? (result.network === 'penumbra' ? 'zigner penumbra' : 'zigner zcash');
+        state.zigner.scanState = 'scanned';
+        state.zigner.errorMessage = undefined;
+      });
     },
 
     /**
@@ -519,26 +188,13 @@ export const createZignerSlice =
      * `parseZcashAccountsCbor` and then build the same `ZcashFvkExportData`
      * shape so downstream onboarding logic doesn't care which path was taken.
      */
-    processZcashAccountsBytes: (cbor: Uint8Array, declared: 'zigner' | 'keystone') => {
+    processZcashAccountsBytes: (cbor: Uint8Array) => {
       try {
         const urExport = parseZcashAccountsCbor(cbor);
-        // Trust the user's explicit declaration (which button they clicked).
-        // The byte heuristic — "zid_pubkey present implies zigner, absent
-        // implies non-zigner" — is only a consistency check, not the source
-        // of truth, because:
-        //   1. A future zigner build could legitimately omit zid_pubkey
-        //      (e.g. privacy mode, key rotation in flight).
-        //   2. A non-zigner signer could in principle add a zid_pubkey-like
-        //      field; we'd misclassify silently.
-        // If declaration disagrees with bytes, log so the divergence is
-        // visible during testing but proceed with the declared kind.
-        const heuristic: 'zigner' | 'keystone' = urExport.zidPublicKey ? 'zigner' : 'keystone';
-        if (heuristic !== declared) {
-          console.warn(
-            `[zigner-import] declared cold signer is "${declared}" but byte heuristic suggests "${heuristic}". ` +
-              `zid_pubkey ${urExport.zidPublicKey ? 'present' : 'absent'}. Trusting declaration.`,
-          );
-        }
+        // one scanner for any cold signer: there is no "which device" button
+        // to declare from any more - the zid_pubkey tell is the only source
+        // of truth (see isLikelyKeystoneAccountsExport).
+        const device: 'zigner' | 'keystone' = urExport.zidPublicKey ? 'zigner' : 'keystone';
         const exportData: ZcashFvkExportData = {
           accountIndex: urExport.accountIndex,
           label: urExport.label,
@@ -548,10 +204,10 @@ export const createZignerSlice =
           address: null,
           ufvk: urExport.ufvk,
           zidPublicKey: urExport.zidPublicKey,
-          coldSignerType: declared,
+          coldSignerType: device,
         };
         const defaultLabel =
-          urExport.label || (declared === 'zigner' ? 'zigner zcash' : 'keystone zcash');
+          urExport.label || (device === 'zigner' ? 'zigner zcash' : 'keystone zcash');
         set(state => {
           state.zigner.qrData = '<multipart-ur:zcash-accounts>'; // sentinel, not a real UR string
           state.zigner.detectedNetwork = 'zcash';
@@ -599,9 +255,7 @@ export const createZignerSlice =
         state.zigner.detectedNetwork = undefined;
         state.zigner.parsedPenumbraExport = undefined;
         state.zigner.parsedZcashExport = undefined;
-        state.zigner.parsedPolkadotExport = undefined;
         state.zigner.parsedCosmosExport = undefined;
-        state.zigner.hotWalletMnemonic = undefined;
         state.zigner.walletLabel = '';
         state.zigner.errorMessage = undefined;
       });
@@ -643,9 +297,7 @@ export const zignerConnectSelector = (state: AllSlices) => {
     detectedNetwork: slice.detectedNetwork,
     parsedPenumbraExport: slice.parsedPenumbraExport,
     parsedZcashExport: slice.parsedZcashExport,
-    parsedPolkadotExport: slice.parsedPolkadotExport,
     parsedCosmosExport: slice.parsedCosmosExport,
-    hotWalletMnemonic: slice.hotWalletMnemonic,
     walletLabel: slice.walletLabel,
     errorMessage: slice.errorMessage,
     walletImport,

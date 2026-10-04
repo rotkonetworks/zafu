@@ -105,7 +105,7 @@ export default ({
 
   const keysPackage = path.dirname(require.resolve('@penumbra-zone/keys'));
   // Resolve wasm package via a known export, then go up to package root
-  const wasmPackage = path.dirname(path.dirname(require.resolve('@rotko/penumbra-wasm/build')));
+  const wasmPackage = path.dirname(path.dirname(require.resolve('@penumbrafi/wasm/build')));
 
   const localPackages = [
     ...Object.values(rootPackageJson.dependencies),
@@ -274,11 +274,11 @@ export default ({
       'keplr-bridge': path.join(injectDir, 'keplr-bridge.ts'),
       'passkey-bridge': path.join(injectDir, 'passkey-bridge.ts'),
       'passkey-intercept': path.join(injectDir, 'passkey-intercept.ts'),
-      'zcash-links': path.join(injectDir, 'zcash-links.ts'),
+      links: path.join(injectDir, 'links.ts'),
       'offscreen-handler': path.join(entryDir, 'offscreen-handler.ts'),
       'page-root': path.join(entryDir, 'page-root.tsx'),
       'popup-root': path.join(entryDir, 'popup-root.tsx'),
-      zitadel: path.join(srcDir, 'zitadel', 'main.tsx'),
+      'buy-root': path.join(entryDir, 'buy-root.tsx'),
       // network workers (isolated sync per network)
       'workers/zcash-worker': path.join(workersDir, 'zcash-worker.ts'),
       // UR fountain decode worker — off-threads ur_decode_frames from the popup
@@ -299,7 +299,7 @@ export default ({
             'keplr-bridge',
             'passkey-bridge',
             'passkey-intercept',
-            'zcash-links',
+            'links',
             'workers/zcash-worker',
             'workers/ur-decode-worker',
           ];
@@ -333,6 +333,20 @@ export default ({
             filename: 'videos/[hash][ext][query]',
           },
         },
+        {
+          // bundled registry/skip/chain and swap icons: shipped in the build,
+          // never fetched at runtime (shared/components/registry-icons.ts,
+          // state/swap/icons.ts)
+          test: /\.(png|svg)$/,
+          include: [
+            path.resolve(__dirname, 'src/assets/registry-icons'),
+            path.resolve(__dirname, 'src/assets/swap-icons'),
+          ],
+          type: 'asset/resource',
+          generator: {
+            filename: 'icons/[hash][ext]',
+          },
+        },
       ],
     },
     resolve: {
@@ -340,9 +354,9 @@ export default ({
       alias: {
         '@ui': path.resolve(__dirname, '../../packages/ui'),
         // Redirect @penumbra-zone packages to @rotko equivalents (async API)
-        '@penumbra-zone/types': '@rotko/penumbra-types',
-        '@penumbra-zone/wasm': '@rotko/penumbra-wasm',
-        '@penumbra-zone/services': '@rotko/penumbra-services',
+        '@penumbra-zone/types': '@penumbrafi/types',
+        '@penumbra-zone/wasm': '@penumbrafi/wasm',
+        '@penumbra-zone/services': '@penumbrafi/services',
         // protobufjs ships an `inquire()` helper that uses eval() to
         // optionally load long.js. MV3 CSP blocks all eval. Stub it.
         '@protobufjs/inquire': path.resolve(__dirname, 'src/stubs/protobufjs-inquire.cjs'),
@@ -368,8 +382,8 @@ export default ({
             to: 'keys/[name][ext]',
           },
           {
-            from: path.join(wasmPackage, 'wasm-parallel'),
-            to: 'wasm-parallel',
+            from: path.join(wasmPackage, 'wasm'),
+            to: 'wasm',
           },
           // zcash-wasm: public/zafu-wasm/ serves BOTH the scanning worker and
           // the offscreen prover (one parallel build, one path) — copied via
@@ -405,10 +419,10 @@ export default ({
         chunks: ['popup-root'],
       }),
       new HtmlWebpackPlugin({
-        title: 'zitadel',
-        template: 'zitadel.html',
-        filename: 'zitadel.html',
-        chunks: ['zitadel'],
+        title: 'buy zec · zafu',
+        template: 'react-root.html',
+        filename: 'buy.html',
+        chunks: ['buy-root'],
       }),
       new HtmlWebpackPlugin({
         title: 'Zafu Offscreen',
@@ -545,9 +559,9 @@ export default ({
       extensions: ['.ts', '.tsx', '.js'],
       alias: {
         // Redirect @penumbra-zone packages to @rotko equivalents (async API)
-        '@penumbra-zone/types': '@rotko/penumbra-types',
-        '@penumbra-zone/wasm': '@rotko/penumbra-wasm',
-        '@penumbra-zone/services': '@rotko/penumbra-services',
+        '@penumbra-zone/types': '@penumbrafi/types',
+        '@penumbra-zone/wasm': '@penumbrafi/wasm',
+        '@penumbra-zone/services': '@penumbrafi/services',
         '@protobufjs/inquire': path.resolve(__dirname, 'src/stubs/protobufjs-inquire.cjs'),
       },
       // Mirror the browser config: the service worker now pulls the cosmos

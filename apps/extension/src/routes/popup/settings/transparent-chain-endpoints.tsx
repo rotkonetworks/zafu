@@ -1,167 +1,83 @@
 /**
- * One transparent chain's editable RPC endpoint pool, as a collapsible row (the
- * way Keplr lists chains): the header says how many endpoints are in use and
- * whether they are the shipped defaults; expanding it edits the list.
- *
+ * One transparent chain's editable RPC node pool, in a Sheet. Opened from the
+ * chain's row in settings > networks > penumbra > ibc chains (with the chain's
+ * own switch as children) and from the penumbra home's "use another node".
  * Deposit-address lookups rotate across the pool per address, so no single
- * provider can link all of a user's addresses. Defaults come from the chain
- * config (packages/wallet cosmos chains), which includes the endpoint Keplr's
- * chain registry lists for the chain.
- *
- * The Penumbra networks panel also passes whether the chain has a live IBC
- * channel to Penumbra, and the allow/block controls for its shipped hosts as
- * children, so each chain is one row instead of appearing in two lists.
+ * provider can link all of a user's addresses. An empty pool falls back to
+ * the shipped defaults from the chain config.
  */
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
-import { cn } from '@repo/ui/lib/utils';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
-import { defaultRpcPool, useRpcPool } from '../../../hooks/transparent-rpc';
+import { Input } from '@repo/ui/components/ui/input';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { useRpcPool } from '../../../hooks/transparent-rpc';
 
-/** "channel open" / "no channel" tag; nothing while the channel list loads. */
-export const ChannelTag = ({ open }: { open?: boolean }) =>
-  open === undefined ? null : (
-    <span
-      className={cn(
-        'flex items-center gap-1 text-label lowercase',
-        open ? 'text-fg-muted' : 'text-fg-dim',
-      )}
-    >
-      <span className={cn('h-1.5 w-1.5 rounded-full', open ? 'bg-green-400' : 'bg-fg-dim')} />
-      {open ? 'channel open' : 'no channel'}
-    </span>
-  );
+const clean = (list: string[]) => list.map(s => s.trim()).filter(Boolean);
 
-export const TransparentChainEndpoints = ({
+export const RpcPoolSheet = ({
   chainId,
-  channelOpen,
+  open,
+  onOpenChange,
   children,
 }: {
   chainId: CosmosChainId;
-  /** live IBC channel to Penumbra; undefined while unknown */
-  channelOpen?: boolean;
-  /** extra controls at the bottom of the expanded row */
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** the chain's own controls, above its nodes */
   children?: ReactNode;
 }) => {
-  const config = COSMOS_CHAINS[chainId];
   const { pool, isCustom, save, reset } = useRpcPool(chainId);
-  const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<string[]>(pool);
-  const [saved, setSaved] = useState(false);
 
-  // sync the draft when the persisted pool loads/changes (but not mid-edit)
+  // the persisted pool loads from storage after mount, and changes on save or reset
   useEffect(() => {
     setDraft(pool);
   }, [pool]);
 
-  const setAt = (i: number, v: string) => setDraft(d => d.map((u, j) => (j === i ? v : u)));
-  const removeAt = (i: number) => setDraft(d => d.filter((_, j) => j !== i));
-  const add = () => setDraft(d => [...d, '']);
-
-  const dirty = JSON.stringify(draft.map(s => s.trim()).filter(Boolean)) !== JSON.stringify(pool);
-
-  const onSave = async () => {
-    await save(draft);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
-  };
+  const dirty = JSON.stringify(clean(draft)) !== JSON.stringify(pool);
 
   return (
-    <div className='border border-border-soft'>
-      <button
-        type='button'
-        onClick={() => setOpen(o => !o)}
-        aria-expanded={open}
-        className='flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-elev-1'
-      >
-        <span className='flex-1 text-xs text-fg lowercase'>{config.name}</span>
-        <ChannelTag open={channelOpen} />
-        {channelOpen !== undefined && <span className='text-label text-fg-dim'>·</span>}
-        <span className='text-label text-fg-muted lowercase tabular'>
-          {pool.length} {pool.length === 1 ? 'endpoint' : 'endpoints'}
-          {isCustom && ' · custom'}
-        </span>
-        <span
-          className={cn(
-            'i-ph-caret-down h-3.5 w-3.5 text-fg-muted transition-transform',
-            open && 'rotate-180',
-          )}
-        />
-      </button>
-
-      {config.deprecation && (
-        <div className='px-3 pb-2 text-label text-fg-dim lowercase'>
-          {config.deprecation.reason} move funds out by {config.deprecation.moveOutBy}.
-        </div>
-      )}
-
-      {open && (
-        <div
-          className='flex flex-col gap-2 border-t border-border-soft px-3 py-2'
-          title='deposit-address lookups rotate across these endpoints, so no single provider can link all of your addresses. add your own for more separation.'
-        >
-          <div className='flex flex-col gap-1.5'>
-            {draft.map((url, i) => (
-              <div key={i} className='flex items-center gap-1.5'>
-                <input
-                  type='text'
-                  value={url}
-                  onChange={e => setAt(i, e.target.value)}
-                  placeholder='https://...'
-                  className='min-w-0 flex-1 rounded-md border border-border-soft bg-input px-2.5 py-1.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
-                />
-                <button
-                  type='button'
-                  onClick={() => removeAt(i)}
-                  className='shrink-0 text-fg-muted transition-colors hover:text-hanko'
-                  title='remove endpoint'
-                >
-                  <span className='i-ph-x h-3.5 w-3.5' />
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <div className='flex items-center gap-3'>
-            <button
-              type='button'
-              onClick={add}
-              className='flex items-center gap-1 text-label text-network-accent transition-colors hover:text-fg-high lowercase'
-            >
-              <span className='i-ph-plus h-3 w-3' /> add endpoint
-            </button>
-            {isCustom && (
-              <button
-                type='button'
-                onClick={() => void reset()}
-                className='text-label text-fg-muted transition-colors hover:text-fg-high lowercase'
-                title='revert to the shipped defaults'
-              >
-                reset
-              </button>
-            )}
-            <div className='flex-1' />
+    <Sheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title={getCosmosChain(chainId).name.toLowerCase()}
+    >
+      {children}
+      <div className='-mx-4 flex min-h-0 flex-col gap-1.5 overflow-y-auto px-4'>
+        {draft.map((url, i) => (
+          <div key={i} className='flex items-center gap-1.5'>
+            <Input
+              value={url}
+              onChange={e => setDraft(d => d.map((u, j) => (j === i ? e.target.value : u)))}
+              placeholder='https://...'
+              className='font-mono text-xs'
+            />
             <Button
-              variant='gradient'
-              size='md'
-              onClick={() => void onSave()}
-              disabled={!dirty}
-              className={cn('text-xs', saved && 'opacity-70')}
+              variant='quiet'
+              className='w-12 shrink-0 px-0'
+              aria-label='remove this node'
+              onClick={() => setDraft(d => d.filter((_, j) => j !== i))}
             >
-              {saved ? 'saved' : 'save'}
+              <span className='i-lucide-x size-4' />
             </Button>
           </div>
-
-          {draft.filter(s => s.trim()).length === 0 && (
-            <p className='text-label text-fg-dim lowercase'>
-              empty - saving reverts to the {defaultRpcPool(chainId).length} shipped defaults.
-            </p>
-          )}
-
-          {children && <div className='border-t border-border-soft pt-2'>{children}</div>}
-        </div>
-      )}
-    </div>
+        ))}
+      </div>
+      <div className='flex shrink-0 gap-2'>
+        <Button variant='quiet' size='sm' onClick={() => setDraft(d => [...d, ''])}>
+          add a node
+        </Button>
+        {isCustom && (
+          <Button variant='quiet' size='sm' onClick={() => void reset()}>
+            use the shipped nodes
+          </Button>
+        )}
+      </div>
+      <Button className='shrink-0' disabled={!dirty} onClick={() => void save(draft)}>
+        save
+      </Button>
+    </Sheet>
   );
 };

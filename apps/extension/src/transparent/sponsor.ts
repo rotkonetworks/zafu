@@ -6,7 +6,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { conduitFor, type TxKind } from '@repo/wallet/networks/transparent/conduit';
 import { holdsSponsorStable } from '@repo/wallet/networks/injective/feegrant';
 
@@ -27,7 +27,7 @@ export function useGasSponsor(
   kind: TxKind,
   balances: readonly { denom: string; amount: bigint }[] | undefined,
 ): GasState {
-  const cfg = COSMOS_CHAINS[chainId];
+  const cfg = getCosmosChain(chainId);
   const gasAsset = cfg.gasAsset ?? { symbol: cfg.symbol, denom: cfg.denom, decimals: cfg.decimals };
   const { amount: fee, gas: gasLimit } = conduitFor(chainId).feeFor(kind);
   const gasBal =

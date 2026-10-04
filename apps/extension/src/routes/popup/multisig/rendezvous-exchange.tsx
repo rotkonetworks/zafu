@@ -1,19 +1,21 @@
 /**
- * rendezvous-exchange — the human-code alternative to pasting relay keys.
+ * rendezvous-exchange - the human-code alternative to pasting relay keys.
  *
  * Default flow on relays that serve /rendezvous/* (zidecar does): the
  * coordinator shows a short room code (a number + two words), co-signers type
  * exchange plus session-id handoff happens through the rendezvous room.
  * The coordinator still sees every joined key and nothing enters the frostd
- * session without their explicit "create" — the code is discovery, not
+ * session without their explicit "create" - the code is discovery, not
  * admission.
  *
  * The manual flow (paste relay keys, paste the session uuid) stays exactly
- * as it was, behind the "enter keys manually" toggle — and is forced when
+ * as it was, behind the "enter keys manually" toggle - and is forced when
  * the relay has no rendezvous.
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { CopyButton } from '@repo/ui/components/ui/copy-button';
+import { requestEgressOptIn } from '../../../net/egress-opt-in';
 import {
   announceSession,
   generateRoomCode,
@@ -31,7 +33,7 @@ const POLL_MS = 1000;
  */
 export function RelayProbing(): React.JSX.Element {
   return (
-    <div className='flex items-center gap-2 rounded-lg border border-border-soft bg-elev-1 p-3 text-xs text-fg-muted'>
+    <div className='flex items-center gap-2 border border-border-soft bg-elev-1 p-3 text-xs text-fg-muted'>
       <span className='i-ph-circle-notch size-3.5 animate-spin' />
       checking the relay…
     </div>
@@ -47,6 +49,10 @@ export function useRendezvousAvailable(relayUrl: string): boolean | null {
   useEffect(() => {
     let cancelled = false;
     setAvailable(null);
+    // a plain probe, not a feature request: while the relay is off this
+    // resolves false (egress-blocked) and the screen settles into the
+    // manual flow. The actual ask happens at "create"/"join", where the
+    // user's intent is explicit.
     void hasRendezvous(relayUrl).then(ok => {
       if (!cancelled) {
         setAvailable(ok);
@@ -59,7 +65,7 @@ export function useRendezvousAvailable(relayUrl: string): boolean | null {
   return available;
 }
 
-/** first 8 hex of a relay key — enough to eyeball against a chat message */
+/** first 8 hex of a relay key - enough to eyeball against a chat message */
 const fingerprint = (pubkey: string) => pubkey.slice(0, 8);
 
 export interface HostRendezvous {
@@ -90,7 +96,6 @@ export function RendezvousHost({
   const [code, setCode] = useState('');
   const [peers, setPeers] = useState<string[]>([]);
   const [error, setError] = useState('');
-  const [copied, setCopied] = useState(false);
   const onStateRef = useRef(onState);
   onStateRef.current = onState;
 
@@ -100,6 +105,13 @@ export function RendezvousHost({
 
     void (async () => {
       try {
+        // opening a room is the moment of intent: ask for the relay before any request
+        if (!(await requestEgressOptIn('multisig-relay'))) {
+          if (!stopped) {
+            setError('a room code needs the multisig relay · please allow it to continue');
+          }
+          return;
+        }
         const myKey = await prepare();
         // regenerate on collision: a code someone already used comes back
         // without a creator token, and a room we don't own is not ours to run
@@ -155,25 +167,20 @@ export function RendezvousHost({
   }, []);
 
   return (
-    <div className='flex flex-col gap-3 rounded-lg border border-border-soft bg-elev-1 p-3'>
+    <div className='flex flex-col gap-3 border border-border-soft bg-elev-1 p-3'>
       <div>
-        <p className='text-xs text-fg-muted'>room code — send this to your co-signers</p>
+        <p className='text-xs text-fg-muted'>room code - send this to your co-signers</p>
         <div className='mt-1 flex items-center gap-2'>
-          <span className='flex-1 rounded bg-input px-2 py-1.5 font-mono text-sm'>
+          <span className='flex-1 bg-input px-2 py-1.5 font-mono text-sm'>
             {code === '' ? 'opening room…' : code}
           </span>
-          <button
-            type='button'
+          <CopyButton
+            text={code}
             disabled={code === ''}
-            className='shrink-0 rounded border border-border-soft px-2 py-1 text-xs disabled:opacity-40'
-            onClick={() => {
-              void navigator.clipboard.writeText(code);
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1500);
-            }}
-          >
-            {copied ? 'copied' : 'copy'}
-          </button>
+            variant='secondary'
+            size='sm'
+            label='copy'
+          />
         </div>
       </div>
 
@@ -189,7 +196,7 @@ export function RendezvousHost({
         ))}
         {peers.length >= maxSigners - 1 && (
           <p className='text-xs text-fg-muted'>
-            check the fingerprints with your co-signers before you create — whoever holds these keys
+            check the fingerprints with your co-signers before you create - whoever holds these keys
             becomes a signer
           </p>
         )}
@@ -236,6 +243,10 @@ export function RendezvousJoin({ relayUrl, prepare, onState }: JoinProps): React
       clearTimeout(timer);
     };
     try {
+      if (!(await requestEgressOptIn('multisig-relay'))) {
+        setError('a room code needs the multisig relay · please allow it to continue');
+        return;
+      }
       const myKey = await prepare();
       const roomId = await roomIdFromCode(code);
       await publishKey(relayUrl, roomId, myKey);
@@ -266,12 +277,12 @@ export function RendezvousJoin({ relayUrl, prepare, onState }: JoinProps): React
   };
 
   return (
-    <div className='flex flex-col gap-3 rounded-lg border border-border-soft bg-elev-1 p-3'>
+    <div className='flex flex-col gap-3 border border-border-soft bg-elev-1 p-3'>
       <label className='text-xs text-fg-muted'>
         room code from the wallet creator
         <div className='mt-1 flex gap-2'>
           <input
-            className='flex-1 rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-sm focus:border-primary/50 focus:outline-none'
+            className='flex-1 border border-border-soft bg-input px-3 py-2 font-mono text-sm focus:border-primary/50 focus:outline-none'
             value={code}
             onChange={e => setCode(e.target.value)}
             placeholder='7-word-word'
@@ -280,7 +291,7 @@ export function RendezvousJoin({ relayUrl, prepare, onState }: JoinProps): React
           />
           <button
             type='button'
-            className='shrink-0 rounded border border-border-soft px-3 py-1 text-xs disabled:opacity-40'
+            className='shrink-0 border border-border-soft px-3 py-1 text-xs disabled:opacity-40'
             disabled={code.trim() === '' || connected}
             onClick={() => void connect()}
           >
@@ -296,7 +307,7 @@ export function RendezvousJoin({ relayUrl, prepare, onState }: JoinProps): React
           ) : (
             <>
               <span className='i-ph-circle-notch size-3.5 animate-spin' />
-              in the room with {peerCount} other signer(s) — waiting for the coordinator to start…
+              in the room with {peerCount} other signer(s) - waiting for the coordinator to start…
             </>
           )}
         </div>

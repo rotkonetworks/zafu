@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { Button } from '@repo/ui/components/ui/button';
 import { importBackup, readEnvelopeFromFile, type ImportSummary } from './import-helpers';
 import type { FrostBackupEnvelope } from '../../../../state/keyring/multisig-backup';
 
@@ -69,15 +70,15 @@ export const ImportModal = ({ open, onClose, onImported }: Props) => {
 
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4'>
-      <div className='w-full max-w-sm rounded-lg border border-border-soft bg-elev-1 p-4'>
-        <h2 className='text-lg font-medium'>restore multisig backup</h2>
+      <div className='w-full max-w-sm border border-border-soft bg-elev-1 p-4'>
+        <h2 className='text-lg'>restore multisig backup</h2>
 
         {!envelope ? (
           <>
             <p className='mt-1 text-label text-fg-muted'>
               Select an encrypted backup file (.json) you created earlier.
             </p>
-            <label className='mt-3 flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed border-border-soft bg-elev-2 px-4 py-6 hover:bg-elev-3 transition-colors'>
+            <label className='mt-3 flex cursor-pointer flex-col items-center gap-2 border border-dashed border-border-soft bg-elev-2 px-4 py-6 hover:bg-elev-3 transition-colors'>
               <span className='i-ph-file-arrow-up size-6 text-fg-muted' />
               <span className='text-xs text-fg-muted'>tap to choose backup file</span>
               <input
@@ -90,9 +91,9 @@ export const ImportModal = ({ open, onClose, onImported }: Props) => {
           </>
         ) : (
           <>
-            <div className='mt-3 rounded-lg border border-border-soft bg-elev-2 p-3 text-body'>
+            <div className='mt-3 border border-border-soft bg-elev-2 p-3 text-body'>
               <p className='kicker'>backup file</p>
-              <p className='mt-0.5 font-medium'>{envelope.label}</p>
+              <p className='mt-0.5'>{envelope.label}</p>
               {isBatch ? (
                 <p className='mt-0.5 text-label text-fg-muted'>
                   contains {envelope.shareCount ?? '?'} multisig wallet
@@ -116,34 +117,38 @@ export const ImportModal = ({ open, onClose, onImported }: Props) => {
                 autoComplete='off'
                 value={passphrase}
                 onChange={e => setPassphrase(e.target.value)}
-                className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-sm focus:border-primary/50 focus:outline-none'
+                className='mt-1 w-full border border-border-soft bg-input px-3 py-2 font-mono text-sm focus:border-primary/50 focus:outline-none'
               />
             </label>
           </>
         )}
 
         {error && (
-          <p className='mt-2 rounded-md border border-red-500/40 bg-red-500/5 p-2 text-body text-red-400'>
+          <p className='mt-2 border border-red-500/40 bg-red-500/5 p-2 text-body text-red-400'>
             {error}
           </p>
         )}
 
         <div className='mt-4 flex gap-2'>
-          <button
+          <Button
+            variant='secondary'
+            size='sm'
             disabled={working}
             onClick={onClose}
-            className='flex-1 rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-2 transition-colors disabled:opacity-50'
+            className='flex-1'
           >
             cancel
-          </button>
+          </Button>
           {envelope && (
-            <button
+            <Button
+              variant='primary'
+              size='sm'
               disabled={passphrase.length === 0 || working}
               onClick={() => void handleImport()}
-              className='flex-1 rounded-lg border border-primary/40 bg-primary/5 py-2 text-xs text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
+              className='flex-1'
             >
               {working ? 'restoring...' : 'restore'}
-            </button>
+            </Button>
           )}
         </div>
       </div>

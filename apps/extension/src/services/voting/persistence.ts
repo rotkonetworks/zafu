@@ -1,14 +1,15 @@
 /**
- * voting persistence — encrypted hotkey and delegation state storage
+ * voting persistence - encrypted hotkey and delegation state storage
  *
  * stores per-round voting hotkeys and delegation state blobs in encrypted
  * local storage, using the same seal/unseal pattern as FROST multisig secrets.
- * the voting hotkey is a hot app-owned secret (64-byte random) — treated with
+ * the voting hotkey is a hot app-owned secret (64-byte random) - treated with
  * the same security as ephemeralSeed/keyPackage.
  */
 
 import { Key } from '@repo/encryption/key';
 import { Box } from '@repo/encryption/box';
+import { keyUse } from '../../state/keyring-lock';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { SessionStorageState } from '@repo/storage-chrome/session';
@@ -65,7 +66,7 @@ const storageKey = (walletId: string, roundId: string): string => {
  * Encrypts the hotkey secret with the session key, stores plaintext pubkey.
  * The hotkey secret is NEVER stored unencrypted.
  */
-export const saveVotingHotkey = async (
+const saveVotingHotkeyUnlocked = async (
   local: ExtensionStorage<LocalStorageState>,
   session: ExtensionStorage<SessionStorageState>,
   walletId: string,
@@ -75,7 +76,7 @@ export const saveVotingHotkey = async (
 ): Promise<void> => {
   const sessionKeyJson = await session.get('passwordKey');
   if (!sessionKeyJson) {
-    throw new Error('keyring locked — cannot save voting hotkey');
+    throw new Error('keyring locked - cannot save voting hotkey');
   }
 
   const key = await Key.fromJson(sessionKeyJson);
@@ -105,10 +106,10 @@ export const saveVotingHotkey = async (
 
 /**
  * Update (or create) the delegation state blob for a round.
- * The blob is treated as opaque JSON produced by wasm — stored verbatim.
+ * The blob is treated as opaque JSON produced by wasm - stored verbatim.
  * If the hotkey hasn't been saved yet, this will be deferred when hotkey is saved.
  */
-export const saveDelegationState = async (
+const saveDelegationStateUnlocked = async (
   local: ExtensionStorage<LocalStorageState>,
   session: ExtensionStorage<SessionStorageState>,
   walletId: string,
@@ -117,7 +118,7 @@ export const saveDelegationState = async (
 ): Promise<void> => {
   const sessionKeyJson = await session.get('passwordKey');
   if (!sessionKeyJson) {
-    throw new Error('keyring locked — cannot save delegation state');
+    throw new Error('keyring locked - cannot save delegation state');
   }
 
   const storage = await getVotingStorage(local);
@@ -154,7 +155,7 @@ export const saveDelegationState = async (
  * Load a voting round record, decrypting both hotkey secret and delegation state.
  * Returns null if the record doesn't exist.
  */
-export const loadVotingRoundRecord = async (
+const loadVotingRoundRecordUnlocked = async (
   local: ExtensionStorage<LocalStorageState>,
   session: ExtensionStorage<SessionStorageState>,
   walletId: string,
@@ -162,7 +163,7 @@ export const loadVotingRoundRecord = async (
 ): Promise<VotingRoundRecord | null> => {
   const sessionKeyJson = await session.get('passwordKey');
   if (!sessionKeyJson) {
-    throw new Error('keyring locked — cannot load voting round');
+    throw new Error('keyring locked - cannot load voting round');
   }
 
   const key = await Key.fromJson(sessionKeyJson);
@@ -257,3 +258,11 @@ export const purgeVotingRound = async (
   delete storage[key_str];
   await setVotingStorage(local, storage);
 };
+
+// each seals or opens with the session key: key users (state/keyring-lock)
+export const saveVotingHotkey: typeof saveVotingHotkeyUnlocked = (...a) =>
+  keyUse(() => saveVotingHotkeyUnlocked(...a));
+export const saveDelegationState: typeof saveDelegationStateUnlocked = (...a) =>
+  keyUse(() => saveDelegationStateUnlocked(...a));
+export const loadVotingRoundRecord: typeof loadVotingRoundRecordUnlocked = (...a) =>
+  keyUse(() => loadVotingRoundRecordUnlocked(...a));

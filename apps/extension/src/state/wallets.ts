@@ -2,11 +2,12 @@ import { Key } from '@repo/encryption/key';
 import { Box, type BoxJson } from '@repo/encryption/box';
 import { Wallet, type WalletJson } from '@repo/wallet';
 // Dynamic import to avoid bundling WASM into initial chunks
-// import { generateSpendKey, getFullViewingKey, getWalletId } from '@rotko/penumbra-wasm/keys';
+// import { generateSpendKey, getFullViewingKey, getWalletId } from '@penumbrafi/wasm/keys';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { SessionStorageState } from '@repo/storage-chrome/session';
 import { AllSlices, SliceCreator } from '.';
+import { keyUse } from './keyring-lock';
 import type { Contact } from './contacts';
 
 /** Zcash wallet stored in extension */
@@ -24,7 +25,7 @@ export interface ZcashWalletJson {
   transparentAddress?: string;
   /** vault ID this wallet belongs to */
   vaultId: string;
-  /** FROST multisig fields — present only for multisig wallets */
+  /** FROST multisig fields - present only for multisig wallets */
   multisig?: {
     /** hex-encoded FROST public key package (shared, non-sensitive) */
     publicKeyPackage: string;
@@ -37,9 +38,9 @@ export interface ZcashWalletJson {
     /** where the FROST share lives. undefined / 'self' = encrypted on zafu;
      * 'airgapSigner' = on a zigner device only, signing requires QR round-trip */
     custody?: 'self' | 'airgapSigner';
-    /** FROST key package — present only for self-custody wallets */
+    /** FROST key package - present only for self-custody wallets */
     keyPackage?: BoxJson | string;
-    /** ephemeral seed — present only for self-custody wallets */
+    /** ephemeral seed - present only for self-custody wallets */
     ephemeralSeed?: BoxJson | string;
     /** zigner-side wallet_id from frost_store_wallet (airgapSigner only).
      *  enables O(1) lookup at sign time vs scanning all FROST wallets. */
@@ -53,6 +54,8 @@ export interface ZcashWalletJson {
     relayCeremonyId?: string;
     /** hide from main wallet UI (app-driven multisigs e.g. poker); sign-time lookup still works */
     hidden?: boolean;
+    /** when this seat's share was last exported to an encrypted backup file */
+    backedUpAt?: number;
   };
 }
 
@@ -66,10 +69,10 @@ export interface WalletsSlice {
   /** Index of the currently active Zcash wallet */
   activeZcashIndex: number;
   addWallet: (toAdd: { label: string; seedPhrase: string[] }) => Promise<void>;
-  /** Update a multisig wallet's mutable fields (label, relayUrl) */
+  /** Update a multisig wallet's mutable fields (label, relayUrl, backedUpAt) */
   updateMultisigWallet: (
     id: string,
-    updates: { label?: string; relayUrl?: string },
+    updates: { label?: string; relayUrl?: string; backedUpAt?: number },
   ) => Promise<void>;
   /** Remove a wallet by index. Cannot remove the last remaining wallet. */
   removeWallet: (index: number) => Promise<void>;
@@ -88,7 +91,7 @@ export const createWalletsSlice =
     local: ExtensionStorage<LocalStorageState>,
   ): SliceCreator<WalletsSlice> =>
   (set, get) => {
-    return {
+    const slice: WalletsSlice = {
       all: [],
       zcashWallets: [],
       activeIndex: 0,
@@ -96,7 +99,7 @@ export const createWalletsSlice =
       addWallet: async ({ label, seedPhrase }) => {
         // Dynamic import to avoid bundling WASM into initial chunks (service worker)
         const { generateSpendKey, getFullViewingKey, getWalletId } =
-          await import('@rotko/penumbra-wasm/keys');
+          await import('@penumbrafi/wasm/keys');
 
         const seedPhraseStr = seedPhrase.join(' ');
         const spendKey = await generateSpendKey(seedPhraseStr);
@@ -170,6 +173,9 @@ export const createWalletsSlice =
           }
           if (updates.relayUrl !== undefined && w.multisig) {
             w.multisig.relayUrl = updates.relayUrl;
+          }
+          if (updates.backedUpAt !== undefined && w.multisig) {
+            w.multisig.backedUpAt = updates.backedUpAt;
           }
         });
 
@@ -290,6 +296,11 @@ export const createWalletsSlice =
         return phrase.split(' ');
       },
     };
+    // both seal or open a seed with the session key: key users (state/keyring-lock)
+    const { addWallet, getSeedPhrase } = slice;
+    slice.addWallet = a => keyUse(() => addWallet(a));
+    slice.getSeedPhrase = () => keyUse(getSeedPhrase);
+    return slice;
   };
 
 /** coarse selector - use sparingly */
@@ -305,6 +316,16 @@ export const selectActiveZcashWallet = (state: AllSlices) => {
   const { zcashWallets, activeZcashIndex } = state.wallets;
   return zcashWallets[activeZcashIndex];
 };
+/**
+ * Whether the active zcash wallet's keys are mainnet-shaped. The one place
+ * this is asked: history, receive and the zcash home screen each used to
+ * derive it their own way (a wallet flag here, a zidecar-url substring
+ * check there) - harmless while they agreed, but nothing would have caught
+ * it if one drifted and a preload warmed the wrong key. Defaults to mainnet
+ * when there is no active wallet yet (matches every prior call site).
+ */
+export const selectZcashIsMainnet = (state: AllSlices): boolean =>
+  selectActiveZcashWallet(state)?.mainnet ?? true;
 /**
  * The user's own zcash accounts, shaped as read-only `Contact`s so they can be
  * offered as send recipients (e.g. move Ledger-transparent ZEC into your own
@@ -336,13 +357,13 @@ export const selectMultisigWallets = (state: AllSlices) => {
   const wallets = Array.isArray(state.wallets.zcashWallets) ? state.wallets.zcashWallets : [];
   return wallets.filter(w => w.multisig);
 };
-/** like selectMultisigWallets but drops hidden=true — use for user-facing lists, NOT backup/dedupe */
+/** like selectMultisigWallets but drops hidden=true - use for user-facing lists, NOT backup/dedupe */
 export const selectVisibleMultisigWallets = (state: AllSlices) => {
   const wallets = Array.isArray(state.wallets.zcashWallets) ? state.wallets.zcashWallets : [];
   return wallets.filter(w => w.multisig && !w.multisig.hidden);
 };
 /** app-managed tables = multisig AND hidden (the poker tables the dedicated manager owns). Feed for
- *  the manager's TableView only — NOT for backup/dedupe (that needs the unfiltered set). */
+ *  the manager's TableView only - NOT for backup/dedupe (that needs the unfiltered set). */
 export const selectAppManagedMultisigWallets = (state: AllSlices) => {
   const wallets = Array.isArray(state.wallets.zcashWallets) ? state.wallets.zcashWallets : [];
   return wallets.filter(w => w.multisig && w.multisig.hidden);

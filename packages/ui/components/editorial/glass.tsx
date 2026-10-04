@@ -2,7 +2,7 @@ import { HTMLAttributes, ReactNode, CSSProperties } from 'react';
 import { cn } from '../../lib/utils';
 
 /**
- * The Zafu "glass" primitive — a very dark, slightly cool translucent panel
+ * The Zafu "glass" primitive - a very dark, slightly cool translucent panel
  * with a 1px gold-tinted rim on top and a thin inner highlight. Never frosty
  * white: the canvas (#000) must still feel black behind it.
  *
@@ -11,8 +11,7 @@ import { cn } from '../../lib/utils';
  * (optionally) rebinds `--glass-accent` on a per-instance basis.
  *
  * Canonical use: approval sheets, modals, signed-payload surfaces. The rim
- * colour (gold by default) can be rebound per-chain by passing `accent` —
- * typically `"var(--network-accent)"` or an rgba() literal.
+ * colour (gold by default) can be rebound per-chain by passing `accent` - * typically `"var(--network-accent)"` or an rgba() literal.
  */
 export interface GlassProps extends HTMLAttributes<HTMLDivElement> {
   children?: ReactNode;

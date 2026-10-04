@@ -2,11 +2,14 @@
   "manifest_version": 3,
   "name": "zafu wallet",
   "short_name": "zafu",
-  "version": "28.3.1",
-  "description": "Zcash + Penumbra privacy wallet. Cold signing, FROST multisig, client-side proving, ed25519 app identity, verified lightclient.",
+  "version": "29.0.0",
+  "description": "shielded signing. Zcash + Penumbra privacy wallet with cold signing, FROST multisig, client-side proving, ed25519 app identity.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqh6vHXkwEKpgW8bpgfPLpIfMKX7pLH7Jmefpr/8YfvsPN79tJtvujMtxo/gy2y3Sg7QcnT+hK5iycsgdSYzj/yvnL8W1eDQ1N0jFsI/o++S6iG/CLWHkbICA2fEwhKe9rA2C9O7FWBSlfIuBD6lrXEuhnTEuykmgH67mIyAQnx88pe0Sn0ZQLmpPw58bmf07iRNfZzTZ+Oy1B98Eu5GUNbiExtxM/HM96eIxzxsP0imXi8VF9o2XDNnUmQWoWouVKEkBZ4wY3ZJ3HR2S9Psrkx4JFoNsvGTQLYVrzHAbosRiQcySn8a0vYxDTnQRenztxyN8BZC0VkTx9o5Ex5lHyQIDAQAB",
   "minimum_chrome_version": "119",
   "action": {},
+  "omnibox": {
+    "keyword": "zafu"
+  },
   "side_panel": {
     "default_path": "sidepanel.html"
   },
@@ -14,7 +17,7 @@
     "16": "favicon/icon16.png",
     "32": "favicon/icon32.png",
     "48": "favicon/icon48.png",
-    "128": "favicon/icon128.png"
+    "128": "favicon/icon128-emblem.png"
   },
   "content_scripts": [
     {
@@ -55,7 +58,7 @@
     },
     {
       "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://[::1]/*"],
-      "js": ["zcash-links.js"],
+      "js": ["links.js"],
       "run_at": "document_idle",
       "world": "ISOLATED"
     }
@@ -82,11 +85,28 @@
     "contextMenus",
     "proxy"
   ],
+  "optional_permissions": ["webRequest", "scripting"],
+  "optional_host_permissions": [
+    "https://app.revolut.com/*",
+    "https://wise.com/*",
+    "https://secure.chase.com/*",
+    "https://secure.bankofamerica.com/*",
+    "https://online.citi.com/*",
+    "https://web.monzo.com/*",
+    "https://internal-api.monzo.com/*",
+    "https://api.monzo.com/*"
+  ],
   "host_permissions": ["<all_urls>"],
   "externally_connectable": {
     "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://[::1]/*"]
   },
   "content_security_policy": {
-    "extension_pages": "object-src 'self'; script-src 'self' 'wasm-unsafe-eval'"
+    "extension_pages": "object-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:"
+  },
+  "cross_origin_opener_policy": {
+    "value": "same-origin"
+  },
+  "cross_origin_embedder_policy": {
+    "value": "require-corp"
   }
 }

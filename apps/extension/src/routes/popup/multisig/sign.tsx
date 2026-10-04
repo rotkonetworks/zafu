@@ -37,6 +37,8 @@ import { PopupPath } from '../paths';
 import { FrostAirgapJoinerSignFlow } from '../send/frost-multisig';
 import { Sensitive } from '../../../components/sensitive';
 import { DEFAULT_RELAY_URL } from './dkg-helpers';
+import { Button } from '@repo/ui/components/ui/button';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 
 type Step = 'input' | 'joining' | 'review' | 'signing' | 'complete' | 'error';
 
@@ -78,7 +80,7 @@ export const MultisigSign = () => {
   const relayRef = useRef<FrostdRelayClient | null>(null);
   const participantIdRef = useRef<Uint8Array | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  // the latched request — set exactly once per session, never mutated after.
+  // the latched request - set exactly once per session, never mutated after.
   const txRef = useRef<SignRequest | null>(null);
   // set if a second, different SIGN: lands after we latched. Poisons the
   // session: the user reviewed request #1, so request #2 has no consent.
@@ -167,7 +169,7 @@ export const MultisigSign = () => {
               pcztHex: signMatch[6],
             };
 
-            // Latch. A second SIGN: is not a "retry" — it is an attempt to
+            // Latch. A second SIGN: is not a "retry" - it is an attempt to
             // swap the tx out from under a review the user has already
             // started (classic case: land it while the password modal is up).
             //
@@ -183,7 +185,7 @@ export const MultisigSign = () => {
                   kind: 'refuse',
                   reasons: [
                     'the host published a SECOND, different transaction after you began reviewing this one',
-                    'this session is void — reject and re-join if you still intend to sign',
+                    'this session is void - reject and re-join if you still intend to sign',
                   ],
                 });
               }
@@ -197,8 +199,7 @@ export const MultisigSign = () => {
             setFeeZat(req.feeZat);
 
             // Verifier: derive output truth from the PCZT (recompute sighash +
-            // OVK-decrypt outputs). Anything that cannot be verified refuses —
-            // there is no "show it anyway and leave approve live" path, because
+            // OVK-decrypt outputs). Anything that cannot be verified refuses - // there is no "show it anyway and leave approve live" path, because
             // the host chooses whether we can verify. FROST multisig wallets
             // store the `uview1…` string in `orchardFvk` (DKG flows save it
             // there); single-key wallets store it in `ufvk`.
@@ -210,7 +211,7 @@ export const MultisigSign = () => {
               setVerdict({
                 kind: 'refuse',
                 reasons: [
-                  'host did not publish the PCZT bytes — everything shown here would be host-authored text bound to nothing',
+                  'host did not publish the PCZT bytes - everything shown here would be host-authored text bound to nothing',
                   'refusing to release a share against an unverifiable request',
                 ],
               });
@@ -281,7 +282,7 @@ export const MultisigSign = () => {
     // ── snapshot what the user is consenting to, BEFORE any await ──
     // `approved` is the request the verdict on screen was computed from. From
     // here on nothing reads txRef for signing purposes; only `approved` is
-    // signed. `verdict`/`acknowledged` are this render's values — i.e. exactly
+    // signed. `verdict`/`acknowledged` are this render's values - i.e. exactly
     // what was displayed when the button was clicked.
     const approved = txRef.current;
     if (!approved) {
@@ -302,7 +303,7 @@ export const MultisigSign = () => {
     if (supersededRef.current || txRef.current !== approved) {
       teardown();
       setError(
-        'the signing request changed while you were authenticating — nothing was signed. re-join to review the new request.',
+        'the signing request changed while you were authenticating - nothing was signed. re-join to review the new request.',
       );
       setStep('error');
       return;
@@ -348,7 +349,7 @@ export const MultisigSign = () => {
       // late swap harmless, but there is no reason to release shares into a
       // session we know has been tampered with.
       if (supersededRef.current || txRef.current !== approved) {
-        throw new Error('signing request changed mid-session — aborted before releasing any share');
+        throw new Error('signing request changed mid-session - aborted before releasing any share');
       }
 
       // split each peer's "c0|c1|..." into per-action lists.
@@ -409,9 +410,9 @@ export const MultisigSign = () => {
   if (!ms) {
     return (
       <SettingsScreen title='co-sign' backPath={PopupPath.MULTISIG}>
-        <div className='rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-400'>
+        <StatusSlot tone='danger'>
           no active multisig wallet - select a multisig wallet first
-        </div>
+        </StatusSlot>
       </SettingsScreen>
     );
   }
@@ -434,13 +435,13 @@ export const MultisigSign = () => {
   return (
     <SettingsScreen title='co-sign' backPath={PopupPath.MULTISIG}>
       {PasswordModal}
-      <div className='mb-4 rounded-lg border border-border-soft bg-elev-1 p-3'>
+      <div className='mb-4 border border-border-soft bg-elev-1 p-3'>
         <p className='text-label text-fg-muted'>signing as</p>
-        <p className='mt-0.5 text-sm font-medium truncate'>{activeWallet.label}</p>
+        <p className='mt-0.5 text-sm truncate'>{activeWallet.label}</p>
         <p className='text-label font-mono text-fg-muted truncate'>
           {activeWallet.address.slice(0, 16)}...{activeWallet.address.slice(-8)}
         </p>
-        <span className='mt-1 inline-block rounded-md bg-primary/10 px-2 py-0.5 text-label font-medium text-zigner-gold'>
+        <span className='mt-1 inline-block bg-primary/10 px-2 py-0.5 text-label text-zigner-gold'>
           {ms.threshold}/{ms.maxSigners}
         </span>
       </div>
@@ -450,7 +451,7 @@ export const MultisigSign = () => {
           <label className='text-xs text-fg-muted'>
             room code (or session id) from the coordinator
             <input
-              className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
+              className='mt-1 w-full border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
               value={roomCode}
               onChange={e => setRoomCode(e.target.value)}
               placeholder='four-words-like-these'
@@ -458,7 +459,7 @@ export const MultisigSign = () => {
             />
           </label>
           <button
-            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
+            className='w-full border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
             onClick={() => void handleJoin()}
             disabled={!roomCode.trim()}
           >
@@ -477,14 +478,12 @@ export const MultisigSign = () => {
 
       {step === 'review' && (
         <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3'>
-            <p className='text-label tracking-wider text-yellow-400'>review transaction</p>
-          </div>
+          <StatusSlot tone='warn'>review transaction</StatusSlot>
 
-          <div className='rounded-lg border border-border-soft bg-elev-1 p-3 flex flex-col gap-2.5'>
+          <div className='border border-border-soft bg-elev-1 p-3 flex flex-col gap-2.5'>
             <div>
               <p className='text-label tracking-wider text-fg-muted'>from</p>
-              <p className='mt-0.5 text-xs font-medium'>{activeWallet.label}</p>
+              <p className='mt-0.5 text-xs'>{activeWallet.label}</p>
               <p className='mt-0.5 break-all font-mono text-label text-fg-muted'>
                 {activeWallet.address}
               </p>
@@ -497,9 +496,7 @@ export const MultisigSign = () => {
             <div className='border-t border-border-soft' />
             <div className='flex items-baseline justify-between'>
               <span className='text-label tracking-wider text-fg-muted'>amount</span>
-              <Sensitive className='tabular text-sm font-medium'>
-                {formatZec(amountZat)} ZEC
-              </Sensitive>
+              <Sensitive className='tabular text-sm'>{formatZec(amountZat)} ZEC</Sensitive>
             </div>
             <div className='flex items-baseline justify-between'>
               <span className='text-label tracking-wider text-fg-muted'>fee (host claim)</span>
@@ -508,7 +505,7 @@ export const MultisigSign = () => {
               </Sensitive>
             </div>
             {/* The fee is the one number on this screen that is NOT derived
-                from the bytes — see assessClaimedFee(). Say so rather than
+                from the bytes - see assessClaimedFee(). Say so rather than
                 letting it sit next to verified fields looking equally solid. */}
             <p className='text-label text-fg-dim'>
               fee is reported by the host and cannot be checked against the transaction bytes
@@ -517,13 +514,13 @@ export const MultisigSign = () => {
 
           {/* verifier verdict */}
           {verdict.kind === 'pending' && (
-            <div className='rounded-lg border border-border-soft bg-elev-1 p-2.5 text-label text-fg-muted flex items-center gap-2'>
+            <div className='border border-border-soft bg-elev-1 p-2.5 text-label text-fg-muted flex items-center gap-2'>
               <span className='i-ph-circle-notch size-3 animate-spin' />
               verifying tx bytes match host claim…
             </div>
           )}
           {verdict.kind === 'match' && (
-            <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-2.5 text-label text-green-400 flex items-start gap-2'>
+            <div className='border border-green-500/40 bg-green-500/5 p-2.5 text-label text-green-400 flex items-start gap-2'>
               <span className='i-ph-shield-check size-3.5 mt-0.5 shrink-0' />
               <span>
                 recipient, amount and sighash verified against the transaction bytes
@@ -539,8 +536,8 @@ export const MultisigSign = () => {
             </div>
           )}
           {verdict.kind === 'refuse' && (
-            <div className='rounded-lg border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
-              <div className='flex items-center gap-2 text-body font-medium text-red-400'>
+            <div className='border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
+              <div className='flex items-center gap-2 text-body text-red-400'>
                 <span className='i-ph-shield-warning size-4' />
                 cannot verify - signing refused
               </div>
@@ -552,8 +549,8 @@ export const MultisigSign = () => {
             </div>
           )}
           {verdict.kind === 'mismatch' && (
-            <div className='rounded-lg border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
-              <div className='flex items-center gap-2 text-body font-medium text-red-400'>
+            <div className='border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
+              <div className='flex items-center gap-2 text-body text-red-400'>
                 <span className='i-ph-shield-warning size-4' />
                 mismatch - host claim disagrees with tx bytes
               </div>
@@ -563,7 +560,7 @@ export const MultisigSign = () => {
                 ))}
               </ul>
               {parsed && parsed.actions.some(a => a.decrypted && !a.is_change) && (
-                <div className='rounded border border-red-500/30 bg-red-500/5 p-2 text-label font-mono text-red-300/80'>
+                <div className='border border-red-500/30 bg-red-500/5 p-2 text-label font-mono text-red-300/80'>
                   <p className='text-label tracking-wider text-red-400/80 mb-1'>derived outputs</p>
                   {parsed.actions
                     .filter(a => a.decrypted && !a.is_change)
@@ -595,14 +592,14 @@ export const MultisigSign = () => {
           <div className='grid grid-cols-2 gap-2'>
             <button
               onClick={handleReject}
-              className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
+              className='border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
             >
               reject
             </button>
             <button
               onClick={() => void handleApprove()}
               disabled={!verdictAllowsSigning(verdict, acknowledged)}
-              className='rounded-lg border border-primary/40 bg-primary/5 py-2 text-xs text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
+              className='border border-primary/40 bg-primary/5 py-2 text-xs text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
             >
               {verdict.kind === 'mismatch' ? 'approve anyway' : 'approve & sign'}
             </button>
@@ -613,9 +610,9 @@ export const MultisigSign = () => {
       {step === 'signing' && (
         <div className='flex flex-col items-center gap-4'>
           {recipient && (
-            <div className='w-full rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3'>
+            <div className='w-full border border-yellow-500/40 bg-yellow-500/5 p-3'>
               <p className='text-label tracking-wider text-yellow-400'>signing</p>
-              <p className='mt-0.5 text-sm font-medium text-yellow-300'>
+              <p className='mt-0.5 text-sm text-yellow-300'>
                 <Sensitive>{formatZec(amountZat)} ZEC</Sensitive> →{' '}
                 <span className='font-mono text-label'>
                   {recipient.slice(0, 16)}…{recipient.slice(-6)}
@@ -632,26 +629,25 @@ export const MultisigSign = () => {
       )}
 
       {step === 'complete' && (
-        <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
+        <div className='border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
           signing shares sent - coordinator will broadcast the transaction
         </div>
       )}
 
       {step === 'error' && (
         <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-400'>
-            {error}
-          </div>
-          <button
+          <StatusSlot tone='danger'>{error}</StatusSlot>
+          <Button
+            variant='secondary'
+            className='w-full'
             onClick={() => {
               teardown();
               setStep('input');
               setError('');
             }}
-            className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >
             try again
-          </button>
+          </Button>
         </div>
       )}
     </SettingsScreen>
@@ -692,13 +688,13 @@ const AirgapJoinerWrapper = ({
   };
 
   const WalletCard = () => (
-    <div className='mb-4 rounded-lg border border-border-soft bg-elev-1 p-3'>
+    <div className='mb-4 border border-border-soft bg-elev-1 p-3'>
       <p className='text-label text-fg-muted'>signing as</p>
-      <p className='mt-0.5 text-sm font-medium truncate'>{walletLabel}</p>
+      <p className='mt-0.5 text-sm truncate'>{walletLabel}</p>
       <p className='text-label font-mono text-fg-muted truncate'>
         {walletAddress.slice(0, 16)}...{walletAddress.slice(-8)}
       </p>
-      <span className='mt-1 inline-block rounded-md bg-primary/10 px-2 py-0.5 text-label font-medium text-zigner-gold'>
+      <span className='mt-1 inline-block bg-primary/10 px-2 py-0.5 text-label text-zigner-gold'>
         {ms.threshold}/{ms.maxSigners} · airgap
       </span>
     </div>
@@ -709,12 +705,12 @@ const AirgapJoinerWrapper = ({
       return (
         <SettingsScreen title='co-sign' backPath={PopupPath.MULTISIG}>
           <div className='flex flex-col gap-3'>
-            <div className='rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-400'>
+            <div className='border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-400'>
               {error}
             </div>
             <button
               onClick={reset}
-              className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
+              className='border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
             >
               try again
             </button>
@@ -740,12 +736,12 @@ const AirgapJoinerWrapper = ({
       <SettingsScreen title='co-sign' backPath={PopupPath.MULTISIG}>
         <WalletCard />
         <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
+          <div className='border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
             signing shares sent - coordinator will broadcast the transaction
           </div>
           <button
             onClick={reset}
-            className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
+            className='border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >
             co-sign another
           </button>
@@ -761,7 +757,7 @@ const AirgapJoinerWrapper = ({
         <label className='text-xs text-fg-muted'>
           room code (or session id) from the coordinator
           <input
-            className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
+            className='mt-1 w-full border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
             value={room}
             onChange={e => setRoom(e.target.value)}
             placeholder='four-words-like-these'
@@ -769,7 +765,7 @@ const AirgapJoinerWrapper = ({
           />
         </label>
         <button
-          className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
+          className='w-full border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
           onClick={() => {
             void (async () => {
               try {

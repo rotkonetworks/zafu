@@ -1,7 +1,7 @@
 /**
  * zid  - seed-derived ed25519 signing identity
  *
- * a zid is a cross-network identity: not penumbra, not zcash — it's the
+ * a zid is a cross-network identity: not penumbra, not zcash - it's the
  * person behind the wallet. one seed -> named identities -> derived keypairs.
  *
  * derivation hierarchy:
@@ -16,17 +16,17 @@
  *
  * identities are named, not numbered. "poker" and "personal" derive
  * different subtrees. the name is a derivation path component, not a
- * secret — the mnemonic provides all entropy.
+ * secret - the mnemonic provides all entropy.
  *
- * identities are unlinkable — no one can tell identity["poker"] and
+ * identities are unlinkable - no one can tell identity["poker"] and
  * identity["personal"] came from the same seed.
  *
- * contacts are scoped to the identity — poker identity's contacts are
+ * contacts are scoped to the identity - poker identity's contacts are
  * completely separate from personal identity's contacts.
  *
  * cross-site key: links your activity across origins WITHIN one identity.
  * opt-in only, requires explicit confirmation. never displayed by default.
- * it does NOT link across identities — "poker" cross-site key cannot be
+ * it does NOT link across identities - "poker" cross-site key cannot be
  * correlated with "personal" cross-site key.
  *
  * limitations:
@@ -135,6 +135,7 @@ import { hmac } from '@noble/hashes/hmac';
 import { hkdf } from '@noble/hashes/hkdf';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { xwingPublicKeyFromSeed, XWING_LENGTHS } from '@zafu/pq';
+import { isPublicSuffix } from './public-suffix';
 
 /**
  * ZID domain separator - v2 uses two-stage KDF.
@@ -169,7 +170,7 @@ export interface Zid {
 
 /** a named identity persona */
 export interface ZidIdentity {
-  /** derivation name ("personal", "poker", "anon") — stable, part of key path */
+  /** derivation name ("personal", "poker", "anon") - stable, part of key path */
   name: string;
   /** user-facing label (can be renamed without changing keys) */
   label: string;
@@ -183,6 +184,12 @@ export interface ZidSitePreference {
   rotation: number;
   /** which identity name to use for this origin */
   identity: string;
+  /**
+   * "friends can find you here": this site may run private contact discovery
+   * (zafu_discover_contacts). Off unless the person turned it on for this
+   * site, on its sheet or by accepting the site's own request.
+   */
+  findFriends?: boolean;
 }
 
 /** format a public key as a zid address */
@@ -251,16 +258,6 @@ const deriveSeedForContact = (identity: Uint8Array, contactId: string): Uint8Arr
   deriveSeed(identity, enc.encode('contact:' + contactId));
 
 /**
- * derive the long-term contact key-agreement seed. ONE per identity, published
- * (its public half) in the contact card for non-interactive pairwise rendezvous
- * (contact discovery). the tag `contact-ka-v1` is suite-independent: the same
- * hash-derived seed feeds whichever KA suite the card declares. reserved future
- * tag `contact-ka-xwing-v1` if a hybrid ever needs a distinct seed.
- */
-const deriveSeedForContactKa = (identity: Uint8Array): Uint8Array =>
-  deriveSeed(identity, enc.encode('contact-ka-v1'));
-
-/**
  * derive the site-scoped X-Wing (X25519 + ML-KEM-768) seed. Domain-separated
  * from the ed25519 site key (tag 'xwing-site:' vs 'site:') so the two algorithms
  * never share key material. This is the recipient's post-quantum sealed-box key:
@@ -325,16 +322,6 @@ const keypairFromSeed = (seed: Uint8Array): { privateKey: Uint8Array; publicKey:
   return { privateKey, publicKey };
 };
 
-/** extract an X25519 keypair from seed (for contact key-agreement). zeroizes the seed. */
-const x25519KeypairFromSeed = (
-  seed: Uint8Array,
-): { privateKey: Uint8Array; publicKey: Uint8Array } => {
-  const privateKey = seed.slice(0, 32);
-  const publicKey = x25519.getPublicKey(privateKey);
-  seed.fill(0);
-  return { privateKey, publicKey };
-};
-
 /** extract P-256 keypair from seed (for WebAuthn/passkey compat). zeroizes the seed. */
 const p256KeypairFromSeed = (
   seed: Uint8Array,
@@ -368,7 +355,7 @@ export const DEFAULT_IDENTITY = 'default';
 
 /**
  * derive a site-specific zid for an origin under a named identity.
- * this is the DEFAULT mode — each site sees a unique key.
+ * this is the DEFAULT mode - each site sees a unique key.
  */
 export const deriveZidForSite = (
   mnemonic: string,
@@ -442,76 +429,25 @@ export const deriveZidCrossSite = (mnemonic: string, identity: string): Zid =>
   });
 
 // ========================================================================
-// CONTACT KEY-AGREEMENT (for private, non-interactive contact discovery)
+// CONTACT KEY-AGREEMENT (legacy card shape)
 // ========================================================================
 //
-// Everything downstream of the pairwise ROOT SECRET (rendezvous tags, epoch
-// rotation, the forward-secrecy ratchet, presence-blob AEAD) consumes the
-// secret as opaque bytes and is SUITE-BLIND. The suite matters only here, at
-// establishment. That is what makes the PQ migration a localized change:
-//
-//   - today  'x25519-v1' : a NIKE. static-static X25519 DH; both sides compute
-//                          the same secret from static keys, no wire ciphertext.
-//   - soon   'xwing-v1'  : X-Wing (X25519 + ML-KEM-768) hybrid, a KEM. asymmetric
-//                          encapsulate/decapsulate, so it DOES carry a ciphertext
-//                          established once at contact-add and cached. The cached
-//                          root secret is suite-agnostic bytes; tags never change.
-//
-// Callers MUST establish the root secret once (at contact-add) and cache it -
-// do NOT re-derive per tag, or the KEM suite can't slot in (a KEM is not a NIKE).
+// Cards used to carry ONE identity-wide discovery key (`ka`, tag
+// `contact-ka-v1`), the same in every card, so any two cards could be linked
+// to each other. Discovery now runs per relationship (see `discoverySecret`),
+// and new cards carry no `ka`. The stored shape below stays only because
+// contacts saved from an older card still hold it; nothing derives or reads
+// it for discovery any more.
 
-/** contact key-agreement suite id. carried in the contact card so a peer knows
- *  how to establish the pairwise secret. */
-export type ContactSuite = 'x25519-v1'; // future: | 'xwing-v1'
+/** contact key-agreement suite id an older card declared. */
+export type ContactSuite = 'x25519-v1';
 
-/** default (and currently only) contact KA suite. */
-export const CONTACT_SUITE_DEFAULT: ContactSuite = 'x25519-v1';
-
-/** the public half of a contact's key-agreement key, as it appears in the card. */
+/** the public half of an older card's discovery key, as a contact stores it. */
 export interface ContactCardKey {
   suite: ContactSuite;
-  /** hex. X25519 public key for 'x25519-v1'; the KEM encapsulation key for a hybrid. */
+  /** hex. X25519 public key. */
   publicKey: string;
 }
-
-/** derive THIS identity's contact-card key (public half only). goes in the card. */
-export const deriveZidContactCardKey = (
-  mnemonic: string,
-  identity: string,
-  suite: ContactSuite = CONTACT_SUITE_DEFAULT,
-): ContactCardKey =>
-  withIdentity(mnemonic, identity, id => {
-    if (suite !== 'x25519-v1') {
-      throw new Error(`unsupported contact suite: ${suite}`);
-    }
-    const { privateKey, publicKey } = x25519KeypairFromSeed(deriveSeedForContactKa(id));
-    privateKey.fill(0);
-    return { suite, publicKey: bytesToHex(publicKey) };
-  });
-
-/**
- * Establish the pairwise ROOT secret with a peer's contact card. This is the
- * ONLY suite-specific step; the caller caches the result and derives all
- * rendezvous tags from it (see packages/zid). Caller must zeroize the return.
- *
- * For 'x25519-v1' this is static-static X25519 DH (symmetric, no ciphertext).
- * A future KEM suite changes this signature to also return/consume a ciphertext,
- * but the cached secret's role is unchanged.
- */
-export const zidContactRootSecret = (
-  mnemonic: string,
-  identity: string,
-  peer: ContactCardKey,
-): Uint8Array =>
-  withIdentity(mnemonic, identity, id => {
-    if (peer.suite !== 'x25519-v1') {
-      throw new Error(`unsupported contact suite: ${peer.suite}`);
-    }
-    const { privateKey } = x25519KeypairFromSeed(deriveSeedForContactKa(id));
-    const shared = x25519.getSharedSecret(privateKey, hexToBytes(peer.publicKey));
-    privateKey.fill(0);
-    return shared; // 32 bytes; run HKDF (tag layer) then zeroize
-  });
 
 /**
  * derive the ring VRF seed for anonymous pro membership.
@@ -567,7 +503,7 @@ export const deriveHotWalletMnemonic = async (
 /**
  * derive a per-contact zid under a named identity.
  *
- * contacts are scoped to the identity — "poker" contacts are separate
+ * contacts are scoped to the identity - "poker" contacts are separate
  * from "personal" contacts. the same contactId under different identities
  * produces different keypairs.
  *
@@ -582,10 +518,19 @@ export const deriveZidForContact = (mnemonic: string, identity: string, contactI
   });
 
 /**
- * Global ZID rotation index. Mirrors the zcashShieldedIndex pattern -
- * a chrome.storage.local counter that lets the user rotate their entire
+ * ZID rotation index, per wallet. Mirrors the zcashShieldedIndex pattern -
+ * a chrome.storage.local counter that lets the user rotate a wallet's entire
  * ZID universe at once ("burn this identity, start over"). Per-site
- * rotation in ZidSitePreference still works on top of this global salt.
+ * rotation in ZidSitePreference still works on top of this salt.
+ *
+ * Scoped by walletId for the same reason the pins are: a generation is a
+ * derivation from ONE wallet's seed. A single global counter meant rotating
+ * wallet A silently moved wallet B to a new identity too.
+ *
+ * Callers that omit `walletId` get the selected vault - the one the
+ * background signing paths derive from. The bare 'zidIndex' key is the
+ * pre-scoping global value: a wallet with no scoped index yet inherits it, so
+ * nobody's presented identity changes on upgrade.
  *
  * Ring VRF seed (deriveRingVrfSeed) is intentionally NOT folded into
  * this rotation - the comment above explains why (subscriptions must
@@ -593,20 +538,40 @@ export const deriveZidForContact = (mnemonic: string, identity: string, contactI
  */
 export const ZID_INDEX_STORAGE_KEY = 'zidIndex';
 
-export async function getZidIndex(): Promise<number> {
-  const r = await chrome.storage.local.get(ZID_INDEX_STORAGE_KEY);
-  const v = r[ZID_INDEX_STORAGE_KEY];
-  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
+const zidIndexKey = (walletId: string): string => `${ZID_INDEX_STORAGE_KEY}:${walletId}`;
+
+async function selectedWalletId(): Promise<string> {
+  const r = await chrome.storage.local.get('selectedVaultId');
+  const v = r['selectedVaultId'];
+  return typeof v === 'string' ? v : '';
 }
 
-export async function setZidIndex(value: number): Promise<void> {
-  await chrome.storage.local.set({ [ZID_INDEX_STORAGE_KEY]: value });
+const validIndex = (v: unknown): v is number =>
+  typeof v === 'number' && Number.isFinite(v) && v >= 0;
+
+export async function getZidIndex(walletId?: string): Promise<number> {
+  const id = walletId ?? (await selectedWalletId());
+  const r = await chrome.storage.local.get(
+    id ? [zidIndexKey(id), ZID_INDEX_STORAGE_KEY] : [ZID_INDEX_STORAGE_KEY],
+  );
+  const scoped = id ? r[zidIndexKey(id)] : undefined;
+  if (validIndex(scoped)) {
+    return scoped;
+  }
+  const legacy = r[ZID_INDEX_STORAGE_KEY];
+  return validIndex(legacy) ? legacy : 0;
 }
 
-export async function rotateZidIndex(): Promise<number> {
-  const current = await getZidIndex();
+export async function setZidIndex(value: number, walletId?: string): Promise<void> {
+  const id = walletId ?? (await selectedWalletId());
+  await chrome.storage.local.set({ [id ? zidIndexKey(id) : ZID_INDEX_STORAGE_KEY]: value });
+}
+
+export async function rotateZidIndex(walletId?: string): Promise<number> {
+  const id = walletId ?? (await selectedWalletId());
+  const current = await getZidIndex(id);
   const next = current + 1;
-  await setZidIndex(next);
+  await setZidIndex(next, id);
   return next;
 }
 
@@ -618,10 +583,11 @@ export async function rotateZidIndex(): Promise<number> {
  * restores it exactly. This is what makes identity switching reversible
  * ("morph back") rather than a one-way burn.
  */
-export async function rotateZidIndexDown(): Promise<number> {
-  const current = await getZidIndex();
+export async function rotateZidIndexDown(walletId?: string): Promise<number> {
+  const id = walletId ?? (await selectedWalletId());
+  const current = await getZidIndex(id);
   const next = current > 0 ? current - 1 : 0;
-  await setZidIndex(next);
+  await setZidIndex(next, id);
   return next;
 }
 
@@ -668,7 +634,8 @@ export async function getZidPins(walletId: string): Promise<ZidPin[]> {
 export async function addZidPin(walletId: string, index: number, label: string): Promise<ZidPin[]> {
   const pins = await getZidPins(walletId);
   const next = pins.filter(p => p.index !== index);
-  next.push({ index, label: label.trim() || `gen ${index}` });
+  // blank stays blank: the screens name an unnamed identity, storage never invents one
+  next.push({ index, label: label.trim() });
   next.sort((a, b) => a.index - b.index);
   await chrome.storage.local.set({ [zidPinsKey(walletId)]: next });
   return next;
@@ -694,34 +661,51 @@ export function rotatedIdentity(baseIdentity: string, zidIndex: number): string 
 
 /** current rotated identity name for the login/share paths.
  * NOTE: multisig, license, and escrow identities deliberately do NOT use
- * this — those must stay pinned to their creation generation or funds and
+ * this - those must stay pinned to their creation generation or funds and
  * subscriptions would "rotate away". Only site login/share rotates. */
 export async function currentIdentityName(base: string = DEFAULT_IDENTITY): Promise<string> {
   return rotatedIdentity(base, await getZidIndex());
 }
 
-/** chrome.storage.local key: map of generation index -> zid public key hex.
- * Populated whenever a generation is actually derived, so display surfaces
- * can show the real key for the active generation without secret access. */
+/** chrome.storage.local key prefix: per wallet, a map of generation index ->
+ * zid public key hex. Populated whenever a generation is actually derived, so
+ * display surfaces can show the real key for the active generation without
+ * secret access.
+ *
+ * Scoped by walletId: the unscoped map mixed keys from every wallet's seed, so
+ * one wallet's display could show (and copy) another wallet's identity. The
+ * old unscoped map is ignored rather than migrated - it is only a cache, and
+ * nothing in it says which wallet a key came from. */
 export const ZID_GEN_KEYS_STORAGE_KEY = 'zidGenKeys';
 
-export async function getZidGenKeys(): Promise<Record<number, string>> {
-  const v = (await chrome.storage.local.get(ZID_GEN_KEYS_STORAGE_KEY))[ZID_GEN_KEYS_STORAGE_KEY] as
-    | Record<number, string>
-    | undefined;
+const zidGenKeysKey = (walletId: string): string => `${ZID_GEN_KEYS_STORAGE_KEY}:${walletId}`;
+
+export async function getZidGenKeys(walletId?: string): Promise<Record<number, string>> {
+  const id = walletId ?? (await selectedWalletId());
+  if (!id) {
+    return {};
+  }
+  const key = zidGenKeysKey(id);
+  const v = (await chrome.storage.local.get(key))[key] as Record<number, string> | undefined;
   return v ?? {};
 }
 
-/** derive the identity-level zid for a generation and record its public key */
+/** derive the identity-level zid for a generation and record its public key.
+ * `mnemonic` must be the seed of `walletId` (default: the selected vault). */
 export async function deriveAndCacheZidGeneration(
   mnemonic: string,
   zidIndex: number,
+  walletId?: string,
 ): Promise<string> {
   const zid = deriveZidCrossSite(mnemonic, rotatedIdentity(DEFAULT_IDENTITY, zidIndex));
-  const keys = await getZidGenKeys();
+  const id = walletId ?? (await selectedWalletId());
+  if (!id) {
+    return zid.publicKey;
+  }
+  const keys = await getZidGenKeys(id);
   if (keys[zidIndex] !== zid.publicKey) {
     keys[zidIndex] = zid.publicKey;
-    await chrome.storage.local.set({ [ZID_GEN_KEYS_STORAGE_KEY]: keys });
+    await chrome.storage.local.set({ [zidGenKeysKey(id)]: keys });
   }
   return zid.publicKey;
 }
@@ -781,7 +765,7 @@ export const signZid = (
 
 /**
  * derive a site-specific P-256 public key (for WebAuthn/passkey registration).
- * same origin scoping as ed25519 ZID — same rotation, same identity.
+ * same origin scoping as ed25519 ZID - same rotation, same identity.
  * returns uncompressed public key (65 bytes: 0x04 || x || y).
  */
 export const deriveP256ForSite = (
@@ -797,17 +781,18 @@ export const deriveP256ForSite = (
   });
 
 /**
- * sign a WebAuthn challenge with the P-256 key for an origin.
- * produces an ECDSA signature (DER-encoded) compatible with ES256.
- * used for sites that only support WebAuthn/passkeys.
+ * sign a challenge with the P-256 key for an origin: ES256, i.e. ECDSA over
+ * SHA-256(challenge), DER-encoded, low-S. Bound to the ZID generation like
+ * signZid, so burning a generation retires this key too.
  */
 export const signP256 = (
   mnemonic: string,
   origin: string,
   challenge: Uint8Array,
   pref?: ZidSitePreference,
+  zidIndex = 0,
 ): { signature: string; publicKey: string } => {
-  const identityName = pref?.identity ?? DEFAULT_IDENTITY;
+  const identityName = rotatedIdentity(pref?.identity ?? DEFAULT_IDENTITY, zidIndex);
   const root = deriveRoot(mnemonic);
   const identity = deriveIdentity(root, identityName);
   root.fill(0);
@@ -819,7 +804,9 @@ export const signP256 = (
   identity.fill(0);
 
   const { privateKey, publicKey } = p256KeypairFromSeed(seed);
-  const signature = p256.sign(challenge, privateKey);
+  // prehash: noble's default treats the input as a digest and keeps only its
+  // first 32 bytes, so a longer challenge was signed on its prefix alone
+  const signature = p256.sign(challenge, privateKey, { prehash: true, lowS: true });
 
   privateKey.fill(0);
 
@@ -830,7 +817,7 @@ export const signP256 = (
 };
 
 /**
- * verify a P-256 signature.
+ * verify an ES256 signature: ECDSA P-256 over SHA-256(challenge).
  */
 export const verifyP256 = (
   publicKeyHex: string,
@@ -838,7 +825,9 @@ export const verifyP256 = (
   challenge: Uint8Array,
 ): boolean => {
   try {
-    return p256.verify(hexToBytes(signatureHex), challenge, hexToBytes(publicKeyHex));
+    return p256.verify(hexToBytes(signatureHex), challenge, hexToBytes(publicKeyHex), {
+      prehash: true,
+    });
   } catch {
     return false;
   }
@@ -848,7 +837,7 @@ export const verifyP256 = (
 
 /**
  * derive a passkey seed for a relying party. NOT affected by ZID rotation.
- * passkeys are long-lived credentials — rotating would lock the user out.
+ * passkeys are long-lived credentials - rotating would lock the user out.
  * re-registration is an explicit action (delete + create new passkey).
  */
 const deriveSeedForPasskey = (identity: Uint8Array, rpId: string): Uint8Array =>
@@ -869,8 +858,8 @@ export const derivePasskeyForSite = (
   });
 
 /**
- * sign with the passkey P-256 key (non-rotating).
- * message is NOT pre-hashed — p256.sign handles SHA-256 internally.
+ * sign with the passkey P-256 key (non-rotating): ES256 over SHA-256(message),
+ * as WebAuthn relying parties verify it.
  */
 export const signPasskey = (
   mnemonic: string,
@@ -881,7 +870,7 @@ export const signPasskey = (
   withIdentity(mnemonic, identity, id => {
     const seed = deriveSeedForPasskey(id, rpId);
     const { privateKey, publicKey } = p256KeypairFromSeed(seed);
-    const sig = p256.sign(message, privateKey, { lowS: true });
+    const sig = p256.sign(message, privateKey, { prehash: true, lowS: true });
     privateKey.fill(0);
     return {
       signature: sig.toDERRawBytes(),
@@ -889,10 +878,27 @@ export const signPasskey = (
     };
   });
 
+/**
+ * the passkey's credential id: 16 bytes keyed by the passkey seed, so it is
+ * different for every user and every relying party, and says nothing about
+ * the wallet that made it. Same seed + rpId gives the same id on every device.
+ */
+export const derivePasskeyCredentialId = (
+  mnemonic: string,
+  identity: string,
+  rpId: string,
+): Uint8Array =>
+  withIdentity(mnemonic, identity, id => {
+    const seed = deriveSeedForPasskey(id, rpId);
+    const credId = hmac(sha256, seed.slice(0, 32), enc.encode('zafu passkey credential id v2'));
+    seed.fill(0);
+    return credId.slice(0, 16);
+  });
+
 // -- PRF (WebAuthn pseudo-random function) --
 
 /**
- * derive a PRF output for a site — the WebAuthn hmac-secret / prf extension.
+ * derive a PRF output for a site - the WebAuthn hmac-secret / prf extension.
  *
  * sites like Confer.to use PRF to derive encryption keys from passkeys.
  * our implementation: HMAC(identity, "prf:" + origin + "\0" + salt_hex)
@@ -917,25 +923,90 @@ export const derivePrf = (
 
 // -- deterministic passwords --
 
-/** base85 alphabet (RFC 1924 — URL-safe, no quotes) */
+/** base85 alphabet (RFC 1924 - URL-safe, no quotes) */
 const B85 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~';
 
 /**
- * derive a deterministic password for a site + username.
- * same seed → same password, always. nothing stored.
+ * Deterministic passwords. Same seed, same site, same username, same rotation
+ * -> same password, always; nothing is stored but the saved login's inputs.
  *
- * derivation: HMAC-SHA512(identity, "password:" + origin + "\0" + username)
- * output: first 32 bytes → base85 → 40-char string, truncated to len.
+ * Two schemes, and a saved login records which one made it, so a password a
+ * person already uses never changes under them:
+ *
+ *   v1  HMAC-SHA512(identity, "password:" + v1site + "\0" + username [+ "\0" + index])
+ *       v1site strips one leading common label (www, mail, my, app, id, ...)
+ *       with no public suffix check, so mail.com, my.com, app.com and id.com
+ *       all became "com" and shared a password; and a username ending in
+ *       "\0<digits>" collided with a rotation. Kept only for saved logins.
+ *   v2  HMAC-SHA512(identity, "password:v2" || lp(site) || lp(username) || u32be(index))
+ *       site strips a common label only while what is left is still a
+ *       registrable domain (not a public suffix), and every field is
+ *       length-prefixed, so no two inputs share bytes.
+ *
+ * output: first 32 bytes -> base85 -> at most 40 characters, cut to `length`.
  */
-/** normalize origin for password derivation — strip protocol, www/common subdomains, trailing slash */
+export type PasswordScheme = 1 | 2;
+
+/** the scheme a new login is made with */
+export const PASSWORD_SCHEME: PasswordScheme = 2;
+
+/** leading labels that usually share the account of the domain below them */
+const COMMON_LABEL = /^(www|api|app|login|auth|sso|accounts|mail|my|portal|secure|id)\./i;
+
+/** the host of what someone typed: no scheme, path or port, lowercase */
+const hostOfTyped = (raw: string): string =>
+  raw
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '')
+    .replace(/:\d+$/, '');
+
+/** v1 site normalization, byte for byte as it was: only for v1 saved logins */
+export const normalizeOriginV1 = (raw: string): string =>
+  hostOfTyped(raw).replace(COMMON_LABEL, '');
+
+/**
+ * normalize a site for password derivation: strip the scheme, path and port,
+ * and one leading common label (`www.`, `login.`, ...) when what is left is
+ * still a registrable domain. `www.forum.z.cash` -> `forum.z.cash`, but
+ * `mail.com`, `mail.ru`, `id.me` and `app.github.io` stay as they are.
+ */
 export const normalizeOrigin = (raw: string): string => {
-  let s = raw.trim().toLowerCase();
-  s = s.replace(/^https?:\/\//, '');
-  s = s.replace(/\/.*$/, '');
-  s = s.replace(/:\d+$/, '');
-  // strip common subdomains that share the same account
-  s = s.replace(/^(www|api|app|login|auth|sso|accounts|mail|my|portal|secure|id)\./i, '');
-  return s;
+  const host = hostOfTyped(raw);
+  const rest = host.replace(COMMON_LABEL, '');
+  return rest !== host && !isPublicSuffix(rest) ? rest : host;
+};
+
+/** the site a scheme derives from */
+export const normalizeOriginFor = (scheme: PasswordScheme, raw: string): string =>
+  scheme === 1 ? normalizeOriginV1(raw) : normalizeOrigin(raw);
+
+const lpBytes = (b: Uint8Array): Uint8Array => {
+  const out = new Uint8Array(4 + b.length);
+  new DataView(out.buffer).setUint32(0, b.length);
+  out.set(b, 4);
+  return out;
+};
+
+const passwordTag = (
+  scheme: PasswordScheme,
+  site: string,
+  username: string,
+  index: number,
+): Uint8Array => {
+  if (scheme === 1) {
+    const suffix = index > 0 ? '\0' + index : '';
+    return enc.encode('password:' + site + '\0' + username + suffix);
+  }
+  const i = new Uint8Array(4);
+  new DataView(i.buffer).setUint32(0, index);
+  return new Uint8Array([
+    ...enc.encode('password:v2'),
+    ...lpBytes(enc.encode(site)),
+    ...lpBytes(enc.encode(username)),
+    ...i,
+  ]);
 };
 
 export const derivePassword = (
@@ -944,13 +1015,16 @@ export const derivePassword = (
   origin: string,
   username: string,
   length = 32,
-  /** rotation index — increment when site requires password change */
+  /** rotation index - increment when site requires password change */
   index = 0,
+  /** which scheme: a saved login's own, else the current one */
+  scheme: PasswordScheme = PASSWORD_SCHEME,
 ): string =>
   withIdentity(mnemonic, identity, id => {
-    const normalized = normalizeOrigin(origin);
-    const suffix = index > 0 ? '\0' + index : '';
-    const tag = enc.encode('password:' + normalized + '\0' + username + suffix);
+    if (!Number.isInteger(index) || index < 0 || index > 0xffffffff) {
+      throw new Error('a password rotation is a u32');
+    }
+    const tag = passwordTag(scheme, normalizeOriginFor(scheme, origin), username, index);
     const seed = deriveSeed(id, tag);
     const bytes = seed.slice(0, 32);
     seed.fill(0);
@@ -960,7 +1034,11 @@ export const derivePassword = (
     for (let i = 0; i < bytes.length && result.length < length; i += 4) {
       let val = 0;
       for (let j = 0; j < 4 && i + j < bytes.length; j++) {
-        val = (val << 8) | bytes[i + j]!;
+        // unsigned: `<<` on a byte >= 0x80 would make val negative after 4
+        // shifts, and `%` keeps the dividend's sign, so B85[val % 85] reads
+        // out of range and returns undefined - a password with the literal
+        // word "undefined" baked in. `>>> 0` forces the unsigned reading.
+        val = ((val << 8) | bytes[i + j]!) >>> 0;
       }
       for (let j = 0; j < 5 && result.length < length; j++) {
         result += B85[val % 85]!;
@@ -1028,3 +1106,283 @@ export const verifyZid = (
     return false;
   }
 };
+
+// ========================================================================
+// XIDs: one per room (groups design 4.1), never the anchor or a site key
+// ========================================================================
+
+/**
+ * `d9 9c56 82 02 58 20`: CBOR tag 40022 (signing public key), array(2),
+ * scheme 2 (Ed25519), bytes(32). An XID is the SHA-256 of this prefix and the
+ * key (xid plan, checked against @bcts/xid), so computing one needs no library.
+ */
+const XID_PREIMAGE_PREFIX = hexToBytes('d99c5682025820');
+
+/** XID of an ed25519 public key (hex in, hex out). */
+export const xidOf = (ed25519PubHex: string): string =>
+  bytesToHex(sha256(new Uint8Array([...XID_PREIMAGE_PREFIX, ...hexToBytes(ed25519PubHex)])));
+
+/** the short form a person sees, `b2b14788` (rendered `XID(b2b14788)`) */
+export const shortXid = (xid: string): string => xid.slice(0, 8);
+
+/**
+ * The keys one XID context hands out. `seed` is the ed25519 secret and
+ * `xwingSeed` the X-Wing decapsulation secret: the caller zeroizes both.
+ */
+export interface XidKeys {
+  /** ed25519 inception key, hex: signs every record under this XID */
+  pubkey: string;
+  xid: string;
+  seed: Uint8Array;
+  /** X-Wing public key, hex: what a peer seals to */
+  xwingPublicKey: string;
+  xwingSeed: Uint8Array;
+}
+
+/** `HKDF-SHA256(ikm = material, no salt, info = label)`, 32 bytes */
+const hkdfLabel = (material: Uint8Array, label: string): Uint8Array =>
+  hkdf(sha256, material, undefined, enc.encode(label), 32);
+
+const xidKeysFrom = (material: Uint8Array): XidKeys => {
+  const seed = hkdfLabel(material, 'inception');
+  const pubkey = bytesToHex(ed25519.getPublicKey(seed));
+  const xwingSeed = hkdfLabel(material, 'xwing');
+  material.fill(0);
+  return {
+    pubkey,
+    xid: xidOf(pubkey),
+    seed,
+    xwingPublicKey: bytesToHex(xwingPublicKeyFromSeed(xwingSeed)),
+    xwingSeed,
+  };
+};
+
+/** `lp(text)`: u32be byte length, then the UTF-8 bytes (zid's `lpText`) */
+const lpText = (text: string): Uint8Array => {
+  const b = enc.encode(text);
+  return new Uint8Array([
+    (b.length >>> 24) & 0xff,
+    (b.length >>> 16) & 0xff,
+    (b.length >>> 8) & 0xff,
+    b.length & 0xff,
+    ...b,
+  ]);
+};
+
+/** a group's genesis id: 16 random bytes, lowercase hex, chosen before anyone signs */
+export const GENESIS_ID_RE = /^[0-9a-f]{32}$/;
+
+/**
+ * This member's key in one room (groups design 4.1):
+ *
+ *   room[gen, G] = HMAC-SHA512(identity[gen], "xid-room-v1" || lp(G))
+ *   inception    = ed25519 seed HKDF(room, "inception")
+ *   xwing        = X-Wing seed  HKDF(room, "xwing")
+ *
+ * `G` is the genesis id as its 32-character hex text. It is not secret; the
+ * HMAC key is, so a room key links to no other room, relationship or anchor.
+ * Pinned to `gen`: a room keeps the generation it was joined under, so
+ * rotating the identity never re-keys a room.
+ */
+export const deriveRoomKeys = (mnemonic: string, gen: number, genesisId: string): XidKeys => {
+  if (!GENESIS_ID_RE.test(genesisId)) {
+    throw new Error('a genesis id is 16 bytes of lowercase hex');
+  }
+  return withIdentity(mnemonic, rotatedIdentity(DEFAULT_IDENTITY, gen), id =>
+    xidKeysFrom(
+      hmac(sha512, id, new Uint8Array([...enc.encode('xid-room-v1'), ...lpText(genesisId)])),
+    ),
+  );
+};
+
+// ========================================================================
+// relationships: one XID per person you gave a card to (xid plan, PR 3)
+// ========================================================================
+
+/** a relationship's keys: its XID context, plus the X25519 key a pair room agrees with */
+export interface RelationshipKeys extends XidKeys {
+  /** X25519 public key, hex: the card's key-agreement key */
+  kaPublicKey: string;
+  kaSeed: Uint8Array;
+}
+
+/**
+ * What you give person `j` (xid plan, design-social 2.2):
+ *
+ *   rel[gen, j] = HMAC-SHA512(identity[gen], "xid-rel-v1" || u32be(j))
+ *   inception   = ed25519 seed HKDF(rel, "inception")  -> XID[gen, j]
+ *   ka          = x25519 seed  HKDF(rel, "contact-ka")
+ *   xwing       = X-Wing seed  HKDF(rel, "xwing")
+ *
+ * `j` is a per-(wallet, gen) counter that only grows, so a relationship is
+ * regenerable from the seed and an index, and two people never hold keys
+ * that link to each other or to your anchor. Pinned to `gen`.
+ */
+export const deriveRelationshipKeys = (
+  mnemonic: string,
+  gen: number,
+  j: number,
+): RelationshipKeys => {
+  if (!Number.isInteger(j) || j < 0 || j > 0xffffffff) {
+    throw new Error('a relationship index is a u32');
+  }
+  return withIdentity(mnemonic, rotatedIdentity(DEFAULT_IDENTITY, gen), id => {
+    const rel = hmac(
+      sha512,
+      id,
+      new Uint8Array([
+        ...enc.encode('xid-rel-v1'),
+        (j >>> 24) & 0xff,
+        (j >>> 16) & 0xff,
+        (j >>> 8) & 0xff,
+        j & 0xff,
+      ]),
+    );
+    const kaSeed = hkdfLabel(rel, 'contact-ka');
+    const kaPublicKey = bytesToHex(x25519.getPublicKey(kaSeed));
+    return { ...xidKeysFrom(rel), kaSeed, kaPublicKey };
+  });
+};
+
+/** X25519 of the two relationship KA keys, then HKDF bound to both XIDs */
+const relationshipSecret = (
+  salt: string,
+  kaSeed: Uint8Array,
+  peerKa: string,
+  myXid: string,
+  peerXid: string,
+): Uint8Array => {
+  const root = x25519.getSharedSecret(kaSeed, hexToBytes(peerKa));
+  const [lo, hi] = myXid < peerXid ? [myXid, peerXid] : [peerXid, myXid];
+  const out = hkdf(
+    sha256,
+    root,
+    enc.encode(salt),
+    new Uint8Array([...hexToBytes(lo), ...hexToBytes(hi)]),
+    32,
+  );
+  root.fill(0);
+  return out;
+};
+
+/**
+ * The secret two people's pair room is keyed by (design-social 2.2):
+ *
+ *   pairRoot  = X25519(ka_mine, ka_theirs)
+ *   pairSecret = HKDF(pairRoot, salt "zafu-pair-v1", info min(XID) || max(XID))
+ *
+ * Both sides compute it from what their cards carry: no invite, no handshake.
+ * XIDs order as hex strings, which is their byte order.
+ */
+export const pairSecret = (
+  kaSeed: Uint8Array,
+  peerKa: string,
+  myXid: string,
+  peerXid: string,
+): Uint8Array => relationshipSecret('zafu-pair-v1', kaSeed, peerKa, myXid, peerXid);
+
+/**
+ * The root secret private contact discovery runs on for one relationship:
+ * the same X25519 as the pair room, under its own salt, so the two secrets
+ * are independent.
+ *
+ *   discoveryRoot = HKDF(X25519(ka_mine, ka_theirs), salt "zafu-discovery-v1",
+ *                        info min(XID) || max(XID))
+ *
+ * Each person holds a different KA key from you (xid-rel-v1), so nothing a
+ * card carries links one person's card to another's, and a site that holds
+ * one of your cards cannot test whether a visitor knows you.
+ */
+export const discoverySecret = (
+  kaSeed: Uint8Array,
+  peerKa: string,
+  myXid: string,
+  peerXid: string,
+): Uint8Array => relationshipSecret('zafu-discovery-v1', kaSeed, peerKa, myXid, peerXid);
+
+/** chrome.storage.local, per wallet: the next unused `j` per generation */
+export const XID_REL_NEXT_KEY = 'xidRelNext';
+
+/** per generation, the next unused relationship index */
+export type RelationshipCounters = Record<string, number>;
+
+const relNextKey = (walletId: string) => `${XID_REL_NEXT_KEY}:${walletId}`;
+
+/** take the next relationship index for this wallet and generation; never reused */
+export async function mintRelationshipIndex(walletId: string, gen: number): Promise<number> {
+  const key = relNextKey(walletId);
+  return navigator.locks.request(key, async () => {
+    const next = ((await chrome.storage.local.get(key))[key] ?? {}) as RelationshipCounters;
+    const j = next[gen] ?? 0;
+    await chrome.storage.local.set({ [key]: { ...next, [gen]: j + 1 } });
+    return j;
+  });
+}
+
+/** this wallet's counters, for the encrypted personal-data backup */
+export async function readRelationshipCounters(walletId: string): Promise<RelationshipCounters> {
+  const key = relNextKey(walletId);
+  return ((await chrome.storage.local.get(key))[key] ?? {}) as RelationshipCounters;
+}
+
+/**
+ * Raise this wallet's counters to at least `floor`, never lower them. A
+ * restore calls it with max(backed-up counter, 1 + every `j` its contacts
+ * hold), so a `j` already handed out - on a card, in a memo, to a person -
+ * is never handed out again to someone new.
+ */
+export async function raiseRelationshipCounters(
+  walletId: string,
+  floor: RelationshipCounters,
+): Promise<void> {
+  const key = relNextKey(walletId);
+  await navigator.locks.request(key, async () => {
+    const next = ((await chrome.storage.local.get(key))[key] ?? {}) as RelationshipCounters;
+    const raised = { ...next };
+    for (const [gen, n] of Object.entries(floor)) {
+      if (Number.isSafeInteger(n) && n > (raised[gen] ?? 0)) {
+        raised[gen] = n;
+      }
+    }
+    await chrome.storage.local.set({ [key]: raised });
+  });
+}
+
+/** per generation, 1 + the highest `j` these relationships use */
+export const relationshipFloor = (
+  rels: readonly { gen: number; j: number }[],
+): RelationshipCounters => {
+  const floor: RelationshipCounters = {};
+  for (const { gen, j } of rels) {
+    if (Number.isSafeInteger(gen) && Number.isSafeInteger(j) && j + 1 > (floor[gen] ?? 0)) {
+      floor[gen] = j + 1;
+    }
+  }
+  return floor;
+};
+
+/**
+ * Which of your relationships an answering card names (its TLV 0x05): try
+ * every `j` this wallet minted, under every generation up to the current one.
+ * Nothing about handed-out cards is stored; the seed and the counters say it.
+ */
+export async function findRelationship(
+  mnemonic: string,
+  walletId: string,
+  inceptionPub: string,
+): Promise<{ gen: number; j: number } | undefined> {
+  const next = await readRelationshipCounters(walletId);
+  for (const [g, n] of Object.entries(next)) {
+    for (let j = 0; j < n; j++) {
+      const k = deriveRelationshipKeys(mnemonic, Number(g), j);
+      const hit = k.pubkey === inceptionPub;
+      k.seed.fill(0);
+      k.kaSeed.fill(0);
+      k.xwingSeed.fill(0);
+      if (hit) {
+        return { gen: Number(g), j };
+      }
+    }
+  }
+  return undefined;
+}

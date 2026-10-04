@@ -124,7 +124,7 @@ function voteIcon(vote: Vote_Vote): string {
 export function VotePage() {
   const activeNetwork = useStore(selectActiveNetwork);
   const penumbraAccount = useStore(selectPenumbraAccount);
-  const penumbraTx = usePenumbraTransaction();
+  const penumbraTx = usePenumbraTransaction({ ownOutcome: false });
   const [showInactive, setShowInactive] = useState(false);
   const [expandedId, setExpandedId] = useState<bigint | null>(null);
   const [rawId, setRawId] = useState<bigint | null>(null);
@@ -132,7 +132,7 @@ export function VotePage() {
   const [voteError, setVoteError] = useState<string | null>(null);
 
   // gate the network query via `enabled` so the hook still runs when on
-  // another network — Rules of Hooks require a stable hook count.
+  // another network - Rules of Hooks require a stable hook count.
   const isPenumbra = activeNetwork === 'penumbra';
 
   const proposalsQuery = useQuery({
@@ -227,7 +227,7 @@ export function VotePage() {
   return (
     <div className='flex flex-col gap-3 p-4'>
       <div className='flex items-center justify-between'>
-        <h2 className='text-lg font-medium'>governance</h2>
+        <h2 className='text-lg'>governance</h2>
         {activeCount > 0 && <span className='text-xs text-fg-high'>{activeCount} active</span>}
       </div>
 
@@ -235,20 +235,20 @@ export function VotePage() {
       <div className='flex items-center gap-2'>
         <button
           onClick={() => setShowInactive(false)}
-          className={`text-xs px-2 py-1 rounded-md transition-colors ${!showInactive ? 'text-fg bg-elev-2' : 'text-fg-muted hover:text-fg-high'}`}
+          className={`text-xs px-2 py-1 transition-colors ${!showInactive ? 'text-fg bg-elev-2' : 'text-fg-muted hover:text-fg-high'}`}
         >
           active
         </button>
         <button
           onClick={() => setShowInactive(true)}
-          className={`text-xs px-2 py-1 rounded-md transition-colors ${showInactive ? 'text-fg bg-elev-2' : 'text-fg-muted hover:text-fg-high'}`}
+          className={`text-xs px-2 py-1 transition-colors ${showInactive ? 'text-fg bg-elev-2' : 'text-fg-muted hover:text-fg-high'}`}
         >
           all
         </button>
       </div>
 
       {voteError && (
-        <div className='text-xs text-red-400 bg-red-400/10 p-2 rounded-lg border border-red-400/40'>
+        <div className='text-xs text-red-400 bg-red-400/10 p-2 border border-red-400/40'>
           {voteError}
           <button onClick={() => setVoteError(null)} className='ml-2 underline'>
             dismiss
@@ -258,7 +258,7 @@ export function VotePage() {
 
       {proposalsQuery.isLoading && (
         <div className='flex items-center justify-center py-12'>
-          <div className='h-5 w-5 animate-spin border-2 border-zigner-gold border-t-transparent rounded-full' />
+          <div className='h-5 w-5 animate-spin border-2 border-zigner-gold border-t-transparent' />
         </div>
       )}
 
@@ -290,7 +290,7 @@ export function VotePage() {
           const canVote = p.state === 'voting';
 
           return (
-            <div key={String(p.id)} className='rounded-lg border border-border-soft bg-elev-1'>
+            <div key={String(p.id)} className='border border-border-soft bg-elev-1'>
               {/* header */}
               <button
                 onClick={() => setExpandedId(isExpanded ? null : p.id)}
@@ -332,7 +332,7 @@ export function VotePage() {
                   </div>
 
                   {rawId === p.id && (
-                    <div className='mt-2 rounded-md border border-border-soft bg-elev-2'>
+                    <div className='mt-2 border border-border-soft bg-elev-2'>
                       <div className='flex items-center justify-between px-2 py-1 text-label text-fg-muted'>
                         <span>what the chain enacts</span>
                         <button
@@ -357,7 +357,7 @@ export function VotePage() {
                           key={v}
                           onClick={() => void handleVote(p.id, v)}
                           disabled={isVoting}
-                          className='flex flex-1 items-center justify-center gap-1 py-1.5 rounded-md bg-elev-2 text-xs font-medium text-fg-high transition-colors hover:bg-elev-1 disabled:opacity-50'
+                          className='flex flex-1 items-center justify-center gap-1 py-1.5 bg-elev-2 text-xs text-fg-high transition-colors hover:bg-elev-1 disabled:opacity-50'
                         >
                           {isVoting ? (
                             '...'

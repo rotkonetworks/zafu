@@ -78,7 +78,7 @@ export type ChannelKind = 'hybrid' | 'classical';
 export interface ZidIdentity {
   /** hex-encoded ed25519 public key (session key) */
   pubkey: string;
-  /** active network ('penumbra' | 'zcash' | 'polkadot' | ...) */
+  /** active network ('penumbra' | 'zcash' | 'cosmos' | ...) */
   network: string;
   /** display name (first 8 chars of pubkey, or custom) */
   name: string;

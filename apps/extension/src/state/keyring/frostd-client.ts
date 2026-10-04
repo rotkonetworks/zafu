@@ -1,5 +1,5 @@
 /**
- * frostd-client — the standard ZF FROST relay, over JSON-HTTP.
+ * frostd-client - the standard ZF FROST relay, over JSON-HTTP.
  *
  * WHY THIS REPLACES frost-relay-client
  *
@@ -14,7 +14,7 @@
  * ENCRYPTION IS NOT THIS CLASS'S JOB
  *
  * This class never encrypts, decrypts, or holds a private key. Callers pass
- * ciphertext in and get ciphertext out — encryption is FrostRelayCipher in
+ * ciphertext in and get ciphertext out - encryption is FrostRelayCipher in
  * the wasm bundle, which is asserted byte-compatible with ZF's frost-client
  * in Rust.
  *
@@ -101,7 +101,7 @@ export class FrostdClient {
   /**
    * Send ciphertext. An empty `recipients` addresses the coordinator.
    *
-   * `msgHex` must already be encrypted — see the module note.
+   * `msgHex` must already be encrypted - see the module note.
    */
   async send(sessionId: string, recipientsHex: string[], msgHex: string): Promise<void> {
     await this.post('send', {

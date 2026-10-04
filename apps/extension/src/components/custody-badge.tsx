@@ -49,7 +49,7 @@ const STYLE: Record<Custody, { icon: string; tint: string; title: string }> = {
   },
   cold: {
     icon: 'i-zafu-kori',
-    tint: 'text-zafu-blue bg-zafu-blue/10',
+    tint: 'text-device-blue bg-device-blue/10',
     title: 'cold - the spending key never touches this browser; signing happens on your device',
   },
   shared: {
@@ -85,7 +85,7 @@ export const CustodyBadge = ({
     <span
       title={style.title}
       className={cn(
-        'inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-label lowercase',
+        'inline-flex shrink-0 items-center gap-1 px-1.5 py-0.5 text-label lowercase',
         style.tint,
         className,
       )}

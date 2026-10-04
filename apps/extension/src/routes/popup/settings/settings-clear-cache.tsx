@@ -5,9 +5,8 @@ import {
 } from '../../../message/services';
 import { useStore } from '../../../state';
 import { selectEnabledNetworks, selectKeyInfos } from '../../../state/keyring';
+import { keyInfoSupportsNetwork } from '../../../state/keyring/vault-ops';
 import { selectZcashWallets, selectPenumbraWallets } from '../../../state/wallets';
-import { terminateNetworkWorker, spawnNetworkWorker } from '../../../state/keyring/network-worker';
-import { deleteZcashDatabases } from '../../../clear-cache-startup';
 import { clearPersonalData } from '../../../state/personal-data';
 import { useState, useEffect } from 'react';
 import { SettingsScreen } from './settings-screen';
@@ -33,7 +32,6 @@ export const SettingsClearCache = () => {
   const zcashWallets = useStore(selectZcashWallets);
   const penumbraWallets = useStore(selectPenumbraWallets);
   const enabledNetworks = useStore(selectEnabledNetworks);
-  const [clearingKey, setClearingKey] = useState<string | null>(null);
   const clearContacts = useStore(s => s.contacts.clearAll);
   const [personalStep, setPersonalStep] = useState<'idle' | 'confirm' | 'clearing' | 'done'>(
     'idle',
@@ -83,33 +81,11 @@ export const SettingsClearCache = () => {
   const progressPercent =
     clearingState.total > 0 ? Math.round((clearingState.completed / clearingState.total) * 100) : 0;
 
-  const handleClearZcash = async (_vault: KeyInfo) => {
-    setClearingKey(`${_vault.id}:zcash`);
-    try {
-      // terminate worker so in-memory commitment tree is dropped
-      try {
-        terminateNetworkWorker('zcash');
-      } catch {}
-      // delete the zcash database and WAIT for it, rather than firing the
-      // delete and sleeping. the memo cache is an object store inside
-      // 'zafu-zcash', not a database of its own, so dropping that database
-      // clears it — the separate 'zafu-memo-cache' delete that used to be
-      // here targeted a database that has never existed.
-      await deleteZcashDatabases();
-      // respawn worker fresh — sync will restart from birthday
-      try {
-        await spawnNetworkWorker('zcash');
-      } catch {}
-    } finally {
-      setClearingKey(null);
-    }
-  };
-
   const handleClearPenumbra = (_vault: KeyInfo) => {
     setClearingState({ inProgress: true, step: 'stopping', completed: 0, total: 4 });
     // fire-and-forget: service worker will reload the extension when done
     chrome.runtime.sendMessage({ type: 'ClearCache', network: 'penumbra' }).catch(() => {
-      // expected — extension reloads before response arrives
+      // expected - extension reloads before response arrives
     });
   };
 
@@ -124,7 +100,7 @@ export const SettingsClearCache = () => {
       <div className='flex flex-col gap-4'>
         {clearingState.inProgress ? (
           <div className='flex flex-col gap-3'>
-            <div className='h-1.5 w-full rounded-full bg-elev-2 overflow-hidden'>
+            <div className='h-1.5 w-full bg-elev-2 overflow-hidden'>
               <div
                 className='h-full bg-zigner-gold transition-all duration-300 ease-out'
                 style={{ width: `${progressPercent}%` }}
@@ -152,11 +128,12 @@ export const SettingsClearCache = () => {
             {grouped.map(g => (
               <div key={g.type}>
                 <p className='kicker mb-2'>{g.label}</p>
-                <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border-soft bg-elev-1'>
+                <div className='flex flex-col divide-y divide-border/40 border border-border-soft bg-elev-1'>
                   {g.vaults.map(v => {
                     const hasZcash =
                       enabledNetworks.includes('zcash') &&
-                      (zcashWallets.some(w => w.vaultId === v.id) || v.type === 'mnemonic');
+                      (zcashWallets.some(w => w.vaultId === v.id) ||
+                        (v.type === 'mnemonic' && keyInfoSupportsNetwork(v, 'zcash')));
                     const hasPenumbra =
                       enabledNetworks.includes('penumbra') &&
                       (penumbraWallets.some(w => w.vaultId === v.id) || v.type === 'mnemonic');
@@ -167,28 +144,23 @@ export const SettingsClearCache = () => {
                     return (
                       <div key={v.id} className='px-3 py-2.5'>
                         <p className='text-sm truncate'>{v.name}</p>
-                        <div className='flex gap-2 mt-1.5'>
-                          {hasZcash && (
+                        {hasZcash && (
+                          <p className='text-label text-fg-dim mt-1'>
+                            zcash resync moved to settings - networks - zcash
+                          </p>
+                        )}
+                        {hasPenumbra && (
+                          <div className='flex gap-2 mt-1.5'>
                             <button
-                              disabled={!!clearingKey || clearingState.inProgress}
-                              onClick={() => void handleClearZcash(v)}
-                              className='rounded border border-red-500/25 bg-red-500/5 px-2 py-0.5 text-label text-red-400 hover:bg-red-500/15 transition-colors disabled:opacity-50'
-                            >
-                              {clearingKey === `${v.id}:zcash` ? 'resyncing...' : 'resync zcash'}
-                            </button>
-                          )}
-                          {hasPenumbra && (
-                            <button
-                              disabled={!!clearingKey || clearingState.inProgress}
+                              disabled={clearingState.inProgress}
                               onClick={() => handleClearPenumbra(v)}
-                              className='rounded border border-red-500/25 bg-red-500/5 px-2 py-0.5 text-label text-red-400 hover:bg-red-500/15 transition-colors disabled:opacity-50'
+                              className='border border-red-500/25 bg-red-500/5 px-2 py-0.5 text-label text-red-400 hover:bg-red-500/15 transition-colors disabled:opacity-50'
+                              title='reloads the extension when done'
                             >
-                              {clearingKey === `${v.id}:penumbra`
-                                ? 'resyncing...'
-                                : 'resync penumbra'}
+                              resync penumbra - reloads the extension
                             </button>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -201,10 +173,10 @@ export const SettingsClearCache = () => {
                 separate, deliberate way to wipe them. */}
             <div>
               <p className='kicker mb-2'>personal data</p>
-              <div className='flex flex-col gap-2 rounded-lg border border-border-soft bg-elev-1 p-3'>
+              <div className='flex flex-col gap-2 border border-border-soft bg-elev-1 p-3'>
                 <p className='text-label text-fg-muted'>
-                  send history, tx notes, and contacts - local only, never rebuilt from the chain. a
-                  resync keeps these; this clears them.
+                  send history, tx notes, contacts and saved logins, local only, never rebuilt from
+                  the chain. a resync keeps these; this clears them.
                 </p>
                 {personalStep === 'done' ? (
                   <p className='text-label text-fg-dim'>personal data cleared.</p>
@@ -213,14 +185,14 @@ export const SettingsClearCache = () => {
                     <button
                       disabled={personalStep === 'clearing'}
                       onClick={() => void handleClearPersonal()}
-                      className='rounded border border-hanko/40 bg-hanko/10 px-2 py-0.5 text-label text-hanko transition-colors hover:bg-hanko/20 disabled:opacity-50'
+                      className='border border-hanko/40 bg-hanko/10 px-2 py-0.5 text-label text-hanko transition-colors hover:bg-hanko/20 disabled:opacity-50'
                     >
                       {personalStep === 'clearing' ? 'clearing...' : 'yes, clear it all'}
                     </button>
                     {personalStep === 'confirm' && (
                       <button
                         onClick={() => setPersonalStep('idle')}
-                        className='rounded border border-border-soft px-2 py-0.5 text-label text-fg-muted'
+                        className='border border-border-soft px-2 py-0.5 text-label text-fg-muted'
                       >
                         cancel
                       </button>
@@ -229,7 +201,7 @@ export const SettingsClearCache = () => {
                 ) : (
                   <button
                     onClick={() => setPersonalStep('confirm')}
-                    className='self-start rounded border border-rust/30 bg-rust/5 px-2 py-0.5 text-label text-rust transition-colors hover:bg-rust/15'
+                    className='self-start border border-rust/30 bg-rust/5 px-2 py-0.5 text-label text-rust transition-colors hover:bg-rust/15'
                   >
                     clear personal data
                   </button>

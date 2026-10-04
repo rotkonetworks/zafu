@@ -1,11 +1,11 @@
-import { useState } from 'react';
 import { Metadata } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { Identicon } from '../identicon';
 import { cn } from '../../../lib/utils';
 import { DelegationTokenIcon } from './delegation-token-icon';
 import { getDisplay } from '@penumbra-zone/getters/metadata';
-import { assetPatterns } from '@rotko/penumbra-types/assets';
+import { assetPatterns } from '@penumbrafi/types/assets';
 import { UnbondingTokenIcon } from './unbonding-token-icon';
+import { resolveBundledIcon } from './bundled-icons';
 
 export const AssetIcon = ({
   metadata,
@@ -14,15 +14,13 @@ export const AssetIcon = ({
   metadata?: Metadata;
   size?: 'xs' | 'sm' | 'lg';
 }) => {
-  // a registry image URL can 404 or be blocked; fall back to a monogram tile.
-  // Track the failed URL rather than a boolean, so switching to a different
-  // asset (this component instance is reused across selections) re-attempts.
-  const [failedSrc, setFailedSrc] = useState<string>();
   // Image default is "" and thus cannot do nullish-coalescing
   // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-  const icon = metadata?.images[0]?.png || metadata?.images[0]?.svg;
+  const registryUrl = metadata?.images[0]?.png || metadata?.images[0]?.svg;
+  // never fetched remotely: a url the app bundled resolves to a local asset,
+  // anything else is "unknown" and falls through to the monogram below
+  const icon = registryUrl ? resolveBundledIcon(registryUrl) : undefined;
   const className = cn(
-    'rounded-full',
     size === 'xs' && 'size-4',
     size === 'sm' && 'size-6',
     size === 'lg' && 'size-12',
@@ -33,8 +31,8 @@ export const AssetIcon = ({
 
   return (
     <>
-      {icon && failedSrc !== icon ? (
-        <img className={className} src={icon} alt='Asset icon' onError={() => setFailedSrc(icon)} />
+      {icon ? (
+        <img className={className} src={icon} alt='Asset icon' />
       ) : isDelegationToken ? (
         <DelegationTokenIcon displayDenom={display} className={className} />
       ) : isUnbondingToken ? (

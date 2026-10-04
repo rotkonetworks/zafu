@@ -48,7 +48,7 @@ const BlockSyncErrorState = () => {
       initial={{ opacity: 0.6 }}
       animate={{ opacity: 1, transition: { duration: 0.5, ease: 'easeOut' } }}
     >
-      <Progress status='error' value={100} shape='squared' />
+      <Progress status='error' value={100} />
       <div className='absolute inset-0 z-10 flex items-center px-2'>
         <div className='font-mono text-[10px] text-red-300 leading-none'>
           Block sync error. Ensure your internet connection is stable
@@ -61,10 +61,10 @@ const BlockSyncErrorState = () => {
 const AwaitingSyncState = ({ genesisSyncing }: { genesisSyncing: boolean }) => {
   return (
     <div className='relative flex select-none flex-col'>
-      <Progress status='in-progress' background='stone' shape='squared' value={0} />
+      <Progress status='in-progress' background='stone' value={0} />
       <div className='absolute inset-0 z-10 flex items-center justify-between px-2'>
         <div className='font-mono text-[10px] text-stone-400 leading-none'>
-          {genesisSyncing ? 'Initializing — connecting to network...' : 'Preparing wallet sync...'}
+          {genesisSyncing ? 'Initializing - connecting to network...' : 'Preparing wallet sync...'}
         </div>
         <LineWave visible={true} height='16' width='16' color='#a8a29e' />
       </div>
@@ -97,7 +97,6 @@ const SyncingState = ({
         status='in-progress'
         value={fullSyncHeight.dividedBy(latestKnownBlockHeight).multipliedBy(100).toNumber()}
         background='stone'
-        shape='squared'
       />
       <div className='absolute inset-0 z-10 flex items-center justify-between px-2 font-mono text-[10px] text-[#4a4127] leading-none mix-blend-plus-lighter'>
         <div>
@@ -142,7 +141,6 @@ const FullySyncedState = ({
       <Progress
         status='done'
         value={fullSyncHeight.dividedBy(latestKnownBlockHeight).multipliedBy(100).toNumber()}
-        shape='squared'
       />
       <div className='absolute inset-0 z-10 flex items-center justify-between px-2'>
         <div className='font-mono text-[10px] text-teal-900 leading-none flex items-center'>

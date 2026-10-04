@@ -1,7 +1,7 @@
 import { Button } from '@repo/ui/components/ui/button';
-import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
-import { InputProps } from '@repo/ui/components/ui/input';
-import { PasswordInput } from '../../shared/components/password-input';
+import { Input } from '@repo/ui/components/ui/input';
+import { Mark } from '@repo/ui/components/ui/mark';
+import { cn } from '@repo/ui/lib/utils';
 import { usePopupNav } from '../../utils/navigate';
 import { useStore } from '../../state';
 import { passwordSelector } from '../../state/password';
@@ -28,8 +28,7 @@ export const Login = () => {
   // wallet is not lost - the user re-imports its recovery phrase. We never
   // mutate or delete anything here.
   const [undecryptable, setUndecryptable] = useState(false);
-  // Key derivation (PBKDF2, 210k rounds) takes a visible beat on slower
-  // machines. Without feedback the button reads as dead and users mash it.
+  // key derivation (PBKDF2, 210k rounds) takes a visible beat on slow machines
   const [unlocking, setUnlocking] = useState(false);
 
   const handleUnlock = (e: FormEvent<HTMLFormElement>) => {
@@ -77,105 +76,67 @@ export const Login = () => {
     })();
   };
 
-  const handleChangePassword: InputProps['onChange'] = e => {
-    setInputValue(e.target.value);
-    setEnteredIncorrect(false);
-  };
-
   return (
-    <FadeTransition className='flex flex-col items-stretch justify-start'>
-      <div className='flex h-screen flex-col justify-between p-[30px] pt-10'>
-        <div className='mx-auto my-0 flex flex-col items-center gap-1'>
-          <span className='text-label tracking-[0.18em] text-fg-muted lowercase'>
-            shielded signing
-          </span>
-          <h1 className='text-display text-zigner-gold lowercase tracking-[-0.01em] leading-none'>
-            zafu
-          </h1>
-        </div>
-        {undecryptable ? (
-          <div className='grid gap-4'>
-            <p className='text-title text-fg-high lowercase tracking-[-0.01em]'>
-              this wallet can't be unlocked
-            </p>
-            <p className='text-body text-fg-muted lowercase'>
-              its recovery data can no longer be decrypted with this password. your funds aren't
-              lost - re-import this wallet's recovery phrase to restore it.
-            </p>
-            <Button
-              size='lg'
-              variant='gradient'
-              type='button'
-              onClick={() => navigate(PopupPath.SETTINGS_WALLETS)}
-            >
-              re-import wallet
-            </Button>
-            <Button
-              size='sm'
-              variant='ghost'
-              type='button'
-              onClick={() => navigate(PopupPath.INDEX)}
-            >
-              continue anyway
-            </Button>
-          </div>
-        ) : (
-          <form onSubmit={handleUnlock} className='grid gap-4'>
-            <PasswordInput
-              autoFocus
-              name='password'
-              passwordValue={input}
-              label={
-                <p className='text-title text-fg-high lowercase tracking-[-0.01em]'>
-                  enter password
-                </p>
-              }
-              onChange={handleChangePassword}
-              validations={[
-                {
-                  type: 'error',
-                  issue: 'wrong password',
-                  checkFn: () => enteredIncorrect,
-                },
-              ]}
-            />
-            <Button
-              size='lg'
-              variant='gradient'
-              disabled={enteredIncorrect || unlocking}
-              type='submit'
-            >
-              {unlocking ? 'unlocking\u2026' : 'unlock'}
-            </Button>
-            {/* New users who hit a wrong password without a hint of
-              recourse assume their wallet is gone. The line only
-              surfaces after a failed attempt so we don't preemptively
-              teach the wrong mental model — but the moment anxiety
-              kicks in, the recovery path is visible. */}
-            {enteredIncorrect && (
-              <p className='text-center text-body text-fg-muted lowercase'>
-                your funds aren't lost — you can restore from your seed phrase by reinstalling zafu.
-              </p>
+    <div className='relative isolate flex h-full min-h-[628px] flex-col justify-center gap-[18px] bg-canvas px-7'>
+      <img
+        src='/media/emblem.webp'
+        alt=''
+        aria-hidden='true'
+        className='pointer-events-none absolute left-1/2 top-10 -z-10 size-[260px] -translate-x-1/2 opacity-10'
+      />
+      <Mark variant='seal' size={54} className='self-center' />
+      <h1 className='self-center font-display text-[26px] text-fg-high'>welcome back</h1>
+      <span className='self-center text-[11px] tracking-[0.1em] text-fg-muted'>
+        shielded signing
+      </span>
+      {undecryptable ? (
+        <>
+          <p className='text-body text-fg-muted'>
+            this wallet&apos;s recovery data no longer opens with this password. your funds are safe
+            - restoring its recovery phrase brings it back.
+          </p>
+          <Button onClick={() => navigate(PopupPath.SETTINGS_WALLETS)}>restore this wallet</Button>
+          <Button variant='quiet' onClick={() => navigate(PopupPath.INDEX)}>
+            continue for now
+          </Button>
+        </>
+      ) : (
+        <form onSubmit={handleUnlock} className='flex flex-col gap-[18px]'>
+          <label htmlFor='unlock-password' className='sr-only'>
+            password
+          </label>
+          <Input
+            id='unlock-password'
+            name='password'
+            type='password'
+            autoFocus
+            autoComplete='current-password'
+            variant={enteredIncorrect ? 'warn' : 'default'}
+            value={input}
+            onChange={e => {
+              setInputValue(e.target.value);
+              setEnteredIncorrect(false);
+            }}
+            className={cn(
+              'h-[52px] px-3.5 text-[15px]',
+              enteredIncorrect && 'focus-visible:border-warn',
             )}
-          </form>
-        )}
-        <div className='flex flex-col gap-1'>
-          <p className='text-center text-xs text-fg-muted lowercase'>
-            need help?{' '}
-            <a
-              className='cursor-pointer text-teal hover:underline transition-colors'
-              href='https://discord.gg/zcash'
-              target='_blank'
-              rel='noreferrer'
-            >
-              chat with us
-            </a>
-          </p>
-          <p className='text-center text-label text-fg-muted/50 tabular'>
-            {BUILD_COMMIT}-{BUILD_DATE}
-          </p>
-        </div>
-      </div>
-    </FadeTransition>
+          />
+          <span className='h-[18px] text-label text-warning' aria-live='polite'>
+            {enteredIncorrect ? "that doesn't match · please try again, slowly" : ''}
+          </span>
+          <Button type='submit' loading={unlocking} className='h-[52px] text-[15px]'>
+            unlock
+          </Button>
+          <button
+            type='button'
+            onClick={() => navigate(PopupPath.FORGOT_PASSWORD)}
+            className='self-center bg-transparent text-label text-fg-muted transition-colors hover:text-fg-high'
+          >
+            forgot it? restore with your recovery phrase
+          </button>
+        </form>
+      )}
+    </div>
   );
 };

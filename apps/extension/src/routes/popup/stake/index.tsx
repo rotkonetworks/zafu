@@ -4,11 +4,10 @@
  * shows user delegations and allows delegate/undelegate
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Sensitive } from '../../../components/sensitive';
 import { viewClient, stakeClient } from '../../../clients';
-import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { useStore } from '../../../state';
 import { selectActiveNetwork, selectPenumbraAccount } from '../../../state/keyring';
 import { hasFeature } from '../../../config/networks';
@@ -21,9 +20,14 @@ import {
   getAssetIdFromValueView,
   getDisplayDenomExponentFromValueView,
 } from '@penumbra-zone/getters/value-view';
-import { fromValueView } from '@rotko/penumbra-types/amount';
-import { assetPatterns } from '@rotko/penumbra-types/assets';
-import { cn } from '@repo/ui/lib/utils';
+import { fromValueView } from '@penumbrafi/types/amount';
+import { assetPatterns } from '@penumbrafi/types/assets';
+import { Button } from '@repo/ui/components/ui/button';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { ScreenHeader } from '../../../components/screen-header';
+import { PenumbraFlow } from '../send/penumbra-flow';
+import { Figure, Footer, Main } from '../send/send-ui';
+import { AmountField, PickSheet } from '../send/send-fields';
 import {
   ValidatorState_ValidatorStateEnum,
   type ValidatorInfo,
@@ -130,16 +134,10 @@ export const StakePage = () => {
   const [amount, setAmount] = useState('');
   const [selectedValidator, setSelectedValidator] = useState<ValidatorRow | undefined>();
   const [selectedDelegation, setSelectedDelegation] = useState<BalancesResponse | undefined>();
-  const [txStatus, setTxStatus] = useState<
-    'idle' | 'planning' | 'signing' | 'broadcasting' | 'success' | 'error'
-  >('idle');
-  const [txHash, setTxHash] = useState<string | undefined>();
-  const [txError, setTxError] = useState<string | undefined>();
-
-  const penumbraTx = usePenumbraTransaction();
+  const [pickOpen, setPickOpen] = useState(false);
 
   // gate network-only queries via the hook's `enabled` flag rather than an
-  // early return — Rules of Hooks require the same hook count on every render.
+  // early return - Rules of Hooks require the same hook count on every render.
   const canStake = hasFeature(activeNetwork, 'stake');
 
   // fetch validators
@@ -275,116 +273,49 @@ export const StakePage = () => {
     [validators],
   );
 
-  // handle delegate
-  const handleDelegate = useCallback(async () => {
-    if (!selectedValidator || !amount || parseFloat(amount) <= 0) {
-      return;
+  const planDelegate = async () => {
+    // to base units
+    const baseAmount = BigInt(Math.floor(parseFloat(amount) * Math.pow(10, STAKING_EXPONENT)));
+    return new TransactionPlannerRequest({
+      delegations: [
+        {
+          amount: new Amount({ lo: baseAmount, hi: 0n }),
+          rateData: selectedValidator!.info.rateData,
+        },
+      ],
+      source: { account: penumbraAccount },
+    });
+  };
+
+  const planUndelegate = async () => {
+    const view = selectedDelegation!.balanceView!;
+    const exponent = getDisplayDenomExponentFromValueView(view);
+    const assetId = getAssetIdFromValueView(view);
+    const baseAmount = BigInt(Math.floor(parseFloat(amount) * Math.pow(10, exponent)));
+    const validator = findValidatorForDelegation(
+      getMetadataFromBalancesResponse.optional(selectedDelegation),
+      validators,
+    );
+    if (!validator) {
+      throw new Error("this delegation's validator isn't listed right now");
     }
+    return new TransactionPlannerRequest({
+      undelegations: [
+        {
+          rateData: validator.info.rateData,
+          value: { amount: new Amount({ lo: baseAmount, hi: 0n }), assetId },
+        },
+      ],
+      source: { account: penumbraAccount },
+    });
+  };
 
-    setTxStatus('planning');
-    setTxError(undefined);
-
-    try {
-      // convert to base units
-      const baseAmount = BigInt(Math.floor(parseFloat(amount) * Math.pow(10, STAKING_EXPONENT)));
-
-      const planRequest = new TransactionPlannerRequest({
-        delegations: [
-          {
-            amount: new Amount({ lo: baseAmount, hi: 0n }),
-            rateData: selectedValidator.info.rateData,
-          },
-        ],
-        source: { account: penumbraAccount },
-      });
-
-      setTxStatus('signing');
-      const result = await penumbraTx.mutateAsync(planRequest);
-
-      setTxStatus('success');
-      setTxHash(result.txId);
-
-      // reset form
-      setAction(undefined);
-      setAmount('');
-      setSelectedValidator(undefined);
-
-      // refetch data
-      void refetchDelegations();
-      void refetchValidators();
-    } catch (err) {
-      setTxStatus('error');
-      setTxError(err instanceof Error ? err.message : 'delegation failed');
-    }
-  }, [selectedValidator, amount, penumbraTx, refetchDelegations, refetchValidators]);
-
-  // handle undelegate
-  const handleUndelegate = useCallback(async () => {
-    if (!selectedDelegation || !amount || parseFloat(amount) <= 0) {
-      return;
-    }
-    if (!selectedDelegation.balanceView) {
-      return;
-    }
-
-    setTxStatus('planning');
-    setTxError(undefined);
-
-    try {
-      const exponent = getDisplayDenomExponentFromValueView(selectedDelegation.balanceView);
-      const assetId = getAssetIdFromValueView(selectedDelegation.balanceView);
-      const baseAmount = BigInt(Math.floor(parseFloat(amount) * Math.pow(10, exponent)));
-
-      // find the validator for this delegation
-      const meta = getMetadataFromBalancesResponse.optional(selectedDelegation);
-      const validator = findValidatorForDelegation(meta, validators);
-
-      if (!validator) {
-        throw new Error('validator not found for delegation');
-      }
-
-      const planRequest = new TransactionPlannerRequest({
-        undelegations: [
-          {
-            rateData: validator.info.rateData,
-            value: {
-              amount: new Amount({ lo: baseAmount, hi: 0n }),
-              assetId,
-            },
-          },
-        ],
-        source: { account: penumbraAccount },
-      });
-
-      setTxStatus('signing');
-      const result = await penumbraTx.mutateAsync(planRequest);
-
-      setTxStatus('success');
-      setTxHash(result.txId);
-
-      // reset form
-      setAction(undefined);
-      setAmount('');
-      setSelectedDelegation(undefined);
-
-      // refetch data
-      void refetchDelegations();
-      void refetchValidators();
-    } catch (err) {
-      setTxStatus('error');
-      setTxError(err instanceof Error ? err.message : 'undelegation failed');
-    }
-  }, [selectedDelegation, amount, validators, penumbraTx, refetchDelegations, refetchValidators]);
-
-  const closeForm = useCallback(() => {
+  const closeForm = () => {
     setAction(undefined);
     setAmount('');
     setSelectedValidator(undefined);
     setSelectedDelegation(undefined);
-    setTxStatus('idle');
-    setTxHash(undefined);
-    setTxError(undefined);
-  }, []);
+  };
 
   // placed after every hook so the count stays consistent across network
   // switches (was triggering React #300).
@@ -392,271 +323,206 @@ export const StakePage = () => {
     return <NetworkUnavailable feature='staking' iconClass='i-ph-stack' />;
   }
 
-  // delegation/undelegate form modal
+  const delegationName = (d: BalancesResponse) => {
+    const meta = getMetadataFromBalancesResponse.optional(d);
+    return (
+      findValidatorForDelegation(meta, validators)?.name ??
+      `${meta?.base?.replace(/u?delegation_/, '').slice(0, 20)}…`
+    );
+  };
+  const balanceOf = (d: BalancesResponse) => {
+    const val = d.balanceView ? fromValueView(d.balanceView) : '0';
+    return typeof val === 'string' ? val : val.toString();
+  };
+  const share = (v: ValidatorRow) =>
+    `${(totalVotingPower > 0 ? (v.votingPower / totalVotingPower) * 100 : 0).toFixed(2)}% · ${v.commission}% fee`;
+
   if (action) {
     const isDelegate = action === 'delegate';
-    const canSubmit = isDelegate
-      ? selectedValidator && amount && parseFloat(amount) > 0
-      : selectedDelegation && amount && parseFloat(amount) > 0;
-
+    const unit = isDelegate
+      ? STAKING_TOKEN.toLowerCase()
+      : selectedDelegation?.balanceView
+        ? getDisplayDenomFromView(selectedDelegation.balanceView).toLowerCase()
+        : 'delegation';
     const maxAmount = isDelegate
       ? stakingBalance || '0'
-      : selectedDelegation?.balanceView
-        ? (() => {
-            const val = fromValueView(selectedDelegation.balanceView);
-            return typeof val === 'string' ? val : val.toString();
-          })()
+      : selectedDelegation
+        ? balanceOf(selectedDelegation)
         : '0';
+    const target = isDelegate
+      ? selectedValidator?.name
+      : selectedDelegation && delegationName(selectedDelegation);
+    const canReview = !!target && parseFloat(amount) > 0;
+    const line = (
+      <>
+        <Sensitive>{`${amount} ${unit}`}</Sensitive>{' '}
+        {isDelegate ? `delegated to ${target}` : `undelegated from ${target}`}
+      </>
+    );
 
     return (
-      <div className='flex flex-col gap-4 p-4'>
-        {/* header */}
-        <div className='flex items-center justify-between'>
-          <h2 className='text-lg font-medium'>{isDelegate ? 'delegate' : 'undelegate'}</h2>
-          <button
-            onClick={closeForm}
-            className='text-fg-muted hover:text-fg-high transition-colors'
-          >
-            <span className='i-ph-x h-5 w-5' />
-          </button>
-        </div>
-
-        {/* validator/delegation selector */}
-        {isDelegate ? (
-          <div>
-            <label className='mb-1 block text-xs text-fg-muted'>validator</label>
-            <select
-              value={selectedValidator ? activeValidators.indexOf(selectedValidator) : ''}
-              onChange={e => setSelectedValidator(activeValidators[parseInt(e.target.value, 10)])}
-              className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg'
-            >
-              <option value=''>select validator...</option>
-              {activeValidators.map((v, i) => {
-                const pct = totalVotingPower > 0 ? (v.votingPower / totalVotingPower) * 100 : 0;
-                return (
-                  <option key={i} value={i}>
-                    {v.name} ({pct.toFixed(2)}%)
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-        ) : (
-          <div>
-            <label className='mb-1 block text-xs text-fg-muted'>delegation</label>
-            <select
-              value={selectedDelegation ? delegations.indexOf(selectedDelegation) : ''}
-              onChange={e => setSelectedDelegation(delegations[parseInt(e.target.value, 10)])}
-              className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg'
-            >
-              <option value=''>select delegation...</option>
-              {delegations.map((d, i) => {
-                const symbol = d.balanceView ? getDisplayDenomFromView(d.balanceView) : 'Unknown';
-                const bal = d.balanceView ? fromValueView(d.balanceView) : '0';
-                const balStr = typeof bal === 'string' ? bal : bal.toString();
-                return (
-                  <option key={i} value={i}>
-                    {symbol} (<Sensitive>{balStr}</Sensitive>)
-                  </option>
-                );
-              })}
-            </select>
-          </div>
+      <PenumbraFlow
+        onClose={closeForm}
+        tx={{
+          sending: line,
+          label: `${action} ${amount}`,
+          plan: isDelegate ? planDelegate : planUndelegate,
+          onSent: () => {
+            void refetchDelegations();
+            void refetchValidators();
+          },
+          review: {
+            lead: isDelegate ? 'you delegate' : 'you undelegate',
+            amount,
+            unit,
+            rows: [
+              [isDelegate ? 'to' : 'from', target ?? ''],
+              ...(isDelegate && selectedValidator
+                ? [['commission', `${selectedValidator.commission}%`] as const]
+                : []),
+              ['fee', 'shown before you approve'],
+            ],
+            privacy: 'the staked amount is public on chain',
+            confirm: isDelegate ? 'delegate' : 'undelegate',
+          },
+          done: line,
+        }}
+      >
+        {review => (
+          <>
+            <ScreenHeader title={action} onBack={closeForm} />
+            <Main className='gap-[18px] pt-5'>
+              <RowGroup>
+                <Row
+                  type='value'
+                  label={isDelegate ? 'validator' : 'delegation'}
+                  value={target ?? 'choose'}
+                  onPress={() => setPickOpen(true)}
+                />
+              </RowGroup>
+              <AmountField
+                value={amount}
+                onChange={setAmount}
+                unit={unit}
+                available={maxAmount}
+                onMax={() => setAmount(maxAmount)}
+              />
+            </Main>
+            <Footer>
+              <Button onClick={review} disabled={!canReview} className='w-full'>
+                review
+              </Button>
+            </Footer>
+            {isDelegate ? (
+              <PickSheet
+                title='validator'
+                open={pickOpen}
+                onOpenChange={setPickOpen}
+                picks={activeValidators.map((v, i) => ({
+                  key: i,
+                  label: v.name,
+                  description: share(v),
+                }))}
+                onPick={i => setSelectedValidator(activeValidators[i])}
+              />
+            ) : (
+              <PickSheet
+                title='delegation'
+                open={pickOpen}
+                onOpenChange={setPickOpen}
+                picks={delegations.map((d, i) => ({
+                  key: i,
+                  label: delegationName(d),
+                  value: balanceOf(d),
+                }))}
+                onPick={i => setSelectedDelegation(delegations[i])}
+                empty='no delegations yet'
+              />
+            )}
+          </>
         )}
-
-        {/* amount */}
-        <div>
-          <div className='mb-1 flex items-center justify-between'>
-            <label className='text-xs text-fg-muted'>amount</label>
-            <button
-              onClick={() => setAmount(maxAmount)}
-              className='text-xs text-zigner-gold hover:text-zigner-gold-light'
-            >
-              max: <Sensitive>{maxAmount}</Sensitive>
-            </button>
-          </div>
-          <input
-            type='text'
-            value={amount}
-            onChange={e => setAmount(e.target.value)}
-            placeholder='0.00'
-            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg'
-          />
-        </div>
-
-        {/* tx status */}
-        {txStatus === 'success' && txHash && (
-          <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
-            <p className='text-sm text-green-400'>
-              {isDelegate ? 'delegation' : 'undelegation'} successful!
-            </p>
-            <p className='text-xs text-fg-muted mt-1 font-mono break-all'>{txHash}</p>
-          </div>
-        )}
-
-        {txStatus === 'error' && txError && (
-          <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
-            <p className='text-sm text-red-400'>transaction failed</p>
-            <p className='text-xs text-fg-muted mt-1'>{txError}</p>
-          </div>
-        )}
-
-        {/* submit */}
-        <button
-          onClick={() => {
-            if (txStatus === 'success' || txStatus === 'error') {
-              closeForm();
-            } else if (isDelegate) {
-              void handleDelegate();
-            } else {
-              void handleUndelegate();
-            }
-          }}
-          disabled={
-            (txStatus === 'idle' && !canSubmit) ||
-            txStatus === 'planning' ||
-            txStatus === 'signing' ||
-            txStatus === 'broadcasting'
-          }
-          className={cn(
-            'w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground',
-            'transition-colors hover:bg-zigner-gold-light disabled:opacity-50 disabled:cursor-not-allowed',
-          )}
-        >
-          {txStatus === 'planning' && 'building plan...'}
-          {txStatus === 'signing' && 'signing...'}
-          {txStatus === 'broadcasting' && 'broadcasting...'}
-          {txStatus === 'idle' && (isDelegate ? 'delegate' : 'undelegate')}
-          {(txStatus === 'success' || txStatus === 'error') && 'done'}
-        </button>
-      </div>
+      </PenumbraFlow>
     );
   }
 
   return (
-    <div className='flex flex-col gap-4 p-4'>
-      {/* header */}
-      <div className='flex items-center justify-between'>
-        <h2 className='text-lg font-medium'>staking</h2>
-        <button
-          onClick={() => {
-            void refetchValidators();
-            void refetchDelegations();
-          }}
-          className='text-fg-muted hover:text-fg-high transition-colors'
-        >
-          <span className='i-ph-arrows-clockwise h-4 w-4' />
-        </button>
-      </div>
+    <div className='flex h-full flex-col'>
+      <ScreenHeader
+        title='stake'
+        meta={
+          <button
+            onClick={() => {
+              void refetchValidators();
+              void refetchDelegations();
+            }}
+            aria-label='refresh'
+            className='grid size-8 place-items-center text-fg-muted transition-colors hover:text-fg-high'
+          >
+            <span className='i-ph-arrows-clockwise size-4' />
+          </button>
+        }
+      />
+      <Main className='gap-[18px] pt-5'>
+        <div className='flex flex-col gap-1.5'>
+          <span className='text-xs text-fg-muted'>available to stake</span>
+          <Figure amount={stakingBalance || '0'} unit={STAKING_TOKEN.toLowerCase()} />
+        </div>
 
-      {/* staking balance */}
-      <div className='rounded-lg border border-border-soft bg-elev-2/20 p-4'>
-        <p className='text-xs text-fg-muted'>available to stake</p>
-        <p className='text-xl font-medium'>
-          <Sensitive>
-            {stakingBalance || '0'} {STAKING_TOKEN}
-          </Sensitive>
-        </p>
-        <button
-          onClick={() => setAction('delegate')}
-          className='mt-2 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
-        >
-          delegate
-        </button>
-      </div>
-
-      {/* user delegations */}
-      <div>
-        <h3 className='mb-2 text-xs font-medium uppercase tracking-wider text-fg-muted'>
-          your delegations
-        </h3>
-        {delegationsLoading ? (
-          <div className='flex items-center gap-2 py-12 text-sm text-fg-muted'>
-            <span className='i-ph-arrows-clockwise h-4 w-4 animate-spin' />
-            loading...
-          </div>
-        ) : delegations.length === 0 ? (
-          <p className='py-12 text-center text-sm text-fg-muted'>no active delegations</p>
-        ) : (
-          <div className='flex flex-col gap-2'>
-            {delegations.map((d, i) => {
-              const bal = d.balanceView ? fromValueView(d.balanceView) : '0';
-              const balStr = typeof bal === 'string' ? bal : bal.toString();
-
-              // find matching validator by delegation token
-              const meta = getMetadataFromBalancesResponse.optional(d);
-              const matchedValidator = findValidatorForDelegation(meta, validators);
-
-              // show validator name, or fallback to truncated address
-              const fallbackAddr = meta?.base?.replace(/u?delegation_/, '').slice(0, 20) + '...';
-              const displayName = matchedValidator?.name || fallbackAddr;
-
-              return (
-                <div
+        <section className='flex flex-col gap-2'>
+          <span className='text-xs text-fg-muted'>your delegations</span>
+          {delegationsLoading ? (
+            <div className='h-[52px] animate-pulse bg-elev-1' />
+          ) : delegations.length === 0 ? (
+            <p className='border border-border-soft px-3.5 py-4 text-xs text-fg-muted'>
+              nothing delegated yet
+            </p>
+          ) : (
+            <RowGroup>
+              {delegations.map((d, i) => (
+                <Row
                   key={i}
-                  className='flex items-center justify-between rounded-lg border border-border-soft bg-elev-2/10 p-3'
-                >
-                  <div className='min-w-0 flex-1'>
-                    <p className='text-sm font-medium truncate'>{displayName}</p>
-                    <p className='text-xs text-fg-muted'>
-                      <Sensitive>{balStr}</Sensitive> staked
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setSelectedDelegation(d);
-                      setAction('undelegate');
-                    }}
-                    className='ml-2 rounded-md bg-elev-2 px-3 py-1 text-xs text-fg-muted hover:bg-elev-1/80 hover:text-fg-high transition-colors'
-                  >
-                    undelegate
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                  type='screen'
+                  label={delegationName(d)}
+                  description={`${balanceOf(d)} staked · undelegate`}
+                  onPress={() => {
+                    setSelectedDelegation(d);
+                    setAction('undelegate');
+                  }}
+                />
+              ))}
+            </RowGroup>
+          )}
+        </section>
 
-      {/* validators */}
-      <div>
-        <h3 className='mb-2 text-xs font-medium uppercase tracking-wider text-fg-muted'>
-          validators ({validators.filter(v => v.state === 'active').length} active)
-        </h3>
-        {validatorsLoading ? (
-          <div className='flex items-center gap-2 py-12 text-sm text-fg-muted'>
-            <span className='i-ph-arrows-clockwise h-4 w-4 animate-spin' />
-            loading validators...
-          </div>
-        ) : (
-          <div className='flex flex-col gap-1 max-h-64 overflow-y-auto'>
-            {validators
-              .filter(v => v.state === 'active')
-              .slice(0, 20)
-              .map((v, i) => {
-                const pct = totalVotingPower > 0 ? (v.votingPower / totalVotingPower) * 100 : 0;
-                return (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      setSelectedValidator(v);
-                      setAction('delegate');
-                    }}
-                    className='flex items-center justify-between rounded-lg border border-border-soft bg-elev-2/10 p-2 text-left hover:bg-elev-1 transition-colors'
-                  >
-                    <div className='flex-1 min-w-0'>
-                      <p className='text-sm font-medium truncate'>{v.name}</p>
-                      <p className='text-xs text-fg-muted'>
-                        {pct.toFixed(2)}% · {v.commission}% fee
-                      </p>
-                    </div>
-                    <span className='i-ph-caret-down h-4 w-4 text-fg-muted rotate-[-90deg]' />
-                  </button>
-                );
-              })}
-          </div>
-        )}
-      </div>
+        <section className='flex flex-col gap-2 pb-4'>
+          <span className='text-xs text-fg-muted'>
+            validators · {activeValidators.length} active
+          </span>
+          {validatorsLoading ? (
+            <div className='h-[52px] animate-pulse bg-elev-1' />
+          ) : (
+            <RowGroup>
+              {activeValidators.slice(0, 20).map((v, i) => (
+                <Row
+                  key={i}
+                  type='screen'
+                  label={v.name}
+                  description={share(v)}
+                  onPress={() => {
+                    setSelectedValidator(v);
+                    setAction('delegate');
+                  }}
+                />
+              ))}
+            </RowGroup>
+          )}
+        </section>
+      </Main>
+      <Footer>
+        <Button onClick={() => setAction('delegate')} className='w-full'>
+          delegate
+        </Button>
+      </Footer>
     </div>
   );
 };

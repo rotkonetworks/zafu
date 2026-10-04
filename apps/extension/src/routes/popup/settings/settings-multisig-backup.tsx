@@ -1,208 +1,186 @@
 /**
- * Batch FROST multisig backup. Single passphrase encrypts every
- * self-custody multisig share into one file. Airgap wallets are listed
- * but not included — those are exported from zigner.
+ * backups (Backups.dc.html): the recovery phrase per hot wallet, then every
+ * group seat with where its share lives and whether it was ever exported.
+ * a group seat is not in the recovery phrase, so each one is backed up on
+ * its own; an airgap seat lives on zigner and is backed up there.
  */
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useStore } from '../../../state';
-import { selectMultisigWallets } from '../../../state/wallets';
+import { selectKeyInfos } from '../../../state/keyring';
+import { selectMultisigWallets, type ZcashWalletJson } from '../../../state/wallets';
 import { Button } from '@repo/ui/components/ui/button';
-import { SettingsScreen } from './settings-screen';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
+import { cn } from '@repo/ui/lib/utils';
+import { Section, SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
+import { usePopupNav } from '../../../utils/navigate';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { BackupModal } from '../multisig/backup/backup-modal';
 import { ImportModal } from '../multisig/backup/import-modal';
 import { AirgapQrImportModal } from '../multisig/backup/airgap-qr-import-modal';
-import { exportBatchBackup, exportSingleBackup } from '../multisig/backup/export-helpers';
+import { exportSingleBackup } from '../multisig/backup/export-helpers';
+
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
+
+const fmtDay = (ms: number) =>
+  new Date(ms).toLocaleDateString('en', { month: 'short', day: 'numeric' }).toLowerCase();
+
+/** what a seat row says about its backup, as data */
+const seatState = (w: ZcashWalletJson) =>
+  w.multisig?.custody === 'airgapSigner'
+    ? { mark: 'i-ph-asterisk size-4 text-zafu-blue', meta: 'seat lives on zigner · back up there' }
+    : w.multisig?.backedUpAt
+      ? { mark: 'size-3.5 bg-success', meta: `encrypted file · ${fmtDay(w.multisig.backedUpAt)}` }
+      : { mark: 'size-3.5 border border-warn', meta: 'never backed up', warn: true };
+
+const Line = ({
+  mark,
+  name,
+  meta,
+  warn,
+  children,
+}: {
+  mark: string;
+  name: string;
+  meta: string;
+  warn?: boolean;
+  children?: ReactNode;
+}) => (
+  <div className='flex min-h-[58px] items-center gap-3 px-3.5 py-2'>
+    <span className={cn('grid w-4 shrink-0 place-items-center', mark)} aria-hidden='true' />
+    <span className='flex min-w-0 grow flex-col gap-[3px]'>
+      <span className='truncate text-sm text-fg-high lowercase'>{name}</span>
+      <span className={cn('truncate text-[11px]', warn ? 'text-warn' : 'text-fg-muted')}>
+        {meta}
+      </span>
+    </span>
+    {children}
+  </div>
+);
 
 export const SettingsMultisigBackup = () => {
-  const allMs = useStore(selectMultisigWallets);
-  const selfCustody = allMs.filter(w => w.multisig?.custody !== 'airgapSigner');
-  const airgap = allMs.filter(w => w.multisig?.custody === 'airgapSigner');
+  const navigate = usePopupNav();
+  const hot = useStore(selectKeyInfos).filter(k => k.type === 'mnemonic');
+  const all = useStore(selectMultisigWallets);
+  const seats = all.filter(w => !w.multisig?.hidden);
+  const tables = all.length - seats.length;
 
-  const [batchOpen, setBatchOpen] = useState(false);
-  const [singleTarget, setSingleTarget] = useState<(typeof allMs)[number] | null>(null);
-  const [restoreOpen, setRestoreOpen] = useState(false);
-  const [airgapQrOpen, setAirgapQrOpen] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-
+  const [target, setTarget] = useState<ZcashWalletJson | null>(null);
+  const [restore, setRestore] = useState<'pick' | 'file' | 'qr' | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const { requestAuth, PasswordModal } = usePasswordGate();
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 4000);
+
+  const restored = (s: { imported: number; skipped: number }) =>
+    setNote(
+      `restored ${plural(s.imported, 'seat')}` + (s.skipped ? ` · ${s.skipped} already here` : ''),
+    );
+  const openRestore = async (how: 'file' | 'qr') => {
+    setRestore(null);
+    if (await requestAuth()) {
+      setRestore(how);
+    }
   };
 
   return (
-    <SettingsScreen title='multisig backup' backPath={PopupPath.SETTINGS}>
+    <SettingsScreen title='backups' meta='security' backPath={PopupPath.SETTINGS_SECURITY}>
       {PasswordModal}
       <BackupModal
-        open={batchOpen}
-        title={`export ${selfCustody.length} wallet${selfCustody.length === 1 ? '' : 's'}`}
-        walletLabel={`${selfCustody.length} self-custody multisig wallet${selfCustody.length === 1 ? '' : 's'}`}
-        batch
+        open={target !== null}
+        title={target ? `back up ${target.label}` : ''}
+        walletLabel={target?.label ?? ''}
         onConfirm={async passphrase => {
-          await exportBatchBackup(selfCustody, passphrase);
-          showToast(`exported ${selfCustody.length} wallet${selfCustody.length === 1 ? '' : 's'}`);
-        }}
-        onClose={() => setBatchOpen(false)}
-      />
-      <BackupModal
-        open={singleTarget !== null}
-        title={singleTarget ? `export "${singleTarget.label}"` : ''}
-        walletLabel={singleTarget?.label ?? ''}
-        onConfirm={async passphrase => {
-          if (singleTarget) {
-            await exportSingleBackup(singleTarget, passphrase);
-            showToast(`exported "${singleTarget.label}"`);
+          if (target) {
+            await exportSingleBackup(target, passphrase);
           }
         }}
-        onClose={() => setSingleTarget(null)}
+        onClose={() => setTarget(null)}
       />
       <ImportModal
-        open={restoreOpen}
-        onClose={() => setRestoreOpen(false)}
-        onImported={s =>
-          showToast(
-            `restored ${s.imported} wallet${s.imported === 1 ? '' : 's'}` +
-              (s.skipped ? ` (${s.skipped} already existed)` : ''),
-          )
-        }
+        open={restore === 'file'}
+        onClose={() => setRestore(null)}
+        onImported={restored}
       />
       <AirgapQrImportModal
-        open={airgapQrOpen}
-        onClose={() => setAirgapQrOpen(false)}
-        onImported={s =>
-          showToast(
-            `imported ${s.imported} airgap wallet${s.imported === 1 ? '' : 's'}` +
-              (s.skipped ? ` (${s.skipped} already existed)` : ''),
-          )
-        }
+        open={restore === 'qr'}
+        onClose={() => setRestore(null)}
+        onImported={restored}
       />
 
-      <div className='flex flex-col gap-4'>
-        {toast && (
-          <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-2 text-xs text-green-400'>
-            {toast}
-          </div>
+      <div className='flex grow flex-col gap-4'>
+        {hot.length > 0 && (
+          <Section title='recovery phrase'>
+            {hot.map(k => (
+              <button
+                key={k.id}
+                type='button'
+                data-preload={PopupPath.SETTINGS_RECOVERY_PASSPHRASE}
+                onClick={() => navigate(PopupPath.SETTINGS_RECOVERY_PASSPHRASE)}
+                className='text-left transition-colors hover:bg-surface-elev-2'
+              >
+                <Line
+                  mark='size-3.5 border border-fg-dim'
+                  name={k.name}
+                  meta='restores every pocket'
+                />
+              </button>
+            ))}
+          </Section>
         )}
 
-        {/* batch export */}
-        <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
-          <p className='text-sm font-medium'>batch backup</p>
-          <p className='mt-1 text-body text-fg-muted'>
-            one encrypted file, one passphrase - restore on any zafu install.
+        {seats.length > 0 && (
+          <Section title='group seats' aside='not in your recovery phrase'>
+            {seats.map(w => {
+              const s = seatState(w);
+              // frost share export stays reachable even once a seat is backed
+              // up - only an airgap seat (exported on zigner itself) has none
+              return (
+                <Line key={w.id} mark={s.mark} name={w.label} meta={s.meta} warn={s.warn}>
+                  {w.multisig?.custody !== 'airgapSigner' && (
+                    <Button
+                      variant={s.warn ? 'primary' : 'secondary'}
+                      size='sm'
+                      className='h-8'
+                      onClick={async () => {
+                        if (await requestAuth()) {
+                          setTarget(w);
+                        }
+                      }}
+                    >
+                      {s.warn ? 'back up' : 'export'}
+                    </Button>
+                  )}
+                </Line>
+              );
+            })}
+          </Section>
+        )}
+        {tables > 0 && (
+          <p className='-mt-2.5 text-[11px] text-fg-dim'>
+            poker tables close when settled · no backup needed
           </p>
-          {selfCustody.length === 0 ? (
-            <p className='mt-3 text-xs text-fg-muted'>
-              no self-custody multisig wallets to back up.
-            </p>
-          ) : (
-            <Button
-              variant='default'
-              size='md'
-              className='mt-3 w-full gap-1.5 text-xs'
-              onClick={async () => {
-                if (await requestAuth()) {
-                  setBatchOpen(true);
-                }
-              }}
-            >
-              <span className='i-ph-archive h-3.5 w-3.5' />
-              export all ({selfCustody.length} wallet{selfCustody.length === 1 ? '' : 's'})
-            </Button>
-          )}
-        </div>
-
-        {/* per-wallet list */}
-        {selfCustody.length > 0 && (
-          <div>
-            <p className='kicker mb-2'>individual exports</p>
-            <div className='flex flex-col gap-1.5'>
-              {selfCustody.map(w => (
-                <div
-                  key={w.id}
-                  className='flex items-center justify-between rounded-lg border border-border-soft bg-elev-1 px-3 py-2'
-                >
-                  <div className='flex flex-col min-w-0'>
-                    <span className='text-sm font-medium truncate'>{w.label}</span>
-                    <span className='text-label text-fg-muted'>
-                      {w.multisig!.threshold}-of-{w.multisig!.maxSigners} · self-custody
-                    </span>
-                  </div>
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    onClick={async () => {
-                      if (await requestAuth()) {
-                        setSingleTarget(w);
-                      }
-                    }}
-                  >
-                    export
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </div>
         )}
-
-        {/* airgap notice */}
-        {airgap.length > 0 && (
-          <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
-            <p className='text-body text-fg-muted'>
-              <span className='font-medium text-fg'>
-                {airgap.length} airgap wallet
-                {airgap.length === 1 ? '' : 's'}
-              </span>{' '}
-              not included - export each from the zigner FROST wallet list.
-            </p>
-            <ul className='mt-2 flex flex-col gap-0.5 text-label text-fg-muted'>
-              {airgap.map(w => (
-                <li key={w.id} className='font-mono'>
-                  · {w.label} ({w.multisig!.threshold}-of-{w.multisig!.maxSigners})
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* restore */}
-        <div className='border-t border-border-soft pt-4 flex flex-col gap-2'>
-          <p className='text-sm font-medium'>restore</p>
-          <p className='text-body text-fg-muted'>
-            import a backup file or scan an airgap QR - known wallets are skipped, not overwritten.
-          </p>
-          <div className='flex gap-2'>
-            <Button
-              variant='secondary'
-              size='md'
-              className='flex-1 gap-1.5 text-xs'
-              onClick={async () => {
-                if (await requestAuth()) {
-                  setRestoreOpen(true);
-                }
-              }}
-            >
-              <span className='i-ph-file-arrow-up h-3.5 w-3.5' />
-              from backup file
-            </Button>
-            <Button
-              variant='secondary'
-              size='md'
-              className='flex-1 gap-1.5 text-xs'
-              onClick={async () => {
-                if (await requestAuth()) {
-                  setAirgapQrOpen(true);
-                }
-              }}
-            >
-              <span className='i-ph-qr-code h-3.5 w-3.5' />
-              from zigner QR
-            </Button>
-          </div>
-        </div>
       </div>
+
+      <div className='-mx-4 mt-4 flex flex-col gap-2 border-t border-border-soft px-4 pt-4'>
+        {note && <StatusSlot>{note}</StatusSlot>}
+        <Button variant='secondary' size='md' className='w-full' onClick={() => setRestore('pick')}>
+          restore from a backup
+        </Button>
+      </div>
+
+      <Sheet
+        open={restore === 'pick'}
+        onOpenChange={o => setRestore(o ? 'pick' : null)}
+        title='restore from a backup'
+      >
+        <RowGroup>
+          <Row type='screen' label='from a backup file' onPress={() => void openRestore('file')} />
+          <Row type='screen' label='from zigner qr' onPress={() => void openRestore('qr')} />
+        </RowGroup>
+      </Sheet>
     </SettingsScreen>
   );
 };

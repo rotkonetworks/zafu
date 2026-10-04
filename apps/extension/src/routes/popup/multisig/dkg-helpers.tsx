@@ -14,6 +14,8 @@
 
 import { useMemo, useState } from 'react';
 import { cn } from '@repo/ui/lib/utils';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+import { Button } from '@repo/ui/components/ui/button';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
 
@@ -29,7 +31,8 @@ import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanne
  * participant list to anyone on the path; it would NOT expose ceremony
  * contents, which are end-to-end encrypted before they leave the device.
  */
-export const DEFAULT_RELAY_URL = 'https://relay.zafu.pro';
+import { DEFAULT_RELAY_URL } from '../../../config/multisig-relay';
+export { DEFAULT_RELAY_URL };
 
 /** Running your own: ZF's frostd, which is what this speaks. */
 export const RELAY_RUNBOOK_URL = 'https://github.com/ZcashFoundation/frost-tools';
@@ -49,25 +52,26 @@ export const RelayTransportField = ({
   const [open, setOpen] = useState(false);
   return (
     <div className='flex flex-col gap-1.5'>
-      <div className='flex items-center justify-between gap-2 rounded-lg border border-border-soft bg-elev-1 px-3 py-2.5'>
+      <div className='flex items-center justify-between gap-2 border border-border-soft bg-elev-1 px-3 py-2.5'>
         <div className='flex min-w-0 items-center gap-2'>
           <span className='i-ph-broadcast size-3.5 shrink-0 text-fg-muted' />
           <span className='shrink-0 text-xs text-fg-muted'>relay</span>
           <span className='truncate font-mono text-xs'>{value || DEFAULT_RELAY_URL}</span>
         </div>
-        <button
-          type='button'
+        <Button
+          variant='quiet'
+          size='sm'
+          className='flex shrink-0 gap-1'
           onClick={() => setOpen(o => !o)}
-          className='flex shrink-0 items-center gap-1 text-label text-fg-muted transition-colors hover:text-fg-high'
         >
           advanced
           <span
             className={cn('i-ph-caret-down size-3 transition-transform', open && 'rotate-180')}
           />
-        </button>
+        </Button>
       </div>
       {open && (
-        <div className='flex flex-col gap-2 rounded-lg border border-border-soft bg-elev-1 p-3'>
+        <div className='flex flex-col gap-2 border border-border-soft bg-elev-1 p-3'>
           <p className='text-label text-fg-muted'>
             transport: relay (recommended). every message is encrypted to the signer it is for
             before it leaves this device, so the relay carries ciphertext only - it never sees keys,
@@ -76,7 +80,7 @@ export const RelayTransportField = ({
           <label className='text-label text-fg-muted'>
             your own relay
             <input
-              className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-xs focus:border-primary/50 focus:outline-none'
+              className='mt-1 w-full border border-border-soft bg-input px-3 py-2 font-mono text-xs focus:border-primary/50 focus:outline-none'
               value={value}
               onChange={e => onChange(e.target.value)}
               placeholder={DEFAULT_RELAY_URL}
@@ -115,36 +119,22 @@ export const CancelSessionModal = ({
   open: boolean;
   onStay: () => void;
   onLeave: () => void;
-}) => {
-  if (!open) {
-    return null;
-  }
-  return (
-    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4'>
-      <div className='w-full max-w-sm rounded-lg border border-amber-500/30 bg-elev-1 p-4'>
-        <h2 className='text-lg font-medium'>cancel this session?</h2>
-        <p className='mt-2 text-xs text-fg-muted'>
-          closing cancels this session for everyone - your co-signers will have to start over. are
-          you sure?
-        </p>
-        <div className='mt-4 flex gap-2'>
-          <button
-            onClick={onStay}
-            className='flex-1 rounded-lg border border-border-soft py-2 text-xs transition-colors hover:bg-elev-2'
-          >
-            stay
-          </button>
-          <button
-            onClick={onLeave}
-            className='flex-1 rounded-lg border border-red-500/40 bg-red-500/10 py-2 text-xs text-red-400 transition-colors hover:bg-red-500/20'
-          >
-            leave anyway
-          </button>
-        </div>
-      </div>
+}) => (
+  <Sheet open={open} onOpenChange={next => !next && onStay()} title='cancel this session?'>
+    <p className='text-xs text-fg-muted'>
+      closing cancels this session for everyone - your co-signers will have to start over. are you
+      sure?
+    </p>
+    <div className='flex gap-2'>
+      <Button variant='secondary' size='md' className='flex-1' onClick={onStay}>
+        stay
+      </Button>
+      <Button variant='danger' size='md' className='flex-1' onClick={onLeave}>
+        leave anyway
+      </Button>
     </div>
-  );
-};
+  </Sheet>
+);
 
 /* ────────────────────────────────────────────────────────────────────
  * Zigner QR-mediated step screens (shared by create + join).
@@ -176,12 +166,9 @@ export const ScreenWithTriggerQr = ({
       <p className='text-xs text-fg-muted'>{headline}</p>
       <p className='text-label text-fg-muted text-center max-w-xs'>{body}</p>
       <AnimatedQrDisplay data={bytes} urType={TRIGGER_UR_TYPE} size={200} />
-      <button
-        className='rounded-lg border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs text-zigner-gold'
-        onClick={onNext}
-      >
+      <Button variant='primary' size='sm' onClick={onNext}>
         {nextLabel}
-      </button>
+      </Button>
     </div>
   );
 };

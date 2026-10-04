@@ -145,7 +145,7 @@ export function verifyStream(
   // The frozen wire manifest fields 1..9 carry image_sig (8) and req_id (9)
   // but NOT a standalone manifest_sig (the manifest is authenticated on-wire
   // by image_sig, whose signed header covers the manifest's cryptographic
-  // fields key_id/board/version/payload_sha256/payload_len — spec freeze + RFC
+  // fields key_id/board/version/payload_sha256/payload_len - spec freeze + RFC
   // §2). verifyManifest() verifies the standalone manifest_sig (corpus vector)
   // against the pinned key when an explicit signature is available.
 
@@ -183,7 +183,7 @@ export function verifyStream(
     // Payload-integrity: recompute SHA-256 of the ACTUAL delivered payload
     // bytes and compare to the signed manifest hash (spec §5.2/§6.1, and the
     // device-side verify_payload_chunks). The wrapper's "declared" hash is
-    // NOT enough — a tampered payload must fail here, before we ever show
+    // NOT enough - a tampered payload must fail here, before we ever show
     // "signed & verified". Deliberately synchronous (sha256Sync).
     const payloadStart = consumed + 4 + 4 + 32;
     const payloadBytesActual = payloadBytes.subarray(payloadStart, consumed + bytesAfter);

@@ -2,7 +2,7 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 
 const PENUMBRA_DB_PREFIX = 'viewdata/penumbra';
 // 'zafu-memo-cache' used to be listed here and in four other clear paths.
-// No such database has ever existed — the memo cache is the 'memo-cache'
+// No such database has ever existed - the memo cache is the 'memo-cache'
 // OBJECT STORE inside 'zafu-zcash' (see zcash-worker.ts). Deleting a
 // non-existent database succeeds silently, so all five call sites looked
 // like they were clearing the memo cache and were clearing nothing. The
@@ -100,7 +100,7 @@ const clearZcashSyncCache = (name: string): Promise<void> =>
  * Delete the zcash databases and WAIT for the result.
  *
  * Callers must terminate the zcash worker first. An open connection does not
- * make `deleteDatabase` fail — it fires `onblocked` and never completes — so
+ * make `deleteDatabase` fail - it fires `onblocked` and never completes - so
  * a fire-and-forget delete is indistinguishable from a successful one. This
  * resolves either way but logs loudly when the data was not actually
  * removed, which is the case a user clearing their wallet needs to know
@@ -118,6 +118,34 @@ export const deleteZcashDatabases = async (): Promise<void> => {
       }),
     ),
   );
+};
+
+/** set by an erase whose database deletes were blocked; finished at startup */
+export const PENDING_WIPE_KEY = 'pendingWipe';
+
+/**
+ * Finish an erase that had to restart the extension: delete every database
+ * before anything opens one, then open the onboarding page the erase was
+ * headed for. A delete still blocked here is reported as finishing, not as
+ * a failure - storage is already gone, and the next start tries again.
+ */
+export const finishPendingWipe = async (): Promise<void> => {
+  const { [PENDING_WIPE_KEY]: pending } = await chrome.storage.local.get(PENDING_WIPE_KEY);
+  if (!pending) {
+    return;
+  }
+  const names = (await indexedDB.databases()).map(d => d.name).filter((n): n is string => !!n);
+  await Promise.all(names.map(name => deleteDb(name).catch(() => undefined)));
+  const left = (await indexedDB.databases()).map(d => d.name).filter(Boolean);
+  if (left.length) {
+    console.warn('[clear-startup] erase still finishing:', left.join(', '));
+    return;
+  }
+  await chrome.storage.local.remove(PENDING_WIPE_KEY);
+  const then = (pending as { then?: string | null }).then;
+  if (then) {
+    await chrome.tabs.create({ url: chrome.runtime.getURL(`page.html#${then}`) });
+  }
 };
 
 /**
@@ -143,11 +171,7 @@ export const performPendingClears = async (): Promise<void> => {
     } catch (e) {
       console.warn('[clear-startup] penumbra enumerate error:', e);
     }
-    await Promise.all([
-      localExtStorage.remove('fullSyncHeight'),
-      localExtStorage.remove('compactFrontierBlockHeight'),
-      localExtStorage.remove('params'),
-    ]);
+    await Promise.all([localExtStorage.remove('penumbraSync'), localExtStorage.remove('params')]);
   }
 
   if (pending.includes('zcash')) {

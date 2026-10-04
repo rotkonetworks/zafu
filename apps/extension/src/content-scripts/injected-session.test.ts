@@ -49,7 +49,8 @@ const sender = { id: 'test-extension-id' } as chrome.runtime.MessageSender;
 
 const importBridge = async () => {
   await import('./injected-session');
-  const listener = backgroundListeners[0];
+  // the session bridge registers last (its discovery-hold import runs first)
+  const listener = backgroundListeners.at(-1)!;
   return (message: ZafuControl) => listener(message, sender, () => {});
 };
 

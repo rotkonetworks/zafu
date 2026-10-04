@@ -14,6 +14,6 @@
     "./key-print": "./src/key-print.ts"
   },
   "devDependencies": {
-    "@rotko/penumbra-types": "37.0.0"
+    "@penumbrafi/types": "38.0.0"
   }
 }

@@ -390,9 +390,22 @@ export function bytesToHex(bytes: Uint8Array): string {
  *
  *              tag 0x01: ed25519 zid pubkey (len=32). DH messaging capable.
  *
+ *              tag 0x05: the inception key (len=32) of the card this one
+ *                        answers, so its holder knows which card it was.
+ *              tag 0x06: the relationship's X25519 key-agreement key
+ *                        (len=32): two people holding each other's cards
+ *                        derive their 1:1 pair room from it. Per
+ *                        relationship, unlike 0x03, so it links nothing.
+ *
  *              tag 0x02: post-quantum public key (algorithm-specific, future).
  *                        PQ keys (897+ bytes) exceed a single memo but the
  *                        card is fragmented across multiple notes when needed.
+ *
+ *              tag 0x03: contact key-agreement key, x25519-v1 (len=32). With
+ *                        it, two people who swapped cards derive the same
+ *                        pairwise secret with no message, which is what
+ *                        private contact discovery runs on. A card without it
+ *                        is address-only for discovery.
  *
  * Size budget:
  *   overhead: 5 bytes (ver + flags + name_len + addr_len)
@@ -424,6 +437,12 @@ export interface ContactCard {
   address: string;
   /** sender's per-contact zid pubkey (32 bytes hex). optional in v1 — appended after address. */
   zid?: string;
+  /** sender's contact key-agreement pubkey, x25519-v1 (32 bytes hex), tag 0x03. optional. */
+  ka?: string;
+  /** the inception key (hex) of the card this one answers, tag 0x05 */
+  answers?: string;
+  /** the relationship's pair-room key-agreement pubkey (hex), tag 0x06 */
+  pairKa?: string;
 }
 
 /**
@@ -452,6 +471,31 @@ export function encodeContactCard(card: Omit<ContactCard, 'version'>): Uint8Arra
       ext[1] = 0x00; // len high
       ext[2] = 0x20; // len low (32)
       ext.set(zidBytes, 3);
+      extensions.push(ext);
+    }
+  }
+  if (card.ka) {
+    const kaBytes = hexToBytes(card.ka);
+    if (kaBytes.length === 32) {
+      const ext = new Uint8Array(3 + 32);
+      ext[0] = 0x03; // tag: contact key-agreement key, x25519-v1
+      ext[1] = 0x00;
+      ext[2] = 0x20;
+      ext.set(kaBytes, 3);
+      extensions.push(ext);
+    }
+  }
+  for (const [tag, hex] of [
+    [0x05, card.answers],
+    [0x06, card.pairKa],
+  ] as const) {
+    const bytes = hex ? hexToBytes(hex) : undefined;
+    if (bytes?.length === 32) {
+      const ext = new Uint8Array(3 + 32);
+      ext[0] = tag;
+      ext[1] = 0x00;
+      ext[2] = 0x20;
+      ext.set(bytes, 3);
       extensions.push(ext);
     }
   }
@@ -518,6 +562,9 @@ export function decodeContactCard(payload: Uint8Array): ContactCard | null {
 
   // parse TLV extensions
   let zid: string | undefined;
+  let ka: string | undefined;
+  let answers: string | undefined;
+  let pairKa: string | undefined;
   while (offset + 3 <= payload.length) {
     const tag = payload[offset]!;
     const len = (payload[offset + 1]! << 8) | payload[offset + 2]!;
@@ -527,12 +574,27 @@ export function decodeContactCard(payload: Uint8Array): ContactCard | null {
     } // truncated — stop
     if (tag === 0x01 && len === 32) {
       zid = bytesToHex(payload.slice(offset, offset + 32));
+    } else if (tag === 0x03 && len === 32) {
+      ka = bytesToHex(payload.slice(offset, offset + 32));
+    } else if (tag === 0x05 && len === 32) {
+      answers = bytesToHex(payload.slice(offset, offset + 32));
+    } else if (tag === 0x06 && len === 32) {
+      pairKa = bytesToHex(payload.slice(offset, offset + 32));
     }
     // unknown tags: skip by advancing offset
     offset += len;
   }
 
-  return { version, flags, name, address, zid };
+  return {
+    version,
+    flags,
+    name,
+    address,
+    zid,
+    ...(ka ? { ka } : {}),
+    ...(answers ? { answers } : {}),
+    ...(pairKa ? { pairKa } : {}),
+  };
 }
 
 // ── generic data (agentic / machine-to-machine) ──

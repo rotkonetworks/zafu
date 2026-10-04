@@ -1,89 +1,37 @@
-import { lazy, Suspense } from 'react';
+import { Navigate, type RouteObject } from 'react-router-dom';
 import { PagePath } from '../paths';
-import { OnboardingShell } from './onboarding-shell';
 
-// lazy load all onboarding screens
-const OnboardingStart = lazy(() => import('./start').then(m => ({ default: m.OnboardingStart })));
-const GenerateSeedPhrase = lazy(() =>
-  import('./generate').then(m => ({ default: m.GenerateSeedPhrase })),
-);
-const ImportSeedPhrase = lazy(() =>
-  import('./import').then(m => ({ default: m.ImportSeedPhrase })),
-);
-const ImportReview = lazy(() => import('./import-review').then(m => ({ default: m.ImportReview })));
-const ImportBirthday = lazy(() =>
-  import('./import-birthday').then(m => ({ default: m.ImportBirthday })),
-);
-const ImportZigner = lazy(() => import('./import-zigner').then(m => ({ default: m.ImportZigner })));
-const ConnectLedger = lazy(() =>
-  import('./connect-ledger').then(m => ({ default: m.ConnectLedger })),
-);
-const SetPassword = lazy(() => import('./password').then(m => ({ default: m.SetPassword })));
-const OnboardingSuccess = lazy(() =>
-  import('./success').then(m => ({ default: m.OnboardingSuccess })),
-);
+type Screens = typeof import('./screens');
 
-/**
- * Skeleton placeholder used while a lazy route bundle is fetched. Avoids
- * the spinner because spinners advertise "we're slow" — a skeleton with
- * the same geometry as the real content feels faster even though the
- * wall-clock latency is identical. Pure CSS, no JS animation cost.
- */
-const LazyFallback = () => (
-  <div className='flex h-full flex-col gap-4 animate-pulse'>
-    <div className='h-6 w-40 rounded-sm bg-elev-2/60' />
-    <div className='h-3 w-64 rounded-sm bg-elev-2/40' />
-    <div className='mt-4 h-32 w-full rounded-sm bg-elev-2/30' />
-  </div>
-);
+// one chunk for the whole flow, fetched once, so a step never waits on a load
+const screen = (name: keyof Screens) => () =>
+  import('./screens').then(m => ({ Component: m[name] }));
 
-const withSuspense = (Component: React.LazyExoticComponent<React.ComponentType>) => (
-  <OnboardingShell>
-    <Suspense fallback={<LazyFallback />}>
-      <Component />
-    </Suspense>
-  </OnboardingShell>
-);
+const P = PagePath;
 
-export const onboardingRoutes = [
-  {
-    path: PagePath.WELCOME,
-    element: withSuspense(OnboardingStart),
-  },
-  {
-    path: PagePath.GENERATE_SEED_PHRASE,
-    element: withSuspense(GenerateSeedPhrase),
-  },
-  {
-    path: PagePath.IMPORT_SEED_PHRASE,
-    element: withSuspense(ImportSeedPhrase),
-  },
-  {
-    path: PagePath.IMPORT_REVIEW,
-    element: withSuspense(ImportReview),
-  },
-  {
-    path: PagePath.IMPORT_BIRTHDAY,
-    element: withSuspense(ImportBirthday),
-  },
-  {
-    path: PagePath.IMPORT_ZIGNER,
-    element: withSuspense(ImportZigner),
-  },
-  {
-    // Gated behind HARDWARE_WALLET_ENABLED at the entry point (start.tsx filters
-    // out the card). The route itself stays registered so the screen is
-    // type-checked and reachable by URL when the flag flips - matching how the
-    // other flagged surfaces (subscribe, password-generator) keep their routes.
-    path: PagePath.CONNECT_LEDGER,
-    element: withSuspense(ConnectLedger),
-  },
-  {
-    path: PagePath.SET_PASSWORD,
-    element: withSuspense(SetPassword),
-  },
-  {
-    path: PagePath.ONBOARDING_SUCCESS,
-    element: withSuspense(OnboardingSuccess),
-  },
-];
+export const onboardingRoute: RouteObject = {
+  path: P.WELCOME,
+  lazy: screen('Onboarding'),
+  children: [
+    { index: true, lazy: screen('OnboardingStart') },
+    { path: P.CHOOSE, lazy: screen('OnboardingChoose') },
+    { path: P.CREATE_PASSWORD, lazy: screen('SetPassword') },
+    { path: P.GENERATE_SEED_PHRASE, lazy: screen('GenerateSeedPhrase') },
+    { path: P.CHECK_SEED_PHRASE, lazy: screen('CheckSeedPhrase') },
+    { path: P.IMPORT_SEED_PHRASE, lazy: screen('ImportSeedPhrase') },
+    { path: P.IMPORT_BIRTHDAY, lazy: screen('ImportBirthday') },
+    { path: P.IMPORT_PASSWORD, lazy: screen('SetPassword') },
+    { path: P.IMPORT_VIEWING_KEY, lazy: screen('ImportViewingKey') },
+    { path: P.VIEWING_KEY_BIRTHDAY, lazy: screen('ImportBirthday') },
+    { path: P.VIEWING_KEY_PASSWORD, lazy: screen('SetPassword') },
+    { path: P.IMPORT_SIGNER, lazy: screen('ImportZigner') },
+    { path: P.ZIGNER_PASSWORD, lazy: screen('SetPassword') },
+    // brand-neutral rename (one scanner for any cold signer) - old links/bookmarks still land
+    { path: P.IMPORT_ZIGNER, element: <Navigate replace to={P.IMPORT_SIGNER} /> },
+    { path: P.IMPORT_ZIGNER_PASSWORD_OLD, element: <Navigate replace to={P.ZIGNER_PASSWORD} /> },
+    // the ledger entry is flagged in start.tsx; the route stays so it type-checks
+    { path: P.CONNECT_LEDGER, lazy: screen('ConnectLedger') },
+    { path: P.PERSONALIZE, lazy: screen('Personalize') },
+    { path: P.ONBOARDING_SUCCESS, lazy: screen('OnboardingSuccess') },
+  ],
+};

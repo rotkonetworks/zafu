@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
  * an offscreen prover at import time, so its broadcast handlers cannot be
  * exercised in a unit test. What CAN be asserted cheaply is the property that
  * was broken: every handler that broadcasts a cold-signed transaction does the
- * same bookkeeping the hot paths do — mark the inputs spent, record the send.
+ * same bookkeeping the hot paths do - mark the inputs spent, record the send.
  *
  * A wallet that skips it keeps counting spent notes as spendable, re-offers
  * them to the next send, and loses the recipient / memo / fee for good.
@@ -61,6 +61,26 @@ describe('cold-send bookkeeping', () => {
 
   it.each(COLD_BROADCAST_HANDLERS)('%s accepts the coldSendId from its build', name => {
     expect(caseBody(name)).toContain('coldSendId');
+  });
+
+  it('complete-orchard-pczt marks inputs only after the broadcast was accepted', () => {
+    // a rejected broadcast throws first, so its inputs stay spendable
+    const body = caseBody('complete-orchard-pczt');
+    const reject = body.indexOf('throw new Error(`broadcast failed');
+    expect(reject).toBeGreaterThan(-1);
+    expect(reject).toBeLessThan(body.indexOf('finalizeColdBroadcast'));
+  });
+
+  it('page code completes orchard pczts only through the shared cold tail', () => {
+    // the tail passes the build's coldSendId; a direct call is how the airgap
+    // multisig send lost its spend marks
+    const src = join(dirname(fileURLToPath(import.meta.url)), '..');
+    const callers = readdirSync(src, { recursive: true })
+      .map(String)
+      .filter(f => /\.tsx?$/.test(f) && !/\.test\./.test(f))
+      .filter(f => readFileSync(join(src, f), 'utf8').includes('completeOrchardPcztInWorker('))
+      .sort();
+    expect(callers).toEqual(['signing/cold-send.ts']);
   });
 
   it('resolves a stashed context only by explicit id', () => {

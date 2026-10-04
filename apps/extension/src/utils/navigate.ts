@@ -4,6 +4,37 @@ import { PopupPath } from '../routes/popup/paths';
 import { POPUP_WINDOW_HEIGHT, POPUP_WINDOW_WIDTH } from './popup-window';
 import { isSidePanel } from './popup-detection';
 
+/**
+ * How a screen change animates (see styles/view-transitions.css):
+ * `tab` crossfades, `push` / `back` crossfade with a slight slide.
+ */
+export type ScreenTransition = 'push' | 'back' | 'tab';
+
+const prefersReducedMotion = (): boolean =>
+  typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/**
+ * Navigate options for an animated screen change via the View Transitions
+ * API (react-router's `viewTransition`). Returns no options - a plain, instant
+ * navigation - where the API is missing or the user prefers reduced motion.
+ * Back (history POP) navigations need no options: the router replays the
+ * transition of the push they undo.
+ */
+export const screenTransition = (
+  kind: ScreenTransition,
+): Pick<NavigateOptions, 'viewTransition'> => {
+  if (
+    typeof document === 'undefined' ||
+    typeof document.startViewTransition !== 'function' ||
+    prefersReducedMotion()
+  ) {
+    return {};
+  }
+  // read by the CSS to pick the animation; set before the old screen is captured
+  document.documentElement.dataset['navDir'] = kind;
+  return { viewTransition: true };
+};
+
 // Used to add type-safety to navigating routes
 export const useTypesafeNav = <T extends string>() => {
   const navigate = useNavigate();
@@ -17,7 +48,19 @@ export const useTypesafeNav = <T extends string>() => {
 };
 
 export const usePageNav = useTypesafeNav<PagePath>;
-export const usePopupNav = useTypesafeNav<PopupPath>;
+
+// popup navigations animate (styles/view-transitions.css, loaded by the popup)
+export const usePopupNav = () => {
+  const navigate = useNavigate();
+  return (to: PopupPath | number, options?: NavigateOptions): void => {
+    if (typeof to === 'number') {
+      screenTransition(to < 0 ? 'back' : 'push');
+      navigate(to);
+    } else {
+      navigate(to, { ...screenTransition('push'), ...options });
+    }
+  };
+};
 
 /** popup-path navigate function, as returned by `usePopupNav` */
 export type PopupNav = (to: PopupPath | number, options?: NavigateOptions) => void;
@@ -27,8 +70,7 @@ export type PopupNav = (to: PopupPath | number, options?: NavigateOptions) => vo
  *
  * Hardcoded back targets teleport: drawer → networks → back used to land
  * on /settings (never visited), identity → contacts → back landed on home.
- * History-back fixes the common case; `fallback` covers direct entry —
- * deep links (`?network=zcash`), dedicated approval windows, and popup
+ * History-back fixes the common case; `fallback` covers direct entry - * deep links (`?network=zcash`), dedicated approval windows, and popup
  * re-opens that start the session directly on a sub-screen and so have
  * no in-app history (React Router marks that first entry key 'default').
  */
@@ -37,9 +79,10 @@ export const useBackNav = (fallback: PopupPath = PopupPath.INDEX) => {
   const location = useLocation();
   return (): void => {
     if (location.key !== 'default') {
+      screenTransition('back');
       navigate(-1);
     } else {
-      navigate(fallback);
+      navigate(fallback, screenTransition('back'));
     }
   };
 };

@@ -1,41 +1,26 @@
-import { PopupLoaderData } from '../routes/popup/home';
-import { useLoaderData } from 'react-router-dom';
 import { useLatestBlockHeight } from './latest-block-height';
-import { useStore } from '../state';
-const selectFullSyncHeight = (state: { network: { fullSyncHeight?: number } }) =>
-  state.network.fullSyncHeight;
+import { useStore, type AllSlices } from '../state';
 
-const tryGetMax = (a?: number, b?: number): number | undefined => {
-  // Height can be 0n which is falsy, so should compare to undefined state
-  if (a === undefined) {
-    return b;
-  }
-  if (b === undefined) {
-    return a;
-  }
+/** the active penumbra wallet, picked the way the worker picks it */
+const selectActiveWalletId = (s: AllSlices) =>
+  (s.wallets.all[s.wallets.activeIndex] ?? s.wallets.all[0])?.id;
 
-  return Math.max(a, b);
-};
-
-// There is a slight delay with Zustand loading up the last block synced.
-// To prevent the screen flicker, we use a loader to read it from chrome.storage.local.
-const useFullSyncHeight = (): number | undefined => {
-  // Default to {} so this never throws if the hook is ever rendered under a
-  // route without popupIndexLoader (useLoaderData returns undefined there).
-  const loaderData: PopupLoaderData | undefined = useLoaderData();
-  const { fullSyncHeight: localHeight } = loaderData ?? {};
-  const memoryHeight = useStore(selectFullSyncHeight);
-
-  return tryGetMax(localHeight, memoryHeight);
+/** the worker's published sync, only while it is the active wallet's: never another wallet's height */
+export const usePenumbraSync = () => {
+  const walletId = useStore(selectActiveWalletId);
+  const sync = useStore(s => s.network.penumbraSync);
+  return sync && sync.walletId === walletId ? sync : undefined;
 };
 
 export const useSyncProgress = () => {
-  const fullSyncHeight = useFullSyncHeight();
-  const { data: queriedLatest, error } = useLatestBlockHeight();
-
-  // If we have a queried sync height and it's ahead of our block-height query,
-  // use the sync value instead
-  const latestBlockHeight = queriedLatest ? tryGetMax(queriedLatest, fullSyncHeight) : undefined;
-
-  return { latestBlockHeight, fullSyncHeight, error };
+  const sync = usePenumbraSync();
+  const { data: queried, error } = useLatestBlockHeight(sync?.height);
+  // a node that answered earlier than the sync has since read is behind it
+  const tip = queried === undefined ? 0 : Math.max(queried, sync?.height ?? 0);
+  return {
+    tip,
+    height: sync?.height,
+    from: sync?.from ?? 0,
+    error,
+  };
 };

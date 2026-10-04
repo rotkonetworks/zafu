@@ -7,6 +7,7 @@ import { useStoreShallow } from '../../../utils/use-store-shallow';
 import { NewFrontendInput } from './new-frontend-input';
 import { LoadingList } from '../loading-list';
 import { useRegistry } from '../registry';
+import { RegistryIcon } from '../registry-icon';
 
 const useFrontendsList = (selectedRpc?: string) => {
   const { data, isLoading, error } = useRegistry();
@@ -62,28 +63,23 @@ export const DefaultFrontendForm = ({ isOnboarding }: { isOnboarding?: boolean }
 
   return (
     <SelectList>
-      {frontends.map(option => {
-        const imageUrl = option.images[0]?.svg ?? option.images[0]?.png;
-        return (
-          <SelectList.Option
-            key={option.url}
-            value={option.url}
-            secondary={option.url}
-            label={option.name}
-            isSelected={option.url === selectedFrontend}
-            onSelect={selectUrl}
-            image={
-              !!imageUrl && (
-                <img
-                  src={imageUrl}
-                  className='size-full object-contain'
-                  alt='rpc endpoint brand image'
-                />
-              )
-            }
-          />
-        );
-      })}
+      {frontends.map(option => (
+        <SelectList.Option
+          key={option.url}
+          value={option.url}
+          secondary={option.url}
+          label={option.name}
+          isSelected={option.url === selectedFrontend}
+          onSelect={selectUrl}
+          image={
+            <RegistryIcon
+              name={option.name}
+              images={option.images}
+              className='size-full object-contain'
+            />
+          }
+        />
+      ))}
 
       <NewFrontendInput
         key='custom-input'
@@ -98,7 +94,7 @@ export const DefaultFrontendForm = ({ isOnboarding }: { isOnboarding?: boolean }
       <div className='sticky bottom-0 left-0 right-0 w-full backdrop-blur-md bg-background/70 border-t border-border-soft z-10 mt-4 pb-[15px]'>
         <Button
           key='save-button'
-          variant='gradient'
+          variant='primary'
           disabled={!selectedFrontend}
           type={isOnboarding ? 'submit' : 'button'}
           className='w-full'

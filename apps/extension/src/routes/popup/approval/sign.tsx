@@ -4,6 +4,11 @@ import { signApprovalSelector } from '../../../state/sign-approval';
 import { ApprovalScreen } from './approval-screen';
 import { ApproveDeny } from './approve-deny';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
+import { OriginIcon } from '../../../shared/components/origin-icon';
+import { QrCode } from '../../../components/qr-code';
+import { Mark } from '@repo/ui/components/ui/mark';
+import { Button } from '@repo/ui/components/ui/button';
+import { Input } from '@repo/ui/components/ui/input';
 import { UserChoice } from '@repo/storage-chrome/records';
 import {
   signZid,
@@ -17,6 +22,8 @@ import { hexToBytes } from '@noble/hashes/utils';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { exitApprovalSurface, usePopupNav } from '../../../utils/navigate';
+import { useApprovalFixture } from './use-approval-fixture';
+import { hostnameOf } from '../../../shared/components/origin-icon';
 
 type SignStep = 'review' | 'password' | 'show-qr' | 'scan-qr' | 'signing';
 
@@ -24,6 +31,7 @@ export const SignApproval = () => {
   const navigate = usePopupNav();
   const {
     origin,
+    title,
     challengeHex,
     statement,
     algorithm,
@@ -35,6 +43,16 @@ export const SignApproval = () => {
   const keyInfo = useStore(selectEffectiveKeyInfo);
   const getMnemonic = useStore(s => s.keyRing.getMnemonic);
   const checkPassword = useStore(s => s.keyRing.checkPassword);
+  const acceptRequest = useStore(s => s.signApproval.acceptRequest);
+
+  useApprovalFixture(!!origin, () => {
+    void acceptRequest({
+      origin: 'https://zk.poker',
+      title: 'zk.poker',
+      challengeHex: 'deadbeef'.repeat(4),
+      algorithm: 'ed25519',
+    });
+  });
 
   const [step, setStep] = useState<SignStep>('review');
   const [password, setPassword] = useState('');
@@ -108,7 +126,7 @@ export const SignApproval = () => {
       const zidIndex = await getZidIndex();
       const result =
         algorithm === 'es256'
-          ? signP256(mnemonic, origin, challenge, pref)
+          ? signP256(mnemonic, origin, challenge, pref, zidIndex)
           : signZid(mnemonic, origin, challenge, pref, zidIndex);
 
       // share log is written by the service worker (sign-request.ts) after popup closes
@@ -198,70 +216,63 @@ export const SignApproval = () => {
   return (
     <ApprovalScreen
       header={
-        <header className='flex h-[70px] flex-col items-center justify-center border-b border-border-soft'>
-          <span className='kicker mb-1'>signature request</span>
+        <header className='flex flex-col items-center justify-center gap-2 border-b border-border-soft px-4 py-4'>
+          {origin && (
+            <div className='flex w-full items-center gap-2'>
+              <OriginIcon origin={origin} size={32} />
+              <div className='flex min-w-0 flex-col'>
+                {title && <span className='truncate text-sm text-fg-high'>{title}</span>}
+                <span className='truncate text-xs text-fg-muted'>
+                  <DisplayOriginURL url={new URL(origin)} />
+                </span>
+              </div>
+            </div>
+          )}
+          {step === 'review' && <Mark variant='seal' size={40} />}
           <h1 className='text-title text-fg-high lowercase tracking-[-0.01em]'>
             {step === 'show-qr'
               ? 'sign with zigner'
               : step === 'scan-qr'
                 ? 'scan response'
-                : 'sign message'}
+                : step === 'password'
+                  ? 'enter password'
+                  : `sign in to ${origin ? hostnameOf(origin) : 'this site'}`}
           </h1>
         </header>
       }
-      footer={step === 'review' ? <ApproveDeny approve={approve} deny={deny} /> : undefined}
+      footer={
+        step === 'review' ? (
+          <ApproveDeny approve={approve} deny={deny} approveLabel='sign in' denyLabel='not now' />
+        ) : undefined
+      }
     >
       {/* ── review step ── */}
       {step === 'review' && (
-        <>
-          <div className='mx-auto flex size-20 items-center justify-center rounded-full bg-elev-2'>
-            <span className='i-ph-fingerprint h-10 w-10 text-fg-muted' />
-          </div>
-          <div className='w-full px-[30px]'>
-            <div className='flex flex-col gap-3'>
-              <div className='flex min-h-11 w-full items-center overflow-x-auto rounded-md bg-elev-2 p-3 text-fg-muted'>
-                <div className='mx-auto items-center text-center leading-[0.8em]'>
-                  {origin && <DisplayOriginURL url={new URL(origin)} />}
-                </div>
-              </div>
-              {statement && (
-                <div className='rounded-md border border-border-soft p-3 text-xs text-fg'>
-                  {statement}
-                </div>
-              )}
-              <div className='rounded-md bg-elev-2 p-3'>
-                <p className='kicker'>challenge</p>
-                <p className='mt-1 break-all tabular text-xs text-fg-high'>
-                  {challengeHex && challengeHex.length > 64
-                    ? challengeHex.slice(0, 64) + '...'
-                    : challengeHex}
+        <div className='w-full px-[30px]'>
+          <div className='flex flex-col gap-3'>
+            {statement && (
+              <div className='border border-border-soft p-3 text-xs text-fg'>{statement}</div>
+            )}
+            {previewAddress && (
+              <div className='border border-border-soft p-3'>
+                <p className='kicker mb-1'>
+                  as ({signingMode}){isAirgap ? ' - zigner' : ''}
                 </p>
+                <p className='tabular text-xs text-fg-high break-all'>{previewAddress}</p>
               </div>
-              {previewAddress && (
-                <div className='rounded-md border border-border-soft p-3'>
-                  <p className='kicker mb-1'>
-                    signing as ({signingMode}){isAirgap ? ' - zigner' : ''}
-                  </p>
-                  <p className='tabular text-xs text-fg-high break-all'>{previewAddress}</p>
-                </div>
-              )}
-              <p className='text-xs text-fg-muted'>
-                this site is requesting a signature from your identity key. this will not authorize
-                any transactions.
-              </p>
-            </div>
+            )}
+            <p className='text-xs text-fg-muted'>
+              {origin ? hostnameOf(origin) : 'this site'} learns nothing about your wallet or other
+              sites.
+            </p>
           </div>
-        </>
+        </div>
       )}
 
       {/* ── password step (mnemonic only) ── */}
       {step === 'password' && (
         <div className='w-full px-[30px] flex flex-col gap-4'>
-          <div className='mx-auto flex size-16 items-center justify-center rounded-full bg-elev-2'>
-            <span className='i-ph-lock h-8 w-8 text-fg-muted' />
-          </div>
-          <p className='text-sm text-fg-muted text-center'>enter password to sign</p>
-          <input
+          <Input
             type='password'
             autoFocus
             value={password}
@@ -271,27 +282,29 @@ export const SignApproval = () => {
                 void handlePasswordSubmit();
               }
             }}
-            className='w-full rounded-lg border border-border-soft bg-elev-2 p-3 text-sm outline-none focus:border-foreground/40'
             placeholder='password'
+            variant={passwordError ? 'error' : 'default'}
           />
-          {passwordError && <p className='text-xs text-red-400 text-center'>{passwordError}</p>}
-          <div className='flex gap-3 mt-2'>
-            <button
+          {passwordError && <p className='text-xs text-red-400'>{passwordError}</p>}
+          <div className='flex gap-3'>
+            <Button
+              variant='secondary'
+              className='flex-1'
               onClick={() => {
                 setStep('review');
                 setPassword('');
                 setPasswordError('');
               }}
-              className='flex-1 rounded-md border border-border-soft p-3 text-xs text-fg-muted hover:text-fg-high hover:bg-elev-1 lowercase'
             >
               back
-            </button>
-            <button
+            </Button>
+            <Button
+              variant='primary'
+              className='flex-1'
               onClick={() => void handlePasswordSubmit()}
-              className='flex-1 rounded-md bg-zigner-gold p-3 text-xs text-zigner-gold-foreground hover:bg-zigner-gold-light lowercase'
             >
               sign
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -307,26 +320,13 @@ export const SignApproval = () => {
       {/* ── show QR step (zigner only) ── */}
       {step === 'show-qr' && (
         <div className='w-full px-[30px] flex flex-col gap-4 items-center'>
-          <p className='text-sm text-fg-muted text-center'>scan this QR with your zigner device</p>
-          <div className='bg-white p-3 rounded-lg'>
-            <QrCanvas data={challengeQr} size={240} />
-          </div>
-          <div className='rounded-md bg-elev-2 p-3 w-full'>
-            <p className='kicker'>origin</p>
-            <p className='tabular text-xs text-fg-high mt-1'>{origin}</p>
-          </div>
-          <button
-            onClick={() => setStep('scan-qr')}
-            className='w-full rounded-md bg-zigner-gold p-3 text-xs text-zigner-gold-foreground hover:bg-zigner-gold-light lowercase'
-          >
+          <QrCode value={challengeQr} size={240} label='zigner sign-challenge QR' />
+          <Button variant='primary' className='w-full' onClick={() => setStep('scan-qr')}>
             scan signed response
-          </button>
-          <button
-            onClick={() => setStep('review')}
-            className='text-label text-fg-dim hover:text-fg-high lowercase'
-          >
+          </Button>
+          <Button variant='quiet' size='sm' onClick={() => setStep('review')}>
             back
-          </button>
+          </Button>
         </div>
       )}
 
@@ -344,26 +344,4 @@ export const SignApproval = () => {
       )}
     </ApprovalScreen>
   );
-};
-
-/* ── QR canvas for challenge display ── */
-const QrCanvas = ({ data, size }: { data: string; size: number }) => {
-  const ref = (canvas: HTMLCanvasElement | null) => {
-    if (!canvas || !data) {
-      return;
-    }
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const QRCode = require('qrcode');
-      QRCode.toCanvas(canvas, data, {
-        width: size,
-        margin: 1,
-        color: { dark: '#000', light: '#fff' },
-        errorCorrectionLevel: 'L',
-      });
-    } catch {
-      /* */
-    }
-  };
-  return <canvas ref={ref} />;
 };

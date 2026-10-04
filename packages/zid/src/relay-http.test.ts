@@ -163,6 +163,70 @@ describe('createHttpRelayTransport', () => {
 
     expect(out).toHaveLength(MAX_RELAY_ENTRIES); // excess beyond the cap dropped
     expect(out.every(e => e.tag.length <= 32)).toBe(true); // oversized entry discarded
+    // never silent: the refusal is counted, not swallowed.
+    expect(out.droppedOversize).toHaveLength(1);
+    expect(out.droppedOversize[0]).toMatchObject({
+      index: 3,
+      base64Length: MAX_RELAY_ENTRY_BASE64 + 4,
+    });
+  });
+
+  it('a caller with a bigger record size raises maxEntryBase64 and keeps the entry', async () => {
+    // a 1053-byte sealed room record (1404 base64 chars) is exactly the shape
+    // that discovery's 1024-char default silently dropped.
+    const tag = b64(new Uint8Array(16).fill(1));
+    const roomBlob = 'A'.repeat(1404);
+    const fetchMock = vi.fn(async () => jsonResponse({ entries: [{ tag, blob: roomBlob }] }));
+    const transport = createHttpRelayTransport({
+      endpoint: 'https://r',
+      fetch: asFetch(fetchMock),
+      maxEntryBase64: 2048,
+    });
+
+    const out = await transport.getBucket({ appScope: 'a', epoch: 1, shard: '' });
+
+    expect(out).toHaveLength(1);
+    expect(out.droppedOversize).toHaveLength(0);
+  });
+
+  it('the same 1404-char record is refused (and reported) at the unchanged discovery default', async () => {
+    const tag = b64(new Uint8Array(16).fill(1));
+    const roomBlob = 'A'.repeat(1404);
+    const fetchMock = vi.fn(async () => jsonResponse({ entries: [{ tag, blob: roomBlob }] }));
+    const transport = createHttpRelayTransport({
+      endpoint: 'https://r',
+      fetch: asFetch(fetchMock),
+    });
+
+    const out = await transport.getBucket({ appScope: 'a', epoch: 1, shard: '' });
+
+    expect(out).toHaveLength(0);
+    expect(out.droppedOversize).toHaveLength(1);
+    expect(out.droppedOversize[0]?.base64Length).toBe(1404);
+  });
+
+  it('a caller may also raise maxEntries and maxBodyBytes, independent of discovery defaults', async () => {
+    const tag = b64(new Uint8Array([1]));
+    const blob = b64(new Uint8Array([2]));
+    const entries = Array.from({ length: MAX_RELAY_ENTRIES + 50 }, () => ({ tag, blob }));
+    const fetchMock = vi.fn(async () => jsonResponse({ entries }));
+    const transport = createHttpRelayTransport({
+      endpoint: 'https://r',
+      fetch: asFetch(fetchMock),
+      maxEntries: MAX_RELAY_ENTRIES + 50,
+      maxBodyBytes: MAX_RELAY_BODY_BYTES * 4,
+    });
+
+    const out = await transport.getBucket({ appScope: 'a', epoch: 1, shard: '' });
+    expect(out).toHaveLength(MAX_RELAY_ENTRIES + 50);
+
+    // discovery's own defaults are untouched by another caller's options.
+    const discoveryTransport = createHttpRelayTransport({
+      endpoint: 'https://r',
+      fetch: asFetch(fetchMock),
+    });
+    const discoveryOut = await discoveryTransport.getBucket({ appScope: 'a', epoch: 1, shard: '' });
+    expect(discoveryOut).toHaveLength(MAX_RELAY_ENTRIES);
   });
 
   it('stops reading an oversized body instead of buffering it for JSON.parse', async () => {
@@ -190,6 +254,7 @@ describe('createHttpRelayTransport', () => {
       fetch: asFetch(fetchMock),
     });
 
-    await expect(transport.getBucket({ appScope: 'a', epoch: 1, shard: '' })).resolves.toEqual([]);
+    const out = await transport.getBucket({ appScope: 'a', epoch: 1, shard: '' });
+    expect(Array.from(out)).toEqual([]);
   });
 });

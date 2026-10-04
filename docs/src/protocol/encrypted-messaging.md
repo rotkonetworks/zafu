@@ -14,10 +14,6 @@ dedicated encrypted memo type (0x06 is
    AES-256-GCM, with no forward secrecy and no post-quantum layer (see
    [multisig group chat](#multisig-group-chat)).
 
-a fourth surface, the zitadel chat client's public rooms, is NOT
-end-to-end encrypted; it relays plaintext and authenticates it with
-per-message ed25519 signatures.
-
 all keys derive from the seed via the v2 zid derivation - see
 [zid](../identity/zid.md#derivation). signatures stay ed25519; the
 post-quantum layer is KEMs only, for confidentiality of key agreement.
@@ -173,50 +169,6 @@ stated plainly:
   envelope carries no signature, and the relay's `sender` field is only a
   hint for which peer key to try first. anything that must pin a frame to
   a specific author needs a signature, which does not exist here.
-
-## zitadel chat
-
-zitadel is an in-extension IRC-style chat client (`zitadel.html`) served
-locally from the extension. it has two message classes with very
-different security:
-
-### public rooms - signed, not encrypted
-
-room messages are **cleartext** to the relay and to anyone it forwards
-them to. there is no room-level encryption. instead, every line is
-authenticated:
-
-- **zid-auth-v1** - a signed announce binding `(server, nick, pubkey,
-ts)`. canonical bytes: `"zafu-zid-auth-v1" 0x00 server 0x00 nick 0x00
-pubkey_hex 0x00 ts`. receivers check version, 60s freshness, that the
-  server matches the active relay, the ed25519 signature, and
-  first-claim-wins for a nick.
-- **zid-msg-v1** - a per-line signature carried alongside the text.
-  canonical bytes: `"zafu-zid-msg-v1" 0x00 server 0x00 room 0x00 nick
-0x00 pubkey 0x00 ts 0x00 text`. it doubles as an implicit announce, so
-  every line carries its own authentication and a nick-spoofed unsigned
-  line never inherits a verified mark.
-
-so public rooms give non-repudiable, nick-spoof-resistant messaging (the
-relay can even prove who said what) but no confidentiality - be honest
-with users that room content is visible to the relay.
-
-the chat identity is the site-scoped ed25519 key for origin `zitadel`,
-fetched from the service worker (`zafu_zid_keypair`, unlocked wallets
-only). the generation-0 pubkey is read from the vault's insensitive
-metadata so a locked wallet can still display an identity.
-
-the default relay is `wss://zrelay.rotko.net/ws`; users can switch with
-`/server <url>`. channel creation is gated to Pro (channels are
-persistent relay state); anyone can join existing channels.
-
-### DMs - end-to-end encrypted
-
-1:1 DMs open a Noise IK channel (above) to the peer's zid pubkey over a
-separate `/zid` WebSocket derived from the chat relay URL. they are
-end-to-end encrypted between the two zid keypairs and require an unlocked
-wallet (the private key is needed for the DH). voice/video call signaling
-rides the same DM channel.
 
 ## bootstrap primitives (SDK)
 

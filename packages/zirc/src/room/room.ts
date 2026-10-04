@@ -33,11 +33,19 @@
  *                    key is derived per (appScope, shard, epoch, kind) with
  *                    HKDF-SHA256, so compromising one window's key does not open
  *                    another's and messages and presence never share one.
- *   authenticity     every record is signed by its author's ed25519 key and the
- *                    signature covers the room, the window and the sequence
- *                    number, so a member cannot rewrite another's message or
- *                    replay one into a different window (the AEAD's AAD binds the
- *                    window too).
+ *   authenticity     every record - message, action, direct message and
+ *                    presence - is signed by its author's ed25519 key. From
+ *                    record version 0x04 the signature covers the room (the
+ *                    app scope's and the shard's hashes), the window, the
+ *                    author's `ts` and sequence number, so a member cannot
+ *                    rewrite another's record, re-seal it into another window
+ *                    or carry it to another room, and cannot announce someone
+ *                    else's presence. A reader refuses any record whose signed
+ *                    `ts` falls outside the window it was served in (one window
+ *                    of clock skew either side); that check also covers older
+ *                    0x02 records, whose `ts` was already signed. The AEAD's
+ *                    AAD binds the window too, but every member can recompute
+ *                    it, so it is not what stops a member.
  *   tamper-evidence  each author's records form a hash chain (`prev`). Rewriting
  *                    your own history is detectable by anyone who saw the earlier
  *                    link.
@@ -89,7 +97,7 @@ import { concat, lpText, PresenceEntry, presenceEpoch, RelayTransport, u32be } f
  * is writing the old shape, so the format moves forward one way and the records
  * already on a relay stay readable until they age out.
  */
-export const ROOM_VERSION = 0x02;
+export const ROOM_VERSION = 0x04;
 
 /**
  * Record version for the unsealed lane: 0x02 plus the window the record was
@@ -104,8 +112,28 @@ export const ROOM_VERSION = 0x02;
  */
 const ROOM_PLAIN_VERSION = 0x03;
 
+/**
+ * Record version that signs its context: 0x03's layout (window field
+ * included), with the signature taken over
+ * `"zirc-record-v4" ‖ sha256(appScope) ‖ shardHash ‖ record`.
+ *
+ * Before it, a sealed record's window and room were bound only by the AEAD's
+ * AAD, which any holder of the room secret can recompute: a member could
+ * re-seal another member's signed record into a later window, once the
+ * original had aged out of the read horizon, or into another room the same
+ * key writes in. Presence carries a signature from this version on too. Both
+ * lanes write it; the room context is not sent, each reader supplies its own.
+ */
+const ROOM_BOUND_VERSION = 0x04;
+
+/** domain tag in front of a 0x04 record's signed bytes */
+const RECORD_SIG_DOMAIN = 'zirc-record-v4';
+
+/** a record's `ts` may sit this many windows either side of the one it is in */
+const TS_WINDOW_SKEW = 1;
+
 /** versions a reader will open, newest first. */
-const ROOM_READ_VERSIONS: readonly number[] = [0x03, 0x02, 0x01];
+const ROOM_READ_VERSIONS: readonly number[] = [0x04, 0x03, 0x02, 0x01];
 
 /** the first version that carries a recipient field. */
 const RECIPIENT_FIELD_VERSION = 0x02;
@@ -132,6 +160,71 @@ const BLOB_PLAIN = 0x02;
  * rather than silently truncated (see {@link encodeRecord}).
  */
 export const ROOM_PLAINTEXT_BYTES = 1024;
+
+/**
+ * Plaintext size for a group-purse or door room (see
+ * `design-groups-on-zirc.md` 1.3): a seal, a share record, or a split PCZT
+ * chunk needs more body than chat's 1 KiB. Still one fixed size per room, so a
+ * window's entries stay indistinguishable by length within that room.
+ */
+export const GROUP_ROOM_PLAINTEXT_BYTES = 4096;
+
+/** the 1-hour door room bootstrapping an invite uses the same size as a group room. */
+export const DOOR_ROOM_PLAINTEXT_BYTES = GROUP_ROOM_PLAINTEXT_BYTES;
+
+/**
+ * The relay `appScope` a group-purse room uses (`design-groups-on-zirc.md`
+ * 1.1). Exported so a relay operator's per-scope retention config
+ * (`MINIRELAY_SCOPE_RETENTION`, see `apps/minirelay`) and this package agree on
+ * the exact string without either side hardcoding the other's constant.
+ */
+export const ZAFU_GROUP_APP_SCOPE = 'zafu-group-v1';
+
+/** version(1) + nonce(12) + ciphertext(plaintextBytes) + GCM tag(16). */
+export const sealedBlobBytes = (plaintextBytes: number): number => 1 + 12 + plaintextBytes + 16;
+
+/**
+ * How many entries one window of a room may hold before a reader stops
+ * buffering: every member's lines and presence for five minutes. Its own
+ * number, not the relay client's default: that one is sized for a discovery
+ * bucket (16384 small entries), and a room's entries are kilobytes each, so
+ * borrowing it would let one hostile window make a reader buffer hundreds of
+ * megabytes (groups design 0.1 sizes a group window at 256).
+ */
+export const ROOM_WINDOW_ENTRIES = 256;
+
+/**
+ * The `createHttpRelayTransport` limits a room of this plaintext size needs.
+ *
+ * `MAX_RELAY_ENTRY_BASE64` in `@zafu/zid` defaults to 1024 base64 chars, sized
+ * for contact discovery's 64-byte presence blobs - far smaller than ANY sealed
+ * room record (even the default 1 KiB chat room seals to 1053 bytes, 1404
+ * base64 chars, already over that ceiling). A room that does not pass its own
+ * limit has every one of its entries silently refused by the transport - the
+ * bug this function exists to make impossible to repeat. Every `Room` built
+ * against a real relay MUST wire these into {@link RelayTransport}'s
+ * constructor options (`createHttpRelayTransport({ ...opts, ...relayLimitsFor(plaintextBytes) })`).
+ *
+ * The read is bounded by `maxEntries` windows' worth of this room's records,
+ * never by the discovery defaults: `maxBodyBytes` is what the transport stops
+ * reading at, so it is the most one window can ever make a reader hold.
+ */
+export const relayLimitsFor = (
+  plaintextBytes: number,
+  maxEntries: number = ROOM_WINDOW_ENTRIES,
+): { maxEntryBase64: number; maxEntries: number; maxBodyBytes: number } => {
+  const sealed = sealedBlobBytes(plaintextBytes);
+  const rawBase64 = Math.ceil(sealed / 3) * 4;
+  // Rounded up to the next KiB: headroom so a reader on an older/newer record
+  // version (different fixed-field widths, same plaintext budget) is never
+  // pushed just over the line.
+  const maxEntryBase64 = Math.ceil(rawBase64 / 1024) * 1024;
+  // one entry on the wire: the blob, a 16-byte tag (24 base64 chars) and its
+  // JSON punctuation; rounded up to a whole MiB
+  const perEntry = maxEntryBase64 + 64;
+  const maxBodyBytes = Math.ceil((maxEntries * perEntry) / (1024 * 1024)) * 1024 * 1024;
+  return { maxEntryBase64, maxEntries, maxBodyBytes };
+};
 
 /** hex ed25519 public key and signature lengths, as the SDK carries them. */
 const PUBKEY_HEX = 64;
@@ -240,6 +333,24 @@ export interface RoomConfig {
    * records stay readable by whoever holds the board.
    */
   public?: boolean;
+  /**
+   * A shard per window instead of one for the room's life (design-social
+   * 2.5): a pair room passes `HKDF(pairSecret, "shard" || u64be(epoch))` so
+   * the relay cannot line up one pair's windows across months by shard.
+   * Wins over `shard` and `public`. Must return 16 lowercase hex characters,
+   * the width {@link roomShardFromSecret} uses.
+   */
+  shardFor?: (epoch: number) => Promise<string>;
+  /**
+   * Fixed plaintext size this room's entries pad to - {@link ROOM_PLAINTEXT_BYTES}
+   * (chat) by default, {@link GROUP_ROOM_PLAINTEXT_BYTES} for a group or door
+   * room. Every entry in one room is still one size (so the relay cannot tell
+   * lengths apart within it), but different rooms may choose different sizes.
+   * Pass the matching {@link relayLimitsFor} output to whatever built this
+   * room's `relay` transport, or its own entries will be the ones silently
+   * refused.
+   */
+  plaintextBytes?: number;
   /** injectable clock, seconds. Defaults to `Date.now()`. Tests pass one. */
   now?: () => number;
   /**
@@ -292,7 +403,7 @@ export interface RoomPresence {
 
 /** what {@link Room.sync} found, and what it refused. */
 /** why a record was not taken at face value. */
-export type DropKind = 'invalid' | 'unsupported' | 'unreachable';
+export type DropKind = 'invalid' | 'unsupported' | 'unreachable' | 'oversize';
 
 export interface RoomSync {
   messages: RoomMessage[];
@@ -627,9 +738,36 @@ const recordBytes = (
     lpText(r.body),
   ]);
 
+/**
+ * What an author signs: the record itself, and from 0x04 on the room and the
+ * window it was written for. The context is not on the wire; a reader signs
+ * over its own coordinates, so a record carried anywhere else fails.
+ */
+const signedMessage = (
+  record: Uint8Array,
+  version: number,
+  ctx: { appScopeHash: Uint8Array; shardHash: Uint8Array },
+): Uint8Array =>
+  version >= ROOM_BOUND_VERSION
+    ? concat([lpText(RECORD_SIG_DOMAIN), ctx.appScopeHash, ctx.shardHash, record])
+    : record;
+
+/**
+ * Why a record's signed `ts` cannot be in the window it was served in, or
+ * null. A member re-sealing someone's record into a later window can change
+ * the window, never the signed `ts`.
+ */
+const tsWindowError = (ts: number, epoch: number): string | null =>
+  Math.abs(presenceEpoch(ts) - epoch) > TS_WINDOW_SKEW ? 'record time outside its window' : null;
+
 /** max body bytes that still fit one record. Callers get a clear error, not a cut. */
-export const maxBodyBytes = (name: string, to = '', version: number = ROOM_VERSION): number =>
-  ROOM_PLAINTEXT_BYTES -
+export const maxBodyBytes = (
+  name: string,
+  to = '',
+  version: number = ROOM_VERSION,
+  plaintextBytes: number = ROOM_PLAINTEXT_BYTES,
+): number =>
+  plaintextBytes -
   (recordBytes(
     {
       kind: 'msg',
@@ -653,9 +791,11 @@ export class Room {
   private readonly shardHash: Uint8Array;
   private readonly channel: string;
   private readonly historyWindows: number;
+  private readonly plaintextBytes: number;
   private readonly now: () => number;
   private readonly relay: RelayTransport;
   private readonly shardPin: string | undefined;
+  private readonly shardFor: ((epoch: number) => Promise<string>) | undefined;
   /** a public room addresses by channel name; a sealed one by the room secret. */
   private readonly isPublic: boolean;
 
@@ -690,20 +830,38 @@ export class Room {
     this.appScopeHash = new Uint8Array(SHA256_BYTES);
     this.shardHash = new Uint8Array(SHA256_BYTES);
     this.historyWindows = config.historyWindows ?? 12;
+    this.plaintextBytes = config.plaintextBytes ?? ROOM_PLAINTEXT_BYTES;
+    if (this.plaintextBytes < 256) {
+      throw new Error(`room: plaintextBytes must be at least 256, got ${this.plaintextBytes}`);
+    }
     this.now = config.now ?? (() => Math.floor(Date.now() / 1000));
     this.relay = config.relay;
     this.shardPin = config.shard;
+    this.shardFor = config.shardFor;
     this.isPublic = config.public ?? false;
     this.seq = config.head?.seq ?? 0;
     this.head = config.head?.hash ?? '';
   }
 
-  /** resolve derived coordinates once, then reuse. */
-  private async coords(): Promise<{
+  /** resolve derived coordinates once, then reuse; a per-window shard per window. */
+  private async coords(epoch: number): Promise<{
     shard: string;
     shardHash: Uint8Array;
     appScopeHash: Uint8Array;
   }> {
+    if (this.shardFor) {
+      const shard = await this.shardFor(epoch);
+      if (!/^[0-9a-f]{16}$/.test(shard)) {
+        throw new Error('room: shardFor must return 16 lowercase hex characters');
+      }
+      const shardHash = new Uint8Array(SHA256_BYTES);
+      shardHash.set(fromHex(shard));
+      if (!this.shard) {
+        this.shard = shard;
+        this.appScopeHash.set(await sha256(enc.encode(this.appScope)));
+      }
+      return { shard, shardHash, appScopeHash: this.appScopeHash };
+    }
     if (!this.shard) {
       // A pinned shard wins - tests, and a relay with pre-provisioned
       // coordinates. Otherwise the mode decides: a public room is addressed by
@@ -797,12 +955,12 @@ export class Room {
     if (opts.plain && kind === 'dm') {
       throw new Error('room: a direct message cannot be sent in the clear');
     }
-    const { shardHash, appScopeHash } = await this.coords();
     const epoch = opts.epoch ?? this.currentEpoch();
+    const { shardHash, appScopeHash } = await this.coords(epoch);
     const name = opts.name ?? this.identity.name ?? this.identity.pubkey.slice(0, 8);
     const to = opts.to ?? '';
     const bytes = enc.encode(body);
-    const room = maxBodyBytes(name, to, opts.plain ? ROOM_PLAIN_VERSION : ROOM_VERSION);
+    const room = maxBodyBytes(name, to, ROOM_VERSION, this.plaintextBytes);
     if (bytes.length > room) {
       throw new Error(`room: message is ${bytes.length} bytes, the limit is ${room}`);
     }
@@ -811,7 +969,8 @@ export class Room {
     const prev = opts.prev ?? (seq === 1 ? '' : this.head);
     const ts = this.now();
     const rec = { kind, ts, seq, prev, author: this.identity.pubkey, to, name, body };
-    const signed = recordBytes(rec, opts.plain ? ROOM_PLAIN_VERSION : ROOM_VERSION, epoch);
+    const record = recordBytes(rec, ROOM_VERSION, epoch);
+    const signed = signedMessage(record, ROOM_VERSION, { appScopeHash, shardHash });
     const sig = await this.identity.sign(signed);
     if (sig.length !== SIG_HEX) {
       throw new Error('room: identity returned a malformed signature');
@@ -819,8 +978,8 @@ export class Room {
 
     const hash = toHex(await sha256(concat([signed, fromHex(sig)])));
     const sigBytes = fromHex(sig);
-    const plaintext = new Uint8Array(ROOM_PLAINTEXT_BYTES);
-    plaintext.set(concat([signed, sigBytes]));
+    const plaintext = new Uint8Array(this.plaintextBytes);
+    plaintext.set(concat([record, sigBytes]));
     // the remaining bytes are the pad; zeroes are inside the AEAD, so they leak
     // nothing an attacker can use, and the size is constant either way.
 
@@ -852,7 +1011,7 @@ export class Room {
     await this.relay.putBucket({
       appScope: this.appScope,
       epoch,
-      shard: await this.shardOrThrow(),
+      shard: await this.shardOrThrow(epoch),
       entries: [{ tag, blob }],
     });
 
@@ -882,8 +1041,8 @@ export class Room {
    * all they need, since presence is "I am here", not a secret.
    */
   async announce(name?: string, opts: { plain?: boolean; epoch?: number } = {}): Promise<void> {
-    const { shardHash, appScopeHash } = await this.coords();
     const win = opts.epoch ?? this.currentEpoch();
+    const { shardHash, appScopeHash } = await this.coords(win);
     const display = name ?? this.identity.name ?? this.identity.pubkey.slice(0, 8);
     const rec = {
       kind: 'presence' as const,
@@ -895,8 +1054,16 @@ export class Room {
       name: display,
       body: '',
     };
-    const plaintext = new Uint8Array(ROOM_PLAINTEXT_BYTES);
-    plaintext.set(recordBytes(rec, opts.plain ? ROOM_PLAIN_VERSION : ROOM_VERSION, win));
+    // signed like any record, so a member cannot announce someone else
+    const record = recordBytes(rec, ROOM_VERSION, win);
+    const sig = await this.identity.sign(
+      signedMessage(record, ROOM_VERSION, { appScopeHash, shardHash }),
+    );
+    if (sig.length !== SIG_HEX) {
+      throw new Error('room: identity returned a malformed signature');
+    }
+    const plaintext = new Uint8Array(this.plaintextBytes);
+    plaintext.set(concat([record, fromHex(sig)]));
     const blob = opts.plain
       ? plainBlob(plaintext)
       : await seal(
@@ -912,7 +1079,7 @@ export class Room {
     await this.relay.putBucket({
       appScope: this.appScope,
       epoch: win,
-      shard: await this.shardOrThrow(),
+      shard: await this.shardOrThrow(win),
       entries: [{ tag, blob }],
     });
   }
@@ -921,14 +1088,49 @@ export class Room {
    * Read the last `historyWindows` windows, oldest first, and verify everything.
    * Records that do not authenticate are dropped - not shown as "unknown", not
    * trusted - and reported so a caller can say how many were refused.
+   *
+   * This never runs by itself: constructing or restoring a `Room` makes no
+   * network request, and neither does any other method here - only a caller
+   * invoking `sync`/`syncSince`/`send`/`announce` does. A member who has not
+   * opened this room, or who has not opted into its relay, generates no
+   * traffic for it. Wire the alarm, the poll loop and the egress opt-in one
+   * layer up, scoped to the room the user is actually looking at.
    */
   async sync(epochs = this.historyWindows): Promise<RoomSync> {
-    const { shardHash, appScopeHash } = await this.coords();
     const current = this.currentEpoch();
     const windows = Array.from({ length: epochs }, (_, i) => current - (epochs - 1 - i)).filter(
       e => e >= 0,
     );
+    return this.syncWindows(windows);
+  }
 
+  /**
+   * Catch up from `sinceEpoch` (inclusive) to now, capped at `maxWindows` so a
+   * member who has been away a very long time still pays a bounded number of
+   * requests rather than one per window since the beginning of time.
+   *
+   * This is what a returning member calls instead of `sync(historyWindows)`:
+   * `historyWindows` only covers the relay's own retention (12 x 5 min = the
+   * discovery default's 1 h), so a room kept 25 h by a per-scope retention
+   * entry (see minirelay's `MINIRELAY_SCOPE_RETENTION`) needs every window the
+   * relay still holds, not just the last 12. Persist the returned sync's
+   * latest window (the caller's own `lastSyncedEpoch`, not tracked here - a
+   * room has no durable storage of its own) and pass it back next time so a
+   * second catch-up does not re-read windows already read.
+   *
+   * Like {@link sync}, this makes no network request on its own: it runs only
+   * when a caller invokes it, which should be "the user opened this room" or
+   * "this room's alarm fired because the user opted in", never on extension
+   * start, unlock, or popup open.
+   */
+  async syncSince(sinceEpoch: number, maxWindows = 288): Promise<RoomSync> {
+    const current = this.currentEpoch();
+    const floor = Math.max(sinceEpoch, current - maxWindows + 1, 0);
+    const windows = Array.from({ length: current - floor + 1 }, (_, i) => floor + i);
+    return this.syncWindows(windows);
+  }
+
+  private async syncWindows(windows: number[]): Promise<RoomSync> {
     const keysFor = new Map<number, { msg: CryptoKey; presence: CryptoKey; dm: CryptoKey }>();
     const dropped: { hash: string; reason: string; kind: DropKind }[] = [];
     const messages: RoomMessage[] = [];
@@ -937,12 +1139,13 @@ export class Room {
     const seen = new Set<string>();
 
     for (const epoch of windows) {
+      const { shard, shardHash, appScopeHash } = await this.coords(epoch);
       let entries: PresenceEntry[];
       try {
         entries = await this.relay.getBucket({
           appScope: this.appScope,
           epoch,
-          shard: await this.shardOrThrow(),
+          shard,
         });
       } catch (e) {
         dropped.push({
@@ -951,6 +1154,19 @@ export class Room {
           kind: 'unreachable',
         });
         continue;
+      }
+      // a relay transport that enforces its own base64 ceiling (see
+      // `relayLimitsFor`) reports what it refused instead of swallowing it; a
+      // mis-sized transport (this room's `plaintextBytes` outgrew the limit it
+      // was built with) shows up here as a hard count, never a silent gap.
+      const oversize = (entries as unknown as Partial<{ droppedOversize: { index: number }[] }>)
+        .droppedOversize;
+      if (oversize && oversize.length > 0) {
+        dropped.push({
+          hash: `window:${epoch}`,
+          reason: `relay transport refused ${oversize.length} oversized entr${oversize.length === 1 ? 'y' : 'ies'} - its maxEntryBase64 is smaller than this room needs`,
+          kind: 'oversize',
+        });
       }
       let keys = keysFor.get(epoch);
       if (!keys) {
@@ -1053,7 +1269,10 @@ export class Room {
         }
 
         if (opened.kind === 'presence') {
-          const fan = decodePresence(opened.plain);
+          const fan = await this.verifyPresence(opened.plain, epoch, {
+            appScopeHash,
+            shardHash,
+          });
           if (typeof fan === 'string') {
             dropped.push({ hash: toHex(entry.tag), reason: fan, kind: dropKindFor(fan) });
             continue;
@@ -1064,10 +1283,10 @@ export class Room {
               dropped.push({ hash: toHex(entry.tag), reason: stale, kind: 'invalid' });
               continue;
             }
-            // presence is unsigned, so the window is also enforced by the tag: a
-            // plain presence tag is HKDF(appScope, epoch, author, stable), which
-            // a reader can recompute. A record replayed from another window - even
-            // with its epoch field rewritten - cannot carry the expected tag.
+            // the window is also enforced by the tag: a plain presence tag is
+            // HKDF(appScope, epoch, author, stable), which a reader can
+            // recompute. A record replayed from another window - even with its
+            // epoch field rewritten - cannot carry the expected tag.
             const expected = await plainTag(this.appScope, epoch, fan.author, true);
             if (toHex(expected) !== toHex(entry.tag)) {
               dropped.push({
@@ -1087,7 +1306,13 @@ export class Room {
           continue;
         }
 
-        const parsed = await this.parse(opened.plain, epoch, opened.kind, opened.plaintext);
+        const parsed = await this.parse(
+          opened.plain,
+          epoch,
+          opened.kind,
+          { appScopeHash, shardHash },
+          opened.plaintext,
+        );
         if (typeof parsed === 'string') {
           dropped.push({ hash: toHex(entry.tag), reason: parsed, kind: dropKindFor(parsed) });
           continue;
@@ -1178,6 +1403,7 @@ export class Room {
     plain: Uint8Array,
     epoch: number,
     kind: MessageKind,
+    ctx: { appScopeHash: Uint8Array; shardHash: Uint8Array },
     plaintext = false,
   ): Promise<RoomMessage | string> {
     try {
@@ -1191,17 +1417,20 @@ export class Room {
       if (kind === 'dm' && fields.to !== this.identity.pubkey) {
         return 'dm not addressed here';
       }
-      // an unsealed record proves its own window; one that does not is refused,
-      // so a relay cannot replay a plain line as if it were written now.
-      if (plaintext) {
-        const stale = plainWindowError(body, epoch);
-        if (stale) {
-          return stale;
-        }
+      // an unsealed record proves its own window, and so does any record that
+      // carries one; a record that does not match is refused, so neither a
+      // relay nor a member can replay a line as if it were written now.
+      const stale = windowError(body, epoch, plaintext);
+      if (stale) {
+        return stale;
       }
       // re-encode in the record's OWN version: a signature only verifies against
       // the layout its author wrote.
-      const signed = recordBytes({ ...fields, kind }, body.version, body.epoch);
+      const signed = signedMessage(
+        recordBytes({ ...fields, kind }, body.version, body.epoch),
+        body.version,
+        ctx,
+      );
       const sig = toHex(plain.subarray(sigAt, sigAt + SIG_HEX / 2));
       if (!(await this.identity.verify(signed, sig, fields.author))) {
         return 'bad signature';
@@ -1224,8 +1453,39 @@ export class Room {
     }
   }
 
-  private async shardOrThrow(): Promise<string> {
-    const { shard } = await this.coords();
+  /**
+   * Decode and verify one presence record: signed (0x04 on), in its window,
+   * by the key it names. An unsigned presence record, which any member could
+   * write for anyone, is refused.
+   */
+  private async verifyPresence(
+    plain: Uint8Array,
+    epoch: number,
+    ctx: { appScopeHash: Uint8Array; shardHash: Uint8Array },
+  ): Promise<DecodedFields | string> {
+    const version = plain[0] ?? 0;
+    if (ROOM_READ_VERSIONS.includes(version) && version < ROOM_BOUND_VERSION) {
+      return 'unsigned presence';
+    }
+    const fan = decodeRecord(plain, 'presence', SIG_HEX / 2);
+    if (typeof fan === 'string') {
+      return fan;
+    }
+    const stale = windowError(fan, epoch, false);
+    if (stale) {
+      return stale;
+    }
+    const signed = signedMessage(
+      recordBytes({ ...fan, kind: 'presence' }, fan.version, fan.epoch),
+      fan.version,
+      ctx,
+    );
+    const sig = toHex(plain.subarray(fan.sigAt, fan.sigAt + SIG_HEX / 2));
+    return (await this.identity.verify(signed, sig, fan.author)) ? fan : 'bad signature';
+  }
+
+  private async shardOrThrow(epoch: number): Promise<string> {
+    const { shard } = await this.coords(epoch);
     return shard;
   }
 }
@@ -1359,10 +1619,6 @@ function decodeRecord(plain: Uint8Array, kind: RoomKind, sigBytes: number): Deco
 const dropKindFor = (reason: string): DropKind =>
   reason.startsWith('unsupported record version') ? 'unsupported' : 'invalid';
 
-function decodePresence(plain: Uint8Array): DecodedFields | string {
-  return decodeRecord(plain, 'presence', 0);
-}
-
 /**
  * The window a plain record claims must be the window it was served in, or the
  * reason it is refused.
@@ -1378,6 +1634,23 @@ const plainWindowError = (body: DecodedFields, epoch: number): string | null => 
     return 'plain record without a window';
   }
   return body.epoch === epoch ? null : 'plain record from another window';
+};
+
+/**
+ * Every window check one record must pass, or the reason it fails: a plain
+ * record must carry its window, any record that carries one must carry this
+ * one, and the signed `ts` must sit in (or one window beside) the window.
+ */
+const windowError = (body: DecodedFields, epoch: number, plaintext: boolean): string | null => {
+  if (plaintext) {
+    const stale = plainWindowError(body, epoch);
+    if (stale) {
+      return stale;
+    }
+  } else if (body.version >= ROOM_PLAIN_VERSION && body.epoch !== epoch) {
+    return 'record from another window';
+  }
+  return tsWindowError(body.ts, epoch);
 };
 
 /**

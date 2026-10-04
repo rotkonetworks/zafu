@@ -1,5 +1,5 @@
 /**
- * wallet-entries — side-effectful wallet record creation
+ * wallet-entries - side-effectful wallet record creation
  *
  * these functions write to chrome storage (local.set) to create
  * per-network wallet records linked to a vault. no zustand state updates.
@@ -11,17 +11,27 @@ import type { SessionStorageState } from '@repo/storage-chrome/session';
 import type { NetworkType, ZignerZafuImport, LedgerImport } from './types';
 import type { ZcashWalletJson } from '../wallets';
 import type { Key } from '@repo/encryption/key';
+import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
+import { shownIndicesKey, fundedIndicesKey } from '../../transparent/hd';
+import { isStoreOfWallet } from '../pocket-id';
+import { PENDING_WIPE_KEY } from '../../clear-cache-startup';
+import { startsOf } from '../../penumbra/start';
 
-/** create penumbra wallet entry for a mnemonic vault (side effect: local.set) */
+/**
+ * create penumbra wallet entry for a mnemonic vault (side effect: local.set).
+ * A phrase zafu just generated has nothing on penumbra yet, so its sync starts
+ * at the tip whenever penumbra first runs for it; an imported one is asked.
+ */
 export async function createPenumbraWalletForMnemonic(
   mnemonic: string,
   name: string,
   vaultId: string,
   key: Key,
   local: ExtensionStorage<LocalStorageState>,
+  generated = false,
 ): Promise<void> {
   const { generateSpendKey, getFullViewingKey, getWalletId } =
-    await import('@rotko/penumbra-wasm/keys');
+    await import('@penumbrafi/wasm/keys');
   const spendKey = await generateSpendKey(mnemonic);
   const fullViewingKey = await getFullViewingKey(spendKey);
   const walletId = await getWalletId(fullViewingKey);
@@ -51,6 +61,10 @@ export async function createPenumbraWalletForMnemonic(
     vaultId,
   };
 
+  if (generated) {
+    const starts = startsOf(await local.get('penumbraStarts'));
+    await local.set('penumbraStarts', { ...starts, [walletIdStr]: 'tip' });
+  }
   await local.set('penumbraWallets', [praxWallet, ...(Array.isArray(wallets) ? wallets : [])]);
   await local.set('activeWalletIndex', 0);
 }
@@ -69,7 +83,7 @@ export async function createZignerWalletEntries(
     try {
       const { FullViewingKey } =
         await import('@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb');
-      const { getWalletId } = await import('@rotko/penumbra-wasm/keys');
+      const { getWalletId } = await import('@penumbrafi/wasm/keys');
 
       const fvkBytes = Uint8Array.from(atob(data.fullViewingKey), c => c.charCodeAt(0));
       const fvk = new FullViewingKey({ inner: fvkBytes });
@@ -120,7 +134,7 @@ export async function createZignerWalletEntries(
         // loudly, not get silently dropped and rediscovered at first send
         // (and not poison FVK-equality dedup with garbage).
         throw new Error(
-          'UFVK failed cryptographic validation — refusing to import. ' +
+          'UFVK failed cryptographic validation - refusing to import. ' +
             'The scanned viewing key is structurally plausible but does not ' +
             'decode as a valid Zcash Unified FVK.',
         );
@@ -157,7 +171,7 @@ export async function createZignerWalletEntries(
   await local.set('enabledNetworks', newEnabledNetworks);
 
   if (existingVaultCount === 0 && supportedNetworks.length > 0) {
-    await local.set('activeNetwork', supportedNetworks[0] as NetworkType);
+    await local.set('activeNetwork', supportedNetworks[0]);
   }
 
   return newEnabledNetworks;
@@ -166,14 +180,14 @@ export async function createZignerWalletEntries(
 /**
  * create the zcash wallet entry for a Ledger cold-signer import (side effect:
  * local.set). clone of the zcash branch of createZignerWalletEntries, trimmed to
- * zcash-only single-signer — no penumbra FVK, no polkadot/cosmos, no ZID.
+ * zcash-only single-signer - no penumbra FVK, no cosmos, no ZID.
  *
  * `key` is accepted for signature parity with createZignerWalletEntries (and so
  * future device-metadata sealing can slot in) but is currently unused: a Ledger
  * account stores no secret material, only a watch-only ufvk/address.
  */
 export async function assertLedgerUfvkValid(ufvk: string | undefined): Promise<void> {
-  // Cryptographic UFVK gate — same authoritative decoder the signing path uses.
+  // Cryptographic UFVK gate - same authoritative decoder the signing path uses.
   // Only unified strings (`uview1…`) are validated; a Ledger export is always a
   // unified string when present.
   //
@@ -193,7 +207,7 @@ export async function assertLedgerUfvkValid(ufvk: string | undefined): Promise<v
   }
   if (!zwasm.validate_ufvk(ufvk)) {
     throw new Error(
-      'UFVK failed cryptographic validation — refusing to import. ' +
+      'UFVK failed cryptographic validation - refusing to import. ' +
         'The Ledger-exported viewing key is structurally plausible but does ' +
         'not decode as a valid Zcash Unified FVK.',
     );
@@ -217,15 +231,12 @@ export async function createLedgerWalletEntries(
     const zcashWallet = {
       id: `zcash-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       label: name,
-      // orchardFvk is a required field; a Ledger import stores its UFVK in the
-      // dedicated `ufvk` field, so leave orchardFvk empty. use-address's
-      // watch-only branch reads `ufvk` first, so address/balance derive free
-      // when a ufvk is present.
-      orchardFvk: '',
+      // a shielded import keeps the `uview1...` in both fields, like zigner,
+      // so every reader finds it; a transparent-only account has none
+      orchardFvk: data.ufvk ?? '',
       ...(data.ufvk ? { ufvk: data.ufvk } : {}),
       // If a ufvk is present, address derives free from it; otherwise store the
-      // address directly. NOTE: without a ufvk there is no shielded scanning —
-      // balances/notes require the UFVK to be provided later.
+      // address directly. NOTE: without a ufvk there is no shielded scanning - // balances/notes require the UFVK to be provided later.
       address: data.address,
       // Transparent Ledger (hw-app-btc) account: persist the t-address so the
       // send flow can fetch UTXOs / route change without a device round-trip and
@@ -259,16 +270,37 @@ export async function createLedgerWalletEntries(
   return newEnabledNetworks;
 }
 
+/** minimal shape of a removed penumbra wallet record, enough to attribute
+ *  other per-wallet storage (e.g. legacy `zignerWallets`) by full viewing key */
+interface RemovedPenumbraWallet {
+  id: string;
+  fullViewingKey?: string;
+}
+
 /** remove all wallet records linked to a vaultId (side effect: local.set + worker cleanup) */
 export async function removeLinkedWallets(
   vaultId: string,
   local: ExtensionStorage<LocalStorageState>,
-): Promise<{ removedZcashIds: string[] }> {
+): Promise<{
+  removedZcashIds: string[];
+  removedZcash: ZcashWalletJson[];
+  removedPenumbra: RemovedPenumbraWallet[];
+}> {
   // penumbra wallets
   const wallets = (await local.get('penumbraWallets')) ?? [];
+  const removedPenumbra = wallets.filter((w: { vaultId?: string }) => w.vaultId === vaultId);
   const updatedWallets = wallets.filter((w: { vaultId?: string }) => w.vaultId !== vaultId);
   if (updatedWallets.length !== wallets.length) {
     await local.set('penumbraWallets', updatedWallets);
+    // nothing of a removed wallet stays behind, its sync start included
+    const starts = startsOf(await local.get('penumbraStarts'));
+    if (starts) {
+      const gone = new Set(removedPenumbra.map((w: { id: string }) => w.id));
+      await local.set(
+        'penumbraStarts',
+        Object.fromEntries(Object.entries(starts).filter(([id]) => !gone.has(id))),
+      );
+    }
     const activeWalletIndex = (await local.get('activeWalletIndex')) ?? 0;
     if (activeWalletIndex >= updatedWallets.length) {
       await local.set('activeWalletIndex', Math.max(0, updatedWallets.length - 1));
@@ -287,22 +319,233 @@ export async function removeLinkedWallets(
     }
   }
 
-  return { removedZcashIds: removedZcash.map(w => w.id) };
+  return {
+    removedZcashIds: removedZcash.map(w => w.id),
+    removedZcash,
+    removedPenumbra: removedPenumbra as RemovedPenumbraWallet[],
+  };
 }
 
-/** clean up zcash worker data + birthday key for a vault */
-export async function cleanupZcashData(vaultId: string, removedZcashIds: string[]): Promise<void> {
+/**
+ * A hot wallet's zcash pockets: its worker stores (account 0 is the vault id
+ * itself; the worker drops every pocket store with it), their per-pocket
+ * storage keys, and the pocket names. Must run while the vault still exists,
+ * since names are filed under its ZID.
+ */
+async function purgePockets(
+  vaultId: string,
+  local: ExtensionStorage<LocalStorageState>,
+): Promise<void> {
+  try {
+    const { deleteWalletInWorker } = await import('./network-worker');
+    await deleteWalletInWorker('zcash', vaultId);
+  } catch {
+    // worker may not be running
+  }
+  // sync-height hints and t-address caches of the vault's stores, all accounts
+  const isPocketKey = (key: string) =>
+    ['zcashSyncHeight_', 'zcashTAddrs:'].some(prefix => {
+      if (!key.startsWith(prefix)) {
+        return false;
+      }
+      return isStoreOfWallet(key.slice(prefix.length), vaultId);
+    });
+  try {
+    const stale = Object.keys(await chrome.storage.local.get(null)).filter(isPocketKey);
+    if (stale.length) {
+      await chrome.storage.local.remove(stale);
+    }
+  } catch {}
+  const vault = ((await local.get('vaults')) ?? []).find(v => v.id === vaultId);
+  if (vault) {
+    const { POCKETS_STORAGE_KEY, forgetWallet, pocketOwner, sanitizePocketBook } =
+      await import('../pockets');
+    const key = POCKETS_STORAGE_KEY as keyof LocalStorageState;
+    const owner = pocketOwner(vault);
+    const book = sanitizePocketBook(await local.get(key));
+    if (book[owner]) {
+      await local.set(key, forgetWallet(book, owner) as never);
+    }
+  }
+}
+
+/**
+ * Remove legacy `zignerWallets` entries belonging to the wallet(s) just
+ * removed from `penumbraWallets`/`zcashWallets`.
+ *
+ * `zignerWallets` (schema v2/v3) has no `vaultId` field of its own - nothing
+ * in the current import paths writes to it any more (zigner imports now land
+ * in `penumbraWallets`/`zcashWallets` with `custody.airgapSigner`, see
+ * `createZignerWalletEntries` above), so this is a best-effort cleanup of
+ * pre-existing/legacy rows: attribute by an exact full-viewing-key match
+ * against the records just removed, never by array position or id, so an
+ * unrelated legacy entry is never touched.
+ */
+async function purgeLegacyZignerWallets(
+  removedZcash: ZcashWalletJson[],
+  removedPenumbra: RemovedPenumbraWallet[],
+  local: ExtensionStorage<LocalStorageState>,
+): Promise<void> {
+  const zcashFvks = new Set(removedZcash.map(w => w.orchardFvk).filter(Boolean));
+  const penumbraFvks = new Set(removedPenumbra.map(w => w.fullViewingKey).filter(Boolean));
+  if (zcashFvks.size === 0 && penumbraFvks.size === 0) {
+    return;
+  }
+
+  const zignerWallets = (await local.get('zignerWallets')) ?? [];
+  if (zignerWallets.length === 0) {
+    return;
+  }
+  const updated = zignerWallets.filter(w => {
+    const zcashHit = w.networks?.zcash?.orchardFvk && zcashFvks.has(w.networks.zcash.orchardFvk);
+    const penumbraHit =
+      w.networks?.penumbra?.fullViewingKey && penumbraFvks.has(w.networks.penumbra.fullViewingKey);
+    return !zcashHit && !penumbraHit;
+  });
+  if (updated.length !== zignerWallets.length) {
+    await local.set('zignerWallets', updated);
+  }
+}
+
+/**
+ * Delete every per-wallet Penumbra IndexedDB database for the removed
+ * wallets. `@penumbra-zone/storage`'s `IndexedDb.initialize` names each
+ * wallet's database `viewdata/<chainId>/<bech32mWalletId>` (see its
+ * `dist/indexed-db/index.js`; the extension's own
+ * `WalletId.fromJsonString(wallet.id)` call site is `wallet-services.ts`).
+ * `chainId` comes from the live RPC endpoint at sync time (not a constant -
+ * it can even change if the network migrates), so the database name cannot
+ * be reconstructed ahead of time; instead enumerate every IndexedDB in the
+ * origin and delete whichever ones match this wallet's bech32 id under any
+ * chainId, the same enumerate-and-filter approach `nukeAllWalletData` uses
+ * for the full wipe.
+ *
+ * Does NOT explicitly stop Penumbra sync first. `wallet-entries.ts` is
+ * shared with the popup/page realms, not just the service worker, so it
+ * cannot reach into `service-worker.ts`'s `rebuildServices` (a real
+ * teardown call would need to live there). `removeLinkedWallets` already
+ * updated `activeWalletIndex`/`penumbraWallets`, which the SW's rebuild
+ * scheduler watches and reacts to on its own; if this delete races an
+ * still-open connection, `deleteDatabaseAwaitable` degrades to a logged
+ * `onblocked` warning rather than hanging, exactly like the full-nuke path.
+ */
+async function purgePenumbraWalletDatabases(
+  removedPenumbra: RemovedPenumbraWallet[],
+): Promise<void> {
+  if (removedPenumbra.length === 0) {
+    return;
+  }
+  try {
+    const [{ bech32mWalletId }, { WalletId }] = await Promise.all([
+      import('@penumbra-zone/bech32m/penumbrawalletid'),
+      import('@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb'),
+    ]);
+    const bech32Ids = new Set<string>();
+    for (const w of removedPenumbra) {
+      if (!w.id) {
+        continue;
+      }
+      try {
+        bech32Ids.add(bech32mWalletId(WalletId.fromJsonString(w.id)));
+      } catch {
+        // a malformed/legacy id must not abort the rest of the purge
+      }
+    }
+    if (bech32Ids.size === 0) {
+      return;
+    }
+    const dbs = await indexedDB.databases();
+    const names = dbs
+      .map(d => d.name)
+      .filter(
+        (n): n is string =>
+          !!n && n.startsWith('viewdata/') && [...bech32Ids].some(id => n.endsWith('/' + id)),
+      );
+    await Promise.all(names.map(deleteDatabaseAwaitable));
+  } catch {
+    // indexedDB is unavailable in some environments (e.g. jsdom tests) and
+    // the penumbra-zone packages are optional-ish at this call depth; either
+    // way this step is best-effort and must not abort the rest of the purge.
+  }
+}
+
+/**
+ * Purge every piece of per-wallet storage left behind by `deleteKeyRing` for
+ * a single removed vault. This is the ONE place that must be extended when a
+ * new per-wallet key is added - see the audit in the module doc comment above
+ * `NUKE_SURVIVORS` for the full-wipe counterpart.
+ *
+ * Deliberately excludes (left alone, and why):
+ * - `zidShareLog` / `zidPreferences` - no `walletId`/`vaultId` field; entries
+ *   are keyed by site origin and a user-chosen identity NAME shared across
+ *   wallets (not a wallet id). Correctly attributing an entry to this vault
+ *   would require re-deriving it from the vault's mnemonic, which does not
+ *   exist for airgap/zigner/ledger/frost vaults at all. Left as shared,
+ *   global data - same as site grants (`knownSites`), which are per-origin by
+ *   design, not per-wallet.
+ */
+export async function purgeWalletData(
+  vaultId: string,
+  local: ExtensionStorage<LocalStorageState>,
+): Promise<void> {
+  // remove the wallet's own penumbraWallets/zcashWallets records first - every
+  // other per-wallet key below is attributed FROM what comes back here, so
+  // this must run first and stay the single entry point callers use.
+  const { removedZcash, removedZcashIds, removedPenumbra } = await removeLinkedWallets(
+    vaultId,
+    local,
+  );
+
+  // zcash worker data + birthday key + sync-height hint, per removed zcash wallet id
   for (const id of removedZcashIds) {
     try {
-      const { deleteWalletInWorker } = await import('./network-worker');
+      const { deleteWalletInWorker, zcashSyncHeightKey } = await import('./network-worker');
       await deleteWalletInWorker('zcash', id);
+      await chrome.storage.local.remove(zcashSyncHeightKey(id));
     } catch {
       // worker may not be running
     }
   }
+
+  await purgePockets(vaultId, local);
+
+  // people rooms this wallet is in (secrets included) and their messages
   try {
-    await chrome.storage.local.remove(`zcashBirthday_${vaultId}`);
+    const { purgePeople } = await import('../../people/vault');
+    await purgePeople(vaultId);
+  } catch {
+    // locked: the sealed blobs stay unreadable, and go with the last wallet
+  }
+
+  // static per-wallet keys, batched into one remove call
+  const staticKeys = [
+    `zcashBirthday_${vaultId}`,
+    // ZID generations pinned/labelled by this wallet - keyed by walletId by
+    // construction (see ZID_PINS_STORAGE_KEY doc comment in state/identity.ts).
+    `zidPins:${vaultId}`,
+    // `zidGenKeys` is a display cache of generation-index -> derived pubkey,
+    // populated from whichever wallet was active when the identity page last
+    // rendered (see state/identity.ts - it is NOT keyed by walletId). It may
+    // hold this wallet's derived pubkeys, so clear it rather than leak them;
+    // it is cheaply rederived on demand for whichever wallet is active next.
+    'zidGenKeys',
+    // NOTE: the unmerged zid-per-wallet-generations branch moves zidGenKeys
+    // (and zidIndex) to a per-wallet key (`<key>:<walletId>`) - once that
+    // lands, the per-wallet form must be purged here too, not the bare key.
+    `zcashTAddrs:${vaultId}`,
+  ];
+  for (const cap of Object.keys(COSMOS_CHAINS)) {
+    staticKeys.push(shownIndicesKey(cap, vaultId), fundedIndicesKey(cap, vaultId));
+  }
+  try {
+    await chrome.storage.local.remove(staticKeys);
   } catch {}
+
+  // legacy zigner wallet records (plaintext FVKs), attributed by FVK match
+  await purgeLegacyZignerWallets(removedZcash, removedPenumbra, local);
+
+  // Penumbra per-wallet IndexedDB view state, attributed by bech32 wallet id
+  await purgePenumbraWalletDatabases(removedPenumbra);
 }
 
 /**
@@ -316,7 +559,7 @@ export async function cleanupZcashData(vaultId: string, removedZcashIds: string[
  * share log (which sites you authenticated to, and when), the ZID pins and
  * generation keys, site labels, known sites, the password key print, the
  * diversified-address referral graph, the contacts and messages ciphertext,
- * and `zignerWallets` — which stores Penumbra and Zcash full viewing keys in
+ * and `zignerWallets` - which stores Penumbra and Zcash full viewing keys in
  * PLAINTEXT, i.e. a complete, permanent read capability over the user's
  * transaction history, surviving the deletion of the wallet that owned it.
  *
@@ -331,6 +574,9 @@ const NUKE_SURVIVORS: ReadonlySet<string> = new Set<string>([
   'zafuTheme',
   'zafuFont',
   'autoLockMinutes',
+  // the storage schema version: without it the next start re-runs every
+  // migration over what is left and drops the keys above with it
+  'dbVersion',
 ]);
 
 /** delete an IndexedDB database, resolving even if the delete is blocked. */
@@ -348,7 +594,7 @@ const deleteDatabaseAwaitable = (name: string): Promise<void> =>
       console.warn('[nuke] IDB delete failed:', name, req.error);
       resolve();
     };
-    // An open connection blocks the delete SILENTLY — the request simply
+    // An open connection blocks the delete SILENTLY - the request simply
     // never completes. Surfacing it is the difference between "the data is
     // gone" and "we think the data is gone".
     req.onblocked = () => {
@@ -358,7 +604,7 @@ const deleteDatabaseAwaitable = (name: string): Promise<void> =>
   });
 
 /**
- * nuke all wallet data — called when the last vault is deleted.
+ * nuke all wallet data - called when the last vault is deleted.
  *
  * Terminates the sync workers FIRST. `indexedDB.deleteDatabase` against a
  * database that still has an open connection does not fail; it fires
@@ -368,19 +614,16 @@ const deleteDatabaseAwaitable = (name: string): Promise<void> =>
 export async function nukeAllWalletData(
   session: ExtensionStorage<SessionStorageState>,
   local: ExtensionStorage<LocalStorageState>,
+  /** an onboarding page to open once the erase has finished */
+  then?: string,
 ): Promise<void> {
   await session.remove('passwordKey');
   // grace must never outlive the unlock
   await session.remove('signGraceUntil');
 
   // drop worker-held IDB connections before attempting any delete
-  try {
-    const { terminateNetworkWorker } = await import('./network-worker');
-    terminateNetworkWorker('zcash');
-    terminateNetworkWorker('penumbra');
-  } catch {
-    // workers may not be running
-  }
+  const { stopNetworkWorker } = await import('./network-worker');
+  await Promise.all((['zcash', 'penumbra'] as const).map(stopNetworkWorker));
 
   const allLocalKeys = await chrome.storage.local.get(null);
   const keysToRemove = Object.keys(allLocalKeys).filter(k => !NUKE_SURVIVORS.has(k));
@@ -410,7 +653,29 @@ export async function nukeAllWalletData(
   // and the session key was dropped at the top of this function, so the
   // writes would no-op with a "wallet is locked" warning. Only the plaintext
   // index keys are restored, so the store hydrates to a clean empty state.
-  await local.set('selectedVaultId', undefined);
+  // `selectedVaultId` is removed rather than set to `undefined` - the storage
+  // layer forbids a no-op `set(..., undefined)` outright.
+  await local.remove('selectedVaultId');
   await local.set('activeWalletIndex', 0);
   await local.set('activeZcashIndex', 0);
+
+  // A blocked delete resolves above without deleting: the service worker's
+  // penumbra services or a respawned worker still hold it open. Restart the
+  // extension, which closes every connection, and let startup finish the
+  // deletes before anything opens them again (clear-cache-startup).
+  const left = await remainingDatabases();
+  if (left.length) {
+    await chrome.storage.local.set({ [PENDING_WIPE_KEY]: { then: then ?? null } });
+    console.warn('[nuke] finishing after a restart:', left.join(', '));
+    chrome.runtime.reload();
+    // this context is going away; nothing after the erase may run in it
+    await new Promise<never>(() => undefined);
+  }
 }
+
+const remainingDatabases = async (): Promise<string[]> => {
+  if (typeof indexedDB === 'undefined' || !indexedDB.databases) {
+    return [];
+  }
+  return (await indexedDB.databases()).map(d => d.name).filter((n): n is string => !!n);
+};

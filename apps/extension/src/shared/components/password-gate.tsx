@@ -85,42 +85,40 @@ export const PasswordGateModal = ({
 
   // Portaled + z-[70]: the auth gate is by definition the topmost surface.
   // Rendered inline it was trapped below body-portaled overlays (e.g. the
-  // ironwood migrate takeover at z-60) — requestAuth() opened an invisible
+  // ironwood migrate takeover at z-60) - requestAuth() opened an invisible
   // modal and the confirm click appeared to do nothing.
   return (
     <OverlayPortal>
       <div className='fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm'>
-        <div className='mx-4 w-full max-w-sm rounded-lg border border-border-soft bg-canvas p-5 shadow-xl'>
+        <div className='mx-4 w-full max-w-sm border border-border-soft bg-canvas p-5 shadow-xl'>
           <div className='mb-4 flex items-center gap-2'>
             <span className='i-ph-lock h-4 w-4 text-zigner-gold' />
-            <h3 className='text-lg font-medium'>Confirm Transaction</h3>
+            <h3 className='text-lg'>confirm this transaction</h3>
           </div>
 
           {walletType === 'zigner' ? (
             <>
               <p className='mb-4 text-xs text-fg-muted'>
-                This transaction requires authorization from your Zigner device.
+                this transaction is signed on your zigner.
               </p>
               <div className='flex gap-2'>
                 <button
                   onClick={onCancel}
-                  className='flex-1 rounded-lg border border-border-soft px-4 py-3 text-sm text-fg-muted transition-colors hover:bg-elev-1'
+                  className='flex-1 border border-border-soft px-4 py-3 text-sm text-fg-muted transition-colors hover:bg-elev-1'
                 >
-                  Cancel
+                  not now
                 </button>
                 <button
                   onClick={onConfirm}
-                  className='flex-1 rounded-lg bg-zigner-gold px-4 py-3 text-sm font-medium text-zigner-gold-foreground transition-colors hover:bg-primary/90'
+                  className='flex-1 bg-zigner-gold px-4 py-3 text-sm text-zigner-gold-foreground transition-colors hover:bg-primary/90'
                 >
-                  Continue
+                  continue
                 </button>
               </div>
             </>
           ) : (
             <>
-              <p className='mb-3 text-xs text-fg-muted'>
-                Enter your password to authorize this transaction.
-              </p>
+              <p className='mb-3 text-xs text-fg-muted'>your password, to sign it.</p>
 
               <div className='relative mb-3'>
                 <input
@@ -134,7 +132,7 @@ export const PasswordGateModal = ({
                   onKeyDown={handleKeyDown}
                   placeholder='password'
                   disabled={checking}
-                  className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 pr-10 text-sm text-fg placeholder:text-fg-muted focus:border-zigner-gold focus:outline-none disabled:opacity-50'
+                  className='w-full border border-border-soft bg-input px-3 py-2.5 pr-10 text-sm text-fg placeholder:text-fg-muted focus:border-zigner-gold focus:outline-none disabled:opacity-50'
                 />
                 <button
                   type='button'
@@ -155,16 +153,16 @@ export const PasswordGateModal = ({
                 <button
                   onClick={onCancel}
                   disabled={checking}
-                  className='flex-1 rounded-lg border border-border-soft px-4 py-3 text-sm text-fg-muted transition-colors hover:bg-elev-1 disabled:opacity-50'
+                  className='flex-1 border border-border-soft px-4 py-3 text-sm text-fg-muted transition-colors hover:bg-elev-1 disabled:opacity-50'
                 >
-                  Cancel
+                  not now
                 </button>
                 <button
                   onClick={() => void handleSubmit()}
                   disabled={checking || !password.trim()}
-                  className='flex-1 rounded-lg bg-zigner-gold px-4 py-3 text-sm font-medium text-zigner-gold-foreground transition-colors hover:bg-primary/90 disabled:opacity-50'
+                  className='flex-1 bg-zigner-gold px-4 py-3 text-sm text-zigner-gold-foreground transition-colors hover:bg-primary/90 disabled:opacity-50'
                 >
-                  {checking ? 'verifying...' : 'Confirm'}
+                  {checking ? 'checking' : 'sign'}
                 </button>
               </div>
             </>

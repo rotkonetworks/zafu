@@ -8,17 +8,13 @@
  * - session manager for rpc entry
  */
 
-// Register the global error / unhandledrejection listeners FIRST, from a sync
-// module, so MV3 sees them on the worker's initial synchronous evaluation. This
-// import MUST stay above every wasm-backed import below (see the file's note on
-// asyncWebAssembly deferring the entry body).
+// The egress guard patches fetch/WebSocket/EventSource before any module can
+// capture them. Then the global error / unhandledrejection listeners, from a
+// sync module, so MV3 sees them on the worker's initial synchronous
+// evaluation. Both MUST stay above every wasm-backed import below (see the
+// file's note on asyncWebAssembly deferring the entry body).
+import './net/egress-install';
 import './install-global-error-handlers';
-
-// Patch `fetch` to run the egress gate on every outbound request. Sync and
-// dependency-free by design (the gate itself loads lazily on first request), so
-// it can sit here with the error handlers and cannot defer listener
-// registration.
-import { installEgressGuard } from './net/install-egress-guard';
 
 // listeners
 import { contentScriptConnectListener } from './message/listen/content-script-connect';
@@ -30,14 +26,20 @@ import { internalServiceListener } from './message/listen/internal-services';
 import { externalMessageListener } from './message/listen/external-easteregg';
 import { encryptionMessageListener } from './message/listen/external-encryption';
 import { contactDiscoveryListener } from './message/listen/contact-discovery';
+import { startDiscoveryPresence } from './discovery-presence-port';
 import {
   contactDiscoveryRequestListener,
   contactDiscoveryRequestResultListener,
 } from './message/listen/contact-discovery-request';
 import { destinationConsentResultListener } from './net/prompt';
-import { internalZidListener } from './message/listen/internal-zid';
+import { runNetEgressMigration } from './net/egress-migrate';
+import { loadStoredRegistry } from './transparent/registry-live';
+import { refreshEgress } from './net/egress';
 import { NET_EGRESS_INTERNAL_METHODS } from './message/listen/zafu-method-names';
-import { zcashLinkListener } from './message/listen/zcash-link';
+import { linkListener } from './message/listen/links';
+import { openWalletRoute } from './message/listen/external-easteregg';
+import { omniboxDescription, omniboxUri, escapeOmniboxXml } from './links/omnibox';
+import { PopupPath } from './routes/popup/paths';
 import { keplrMessageListener } from './message/listen/keplr';
 import { createPenumbraSendListener } from './message/listen/penumbra-send';
 import { TX_OP_PREFIX, isTxOp, type TxOp } from './tx-ops';
@@ -59,8 +61,8 @@ import { connectChannelAdapter } from '@penumbra-zone/transport-dom/adapter';
 import { validateSessionPort } from './senders/session';
 
 // context
-import { fvkCtx } from '@rotko/penumbra-services/ctx/full-viewing-key';
-import { servicesCtx } from '@rotko/penumbra-services/ctx/prax';
+import { fvkCtx } from '@penumbrafi/services/ctx/full-viewing-key';
+import { servicesCtx } from '@penumbrafi/services/ctx/prax';
 import { getFullViewingKey } from './ctx/full-viewing-key';
 import { getWalletId } from './ctx/wallet-id';
 import { setCachedWallet, resetWalletCache } from './ctx/wallet-cache';
@@ -71,25 +73,44 @@ import { getAuthorization } from './ctx/authorization';
 
 // context clients
 import { CustodyService, StakeService, ViewService } from '@penumbra-zone/protobuf';
-import { custodyClientCtx } from '@rotko/penumbra-services/ctx/custody-client';
-import { stakeClientCtx } from '@rotko/penumbra-services/ctx/stake-client';
+import { custodyClientCtx } from '@penumbrafi/services/ctx/custody-client';
+import { stakeClientCtx } from '@penumbrafi/services/ctx/stake-client';
 import { createDirectClient } from '@penumbra-zone/transport-dom/direct';
 import { internalTransportOptions } from './transport-options';
 
 // idb, querier, block processor
-import { walletIdCtx } from '@rotko/penumbra-services/ctx/wallet-id';
+import { walletIdCtx } from '@penumbrafi/services/ctx/wallet-id';
 import type { Services } from '@repo/context';
-import { startWalletServices, penumbraGate } from './wallet-services';
+import {
+  startWalletServices,
+  penumbraGate,
+  refreshPenumbraChainId,
+  storedPenumbraChainId,
+} from './wallet-services';
+import type { StartedServices } from './wallet-services';
+import type { BlockProcessor } from '@penumbra-zone/query/block-processor';
+import { getWalletFromStorage } from '@repo/storage-chrome/onboard';
+import type { WalletJson } from '@repo/wallet';
 import { createRebuildScheduler } from './rebuild-scheduler';
-import { performPendingClears } from './clear-cache-startup';
+import { sameTarget, settledTarget, type PenumbraTarget } from './penumbra/start';
+import { finishPendingWipe, performPendingClears } from './clear-cache-startup';
 
 import { backOff } from 'exponential-backoff';
 
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { networkAllowsBackgroundSync } from './state/privacy';
-import { runPresencePublish } from './state/contact-discovery-service';
+import { startUiOpenSession } from './ui-open-session';
+import { startPeopleRelay } from './people/sw';
+import { penumbraTiming } from './penumbra/timing';
+import { createChainCheck } from './penumbra/chain-check';
+import { requestStopAllSync } from './state/keyring/network-worker';
+import { stampSeenVersion } from './state/moved-notice';
+import { idleFor } from './state/idle-activity';
+import { keptCaptureAccess } from './buy/capture/kept';
 
-installEgressGuard();
+// performance.now() counts from the worker's start, so this is wake to here:
+// the wasm-backed imports above are what the entry body waits on
+penumbraTiming('sw modules and wasm loaded');
 
 // count open side panels so approval routing can target the panel only when it
 // is actually open (see popup.ts). Registered once at worker startup.
@@ -100,6 +121,100 @@ trackSidePanelPresence();
 // lose the user gesture chrome.sidePanel.open requires).
 initSidePanelPref();
 
+/** penumbra's block processor runs in this worker: pause it with the last
+ *  window and resume with the next, like the zcash worker */
+const penumbraSync = (act: 'pause' | 'resume') =>
+  void walletServices
+    ?.then(s => s.getWalletServices())
+    // pause/resume live on zafu's block processor, not the shared interface
+    .then(ws => (ws.blockProcessor as { pause?: () => void; resume?: () => void })[act]?.())
+    .catch(() => undefined);
+/** the user's "keep syncing when closed": penumbra alone may go on with every window closed */
+let keepPenumbraSyncing = false;
+const readKeepSyncing = () =>
+  localExtStorage
+    .get('privacySettings')
+    .then(p => {
+      keepPenumbraSyncing = p?.keepPenumbraSyncing === true;
+    })
+    .catch(() => undefined);
+/**
+ * The first read of the setting. Services are only built once it has landed
+ * (see initHandler and rebuildServices): a block processor built before it
+ * would take every worker start - a browser restart, MV3 recycling the worker
+ * - for "keep syncing" off, and pause with every window closed.
+ */
+const keepSyncingRead = readKeepSyncing();
+chrome.storage.onChanged.addListener(
+  (c, area) => void (area === 'local' && 'privacySettings' in c && readKeepSyncing()),
+);
+// zafu is fully closed: the offscreen-hosted zcash worker otherwise keeps
+// syncing (and polling mempool) with nobody watching. Stop network activity
+// only - the offscreen document and its worker stay up for proving - and the
+// next popup/page open resumes sync on its own (zcash-auto-sync.ts).
+// people: group and pair rooms on the people relay. Starts nothing by
+// itself; the first request is the person opening people.
+const people = startPeopleRelay();
+
+// a Peer capture grant kept "for the next buy" (webRequest + scripting, which
+// reach every site) is given back once its time is up, even if the buy page is
+// never opened again
+void keptCaptureAccess().catch(() => undefined);
+
+const ui = startUiOpenSession(
+  {
+    resume: () => {
+      penumbraSync('resume');
+      runChainCheck();
+    },
+    pause: () => {
+      console.log('[sw] last UI surface closed, requesting zcash sync stop');
+      requestStopAllSync('zcash');
+      if (!keepPenumbraSyncing) {
+        penumbraSync('pause');
+      }
+    },
+  },
+  people.hooks,
+);
+
+/**
+ * Services start on the stored chain id, so a start never waits on the node.
+ * Their sync is held until the node confirms it - asked only once a window is
+ * open, since nothing may call out while every window is closed. A changed id
+ * rebuilds the services, and the held sync means the old chain's database
+ * never reads a block of the new one.
+ */
+const chainCheck = createChainCheck({
+  windowOpen: () => ui.open,
+  refresh: async () => {
+    const t = performance.now();
+    try {
+      return await refreshPenumbraChainId();
+    } finally {
+      penumbraTiming('params refresh (node)', t);
+    }
+  },
+  rebuild: why => void reinitializeServices(why),
+  retryMs: 60_000,
+});
+const runChainCheck = chainCheck.run;
+
+/** a fresh block processor, before anything can start it */
+const onBlockProcessor = (bp: BlockProcessor, chain: { id: string; confirmed: boolean }) => {
+  // fresh services start syncing at once; with every window closed they wait
+  if (!ui.open && !keepPenumbraSyncing) {
+    bp.pause();
+  }
+  if (chain.confirmed) {
+    chainCheck.drop();
+    return;
+  }
+  // confirmed, or the node did not answer in time: sync goes on as it would
+  // have (see penumbra/chain-check.ts)
+  chainCheck.arm(chain.id, bp.hold());
+};
+
 // The graceful network-error handler (unhandledrejection + error) is registered
 // by the top-of-file './install-global-error-handlers' import - it must run on
 // the worker's initial synchronous evaluation, which the entry body (deferred
@@ -109,63 +224,12 @@ initSidePanelPref();
 // storage-chrome/local.ts) so every realm - SW, popup, options page - has them,
 // not just this worker. No explicit enableMigration call needed here.
 
-/**
- * Load polkadot custom chainspecs - but ONLY when polkadot/kusama is actually
- * enabled. The polkadot light client (smoldot) is heavy and was previously
- * imported statically at service-worker startup, and ran for every user
- * regardless of the networks they use. (The `unhandledrejection` / `error`
- * listeners no longer depend on when the body runs - they register from a sync
- * top-of-file import, see './install-global-error-handlers'.)
- *
- * We are a privacy-preserving wallet: a network the user has not selected must
- * not load code or open connections. So the import is dynamic and gated on the
- * enabled set - zcash-only or penumbra-only users never touch smoldot.
- */
-async function loadCustomChainspecsIfEnabled(): Promise<void> {
-  const enabled = (await localExtStorage.get('enabledNetworks')) ?? [];
-  if (!enabled.includes('polkadot') && !enabled.includes('kusama')) {
-    return;
-  }
-  const { registerCustomChainspec, unregisterCustomChainspec, getCustomChainspecs } = await import(
-    /* webpackChunkName: "polkadot-chainspec" */ '@repo/wallet/networks/polkadot'
-  );
-  const specs = (await localExtStorage.get('customChainspecs')) ?? [];
-  const registered = getCustomChainspecs();
-  for (const spec of specs) {
-    if (!registered.has(spec.id)) {
-      registerCustomChainspec(
-        spec.id,
-        spec.chainspec,
-        spec.relay === 'standalone' ? 'standalone' : spec.relay,
-        spec.name,
-        spec.symbol,
-        spec.decimals,
-      );
-    }
-  }
-  const specIds = new Set(specs.map(s => s.id));
-  for (const [id] of registered) {
-    if (!specIds.has(id)) {
-      unregisterCustomChainspec(id);
-    }
-  }
-  console.log(`[polkadot] loaded ${specs.length} custom chainspecs`);
-}
-
-// gated on enabled networks - a no-op for zcash-only / penumbra-only users
-void loadCustomChainspecsIfEnabled();
-
-let walletServicesResult: Promise<{
-  services: Services;
-  wallet: import('@repo/wallet').WalletJson;
-  reason?: string;
-}>;
+let walletServicesResult: Promise<StartedServices>;
 // Undefined until `initHandler` creates the boot services. Any awaited use must
 // tolerate that: the first millisecond of a worker's life is a real, reachable
 // state, not just a typing nicety (see the blockSync alarm and the internal
 // service listener).
 let walletServices: Promise<Services> | undefined;
-let currentWalletIndex: number | undefined;
 let currentSyncAbort: AbortController | undefined;
 
 /**
@@ -175,23 +239,32 @@ let currentSyncAbort: AbortController | undefined;
  * into wasm and re-fetches genesis, which on a large wallet (hundreds of LP
  * positions) takes a long time, and dapps see empty/zero state meanwhile.
  */
-interface PenumbraTarget {
-  walletIndex: number;
-  run: boolean;
-}
-
 const desiredPenumbraTarget = async (): Promise<PenumbraTarget> => ({
-  walletIndex: (await localExtStorage.get('activeWalletIndex')) ?? 0,
+  walletId: (await getWalletFromStorage())?.id,
   run: (await penumbraGate()).run,
+  chainId: await storedPenumbraChainId(),
 });
 
-/** Tear down the current services and start fresh ones for `target`. */
-const rebuildServices = async (
+const settle = (
+  r: { wallet?: WalletJson; reason?: string; chainId?: string },
   target: PenumbraTarget,
-  previous: PenumbraTarget | undefined,
-  why: string,
 ) => {
-  // tear down old services: stop block processor + cancel fullSyncHeight subscription
+  rebuilds.setRunning(
+    settledTarget({ ...target, chainId: r.chainId ?? target.chainId }, r.wallet?.id),
+  );
+  // confirm the stored chain id now if a window is open, else on the next
+  // open. With "keep syncing when closed" on, now in any case: the hold would
+  // otherwise keep penumbra from syncing until a window opens, which is the
+  // one thing the setting promises not to do, and this is the one call to the
+  // node the user opted into.
+  if (ui.open || keepPenumbraSyncing) {
+    runChainCheck();
+  }
+};
+
+/** Tear down the current services and start fresh ones for `target`. */
+const rebuildServices = async (target: PenumbraTarget, _previous: unknown, why: string) => {
+  // tear down old services: stop block processor + its height publishing
   if (currentSyncAbort) {
     currentSyncAbort.abort();
   }
@@ -210,27 +283,22 @@ const rebuildServices = async (
   // new RPC requests will block on getWalletReady() until the new wallet is cached
   resetWalletCache();
 
-  // Only a WALLET change makes the stored height wrong. For the same wallet the
-  // IndexedDB still holds its real sync height, so resetting to 0 just made
-  // every rebuild look like a from-scratch resync with zero balances.
-  if (previous && previous.walletIndex !== target.walletIndex) {
-    await localExtStorage.set('fullSyncHeight', 0);
-  }
-
   currentSyncAbort = new AbortController();
-  walletServicesResult = startWalletServices(currentSyncAbort.signal);
+  // the old services' chain check is moot: it must not ask a node for them
+  chainCheck.drop();
+  await keepSyncingRead;
+  walletServicesResult = startWalletServices(currentSyncAbort.signal, onBlockProcessor);
   walletServices = walletServicesResult.then(r => r.services);
-  const { services, wallet, reason } = await walletServicesResult;
+  const result = await walletServicesResult;
+  const { services, wallet, reason } = result;
   setCachedWallet(wallet, reason);
+  settle(result, target);
   try {
     const ws = await services.getWalletServices();
-    void ws.blockProcessor.sync().catch((e: unknown) => {
-      // terminal rejection after an intentional stop is expected teardown;
-      // anything else deserves the console
-      if (!String(e).includes('Sync stop')) {
-        console.error('[sync] block processor terminated:', e);
-      }
-    });
+    // an intentional stop ends a run quietly; anything else deserves the console
+    void ws.blockProcessor
+      .sync()
+      .catch((e: unknown) => console.error('[sync] block processor terminated:', e));
   } catch {
     // stub services (penumbra gated off): nothing to sync
   }
@@ -241,7 +309,7 @@ const rebuildServices = async (
 // is already running does nothing.
 const rebuilds = createRebuildScheduler<PenumbraTarget>({
   desired: desiredPenumbraTarget,
-  same: (a, b) => a.walletIndex === b.walletIndex && a.run === b.run,
+  same: sameTarget,
   rebuild: rebuildServices,
   onError: e => console.error('[sync] rebuild failed:', e),
 });
@@ -261,22 +329,46 @@ const reinitializeServices = (why: string) => rebuilds.request(why);
 // balances) several times per transaction - dapps then saw stale or empty
 // state. Penumbra stays up until the user next switches networks, which
 // re-evaluates the gate.
+//
+// If penumbra was stubbed, the dapp's first RPCs arrive on this very port
+// before the rebuild swaps the stub out, and used to fail with "penumbra
+// network not active". Hold them on `dappStart` until the real services exist.
+let dappStart: Promise<void> | undefined;
 setDappSessionHooks({
-  onFirst: () => void reinitializeServices('dapp session started'),
+  onFirst: () => {
+    const stubbed = rebuilds.getRunning()?.run === false;
+    if (stubbed) {
+      // block wallet getters now; the rebuild settles this same cache
+      resetWalletCache();
+    }
+    const started = reinitializeServices('dapp session started');
+    if (stubbed) {
+      dappStart = started;
+      void started.finally(async () => {
+        if (dappStart === started) {
+          dappStart = undefined;
+        }
+        // the scheduler skipped (gate still closed, e.g. penumbra disabled):
+        // no rebuild settled the cache reset above, so fail it like the stub would
+        if (rebuilds.getRunning()?.run === false) {
+          const gate = await penumbraGate();
+          setCachedWallet(undefined, gate.run ? undefined : gate.reason);
+        }
+      });
+    }
+  },
 });
+
+/** The penumbra services RPCs should use, waiting out a dapp-triggered start. */
+const currentWalletServices = () =>
+  dappStart ? dappStart.then(() => walletServices) : walletServices;
 
 // Listen for wallet and network changes
 localExtStorage.addListener(changes => {
-  // Reinitialize when active wallet changes
-  if (changes.activeWalletIndex !== undefined) {
-    const newIndex = changes.activeWalletIndex.newValue ?? 0;
-    if (currentWalletIndex !== undefined && currentWalletIndex !== newIndex) {
-      console.log(`Switching wallet from ${currentWalletIndex} to ${newIndex}`);
-      currentWalletIndex = newIndex;
-      void reinitializeServices('wallet switch');
-    } else {
-      currentWalletIndex = newIndex;
-    }
+  // a switch, a new wallet (prepended, so the index alone may not change) or
+  // a chosen start; the scheduler skips whatever leaves the target as it is
+  if (changes.activeWalletIndex || changes.penumbraWallets || changes.penumbraStarts) {
+    void reinitializeServices('wallet or start changed');
   }
 
   // Reinitialize when first vault is created (wallets are encrypted, use vaults as signal)
@@ -308,28 +400,36 @@ localExtStorage.addListener(changes => {
   if (changes.activeNetwork !== undefined) {
     void reinitializeServices('network switch');
   }
-
-  // sync custom chainspecs when they change (no-op unless polkadot is enabled)
-  if (changes.customChainspecs !== undefined) {
-    void loadCustomChainspecsIfEnabled();
-  }
 });
 
 const initHandler = async () => {
+  // v1 egress ledger -> default deny, once (see net/egress-migrate.ts)
+  await runNetEgressMigration().catch(() => undefined);
+
+  // chains from a verified newer registry, then their egress rows (storage only)
+  if ((await loadStoredRegistry().catch(() => [])).length) {
+    await refreshEgress();
+  }
+
   // run any pending IDB clears requested before the previous reload,
   // BEFORE wallet services open new connections (which would block deletion)
+  await finishPendingWipe().catch(e => console.warn('[clear-startup] erase finish failed', e));
   await performPendingClears();
 
-  // Track initial wallet index
-  currentWalletIndex = (await localExtStorage.get('activeWalletIndex')) ?? 0;
   // record what the boot services are for, so a later request that would
   // produce the same thing is skipped instead of rebuilding
-  rebuilds.setRunning(await desiredPenumbraTarget());
+  const bootTarget = await desiredPenumbraTarget();
+  rebuilds.setRunning(bootTarget);
   currentSyncAbort = new AbortController();
-  walletServicesResult = startWalletServices(currentSyncAbort.signal);
+  // the processor decides at birth whether to pause with every window closed
+  await keepSyncingRead;
+  walletServicesResult = startWalletServices(currentSyncAbort.signal, onBlockProcessor);
   walletServices = walletServicesResult.then(r => r.services);
-  // cache decrypted wallet as soon as it's available — unblocks RPC context getters
-  void walletServicesResult.then(({ wallet, reason }) => setCachedWallet(wallet, reason));
+  // cache decrypted wallet as soon as it's available - unblocks RPC context getters
+  void walletServicesResult.then(r => {
+    setCachedWallet(r.wallet, r.reason);
+    settle(r, bootTarget);
+  });
   const rpcImpls = await getRpcImpls();
 
   let custodyClient: Client<typeof CustodyService> | undefined;
@@ -355,7 +455,7 @@ const initHandler = async () => {
 
       // remaining context for all services
       contextValues.set(fvkCtx, getFullViewingKey);
-      contextValues.set(servicesCtx, (() => walletServices) as never);
+      contextValues.set(servicesCtx, currentWalletServices as never);
       contextValues.set(walletIdCtx, getWalletId);
 
       // discriminate context available to specific services
@@ -371,7 +471,7 @@ const initHandler = async () => {
   return handler;
 };
 
-// register message listeners IMMEDIATELY — before wallet services init.
+// register message listeners IMMEDIATELY - before wallet services init.
 // wallet services now wait for unlock (wallets encrypted at rest), but
 // content scripts and dapps need the connect/disconnect/load listeners
 // to be ready as soon as the service worker starts.
@@ -379,11 +479,10 @@ chrome.runtime.onMessage.addListener(contentScriptConnectListener);
 chrome.runtime.onMessage.addListener(contentScriptDisconnectListener);
 chrome.runtime.onMessage.addListener(contentScriptLoadListener);
 chrome.runtime.onMessage.addListener(internalRevokeListener);
-chrome.runtime.onMessage.addListener(internalZidListener);
-chrome.runtime.onMessage.addListener(zcashLinkListener);
+chrome.runtime.onMessage.addListener(linkListener);
 
-// CRSessionManager must be initialized NOW — before wallet services are
-// ready — so content scripts can establish session ports right after the
+// CRSessionManager must be initialized NOW - before wallet services are
+// ready - so content scripts can establish session ports right after the
 // approval popup. The deferred handler queues RPC requests until the
 // real handler resolves.
 type HandlerFn = (request: never, signal?: AbortSignal, timeoutMs?: number) => Promise<never>;
@@ -397,7 +496,7 @@ const deferredHandler: HandlerFn = (request, signal, timeoutMs) =>
 
 CRSessionManager.init(chrome.runtime.id, deferredHandler as never, validateSessionPort);
 
-// start services in background — resolves handlerReady when done
+// start services in background - resolves handlerReady when done
 void backOff(() => initHandler(), {
   delayFirstAttempt: false,
   startingDelay: 5_000,
@@ -497,6 +596,9 @@ chrome.runtime.onMessageExternal.addListener(encryptionMessageListener);
 // listen for private, app-scoped contact discovery (zafu_discover_contacts).
 // A no-op unless the user opted in and configured a relay.
 chrome.runtime.onMessageExternal.addListener(contactDiscoveryListener);
+// presence for a granted site's open page, held over its content script's
+// port; nothing here runs while no granted page is open
+startDiscoveryPresence();
 
 // listen for the contact-discovery CONSENT request
 // (zafu_request_contact_discovery): an app asks the user to turn the
@@ -539,26 +641,10 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
 });
 
 // ── idle auto-lock ──
-// track last activity timestamp. only UI and dapp interactions reset it.
-// background service messages (sync, alarms) must NOT reset the timer.
-let lastActivityMs = Date.now();
-const touchActivity = () => {
-  lastActivityMs = Date.now();
-};
-
-// reset on external messages (dapp interactions - always user-initiated)
-chrome.runtime.onMessageExternal.addListener(() => {
-  touchActivity();
-});
-
-// reset on internal messages that originate from UI (popup/sidepanel/page),
-// not from the service worker itself. check sender for a tab (UI has tabs,
-// service worker does not).
-chrome.runtime.onMessage.addListener((_msg, sender) => {
-  if (sender.tab || sender.url?.includes('popup.html') || sender.url?.includes('sidepanel.html')) {
-    touchActivity();
-  }
-});
+// The clock lives in chrome.storage.session (state/idle-activity.ts), written
+// only by zafu's own pages on real input. Nothing here counts messages: a site
+// pinging the wallet, or a content script, must not keep it unlocked, and an
+// in-memory clock reset itself every time Chrome evicted this worker.
 
 // https://developer.chrome.com/docs/extensions/reference/api/alarms
 void chrome.alarms.create('blockSync', {
@@ -577,21 +663,7 @@ void chrome.alarms.create('ibcTransferPoll', {
   delayInMinutes: 1,
 });
 
-// private contact discovery: beacon this wallet's presence once per presence
-// epoch (5 min), so friends' apps can find it. Strict no-op unless the user
-// opted in AND configured a relay AND the wallet is unlocked; the per-scope
-// scheduler makes over-ticking idempotent within an epoch.
-void chrome.alarms.create('zidPresencePublish', {
-  periodInMinutes: 5,
-  delayInMinutes: 1,
-});
-
 chrome.alarms.onAlarm.addListener(async alarm => {
-  if (alarm.name === 'zidPresencePublish') {
-    await runPresencePublish();
-    return;
-  }
-
   if (alarm.name === 'ibcTransferPoll') {
     await runIbcTransferSweep().catch(e => console.warn('[ibc-tracker] poll failed', e));
     return;
@@ -602,8 +674,7 @@ chrome.alarms.onAlarm.addListener(async alarm => {
     if (minutes <= 0) {
       return;
     } // disabled
-    const idleMs = Date.now() - lastActivityMs;
-    if (idleMs >= minutes * 60_000) {
+    if (await idleFor(minutes)) {
       // check if actually unlocked before locking
       const key = await chrome.storage.session.get('passwordKey');
       if (key?.['passwordKey']) {
@@ -613,6 +684,7 @@ chrome.alarms.onAlarm.addListener(async alarm => {
         await chrome.storage.session.remove([
           'passwordKey',
           'signGraceUntil',
+          'retiredPasswordKey',
           'penumbraBalancesSnapshot',
         ]);
         chrome.runtime.reload();
@@ -622,15 +694,22 @@ chrome.alarms.onAlarm.addListener(async alarm => {
   }
 
   if (alarm.name === 'blockSync') {
-    // privacy check: shielded (penumbra, zcash) and light-client (polkadot)
-    // networks always sync - trial decryption / p2p never leak addresses, so
-    // they have no toggle. Only transparent networks honor enableBackgroundSync.
+    // nothing syncs while every zafu window is closed
+    if (!ui.open) {
+      return;
+    }
+    // privacy check: shielded (penumbra, zcash) networks always sync - trial
+    // decryption / p2p never leak addresses, so they have no toggle. Only
+    // transparent networks honor transparentBackgroundSync (off unless set;
+    // penumbra's "keep syncing when closed" is its own setting since v5).
     // (Gating ALL sync on the raw flag wrongly disabled zcash background sync
     // with no way to re-enable it, since zcash shows no toggle.)
     const privacySettings = await localExtStorage.get('privacySettings');
     const activeNetwork = await localExtStorage.get('activeNetwork');
-    const enableBg = privacySettings?.enableBackgroundSync !== false;
-    const allowed = activeNetwork ? networkAllowsBackgroundSync(activeNetwork, enableBg) : enableBg;
+    const transparentBg = privacySettings?.transparentBackgroundSync === true;
+    const allowed = activeNetwork
+      ? networkAllowsBackgroundSync(activeNetwork, transparentBg)
+      : true;
     if (!allowed) {
       if (globalThis.__DEV__) {
         console.info('Background sync disabled by user privacy settings');
@@ -661,13 +740,10 @@ chrome.alarms.onAlarm.addListener(async alarm => {
     try {
       const services = await booting;
       const ws = await services.getWalletServices();
-      void ws.blockProcessor.sync().catch((e: unknown) => {
-        // terminal rejection after an intentional stop is expected teardown;
-        // anything else deserves the console
-        if (!String(e).includes('Sync stop')) {
-          console.error('[sync] block processor terminated:', e);
-        }
-      });
+      // an intentional stop ends a run quietly; anything else deserves the console
+      void ws.blockProcessor
+        .sync()
+        .catch((e: unknown) => console.error('[sync] block processor terminated:', e));
     } catch (e) {
       // services not initialized or network not enabled - this is expected
       if (globalThis.__DEV__) {
@@ -747,7 +823,8 @@ void (async () => {
 })();
 
 // on install: open onboarding page + create context menu
-chrome.runtime.onInstalled.addListener(({ reason }) => {
+chrome.runtime.onInstalled.addListener(({ reason, previousVersion }) => {
+  void stampSeenVersion(reason, previousVersion).catch(() => undefined);
   chrome.contextMenus.create({
     id: 'open-popup-window',
     title: 'Open Zafu in Popup Window',
@@ -764,4 +841,18 @@ chrome.contextMenus.onClicked.addListener((_info, _tab) => {
   if (_info.menuItemId === 'open-popup-window') {
     void openApprovalPopup(chrome.runtime.getURL('popup.html'));
   }
+});
+
+// `zafu <intent>` in the address bar: same router as a clicked link, landing
+// on the same prefilled review. One window at a time, like every other
+// wallet-initiated popup - typing enter twice never stacks windows.
+// absent until the extension is reloaded with the manifest's omnibox key
+// (an unpacked build picks up new code first), and in browsers without it
+chrome.omnibox?.onInputChanged.addListener((text, suggest) => {
+  suggest([{ content: text, description: escapeOmniboxXml(omniboxDescription(text)) }]);
+});
+
+chrome.omnibox?.onInputEntered.addListener(text => {
+  const route = `${PopupPath.LINK}?uri=${encodeURIComponent(omniboxUri(text))}&via=typed`;
+  void openWalletRoute('omnibox', route);
 });

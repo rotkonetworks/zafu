@@ -2,15 +2,14 @@
  * Preset list of Penumbra gRPC-Web RPC endpoints, grouped by region.
  *
  * Two layers:
- *   - A hardcoded fallback list ({@link PENUMBRA_MAINNET_ENDPOINTS}) so the
- *     settings panel is never bricked when the registry fetch is slow or
- *     offline. `penumbra.rotko.net` is the shipped default (matches every
- *     other rotko fork).
- *   - {@link getRegistryEndpoints} hydrates the extra community-run RPCs
- *     from `@penumbrafi/registry` at runtime. The registry ships
- *     `EntityMetadata = { name, url, images }` with no region info, so we
- *     bucket registry entries into `community` by default (or `default`
- *     when the URL matches a hardcoded preset).
+ *   - A hardcoded fallback list ({@link PENUMBRA_MAINNET_ENDPOINTS}).
+ *     `penumbra.rotko.net` is the shipped default (matches every other rotko
+ *     fork).
+ *   - {@link getRegistryEndpoints} folds in the extra community-run RPCs from
+ *     `@penumbrafi/registry`'s build-time bundled reader - no runtime fetch.
+ *     The registry ships `EntityMetadata = { name, url, images }` with no
+ *     region info, so we bucket registry entries into `community` by default
+ *     (or `default` when the URL matches a hardcoded preset).
  *
  * The `region` field is shared with the Zcash preset shape so
  * `groupPresetsByRegion` from config/zcash-endpoints can be reused.
@@ -38,7 +37,7 @@ export interface PenumbraEndpointPreset {
 /**
  * Hardcoded fallback presets. Order = visual order (within region).
  *
- * Region tags for the community RPCs are best-effort — the operator names
+ * Region tags for the community RPCs are best-effort - the operator names
  * don't cleanly imply a geography (silentvalidator, ghostinnet, crouton,
  * radiantcommons all serve global traffic from single POPs). They ride
  * under `community` so the region bucket in the picker is the honest one.
@@ -133,7 +132,9 @@ function slugify(name: string): string {
 }
 
 /**
- * Hydrate the preset list from `@penumbrafi/registry`.
+ * Hydrate the preset list from `@penumbrafi/registry`'s BUNDLED reader only -
+ * no runtime fetch. A remote re-fetch used to run here on every settings
+ * panel open; it is gone (zafu contacts only what the user asked for).
  *
  * Strategy:
  *   - Start with the hardcoded fallback list so the shipped default and
@@ -141,11 +142,8 @@ function slugify(name: string): string {
  *   - Fold in every registry entry that isn't already covered by URL. New
  *     entries land in the `community` bucket (registry entries don't carry
  *     geographic metadata).
- *   - Prefer the bundled reader (`bundled.globals()`) so the panel renders
- *     synchronously; the caller can later re-hydrate via `remote.globals()`
- *     if a fresher list matters (it doesn't for a first render).
  *
- * Never throws — a broken registry falls back to the hardcoded list.
+ * Never throws - a broken registry falls back to the hardcoded list.
  */
 export function getRegistryEndpoints(): readonly PenumbraEndpointPreset[] {
   try {
@@ -154,17 +152,6 @@ export function getRegistryEndpoints(): readonly PenumbraEndpointPreset[] {
     return mergeRegistry(PENUMBRA_MAINNET_ENDPOINTS, bundled.rpcs);
   } catch {
     return PENUMBRA_MAINNET_ENDPOINTS;
-  }
-}
-
-/** Async variant that pulls from the remote registry (github). */
-export async function getRegistryEndpointsRemote(): Promise<readonly PenumbraEndpointPreset[]> {
-  try {
-    const client = new ChainRegistryClient();
-    const remote = await client.remote.globals();
-    return mergeRegistry(PENUMBRA_MAINNET_ENDPOINTS, remote.rpcs);
-  } catch {
-    return getRegistryEndpoints();
   }
 }
 

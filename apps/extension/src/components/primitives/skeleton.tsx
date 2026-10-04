@@ -11,12 +11,12 @@ interface SkeletonProps {
 
 /** basic skeleton block */
 export const Skeleton = ({ className }: SkeletonProps) => (
-  <div className={cn('animate-pulse bg-elev-2 rounded-md', className)} />
+  <div className={cn('animate-pulse bg-elev-2', className)} />
 );
 
 /** skeleton for balance display */
 export const BalanceSkeleton = () => (
-  <div className='flex items-center justify-between rounded-lg border border-border-soft bg-elev-1 p-4'>
+  <div className='flex items-center justify-between border border-border-soft bg-elev-1 p-4'>
     <div className='space-y-2'>
       <Skeleton className='h-3 w-12' />
       <Skeleton className='h-7 w-24' />
@@ -36,7 +36,7 @@ export const AssetListSkeleton = ({ rows = 3 }: { rows?: number }) => (
     {Array.from({ length: rows }).map((_, i) => (
       <div key={i} className='flex items-center justify-between py-2'>
         <div className='flex items-center gap-2'>
-          <Skeleton className='h-8 w-8 rounded-full' />
+          <Skeleton className='h-8 w-8' />
           <div className='space-y-1'>
             <Skeleton className='h-4 w-16' />
             <Skeleton className='h-3 w-12' />
@@ -54,7 +54,7 @@ export const AssetListSkeleton = ({ rows = 3 }: { rows?: number }) => (
 /** skeleton for network item */
 export const NetworkItemSkeleton = () => (
   <div className='flex items-center gap-2 px-2 py-1.5'>
-    <Skeleton className='h-2 w-2 rounded-full' />
+    <Skeleton className='h-2 w-2' />
     <Skeleton className='h-4 w-16' />
   </div>
 );

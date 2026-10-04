@@ -1,5 +1,5 @@
 /**
- * frostd-relay-client — the old FrostRelayClient shape, backed by a standard
+ * frostd-relay-client - the old FrostRelayClient shape, backed by a standard
  * frostd relay and Noise_K end-to-end encryption.
  *
  * WHY AN ADAPTER RATHER THAN A REWRITE
@@ -13,8 +13,7 @@
  * WHAT CHANGES ANYWAY, AND WHY IT HAS TO
  *
  * The old model was a room code: three words, anyone who has them joins, and
- * participants are discovered as they arrive. frostd does not work that way —
- * a session lists its participants' public keys at creation and admits nobody
+ * participants are discovered as they arrive. frostd does not work that way - * a session lists its participants' public keys at creation and admits nobody
  * else.
  *
  * That is a real UX cost: everyone must exchange relay public keys before a
@@ -27,8 +26,8 @@
  * WHAT THIS FIXES
  *
  * Every payload is sealed with Noise_K before it reaches the relay. The old
- * path sent FROST traffic as a colon-delimited plaintext string — including
- * `SIGN:sighash:alphas:recipient:amount:fee:pczt` — while the transport
+ * path sent FROST traffic as a colon-delimited plaintext string - including
+ * `SIGN:sighash:alphas:recipient:amount:fee:pczt` - while the transport
  * picker told users the relay "never sees keys or amounts". It did see them.
  * Now it sees ciphertext, and that sentence is true.
  */
@@ -67,7 +66,7 @@ export interface RelayCipher {
 
 /** This participant's relay identity plus everyone else's public keys. */
 export interface RelayIdentity {
-  /** our public key, hex — what frostd authenticates us as */
+  /** our public key, hex - what frostd authenticates us as */
   publicKey: string;
   /** signs the frostd login challenge; the private key stays with the caller */
   sign: (challenge: string) => Promise<Uint8Array>;
@@ -110,7 +109,7 @@ export class FrostdRelayClient {
   }
 
   /**
-   * Create a session. The returned `roomCode` is frostd's session id — a
+   * Create a session. The returned `roomCode` is frostd's session id - a
    * uuid rather than three words, and the thing to hand to the others.
    *
    * threshold and maxSigners are accepted for call-site compatibility;
@@ -118,7 +117,7 @@ export class FrostdRelayClient {
    */
   async createRoom(_threshold: number, _maxSigners: number, _ttlSeconds = 0): Promise<FrostRoom> {
     await this.ensureLoggedIn();
-    // every participant, ourselves included — a coordinator that is also
+    // every participant, ourselves included - a coordinator that is also
     // signing must be able to send and receive
     const pubkeys = [this.identity.publicKey, ...this.identity.peers];
     const sessionId = await this.client.createSession(pubkeys, 3);
@@ -174,8 +173,8 @@ export class FrostdRelayClient {
         try {
           payload = this.identity.cipher.decrypt(m.sender, m.msg);
         } catch {
-          // A message we cannot open is not fatal on its own — it may be
-          // addressed to someone else — but it must not be handed upward as
+          // A message we cannot open is not fatal on its own - it may be
+          // addressed to someone else - but it must not be handed upward as
           // if it were plaintext.
           continue;
         }

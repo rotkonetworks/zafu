@@ -17,7 +17,6 @@ import { ConnectedSitesSlice, createConnectedSitesSlice } from './connected-site
 import { createDefaultFrontendSlice, DefaultFrontendSlice } from './default-frontend';
 import { createNumerairesSlice, NumerairesSlice } from './numeraires';
 import { createZignerSlice, ZignerSlice } from './zigner';
-import { createTradingModeSlice, TradingModeSlice } from './trading-mode';
 import { createZignerSigningSlice, ZignerSigningSlice } from './zigner-signing';
 import { createPrivacySlice, PrivacySlice } from './privacy';
 import { createNetworksSlice, NetworksSlice } from './networks';
@@ -33,8 +32,7 @@ import { createInboxSlice, InboxSlice } from './inbox';
 import { createLicenseSlice, LicenseSlice } from './license';
 import { createRingVrfSlice, RingVrfSlice } from './ring-vrf';
 import { createOtaSlice, type OtaSlice } from './ota';
-import { createLedgerSessionSlice, LedgerSessionSlice } from './ledger-session';
-import { createGroupChatSlice, GroupChatSlice } from './group-chat';
+import { createPocketsSlice, PocketsSlice } from './pockets';
 
 export interface AllSlices {
   wallets: WalletsSlice;
@@ -47,7 +45,6 @@ export interface AllSlices {
   connectedSites: ConnectedSitesSlice;
   defaultFrontend: DefaultFrontendSlice;
   zigner: ZignerSlice;
-  tradingMode: TradingModeSlice;
   zignerSigning: ZignerSigningSlice;
   privacy: PrivacySlice;
   networks: NetworksSlice;
@@ -63,8 +60,7 @@ export interface AllSlices {
   license: LicenseSlice;
   ringVrf: RingVrfSlice;
   ota: OtaSlice;
-  ledgerSession: LedgerSessionSlice;
-  groupChat: GroupChatSlice;
+  pockets: PocketsSlice;
 }
 
 export type SliceCreator<SliceInterface> = StateCreator<
@@ -93,7 +89,6 @@ export const initializeStore = (
     originApproval: createOriginApprovalSlice()(setState, getState, store),
     defaultFrontend: createDefaultFrontendSlice(local)(setState, getState, store),
     zigner: createZignerSlice(local)(setState, getState, store),
-    tradingMode: createTradingModeSlice(local)(setState, getState, store),
     zignerSigning: createZignerSigningSlice(setState, getState, store),
     privacy: createPrivacySlice(local)(setState, getState, store),
     networks: createNetworksSlice(local)(setState, getState, store),
@@ -109,8 +104,7 @@ export const initializeStore = (
     license: createLicenseSlice()(setState, getState, store),
     ringVrf: createRingVrfSlice()(setState, getState, store),
     ota: createOtaSlice(setState, getState, store),
-    ledgerSession: createLedgerSessionSlice(setState, getState, store),
-    groupChat: createGroupChatSlice(local)(setState, getState, store),
+    pockets: createPocketsSlice(local)(setState, getState, store),
   }));
 };
 
@@ -130,5 +124,5 @@ export const useStore = createWithEqualityFn<AllSlices>()(
   shallow,
 );
 
-/** store type for use in test mocks — includes immer middleware signature */
+/** store type for use in test mocks - includes immer middleware signature */
 export type TestStore = typeof useStore;

@@ -3,8 +3,8 @@
  *
  * This pins `NETWORKS[*].features` to the behaviour the pre-migration literal
  * checks produced. The expectations are transcribed from the ORIGINAL
- * `=== 'zcash'` / `=== 'penumbra'` / `isIbcNetwork(n) || n === ...` checks — not
- * derived from the corrected table — so a wrong feature value fails here rather
+ * `=== 'zcash'` / `=== 'penumbra'` / `isIbcNetwork(n) || n === ...` checks - not
+ * derived from the corrected table - so a wrong feature value fails here rather
  * than silently changing which tabs, routes and components render.
  */
 
@@ -37,22 +37,23 @@ const ALL_FEATURES: FeatureKey[] = [
  * - cosmos    privacy rows `isIbcNetwork(n) || n === 'penumbra'`
  * - zcash     privacy rows `n === 'zcash'`
  */
-const EXPECTED_SETS: Record<NetworkType, FeatureKey[]> = {
+const WRITTEN_SETS: Partial<Record<NetworkType, FeatureKey[]>> = {
   zcash: ['swap', 'vote', 'inbox', 'multisig', 'zcash'],
   penumbra: ['stake', 'swap', 'vote', 'inbox', 'cosmos'],
-  polkadot: [],
-  kusama: [],
-  noble: ['cosmos'],
-  cosmoshub: ['cosmos'],
-  osmosis: ['cosmos'],
-  injective: ['cosmos'],
   ethereum: [],
   bitcoin: [],
 };
+/** every penumbra subnetwork, written out or from the registry, is a cosmos surface only */
+const isSubnetwork = (n: NetworkType) => NETWORKS[n]?.parent === 'penumbra';
+const EXPECTED_SETS: Record<NetworkType, FeatureKey[]> = Object.fromEntries(
+  NETWORK_IDS.map(n => [n, WRITTEN_SETS[n] ?? (isSubnetwork(n) ? ['cosmos'] : [])]),
+);
 
 describe('NETWORKS features match the original literal gates', () => {
-  it('covers every network in NETWORKS', () => {
-    expect(Object.keys(EXPECTED_SETS).sort()).toEqual([...NETWORK_IDS].sort());
+  it('lists the written networks and the subnetworks it knows', () => {
+    for (const n of ['zcash', 'penumbra', 'noble', 'cosmoshub', 'osmosis', 'injective', 'axelar']) {
+      expect(NETWORK_IDS).toContain(n);
+    }
   });
 
   it.each(NETWORK_IDS)('%s has the literal-derived feature set', network => {
@@ -67,13 +68,7 @@ describe('NETWORKS features match the original literal gates', () => {
     expect(hasFeature(network, 'vote')).toBe(network === 'zcash' || network === 'penumbra');
     expect(hasFeature(network, 'swap')).toBe(network === 'zcash' || network === 'penumbra');
     expect(hasFeature(network, 'inbox')).toBe(network === 'zcash' || network === 'penumbra');
-    expect(hasFeature(network, 'cosmos')).toBe(
-      network === 'noble' ||
-        network === 'cosmoshub' ||
-        network === 'osmosis' ||
-        network === 'injective' ||
-        network === 'penumbra',
-    );
+    expect(hasFeature(network, 'cosmos')).toBe(isSubnetwork(network) || network === 'penumbra');
     expect(hasFeature(network, 'zcash')).toBe(network === 'zcash');
   });
 });

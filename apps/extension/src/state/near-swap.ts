@@ -3,19 +3,22 @@
  *
  * Uses ChainDefuser's 1Click API (same as Zashi mobile) for
  * crosschain swaps to/from ZEC. The API handles routing through
- * NEAR's intent infrastructure — we just request quotes and send
+ * NEAR's intent infrastructure - we just request quotes and send
  * ZEC to the deposit address.
  *
  * Flow:
- *   1. GET /v0/tokens — list supported assets
- *   2. POST /v0/quote — get quote with deposit address
+ *   1. GET /v0/tokens - list supported assets
+ *   2. POST /v0/quote - get quote with deposit address
  *   3. User sends ZEC to deposit address (or receives at their address)
- *   4. GET /v0/status?depositAddress=... — poll for completion
+ *   4. GET /v0/status?depositAddress=... - poll for completion
  */
+
+import { requestEgressOptIn } from '../net/egress-opt-in';
+import { NEAR_APP_FEE_RECIPIENT } from '../config/swap-fee';
 
 const API_BASE = 'https://1click.chaindefuser.com';
 
-// 1Click partner JWT — partner_id: rotko-networks (issued via NEAR Intents portal).
+// 1Click partner JWT - partner_id: rotko-networks (issued via NEAR Intents portal).
 // Sent as `Authorization: Bearer <jwt>` on quote/status/deposit to avoid the 0.2% fee
 // and attribute swaps to rotko.
 //
@@ -25,9 +28,6 @@ const API_BASE = 'https://1click.chaindefuser.com';
 // builds read apps/extension/.env.local (gitignored). Empty => unauthenticated
 // 1Click request (degrades the fee-free partner path only).
 const AUTH_TOKEN = process.env['NEAR_1CLICK_JWT'] ?? '';
-
-const AFFILIATE_ADDRESS = 'bdb384d8c6273bf4e40757d57d49ff7931c12b4ddaa838c323e4f93a7263744f';
-const AFFILIATE_FEE_BPS = 67;
 
 // ── types ──
 
@@ -53,7 +53,7 @@ export interface SwapQuoteRequest {
   recipientType: 'DESTINATION_CHAIN';
   deadline: string; // ISO 8601
   quoteWaitingTimeMs?: number;
-  appFees: { recipient: string; fee: number }[];
+  appFees?: { recipient: string; fee: number }[];
   referral?: string;
 }
 
@@ -110,6 +110,9 @@ export interface SwapStatusResponse {
 // ── API calls ──
 
 async function nearFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  // asks before the first request; declining still reaches fetch, which the
+  // egress guard refuses with a named EgressBlockedError for the caller to show
+  await requestEgressOptIn('near-swap');
   const resp = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
@@ -143,6 +146,15 @@ export async function getSupportedTokens(): Promise<NearToken[]> {
   return nearFetch<NearToken[]>('/v0/tokens');
 }
 
+/**
+ * How far below the quoted output a 1click swap may settle, in bps (1click's
+ * slippageTolerance: 100 = 1%). Its floor, minAmountOut, is shown as "at least".
+ */
+export const NEAR_SLIPPAGE_BPS = 100;
+
+/** how long 1click gathers solver quotes before it answers */
+export const NEAR_QUOTE_WAIT_MS = 3000;
+
 /** Request a swap quote. Returns deposit address + amounts. */
 export async function requestQuote(params: {
   swapType: 'EXACT_INPUT' | 'EXACT_OUTPUT';
@@ -157,13 +169,16 @@ export async function requestQuote(params: {
   // VALID destination-chain recipient is still required (the API validates it
   // even when dry), so callers pass a placeholder for the estimate.
   dry?: boolean;
+  /** zafu's app fee in bps, taken from the amount out; 0 = none */
+  appFeeBps?: number;
+  signal?: AbortSignal;
 }): Promise<SwapQuoteResponse> {
   const deadline = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 
   const request: SwapQuoteRequest = {
     dry: params.dry ?? false,
     swapType: params.swapType,
-    slippageTolerance: params.slippageTolerance ?? 200,
+    slippageTolerance: params.slippageTolerance ?? NEAR_SLIPPAGE_BPS,
     originAsset: params.originAsset,
     depositType: 'ORIGIN_CHAIN',
     destinationAsset: params.destinationAsset,
@@ -173,14 +188,17 @@ export async function requestQuote(params: {
     recipient: params.recipient,
     recipientType: 'DESTINATION_CHAIN',
     deadline,
-    quoteWaitingTimeMs: 3000,
-    appFees: [{ recipient: AFFILIATE_ADDRESS, fee: AFFILIATE_FEE_BPS }],
+    quoteWaitingTimeMs: NEAR_QUOTE_WAIT_MS,
+    appFees: params.appFeeBps
+      ? [{ recipient: NEAR_APP_FEE_RECIPIENT, fee: params.appFeeBps }]
+      : undefined,
     referral: 'zafu',
   };
 
   return nearFetch<SwapQuoteResponse>('/v0/quote', {
     method: 'POST',
     body: JSON.stringify(request),
+    signal: params.signal,
   });
 }
 
@@ -207,70 +225,20 @@ export function findZecAssetId(tokens: NearToken[]): string | undefined {
   return (zecTokens.find(t => t.blockchain === 'zec') ?? zecTokens[0])?.assetId;
 }
 
-/** Filter tokens to only those swappable with ZEC (exclude ZEC variants). */
 /**
- * Reduce the raw NEAR token list (which lists every symbol once per chain -
- * e.g. BTC on btc/near/aptos, ZEC on zec/sol/aptos/...) to ONE canonical entry
- * per symbol. Without this the picker shows confusing duplicates and defaults
- * can land on a wrapped variant ("BTC on aptos"). Preference order:
- *   1. the asset's native chain (blockchain === symbol, e.g. BTC->btc, ETH->eth)
- *   2. a popularity list of well-supported chains
- *   3. whatever came first
- * ZEC is dropped (it is always the local side of the swap, not a pick).
- * Multi-chain selection can return later behind the provider abstraction.
+ * Every token swappable with ZEC, on every chain 1Click lists it on (the picker
+ * goes chain first). ZEC is dropped: it is always the local side. Each symbol's
+ * native chain comes first, then well-supported chains, so a link that names
+ * only a symbol ("btc") lands on bitcoin, not a wrapped variant on aptos.
  */
-const CHAIN_PREFERENCE = ['btc', 'eth', 'sol', 'near', 'arbitrum', 'base', 'polygon'];
-export function filterSwappableTokens(tokens: NearToken[]): NearToken[] {
-  const chainRank = (t: NearToken): number => {
-    if (t.blockchain === t.symbol.toLowerCase()) {
-      return -1; // native chain wins
-    }
-    const i = CHAIN_PREFERENCE.indexOf(t.blockchain);
-    return i >= 0 ? i : CHAIN_PREFERENCE.length;
-  };
-  const bySymbol = new Map<string, NearToken>();
-  for (const t of tokens) {
-    if (t.symbol === 'ZEC') {
-      continue;
-    }
-    const cur = bySymbol.get(t.symbol);
-    if (!cur || chainRank(t) < chainRank(cur)) {
-      bySymbol.set(t.symbol, t);
-    }
+const CHAIN_PREFERENCE = ['btc', 'eth', 'sol', 'near', 'arb', 'base', 'pol'];
+const chainRank = (t: NearToken): number => {
+  if (t.blockchain === t.symbol.toLowerCase()) {
+    return -1;
   }
-  return [...bySymbol.values()];
-}
-
-/** Format amount from base units to display (e.g. zatoshis → ZEC). */
-export function formatAmount(baseUnits: string, decimals: number): string {
-  const n = Number(baseUnits);
-  if (isNaN(n)) {
-    return '0';
-  }
-  return (n / 10 ** decimals).toFixed(Math.min(decimals, 8));
-}
-
-/** Convert display amount to base units string. */
-export function toBaseUnits(displayAmount: string, decimals: number): string {
-  const n = parseFloat(displayAmount);
-  if (isNaN(n) || n <= 0) {
-    return '0';
-  }
-  return Math.floor(n * 10 ** decimals).toString();
-}
-
-/** Map NEAR 1Click blockchain name to our ContactNetwork type. */
-const BLOCKCHAIN_TO_NETWORK: Record<string, string> = {
-  ethereum: 'ethereum',
-  bitcoin: 'bitcoin',
-  solana: 'solana',
-  near: 'near',
-  base: 'base',
-  arbitrum: 'arbitrum',
-  avalanche: 'avalanche',
-  polygon: 'polygon',
+  const i = CHAIN_PREFERENCE.indexOf(t.blockchain);
+  return i >= 0 ? i : CHAIN_PREFERENCE.length;
 };
-
-export function blockchainToContactNetwork(blockchain: string): string | undefined {
-  return BLOCKCHAIN_TO_NETWORK[blockchain.toLowerCase()];
+export function filterSwappableTokens(tokens: NearToken[]): NearToken[] {
+  return tokens.filter(t => t.symbol !== 'ZEC').sort((a, b) => chainRank(a) - chainRank(b));
 }

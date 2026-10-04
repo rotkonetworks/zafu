@@ -21,6 +21,7 @@ const spyService = () => {
     async publishSelf(_record, peers, epoch) {
       calls.push({ peers, epoch });
     },
+    async withdrawSelf() {},
     async findPresent() {
       return [];
     },

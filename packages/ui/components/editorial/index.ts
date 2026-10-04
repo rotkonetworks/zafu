@@ -1,5 +1,5 @@
 /**
- * Editorial primitives — the v2 design system's layout vocabulary.
+ * Editorial primitives - the v2 design system's layout vocabulary.
  *
  * These are intentionally separate from the shadcn-style primitives under
  * `components/ui/`. They are token-driven, newspaper-inspired pieces meant

@@ -64,20 +64,29 @@
     "vitest": "~1.6.1"
   },
   "overrides": {
-    "@penumbrafi/registry": "^13.2.0",
+    "@penumbrafi/registry": "^13.4.0",
     "@bufbuild/protobuf": "^1.10.0",
-    "@penumbra-zone/types": "npm:@rotko/penumbra-types@37.0.0",
-    "@penumbra-zone/wasm": "npm:@rotko/penumbra-wasm@55.0.2",
-    "@rotko/penumbra-wasm": "55.0.2",
-    "@penumbra-zone/services": "npm:@rotko/penumbra-services@70.0.0"
+    "@penumbra-zone/types": "npm:@penumbrafi/types@38.0.0",
+    "@penumbra-zone/wasm": "npm:@penumbrafi/wasm@57.0.0",
+    "@penumbra-zone/services": "npm:@penumbrafi/services@72.0.0"
   },
   "pnpm": {
     "overrides": {
-      "@penumbra-labs/registry": "npm:@penumbrafi/registry@^13.2.0"
+      "@penumbra-labs/registry": "npm:@penumbrafi/registry@^13.4.0",
+      "@penumbrafi/registry": "13.4.0",
+      "@penumbra-zone/types": "npm:@penumbrafi/types@38.0.0",
+      "@penumbra-zone/wasm": "npm:@penumbrafi/wasm@57.0.0",
+      "@penumbra-zone/services": "npm:@penumbrafi/services@72.0.0",
+      "@penumbrafi/types": "38.0.0",
+      "@penumbrafi/wasm": "57.0.0",
+      "@penumbrafi/services": "72.0.0"
     },
     "peerDependencyRules": {
       "allowAny": [
-        "@rotko/penumbra-wasm",
+        "@penumbrafi/wasm",
+        "@penumbra-zone/wasm",
+        "@penumbra-zone/types",
+        "@penumbra-zone/services",
         "@penumbra-labs/registry"
       ]
     }

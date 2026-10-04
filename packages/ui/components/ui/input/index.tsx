@@ -3,17 +3,16 @@ import * as React from 'react';
 import { cva, VariantProps } from 'class-variance-authority';
 import { cn } from '../../../lib/utils';
 
+/** board input: 48px, elev-1 ground, 1px line, square. */
 const inputVariants = cva(
-  'flex h-11 w-full rounded-lg border bg-canvas px-3 py-2 ring-offset-background [appearance:textfield] file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-fg-muted focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
+  'flex h-12 w-full border border-border-soft bg-elev-1 px-3 text-sm text-fg-high [appearance:textfield] file:border-0 file:bg-transparent file:text-sm placeholder:text-fg-muted focus-visible:border-zigner-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:text-fg-dim [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
   {
     variants: {
       variant: {
         default: '',
-        success: 'border-teal',
-        error: 'border-red-400',
-        warn: 'border-yellow-300',
-        transparent:
-          'h-[22px] rounded-none border-none bg-transparent p-0 placeholder:text-[15px] placeholder:font-medium placeholder:leading-[22px] placeholder:text-light-brown',
+        success: 'border-green',
+        error: 'border-red',
+        warn: 'border-warn',
       },
     },
     defaultVariants: {

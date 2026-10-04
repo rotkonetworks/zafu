@@ -1,8 +1,8 @@
 /**
- * external message listener — handles messages from websites via externally_connectable
+ * external message listener - handles messages from websites via externally_connectable
  *
  * supports:
- * - { type: 'ping' } → responds with { zafu: true, version }
+ * - { type: 'ping' } → responds with { zafu: true, version (connected sites only) }
  * - { type: 'send', address } → opens send popup
  * - { type: 'zafu_sign', challengeHex, ... } → sign request (handled elsewhere)
  * - { type: 'zafu_request_capability', capability } → request a specific capability
@@ -22,11 +22,12 @@
  * - { type: 'zafu_delete_multisig', multisigLabel, delayMs? }
  *     → schedule (or immediately do) deletion of a multisig vault by name prefix.
  *       used by app-driven multisigs (poker tables) to evaporate themselves after settlement.
- *       no popup — silent operation. delayMs default 0 (immediate).
+ *       no popup - silent operation. delayMs default 0 (immediate).
  * - { type: 'zafu_open_shield', chainId } → show the wallet's own shield-in screen
  *     (dapp handoff, e.g. Veil's "deposit from Injective"); nothing crosses back.
  */
 
+import { DEFAULT_RELAY_URL } from '../../config/multisig-relay';
 import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
 import { getCapabilityMode, setCapabilityMode } from '../../state/capability-modes';
 import {
@@ -44,9 +45,12 @@ import {
   nextHdIndex,
   checkAndBumpFreshAddressRateLimit,
 } from '@repo/storage-chrome/cosmos-chain-counters';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { isPro } from '../../state/license';
 import { isValidExternalSender } from '../../senders/external';
+import { isValidInternalSender } from '../../senders/internal';
+import { sessionExtStorage } from '@repo/storage-chrome/session';
+import { rpIdMatchesOrigin } from '../../state/public-suffix';
 import { ZAFU_PROTOCOL_VERSION, ZAFU_SUPPORTED_PROTOCOL_VERSIONS } from '@zafu/protocol';
 import { getApprovalSurface } from '../../side-panel-pref';
 import { isSidePanelOpen } from '../../side-panel-presence';
@@ -85,25 +89,6 @@ const OPEN_SHIELD_CHAINS = new Set<string>(['injective']);
 // in the zafu-method-names leaf. Keep the switch below in sync with that list;
 // the protocol contract test fails on drift.
 
-/**
- * WebAuthn rpId must be the caller origin's host or a registrable domain
- * suffix of it (the spec's "registrable domain suffix" rule, minus the
- * public-suffix-list check). Without this, a connected origin could request
- * an assertion for any other RP. `origin` is the browser-attested
- * `sender.origin`, never a caller-supplied field.
- */
-const rpIdMatchesOrigin = (rpId: string, origin: string): boolean => {
-  if (!rpId) {
-    return false;
-  }
-  try {
-    const host = new URL(origin).hostname;
-    return host === rpId || host.endsWith('.' + rpId);
-  } catch {
-    return false;
-  }
-};
-
 // Gates the zafu_frost_sign_orchard external entry. The joiner now receives
 // a full PCZT from the host and verifies sighash + OVK-decrypted outputs
 // on zigner before signing (gh #17), so the display↔sighash binding gap
@@ -119,7 +104,13 @@ const pendingPicks = new Map<string, (r: unknown) => void>();
 // result arrives; the origin is kept for the same reason, so approval can grant
 // the `passkey` capability to the origin that actually asked. Kept here, not in
 // the popup round-trip: an extension page must not choose either value.
-const pendingPasskeyRequests = new Map<string, { origin: string; rpId: string }>();
+const pendingPasskeyRequests = new Map<
+  string,
+  { origin: string; rpId: string; verified: boolean }
+>();
+
+/** is the wallet locked right now? read before an unlock, so a request knows it made the person type their password */
+const walletLocked = async (): Promise<boolean> => !(await sessionExtStorage.get('passwordKey'));
 
 /**
  * Register a pending popup callback keyed by `requestId`. Other external
@@ -159,6 +150,40 @@ const popupWindowToOrigin = new Map<number, string>();
 // callsite; that ordering removes the race where the window closes between
 // windowId registration and pendingPicks.set.
 const popupWindowToRequestId = new Map<number, string>();
+
+// Reverse of popupWindowToRequestId, so a result message (which only carries
+// the requestId) can release the per-origin guard immediately - see
+// releasePopupGuardForRequest below.
+const requestIdToWindowId = new Map<string, number>();
+
+/**
+ * Release the per-origin popup-open guard for `requestId`'s window as soon
+ * as its result is IN, instead of waiting for the physical window-close
+ * event. A flow that opens two approval popups back to back for the SAME
+ * origin - the global opt-in question (askOptin), immediately followed by
+ * the per-site consent (requestCapabilityApprovalPopup) - would otherwise
+ * race `onRemoved`: that event fires only once Chrome finishes tearing the
+ * window down, which is frequently AFTER the service worker has already
+ * resumed and tried to open the second popup, so the still-set guard from
+ * the first popup would silently drop the second one (gh: the global
+ * question is answered but the per-site one never appears). Releasing here,
+ * at the point a decision is consumed, removes that race. `onRemoved` is
+ * still the ONLY cleanup for a window closed without ever answering (no
+ * result message ever arrives in that case).
+ */
+function releasePopupGuardForRequest(requestId: string): void {
+  const windowId = requestIdToWindowId.get(requestId);
+  if (windowId === undefined) {
+    return;
+  }
+  requestIdToWindowId.delete(requestId);
+  popupWindowToRequestId.delete(windowId);
+  const origin = popupWindowToOrigin.get(windowId);
+  if (origin !== undefined) {
+    popupWindowToOrigin.delete(windowId);
+    originsWithOpenPopup.delete(origin);
+  }
+}
 
 // A result message races the window removal: the approval popup sends its
 // approve/deny message and then closes itself, and `onRemoved` can win. Settling
@@ -226,6 +251,7 @@ export async function openApprovalPopup(
       popupWindowToOrigin.set(opened.id, origin);
       if (requestId !== undefined) {
         popupWindowToRequestId.set(opened.id, requestId);
+        requestIdToWindowId.set(requestId, opened.id);
       }
       return true;
     }
@@ -267,16 +293,16 @@ const createPopupWindow = async (
 /**
  * Uniform capability gate for high-risk external entry points.
  *
- * Any rejection — missing origin, missing perms, missing capability,
- * lookup error — returns the same error shape after a constant minimum
+ * Any rejection - missing origin, missing perms, missing capability,
+ * lookup error - returns the same error shape after a constant minimum
  * latency. Differentiating rejection causes (which the older
  * zafu_passkey_* pattern does) gives a local attacker a fingerprint of
  * which capabilities a user has granted; uniform rejection collapses
  * those distinguishable paths.
  *
  * Callers receive either:
- *   { ok: true, origin: <validated origin> }  — proceed
- *   null                                       — sendResponse has been
+ *   { ok: true, origin: <validated origin> } - proceed
+ *   null - sendResponse has been
  *                                                 called with the denied
  *                                                 shape; caller MUST
  *                                                 early-return.
@@ -310,7 +336,7 @@ async function requireCapability(
   try {
     // Global participation first: a capability the user turned off (or is
     // still undecided about, which prompts once) collapses into the same
-    // uniform rejection as a missing per-origin grant — the caller cannot
+    // uniform rejection as a missing per-origin grant - the caller cannot
     // tell a global refusal from a per-origin one.
     const modeCheck = await ensureCapabilityMode(cap, origin);
     if (!modeCheck.ok) {
@@ -331,8 +357,8 @@ async function requireCapability(
  *
  * The per-origin capability grant answers "may THIS site use this?"; this
  * answers "does the user want zafu to offer this at all?". An undecided
- * capability (absent from storage) is asked ONCE, globally — the question is
- * not about the site, so the screen gets no origin — and the answer is
+ * capability (absent from storage) is asked ONCE, globally - the question is
+ * not about the site, so the screen gets no origin - and the answer is
  * persisted as the mode, so every later site skips straight to its own
  * per-origin consent. A cancelled prompt persists nothing, so a site whose
  * approval window died cannot lock the feature out.
@@ -385,6 +411,62 @@ async function ensureCapabilityMode(cap: Capability, origin: string): Promise<Mo
   return answer.approved ? { ok: true } : { ok: false, reason: 'disabled' };
 }
 
+/**
+ * Open the per-origin capability approval popup and wait for a decision,
+ * granting/denying `cap` at `origin` as a side effect. This is the ONE
+ * place that opens that popup - both `zafu_request_capability`'s popup
+ * path and `zafu_passkey_get`'s re-authorization-after-expiry path (see
+ * TIME_LIMITED_CAPABILITIES) call this instead of each running their own
+ * copy of the window-lifecycle plumbing.
+ *
+ * Goes through `openApprovalPopup`, same as every other high-risk popup in
+ * this file, so a second concurrent request from the same origin (e.g. a
+ * page looping `navigator.credentials.get()`) is dropped instead of
+ * stacking another window - `openApprovalPopup` is the per-origin
+ * `originsWithOpenPopup` guard (gh #19); opening the window directly here
+ * used to bypass it.
+ *
+ * Returns which of the three outcomes happened, since callers respond
+ * differently to "the user said no" than to "the popup never got an
+ * answer" (closed, failed to open, or dropped by the per-origin guard): a
+ * cancelled decision must NOT persist a denial the user never made.
+ */
+export async function requestCapabilityApprovalPopup(
+  origin: string,
+  cap: Capability,
+  sender: chrome.runtime.MessageSender,
+): Promise<'approved' | 'denied' | 'cancelled'> {
+  const requestId = crypto.randomUUID();
+  const resultPromise = new Promise<unknown>(resolve => {
+    pendingPicks.set(requestId, resolve);
+  });
+
+  const params = new URLSearchParams({
+    app: origin,
+    capability: cap,
+    requestId,
+    title: sender.tab?.title || '',
+  });
+  const url = chrome.runtime.getURL(`popup.html#/approval/capability?${params.toString()}`);
+  if (!(await openApprovalPopup(origin, url, requestId))) {
+    pendingPicks.delete(requestId);
+    return 'cancelled';
+  }
+
+  const result = (await resultPromise) as { approved?: boolean; cancelled?: boolean };
+  if (result?.approved) {
+    await grantCapability(origin, cap);
+    return 'approved';
+  }
+  if (result?.cancelled) {
+    // Popup never got a user decision (closed or failed to open). Do NOT
+    // persist a denial the user did not make; caller can retry.
+    return 'cancelled';
+  }
+  await denyCapability(origin, cap);
+  return 'denied';
+}
+
 export const externalMessageListener = (
   req: unknown,
   sender: chrome.runtime.MessageSender,
@@ -409,7 +491,9 @@ export const externalMessageListener = (
     'zafu_passkey_create_result',
   ]);
   if (INTERNAL_RESULT_TYPES.has(type)) {
-    if (sender.id !== chrome.runtime.id) {
+    // a content script carries this extension's id too, so the id alone is not
+    // "zafu's own page": require the extension origin
+    if (!isValidInternalSender(sender)) {
       return false;
     }
   } else if (
@@ -418,7 +502,10 @@ export const externalMessageListener = (
     // a picker/approval/send popup wearing the host tab's identity (provenance
     // spoof). The frost/passkey entries already gate via requireCapability /
     // isValidExternalSender; ping is a harmless discovery response.
-    (type === 'send' || type === 'zafu_pick_contacts' || type === 'zafu_request_capability') &&
+    (type === 'send' ||
+      type === 'zafu_pick_contacts' ||
+      type === 'zafu_request_capability' ||
+      type === 'zafu_zcash_send') &&
     !isValidExternalSender(sender)
   ) {
     sendResponse({ success: false, error: 'denied', code: 'denied' });
@@ -426,14 +513,25 @@ export const externalMessageListener = (
   }
 
   switch (type) {
-    case 'ping':
-      sendResponse({
-        zafu: true,
-        version: chrome.runtime.getManifest().version,
-        protocolVersion: ZAFU_PROTOCOL_VERSION,
-        protocolVersions: [...ZAFU_SUPPORTED_PROTOCOL_VERSIONS],
-      });
+    case 'ping': {
+      // the release version narrows down who someone is; a site the person
+      // connected may read it, any other gets an empty string (the shape the
+      // protocol pins) and only the protocol versions it needs to talk to us
+      const origin = sender.origin;
+      void (async () => {
+        const connected =
+          !!origin &&
+          isValidExternalSender(sender) &&
+          hasCapability(await getOriginPermissions(origin), 'connect');
+        sendResponse({
+          zafu: true,
+          version: connected ? chrome.runtime.getManifest().version : '',
+          protocolVersion: ZAFU_PROTOCOL_VERSION,
+          protocolVersions: [...ZAFU_SUPPORTED_PROTOCOL_VERSIONS],
+        });
+      })().catch(() => sendResponse({ error: 'ping failed' }));
       return true;
+    }
 
     case 'send': {
       const address = msg['address'];
@@ -442,7 +540,7 @@ export const externalMessageListener = (
         return true;
       }
       const params = new URLSearchParams({ to: address });
-      // optional zatoshi amount — zafu's send popup converts to ZEC for display
+      // optional zatoshi amount - zafu's send popup converts to ZEC for display
       const amountZat = Number(msg['amount_zat']);
       if (Number.isFinite(amountZat) && amountZat > 0) {
         params.set('amount_zat', String(Math.floor(amountZat)));
@@ -451,12 +549,23 @@ export const externalMessageListener = (
       // in the memo and the send popup substitutes the user's oldest non-multisig Zcash UA.
       // Saves a separate "what's my address" round-trip; user can still edit before send.
       const memo = msg['memo'];
-      if (typeof memo === 'string' && memo.length > 0 && memo.length <= 512) {
-        params.set('memo', memo);
-      }
-      const url = chrome.runtime.getURL(`popup.html#/send?${params.toString()}`);
-      void chrome.windows.create({ url, type: 'popup', width: 400, height: 628 });
-      sendResponse({ ok: true });
+      // a valid top-frame https sender (checked above), so the origin is attested
+      const origin = sender.origin ?? '';
+      void (async () => {
+        // `[primary]`/`[self]` put the person's own address in the memo the
+        // site's recipient reads: only a site they connected may ask for that.
+        // An unconnected site still gets its prefilled send, minus the tokens.
+        const connected = hasCapability(await getOriginPermissions(origin), 'connect');
+        if (typeof memo === 'string' && memo.length > 0 && memo.length <= 512) {
+          const kept = connected ? memo : memo.replaceAll('[primary]', '').replaceAll('[self]', '');
+          if (kept.trim()) {
+            params.set('memo', kept);
+          }
+        }
+        const url = chrome.runtime.getURL(`popup.html#/send?${params.toString()}`);
+        void chrome.windows.create({ url, type: 'popup', width: 400, height: 628 });
+        sendResponse({ ok: true });
+      })().catch(() => sendResponse({ ok: false }));
       return true;
     }
 
@@ -466,7 +575,7 @@ export const externalMessageListener = (
       const max = Number(msg['max']) || 1;
       const requestId = crypto.randomUUID();
 
-      // store the callback — picker popup will send result via internal message
+      // store the callback - picker popup will send result via internal message
       pendingPicks.set(requestId, sendResponse);
 
       // open picker popup with params
@@ -539,7 +648,7 @@ export const externalMessageListener = (
           }
           const threshold = Number(msg['threshold']) || 2;
           const maxSigners = Number(msg['maxSigners']) || 3;
-          const relayUrl = String(msg['relayUrl'] || 'wss://zcash.rotko.net/ws');
+          const relayUrl = String(msg['relayUrl'] || DEFAULT_RELAY_URL);
           const appOrigin = sender.origin || sender.url || 'unknown';
           const requestId = crypto.randomUUID();
 
@@ -583,7 +692,7 @@ export const externalMessageListener = (
         }
         const threshold = Number(msg['threshold']) || 2;
         const maxSigners = Number(msg['maxSigners']) || 3;
-        const relayUrl = String(msg['relayUrl'] || 'wss://zcash.rotko.net/ws');
+        const relayUrl = String(msg['relayUrl'] || DEFAULT_RELAY_URL);
         const requestId = crypto.randomUUID();
 
         const params = new URLSearchParams({
@@ -619,7 +728,7 @@ export const externalMessageListener = (
         }
         const threshold = Number(msg['threshold']) || 2;
         const maxSigners = Number(msg['maxSigners']) || 3;
-        const relayUrl = String(msg['relayUrl'] || 'wss://zcash.rotko.net');
+        const relayUrl = String(msg['relayUrl'] || DEFAULT_RELAY_URL);
         const appOrigin = sender.origin || sender.url || 'unknown';
         // new URL() throws on non-URL strings (e.g. 'unknown'); fall back safely.
         let originHost = 'multisig';
@@ -658,13 +767,13 @@ export const externalMessageListener = (
     }
 
     case 'zafu_frost_sign': {
-      // DISABLED — this was unconditional blind signing.
+      // DISABLED - this was unconditional blind signing.
       //
       // The approval screen for this entry showed only a truncated sighash:
       // no PCZT, no outputs, no verification of any kind. A page holding the
       // 'frost' capability could therefore get a threshold share released over
       // an arbitrary 32 bytes it chose. Worse, the caller's randomizer was set
-      // equal to the message (alphas = [sighashHex]) — an attacker-chosen
+      // equal to the message (alphas = [sighashHex]) - an attacker-chosen
       // randomizer over an attacker-chosen message is exactly the adaptive
       // setting randomized FROST exists to exclude.
       //
@@ -705,10 +814,10 @@ export const externalMessageListener = (
           sendResponse({ error: 'plan array required' });
           return;
         }
-        const relayUrl = String(msg['relayUrl'] || 'wss://zcash.rotko.net');
+        const relayUrl = String(msg['relayUrl'] || DEFAULT_RELAY_URL);
         const feeZat = Number(msg['feeZat']) || 10_000;
         // Empty is allowed here because the popup falls back to the default
-        // multisigVault; the popup looks up via startsWith — same charset rules.
+        // multisigVault; the popup looks up via startsWith - same charset rules.
         const rawLabel = typeof msg['multisigLabel'] === 'string' ? msg['multisigLabel'] : '';
         const multisigLabel = rawLabel.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64);
         const requestId = crypto.randomUUID();
@@ -746,7 +855,7 @@ export const externalMessageListener = (
         // prefix can't be enumerated. Origin-binding in findVaultByLabelPrefix
         // is the real guard; this is defense in depth. All rejections are the
         // uniform 'denied' shape (and only after the capability gate) so a
-        // caller can't distinguish rejection causes — same contract as
+        // caller can't distinguish rejection causes - same contract as
         // requireCapability.
         const rawLabel = typeof msg['multisigLabel'] === 'string' ? msg['multisigLabel'] : '';
         const multisigLabel = rawLabel.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64);
@@ -758,7 +867,7 @@ export const externalMessageListener = (
         try {
           const { findVaultByLabelPrefix, cancelScheduledDelete } =
             await import('../../state/keyring/scheduled-deletes');
-          // origin-scoped lookup — refuses cross-origin label collisions.
+          // origin-scoped lookup - refuses cross-origin label collisions.
           const vaultId = await findVaultByLabelPrefix(multisigLabel, gate.origin);
           if (!vaultId) {
             sendResponse({ success: false, error: 'denied' });
@@ -766,7 +875,7 @@ export const externalMessageListener = (
           }
           // POLICY (money-safety): a dapp can no longer DESTROY a multisig share. A FROST key is
           // not seed-recoverable and has no auto-backup, and a "settled" table may still receive a
-          // late deposit or hold a not-yet-credited balance — so we RETAIN it (it's already hidden
+          // late deposit or hold a not-yet-credited balance - so we RETAIN it (it's already hidden
           // from the UI) rather than purge. Any prior schedule is cancelled. Removal is exclusively
           // a user-initiated, balance+sync-gated action in the wallet's multisig manager.
           await cancelScheduledDelete(vaultId);
@@ -811,7 +920,7 @@ export const externalMessageListener = (
           // One pure decision over both questions: does zafu offer this
           // capability at all (global mode), and may this site use it? An
           // undecided capability prompts the one-time global question first,
-          // and the decision is then re-made with the answer persisted — so the
+          // and the decision is then re-made with the answer persisted - so the
           // per-site prompt below only ever runs for a feature the user wants.
           let decision = decideCapabilityUse({
             mode: await getCapabilityMode(cap),
@@ -843,55 +952,14 @@ export const externalMessageListener = (
             return;
           }
 
-          // open approval popup for this capability
-          const requestId = crypto.randomUUID();
-          const resultPromise = new Promise<unknown>(resolve => {
-            pendingPicks.set(requestId, resolve);
-          });
-
-          const params = new URLSearchParams({
-            app: origin,
-            capability: cap,
-            requestId,
-            favIconUrl: sender.tab?.favIconUrl || '',
-            title: sender.tab?.title || '',
-          });
-          const url = chrome.runtime.getURL(`popup.html#/approval/capability?${params.toString()}`);
-          // Track windowId so the onRemoved sweep can resolve the pending
-          // approval on close; create-failure resolves the promise with the
-          // cancelled shape so the outer awaiter does NOT persist a denial
-          // the user never made.
-          chrome.windows
-            .create({ url, type: 'popup', width: 400, height: 520 })
-            .then(win => {
-              if (win?.id !== undefined) {
-                popupWindowToRequestId.set(win.id, requestId);
-                return;
-              }
-              const r = pendingPicks.get(requestId);
-              if (r) {
-                pendingPicks.delete(requestId);
-                r({ success: false, error: 'cancelled', cancelled: true });
-              }
-            })
-            .catch(() => {
-              const r = pendingPicks.get(requestId);
-              if (r) {
-                pendingPicks.delete(requestId);
-                r({ success: false, error: 'cancelled', cancelled: true });
-              }
-            });
-
-          const result = (await resultPromise) as { approved?: boolean; cancelled?: boolean };
-          if (result?.approved) {
-            await grantCapability(origin, cap);
+          // open approval popup for this capability (shared with
+          // zafu_passkey_get's re-authorization-after-expiry path)
+          const outcome = await requestCapabilityApprovalPopup(origin, cap, sender);
+          if (outcome === 'approved') {
             sendResponse({ granted: true, capability: cap });
-          } else if (result?.cancelled) {
-            // Popup never got a user decision (closed or failed to open).
-            // Do NOT persist a denial the user did not make; caller can retry.
+          } else if (outcome === 'cancelled') {
             sendResponse({ granted: false, capability: cap });
           } else {
-            await denyCapability(origin, cap);
             sendResponse({ granted: false, denied: true, capability: cap });
           }
         } catch {
@@ -912,6 +980,11 @@ export const externalMessageListener = (
         callback(msg['result'] || { approved: false });
         pendingPicks.delete(requestId);
       }
+      // Release the origin guard NOW, not on the eventual window-close event
+      // - see releasePopupGuardForRequest. This is the screen askOptin and
+      // requestCapabilityApprovalPopup both use, so it is what lets a
+      // same-origin global-then-per-site consent pair run back to back.
+      releasePopupGuardForRequest(requestId);
       sendResponse({ ok: true });
       return true;
     }
@@ -947,7 +1020,7 @@ export const externalMessageListener = (
             sendResponse({ error: 'not connected', code: 'denied' });
             return;
           }
-          if (!(await openWalletRoute(shieldOrigin, PopupPath.INJECTIVE))) {
+          if (!(await openWalletRoute(shieldOrigin, `${PopupPath.RECEIVE}?mode=shield`))) {
             sendResponse({ error: 'a wallet window is already open', code: 'rate_limited' });
             return;
           }
@@ -973,9 +1046,9 @@ export const externalMessageListener = (
       // Gates (in order):
       //   1. valid external sender (rejects iframes and unauthenticated pages)
       //   2. requested chain is a known CosmosChainId
-      //   3. origin holds the 'connect' capability — first call prompts the
+      //   3. origin holds the 'connect' capability - first call prompts the
       //      user like any other connect; subsequent calls succeed silently
-      //   4. per-origin+chain rate limit (100 / 24 h) — a hostile site can't
+      //   4. per-origin+chain rate limit (100 / 24 h) - a hostile site can't
       //      pump the counter into the millions and bomb the user's UX
       //   5. wallet is unlocked and has a mnemonic vault selected
       //
@@ -993,7 +1066,7 @@ export const externalMessageListener = (
         sendResponse({ error: `unknown chainId '${rawChainId}'`, code: 'invalid_request' });
         return true;
       }
-      const chainId = rawChainId as CosmosChainId;
+      const chainId = rawChainId;
 
       void (async () => {
         try {
@@ -1073,7 +1146,8 @@ export const externalMessageListener = (
 
       const totalAmount = outputs.reduce((sum, o) => sum + (o.amount || 0), 0);
       const fee = Number(msg['fee']) || 10_000;
-      const appOrigin = sender.origin || sender.url || 'unknown';
+      // the guard above already required a valid top-frame https sender
+      const appOrigin = sender.origin ?? 'unknown';
       const requestId = crypto.randomUUID();
 
       pendingPicks.set(requestId, sendResponse);
@@ -1085,27 +1159,18 @@ export const externalMessageListener = (
         fee: String(fee),
         numOutputs: String(outputs.length),
         outputsJson: JSON.stringify(outputs),
-        favIconUrl: sender.tab?.favIconUrl || '',
       });
       const url = chrome.runtime.getURL(`popup.html#/approval/zcash-send?${params.toString()}`);
-      // Track windowId -> requestId for the onRemoved sweep; on create-failure
-      // / untrackable id, respond with the denied shape rather than hang.
-      chrome.windows
-        .create({ url, type: 'popup', width: 400, height: 628 })
-        .then(win => {
-          if (win?.id !== undefined) {
-            popupWindowToRequestId.set(win.id, requestId);
-            return;
-          }
+      // Same per-origin dedup as every other high-risk popup: a second
+      // concurrent send from the same origin is dropped instead of stacking
+      // another window.
+      void (async () => {
+        if (!(await openApprovalPopup(appOrigin, url, requestId))) {
           if (pendingPicks.delete(requestId)) {
             sendResponse({ success: false, error: 'denied' });
           }
-        })
-        .catch(() => {
-          if (pendingPicks.delete(requestId)) {
-            sendResponse({ success: false, error: 'denied' });
-          }
-        });
+        }
+      })();
       return true;
     }
 
@@ -1129,8 +1194,7 @@ export const externalMessageListener = (
 
     case 'zafu_passkey_create': {
       const { rpId } = msg as { rpId: string };
-      // origin is the browser-attested sender, never a caller-supplied field —
-      // otherwise any site could spoof a connected origin and mint credentials.
+      // origin is the browser-attested sender, never a caller-supplied field - // otherwise any site could spoof a connected origin and mint credentials.
       if (!isValidExternalSender(sender)) {
         sendResponse({ success: false, error: 'not connected' });
         return true;
@@ -1169,6 +1233,10 @@ export const externalMessageListener = (
           // script turned into a silent fallback to the platform authenticator
           // (the browser's own prompt / NotAllowedError). Asking for the unlock
           // FIRST makes the popup appear only when approving can actually work.
+          // UV is claimed only when this request made the person enter their
+          // password; an approve tap on an unlocked wallet is presence, not
+          // verification
+          const verified = await walletLocked();
           try {
             const { throwIfNeedsLogin } = await import('../../needs-login');
             await throwIfNeedsLogin();
@@ -1178,13 +1246,14 @@ export const externalMessageListener = (
             return;
           }
           const requestId = crypto.randomUUID();
-          const params = new URLSearchParams({ app: reqOrigin, requestId });
+          // the rpId rides along for display only; the worker keeps its own copy
+          const params = new URLSearchParams({ app: reqOrigin, rp: rpId, requestId });
           const url = chrome.runtime.getURL(`popup.html#/passkey-approve?${params.toString()}`);
           // Register the pending callback and the validated origin+rpId BEFORE
           // opening the popup so the onRemoved sweep can find them if the window
           // closes fast; clear both if openApprovalPopup rejects the request.
           pendingPicks.set(requestId, sendResponse);
-          pendingPasskeyRequests.set(requestId, { origin: reqOrigin, rpId });
+          pendingPasskeyRequests.set(requestId, { origin: reqOrigin, rpId, verified });
           if (!(await openApprovalPopup(reqOrigin, url, requestId))) {
             pendingPicks.delete(requestId);
             pendingPasskeyRequests.delete(requestId);
@@ -1227,7 +1296,7 @@ export const externalMessageListener = (
               return;
             }
             const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
-            const result = createCredential(mnemonic, pending.rpId);
+            const result = createCredential(mnemonic, pending.rpId, pending.verified);
             // the credential exists only after this approval, so the origin earns
             // the narrow `passkey` grant HERE - that is what lets a later
             // zafu_passkey_get sign in without a second popup. Never granted
@@ -1258,15 +1327,18 @@ export const externalMessageListener = (
     case 'zafu_passkey_get': {
       const {
         rpId,
+        challenge: challengeHex,
         clientDataHash: clientDataHashHex,
         prfSalts,
+        allowCredentials,
       } = msg as {
         rpId: string;
+        challenge?: string;
         clientDataHash: string;
         prfSalts?: { first: string; second?: string };
+        allowCredentials?: { id?: unknown }[];
       };
-      // origin is the browser-attested sender, never a caller-supplied field —
-      // otherwise any site could spoof a connected origin and forge assertions
+      // origin is the browser-attested sender, never a caller-supplied field - // otherwise any site could spoof a connected origin and forge assertions
       // for an arbitrary rpId (account takeover at the relying party).
       if (!isValidExternalSender(sender)) {
         sendResponse({ success: false, error: 'not connected' });
@@ -1277,6 +1349,27 @@ export const externalMessageListener = (
         try {
           if (!rpIdMatchesOrigin(rpId, getOrigin)) {
             sendResponse({ success: false, error: 'rpId does not match origin' });
+            return;
+          }
+          // The page builds the client data the relying party will check, so
+          // rebuild it here from the challenge and the browser-attested origin
+          // and sign only that: a page cannot get a signature over client data
+          // naming another origin, or over a hash it chose.
+          const { hexToBytes: h2b0, bytesToHex: b2h0 } = await import('@noble/hashes/utils');
+          const { sha256 } = await import('@noble/hashes/sha256');
+          const { clientDataJson } = await import('../../content-scripts/passkey-wire');
+          let clientDataMatches = false;
+          try {
+            clientDataMatches =
+              typeof challengeHex === 'string' &&
+              typeof clientDataHashHex === 'string' &&
+              b2h0(sha256(clientDataJson('webauthn.get', h2b0(challengeHex), getOrigin))) ===
+                clientDataHashHex.toLowerCase();
+          } catch {
+            clientDataMatches = false;
+          }
+          if (!clientDataMatches) {
+            sendResponse({ success: false, error: 'client data does not match the request' });
             return;
           }
           // Global switch: a `passkey` the user turned off must not sign, and
@@ -1292,18 +1385,27 @@ export const externalMessageListener = (
             return;
           }
           const perms = await getOriginPermissions(getOrigin);
-          // `passkey` is the grant that passkey creation earns; `connect` stays
-          // accepted so origins already connected before the capability existed
-          // (and dapps that use the wallet's P-256 signer through an existing
-          // connect grant) keep signing without a new consent step.
-          if (!hasCapability(perms, 'passkey') && !hasCapability(perms, 'connect')) {
+          // `passkey` is the grant that passkey creation earns, and it is
+          // time-limited (see TIME_LIMITED_CAPABILITIES). A bare `connect`
+          // grant with NO `passkey` at all is a LEGACY credential: the
+          // `passkey` capability did not exist before 2250be97, so every
+          // passkey created on an older release holds only `connect`. Those
+          // sites must not be hard-refused - they re-earn `passkey` through
+          // one approval popup below, same as an expired grant.
+          const everHadPasskey = !!perms?.granted.includes('passkey');
+          const legacyConnectOnly = !everHadPasskey && !!perms?.granted.includes('connect');
+          if (!everHadPasskey && !legacyConnectOnly) {
+            // never had a credential grant or a pre-passkey connect grant -
+            // nothing to re-authorize.
             sendResponse({ success: false, error: 'not connected' });
             return;
           }
-          // Signing needs the mnemonic too: unlocking first keeps a locked
-          // wallet from answering with a failure the content script would have
-          // to turn into a platform-authenticator fallback for a credential
-          // that only zafu holds.
+          // Signing needs the mnemonic, and so does the re-authorization
+          // popup below if one is about to open - unlock BEFORE either, same
+          // ordering zafu_passkey_create uses and for the same reason:
+          // approving a popup that then hits 'keyring locked' reads as "the
+          // wallet stopped working" right after the user clicked approve.
+          const verified = await walletLocked();
           try {
             const { throwIfNeedsLogin } = await import('../../needs-login');
             await throwIfNeedsLogin();
@@ -1312,7 +1414,7 @@ export const externalMessageListener = (
             sendResponse({ success: false, error: 'wallet locked', code: 'cancelled' });
             return;
           }
-          const { signAssertion, buildCredentialId } = await import('../../state/webauthn');
+          const { signAssertion, pickCredentialId } = await import('../../state/webauthn');
           const { useStore } = await import('../../state');
           const { bytesToHex, hexToBytes: h2b } = await import('@noble/hashes/utils');
           const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
@@ -1321,14 +1423,41 @@ export const externalMessageListener = (
             return;
           }
           const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
-
-          // clientDataHash comes from the content script (SHA-256 of its clientDataJSON)
+          // the relying party lists the credentials it knows; when none is this
+          // wallet's (new or legacy id) the request belongs to another
+          // authenticator, so let the page fall back to it
+          const allowIds = Array.isArray(allowCredentials)
+            ? allowCredentials.map(c => c?.id).filter((id): id is string => typeof id === 'string')
+            : undefined;
+          const credentialId = pickCredentialId(mnemonic, rpId, allowIds);
+          if (!credentialId) {
+            sendResponse({ success: false, error: 'no zafu credential for this request' });
+            return;
+          }
+          if (!hasCapability(perms, 'passkey')) {
+            // either the TTL lapsed, or this is the legacy connect-only case
+            // above (task rule (a): "an expired grant means the user is
+            // asked again", not a silent substitute or a permanent failure).
+            // Re-run the exact approval popup `zafu_request_capability`
+            // uses; on approve this stamps a fresh `passkey` expiry and the
+            // assertion proceeds in the same call.
+            const outcome = await requestCapabilityApprovalPopup(getOrigin, 'passkey', sender);
+            if (outcome !== 'approved') {
+              sendResponse({
+                success: false,
+                error: outcome === 'cancelled' ? 'cancelled' : 'denied',
+                ...(outcome === 'cancelled' ? { code: 'cancelled' } : {}),
+              });
+              return;
+            }
+          }
+          // checked above against the challenge and the sender's origin
           const clientDataHash = h2b(clientDataHashHex);
 
-          const result = signAssertion(mnemonic, rpId, clientDataHash, prfSalts);
+          const result = signAssertion(mnemonic, rpId, clientDataHash, prfSalts, verified);
           sendResponse({
             success: true,
-            credentialId: bytesToHex(buildCredentialId(rpId)),
+            credentialId: bytesToHex(credentialId),
             authenticatorData: bytesToHex(result.authenticatorData),
             signature: bytesToHex(result.signature),
             prfResults: result.prfResults
@@ -1359,6 +1488,9 @@ export const externalMessageListener = (
         'zafu_zid_pubkey',
         'zafu_encryption_approval_result', // handled by external-encryption.ts
         'zafu_request_contact_discovery', // handled by contact-discovery-request.ts
+        // handled by contact-discovery.ts: answering here first left every
+        // site with "unknown message type", so discovery never ran
+        'zafu_discover_contacts',
       ];
       if (typeof type === 'string' && delegatedTypes.includes(type)) {
         return false;

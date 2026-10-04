@@ -4,7 +4,7 @@ import { ZCASH_ORCHARD_ACTIVATION } from '../config/networks';
  * zcash height ↔ date, approximated from a fixed anchor.
  *
  * Zcash targets 75s blocks, so extrapolating from orchard activation is
- * accurate to within a few days across the whole post-NU5 range — good
+ * accurate to within a few days across the whole post-NU5 range - good
  * enough to pick a sync start, and good enough to *show* the user which
  * chain a height belongs to.
  *
@@ -33,7 +33,7 @@ export const blockToDate = (block: number): Date =>
 /** yyyy-mm-dd, for <input type='date'> */
 export const formatDateInput = (date: Date): string => date.toISOString().split('T')[0]!;
 
-/** "mar 2025" — deliberately coarse; the estimate is not day-accurate */
+/** "mar 2025" - deliberately coarse; the estimate is not day-accurate */
 export const formatBlockMonth = (block: number): string =>
   blockToDate(block)
     .toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' })
@@ -44,8 +44,7 @@ export const formatBlockMonth = (block: number): string =>
  *
  * A rescan deletes the note database and writes its start height as the
  * wallet's new birthday, so the wallet can never look below it again. The home
- * screen used to fall back to the CHAIN TIP when no birthday was stored —
- * which is the default for any wallet imported without one — and that fallback
+ * screen used to fall back to the CHAIN TIP when no birthday was stored - * which is the default for any wallet imported without one - and that fallback
  * turned "re-read the chain" into "forget every note you hold".
  *
  * There is no safe way to guess forward. Orchard activation is the earliest

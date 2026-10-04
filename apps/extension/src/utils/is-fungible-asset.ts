@@ -9,7 +9,7 @@
  * and the LP-history view still need them) - this helper only excludes them
  * from fungible-asset UI surfaces.
  *
- * Source of truth for the patterns is `@rotko/penumbra-types/assets`; keep
+ * Source of truth for the patterns is `@penumbrafi/types/assets`; keep
  * this list in sync with veil's `shouldFilterAsset` (see
  * apps/veil/src/pages/portfolio/api/use-unified-assets.ts in the penumbra-web
  * repo).
@@ -21,7 +21,7 @@
  * strips the SI prefix) gives correct results for every pattern.
  */
 
-import { assetPatterns } from '@rotko/penumbra-types/assets';
+import { assetPatterns } from '@penumbrafi/types/assets';
 import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import type { Metadata } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';

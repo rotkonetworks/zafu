@@ -1,14 +1,10 @@
 /**
- * Onboarding completion - final step of the shell stepper.
- *
- * Removed the dense link-grid (poker / chat / dex / docs) that competed
- * for attention with the actual primary action ("open zafu"). A user
- * who just finished onboarding wants the single confidence: it worked,
- * here is the wallet. Discovery happens later from inside the wallet.
+ * Wallet ready - Onb5Done board. The board's sync bar is left out: nothing
+ * syncs until zafu is opened, and a bar here would be a made-up number.
  */
 
-import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
-import { cn } from '@repo/ui/lib/utils';
+import { Button } from '@repo/ui/components/ui/button';
+import { Mark } from '@repo/ui/components/ui/mark';
 
 const openSidePanel = async () => {
   // The onboarding tab is itself an extension page (page.html). After we
@@ -38,39 +34,29 @@ const openSidePanel = async () => {
   setTimeout(() => window.close(), 250);
 };
 
-export const OnboardingSuccess = () => {
-  return (
-    <FadeTransition>
-      <div className='flex h-full flex-col items-center justify-center gap-7 py-6 text-center'>
-        {/* tiny checkmark in a soft round badge - restrained */}
-        <span className='inline-flex h-12 w-12 items-center justify-center rounded-full bg-zigner-gold/15'>
-          <span className='i-ph-check h-5 w-5 text-zigner-gold' />
+export const OnboardingSuccess = () => (
+  <div className='flex flex-col gap-[22px]'>
+    <Mark variant='stamp' glyph='済' size={76} />
+    <h1 className='font-display text-[44px] text-fg-high'>wallet ready</h1>
+
+    <div className='flex flex-col gap-3 border border-border-soft bg-elev-1 p-[18px]'>
+      <span className='text-data text-fg-high'>pin zafu to your toolbar</span>
+      <div
+        aria-hidden='true'
+        className='flex h-11 items-center gap-3 border border-border-soft bg-canvas px-3'
+      >
+        <span className='h-2.5 flex-1 bg-elev-2' />
+        <span className='grid size-[26px] place-items-center border border-border-hard'>
+          <span className='i-ph-puzzle-piece size-3.5 text-fg-muted' />
         </span>
-
-        <header className='flex flex-col gap-1'>
-          <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>wallet ready</h2>
-          <p className='text-xs text-fg-muted lowercase'>shielded signing, on your terms.</p>
-        </header>
-
-        <button
-          type='button'
-          onClick={() => void openSidePanel()}
-          className={cn(
-            'group inline-flex items-center justify-center gap-2 px-6 py-3 text-sm lowercase',
-            '[border-radius:14px] border border-zigner-gold/30 bg-zigner-gold/10 text-zigner-gold',
-            'transition-[transform,background-color] duration-200',
-            'hover:-translate-y-[1px] hover:bg-zigner-gold/15',
-          )}
-        >
-          <span className='i-ph-sidebar-simple h-4 w-4' />
-          open zafu
-          <span className='i-ph-arrow-right h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5' />
-        </button>
-
-        <p className='mt-2 max-w-xs text-body text-fg-muted lowercase'>
-          discover dapps and tools from inside the wallet once you're in.
-        </p>
+        <span className='i-lucide-arrow-right size-4 text-zigner-gold' />
+        <Mark variant='seal' size={26} />
       </div>
-    </FadeTransition>
-  );
-};
+      <span className='text-[11px] text-fg-muted'>extensions · then the pin next to zafu</span>
+    </div>
+
+    <Button autoFocus className='h-14 w-full text-[15px]' onClick={() => void openSidePanel()}>
+      open zafu
+    </Button>
+  </div>
+);

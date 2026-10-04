@@ -25,7 +25,7 @@ import {
 import { stringToPath } from '@cosmjs/crypto';
 import { fromBech32, toBech32, toBase64, fromBase64 } from '@cosmjs/encoding';
 import { encodePubkey, makeAuthInfoBytes, DirectSecp256k1HdWallet } from '@cosmjs/proto-signing';
-import { COSMOS_CHAINS, type CosmosChainId } from './chains';
+import { COSMOS_CHAINS, getCosmosChain, type CosmosChainId } from './chains';
 
 /** encode object for cosmos messages */
 export interface EncodeObject {
@@ -101,7 +101,7 @@ export async function deriveCosmosWallet(
  * GitHub #34; until then every CosmosChainId here is a coin-type-118 chain.
  */
 export function deriveChainAddress(address: string, chainId: CosmosChainId): string {
-  const config = COSMOS_CHAINS[chainId];
+  const config = getCosmosChain(chainId);
   // Fund-safety guard: an Ethermint chain (Injective) uses a keccak256 address,
   // so re-encoding these ripemd160 bytes under `inj` would produce a wrong,
   // unrecoverable address. Refuse rather than mis-derive; such a chain must be
@@ -156,7 +156,7 @@ export async function getSigningClient(
     return client;
   }
 
-  const config = COSMOS_CHAINS[chainId];
+  const config = getCosmosChain(chainId);
   client = await SigningStargateClient.connectWithSigner(config.rpcEndpoint, signer, {
     gasPrice: GasPrice.fromString(config.gasPrice),
   });
@@ -179,7 +179,7 @@ export async function createSigningClient(
   mnemonic: string,
   accountIndex = 0,
 ): Promise<{ client: SigningStargateClient; address: string }> {
-  const config = COSMOS_CHAINS[chainId];
+  const config = getCosmosChain(chainId);
 
   const signer = await Secp256k1HdWallet.fromMnemonic(mnemonic, {
     prefix: config.bech32Prefix,
@@ -305,7 +305,7 @@ export function estimateGas(
 
 /** calculate fee from gas */
 export function calculateFee(chainId: CosmosChainId, gas: number): StdFee {
-  const config = COSMOS_CHAINS[chainId];
+  const config = getCosmosChain(chainId);
   const gasPriceMatch = /^([\d.]+)(.+)$/.exec(config.gasPrice);
 
   if (!gasPriceMatch) {
@@ -390,7 +390,7 @@ export async function buildZignerSignDoc(
   fee: StdFee,
   memo = '',
 ): Promise<ZignerSignRequest> {
-  const config = COSMOS_CHAINS[chainId];
+  const config = getCosmosChain(chainId);
 
   // query account info from chain (read-only client)
   const client = await StargateClient.connect(config.rpcEndpoint);
@@ -441,7 +441,7 @@ export async function broadcastZignerSignedTx(
   signature: Uint8Array,
   pubkey: Uint8Array,
 ): Promise<DeliverTxResponse> {
-  const config = COSMOS_CHAINS[chainId];
+  const config = getCosmosChain(chainId);
 
   // build amino-style pubkey for proto encoding
   const aminoPubkey = {

@@ -1,22 +1,32 @@
 // Must be the first import: its side effect runs in webpack's hoisted,
 // synchronous require phase, ahead of this entry's wasm-backed deps.
+// egress guard first: nothing may capture fetch or open a socket before it
+import '../net/egress-install';
 import '../install-console-quieting';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode, useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
+import { loadStoredRegistry } from '../transparent/registry-live';
+import { refreshPenumbraRegistry } from '../penumbra/asset-registry';
 import { RouterProvider } from 'react-router-dom';
-import { popupRouter } from '../routes/popup/router';
+import { popupRouter, popupRoutes } from '../routes/popup/router';
+import { installPreload } from '../routes/popup/preload';
 import { isSidePanel } from '../utils/popup-detection';
 import { announceSidePanelPresence } from '../side-panel-presence';
+import { announceUiOpenPresence } from '../state/ui-open-presence';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
 import { noteContextInvalidated } from '../utils/reload-notice';
 import { AppErrorBoundary, reportRenderError } from '../components/error-boundary';
 import { loadBalancesSnapshot } from '../hooks/balances-snapshot';
 import { balancesQueryKey } from '../hooks/penumbra-balances';
+import { EgressAskSheet } from '../net/egress-ask-sheet';
+import { installRegistryIcons } from '../shared/components/registry-icons';
+import { trackActivity } from '../state/idle-activity';
 
 import '@repo/ui/styles/globals.css';
 import '@repo/ui/styles/icons.css';
+import '../styles/view-transitions.css';
 
 // Safety net for the popup page itself: a best-effort fetch in a dependency
 // or a not-awaited background call that rejects with a transient network
@@ -25,6 +35,9 @@ import '@repo/ui/styles/icons.css';
 // those to console.debug; every other rejection still surfaces loudly, so
 // real bugs are not hidden. Installed before first render on purpose.
 installGracefulNetworkErrorHandler();
+installRegistryIcons();
+// the person using this page is what keeps the wallet unlocked (auto-lock)
+trackActivity();
 
 // A popup left open across an extension reload/auto-update is alive but dead:
 // `runtime.id` is gone and every call throws "Extension context invalidated".
@@ -33,8 +46,14 @@ if (!chrome.runtime?.id) {
   noteContextInvalidated();
 }
 
+// refetch only when a screen asks: never on focus or reconnect. One cache for
+// the popup's life, shared with the intent preloads (routes/popup/preload.ts).
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { refetchOnWindowFocus: false, refetchOnReconnect: false } },
+});
+installPreload({ routes: popupRoutes, client: queryClient });
+
 const MainPopup = () => {
-  const [queryClient] = useState(() => new QueryClient());
   const [wasmReady, setWasmReady] = useState(false);
   const [cacheSeeded, setCacheSeeded] = useState(false);
 
@@ -52,18 +71,25 @@ const MainPopup = () => {
         }
       })
       .finally(() => setCacheSeeded(true));
-  }, [queryClient]);
+  }, []);
 
   useEffect(() => {
     // initialize standard wasm module for keys, addresses
     // parallel wasm will be initialized on-demand when needed for tx building
-    import('@rotko/penumbra-wasm/init')
+    import('@penumbrafi/wasm/init')
       .then(({ initWasm }) => initWasm())
       .then(() => setWasmReady(true))
       .catch(err => {
         console.error('failed to init wasm:', err);
         setWasmReady(true); // continue anyway, some routes don't need wasm
       });
+  }, []);
+
+  // announce that a zafu UI surface is open, for the duration of this
+  // document - lets the worker run surface-only background work (e.g. the
+  // contact-discovery presence beacon) exactly while zafu is in use.
+  useEffect(() => {
+    announceUiOpenPresence();
   }, []);
 
   // check for pending side panel navigation
@@ -101,6 +127,7 @@ const MainPopup = () => {
     <StrictMode>
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={popupRouter} />
+        <EgressAskSheet />
       </QueryClientProvider>
     </StrictMode>
   );
@@ -108,9 +135,9 @@ const MainPopup = () => {
 
 const rootElement = document.getElementById('popup-root') as HTMLDivElement;
 // apply persisted appearance theme before first paint ('sumi' is the
-// :root default; 'terminal' restores the cold pure-black material)
+// :root default; a retired 'terminal' choice stays on sumi)
 void localExtStorage.get('zafuTheme').then(v => {
-  if (v && v !== 'sumi') {
+  if (v === 'washi') {
     document.documentElement.dataset['theme'] = v;
   }
 });
@@ -120,11 +147,18 @@ void localExtStorage.get('zafuFont').then(v => {
   }
 });
 
-createRoot(rootElement, {
-  onCaughtError: (error, info) => reportRenderError(error, info),
-  onUncaughtError: (error, info) => reportRenderError(error, info),
-}).render(
-  <AppErrorBoundary>
-    <MainPopup />
-  </AppErrorBoundary>,
-);
+// a verified newer registry, if one is stored, before the first render so
+// every chain list is complete, and every asset's symbol/name/image is
+// registry-first from the start; storage only, never the network
+void Promise.all([loadStoredRegistry(), refreshPenumbraRegistry()])
+  .catch(() => undefined)
+  .finally(() =>
+    createRoot(rootElement, {
+      onCaughtError: (error, info) => reportRenderError(error, info),
+      onUncaughtError: (error, info) => reportRenderError(error, info),
+    }).render(
+      <AppErrorBoundary>
+        <MainPopup />
+      </AppErrorBoundary>,
+    ),
+  );

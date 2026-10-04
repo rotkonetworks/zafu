@@ -42,7 +42,7 @@ const parsedWith = (over: Partial<FrostParsedTx> = {}): FrostParsedTx => ({
   ...over,
 });
 
-describe('computeVerdict — no unverifiable-but-signable state', () => {
+describe('computeVerdict - no unverifiable-but-signable state', () => {
   it('REFUSES when the sighash cannot be recomputed, rather than warning', () => {
     // This is the downgrade a host can force at will by adding a dust
     // transparent output: the parser returns null and the old code returned
@@ -124,7 +124,7 @@ describe('verdictAllowsSigning', () => {
     [{ kind: 'pending' }, false, false],
     [{ kind: 'pending' }, true, false],
     [{ kind: 'refuse', reasons: ['nope'] }, false, false],
-    // acknowledging must NOT unlock a refuse — there is nothing to acknowledge,
+    // acknowledging must NOT unlock a refuse - there is nothing to acknowledge,
     // the user was shown no verified data at all.
     [{ kind: 'refuse', reasons: ['nope'] }, true, false],
     [{ kind: 'mismatch', reasons: ['r'], sendZat: 0n, changeZat: 0n }, false, false],
@@ -136,7 +136,7 @@ describe('verdictAllowsSigning', () => {
   });
 });
 
-describe('assessClaimedFee — a sanity bound, not verification', () => {
+describe('assessClaimedFee - a sanity bound, not verification', () => {
   it('accepts an ordinary fee', () => {
     expect(assessClaimedFee('10000', '100000').ok).toBe(true);
   });
@@ -157,7 +157,7 @@ describe('assessClaimedFee — a sanity bound, not verification', () => {
   it('DOCUMENTS THE HOLE: a lied-about small fee passes', () => {
     // The fee-theft attack is: spend a 10 ZEC note, send 0.01 to the displayed
     // recipient, emit no change, let 9.99 fall out as fee to a colluding miner
-    // — while claiming a normal fee here. Nothing on this side of the wasm
+    // - while claiming a normal fee here. Nothing on this side of the wasm
     // boundary can catch that, because `frost_inspect_pczt_outputs` never
     // returns the bundle's value_balance. If this test ever starts failing
     // because a real conservation check was added, delete it.

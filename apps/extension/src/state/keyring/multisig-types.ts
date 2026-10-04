@@ -4,7 +4,7 @@
  * a multisig wallet is a t-of-n FROST threshold wallet.
  * participants coordinate DKG via the frost relay, then store
  * their key package locally. the public key package + FVK are
- * shared (non-sensitive) — they derive the receiving address
+ * shared (non-sensitive) - they derive the receiving address
  * and allow all participants to decrypt incoming memos.
  *
  * spending requires t-of-n participants to sign via frost relay.
@@ -16,11 +16,11 @@ export interface MultisigWallet {
   id: string;
   /** user label */
   label: string;
-  /** threshold — minimum signers required */
+  /** threshold - minimum signers required */
   threshold: number;
   /** total participants */
   maxSigners: number;
-  /** hex-encoded FROST key package (SECRET — encrypted at rest) */
+  /** hex-encoded FROST key package (SECRET - encrypted at rest) */
   keyPackageHex: string;
   /** hex-encoded FROST public key package (shared, non-sensitive) */
   publicKeyPackageHex: string;
@@ -80,7 +80,7 @@ export interface MultisigZcashWallet {
   };
 }
 
-/** DKG session state — tracks progress through 3 rounds */
+/** DKG session state - tracks progress through 3 rounds */
 export interface DkgSession {
   /** room code for relay coordination */
   roomCode: string;
@@ -108,7 +108,7 @@ export interface DkgSession {
   error?: string;
 }
 
-/** signing session state — tracks a FROST spend authorization */
+/** signing session state - tracks a FROST spend authorization */
 export interface SigningSession {
   /** room code for relay coordination */
   roomCode: string;

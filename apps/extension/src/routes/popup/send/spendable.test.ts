@@ -3,7 +3,7 @@ import { computeFeeZat, maxSendable, quoteSend, MARGINAL_FEE } from './spendable
 
 const zec = (n: number) => BigInt(Math.round(n * 1e8));
 
-describe('computeFeeZat — ZIP-317, mirroring the worker', () => {
+describe('computeFeeZat - ZIP-317, mirroring the worker', () => {
   it('prices a minimal shielded send at the 2-action floor', () => {
     // 1 spend, 1 shielded output, change -> max(1, 2, 2) = 2 actions
     expect(computeFeeZat(1, 1, 0, true)).toBe(MARGINAL_FEE * 2n);
@@ -62,7 +62,7 @@ describe('maxSendable', () => {
   });
 });
 
-describe('quoteSend — the check that used to happen after a two-minute prove', () => {
+describe('quoteSend - the check that used to happen after a two-minute prove', () => {
   it('accepts an amount the notes cover with fee', () => {
     const q = quoteSend([zec(1)], zec(0.5), { transparentRecipient: false });
     expect(q.ok).toBe(true);

@@ -376,9 +376,11 @@ where
     }
 }
 
-/// One line per call, carrying the operation and outcome but never a coordinate:
-/// writing `(app_scope, epoch)` to disk would build the index the protocol
-/// refuses to keep, and the operator already sees those fields on the wire.
+/// One line per call, carrying the operation, its size and outcome but never a
+/// coordinate: writing `(app_scope, epoch)` to disk would build the index the
+/// protocol refuses to keep, and the operator already sees those fields on the
+/// wire. The size is the padded batch (always 64 from an honest client), so it
+/// says nothing about anyone's friends - and it lets an operator check that.
 #[derive(Clone, Default)]
 pub struct ObserveLayer;
 
@@ -411,13 +413,21 @@ where
     fn call(&mut self, req: RelayRequest) -> Self::Future {
         let mut inner = self.inner.clone();
         let method = req.op.method();
+        let written = match &req.op {
+            Op::Put { entries, .. } => Some(entries.len()),
+            Op::Get { .. } => None,
+        };
         Box::pin(async move {
             let started = Instant::now();
             let result = inner.call(req).await;
             let millis = started.elapsed().as_millis();
-            match &result {
-                Ok(_) => eprintln!("minirelay: {method} ok in {millis}ms"),
-                Err(e) => eprintln!("minirelay: {method} refused ({e:?}) in {millis}ms"),
+            match (&result, written) {
+                (Ok(_), Some(n)) => eprintln!("minirelay: {method} {n} entries ok in {millis}ms"),
+                (Ok(RelayResponse::Entries(e)), None) => {
+                    eprintln!("minirelay: {method} {} entries ok in {millis}ms", e.len())
+                }
+                (Ok(_), None) => eprintln!("minirelay: {method} ok in {millis}ms"),
+                (Err(e), _) => eprintln!("minirelay: {method} refused ({e:?}) in {millis}ms"),
             }
             result
         })
@@ -448,7 +458,7 @@ mod tests {
     use super::*;
 
     fn store() -> Arc<Store> {
-        Arc::new(Store::open(":memory:", 1000, 3600).unwrap())
+        Arc::new(Store::open(":memory:", 1000, 3600, Vec::new()).unwrap())
     }
 
     fn coord(scope: &str) -> Coord {

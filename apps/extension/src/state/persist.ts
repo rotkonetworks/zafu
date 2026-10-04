@@ -9,6 +9,7 @@ import { OriginRecord, UserChoice } from '@repo/storage-chrome/records';
 import { readEncrypted, writeEncrypted, markHydrated } from './encrypted-storage';
 import { backfillMissingMultisigMirrors } from './keyring/migration';
 import { DEFAULT_PRIVACY_SETTINGS } from './privacy';
+import { POCKETS_STORAGE_KEY } from './pockets';
 import type { WalletJson } from '@repo/wallet';
 import type { EncryptedVault } from './keyring/types';
 import type { ZcashWalletJson } from './wallets';
@@ -28,16 +29,21 @@ type Persist = (f: StateCreator<AllSlices>) => StateCreator<AllSlices>;
 export const customPersistImpl: Persist = f => (set, get, store) => {
   void (async function () {
     // Part 1: load non-encrypted values only.
-    // wallets/zcashWallets are encrypted at rest (contain viewing keys) —
-    // they're loaded later via hydrateEncryptedData() after unlock.
+    // wallets/zcashWallets are encrypted at rest (contain viewing keys) - // they're loaded later via hydrateEncryptedData() after unlock.
     const activeZcashIndex = await localExtStorage.get('activeZcashIndex');
     const activeWalletIndex = await localExtStorage.get('activeWalletIndex');
     const grpcEndpoint = await localExtStorage.get('grpcEndpoint');
+    const penumbraSync = await localExtStorage.get('penumbraSync');
     const frontendUrl = await localExtStorage.get('frontendUrl');
     const numeraires = await localExtStorage.get('numeraires');
     const zignerCameraEnabled = await localExtStorage.get('zignerCameraEnabled');
     const privacySettings = await localExtStorage.get(
       'privacySettings' as keyof import('@repo/storage-chrome/local').LocalStorageState,
+    );
+    get().pockets.hydrate(
+      await localExtStorage.get(
+        POCKETS_STORAGE_KEY as keyof import('@repo/storage-chrome/local').LocalStorageState,
+      ),
     );
 
     set(
@@ -45,6 +51,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         state.wallets.activeZcashIndex = activeZcashIndex ?? 0;
         state.wallets.activeIndex = activeWalletIndex ?? 0;
         state.network.grpcEndpoint = grpcEndpoint;
+        state.network.penumbraSync = penumbraSync;
         state.defaultFrontend.url = frontendUrl;
         state.numeraires.selectedNumeraires = numeraires;
         state.zigner.cameraEnabled = zignerCameraEnabled ?? false;
@@ -149,7 +156,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
           }
         }),
       );
-      // only unblock writes if we actually decrypted data — if locked (all null),
+      // only unblock writes if we actually decrypted data - if locked (all null),
       // keep blocking so persist() can't wipe storage with empty arrays
       if (decryptedAny) {
         markHydrated();
@@ -171,7 +178,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
     // Initialize keyring from storage (loads vaults, selected key, networks)
     await get().keyRing.init();
 
-    // fresh install (no password set) — nothing to protect, unblock writes immediately
+    // fresh install (no password set) - nothing to protect, unblock writes immediately
     if (get().keyRing.status === 'empty') {
       markHydrated();
     }
@@ -179,7 +186,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
     // hydrate now (works if already unlocked or auto-unlocked)
     await hydrateEncryptedData();
 
-    // subscribe to status changes — re-hydrate when keyring transitions to 'unlocked'
+    // subscribe to status changes - re-hydrate when keyring transitions to 'unlocked'
     // dataflow: react to state change, not imperative wrapping of unlock()
     let prevStatus = get().keyRing.status;
     store.subscribe((state: AllSlices) => {
@@ -191,6 +198,14 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
     });
 
     // Part 2: when chrome.storage changes sync select fields to store
+    // a key set in another realm (an unlock, a password change) re-opens what
+    // this one holds, so no realm keeps boxes the old key sealed
+    sessionExtStorage.addListener(changes => {
+      if (changes.passwordKey?.newValue) {
+        void hydrateEncryptedData();
+      }
+    });
+
     localExtStorage.addListener(changes => {
       // encrypted data re-hydration
       if (changes.penumbraWallets || changes.zcashWallets || changes.contacts || changes.messages) {
@@ -228,11 +243,11 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         }
       }
 
-      if (changes.fullSyncHeight) {
-        const stored = changes.fullSyncHeight.newValue;
+      if (changes.penumbraSync) {
+        const stored = changes.penumbraSync.newValue;
         set(
           produce((state: AllSlices) => {
-            state.network.fullSyncHeight = stored ?? 0;
+            state.network.penumbraSync = stored;
           }),
         );
       }
@@ -306,8 +321,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         const stored = changes.enabledNetworks.newValue;
         set(
           produce((state: AllSlices) => {
-            state.keyRing.enabledNetworks = (stored ??
-              []) as AllSlices['keyRing']['enabledNetworks'];
+            state.keyRing.enabledNetworks = stored ?? [];
           }),
         );
       }
@@ -325,6 +339,13 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
             }),
           );
         }
+      }
+
+      const pocketsChange = (changes as Record<string, { newValue?: unknown } | undefined>)[
+        POCKETS_STORAGE_KEY
+      ];
+      if (pocketsChange) {
+        get().pockets.hydrate(pocketsChange.newValue);
       }
 
       // re-init keyring if vaults or selected vault changes

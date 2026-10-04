@@ -14,7 +14,10 @@
 
 import { OverlayPortal } from '../../../components/overlay-portal';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { VaultUnlock } from '../../../state/keyring/types';
 import { Button } from '@repo/ui/components/ui/button';
+import { ScreenHeader } from '../../../components/screen-header';
+import { PopupPath } from '../paths';
 import { Sensitive } from '../../../components/sensitive';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
@@ -22,8 +25,13 @@ import {
   buildTurnstileMigrationInWorker,
   completeTurnstileMigrationInWorker,
   spawnNetworkWorker,
+  stopBuildInWorker,
   type TurnstileMigrationUnsignedResult,
 } from '../../../state/keyring/network-worker';
+import { isBuildStopped } from '../../../workers/build-abort';
+import { Sending, type SendingNote } from './send-ui';
+import { STAGES, sendStage } from './send-stage';
+import { isHeartbeat, phaseOf, useSendWatch } from './send-watch';
 import {
   parsePreludeSinglePcztResponse,
   unwrapCborSinglePczt,
@@ -99,55 +107,6 @@ function isPreActivationError(message: string | null): boolean {
   );
 }
 
-/**
- * Home-screen prompt (Zashi proposeShielding style): shown when the wallet
- * holds orchard balance and the turnstile is available. The caller gates on
- * the IRONWOOD_MIGRATION feature flag.
- *
- * Orchard is framed as a legacy, migrate-only pool: after NU6.3 activates,
- * orchard-to-orchard sends are disabled, so funds are moved one-way to your
- * own ironwood address to keep spending them normally. The funds are never at
- * risk - only the pool changes. When orchardZat is 0 the wallet is fully
- * migrated and the banner renders nothing (the parent also gates on
- * orchardZat > 0, but returning null keeps this component safe on its own).
- */
-export function IronwoodMigrationBanner({
-  orchardZat,
-  onMigrate,
-}: {
-  orchardZat: bigint;
-  onMigrate: () => void;
-}) {
-  // Fully migrated: nothing left in the legacy orchard pool - no prompt.
-  if (orchardZat <= 0n) {
-    return null;
-  }
-  return (
-    <div className='rounded-lg border border-primary/40 bg-primary/10 p-3'>
-      <div className='flex items-center justify-between'>
-        <div className='flex items-center gap-2'>
-          <span className='i-ph-arrows-left-right h-4 w-4 text-zigner-gold' />
-          <span className='text-xs text-fg-high'>orchard is now legacy</span>
-          <span className='text-xs font-medium tabular-nums text-fg-muted'>
-            <Sensitive>{fmtZec(orchardZat)}</Sensitive> ZEC to migrate
-          </span>
-        </div>
-        <button
-          onClick={onMigrate}
-          className='text-xs font-medium text-zigner-gold hover:text-primary/90 transition-colors'
-        >
-          migrate
-        </button>
-      </div>
-      <p className='mt-1.5 text-label text-fg-muted leading-snug'>
-        NU6.3 makes ironwood the active pool. your orchard funds are safe - move them one-way to
-        your own ironwood address to keep spending normally. orchard-to-orchard sends are disabled
-        after activation.
-      </p>
-    </div>
-  );
-}
-
 type MigrateStep = 'review' | 'building' | 'sign' | 'scan' | 'broadcast' | 'complete' | 'error';
 
 interface IronwoodMigrateProps {
@@ -161,18 +120,16 @@ interface IronwoodMigrateProps {
   ufvk?: string;
   orchardZat: bigint;
   /**
-   * Hot (self-custody / mnemonic) wallet: the wasm signs the V6 tx in-worker
-   * and broadcasts directly - no zigner QR round trip. When true, `getMnemonic`
-   * MUST be provided.
+   * Hot (self-custody / mnemonic) wallet: the zcash worker signs the V6 tx
+   * and broadcasts directly - no zigner QR round trip. When true,
+   * `getVaultUnlock` MUST be provided.
    */
   isHotWallet?: boolean;
   /**
-   * Fetch the decrypted seed phrase (behind the password gate) for the hot
-   * path. Returns null if the user cancels auth. Only called for hot wallets,
-   * only at build time; the returned seed is handed straight to the worker and
-   * never retained in component state.
+   * The sealed vault (behind the password gate) for the hot path; the zcash
+   * worker opens it, never this page. Returns null if the user cancels auth.
    */
-  getMnemonic?: () => Promise<string | null>;
+  getVaultUnlock?: () => Promise<VaultUnlock | null>;
 }
 
 /** Full-screen turnstile migration flow, reusing the send PCZT UI machine. */
@@ -186,7 +143,7 @@ export function IronwoodMigrate({
   ufvk,
   orchardZat,
   isHotWallet,
-  getMnemonic,
+  getVaultUnlock,
 }: IronwoodMigrateProps) {
   const [step, setStep] = useState<MigrateStep>('review');
   const [error, setError] = useState<string | null>(null);
@@ -196,6 +153,51 @@ export function IronwoodMigrate({
   const [progressSteps, setProgressSteps] = useState<
     { step: string; detail?: string; elapsedMs: number }[]
   >([]);
+
+  // the build in the worker, stoppable under this key until it broadcasts
+  const buildKeyRef = useRef<string | null>(null);
+  const buildSinceRef = useRef(0);
+  const [buildNote, setBuildNote] = useState<Exclude<SendingNote, 'slow'>>('leave');
+  const watch = useSendWatch(progressSteps, buildSinceRef.current, step === 'building');
+
+  /** stop the build; the worker says if it is already broadcasting */
+  const stopBuild = useCallback(async (failed?: string) => {
+    const key = buildKeyRef.current;
+    if (!key) {
+      return;
+    }
+    setBuildNote('stopping');
+    const outcome = await stopBuildInWorker('zcash', key);
+    if (outcome === 'committed') {
+      setBuildNote('on-its-way');
+      return;
+    }
+    buildKeyRef.current = null;
+    setBuildNote('leave');
+    if (failed) {
+      setError(failed);
+      setStep('error');
+    } else {
+      setStep('review');
+    }
+  }, []);
+
+  // far past its phase's bound: end it calmly instead of spinning on
+  useEffect(() => {
+    if (watch !== 'timeout') {
+      return;
+    }
+    const quietAt = progressSteps.findLast(p => !isHeartbeat(p.step))?.step;
+    if (phaseOf(quietAt) === 'broadcast') {
+      setError(
+        'zafu did not hear back from the network · it may still arrive, so please look at home before trying again',
+      );
+      setStep('error');
+      return;
+    }
+    void stopBuild('this took far longer than it should, so zafu stopped it · nothing was moved');
+    // once per timeout
+  }, [watch]);
 
   // mirror the zcash-send build screen: live progress from the worker
   useEffect(() => {
@@ -220,28 +222,32 @@ export function IronwoodMigrate({
     // broadcast, so we stay on 'building' (which shows live worker progress)
     // and jump straight to 'complete' - no 'sign'/'scan' zigner steps.
     if (isHotWallet) {
-      if (!getMnemonic) {
+      if (!getVaultUnlock) {
         setError('hot-wallet signing unavailable (missing key access)');
         setStep('error');
         return;
       }
       setError(null);
       setProgressSteps([]);
-      // pull the seed behind the password gate BEFORE showing the building
-      // screen; a cancelled/failed unlock returns to review without building.
-      let seed: string | null;
+      // unlock behind the password gate BEFORE showing the building screen; a
+      // cancelled/failed unlock returns to review without building.
+      let vault: VaultUnlock | null;
       try {
-        seed = await getMnemonic();
+        vault = await getVaultUnlock();
       } catch {
         setError('could not unlock wallet');
         setStep('error');
         return;
       }
-      if (!seed) {
+      if (!vault) {
         // user cancelled the password prompt
         setStep('review');
         return;
       }
+      const key = crypto.randomUUID();
+      buildKeyRef.current = key;
+      buildSinceRef.current = Date.now();
+      setBuildNote('leave');
       setStep('building');
       try {
         await spawnNetworkWorker('zcash');
@@ -253,7 +259,9 @@ export function IronwoodMigrate({
           mainnet,
           ufvk,
           backend,
-          seed,
+          vault,
+          undefined,
+          key,
         );
         // hot path resolves to { txid, fee } (tx already broadcast in-worker)
         if (!('txid' in result)) {
@@ -262,6 +270,10 @@ export function IronwoodMigrate({
         setTxid(result.txid);
         setStep('complete');
       } catch (err) {
+        if (isBuildStopped(err)) {
+          // stopped: the stop already put the screen where it belongs
+          return;
+        }
         setError(err instanceof Error ? err.message : 'failed to build migration transaction');
         setStep('error');
       }
@@ -275,6 +287,10 @@ export function IronwoodMigrate({
       setStep('error');
       return;
     }
+    const key = crypto.randomUUID();
+    buildKeyRef.current = key;
+    buildSinceRef.current = Date.now();
+    setBuildNote('leave');
     setStep('building');
     setError(null);
     setProgressSteps([]);
@@ -288,6 +304,9 @@ export function IronwoodMigrate({
         mainnet,
         ufvk,
         backend,
+        undefined,
+        undefined,
+        key,
       );
       // cold path resolves to the unsigned PCZT result (with UR frames)
       if ('txid' in result) {
@@ -297,10 +316,13 @@ export function IronwoodMigrate({
       setUrFrames(result.urFrames);
       setStep('sign');
     } catch (err) {
+      if (isBuildStopped(err)) {
+        return;
+      }
       setError(err instanceof Error ? err.message : 'failed to build migration transaction');
       setStep('error');
     }
-  }, [isHotWallet, getMnemonic, ufvk, walletId, serverUrl, accountIndex, mainnet, backend]);
+  }, [isHotWallet, getVaultUnlock, ufvk, walletId, serverUrl, accountIndex, mainnet, backend]);
 
   const handleSignedScanned = useCallback(
     async (envelopeBytes: Uint8Array) => {
@@ -361,27 +383,19 @@ export function IronwoodMigrate({
         if (orchardZat <= 0n) {
           return (
             <div className='flex h-full min-h-0 flex-col'>
-              <div className='flex shrink-0 items-center gap-3 p-4'>
-                <button
-                  onClick={onClose}
-                  className='text-fg-muted hover:text-fg-high transition-colors'
-                >
-                  <span className='i-ph-arrow-left h-5 w-5' />
-                </button>
-                <h2 className='text-lg font-medium'>migrate to ironwood</h2>
-              </div>
+              <ScreenHeader title='move to ironwood' onBack={onClose} backPath={PopupPath.INDEX} />
               <div className='flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6 text-center'>
-                <div className='flex h-16 w-16 items-center justify-center rounded-full bg-green-500/20'>
+                <div className='flex h-16 w-16 items-center justify-center bg-green-500/20'>
                   <span className='i-ph-check h-8 w-8 text-green-400' />
                 </div>
-                <h2 className='text-lg font-medium'>fully migrated</h2>
+                <h2 className='text-lg'>fully migrated</h2>
                 <p className='max-w-sm text-sm text-fg-muted leading-snug'>
                   your orchard balance is empty - everything has moved to ironwood. there is nothing
                   left to migrate.
                 </p>
               </div>
               <div className='shrink-0 p-4'>
-                <Button variant='gradient' onClick={onClose} className='w-full'>
+                <Button variant='primary' onClick={onClose} className='w-full'>
                   done
                 </Button>
               </div>
@@ -390,89 +404,58 @@ export function IronwoodMigrate({
         }
         return (
           <div className='flex h-full min-h-0 flex-col'>
-            <div className='flex shrink-0 items-center gap-3 p-4'>
-              <button
-                onClick={onClose}
-                className='text-fg-muted hover:text-fg-high transition-colors'
-              >
-                <span className='i-ph-arrow-left h-5 w-5' />
-              </button>
-              <h2 className='text-lg font-medium'>migrate to ironwood</h2>
-            </div>
+            <ScreenHeader title='move to ironwood' onBack={onClose} backPath={PopupPath.INDEX} />
 
-            <div className='flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4'>
-              <div className='flex items-center justify-center gap-4 pt-2'>
-                <div className='flex flex-col items-center gap-1'>
-                  <span className='i-ph-shield h-7 w-7 text-fg-muted' />
-                  <span className='text-xs text-fg-muted'>orchard</span>
-                </div>
-                <span className='i-ph-arrow-right h-5 w-5 text-zigner-gold' />
-                <div className='flex flex-col items-center gap-1'>
-                  <span className='i-ph-shield-check h-7 w-7 text-fg-high' />
-                  <span className='text-xs font-medium'>ironwood</span>
-                </div>
-              </div>
-
-              <div className='text-center'>
-                <div className='text-3xl font-semibold tabular-nums'>
-                  <Sensitive>{fmtZec(orchardZat)}</Sensitive>
-                </div>
-                <div className='text-sm text-fg-muted'>ZEC to migrate</div>
-              </div>
-
-              <p className='text-center text-xs text-fg-muted leading-snug'>
-                orchard is now a legacy pool. this moves your full orchard balance to your own
-                ironwood address so you can keep spending it normally.
+            <div className='flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 pt-3'>
+              <p className='text-xs text-fg-muted leading-snug'>
+                orchard is closing. move your zec into ironwood, the new private pool.
               </p>
 
-              {/* The privacy cost, stated before the user commits.
-                  A turnstile migration moves value BETWEEN pools, so the amount
-                  is a cleartext consensus field (valueBalance) — not shielded.
-                  And because this sweeps every orchard note at once, the number
-                  published is the user's entire orchard balance, which also
-                  links their pre- and post-NU6.3 activity at that txid.
-                  Saying nothing here would let someone deanonymise their whole
-                  orchard history in one click while believing this is a private
-                  shielded-to-shielded move. */}
-              <div className='flex items-start gap-2 rounded-lg border border-hanko/40 bg-elev-1 p-3'>
-                <span className='i-ph-eye mt-0.5 size-3.5 shrink-0 text-hanko' />
-                <p className='text-label text-fg-muted leading-snug'>
-                  <span className='text-hanko'>this amount becomes public.</span> moving between
-                  pools publishes the value on-chain in the clear, and this migrates your whole
-                  orchard balance at once — so the figure above, and the link between your orchard
-                  and ironwood activity, are visible to anyone.
-                  <br />
-                  <span className='text-fg-dim'>
-                    your orchard funds stay spendable until you move them. if you would rather not
-                    publish this, you can wait — but note that spending orchard directly leaks value
-                    the same way.
-                  </span>
-                </p>
+              <div className='text-center'>
+                <Sensitive className='text-3xl tabular-nums text-fg-high'>
+                  {fmtZec(orchardZat)}
+                  <span className='ml-1.5 text-base text-zigner-gold'>zec</span>
+                </Sensitive>
               </div>
 
-              <div className='divide-y divide-border-soft rounded-lg border border-border-soft bg-elev-1'>
+              <div className='divide-y divide-border-soft border border-border-soft bg-elev-1'>
                 <div className='flex items-center justify-between px-4 py-3 text-sm'>
-                  <span className='text-fg-muted'>destination</span>
-                  <span className='font-medium'>your ironwood address</span>
+                  <span className='text-fg-muted'>from</span>
+                  <span>orchard · legacy</span>
                 </div>
                 <div className='flex items-center justify-between px-4 py-3 text-sm'>
-                  <span className='text-fg-muted'>network fee</span>
+                  <span className='text-fg-muted'>into</span>
+                  <span>ironwood</span>
+                </div>
+                <div className='flex items-center justify-between px-4 py-3 text-sm'>
+                  <span className='text-fg-muted'>fee</span>
                   <span className='text-fg-muted'>computed at build</span>
                 </div>
               </div>
 
-              <div className='flex items-center gap-2 text-xs text-fg-muted'>
-                <span className='i-ph-arrow-right h-4 w-4 shrink-0' />
-                <span>one-way - your funds stay yours, they just cannot move back to orchard</span>
+              {/* The privacy cost, stated before the user commits.
+                  A turnstile migration moves value BETWEEN pools, so the amount
+                  is a cleartext consensus field (valueBalance) - not shielded,
+                  and it sweeps the full orchard balance in one go. */}
+              <div className='flex items-start gap-2 border border-hanko/40 bg-elev-1 p-3'>
+                <span className='i-ph-eye mt-0.5 size-3.5 shrink-0 text-hanko' />
+                <p className='text-label text-fg-muted leading-snug'>
+                  the amount moved is visible on the chain. who sent it and where it goes stay
+                  private.
+                </p>
               </div>
+
+              <p className='text-label text-fg-dim leading-snug'>
+                tip: moving in a few smaller steps makes the amounts harder to link
+              </p>
             </div>
 
             <div className='flex shrink-0 gap-2 p-4'>
               <Button variant='secondary' onClick={onClose} className='flex-1'>
-                not now
+                later
               </Button>
-              <Button variant='gradient' onClick={() => void handleBuild()} className='flex-1'>
-                migrate
+              <Button variant='primary' onClick={() => void handleBuild()} className='flex-1'>
+                move to ironwood
               </Button>
             </div>
           </div>
@@ -480,33 +463,22 @@ export function IronwoodMigrate({
 
       case 'building':
         return (
-          <div className='flex flex-col items-center gap-4 p-6'>
-            <div className='w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center'>
-              <div className='w-8 h-8 border-2 border-zigner-gold border-t-transparent rounded-full animate-spin' />
-            </div>
-            <h2 className='text-lg font-medium'>building migration</h2>
-            {progressSteps.length > 0 ? (
-              <div className='w-full max-w-sm flex flex-col gap-1'>
-                {progressSteps.map((s, i) => (
-                  <div
-                    key={i}
-                    className={`flex items-start gap-2 text-xs ${
-                      i === progressSteps.length - 1 ? 'text-fg' : 'text-fg-muted'
-                    }`}
-                  >
-                    <span className='font-mono w-12 text-right shrink-0'>
-                      {(s.elapsedMs / 1000).toFixed(1)}s
-                    </span>
-                    <span>
-                      {s.step}
-                      {s.detail && <span className='text-fg-muted ml-1'>({s.detail})</span>}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className='text-sm text-fg-muted text-center'>preparing...</p>
-            )}
+          <div className='flex h-full min-h-0 flex-col'>
+            <Sending
+              meta={<Sensitive>{fmtZec(orchardZat)} zec · orchard to ironwood</Sensitive>}
+              stages={STAGES.zcash}
+              steps={progressSteps}
+              floor={0}
+              since={buildSinceRef.current}
+              hot={!!isHotWallet}
+              note={buildNote !== 'leave' ? buildNote : watch === 'slow' ? 'slow' : 'leave'}
+              onStop={
+                buildNote !== 'on-its-way' && sendStage(STAGES.zcash, progressSteps) < 3
+                  ? () => void stopBuild()
+                  : undefined
+              }
+              onClose={onClose}
+            />
           </div>
         );
 
@@ -520,11 +492,11 @@ export function IronwoodMigrate({
               >
                 <span className='i-ph-arrow-left w-5 h-5' />
               </button>
-              <h2 className='text-lg font-medium'>sign migration with zafu zigner</h2>
+              <h2 className='text-lg'>sign migration with zafu zigner</h2>
             </div>
 
             {amount !== null && fee !== null && (
-              <div className='rounded bg-elev-2 p-3 text-xs text-fg-muted flex flex-col gap-1'>
+              <div className='bg-elev-2 p-3 text-xs text-fg-muted flex flex-col gap-1'>
                 <div className='flex justify-between'>
                   <span>migrate</span>
                   <span className='tabular-nums text-fg-high'>
@@ -579,7 +551,7 @@ export function IronwoodMigrate({
               </div>
             </div>
 
-            <Button variant='gradient' onClick={() => setStep('scan')} className='w-full'>
+            <Button variant='primary' onClick={() => setStep('scan')} className='w-full'>
               scan signature from zafu zigner
             </Button>
           </div>
@@ -605,10 +577,10 @@ export function IronwoodMigrate({
       case 'broadcast':
         return (
           <div className='flex flex-col items-center gap-4 p-8'>
-            <div className='w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center animate-pulse'>
-              <div className='w-8 h-8 border-2 border-zigner-gold border-t-transparent rounded-full animate-spin' />
+            <div className='w-16 h-16 bg-primary/20 flex items-center justify-center animate-pulse'>
+              <div className='w-8 h-8 border-2 border-zigner-gold border-t-transparent animate-spin' />
             </div>
-            <h2 className='text-lg font-medium'>broadcasting migration</h2>
+            <h2 className='text-lg'>broadcasting migration</h2>
             <p className='text-center text-sm text-fg-muted'>broadcasting to the network</p>
           </div>
         );
@@ -616,16 +588,16 @@ export function IronwoodMigrate({
       case 'complete':
         return (
           <div className='flex flex-col items-center gap-4 p-8'>
-            <div className='w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center'>
+            <div className='w-16 h-16 bg-green-500/20 flex items-center justify-center'>
               <span className='i-ph-check w-8 h-8 text-green-400' />
             </div>
-            <h2 className='text-lg font-medium'>migrated to ironwood</h2>
+            <h2 className='text-lg'>migrated to ironwood</h2>
             <p className='text-center text-sm text-fg-muted'>
               your funds are now in the active ironwood pool. your balance updates once the
               transaction confirms, and you can keep spending normally.
             </p>
             {txid && <p className='break-all font-mono text-xs text-fg-muted'>{txid}</p>}
-            <Button variant='gradient' onClick={onClose} className='w-full mt-4'>
+            <Button variant='primary' onClick={onClose} className='w-full mt-4'>
               done
             </Button>
           </div>
@@ -639,15 +611,15 @@ export function IronwoodMigrate({
         if (isPreActivationError(error)) {
           return (
             <div className='flex flex-col items-center gap-4 p-8'>
-              <div className='flex h-16 w-16 items-center justify-center rounded-full bg-primary/15'>
+              <div className='flex h-16 w-16 items-center justify-center bg-primary/15'>
                 <span className='i-ph-clock h-8 w-8 text-zigner-gold' />
               </div>
-              <h2 className='text-lg font-medium'>migration not available yet</h2>
+              <h2 className='text-lg'>migration not available yet</h2>
               <p className='max-w-sm text-center text-sm text-fg-muted leading-snug'>
                 orchard to ironwood migration becomes available once NU6.3 activates on the network.
                 your orchard funds are safe in the meantime - nothing is required until then.
               </p>
-              <Button variant='gradient' onClick={onClose} className='mt-2 w-full'>
+              <Button variant='primary' onClick={onClose} className='mt-2 w-full'>
                 got it
               </Button>
             </div>
@@ -655,16 +627,16 @@ export function IronwoodMigrate({
         }
         return (
           <div className='flex flex-col items-center gap-4 p-8'>
-            <div className='w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center'>
+            <div className='w-16 h-16 bg-red-500/20 flex items-center justify-center'>
               <span className='i-ph-x w-8 h-8 text-red-400' />
             </div>
-            <h2 className='text-lg font-medium'>migration failed</h2>
+            <h2 className='text-lg'>migration failed</h2>
             <p className='text-sm text-red-400 text-center'>{error ?? 'an error occurred'}</p>
             <div className='flex gap-2 w-full mt-4'>
               <Button variant='secondary' onClick={onClose} className='flex-1'>
                 close
               </Button>
-              <Button variant='gradient' onClick={() => setStep('review')} className='flex-1'>
+              <Button variant='primary' onClick={() => setStep('review')} className='flex-1'>
                 try again
               </Button>
             </div>
@@ -679,7 +651,7 @@ export function IronwoodMigrate({
   // Portaled to document.body: rendered inline, the layout root's
   // contain-layout + the scroll area's transform trap this overlay in a
   // lower stacking context, so no z-index can lift it above the bottom
-  // tabs — the confirm buttons ended up hidden under the footer.
+  // tabs - the confirm buttons ended up hidden under the footer.
   return (
     <OverlayPortal>
       <div className='fixed inset-0 z-[60] overflow-y-auto bg-canvas'>{renderContent()}</div>

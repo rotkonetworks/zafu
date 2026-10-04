@@ -4,7 +4,7 @@ import { describe, expect, test } from 'vitest';
 import { withShuffle, type RandomU32 } from './shuffle';
 import type { BucketStart, FetchContext, MemoFetcher } from '../types';
 
-// recording mock — captures the EXACT order buckets arrive in.
+// recording mock - captures the EXACT order buckets arrive in.
 function recorder(): { fetcher: MemoFetcher; calls: BucketStart[][] } {
   const calls: BucketStart[][] = [];
   const fetcher: MemoFetcher = async function* (_w, owned, _ctx) {
@@ -14,7 +14,7 @@ function recorder(): { fetcher: MemoFetcher; calls: BucketStart[][] } {
 }
 
 const seededRng = (seed: number): RandomU32 => {
-  // simple linear congruential generator — deterministic across runs.
+  // simple linear congruential generator - deterministic across runs.
   let state = seed >>> 0;
   return out => {
     for (let i = 0; i < out.length; i++) {

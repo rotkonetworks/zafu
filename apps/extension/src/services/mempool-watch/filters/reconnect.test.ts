@@ -93,7 +93,7 @@ describe('withReconnect', () => {
       got.push(s.observedAtMs);
       if (got.length === 2) ctrl.abort();
     }
-    // we don't strictly assert the exact statuses sequence — but we do
+    // we don't strictly assert the exact statuses sequence - but we do
     // assert that reconnect never gave up and the second yield arrived.
     expect(got[0]).toBe(1);
   });

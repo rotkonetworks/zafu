@@ -10,7 +10,7 @@ describe('rescanStartHeight', () => {
   it('never returns the chain tip for a missing birthday', () => {
     // the bug: `walletBirthday || chainHeight` made "no birthday recorded"
     // mean "start scanning from now", and the handler then WROTE that as the
-    // birthday — every note already held became unreachable.
+    // birthday - every note already held became unreachable.
     const tip = 3_500_000;
     for (const missing of [0, undefined, null, NaN]) {
       const h = rescanStartHeight(missing as number);

@@ -5,11 +5,12 @@
  * lightwalletd implement. Avoids the fingerprinting beacon problem
  * of probing zidecar-only RPCs against arbitrary endpoints.
  *
- * Manual trigger only: settings UI calls measurePresetLatencies()
- * on user click; no background polling, no probe on settings entry.
+ * No background polling, ever, and nothing on open: only the node sheet's
+ * "test speed" calls measurePresetLatencies(), after the user allows
+ * "other zcash servers".
  */
 
-import { zcashClientFor, isZidecarEndpoint } from './zcash-backend';
+import { backendOfEndpoint, zcashClient } from './zcash-backend';
 import { ZCASH_MAINNET_ENDPOINTS } from '../../config/zcash-endpoints';
 
 export interface EndpointLatency {
@@ -30,9 +31,7 @@ async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 export async function measureEndpointLatency(url: string): Promise<EndpointLatency> {
   const start = performance.now();
   try {
-    const backend = isZidecarEndpoint(url) ? 'zidecar' : 'lightwalletd';
-    const client = await zcashClientFor(url, backend);
-    await withTimeout(client.getTip(), PROBE_TIMEOUT_MS);
+    await withTimeout(zcashClient(url, backendOfEndpoint(url)).getTip(), PROBE_TIMEOUT_MS);
     return { url, rttMs: Math.round(performance.now() - start) };
   } catch (e) {
     return {

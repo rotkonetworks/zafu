@@ -210,12 +210,6 @@ type LOCAL = {
   };
   zcashBackend?: 'zidecar' | 'lightwalletd';
 
-  votingConfigOverride?: {
-    enabled: boolean;
-    url: string;
-    sha256: string | null;
-  };
-
   zcashMeConfig?: {
     mode: 'off' | 'directory' | 'live';
     mirrorUrl: string;
@@ -330,6 +324,18 @@ type LOCAL = {
   zafuTheme?: 'sumi' | 'washi' | 'terminal';
 
   zafuFont?: 'iosevka' | 'system';
+
+  /** transparent chains the user hid from the penumbra home */
+  hiddenTransparentChains?: string[];
+
+  /** what the penumbra home's total is shown in; absent = um */
+  penumbraTotalIn?: 'usd' | 'um';
+
+  /** penumbra home rows (asset ids, base64) the user turned to show usd */
+  penumbraRowsInUsd?: string[];
+
+  /** the swap route the user chose per pair (`into_zec:btc@btc`), kept only when they changed it */
+  swapRoutes?: Record<string, 'near' | 'thor' | 'penumbra'>;
 
   zafuFeeMultiplier?: number;
 

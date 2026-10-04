@@ -1,5 +1,5 @@
 /**
- * migration — one-time data migrations run during init
+ * migration - one-time data migrations run during init
  *
  * each migration is a pure-ish function: takes current state,
  * returns new state + writes to storage if needed.
@@ -91,7 +91,7 @@ export const hasOrphanedMultisigs = (zcashWallets: ZcashWalletJson[]): boolean =
  * (getMultisigSecrets is vault-first); this rebuilds the display/routing
  * mirror the multisig manager reads. secret material (keyPackage /
  * ephemeralSeed) stays in vault.encryptedData and is intentionally omitted
- * here — self-custody backup pulls it via getMultisigSecrets(vaultId).
+ * here - self-custody backup pulls it via getMultisigSecrets(vaultId).
  *
  * orchardFvk isn't stored on the vault, so a mirror rebuilt from a vault
  * that never had one carries ''. balances resolve by vaultId regardless;

@@ -16,17 +16,16 @@
  * tab), and we additionally guard below with isPopup() so a stray popup entry
  * bails out with instructions rather than silently failing.
  *
- * Gated behind HARDWARE_WALLET_ENABLED - the entry card in start.tsx is
- * filtered out while the flag is off, so this screen is unreachable from the UI
- * until the flag flips (the route stays registered for type-checking).
+ * Two paths: with HARDWARE_WALLET_ENABLED (beta) the Ledger Zcash app exports
+ * the account's UFVK and the wallet is shielded (ledger/zcash-app); otherwise,
+ * and one tap away in beta, the Bitcoin app reads a transparent address only.
  */
 
-import { useCallback, useState } from 'react';
-import { BackIcon } from '@repo/ui/components/ui/icons/back-icon';
-import { Button } from '@repo/ui/components/ui/button';
-import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
-import { Input } from '@repo/ui/components/ui/input';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@repo/ui/lib/utils';
+import { Button } from '@repo/ui/components/ui/button';
+import { Input } from '@repo/ui/components/ui/input';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../../../state';
 import { keyRingSelector, type LedgerImport } from '../../../state/keyring';
@@ -41,36 +40,28 @@ import {
   isLedgerBtcSupported,
   zcashTransparentPath,
 } from '../../../ledger/hw-btc-signer';
+import { HARDWARE_WALLET_ENABLED } from '../../../config/feature-flags';
+import { ZCASH_ORCHARD_ACTIVATION } from '../../../config/networks';
+import { deriveZcashAddressFromUfvk } from '../../../hooks/use-address';
+import { pickLedger } from '../../../ledger/zcash-app/connect';
+import { MIN_ZCASH_APP_VERSION_FOR_NEW_ACCOUNTS } from '../../../ledger/zcash-app/contract';
+import { ledgerGuidance, type LedgerGuidance } from '../../../ledger/zcash-app/guidance';
+import {
+  MAX_LEDGER_ONBOARDING_ACCOUNT_INDEX,
+  exportLedgerZcashAccount,
+  parseLedgerAccountIndex,
+  saveLedgerZcashAccount,
+  type LedgerExportStep,
+  type LedgerZcashAccount,
+} from '../../../ledger/zcash-app/import-account';
+import { loadLedgerZcashProtocol } from '../../../ledger/zcash-app/protocol';
+import { presets } from './import-birthday';
 
 /** Zcash mainnet - onboarding only imports the mainnet account today. */
 const MAINNET = true;
 
 // Version -> capability decisions come from the single source `ledgerCapabilities`
 // (../../../ledger/capabilities): transparent always; shielded iff app >= 3.8.0.
-
-/**
- * Small access/notice box - same visual language as import-zigner's AccessNote,
- * but ledger notices carry a warn or info tone depending on capability.
- */
-const NoticeBox = ({ tone, icon, children }: NoticeBoxProps) => (
-  <div
-    className={cn(
-      'flex items-start gap-1.5 rounded-lg border p-3 text-left text-xs lowercase',
-      tone === 'warn'
-        ? 'border-yellow-500/40 bg-yellow-500/10 text-yellow-400'
-        : 'border-border-soft/60 bg-elev-2/40 text-fg-muted',
-    )}
-  >
-    <span className={cn(icon, 'mt-0.5 h-3.5 w-3.5 shrink-0')} />
-    <span>{children}</span>
-  </div>
-);
-
-interface NoticeBoxProps {
-  readonly tone: 'warn' | 'info';
-  readonly icon: string;
-  readonly children: React.ReactNode;
-}
 
 /** Local view state - a small linear machine, no store slice needed. */
 type Phase = 'idle' | 'connecting' | 'connected' | 'importing';
@@ -83,7 +74,7 @@ interface Connected {
   readonly transparentAddress: string;
 }
 
-export const ConnectLedger = () => {
+const ConnectLedgerTransparent = () => {
   const navigate = usePageNav();
   const { addLedgerUnencrypted } = useStore(keyRingSelector);
 
@@ -97,8 +88,6 @@ export const ConnectLedger = () => {
   // a popup - bail with guidance instead of a cryptic HID failure.
   const inPopup = isPopup();
   const supported = isLedgerBtcSupported();
-
-  const handleBack = () => navigate(-1);
 
   const handleConnect = useCallback(async () => {
     setError(null);
@@ -151,7 +140,7 @@ export const ConnectLedger = () => {
       if (firstWallet) {
         await setOnboardingValuesInStorage(SEED_PHRASE_ORIGIN.LEDGER);
       }
-      navigate(PagePath.ONBOARDING_SUCCESS);
+      navigate(firstWallet ? PagePath.PERSONALIZE : PagePath.ONBOARDING_SUCCESS);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       setError(`failed to import: ${message}`);
@@ -160,132 +149,358 @@ export const ConnectLedger = () => {
   }, [account, addLedgerUnencrypted, walletLabel, navigate]);
 
   return (
-    <FadeTransition>
-      <div className='flex h-full flex-col gap-6'>
-        <header className='flex flex-col gap-1'>
-          <div className='flex items-center gap-2'>
-            <BackIcon onClick={handleBack} />
-            <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>connect ledger</h2>
+    <div className='flex flex-col gap-5'>
+      <h1 className='font-display text-[38px] text-fg-high'>connect ledger</h1>
+      <p className='text-body text-fg-muted lowercase'>
+        plug in your ledger and open the zcash app to add a watch-only wallet.
+      </p>
+
+      <div className='flex flex-col gap-4'>
+        {inPopup && (
+          <StatusSlot tone='warn' icon='i-ph-arrow-square-out'>
+            open zafu in the side panel or a full tab to connect a ledger. usb sessions are dropped
+            when the popup loses focus.
+          </StatusSlot>
+        )}
+
+        {!inPopup && !supported && (
+          <StatusSlot tone='warn' icon='i-ph-warning'>
+            this browser does not support webhid. use a chromium browser to connect a ledger.
+          </StatusSlot>
+        )}
+
+        {/* idle - connect button */}
+        {!inPopup && supported && phase !== 'connected' && phase !== 'importing' && (
+          <div className='flex flex-col gap-2.5'>
+            <Button
+              variant='primary'
+              className='w-full'
+              disabled={phase === 'connecting'}
+              onClick={handleConnect}
+            >
+              {phase === 'connecting' ? (
+                <>
+                  <span className='i-ph-circle-notch mr-2 h-4 w-4 animate-spin' />
+                  connecting...
+                </>
+              ) : (
+                <>
+                  <span className='i-ph-usb mr-2 h-4 w-4' />
+                  connect ledger
+                </>
+              )}
+            </Button>
+            {error && (
+              <StatusSlot tone='danger' icon='i-ph-warning'>
+                {error}
+              </StatusSlot>
+            )}
           </div>
-          <p className='text-xs text-fg-muted lowercase'>
-            plug in your ledger and open the zcash app to add a watch-only wallet.
-          </p>
-        </header>
+        )}
 
-        <div className='flex flex-col gap-4'>
-          {inPopup && (
-            <NoticeBox tone='warn' icon='i-ph-arrow-square-out'>
-              open zafu in the side panel or a full tab to connect a ledger. usb sessions are
-              dropped when the popup loses focus.
-            </NoticeBox>
-          )}
-
-          {!inPopup && !supported && (
-            <NoticeBox tone='warn' icon='i-ph-warning'>
-              this browser does not support webhid. use a chromium browser to connect a ledger.
-            </NoticeBox>
-          )}
-
-          {/* idle - connect button */}
-          {!inPopup && supported && phase !== 'connected' && phase !== 'importing' && (
-            <div className='flex flex-col gap-2.5'>
-              <Button
-                variant='gradient'
-                className='w-full'
-                disabled={phase === 'connecting'}
-                onClick={handleConnect}
-              >
-                {phase === 'connecting' ? (
-                  <>
-                    <span className='i-ph-circle-notch mr-2 h-4 w-4 animate-spin' />
-                    connecting...
-                  </>
-                ) : (
-                  <>
-                    <span className='i-ph-usb mr-2 h-4 w-4' />
-                    connect ledger
-                  </>
-                )}
-              </Button>
-              {error && <div className='mt-1 text-sm text-red-400'>{error}</div>}
-            </div>
-          )}
-
-          {/* connected - account detail + import */}
-          {(phase === 'connected' || phase === 'importing') && account && (
-            <div className='flex flex-col gap-4'>
-              <div className='flex flex-col gap-1'>
-                <div className='text-title text-fg-high lowercase tracking-[-0.005em]'>
-                  ledger connected
-                </div>
-                <div className='font-mono text-xs text-fg-muted break-all'>
-                  account #0
-                  <span className='ml-2'>(mainnet)</span>
-                </div>
-                <div className='mt-1 font-mono text-xs text-fg-muted break-all'>
-                  <span className='text-fg-muted/70'>transparent: </span>
-                  {account.transparentAddress}
-                </div>
+        {/* connected - account detail + import */}
+        {(phase === 'connected' || phase === 'importing') && account && (
+          <div className='flex flex-col gap-4'>
+            <div className='flex flex-col gap-1'>
+              <div className='text-title text-fg-high lowercase tracking-[-0.005em]'>
+                ledger connected
               </div>
+              <div className='font-mono text-xs text-fg-muted break-all'>
+                account #0
+                <span className='ml-2'>(mainnet)</span>
+              </div>
+              <div className='mt-1 font-mono text-xs text-fg-muted break-all'>
+                <span className='text-fg-muted/70'>transparent: </span>
+                {account.transparentAddress}
+              </div>
+            </div>
 
-              <Input
-                placeholder='wallet label'
-                value={walletLabel}
-                onChange={e => setWalletLabel(e.target.value)}
-              />
+            <Input
+              placeholder='wallet label'
+              value={walletLabel}
+              onChange={e => setWalletLabel(e.target.value)}
+            />
 
-              {/* Update-app alert. hw-app-btc signs against the Zcash app on the
+            {/* Update-app alert. hw-app-btc signs against the Zcash app on the
                   device; an app that predates NU6.3 does not know the current
                   consensus branch id and REJECTS every send (6a80). Tell the user
                   to update before they try to send, or it fails on-device. */}
-              <NoticeBox tone='warn' icon='i-ph-arrows-clockwise'>
-                update your ledger zcash app to the latest version in ledger live first. an older
-                app does not recognise the current zcash network and will reject transparent sends.
-              </NoticeBox>
+            <StatusSlot tone='warn' icon='i-ph-arrows-clockwise'>
+              update your ledger zcash app to the latest version in ledger live first. an older app
+              does not recognise the current zcash network and will reject transparent sends.
+            </StatusSlot>
 
-              {/* TRANSPARENT-ONLY. zafu signs Ledger via the Bitcoin app (the only
+            {/* TRANSPARENT-ONLY. zafu signs Ledger via the Bitcoin app (the only
                   path that works on mainnet today); the dedicated shielded app is
                   not published yet, so shielded on Ledger is unavailable REGARDLESS
                   of app version. State that plainly - do not imply shielded works. */}
-              <NoticeBox tone='warn' icon='i-ph-shield-slash'>
-                ledger is transparent-only in zafu right now. you can send and receive transparent
-                zec (t-addresses). shielded on ledger needs a newer zcash app from ledger and is
-                coming later - keep long-term savings in a shielded zafu wallet.
-              </NoticeBox>
+            <StatusSlot tone='warn' icon='i-ph-shield-slash'>
+              ledger is transparent-only in zafu right now. you can send and receive transparent zec
+              (t-addresses). shielded on ledger needs a newer zcash app from ledger and is coming
+              later - keep long-term savings in a shielded zafu wallet.
+            </StatusSlot>
 
-              <NoticeBox tone='info' icon='i-ph-usb'>
-                watch-only + transparent. view your t-address balance and sign transparent sends
-                with the ledger plugged in.
-              </NoticeBox>
+            <StatusSlot tone='info' icon='i-ph-usb'>
+              watch-only + transparent. view your t-address balance and sign transparent sends with
+              the ledger plugged in.
+            </StatusSlot>
 
-              {error && <div className='text-sm text-red-400'>{error}</div>}
+            {error && (
+              <StatusSlot tone='danger' icon='i-ph-warning'>
+                {error}
+              </StatusSlot>
+            )}
 
-              <div className='flex flex-col gap-2'>
-                <Button
-                  variant='gradient'
-                  className='w-full'
-                  disabled={phase === 'importing'}
-                  onClick={handleImport}
-                >
-                  {phase === 'importing' ? 'importing...' : 'add wallet'}
-                </Button>
-                <Button
-                  variant='ghost'
-                  className='w-full'
-                  disabled={phase === 'importing'}
-                  onClick={() => {
-                    setAccount(null);
-                    setError(null);
-                    setPhase('idle');
-                  }}
-                >
-                  connect a different ledger
-                </Button>
-              </div>
+            <div className='flex flex-col gap-2'>
+              <Button
+                variant='primary'
+                className='w-full'
+                disabled={phase === 'importing'}
+                onClick={handleImport}
+              >
+                {phase === 'importing' ? 'importing...' : 'add wallet'}
+              </Button>
+              <Button
+                variant='quiet'
+                className='w-full'
+                disabled={phase === 'importing'}
+                onClick={() => {
+                  setAccount(null);
+                  setError(null);
+                  setPhase('idle');
+                }}
+              >
+                connect a different ledger
+              </Button>
             </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const STEP_TEXT: Record<LedgerExportStep['step'], string> = {
+  checking_app: 'looking for the ledger',
+  opening_app: 'please open the zcash app',
+  confirm_on_device: 'please approve on the ledger',
+  device: 'waiting for the ledger',
+};
+
+/** the default unified address of a UFVK (diversifier index 0) */
+const firstAddress = (ufvk: string) => deriveZcashAddressFromUfvk(ufvk, '00'.repeat(11));
+
+const ConnectLedgerShielded = ({ onTransparent }: { onTransparent: () => void }) => {
+  const navigate = usePageNav();
+  const { addLedgerUnencrypted } = useStore(keyRingSelector);
+  const [phase, setPhase] = useState<'idle' | 'working' | 'review' | 'saving'>('idle');
+  const [step, setStep] = useState<LedgerExportStep['step']>('checking_app');
+  const [guidance, setGuidance] = useState<LedgerGuidance | null>(null);
+  const [indexText, setIndexText] = useState('0');
+  const [account, setAccount] = useState<LedgerZcashAccount | null>(null);
+  const [address, setAddress] = useState<string | null>(null);
+  const [walletLabel, setWalletLabel] = useState('');
+  const [options] = useState(presets);
+  const [pick, setPick] = useState(1);
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  const inPopup = isPopup();
+  const supported = typeof navigator !== 'undefined' && 'hid' in navigator;
+  const accountIndex = parseLedgerAccountIndex(indexText);
+
+  const handleConnect = () => {
+    if (accountIndex == null) {
+      return;
+    }
+    setGuidance(null);
+    setPhase('working');
+    setStep('checking_app');
+    const abort = new AbortController();
+    abortRef.current = abort;
+    // the device picker needs this click: nothing is awaited before it
+    const opening = pickLedger();
+    void (async () => {
+      let close: (() => Promise<void>) | undefined;
+      try {
+        const { device, productName } = await opening;
+        close = () => device.close();
+        const exported = await exportLedgerZcashAccount(
+          {
+            device,
+            protocol: await loadLedgerZcashProtocol(),
+            network: MAINNET ? 'main' : 'test',
+            productName,
+          },
+          { accountIndex, signal: abort.signal, onStep: s => setStep(s.step) },
+        );
+        setAccount(exported);
+        setAddress(null);
+        setPhase('review');
+        firstAddress(exported.ufvk).then(setAddress, () => setAddress(null));
+      } catch (cause) {
+        setGuidance(ledgerGuidance(cause));
+        setPhase('idle');
+      } finally {
+        await close?.().catch(() => undefined);
+        abortRef.current = null;
+      }
+    })();
+  };
+
+  const handleSave = async () => {
+    if (!account) {
+      return;
+    }
+    setGuidance(null);
+    setPhase('saving');
+    try {
+      const firstWallet = !(await localExtStorage.get('vaults'))?.length;
+      await saveLedgerZcashAccount(
+        {
+          addLedger: addLedgerUnencrypted,
+          deriveAddress: ufvk => (address ? Promise.resolve(address) : firstAddress(ufvk)),
+          birthdayStore: chrome.storage.local,
+          minBirthdayHeight: ZCASH_ORCHARD_ACTIVATION,
+        },
+        { account, label: walletLabel, mainnet: MAINNET, birthdayHeight: options[pick]!.height },
+      );
+      if (firstWallet) {
+        await setOnboardingValuesInStorage(SEED_PHRASE_ORIGIN.LEDGER);
+      }
+      navigate(firstWallet ? PagePath.PERSONALIZE : PagePath.ONBOARDING_SUCCESS);
+    } catch (cause) {
+      setGuidance(ledgerGuidance(cause));
+      setPhase('review');
+    }
+  };
+
+  const reviewing = (phase === 'review' || phase === 'saving') && account;
+
+  return (
+    <div className='flex flex-col gap-5'>
+      <h1 className='font-display text-[38px] text-fg-high'>connect ledger</h1>
+      <p className='text-body text-fg-muted lowercase'>
+        {reviewing
+          ? `${account.deviceLabel.toLowerCase()} · account #${account.accountIndex} · zcash app ${account.appVersion}`
+          : `plug in your ledger and open the zcash app ${MIN_ZCASH_APP_VERSION_FOR_NEW_ACCOUNTS} or newer.`}
+      </p>
+
+      {inPopup ? (
+        <StatusSlot tone='warn' icon='i-ph-arrow-square-out'>
+          please open zafu in the side panel or a tab to connect a ledger
+        </StatusSlot>
+      ) : !supported ? (
+        <StatusSlot tone='warn' icon='i-ph-warning'>
+          this browser cannot reach usb devices. a chromium browser can.
+        </StatusSlot>
+      ) : reviewing ? (
+        <div className='flex flex-col gap-4'>
+          <div className='break-all font-mono text-xs text-fg-muted'>
+            {address ?? 'reading the address'}
+          </div>
+          <Input
+            placeholder='wallet label'
+            value={walletLabel}
+            onChange={e => setWalletLabel(e.target.value)}
+          />
+          <div className='flex flex-col gap-2'>
+            <span className='text-label text-fg-muted'>first used</span>
+            <div className='grid grid-cols-3 gap-2.5'>
+              {options.map((o, i) => (
+                <button
+                  key={o.label}
+                  type='button'
+                  aria-pressed={pick === i}
+                  onClick={() => setPick(i)}
+                  className={cn(
+                    'h-11 border text-body text-fg-high transition-colors',
+                    pick === i
+                      ? 'border-zigner-gold bg-zigner-gold/10'
+                      : 'border-border-soft bg-elev-1 hover:bg-elev-2',
+                  )}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {guidance && (
+            <StatusSlot tone='warn' icon='i-ph-warning'>
+              {guidance.title} · {guidance.action}
+            </StatusSlot>
+          )}
+          <div className='flex flex-col gap-2'>
+            <Button
+              variant='primary'
+              className='w-full'
+              disabled={phase === 'saving'}
+              onClick={() => void handleSave()}
+            >
+              {phase === 'saving' ? 'adding' : 'add wallet'}
+            </Button>
+            <Button
+              variant='quiet'
+              className='w-full'
+              disabled={phase === 'saving'}
+              onClick={() => {
+                setAccount(null);
+                setGuidance(null);
+                setPhase('idle');
+              }}
+            >
+              connect a different account
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className='flex flex-col gap-3'>
+          <label className='flex items-center gap-3 text-label text-fg-muted'>
+            account
+            <Input
+              inputMode='numeric'
+              className='w-20 font-mono'
+              value={indexText}
+              disabled={phase === 'working'}
+              onChange={e => setIndexText(e.target.value)}
+              aria-label='ledger account index'
+            />
+            <span className='text-fg-dim'>0 - {MAX_LEDGER_ONBOARDING_ACCOUNT_INDEX}</span>
+          </label>
+          {guidance && (
+            <StatusSlot tone='warn' icon='i-ph-usb'>
+              {guidance.title} · {guidance.action}
+            </StatusSlot>
+          )}
+          <Button
+            variant='primary'
+            className='w-full'
+            disabled={phase === 'working' || accountIndex == null}
+            onClick={handleConnect}
+          >
+            {phase === 'working' ? STEP_TEXT[step] : guidance ? 'try again' : 'connect ledger'}
+          </Button>
+          {phase === 'working' ? (
+            <Button variant='quiet' className='w-full' onClick={() => abortRef.current?.abort()}>
+              not now
+            </Button>
+          ) : (
+            <Button variant='quiet' className='w-full' onClick={onTransparent}>
+              use the bitcoin app instead · transparent only
+            </Button>
           )}
         </div>
-      </div>
-    </FadeTransition>
+      )}
+    </div>
+  );
+};
+
+/** shielded with the zcash app in beta, the bitcoin app one tap away; transparent otherwise */
+export const ConnectLedger = () => {
+  const [transparent, setTransparent] = useState(!HARDWARE_WALLET_ENABLED);
+  return transparent ? (
+    <ConnectLedgerTransparent />
+  ) : (
+    <ConnectLedgerShielded onTransparent={() => setTransparent(true)} />
   );
 };

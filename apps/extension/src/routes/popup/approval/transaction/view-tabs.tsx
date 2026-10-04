@@ -25,13 +25,13 @@ export const ViewTabs = ({
           'grid-cols-3': showReceiverTransactionView,
         })}
       >
-        <TabsTrigger value={TransactionViewTab.SENDER}>Your View</TabsTrigger>
+        <TabsTrigger value={TransactionViewTab.SENDER}>your view</TabsTrigger>
 
         {showReceiverTransactionView && (
-          <TabsTrigger value={TransactionViewTab.RECEIVER}>Receiver&apos;s View</TabsTrigger>
+          <TabsTrigger value={TransactionViewTab.RECEIVER}>their view</TabsTrigger>
         )}
 
-        <TabsTrigger value={TransactionViewTab.PUBLIC}>Public View</TabsTrigger>
+        <TabsTrigger value={TransactionViewTab.PUBLIC}>public view</TabsTrigger>
       </TabsList>
     </Tabs>
   );
