@@ -20,7 +20,7 @@
     },
     "build": {
       "dependsOn": ["^build"],
-      "env": ["ZAFU", "NEAR_1CLICK_JWT", "ZAFU_SHARDTREE"],
+      "env": ["ZAFU", "NEAR_1CLICK_JWT"],
       "outputs": ["dist/**"]
     },
     "clean": {

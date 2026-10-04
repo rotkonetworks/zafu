@@ -31,6 +31,7 @@ export class NoteTree {
     free(): void;
     [Symbol.dispose](): void;
     append_blocks(start_position: number, blocks: Uint8Array, marked: Uint32Array, checkpoint_from: number): void;
+    checkpoint_at_or_below(height: number): number | undefined;
     insert_frontier(frontier_hex: string, height: number): void;
     /**
      * returns how many roots were taken (resume from start_index + n)
@@ -48,6 +49,11 @@ export class NoteTree {
      */
     next_position(): number | undefined;
     oldest_checkpoint(): number | undefined;
+    /**
+     * witnesses for `positions` by replaying `blocks` from `frontier_hex` up to
+     * the checkpoint at `height`; returns how many were inserted
+     */
+    recover(frontier_hex: string, blocks: Uint8Array, positions: Uint32Array, height: number): number;
     /**
      * hex root at the checkpoint, or undefined if it is not retained
      */
@@ -1180,6 +1186,7 @@ export interface InitOutput {
     readonly ledger_ufvk_remaining_bytes: (a: any) => [number, number, number];
     readonly ledger_validate_pczt: (a: number, b: number) => [number, number];
     readonly notetree_append_blocks: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
+    readonly notetree_checkpoint_at_or_below: (a: number, b: number) => number;
     readonly notetree_insert_frontier: (a: number, b: number, c: number, d: number) => [number, number];
     readonly notetree_insert_subtree_roots: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly notetree_insert_witness: (a: number, b: number, c: number, d: number) => [number, number];
@@ -1191,6 +1198,7 @@ export interface InitOutput {
     readonly notetree_new: (a: number) => number;
     readonly notetree_next_position: (a: number) => [number, number];
     readonly notetree_oldest_checkpoint: (a: number) => number;
+    readonly notetree_recover: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
     readonly notetree_root_at: (a: number, b: number) => [number, number, number, number];
     readonly notetree_take_changes: (a: number) => [number, number, number];
     readonly notetree_truncate: (a: number, b: number) => [number, number, number];

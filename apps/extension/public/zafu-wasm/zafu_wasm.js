@@ -118,6 +118,14 @@ export class NoteTree {
         }
     }
     /**
+     * @param {number} height
+     * @returns {number | undefined}
+     */
+    checkpoint_at_or_below(height) {
+        const ret = wasm.notetree_checkpoint_at_or_below(this.__wbg_ptr, height);
+        return ret === Number.MAX_SAFE_INTEGER ? undefined : ret;
+    }
+    /**
      * @param {string} frontier_hex
      * @param {number} height
      */
@@ -228,6 +236,28 @@ export class NoteTree {
     oldest_checkpoint() {
         const ret = wasm.notetree_oldest_checkpoint(this.__wbg_ptr);
         return ret === Number.MAX_SAFE_INTEGER ? undefined : ret;
+    }
+    /**
+     * witnesses for `positions` by replaying `blocks` from `frontier_hex` up to
+     * the checkpoint at `height`; returns how many were inserted
+     * @param {string} frontier_hex
+     * @param {Uint8Array} blocks
+     * @param {Uint32Array} positions
+     * @param {number} height
+     * @returns {number}
+     */
+    recover(frontier_hex, blocks, positions, height) {
+        const ptr0 = passStringToWasm0(frontier_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArray8ToWasm0(blocks, wasm.__wbindgen_malloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passArray32ToWasm0(positions, wasm.__wbindgen_malloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.notetree_recover(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2, height);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return ret[0] >>> 0;
     }
     /**
      * hex root at the checkpoint, or undefined if it is not retained
@@ -4096,12 +4126,12 @@ function __wbg_get_imports(memory) {
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3779, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3780, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue__core_8266185441cb29e1___result__Result_____wasm_bindgen_aeea2c632802c019___JsError___true_);
             return ret;
         },
         __wbindgen_cast_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3781, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3782, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___futures__task__wait_async_polyfill__MessageEvent______true_);
             return ret;
         },

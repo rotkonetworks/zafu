@@ -94,6 +94,27 @@ Reproduce by checking out the zcli rev below and running the commands.
 Verify: rebuild from the rev, sha256sum the outputs,
 diff against the values above. A mismatch means the vendored blob is stale.
 
+## 2026-10-05 rebuild (2) - NoteTree.recover, checkpoint_at_or_below
+
+- source repo: zcli, branch `integ/shardtree-blob`, rev `293d5e9` = the blob
+  below plus `feat/wasm-shardtree` 94b33e1 cherry-picked (no conflicts).
+- new (public data only, nothing takes a key): `NoteTree.recover(frontier_hex,
+blocks, positions, height)` (replays from a frontier up to a retained
+  checkpoint and inserts witnesses for notes the tree lost; inserts nothing
+  unless the replay ends at that checkpoint with its root) and
+  `NoteTree.checkpoint_at_or_below(height)`.
+- `.d.ts` diff against the previous blob: those two methods; nothing removed.
+- `cargo test -p zafu-wasm --release --test note_tree`: 7 passed.
+- toolchain and recipe as below (nightly, wasm-bindgen 0.2.126, binaryen 130).
+- parallel variant only, copied to both `packages/zcash-wasm/` and
+  `apps/extension/public/zafu-wasm/`; rayon snippet hash unchanged
+  (`wasm-bindgen-rayon-38edf6e439f6d70d`), patched `workerHelpers.js` kept.
+- size: pre `wasm-opt` 22,414,445 bytes; post `-Oz` 10,255,183 bytes.
+- sha256(parallel zafu_wasm_bg.wasm) =
+  b1ad96f655c44b9e04b6eecb429bcb2f13efceae4760acdcb6ebfc0aff89d6ff
+- shared imported memory confirmed post-bindgen:
+  `(memory $mimport$0 56 32768 shared)`.
+
 ## 2026-10-05 rebuild - NoteTree (note commitment trees as shards)
 
 - source repo: zcli, branch `integ/shardtree-blob` (from `feat/ledger-on-thor`
