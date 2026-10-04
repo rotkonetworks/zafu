@@ -32,10 +32,12 @@ import {
   restartOf,
   type Ceremony,
   type FrostCalls,
+  type FrostIo,
   type FrostStatus,
   type Seat,
 } from './frost-room';
 import type { PeopleRoom, Thread } from './vault';
+import { advanceSign, decline, proposalsOf, seal, type SignCalls } from './room-sign';
 
 type Wasm = typeof import('@repo/zcash-wasm');
 let W: Wasm;
@@ -125,6 +127,11 @@ const wallet = (n: number, transport: () => RelayTransport, clock: { t: number }
     room,
     post: async (G: string, bodies: string[]) =>
       frostOps['frost-post']({ roomId: groupId(G), bodies }, service),
+    io: (G: string): FrostIo => ({
+      post: bodies => frostOps['frost-post']({ roomId: groupId(G), bodies }, service),
+      keep: (id, patch) => frostOps['frost-keep']({ roomId: groupId(G), id, patch }, service),
+      save: async seat => void seats.push(seat),
+    }),
     /** this member's turn: read the room, do what can be done now */
     turn: async (G: string): Promise<FrostStatus> => {
       await service.check();
@@ -344,5 +351,91 @@ describe('a shared wallet made in its group room', () => {
     // the court is a seat that waits for its service: nobody finishes without it
     await start(a!, G, [a!.me(G).pubkey, b!.me(G).pubkey, COURT], 2);
     expect(await run(ws, G, 3)).toEqual(['waiting', 'waiting']);
+  });
+
+  test('a payment from it: proposed, sealed by two, declined by one, signed in the room', async () => {
+    const { ws, G } = await group(3);
+    const [a, b, c] = ws;
+    await start(
+      a!,
+      G,
+      ws.map(w => w.me(G).pubkey),
+      2,
+    );
+    expect(await run(ws, G)).toEqual(['done', 'done', 'done']);
+    const seat = a!.seats[0]!;
+    const wallet = { ceremony: seat.ceremony, members: seat.members, threshold: 2 };
+    const sent: string[][] = [];
+    const callsOf = (s: Seat): SignCalls => ({
+      round1: async () => JSON.parse(W.frost_sign_round1(s.ephemeralSeed, s.keyPackage)),
+      sign: async (n, h, alpha, cm) =>
+        W.frost_spend_sign_round2_signed(
+          s.ephemeralSeed,
+          s.keyPackage,
+          n,
+          h,
+          alpha,
+          JSON.stringify(cm),
+        ),
+      aggregate: async (h, alpha, cm, sh) =>
+        W.frost_spend_aggregate(
+          s.publicKeyPackage,
+          h,
+          alpha,
+          JSON.stringify(cm),
+          JSON.stringify(sh),
+        ),
+      complete: async (_p, sigs) => (sent.push(sigs), 'ab'.repeat(32)),
+    });
+    // two spends: two alphas, one share each per signer
+    const alphas = ['01'.padEnd(64, '0'), '02'.padEnd(64, '0')];
+    const prop = {
+      t: 'prop' as const,
+      id: 'f'.repeat(32),
+      w: seat.ceremony,
+      to: 'u1someone',
+      amt: '125000000',
+      fee: '10000',
+      sighash: bytesToHex(crypto.getRandomValues(new Uint8Array(32))),
+      alphas,
+      si: [0, 1],
+      pczt: 'aa',
+    };
+    await a!.post(G, await packFrost(prop));
+    await seal(prop, callsOf(seat), a!.io(G));
+    const view = async (w: ReturnType<typeof wallet>) => {
+      await w.service.check();
+      const r = w.room(G);
+      return { p: proposalsOf(r.frost?.msgs, wallet)[0]!, mine: r.frost?.mine?.[prop.id] };
+    };
+    {
+      const { p } = await view(b!);
+      expect(p).toMatchObject({ by: a!.me(G).pubkey, amt: '125000000' });
+      expect([...p.commits.keys()]).toEqual([a!.me(G).pubkey]);
+      await seal(p, callsOf(b!.seats[0]!), b!.io(G));
+      await decline((await view(c!)).p, c!.io(G));
+    }
+    let status = '';
+    for (let i = 0; i < 6 && status !== 'sent'; i++) {
+      for (const w of [a!, b!, c!]) {
+        const { p, mine } = await view(w);
+        const s = await advanceSign(p, wallet, mine, w.me(G).pubkey, callsOf(w.seats[0]!), w.io(G));
+        if (w === a) {
+          status = s;
+        }
+      }
+    }
+    expect(status).toBe('sent');
+    // one aggregated signature per spend, each verified by frost against the group key
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.map(x => x.length)).toEqual([128, 128]);
+    const { p, mine: bMine } = await view(b!);
+    expect(p.set).toEqual([a!.me(G).pubkey, b!.me(G).pubkey]);
+    expect(p.no).toEqual(new Set([c!.me(G).pubkey]));
+    expect(p.sent).toBe('ab'.repeat(32));
+    // a nonce signs once: gone from the device the moment its share left
+    expect(bMine).toMatchObject({ released: true });
+    expect(bMine).not.toHaveProperty('n');
+    expect((await view(c!)).mine).toMatchObject({ no: true });
   });
 });

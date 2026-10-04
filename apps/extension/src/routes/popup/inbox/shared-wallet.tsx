@@ -75,10 +75,12 @@ interface CardProps {
   nameOf: (key: string) => string;
   /** reach a missing member: "message dan" */
   onMessage?: (key: string) => void;
+  /** propose a payment from the finished wallet */
+  onSend?: () => void;
 }
 
 /** the card a ceremony draws in its thread, from "making keys" to "ready" */
-export const KeyCard = ({ view, roomId, nameOf, onMessage }: CardProps) => {
+export const KeyCard = ({ view, roomId, nameOf, onMessage, onSend }: CardProps) => {
   const now = useNow(15_000);
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
@@ -143,10 +145,15 @@ export const KeyCard = ({ view, roomId, nameOf, onMessage }: CardProps) => {
         </div>
         <div className='flex gap-2 border-t border-border-soft px-3.5 py-2.5'>
           <CopyButton text={seat.address} label='copy address' />
+          {onSend && (
+            <Button variant='secondary' size='sm' className='ml-auto' onClick={onSend}>
+              send from it
+            </Button>
+          )}
           <Button
             variant='secondary'
             size='sm'
-            className='ml-auto'
+            className={onSend ? '' : 'ml-auto'}
             onClick={() =>
               navigate(PopupPath.SEND, {
                 state: { prefillRecipient: seat.address, network: 'zcash' },

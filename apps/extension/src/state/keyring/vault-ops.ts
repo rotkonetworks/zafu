@@ -210,6 +210,8 @@ export interface SeatRoom {
   walletId: string;
   roomId: string;
   ceremony: string;
+  /** the members' room keys: who may propose and seal payments in that room */
+  members: string[];
 }
 
 export const buildFrostVault = (

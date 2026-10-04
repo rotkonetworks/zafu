@@ -62,7 +62,31 @@ export type FrostBody =
   | { t: 'r1'; id: string; b: string; x: string }
   | { t: 'sk'; id: string; s: Record<string, string> }
   | { t: 'r2'; id: string; p: string[] }
-  | { t: 'fvk'; id: string; u: string; a: string };
+  | { t: 'fvk'; id: string; u: string; a: string }
+  // -- spending from it (people/room-sign) --
+  /** a payment from the shared wallet `w`, built: what every member reviews */
+  | {
+      t: 'prop';
+      id: string;
+      w: string;
+      to: string;
+      amt: string;
+      fee: string;
+      sighash: string;
+      alphas: string[];
+      si: number[];
+      pczt: string;
+    }
+  /** "review and seal": this member's round-one commitments, one per spend */
+  | { t: 'c'; id: string; c: string[] }
+  /** "decline": a message, never a veto */
+  | { t: 'no'; id: string }
+  /** the proposer: whose commitments sign it */
+  | { t: 'set'; id: string; m: string[] }
+  /** a signer's round-two shares, one per spend */
+  | { t: 's'; id: string; s: string[] }
+  /** the proposer: it left, as this transaction */
+  | { t: 'sent'; id: string; tx: string };
 
 export interface FrostMsg {
   from: string;
@@ -87,6 +111,17 @@ export interface FrostMine {
   /** a deal someone else proposed: you agreed to make its keys */
   ok?: boolean;
   saved?: boolean;
+  /** a payment: this member's round-one nonces (secret) and commitments, per spend */
+  n?: string[];
+  cm?: string[];
+  /** the proposer's build handle, to complete what it built */
+  cold?: string;
+  /** a payment: this member's round-two shares, and the txid it left as */
+  sh?: string[];
+  tx?: string;
+  /** a payment: shares released (the nonces are gone), or declined */
+  released?: boolean;
+  no?: boolean;
 }
 
 interface Part {
@@ -110,6 +145,8 @@ const KEY = /^[0-9a-f]{64}$/;
 const CHUNK = 2600;
 /** ceremonies a room keeps the messages of: the current one and those it replaced */
 const KEEP_CEREMONIES = 4;
+/** payments a room keeps the messages of */
+const KEEP_PROPOSALS = 12;
 
 const b64 = (b: Uint8Array) => btoa(String.fromCharCode(...b));
 const unb64 = (s: string) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
@@ -163,6 +200,33 @@ const readBody = (v: unknown): FrostBody | undefined => {
       return typeof x['u'] === 'string' && typeof x['a'] === 'string'
         ? (x as FrostBody)
         : undefined;
+    case 'prop':
+      return str(x['w'], /^[0-9a-f]{32}$/) &&
+        typeof x['to'] === 'string' &&
+        str(x['amt'], /^\d{1,16}$/) &&
+        str(x['fee'], /^\d{1,16}$/) &&
+        str(x['sighash']) &&
+        str(x['pczt']) &&
+        Array.isArray(x['alphas']) &&
+        x['alphas'].every(a => str(a)) &&
+        Array.isArray(x['si']) &&
+        x['si'].length === x['alphas'].length &&
+        x['si'].every(i => Number.isInteger(i))
+        ? (x as FrostBody)
+        : undefined;
+    case 'c':
+    case 's': {
+      const v = x[x['t']];
+      return Array.isArray(v) && v.length <= 64 && v.every(c => str(c))
+        ? (x as FrostBody)
+        : undefined;
+    }
+    case 'set':
+      return Array.isArray(x['m']) && x['m'].every(k => str(k, KEY)) ? (x as FrostBody) : undefined;
+    case 'no':
+      return x as FrostBody;
+    case 'sent':
+      return str(x['tx'], /^[0-9a-f]{64}$/) ? (x as FrostBody) : undefined;
     default:
       return undefined;
   }
@@ -241,12 +305,12 @@ const pruneMsgs = (all: FrostMsg[]): FrostMsg[] => {
     one.set(`${m.from}:${m.body.t}:${m.body.id}`, m);
   }
   const msgs = [...one.values()];
-  const keep = new Set(
+  const last = (t: FrostBody['t'], n: number) =>
     msgs
-      .filter(m => m.body.t === 'start')
-      .slice(-KEEP_CEREMONIES)
-      .map(m => m.body.id),
-  );
+      .filter(m => m.body.t === t)
+      .slice(-n)
+      .map(m => m.body.id);
+  const keep = new Set([...last('start', KEEP_CEREMONIES), ...last('prop', KEEP_PROPOSALS)]);
   return msgs.filter(m => keep.has(m.body.id));
 };
 
@@ -404,6 +468,10 @@ export const keepMine = (cur: FrostMine | undefined, patch: FrostMine): FrostMin
       next[k] = v;
     }
   }
+  // a nonce signs once: gone the moment its share leaves
+  if (next.released || next.no) {
+    delete next.n;
+  }
   if (next.saved) {
     delete next.s1;
     delete next.s2;
@@ -432,6 +500,8 @@ export interface FrostCalls {
 /** what a finished ceremony leaves on this device */
 export interface Seat {
   ceremony: string;
+  /** every member's room key: who may propose and seal payments from it */
+  members: string[];
   label: string;
   threshold: number;
   maxSigners: number;
@@ -553,6 +623,7 @@ export const advance = async (
   }
   await io.save({
     ceremony: c.id,
+    members: c.members,
     label: c.label,
     threshold: c.k,
     maxSigners: c.members.length,

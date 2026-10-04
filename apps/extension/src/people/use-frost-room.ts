@@ -7,17 +7,22 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { hexToBytes } from '@noble/hashes/utils';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { useStore } from '../state';
 import { deriveRelationshipKeys, deriveRoomKeys, type XidKeys } from '../state/identity';
 import {
+  buildSendTxPcztInWorker,
+  completeOrchardPcztInWorker,
   frostDeriveAddressFromSkInWorker,
   frostDeriveUfvkInWorker,
   frostDkgPart1InWorker,
   frostDkgPart2InWorker,
   frostDkgPart3InWorker,
   frostSampleFvkSkInWorker,
+  frostSignRound1InWorker,
+  frostSpendAggregateInWorker,
+  frostSpendSignInWorker,
 } from '../state/keyring/network-worker';
 import type { ZcashWalletJson } from '../state/wallets';
 import { peopleAsk, peopleCall } from './client';
@@ -30,9 +35,19 @@ import {
   type Ceremony,
   type Deal,
   type FrostCalls,
+  type FrostIo,
   type FrostMine,
   type Seat,
 } from './frost-room';
+import {
+  advanceSign,
+  decline,
+  proposalsOf,
+  seal,
+  type Proposal,
+  type RoomWallet,
+  type SignCalls,
+} from './room-sign';
 import { readRooms, type PeopleRoom } from './vault';
 
 const frost: FrostCalls = {
@@ -84,7 +99,12 @@ const save = (room: PeopleRoom) => async (seat: Seat) => {
     maxSigners: seat.maxSigners,
     relayUrl: room.relay,
     custody: 'self',
-    room: { walletId: room.walletId, roomId: room.id, ceremony: seat.ceremony },
+    room: {
+      walletId: room.walletId,
+      roomId: room.id,
+      ceremony: seat.ceremony,
+      members: seat.members,
+    },
   });
 };
 
@@ -106,19 +126,61 @@ const paced = async (key: string, post: () => Promise<unknown>) => {
 /** one pass at a time per room; a change while it runs runs it once more after */
 const runs = new Map<string, { again: boolean }>();
 
+const ioFor = (room: PeopleRoom): FrostIo => ({
+  post: (bodies, key) =>
+    paced(`${room.id}/${key}`, () => peopleCall('frost-post', { roomId: room.id, bodies })),
+  keep: (id, patch) => peopleCall<FrostMine>('frost-keep', { roomId: room.id, id, patch }),
+  save: save(room),
+});
+
+/** the wallet a seat spends from, as its room's payments name it */
+export const walletOf = (seat: ZcashWalletJson | undefined): RoomWallet | undefined => {
+  const ms = seat?.multisig;
+  return ms?.room
+    ? { ceremony: ms.room.ceremony, members: ms.room.members, threshold: ms.threshold }
+    : undefined;
+};
+
+const zcashUrl = () =>
+  useStore.getState().networks.networks.zcash.endpoint || 'https://zcash.rotko.net';
+
+/** the signing rounds, bound to this device's share of `seat` */
+const signCalls = async (seat: ZcashWalletJson): Promise<SignCalls> => {
+  const k = await useStore.getState().keyRing.getMultisigSecrets(seat.vaultId);
+  if (!k) {
+    throw new Error('this shared wallet is locked');
+  }
+  return {
+    round1: () => frostSignRound1InWorker(k.ephemeralSeed, k.keyPackage),
+    sign: (n, h, a, c) => frostSpendSignInWorker(k.ephemeralSeed, k.keyPackage, n, h, a, c),
+    aggregate: (h, a, c, sh) =>
+      frostSpendAggregateInWorker(seat.multisig!.publicKeyPackage, h, a, c, sh),
+    complete: async (p, sigs, cold) =>
+      (await completeOrchardPcztInWorker(seat.vaultId, zcashUrl(), p.pczt, sigs, p.si, cold)).txid,
+  };
+};
+
 const step = async (walletId: string, roomId: string) => {
   const room = (await readRooms())?.find(r => r.id === roomId && r.walletId === walletId);
   if (!room?.frost) {
     return;
   }
   const me = await roomKeysOf(room);
+  const io = ioFor(room);
   const c = ceremonyOf(room.frost.msgs, allowedIn(room, me.pubkey));
-  await advance(c, c && room.frost.mine?.[c.id], me, frost, {
-    post: (bodies, key) =>
-      paced(`${roomId}/${key}`, () => peopleCall('frost-post', { roomId, bodies })),
-    keep: (id, patch) => peopleCall<FrostMine>('frost-keep', { roomId, id, patch }),
-    save: save(room),
-  });
+  await advance(c, c && room.frost.mine?.[c.id], me, frost, io);
+  // payments this device sealed: name the signers, release shares, finish
+  const seat = seatOf(useStore.getState().wallets.zcashWallets, room);
+  const w = walletOf(seat);
+  const open = w
+    ? proposalsOf(room.frost.msgs, w).filter(p => !p.sent && room.frost!.mine?.[p.id]?.cm)
+    : [];
+  if (seat && w && open.length) {
+    const calls = await signCalls(seat);
+    for (const p of open) {
+      await advanceSign(p, w, room.frost.mine?.[p.id], me.pubkey, calls, io);
+    }
+  }
 };
 
 const kick = (walletId: string, roomId: string) => {
@@ -164,6 +226,10 @@ export interface FrostView {
   /** what this device did in it */
   mine?: FrostMine;
   seat?: ZcashWalletJson;
+  /** payments proposed from the seat's wallet, oldest first */
+  payments: Proposal[];
+  /** this device's part in each, by proposal id */
+  kept: Record<string, FrostMine>;
 }
 
 /** a room's ceremony as this wallet sees it, and this device doing its part while it is shown */
@@ -176,8 +242,14 @@ export const useFrostRoom = (room: PeopleRoom | undefined): FrostView => {
     () => (room && me ? ceremonyOf(msgs, allowedIn(room, me)) : undefined),
     [room, me, msgs],
   );
+  const w = walletOf(seat);
+  const payments = useMemo(() => (w ? proposalsOf(msgs, w) : []), [msgs, w?.ceremony]);
+  const kept = room?.frost?.mine ?? {};
   // the worker is an external system: each new message may let this device do its part
-  const live = !!room && !!me && !!ceremony?.members.includes(me) && !seat;
+  const live =
+    !!room &&
+    !!me &&
+    ((!!ceremony?.members.includes(me) && !seat) || payments.some(p => !p.sent && kept[p.id]?.cm));
   useEffect(() => {
     if (live) {
       kick(room.walletId, room.id);
@@ -191,8 +263,64 @@ export const useFrostRoom = (room: PeopleRoom | undefined): FrostView => {
     const t = setInterval(() => kick(room.walletId, room.id), 10_000);
     return () => clearInterval(t);
   }, [live, room?.walletId, room?.id]);
-  return { me, ceremony, mine: ceremony && room?.frost?.mine?.[ceremony.id], seat };
+  return { me, ceremony, mine: ceremony && kept[ceremony.id], seat, payments, kept };
 };
+
+/**
+ * Propose a payment from a room's shared wallet: built here from the synced
+ * viewing key, said in the room for everyone to review, and sealed by you.
+ */
+export const proposePayment = async (
+  room: PeopleRoom,
+  seat: ZcashWalletJson,
+  to: string,
+  amountZat: string,
+) => {
+  const w = walletOf(seat)!;
+  const u = await buildSendTxPcztInWorker(
+    'zcash',
+    seat.vaultId,
+    zcashUrl(),
+    to,
+    amountZat,
+    '',
+    0,
+    seat.mainnet,
+    seat.orchardFvk,
+    true,
+  );
+  if (!u.alphas.length) {
+    throw new Error('the shared wallet has nothing to spend yet');
+  }
+  const id = bytesToHex(crypto.getRandomValues(new Uint8Array(16)));
+  const io = ioFor(room);
+  const prop = {
+    t: 'prop' as const,
+    id,
+    w: w.ceremony,
+    to,
+    amt: amountZat,
+    fee: String(u.fee),
+    sighash: u.sighash,
+    alphas: u.alphas,
+    si: u.spendIndices,
+    pczt: u.pcztHex,
+  };
+  await io.post(await packFrost(prop), `prop:${id}`);
+  if (u.coldSendId) {
+    await io.keep(id, { cold: u.coldSendId });
+  }
+  await seal(prop, await signCalls(seat), io);
+  kick(room.walletId, room.id);
+};
+
+/** "review and seal", after the review passed and the password was given */
+export const sealPayment = async (room: PeopleRoom, seat: ZcashWalletJson, p: Proposal) => {
+  await seal(p, await signCalls(seat), ioFor(room));
+  kick(room.walletId, room.id);
+};
+
+export const declinePayment = (room: PeopleRoom, p: Proposal) => decline(p, ioFor(room));
 
 /** agree to a deal someone proposed: this device then makes its share */
 export const agree = (roomId: string, id: string) =>

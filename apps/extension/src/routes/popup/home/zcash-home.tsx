@@ -46,7 +46,7 @@ import { SyncStrip } from '../../../components/wallet/sync-strip';
 import { EmptyBox, HomeScreen } from './home-screen';
 import { BalanceGroup, BalanceRow, Tile } from '../../../components/wallet/balance-rows';
 import type { BalanceView } from '../../../components/wallet/balance-hero';
-import { MultisigOverview } from './multisig-overview';
+import { SharedWallets } from './shared-wallets';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { BuyInFlight } from '../../../components/buy-in-flight';
 import { SwapInFlight } from '../../../components/swap-in-flight';
@@ -375,7 +375,7 @@ export const ZcashContent = ({
         </BalanceGroup>
       )}
 
-      <MultisigOverview />
+      <SharedWallets />
 
       <HistoryContent network='zcash' penumbraAccount={0} limit={3} />
 

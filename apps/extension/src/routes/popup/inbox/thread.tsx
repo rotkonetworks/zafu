@@ -58,6 +58,8 @@ import { useFrostRoom } from '../../../people/use-frost-room';
 import { DOOR_MS } from '../../../people/door';
 import { KeyCard } from './shared-wallet';
 import { DealSheet } from './deal-sheet';
+import { PaymentCard, ProposeSheet } from './payments';
+import { usePasswordGate } from '../../../hooks/password-gate';
 import { RequestSheet } from '../send/send-fields';
 import { cardOf, counterparty, shortAddress, threadIdOf, whenOf } from './threads';
 
@@ -499,6 +501,8 @@ export function ThreadPage() {
   const relay = useThread(room)?.items;
   // a deal made in the pair room, and an invite into someone's deal group
   const shared = useFrostRoom(room);
+  const [sending, setSending] = useState(false);
+  const { requestAuth, PasswordModal } = usePasswordGate();
   const dealAsk =
     room?.pair?.deal && room.pair.deal.at * 1000 > Date.now() - DOOR_MS
       ? room.pair.deal
@@ -535,6 +539,7 @@ export function ThreadPage() {
         ...messages.map(m => ({ key: m.id, t: m.timestamp, m })),
         ...(relay ?? []).map(it => ({ key: it.hash || it.local!, t: it.ts * 1000, it })),
         ...(shared.ceremony ? [{ key: shared.ceremony.id, t: shared.ceremony.at * 1000 }] : []),
+        ...shared.payments.map(p => ({ key: p.id, t: p.at * 1000, p })),
       ].sort((a, b) => a.t - b.t),
     [messages, relay, shared.ceremony],
   );
@@ -664,8 +669,29 @@ export function ThreadPage() {
             )}
             {'m' in r ? (
               <Item m={r.m} from={name} />
+            ) : 'p' in r ? (
+              room &&
+              shared.seat &&
+              shared.me && (
+                <PaymentCard
+                  p={r.p}
+                  room={room}
+                  seat={shared.seat}
+                  me={shared.me}
+                  kept={shared.kept[r.p.id]}
+                  nameOf={() => name}
+                  requestAuth={requestAuth}
+                />
+              )
             ) : !('it' in r) ? (
-              room && <KeyCard view={shared} roomId={room.id} nameOf={() => name} />
+              room && (
+                <KeyCard
+                  view={shared}
+                  roomId={room.id}
+                  nameOf={() => name}
+                  onSend={() => setSending(true)}
+                />
+              )
             ) : (
               <RelayLine item={r.it} onRetry={() => say(r.it.body, r.it.local)} />
             )}
@@ -773,6 +799,17 @@ export function ThreadPage() {
             : undefined
         }
       />
+      {PasswordModal}
+      {room && shared.seat && (
+        <ProposeSheet
+          open={sending}
+          onClose={() => setSending(false)}
+          room={room}
+          seat={shared.seat}
+          to={address}
+          requestAuth={requestAuth}
+        />
+      )}
       {room?.pair?.peer && shared.me && contact && (
         <DealSheet
           open={dealing}
