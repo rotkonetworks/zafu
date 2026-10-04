@@ -14,7 +14,9 @@ import { useBackNav } from '../../../utils/navigate';
 import { peopleCall, peopleSay, useMyRooms, useThread, useWatchRoom } from '../../../people/client';
 import { RelaySlot } from '../../../people/relay-slot';
 import type { ThreadItem } from '../../../people/vault';
+import { useFrostRoom } from '../../../people/use-frost-room';
 import { PopupPath, groupInvitePath } from '../paths';
+import { KeyCard, MakeSharedSheet } from './shared-wallet';
 import { whenOf } from './threads';
 
 const dayOf = (s: number) => {
@@ -70,13 +72,27 @@ export function GroupPage() {
   const room = useMyRooms().find(r => r.id === roomId);
   const thread = useThread(room);
   const [draft, setDraft] = useState('');
+  const [making, setMaking] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   useWatchRoom(room ? roomId : undefined);
+  const shared = useFrostRoom(room);
 
   const items = thread?.items ?? [];
   const names = room?.group?.names ?? {};
   const nameOf = (i: ThreadItem) => (i.mine ? 'you' : (names[i.author] ?? i.name));
   const last = items[items.length - 1];
+  // the key card sits in the thread where its ceremony started
+  const c = shared.ceremony;
+  const cardAt = c ? items.findIndex(i => i.ts > c.at) : -1;
+  const card = c && (
+    <KeyCard
+      key={c.id}
+      view={shared}
+      roomId={roomId}
+      nameOf={k => names[k] ?? k.slice(0, 8)}
+      onMessage={k => setDraft(`@${names[k] ?? k.slice(0, 8)} `)}
+    />
+  );
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -107,13 +123,14 @@ export function GroupPage() {
       />
       <RelaySlot />
       <div ref={scrollRef} className='flex grow flex-col gap-3 overflow-y-auto px-3.5 pb-2 pt-3.5'>
-        {items.length === 0 && (
+        {items.length === 0 && !c && (
           <span className='self-center text-[11px] text-fg-dim'>no messages yet</span>
         )}
         {items.map((it, i) => {
           const prev = items[i - 1];
           return (
             <div key={it.hash || it.local} className='contents'>
+              {i === cardAt && card}
               {dayOf(it.ts) !== (prev ? dayOf(prev.ts) : '') && (
                 <span className='self-center text-[11px] text-fg-dim'>{dayOf(it.ts)}</span>
               )}
@@ -126,6 +143,7 @@ export function GroupPage() {
             </div>
           );
         })}
+        {cardAt < 0 && card}
       </div>
       <form
         className='flex shrink-0 gap-2 border-t border-border-soft px-3 pb-3 pt-2.5'
@@ -138,6 +156,16 @@ export function GroupPage() {
           }
         }}
       >
+        {!shared.ceremony && !shared.seat && (room.group?.members.length ?? 0) >= 2 && (
+          <button
+            type='button'
+            aria-label='make it a shared wallet'
+            onClick={() => setMaking(true)}
+            className='grid size-11 shrink-0 place-items-center border border-border-soft bg-elev-2 text-zigner-gold hover:bg-border-soft'
+          >
+            <span className='i-lucide-plus size-[18px]' aria-hidden='true' />
+          </button>
+        )}
         <Input
           aria-label='message'
           placeholder='message the group'
@@ -147,6 +175,18 @@ export function GroupPage() {
           className='h-11 min-w-0 grow'
         />
       </form>
+      {shared.me && (
+        <MakeSharedSheet
+          open={making}
+          onClose={() => setMaking(false)}
+          roomId={roomId}
+          label={room.name}
+          members={(room.group?.members ?? []).map(m => ({
+            key: m.key,
+            name: m.key === shared.me ? 'you' : m.name,
+          }))}
+        />
+      )}
     </div>
   );
 }

@@ -100,6 +100,15 @@ export interface PeopleApi {
 
 export { threadKey } from './vault';
 
+/** a pass that threw: said in the worker's console, shown as "the relay did not answer" */
+const unreadable = (e: unknown): 'unreachable' => {
+  console.warn(
+    '[people] a room could not be read:',
+    e instanceof Error ? (e.stack ?? e.message) : String(e),
+  );
+  return 'unreachable';
+};
+
 /** catch-up, every 5 minutes after the person opened people (T3) */
 export const T3_MS = 5 * 60_000;
 /** one pass reads at most this many windows across all rooms */
@@ -328,7 +337,7 @@ export const createPeopleService = (
         break; // the rest catch up when they are opened
       }
       budget -= need;
-      slots.push(await sync(rec.id, need).catch(() => 'unreachable' as const));
+      slots.push(await sync(rec.id, need).catch(unreadable));
     }
     const slot = WORST.find(s => slots.includes(s)) ?? 'checked';
     await status(slot);
@@ -380,7 +389,7 @@ export const createPeopleService = (
       const tick = () =>
         void sync(roomId).then(
           slot => slot !== 'idle' && status(slot),
-          () => status('unreachable'),
+          (e: unknown) => status(unreadable(e)),
         );
       if (w) {
         w.n++;

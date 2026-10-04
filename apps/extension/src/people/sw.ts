@@ -26,6 +26,7 @@ import type { Contact } from '../state/contacts';
 import { createPairs } from './pairs';
 import { createInvites } from './invites';
 import { createGroups } from './groups';
+import { frostOps, withFrost } from './frost-room';
 import { compileEgress, describeEgress, type EgressInputs } from '../net/egress-policy';
 import { decideEgress } from '../net/egress-table';
 import { readEgressInputs } from '../net/egress-opt-in';
@@ -158,6 +159,8 @@ export const startPeopleRelay = (
     ...groups.handlers,
     ...invites.handlers,
     ...handlers,
+    group: withFrost(handlers.group ?? groups.handlers.group),
+    pair: withFrost(handlers.pair ?? invites.handlers.pair),
   });
   const all: Record<string, PeopleOp> = {
     open: async (_, s) => {
@@ -175,6 +178,7 @@ export const startPeopleRelay = (
     ...groups.ops,
     ...pairs.ops,
     ...invites.ops,
+    ...frostOps,
     ...ops,
   };
 

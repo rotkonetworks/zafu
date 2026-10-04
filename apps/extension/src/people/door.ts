@@ -156,7 +156,9 @@ export type GroupWire =
   | { kind: 'ask'; key: string; name: string; seal: string }
   | { kind: 'invite'; to: string; sealed: Uint8Array }
   | { kind: 'log'; entry: ChannelGenesis | ChannelRecord }
-  | { kind: 'names'; names: Record<string, string> };
+  | { kind: 'names'; names: Record<string, string> }
+  /** one piece of a FROST message (people/frost-room): `i` of `n`, all sharing `mid` */
+  | { kind: 'kc'; mid: string; i: number; n: number; data: Uint8Array };
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const G_RE = /^[0-9a-f]{32}$/;
@@ -171,7 +173,9 @@ export const encodeWire = (r: GroupWire): string => {
           ? [r.to, r.sealed]
           : r.kind === 'log'
             ? [JSON.stringify(r.entry)]
-            : [JSON.stringify(r.names)];
+            : r.kind === 'kc'
+              ? [r.mid, String(r.i), String(r.n), r.data]
+              : [JSON.stringify(r.names)];
   return `zg1:${r.kind}:${b64url(lpAll(fields))}`;
 };
 
@@ -204,6 +208,18 @@ export const decodeWire = (body: string): GroupWire | undefined => {
         return HEX64.test(t(0)) && f[1] ? { kind: 'invite', to: t(0), sealed: f[1] } : undefined;
       case 'log':
         return { kind: 'log', entry: JSON.parse(t(0)) as ChannelGenesis | ChannelRecord };
+      case 'kc': {
+        const [i, n] = [Number(t(1)), Number(t(2))];
+        return /^[0-9a-f]{16}$/.test(t(0)) &&
+          Number.isInteger(i) &&
+          Number.isInteger(n) &&
+          n <= 64 &&
+          i >= 0 &&
+          i < n &&
+          f[3]
+          ? { kind: 'kc', mid: t(0), i, n, data: f[3] }
+          : undefined;
+      }
       case 'names': {
         const names = JSON.parse(t(0)) as unknown;
         return names && typeof names === 'object'
