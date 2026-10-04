@@ -674,13 +674,14 @@ const cborWrapPczt = (pczt: Uint8Array): Uint8Array => {
  * NU5 branch ID in LE: B4 D0 D6 C2
  */
 /**
- * NU6.3 consensus branch id (from the live zebra: 0x37a5165b). The turnstile
- * migration builder binds this into the transaction; we fail closed unless the
- * endpoint's GetLightdInfo reports exactly this. `GetLightdInfo` returns it as
- * a lowercase hex string with no `0x` prefix.
+ * Consensus branch ids that have the ironwood pool: NU6.3 (0x37a5165b) and NU7
+ * (0x77190ad9, testnet from 4,465,026). The ironwood builders bind the
+ * endpoint's branch id into the transaction; we fail closed unless
+ * GetLightdInfo reports one of these. `GetLightdInfo` returns it as a
+ * lowercase hex string with no `0x` prefix.
  */
-const NU63_CONSENSUS_BRANCH_ID = 0x37a5165b;
-const NU63_CONSENSUS_BRANCH_ID_HEX = '37a5165b';
+const IRONWOOD_BRANCH_IDS_HEX = new Set(['37a5165b', '77190ad9']);
+const IRONWOOD_BRANCH_IDS_TEXT = 'NU6.3 0x37a5165b or NU7 0x77190ad9';
 /** Placeholder branch id from a pre-activation / not-yet-real fork. Never build against it. */
 const PLACEHOLDER_BRANCH_ID_HEX = 'ffffffff';
 
@@ -4791,10 +4792,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                   'ironwood send is unavailable until NU6.3 activates',
               );
             }
-            if (iwReportedBranchHex !== NU63_CONSENSUS_BRANCH_ID_HEX) {
+            if (!IRONWOOD_BRANCH_IDS_HEX.has(iwReportedBranchHex)) {
               throw new Error(
-                `endpoint consensus branch id 0x${iwReportedBranchHex} does not match NU6.3 ` +
-                  `(0x${NU63_CONSENSUS_BRANCH_ID_HEX}); refusing to build ironwood send`,
+                `endpoint consensus branch id 0x${iwReportedBranchHex} has no ironwood pool ` +
+                  `(expected ${IRONWOOD_BRANCH_IDS_TEXT}); refusing to build ironwood send`,
               );
             }
             emitProgress('NU6.3 active', `branch id 0x${iwReportedBranchHex}`);
@@ -4854,7 +4855,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                       JSON.stringify(iwPathsForWasm),
                       spendAccount,
                       sendTip.height,
-                      NU63_CONSENSUS_BRANCH_ID,
+                      parseInt(iwReportedBranchHex, 16),
                       sendPayload.mainnet,
                       memoHex,
                     ],
@@ -5378,10 +5379,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 'ironwood send is unavailable until NU6.3 activates',
             );
           }
-          if (iwReportedBranchHex !== NU63_CONSENSUS_BRANCH_ID_HEX) {
+          if (!IRONWOOD_BRANCH_IDS_HEX.has(iwReportedBranchHex)) {
             throw new Error(
-              `endpoint consensus branch id 0x${iwReportedBranchHex} does not match NU6.3 ` +
-                `(0x${NU63_CONSENSUS_BRANCH_ID_HEX}); refusing to build ironwood send`,
+              `endpoint consensus branch id 0x${iwReportedBranchHex} has no ironwood pool ` +
+                `(expected ${IRONWOOD_BRANCH_IDS_TEXT}); refusing to build ironwood send`,
             );
           }
           emitProgress('NU6.3 active', `branch id 0x${iwReportedBranchHex}`);
@@ -5429,7 +5430,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 JSON.stringify(pathsForWasm),
                 0,
                 sendTip.height,
-                NU63_CONSENSUS_BRANCH_ID,
+                parseInt(iwReportedBranchHex, 16),
                 sendPayload.mainnet,
                 memoHex,
               ],
@@ -5797,10 +5798,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               'turnstile migration is unavailable until NU6.3 activates',
           );
         }
-        if (reportedBranchHex !== NU63_CONSENSUS_BRANCH_ID_HEX) {
+        if (!IRONWOOD_BRANCH_IDS_HEX.has(reportedBranchHex)) {
           throw new Error(
-            `endpoint consensus branch id 0x${reportedBranchHex} does not match NU6.3 ` +
-              `(0x${NU63_CONSENSUS_BRANCH_ID_HEX}); refusing to build turnstile migration`,
+            `endpoint consensus branch id 0x${reportedBranchHex} has no ironwood pool ` +
+              `(expected ${IRONWOOD_BRANCH_IDS_TEXT}); refusing to build turnstile migration`,
           );
         }
         emitProgress('NU6.3 active', `branch id 0x${reportedBranchHex}`);
@@ -5856,7 +5857,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             // target_height = live tip; at/after NU6.3 activation this selects
             // TxVersion::V6 (orchard spends + ironwood outputs) in the builder.
             // The keys MUST be the account the orchard notes were scanned under
-            // or no spend accepts them. NU63_CONSENSUS_BRANCH_ID is the live value
+            // or no spend accepts them. The branch id is the live value
             // validated from GetLightdInfo above (never the placeholder); the
             // producer refuses to build unless the branch id it binds equals it.
             const signing = withSpendKeys(
@@ -5875,7 +5876,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                     JSON.stringify(pathsForWasm),
                     migrateAccount,
                     migrateTip.height,
-                    NU63_CONSENSUS_BRANCH_ID,
+                    parseInt(reportedBranchHex, 16),
                     migratePayload.mainnet,
                     null,
                   ],
@@ -5965,7 +5966,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             // producer signature (FIX-A). It is the value validated from
             // GetLightdInfo; the producer's fail-closed guard refuses to build
             // unless the branch id it binds equals this.
-            NU63_CONSENSUS_BRANCH_ID,
+            parseInt(reportedBranchHex, 16),
             migratePayload.mainnet,
             null,
           ],

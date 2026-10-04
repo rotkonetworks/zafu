@@ -96,7 +96,8 @@ describe('deposit on the real wasm', () => {
             script: hexToBytes(script),
           })),
         ),
-      tip: () => Promise.resolve(10_000_000),
+      // testnet, NU6.3 (active 4,134,000 until NU7 at 4,465,026)
+      tip: () => Promise.resolve(4_300_000),
       branchId: () => Promise.resolve(0x37a5165b),
       broadcast,
     };
