@@ -1,4 +1,4 @@
-// zidecar (verified) vs standard lightwalletd endpoint selection.
+// zidecar (verified) vs standard lightwalletd, detected from the node itself.
 
 import { ZidecarClient } from './zidecar-client';
 import { LightwalletdClient } from './lightwalletd-client';
@@ -15,8 +15,6 @@ export type ZcashBackend = 'zidecar' | 'lightwalletd';
  * lightwalletd.
  */
 export interface ZcashBackendProfile {
-  /** the one short value the network screen and node sheet show */
-  readonly label: string;
   readonly client: (url: string) => ZcashClient;
   readonly extras?: (url: string) => ZidecarClient;
   /** zidecar's SendResponse carries the txid; standard lightwalletd's does not */
@@ -25,13 +23,11 @@ export interface ZcashBackendProfile {
 
 export const ZCASH_BACKENDS: Readonly<Record<ZcashBackend, ZcashBackendProfile>> = {
   zidecar: {
-    label: 'zidecar · verified',
     client: url => new ZidecarClient(url),
     extras: url => new ZidecarClient(url),
     echoesTxid: true,
   },
   lightwalletd: {
-    label: 'lightwalletd',
     client: url => new LightwalletdClient(url),
     echoesTxid: false,
   },
@@ -74,6 +70,8 @@ export interface ZcashClient {
    * value (0x37a5165b) and is not the placeholder 0xffffffff.
    */
   getLightdInfo(): Promise<{
+    /** free-form server name; zidecar answers "zidecar/rotkonetworks" */
+    vendor: string;
     consensusBranchId: string;
     chainName: string;
     blockHeight: number;
@@ -85,23 +83,73 @@ export interface ZcashClient {
 }
 
 /**
- * Declaratively classify an endpoint URL as zidecar-speaking or generic
- * lightwalletd.
+ * What kind of node an endpoint is, told by the node itself.
  *
- * Design choice (defensive, hdevalence-style):
- *   We deliberately do NOT auto-probe a zidecar-only RPC at runtime.
- *   Probing `zidecar.v1.Zidecar/GetSyncStatus` against an arbitrary
- *   endpoint is a unique-to-zafu request signature - no other Zcash
- *   wallet hits that path. Even on failure the probe is an unambiguous
- *   "this is a zafu client" beacon that survives across IP changes,
- *   browser sessions, and TLS handshakes.
- *
- * Instead: a static known-host suffix list. Endpoints we ship default
- * to zidecar; everything else defaults to lightwalletd. Users on a
- * custom zidecar deployment can override via setZcashBackend.
- *
- * The static list is intentionally narrow. Add to it only after we've
- * shipped a zidecar at the deployment in question.
+ * zafu never asks the user, and never sends a zidecar-only rpc to find out:
+ * a `zidecar.v1.*` request is a request signature no other Zcash wallet
+ * makes, so even a failed probe would mark the wallet as zafu. The question
+ * is asked with lightwalletd's own `GetLightdInfo`, the call every light
+ * wallet makes, and answered from its `vendor` field. zidecar has answered
+ * "zidecar/rotkonetworks" there since v0.5.4; anything else (another
+ * vendor, a blank one, a node that will not say) is a standard lightwalletd,
+ * which is the safe reading: zafu then makes only standard calls.
+ */
+export const classifyLightdInfo = (info: { vendor?: unknown }): ZcashBackend =>
+  typeof info.vendor === 'string' && /^zidecar\b/i.test(info.vendor.trim())
+    ? 'zidecar'
+    : 'lightwalletd';
+
+/** one spelling per endpoint, for the per-endpoint cache and the worker registry */
+export const backendKey = (serverUrl: string): string =>
+  serverUrl.trim().replace(/\/+$/, '').toLowerCase();
+
+/**
+ * Ask the node what it is, with standard calls only. Native gRPC first (what
+ * lightwalletd wallets send); a node behind a grpc-web-only proxy answers the
+ * same rpc over grpc-web, which every browser wallet speaks. Throws when the
+ * node answers neither, so a caller keeps what it already knew.
+ */
+export const detectZcashBackend = async (serverUrl: string): Promise<ZcashBackend> => {
+  let info: { vendor: string };
+  try {
+    info = await new LightwalletdClient(serverUrl).getLightdInfo();
+  } catch {
+    info = await new ZidecarClient(serverUrl).getLightdInfo();
+  }
+  return classifyLightdInfo(info);
+};
+
+/**
+ * Re-ask a node what it is after one of zidecar's own calls failed, at most
+ * once per `cooldownMs` per endpoint. Resolves to the node's answer, or
+ * undefined when it was asked too recently or did not answer - a node that
+ * blinked keeps its kind; only an answer changes it.
+ */
+export const createRedetector = (
+  detect: (serverUrl: string) => Promise<ZcashBackend> = detectZcashBackend,
+  { cooldownMs = 10 * 60_000, now = Date.now }: { cooldownMs?: number; now?: () => number } = {},
+) => {
+  const askedAt = new Map<string, number>();
+  return async (serverUrl: string): Promise<ZcashBackend | undefined> => {
+    const key = backendKey(serverUrl);
+    const last = askedAt.get(key);
+    if (last !== undefined && now() - last < cooldownMs) {
+      return undefined;
+    }
+    askedAt.set(key, now());
+    try {
+      return await detect(serverUrl);
+    } catch {
+      return undefined;
+    }
+  };
+};
+
+/**
+ * The best guess before a node has answered: a shipped preset or a rotko
+ * host is zidecar, anything else a standard lightwalletd. Only a guess -
+ * detection replaces it - and it never guesses zidecar for a third party,
+ * so an unclassified host never sees a zidecar-only rpc.
  */
 const KNOWN_ZIDECAR_HOST_SUFFIXES: readonly string[] = ['rotko.net'];
 
@@ -109,17 +157,11 @@ export const backendOfEndpoint = (serverUrl: string): ZcashBackend =>
   isZidecarEndpoint(serverUrl) ? 'zidecar' : 'lightwalletd';
 
 function isZidecarEndpoint(serverUrl: string): boolean {
-  // First: exact-URL match against the curated preset list. zidecar
-  // presets are the exception; anything not in the list falls through
-  // to the hostname-suffix check.
   const preset = findPresetByUrl(serverUrl);
   if (preset) {
     return preset.backend === 'zidecar';
   }
-
-  // Defensive parse - never throw on garbage URLs; treat unparseable
-  // input as lightwalletd (the safer default since it doesn't assume
-  // zidecar-only RPCs are available).
+  // never throw on a garbage url; an unparseable one is no zidecar
   let host: string;
   try {
     host = new URL(serverUrl).hostname.toLowerCase();

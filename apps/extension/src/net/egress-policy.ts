@@ -84,7 +84,7 @@ export interface EgressInputs {
   keplrCompat?: boolean;
   /** only `multisig.relayUrl` is read: each multisig wallet's own relay */
   zcashWallets?: { multisig?: { relayUrl?: unknown } }[];
-  /** absent means the shipped default, zidecar */
+  /** what the current zcash node said it is (or the guess until it has); absent: zidecar, the shipped default */
   zcashBackend?: string;
   /** the people relay's default and the other relays the person allowed */
   peopleRelay?: PeopleRelaySetting;

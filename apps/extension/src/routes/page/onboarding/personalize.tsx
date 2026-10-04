@@ -30,7 +30,6 @@ import {
 import { ContactDiscoverySection } from '../../popup/settings/settings-privacy';
 import { ZcashNodeSheet } from '../../popup/settings/settings-zcash-network';
 import { useAutoLock, AUTO_LOCK_OPTIONS } from '../../popup/settings/use-auto-lock';
-import type { ZcashBackend } from '../../../state/keyring/zcash-backend';
 
 // the three choices worth a tap before there is anything to lock; "off" and
 // the finer options stay in settings > security, same list, same storage
@@ -48,7 +47,6 @@ interface Snapshot {
   hideBalances: boolean;
   minutes: number;
   zcashEndpoint: string | undefined;
-  zcashBackend: ZcashBackend;
   enableExplorerLinks: boolean;
   openZcashLinks: boolean;
   openZafuLinks: boolean;
@@ -69,9 +67,7 @@ export const Personalize = () => {
   const { settings, setSetting } = useStore(privacySelector);
   const { minutes, set: setAutoLock } = useAutoLock();
   const zcashEndpoint = useStore(s => s.networks.networks.zcash.endpoint);
-  const zcashBackend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
   const setNetworkEndpoint = useStore(s => s.networks.setNetworkEndpoint);
-  const setZcashBackend = useStore(s => s.networks.setZcashBackend);
 
   // one snapshot, taken once every value here has loaded for real (not the
   // pre-read placeholder) - this is what "keep defaults" restores to.
@@ -89,7 +85,6 @@ export const Personalize = () => {
       hideBalances: settings.hideBalances,
       minutes,
       zcashEndpoint,
-      zcashBackend,
       enableExplorerLinks: settings.enableExplorerLinks,
       openZcashLinks: settings.openZcashLinks,
       openZafuLinks: settings.openZafuLinks,
@@ -102,10 +97,10 @@ export const Personalize = () => {
   // the snapshot exists, any value that drifts from it means something changed.
   useEffect(() => {
     const s = snapshot.current;
-    if (s && (s.zcashEndpoint !== zcashEndpoint || s.zcashBackend !== zcashBackend)) {
+    if (s && s.zcashEndpoint !== zcashEndpoint) {
       setTouched(true);
     }
-  }, [zcashEndpoint, zcashBackend]);
+  }, [zcashEndpoint]);
 
   const keepDefaults = () => {
     const s = snapshot.current;
@@ -118,7 +113,6 @@ export const Personalize = () => {
       void setSetting('hideBalances', s.hideBalances);
       setAutoLock(s.minutes);
       void setNetworkEndpoint('zcash', s.zcashEndpoint ?? '');
-      void setZcashBackend(s.zcashBackend);
       void setSetting('enableExplorerLinks', s.enableExplorerLinks);
       void setSetting('openZcashLinks', s.openZcashLinks);
       void setSetting('openZafuLinks', s.openZafuLinks);

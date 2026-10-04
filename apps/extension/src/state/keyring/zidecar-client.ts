@@ -120,6 +120,7 @@ export class ZidecarClient {
    * builder fails closed unless it is the real NU6.3 branch id (0x37a5165b).
    */
   async getLightdInfo(): Promise<{
+    vendor: string;
     consensusBranchId: string;
     chainName: string;
     blockHeight: number;
@@ -1645,16 +1646,19 @@ export class ZidecarClient {
   }
 
   private parseLightdInfo(buf: Uint8Array): {
+    vendor: string;
     consensusBranchId: string;
     chainName: string;
     blockHeight: number;
     saplingActivationHeight: number;
   } {
     // LightdInfo (lightwalletd service.proto):
+    //   field 2:  string vendor
     //   field 4:  string chainName
     //   field 5:  uint64 saplingActivationHeight (varint)
     //   field 6:  string consensusBranchId (hex, no 0x)
     //   field 8:  uint64 blockHeight (varint)
+    let vendor = '';
     let consensusBranchId = '';
     let chainName = '';
     let blockHeight = 0;
@@ -1704,7 +1708,9 @@ export class ZidecarClient {
           break;
         }
         const data = buf.subarray(pos, pos + len);
-        if (field === 4) {
+        if (field === 2) {
+          vendor = decoder.decode(data);
+        } else if (field === 4) {
           chainName = decoder.decode(data);
         } else if (field === 6) {
           consensusBranchId = decoder.decode(data);
@@ -1715,7 +1721,7 @@ export class ZidecarClient {
       }
     }
 
-    return { consensusBranchId, chainName, blockHeight, saplingActivationHeight };
+    return { vendor, consensusBranchId, chainName, blockHeight, saplingActivationHeight };
   }
 
   private parseLicenseResponse(buf: Uint8Array): LicenseInfo {

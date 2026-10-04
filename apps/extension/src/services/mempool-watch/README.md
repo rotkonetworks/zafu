@@ -41,10 +41,11 @@ backends the helper returns false and no watcher is spawned.
   indexer learns when you're online."
 - **Phase-aligned cadence.** Wake-ups target wall-clock multiples of the
   interval; per-user phase offset doesn't persist across reconnects.
-- **No active probe.** Backend selection is declarative (see
-  `state/keyring/zcash-backend.ts:isZidecarEndpoint`). A probe of a
-  zidecar-only RPC against an arbitrary endpoint would itself be a
-  unique-to-zafu request signature.
+- **No zidecar-only probe.** The node says what it is through the
+  standard `GetLightdInfo` vendor field (see
+  `state/keyring/zcash-backend.ts:detectZcashBackend`), the call every
+  light wallet makes. A probe of a zidecar-only RPC against an arbitrary
+  endpoint would itself be a unique-to-zafu request signature.
 - **`mempool-update` is match-conditional.** The event fires only when
   the wallet found at least one match. Consumers MUST do constant-effort
   work regardless of payload contents (see contract comment in
