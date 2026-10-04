@@ -40,6 +40,7 @@ import {
   type GivenCard,
 } from '../state/contacts';
 import { useContactAddressSource } from '../hooks/use-contact-address-source';
+import { whenHydrated } from '../state/encrypted-storage';
 import { defaultPeopleRelay } from '../config/people-relay';
 import { readB64Card } from './cards';
 import { peopleCall, useMyRooms } from './client';
@@ -253,12 +254,16 @@ export const useCardSync = (): void => {
   const { walletId } = cards;
   const penumbraOn = useStore(s => selectEnabledNetworks(s).includes('penumbra'));
   const [relay, setRelay] = useState<string>();
+  // nothing is written before this window read its contacts: a write from the
+  // empty list it starts with would replace everyone stored
+  const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
     void localExtStorage.get('peopleRelay').then(v => setRelay(defaultPeopleRelay(v)));
+    void whenHydrated().then(() => setHydrated(true));
   }, []);
 
   useEffect(() => {
-    if (!walletId || !Array.isArray(contacts)) {
+    if (!walletId || !hydrated || !Array.isArray(contacts)) {
       return;
     }
     const once = (key: string, fn: () => Promise<unknown>) => {
@@ -326,5 +331,15 @@ export const useCardSync = (): void => {
       await peopleCall('card-send', { contactId: person.id, card: b64 });
       await updateContact(person.id, { given: givenOf(card) });
     }
-  }, [rooms, contacts, walletId, cards.ready, penumbraOn, relay, addContact, updateContact]);
+  }, [
+    rooms,
+    contacts,
+    walletId,
+    hydrated,
+    cards.ready,
+    penumbraOn,
+    relay,
+    addContact,
+    updateContact,
+  ]);
 };

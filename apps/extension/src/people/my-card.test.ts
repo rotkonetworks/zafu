@@ -9,6 +9,7 @@ import { bytesToHex } from '@noble/hashes/utils';
 let contacts: unknown = [];
 /** what the store holds now, when a test wants it to differ from what a render saw */
 let live: unknown;
+let hydrated = true;
 let rooms: unknown[] = [];
 const addContact = vi.fn(async () => ({}));
 const updateContact = vi.fn(async () => undefined);
@@ -41,6 +42,9 @@ vi.mock('../hooks/use-contact-address-source', () => ({
   useContactAddressSource: () => () => ({}),
 }));
 vi.mock('@repo/storage-chrome/local', () => ({ localExtStorage: { get: async () => undefined } }));
+vi.mock('../state/encrypted-storage', () => ({
+  whenHydrated: () => (hydrated ? Promise.resolve() : new Promise(() => undefined)),
+}));
 vi.mock('./client', () => ({
   peopleCall: (...a: unknown[]) => peopleCall(...(a as [])),
   useMyRooms: () => rooms,
@@ -155,6 +159,15 @@ describe('useCardSync', () => {
     await act(async () => root.render(createElement(Probe)));
     expect(addContact).not.toHaveBeenCalled();
     live = undefined;
+  });
+
+  it('writes nothing before this window read its contacts', async () => {
+    hydrated = false;
+    contacts = [];
+    rooms = [answeredRoom];
+    await act(async () => root.render(createElement(Probe)));
+    expect(addContact).not.toHaveBeenCalled();
+    hydrated = true;
   });
 
   it('leaves contacts sealed at rest alone: no write, no throw', async () => {
