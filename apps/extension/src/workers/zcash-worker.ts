@@ -91,6 +91,7 @@ import {
 import { startRun, stopRun, STOP_WAIT_MS, type RunSlot } from './sync-runs';
 import { errText, storageFailure } from '@penumbra-zone/query/error-text';
 import { mergeLoadedNotes, mergeLoadedSpent } from './wallet-state-merge';
+import { storeFellBehind } from './store-reset';
 import { createBuildRegistry } from './build-abort';
 import { advanceWitnesses, frontierHolds } from './witness-advance';
 
@@ -906,6 +907,8 @@ const DB_NAME = 'zafu-zcash';
 const DB_VERSION = 5;
 
 let sharedDb: IDBDatabase | null = null;
+/** counts connections lost under us (closed by the browser, asked to let go) */
+let dbLost = 0;
 
 const getDb = (): Promise<IDBDatabase> => {
   if (sharedDb) {
@@ -937,6 +940,7 @@ const getDb = (): Promise<IDBDatabase> => {
       const forget = () => {
         if (sharedDb === db) {
           sharedDb = null;
+          dbLost++;
         }
       };
       db.onclose = forget;
@@ -3451,7 +3455,10 @@ const runSync = (...args: SyncArgs): Promise<void> => {
     state,
     async signal => {
       try {
-        await syncLoop(state, signal, ...args);
+        // a store wiped under the run restarts it from what is stored
+        while ((await syncLoop(state, signal, ...args)) === 'restart' && !signal.aborted) {
+          console.warn(`[zcash-worker] restarting sync wallet=${walletId} from the stored height`);
+        }
       } catch (err) {
         // everything outside the batch loop's own retries: opening the store,
         // deriving keys, sizing the stored frontier. The window offers to try
@@ -3487,7 +3494,7 @@ const syncLoop = async (
   ufvk?: string,
   backend: ZcashBackend = lookupBackend(serverUrl),
   mempoolWatch: 'off' | 'on' = 'off',
-): Promise<void> => {
+): Promise<'restart' | undefined> => {
   if (!wasmModule) {
     throw new Error('wasm not initialized');
   }
@@ -3513,6 +3520,28 @@ const syncLoop = async (
   const syncedHeight = await getSyncHeight(walletId);
   // use whichever is higher - prevents re-scanning if chrome.storage was stale
   let currentHeight = Math.max(startHeight ?? 0, syncedHeight);
+
+  // The store under this run: the last height it saved, and the lost
+  // connections it has checked. After a reconnect, a store that no longer
+  // holds what this run saved was wiped (see store-reset.ts): the run stops
+  // and starts again from what is stored, never from its in-memory height.
+  let lastSaved = syncedHeight;
+  let lostSeen = dbLost;
+  const storeWasReset = async (): Promise<boolean> => {
+    if (lostSeen === dbLost) {
+      return false;
+    }
+    lostSeen = dbLost;
+    const [stored, wallets] = await Promise.all([getSyncHeight(walletId), listWallets()]);
+    const behind = storeFellBehind({ stored, walletKnown: wallets.includes(walletId), lastSaved });
+    if (behind) {
+      console.warn(
+        `[zcash-worker] the store was reset under sync (stored=${stored}, last saved=${lastSaved}); not scanning on from ${currentHeight}`,
+      );
+    }
+    return behind;
+  };
+  let restart = false;
 
   const client = makeZcashClient(serverUrl, backend);
   // proofs, the actions commitment, mempool watch and the tip cross-check are
@@ -3938,6 +3967,10 @@ const syncLoop = async (
 
   while (!signal.aborted) {
     try {
+      if (await storeWasReset()) {
+        restart = true;
+        break;
+      }
       const chainHeight = await getChainTip();
 
       // Cross-check the tip against an INDEPENDENT operator, once per
@@ -4821,7 +4854,12 @@ const syncLoop = async (
       }
       const combinedUpdated = Array.from(updatedDedup.values());
 
-      // single batched db write for entire batch
+      // single batched db write for entire batch, into the store this run
+      // has been writing: never into one wiped under it
+      if (await storeWasReset()) {
+        restart = true;
+        break;
+      }
       currentHeight = endHeight;
       await saveBatch(
         walletId,
@@ -4842,6 +4880,7 @@ const syncLoop = async (
             }
           : undefined,
       );
+      lastSaved = currentHeight;
 
       // periodic frontier snapshot for privacy-safe witness building.
       // Also cross-check local frontier vs network to detect reorg-induced corruption.
@@ -4956,6 +4995,7 @@ const syncLoop = async (
           try {
             await rewindScanCursor(target);
             currentHeight = target;
+            lastSaved = target;
             workerSelf.postMessage({
               type: 'sync-progress',
               id: '',
@@ -4986,7 +5026,9 @@ const syncLoop = async (
       // away: say so once, honestly, and stop until the person acts.
       const storage = storageFailure(err);
       if (storage) {
+        // the next try opens a fresh connection, and checks it is the same store
         closeDb();
+        dbLost++;
       }
       if (storage === 'fatal') {
         console.error(`[zcash-worker] sync stopped, local data unusable: ${errLine}`);
@@ -5049,6 +5091,7 @@ const syncLoop = async (
   // Nothing in flight may be applied after the loop ends, however it ended.
   prefetcher.reset();
   state.mempoolAbort?.abort();
+  return restart ? 'restart' : undefined;
 };
 
 const getBalance = async (walletId: string): Promise<bigint> => {
