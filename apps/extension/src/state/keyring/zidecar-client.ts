@@ -5,16 +5,6 @@
  * uses raw protobuf encoding (no grpc-web library needed)
  */
 
-export interface SyncStatus {
-  currentHeight: number;
-  currentEpoch: number;
-  blocksInEpoch: number;
-  completeEpochs: number;
-  gigaproofStatus: number;
-  lastGigaproofHeight: number;
-  blocksUntilReady: number;
-}
-
 export interface CompactBlock {
   height: number;
   hash: Uint8Array;
@@ -125,12 +115,6 @@ export class ZidecarClient {
     return this.parseProRing(resp);
   }
 
-  /** get sync status (chain height, epoch info, gigaproof status) */
-  async getSyncStatus(): Promise<SyncStatus> {
-    const resp = await this.grpcCall('GetSyncStatus', new Uint8Array(0));
-    return this.parseSyncStatus(resp);
-  }
-
   /** get compact blocks for scanning */
   async getCompactBlocks(startHeight: number, endHeight: number): Promise<CompactBlock[]> {
     // encode BlockRange proto
@@ -216,17 +200,6 @@ export class ZidecarClient {
     }
 
     return { txid, errorCode, errorMessage };
-  }
-
-  /** get header proof (ligerito epoch + tip) */
-  async getHeaderProof(): Promise<{
-    proofBytes: Uint8Array;
-    fromHeight: number;
-    toHeight: number;
-  }> {
-    // ProofRequest: field 1 = from_height (0), field 2 = to_height (0 = current tip)
-    const resp = await this.grpcCall('GetHeaderProof', new Uint8Array(0));
-    return this.parseHeaderProof(resp);
   }
 
   /** request an ed25519 anchor attestation from zidecar's verifier (SignAnchor).
@@ -503,58 +476,6 @@ export class ZidecarClient {
     }
 
     return { height, hash };
-  }
-
-  private parseSyncStatus(buf: Uint8Array): SyncStatus {
-    const r: SyncStatus = {
-      currentHeight: 0,
-      currentEpoch: 0,
-      blocksInEpoch: 0,
-      completeEpochs: 0,
-      gigaproofStatus: 0,
-      lastGigaproofHeight: 0,
-      blocksUntilReady: 0,
-    };
-    let pos = 0;
-
-    while (pos < buf.length) {
-      const tag = buf[pos++]!;
-      const field = tag >> 3;
-      if ((tag & 0x7) !== 0) {
-        break;
-      }
-
-      let v = 0,
-        s = 0;
-      while (pos < buf.length) {
-        const b = buf[pos++]!;
-        v |= (b & 0x7f) << s;
-        if (!(b & 0x80)) {
-          break;
-        }
-        s += 7;
-      }
-
-      if (field === 1) {
-        r.currentHeight = v;
-      } else if (field === 2) {
-        r.currentEpoch = v;
-      } else if (field === 3) {
-        r.blocksInEpoch = v;
-      } else if (field === 4) {
-        r.completeEpochs = v;
-      } else if (field === 5) {
-        r.gigaproofStatus = v;
-      } else if (field === 6) {
-        // proto: `uint32 blocks_until_ready = 6;` (0 when the proof is ready)
-        r.blocksUntilReady = v;
-      } else if (field === 7) {
-        // proto: `uint32 last_epoch_proof_height = 7;`
-        r.lastGigaproofHeight = v;
-      }
-    }
-
-    return r;
   }
 
   private parseBlockStream(buf: Uint8Array): CompactBlock[] {
@@ -1156,69 +1077,6 @@ export class ZidecarClient {
     return ironwoodTree
       ? { height, orchardTree, ironwoodTree, time }
       : { height, orchardTree, time };
-  }
-
-  private parseHeaderProof(buf: Uint8Array): {
-    proofBytes: Uint8Array;
-    fromHeight: number;
-    toHeight: number;
-  } {
-    let proofBytes = new Uint8Array(0);
-    let fromHeight = 0;
-    let toHeight = 0;
-    let pos = 0;
-
-    while (pos < buf.length) {
-      const tag = buf[pos++]!;
-      const field = tag >> 3;
-      const wire = tag & 0x7;
-
-      if (wire === 0) {
-        let v = 0,
-          s = 0;
-        while (pos < buf.length) {
-          const b = buf[pos++]!;
-          v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (field === 2) {
-          fromHeight = v;
-        } else if (field === 3) {
-          toHeight = v;
-        }
-      } else if (wire === 2) {
-        // Unsigned + shift-bounded. `len |= (b & 0x7f) << s` overflows to a
-        // NEGATIVE int32 at s=28, after which `pos += len` walks backwards and
-        // the parser loops re-reading the same bytes forever. Multiply instead
-        // of shift, and refuse a varint longer than 5 bytes.
-        let len = 0,
-          s = 0,
-          lenBytes = 0;
-        while (pos < buf.length && lenBytes < 5) {
-          const b = buf[pos++]!;
-          len += (b & 0x7f) * Math.pow(2, s);
-          lenBytes++;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (!Number.isSafeInteger(len) || len < 0 || pos + len > buf.length) {
-          break;
-        }
-        if (field === 1) {
-          proofBytes = buf.slice(pos, pos + len);
-        }
-        pos += len;
-      } else {
-        break;
-      }
-    }
-
-    return { proofBytes, fromHeight, toHeight };
   }
 
   private parseTxidList(buf: Uint8Array): Uint8Array[] {

@@ -91,12 +91,12 @@ const WORKER_SRC = readFileSync(
 describe('zcash-worker wasm init', () => {
   it('memoizes the in-flight init instead of a bare null guard', () => {
     expect(WORKER_SRC).toContain('const initWasm = once(');
-    expect(WORKER_SRC).toContain('const initZync = once(');
   });
 
   it('still initializes the rayon pool inside initWasm', () => {
     const start = WORKER_SRC.indexOf('const initWasm = once(');
-    const end = WORKER_SRC.indexOf('const initZync = once(');
+    // the body ends at the first top-level close after it
+    const end = WORKER_SRC.indexOf('\n});\n', start);
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
     expect(WORKER_SRC.slice(start, end)).toContain('initThreadPool');

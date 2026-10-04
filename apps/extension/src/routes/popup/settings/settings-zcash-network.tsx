@@ -13,12 +13,6 @@ import {
 } from '../../../components/zcash/sync-status';
 import { ZCASH_MAINNET_ENDPOINTS, findPresetByUrl } from '../../../config/zcash-endpoints';
 import { measurePresetLatencies } from '../../../state/keyring/endpoint-latency';
-import {
-  ZCASH_BACKENDS,
-  backendKey,
-  backendOfEndpoint,
-} from '../../../state/keyring/zcash-backend';
-import { selectZcashBackend } from '../../../state/networks';
 import { hostOf } from '../../../net/destination';
 import { PopupPath } from '../paths';
 import { Section, SettingsScreen } from './settings-screen';
@@ -50,11 +44,6 @@ const useBirthday = (vaultId: string | undefined) => {
   return [h, setH] as const;
 };
 
-/** the one capability cue a node shows: zafu checks its header proofs */
-const VERIFIED = 'verified';
-const verifiedCue = (backend: keyof typeof ZCASH_BACKENDS) =>
-  ZCASH_BACKENDS[backend].extras ? VERIFIED : undefined;
-
 const speedTest = async () =>
   new Map([...(await measurePresetLatencies())].map(([url, l]) => [url, l.rttMs]));
 
@@ -71,15 +60,8 @@ export const ZcashNodeSheet = ({
   onExplain?: (label: string) => void;
 }) => {
   const endpoint = useStore(s => s.networks.networks.zcash.endpoint) ?? '';
-  const backend = useStore(selectZcashBackend);
   const setEndpoint = useStore(s => s.networks.setNetworkEndpoint);
-  // a preset is marked by what it said, once it is the node in use; by its guess before
-  const presets = ZCASH_MAINNET_ENDPOINTS.map(p => ({
-    ...p,
-    kind: verifiedCue(
-      backendKey(p.url) === backendKey(endpoint) ? backend : backendOfEndpoint(p.url),
-    ),
-  }));
+  const presets = ZCASH_MAINNET_ENDPOINTS;
   return (
     <NodeSheet
       open={open}
@@ -105,7 +87,6 @@ export const ZcashNodeSheet = ({
 export const SettingsZcashNetwork = () => {
   const vaultId = useStore(selectEffectiveKeyInfo)?.id;
   const endpoint = useStore(s => s.networks.networks.zcash.endpoint);
-  const verified = useStore(s => verifiedCue(selectZcashBackend(s)));
   const preset = endpoint ? findPresetByUrl(endpoint) : undefined;
   // local progress only: opening this screen asks no node
   const { workerSyncHeight, workerChainHeight: tip, workerFailure: failure } = useZcashWorkerSync();
@@ -195,10 +176,7 @@ export const SettingsZcashNetwork = () => {
           <Row
             type='value'
             label='node'
-            description={
-              [!preset && endpoint && 'your own node', verified].filter(Boolean).join(' · ') ||
-              undefined
-            }
+            description={(!preset && endpoint && 'your own node') || undefined}
             value={preset?.label ?? ((endpoint && hostOf(endpoint)) || 'auto')}
             onPress={() => setSheet('node')}
             {...explainProps('network.zcashNode')}

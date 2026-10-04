@@ -8,9 +8,9 @@ describe('zcash backends', () => {
     expect(zidecarExtras('https://zcash.rotko.net', 'zidecar')).toBeDefined();
     expect(zidecarExtras('https://zec.rocks:443', 'lightwalletd')).toBeUndefined();
     expect(zidecarExtras('https://zec.rocks:443', 'toString')).toBeUndefined();
-    expect('getHeaderProof' in ZCASH_BACKENDS.lightwalletd.client('https://zec.rocks:443')).toBe(
-      false,
-    );
+    expect(
+      'getBlockTransactions' in ZCASH_BACKENDS.lightwalletd.client('https://zec.rocks:443'),
+    ).toBe(false);
   });
 
   it('runs the mempool watch only when asked and on a zidecar', () => {
