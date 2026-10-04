@@ -130,3 +130,20 @@ describe('denyCapability clears a stale expiry', () => {
     expect(perms?.expires?.encrypt).toBeUndefined();
   });
 });
+
+describe('knownSites written by another build', () => {
+  test('a record without its denied list, a null entry and an unknown field are read, not thrown on', async () => {
+    const origin = 'https://other-build.example';
+    await localExtStorage.set('knownSites', [
+      null,
+      { origin, granted: ['connect'], grantedAt: 1, laterField: 'kept' },
+    ] as never);
+    const perms = await getOriginPermissions(origin);
+    expect(perms?.granted).toEqual(['connect']);
+    expect(perms?.denied).toEqual([]);
+    // a write keeps the field this build does not know
+    await denyCapability(origin, 'encrypt');
+    const all = (await getAllPermissions()) as unknown as Record<string, unknown>[];
+    expect(all.find(p => p['origin'] === origin)?.['laterField']).toBe('kept');
+  });
+});

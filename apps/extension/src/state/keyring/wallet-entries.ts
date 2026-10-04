@@ -392,8 +392,9 @@ async function purgeLegacyZignerWallets(
     return;
   }
 
-  const zignerWallets = (await local.get('zignerWallets')) ?? [];
-  if (zignerWallets.length === 0) {
+  const zignerWallets = await local.get('zignerWallets');
+  // filter-then-write: a list this build cannot read is left as it is
+  if (!Array.isArray(zignerWallets) || zignerWallets.length === 0) {
     return;
   }
   const updated = zignerWallets.filter(w => {

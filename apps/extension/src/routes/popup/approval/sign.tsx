@@ -1,3 +1,4 @@
+import { storedList } from '@repo/storage-chrome/stored-list';
 import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../../../state';
 import { signApprovalSelector } from '../../../state/sign-approval';
@@ -92,7 +93,9 @@ export const SignApproval = () => {
 
       // mnemonic wallet: check share log first, then derive
       const log = await localExtStorage.get('zidShareLog');
-      const entries = (log ?? []).filter(r => r.sharedWith === origin);
+      const entries = storedList<NonNullable<typeof log>[number]>(log).filter(
+        r => r.sharedWith === origin,
+      );
       const latest = entries[entries.length - 1];
       if (latest) {
         setPreviewAddress('zid' + latest.publicKey.slice(0, 16));

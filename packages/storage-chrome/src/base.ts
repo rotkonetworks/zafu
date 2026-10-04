@@ -216,6 +216,7 @@ export class ExtensionStorage<
     // down, do NOT throw, and do NOT rewrite the stored version downward; treat
     // storage as forward-compatible so wallet services start against the
     // existing state instead of bricking with "couldn't start wallet services".
+    // Readers must tolerate that newer shape: see stored-list.ts for the policy.
     if (storedVersion !== undefined && storedVersion > this.version) {
       if (!this.warnedNewerVersion) {
         this.warnedNewerVersion = true;

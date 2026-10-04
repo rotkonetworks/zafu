@@ -1,3 +1,4 @@
+import { storedList } from '@repo/storage-chrome/stored-list';
 import { AppParameters } from '@penumbra-zone/protobuf/penumbra/core/app/v1/app_pb';
 import { AppService, TendermintProxyService } from '@penumbra-zone/protobuf';
 import { createGrpcWebTransport } from '@connectrpc/connect-web';
@@ -35,9 +36,8 @@ import type { BlockProcessor } from '@penumbra-zone/query/block-processor';
 export const isPenumbraEnabled = async (): Promise<boolean> => {
   const enabledNetworks = await localExtStorage.get('enabledNetworks');
   // if no networks configured yet, check vaults (wallets are encrypted at rest)
-  if (!enabledNetworks) {
-    const vaults = await localExtStorage.get('vaults');
-    return !!vaults && vaults.length > 0;
+  if (!Array.isArray(enabledNetworks)) {
+    return storedList(await localExtStorage.get('vaults')).length > 0;
   }
   return enabledNetworks.includes('penumbra');
 };
@@ -367,7 +367,8 @@ export const publishSyncHeight = async (
  * an older set gets the two added once (no network).
  */
 const numerairesFor = async (chainId: string): Promise<string[]> => {
-  const stored = await localExtStorage.get('numeraires');
+  // a cache of asset ids: anything but a list is rebuilt from the registry
+  const stored = storedList<string>(await localExtStorage.get('numeraires'));
   try {
     const bundled = new ChainRegistryClient().bundled;
     const ids = [

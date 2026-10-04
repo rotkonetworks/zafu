@@ -1,3 +1,4 @@
+import { storedList } from '@repo/storage-chrome/stored-list';
 import { localExtStorage } from '@repo/storage-chrome/local';
 
 const PENUMBRA_DB_PREFIX = 'viewdata/penumbra';
@@ -154,8 +155,8 @@ export const finishPendingWipe = async (): Promise<void> => {
  * since opened IDB connections would block deletion.
  */
 export const performPendingClears = async (): Promise<void> => {
-  const pending = await localExtStorage.get('pendingClearCache');
-  if (!pending || pending.length === 0) {
+  const pending = storedList<string>(await localExtStorage.get('pendingClearCache'));
+  if (pending.length === 0) {
     return;
   }
 
