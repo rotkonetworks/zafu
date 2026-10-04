@@ -114,7 +114,8 @@ export const detectZcashBackend = async (serverUrl: string): Promise<ZcashBacken
   try {
     info = await new LightwalletdClient(serverUrl).getLightdInfo();
   } catch {
-    info = await new ZidecarClient(serverUrl).getLightdInfo();
+    // bare: no zafu-only header (the pro proof) reaches a node not yet classified
+    info = await new ZidecarClient(serverUrl).getLightdInfo({ bare: true });
   }
   return classifyLightdInfo(info);
 };

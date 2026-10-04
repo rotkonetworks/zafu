@@ -133,6 +133,31 @@ describe('egress: finding out what a node is never fingerprints the wallet', () 
     }
   });
 
+  it('sends no zafu-only header on the grpc-web fallback, even with a pro proof set', async () => {
+    const { ZidecarClient } = await import('./zidecar-client');
+    ZidecarClient.extraHeaders = () => ({ 'x-zafu-ring-proof': 'secret' });
+    const sent: Record<string, string>[] = [];
+    let n = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: { headers: Record<string, string> }) => {
+        sent.push(init.headers);
+        if (n++ === 0) {
+          throw new Error('415');
+        }
+        return new Response(lightdInfoWithVendor('zaino'), { status: 200 });
+      }),
+    );
+    try {
+      await expect(detectZcashBackend('https://proxy.example.org')).resolves.toBe('lightwalletd');
+    } finally {
+      ZidecarClient.extraHeaders = null;
+    }
+    expect(sent).toHaveLength(2);
+    expect(Object.keys(sent[0]!)).toEqual(['Content-Type']);
+    expect(Object.keys(sent[1]!).sort()).toEqual(['Accept', 'Content-Type', 'x-grpc-web']);
+  });
+
   it('never guesses zidecar for a third-party node before it has answered', () => {
     for (const url of ['https://zec.rocks:443', 'https://lwd.example.org', 'not a url', '']) {
       expect(backendOfEndpoint(url)).toBe('lightwalletd');

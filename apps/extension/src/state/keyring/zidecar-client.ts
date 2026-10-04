@@ -119,7 +119,7 @@ export class ZidecarClient {
    * `consensusBranchId` is field 6 (hex string, no 0x prefix); the turnstile
    * builder fails closed unless it is the real NU6.3 branch id (0x37a5165b).
    */
-  async getLightdInfo(): Promise<{
+  async getLightdInfo({ bare = false }: { bare?: boolean } = {}): Promise<{
     vendor: string;
     consensusBranchId: string;
     chainName: string;
@@ -130,6 +130,7 @@ export class ZidecarClient {
       'cash.z.wallet.sdk.rpc.CompactTxStreamer',
       'GetLightdInfo',
       new Uint8Array(0),
+      bare,
     );
     return this.parseLightdInfo(resp);
   }
@@ -399,6 +400,8 @@ export class ZidecarClient {
     service: string,
     method: string,
     msg: Uint8Array,
+    /** only the grpc-web headers: for a node not yet known to be a zidecar */
+    bare = false,
   ): Promise<Uint8Array> {
     const path = `${this.serverUrl}/${service}/${method}`;
 
@@ -415,7 +418,7 @@ export class ZidecarClient {
       'Content-Type': 'application/grpc-web+proto',
       Accept: 'application/grpc-web+proto',
       'x-grpc-web': '1',
-      ...(ZidecarClient.extraHeaders?.() ?? {}),
+      ...(bare ? {} : (ZidecarClient.extraHeaders?.() ?? {})),
     };
 
     const resp = await fetch(path, { method: 'POST', headers, body });

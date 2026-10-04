@@ -213,8 +213,9 @@ export function useZcashAutoSync() {
             return;
           }
           // generate ring VRF session proof for pro priority sync (this still
-          // opens the phrase in the page; it moves with the ZID signers)
-          if (isPro(useStore.getState())) {
+          // opens the phrase in the page; it moves with the ZID signers).
+          // The ring is zidecar's own rpc: never asked of any other node
+          if (isPro(useStore.getState()) && zcashBackend === 'zidecar') {
             try {
               const seed = deriveRingVrfSeed(await getMnemonic(walletId));
               await useStore.getState().ringVrf.refreshRing(zidecarUrl, seed);
