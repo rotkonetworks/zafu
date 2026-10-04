@@ -2,7 +2,7 @@
  * Wallet-side feature gating for device firmware (spec §8/§10, fail-closed).
  *
  * Capabilities are derived from a version -> capabilities map. Unknown or
- * stale versions offer NO capabilities — never assume. This is advisory UX
+ * stale versions offer NO capabilities - never assume. This is advisory UX
  * routing only; the device enforces the true trust boundary.
  */
 
@@ -32,7 +32,7 @@ export function hasCapability(record: DeviceFwRecord | undefined, capability: st
 
 /**
  * Whether an incoming verified manifest is applicable to the current device
- * record — i.e. it is a strict monotonic upgrade of the applied firmware.
+ * record - i.e. it is a strict monotonic upgrade of the applied firmware.
  *
  * - no record → applicable (first install / fresh device)
  * - manifest.version > record.fw → applicable
@@ -50,7 +50,7 @@ export function isUpdateApplicable(
   }
   const order = compareSemver(manifest.version, record.fw);
   if (order === null) {
-    // invalid semver — fail closed
+    // invalid semver - fail closed
     return false;
   }
   return order > 0;

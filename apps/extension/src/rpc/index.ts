@@ -22,12 +22,13 @@ import {
 
 import { custodyImpl } from '@repo/custody-chrome';
 
-import { sctImpl } from '@rotko/penumbra-services/sct-service';
-import { stakeImpl } from '@rotko/penumbra-services/stake-service';
-import { viewImpl } from '@rotko/penumbra-services/view-service';
+import { sctImpl } from '@penumbrafi/services/sct-service';
+import { stakeImpl } from '@penumbrafi/services/stake-service';
+import { viewImpl } from '@penumbrafi/services/view-service';
 import { createProxyImpl, noContextHandler } from '@penumbra-zone/transport-dom/proxy';
 import { resolvePenumbraEndpoint } from '../config/penumbra-endpoints';
 import { rethrowImplErrors } from './rethrow-impl-errors';
+import { sendFirst, timedCustody } from './send-first';
 
 type RpcImplTuple<T extends ServiceType> = [T, Partial<ServiceImpl<T>>];
 
@@ -121,10 +122,11 @@ export const getRpcImpls = async () => {
 
   const rpcImpls: RpcImplTuple<ServiceType>[] = [
     // rpc local implementations
-    [CustodyService, rethrowImplErrors(CustodyService, custodyImpl)],
+    [CustodyService, rethrowImplErrors(CustodyService, timedCustody(custodyImpl))],
     [SctService, rethrowImplErrors(SctService, sctImpl)],
     [StakeService, rethrowImplErrors(StakeService, stakeImpl)],
-    [ViewService, rethrowImplErrors(ViewService, viewImpl)],
+    // planning and building go ahead of catch-up sync (see send-first.ts)
+    [ViewService, rethrowImplErrors(ViewService, sendFirst(viewImpl))],
     // customized proxy
     [
       TendermintProxyService,

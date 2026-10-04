@@ -13,6 +13,8 @@ import {
   type FrostBackupPayload,
   type FrostSharePayload,
 } from '../../../../state/keyring/multisig-backup';
+import type { SeatRoom } from '../../../../state/keyring/vault-ops';
+import { readRooms } from '../../../../people/vault';
 
 export interface ImportSummary {
   imported: number;
@@ -28,6 +30,7 @@ const importOneShare = async (
     return 'skipped';
   }
   await useStore.getState().keyRing.newFrostMultisigKey({
+    ...(share.room ? { room: await roomHere(share.room) } : {}),
     label: share.label,
     address: share.address,
     orchardFvk: share.orchardFvk,
@@ -39,7 +42,26 @@ const importOneShare = async (
     keyPackage: share.keyPackage,
     ephemeralSeed: share.ephemeralSeed,
   });
+  // it came from an encrypted backup file, so that file is its backup
+  const restored = selectMultisigWallets(useStore.getState()).find(
+    w => w.multisig?.publicKeyPackage === share.publicKeyPackage,
+  );
+  if (restored) {
+    await useStore
+      .getState()
+      .wallets.updateMultisigWallet(restored.id, { backedUpAt: share.createdAt || Date.now() });
+  }
   return 'imported';
+};
+
+/**
+ * A seat's room as this zafu holds it: the people backup may have put the
+ * room under another wallet id than the one the seat was made under, so the
+ * seat follows the room.
+ */
+const roomHere = async (room: SeatRoom): Promise<SeatRoom> => {
+  const here = (await readRooms())?.find(r => r.id === room.roomId);
+  return here ? { ...room, walletId: here.walletId } : room;
 };
 
 export const readFileAsText = (file: File): Promise<string> =>
@@ -85,6 +107,7 @@ export const importBackup = async (
             address: payload.address,
             relayUrl: payload.relayUrl,
             createdAt: payload.createdAt,
+            room: payload.room,
           },
         ]
       : payload.shares;

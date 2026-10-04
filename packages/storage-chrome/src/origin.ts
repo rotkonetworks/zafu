@@ -1,9 +1,27 @@
 import { localExtStorage } from './local';
+import { storedList } from './stored-list';
 import { OriginRecord } from './records/known-site';
 import { UserChoice } from './records/user-choice';
-import { Capability, OriginPermissions } from './capabilities';
+import {
+  Capability,
+  OriginPermissions,
+  TIME_LIMITED_CAPABILITIES,
+  GRANT_TTL_MS,
+} from './capabilities';
 
 // --- New capability-based API ---
+
+// NOTE: `granted` is intentionally returned RAW here, never pruned of expired
+// time-limited capabilities. A consumer that needs "is this usable right
+// now" must call `hasCapability` per capability (that is its entire job) -
+// see the two settings screens and contact-discovery-service.ts, which do.
+// A consumer like `zafu_passkey_get` instead needs to tell "this capability
+// was granted once and lapsed" (re-authorize with one popup) apart from
+// "this origin never granted it at all" (hard refuse) - collapsing those by
+// pruning `granted` here would make every expired grant look identical to
+// one that never existed, which is exactly the silent-failure-forever bug
+// the expiry mechanism exists to avoid.
+const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object';
 
 const getPermissionsArray = async (): Promise<OriginPermissions[]> => {
   const raw = await localExtStorage.get('knownSites');
@@ -11,10 +29,11 @@ const getPermissionsArray = async (): Promise<OriginPermissions[]> => {
     return [];
   }
   // migrate old OriginRecord[] to OriginPermissions[] on read
-  return (raw as unknown[]).map(entry => {
-    const r = entry as Record<string, unknown>;
+  // a record another build wrote may lack a list or carry fields we do not
+  // know: fill the lists, keep the rest (see stored-list.ts)
+  return (raw as unknown[]).filter(isRecord).map(r => {
     if ('granted' in r && Array.isArray(r['granted'])) {
-      return r as unknown as OriginPermissions;
+      return { ...r, denied: storedList(r['denied']) } as unknown as OriginPermissions;
     }
     // legacy OriginRecord shape → convert
     const legacy = r as unknown as OriginRecord;
@@ -42,14 +61,27 @@ export const getOriginPermissions = async (
   return all.find(p => p.origin === origin);
 };
 
+/**
+ * grant `capability` at `origin`. Time-limited capabilities (see
+ * TIME_LIMITED_CAPABILITIES) get a fresh `expires[capability]` stamped
+ * GRANT_TTL_MS out from now - the TTL is a fixed constant, not a per-call
+ * parameter, so every call site gets the expiry behavior automatically
+ * without having to know which capabilities are time-limited.
+ */
 export const grantCapability = async (origin: string, capability: Capability): Promise<void> => {
   const all = await getPermissionsArray();
   const existing = all.find(p => p.origin === origin);
+  const expiresAt = TIME_LIMITED_CAPABILITIES.has(capability)
+    ? Date.now() + GRANT_TTL_MS
+    : undefined;
   if (existing) {
     if (!existing.granted.includes(capability)) {
       existing.granted.push(capability);
     }
     existing.denied = existing.denied.filter(c => c !== capability);
+    if (expiresAt !== undefined) {
+      existing.expires = { ...existing.expires, [capability]: expiresAt };
+    }
     await savePermissions(all);
   } else {
     await savePermissions([
@@ -59,6 +91,7 @@ export const grantCapability = async (origin: string, capability: Capability): P
         granted: [capability],
         denied: [],
         grantedAt: Date.now(),
+        ...(expiresAt !== undefined ? { expires: { [capability]: expiresAt } } : {}),
       },
     ]);
   }
@@ -71,6 +104,10 @@ export const denyCapability = async (origin: string, capability: Capability): Pr
     existing.granted = existing.granted.filter(c => c !== capability);
     if (!existing.denied.includes(capability)) {
       existing.denied.push(capability);
+    }
+    // a denied capability should not keep carrying a stale expiry around.
+    if (existing.expires && capability in existing.expires) {
+      existing.expires = { ...existing.expires, [capability]: undefined };
     }
     await savePermissions(all);
   } else {

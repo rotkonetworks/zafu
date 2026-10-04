@@ -1,10 +1,19 @@
 import { PenumbraRequestFailure } from '@penumbra-zone/client/error';
 import type { ZafuConnection } from './zafu-connection';
-import { isContextInvalidated, noteContextInvalidated } from '../../utils/reload-notice';
+import {
+  isContextInvalidated,
+  noteContextInvalidated,
+  runtimeGone,
+} from '../../utils/reload-notice';
 
 export const sendBackground = async (
   request: ZafuConnection,
 ): Promise<null | PenumbraRequestFailure> => {
+  // orphaned by a zafu reload: say so once instead of throwing on every request
+  if (runtimeGone()) {
+    noteContextInvalidated();
+    return PenumbraRequestFailure.BadResponse;
+  }
   try {
     const response = await chrome.runtime.sendMessage<ZafuConnection, unknown>(request);
 
@@ -54,7 +63,7 @@ export function listenBackground<R = never>(
     respond: (response: R) => void,
   ): boolean => {
     // Filter to messages from our own extension. chrome.runtime.id is the
-    // canonical runtime value — works for both unpacked and Web Store
+    // canonical runtime value - works for both unpacked and Web Store
     // installs without a build-time constant.
     if (sender.id !== chrome.runtime.id) {
       return false;

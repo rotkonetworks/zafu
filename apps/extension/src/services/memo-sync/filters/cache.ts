@@ -1,11 +1,11 @@
 /**
- * withBucketCache — skip buckets already processed; mark new buckets after fetch.
+ * withBucketCache - skip buckets already processed; mark new buckets after fetch.
  *
  * privacy + bandwidth: once a bucket has been fetched the server has seen it
  * tied to this wallet's session. fetching it again teaches nothing new, costs
  * bandwidth, and progressively narrows what the server can infer about which
  * buckets are real (real buckets get fetched once, decoy buckets are random
- * each time — so any bucket fetched twice is real). caching avoids that
+ * each time - so any bucket fetched twice is real). caching avoids that
  * fingerprint.
  *
  * the cache is keyed by walletId, so multiple wallets sharing the same browser
@@ -61,7 +61,7 @@ export const withBucketCache =
       //   - errored buckets (no event yielded) are not cached, so the next
       //     sync retries them naturally
       //   - decoy buckets (added by inner filters, not in `fresh`) are never
-      //     recorded — keeping the decoy universe over [activation, tip] full
+      //     recorded - keeping the decoy universe over [activation, tip] full
       //     instead of monotonically shrinking
       const succeeded = new Set<BucketStart>();
       for await (const event of inner(walletId, fresh, ctx)) {

@@ -1,5 +1,5 @@
 /**
- * animated QR display — cycles through multipart QR frames
+ * animated QR display - cycles through multipart QR frames
  *
  * for payloads > ~2KB that don't fit in a single QR code.
  * splits the payload into numbered frames and cycles through them.
@@ -10,8 +10,8 @@
  * BC-UR encoding for UR flows goes through the wasm ur_encode_frames).
  *
  * Two controls:
- *   QR speed   — ms per frame (how fast the animation cycles)
- *   QR density — payload bytes per frame (Safe 400B / Medium 800B / Aggressive
+ *   QR speed - ms per frame (how fast the animation cycles)
+ *   QR density - payload bytes per frame (Safe 400B / Medium 800B / Aggressive
  *                1.2KB). Higher density = fewer frames but a higher QR version,
  *                which needs a sharper camera. Persistent per-install.
  */
@@ -57,7 +57,7 @@ interface AnimatedQrDisplayProps {
   data?: Uint8Array;
   /** pre-built UR string frames (e.g. from WASM ur_encode_frames) */
   urFrames?: string[];
-  /** UR type string (e.g. 'zcash-notes', 'zafu-stream') — used with data prop */
+  /** UR type string (e.g. 'zcash-notes', 'zafu-stream') - used with data prop */
   urType?: string;
   /** size of QR code in pixels */
   size?: number;
@@ -72,7 +72,7 @@ interface AnimatedQrDisplayProps {
   /** initial payload-bytes-per-frame density (default 200 = safe) */
   densityBytes?: number;
   /**
-   * raw fountain source for UR flows — lets the component re-fountain frames at
+   * raw fountain source for UR flows - lets the component re-fountain frames at
    * the chosen density via wasm ur_encode_frames. Without it, pre-built
    * urFrames can't be re-densified and the density slider is hidden.
    */
@@ -83,6 +83,8 @@ interface AnimatedQrDisplayProps {
   description?: string;
   /** total bytes for display (when using urFrames, data.length isn't available) */
   totalBytes?: number;
+  /** the QR alone: no controls or captions around it (tap still enlarges) */
+  bare?: boolean;
 }
 
 /** split payload into numbered frames: P<idx>/<total>/<type>/<base64> (legacy) */
@@ -109,7 +111,7 @@ function estimateQrVersion(payloadBytes: number): number {
       return qr.version;
     }
   } catch {
-    /* qrcode lib unavailable/sparse — fall through to the table */
+    /* qrcode lib unavailable/sparse - fall through to the table */
   }
   // QR capacity table (bytes, EC L); first version whose capacity is >= payloadBytes
   const CAP: [number, number][] = [
@@ -143,6 +145,7 @@ export function AnimatedQrDisplay({
   title,
   description,
   totalBytes,
+  bare = false,
 }: AnimatedQrDisplayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -400,10 +403,10 @@ export function AnimatedQrDisplay({
       }}
       title={fullscreen ? 'tap to shrink' : 'tap to enlarge for scanning'}
     >
-      <div className='relative rounded-lg bg-white p-3'>
+      <div className='relative bg-white p-3'>
         <canvas ref={canvasRef} />
         {frames.length > 1 && (
-          <div className='absolute bottom-1 right-1 rounded bg-black/60 px-1.5 py-0.5 text-label text-white font-mono'>
+          <div className='absolute bottom-1 right-1 bg-black/60 px-1.5 py-0.5 text-label text-white font-mono'>
             {currentFrame}/{frames.length}
           </div>
         )}
@@ -418,11 +421,11 @@ export function AnimatedQrDisplay({
 
   return (
     <div className='flex flex-col items-center gap-3'>
-      {title && <h3 className='text-sm font-medium text-fg'>{title}</h3>}
+      {title && <h3 className='text-sm text-fg'>{title}</h3>}
 
       {qrBlock}
 
-      {!fullscreen && (
+      {!bare && !fullscreen && (
         <button
           type='button'
           onClick={() => setFullscreen(true)}
@@ -433,15 +436,15 @@ export function AnimatedQrDisplay({
         </button>
       )}
 
-      {frames.length > 1 && (
+      {!bare && frames.length > 1 && (
         <div className='flex items-center gap-2 text-label text-fg-muted'>
           <span className='i-ph-circle-notch size-3 animate-spin' />
-          scanning — hold camera steady
+          scanning - hold camera steady
         </div>
       )}
 
       {/* ── QR speed (ms/frame) ── */}
-      {showSpeedControl && frames.length > 1 && (
+      {!bare && showSpeedControl && frames.length > 1 && (
         <label className='flex w-full max-w-xs flex-col gap-1 text-label text-fg-muted'>
           <div className='flex items-center justify-between'>
             <span className='flex items-center gap-1'>
@@ -472,7 +475,7 @@ export function AnimatedQrDisplay({
       )}
 
       {/* ── QR density (payload bytes / frame) ── */}
-      {showDensityControl && frames.length > 1 && canReDensify && (
+      {!bare && showDensityControl && frames.length > 1 && canReDensify && (
         <div className='flex w-full max-w-xs flex-col gap-1 text-label text-fg-muted'>
           <div className='flex items-center justify-between'>
             <span className='flex items-center gap-1'>
@@ -491,13 +494,13 @@ export function AnimatedQrDisplay({
                   key={preset.key}
                   type='button'
                   onClick={() => changeDensity(preset.bytes)}
-                  className={`rounded-md border px-1 py-1 text-center text-xs transition-colors ${
+                  className={`border px-1 py-1 text-center text-xs transition-colors ${
                     active
                       ? 'border-zigner-gold bg-zigner-gold/10 text-fg-high'
                       : 'border-border-soft text-fg-muted hover:border-zigner-gold/50'
                   }`}
                 >
-                  <span className='block font-medium capitalize'>{preset.label}</span>
+                  <span className='block capitalize'>{preset.label}</span>
                   <span className='block opacity-70'>
                     {preset.bytes < 1000 ? `${preset.bytes}B` : `${preset.bytes / 1000}KB`}
                   </span>
@@ -514,10 +517,12 @@ export function AnimatedQrDisplay({
 
       {description && <p className='text-xs text-fg-muted text-center max-w-xs'>{description}</p>}
 
-      <p className='text-label text-fg-muted'>
-        {byteCount.toLocaleString()} bytes · {frames.length} frame
-        {frames.length !== 1 ? 's' : ''}
-      </p>
+      {!bare && (
+        <p className='text-label text-fg-muted'>
+          {byteCount.toLocaleString()} bytes · {frames.length} frame
+          {frames.length !== 1 ? 's' : ''}
+        </p>
+      )}
     </div>
   );
 }

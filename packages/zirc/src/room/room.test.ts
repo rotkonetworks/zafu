@@ -1,12 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { RelayTransport, ZidIdentity, concat, createGuestIdentity, u32be } from '@zafu/zid';
 import {
+  RelayTransport,
+  ZidIdentity,
+  concat,
+  createGuestIdentity,
+  createHttpRelayTransport,
+  u32be,
+} from '@zafu/zid';
+import {
+  GROUP_ROOM_PLAINTEXT_BYTES,
   Room,
+  ROOM_PLAINTEXT_BYTES,
   createRoomSecret,
   encodeInvite,
   hkdfBytes,
   maxBodyBytes,
   parseInvite,
+  relayLimitsFor,
+  ROOM_WINDOW_ENTRIES,
+  sealedBlobBytes,
   DEFAULT_CHANNEL,
   roomShard,
   roomShardFromSecret,
@@ -466,8 +478,9 @@ describe('room', () => {
 
     now = T0 + WINDOW;
     // the relay is not limited to serving the bytes verbatim: it rewrites the
-    // window field to the current one. The unsigned presence record cannot prove
-    // its window that way - the old stable tag still names the old window.
+    // window field to the current one. The presence record's signature covers
+    // that field, so the rewrite is refused (and the old stable tag still names
+    // the old window).
     const replay = new Uint8Array(entry!.blob);
     replay.set(u32be(alice.currentEpoch()), 3);
     await transport.putBucket({
@@ -484,9 +497,150 @@ describe('room', () => {
     });
     const seen = await bob.sync(1);
     expect(seen.present).toEqual([]);
+    expect(seen.dropped).toEqual([expect.objectContaining({ reason: 'bad signature' })]);
+  });
+
+  /** what any member can do: open a sealed message in one window, seal it into another */
+  const resealer = (secret: Uint8Array) => {
+    const msgKey = async (shard: string, epoch: number) => {
+      const appScopeHash = new Uint8Array(
+        await crypto.subtle.digest('SHA-256', new TextEncoder().encode(SCOPE)),
+      );
+      const shardHash = new Uint8Array(32);
+      shardHash.set(fromHex(shard));
+      const raw = await hkdfBytes(
+        secret,
+        'veil-room-msg-v1',
+        concat([appScopeHash, shardHash, u32be(epoch)]),
+        32,
+      );
+      const key = await crypto.subtle.importKey('raw', ab(raw), 'AES-GCM', false, [
+        'encrypt',
+        'decrypt',
+      ]);
+      const aadBytes = ab(
+        concat([Uint8Array.of(0x01), appScopeHash, shardHash, u32be(epoch), Uint8Array.of(0x01)]),
+      );
+      return { key, aadBytes };
+    };
+    return async (blob: Uint8Array, shard: string, from: number, to: number) => {
+      const a = await msgKey(shard, from);
+      const plain = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: ab(blob.subarray(1, 13)), additionalData: a.aadBytes },
+        a.key,
+        ab(blob.subarray(13)),
+      );
+      const b = await msgKey(shard, to);
+      const nonce = crypto.getRandomValues(new Uint8Array(12));
+      const ct = new Uint8Array(
+        await crypto.subtle.encrypt(
+          { name: 'AES-GCM', iv: nonce, additionalData: b.aadBytes },
+          b.key,
+          plain,
+        ),
+      );
+      return concat([Uint8Array.of(0x01), nonce, ct]);
+    };
+  };
+
+  it('refuses a signed message a member re-sealed into a later window', async () => {
+    const { transport, shardOf } = fakeRelay();
+    const secret = createRoomSecret();
+    let now = T0;
+    const alice = openRoom(asIdentity(guest(1), 'alice'), {
+      relay: transport,
+      roomSecret: secret,
+      now: () => now,
+    });
+    await alice.send('pay bob 5');
+    const from = alice.currentEpoch();
+    const shard = shardOf(SCOPE, from);
+    const [entry] = await transport.getBucket({ appScope: SCOPE, epoch: from, shard });
+
+    // much later, after the original aged out of every reader's horizon
+    now = T0 + WINDOW * 20;
+    const to = alice.currentEpoch();
+    const blob = await resealer(secret)(entry!.blob, shard, from, to);
+    await transport.putBucket({
+      appScope: SCOPE,
+      epoch: to,
+      shard,
+      entries: [{ tag: crypto.getRandomValues(new Uint8Array(16)), blob }],
+    });
+
+    const bob = openRoom(asIdentity(guest(2), 'bob'), {
+      relay: transport,
+      roomSecret: secret,
+      now: () => now,
+    });
+    const seen = await bob.sync(1);
+    expect(seen.messages).toEqual([]);
     expect(seen.dropped).toEqual([
-      expect.objectContaining({ reason: 'plain presence tag mismatch' }),
+      expect.objectContaining({ reason: 'record from another window' }),
     ]);
+  });
+
+  it('refuses a record whose signed time is far from the window it sits in', async () => {
+    const { transport } = fakeRelay();
+    const secret = createRoomSecret();
+    const alice = openRoom(asIdentity(guest(1), 'alice'), { relay: transport, roomSecret: secret });
+    // written for a window three ahead of its own clock
+    await alice.send('from the future', { epoch: alice.currentEpoch() + 3 });
+    const bob = openRoom(asIdentity(guest(2), 'bob'), {
+      relay: transport,
+      roomSecret: secret,
+      now: () => T0 + WINDOW * 3,
+    });
+    const seen = await bob.sync(1);
+    expect(seen.messages).toEqual([]);
+    expect(seen.dropped).toEqual([
+      expect.objectContaining({ reason: 'record time outside its window' }),
+    ]);
+  });
+
+  it('a record signed for one room does not verify in another the same key writes in', async () => {
+    const signed: Uint8Array[] = [];
+    const id = guest(1);
+    const capturing: RoomIdentity = {
+      pubkey: id.pubkey,
+      name: 'alice',
+      sign: async (data: Uint8Array) => {
+        signed.push(data);
+        return id.sign(data);
+      },
+      verify: id.verify,
+    };
+    const { transport } = fakeRelay();
+    const room = openRoom(capturing, { relay: transport, roomSecret: createRoomSecret() });
+    await room.send('hi');
+    await room.announce('alice');
+    const scopeHash = new Uint8Array(
+      await crypto.subtle.digest('SHA-256', new TextEncoder().encode(SCOPE)),
+    );
+    expect(signed).toHaveLength(2);
+    for (const bytes of signed) {
+      const text = new TextDecoder().decode(bytes.subarray(4, 4 + 'zirc-record-v4'.length));
+      expect(text).toBe('zirc-record-v4');
+      expect(toHex(bytes.subarray(18, 50))).toBe(toHex(scopeHash));
+    }
+  });
+
+  it("refuses presence a member announces under someone else's key", async () => {
+    const { transport } = fakeRelay();
+    const secret = createRoomSecret();
+    const mallory = guest(3);
+    const alicePub = guest(1).pubkey;
+    const forger: RoomIdentity = {
+      pubkey: alicePub,
+      name: 'alice',
+      sign: mallory.sign,
+      verify: mallory.verify,
+    };
+    await openRoom(forger, { relay: transport, roomSecret: secret }).announce('alice');
+    const bob = openRoom(asIdentity(guest(2), 'bob'), { relay: transport, roomSecret: secret });
+    const seen = await bob.sync(1);
+    expect(seen.present).toEqual([]);
+    expect(seen.dropped).toEqual([expect.objectContaining({ reason: 'bad signature' })]);
   });
 
   it('continues a persisted chain head across a fresh session', async () => {
@@ -871,5 +1025,463 @@ describe('room coordinate', () => {
       shard: await roomShard(SCOPE, DEFAULT_CHANNEL),
     });
     expect((await byName.sync(1)).messages.map(m => m.body)).toEqual(['hello']);
+  });
+});
+
+describe("room: plaintextBytes (blocker 1 - zirc rooms need more than chat's 1 KiB)", () => {
+  /** both fetch mocks below only ever receive a string url/body; narrow instead of `String()`-coercing an object. */
+  const asUrl = (input: RequestInfo | URL): string =>
+    typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+  const asText = (body: BodyInit | null | undefined): string =>
+    typeof body === 'string' ? body : '';
+
+  it('a 4096-byte room round-trips a body close to its larger budget', async () => {
+    const { transport } = fakeRelay();
+    const secret = createRoomSecret();
+    const alice = openRoom(asIdentity(guest(1), 'alice'), {
+      relay: transport,
+      roomSecret: secret,
+      plaintextBytes: GROUP_ROOM_PLAINTEXT_BYTES,
+    });
+    const bob = openRoom(asIdentity(guest(2), 'bob'), {
+      relay: transport,
+      roomSecret: secret,
+      plaintextBytes: GROUP_ROOM_PLAINTEXT_BYTES,
+    });
+
+    const budget = maxBodyBytes('alice', '', undefined, GROUP_ROOM_PLAINTEXT_BYTES);
+    expect(budget).toBeGreaterThan(maxBodyBytes('alice')); // bigger than the 1 KiB default
+    const body = 'x'.repeat(budget);
+    await alice.send(body);
+
+    const synced = await bob.sync(1);
+    expect(synced.messages.map(m => m.body)).toEqual([body]);
+  });
+
+  it('a budget-exceeding body is refused with a clear error, not truncated', async () => {
+    const { transport } = fakeRelay();
+    const room = openRoom(asIdentity(guest(1), 'alice'), {
+      relay: transport,
+      roomSecret: createRoomSecret(),
+      plaintextBytes: GROUP_ROOM_PLAINTEXT_BYTES,
+    });
+    const budget = maxBodyBytes('alice', '', undefined, GROUP_ROOM_PLAINTEXT_BYTES);
+    await expect(room.send('x'.repeat(budget + 1))).rejects.toThrow(/room: message is/);
+  });
+
+  it('a reader at the 1024-byte default still opens records from another 1024-byte room', async () => {
+    // plaintextBytes only changes how MUCH a room pads to, never the decode
+    // path - a default-sized room's own messages are unaffected by the feature.
+    const { transport } = fakeRelay();
+    const secret = createRoomSecret();
+    const alice = openRoom(asIdentity(guest(1), 'alice'), { relay: transport, roomSecret: secret });
+    const bob = openRoom(asIdentity(guest(2), 'bob'), { relay: transport, roomSecret: secret });
+    await alice.send('hello from the default room');
+    expect((await bob.sync(1)).messages.map(m => m.body)).toEqual(['hello from the default room']);
+  });
+
+  it('relayLimitsFor sizes a transport large enough for the room it describes', () => {
+    // the historical bug, reproduced in numbers: a 1024-byte (chat) room's
+    // sealed blob is already 1053 bytes - 1404 base64 chars - bigger than
+    // `@zafu/zid`'s 1024-char discovery default. relayLimitsFor must clear it.
+    const chat = relayLimitsFor(ROOM_PLAINTEXT_BYTES);
+    const sealedChat = sealedBlobBytes(ROOM_PLAINTEXT_BYTES);
+    expect(sealedChat).toBe(1053);
+    const chatBase64 = Math.ceil(sealedChat / 3) * 4;
+    expect(chatBase64).toBeGreaterThan(1024); // the bug this closes
+    expect(chat.maxEntryBase64).toBeGreaterThanOrEqual(chatBase64);
+
+    const group = relayLimitsFor(GROUP_ROOM_PLAINTEXT_BYTES);
+    const sealedGroup = sealedBlobBytes(GROUP_ROOM_PLAINTEXT_BYTES);
+    expect(sealedGroup).toBe(4125);
+    const groupBase64 = Math.ceil(sealedGroup / 3) * 4;
+    expect(group.maxEntryBase64).toBeGreaterThanOrEqual(groupBase64);
+    expect(group.maxEntryBase64).toBeGreaterThan(chat.maxEntryBase64);
+  });
+
+  it('a real HTTP transport sized by relayLimitsFor round-trips a 1404-char room record end to end', async () => {
+    // exactly the failure mode the design doc measured: a sealed 1053-byte
+    // room blob, 1404 base64 characters, against the real wire shape
+    // `createHttpRelayTransport` speaks (not the in-memory fake relay).
+    const coords = new Map<string, { tag: string; blob: string }[]>();
+    const key = (appScope: string, epoch: number, shard: string) => `${appScope}|${epoch}|${shard}`;
+    const fetchMock = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = asUrl(input);
+      if (init?.method === 'POST') {
+        const req = JSON.parse(asText(init?.body)) as {
+          appScope: string;
+          epoch: number;
+          shard: string;
+          entries: { tag: string; blob: string }[];
+        };
+        const k = key(req.appScope, req.epoch, req.shard);
+        const existing = coords.get(k) ?? [];
+        const byTag = new Map(existing.map(e => [e.tag, e] as const));
+        for (const e of req.entries) {
+          byTag.set(e.tag, e);
+        }
+        coords.set(k, [...byTag.values()]);
+        return new Response(null, { status: 204 });
+      }
+      const u = new URL(url);
+      const entries =
+        coords.get(
+          key(
+            u.searchParams.get('appScope') ?? '',
+            Number(u.searchParams.get('epoch')),
+            u.searchParams.get('shard') ?? '',
+          ),
+        ) ?? [];
+      return new Response(JSON.stringify({ entries }), { status: 200 });
+    }) as typeof fetch;
+
+    const limits = relayLimitsFor(GROUP_ROOM_PLAINTEXT_BYTES);
+    const relay = createHttpRelayTransport({
+      endpoint: 'https://relay.example/group',
+      fetch: fetchMock,
+      ...limits,
+    });
+
+    const secret = createRoomSecret();
+    const alice = openRoom(asIdentity(guest(1), 'alice'), {
+      relay,
+      roomSecret: secret,
+      plaintextBytes: GROUP_ROOM_PLAINTEXT_BYTES,
+    });
+    const bob = openRoom(asIdentity(guest(2), 'bob'), {
+      relay,
+      roomSecret: secret,
+      plaintextBytes: GROUP_ROOM_PLAINTEXT_BYTES,
+    });
+
+    await alice.send('a group record riding a real sealed 4 KiB room');
+    const synced = await bob.sync(1);
+    expect(synced.messages.map(m => m.body)).toEqual([
+      'a group record riding a real sealed 4 KiB room',
+    ]);
+    expect(synced.dropped).toHaveLength(0);
+  });
+
+  it("plaintextBytes and relayLimitsFor work the same way for a PUBLIC room (zitadel's replacement)", async () => {
+    // the coordinator asked explicitly: size and retention changes must not be
+    // sealed-room-only. A public room's coordinate comes from the channel
+    // NAME instead of the secret (RoomConfig.public), but the record size and
+    // the transport limits it needs are the same arithmetic either way - this
+    // is the same real-transport harness as the sealed case above, just with
+    // `public: true` and an unsealed (`plain`) send, since a public room's
+    // whole point is that a keyless visitor can read it.
+    const coords = new Map<string, { tag: string; blob: string }[]>();
+    const key = (appScope: string, epoch: number, shard: string) => `${appScope}|${epoch}|${shard}`;
+    const fetchMock = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = asUrl(input);
+      if (init?.method === 'POST') {
+        const req = JSON.parse(asText(init?.body)) as {
+          appScope: string;
+          epoch: number;
+          shard: string;
+          entries: { tag: string; blob: string }[];
+        };
+        const k = key(req.appScope, req.epoch, req.shard);
+        const existing = coords.get(k) ?? [];
+        const byTag = new Map(existing.map(e => [e.tag, e] as const));
+        for (const e of req.entries) {
+          byTag.set(e.tag, e);
+        }
+        coords.set(k, [...byTag.values()]);
+        return new Response(null, { status: 204 });
+      }
+      const u = new URL(url);
+      const entries =
+        coords.get(
+          key(
+            u.searchParams.get('appScope') ?? '',
+            Number(u.searchParams.get('epoch')),
+            u.searchParams.get('shard') ?? '',
+          ),
+        ) ?? [];
+      return new Response(JSON.stringify({ entries }), { status: 200 });
+    }) as typeof fetch;
+
+    const relay = createHttpRelayTransport({
+      endpoint: 'https://relay.example/public-group',
+      fetch: fetchMock,
+      ...relayLimitsFor(GROUP_ROOM_PLAINTEXT_BYTES),
+    });
+
+    const secret = createRoomSecret(); // irrelevant to the coordinate here, still needed to seal DMs
+    const alice = openRoom(asIdentity(guest(1), 'alice'), {
+      relay,
+      roomSecret: secret,
+      plaintextBytes: GROUP_ROOM_PLAINTEXT_BYTES,
+      public: true,
+    });
+    // a visitor with no room secret at all - the point of a public room -
+    // still reads it, as long as it was built with the same size and limits.
+    const visitor = openRoom(asIdentity(guest(2), 'bob'), {
+      relay,
+      roomSecret: createRoomSecret(),
+      plaintextBytes: GROUP_ROOM_PLAINTEXT_BYTES,
+      public: true,
+    });
+
+    await alice.send('a public group-sized announcement', { plain: true });
+    const synced = await visitor.sync(1);
+    expect(synced.messages.map(m => m.body)).toEqual(['a public group-sized announcement']);
+    expect(synced.dropped).toHaveLength(0);
+  });
+
+  it('an oversize record is reported in `dropped`, never silently missing', async () => {
+    // a transport built with discovery's unchanged defaults cannot carry this
+    // room's 4 KiB records - every entry is refused, and the room must say so.
+    const coords = new Map<string, { tag: string; blob: string }[]>();
+    const key = (appScope: string, epoch: number, shard: string) => `${appScope}|${epoch}|${shard}`;
+    const fetchMock = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = asUrl(input);
+      if (init?.method === 'POST') {
+        const req = JSON.parse(asText(init?.body)) as {
+          appScope: string;
+          epoch: number;
+          shard: string;
+          entries: { tag: string; blob: string }[];
+        };
+        const k = key(req.appScope, req.epoch, req.shard);
+        coords.set(k, [...(coords.get(k) ?? []), ...req.entries]);
+        return new Response(null, { status: 204 });
+      }
+      const u = new URL(url);
+      const entries =
+        coords.get(
+          key(
+            u.searchParams.get('appScope') ?? '',
+            Number(u.searchParams.get('epoch')),
+            u.searchParams.get('shard') ?? '',
+          ),
+        ) ?? [];
+      return new Response(JSON.stringify({ entries }), { status: 200 });
+    }) as typeof fetch;
+
+    // one transport instance to publish with no ceiling at all (bypassing the
+    // bug on the write side), another - discovery's own defaults - to read.
+    const writer = createHttpRelayTransport({
+      endpoint: 'https://relay.example/group',
+      fetch: fetchMock,
+      maxEntryBase64: 1024 * 1024,
+      maxBodyBytes: 1024 * 1024,
+    });
+    const readerWithDiscoveryDefaults = createHttpRelayTransport({
+      endpoint: 'https://relay.example/group',
+      fetch: fetchMock,
+    });
+
+    const secret = createRoomSecret();
+    const alice = openRoom(asIdentity(guest(1), 'alice'), {
+      relay: writer,
+      roomSecret: secret,
+      plaintextBytes: GROUP_ROOM_PLAINTEXT_BYTES,
+    });
+    const bob = openRoom(asIdentity(guest(2), 'bob'), {
+      relay: readerWithDiscoveryDefaults,
+      roomSecret: secret,
+      plaintextBytes: GROUP_ROOM_PLAINTEXT_BYTES,
+    });
+
+    await alice.send('this must not vanish');
+    const synced = await bob.sync(1);
+
+    expect(synced.messages).toHaveLength(0); // the entry never reached bob
+    expect(synced.dropped.some(d => d.kind === 'oversize')).toBe(true); // but it is reported
+  });
+});
+
+describe('room: Room.syncSince (blocker 2 - catching up past historyWindows)', () => {
+  it('reads only the requested range, even across hundreds of injected windows', async () => {
+    const { transport, bucket } = fakeRelay();
+    let now = T0;
+    const room = openRoom(asIdentity(guest(1), 'alice'), {
+      relay: transport,
+      roomSecret: createRoomSecret(),
+      now: () => now,
+    });
+
+    const startEpoch = room.currentEpoch();
+    await room.send('day 1');
+    // jump the clock forward 200 windows (~16.7 h), as if the member were away
+    // - within the 288-window (24 h) cap, so both windows are read.
+    now += WINDOW * 200;
+    const laterEpoch = room.currentEpoch();
+    await room.send('day 2 (today)', { epoch: laterEpoch });
+    // the old window's bucket still exists on this fake relay (it never sweeps),
+    // standing in for the per-scope retention a group room would get.
+    expect(bucket(SCOPE, startEpoch).size).toBe(1);
+
+    const caughtUp = await room.syncSince(startEpoch, 288);
+    expect(caughtUp.messages.map(m => m.body).sort()).toEqual(['day 1', 'day 2 (today)']);
+  });
+
+  it('caps how far back it reaches, even if the caller asks for more', async () => {
+    const { transport, bucket } = fakeRelay();
+    let now = T0;
+    const room = openRoom(asIdentity(guest(1), 'alice'), {
+      relay: transport,
+      roomSecret: createRoomSecret(),
+      now: () => now,
+    });
+
+    const oldEpoch = room.currentEpoch();
+    await room.send('ancient');
+    now += WINDOW * 1000;
+    const recentEpoch = room.currentEpoch();
+    await room.send('recent', { epoch: recentEpoch });
+    expect(bucket(SCOPE, oldEpoch).size).toBe(1);
+
+    // sinceEpoch is 1000 windows back, but maxWindows caps the walk at 10.
+    const capped = await room.syncSince(oldEpoch, 10);
+    expect(capped.messages.map(m => m.body)).toEqual(['recent']);
+  });
+
+  it('never runs on its own: constructing a Room makes no relay call until a method is invoked', async () => {
+    let calls = 0;
+    const counting: RelayTransport = {
+      putBucket: async req => {
+        calls += 1;
+        await fakeRelay().transport.putBucket(req);
+      },
+      getBucket: async req => {
+        calls += 1;
+        return fakeRelay().transport.getBucket(req);
+      },
+    };
+
+    const room = new Room(asIdentity(guest(1), 'alice'), {
+      appScope: SCOPE,
+      roomSecret: createRoomSecret(),
+      relay: counting,
+      now: () => T0,
+    });
+    expect(calls).toBe(0); // the constructor alone touched the relay zero times
+
+    // restoring from a persisted head is the same story: still zero calls.
+    const restored = new Room(asIdentity(guest(1), 'alice'), {
+      appScope: SCOPE,
+      roomSecret: createRoomSecret(),
+      relay: counting,
+      now: () => T0,
+      head: room.chainHead(),
+    });
+    expect(calls).toBe(0);
+    void restored;
+
+    // only an explicit call (open/sync/send/announce) talks to the relay -
+    // never extension start, unlock, or popup open, which this constructor
+    // stands in for.
+    await room.sync(1);
+    expect(calls).toBeGreaterThan(0);
+  });
+});
+
+describe('room: shardFor (a shard per window)', () => {
+  const perWindow =
+    (secret: Uint8Array) =>
+    async (epoch: number): Promise<string> =>
+      toHex(await hkdfBytes(secret, 'shard', fromHex(epoch.toString(16).padStart(16, '0')), 8));
+
+  it('writes each window to its own shard and reads back across 300 windows', async () => {
+    const { transport, shardOf } = fakeRelay();
+    let now = T0;
+    const secret = createRoomSecret();
+    const alice = openRoom(asIdentity(guest(1), 'alice'), {
+      relay: transport,
+      roomSecret: secret,
+      shardFor: perWindow(secret),
+      now: () => now,
+    });
+    const first = alice.currentEpoch();
+    await alice.send('early');
+    now += WINDOW * 300;
+    const later = alice.currentEpoch();
+    await alice.send('late');
+    expect(shardOf(SCOPE, first)).not.toBe(shardOf(SCOPE, later));
+    expect(shardOf(SCOPE, first)).toBe(await perWindow(secret)(first));
+
+    const bob = openRoom(asIdentity(guest(2), 'bob'), {
+      relay: transport,
+      roomSecret: secret,
+      shardFor: perWindow(secret),
+      now: () => now,
+    });
+    const read = await bob.syncSince(first, 301);
+    expect(read.messages.map(m => m.body)).toEqual(['early', 'late']);
+    expect(read.dropped).toEqual([]);
+  });
+
+  it('a reader on the room-long shard sees none of it', async () => {
+    const { transport } = fakeRelay();
+    const secret = createRoomSecret();
+    const now = () => T0;
+    const alice = openRoom(asIdentity(guest(1), 'alice'), {
+      relay: transport,
+      roomSecret: secret,
+      shardFor: perWindow(secret),
+      now,
+    });
+    await alice.send('hello');
+    const fixed = openRoom(asIdentity(guest(2), 'bob'), {
+      relay: transport,
+      roomSecret: secret,
+      now,
+    });
+    expect((await fixed.sync(1)).messages).toEqual([]);
+  });
+
+  it('refuses a shard that is not 16 hex characters', async () => {
+    const { transport } = fakeRelay();
+    const room = openRoom(asIdentity(guest(1), 'alice'), {
+      relay: transport,
+      roomSecret: createRoomSecret(),
+      shardFor: () => Promise.resolve('nope'),
+      now: () => T0,
+    });
+    await expect(room.send('x')).rejects.toThrow(/16 lowercase hex/);
+  });
+});
+
+describe('room: a read is bounded by the room, not by discovery', () => {
+  it('a room caps its window at ROOM_WINDOW_ENTRIES and a few MiB, not the 16384-entry default', () => {
+    const group = relayLimitsFor(GROUP_ROOM_PLAINTEXT_BYTES);
+    expect(group.maxEntries).toBe(ROOM_WINDOW_ENTRIES);
+    expect(group.maxBodyBytes).toBe(2 * 1024 * 1024);
+    expect(relayLimitsFor(ROOM_PLAINTEXT_BYTES).maxBodyBytes).toBe(1024 * 1024);
+    // what one honest full window weighs fits inside it
+    expect(ROOM_WINDOW_ENTRIES * (group.maxEntryBase64 + 64)).toBeLessThanOrEqual(
+      group.maxBodyBytes,
+    );
+  });
+
+  it('a hostile relay cannot make a room read buffer beyond the cap', async () => {
+    const limits = relayLimitsFor(GROUP_ROOM_PLAINTEXT_BYTES);
+    let pulled = 0;
+    const chunk = new TextEncoder().encode('x'.repeat(64 * 1024));
+    // an endless body: the relay keeps sending as long as anyone reads
+    const fetch = () =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            pull(c) {
+              pulled += chunk.byteLength;
+              c.enqueue(chunk);
+            },
+          }),
+        ),
+      );
+    const relay = createHttpRelayTransport({
+      endpoint: 'https://relay.example',
+      fetch: fetch as unknown as typeof globalThis.fetch,
+      ...limits,
+    });
+    await expect(
+      relay.getBucket({ appScope: 'zafu-group-v1', epoch: 1, shard: 'ab' }),
+    ).rejects.toThrow(/exceeds/);
+    // read up to the cap, one chunk past it at most, then stopped
+    expect(pulled).toBeLessThanOrEqual(limits.maxBodyBytes + 2 * chunk.byteLength);
   });
 });

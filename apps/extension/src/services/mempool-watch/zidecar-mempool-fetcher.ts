@@ -1,5 +1,5 @@
 /**
- * zidecarMempoolFetcher — one-shot snapshot fetcher backed by zidecar.
+ * zidecarMempoolFetcher - one-shot snapshot fetcher backed by zidecar.
  *
  * yields exactly one MempoolSnapshot per call (the current zidecar
  * mempool stream returns the full current mempool as a list of compact
@@ -13,7 +13,7 @@
 import type { MempoolEntry, MempoolFetcher } from './types';
 
 /**
- * Minimal client interface — exact shape of the relevant ZidecarClient
+ * Minimal client interface - exact shape of the relevant ZidecarClient
  * method. Allows tests to inject a fake without pulling the whole client.
  *
  * The optional `signal` is plumbed all the way to the underlying fetch so
@@ -62,7 +62,7 @@ export function zidecarMempoolFetcher(client: MempoolStreamClient): MempoolFetch
       yield { entries, observedAtMs: Date.now() };
     } catch (err) {
       // Abort during the network call surfaces as DOMException 'AbortError'.
-      // It's not a watcher error — the caller asked us to stop.
+      // It's not a watcher error - the caller asked us to stop.
       if (ctx.signal.aborted) {
         return;
       }

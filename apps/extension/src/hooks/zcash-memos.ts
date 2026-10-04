@@ -2,14 +2,17 @@
  * hook to sync zcash transaction memos into the inbox
  *
  * all heavy lifting (bucket fetch, noise generation, decryption) runs in the
- * zcash worker — this hook is a thin wrapper that sends one message and
+ * zcash worker - this hook is a thin wrapper that sends one message and
  * inserts returned memos into the zustand messages store.
  */
 
 import { useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { ingestCardMemos, ingestMemoInvites } from '../people/client';
 import { useStore } from '../state';
 import { messagesSelector } from '../state/messages';
+import { getDiversifiedAddresses } from '../state/diversified-addresses';
+import { matchReceiver, receivingAddress } from '../state/receiving-address';
 import {
   syncMemosInWorker,
   decryptMemosInWorker,
@@ -106,9 +109,18 @@ export function useZcashMemos(walletId: string, zidecarUrl: string = DEFAULT_ZID
         strategy,
       );
 
+      // which of your addresses each note arrived on, and so who it is from
+      const records = results.some(m => m.receiver)
+        ? await getDiversifiedAddresses().catch(() => [])
+        : [];
+      const contacts = useStore.getState().contacts.contacts;
+      const matchOf = (receiver: string | undefined) =>
+        matchReceiver(receiver, records, Array.isArray(contacts) ? contacts : []);
+
       // insert returned memos into zustand store
       for (const memo of results) {
         const { content, returnAddress } = parseReturnAddress(memo.content);
+        const match = matchOf(memo.receiver);
         await messages.addMessage({
           network: 'zcash',
           txId: memo.txId,
@@ -116,12 +128,29 @@ export function useZcashMemos(walletId: string, zidecarUrl: string = DEFAULT_ZID
           timestamp: memo.timestamp,
           content,
           senderAddress: returnAddress,
-          recipientAddress: '',
+          recipientAddress: receivingAddress(memo.receiver) ?? '',
+          diversifierIndex: match?.diversifierIndex,
+          personAddress: match?.personAddress,
           direction: memo.direction as 'sent' | 'received',
           read: memo.direction === 'sent',
           amount: memo.amount,
         });
       }
+
+      // a memo that carries a zafu chat invite goes to the people relay's inbox
+      ingestMemoInvites(
+        results.map(m => {
+          const { content, returnAddress } = parseReturnAddress(m.content);
+          return {
+            network: 'zcash' as const,
+            txId: m.txId,
+            content,
+            timestamp: m.timestamp,
+            from: returnAddress,
+            direction: m.direction,
+          };
+        }),
+      );
 
       // also feed raw memo bytes into the structured inbox for binary-encoded messages
       // (FROST coordination, fragmented text, address shares, etc.)
@@ -144,16 +173,19 @@ export function useZcashMemos(walletId: string, zidecarUrl: string = DEFAULT_ZID
             txid: m.txId,
             height: m.blockHeight,
             memo: bytes,
-            diversifierIndex: m.diversifierIndex ?? 0,
+            diversifierIndex: matchOf(m.receiver)?.diversifierIndex ?? 0,
             isChange: m.direction === 'sent',
             timestamp: m.timestamp,
             // the note's own declared return address is the only thing a
-            // card/sign payload can be bound to — a memo carries no signature
+            // card/sign payload can be bound to - a memo carries no signature
             senderAddress: parseReturnAddress(m.content).returnAddress,
           }));
         if (structuredNotes.length > 0) {
           inbox.ingestMemos(structuredNotes);
         }
+
+        // a v2 card that came as a memo: the answer to a card you showed
+        ingestCardMemos(structuredNotes);
 
         // surface contact cards as messages so they appear in the inbox UI
         for (const note of structuredNotes) {
@@ -178,11 +210,13 @@ export function useZcashMemos(walletId: string, zidecarUrl: string = DEFAULT_ZID
             txId: m.txId,
             blockHeight: m.blockHeight,
             timestamp: m.timestamp,
-            content: `📇 ${card.name || 'anonymous'}\n${card.address}`,
+            content: `${card.name}\n${card.address}`,
             // never record the card's self-declared address as the sender:
             // only the delivering note's own return address is evidence
             senderAddress: note.senderAddress,
-            recipientAddress: '',
+            recipientAddress: receivingAddress(m.receiver) ?? '',
+            diversifierIndex: matchOf(m.receiver)?.diversifierIndex,
+            personAddress: matchOf(m.receiver)?.personAddress,
             direction: m.direction as 'sent' | 'received',
             read: m.direction === 'sent',
             amount: m.amount,

@@ -26,12 +26,15 @@ vi.mock('./settings-screen', () => ({
 
 import { SettingsFeatures } from './settings-features';
 
-/** The row for one capability: the block whose state group is its direct child. */
+/** The row for one capability: the block whose state group (a radiogroup of
+ * three radios) is its direct child. */
 const row = (cap: Capability): HTMLElement => {
   const label = CAPABILITY_META[cap].label;
   const hit = [...document.querySelectorAll('div')].find(d => {
     const states = [...d.children].find(
-      c => c.tagName === 'DIV' && c.querySelectorAll(':scope > button').length === 3,
+      c =>
+        c.getAttribute('role') === 'radiogroup' &&
+        c.querySelectorAll(':scope > button').length === 3,
     );
     return !!states && (d.textContent ?? '').includes(label);
   });
@@ -41,8 +44,8 @@ const row = (cap: Capability): HTMLElement => {
 
 /** Which of the three states is the highlighted one in that row. */
 const active = (cap: Capability): string => {
-  const buttons = [...row(cap).querySelectorAll('button')];
-  const on = buttons.find(b => b.className.includes('bg-elev-3'));
+  const buttons = [...row(cap).querySelectorAll('button[role="radio"]')];
+  const on = buttons.find(b => b.getAttribute('aria-checked') === 'true');
   if (!on) throw new Error(`no active state in ${cap} row`);
   return (on.textContent ?? '').trim();
 };

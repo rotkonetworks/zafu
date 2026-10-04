@@ -39,7 +39,10 @@ const handlePopup = async <T extends PopupType>(
 export const wirePopupDelivery = (popupId: string): (() => void) => {
   const listener = listenPopup(popupId, handlePopup);
   chrome.runtime.onMessage.addListener(listener);
-  void chrome.runtime.sendMessage(popupId);
+  // the service worker can still be waking up when this fires - nobody
+  // awaits the ping, so an unhandled rejection would surface as "receiving
+  // end does not exist" on every popup open
+  void chrome.runtime.sendMessage(popupId).catch(() => {});
   return () => chrome.runtime.onMessage.removeListener(listener);
 };
 

@@ -10,6 +10,7 @@
 import { Key } from '@repo/encryption/key';
 import { KeyPrint, type KeyPrintJson } from '@repo/encryption/key-print';
 import { Box, type BoxJson } from '@repo/encryption/box';
+import type { SeatRoom } from './vault-ops';
 
 // ── plaintext payloads ──
 
@@ -23,13 +24,15 @@ export interface FrostSharePayload {
   threshold: number;
   maxSigners: number;
   mainnet: boolean;
-  /** Orchard-only UFVK (`uview1…`) — saved so restore doesn't need the FVK sk. */
+  /** Orchard-only UFVK (`uview1…`) - saved so restore doesn't need the FVK sk. */
   orchardFvk: string;
-  /** unified address — also derivable from publicKeyPackage + sk, saved for convenience. */
+  /** unified address - also derivable from publicKeyPackage + sk, saved for convenience. */
   address: string;
   /** relay url for FROST signing rounds. */
   relayUrl: string;
   createdAt: number;
+  /** a group's or a deal's seat: the room it was made in and signs in */
+  room?: SeatRoom;
 }
 
 export interface FrostShareBatchPayload {
@@ -52,7 +55,7 @@ export interface FrostBackupEnvelope {
   publicKeyPackage?: string;
   /** number of shares for batch backups; absent for single */
   shareCount?: number;
-  /** when the export was made — plaintext, helps user identify */
+  /** when the export was made - plaintext, helps user identify */
   exportedAt: number;
   keyPrint: KeyPrintJson;
   box: BoxJson;

@@ -20,4 +20,12 @@ describe('splitPaymentLinks', () => {
     ]);
     expect(splitPaymentLinks('no links here')).toEqual(['no links here']);
   });
+
+  it('pulls out zafu: links too', () => {
+    expect(splitPaymentLinks('swap here: zafu:swap?from=eth&to=zec.')).toEqual([
+      'swap here: ',
+      { uri: 'zafu:swap?from=eth&to=zec' },
+      '.',
+    ]);
+  });
 });

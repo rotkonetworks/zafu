@@ -13,6 +13,9 @@
  * learns anything): Channels, then per transfer channel ChannelClientState
  * (which chain it points at) and ClientStatus (Active or not).
  *
+ * The answers only ever DISABLE a pair the registry pins (see
+ * pinnedRouteStatus); they never pick one.
+ *
  * Only the Penumbra-side client is checked. Shield-in (funds leaving the cosmos
  * chain) also needs that chain's client of penumbra-1 to be Active; that is
  * not checked here.
@@ -35,8 +38,6 @@ export interface PenumbraRoute {
   /** the Penumbra-side light client is Active */
   active: boolean;
 }
-
-const channelNumber = (id: string): number => Number(id.replace(/^channel-/, ''));
 
 /** ask the Penumbra node for every transfer channel, its chain and client status */
 export async function discoverPenumbraRoutes(
@@ -76,26 +77,38 @@ export async function discoverPenumbraRoutes(
   return routes.filter((r): r is PenumbraRoute => !!r && !!r.penumbraChannel);
 }
 
+/** a channel pair as the registry pins it */
+export interface PinnedPair {
+  penumbraSourceChannel: string;
+  penumbraChannel: string;
+}
+
 /**
- * The route to use for a chain, or undefined when there is none.
+ * Whether the registry's pinned channel pair for a chain can carry funds right
+ * now: 'active' when discovery reports that exact pair with an Active client,
+ * 'inactive' otherwise.
  *
- * Several Active channels can lead to one chain (osmosis has 19 and 20). Pick
- * the pinned one when it is Active, else the lowest-numbered Active one - the
- * denom a token gets on Penumbra embeds the channel, so this rule has to agree
- * with what the Penumbra asset registry labels. A pinned channel whose client
- * is not Active is never returned: that is exactly the stale-pin case.
+ * Discovery can only take a pair away, never offer one. Its answers carry no
+ * proofs, and the chain id it reports is whatever the client's creator wrote:
+ * opening an IBC client and channel on Penumbra is permissionless, so anyone
+ * can open a channel to a chain of their own that calls itself `injective-1`.
+ * Taking "the lowest Active channel that claims the chain" (as this once did,
+ * whenever the pin was not Active) would send a shield-in or a withdraw to
+ * whoever opened that channel, and a node the user picked could hand back
+ * any pair it liked. So the pair always comes from the bundled or signed
+ * registry, the reported chain id is not read at all, and both ends of the
+ * pair must match: a node that reports the pinned Penumbra channel with
+ * another counterparty is answered with 'inactive' too.
  */
-export function selectPenumbraRoute(
-  routes: PenumbraRoute[],
-  chainId: string,
-  pinnedSourceChannel?: string,
-): PenumbraRoute | undefined {
-  const live = routes.filter(r => r.chainId === chainId && r.active);
-  const pinned = live.find(r => r.penumbraSourceChannel === pinnedSourceChannel);
-  if (pinned) {
-    return pinned;
-  }
-  return live.sort(
-    (a, b) => channelNumber(a.penumbraSourceChannel) - channelNumber(b.penumbraSourceChannel),
-  )[0];
+export function pinnedRouteStatus(
+  routes: readonly PenumbraRoute[],
+  pin: PinnedPair,
+): 'active' | 'inactive' {
+  const live = routes.some(
+    r =>
+      r.active &&
+      r.penumbraSourceChannel === pin.penumbraSourceChannel &&
+      r.penumbraChannel === pin.penumbraChannel,
+  );
+  return live ? 'active' : 'inactive';
 }

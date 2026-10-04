@@ -5,6 +5,8 @@
  * response back. Binary already crosses as base64 (see injected-keplr.ts), so
  * everything here is plain JSON.
  */
+// egress guard first: nothing may capture fetch or open a socket before it
+import '../net/egress-install-lite';
 
 export {}; // module scope - keeps CHANNEL out of the shared ISOLATED-world global
 
@@ -61,7 +63,7 @@ window.addEventListener('message', (ev: MessageEvent) => {
   }
 
   chrome.runtime
-    .sendMessage({ type: 'ZafuKeplr', method, params, origin: window.origin })
+    .sendMessage({ type: 'ZafuKeplr', method, params })
     .then((res: { ok?: boolean; result?: unknown; error?: string } | undefined) => {
       if (res?.ok) {
         respond({ ok: true, result: res.result });

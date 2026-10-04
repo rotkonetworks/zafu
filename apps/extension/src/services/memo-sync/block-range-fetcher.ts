@@ -1,5 +1,5 @@
 /**
- * blockRangeFetcher — the only concrete MemoFetcher in the strategy stack.
+ * blockRangeFetcher - the only concrete MemoFetcher in the strategy stack.
  *
  * privacy property at the transport layer:
  *   for each bucket the wallet wants, fetch a 100-block contiguous range
@@ -22,7 +22,7 @@ import { BUCKET_SIZE } from './types';
 import type { BucketStart, FetchContext, MemoEvent, MemoFetcher } from './types';
 
 /**
- * minimal client interface — exact shape of the relevant ZidecarClient
+ * minimal client interface - exact shape of the relevant ZidecarClient
  * methods. allows tests to inject a fake without pulling the whole client in.
  */
 export interface BlockRangeClient {

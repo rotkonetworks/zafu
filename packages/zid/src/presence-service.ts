@@ -28,7 +28,12 @@ import {
   type PresenceRecord,
   type PresenceDir,
 } from './presence-blob';
-import type { ContactRelay, PresenceEntry, FriendPresenceQuery } from './contact-relay';
+import {
+  PRESENCE_BLOB_BYTES,
+  type ContactRelay,
+  type PresenceEntry,
+  type FriendPresenceQuery,
+} from './contact-relay';
 
 /** a friend to publish-to / discover, with the cached pairwise root secret. */
 export interface DiscoveryPeer {
@@ -38,6 +43,13 @@ export interface DiscoveryPeer {
   friendPubHex: string;
   /** the cached pairwise root secret (from contacts.ts establishContactSecret). */
   rootSecret: Uint8Array;
+  /**
+   * MY key-agreement public key for this peer (hex), when I hold a different
+   * one per relationship. It names the publisher in the tag and orders the
+   * pair's direction, so it must be the key the peer holds for me. Absent:
+   * the service-wide `myPubHex`.
+   */
+  myPubHex?: string;
 }
 
 /** a present friend, with their decrypted presence record. */
@@ -69,6 +81,15 @@ export interface PresenceService {
    * dropped.
    */
   findPresent(peers: readonly DiscoveryPeer[], epoch?: number): Promise<PresentPeer[]>;
+  /**
+   * Take back this epoch's presence: the same padded, fixed-size write as
+   * `publishSelf`, with each real tag carrying fresh random bytes instead of a
+   * sealed record. The relay merges by tag, so the earlier blob is replaced and
+   * a friend's lookup finds the tag but nothing that opens: absent, at once,
+   * instead of at the end of the window. To the relay it is one more 64-entry
+   * write of random-looking bytes.
+   */
+  withdrawSelf(peers: readonly DiscoveryPeer[], epoch?: number): Promise<void>;
 }
 
 /**
@@ -76,65 +97,84 @@ export interface PresenceService {
  *                   `blobBytes` matching the sealed PresenceRecord size.
  * @param appOrigin  the app scope; MUST equal the relay's appOrigin so tags and
  *                   buckets agree.
- * @param myPubHex   my own contact-card key-agreement public key (hex).
+ * @param myPubHex   my own contact-card key-agreement public key (hex), for
+ *                   peers that carry no `myPubHex` of their own. A wallet with
+ *                   one key per relationship sets it on every peer instead.
  */
 export const createPresenceService = (
   relay: ContactRelay,
   appOrigin: string,
-  myPubHex: string,
-): PresenceService => ({
-  async publishSelf(record, peers, epoch = presenceEpoch()) {
-    const plaintext = encodePresenceRecord(record);
-    const entries: PresenceEntry[] = [];
-    for (const p of peers) {
-      // I announce under MY pubkey; peer j finds me by deriving the same tag.
-      const tag = rendezvousTag(p.rootSecret, appOrigin, epoch, myPubHex);
-      const blob = await sealPresence(
-        p.rootSecret,
-        appOrigin,
-        epoch,
-        pairDir(myPubHex, p.friendPubHex),
-        plaintext,
-      );
-      entries.push({ tag, blob });
+  myPubHex?: string,
+): PresenceService => {
+  const mine = (p: DiscoveryPeer): string => {
+    const k = p.myPubHex ?? myPubHex;
+    if (!k) {
+      throw new Error('presence: no key of mine for this peer');
     }
-    await relay.publishPresence(entries, epoch);
-  },
-
-  async findPresent(peers, epoch = presenceEpoch()) {
-    const queries: FriendPresenceQuery[] = peers.map(p => ({
-      id: p.id,
-      friendPubHex: p.friendPubHex,
-      rootSecret: p.rootSecret,
-    }));
-    const present = await relay.discover(queries, epoch);
-    const byId = new Map(peers.map(p => [p.id, p]));
-    const out: PresentPeer[] = [];
-    for (const f of present) {
-      const p = byId.get(f.id);
-      if (!p) {
-        continue;
+    return k;
+  };
+  return {
+    async publishSelf(record, peers, epoch = presenceEpoch()) {
+      const plaintext = encodePresenceRecord(record);
+      const entries: PresenceEntry[] = [];
+      for (const p of peers) {
+        // I announce under MY pubkey; peer j finds me by deriving the same tag.
+        const tag = rendezvousTag(p.rootSecret, appOrigin, epoch, mine(p));
+        const blob = await sealPresence(
+          p.rootSecret,
+          appOrigin,
+          epoch,
+          pairDir(mine(p), p.friendPubHex),
+          plaintext,
+        );
+        entries.push({ tag, blob });
       }
-      // the peer published (to me) under THEIR pubkey; open in that direction.
-      const bytes = await openPresence(
-        p.rootSecret,
-        appOrigin,
-        epoch,
-        pairDir(p.friendPubHex, myPubHex),
-        f.blob,
-      );
-      if (bytes) {
-        // decode can still reject a malformed / wrong-version record even after
-        // the AEAD opened - drop those rather than surfacing a bogus peer.
-        const record = decodePresenceRecord(bytes);
-        if (record) {
-          out.push({ id: f.id, record });
+      await relay.publishPresence(entries, epoch);
+    },
+
+    async withdrawSelf(peers, epoch = presenceEpoch()) {
+      const entries: PresenceEntry[] = peers.map(p => ({
+        tag: rendezvousTag(p.rootSecret, appOrigin, epoch, mine(p)),
+        blob: crypto.getRandomValues(new Uint8Array(PRESENCE_BLOB_BYTES)),
+      }));
+      await relay.publishPresence(entries, epoch);
+    },
+
+    async findPresent(peers, epoch = presenceEpoch()) {
+      const queries: FriendPresenceQuery[] = peers.map(p => ({
+        id: p.id,
+        friendPubHex: p.friendPubHex,
+        rootSecret: p.rootSecret,
+      }));
+      const present = await relay.discover(queries, epoch);
+      const byId = new Map(peers.map(p => [p.id, p]));
+      const out: PresentPeer[] = [];
+      for (const f of present) {
+        const p = byId.get(f.id);
+        if (!p) {
+          continue;
+        }
+        // the peer published (to me) under THEIR pubkey; open in that direction.
+        const bytes = await openPresence(
+          p.rootSecret,
+          appOrigin,
+          epoch,
+          pairDir(p.friendPubHex, mine(p)),
+          f.blob,
+        );
+        if (bytes) {
+          // decode can still reject a malformed / wrong-version record even after
+          // the AEAD opened - drop those rather than surfacing a bogus peer.
+          const record = decodePresenceRecord(bytes);
+          if (record) {
+            out.push({ id: f.id, record });
+          }
         }
       }
-    }
-    return out;
-  },
-});
+      return out;
+    },
+  };
+};
 
 /** the minimum an app receives per present contact: the caller's handle, the
  *  peer's EPHEMERAL session pubkey (to connect to), and capability bits. Never

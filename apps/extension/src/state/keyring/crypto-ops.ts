@@ -1,5 +1,5 @@
 /**
- * crypto-ops — async crypto helpers
+ * crypto-ops - async crypto helpers
  *
  * each function does exactly one thing. no storage writes, no state updates.
  * takes a session handle (to get the password key) + inputs, returns outputs.
@@ -12,6 +12,7 @@ import { KeyPrint, type KeyPrintJson } from '@repo/encryption/key-print';
 import { Box } from '@repo/encryption/box';
 import type { BoxJson } from '@repo/encryption/box';
 import type { EncryptedVault } from './types';
+import { sealKeyTo, type KeySeal, type WorkerKey } from '../../shared/vault-seal';
 
 export interface CryptoCtx {
   session: ExtensionStorage<SessionStorageState>;
@@ -24,6 +25,15 @@ export const requireKey = async (ctx: CryptoCtx): Promise<Key> => {
     throw new Error('keyring locked');
   }
   return Key.fromJson(keyJson);
+};
+
+/** the session key wrapped to a key the zcash worker issued, or throw */
+export const sealSessionKeyTo = async (ctx: CryptoCtx, to: WorkerKey): Promise<KeySeal> => {
+  const keyJson = await ctx.session.get('passwordKey');
+  if (!keyJson) {
+    throw new Error('keyring locked');
+  }
+  return sealKeyTo(keyJson, to);
 };
 
 /** encrypt plaintext with the session key */
@@ -61,49 +71,7 @@ export const recreateMasterKey = async (password: string, keyPrintJson: KeyPrint
   return { key, keyJson };
 };
 
-/** re-encrypt vault data: decrypt with oldKey, encrypt with newKey */
-export const reencryptVault = async (
-  vault: EncryptedVault,
-  oldKey: Key,
-  newKey: Key,
-): Promise<EncryptedVault> => {
-  const oldBox = Box.fromJson(JSON.parse(vault.encryptedData));
-  const decrypted = await oldKey.unseal(oldBox);
-  if (!decrypted) {
-    throw new Error(`failed to decrypt vault ${vault.id}`);
-  }
-
-  const newBox = await newKey.seal(decrypted);
-  const newInsensitive = { ...vault.insensitive };
-  delete newInsensitive['airgapOnly'];
-
-  return {
-    ...vault,
-    encryptedData: JSON.stringify(newBox.toJson()),
-    insensitive: newInsensitive,
-  };
-};
-
-/**
- * re-encrypt a raw seed Box (a penumbra wallet's custody.encryptedSeedPhrase)
- * from oldKey to newKey. Same invariant as reencryptVault, but for the seed
- * boxes that live in penumbraWallets rather than in the vault list - both are
- * sealed under the master key, so a password change must re-seal both or the
- * penumbra seed is orphaned exactly like the vault bug.
- */
-export const reencryptSeedBox = async (
-  boxJson: BoxJson,
-  oldKey: Key,
-  newKey: Key,
-): Promise<BoxJson> => {
-  const plain = await oldKey.unseal(Box.fromJson(boxJson));
-  if (plain == null) {
-    throw new Error('failed to decrypt penumbra seed for migration');
-  }
-  return (await newKey.seal(plain)).toJson();
-};
-
-/** decrypt multisig secrets — tries vault first, then legacy zcash wallet record */
+/** decrypt multisig secrets - tries vault first, then legacy zcash wallet record */
 export const decryptMultisigSecrets = async (
   ctx: CryptoCtx,
   keyPackage: BoxJson | string,
@@ -132,7 +100,7 @@ export const encryptFrostSecrets = async (
       encEphemeralSeed: (await key.seal(ephemeralSeed)).toJson(),
     };
   } catch {
-    // no session key — store as raw strings
+    // no session key - store as raw strings
     return { encKeyPackage: keyPackage, encEphemeralSeed: ephemeralSeed };
   }
 };

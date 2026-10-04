@@ -14,7 +14,6 @@ export interface KeplrMessage {
   type: 'ZafuKeplr';
   method: string;
   params: unknown;
-  origin: string;
 }
 
 export const isKeplrMessage = (m: unknown): m is KeplrMessage =>
@@ -71,14 +70,14 @@ export interface KeplrWireKey {
 export const cosmosChainIdFromKeplr = (keplrChainId: string): CosmosChainId | undefined => {
   for (const [id, config] of Object.entries(COSMOS_CHAINS)) {
     if (config.chainId === keplrChainId) {
-      return id as CosmosChainId;
+      return id;
     }
   }
   // fall back to a prefix match (keplr chain ids are usually "<prefix>-<n>")
   const prefix = keplrChainId.split('-')[0];
   for (const [id, config] of Object.entries(COSMOS_CHAINS)) {
     if (config.bech32Prefix === prefix) {
-      return id as CosmosChainId;
+      return id;
     }
   }
   return undefined;

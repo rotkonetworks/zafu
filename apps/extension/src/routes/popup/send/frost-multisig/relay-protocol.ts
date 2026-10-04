@@ -1,8 +1,8 @@
 // wire-tags used by both self-custody and airgap multisig signers on the relay:
 //   SIGN:<sighash>:<alphas>:<recipient>:<amountZat>:<feeZat>[:<pcztHex>]
-//                                                            — joiner display payload + verifier bytes
-//   C:<commit_a0>|<commit_a1>|...                            — round-1 commitments per action
-//   S:<actionIdx>:<share>                                    — round-2 share per action
+// - joiner display payload + verifier bytes
+//   C:<commit_a0>|<commit_a1>|... - round-1 commitments per action
+//   S:<actionIdx>:<share> - round-2 share per action
 //
 // `pcztHex` is the standard pczt::Pczt the host built (gh #17 migration). Each
 // joiner parses it via `frostInspectPcztOutputsInWorker`, recomputes the
@@ -17,7 +17,7 @@
 // unauthenticated relay. There is no host-claim-only fallback.
 //
 // NOT covered by any of this: `feeZat`. See assessClaimedFee() in
-// multisig-verifier.ts — the fee cannot be checked without the bundle's
+// multisig-verifier.ts - the fee cannot be checked without the bundle's
 // value_balance, which the wasm parser does not return.
 
 import { FrostdRelayClient } from '../../../../state/keyring/frostd-relay-client';
@@ -32,7 +32,7 @@ export interface RelaySession {
   roomCode: string;
   /**
    * The human room code announced via the relay's rendezvous, when it has
-   * one — the thing to show co-signers instead of the uuid. Null on stock
+   * one - the thing to show co-signers instead of the uuid. Null on stock
    * frostd relays; show `roomCode` then.
    */
   friendlyCode: string | null;
@@ -87,7 +87,7 @@ export async function openRelayRoom(
   };
 }
 
-/** joiner variant — connects to an existing session by id (no createRoom). */
+/** joiner variant - connects to an existing session by id (no createRoom). */
 export async function openJoinerSession(
   relayUrl: string,
   roomCode: string,

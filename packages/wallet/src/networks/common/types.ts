@@ -5,13 +5,10 @@
  */
 
 /** Supported network types */
-export type NetworkType = 'penumbra' | 'zcash' | 'polkadot' | 'cosmos';
+export type NetworkType = 'penumbra' | 'zcash' | 'cosmos';
 
 /** Network chain IDs for QR protocol */
 export const CHAIN_IDS = {
-  SUBSTRATE_SR25519: 0x00,
-  SUBSTRATE_ED25519: 0x01,
-  SUBSTRATE_ECDSA: 0x02,
   PENUMBRA: 0x03,
   ZCASH: 0x04,
 } as const;
@@ -43,18 +40,6 @@ export interface ZcashNetworkKeys {
   unifiedAddress: string;
   /** Mainnet or testnet */
   mainnet: boolean;
-}
-
-/** Polkadot network keys */
-export interface PolkadotNetworkKeys {
-  /** Public key (32 bytes, hex) */
-  publicKey: string;
-  /** SS58 encoded address */
-  ss58Address: string;
-  /** Signature scheme */
-  scheme: 'sr25519' | 'ed25519';
-  /** Chain name (e.g., 'polkadot', 'kusama') */
-  chain: string;
 }
 
 /** Cosmos network keys */
@@ -92,7 +77,6 @@ export interface ZignerWallet {
   networks: {
     penumbra?: PenumbraNetworkKeys;
     zcash?: ZcashNetworkKeys;
-    polkadot?: PolkadotNetworkKeys;
     cosmos?: CosmosNetworkKeys;
   };
 }
@@ -105,9 +89,6 @@ export function getEnabledNetworks(wallet: ZignerWallet): NetworkType[] {
   }
   if (wallet.networks.zcash) {
     networks.push('zcash');
-  }
-  if (wallet.networks.polkadot) {
-    networks.push('polkadot');
   }
   if (wallet.networks.cosmos) {
     networks.push('cosmos');
@@ -126,7 +107,6 @@ export interface NetworkInfo {
 export const NETWORK_INFO: Record<NetworkType, NetworkInfo> = {
   penumbra: { type: 'penumbra', name: 'Penumbra', icon: '🔴', color: '#E11D48' },
   zcash: { type: 'zcash', name: 'Zcash', icon: '💛', color: '#F4B728' },
-  polkadot: { type: 'polkadot', name: 'Polkadot', icon: '🔵', color: '#E6007A' },
   cosmos: { type: 'cosmos', name: 'Cosmos', icon: '⚛️', color: '#6F7390' },
 };
 
@@ -199,5 +179,5 @@ export interface QrImportResult {
   /** Account index (if available) */
   accountIndex?: number;
   /** The network-specific keys */
-  keys: PenumbraNetworkKeys | ZcashNetworkKeys | PolkadotNetworkKeys | CosmosNetworkKeys;
+  keys: PenumbraNetworkKeys | ZcashNetworkKeys | CosmosNetworkKeys;
 }

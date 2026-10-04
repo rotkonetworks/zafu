@@ -11,8 +11,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { x25519 } from '@noble/curves/ed25519';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
+import { bytesToHex } from '@noble/hashes/utils';
 import {
   ContactRelay,
   PRESENCE_BLOB_BYTES,
@@ -26,7 +25,9 @@ import type { ZafuDiscoverContactsResponse } from '@zafu/protocol';
 import { createContactDiscoveryListener } from './contact-discovery';
 import type { ContactDiscoveryDeps } from '../../state/contact-discovery-service';
 import type { Contact } from '../../state/contacts';
-import { deriveZidContactCardKey } from '../../state/identity';
+import { deriveRelationshipKeys, discoverySecret } from '../../state/identity';
+import { hkdf } from '@noble/hashes/hkdf';
+import { sha256 } from '@noble/hashes/sha256';
 
 // in-memory blind relay: a dumb KV store keyed by (appScope, epoch, shard).
 class MemRelay implements RelayTransport {
@@ -49,19 +50,20 @@ class MemRelay implements RelayTransport {
 
 const MNEMONIC =
   'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
-const IDENTITY = 'default';
+const PEER = 'zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong';
+const ABSENT = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
+const WALLET = 'wallet-1';
 const APP = 'https://poker.zk.bot';
 
-const myCard = deriveZidContactCardKey(MNEMONIC, IDENTITY);
+// the relationship I gave the peer (j 0) and the one the peer gave me (j 4)
+const mine = deriveRelationshipKeys(MNEMONIC, 0, 0);
+const peerRel = deriveRelationshipKeys(PEER, 0, 4);
+const peerPub = peerRel.kaPublicKey;
+const rootSecret = discoverySecret(peerRel.kaSeed, mine.kaPublicKey, peerRel.xid, mine.xid);
 
-// a peer's contact-card KA keypair + the (symmetric) shared root secret.
-const peerPriv = new Uint8Array(32).fill(7);
-const peerPub = bytesToHex(x25519.getPublicKey(peerPriv));
-const rootSecret = x25519.getSharedSecret(peerPriv, hexToBytes(myCard.publicKey));
-
-// a second, always-absent peer.
-const absentPriv = new Uint8Array(32).fill(11);
-const absentPub = bytesToHex(x25519.getPublicKey(absentPriv));
+// a second, always-absent peer, holding my relationship 1
+const absentRel = deriveRelationshipKeys(ABSENT, 0, 0);
+const absentPub = absentRel.kaPublicKey;
 
 const SESSION_PUB = new Uint8Array(32).fill(0xa5);
 
@@ -71,16 +73,27 @@ const contacts: Contact[] = [
     name: 'Present',
     createdAt: 0,
     addresses: [],
-    card: { suite: 'x25519-v1', publicKey: peerPub },
+    rel: { walletId: WALLET, gen: 0, j: 0 },
+    pairKa: peerPub,
+    zid: peerRel.pubkey,
   },
   {
     id: 'absent',
     name: 'Absent',
     createdAt: 0,
     addresses: [],
-    card: { suite: 'x25519-v1', publicKey: absentPub },
+    rel: { walletId: WALLET, gen: 0, j: 1 },
+    pairKa: absentPub,
+    zid: absentRel.pubkey,
   },
-  { id: 'legacy', name: 'Legacy (no card)', createdAt: 0, addresses: [] },
+  // saved from an older card: one identity-wide key, no relationship
+  {
+    id: 'legacy',
+    name: 'Legacy',
+    createdAt: 0,
+    addresses: [],
+    card: { suite: 'x25519-v1', publicKey: 'ab'.repeat(32) },
+  },
 ];
 
 /** have the present peer beacon its presence into `relay` at `epoch`. */
@@ -92,11 +105,10 @@ const publishPeerPresence = async (relay: MemRelay, epoch: number): Promise<void
       blobBytes: PRESENCE_BLOB_BYTES,
     }),
     APP,
-    peerPub,
   );
   await service.publishSelf(
     { sessionPub: SESSION_PUB, caps: 5 },
-    [{ id: 'peer', friendPubHex: myCard.publicKey, rootSecret }],
+    [{ id: 'peer', friendPubHex: mine.kaPublicKey, myPubHex: peerPub, rootSecret }],
     epoch,
   );
 };
@@ -107,8 +119,9 @@ const depsWith = (
 ): ContactDiscoveryDeps => ({
   settings: async () => ({ enabled: true, relayEndpoint: 'https://relay.example', relayToken: '' }),
   locked: async () => false,
+  siteAllowed: async () => true,
   contacts: async () => contacts,
-  identity: async () => ({ mnemonic: MNEMONIC, identityName: IDENTITY }),
+  identity: async () => ({ mnemonic: MNEMONIC, walletId: WALLET }),
   transport: () => relay,
   ...overrides,
 });
@@ -133,14 +146,21 @@ const call = (
   return promise;
 };
 
-/** independently recompute the app-scoped handle the response must carry. */
-const expectedHandle = async (pubkey: string, appScope: string): Promise<string> =>
+/**
+ * independently recompute the app-scoped handle the response must carry:
+ * HKDF of the pair's own secret, never a hash of a public card key.
+ */
+const expectedHandle = (secret: Uint8Array, appScope: string): string =>
   bytesToHex(
-    new Uint8Array(
-      await crypto.subtle.digest(
-        'SHA-256',
-        new TextEncoder().encode(`${pubkey}:${appScope}:zid:contact:v1`),
-      ),
+    hkdf(
+      sha256,
+      secret,
+      undefined,
+      new Uint8Array([
+        ...new TextEncoder().encode('zid-contact-handle-v1'),
+        ...sha256(new TextEncoder().encode(appScope)),
+      ]),
+      32,
     ),
   );
 
@@ -175,7 +195,10 @@ describe('zafu_discover_contacts - present intersection only', () => {
     }
     expect(res.contacts).toHaveLength(1);
     const [found] = res.contacts;
-    expect(found!.handle).toBe(await expectedHandle(peerPub, APP));
+    expect(found!.handle).toBe(expectedHandle(rootSecret, APP));
+    // not the old public formula a card holder could compute
+    const old = bytesToHex(sha256(new TextEncoder().encode(`${peerPub}:${APP}:zid:contact:v1`)));
+    expect(found!.handle).not.toBe(old);
     expect(found!.sessionPubHex).toBe(bytesToHex(SESSION_PUB));
     expect(found!.caps).toBe(5);
   });
@@ -263,6 +286,17 @@ describe('zafu_discover_contacts - refusals', () => {
       senderFor(APP),
     );
     expect(res).toEqual({ error: 'contact discovery is not available', code: 'not_available' });
+  });
+
+  it('refuses not_available, and reads no relay, when this site has no "find friends" grant', async () => {
+    const transport = vi.fn(() => relay);
+    const res = await call(
+      depsWith(relay, { siteAllowed: async origin => origin !== APP, transport }),
+      { type: 'zafu_discover_contacts', appScope: APP },
+      senderFor(APP),
+    );
+    expect(res).toEqual({ error: 'contact discovery is not available', code: 'not_available' });
+    expect(transport).not.toHaveBeenCalled();
   });
 
   it('refuses not_available when the wallet is locked', async () => {

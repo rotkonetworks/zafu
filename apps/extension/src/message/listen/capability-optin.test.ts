@@ -1,9 +1,9 @@
 /**
  * The two-question consent model, exercised through the real message listener:
  *
- *   1. global — "does zafu offer this capability at all?" (`capabilityModes`,
+ *   1. global - "does zafu offer this capability at all?" (`capabilityModes`,
  *      asked once, prompted with `scope=zafu`)
- *   2. per-origin — "may this site use it?" (the existing capability grant)
+ *   2. per-origin - "may this site use it?" (the existing capability grant)
  *
  * What must hold: a disabled capability refuses *every* site without a prompt
  * (revocation wins over a stale per-origin grant), an undecided one asks once
@@ -26,8 +26,14 @@ const validSender = (origin: string): chrome.runtime.MessageSender =>
     url: `${origin}/index.html`,
   }) as chrome.runtime.MessageSender;
 
+// zafu's own page: the extension id AND the extension origin (a content script
+// carries the id too, so the id alone is not enough)
 const internalSender = (): chrome.runtime.MessageSender =>
-  ({ id: chrome.runtime.id }) as chrome.runtime.MessageSender;
+  ({
+    id: chrome.runtime.id,
+    origin: `chrome-extension://${chrome.runtime.id}`,
+    url: `chrome-extension://${chrome.runtime.id}/popup.html`,
+  }) as chrome.runtime.MessageSender;
 
 const call = (req: unknown, sender: chrome.runtime.MessageSender): Promise<any> =>
   new Promise(resolve => {
@@ -74,7 +80,7 @@ beforeEach(async () => {
   await localExtStorage.set('capabilityModes', {});
 });
 
-describe('global opt-in — undecided capability', () => {
+describe('global opt-in - undecided capability', () => {
   it('asks the zafu-level question once, then the per-site one', async () => {
     const origin = 'https://optin.example';
     const answer = call(
@@ -83,7 +89,7 @@ describe('global opt-in — undecided capability', () => {
     );
     await flush();
 
-    // question 1: no site attached — the question is about zafu, not the page
+    // question 1: no site attached - the question is about zafu, not the page
     expect(createMock).toHaveBeenCalledTimes(1);
     expect(urlAt(0)).toContain('scope=zafu');
     expect(urlAt(0)).toContain('capability=view_history');
@@ -149,7 +155,7 @@ describe('global opt-in — undecided capability', () => {
   });
 });
 
-describe('global opt-in — answered capability', () => {
+describe('global opt-in - answered capability', () => {
   it('a disabled capability refuses every site with no prompt', async () => {
     await localExtStorage.set('capabilityModes', { export_fvk: 'disabled' });
 
@@ -191,7 +197,7 @@ describe('global opt-in — answered capability', () => {
   });
 });
 
-describe('global opt-in — the other gates', () => {
+describe('global opt-in - the other gates', () => {
   it('keeps the FROST rejection uniform with the capability off', async () => {
     const origin = 'https://frost-off.example';
     await grantCapability(origin, 'frost');

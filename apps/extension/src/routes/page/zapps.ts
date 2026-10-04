@@ -35,17 +35,6 @@ export const DEFAULT_ZAPPS: Zapp[] = [
     category: 'finance',
     builtin: true,
   },
-  {
-    id: 'zitadel',
-    name: 'zitadel',
-    description: 'zafu chat - support & community',
-    icon: 'i-ph-chat-circle',
-    // packaged in-extension chat over the zafu relay (zrelay.rotko.net).
-    // resolves to zitadel.html via resolveZappUrl('__zitadel__').
-    url: '__zitadel__',
-    category: 'social',
-    builtin: true,
-  },
   // Discord invites were verified live 2026-09-21 against Discord's own endpoint
   // (`GET https://discord.com/api/v10/invites/<code>`): zcash -> guild "Zcash",
   // penumbra -> guild "Penumbra", neither expiring. `discord.gg/penumbra` answers
@@ -223,9 +212,6 @@ export const resolveZappUrl = (url: string): string | null => {
   if (url === '__sidepanel__') {
     return null;
   } // handled specially in the click handler (opens the side panel)
-  if (url === '__zitadel__') {
-    return chrome.runtime.getURL('zitadel.html');
-  }
   if (url === '__docs__') {
     return chrome.runtime.getURL('docs/index.html');
   }

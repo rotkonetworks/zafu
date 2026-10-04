@@ -1,15 +1,14 @@
 /**
  * Endpoint latency + health probe for Penumbra gRPC-Web RPCs.
  *
- * Uses `TendermintProxyService.getStatus` — the tendermint-proxy shim every
+ * Uses `TendermintProxyService.getStatus` - the tendermint-proxy shim every
  * Penumbra node exposes. One round-trip returns latest block height (for
  * "at tip" / "-N blocks" labels) plus reachability, and the same call is
  * already how `hooks/latest-block-height.ts` picks a working RPC during
- * onboarding — so we reuse the wire path the app itself relies on.
+ * onboarding - so we reuse the wire path the app itself relies on.
  *
  * Parallel with `Promise.allSettled`; 5s per-endpoint hard timeout; no
- * background polling — the settings panel calls this on mount + on
- * "retest" / "smart pick" clicks only.
+ * background polling - only the node sheet's "test speed" calls this.
  */
 
 import { createClient } from '@connectrpc/connect';
@@ -21,10 +20,8 @@ import type { EndpointHealth } from './endpoint-health';
 const PROBE_TIMEOUT_MS = 5000;
 
 /**
- * Probe one Penumbra RPC. Returns an `EndpointHealth` so the settings
- * panel can reuse the same `Candidate` / `pickEndpoint` machinery the
- * Zcash panel uses — the shape's `info.blockHeight` field carries the
- * tendermint tip height, and `latencyMs` is the wall-clock round-trip.
+ * Probe one Penumbra RPC. `info.blockHeight` carries the tendermint tip
+ * height, and `latencyMs` is the wall-clock round-trip.
  */
 export async function probePenumbraEndpoint(
   preset: PenumbraEndpointPreset,
@@ -60,7 +57,7 @@ export async function probePenumbraEndpoint(
     return {
       presetId: preset.id,
       latencyMs,
-      // The rest of the LightdInfo fields don't apply on penumbra — leave
+      // The rest of the LightdInfo fields don't apply on penumbra - leave
       // them empty. Only blockHeight is actually consumed by the picker.
       info: {
         version: '',
@@ -92,7 +89,7 @@ export async function probePenumbraEndpoint(
   }
 }
 
-/** Probe every candidate concurrently. Never rejects — bad rpcs surface as `ok: false`. */
+/** Probe every candidate concurrently. Never rejects - bad rpcs surface as `ok: false`. */
 export async function probeAllPenumbra(
   presets: readonly PenumbraEndpointPreset[],
   referenceTip?: number | null,
@@ -116,18 +113,6 @@ export async function probeAllPenumbra(
       measuredAt: Date.now(),
     };
   });
-}
-
-/** Peer-median tip across probed endpoints — Penumbra has no hosh-equivalent. */
-export function peerMedianTipPenumbra(healths: readonly EndpointHealth[]): number | null {
-  const heights = healths
-    .filter(h => h.ok && h.info && h.info.blockHeight > 0)
-    .map(h => h.info!.blockHeight)
-    .sort((a, b) => a - b);
-  if (heights.length === 0) {
-    return null;
-  }
-  return heights[Math.floor(heights.length / 2)]!;
 }
 
 function mergeSignals(a: AbortSignal, b: AbortSignal): AbortSignal {

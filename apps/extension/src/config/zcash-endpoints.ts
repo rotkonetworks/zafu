@@ -1,22 +1,31 @@
 /**
- * Preset list of zcash light-wallet endpoints, grouped by region.
+ * Preset list of zcash light-wallet endpoints.
  *
- * Two flavors:
- *   - zidecar — rotko-hosted, trustless verification (Ligerito + NOMT
- *     proofs). Mempool watch works on this backend.
- *   - lightwalletd — public ECC lightwalletd / Zaino. Trusted (the
+ * A preset MUST be reachable from a browser: it has to answer a grpc-web
+ * (not native grpc) request, and its CORS preflight has to succeed for a
+ * `chrome-extension://` origin. Probed 2026-10-02 with curl (a grpc-web
+ * POST plus a CORS preflight from a chrome-extension origin): every
+ * stardust host, every zec.rocks host and lwd.zcashexplorer.app either
+ * fail the preflight (301/404/415, or no connection) or answer with
+ * native `application/grpc`, which a browser client cannot speak. Picking
+ * one of those left users stuck on "gRPC GetLatestBlock: empty response"
+ * or an HTTP 415 with sync stalled. Only rotko's zidecar answers
+ * grpc-web with CORS, so it is the only preset shipped.
+ *
+ * Anyone running their own grpc-web-speaking proxy (Envoy, or Zaino with
+ * grpc-web turned on) can still enter it by hand: the custom-endpoint
+ * entry in settings and the lightwalletd backend code path both stay.
+ *
+ * Two backend flavors (see state/keyring/zcash-backend.ts):
+ *   - zidecar - rotko-hosted; adds a Ligerito header proof and the
+ *     actions commitment check. Mempool watch works on this backend.
+ *   - lightwalletd - public ECC lightwalletd / Zaino. Trusted (the
  *     wallet accepts what the server returns). Mempool watch is
  *     unavailable on this backend.
  *
- * Anything mentioned in `KNOWN_ZIDECAR_HOST_SUFFIXES`
- * (state/keyring/zcash-backend.ts) is classified as zidecar
- * automatically at runtime. Anything else gets the lightwalletd
- * (trusted) treatment.
- *
- * Vizor's preset set is the inspiration here — the goal is "the user
- * has a working fallback if their default node is down". For zafu's
- * privacy story, zidecar endpoints are preferable; the public
- * lightwalletd endpoints are listed as honest fallbacks.
+ * The user is never asked which one a node is: the node says, through the
+ * standard GetLightdInfo `vendor` (detectZcashBackend). A preset's
+ * `backend` is only the guess that stands until it has answered.
  */
 
 import type { ZcashBackend } from '../state/keyring/zcash-backend';
@@ -38,7 +47,7 @@ export interface ZcashEndpointPreset {
   readonly url: string;
   /** geographic / trust classification for the regional grouping UI */
   readonly region: RpcEndpointRegion;
-  /** trustless (zidecar) vs trusted (lightwalletd) */
+  /** trustless (zidecar) vs trusted (lightwalletd), until the node itself says */
   readonly backend: ZcashBackend;
   /** the shipped default for a fresh wallet */
   readonly isDefault?: boolean;
@@ -53,90 +62,13 @@ export interface ZcashEndpointPreset {
  * fallbacks one tap away.
  */
 export const ZCASH_MAINNET_ENDPOINTS: readonly ZcashEndpointPreset[] = [
-  // ── default (trustless) ──
   {
     id: 'rotko-zidecar',
-    label: 'rotko zidecar',
+    label: 'rotko',
     url: 'https://zcash.rotko.net',
     region: 'default',
     backend: 'zidecar',
     isDefault: true,
-  },
-
-  // ── stardust family (trusted lightwalletd) ──
-  {
-    id: 'stardust-us',
-    label: 'stardust us',
-    url: 'https://us.zec.stardust.rest:443',
-    region: 'americas',
-    backend: 'lightwalletd',
-  },
-  {
-    id: 'stardust-eu',
-    label: 'stardust europe',
-    url: 'https://eu.zec.stardust.rest:443',
-    region: 'europe',
-    backend: 'lightwalletd',
-  },
-  {
-    id: 'stardust-eu2',
-    label: 'stardust europe 2',
-    url: 'https://eu2.zec.stardust.rest:443',
-    region: 'europe',
-    backend: 'lightwalletd',
-  },
-  {
-    id: 'stardust-jp',
-    label: 'stardust japan',
-    url: 'https://jp.zec.stardust.rest:443',
-    region: 'asia-pacific',
-    backend: 'lightwalletd',
-  },
-
-  // ── zec.rocks family (trusted lightwalletd) ──
-  {
-    id: 'zec-rocks',
-    label: 'zec.rocks (global)',
-    url: 'https://zec.rocks:443',
-    region: 'global',
-    backend: 'lightwalletd',
-  },
-  {
-    id: 'zec-rocks-na',
-    label: 'zec.rocks north america',
-    url: 'https://na.zec.rocks:443',
-    region: 'americas',
-    backend: 'lightwalletd',
-  },
-  {
-    id: 'zec-rocks-sa',
-    label: 'zec.rocks south america',
-    url: 'https://sa.zec.rocks:443',
-    region: 'americas',
-    backend: 'lightwalletd',
-  },
-  {
-    id: 'zec-rocks-eu',
-    label: 'zec.rocks europe',
-    url: 'https://eu.zec.rocks:443',
-    region: 'europe',
-    backend: 'lightwalletd',
-  },
-  {
-    id: 'zec-rocks-ap',
-    label: 'zec.rocks asia pacific',
-    url: 'https://ap.zec.rocks:443',
-    region: 'asia-pacific',
-    backend: 'lightwalletd',
-  },
-
-  // ── community ──
-  {
-    id: 'zcash-explorer',
-    label: 'zcash explorer',
-    url: 'https://lwd.zcashexplorer.app:9067',
-    region: 'community',
-    backend: 'lightwalletd',
   },
 ];
 
@@ -158,7 +90,7 @@ export function defaultZcashEndpoint(): ZcashEndpointPreset {
  * Group presets by region for the dropdown UI.
  *
  * Generic over the preset shape so the Penumbra panel can reuse the same
- * regional grouping without duplicating this logic — the helper only reads
+ * regional grouping without duplicating this logic - the helper only reads
  * `p.region`, so any `{ region: RpcEndpointRegion }` shape works.
  */
 export function groupPresetsByRegion<T extends { readonly region: RpcEndpointRegion }>(

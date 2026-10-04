@@ -16,10 +16,6 @@ const progressVariants = cva('', {
       black: 'bg-black',
       stone: 'bg-stone-800',
     },
-    shape: {
-      rounded: 'rounded-lg',
-      squared: '',
-    },
   },
 });
 
@@ -28,29 +24,18 @@ interface ProgressProps extends VariantProps<typeof progressVariants> {
   value?: number;
 }
 
-const Progress = ({
-  value,
-  status,
-  shape = 'rounded',
-  background = 'black',
-  size = 'lg',
-}: ProgressProps) => (
+const Progress = ({ value, status, background = 'black', size = 'lg' }: ProgressProps) => (
   <ProgressPrimitive.Root
     className={cn(
       'relative',
       size === 'lg' && 'h-4',
       size === 'sm' && 'h-1',
       'w-full overflow-hidden',
-      progressVariants({ shape }),
       progressVariants({ background }),
     )}
   >
     <ProgressPrimitive.Indicator
-      className={cn(
-        'h-full w-full flex-1 transition-all',
-        progressVariants({ shape }),
-        progressVariants({ status }),
-      )}
+      className={cn('h-full w-full flex-1 transition-all', progressVariants({ status }))}
       style={{ transform: `translateX(-${100 - (value ?? 0)}%)` }}
     />
   </ProgressPrimitive.Root>

@@ -13,10 +13,11 @@ import {
   selectEffectiveKeyInfo,
   selectPenumbraAccount,
   selectGetMnemonic,
+  selectGetVaultUnlock,
 } from '../state/keyring';
 import { getActiveWalletJson, selectActiveZcashWallet } from '../state/wallets';
-import { NETWORK_CONFIGS, isIbcNetwork } from '../state/keyring/network-types';
-import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { activeAccountIndex } from '../state/pockets';
+import { getNetworkConfig, isIbcNetwork } from '../state/keyring/network-types';
 import { spawnNetworkWorker, deriveAddressInWorker } from '../state/keyring/network-worker';
 import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { createZafuWasmMemory } from '../config/zafu-wasm-memory';
@@ -29,19 +30,10 @@ async function deriveCosmosAddress(mnemonic: string, prefix: string): Promise<st
   return wallet.address;
 }
 
-/** derive polkadot/kusama ed25519 address from mnemonic */
-async function derivePolkadotAddress(
-  mnemonic: string,
-  network: 'polkadot' | 'kusama',
-): Promise<string> {
-  const { derivePolkadotAddress: derive } = await import('@repo/wallet/networks/polkadot/derive');
-  return derive(mnemonic, network, 0);
-}
-
 /** derive penumbra address from mnemonic */
 async function derivePenumbraAddress(mnemonic: string, index = 0): Promise<string> {
   const { generateSpendKey, getFullViewingKey, getAddressByIndex } =
-    await import('@rotko/penumbra-wasm/keys');
+    await import('@penumbrafi/wasm/keys');
   const { bech32mAddress } = await import('@penumbra-zone/bech32m/penumbra');
 
   const spendKey = await generateSpendKey(mnemonic);
@@ -53,7 +45,7 @@ async function derivePenumbraAddress(mnemonic: string, index = 0): Promise<strin
 /** derive a random ephemeral penumbra address from mnemonic (each call returns a different address) */
 async function derivePenumbraEphemeralFromMnemonic(mnemonic: string, index = 0): Promise<string> {
   const { generateSpendKey, getFullViewingKey, getEphemeralByIndex } =
-    await import('@rotko/penumbra-wasm/keys');
+    await import('@penumbrafi/wasm/keys');
   const { bech32mAddress } = await import('@penumbra-zone/bech32m/penumbra');
 
   const spendKey = await generateSpendKey(mnemonic);
@@ -65,7 +57,7 @@ async function derivePenumbraEphemeralFromMnemonic(mnemonic: string, index = 0):
 /** derive a random ephemeral penumbra address from stored FVK JSON */
 async function derivePenumbraEphemeralFromFvk(fvkJson: string, index = 0): Promise<string> {
   const { FullViewingKey } = await import('@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb');
-  const { getEphemeralByIndex } = await import('@rotko/penumbra-wasm/keys');
+  const { getEphemeralByIndex } = await import('@penumbrafi/wasm/keys');
   const { bech32mAddress } = await import('@penumbra-zone/bech32m/penumbra');
 
   const fvk = FullViewingKey.fromJsonString(fvkJson);
@@ -108,7 +100,10 @@ async function loadZcashWasm() {
  * derive zcash address from UFVK string (for watch-only wallets) at an 11-byte
  * diversifier index (22 hex chars)
  */
-async function deriveZcashAddressFromUfvk(ufvk: string, diversifierHex: string): Promise<string> {
+export async function deriveZcashAddressFromUfvk(
+  ufvk: string,
+  diversifierHex: string,
+): Promise<string> {
   const zcashWasm = await loadZcashWasm();
   if (ufvk.startsWith('uview')) {
     const raw = zcashWasm.address_from_ufvk_at_index(ufvk, diversifierHex);
@@ -137,8 +132,10 @@ export function useActiveAddress() {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const penumbraAccount = useStore(selectPenumbraAccount);
   const getMnemonic = useStore(selectGetMnemonic);
+  const getVaultUnlock = useStore(selectGetVaultUnlock);
   const penumbraWallet = useStore(getActiveWalletJson);
   const zcashWallet = useStore(selectActiveZcashWallet);
+  const pocket = useStore(activeAccountIndex);
 
   const [address, setAddress] = useState('');
   const [loading, setLoading] = useState(true);
@@ -181,7 +178,7 @@ export function useActiveAddress() {
 
   useEffect(() => {
     let cancelled = false;
-    const identity = `${activeNetwork}:${selectedKeyInfo?.id}:${zcashWallet?.ufvk ?? zcashWallet?.orchardFvk ?? ''}`;
+    const identity = `${activeNetwork}:${selectedKeyInfo?.id}:${pocket}:${zcashWallet?.ufvk ?? zcashWallet?.orchardFvk ?? ''}`;
 
     const deriveAddress = async () => {
       if (derivedFor.current !== identity) {
@@ -192,7 +189,11 @@ export function useActiveAddress() {
         // mnemonic vault - derive addresses from seed for all networks
         if (selectedKeyInfo?.type === 'mnemonic') {
           try {
-            const mnemonic = await getMnemonic(selectedKeyInfo.id);
+            // zcash derives in its worker from the sealed vault: the phrase is
+            // neither decrypted here nor sent over the message bus
+            const mnemonic = activeNetwork === 'zcash' ? '' : await getMnemonic(selectedKeyInfo.id);
+            const vault =
+              activeNetwork === 'zcash' ? await getVaultUnlock(selectedKeyInfo.id) : undefined;
 
             // penumbra - derive from seed
             if (activeNetwork === 'penumbra') {
@@ -207,12 +208,18 @@ export function useActiveAddress() {
             }
 
             // zcash - derive orchard address via worker (avoids main-thread wasm)
-            if (activeNetwork === 'zcash') {
-              // retry worker spawn — rescan may have terminated it
+            if (activeNetwork === 'zcash' && vault) {
+              // retry worker spawn - rescan may have terminated it
               for (let attempt = 0; attempt < 3 && !cancelled; attempt++) {
                 try {
                   await spawnNetworkWorker('zcash');
-                  const rawAddr = await deriveAddressInWorker('zcash', mnemonic, 0, diversifier);
+                  const rawAddr = await deriveAddressInWorker(
+                    'zcash',
+                    vault,
+                    0,
+                    diversifier,
+                    pocket,
+                  );
                   const addr = fixOrchardAddress(rawAddr, true);
                   if (!cancelled) {
                     setAddress(addr);
@@ -227,8 +234,14 @@ export function useActiveAddress() {
                   }
                 }
               }
-              // all retries failed — don't fall through to zigner wallet
+              // All retries failed - never fall through to zigner wallet, and
+              // never leave the PREVIOUS pocket's address on screen. Without
+              // this, switching to a pocket the wasm can't derive yet (see
+              // workers/pocket-keys.ts) silently kept showing the address it
+              // last derived - a real address, just the wrong pocket's - as
+              // if it were current.
               if (!cancelled) {
+                setAddress('');
                 setLoading(false);
               }
               return;
@@ -236,20 +249,8 @@ export function useActiveAddress() {
 
             // cosmos/ibc chains
             if (isIbcNetwork(activeNetwork)) {
-              const config = NETWORK_CONFIGS[activeNetwork];
+              const config = getNetworkConfig(activeNetwork);
               const addr = await deriveCosmosAddress(mnemonic, config.bech32Prefix!);
-              if (!cancelled) {
-                setAddress(addr);
-              }
-              if (!cancelled) {
-                setLoading(false);
-              }
-              return;
-            }
-
-            // polkadot/kusama - use ed25519 derivation (ledger compatible)
-            if (activeNetwork === 'polkadot' || activeNetwork === 'kusama') {
-              const addr = await derivePolkadotAddress(mnemonic, activeNetwork);
               if (!cancelled) {
                 setAddress(addr);
               }
@@ -289,7 +290,7 @@ export function useActiveAddress() {
         if (activeNetwork === 'penumbra' && penumbraWallet?.fullViewingKey) {
           const { FullViewingKey } =
             await import('@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb');
-          const { getAddressByIndex } = await import('@rotko/penumbra-wasm/keys');
+          const { getAddressByIndex } = await import('@penumbrafi/wasm/keys');
           const { bech32mAddress } = await import('@penumbra-zone/bech32m/penumbra');
 
           // fullViewingKey is stored as JSON string: {"inner":"base64..."}
@@ -325,7 +326,7 @@ export function useActiveAddress() {
               console.error('failed to derive address from ufvk:', err);
             }
           }
-          // orchardFvk is base64 FVK bytes (from zigner QR binary) — derive via WatchOnlyWallet
+          // orchardFvk is base64 FVK bytes (from zigner QR binary) - derive via WatchOnlyWallet
           if (zcashWallet.orchardFvk && !zcashWallet.orchardFvk.startsWith('uview')) {
             try {
               const zcashWasm = await loadZcashWasm();
@@ -388,10 +389,7 @@ export function useActiveAddress() {
                 try {
                   const { deriveChainAddress } =
                     await import('@repo/wallet/networks/cosmos/signer');
-                  const addr = deriveChainAddress(
-                    addrs[0]!.address,
-                    activeNetwork as CosmosChainId,
-                  );
+                  const addr = deriveChainAddress(addrs[0]!.address, activeNetwork);
                   if (!cancelled) {
                     setAddress(addr);
                   }
@@ -404,20 +402,6 @@ export function useActiveAddress() {
                 }
               }
             }
-          }
-
-          // check for stored polkadot key
-          if (
-            (activeNetwork === 'polkadot' || activeNetwork === 'kusama') &&
-            insensitive['polkadotSs58']
-          ) {
-            if (!cancelled) {
-              setAddress(insensitive['polkadotSs58'] as string);
-            }
-            if (!cancelled) {
-              setLoading(false);
-            }
-            return;
           }
         }
 
@@ -460,7 +444,9 @@ export function useActiveAddress() {
     zcashWallet?.orchardFvk,
     zcashWallet?.ufvk,
     getMnemonic,
+    getVaultUnlock,
     diversifier,
+    pocket,
   ]);
 
   return { address, loading, shieldedIndex: derivedIndex };

@@ -15,7 +15,7 @@ beforeEach(async () => {
 
 const stubSendMessage = (impl: () => Promise<unknown>) => {
   const sendMessage = vi.fn(impl);
-  vi.stubGlobal('chrome', { runtime: { sendMessage } });
+  vi.stubGlobal('chrome', { runtime: { id: 'zafu', sendMessage } });
   return sendMessage;
 };
 
@@ -98,5 +98,18 @@ describe('sendBackground', () => {
     expect(consoleError).not.toHaveBeenCalled();
     expect(debug).toHaveBeenCalledTimes(1);
     expect(document.querySelectorAll('#zafu-reload-notice')).toHaveLength(1);
+  });
+});
+
+describe('sendBackground with chrome.runtime gone', () => {
+  it('shows the reload notice once and never calls into the dead runtime', async () => {
+    vi.stubGlobal('chrome', {});
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(sendBackground(ZafuConnection.Load)).resolves.toBe(
+      PenumbraRequestFailure.BadResponse,
+    );
+    await sendBackground(ZafuConnection.Load);
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(document.getElementById('zafu-reload-notice')).not.toBeNull();
   });
 });

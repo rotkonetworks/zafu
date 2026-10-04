@@ -33,7 +33,7 @@ export const IdentityKeyComponent = ({ identityKey }: { identityKey: IdentityKey
         </div>
       ) : (
         <div className='min-w-0 truncate font-mono'>
-          <span className='text-red-900'>Invalid identity key</span>
+          <span className='text-hanko'>Invalid identity key</span>
         </div>
       )}
     </div>

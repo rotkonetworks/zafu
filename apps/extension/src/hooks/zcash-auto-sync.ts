@@ -1,5 +1,5 @@
 /**
- * zcash auto-sync hook — manages sync lifecycle at the layout level
+ * zcash auto-sync hook - manages sync lifecycle at the layout level
  *
  * this hook persists across tab navigation (home → history → inbox)
  * so the sync doesn't stop when switching pages.
@@ -7,11 +7,18 @@
  * use in PopupLayout, not in individual page components.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useStore } from '../state';
-import { selectActiveNetwork, selectEffectiveKeyInfo, selectGetMnemonic } from '../state/keyring';
+import {
+  selectEnabledNetworks,
+  selectEffectiveKeyInfo,
+  selectGetMnemonic,
+  selectGetVaultUnlock,
+} from '../state/keyring';
+import { keyInfoSupportsNetwork } from '../state/keyring/vault-ops';
 import { selectActiveZcashWallet } from '../state/wallets';
+import { activePocketBirthday, activeZcashStoreId } from '../state/pockets';
 import {
   spawnNetworkWorker,
   startSyncInWorker,
@@ -23,12 +30,20 @@ import { ZCASH_ORCHARD_ACTIVATION } from '../config/networks';
 import { isPro } from '../state/license';
 import { deriveRingVrfSeed } from '../state/identity';
 import { ZidecarClient } from '../state/keyring/zidecar-client';
-import type { ZcashBackend } from '../state/keyring/zcash-backend';
+import { zcashClient, type ZcashBackend } from '../state/keyring/zcash-backend';
+import { selectZcashBackend } from '../state/networks';
 import { isMempoolWatchEnabled } from '../services/mempool-watch/strategy';
 
+/**
+ * the node has not said what it is yet: the worker asks it (GetLightdInfo)
+ * before syncing. Read at start, not subscribed, so the answer arriving does
+ * not restart a sync whose kind it confirmed.
+ */
+const nodeUnclassified = () => !useStore.getState().networks.networks.zcash.backendDetected;
+
 /** resolve wallet birthday height from storage or chain tip.
- *  never returns below orchard activation — no point scanning pre-orchard blocks. */
-async function resolveBirthday(
+ *  never returns below orchard activation - no point scanning pre-orchard blocks. */
+export async function resolveBirthday(
   walletId: string,
   zidecarUrl: string,
   backend: ZcashBackend,
@@ -39,14 +54,9 @@ async function resolveBirthday(
   if (stored[birthdayKey] && typeof stored[birthdayKey] === 'number') {
     return Math.max(ZCASH_ORCHARD_ACTIVATION, stored[birthdayKey]);
   }
-  // no birthday set — default to near chain tip (new wallet = recent)
+  // no birthday set - default to near chain tip (new wallet = recent)
   try {
-    const tip =
-      backend === 'lightwalletd'
-        ? await new (await import('../state/keyring/lightwalletd-client')).LightwalletdClient(
-            zidecarUrl,
-          ).getTip()
-        : await new ZidecarClient(zidecarUrl).getTip();
+    const tip = await zcashClient(zidecarUrl, backend).getTip();
     const height = Math.floor(Math.max(ZCASH_ORCHARD_ACTIVATION, tip.height - 100) / 10000) * 10000;
     await chrome.storage.local.set({ [birthdayKey]: height });
     return height;
@@ -57,12 +67,19 @@ async function resolveBirthday(
 
 export function useZcashAutoSync() {
   const location = useLocation();
-  const activeNetwork = useStore(selectActiveNetwork);
+  // zcash keeps syncing while any zafu window is open and zcash is on, whatever
+  // network is on screen: switching to penumbra must not stop it
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  // and never for a penumbra-only (12-word) vault
+  const zcashOn =
+    useStore(selectEnabledNetworks).includes('zcash') &&
+    !!selectedKeyInfo &&
+    keyInfoSupportsNetwork(selectedKeyInfo, 'zcash');
   const getMnemonic = useStore(selectGetMnemonic);
+  const getVaultUnlock = useStore(selectGetVaultUnlock);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
-  const zcashBackend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
+  const zcashBackend = useStore(selectZcashBackend);
   const mempoolWatchSetting = useStore(s => s.networks.networks.zcash.mempoolWatch) ?? 'off';
   // Single-source-of-truth gate. UI and worker also enforce; we run the same
   // helper at every layer so all surfaces agree on the answer and no single
@@ -75,6 +92,9 @@ export function useZcashAutoSync() {
   const hasMnemonic = selectedKeyInfo?.type === 'mnemonic';
   const watchOnly = activeZcashWallet;
   const walletId = selectedKeyInfo?.id;
+  // the worker store of the active pocket; the bare vault id for account 0
+  const storeId = useStore(activeZcashStoreId);
+  const pocketBirthday = useStore(activePocketBirthday);
 
   // track which walletId we started sync for, to avoid double-start
   const syncingWalletRef = useRef<string | null>(null);
@@ -86,34 +106,56 @@ export function useZcashAutoSync() {
   // track in-flight stop promise so the start effect can await it on quick network switches
   const stopPromiseRef = useRef<Promise<void> | null>(null);
 
-  // eagerly pre-spawn zcash worker when on zcash network
+  // "try again", or a host that lost its worker: start again from the stored
+  // height. A retry stops the running loop first, so it ends before the new one
+  const [restarts, setRestarts] = useState(0);
+  useEffect(() => {
+    const restart = (e: Event) => {
+      if (e.type === 'network-sync-lost' && (e as CustomEvent).detail?.network !== 'zcash') {
+        return;
+      }
+      const running = syncingWalletRef.current;
+      if (e.type === 'zcash-sync-retry' && running) {
+        stopPromiseRef.current = stopSyncInWorker('zcash', running).catch(() => {});
+      }
+      setRestarts(n => n + 1);
+    };
+    window.addEventListener('zcash-sync-retry', restart);
+    window.addEventListener('network-sync-lost', restart);
+    return () => {
+      window.removeEventListener('zcash-sync-retry', restart);
+      window.removeEventListener('network-sync-lost', restart);
+    };
+  }, []);
+
+  // eagerly pre-spawn the zcash worker while zcash is on
   // decouples WASM loading from wallet data hydration so the worker
   // is ready by the time mnemonic or watch-only sync needs it
   useEffect(() => {
-    if (activeNetwork !== 'zcash') {
+    if (!zcashOn) {
       return;
     }
     if (onLoginPage) {
       return;
     }
     void spawnNetworkWorker('zcash').catch(() => {});
-  }, [activeNetwork, onLoginPage]);
+  }, [zcashOn, onLoginPage]);
 
   // mnemonic wallet sync
   useEffect(() => {
-    if (activeNetwork !== 'zcash') {
+    if (!zcashOn) {
       return;
     }
     if (onLoginPage) {
       return;
     } // keyring not yet unlocked
-    if (!hasMnemonic || !walletId) {
+    if (!hasMnemonic || !walletId || !storeId) {
       return;
     }
 
     // stop previous wallet's sync if switching to a different wallet
     const prevWallet = syncingWalletRef.current;
-    if (prevWallet && prevWallet !== walletId && isWalletSyncing('zcash', prevWallet)) {
+    if (prevWallet && prevWallet !== storeId && isWalletSyncing('zcash', prevWallet)) {
       console.log('[zcash-sync] stopping sync for previous wallet', prevWallet);
       void stopSyncInWorker('zcash', prevWallet).catch(() => {});
       syncingWalletRef.current = null;
@@ -121,12 +163,12 @@ export function useZcashAutoSync() {
 
     // only bail if truly syncing with no pending stop (i.e. we started it, it's healthy)
     // and the endpoint/backend it was started with still matches the current one.
-    if (isWalletSyncing('zcash', walletId) && !stopPromiseRef.current) {
+    if (isWalletSyncing('zcash', storeId) && !stopPromiseRef.current) {
       const started = syncEndpointRef.current;
       const endpointChanged =
         started !== null && (started.endpoint !== zidecarUrl || started.backend !== zcashBackend);
       if (!endpointChanged) {
-        syncingWalletRef.current = walletId;
+        syncingWalletRef.current = storeId;
         return;
       }
       // endpoint or backend changed mid-sync - stop the stale loop the same
@@ -134,8 +176,8 @@ export function useZcashAutoSync() {
       // against the new server. The worker treats this abort as intentional
       // (no error surfacing), and runSync waits for the old loop to drain
       // before starting the new one.
-      console.log('[zcash-sync] endpoint/backend changed, restarting sync for', walletId);
-      stopPromiseRef.current = stopSyncInWorker('zcash', walletId).catch(() => {});
+      console.log('[zcash-sync] endpoint/backend changed, restarting sync for', storeId);
+      stopPromiseRef.current = stopSyncInWorker('zcash', storeId).catch(() => {});
       syncingWalletRef.current = null;
       syncEndpointRef.current = null;
     }
@@ -157,18 +199,25 @@ export function useZcashAutoSync() {
               return;
             }
           }
-          const mnemonic = await getMnemonic(walletId);
+          const vault = await getVaultUnlock(walletId);
           if (cancelled) {
             return;
           }
-          const startHeight = await resolveBirthday(walletId, zidecarUrl, zcashBackend);
+          // a pocket scans from its own creation height; account 0 (and a
+          // pocket restored without one) from the wallet birthday
+          const startHeight =
+            pocketBirthday !== undefined
+              ? Math.max(ZCASH_ORCHARD_ACTIVATION, pocketBirthday)
+              : await resolveBirthday(walletId, zidecarUrl, zcashBackend);
           if (cancelled) {
             return;
           }
-          // generate ring VRF session proof for pro priority sync
-          if (isPro(useStore.getState())) {
+          // generate ring VRF session proof for pro priority sync (this still
+          // opens the phrase in the page; it moves with the ZID signers).
+          // The ring is zidecar's own rpc: never asked of any other node
+          if (isPro(useStore.getState()) && zcashBackend === 'zidecar') {
             try {
-              const seed = deriveRingVrfSeed(mnemonic);
+              const seed = deriveRingVrfSeed(await getMnemonic(walletId));
               await useStore.getState().ringVrf.refreshRing(zidecarUrl, seed);
               await useStore.getState().ringVrf.newSessionProof();
               // inject proof headers into all ZidecarClient requests
@@ -178,17 +227,18 @@ export function useZcashAutoSync() {
             }
           }
 
-          syncingWalletRef.current = walletId;
+          syncingWalletRef.current = storeId;
           syncEndpointRef.current = { endpoint: zidecarUrl, backend: zcashBackend };
-          console.log('[zcash-sync] starting mnemonic sync for', walletId);
+          console.log('[zcash-sync] starting mnemonic sync for', storeId);
           await startSyncInWorker(
             'zcash',
-            walletId,
-            mnemonic,
+            storeId,
+            vault,
             zidecarUrl,
             startHeight,
             zcashBackend,
             mempoolWatch,
+            nodeUnclassified(),
           );
         } catch (err) {
           if (err instanceof Error && err.message.includes('keyring locked')) {
@@ -200,8 +250,9 @@ export function useZcashAutoSync() {
             window.dispatchEvent(
               new CustomEvent('zcash-sync-error', {
                 detail: {
-                  walletId,
+                  walletId: storeId,
                   message: err instanceof Error ? err.message : String(err),
+                  stalled: true,
                 },
               }),
             );
@@ -215,19 +266,23 @@ export function useZcashAutoSync() {
       clearTimeout(timer);
     };
   }, [
-    activeNetwork,
+    zcashOn,
     onLoginPage,
     hasMnemonic,
     walletId,
+    storeId,
+    pocketBirthday,
     getMnemonic,
+    getVaultUnlock,
     zidecarUrl,
     zcashBackend,
     mempoolWatch,
+    restarts,
   ]);
 
   // watch-only wallet sync
   useEffect(() => {
-    if (activeNetwork !== 'zcash') {
+    if (!zcashOn) {
       return;
     }
     if (onLoginPage) {
@@ -276,7 +331,7 @@ export function useZcashAutoSync() {
     }
 
     let cancelled = false;
-    // no timer delay — worker is already pre-spawned by the eager effect above,
+    // no timer delay - worker is already pre-spawned by the eager effect above,
     // and this effect only fires once zcashWallets has hydrated, so start immediately
     (async () => {
       try {
@@ -308,6 +363,7 @@ export function useZcashAutoSync() {
           startHeight,
           zcashBackend,
           mempoolWatch,
+          nodeUnclassified(),
         );
       } catch (err) {
         console.error('[zcash-sync] watch-only auto-sync failed:', err);
@@ -316,6 +372,7 @@ export function useZcashAutoSync() {
             detail: {
               walletId,
               message: err instanceof Error ? err.message : String(err),
+              stalled: true,
             },
           }),
         );
@@ -326,7 +383,7 @@ export function useZcashAutoSync() {
       cancelled = true;
     };
   }, [
-    activeNetwork,
+    zcashOn,
     onLoginPage,
     hasMnemonic,
     watchOnly?.id,
@@ -336,18 +393,6 @@ export function useZcashAutoSync() {
     zidecarUrl,
     zcashBackend,
     mempoolWatch,
+    restarts,
   ]);
-
-  // stop sync when switching away from zcash network
-  useEffect(() => {
-    if (activeNetwork === 'zcash') {
-      return;
-    }
-    const syncedWallet = syncingWalletRef.current;
-    if (syncedWallet && isWalletSyncing('zcash', syncedWallet)) {
-      console.log('[zcash-sync] stopping sync (switched away from zcash)');
-      stopPromiseRef.current = stopSyncInWorker('zcash', syncedWallet).catch(() => {});
-      syncingWalletRef.current = null;
-    }
-  }, [activeNetwork]);
 }

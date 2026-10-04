@@ -32,6 +32,7 @@ import type { EncryptedVault } from '../../state/keyring/types';
 import type { ZidShareRecord } from '../../state/identity';
 import type { ZafuSignRequest, ZafuSignResponse } from '@zafu/protocol';
 import { SIGN_REQUEST_TYPE } from './zafu-method-names';
+import { CAPS, walletKind } from '../../signing/wallet-kind';
 
 // request/response shapes come from the shared @zafu/protocol contract, so any
 // drift from the wallet<->dapp wire (and from the @zafu/zid SDK that builds
@@ -65,6 +66,25 @@ export const signRequestListener = (
   return true;
 };
 
+/**
+ * The site's ed25519 key signs `zafu_sign` challenges as they are (the v1
+ * contract every relying party verifies) and also signs zafu's own messages,
+ * such as the PQ prekey authentication (`lp("zafu-pq-key-auth-v1") || ...`).
+ * Without a domain prefix on `zafu_sign`, a site could have the user sign a
+ * crafted prekey message for a PQ key of its choosing. Adding a prefix would
+ * break every verifier, so instead a challenge shaped like one of zafu's own -
+ * a big-endian u32 length followed by "zafu-" - is refused.
+ */
+export const isReservedChallenge = (challengeHex: string): boolean => {
+  const head = challengeHex.slice(0, 18).toLowerCase();
+  if (head.length < 18) {
+    return false;
+  }
+  const len = Number.parseInt(head.slice(0, 8), 16);
+  // "zafu-" in hex
+  return head.slice(8) === '7a6166752d' && len >= 5 && len <= challengeHex.length / 2 - 4;
+};
+
 const handleSignRequest = async (
   req: SignRequestMessage,
   sender: { origin: string; tab: chrome.tabs.Tab },
@@ -86,12 +106,26 @@ const handleSignRequest = async (
     };
   }
 
+  if (isReservedChallenge(req.challengeHex)) {
+    return {
+      success: false,
+      error: 'invalid challenge: these bytes are reserved for zafu itself',
+      code: 'invalid_request',
+    };
+  }
+
   try {
-    // detect wallet type for mnemonic vs zigner signing flow
+    // who holds the key: a phrase signs here, a zigner answers a QR, and a
+    // device that cannot sign a ZID is told so before any popup opens.
     const vaults = ((await localExtStorage.get('vaults')) ?? []) as EncryptedVault[];
     const selectedId = await localExtStorage.get('selectedVaultId');
     const selectedVault = vaults.find(v => v.id === selectedId);
-    const isAirgap = selectedVault?.type === 'zigner-zafu';
+    const kind = selectedVault && walletKind(selectedVault);
+    const refusal = kind && CAPS[kind].zid;
+    if (refusal) {
+      return { success: false, error: refusal, code: 'not_available' };
+    }
+    const isAirgap = kind === 'zigner';
     const zidPubkey = isAirgap
       ? (selectedVault?.insensitive?.['zid'] as string | undefined)
       : undefined;
@@ -121,9 +155,11 @@ const handleSignRequest = async (
     // log the shared zid (done in service worker so it persists even if popup closes)
     if (publicKey) {
       const log = ((await localExtStorage.get('zidShareLog')) ?? []) as ZidShareRecord[];
-      const alreadyLogged = log.some(
-        r => r.publicKey === publicKey && r.sharedWith === sender.origin,
-      );
+      // a log another build wrote in a shape this one cannot read is left
+      // alone: rewriting it as a fresh list would drop its entries
+      const alreadyLogged =
+        !Array.isArray(log) ||
+        log.some(r => r.publicKey === publicKey && r.sharedWith === sender.origin);
       if (!alreadyLogged) {
         log.push({
           publicKey,

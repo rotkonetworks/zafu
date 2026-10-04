@@ -1,5 +1,5 @@
 /**
- * withConcurrency — bound the number of in-flight bucket fetches.
+ * withConcurrency - bound the number of in-flight bucket fetches.
  *
  * the underlying server has limits; flooding it with parallel requests hurts
  * latency for everyone and can trigger rate limiting. higher concurrency =
@@ -9,7 +9,7 @@
  *
  * implementation note: the inner fetcher receives the FULL bucket set at once
  * and decides per-bucket concurrency internally. this filter doesn't split
- * the set — instead it enforces a workgroup pattern in cooperation with the
+ * the set - instead it enforces a workgroup pattern in cooperation with the
  * inner fetcher via a token bucket exposed through FetchContext.
  *
  * since the existing concrete fetcher in zcash-worker.ts already batches
@@ -17,7 +17,7 @@
  * trimming what the inner sees. simple and predictable.
  *
  * for now this is a thin pass-through that records the desired limit on the
- * context — the concrete fetcher reads it. keeping the wiring explicit makes
+ * context - the concrete fetcher reads it. keeping the wiring explicit makes
  * the filter trivially testable.
  */
 

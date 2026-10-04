@@ -7,7 +7,7 @@
 
 import { StargateClient } from '@cosmjs/stargate';
 import { fromBech32, toBech32 } from '@cosmjs/encoding';
-import { type CosmosChainId, COSMOS_CHAINS } from './chains';
+import { type CosmosChainId, COSMOS_CHAINS, getCosmosChain } from './chains';
 
 /** cached clients per chain */
 // keyed by endpoint URL so a chain can hold several connections (one per RPC in
@@ -22,7 +22,7 @@ export async function getClient(
   chainId: CosmosChainId,
   endpoint?: string,
 ): Promise<StargateClient> {
-  const url = endpoint ?? COSMOS_CHAINS[chainId].rpcEndpoint;
+  const url = endpoint ?? getCosmosChain(chainId).rpcEndpoint;
   let client = clients.get(url);
   if (client) {
     return client;
@@ -56,7 +56,7 @@ export async function getBalance(
   endpoint?: string,
 ): Promise<CosmosBalance> {
   const client = await getClient(chainId, endpoint);
-  const config = COSMOS_CHAINS[chainId];
+  const config = getCosmosChain(chainId);
 
   const balance = await client.getBalance(address, config.denom);
 
@@ -112,13 +112,13 @@ export async function getHeight(chainId: CosmosChainId): Promise<number> {
  * would be a valid-looking but wrong, unspendable address.
  */
 export function convertAddress(address: string, targetChain: CosmosChainId): string {
-  if (COSMOS_CHAINS[targetChain].keyAlgo === 'eth_secp256k1') {
+  if (getCosmosChain(targetChain).keyAlgo === 'eth_secp256k1') {
     throw new Error(
       `convertAddress cannot prefix-swap to ${targetChain}: Ethermint chain (eth_secp256k1)`,
     );
   }
   const { data } = fromBech32(address);
-  const targetPrefix = COSMOS_CHAINS[targetChain].bech32Prefix;
+  const targetPrefix = getCosmosChain(targetChain).bech32Prefix;
   return toBech32(targetPrefix, data);
 }
 
@@ -139,7 +139,7 @@ export function deriveAllAddresses(sourceAddress: string): Record<CosmosChainId,
     addresses[chainId] = toBech32(config.bech32Prefix, data);
   }
 
-  return addresses as Record<CosmosChainId, string>;
+  return addresses;
 }
 
 /** build unsigned MsgSend for zigner signing */
@@ -169,7 +169,7 @@ export async function buildUnsignedSend(
   amount: bigint,
   memo = '',
 ): Promise<UnsignedSend> {
-  const config = COSMOS_CHAINS[chainId];
+  const config = getCosmosChain(chainId);
   const account = await getAccount(chainId, fromAddress);
 
   if (!account) {

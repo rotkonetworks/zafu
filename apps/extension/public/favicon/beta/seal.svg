@@ -1,0 +1,28 @@
+<!--
+  Zafu brand mark - hanko seal (匿).
+  Glyph outlines extracted from Shippori Mincho SemiBold (OFL 1.1),
+  https://github.com/fontdasu/ShipporiMincho, glyph uni533F, via fontTools
+  (no runtime font dependency; paths only).
+
+  Colors: square #f4b728 (gold), glyph #141008 (ink) - beta variant, chosen over a cream/vermillion inverse because it holds a fully bounded, high-contrast square on both light and dark Chrome toolbars (the cream inverse nearly vanishes against a white toolbar)
+  Master ratio: glyph height = 21/38 of the square (matches the 38px/21px
+  onboarding seal spec). Square corners, flat fill, no gradients or shadows.
+
+  Rendered PNGs are tuned per size, not a plain downscale of this master
+  (匿 has fewer strokes than the earlier 秘 glyph, so fractions and
+  strokes were re-tuned rather than reused):
+    icon16.png  - glyph fraction 0.60, +14 font-unit stroke (upm 1000)
+    icon32.png  - glyph fraction 0.57, +6 font-unit stroke
+    icon48.png  - glyph fraction 0.55, +3 font-unit stroke
+    icon128.png - 96x96 artwork (glyph fraction 0.53, no stroke boost),
+                  centered in a 128x128 transparent canvas per Chrome's
+                  128-icon convention.
+  Regenerate by re-rendering this glyph path at the fractions above and
+  adding a same-colour stroke of the listed width (font units, upm 1000).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">
+  <rect x="0" y="0" width="1000" height="1000" fill="#f4b728"/>
+  <g transform="translate(500.0,500.0) scale(0.5980861244019139,-0.5980861244019139) translate(-525.5,-373.0)">
+    <path d="M779 800Q784 807 790.0 815.0Q796 823 802.0 829.0Q808 835 812 835Q818 835 843.0 817.0Q868 799 890.0 779.0Q912 759 912 752Q908 736 887 736H206V14H781L809 52Q814 58 822.0 69.0Q830 80 835.5 85.5Q841 91 845 91Q851 91 877.5 71.0Q904 51 927.0 29.5Q950 8 950 1Q946 -15 923 -15H206V-58Q206 -63 196.0 -70.5Q186 -78 168.5 -83.5Q151 -89 129 -89Q118 -89 110.5 -83.0Q103 -77 103 -69Q107 -10 110.0 45.5Q113 101 114 191V610Q114 736 101 815L219 765H753ZM765 479Q769 485 776.0 494.5Q783 504 787.5 508.5Q792 513 796 513Q802 513 824.5 496.0Q847 479 867.0 459.5Q887 440 887 433Q883 417 861 417H506Q481 375 449 336L478 324H676L695 347Q698 351 706.5 360.5Q715 370 721 370Q727 370 749.0 355.5Q771 341 789.5 324.0Q808 307 808 300Q796 286 772 282V219L773 181Q774 138 777 99Q773 90 747.0 80.5Q721 71 700 71Q680 71 680 91Q680 91 684 109V128H465V84Q465 80 455.5 73.0Q446 66 430.0 61.0Q414 56 393 56Q383 56 377.5 62.0Q372 68 372 76Q376 122 378 194V264Q316 210 241 176L231 187Q289 226 337.0 285.5Q385 345 418 417H354Q297 416 236 403L211 454Q266 448 344 446H431Q445 480 459 526Q437 517 404 517H389V581H340Q298 580 252 567L227 618Q272 612 337 610H389Q389 668 383 711Q445 695 469.5 684.5Q494 674 494 667Q494 663 487 658L471 647V610H615Q615 668 609 711Q672 695 696.5 684.5Q721 674 721 667Q721 663 714 658L698 647V610H756L776 638Q780 643 784.5 650.0Q789 657 794.0 662.0Q799 667 803 667Q809 667 828.5 652.5Q848 638 865.0 621.0Q882 604 882 597Q879 581 857 581H698V539Q698 534 680.0 527.0Q662 520 631 519Q611 519 611 539Q612 541 615 560V581H471V549Q578 534 578 522Q578 520 569 516L552 511Q534 467 522 446H742ZM684 157V295H465V157Z" fill="#141008"/>
+  </g>
+</svg>

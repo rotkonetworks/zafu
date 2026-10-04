@@ -67,11 +67,7 @@ export interface SignedPczt {
  *     device, signs, and scans the response back with the camera, possibly after
  *     the popup was torn down. To present these as an `ExternalSigner` the
  *     Promise must be a Deferred RESOLVED by the scan handler, not an inline
- *     await. Modelled but NOT yet migrated: the send component still drives these
- *     as an explicit two-phase flow (build+display, then a separate
- *     handlePcztSignatureScanned). Migrating them means threading that Deferred
- *     through the signing store; behaviour-preserving but it touches a working
- *     mainnet path, so it is a deliberate, separately-verified step.
+ *     await. zigner does this today (zigner-signer.ts).
  */
 export type ExternalSigner = (req: SignRequest) => Promise<SignResult>;
 

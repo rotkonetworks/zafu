@@ -12,7 +12,7 @@
  * valid-looking but wrong inj1 address, and funds sent there are lost.
  */
 
-import { COSMOS_CHAINS, type CosmosChainId } from '../cosmos/chains';
+import { getCosmosChain, type CosmosChainId } from '../cosmos/chains';
 import {
   buildMsgSend,
   buildMsgTransfer,
@@ -124,7 +124,8 @@ function cosmosConduit(chainId: CosmosChainId): ChainConduit {
   // derived on the chain's own path (its prefix picks the coin type), never a
   // prefix-swap: a chain on another coin type (Kava) has different address bytes
   const deriveAddress = async (mnemonic: string, accountIndex: number) =>
-    (await deriveCosmosWallet(mnemonic, accountIndex, COSMOS_CHAINS[chainId].bech32Prefix)).address;
+    (await deriveCosmosWallet(mnemonic, accountIndex, getCosmosChain(chainId).bech32Prefix))
+      .address;
   const feeFor = (kind: TxKind): TransparentFee => {
     const typeUrl =
       kind === 'ibc' ? '/ibc.applications.transfer.v1.MsgTransfer' : '/cosmos.bank.v1beta1.MsgSend';
@@ -198,7 +199,7 @@ function ethermintConduit(
   chainId: CosmosChainId,
   deps: { wait: (ms: number) => Promise<void>; fetchFn?: typeof fetch } = { wait: sleep },
 ): ChainConduit {
-  const cfg = COSMOS_CHAINS[chainId];
+  const cfg = getCosmosChain(chainId);
   const sponsorUrl = cfg.gasSponsorUrl;
   const gas = cfg.gasAsset ?? { symbol: cfg.symbol, denom: cfg.denom, decimals: cfg.decimals };
   const feeFor = (): TransparentFee => {
@@ -289,7 +290,7 @@ function ethermintConduit(
 
 /** the conduit for a transparent chain, chosen by its key scheme */
 export function conduitFor(chainId: CosmosChainId): ChainConduit {
-  return COSMOS_CHAINS[chainId].keyAlgo === 'eth_secp256k1'
+  return getCosmosChain(chainId).keyAlgo === 'eth_secp256k1'
     ? ethermintConduit(chainId)
     : cosmosConduit(chainId);
 }

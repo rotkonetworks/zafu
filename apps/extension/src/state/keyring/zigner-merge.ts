@@ -3,7 +3,7 @@
  *
  * When a user imports the same zigner device across multiple networks
  * (e.g. first zcash, then penumbra), we want one vault with multiple
- * network capabilities — not one vault per network. This module handles
+ * network capabilities - not one vault per network. This module handles
  * the merge: decrypt the existing vault data, combine the new viewing
  * keys / addresses into it, re-encrypt, and wire up the per-network
  * wallet entries for whatever's newly supported.
@@ -38,7 +38,7 @@ export async function mergeZignerCapabilities(
   // need the session key to decrypt + re-encrypt the vault's import data
   const sessionKeyJson = await session.get('passwordKey');
   if (!sessionKeyJson) {
-    throw new Error('keyring locked — cannot merge zigner imports');
+    throw new Error('keyring locked - cannot merge zigner imports');
   }
   const key = await Key.fromJson(sessionKeyJson);
 
@@ -56,8 +56,6 @@ export async function mergeZignerCapabilities(
     fullViewingKey: incoming.fullViewingKey ?? existingData.fullViewingKey,
     viewingKey: incoming.viewingKey ?? existingData.viewingKey,
     publicKey: incoming.publicKey ?? existingData.publicKey,
-    polkadotSs58: incoming.polkadotSs58 ?? existingData.polkadotSs58,
-    polkadotGenesisHash: incoming.polkadotGenesisHash ?? existingData.polkadotGenesisHash,
     cosmosAddresses: incoming.cosmosAddresses ?? existingData.cosmosAddresses,
     zidPublicKey: incoming.zidPublicKey ?? existingData.zidPublicKey,
     // accountIndex + deviceId stay as-is (they matched for us to be here)

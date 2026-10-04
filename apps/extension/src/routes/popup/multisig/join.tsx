@@ -38,9 +38,12 @@ import {
 } from '../../../state/keyring/relay-identity';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
+import { requestEgressOptIn } from '../../../net/egress-opt-in';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
 import { useBackNav } from '../../../utils/navigate';
+import { Button } from '@repo/ui/components/ui/button';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import {
   DEFAULT_RELAY_URL,
   RelayTransportField,
@@ -105,6 +108,10 @@ const MultisigJoinZafu = () => {
     const room = (roomArg ?? roomCode).trim();
     const keys = peersArg ?? peerKeys;
     if (!room) {
+      return;
+    }
+    if (!(await requestEgressOptIn('multisig-relay'))) {
+      setError('not now - allow the multisig relay to join a room');
       return;
     }
 
@@ -274,7 +281,7 @@ const MultisigJoinZafu = () => {
             <label className='text-xs text-fg-muted'>
               session id from the wallet creator
               <input
-                className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
+                className='mt-1 w-full border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
                 value={roomCode}
                 onChange={e => setRoomCode(e.target.value)}
                 placeholder='00000000-0000-0000-0000-000000000000'
@@ -311,9 +318,10 @@ const MultisigJoinZafu = () => {
             />
           )}
           {rdvAvailable === true && (
-            <button
-              type='button'
-              className='self-start text-label text-fg-muted underline'
+            <Button
+              variant='quiet'
+              size='sm'
+              className='self-start'
               onClick={() => {
                 setManualKeys(m => !m);
                 setPeerKeys([]);
@@ -322,16 +330,17 @@ const MultisigJoinZafu = () => {
               }}
             >
               {manualKeys ? 'use a room code instead' : 'advanced: join by session id'}
-            </button>
+            </Button>
           )}
           {rdvAvailable !== null && !rendezvous && (
-            <button
-              className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
+            <Button
+              variant='primary'
+              className='w-full'
               onClick={() => void handleJoin()}
               disabled={!roomCode.trim() || peerKeys.length === 0}
             >
               join
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -339,16 +348,16 @@ const MultisigJoinZafu = () => {
       {(step === 'joining' || step === 'dkg' || step === 'fvk-echo') && (
         <div className='flex flex-col items-center gap-4'>
           {thresholdInfo && (
-            <span className='rounded-md bg-primary/10 px-2 py-0.5 text-label font-medium text-zigner-gold'>
+            <span className='bg-primary/10 px-2 py-0.5 text-label text-zigner-gold'>
               {thresholdInfo}
             </span>
           )}
 
           {maxSigners > 0 && (
-            <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
+            <div className='flex items-center gap-2 bg-elev-2 px-3 py-1.5'>
               <span className='i-ph-users size-3.5 text-fg-muted' />
               <span className='text-xs'>
-                <span className='font-medium text-fg'>{participantCount}</span>
+                <span className='text-fg'>{participantCount}</span>
                 <span className='text-fg-muted'> / {maxSigners} joined</span>
               </span>
             </div>
@@ -364,37 +373,33 @@ const MultisigJoinZafu = () => {
 
       {step === 'complete' && (
         <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
+          <div className='border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
             joined multisig wallet
           </div>
-          <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
+          <div className='border border-border-soft bg-elev-1 p-3'>
             <p className='text-label text-fg-muted'>address</p>
             <p className='mt-1 break-all font-mono text-xs'>{address}</p>
           </div>
-          <button
-            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors'
-            onClick={goBack}
-          >
+          <Button variant='primary' className='w-full' onClick={goBack}>
             done
-          </button>
+          </Button>
         </div>
       )}
 
       {step === 'error' && (
         <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-400'>
-            {error}
-          </div>
-          <button
+          <StatusSlot tone='danger'>{error}</StatusSlot>
+          <Button
+            variant='secondary'
+            className='w-full'
             onClick={() => {
               setStep('input');
               setError('');
               autoJoinedRef.current = false;
             }}
-            className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >
             try again
-          </button>
+          </Button>
         </div>
       )}
     </SettingsScreen>
@@ -500,6 +505,10 @@ const MultisigJoinZigner = () => {
     const room = (roomArg ?? roomCode).trim();
     const keys = peersArg ?? peerKeys;
     if (!room) {
+      return;
+    }
+    if (!(await requestEgressOptIn('multisig-relay'))) {
+      setError('not now - allow the multisig relay to join a room');
       return;
     }
     try {
@@ -819,15 +828,15 @@ const MultisigJoinZigner = () => {
       />
       {step === 'input' && (
         <div className='flex flex-col gap-4'>
-          <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-2.5 text-label text-yellow-400'>
+          <StatusSlot tone='warn'>
             cold-multisig: your signing key is generated and stored on zigner only. zafu keeps only
             the public keys needed to watch the wallet.
-          </div>
+          </StatusSlot>
           {rdvAvailable !== null && !rendezvous && (
             <label className='text-xs text-fg-muted'>
               session id from the wallet creator
               <input
-                className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
+                className='mt-1 w-full border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
                 value={roomCode}
                 onChange={e => setRoomCode(e.target.value)}
                 placeholder='00000000-0000-0000-0000-000000000000'
@@ -863,9 +872,10 @@ const MultisigJoinZigner = () => {
             />
           )}
           {rdvAvailable === true && (
-            <button
-              type='button'
-              className='self-start text-label text-fg-muted underline'
+            <Button
+              variant='quiet'
+              size='sm'
+              className='self-start'
               onClick={() => {
                 setManualKeys(m => !m);
                 setPeerKeys([]);
@@ -874,16 +884,17 @@ const MultisigJoinZigner = () => {
               }}
             >
               {manualKeys ? 'use a room code instead' : 'advanced: join by session id'}
-            </button>
+            </Button>
           )}
           {rdvAvailable !== null && !rendezvous && (
-            <button
-              className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
+            <Button
+              variant='primary'
+              className='w-full'
               onClick={() => void handleJoin()}
               disabled={!roomCode.trim() || peerKeys.length === 0}
             >
               join
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -979,40 +990,36 @@ const MultisigJoinZigner = () => {
 
       {step === 'complete' && (
         <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
+          <div className='border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
             multisig wallet saved - signing key lives on zigner only
           </div>
-          <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
+          <div className='border border-border-soft bg-elev-1 p-3'>
             <p className='text-label text-fg-muted'>address</p>
             <p className='mt-1 break-all font-mono text-xs'>{address}</p>
           </div>
           <p className='text-label text-fg-muted'>
             zigner wallet_id: <span className='font-mono'>{walletId}</span>
           </p>
-          <button
-            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors'
-            onClick={goBack}
-          >
+          <Button variant='primary' className='w-full' onClick={goBack}>
             done
-          </button>
+          </Button>
         </div>
       )}
 
       {step === 'error' && (
         <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-400'>
-            {error}
-          </div>
-          <button
+          <StatusSlot tone='danger'>{error}</StatusSlot>
+          <Button
+            variant='secondary'
+            className='w-full'
             onClick={() => {
               setStep('input');
               setError('');
               autoJoinedRef.current = false;
             }}
-            className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >
             try again
-          </button>
+          </Button>
         </div>
       )}
     </SettingsScreen>

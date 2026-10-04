@@ -1,159 +1,137 @@
-import { lazy, Suspense } from 'react';
+import { Navigate, type RouteObject } from 'react-router-dom';
 import { PopupPath } from '../paths';
+import { screen } from '../route-modules';
 
-// lazy load all settings screens
-const SettingsMain = lazy(() => import('./settings').then(m => ({ default: m.Settings })));
-const SettingsClearCache = lazy(() =>
-  import('./settings-clear-cache').then(m => ({ default: m.SettingsClearCache })),
-);
-const SettingsConnectedSites = lazy(() =>
-  import('./settings-connected-sites').then(m => ({ default: m.SettingsConnectedSites })),
-);
-const SettingsPassphrase = lazy(() =>
-  import('./settings-passphrase').then(m => ({ default: m.SettingsPassphrase })),
-);
-const SettingsDefaultFrontend = lazy(() =>
-  import('./settings-default-frontend').then(m => ({ default: m.SettingsDefaultFrontend })),
-);
-// wallets + networks are one merged screen (SettingsWallets supplies the
-// header/back chrome; the network toggles render below it).
-const SettingsWalletsNetworks = lazy(() =>
-  import('./settings-networks').then(m => ({ default: m.SettingsWalletsNetworks })),
-);
-const SettingsPrivacy = lazy(() =>
-  import('./settings-privacy').then(m => ({ default: m.SettingsPrivacy })),
-);
-const SettingsFeatures = lazy(() =>
-  import('./settings-features').then(m => ({ default: m.SettingsFeatures })),
-);
-const SettingsAppearance = lazy(() =>
-  import('./settings-appearance').then(m => ({ default: m.SettingsAppearance })),
-);
-const SettingsAddViewingKey = lazy(() =>
-  import('./settings-add-viewing-key').then(m => ({ default: m.SettingsAddViewingKey })),
-);
-// Security & Backup tab. SecurityBackup (authored by another engineer) brings
-// its own SettingsScreen chrome, so mount it directly - no extra wrapper.
-const SettingsSecurityBackup = lazy(() =>
-  import('./settings-security-backup').then(m => ({ default: m.SecurityBackup })),
-);
-const SettingsAbout = lazy(() =>
-  import('./settings-about').then(m => ({ default: m.SettingsAbout })),
-);
-const SettingsMultisig = lazy(() =>
-  import('./settings-multisig').then(m => ({ default: m.SettingsMultisig })),
-);
-const SettingsMultisigBackup = lazy(() =>
-  import('./settings-multisig-backup').then(m => ({ default: m.SettingsMultisigBackup })),
-);
-const SettingsZigner = lazy(() =>
-  import('./settings-zigner').then(m => ({ default: m.SettingsZigner })),
-);
-const SettingsOta = lazy(() => import('./settings-ota').then(m => ({ default: m.SettingsOta })));
-const SettingsVoting = lazy(() =>
-  import('./settings-voting').then(m => ({ default: m.SettingsVoting })),
-);
-const SettingsZcashMe = lazy(() =>
-  import('./settings-zcashme').then(m => ({ default: m.SettingsZcashMe })),
-);
-const SubscribePage = lazy(() => import('./subscribe').then(m => ({ default: m.SubscribePage })));
+// every settings screen is route-level lazy (see route-modules.ts): the router
+// loads the chunk before committing, so the previous screen stays up meanwhile
 
-const LazyFallback = () => (
-  <div className='flex h-full items-center justify-center p-4'>
-    <div className='h-6 w-6 animate-spin rounded-full border-2 border-zigner-gold border-t-transparent' />
-  </div>
-);
-
-const withSuspense = (Component: React.LazyExoticComponent<React.ComponentType>) => (
-  <Suspense fallback={<LazyFallback />}>
-    <Component />
-  </Suspense>
-);
-
-export const settingsRoutes = [
+export const settingsRoutes: RouteObject[] = [
   {
     path: PopupPath.SETTINGS,
-    element: withSuspense(SettingsMain),
+    ...screen('settingsMain'),
   },
   {
     path: PopupPath.SUBSCRIBE,
-    element: withSuspense(SubscribePage),
+    ...screen('subscribe'),
   },
   {
     path: PopupPath.SETTINGS_DEFAULT_FRONTEND,
-    element: withSuspense(SettingsDefaultFrontend),
+    ...screen('settingsDefaultFrontend'),
   },
   {
     path: PopupPath.SETTINGS_CLEAR_CACHE,
-    element: withSuspense(SettingsClearCache),
+    ...screen('settingsClearCache'),
   },
   {
     path: PopupPath.SETTINGS_CONNECTED_SITES,
-    element: withSuspense(SettingsConnectedSites),
+    ...screen('settingsConnectedSites'),
   },
   {
     path: PopupPath.SETTINGS_RECOVERY_PASSPHRASE,
-    element: withSuspense(SettingsPassphrase),
+    ...screen('settingsPassphrase'),
   },
   {
     // real zigner screen - a "zigner" link that silently redirected to the
-    // wallets list made the label lie. wallets still handles vault import;
-    // this screen owns zigner-specific settings (vault legacy mode, scan).
+    // wallets list made the label lie. it lists the paired zigner vaults;
+    // pairing goes through the one device scanner (connect-device).
     path: PopupPath.SETTINGS_ZIGNER,
-    element: withSuspense(SettingsZigner),
+    ...screen('settingsZigner'),
   },
   {
-    // networks deep-links (?network=zcash) still land here; the merged screen
-    // keeps the ?network auto-expand + scroll-into-view.
+    path: PopupPath.SETTINGS_CONNECT_DEVICE,
+    ...screen('settingsConnectDevice'),
+  },
+  {
+    // ?network=zcash|penumbra (the home "switch node" links) opens that network's node sheet
     path: PopupPath.SETTINGS_NETWORKS,
-    element: withSuspense(SettingsWalletsNetworks),
+    ...screen('settingsNetworks'),
+  },
+  // the old two-level networks menu; kept so saved back stacks still land
+  ...['/settings/networks/home', '/settings/networks/all'].map(path => ({
+    path,
+    element: <Navigate replace to={PopupPath.SETTINGS_NETWORKS} />,
+  })),
+  // security, privacy and devices went through the same flattening: each
+  // category is one screen now, so its old "all controls" (or home) path
+  // just redirects to the category screen.
+  {
+    path: '/settings/security-backup',
+    element: <Navigate replace to={PopupPath.SETTINGS_SECURITY} />,
+  },
+  {
+    path: '/settings/privacy/home',
+    element: <Navigate replace to={PopupPath.SETTINGS_PRIVACY} />,
+  },
+  {
+    path: '/settings/devices/all',
+    element: <Navigate replace to={PopupPath.SETTINGS_DEVICES} />,
   },
   {
     path: PopupPath.SETTINGS_PRIVACY,
-    element: withSuspense(SettingsPrivacy),
+    ...screen('settingsPrivacy'),
   },
   {
     path: PopupPath.SETTINGS_FEATURES,
-    element: withSuspense(SettingsFeatures),
-  },
-  {
-    path: PopupPath.SETTINGS_APPEARANCE,
-    element: withSuspense(SettingsAppearance),
+    ...screen('settingsFeatures'),
   },
   {
     path: PopupPath.SETTINGS_WALLETS,
-    element: withSuspense(SettingsWalletsNetworks),
-  },
-  {
-    path: PopupPath.SETTINGS_SECURITY_BACKUP,
-    element: withSuspense(SettingsSecurityBackup),
+    ...screen('settingsWalletsNetworks'),
   },
   {
     path: PopupPath.SETTINGS_ABOUT,
-    element: withSuspense(SettingsAbout),
+    ...screen('settingsAbout'),
   },
   {
     path: PopupPath.SETTINGS_MULTISIG,
-    element: withSuspense(SettingsMultisig),
+    ...screen('settingsMultisig'),
   },
   {
     path: PopupPath.SETTINGS_MULTISIG_BACKUP,
-    element: withSuspense(SettingsMultisigBackup),
+    ...screen('settingsMultisigBackup'),
   },
   {
     path: PopupPath.SETTINGS_OTA,
-    element: withSuspense(SettingsOta),
+    ...screen('settingsOta'),
   },
   {
     path: PopupPath.SETTINGS_VOTING,
-    element: withSuspense(SettingsVoting),
+    ...screen('settingsVoting'),
   },
   {
     path: PopupPath.SETTINGS_ZCASHME,
-    element: withSuspense(SettingsZcashMe),
+    ...screen('settingsZcashMe'),
+  },
+  {
+    path: PopupPath.SETTINGS_CHANGE_PASSWORD,
+    ...screen('settingsChangePassword'),
   },
   {
     path: PopupPath.SETTINGS_ADD_VIEWING_KEY,
-    element: withSuspense(SettingsAddViewingKey),
+    ...screen('settingsAddViewingKey'),
+  },
+  {
+    path: PopupPath.SETTINGS_SECURITY,
+    ...screen('settingsSecurityHome'),
+  },
+  {
+    path: PopupPath.SETTINGS_ZCASH_NETWORK,
+    ...screen('settingsZcashNetwork'),
+  },
+  {
+    path: PopupPath.SETTINGS_PENUMBRA_NETWORK,
+    ...screen('settingsPenumbraNetwork'),
+  },
+  {
+    path: PopupPath.SETTINGS_DEVICES,
+    ...screen('settingsDevicesHome'),
+  },
+  {
+    path: PopupPath.SETTINGS_REMOVE_WALLET,
+    ...screen('settingsRemoveWallet'),
+  },
+  {
+    path: PopupPath.SETTINGS_CONNECTIONS,
+    ...screen('settingsConnections'),
   },
 ];

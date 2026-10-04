@@ -1,5 +1,5 @@
 /**
- * migration — one-time data migrations run during init
+ * migration - one-time data migrations run during init
  *
  * each migration is a pure-ish function: takes current state,
  * returns new state + writes to storage if needed.
@@ -11,6 +11,7 @@ import { Key, type KeyJson } from '@repo/encryption/key';
 import { Box } from '@repo/encryption/box';
 import type { EncryptedVault } from './types';
 import type { ZcashWalletJson } from '../wallets';
+import type { SeatRoom } from './vault-ops';
 
 /** migrate orphaned multisig wallets (multisig && !vaultId) into the vault system */
 export async function migrateOrphanedMultisigs(
@@ -91,7 +92,7 @@ export const hasOrphanedMultisigs = (zcashWallets: ZcashWalletJson[]): boolean =
  * (getMultisigSecrets is vault-first); this rebuilds the display/routing
  * mirror the multisig manager reads. secret material (keyPackage /
  * ephemeralSeed) stays in vault.encryptedData and is intentionally omitted
- * here — self-custody backup pulls it via getMultisigSecrets(vaultId).
+ * here - self-custody backup pulls it via getMultisigSecrets(vaultId).
  *
  * orchardFvk isn't stored on the vault, so a mirror rebuilt from a vault
  * that never had one carries ''. balances resolve by vaultId regardless;
@@ -121,6 +122,7 @@ export const deriveMirrorFromFrostVault = (vault: EncryptedVault): ZcashWalletJs
       ...(custody ? { custody } : {}),
       ...(ins['zignerWalletId'] ? { zignerWalletId: ins['zignerWalletId'] as string } : {}),
       ...(ins['hidden'] === true ? { hidden: true as const } : {}),
+      ...(ins['room'] ? { room: ins['room'] as SeatRoom } : {}),
     },
   };
 };

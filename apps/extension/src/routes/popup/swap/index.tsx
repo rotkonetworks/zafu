@@ -2,85 +2,56 @@
  * swap page
  *
  * penumbra: private on-chain DEX swap via simulation service
- * zcash: crosschain swap via NEAR 1Click (same API as Zashi mobile)
+ * zcash: crosschain swap over every route that carries the pair (crosschain.tsx)
  */
 
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useLocation } from 'react-router-dom';
 import { viewClient, simulationClient } from '../../../clients';
+import { Button } from '@repo/ui/components/ui/button';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Sensitive } from '../../../components/sensitive';
-import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
+import { ScreenHeader } from '../../../components/screen-header';
 import { useStore } from '../../../state';
-import {
-  selectActiveNetwork,
-  selectPenumbraAccount,
-  selectEffectiveKeyInfo,
-  selectGetMnemonic,
-} from '../../../state/keyring';
-import { contactsSelector, type ContactNetwork } from '../../../state/contacts';
+import { selectActiveNetwork, selectPenumbraAccount } from '../../../state/keyring';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { Value, Metadata } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
-import {
-  getAssetIdFromValueView,
-  getDisplayDenomExponentFromValueView,
-} from '@penumbra-zone/getters/value-view';
-import { AssetIcon } from '@repo/ui/components/ui/asset-icon';
+import { getAssetIdFromValueView } from '@penumbra-zone/getters/value-view';
 import { symbolFromMetadata } from '../../../utils/asset-display';
-import { fromValueView } from '@rotko/penumbra-types/amount';
-import {
-  isFungibleMetadata,
-  positionLabel,
-  selectPickerBuckets,
-} from '../../../utils/is-fungible-asset';
+import { fromValueView } from '@penumbrafi/types/amount';
+import { isFungibleMetadata, selectPickerBuckets } from '../../../utils/is-fungible-asset';
 import { balancesQueryOptions } from '../../../hooks/penumbra-balances';
-import { AssetBucketToggle, type AssetBucket } from '../../../components/asset-bucket-toggle';
-import { cn } from '@repo/ui/lib/utils';
-import { useActiveAddress } from '../../../hooks/use-address';
-import {
-  getBalanceInWorker,
-  buildSendTxInWorker,
-  completeSendTxInWorker,
-} from '../../../state/keyring/network-worker';
-import { RecipientPicker } from '../../../components/recipient-picker';
-import {
-  getSupportedTokens,
-  requestQuote,
-  checkSwapStatus,
-  filterSwappableTokens,
-  findZecAssetId,
-  blockchainToContactNetwork,
-  toBaseUnits,
-  type NearToken,
-  type SwapQuoteResponse,
-  type SwapStatus,
-} from '../../../state/near-swap';
 import type {
   BalancesResponse,
   AssetsResponse,
 } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
-import { usePasswordGate } from '../../../hooks/password-gate';
-import { QrDisplay } from '../../../shared/components/qr-display';
-import { QrScanner } from '../../../shared/components/qr-scanner';
-import {
-  encodeZcashSignRequest,
-  parseZcashSignatureResponse,
-  isZcashSignatureQR,
-  hexToBytes,
-  bytesToHex,
-} from '@repo/wallet/networks';
-import { selectActiveZcashWallet } from '../../../state/wallets';
 import { useBackNav } from '../../../utils/navigate';
+import { PenumbraFlow } from '../send/penumbra-flow';
+import { Footer, Main } from '../send/send-ui';
+import { AmountField, PickSheet } from '../send/send-fields';
+import { BalanceSheet } from '../send/balance-sheet';
 import { PopupPath } from '../paths';
-import { useLocation } from 'react-router-dom';
 import { hasFeature } from '../../../config/networks';
+import type { SwapLinkState } from '../../../links/land';
+import { CrosschainSwap } from './crosschain';
+import { splitLoHi } from '@penumbrafi/types/lo-hi';
+import { fromUnits } from '../../../state/swap/provider';
+import { toBaseUnits } from '../../../state/ibc-withdraw-amount';
+import { traceOut, u128 } from './penumbra-units';
+import { reachOf, splitByReach } from './reachable';
+import { usePenumbraRoutes } from '../../../transparent/penumbra-routes';
+import { chainByChainId } from '@repo/wallet/networks/cosmos/chains';
 
 /**
  * Router state accepted by the swap page. Set from the row-level "Swap X"
  * quick-action on the home asset list so the from-leg boots pre-selected.
  */
-interface SwapLocationState {
+interface SwapLocationState extends Partial<SwapLinkState> {
+  /** an open swap to reopen where it stood (home's in-flight card) */
+  resume?: string;
   /** Base denom of the asset to preselect as the FROM leg. Falls back to
    *  top-priority balance when the denom is not found. */
   prefillFromAsset?: string;
@@ -98,6 +69,28 @@ interface InputAsset {
 
 /** stable empty list so memo/effect deps don't churn while balances load */
 const EMPTY_BALANCES: BalancesResponse[] = [];
+
+/**
+ * The display unit's exponent from the asset's own metadata, or undefined
+ * when the metadata does not say. Never a guess: an exponent off by k shows
+ * a quote off by 10^k, and Penumbra swaps have no minimum output, so the
+ * quote is the only safeguard the user gets. An asset without one is not
+ * offered here.
+ */
+const displayExponent = (meta: Metadata | undefined): number | undefined =>
+  meta?.denomUnits.find(u => u.denom === meta.display)?.exponent;
+
+/** exact base units of what is typed, or undefined when it can't be sent as typed */
+const typedUnits = (text: string, exponent: number): bigint | undefined => {
+  try {
+    return toBaseUnits(text, exponent);
+  } catch {
+    return undefined;
+  }
+};
+
+const sameId = (a?: Uint8Array, b?: Uint8Array) =>
+  !!a && !!b && a.length === b.length && a.every((v, i) => v === b[i]);
 
 /** output asset from assets list */
 interface OutputAsset {
@@ -118,11 +111,11 @@ export const SwapPage = () => {
   if (!hasFeature(activeNetwork, 'swap')) {
     return (
       <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
-        <div className='rounded-full bg-primary/10 p-4'>
+        <div className='bg-primary/10 p-4'>
           <span className='i-ph-shuffle h-8 w-8 text-zigner-gold' />
         </div>
         <div>
-          <h2 className='text-lg font-medium'>swap</h2>
+          <h2 className='text-lg'>swap</h2>
           <p className='mt-1 text-sm text-fg-muted'>swapping is not available for this network.</p>
         </div>
       </div>
@@ -130,911 +123,23 @@ export const SwapPage = () => {
   }
 
   if (activeNetwork === 'zcash') {
-    return <ZcashCrosschainSwap />;
+    // a new link remounts the form, filled in afresh
+    return (
+      <CrosschainSwap
+        key={location.key}
+        link={swapState?.link ? { link: swapState.link, via: swapState.via } : undefined}
+        resume={swapState?.resume}
+      />
+    );
+  }
+  if (swapState?.link) {
+    return (
+      <p className='px-4 py-12 text-center text-sm text-fg-muted'>
+        swap links open with zcash · please switch to zcash, then open the link again
+      </p>
+    );
   }
   return <PenumbraSwap prefillFromAsset={swapState?.prefillFromAsset} />;
-};
-
-// ── Zcash Crosschain Swap (NEAR 1Click) ──
-
-type ZcashSwapStep =
-  | 'input'
-  | 'quoting'
-  | 'review'
-  | 'sign'
-  | 'scan'
-  | 'sending'
-  | 'deposit'
-  | 'polling'
-  | 'done'
-  | 'error';
-
-function LiveTimer({ startMs }: { startMs: number }) {
-  const [elapsed, setElapsed] = useState(0);
-
-  useEffect(() => {
-    if (!startMs) {
-      return;
-    }
-    const tick = () => setElapsed(Math.round((Date.now() - startMs) / 1000));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [startMs]);
-
-  return <div className='font-mono text-2xl tabular-nums text-zigner-gold'>{elapsed}s</div>;
-}
-
-const ZcashCrosschainSwap = () => {
-  const goBack = useBackNav(PopupPath.INDEX);
-  const { address: zcashAddress } = useActiveAddress();
-  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
-  const { contacts } = useStore(contactsSelector);
-  const [step, setStep] = useState<ZcashSwapStep>('input');
-  const [direction, setDirection] = useState<'from_zec' | 'into_zec'>('from_zec');
-  const [amountIn, setAmountIn] = useState('');
-  const [selectedToken, setSelectedToken] = useState<NearToken | undefined>();
-  const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
-  const [destinationAddress, setDestinationAddress] = useState('');
-  const [showContacts, setShowContacts] = useState(false);
-  const [riskAcknowledged, setRiskAcknowledged] = useState(false);
-  const [quote, setQuote] = useState<SwapQuoteResponse | undefined>();
-  const [swapStatus, setSwapStatus] = useState<SwapStatus | null>(null);
-  const [error, setError] = useState<string | undefined>();
-  const [balanceZec, setBalanceZec] = useState<string | undefined>();
-  const getMnemonic = useStore(selectGetMnemonic);
-  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
-  const { requestAuth, PasswordModal } = usePasswordGate();
-  const [signRequestQr, setSignRequestQr] = useState<string | null>(null);
-  const unsignedTxRef = useRef<any | null>(null);
-  const [sendSteps, setSendSteps] = useState<
-    { step: string; detail?: string; elapsedMs: number }[]
-  >([]);
-  const buildStartRef = useRef(0);
-  const activeZcashWallet = useStore(selectActiveZcashWallet);
-  const ufvk =
-    activeZcashWallet?.ufvk ??
-    (activeZcashWallet?.orchardFvk?.startsWith('uview') ? activeZcashWallet.orchardFvk : undefined);
-
-  const isFromZec = direction === 'from_zec';
-
-  //zcash-send-progress
-  useEffect(() => {
-    if (step !== 'sending') {
-      return;
-    }
-
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as {
-        step: string;
-        detail?: string;
-        elapsedMs: number;
-      };
-      setSendSteps(prev => [...prev, detail]);
-    };
-
-    window.addEventListener('zcash-send-progress', handler);
-    return () => window.removeEventListener('zcash-send-progress', handler);
-  }, [step]);
-
-  // fetch ZEC balance
-  const walletId = selectedKeyInfo?.id;
-  useEffect(() => {
-    if (!walletId) {
-      return;
-    }
-    getBalanceInWorker('zcash', walletId)
-      .then(b => {
-        const zec = (Number(b) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
-        setBalanceZec(zec);
-      })
-      .catch(() => {});
-  }, [walletId]);
-
-  // fetch supported tokens + resolve ZEC asset ID dynamically
-  const [zecAssetId, setZecAssetId] = useState<string | undefined>();
-  const { data: tokens = [], isLoading: tokensLoading } = useQuery({
-    queryKey: ['near-tokens'],
-    staleTime: 300_000,
-    queryFn: async () => {
-      const all = await getSupportedTokens();
-      setZecAssetId(findZecAssetId(all));
-      return filterSwappableTokens(all);
-    },
-  });
-
-  // popular tokens first
-  const sortedTokens = useMemo(() => {
-    const popular = ['BTC', 'ETH', 'USDC', 'USDT', 'SOL', 'NEAR'];
-    return [...tokens].sort((a, b) => {
-      const ai = popular.indexOf(a.symbol);
-      const bi = popular.indexOf(b.symbol);
-      if (ai >= 0 && bi >= 0) {
-        return ai - bi;
-      }
-      if (ai >= 0) {
-        return -1;
-      }
-      if (bi >= 0) {
-        return 1;
-      }
-      return a.symbol.localeCompare(b.symbol);
-    });
-  }, [tokens]);
-
-  // map selected token's blockchain to contact network for address book
-  const destContactNetwork = useMemo(() => {
-    if (!selectedToken) {
-      return undefined;
-    }
-    return blockchainToContactNetwork(selectedToken.blockchain) as ContactNetwork | undefined;
-  }, [selectedToken]);
-
-  // get contacts for the destination network
-  const destContacts = useMemo(() => {
-    if (!destContactNetwork) {
-      return [];
-    }
-    return contacts
-      .filter(c => c.addresses.some(a => a.network === destContactNetwork))
-      .flatMap(c =>
-        c.addresses
-          .filter(a => a.network === destContactNetwork)
-          .map(a => ({ name: c.name, address: a.address })),
-      );
-  }, [contacts, destContactNetwork]);
-
-  const handleFlipDirection = useCallback(() => {
-    if (step !== 'input') {
-      return;
-    }
-    setDirection(d => (d === 'from_zec' ? 'into_zec' : 'from_zec'));
-    setAmountIn('');
-    setDestinationAddress('');
-  }, [step]);
-
-  const handleRequestQuote = useCallback(async () => {
-    if (!selectedToken) {
-      setError('select a token to receive');
-      return;
-    }
-
-    if (!amountIn || parseFloat(amountIn) <= 0) {
-      setError('enter an amount greater than 0');
-      return;
-    }
-
-    if (!zcashAddress) {
-      setError('zcash address not loaded yet');
-      return;
-    }
-
-    if (!zecAssetId) {
-      setError('ZEC asset metadata still loading');
-      return;
-    }
-
-    if (!destinationAddress) {
-      setError(
-        isFromZec
-          ? `enter ${selectedToken.blockchain} recipient address`
-          : `enter your ${selectedToken.blockchain} address for sending + refund`,
-      );
-      return;
-    }
-
-    setStep('quoting');
-    setError(undefined);
-
-    try {
-      const originAsset = isFromZec ? zecAssetId : selectedToken.assetId;
-      const destAsset = isFromZec ? selectedToken.assetId : zecAssetId;
-      const originDecimals = isFromZec ? 8 : selectedToken.decimals;
-      const amount = toBaseUnits(amountIn, originDecimals);
-
-      const recipient = isFromZec ? destinationAddress : zcashAddress;
-      const refundTo = isFromZec ? zcashAddress : destinationAddress;
-
-      const resp = await requestQuote({
-        swapType: 'EXACT_INPUT',
-        amount,
-        originAsset,
-        destinationAsset: destAsset,
-        recipient,
-        refundTo,
-      });
-
-      setQuote(resp);
-      setStep('review');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'failed to get quote');
-      setStep('error');
-    }
-  }, [selectedToken, amountIn, zcashAddress, zecAssetId, destinationAddress, isFromZec]);
-
-  const handleConfirmSwap = useCallback(async () => {
-    if (!quote || !selectedKeyInfo) {
-      return;
-    }
-
-    setError(undefined);
-
-    try {
-      if (isFromZec && selectedKeyInfo.type === 'mnemonic') {
-        const ok = await requestAuth();
-        if (!ok) {
-          setStep('review');
-          return;
-        }
-
-        setSendSteps([]);
-        buildStartRef.current = Date.now();
-        setStep('sending');
-
-        const walletId = selectedKeyInfo.id;
-        const amountZat = toBaseUnits(amountIn, 8);
-        const mnemonic = await getMnemonic(walletId);
-
-        const result = await buildSendTxInWorker(
-          'zcash',
-          walletId,
-          zidecarUrl,
-          quote.quote.depositAddress,
-          amountZat,
-          '',
-          0,
-          true,
-          mnemonic,
-        );
-
-        if (!('txid' in result)) {
-          throw new Error('failed to broadcast deposit transaction');
-        }
-
-        setStep('polling');
-        return;
-      }
-
-      // setStep('deposit');
-      // zigner flow
-      const walletId = selectedKeyInfo.id;
-      const amountZat = toBaseUnits(amountIn, 8);
-
-      // build unsigned tx
-      if (!ufvk) {
-        throw new Error('UFVK required for zigner wallet send');
-      }
-
-      setSendSteps([]);
-      buildStartRef.current = Date.now();
-      setStep('sending');
-      const result = await buildSendTxInWorker(
-        'zcash',
-        walletId,
-        zidecarUrl,
-        quote.quote.depositAddress,
-        amountZat,
-        '',
-        0,
-        true,
-        undefined,
-        ufvk,
-      );
-
-      if (!('sighash' in result)) {
-        throw new Error('unexpected unsigned tx result');
-      }
-
-      unsignedTxRef.current = result;
-
-      // build QR
-      const signRequest = encodeZcashSignRequest({
-        accountIndex: 0,
-        sighash: hexToBytes(result.sighash),
-        orchardAlphas: result.alphas.map(a => hexToBytes(a)),
-        summary: `swap ${amountIn} ZEC`,
-        mainnet: true,
-      });
-
-      setSignRequestQr(signRequest);
-      setStep('sign');
-    } catch (err) {
-      console.error('[swap] send failed', err);
-      setError(err instanceof Error ? err.message : 'failed to send deposit');
-      setStep('error');
-    }
-  }, [quote, selectedKeyInfo, amountIn, getMnemonic, zidecarUrl, isFromZec, requestAuth]);
-
-  const handleSignatureScanned = useCallback(
-    async (data: string) => {
-      try {
-        if (!isZcashSignatureQR(data)) {
-          setError('invalid signature qr code');
-          setStep('error');
-          return;
-        }
-
-        const sigResponse = parseZcashSignatureResponse(data);
-
-        if (!unsignedTxRef.current || !selectedKeyInfo) {
-          throw new Error('missing unsigned tx');
-        }
-
-        const signatures = {
-          orchardSigs: sigResponse.orchardSigs.map(bytesToHex),
-          transparentSigs: sigResponse.transparentSigs.map(bytesToHex),
-        };
-
-        setStep('sending');
-
-        const result = await completeSendTxInWorker(
-          'zcash',
-          selectedKeyInfo.id,
-          zidecarUrl,
-          unsignedTxRef.current.unsignedTx,
-          signatures,
-          unsignedTxRef.current.spendIndices,
-          // lets the worker mark the spent inputs and record the send
-          unsignedTxRef.current.coldSendId,
-        );
-
-        unsignedTxRef.current = null;
-
-        if (!('txid' in result)) {
-          throw new Error('failed to broadcast');
-        }
-
-        setStep('polling');
-      } catch (err) {
-        console.error(err);
-        setError(err instanceof Error ? err.message : 'failed to complete zigner tx');
-        setStep('error');
-      }
-    },
-    [selectedKeyInfo, zidecarUrl],
-  );
-
-  // poll swap status when in deposit/polling step
-  useEffect(() => {
-    if ((step !== 'deposit' && step !== 'polling') || !quote) {
-      return;
-    }
-
-    const interval = setInterval(async () => {
-      try {
-        const status = await checkSwapStatus(quote.quote.depositAddress);
-
-        console.log('[swap-status]', status.status);
-        setSwapStatus(status.status);
-
-        switch (status.status) {
-          case 'SUCCESS':
-            setStep('done');
-            break;
-
-          case 'FAILED':
-          case 'REFUNDED':
-            setError(`swap ${status.status.toLowerCase()}`);
-            setStep('error');
-            break;
-
-          case 'PROCESSING':
-            setStep('polling');
-            break;
-
-          case 'KNOWN_DEPOSIT_TX':
-          case 'PENDING_DEPOSIT':
-          case 'INCOMPLETE_DEPOSIT':
-          case null:
-          default:
-            // stay on current screen and keep polling
-            break;
-        }
-      } catch (err) {
-        console.error('[swap-status] poll failed', err);
-      }
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [step, quote]);
-  const handleReset = useCallback(() => {
-    setStep('input');
-    setQuote(undefined);
-    setSwapStatus(null);
-    setError(undefined);
-    setAmountIn('');
-  }, []);
-
-  const canQuote = selectedToken && parseFloat(amountIn) > 0 && zcashAddress && destinationAddress;
-
-  return (
-    <div className='flex flex-col gap-3 p-4'>
-      {PasswordModal}
-      {/* header with back arrow */}
-      <div className='flex items-center gap-3 -mx-4 -mt-4 border-b border-border-soft px-4 py-3'>
-        <button onClick={goBack} className='text-fg-muted transition-colors hover:text-fg-high'>
-          <span className='i-ph-arrow-left h-5 w-5' />
-        </button>
-        <h1 className='text-lg font-medium'>crosschain swap</h1>
-      </div>
-
-      {step === 'input' && (
-        <>
-          {/* FROM card */}
-          <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
-            <div className='flex items-center justify-between mb-2'>
-              <span className='text-xs text-fg-muted'>you send</span>
-              {isFromZec && balanceZec && (
-                <button
-                  onClick={() => {
-                    const max = Math.max(0, parseFloat(balanceZec) - 0.0001);
-                    setAmountIn(max.toFixed(8).replace(/0+$/, '').replace(/\.$/, ''));
-                  }}
-                  className='text-xs text-fg-muted hover:text-fg-high'
-                >
-                  bal: <Sensitive>{parseFloat(balanceZec).toFixed(4)}</Sensitive>
-                </button>
-              )}
-            </div>
-            <div className='flex items-center gap-2'>
-              <input
-                type='text'
-                inputMode='decimal'
-                value={amountIn}
-                onChange={e => setAmountIn(e.target.value)}
-                placeholder='0.00'
-                className='flex-1 bg-transparent text-xl font-medium text-fg placeholder:text-fg-muted focus:outline-none'
-              />
-              {isFromZec ? (
-                <div className='shrink-0 rounded-md bg-elev-2 px-3 py-1.5 text-sm font-medium'>
-                  ZEC
-                </div>
-              ) : (
-                <button
-                  onClick={() => setTokenPickerOpen(!tokenPickerOpen)}
-                  disabled={tokensLoading}
-                  className='shrink-0 flex items-center gap-1 rounded-md bg-elev-2 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-elev-1/80 disabled:opacity-50'
-                >
-                  {tokensLoading ? '...' : (selectedToken?.symbol ?? 'select')}
-                  <span
-                    className={cn(
-                      'i-ph-caret-down h-3.5 w-3.5 transition-transform',
-                      tokenPickerOpen && 'rotate-180',
-                    )}
-                  />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* flip arrow */}
-          <div className='flex justify-center -my-1.5 z-10'>
-            <button
-              onClick={handleFlipDirection}
-              className='rounded-full border border-border-soft bg-canvas p-1.5 shadow-sm transition-colors hover:bg-elev-1'
-              title='flip direction'
-            >
-              <div className='flex flex-col items-center'>
-                <span className='i-ph-arrow-down h-4 w-4' />
-              </div>
-            </button>
-          </div>
-
-          {/* TO card */}
-          <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
-            <div className='flex items-center justify-between mb-2'>
-              <span className='text-xs text-fg-muted'>you receive</span>
-            </div>
-            <div className='flex items-center gap-2'>
-              <div className='flex-1 text-xl font-medium text-fg-muted/50'>--</div>
-              {isFromZec ? (
-                <button
-                  onClick={() => setTokenPickerOpen(!tokenPickerOpen)}
-                  disabled={tokensLoading}
-                  className='shrink-0 flex items-center gap-1 rounded-md bg-elev-2 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-elev-1/80 disabled:opacity-50'
-                >
-                  {tokensLoading ? '...' : (selectedToken?.symbol ?? 'select')}
-                  <span
-                    className={cn(
-                      'i-ph-caret-down h-3.5 w-3.5 transition-transform',
-                      tokenPickerOpen && 'rotate-180',
-                    )}
-                  />
-                </button>
-              ) : (
-                <div className='shrink-0 rounded-md bg-elev-2 px-3 py-1.5 text-sm font-medium'>
-                  ZEC
-                </div>
-              )}
-            </div>
-            {selectedToken && (
-              <div className='mt-1 text-xs text-fg-muted'>on {selectedToken.blockchain}</div>
-            )}
-          </div>
-
-          {/* token picker dropdown */}
-          {tokenPickerOpen && (
-            <div className='rounded-lg border border-border-soft bg-canvas max-h-48 overflow-y-auto -mt-2'>
-              {sortedTokens.map(t => (
-                <button
-                  key={t.assetId}
-                  onClick={() => {
-                    setSelectedToken(t);
-                    setTokenPickerOpen(false);
-                    setDestinationAddress('');
-                  }}
-                  className={cn(
-                    'flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-elev-1',
-                    selectedToken?.assetId === t.assetId && 'bg-elev-2',
-                  )}
-                >
-                  <span className='font-medium'>{t.symbol}</span>
-                  <span className='text-xs text-fg-muted'>{t.blockchain}</span>
-                </button>
-              ))}
-              {sortedTokens.length === 0 && (
-                <div className='px-3 py-2 text-sm text-fg-muted'>no tokens available</div>
-              )}
-            </div>
-          )}
-
-          {/* destination address */}
-          <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
-            <div className='flex items-center justify-between mb-1'>
-              <span className='text-xs text-fg-muted'>
-                {isFromZec
-                  ? `${selectedToken?.blockchain ?? 'destination'} recipient`
-                  : `your ${selectedToken?.blockchain ?? 'source'} address`}
-              </span>
-              {destContacts.length > 0 && (
-                <button
-                  onClick={() => setShowContacts(!showContacts)}
-                  className={cn(
-                    'p-0.5 transition-colors',
-                    showContacts ? 'text-fg' : 'text-fg-muted hover:text-fg-high',
-                  )}
-                  title='address book'
-                >
-                  <span className='i-ph-user h-3.5 w-3.5' />
-                </button>
-              )}
-            </div>
-            <input
-              type='text'
-              value={destinationAddress}
-              onChange={e => {
-                setDestinationAddress(e.target.value);
-                setShowContacts(false);
-              }}
-              placeholder={isFromZec ? 'recipient address' : 'your address (for sending + refund)'}
-              className='w-full bg-transparent text-sm font-mono text-fg placeholder:text-fg-muted focus:outline-none'
-            />
-            {/* contact book suggestions */}
-            {showContacts && destContacts.length > 0 && (
-              <div className='mt-2 flex flex-wrap gap-1'>
-                {destContacts.map(c => (
-                  <button
-                    key={c.address}
-                    onClick={() => {
-                      setDestinationAddress(c.address);
-                      setShowContacts(false);
-                    }}
-                    className='rounded-md bg-elev-2 px-2 py-1 text-xs text-fg-muted hover:bg-elev-1/80 hover:text-fg-high transition-colors'
-                  >
-                    {c.name}
-                  </button>
-                ))}
-              </div>
-            )}
-            {/* also show RecipientPicker for matching network */}
-            {destContactNetwork && !showContacts && (
-              <RecipientPicker
-                network={destContactNetwork}
-                onSelect={addr => setDestinationAddress(addr)}
-                show={!destinationAddress}
-              />
-            )}
-          </div>
-
-          {error && <p className='text-xs text-red-400'>{error}</p>}
-
-          {/* third-party custody risk warning - shown before any funds are committed */}
-          <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3'>
-            <div className='flex items-start gap-2'>
-              <span className='i-ph-warning mt-0.5 h-4 w-4 shrink-0 text-yellow-400' />
-              <div className='flex flex-col gap-1.5 text-xs text-yellow-400'>
-                <p className='font-medium'>third-party service - not operated by us</p>
-                <p className='text-fg-muted'>
-                  This swap routes through NEAR Intents (Defuse / 1Click), a third-party service we
-                  do not operate or control. We provide no guarantees.
-                </p>
-                <p className='text-fg-muted'>
-                  Funds sent to the deposit address may be delayed, held, frozen, or subject to the
-                  service's own compliance / AML review - potentially for a long time - and we
-                  cannot recover or guarantee them.
-                </p>
-                <p className='text-fg-muted'>
-                  The deposit address may be a custodial address controlled by the service, not a
-                  trustless bridge.
-                </p>
-                <a
-                  href='https://docs.near-intents.org/near-intents/integration/distribution-channels/1click-terms-of-service'
-                  target='_blank'
-                  rel='noopener noreferrer'
-                  className='inline-flex items-center gap-1 text-yellow-400 underline underline-offset-2 hover:text-yellow-300'
-                >
-                  NEAR Intents 1Click terms of service
-                  <span className='i-ph-arrow-square-out h-3 w-3' />
-                </a>
-              </div>
-            </div>
-          </div>
-
-          <label className='flex cursor-pointer items-start gap-2.5 text-xs text-fg'>
-            <input
-              type='checkbox'
-              checked={riskAcknowledged}
-              onChange={e => setRiskAcknowledged(e.target.checked)}
-              className='mt-0.5 h-4 w-4 shrink-0 accent-[var(--zigner-gold)]'
-            />
-            I understand this is a third-party, potentially custodial service and accept these
-            risks.
-          </label>
-
-          <button
-            onClick={() => void handleRequestQuote()}
-            disabled={!canQuote || !riskAcknowledged}
-            className={cn(
-              'w-full bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground',
-              'transition-colors hover:bg-primary/90',
-              'disabled:opacity-50 disabled:cursor-not-allowed',
-            )}
-          >
-            get quote
-          </button>
-
-          <p className='text-center text-label text-fg-dim'>
-            via NEAR 1Click - swap details shared with third-party API
-          </p>
-        </>
-      )}
-
-      {step === 'quoting' && (
-        <div className='flex flex-col items-center gap-3 py-12'>
-          <span className='i-ph-arrows-clockwise h-6 w-6 animate-spin text-fg-muted' />
-          <p className='text-sm text-fg-muted'>fetching quote...</p>
-        </div>
-      )}
-
-      {step === 'review' && quote && (
-        <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-zigner-gold/30 bg-card/50 p-3'>
-            <p className='mb-2 text-xs font-medium text-zigner-gold'>confirm swap</p>
-
-            <div className='flex flex-col gap-1.5 text-xs'>
-              <div className='flex justify-between'>
-                <span className='text-fg-muted'>you send</span>
-                <span>
-                  <Sensitive>{amountIn} ZEC</Sensitive>
-                </span>
-              </div>
-
-              <div className='flex justify-between'>
-                <span className='text-fg-muted'>you receive</span>
-                <span>
-                  <Sensitive>
-                    {quote.quote.amountOutFormatted} {isFromZec ? selectedToken?.symbol : 'ZEC'}
-                  </Sensitive>
-                </span>
-              </div>
-
-              <div className='flex justify-between gap-2'>
-                <span className='shrink-0 text-fg-muted'>recipient</span>
-                <span className='break-all text-right font-mono'>{destinationAddress}</span>
-              </div>
-
-              <div className='flex justify-between gap-2'>
-                <span className='shrink-0 text-fg-muted'>deposit address</span>
-                <span className='break-all text-right font-mono'>{quote.quote.depositAddress}</span>
-              </div>
-            </div>
-
-            <div className='mt-3 flex gap-2'>
-              <button
-                onClick={() => void handleConfirmSwap()}
-                className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground transition-colors hover:bg-zigner-gold-light'
-              >
-                confirm & send
-              </button>
-
-              <button
-                onClick={() => setStep('input')}
-                className='flex-1 rounded-lg border border-border-soft py-3 text-sm text-fg-muted transition-colors hover:text-fg-high'
-              >
-                back
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {step === 'sign' && signRequestQr && (
-        <div className='flex flex-col gap-4 p-4'>
-          <div className='flex flex-col items-center gap-4 py-4'>
-            <QrDisplay
-              data={signRequestQr}
-              size={220}
-              title='scan with zigner'
-              description='scan this QR with your signer'
-            />
-          </div>
-
-          <div className='text-center'>
-            <p className='text-sm text-fg-muted'>1. open zigner on your phone</p>
-            <p className='text-sm text-fg-muted'>2. scan this qr code</p>
-            <p className='text-sm text-fg-muted'>3. review and approve the transaction</p>
-          </div>
-
-          <button
-            onClick={() => setStep('scan')}
-            className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground transition-colors hover:bg-zigner-gold-light'
-          >
-            scan signature
-          </button>
-        </div>
-      )}
-
-      {step === 'scan' && (
-        <QrScanner
-          onScan={handleSignatureScanned}
-          onError={err => {
-            setError(typeof err === 'string' ? err : 'failed to scan signature');
-            setStep('error');
-          }}
-          onClose={() => setStep('sign')}
-          title='scan signature'
-          description='point camera at signer QR code'
-        />
-      )}
-
-      {step === 'sending' && (
-        <div className='flex flex-col items-center gap-4 p-6'>
-          <div className='w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center'>
-            <div className='w-8 h-8 border-2 border-zigner-gold border-t-transparent rounded-full animate-spin' />
-          </div>
-          <h2 className='text-lg font-medium'>building transaction</h2>
-
-          <LiveTimer startMs={buildStartRef.current} />
-
-          {sendSteps.length > 0 ? (
-            <div className='w-full max-w-sm flex flex-col gap-1'>
-              {sendSteps.map((s, i) => {
-                const isLast = i === sendSteps.length - 1;
-                const prevMs = i > 0 ? sendSteps[i - 1]!.elapsedMs : 0;
-                const stepDuration = ((s.elapsedMs - prevMs) / 1000).toFixed(1);
-
-                return (
-                  <div
-                    key={i}
-                    className={`flex items-start gap-2 text-xs ${
-                      isLast ? 'text-fg' : 'text-fg-muted'
-                    }`}
-                  >
-                    <span className='font-mono w-12 text-right shrink-0'>
-                      {(s.elapsedMs / 1000).toFixed(1)}s
-                    </span>
-                    <span>
-                      {s.step}
-                      {s.detail && <span className='text-fg-muted ml-1'>({s.detail})</span>}
-                      {!isLast && Number(stepDuration) >= 0.5 && (
-                        <span className='text-fg-muted ml-1'>+{stepDuration}s</span>
-                      )}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className='text-sm text-fg-muted text-center'>preparing...</p>
-          )}
-        </div>
-      )}
-
-      {(step === 'deposit' || step === 'polling') && quote && (
-        <div className='flex flex-col gap-3'>
-          {/* quote summary */}
-          <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
-            <div className='flex justify-between text-sm'>
-              <span className='text-fg-muted'>send</span>
-              <span className='font-medium'>
-                <Sensitive>
-                  {quote.quote.amountInFormatted} {isFromZec ? 'ZEC' : selectedToken?.symbol}
-                </Sensitive>
-              </span>
-            </div>
-            <div className='flex justify-between text-sm mt-1'>
-              <span className='text-fg-muted'>receive</span>
-              <span className='font-medium'>
-                <Sensitive>
-                  {quote.quote.amountOutFormatted} {isFromZec ? selectedToken?.symbol : 'ZEC'}
-                </Sensitive>
-              </span>
-            </div>
-            {quote.quote.amountInUsd !== '0' && (
-              <div className='flex justify-between text-xs text-fg-muted mt-1'>
-                <span>value</span>
-                <span>
-                  $<Sensitive>{parseFloat(quote.quote.amountInUsd).toFixed(2)}</Sensitive>
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* status */}
-          <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
-            <div className='flex items-center gap-2'>
-              {step === 'polling' ? (
-                <span className='i-ph-arrows-clockwise h-4 w-4 animate-spin text-zigner-gold' />
-              ) : (
-                <div className='h-2 w-2 rounded-full bg-yellow-500 animate-pulse' />
-              )}
-              <span className='text-sm'>
-                {swapStatus === 'PROCESSING' && 'processing swap...'}
-                {swapStatus === 'PENDING_DEPOSIT' && 'waiting for deposit...'}
-                {swapStatus === 'KNOWN_DEPOSIT_TX' && 'deposit detected, confirming...'}
-                {swapStatus === 'INCOMPLETE_DEPOSIT' && 'waiting for full deposit...'}
-                {!swapStatus && 'waiting for deposit...'}
-              </span>
-            </div>
-          </div>
-
-          <button onClick={handleReset} className='text-xs text-fg-muted hover:text-fg-high'>
-            cancel
-          </button>
-        </div>
-      )}
-
-      {step === 'done' && (
-        <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
-            <p className='text-sm text-green-400'>swap complete</p>
-            {quote && (
-              <p className='text-xs text-fg-muted mt-1'>
-                <Sensitive>
-                  {quote.quote.amountInFormatted} {isFromZec ? 'ZEC' : selectedToken?.symbol}
-                </Sensitive>
-                {' → '}
-                <Sensitive>
-                  {quote.quote.amountOutFormatted} {isFromZec ? selectedToken?.symbol : 'ZEC'}
-                </Sensitive>
-              </p>
-            )}
-          </div>
-          <button
-            onClick={handleReset}
-            className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground transition-colors hover:bg-primary/90'
-          >
-            swap again
-          </button>
-        </div>
-      )}
-
-      {step === 'error' && (
-        <div className='flex flex-col gap-3'>
-          <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
-            <p className='text-sm text-red-400'>swap failed</p>
-            <p className='text-xs text-fg-muted mt-1'>{error}</p>
-          </div>
-          <button
-            onClick={handleReset}
-            className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground transition-colors hover:bg-primary/90'
-          >
-            try again
-          </button>
-        </div>
-      )}
-    </div>
-  );
 };
 
 // ── Penumbra DEX Swap ──
@@ -1043,17 +148,11 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
   const goBack = useBackNav(PopupPath.INDEX);
   const penumbraAccount = useStore(selectPenumbraAccount);
   const [amountIn, setAmountIn] = useState('');
-  const [assetInOpen, setAssetInOpen] = useState(false);
-  const [assetOutOpen, setAssetOutOpen] = useState(false);
+  const [pick, setPick] = useState<'in' | 'out'>();
   const [selectedIn, setSelectedIn] = useState<InputAsset | undefined>();
   const [selectedOut, setSelectedOut] = useState<OutputAsset | undefined>();
-  const [txStatus, setTxStatus] = useState<
-    'idle' | 'planning' | 'signing' | 'broadcasting' | 'success' | 'error'
-  >('idle');
-  const [txHash, setTxHash] = useState<string | undefined>();
-  const [txError, setTxError] = useState<string | undefined>();
-
-  const penumbraTx = usePenumbraTransaction();
+  const [showClosed, setShowClosed] = useState(false);
+  const routes = usePenumbraRoutes();
 
   // fetch balances
   // The ['balances', account] cache holds the RAW list (the home screen
@@ -1069,16 +168,6 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
     select: selectPickerBuckets,
   });
   const balances = buckets?.assets ?? EMPTY_BALANCES;
-  const positions = buckets?.positions ?? EMPTY_BALANCES;
-  const [bucketIn, setBucketIn] = useState<AssetBucket>('assets');
-
-  // the picker always reopens on the fungible list
-  useEffect(() => {
-    if (!assetInOpen) {
-      setBucketIn('assets');
-    }
-  }, [assetInOpen]);
-
   const { data: allAssets = [], isLoading: assetsLoading } = useQuery({
     queryKey: ['assets'],
     staleTime: 300_000,
@@ -1097,24 +186,30 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
   });
 
   const inputAssets: InputAsset[] = useMemo(() => {
-    return balances.map(b => {
+    return balances.flatMap(b => {
       const metadata = getMetadataFromBalancesResponse.optional(b);
+      const exponent = displayExponent(metadata);
+      if (exponent === undefined) {
+        return [];
+      }
       const symbol = symbolFromMetadata(metadata);
       const amt = b.balanceView ? fromValueView(b.balanceView) : 0;
       const amount = typeof amt === 'string' ? amt : amt.toString();
       const assetId = b.balanceView ? getAssetIdFromValueView(b.balanceView)?.inner : undefined;
-      const exponent = b.balanceView ? getDisplayDenomExponentFromValueView(b.balanceView) : 6;
-      return { balance: b, symbol, amount, assetId, exponent, metadata };
+      return [{ balance: b, symbol, amount, assetId, exponent, metadata }];
     });
   }, [balances]);
 
   const outputAssets: OutputAsset[] = useMemo(() => {
-    return allAssets.map(resp => {
+    return allAssets.flatMap(resp => {
       const meta = resp.denomMetadata;
+      const exponent = displayExponent(meta);
+      if (exponent === undefined) {
+        return [];
+      }
       const symbol = symbolFromMetadata(meta);
       const assetId = meta?.penumbraAssetId?.inner;
-      const exponent = meta?.denomUnits?.find(u => u.denom === meta?.display)?.exponent ?? 6;
-      return { response: resp, symbol, assetId, exponent, metadata: meta };
+      return [{ response: resp, symbol, assetId, exponent, metadata: meta }];
     });
   }, [allAssets]);
 
@@ -1131,70 +226,53 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
     setSelectedIn(match ?? inputAssets[0]);
   }, [inputAssets, selectedIn, prefillFromAsset]);
 
+  // exact base units of what is typed; never a float, never cut short: digits
+  // past the asset's exponent are refused, not dropped, so what is reviewed
+  // is what is swapped
+  const typed = selectedIn && amountIn.trim() ? typedUnits(amountIn, selectedIn.exponent) : 0n;
+  const tooPrecise =
+    typed === undefined && (amountIn.split('.')[1]?.length ?? 0) > (selectedIn?.exponent ?? 0);
+  const units = typed ?? 0n;
   const {
     data: simulation,
     isLoading: simLoading,
     error: simError,
   } = useQuery({
     queryKey: ['simulate', selectedIn?.assetId, selectedOut?.assetId, amountIn],
-    enabled: !!selectedIn && !!selectedOut && parseFloat(amountIn) > 0,
+    enabled: !!selectedIn && !!selectedOut && units > 0n,
     staleTime: 10_000,
     queryFn: async () => {
-      if (!selectedIn || !selectedOut || !amountIn || parseFloat(amountIn) <= 0) {
+      if (!selectedIn || !selectedOut || units <= 0n) {
         return null;
       }
-
-      const multiplier = 10 ** selectedIn.exponent;
-      const baseAmount = BigInt(Math.floor(parseFloat(amountIn) * multiplier));
-
-      const inputValue = new Value({
-        amount: new Amount({ lo: baseAmount, hi: 0n }),
-        assetId: { inner: selectedIn.assetId },
-      });
-
       const result = await simulationClient.simulateTrade({
-        input: inputValue,
+        input: new Value({
+          amount: new Amount(splitLoHi(units)),
+          assetId: { inner: selectedIn.assetId },
+        }),
         output: { inner: selectedOut.assetId },
       });
-
-      const execution = result.output;
-      if (!execution) {
+      if (!result.output) {
         return null;
       }
-
-      let totalOutput = 0n;
-      for (const trace of execution.traces ?? []) {
-        const outputValue = trace.value?.at(-1);
-        if (outputValue?.amount) {
-          totalOutput += outputValue.amount.lo ?? 0n;
-        }
-      }
-
-      const outputAmount = Number(totalOutput) / 10 ** selectedOut.exponent;
-
-      // Penumbra always returns an `unfilled` Value; it only means a partial
-      // fill when its amount is > 0 (input that couldn't fill at the price and
-      // is returned to you). Guarding on the object alone flagged every swap.
-      const unfilledAmt = result.unfilled?.amount;
-      const unfilledLo = unfilledAmt?.lo ?? 0n;
-      const hasUnfilled = unfilledLo > 0n || (unfilledAmt?.hi ?? 0n) > 0n;
-
-      // Effective price against the *filled* portion only: the input that was
-      // returned unfilled never traded, so rating it against the full input
-      // would understate the rate you actually got.
-      const inputAmount = parseFloat(amountIn);
-      const filledInput = inputAmount - Number(unfilledLo) / 10 ** selectedIn.exponent;
-      const rate = filledInput > 0 ? outputAmount / filledInput : 0;
-
+      const out = traceOut(result.output.traces);
+      // Penumbra always returns an `unfilled` Value; only a non-zero one is a
+      // partial fill (input that couldn't fill at the price, returned to you).
+      const unfilled = u128(result.unfilled?.amount);
+      // the rate is against the filled input only: what came back never traded
+      const filled = units - unfilled;
+      const rate =
+        filled > 0n
+          ? Number(fromUnits(out, selectedOut.exponent, 18)) /
+            Number(fromUnits(filled, selectedIn.exponent, 18))
+          : 0;
       return {
-        outputAmount: outputAmount.toFixed(6),
+        outputAmount: fromUnits(out, selectedOut.exponent, 6),
         rate: rate > 0 ? rate : undefined,
-        unfilled: hasUnfilled
-          ? {
-              amount: (Number(unfilledLo) / 10 ** selectedIn.exponent).toFixed(6),
-              symbol: selectedIn.symbol,
-            }
-          : undefined,
+        unfilled:
+          unfilled > 0n
+            ? { amount: fromUnits(unfilled, selectedIn.exponent, 6), symbol: selectedIn.symbol }
+            : undefined,
       };
     },
   });
@@ -1206,387 +284,177 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
   }, [selectedIn]);
 
   const handleFlip = useCallback(() => {
-    if (selectedIn && selectedOut) {
-      const newIn = inputAssets.find(
-        a =>
-          a.assetId &&
-          a.assetId.length === selectedOut.assetId?.length &&
-          a.assetId.every((v, i) => v === selectedOut.assetId![i]),
-      );
-      if (newIn) {
-        const newOut = outputAssets.find(
-          a =>
-            a.assetId &&
-            a.assetId.length === selectedIn.assetId?.length &&
-            a.assetId.every((v, i) => v === selectedIn.assetId![i]),
-        );
-        if (newOut) {
-          setSelectedIn(newIn);
-          setSelectedOut(newOut);
-          setAmountIn('');
-        }
-      }
+    const newIn = inputAssets.find(a => sameId(a.assetId, selectedOut?.assetId));
+    const newOut = outputAssets.find(a => sameId(a.assetId, selectedIn?.assetId));
+    if (newIn && newOut) {
+      setSelectedIn(newIn);
+      setSelectedOut(newOut);
+      setAmountIn('');
     }
   }, [selectedIn, selectedOut, inputAssets, outputAssets]);
 
-  const canSubmit =
-    selectedIn && selectedOut && parseFloat(amountIn) > 0 && simulation && txStatus === 'idle';
+  const canReview = !!selectedIn && !!selectedOut && units > 0n && !!simulation;
 
-  const handleSubmit = useCallback(async () => {
-    if (!canSubmit || !selectedIn || !selectedOut) {
-      return;
-    }
+  const plan = async () => {
+    const { address: claimAddress } = await viewClient.addressByIndex({
+      addressIndex: { account: penumbraAccount },
+    });
+    return new TransactionPlannerRequest({
+      swaps: [
+        {
+          targetAsset: { inner: selectedOut!.assetId },
+          value: new Value({
+            amount: new Amount(splitLoHi(units)),
+            assetId: { inner: selectedIn!.assetId },
+          }),
+          claimAddress,
+        },
+      ],
+      source: { account: penumbraAccount },
+    });
+  };
 
-    setTxStatus('planning');
-    setTxError(undefined);
-
-    try {
-      const multiplier = 10 ** selectedIn.exponent;
-      const baseAmount = BigInt(Math.floor(parseFloat(amountIn) * multiplier));
-
-      const { address: claimAddress } = await viewClient.addressByIndex({
-        addressIndex: { account: penumbraAccount },
-      });
-
-      const planRequest = new TransactionPlannerRequest({
-        swaps: [
-          {
-            targetAsset: { inner: selectedOut.assetId },
-            value: new Value({
-              amount: new Amount({ lo: baseAmount, hi: 0n }),
-              assetId: { inner: selectedIn.assetId },
-            }),
-            claimAddress,
-          },
-        ],
-        source: { account: penumbraAccount },
-      });
-
-      setTxStatus('signing');
-      const result = await penumbraTx.mutateAsync(planRequest);
-
-      setTxStatus('success');
-      setTxHash(result.txId);
-      void refetchBalances();
-    } catch (err) {
-      setTxStatus('error');
-      setTxError(err instanceof Error ? err.message : 'swap failed');
-    }
-  }, [canSubmit, selectedIn, selectedOut, amountIn, penumbraTx, refetchBalances]);
-
-  const handleReset = useCallback(() => {
-    setTxStatus('idle');
-    setTxHash(undefined);
-    setTxError(undefined);
-    setAmountIn('');
-  }, []);
+  const unitIn = (selectedIn?.symbol ?? 'um').toLowerCase();
+  const unitOut = (selectedOut?.symbol ?? 'asset').toLowerCase();
+  const rate =
+    simulation?.rate &&
+    `1 ${unitIn} = ${
+      simulation.rate < 0.001
+        ? simulation.rate.toPrecision(3)
+        : simulation.rate.toLocaleString(undefined, { maximumFractionDigits: 6 })
+    } ${unitOut}`;
+  const line = (
+    <>
+      <Sensitive>{`${amountIn} ${unitIn}`}</Sensitive> for about{' '}
+      <Sensitive>{`${simulation?.outputAmount ?? '0'} ${unitOut}`}</Sensitive>
+    </>
+  );
+  const { shown: reachableOut, hidden: closedOut } = splitByReach(
+    outputAssets.filter(a => !sameId(a.assetId, selectedIn?.assetId)),
+    a => a.metadata?.base,
+    a => inputAssets.some(i => sameId(i.assetId, a.assetId)),
+    routes,
+  );
+  const outChoices = showClosed ? [...reachableOut, ...closedOut] : reachableOut;
+  const outDescription = (a: OutputAsset) => {
+    const reach = reachOf(a.metadata?.base, routes);
+    return reach.reachable
+      ? reach.via && chainByChainId(reach.via)?.name.toLowerCase()
+      : `${reach.via} · can't leave penumbra`;
+  };
 
   return (
-    <div className='flex flex-col gap-4 p-4'>
-      <div className='flex items-center gap-3 -mx-4 -mt-4 border-b border-border-soft px-4 py-3 mb-1'>
-        <button onClick={goBack} className='text-fg-muted transition-colors hover:text-fg-high'>
-          <span className='i-ph-arrow-left h-5 w-5' />
-        </button>
-        <h1 className='text-lg font-medium'>swap</h1>
-      </div>
-
-      {/* input asset */}
-      <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
-        <div className='flex items-center justify-between mb-2'>
-          <span className='text-xs text-fg-muted'>you pay</span>
-          {selectedIn && (
-            <span className='text-xs text-fg-muted'>balance: {selectedIn.amount}</span>
-          )}
-        </div>
-        <div className='flex items-center gap-2'>
-          <input
-            type='text'
-            value={amountIn}
-            onChange={e => setAmountIn(e.target.value)}
-            placeholder='0.00'
-            disabled={txStatus !== 'idle'}
-            // Row-level "Swap USDC" preselected the FROM leg for us; land
-            // the cursor in the amount field so the user picks the TO leg
-            // as a deliberate next click, not as the first input decision.
-            autoFocus={!!prefillFromAsset}
-            className='flex-1 bg-transparent text-lg font-medium text-fg placeholder:text-fg-muted focus:outline-none disabled:opacity-50'
+    <PenumbraFlow
+      onClose={goBack}
+      tx={{
+        sending: <>swap {line}</>,
+        label: `swap ${amountIn} ${selectedIn?.symbol ?? ''} for ${selectedOut?.symbol ?? ''}`,
+        plan,
+        onSent: () => {
+          void refetchBalances();
+          setAmountIn('');
+        },
+        review: {
+          lead: 'you swap',
+          amount: amountIn,
+          unit: unitIn,
+          rows: [
+            ['you get about', `${simulation?.outputAmount ?? '0'} ${unitOut}`],
+            ...(rate ? [['rate', rate] as const] : []),
+            ['fee', 'shown before you approve'],
+          ],
+          privacy: 'shielded · the dex sees the batch, not you',
+          confirm: 'swap',
+        },
+        done: <>{line} · it lands once the claim is processed</>,
+      }}
+    >
+      {review => (
+        <>
+          <ScreenHeader title='swap' onBack={goBack} />
+          <Main className='gap-[18px] pt-5'>
+            <AmountField
+              label='you pay'
+              value={amountIn}
+              onChange={setAmountIn}
+              unit={balancesLoading ? 'reading' : unitIn}
+              onUnit={() => setPick('in')}
+              available={selectedIn?.amount}
+              onMax={handleMax}
+              canMax={!!selectedIn}
+              autoFocus={!!prefillFromAsset}
+              warn={!!simError || tooPrecise}
+              helper={
+                tooPrecise
+                  ? `${(selectedIn?.symbol ?? 'this asset').toLowerCase()} goes to ${selectedIn?.exponent ?? 0} decimal places · please shorten the amount`
+                  : simError
+                    ? 'the dex could not price this right now · please try again'
+                    : simulation?.unfilled
+                      ? `only part fills at this price · ${simulation.unfilled.amount} ${simulation.unfilled.symbol.toLowerCase()} comes back`
+                      : simLoading
+                        ? 'pricing'
+                        : rate
+              }
+            />
+            <RowGroup>
+              <Row
+                type='value'
+                label='you get'
+                description={
+                  selectedIn && selectedOut
+                    ? `${simulation?.outputAmount ?? '0'} ${unitOut}`
+                    : undefined
+                }
+                value={assetsLoading ? 'reading' : selectedOut ? unitOut : 'choose'}
+                onPress={() => setPick('out')}
+              />
+            </RowGroup>
+            {selectedIn && selectedOut && (
+              <Button variant='quiet' size='sm' onClick={handleFlip} className='self-start px-0'>
+                <span className='i-lucide-arrow-up-down size-3.5' />
+                flip
+              </Button>
+            )}
+          </Main>
+          <Footer>
+            <Button onClick={review} disabled={!canReview} className='w-full'>
+              {simLoading ? 'pricing' : 'review swap'}
+            </Button>
+          </Footer>
+          <BalanceSheet
+            open={pick === 'in'}
+            onOpenChange={o => setPick(o ? 'in' : undefined)}
+            assets={balances}
+            onPick={b => setSelectedIn(inputAssets.find(a => a.balance === b))}
           />
-          <button
-            onClick={handleMax}
-            disabled={txStatus !== 'idle' || !selectedIn}
-            className='text-xs text-zigner-gold hover:text-zigner-gold-light disabled:opacity-50'
-          >
-            max
-          </button>
-        </div>
-        <div className='mt-2 relative'>
-          <button
-            onClick={() => setAssetInOpen(!assetInOpen)}
-            disabled={txStatus !== 'idle' || balancesLoading}
-            className='flex items-center gap-2 rounded-md bg-background/50 px-3 py-1.5 text-sm transition-colors hover:bg-canvas disabled:opacity-50'
-          >
-            {balancesLoading ? (
-              <span className='text-fg-muted'>loading...</span>
-            ) : selectedIn ? (
-              <span className='flex items-center gap-1.5 font-medium'>
-                <AssetIcon metadata={selectedIn.metadata} size='xs' />
-                {selectedIn.symbol}
-              </span>
-            ) : (
-              <span className='text-fg-muted'>select</span>
-            )}
-            <span
-              className={cn(
-                'i-ph-caret-down h-4 w-4 transition-transform',
-                assetInOpen && 'rotate-180',
-              )}
-            />
-          </button>
-
-          {assetInOpen && (
-            <div className='absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-border-soft bg-canvas shadow-lg'>
-              <div className='border-b border-border-soft p-1.5'>
-                <AssetBucketToggle
-                  bucket={bucketIn}
-                  onChange={setBucketIn}
-                  positionCount={positions.length}
-                />
-              </div>
-              <div className='max-h-48 overflow-y-auto'>
-                {bucketIn === 'assets' ? (
-                  <>
-                    {inputAssets.map((item, i) => (
-                      <button
-                        key={i}
-                        onClick={() => {
-                          setSelectedIn(item);
-                          setAssetInOpen(false);
-                        }}
-                        className={cn(
-                          'flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-elev-1',
-                          selectedIn === item && 'bg-elev-2',
-                        )}
-                      >
-                        <span className='flex items-center gap-1.5'>
-                          <AssetIcon metadata={item.metadata} size='xs' />
-                          {item.symbol}
-                        </span>
-                        <span className='text-fg-muted'>{item.amount}</span>
-                      </button>
-                    ))}
-                    {inputAssets.length === 0 && (
-                      <div className='px-3 py-2 text-sm text-fg-muted'>no assets</div>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    {/* inspect-only: an LP NFT can't be market-swapped */}
-                    {positions.length > 0 && (
-                      <div className='px-3 py-1.5 text-[11px] text-fg-muted'>
-                        positions can&apos;t be swapped - close them from the dex
-                      </div>
-                    )}
-                    {positions.map((balance, i) => {
-                      const meta = getMetadataFromBalancesResponse.optional(balance);
-                      const amt = balance.balanceView ? fromValueView(balance.balanceView) : 0;
-                      return (
-                        <div
-                          key={i}
-                          className='flex w-full items-center justify-between px-3 py-2 text-sm text-fg-muted'
-                        >
-                          <span className='flex min-w-0 items-center gap-1.5'>
-                            <AssetIcon metadata={meta} size='xs' />
-                            <span className='truncate'>
-                              {positionLabel(meta) ?? symbolFromMetadata(meta)}
-                            </span>
-                          </span>
-                          <span>{typeof amt === 'string' ? amt : amt.toString()}</span>
-                        </div>
-                      );
-                    })}
-                    {positions.length === 0 && (
-                      <div className='px-3 py-2 text-sm text-fg-muted'>no open positions</div>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* swap direction */}
-      <div className='flex justify-center -my-2'>
-        <button
-          onClick={handleFlip}
-          disabled={txStatus !== 'idle' || !selectedIn || !selectedOut}
-          className='rounded-full border border-border-soft bg-canvas p-2 shadow-sm transition-colors hover:bg-elev-1 disabled:opacity-50'
-        >
-          <span className='i-ph-arrow-down h-4 w-4' />
-        </button>
-      </div>
-
-      {/* output asset */}
-      <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
-        <div className='flex items-center justify-between mb-2'>
-          <span className='text-xs text-fg-muted'>you receive</span>
-          {simLoading && (
-            <span className='flex items-center gap-1 text-xs text-fg-muted'>
-              <span className='i-ph-arrows-clockwise h-3 w-3 animate-spin' />
-              simulating...
-            </span>
-          )}
-        </div>
-        <div className='flex items-center gap-2'>
-          <div className='flex-1 text-lg font-medium text-fg'>
-            {simulation?.outputAmount ?? '0.00'}
-          </div>
-        </div>
-        <div className='mt-2 relative'>
-          <button
-            onClick={() => setAssetOutOpen(!assetOutOpen)}
-            disabled={txStatus !== 'idle' || assetsLoading}
-            className='flex items-center gap-2 rounded-md bg-background/50 px-3 py-1.5 text-sm transition-colors hover:bg-canvas disabled:opacity-50'
-          >
-            {assetsLoading ? (
-              <span className='text-fg-muted'>loading...</span>
-            ) : selectedOut ? (
-              <span className='flex items-center gap-1.5 font-medium'>
-                <AssetIcon metadata={selectedOut.metadata} size='xs' />
-                {selectedOut.symbol}
-              </span>
-            ) : (
-              <span className='text-fg-muted'>select</span>
-            )}
-            <span
-              className={cn(
-                'i-ph-caret-down h-4 w-4 transition-transform',
-                assetOutOpen && 'rotate-180',
-              )}
-            />
-          </button>
-
-          {assetOutOpen && (
-            <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-soft bg-canvas shadow-lg'>
-              {outputAssets
-                .filter(a => {
-                  if (!selectedIn?.assetId || !a.assetId) {
-                    return true;
-                  }
-                  if (selectedIn.assetId.length !== a.assetId.length) {
-                    return true;
-                  }
-                  return !selectedIn.assetId.every((v, i) => v === a.assetId![i]);
-                })
-                .map((item, i) => (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      setSelectedOut(item);
-                      setAssetOutOpen(false);
-                    }}
-                    className={cn(
-                      'flex w-full items-center px-3 py-2 text-sm transition-colors hover:bg-elev-1',
-                      selectedOut?.symbol === item.symbol && 'bg-elev-2',
-                    )}
-                  >
-                    <span className='flex items-center gap-1.5'>
-                      <AssetIcon metadata={item.metadata} size='xs' />
-                      {item.symbol}
-                    </span>
-                  </button>
-                ))}
-              {outputAssets.length === 0 && (
-                <div className='px-3 py-2 text-sm text-fg-muted'>no assets</div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {simulation?.rate && selectedIn && selectedOut && (
-        <div className='flex items-center justify-between px-1 text-xs text-fg-muted'>
-          <span>rate</span>
-          <span className='font-mono'>
-            1 {selectedIn.symbol} ={' '}
-            {simulation.rate < 0.001
-              ? simulation.rate.toPrecision(3)
-              : simulation.rate.toLocaleString(undefined, { maximumFractionDigits: 6 })}{' '}
-            {selectedOut.symbol}
-          </span>
-        </div>
+          <PickSheet
+            title='you get'
+            search
+            open={pick === 'out'}
+            onOpenChange={o => setPick(o ? 'out' : undefined)}
+            picks={outChoices.map((a, i) => ({
+              key: i,
+              label: a.symbol,
+              description: outDescription(a),
+            }))}
+            onPick={i => setSelectedOut(outChoices[i])}
+            foot={
+              closedOut.length > 0 && (
+                <Button
+                  variant='quiet'
+                  size='sm'
+                  onClick={() => setShowClosed(!showClosed)}
+                  className='w-full'
+                >
+                  {showClosed
+                    ? 'hide closed channels'
+                    : `show ${closedOut.length} from closed channels`}
+                </Button>
+              )
+            }
+          />
+        </>
       )}
-
-      {simulation?.unfilled && (
-        <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-2'>
-          <p className='text-xs text-yellow-400'>
-            Only part of this swap fills at the current price - {simulation.unfilled.amount}{' '}
-            {simulation.unfilled.symbol} will be returned to you.
-          </p>
-        </div>
-      )}
-
-      {simError && (
-        <p className='text-xs text-red-400'>{simError.message || 'failed to simulate swap'}</p>
-      )}
-
-      {txStatus === 'success' && txHash && (
-        <div className='rounded-lg border border-green-500/30 bg-green-500/5 p-3'>
-          <div className='flex items-center gap-2'>
-            <span className='i-ph-check h-4 w-4 text-green-400' />
-            <p className='text-sm font-medium text-fg'>Swap submitted</p>
-          </div>
-          <button
-            type='button'
-            onClick={() => void navigator.clipboard.writeText(txHash)}
-            title='Copy transaction hash'
-            className='mt-2 flex w-full items-center gap-1.5 rounded-md bg-elev-2 px-2 py-1.5 transition-colors hover:bg-elev-1'
-          >
-            <span className='i-ph-copy h-3 w-3 shrink-0 text-fg-muted' />
-            <span className='truncate font-mono text-xs text-fg-muted'>{txHash}</span>
-          </button>
-          <p className='mt-2 text-xs text-fg-muted'>
-            Outputs arrive once the claim transaction is processed.
-          </p>
-        </div>
-      )}
-
-      {txStatus === 'error' && txError && (
-        <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
-          <p className='text-sm text-red-400'>swap failed</p>
-          <p className='text-xs text-fg-muted mt-1'>{txError}</p>
-        </div>
-      )}
-
-      <button
-        onClick={() => {
-          if (txStatus === 'success' || txStatus === 'error') {
-            handleReset();
-          } else {
-            void handleSubmit();
-          }
-        }}
-        disabled={
-          (txStatus === 'idle' && !canSubmit) ||
-          txStatus === 'planning' ||
-          txStatus === 'signing' ||
-          txStatus === 'broadcasting'
-        }
-        className={cn(
-          'mt-2 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground',
-          'transition-colors hover:bg-zigner-gold-light',
-          'disabled:opacity-50 disabled:cursor-not-allowed',
-        )}
-      >
-        {txStatus === 'planning' && 'building swap...'}
-        {txStatus === 'signing' && 'signing...'}
-        {txStatus === 'broadcasting' && 'broadcasting...'}
-        {txStatus === 'idle' && (simLoading ? 'simulating...' : 'swap')}
-        {txStatus === 'success' && 'swap again'}
-        {txStatus === 'error' && 'retry'}
-      </button>
-
-      <p className='text-center text-xs text-fg-muted'>private swap using penumbra dex</p>
-    </div>
+    </PenumbraFlow>
   );
 };

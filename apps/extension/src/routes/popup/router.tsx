@@ -1,78 +1,24 @@
-import { lazy, Suspense } from 'react';
 import { createHashRouter, RouteObject } from 'react-router-dom';
 import { RouteErrorScreen } from '../../components/error-boundary';
 import { PopupIndex, popupIndexLoader } from './home';
 import { lockedScreenGuard } from './popup-needs';
 import { Login, popupLoginLoader } from './login';
+import { PopupWelcome } from './welcome';
 import { PopupPath } from './paths';
 import { PopupLayout } from './popup-layout';
 import { settingsRoutes } from './settings/routes';
 import { IRONWOOD_MIGRATION } from '../../config/feature-flags';
-
-// lazy load heavier routes
-const Settings = lazy(() => import('./settings').then(m => ({ default: m.Settings })));
-const TransactionApproval = lazy(() =>
-  import('./approval/transaction').then(m => ({ default: m.TransactionApproval })),
-);
-const OriginApproval = lazy(() =>
-  import('./approval/origin').then(m => ({ default: m.OriginApproval })),
-);
-const SignApproval = lazy(() => import('./approval/sign').then(m => ({ default: m.SignApproval })));
-const CapabilityApproval = lazy(() =>
-  import('./approval/capability').then(m => ({ default: m.CapabilityApproval })),
-);
-const ContactDiscoveryApproval = lazy(() =>
-  import('./approval/contact-discovery').then(m => ({ default: m.ContactDiscoveryApproval })),
-);
-const DestinationApproval = lazy(() =>
-  import('./approval/destination').then(m => ({ default: m.DestinationApproval })),
-);
-
-// lazy load tab pages
-const StakePage = lazy(() => import('./stake').then(m => ({ default: m.StakePage })));
-const SwapPage = lazy(() => import('./swap').then(m => ({ default: m.SwapPage })));
-const VotePage = lazy(() => import('./vote').then(m => ({ default: m.VotePage })));
-const InboxPage = lazy(() => import('./inbox').then(m => ({ default: m.InboxPage })));
-const GroupChatThread = lazy(() =>
-  import('./inbox/group-chat-thread').then(m => ({ default: m.GroupChatThread })),
-);
-const ContactsPage = lazy(() => import('./contacts').then(m => ({ default: m.ContactsPage })));
-const SendPage = lazy(() => import('./send').then(m => ({ default: m.SendPage })));
-const ReceivePage = lazy(() => import('./receive').then(m => ({ default: m.ReceivePage })));
-const InjectivePage = lazy(() => import('./injective').then(m => ({ default: m.InjectivePage })));
-const CosmosSign = lazy(() => import('./cosmos-sign').then(m => ({ default: m.CosmosSign })));
-const MultisigSessions = lazy(() =>
-  import('./multisig/sessions').then(m => ({ default: m.MultisigPage })),
-);
-const MultisigCreate = lazy(() =>
-  import('./multisig/create').then(m => ({ default: m.MultisigCreate })),
-);
-const MultisigJoin = lazy(() => import('./multisig/join').then(m => ({ default: m.MultisigJoin })));
-const MultisigSign = lazy(() => import('./multisig/sign').then(m => ({ default: m.MultisigSign })));
-const NoteSyncPage = lazy(() => import('./note-sync').then(m => ({ default: m.NoteSyncPage })));
-const PoolNotesPage = lazy(() => import('./pool-notes').then(m => ({ default: m.PoolNotesPage })));
-const IdentityPage = lazy(() => import('./identity').then(m => ({ default: m.IdentityPage })));
-const PasswordsPage = lazy(() =>
-  import('./identity/passwords').then(m => ({ default: m.PasswordsPage })),
-);
-const ContactPicker = lazy(() =>
-  import('./pick-contacts').then(m => ({ default: m.ContactPicker })),
-);
-const FrostApprove = lazy(() => import('./frost-approve').then(m => ({ default: m.FrostApprove })));
-const PasskeyApprove = lazy(() =>
-  import('./approval/passkey').then(m => ({ default: m.PasskeyApprove })),
-);
-const ZcashSendApproval = lazy(() =>
-  import('./approval/zcash-send').then(m => ({ default: m.ZcashSendApproval })),
-);
-const KeplrApproval = lazy(() =>
-  import('./approval/keplr').then(m => ({ default: m.KeplrApproval })),
-);
+import { screen, type PreloadHandle } from './route-modules';
+import { routePreloads } from './route-preloads';
+import { registerRoutePreload } from './preload';
+import { BUY_PRELOAD, preloadBuyPage } from '../../buy/open';
 
 /**
- * Skeleton placeholder for lazy-loaded popup routes.
+ * Skeleton placeholder while the first screen hydrates (its loaders and its
+ * route-level lazy chunk). Later navigations never show it: the router keeps
+ * the current screen up until the next one has loaded.
  *
- * Spinner advertises "we're slow" — same wall-clock latency feels
+ * Spinner advertises "we're slow" - same wall-clock latency feels
  * slower to the user. A skeleton of plausible content geometry
  * (header strip + a couple of card-sized blocks) communicates
  * "loading layout you're about to see" instead. CSS pulse only, no
@@ -80,9 +26,9 @@ const KeplrApproval = lazy(() =>
  */
 const LazyFallback = () => (
   <div className='flex h-full flex-col gap-3 p-4 animate-pulse'>
-    <div className='h-6 w-32 rounded-sm bg-elev-2/50' />
-    <div className='h-24 w-full rounded-md bg-elev-2/30' />
-    <div className='h-16 w-full rounded-md bg-elev-2/20' />
+    <div className='h-6 w-32 bg-elev-2/50' />
+    <div className='h-24 w-full bg-elev-2/30' />
+    <div className='h-16 w-full bg-elev-2/20' />
   </div>
 );
 
@@ -112,159 +58,145 @@ export const popupRoutes: RouteObject[] = [
             path: PopupPath.INDEX,
             element: <PopupIndex />,
             loader: popupIndexLoader,
+            handle: { preload: routePreloads.home } satisfies PreloadHandle,
           },
           {
             path: PopupPath.STAKE,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <StakePage />
-              </Suspense>
-            ),
+            ...screen('stake'),
           },
           {
             path: PopupPath.SWAP,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <SwapPage />
-              </Suspense>
-            ),
+            ...screen('swap', routePreloads.swap),
           },
           {
             path: PopupPath.VOTE,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <VotePage />
-              </Suspense>
-            ),
+            ...screen('vote'),
           },
           {
             path: PopupPath.INBOX,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <InboxPage />
-              </Suspense>
-            ),
+            ...screen('inbox'),
+          },
+          {
+            path: PopupPath.INBOX_THREAD,
+            ...screen('thread'),
           },
           {
             path: PopupPath.INBOX_GROUP,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <GroupChatThread />
-              </Suspense>
-            ),
+            ...screen('group'),
+          },
+          {
+            path: PopupPath.INBOX_GROUP_INVITE,
+            ...screen('groupInvite'),
+          },
+          {
+            path: PopupPath.INBOX_NEW_GROUP,
+            ...screen('newGroup'),
+          },
+          {
+            path: PopupPath.INBOX_JOIN,
+            ...screen('groupJoin'),
+          },
+          {
+            path: PopupPath.INBOX_ADD,
+            ...screen('addPerson'),
+          },
+          {
+            path: PopupPath.INBOX_SCAN,
+            ...screen('scanCard'),
           },
           {
             path: PopupPath.CONTACTS,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <ContactsPage />
-              </Suspense>
-            ),
+            ...screen('contacts'),
+          },
+          {
+            path: PopupPath.CONTACT_CARD,
+            ...screen('contactCard'),
+          },
+          {
+            path: PopupPath.CONTACT_SEAL,
+            ...screen('contactSeal'),
+          },
+          {
+            path: PopupPath.CONTACT,
+            ...screen('contact'),
+          },
+          {
+            path: PopupPath.TOOLS,
+            ...screen('tools'),
           },
           {
             path: PopupPath.SETTINGS,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <Settings />
-              </Suspense>
-            ),
+            ...screen('settings'),
             children: settingsRoutes,
           },
 
           // Identity
           {
             path: PopupPath.IDENTITY,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <IdentityPage />
-              </Suspense>
-            ),
+            ...screen('identity', routePreloads.identity),
+          },
+          {
+            path: PopupPath.IDENTITY_SITES,
+            ...screen('identitySites'),
+          },
+          {
+            path: PopupPath.IDENTITY_CONTROLS,
+            ...screen('identityControls'),
           },
           {
             path: PopupPath.PASSWORDS,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <PasswordsPage />
-              </Suspense>
-            ),
+            ...screen('passwords'),
+          },
+
+          {
+            path: PopupPath.LINK,
+            ...screen('link'),
           },
 
           // Send/Receive
           {
             path: PopupPath.SEND,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <SendPage />
-              </Suspense>
-            ),
+            ...screen('send', routePreloads.send),
           },
           {
             path: PopupPath.RECEIVE,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <ReceivePage />
-              </Suspense>
-            ),
-          },
-          {
-            path: PopupPath.INJECTIVE,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <InjectivePage />
-              </Suspense>
-            ),
+            ...screen('receive', routePreloads.receive),
           },
 
           // Cosmos airgap signing (dedicated window)
           {
             path: PopupPath.COSMOS_SIGN,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <CosmosSign />
-              </Suspense>
-            ),
+            ...screen('cosmosSign'),
           },
 
           // Multisig
           {
             path: PopupPath.MULTISIG,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <MultisigSessions />
-              </Suspense>
-            ),
+            ...screen('multisigSessions'),
           },
           {
             path: PopupPath.MULTISIG_CREATE,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <MultisigCreate />
-              </Suspense>
-            ),
+            ...screen('multisigCreate'),
           },
           {
             path: PopupPath.MULTISIG_JOIN,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <MultisigJoin />
-              </Suspense>
-            ),
+            ...screen('multisigJoin'),
           },
           {
             path: PopupPath.MULTISIG_SIGN,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <MultisigSign />
-              </Suspense>
-            ),
+            ...screen('multisigSign'),
           },
           {
             path: PopupPath.NOTE_SYNC,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <NoteSyncPage />
-              </Suspense>
-            ),
+            ...screen('noteSync'),
+          },
+          {
+            path: PopupPath.ACTIVITY,
+            ...screen('activity', routePreloads.activity),
+          },
+          {
+            path: PopupPath.TX_DETAIL,
+            ...screen('txDetail'),
           },
 
           // Per-pool notes (orchard legacy vs ironwood). Registered only when the
@@ -273,11 +205,7 @@ export const popupRoutes: RouteObject[] = [
             ? [
                 {
                   path: PopupPath.POOL_NOTES,
-                  element: (
-                    <Suspense fallback={<LazyFallback />}>
-                      <PoolNotesPage />
-                    </Suspense>
-                  ),
+                  ...screen('poolNotes'),
                 },
               ]
             : []),
@@ -285,27 +213,15 @@ export const popupRoutes: RouteObject[] = [
           // zid contact picker (external app requests)
           {
             path: PopupPath.CONTACT_PICKER,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <ContactPicker />
-              </Suspense>
-            ),
+            ...screen('contactPicker'),
           },
           {
             path: PopupPath.FROST_APPROVE,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <FrostApprove />
-              </Suspense>
-            ),
+            ...screen('frostApprove'),
           },
           {
             path: PopupPath.PASSKEY_APPROVE,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <PasskeyApprove />
-              </Suspense>
-            ),
+            ...screen('passkeyApprove'),
           },
 
           // Auth
@@ -314,76 +230,51 @@ export const popupRoutes: RouteObject[] = [
             element: <Login />,
             loader: popupLoginLoader,
           },
+          { path: PopupPath.WELCOME, element: <PopupWelcome /> },
+          { path: PopupPath.FORGOT_PASSWORD, ...screen('forgotPassword') },
 
           // Approvals
           {
             path: PopupPath.TRANSACTION_APPROVAL,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <TransactionApproval />
-              </Suspense>
-            ),
+            ...screen('transactionApproval'),
           },
           {
             path: PopupPath.ORIGIN_APPROVAL,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <OriginApproval />
-              </Suspense>
-            ),
+            ...screen('originApproval'),
           },
           {
             path: PopupPath.SIGN_APPROVAL,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <SignApproval />
-              </Suspense>
-            ),
+            ...screen('signApproval'),
           },
           {
             path: PopupPath.CAPABILITY_APPROVAL,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <CapabilityApproval />
-              </Suspense>
-            ),
+            ...screen('capabilityApproval'),
           },
           {
             path: PopupPath.CONTACT_DISCOVERY_APPROVAL,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <ContactDiscoveryApproval />
-              </Suspense>
-            ),
+            ...screen('contactDiscoveryApproval'),
           },
           {
             path: PopupPath.DESTINATION_APPROVAL,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <DestinationApproval />
-              </Suspense>
-            ),
+            ...screen('destinationApproval'),
           },
           {
             path: PopupPath.ZCASH_SEND_APPROVAL,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <ZcashSendApproval />
-              </Suspense>
-            ),
+            ...screen('zcashSendApproval'),
           },
           {
             path: PopupPath.KEPLR_APPROVAL,
-            element: (
-              <Suspense fallback={<LazyFallback />}>
-                <KeplrApproval />
-              </Suspense>
-            ),
+            ...screen('keplrApproval'),
           },
         ],
       },
     ],
   },
 ];
+
+// targets that are not routes: the wallets panel opens over any screen
+registerRoutePreload('sheet:wallets', routePreloads.wallets);
+// buy.html opens in its own tab: intent on a buy entry warms its code, never its data
+registerRoutePreload(BUY_PRELOAD, preloadBuyPage);
 
 export const popupRouter = createHashRouter(popupRoutes);

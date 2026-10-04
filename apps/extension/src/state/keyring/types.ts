@@ -6,11 +6,12 @@
  *
  * networks fall into two categories:
  * - privacy: need local sync (zcash, penumbra) - run in isolated workers
- * - transparent: rpc only (polkadot, ethereum) - no local state needed
+ * - transparent: rpc only (ethereum) - no local state needed
  */
 
 // re-export from network-types for convenience
 import type { NetworkType as NetworkTypeImport } from './network-types';
+import type { SealedVault, WorkerKey } from '../../shared/vault-seal';
 
 export type KeyType =
   | 'mnemonic'
@@ -24,23 +25,16 @@ export type {
   PrivacyNetwork,
   IbcNetwork,
   TransparentNetwork,
-  SubstrateChainConfig,
   EncryptionType,
 } from './network-types';
 export {
   isPrivacyNetwork,
   isIbcNetwork,
   isTransparentNetwork,
-  isSubstrateNetwork,
-  isMultiEncryptionNetwork,
   getNetworkEncryption,
   getSupportedEncryptions,
   NETWORK_CONFIGS,
   NETWORK_DEFAULT_ENCRYPTION,
-  SUBSTRATE_ENCRYPTIONS,
-  SUBSTRATE_CHAINS,
-  getSubstrateChain,
-  getSubstrateChainsByRelay,
 } from './network-types';
 
 // local alias for use in this file
@@ -113,18 +107,6 @@ export const NETWORK_DERIVATIONS: Partial<Record<NetworkType, NetworkDerivation>
     prefix: 'cosmos',
   },
   // transparent networks
-  polkadot: {
-    network: 'polkadot',
-    coinType: 354,
-    pathTemplate: "m/44'/354'/0'/0'/0'",
-    prefix: '1', // polkadot ss58
-  },
-  kusama: {
-    network: 'kusama',
-    coinType: 434,
-    pathTemplate: "m/44'/434'/0'/0'/0'",
-    prefix: 'C', // kusama ss58
-  },
   ethereum: {
     network: 'ethereum',
     coinType: 60,
@@ -158,10 +140,6 @@ export interface ZignerZafuImport {
   viewingKey?: string;
   /** public key for other networks */
   publicKey?: string;
-  /** ss58 address for polkadot/kusama (watch-only) */
-  polkadotSs58?: string;
-  /** genesis hash for the polkadot network */
-  polkadotGenesisHash?: string;
   /** cosmos chain addresses (watch-only) */
   cosmosAddresses?: { chainId: string; address: string; prefix: string }[];
   /**
@@ -179,7 +157,7 @@ export interface ZignerZafuImport {
   /**
    * Cold signer kind. Defaults to `'zigner'` when omitted (covers all
    * pre-Keystone watch-only imports). Set to `'keystone'` for FVKs imported
-   * from a Keystone hardware wallet — gates Zigner-only features (Penumbra,
+   * from a Keystone hardware wallet - gates Zigner-only features (Penumbra,
    * FROST, ZID) in the UI even though the underlying Zcash signing path is
    * shared via PCZT/UR. `'viewing-key'` is a pasted viewing key with no signer
    * at all: it can see, never spend (see settings-add-viewing-key).
@@ -202,8 +180,8 @@ export type ColdSignerType = 'zigner' | 'keystone' | 'ledger';
  *
  * unlike a zigner/keystone import (which is a multi-network watch-only FVK
  * bundle), a Ledger account is a single-signer zcash-only cold wallet. it
- * carries no penumbra FVK, no polkadot/cosmos addresses, no ZID key, and no
- * FROST share — just enough to watch a single orchard account and hand PCZTs
+ * carries no penumbra FVK, no cosmos addresses, no ZID key, and no
+ * FROST share - just enough to watch a single orchard account and hand PCZTs
  * to the device for signing.
  *
  * flag-gated hardware-wallet scaffolding: reuses the `zigner-zafu` vault
@@ -228,10 +206,21 @@ export interface LedgerImport {
   ufvk?: string;
   /** account index on the ledger device */
   accountIndex: number;
-  /** device identifier */
+  /** `ledger-zcash-<seedFingerprintHex>` for a Zcash-app account,
+   *  `ledger-btc-<t-address>` for a Bitcoin-app one */
   deviceId: string;
   /** mainnet (true) vs testnet (false) */
   mainnet: boolean;
+  /** set for a shielded account exported by the Ledger Zcash app (UFVK);
+   *  absent for a transparent-only Bitcoin-app account */
+  custody?: 'ledger-zcash';
+  /** the Zcash app's account fingerprint (hex, 32 bytes): with accountIndex
+   *  the dedupe key, and stamped into PCZT derivations. Not key material. */
+  seedFingerprint?: string;
+  /** Zcash app version at connect time */
+  appVersion?: string;
+  /** presentation only ("Ledger Nano S Plus") */
+  deviceLabel?: string;
 }
 
 /**
@@ -274,3 +263,15 @@ export const getNetworkActivation = (
     shouldLoadFeatures: isEnabled,
   };
 };
+
+/**
+ * A mnemonic vault, ready for the zcash worker to open itself: the sealed box
+ * as stored, and a way to wrap the session key to a single-use key the worker
+ * issues (shared/vault-seal.ts). The page passes this instead of the phrase,
+ * so it never holds the plaintext. Page-side only; what crosses to the worker
+ * is a SealedVault.
+ */
+export interface VaultUnlock {
+  /** the box and the session key wrapped to `to`, read together */
+  sealTo: (to: WorkerKey) => Promise<SealedVault>;
+}

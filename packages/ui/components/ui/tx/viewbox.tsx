@@ -12,7 +12,7 @@ export interface ViewBoxProps {
 }
 
 const Label = ({ label }: { label: string }) => (
-  <span className='text-lg font-medium text-gray-300'>{label}</span>
+  <span className='text-lg text-fg-muted'>{label}</span>
 );
 
 export const ViewBox = ({ label, visibleContent, isOpaque }: ViewBoxProps) => {
@@ -23,10 +23,10 @@ export const ViewBox = ({ label, visibleContent, isOpaque }: ViewBoxProps) => {
     <Box overflow='hidden'>
       <div className={cn('flex flex-col gap-2', isOpaque ? 'cursor-not-allowed' : '')}>
         <div className='flex items-center gap-2'>
-          <span className={cn('text-base', isOpaque ? 'text-gray-600' : '')}>
+          <span className={cn('text-base', isOpaque ? 'text-fg-dim' : '')}>
             {isOpaque ? (
               <div className='flex items-center gap-2'>
-                <IncognitoIcon fill='#4b5563' />
+                <IncognitoIcon fill='currentColor' />
                 <Label label={label} />
               </div>
             ) : (
@@ -34,7 +34,7 @@ export const ViewBox = ({ label, visibleContent, isOpaque }: ViewBoxProps) => {
             )}
           </span>
         </div>
-        {visibleContent && <div className='border-t border-gray-700 pt-2'>{visibleContent}</div>}
+        {visibleContent && <div className='border-t border-border-soft pt-2'>{visibleContent}</div>}
       </div>
     </Box>
   );
@@ -48,7 +48,7 @@ export interface ViewSectionProps {
 export const ViewSection = ({ heading, children }: ViewSectionProps) => {
   return (
     <div className='grid gap-2'>
-      <div className='text-xl font-medium'>{heading}</div>
+      <div className='text-xl'>{heading}</div>
       {children}
     </div>
   );

@@ -1,32 +1,49 @@
-// zidecar (trustless) vs generic lightwalletd (trusted) endpoint selection.
+// zidecar (verified) vs standard lightwalletd, detected from the node itself.
 
-import type {
-  ChainTip,
-  CompactBlock,
-  CommitmentProofData,
-  NullifierProofData,
-  SyncStatus,
-  Utxo,
-} from './zidecar-client';
+import { ZidecarClient } from './zidecar-client';
+import { LightwalletdClient } from './lightwalletd-client';
+import type { ChainTip, CompactBlock, Utxo } from './zidecar-client';
 import { findPresetByUrl } from '../../config/zcash-endpoints';
 
 export type ZcashBackend = 'zidecar' | 'lightwalletd';
 
-/** Construct the right sync client for a known backend (UI-thread helper). */
-export async function zcashClientFor(
-  serverUrl: string,
-  backend: ZcashBackend,
-): Promise<ZcashClient> {
-  // eager: also bundled into the worker, which has no `document` for chunk loading
-  if (backend === 'lightwalletd') {
-    const { LightwalletdClient } = await import(/* webpackMode: "eager" */ './lightwalletd-client');
-    return new LightwalletdClient(serverUrl);
-  }
-  const { ZidecarClient } = await import(/* webpackMode: "eager" */ './zidecar-client');
-  return new ZidecarClient(serverUrl);
+/**
+ * Everything that differs by backend, in one place. A standard lightwalletd
+ * is used like every other lightwalletd wallet uses it; zidecar adds its own
+ * rpcs (proofs, mempool, whole-block transactions, anchor attestation), and
+ * code reaches them only through `extras`, so nothing can call them on a
+ * lightwalletd.
+ */
+export interface ZcashBackendProfile {
+  readonly client: (url: string) => ZcashClient;
+  readonly extras?: (url: string) => ZidecarClient;
+  /** zidecar's SendResponse carries the txid; standard lightwalletd's does not */
+  readonly echoesTxid: boolean;
 }
 
-/** Method surface the worker drives a backend through; ZidecarClient is a structural superset. */
+export const ZCASH_BACKENDS: Readonly<Record<ZcashBackend, ZcashBackendProfile>> = {
+  zidecar: {
+    client: url => new ZidecarClient(url),
+    extras: url => new ZidecarClient(url),
+    echoesTxid: true,
+  },
+  lightwalletd: {
+    client: url => new LightwalletdClient(url),
+    echoesTxid: false,
+  },
+};
+
+export const isZcashBackend = (b: unknown): b is ZcashBackend =>
+  typeof b === 'string' && Object.hasOwn(ZCASH_BACKENDS, b);
+
+/** zidecar's own rpcs for this backend, or undefined on a standard lightwalletd */
+export const zidecarExtras = (url: string, backend: unknown): ZidecarClient | undefined =>
+  isZcashBackend(backend) ? ZCASH_BACKENDS[backend].extras?.(url) : undefined;
+
+export const zcashClient = (url: string, backend: ZcashBackend): ZcashClient =>
+  ZCASH_BACKENDS[backend].client(url);
+
+/** The standard CompactTxStreamer surface both backends serve; ZidecarClient is a structural superset. */
 export interface ZcashClient {
   getTip(): Promise<ChainTip>;
   getTreeState(height: number): Promise<{
@@ -41,15 +58,9 @@ export interface ZcashClient {
     time: number;
   }>;
   getCompactBlocks(startHeight: number, endHeight: number): Promise<CompactBlock[]>;
-  getMempoolStream(): Promise<CompactBlock[]>;
   getAddressUtxos(addresses: string[], startHeight?: number, maxEntries?: number): Promise<Utxo[]>;
   getTaddressTxids(addresses: string[], startHeight?: number): Promise<Uint8Array[]>;
   getTransaction(txid: Uint8Array): Promise<{ data: Uint8Array; height: number }>;
-  getBlockTransactions(height: number): Promise<{
-    height: number;
-    hash: Uint8Array;
-    txs: { data: Uint8Array; height: number }[];
-  }>;
   getBlockTime(height: number): Promise<number>;
   /**
    * lightwalletd `GetLightdInfo` (both backends serve it; zidecar via its
@@ -59,6 +70,8 @@ export interface ZcashClient {
    * value (0x37a5165b) and is not the placeholder 0xffffffff.
    */
   getLightdInfo(): Promise<{
+    /** free-form server name; zidecar answers "zidecar/rotkonetworks" */
+    vendor: string;
     consensusBranchId: string;
     chainName: string;
     blockHeight: number;
@@ -67,66 +80,89 @@ export interface ZcashClient {
   sendTransaction(
     txData: Uint8Array,
   ): Promise<{ txid: Uint8Array; errorCode: number; errorMessage: string }>;
-  // trustless-only (zidecar)
-  getHeaderProof(): Promise<{ proofBytes: Uint8Array; fromHeight: number; toHeight: number }>;
-  getCommitmentProofs(
-    cmxs: Uint8Array[],
-    positions: number[],
-    height: number,
-  ): Promise<{ proofs: CommitmentProofData[]; treeRoot: Uint8Array }>;
-  getNullifierProofs(
-    nullifiers: Uint8Array[],
-    height: number,
-  ): Promise<{
-    proofs: NullifierProofData[];
-    nullifierRoot: Uint8Array;
-    /**
-     * Validity horizons. The NOMT indexes are existence-keyed, so above these
-     * heights "no entry" means "not indexed yet" — indistinguishable from
-     * "not spent". Callers must not read absence as unspent above them.
-     * The two pools advance independently: ironwood is indexed from NU6.3
-     * activation and tracks the tip, while the full-chain backfill trails.
-     * 0 means the server did not report one (treat as no coverage).
-     */
-    syncedHeight: number;
-    ironwoodSyncedHeight: number;
-  }>;
-  getSyncStatus(): Promise<SyncStatus>;
 }
 
 /**
- * Declaratively classify an endpoint URL as zidecar-speaking or generic
- * lightwalletd.
+ * What kind of node an endpoint is, told by the node itself.
  *
- * Design choice (defensive, hdevalence-style):
- *   We deliberately do NOT auto-probe a zidecar-only RPC at runtime.
- *   Probing `zidecar.v1.Zidecar/GetSyncStatus` against an arbitrary
- *   endpoint is a unique-to-zafu request signature — no other Zcash
- *   wallet hits that path. Even on failure the probe is an unambiguous
- *   "this is a zafu client" beacon that survives across IP changes,
- *   browser sessions, and TLS handshakes.
- *
- * Instead: a static known-host suffix list. Endpoints we ship default
- * to zidecar; everything else defaults to lightwalletd. Users on a
- * custom zidecar deployment can override via setZcashBackend.
- *
- * The static list is intentionally narrow. Add to it only after we've
- * shipped a zidecar at the deployment in question.
+ * zafu never asks the user, and never sends a zidecar-only rpc to find out:
+ * a `zidecar.v1.*` request is a request signature no other Zcash wallet
+ * makes, so even a failed probe would mark the wallet as zafu. The question
+ * is asked with lightwalletd's own `GetLightdInfo`, the call every light
+ * wallet makes, and answered from its `vendor` field. zidecar has answered
+ * "zidecar/rotkonetworks" there since v0.5.4; anything else (another
+ * vendor, a blank one, a node that will not say) is a standard lightwalletd,
+ * which is the safe reading: zafu then makes only standard calls.
+ */
+export const classifyLightdInfo = (info: { vendor?: unknown }): ZcashBackend =>
+  typeof info.vendor === 'string' && /^zidecar\b/i.test(info.vendor.trim())
+    ? 'zidecar'
+    : 'lightwalletd';
+
+/** one spelling per endpoint, for the per-endpoint cache and the worker registry */
+export const backendKey = (serverUrl: string): string =>
+  serverUrl.trim().replace(/\/+$/, '').toLowerCase();
+
+/**
+ * Ask the node what it is, with standard calls only. Native gRPC first (what
+ * lightwalletd wallets send); a node behind a grpc-web-only proxy answers the
+ * same rpc over grpc-web, which every browser wallet speaks. Throws when the
+ * node answers neither, so a caller keeps what it already knew.
+ */
+export const detectZcashBackend = async (serverUrl: string): Promise<ZcashBackend> => {
+  let info: { vendor: string };
+  try {
+    info = await new LightwalletdClient(serverUrl).getLightdInfo();
+  } catch {
+    // bare: no zafu-only header (the pro proof) reaches a node not yet classified
+    info = await new ZidecarClient(serverUrl).getLightdInfo({ bare: true });
+  }
+  return classifyLightdInfo(info);
+};
+
+/**
+ * Re-ask a node what it is after one of zidecar's own calls failed, at most
+ * once per `cooldownMs` per endpoint. Resolves to the node's answer, or
+ * undefined when it was asked too recently or did not answer - a node that
+ * blinked keeps its kind; only an answer changes it.
+ */
+export const createRedetector = (
+  detect: (serverUrl: string) => Promise<ZcashBackend> = detectZcashBackend,
+  { cooldownMs = 10 * 60_000, now = Date.now }: { cooldownMs?: number; now?: () => number } = {},
+) => {
+  const askedAt = new Map<string, number>();
+  return async (serverUrl: string): Promise<ZcashBackend | undefined> => {
+    const key = backendKey(serverUrl);
+    const last = askedAt.get(key);
+    if (last !== undefined && now() - last < cooldownMs) {
+      return undefined;
+    }
+    askedAt.set(key, now());
+    try {
+      return await detect(serverUrl);
+    } catch {
+      return undefined;
+    }
+  };
+};
+
+/**
+ * The best guess before a node has answered: a shipped preset or a rotko
+ * host is zidecar, anything else a standard lightwalletd. Only a guess -
+ * detection replaces it - and it never guesses zidecar for a third party,
+ * so an unclassified host never sees a zidecar-only rpc.
  */
 const KNOWN_ZIDECAR_HOST_SUFFIXES: readonly string[] = ['rotko.net'];
 
-export function isZidecarEndpoint(serverUrl: string): boolean {
-  // First: exact-URL match against the curated preset list. zidecar
-  // presets are the exception; anything not in the list falls through
-  // to the hostname-suffix check.
+export const backendOfEndpoint = (serverUrl: string): ZcashBackend =>
+  isZidecarEndpoint(serverUrl) ? 'zidecar' : 'lightwalletd';
+
+function isZidecarEndpoint(serverUrl: string): boolean {
   const preset = findPresetByUrl(serverUrl);
   if (preset) {
     return preset.backend === 'zidecar';
   }
-
-  // Defensive parse - never throw on garbage URLs; treat unparseable
-  // input as lightwalletd (the safer default since it doesn't assume
-  // zidecar-only RPCs are available).
+  // never throw on a garbage url; an unparseable one is no zidecar
   let host: string;
   try {
     host = new URL(serverUrl).hostname.toLowerCase();
@@ -137,41 +173,4 @@ export function isZidecarEndpoint(serverUrl: string): boolean {
     return false;
   }
   return KNOWN_ZIDECAR_HOST_SUFFIXES.some(suffix => host === suffix || host.endsWith(`.${suffix}`));
-}
-
-/** Trust description used in UI badges / tooltips. Single source of truth. */
-export function backendTrustDescription(backend: ZcashBackend): {
-  readonly label: 'trust-minimized' | 'trusted';
-  readonly summary: string;
-} {
-  if (backend === 'zidecar') {
-    return {
-      // NOT 'trustless'. Claiming that was the most dangerous line in this
-      // codebase: users choose an endpoint based on this badge.
-      //
-      // What actually holds today: NOMT nullifier/commitment paths are real
-      // merkle proofs and are verified locally against the root the server
-      // reports. What does NOT hold: the Ligerito header proof carries no
-      // constraint system, so the roots it "proves" are values the prover
-      // chose and absorbed into its own transcript. Nothing binds them to
-      // consensus. A malicious server can therefore present a coherent but
-      // fabricated chain state, and block/action OMISSION is not detectable
-      // at all. Cross-endpoint verification is the design's stated mitigation
-      // and is not wired up.
-      label: 'trust-minimized',
-      summary:
-        'Merkle proofs for nullifiers and commitments are checked locally, so ' +
-        'the server cannot forge those paths. It can still omit blocks or ' +
-        'actions, and the header proof does not yet bind the chain state it ' +
-        'reports — so this is stronger than a plain light server, but it is ' +
-        'not trustless. Prefer an endpoint you run yourself.',
-    };
-  }
-  return {
-    label: 'trusted',
-    summary:
-      'Server can lie about chain state (heights, transaction inclusion, ' +
-      'nullifier set). Memos and keys stay local so privacy is intact, but ' +
-      'use a server you trust for chain-state integrity.',
-  };
 }

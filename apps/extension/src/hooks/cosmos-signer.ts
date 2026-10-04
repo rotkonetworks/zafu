@@ -1,10 +1,10 @@
 /**
  * cosmos signing hooks
  *
- * provides signing functionality for cosmos chains.
- * supports two wallet types:
- * - mnemonic: direct sign+broadcast with derived key
- * - zigner-zafu: build sign request QR, get signature from zigner, broadcast
+ * provides signing functionality for cosmos chains, with the selected wallet's
+ * own key only (signing/cosmos-key.ts):
+ * - hot: direct sign+broadcast with derived key
+ * - zigner: build sign request QR, get signature from zigner, broadcast
  */
 
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -21,8 +21,8 @@ import {
 } from '@repo/wallet/networks/cosmos/signer';
 import type { ZignerSignRequest, EncodeObject } from '@repo/wallet/networks/cosmos/signer';
 import { encodeCosmosSignRequest } from '@repo/wallet/networks/cosmos/airgap';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
-import { deriveChainAddress } from '@repo/wallet/networks/cosmos/signer';
+import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { cosmosKeyFor, noCosmosKey } from '../signing/cosmos-key';
 import { conduitFor, type TxKind } from '@repo/wallet/networks/transparent/conduit';
 
 /** send parameters */
@@ -80,33 +80,6 @@ export interface CosmosZignerSignResult {
   pubkey: Uint8Array;
 }
 
-/** get cosmos address from zigner insensitive data */
-function getZignerAddress(
-  insensitive: Record<string, unknown>,
-  chainId: CosmosChainId,
-): string | null {
-  // zigner holds coin-118 cosmos keys; nothing it has is valid on an Ethermint chain
-  if (COSMOS_CHAINS[chainId].keyAlgo === 'eth_secp256k1') {
-    return null;
-  }
-  const addrs = insensitive['cosmosAddresses'] as
-    | { chainId: string; address: string; prefix: string }[]
-    | undefined;
-  if (!addrs?.length) {
-    return null;
-  }
-  const match = addrs.find(a => a.chainId === chainId);
-  if (match) {
-    return match.address;
-  }
-  // derive from any stored address using bech32 prefix conversion
-  try {
-    return deriveChainAddress(addrs[0]!.address, chainId);
-  } catch {
-    return null;
-  }
-}
-
 /** get cosmos pubkey from zigner insensitive data (hex-encoded compressed secp256k1) */
 function getZignerPubkey(insensitive: Record<string, unknown>): Uint8Array | null {
   const hex = insensitive['cosmosPublicKey'] as string | undefined;
@@ -118,37 +91,6 @@ function getZignerPubkey(insensitive: Record<string, unknown>): Uint8Array | nul
     bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
   }
   return bytes;
-}
-
-/** find a keyInfo with cosmos capability — effective first, then any wallet */
-function findCosmosKey(
-  keyInfos: { id: string; type: string; insensitive: Record<string, unknown> }[],
-  effective: { id: string; type: string; insensitive: Record<string, unknown> } | undefined,
-  chainId: CosmosChainId,
-) {
-  if (effective) {
-    if (effective.type === 'mnemonic') {
-      return effective;
-    }
-    if (
-      effective.type === 'zigner-zafu' &&
-      getZignerAddress(effective.insensitive ?? {}, chainId)
-    ) {
-      return effective;
-    }
-  }
-  for (const ki of keyInfos) {
-    if (ki === effective) {
-      continue;
-    }
-    if (ki.type === 'mnemonic') {
-      return ki;
-    }
-    if (ki.type === 'zigner-zafu' && getZignerAddress(ki.insensitive ?? {}, chainId)) {
-      return ki;
-    }
-  }
-  return null;
 }
 
 /**
@@ -176,7 +118,7 @@ async function broadcastWithMnemonic(
   let feeGranter: string | undefined;
   if (sponsored) {
     if (!conduit.requestFeeGrant) {
-      throw new Error(`no gas sponsor for ${COSMOS_CHAINS[chainId].name}`);
+      throw new Error(`no gas sponsor for ${getCosmosChain(chainId).name}`);
     }
     const from = expectedAddress ?? (await conduit.deriveAddress(mnemonic, accountIndex));
     feeGranter = (await conduit.requestFeeGrant(from, kind)).granter;
@@ -185,208 +127,157 @@ async function broadcastWithMnemonic(
   if (res.code !== 0) {
     throw new Error(res.rawLog || `broadcast failed (code ${res.code})`);
   }
-  const syncBroadcast = COSMOS_CHAINS[chainId].keyAlgo === 'eth_secp256k1';
+  const syncBroadcast = getCosmosChain(chainId).keyAlgo === 'eth_secp256k1';
   return {
     type: 'broadcast',
     txHash: res.txHash,
     code: res.code,
-    ...(syncBroadcast ? { restUrl: COSMOS_CHAINS[chainId].restEndpoint } : {}),
+    ...(syncBroadcast ? { restUrl: getCosmosChain(chainId).restEndpoint } : {}),
   };
+}
+
+interface KeyFacts {
+  id: string;
+  type: string;
+  insensitive: Record<string, unknown>;
+}
+type GetMnemonic = (id: string) => Promise<string>;
+
+/** The zigner sign request for `messages`, as a QR for the device. */
+async function zignerSignRequest(
+  chainId: CosmosChainId,
+  key: { key: KeyFacts; address: string },
+  accountIndex: number,
+  messages: EncodeObject[],
+  gas: number | undefined,
+  memo: string | undefined,
+): Promise<CosmosZignerSignResult> {
+  const pubkey = getZignerPubkey(key.key.insensitive);
+  if (!pubkey) {
+    throw new Error('no cosmos public key found - reimport wallet from zigner');
+  }
+  const fee = calculateFee(chainId, gas ?? (await estimateGas(chainId, key.address, messages)));
+  const signRequest = await buildZignerSignDoc(chainId, key.address, messages, fee, memo ?? '');
+  return {
+    type: 'zigner',
+    signRequestQr: encodeCosmosSignRequest(accountIndex, chainId, signRequest.signDocBytes),
+    signRequest,
+    chainId,
+    pubkey,
+  };
+}
+
+/** The selected wallet's own cosmos key, or a calm refusal. Never another wallet's. */
+const ownCosmosKey = (key: KeyFacts | undefined, chainId: CosmosChainId) => {
+  const own = cosmosKeyFor(key, chainId);
+  if (!own) {
+    throw new Error(noCosmosKey(chainId));
+  }
+  return own;
+};
+
+export async function cosmosSend(
+  params: CosmosSendParams,
+  selected: KeyFacts | undefined,
+  getMnemonic: GetMnemonic,
+): Promise<CosmosTxResult | CosmosZignerSignResult> {
+  const config = getCosmosChain(params.chainId);
+  const denom = params.denom ?? config.denom;
+  const accountIndex = params.accountIndex ?? 0;
+  const amountInBase = parseAmountToBaseUnits(params.amount, params.decimals ?? config.decimals);
+  const own = ownCosmosKey(selected, params.chainId);
+
+  if (own.signer === 'hot') {
+    const mnemonic = await getMnemonic(own.key.id);
+    return broadcastWithMnemonic(
+      params.chainId,
+      mnemonic,
+      accountIndex,
+      'send',
+      params.sponsored,
+      params.expectedAddress,
+      (conduit, signer) =>
+        conduit.send({
+          ...signer,
+          to: params.toAddress,
+          coin: { denom, amount: amountInBase },
+          memo: params.memo,
+        }),
+    );
+  }
+  const messages = [
+    buildMsgSend({
+      fromAddress: own.address,
+      toAddress: params.toAddress,
+      amount: [{ denom, amount: amountInBase }],
+    }),
+  ];
+  return zignerSignRequest(params.chainId, own, accountIndex, messages, undefined, params.memo);
+}
+
+export async function cosmosIbcTransfer(
+  params: CosmosIbcTransferParams,
+  selected: KeyFacts | undefined,
+  getMnemonic: GetMnemonic,
+): Promise<CosmosTxResult | CosmosZignerSignResult> {
+  const config = getCosmosChain(params.sourceChainId);
+  const denom = params.denom ?? config.denom;
+  const accountIndex = params.accountIndex ?? 0;
+  const amountInBase = parseAmountToBaseUnits(params.amount, params.decimals ?? config.decimals);
+  const timeoutTimestamp = BigInt(Date.now() + 10 * 60 * 1000) * 1_000_000n;
+  const own = ownCosmosKey(selected, params.sourceChainId);
+
+  if (own.signer === 'hot') {
+    const mnemonic = await getMnemonic(own.key.id);
+    return broadcastWithMnemonic(
+      params.sourceChainId,
+      mnemonic,
+      accountIndex,
+      'ibc',
+      params.sponsored,
+      params.expectedAddress,
+      (conduit, signer) =>
+        conduit.ibcTransfer({
+          ...signer,
+          sourceChannel: params.sourceChannel,
+          receiver: params.toAddress,
+          coin: { denom, amount: amountInBase },
+          timeoutTimestamp,
+          memo: params.memo,
+        }),
+    );
+  }
+  const messages = [
+    buildMsgTransfer({
+      sourcePort: 'transfer',
+      sourceChannel: params.sourceChannel,
+      token: { denom, amount: amountInBase },
+      sender: own.address,
+      receiver: params.toAddress,
+      timeoutTimestamp,
+      memo: params.memo,
+    }),
+  ];
+  // for IBC, use a fixed higher gas estimate
+  return zignerSignRequest(params.sourceChainId, own, accountIndex, messages, 200000, params.memo);
 }
 
 /** hook for cosmos send transactions */
 export const useCosmosSend = () => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
-  const allKeyInfos = useStore(state => state.keyRing.keyInfos);
   const { getMnemonic } = useStore(keyRingSelector);
-
   return useMutation({
-    mutationFn: async (
-      params: CosmosSendParams,
-    ): Promise<CosmosTxResult | CosmosZignerSignResult> => {
-      const config = COSMOS_CHAINS[params.chainId];
-      const denom = params.denom ?? config.denom;
-      const accountIndex = params.accountIndex ?? 0;
-      const amountInBase = parseAmountToBaseUnits(
-        params.amount,
-        params.decimals ?? config.decimals,
-      );
-
-      const key = findCosmosKey(allKeyInfos, selectedKeyInfo, params.chainId);
-      if (!key) {
-        throw new Error('no cosmos-capable wallet found');
-      }
-
-      if (key.type === 'mnemonic') {
-        const mnemonic = await getMnemonic(key.id);
-        return broadcastWithMnemonic(
-          params.chainId,
-          mnemonic,
-          accountIndex,
-          'send',
-          params.sponsored,
-          params.expectedAddress,
-          (conduit, signer) =>
-            conduit.send({
-              ...signer,
-              to: params.toAddress,
-              coin: { denom, amount: amountInBase },
-              memo: params.memo,
-            }),
-        );
-      }
-
-      if (key.type === 'zigner-zafu') {
-        // zigner path: build sign request for QR
-        const insensitive = key.insensitive ?? {};
-        const fromAddress = getZignerAddress(insensitive, params.chainId);
-        if (!fromAddress) {
-          throw new Error('no cosmos address found for zigner wallet');
-        }
-
-        const pubkey = getZignerPubkey(insensitive);
-        if (!pubkey) {
-          throw new Error('no cosmos public key found — reimport wallet from zigner');
-        }
-
-        const messages: EncodeObject[] = [
-          buildMsgSend({
-            fromAddress,
-            toAddress: params.toAddress,
-            amount: [{ denom, amount: amountInBase }],
-          }),
-        ];
-
-        const gas = await estimateGas(params.chainId, fromAddress, messages);
-        const fee = calculateFee(params.chainId, gas);
-
-        const signRequest = await buildZignerSignDoc(
-          params.chainId,
-          fromAddress,
-          messages,
-          fee,
-          params.memo ?? '',
-        );
-
-        const signRequestQr = encodeCosmosSignRequest(
-          accountIndex,
-          params.chainId,
-          signRequest.signDocBytes,
-        );
-
-        return {
-          type: 'zigner',
-          signRequestQr,
-          signRequest,
-          chainId: params.chainId,
-          pubkey,
-        };
-      }
-
-      throw new Error('unsupported wallet type for cosmos signing');
-    },
+    mutationFn: (params: CosmosSendParams) => cosmosSend(params, selectedKeyInfo, getMnemonic),
   });
 };
 
 /** hook for IBC transfers */
 export const useCosmosIbcTransfer = () => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
-  const allKeyInfos = useStore(state => state.keyRing.keyInfos);
   const { getMnemonic } = useStore(keyRingSelector);
-
   return useMutation({
-    mutationFn: async (
-      params: CosmosIbcTransferParams,
-    ): Promise<CosmosTxResult | CosmosZignerSignResult> => {
-      const config = COSMOS_CHAINS[params.sourceChainId];
-      const denom = params.denom ?? config.denom;
-      const accountIndex = params.accountIndex ?? 0;
-      const amountInBase = parseAmountToBaseUnits(
-        params.amount,
-        params.decimals ?? config.decimals,
-      );
-      const timeoutTimestamp = BigInt(Date.now() + 10 * 60 * 1000) * 1_000_000n;
-
-      const key = findCosmosKey(allKeyInfos, selectedKeyInfo, params.sourceChainId);
-      if (!key) {
-        throw new Error('no cosmos-capable wallet found');
-      }
-
-      if (key.type === 'mnemonic') {
-        const mnemonic = await getMnemonic(key.id);
-        return broadcastWithMnemonic(
-          params.sourceChainId,
-          mnemonic,
-          accountIndex,
-          'ibc',
-          params.sponsored,
-          params.expectedAddress,
-          (conduit, signer) =>
-            conduit.ibcTransfer({
-              ...signer,
-              sourceChannel: params.sourceChannel,
-              receiver: params.toAddress,
-              coin: { denom, amount: amountInBase },
-              timeoutTimestamp,
-              memo: params.memo,
-            }),
-        );
-      }
-
-      if (key.type === 'zigner-zafu') {
-        // zigner path: build sign request for QR
-        const insensitive = key.insensitive ?? {};
-        const fromAddress = getZignerAddress(insensitive, params.sourceChainId);
-        if (!fromAddress) {
-          throw new Error('no cosmos address found for zigner wallet');
-        }
-
-        const pubkey = getZignerPubkey(insensitive);
-        if (!pubkey) {
-          throw new Error('no cosmos public key found — reimport wallet from zigner');
-        }
-
-        const messages: EncodeObject[] = [
-          buildMsgTransfer({
-            sourcePort: 'transfer',
-            sourceChannel: params.sourceChannel,
-            token: { denom, amount: amountInBase },
-            sender: fromAddress,
-            receiver: params.toAddress,
-            timeoutTimestamp,
-            memo: params.memo,
-          }),
-        ];
-
-        // for IBC, use higher gas estimate
-        const gas = 200000;
-        const fee = calculateFee(params.sourceChainId, gas);
-
-        const signRequest = await buildZignerSignDoc(
-          params.sourceChainId,
-          fromAddress,
-          messages,
-          fee,
-          params.memo ?? '',
-        );
-
-        const signRequestQr = encodeCosmosSignRequest(
-          accountIndex,
-          params.sourceChainId,
-          signRequest.signDocBytes,
-        );
-
-        return {
-          type: 'zigner',
-          signRequestQr,
-          signRequest,
-          chainId: params.sourceChainId,
-          pubkey,
-        };
-      }
-
-      throw new Error('unsupported wallet type for cosmos signing');
-    },
+    mutationFn: (params: CosmosIbcTransferParams) =>
+      cosmosIbcTransfer(params, selectedKeyInfo, getMnemonic),
   });
 };
 

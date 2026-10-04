@@ -2,7 +2,7 @@ import { HTMLAttributes, ReactNode } from 'react';
 import { cn } from '../../lib/utils';
 
 /**
- * A hairline horizontal rule — the `<Rule/>` element used as a visual
+ * A hairline horizontal rule - the `<Rule/>` element used as a visual
  * break inside editorial layouts (inside `<SectionHead>`, between
  * scale rows, etc). Thin, colored by the v2 border token, full-width.
  */
@@ -11,7 +11,7 @@ export const Rule = ({ className, ...rest }: HTMLAttributes<HTMLDivElement>) => 
 );
 
 /**
- * `<RulerScale>` — the drawn-ruler spacing visualisation from `spacing.html`.
+ * `<RulerScale>` - the drawn-ruler spacing visualisation from `spacing.html`.
  * Shows the design system's spacing scale as a horizontal ruler with ticks,
  * gold majors, and labeled segments. Useful for internal docs / storybook.
  */
@@ -45,7 +45,7 @@ export const RulerScale = ({
   return (
     <div
       className={cn(
-        'relative bg-[#050505] border border-border-hard rounded-sm overflow-hidden',
+        'relative bg-[#050505] border border-border-hard overflow-hidden',
         'pt-18 pb-6 px-8',
         className,
       )}
@@ -81,7 +81,7 @@ export const RulerScale = ({
       {segments.map((s, i) => (
         <div
           key={i}
-          className='absolute h-2 rounded-sm'
+          className='absolute h-2'
           style={{
             top: 62,
             left: pct(s.from),

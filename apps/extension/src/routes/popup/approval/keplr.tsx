@@ -9,7 +9,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useStore } from '../../../state';
 import { keyRingSelector, selectEffectiveKeyInfo } from '../../../state/keyring';
-import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
+import { getCosmosChain } from '@repo/wallet/networks/cosmos/chains';
+import { OriginIcon } from '../../../shared/components/origin-icon';
 import {
   deriveKeplrWireKey,
   signKeplrAmino,
@@ -27,7 +28,7 @@ import {
 const prefixFor = (chainId: string, signerAddress?: string): string => {
   const id = cosmosChainIdFromKeplr(chainId);
   if (id) {
-    return COSMOS_CHAINS[id].bech32Prefix;
+    return getCosmosChain(id).bech32Prefix;
   }
   // bech32 is "<prefix>1<data>" and the data charset excludes '1', so the last
   // '1' is the separator - everything before it is the human-readable prefix
@@ -152,15 +153,15 @@ export const KeplrApproval = () => {
       </header>
 
       <div className='flex-1 overflow-y-auto p-4'>
-        <div className='flex items-center gap-2 rounded-lg bg-canvas p-3'>
-          {!!req.favIconUrl && <img src={req.favIconUrl} alt='' className='size-8 rounded-full' />}
+        <div className='flex items-center gap-2 bg-canvas p-3'>
+          {!!req.origin && <OriginIcon origin={req.origin} size={32} />}
           <div className='flex flex-col overflow-hidden'>
             {req.title && <span className='truncate text-sm'>{req.title}</span>}
             <span className='truncate text-xs text-fg-muted'>{req.origin ?? ''}</span>
           </div>
         </div>
 
-        <div className='mt-3 rounded-lg border border-border-soft p-3 text-sm'>
+        <div className='mt-3 border border-border-soft p-3 text-sm'>
           {isSign ? (
             <>
               <p className='text-fg'>
@@ -173,7 +174,7 @@ export const KeplrApproval = () => {
                   {req.signerAddress}
                 </p>
               )}
-              <pre className='mt-2 max-h-48 overflow-auto rounded bg-elev-1 p-2 text-label text-fg-muted'>
+              <pre className='mt-2 max-h-48 overflow-auto bg-elev-1 p-2 text-label text-fg-muted'>
                 {JSON.stringify(
                   req.signDoc,
                   (_k, v) => (typeof v === 'bigint' ? v.toString() : v),
@@ -196,7 +197,7 @@ export const KeplrApproval = () => {
           type='button'
           onClick={deny}
           disabled={busy}
-          className='flex-1 rounded-lg bg-elev-2 px-3 py-2.5 text-sm text-fg-muted transition-colors hover:bg-elev-1 disabled:opacity-50'
+          className='flex-1 bg-elev-2 px-3 py-2.5 text-sm text-fg-muted transition-colors hover:bg-elev-1 disabled:opacity-50'
         >
           reject
         </button>
@@ -204,7 +205,7 @@ export const KeplrApproval = () => {
           type='button'
           onClick={() => void approve()}
           disabled={busy || !keyInfo}
-          className='flex-1 rounded-lg bg-zigner-gold px-3 py-2.5 text-sm font-medium text-zigner-gold-foreground transition-colors disabled:opacity-50'
+          className='flex-1 bg-zigner-gold px-3 py-2.5 text-sm text-zigner-gold-foreground transition-colors disabled:opacity-50'
         >
           {busy ? 'working…' : isSign ? 'approve' : 'connect'}
         </button>

@@ -2,7 +2,7 @@ import { Metadata } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_p
 import { AssetIcon } from '../asset-icon';
 import { Pill } from '../pill';
 import { cn } from '../../../lib/utils';
-import { assetPatterns } from '@rotko/penumbra-types/assets';
+import { assetPatterns } from '@penumbrafi/types/assets';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../tooltip';
 
 const UNBONDING_DELAY_BLOCKS = 120_960;
@@ -78,23 +78,23 @@ const UnbondingTooltipContent = ({
 
   return (
     <div className='flex flex-col gap-2 font-normal text-left'>
-      <div className='font-medium text-white'>Unbonding Token</div>
+      <div className='text-fg-high'>Unbonding Token</div>
       <div>
         <span className='text-fg-muted'>Start: </span>
-        <span className='text-white font-mono'>{info.startAt.toLocaleString()}</span>
+        <span className='text-fg-high font-mono'>{info.startAt.toLocaleString()}</span>
       </div>
       <div>
         <span className='text-fg-muted'>End: </span>
-        <span className='text-white font-mono'>{info.claimableAt.toLocaleString()}</span>
+        <span className='text-fg-high font-mono'>{info.claimableAt.toLocaleString()}</span>
       </div>
       {currentBlockHeight !== undefined && blocksRemaining !== undefined && (
         <div>
           <span className='text-fg-muted'>Current: </span>
-          <span className='text-white font-mono'>{currentBlockHeight.toLocaleString()}</span>
+          <span className='text-fg-high font-mono'>{currentBlockHeight.toLocaleString()}</span>
           {isReady ? (
-            <span className='text-green-400 ml-2'>Ready!</span>
+            <span className='text-success ml-2'>Ready!</span>
           ) : (
-            <div className='text-orange-400 text-xs mt-1'>
+            <div className='text-warn text-xs mt-1'>
               {blocksRemaining.toLocaleString()} blocks ({formatDuration(blocksRemaining)})
             </div>
           )}
@@ -102,8 +102,8 @@ const UnbondingTooltipContent = ({
       )}
       <div>
         <span className='text-fg-muted'>Validator: </span>
-        {info.validatorName && <div className='text-white font-medium'>{info.validatorName}</div>}
-        <div className='text-white break-all text-[10px] font-mono'>{info.validatorId}</div>
+        {info.validatorName && <div className='text-fg-high'>{info.validatorName}</div>}
+        <div className='text-fg-high break-all text-[10px] font-mono'>{info.validatorId}</div>
       </div>
       {isReady && onClaim && (
         <button
@@ -112,7 +112,7 @@ const UnbondingTooltipContent = ({
             e.stopPropagation();
             onClaim();
           }}
-          className='mt-1 rounded-md bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
+          className='mt-1 bg-zigner-gold px-3 py-1.5 text-sm text-zigner-dark hover:bg-zigner-gold-light transition-colors'
         >
           Claim
         </button>
@@ -149,7 +149,7 @@ export const ValueComponent = ({
     <Pill variant={variant === 'default' ? 'default' : 'dashed'}>
       <div className='flex min-w-0 items-center gap-1'>
         {showIcon && (
-          <div className='-ml-2 mr-1 flex shrink-0 items-center justify-center rounded-full'>
+          <div className='-ml-2 mr-1 flex shrink-0 items-center justify-center'>
             <AssetIcon metadata={metadata} size={size === 'default' ? 'sm' : 'xs'} />
           </div>
         )}

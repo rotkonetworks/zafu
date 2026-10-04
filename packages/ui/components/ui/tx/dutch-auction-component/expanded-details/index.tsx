@@ -3,7 +3,7 @@ import {
   AuctionId,
   DutchAuction,
 } from '@penumbra-zone/protobuf/penumbra/core/component/auction/v1/auction_pb';
-import { formatAmount } from '@rotko/penumbra-types/amount';
+import { formatAmount } from '@penumbrafi/types/amount';
 import { ReactNode } from 'react';
 import { Separator } from '../../../separator';
 import { getPrice } from './get-price';

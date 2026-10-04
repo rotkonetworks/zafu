@@ -16,6 +16,7 @@ const peer = (id: string): DiscoveryPeer => ({
 // a PresenceService whose findPresent returns a fixed present subset
 const serviceReturning = (present: PresentPeer[]): PresenceService => ({
   async publishSelf() {},
+  async withdrawSelf() {},
   async findPresent() {
     return present;
   },

@@ -236,7 +236,7 @@ export function FrostAirgapSignFlow({
           <span className='i-ph-arrow-left h-5 w-5' />
         </button>
       )}
-      <h2 className='text-lg font-medium flex-1'>multisig sign</h2>
+      <h2 className='text-lg flex-1'>multisig sign</h2>
       <DontQuitIcon />
     </div>
   );
@@ -252,7 +252,7 @@ export function FrostAirgapSignFlow({
           {sessionRef.current && (
             <RoomCodeChip code={sessionRef.current.friendlyCode ?? sessionRef.current.roomCode} />
           )}
-          <div className='w-full rounded bg-elev-2 p-2 text-body text-fg-muted space-y-0.5'>
+          <div className='w-full bg-elev-2 p-2 text-body text-fg-muted space-y-0.5'>
             <p>
               {ms.threshold}-of-{ms.maxSigners} threshold
             </p>
@@ -264,7 +264,7 @@ export function FrostAirgapSignFlow({
               fee: <Sensitive>{fee} ZEC</Sensitive>
             </p>
           </div>
-          <Button variant='gradient' onClick={() => setStep('r1-in')} className='w-full'>
+          <Button variant='primary' onClick={() => setStep('r1-in')} className='w-full'>
             scan qr from zigner
           </Button>
           <Button variant='secondary' onClick={cancel} className='w-full'>
@@ -308,10 +308,10 @@ export function FrostAirgapSignFlow({
           {sessionRef.current && (
             <RoomCodeChip code={sessionRef.current.friendlyCode ?? sessionRef.current.roomCode} />
           )}
-          <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
+          <div className='flex items-center gap-2 bg-elev-2 px-3 py-1.5'>
             <span className='i-ph-users size-3.5 text-fg-muted' />
             <span className='text-xs'>
-              <span className='font-medium text-fg'>{peersReady + 1}</span>
+              <span className='text-fg'>{peersReady + 1}</span>
               <span className='text-fg-muted'> / {ms.threshold} ready</span>
             </span>
           </div>
@@ -331,7 +331,7 @@ export function FrostAirgapSignFlow({
           <SignStepProgress current={2} />
           <p className='text-sm text-fg-high'>show this QR to zigner</p>
           {trigger2 && <AnimatedQrDisplay data={trigger2} urType='zafu-frost-sign' size={220} />}
-          <Button variant='gradient' onClick={() => setStep('r2-in')} className='w-full'>
+          <Button variant='primary' onClick={() => setStep('r2-in')} className='w-full'>
             scan qr from zigner
           </Button>
           <Button variant='secondary' onClick={cancel} className='w-full'>

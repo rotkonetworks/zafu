@@ -1,49 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
-import { ChainRegistryClient } from '@penumbrafi/registry';
 import { registryClient } from '../../hooks/ibc-chains';
 
 /**
- * prefetch all icon URLs from the registry into browser cache.
- * this prevents a timing leak where the browser would only fetch
- * icons for assets the user holds, revealing their portfolio to
- * the image host (github).
+ * Globals (default endpoints, frontends) from the bundled registry copy -
+ * `registryClient.remote.globals` resolves from it first, never the network
+ * (see @repo/context/registry-client). The icon urls it carries are never
+ * fetched: AssetIcon falls back to a generated monogram instead of asking
+ * github for them (packages/ui/components/ui/asset-icon).
  */
-const prefetchRegistryIcons = (
-  registry: ReturnType<ChainRegistryClient['remote']['globals']> extends Promise<infer T>
-    ? T
-    : never,
-) => {
-  try {
-    const rpcs = registry.rpcs ?? [];
-    const frontends = registry.frontends ?? [];
-    const urls = new Set<string>();
-    for (const item of [...rpcs, ...frontends]) {
-      for (const img of item.images ?? []) {
-        if (img.png) {
-          urls.add(img.png);
-        }
-        if (img.svg) {
-          urls.add(img.svg);
-        }
-      }
-    }
-    // fire-and-forget prefetch into browser http cache
-    for (const url of urls) {
-      void fetch(url, { mode: 'no-cors', cache: 'force-cache' }).catch(() => {});
-    }
-  } catch {
-    // non-critical - icon prefetch failure doesn't break anything
-  }
-};
-
 export const useRegistry = () => {
   return useQuery({
     queryKey: ['registryGlobals'],
-    queryFn: async () => {
-      const data = await registryClient.remote.globals();
-      prefetchRegistryIcons(data);
-      return data;
-    },
+    queryFn: () => registryClient.remote.globals(),
     staleTime: Infinity,
   });
 };

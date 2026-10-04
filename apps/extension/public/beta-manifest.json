@@ -2,12 +2,15 @@
   "manifest_version": 3,
   "name": "zafu wallet BETA",
   "short_name": "zafu BETA",
-  "version": "28.3.1",
-  "description": "Zcash + Penumbra privacy wallet. Cold signing, FROST multisig, client-side proving, ed25519 app identity, verified lightclient.",
+  "version": "29.0.0",
+  "description": "shielded signing. Zcash + Penumbra privacy wallet with cold signing, FROST multisig, client-side proving, ed25519 app identity.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAumLcmfQnXRpyRqpga9emIAK2NszJC0GbCtacZXNFKRr/ZvsBCasAeu91plM7BPhuFd6E9cjsJafmesmhZ3eVQijR+rrjE77coqB5Aff5otsCFd8l0+HcWcLZrpDO2HAxlJMCceylA75DzYx4ewSc/mW1e69G6xjUxb8azaWqhCK8t6bwrYCN7YGhRYjpNzbHRtB3EA/6lf8kEVMFrTX/wlD+AJMo+Yq5ggikECK4VmRAoAxM4M+hE4M3LtKypMrj2q0+wqnMU+NdyIyMaEeEl8UbsuP6UymQf1j+NIcAkoS4HCHA9oZ68GRzDH2cpXf+TaQJnmEAnI9cjpaUiU1TFQIDAQAB",
   "minimum_chrome_version": "119",
   "action": {
     "default_popup": "popup.html"
+  },
+  "omnibox": {
+    "keyword": "zafu"
   },
   "side_panel": {
     "default_path": "sidepanel.html"
@@ -57,7 +60,7 @@
     },
     {
       "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://[::1]/*"],
-      "js": ["zcash-links.js"],
+      "js": ["links.js"],
       "run_at": "document_idle",
       "world": "ISOLATED"
     }
@@ -83,11 +86,18 @@
     "sidePanel",
     "contextMenus"
   ],
+  "optional_permissions": ["webRequest", "scripting"],
   "host_permissions": ["<all_urls>"],
   "externally_connectable": {
     "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://[::1]/*"]
   },
   "content_security_policy": {
-    "extension_pages": "object-src 'self'; script-src 'self' 'wasm-unsafe-eval'"
+    "extension_pages": "object-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:"
+  },
+  "cross_origin_opener_policy": {
+    "value": "same-origin"
+  },
+  "cross_origin_embedder_policy": {
+    "value": "require-corp"
   }
 }

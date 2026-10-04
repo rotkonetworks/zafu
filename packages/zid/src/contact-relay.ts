@@ -115,8 +115,10 @@ export const PRESENCE_PAD_TO = 64;
 
 /**
  * Global presence-blob size in bytes. MUST equal the sealed size of a
- * PresenceRecord from presence-blob.ts: version(1) + nonce(12) + record(35) +
- * GCM tag(16) = 64. Uniform across clients or the write size leaks.
+ * PresenceRecord from presence-blob.ts: nonce(12) + [version(1) + record(35)
+ * under the AEAD] + GCM tag(16) = 64. Uniform across clients or the write size
+ * leaks. No byte of a real blob is constant (the version is inside the AEAD),
+ * so a real blob, a dummy and a withdraw blob all look like 64 random bytes.
  */
 export const PRESENCE_BLOB_BYTES = 64;
 

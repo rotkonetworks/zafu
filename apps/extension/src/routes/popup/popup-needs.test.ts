@@ -12,12 +12,11 @@ describe('locked screen guard rules', () => {
     }
   });
   it('guards wallet screens', () => {
-    for (const p of ['/injective', '/send', '/receive', '/vote', '/settings/wallets']) {
+    for (const p of ['/send', '/receive', '/vote', '/settings/wallets']) {
       expect(handlesOwnLogin(p)).toBe(false);
     }
   });
   it('only returns to our own screens after unlock', () => {
-    expect(safeNext('/injective')).toBe('/injective');
     expect(safeNext('/receive?mode=shield')).toBe('/receive?mode=shield');
     expect(safeNext('https://evil.example')).toBeNull();
     expect(safeNext('//evil.example')).toBeNull();

@@ -2,10 +2,10 @@
  * Private-contact-discovery consent popup.
  *
  * Opened by external apps via `zafu_request_contact_discovery`: the app asked
- * the USER to turn private contact discovery on. This popup is the user's
- * decision, and it must be an INFORMED one - so it states plainly that
- * accepting turns the feature on for EVERY app, not just the caller, and it
- * shows the relay the wallet will actually use (the app cannot choose it).
+ * the USER to show it which friends are here (ReqDiscover.dc.html). The
+ * answer is for THIS site only, and it says the one cost straight: friends
+ * here will see you are online. The relay it uses is the wallet's own (the
+ * app cannot choose it), listed under "everything zafu talks to".
  *
  * On approve/deny it reports the decision to the service worker over the
  * internal callback `zafu_contact_discovery_approval_result`; closing the
@@ -16,8 +16,8 @@ import { useSearchParams } from 'react-router-dom';
 import { ApprovalScreen } from './approval-screen';
 import { ApproveDeny } from './approve-deny';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
-import { LinkGradientIcon } from '../../../icons/link-gradient';
-import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../../../config/contact-discovery-relay';
+import { OriginIcon, hostnameOf } from '../../../shared/components/origin-icon';
+import { Mark } from '@repo/ui/components/ui/mark';
 
 // `new URL()` throws on a malformed string; the `app` query param is only
 // truthiness-checked upstream, so parse defensively and fall back to the raw text.
@@ -35,71 +35,59 @@ export const ContactDiscoveryApproval = () => {
   const [params] = useSearchParams();
   const origin = params.get('app') || '';
   const requestId = params.get('requestId') || '';
-  const favIconUrl = params.get('favIconUrl') || '';
-  const title = params.get('title') || '';
-  // The endpoint the wallet will ACTUALLY use (the worker resolved a configured
-  // endpoint, else the built-in default). Falling back to the constant keeps the
-  // popup honest if the param is ever missing - never show a relay we're not sure of.
-  const relay = params.get('relay') || DEFAULT_CONTACT_DISCOVERY_RELAY;
+  // the site's own host, never its page title: a title is whatever the page says
+  const host = origin ? hostnameOf(origin) : 'this site';
 
-  const respond = (approved: boolean) => {
-    void chrome.runtime.sendMessage({
-      type: 'zafu_contact_discovery_approval_result',
-      requestId,
-      result: { approved },
-    });
+  const respond = async (approved: boolean) => {
+    // Await before closing (see passkey.tsx): window.close() tears this popup
+    // down synchronously and can race the send, dropping it unanswered.
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'zafu_contact_discovery_approval_result',
+        requestId,
+        result: { approved },
+      });
+    } catch {
+      // service worker unreachable or reloaded - closing is all we can do
+    }
     window.close();
   };
 
   return (
     <ApprovalScreen
       header={
-        <header className='flex h-[70px] flex-col items-center justify-center border-b border-border-soft'>
-          <span className='kicker mb-1'>app request</span>
-          <h1 className='text-title text-fg-high lowercase tracking-[-0.01em]'>
-            private contact discovery
-          </h1>
-        </header>
-      }
-      footer={<ApproveDeny approve={() => respond(true)} deny={() => respond(false)} />}
-    >
-      <div className='mx-auto size-20'>
-        <LinkGradientIcon />
-      </div>
-      <div className='w-full px-[30px]'>
-        <div className='flex flex-col gap-3'>
-          {/* requesting app */}
-          <div className='flex items-center gap-2 rounded-lg bg-canvas p-3'>
-            {!!favIconUrl && <img src={favIconUrl} alt='' className='size-8 rounded-full' />}
-            <div className='flex flex-col overflow-hidden'>
-              {title && <span className='text-sm truncate'>{title}</span>}
+        <header className='flex flex-col items-center justify-center gap-2 border-b border-border-soft px-4 py-4'>
+          <div className='flex w-full items-center gap-2'>
+            {!!origin && <OriginIcon origin={origin} size={32} />}
+            <div className='flex min-w-0 flex-col'>
+              <span className='truncate text-sm text-fg-high'>{host}</span>
               {origin && (
-                <span className='text-xs text-fg-muted truncate'>
-                  <SafeOriginURL origin={origin} />
+                <span className='truncate text-xs text-fg-muted'>
+                  <SafeOriginURL origin={origin} /> · find friends
                 </span>
               )}
             </div>
           </div>
-
-          {/* what it means */}
-          <p className='text-sm text-fg-muted'>
-            an app learns only which contacts are present in that app, under app-scoped handles -
-            never your contact list, and unlinkable across apps.
-          </p>
-
-          {/* the wallet-wide consequence, stated plainly */}
-          <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3 text-xs text-yellow-400'>
-            turns on private contact discovery for every app, not just this one.
-          </div>
-
-          {/* the relay the wallet will use - the app cannot choose it */}
-          <div className='rounded-lg border border-border-soft bg-canvas p-3'>
-            <p className='kicker mb-1'>relay</p>
-            <p className='break-all font-mono text-xs text-fg-high'>{relay}</p>
-            <p className='mt-1 text-xs text-fg-muted'>
-              your wallet chooses the relay; the app cannot point it elsewhere.
-            </p>
-          </div>
+          <Mark variant='seal' size={40} />
+          <h1 className='text-title text-fg-high lowercase tracking-[-0.01em]'>
+            show {host} which friends are here?
+          </h1>
+        </header>
+      }
+      footer={
+        <ApproveDeny
+          approve={() => respond(true)}
+          deny={() => respond(false)}
+          approveLabel='show friends'
+        />
+      }
+    >
+      <div className='w-full px-[30px]'>
+        <div className='flex flex-col gap-2 text-xs text-fg-muted'>
+          <p>only friends who also use {host}</p>
+          <p>never your whole contact list</p>
+          <p>the relay can&apos;t tell who you looked for</p>
+          <p>friends here will see you are online</p>
         </div>
       </div>
     </ApprovalScreen>

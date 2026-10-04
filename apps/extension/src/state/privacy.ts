@@ -6,8 +6,7 @@
  *
  * privacy tiers:
  * 1. shielded (penumbra, zcash) - trial decryption, rpc never learns addresses
- * 2. light client (polkadot) - p2p network, no central rpc, distributed peers
- * 3. transparent (cosmos) - queries specific addresses to centralized rpc
+ * 2. transparent (cosmos) - queries specific addresses to centralized rpc
  */
 
 import type { AllSlices, SliceCreator } from '.';
@@ -36,13 +35,12 @@ export const SHIELDED_NETWORKS: NetworkType[] = ['penumbra', 'zcash'];
 /**
  * networks using light client (p2p, no centralized rpc)
  *
- * uses smoldot embedded light client for trustless verification.
  * connects to p2p network directly, verifies headers cryptographically.
  * queries are distributed across peers - harder to correlate than single rpc.
  *
- * - polkadot: smoldot light client, no rpc option
+ * none currently - zafu ships no light-client network today.
  */
-export const LIGHT_CLIENT_NETWORKS: NetworkType[] = ['polkadot'];
+export const LIGHT_CLIENT_NETWORKS: NetworkType[] = [];
 
 /**
  * networks where queries leak address activity to centralized rpc
@@ -66,7 +64,7 @@ export interface ProxyConfig {
 export interface PrivacySettings {
   /**
    * enable balance fetching for transparent networks
-   * when false (default): no balance queries for polkadot/cosmos
+   * when false (default): no balance queries for cosmos
    * when true: fetches balances (leaks address activity to rpc nodes)
    *
    * note: penumbra and zcash always safe (trial decryption, no leak)
@@ -81,13 +79,31 @@ export interface PrivacySettings {
   enableTransactionHistory: boolean;
 
   /**
-   * enable background sync for transparent networks
-   * when false (default): no background network activity
-   * when true: periodically syncs state with network
-   *
-   * note: penumbra and zcash sync always safe (shielded)
+   * the one-time "keep a history on this computer?" sheet, shown on the first
+   * payment, has been answered. read as `=== true` so legacy stored state
+   * (no field) still gets asked.
    */
-  enableBackgroundSync: boolean;
+  historyAsked: boolean;
+
+  /**
+   * keep penumbra syncing after the last zafu window closes. false (default)
+   * pauses penumbra with the last window, as zcash always does.
+   */
+  keepPenumbraSyncing: boolean;
+
+  /**
+   * transparent (cosmos) networks may be synced by the background alarm.
+   * false (default). Penumbra's own switch is `keepPenumbraSyncing`; the two
+   * were one flag before storage v5.
+   */
+  transparentBackgroundSync: boolean;
+
+  /**
+   * check the transparent deposit addresses on their own each time the
+   * penumbra balance opens, once the user agreed to the first check.
+   * false (default): only a tap on a transparent line asks.
+   */
+  autoCheckTransparent: boolean;
 
   /**
    * enable price fetching (affects all networks)
@@ -114,6 +130,14 @@ export interface PrivacySettings {
    * Links pasted or scanned inside zafu are always understood.
    */
   openZcashLinks: boolean;
+
+  /**
+   * `zafu:` links clicked on websites (a swap, a screen, a group code).
+   * when true (default): zafu opens them on the screen they fill, for review.
+   * when false: zafu leaves the click alone. Pasted or scanned links are
+   * always understood.
+   */
+  openZafuLinks: boolean;
 
   /**
    * SOCKS5 proxy for all extension network traffic.
@@ -192,10 +216,14 @@ export interface PrivacySlice {
 export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   enableTransparentBalances: false,
   enableTransactionHistory: false,
-  enableBackgroundSync: false,
+  historyAsked: false,
+  keepPenumbraSyncing: false,
+  transparentBackgroundSync: false,
+  autoCheckTransparent: false,
   enablePriceFetching: false,
   enableExplorerLinks: false,
   openZcashLinks: true,
+  openZafuLinks: true,
   proxy: { enabled: false, host: '', port: 1080 },
   enableIdentity: true,
   hideBalances: false,
@@ -277,7 +305,7 @@ export const createPrivacySlice =
       return (
         settings.enableTransparentBalances ||
         settings.enableTransactionHistory ||
-        settings.enableBackgroundSync
+        settings.transparentBackgroundSync
       );
     },
   });
@@ -293,7 +321,6 @@ export const privacySettingsSelector = (state: AllSlices) => state.privacy.setti
 /**
  * check if we can fetch balances for a given network
  * - shielded (penumbra, zcash): always allowed (trial decryption)
- * - light client (polkadot): always allowed (p2p, no central rpc)
  * - transparent (cosmos): only if enableTransparentBalances is true
  */
 export const canFetchBalancesForNetwork = (state: AllSlices, network: NetworkType) => {
@@ -313,20 +340,14 @@ export const canFetchHistory = (state: AllSlices) =>
   state.privacy.settings.enableTransactionHistory;
 
 /**
- * check if we can background sync for a given network
- * - shielded (penumbra, zcash): always allowed (trial decryption)
- * - light client (polkadot): always allowed (p2p, no central rpc)
- * - transparent (cosmos): only if enableBackgroundSync is true
- */
-/**
  * Pure form of the per-network background-sync rule - usable outside React
  * (e.g. the service worker, which only has chrome.storage, not the Zustand
  * store). Shielded and light-client networks are always allowed; transparent
- * networks honor the `enableBackgroundSync` flag.
+ * networks honor the `transparentBackgroundSync` flag.
  */
 export const networkAllowsBackgroundSync = (
   network: string,
-  enableBackgroundSync: boolean,
+  transparentBackgroundSync: boolean,
 ): boolean => {
   if ((SHIELDED_NETWORKS as readonly string[]).includes(network)) {
     return true; // trial decryption, rpc never learns addresses
@@ -334,11 +355,11 @@ export const networkAllowsBackgroundSync = (
   if ((LIGHT_CLIENT_NETWORKS as readonly string[]).includes(network)) {
     return true; // p2p network, no central rpc to leak to
   }
-  return enableBackgroundSync;
+  return transparentBackgroundSync;
 };
 
 export const canBackgroundSyncForNetwork = (state: AllSlices, network: NetworkType) =>
-  networkAllowsBackgroundSync(network, state.privacy.settings.enableBackgroundSync);
+  networkAllowsBackgroundSync(network, state.privacy.settings.transparentBackgroundSync);
 
 export const canFetchPrices = (state: AllSlices) => state.privacy.settings.enablePriceFetching;
 

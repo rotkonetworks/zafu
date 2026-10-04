@@ -1,0 +1,178 @@
+{
+  "success": true,
+  "message": "Quote fetched successfully",
+  "responseObject": {
+    "fiat": {
+      "currencyCode": "0xc4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e",
+      "currencyName": "USD",
+      "currencySymbol": "$",
+      "countryCode": "us"
+    },
+    "token": {
+      "token": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+      "decimals": 6,
+      "name": "USD Coin",
+      "symbol": "USDC",
+      "chainId": 8453
+    },
+    "quotes": [
+      {
+        "fiatAmount": "100000000",
+        "fiatAmountFormatted": "100.00 USD",
+        "tokenAmount": "97107843",
+        "tokenAmountFormatted": "97.10 USDC",
+        "signalIntentAmount": "98039215",
+        "signalIntentAmountFormatted": "98.03 USDC",
+        "zkp2pFeeAmount": "931372",
+        "zkp2pFeeAmountFormatted": "0.94 USDC",
+        "serviceFeeBps": 95,
+        "takerReferralFeeBps": 0,
+        "takerReferralFeeAmount": "0",
+        "takerReferralFeeAmountFormatted": "0.00 USDC",
+        "managerFeeAmount": "0",
+        "managerFeeAmountFormatted": "0.00 USDC",
+        "totalFeeAmount": "931372",
+        "totalFeeAmountFormatted": "0.94 USDC",
+        "paymentMethod": "revolut",
+        "payeeAddress": "0x643298A57D27538b1Ae12F7B7a619B639362512C",
+        "conversionRate": "1020000000000000000",
+        "sellerAutomatedReleaseAvailable": false,
+        "depositSuccessRateBps": 6708,
+        "depositIntentStats": {
+          "totalIntents": 79,
+          "signaledIntents": 79,
+          "fulfilledIntents": 53,
+          "prunedIntents": 26
+        },
+        "whitelistEnabled": false,
+        "allowedGroupIds": [],
+        "disputeProtectionOptedOut": false,
+        "disputeProtectionRequiresStake": false,
+        "intent": {
+          "depositId": 5715,
+          "processorName": "revolut",
+          "amount": "98039215",
+          "toAddress": "0x3b5f8a6e1c2d4f7a9b0c1d2e3f4a5b6c7d8e9f01",
+          "payeeDetails": "0xef99b5f2ae91c0e09db45141c1c405f81cd934db46105b62da87ad65d714bfc0",
+          "processorIntentData": {},
+          "fiatCurrencyCode": "0xc4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e",
+          "chainId": "8453",
+          "escrowAddress": "0x777777779d229cdf3110e9de47943791c26300ef",
+          "managerFee": "0",
+          "managerFeeFormatted": "0%"
+        },
+        "maker": {
+          "offchainId": "mgz0"
+        }
+      },
+      {
+        "fiatAmount": "100000000",
+        "fiatAmountFormatted": "100.00 USD",
+        "tokenAmount": "97107843",
+        "tokenAmountFormatted": "97.10 USDC",
+        "signalIntentAmount": "98039215",
+        "signalIntentAmountFormatted": "98.03 USDC",
+        "zkp2pFeeAmount": "931372",
+        "zkp2pFeeAmountFormatted": "0.94 USDC",
+        "serviceFeeBps": 95,
+        "takerReferralFeeBps": 0,
+        "takerReferralFeeAmount": "0",
+        "takerReferralFeeAmountFormatted": "0.00 USDC",
+        "managerFeeAmount": "0",
+        "managerFeeAmountFormatted": "0.00 USDC",
+        "totalFeeAmount": "931372",
+        "totalFeeAmountFormatted": "0.94 USDC",
+        "paymentMethod": "revolut",
+        "payeeAddress": "0x74EC382Ef683546308E446285f6fe5535bbfe346",
+        "conversionRate": "1020000000000000000",
+        "sellerAutomatedReleaseAvailable": false,
+        "depositSuccessRateBps": 7321,
+        "depositIntentStats": {
+          "totalIntents": 62,
+          "signaledIntents": 62,
+          "fulfilledIntents": 41,
+          "prunedIntents": 15
+        },
+        "whitelistEnabled": false,
+        "allowedGroupIds": [],
+        "disputeProtectionOptedOut": false,
+        "disputeProtectionRequiresStake": false,
+        "intent": {
+          "depositId": 5953,
+          "processorName": "revolut",
+          "amount": "98039215",
+          "toAddress": "0x3b5f8a6e1c2d4f7a9b0c1d2e3f4a5b6c7d8e9f01",
+          "payeeDetails": "0xb89672a2b2ebf8346e85103dac957e5f63d9f11345c0f44c5ca715b57be8ca1c",
+          "processorIntentData": {},
+          "fiatCurrencyCode": "0xc4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e",
+          "chainId": "8453",
+          "escrowAddress": "0x777777779d229cdf3110e9de47943791c26300ef",
+          "managerFee": "0",
+          "managerFeeFormatted": "0%"
+        },
+        "maker": {
+          "offchainId": "buymoretomorrow"
+        }
+      },
+      {
+        "fiatAmount": "100000000",
+        "fiatAmountFormatted": "100.00 USD",
+        "tokenAmount": "96165048",
+        "tokenAmountFormatted": "96.16 USDC",
+        "signalIntentAmount": "97087378",
+        "signalIntentAmountFormatted": "97.08 USDC",
+        "zkp2pFeeAmount": "922330",
+        "zkp2pFeeAmountFormatted": "0.93 USDC",
+        "serviceFeeBps": 95,
+        "takerReferralFeeBps": 0,
+        "takerReferralFeeAmount": "0",
+        "takerReferralFeeAmountFormatted": "0.00 USDC",
+        "managerFeeAmount": "0",
+        "managerFeeAmountFormatted": "0.00 USDC",
+        "totalFeeAmount": "922330",
+        "totalFeeAmountFormatted": "0.93 USDC",
+        "paymentMethod": "revolut",
+        "payeeAddress": "0xf27020ec3Cb66197E9c9b5D159890D92E1EAb45F",
+        "conversionRate": "1030000000000000000",
+        "sellerAutomatedReleaseAvailable": false,
+        "depositSuccessRateBps": 5600,
+        "depositIntentStats": {
+          "totalIntents": 25,
+          "signaledIntents": 25,
+          "fulfilledIntents": 14,
+          "prunedIntents": 11
+        },
+        "whitelistEnabled": false,
+        "allowedGroupIds": [],
+        "disputeProtectionOptedOut": false,
+        "disputeProtectionRequiresStake": false,
+        "intent": {
+          "depositId": 5138,
+          "processorName": "revolut",
+          "amount": "97087378",
+          "toAddress": "0x3b5f8a6e1c2d4f7a9b0c1d2e3f4a5b6c7d8e9f01",
+          "payeeDetails": "0xc897c1802328d79f5705e19fef95b24a450f159b403ec53c1eed97f5319e4305",
+          "processorIntentData": {},
+          "fiatCurrencyCode": "0xc4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e",
+          "chainId": "8453",
+          "escrowAddress": "0x777777779d229cdf3110e9de47943791c26300ef",
+          "managerFee": "0",
+          "managerFeeFormatted": "0%"
+        },
+        "maker": {
+          "offchainId": "rickzhrk"
+        }
+      }
+    ],
+    "fees": {
+      "zkp2pFee": "9500000000000000",
+      "zkp2pFeeFormatted": "0.95%",
+      "swapFee": "0.00",
+      "swapFeeFormatted": "$0.00"
+    },
+    "quoteExpiresAt": "2026-10-03T17:41:25.730Z",
+    "orchestratorAddress": "0x014025fde093f8701d86e9f38e2c3a9b779cb5c7",
+    "mode": "eligible"
+  },
+  "statusCode": 200
+}

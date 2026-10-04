@@ -1,5 +1,5 @@
 /**
- * rendezvous-client — human room codes in front of frostd sessions.
+ * rendezvous-client - human room codes in front of frostd sessions.
  *
  * zidecar's frostd listener also serves /rendezvous/*: a discovery room,
  * addressed by SHA-256 of a human code, where participants drop their relay
@@ -9,13 +9,22 @@
  * approval puts it in the frostd session, and frostd admits nobody else.
  *
  * The code is a number + two bip39 words (~32 bits) against the old three-of-256
- * (~24 bits), and the server never sees it — only its hash.
+ * (~24 bits). The server is sent only SHA-256 of it, but that is no secret: a
+ * space of ~2^32 codes inverts in seconds, so treat the code as known to the
+ * relay. That costs little - the relay already serves the room and sees what
+ * is posted in it, and joining still needs the coordinator's approval and the
+ * relay-key whitelist. The id is deliberately an unsalted, unstretched hash:
+ * zcli and pokerbot derive the same id (bin/zcli/src/rendezvous.rs,
+ * bin/pokerbot/src/rendezvous.rs), and a public salt would not slow the
+ * enumeration anyway; hiding the code from the relay needs a stretched hash
+ * changed in all three together.
  *
  * Stock frostd relays don't have these routes; `hasRendezvous` probes so the
  * UI can fall back to the manual key-exchange + session-id flow.
  */
 
 import { wordlists } from 'bip39';
+import { isEgressBlockedCause } from '../../net/egress';
 
 export interface RendezvousEntry {
   pubkey: string;
@@ -41,13 +50,22 @@ export function generateRoomCode(): string {
   if (WORDS.length !== 2048) {
     throw new Error('bip39 EN wordlist unavailable');
   }
-  const rnd = new Uint16Array(3);
-  crypto.getRandomValues(rnd);
-  const number = (rnd[0]! % 999) + 1; // 1..999
-  const w1 = WORDS[rnd[1]! % 2048]!;
-  const w2 = WORDS[rnd[2]! % 2048]!;
+  const number = uniform(999) + 1; // 1..999
+  const w1 = WORDS[uniform(2048)]!;
+  const w2 = WORDS[uniform(2048)]!;
   return `${number}-${w1}-${w2}`;
 }
+
+/** uniform integer in [0, n) by rejection sampling: `x % n` alone favours the low values */
+export const uniform = (n: number): number => {
+  const limit = Math.floor(0x1_0000_0000 / n) * n;
+  for (;;) {
+    const [x] = crypto.getRandomValues(new Uint32Array(1));
+    if (x! < limit) {
+      return x! % n;
+    }
+  }
+};
 
 /**
  * Room id = SHA-256 of the normalized code, hex. Normalization forgives the
@@ -76,8 +94,10 @@ export async function hasRendezvous(relayUrl: string): Promise<boolean> {
   try {
     const res = await post(relayUrl, 'poll', { room: '0'.repeat(64) });
     return res.ok;
-  } catch {
-    return false;
+  } catch (e) {
+    // the relay is simply not allowed yet: zafu's relays serve rendezvous, so
+    // offer the room code and ask at "create" / "join", where intent is explicit
+    return isEgressBlockedCause(e);
   }
 }
 
@@ -112,7 +132,7 @@ export async function pollRoom(relayUrl: string, roomId: string): Promise<RoomVi
 /**
  * Signing-flow convenience: open a fresh room, announce `sessionId` into it,
  * and return the code to show the co-signers. Null when the relay has no
- * rendezvous or the offer fails for any reason — the caller falls back to
+ * rendezvous or the offer fails for any reason - the caller falls back to
  * showing the uuid, which always works.
  *
  * No key collection here: a signing group's relay keys are already on file,

@@ -5,16 +5,6 @@
  * uses raw protobuf encoding (no grpc-web library needed)
  */
 
-export interface SyncStatus {
-  currentHeight: number;
-  currentEpoch: number;
-  blocksInEpoch: number;
-  completeEpochs: number;
-  gigaproofStatus: number;
-  lastGigaproofHeight: number;
-  blocksUntilReady: number;
-}
-
 export interface CompactBlock {
   height: number;
   hash: Uint8Array;
@@ -49,22 +39,6 @@ export interface Utxo {
   script: Uint8Array;
   valueZat: bigint;
   height: number;
-}
-
-export interface CommitmentProofData {
-  cmx: Uint8Array;
-  treeRoot: Uint8Array;
-  pathProofRaw: Uint8Array;
-  valueHash: Uint8Array;
-  exists: boolean;
-}
-
-export interface NullifierProofData {
-  nullifier: Uint8Array;
-  nullifierRoot: Uint8Array;
-  isSpent: boolean;
-  pathProofRaw: Uint8Array;
-  valueHash: Uint8Array;
 }
 
 export interface ProRing {
@@ -119,7 +93,8 @@ export class ZidecarClient {
    * `consensusBranchId` is field 6 (hex string, no 0x prefix); the turnstile
    * builder fails closed unless it is the real NU6.3 branch id (0x37a5165b).
    */
-  async getLightdInfo(): Promise<{
+  async getLightdInfo({ bare = false }: { bare?: boolean } = {}): Promise<{
+    vendor: string;
     consensusBranchId: string;
     chainName: string;
     blockHeight: number;
@@ -129,6 +104,7 @@ export class ZidecarClient {
       'cash.z.wallet.sdk.rpc.CompactTxStreamer',
       'GetLightdInfo',
       new Uint8Array(0),
+      bare,
     );
     return this.parseLightdInfo(resp);
   }
@@ -137,12 +113,6 @@ export class ZidecarClient {
   async getProRing(): Promise<ProRing> {
     const resp = await this.grpcCall('GetProRing', new Uint8Array(0));
     return this.parseProRing(resp);
-  }
-
-  /** get sync status (chain height, epoch info, gigaproof status) */
-  async getSyncStatus(): Promise<SyncStatus> {
-    const resp = await this.grpcCall('GetSyncStatus', new Uint8Array(0));
-    return this.parseSyncStatus(resp);
   }
 
   /** get compact blocks for scanning */
@@ -158,7 +128,7 @@ export class ZidecarClient {
       parts.push(...this.varint(endHeight));
     }
 
-    // streaming RPC — need raw response with gRPC frames intact
+    // streaming RPC - need raw response with gRPC frames intact
     const resp = await this.grpcCallStream('GetCompactBlocks', new Uint8Array(parts));
     return this.parseBlockStream(resp);
   }
@@ -232,37 +202,6 @@ export class ZidecarClient {
     return { txid, errorCode, errorMessage };
   }
 
-  /** get header proof (ligerito epoch + tip) */
-  async getHeaderProof(): Promise<{
-    proofBytes: Uint8Array;
-    fromHeight: number;
-    toHeight: number;
-  }> {
-    // ProofRequest: field 1 = from_height (0), field 2 = to_height (0 = current tip)
-    const resp = await this.grpcCall('GetHeaderProof', new Uint8Array(0));
-    return this.parseHeaderProof(resp);
-  }
-
-  /** get NOMT commitment proofs for a batch of cmxs */
-  async getCommitmentProofs(
-    cmxs: Uint8Array[],
-    positions: number[],
-    height: number,
-  ): Promise<{ proofs: CommitmentProofData[]; treeRoot: Uint8Array }> {
-    const parts: number[] = [];
-    for (const cmx of cmxs) {
-      parts.push(0x0a, ...this.lengthDelimited(cmx)); // field 1 repeated bytes
-    }
-    for (const pos of positions) {
-      parts.push(0x10, ...this.varint(pos)); // field 2 repeated uint64
-    }
-    if (height > 0) {
-      parts.push(0x18, ...this.varint(height)); // field 3 uint32
-    }
-    const resp = await this.grpcCall('GetCommitmentProofs', new Uint8Array(parts));
-    return this.parseCommitmentProofsResponse(resp);
-  }
-
   /** request an ed25519 anchor attestation from zidecar's verifier (SignAnchor).
    *  signs SHA256("zcash-anchor-v1" || vk || anchor || height_LE || mainnet).
    *  available=false when the server has no signing key configured. */
@@ -329,29 +268,6 @@ export class ZidecarClient {
     return { available, signatureHex, verifierKeyHex };
   }
 
-  /** get NOMT nullifier proofs for a batch of nullifiers */
-  async getNullifierProofs(
-    nullifiers: Uint8Array[],
-    height: number,
-  ): Promise<{
-    proofs: NullifierProofData[];
-    nullifierRoot: Uint8Array;
-    /** highest block the sapling/orchard index covers; 0 when unknown */
-    syncedHeight: number;
-    /** highest block the ironwood index covers; 0 when unknown */
-    ironwoodSyncedHeight: number;
-  }> {
-    const parts: number[] = [];
-    for (const nf of nullifiers) {
-      parts.push(0x0a, ...this.lengthDelimited(nf)); // field 1 repeated bytes
-    }
-    if (height > 0) {
-      parts.push(0x10, ...this.varint(height)); // field 2 uint32
-    }
-    const resp = await this.grpcCall('GetNullifierProofs', new Uint8Array(parts));
-    return this.parseNullifierProofsResponse(resp);
-  }
-
   /** build binary format for parallel scanning */
   static buildBinaryActions(actions: CompactAction[]): Uint8Array {
     const actionSize = 32 + 32 + 32 + 52; // nullifier + cmx + epk + ciphertext
@@ -398,6 +314,8 @@ export class ZidecarClient {
     service: string,
     method: string,
     msg: Uint8Array,
+    /** only the grpc-web headers: for a node not yet known to be a zidecar */
+    bare = false,
   ): Promise<Uint8Array> {
     const path = `${this.serverUrl}/${service}/${method}`;
 
@@ -414,7 +332,7 @@ export class ZidecarClient {
       'Content-Type': 'application/grpc-web+proto',
       Accept: 'application/grpc-web+proto',
       'x-grpc-web': '1',
-      ...(ZidecarClient.extraHeaders?.() ?? {}),
+      ...(bare ? {} : (ZidecarClient.extraHeaders?.() ?? {})),
     };
 
     const resp = await fetch(path, { method: 'POST', headers, body });
@@ -450,7 +368,7 @@ export class ZidecarClient {
         const msg = messageMatch?.[1]?.trim();
         throw new Error(`gRPC ${method}: ${decodeURIComponent(msg ?? `status ${status}`)}`);
       }
-      // status 0 but no data frame — treat as empty success
+      // status 0 but no data frame - treat as empty success
       return new Uint8Array(0);
     }
 
@@ -459,7 +377,7 @@ export class ZidecarClient {
     return buf.subarray(5, 5 + len);
   }
 
-  /** raw gRPC-web call for server-streaming RPCs — returns full response with frame headers */
+  /** raw gRPC-web call for server-streaming RPCs - returns full response with frame headers */
   private async grpcCallStream(
     method: string,
     msg: Uint8Array,
@@ -560,58 +478,6 @@ export class ZidecarClient {
     return { height, hash };
   }
 
-  private parseSyncStatus(buf: Uint8Array): SyncStatus {
-    const r: SyncStatus = {
-      currentHeight: 0,
-      currentEpoch: 0,
-      blocksInEpoch: 0,
-      completeEpochs: 0,
-      gigaproofStatus: 0,
-      lastGigaproofHeight: 0,
-      blocksUntilReady: 0,
-    };
-    let pos = 0;
-
-    while (pos < buf.length) {
-      const tag = buf[pos++]!;
-      const field = tag >> 3;
-      if ((tag & 0x7) !== 0) {
-        break;
-      }
-
-      let v = 0,
-        s = 0;
-      while (pos < buf.length) {
-        const b = buf[pos++]!;
-        v |= (b & 0x7f) << s;
-        if (!(b & 0x80)) {
-          break;
-        }
-        s += 7;
-      }
-
-      if (field === 1) {
-        r.currentHeight = v;
-      } else if (field === 2) {
-        r.currentEpoch = v;
-      } else if (field === 3) {
-        r.blocksInEpoch = v;
-      } else if (field === 4) {
-        r.completeEpochs = v;
-      } else if (field === 5) {
-        r.gigaproofStatus = v;
-      } else if (field === 6) {
-        // proto: `uint32 blocks_until_ready = 6;` (0 when the proof is ready)
-        r.blocksUntilReady = v;
-      } else if (field === 7) {
-        // proto: `uint32 last_epoch_proof_height = 7;`
-        r.lastGigaproofHeight = v;
-      }
-    }
-
-    return r;
-  }
-
   private parseBlockStream(buf: Uint8Array): CompactBlock[] {
     const blocks: CompactBlock[] = [];
     let pos = 0;
@@ -626,7 +492,7 @@ export class ZidecarClient {
 
       // `<<24` yields a SIGNED int32: a declared length >= 2^31 parses
       // negative, the bounds check below passes, subarray clamps to empty and
-      // `pos += len` walks BACKWARDS — an unbounded loop that pushes an object
+      // `pos += len` walks BACKWARDS - an unbounded loop that pushes an object
       // every 5 bytes until the worker OOMs. A 9-byte hostile response was
       // enough. Use unsigned arithmetic and reject anything not a sane length.
       const len =
@@ -694,7 +560,7 @@ export class ZidecarClient {
         } else if (field === 4) {
           block.actionsRoot = buf.slice(pos, pos + len);
         } else if (field === 5) {
-          // ironwood_actions — same wire shape as orchard actions. Without
+          // ironwood_actions - same wire shape as orchard actions. Without
           // this the wallet downloads its own ironwood notes and discards
           // them, showing zero after a turnstile migration.
           (block.ironwoodActions ??= []).push(this.parseAction(data));
@@ -1072,7 +938,7 @@ export class ZidecarClient {
       const wire = tag & 0x7;
 
       if (wire === 0) {
-        // varint — need to handle uint64 for valueZat
+        // varint - need to handle uint64 for valueZat
         let v = 0n;
         let s = 0n;
         while (pos < buf.length) {
@@ -1195,7 +1061,7 @@ export class ZidecarClient {
           orchardTree = decoder.decode(data);
         } else if (field === 6) {
           // zidecar.v1 TreeState.ironwood_tree = 6. This read field 7, which
-          // is the LIGHTWALLETD TreeState number — so against zidecar it never
+          // is the LIGHTWALLETD TreeState number - so against zidecar it never
           // matched and every ironwood send failed with "server has no
           // ironwood tree state", despite the server returning it correctly.
           ironwoodTree = decoder.decode(data);
@@ -1211,324 +1077,6 @@ export class ZidecarClient {
     return ironwoodTree
       ? { height, orchardTree, ironwoodTree, time }
       : { height, orchardTree, time };
-  }
-
-  private parseHeaderProof(buf: Uint8Array): {
-    proofBytes: Uint8Array;
-    fromHeight: number;
-    toHeight: number;
-  } {
-    let proofBytes = new Uint8Array(0);
-    let fromHeight = 0;
-    let toHeight = 0;
-    let pos = 0;
-
-    while (pos < buf.length) {
-      const tag = buf[pos++]!;
-      const field = tag >> 3;
-      const wire = tag & 0x7;
-
-      if (wire === 0) {
-        let v = 0,
-          s = 0;
-        while (pos < buf.length) {
-          const b = buf[pos++]!;
-          v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (field === 2) {
-          fromHeight = v;
-        } else if (field === 3) {
-          toHeight = v;
-        }
-      } else if (wire === 2) {
-        // Unsigned + shift-bounded. `len |= (b & 0x7f) << s` overflows to a
-        // NEGATIVE int32 at s=28, after which `pos += len` walks backwards and
-        // the parser loops re-reading the same bytes forever. Multiply instead
-        // of shift, and refuse a varint longer than 5 bytes.
-        let len = 0,
-          s = 0,
-          lenBytes = 0;
-        while (pos < buf.length && lenBytes < 5) {
-          const b = buf[pos++]!;
-          len += (b & 0x7f) * Math.pow(2, s);
-          lenBytes++;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (!Number.isSafeInteger(len) || len < 0 || pos + len > buf.length) {
-          break;
-        }
-        if (field === 1) {
-          proofBytes = buf.slice(pos, pos + len);
-        }
-        pos += len;
-      } else {
-        break;
-      }
-    }
-
-    return { proofBytes, fromHeight, toHeight };
-  }
-
-  private parseCommitmentProof(buf: Uint8Array): CommitmentProofData {
-    const proof: CommitmentProofData = {
-      cmx: new Uint8Array(0),
-      treeRoot: new Uint8Array(0),
-      pathProofRaw: new Uint8Array(0),
-      valueHash: new Uint8Array(0),
-      exists: false,
-    };
-    let pos = 0;
-
-    while (pos < buf.length) {
-      const tag = buf[pos++]!;
-      const field = tag >> 3;
-      const wire = tag & 0x7;
-
-      if (wire === 0) {
-        let v = 0,
-          s = 0;
-        while (pos < buf.length) {
-          const b = buf[pos++]!;
-          v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (field === 7) {
-          proof.exists = v !== 0;
-        }
-      } else if (wire === 2) {
-        // Unsigned + shift-bounded. `len |= (b & 0x7f) << s` overflows to a
-        // NEGATIVE int32 at s=28, after which `pos += len` walks backwards and
-        // the parser loops re-reading the same bytes forever. Multiply instead
-        // of shift, and refuse a varint longer than 5 bytes.
-        let len = 0,
-          s = 0,
-          lenBytes = 0;
-        while (pos < buf.length && lenBytes < 5) {
-          const b = buf[pos++]!;
-          len += (b & 0x7f) * Math.pow(2, s);
-          lenBytes++;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (!Number.isSafeInteger(len) || len < 0 || pos + len > buf.length) {
-          break;
-        }
-        const data = buf.slice(pos, pos + len);
-        if (field === 1) {
-          proof.cmx = data;
-        } else if (field === 3) {
-          proof.treeRoot = data;
-        } else if (field === 8) {
-          proof.pathProofRaw = data;
-        } else if (field === 9) {
-          proof.valueHash = data;
-        }
-        pos += len;
-      } else {
-        break;
-      }
-    }
-
-    return proof;
-  }
-
-  private parseCommitmentProofsResponse(buf: Uint8Array): {
-    proofs: CommitmentProofData[];
-    treeRoot: Uint8Array;
-  } {
-    const proofs: CommitmentProofData[] = [];
-    let treeRoot = new Uint8Array(0);
-    let pos = 0;
-
-    while (pos < buf.length) {
-      const tag = buf[pos++]!;
-      const field = tag >> 3;
-      const wire = tag & 0x7;
-
-      if (wire === 2) {
-        // Unsigned + shift-bounded. `len |= (b & 0x7f) << s` overflows to a
-        // NEGATIVE int32 at s=28, after which `pos += len` walks backwards and
-        // the parser loops re-reading the same bytes forever. Multiply instead
-        // of shift, and refuse a varint longer than 5 bytes.
-        let len = 0,
-          s = 0,
-          lenBytes = 0;
-        while (pos < buf.length && lenBytes < 5) {
-          const b = buf[pos++]!;
-          len += (b & 0x7f) * Math.pow(2, s);
-          lenBytes++;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (!Number.isSafeInteger(len) || len < 0 || pos + len > buf.length) {
-          break;
-        }
-        const data = buf.subarray(pos, pos + len);
-        if (field === 1) {
-          proofs.push(this.parseCommitmentProof(data));
-        } else if (field === 2) {
-          treeRoot = buf.slice(pos, pos + len);
-        }
-        pos += len;
-      } else {
-        break;
-      }
-    }
-
-    return { proofs, treeRoot };
-  }
-
-  private parseNullifierProof(buf: Uint8Array): NullifierProofData {
-    const proof: NullifierProofData = {
-      nullifier: new Uint8Array(0),
-      nullifierRoot: new Uint8Array(0),
-      isSpent: false,
-      pathProofRaw: new Uint8Array(0),
-      valueHash: new Uint8Array(0),
-    };
-    let pos = 0;
-
-    while (pos < buf.length) {
-      const tag = buf[pos++]!;
-      const field = tag >> 3;
-      const wire = tag & 0x7;
-
-      if (wire === 0) {
-        let v = 0,
-          s = 0;
-        while (pos < buf.length) {
-          const b = buf[pos++]!;
-          v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (field === 6) {
-          proof.isSpent = v !== 0;
-        }
-      } else if (wire === 2) {
-        // Unsigned + shift-bounded. `len |= (b & 0x7f) << s` overflows to a
-        // NEGATIVE int32 at s=28, after which `pos += len` walks backwards and
-        // the parser loops re-reading the same bytes forever. Multiply instead
-        // of shift, and refuse a varint longer than 5 bytes.
-        let len = 0,
-          s = 0,
-          lenBytes = 0;
-        while (pos < buf.length && lenBytes < 5) {
-          const b = buf[pos++]!;
-          len += (b & 0x7f) * Math.pow(2, s);
-          lenBytes++;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (!Number.isSafeInteger(len) || len < 0 || pos + len > buf.length) {
-          break;
-        }
-        const data = buf.slice(pos, pos + len);
-        if (field === 1) {
-          proof.nullifier = data;
-        } else if (field === 2) {
-          proof.nullifierRoot = data;
-        } else if (field === 7) {
-          proof.pathProofRaw = data;
-        } else if (field === 8) {
-          proof.valueHash = data;
-        }
-        pos += len;
-      } else {
-        break;
-      }
-    }
-
-    return proof;
-  }
-
-  private parseNullifierProofsResponse(buf: Uint8Array): {
-    proofs: NullifierProofData[];
-    nullifierRoot: Uint8Array;
-    syncedHeight: number;
-    ironwoodSyncedHeight: number;
-  } {
-    const proofs: NullifierProofData[] = [];
-    let nullifierRoot = new Uint8Array(0);
-    let syncedHeight = 0;
-    let ironwoodSyncedHeight = 0;
-    let pos = 0;
-
-    while (pos < buf.length) {
-      const tag = buf[pos++]!;
-      const field = tag >> 3;
-      const wire = tag & 0x7;
-
-      if (wire === 0) {
-        // varint. This branch used to `break`, which meant any scalar field
-        // silently truncated the parse — the sync-height fields below sit
-        // after the length-delimited ones on the wire.
-        let v = 0,
-          s = 0;
-        while (pos < buf.length) {
-          const b = buf[pos++]!;
-          v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (field === 3) {
-          syncedHeight = v;
-        } else if (field === 4) {
-          ironwoodSyncedHeight = v;
-        }
-      } else if (wire === 2) {
-        // Unsigned + shift-bounded. `len |= (b & 0x7f) << s` overflows to a
-        // NEGATIVE int32 at s=28, after which `pos += len` walks backwards and
-        // the parser loops re-reading the same bytes forever. Multiply instead
-        // of shift, and refuse a varint longer than 5 bytes.
-        let len = 0,
-          s = 0,
-          lenBytes = 0;
-        while (pos < buf.length && lenBytes < 5) {
-          const b = buf[pos++]!;
-          len += (b & 0x7f) * Math.pow(2, s);
-          lenBytes++;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (!Number.isSafeInteger(len) || len < 0 || pos + len > buf.length) {
-          break;
-        }
-        const data = buf.subarray(pos, pos + len);
-        if (field === 1) {
-          proofs.push(this.parseNullifierProof(data));
-        } else if (field === 2) {
-          nullifierRoot = buf.slice(pos, pos + len);
-        }
-        pos += len;
-      } else {
-        break;
-      }
-    }
-
-    return { proofs, nullifierRoot, syncedHeight, ironwoodSyncedHeight };
   }
 
   private parseTxidList(buf: Uint8Array): Uint8Array[] {
@@ -1645,16 +1193,19 @@ export class ZidecarClient {
   }
 
   private parseLightdInfo(buf: Uint8Array): {
+    vendor: string;
     consensusBranchId: string;
     chainName: string;
     blockHeight: number;
     saplingActivationHeight: number;
   } {
     // LightdInfo (lightwalletd service.proto):
+    //   field 2:  string vendor
     //   field 4:  string chainName
     //   field 5:  uint64 saplingActivationHeight (varint)
     //   field 6:  string consensusBranchId (hex, no 0x)
     //   field 8:  uint64 blockHeight (varint)
+    let vendor = '';
     let consensusBranchId = '';
     let chainName = '';
     let blockHeight = 0;
@@ -1704,7 +1255,9 @@ export class ZidecarClient {
           break;
         }
         const data = buf.subarray(pos, pos + len);
-        if (field === 4) {
+        if (field === 2) {
+          vendor = decoder.decode(data);
+        } else if (field === 4) {
           chainName = decoder.decode(data);
         } else if (field === 6) {
           consensusBranchId = decoder.decode(data);
@@ -1715,7 +1268,7 @@ export class ZidecarClient {
       }
     }
 
-    return { consensusBranchId, chainName, blockHeight, saplingActivationHeight };
+    return { vendor, consensusBranchId, chainName, blockHeight, saplingActivationHeight };
   }
 
   private parseLicenseResponse(buf: Uint8Array): LicenseInfo {

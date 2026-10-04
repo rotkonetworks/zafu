@@ -1,152 +1,138 @@
 /**
- * Set-password - last user-input step before the wallet is sealed. Lives
- * inside OnboardingShell now, so this screen only renders the form +
- * primary action. The shell provides the rounded pane, brand rail and
- * stepper.
- *
- * For new users the password is the *only* thing standing between a
- * compromised local context and their seed phrase, so the copy is
- * deliberately honest - not "secure your wallet" boilerplate but the
- * actual concrete thing the password does.
+ * Set a password - Onb2Password board. The create path keeps it in memory and
+ * moves on to the phrase; every other path seals the wallet here.
  */
 
-import { FormEvent, useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
-import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
+import { FormEvent, useState } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
 import { cn } from '@repo/ui/lib/utils';
+import { Button } from '@repo/ui/components/ui/button';
+import { Input } from '@repo/ui/components/ui/input';
 import { usePageNav } from '../../../../utils/navigate';
-import { PasswordInput } from '../../../../shared/components/password-input';
-import { useFinalizeOnboarding } from './hooks';
 import { PagePath } from '../../paths';
+import { PENDING_ZCASH_BIRTHDAY_KEY } from '../constants';
+import { BIRTHDAY_PATH, originOf, passwordStrength, penumbraOnlyImport } from '../flow';
+import { useOnboarding } from '..';
+import { useFinalizeOnboarding } from './hooks';
+import { useStore } from '../../../../state';
 import { SEED_PHRASE_ORIGIN } from './types';
-import { getSeedPhraseOrigin } from './utils';
-import { PENDING_ZCASH_BIRTHDAY_KEY, PENDING_IMPORT_NETWORKS_KEY } from '../constants';
+
+const STRENGTH = [
+  ['', ''],
+  ['weak', 'bg-warning'],
+  ['fair', 'bg-zigner-gold'],
+  ['strong', 'bg-green'],
+  ['very strong', 'bg-green'],
+] as const;
 
 export const SetPassword = () => {
   const navigate = usePageNav();
-  const [password, setPassword] = useState('');
-  const [confirmation, setConfirmation] = useState('');
-  const { handleSubmit, error, loading } = useFinalizeOnboarding();
+  const origin = originOf(useLocation().pathname) ?? SEED_PHRASE_ORIGIN.IMPORTED;
+  const onboarding = useOnboarding();
+  // only the create path keeps a password to come back to
+  const kept = origin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED ? onboarding.password : '';
+  const [password, setPassword] = useState(kept);
+  const [again, setAgain] = useState(kept);
+  const { finalize, error, loading } = useFinalizeOnboarding();
+  const words = useStore(s => s.seedPhrase.import.phrase.length);
 
-  const location = useLocation();
-  const origin = getSeedPhraseOrigin(location);
+  // an import always carries a birthday from the step before; reached
+  // without one (a reload, a typed url), go back and ask for it. Read once:
+  // sealing the wallet clears it on the way out.
+  const birthdayAt = penumbraOnlyImport(origin, words)
+    ? undefined
+    : (BIRTHDAY_PATH as Partial<Record<string, PagePath>>)[origin];
+  const [needsBirthday] = useState(
+    () => !!birthdayAt && !sessionStorage.getItem(PENDING_ZCASH_BIRTHDAY_KEY),
+  );
+  if (needsBirthday && birthdayAt) {
+    return <Navigate to={birthdayAt} replace />;
+  }
+  // the viewing key lives in memory only; after a reload, ask for it again
+  if (origin === SEED_PHRASE_ORIGIN.VIEWING_KEY && !onboarding.viewingKey) {
+    return <Navigate to={PagePath.IMPORT_VIEWING_KEY} replace />;
+  }
 
-  // The zcash wallet birthday (imported wallets only) now has its own guided
-  // step before this one - it stashes the chosen height into sessionStorage,
-  // and useFinalizeOnboarding applies it after the wallet exists. This screen
-  // is back to being just the password for every path.
-  //
-  // Enforce that an import can never reach this screen without a birthday: the
-  // birthday step clears the stash on entry, so a back-then-forward (or a
-  // direct URL) could otherwise land here with none, and finalize would import
-  // with no birthday - the very footgun the birthday step exists to close.
-  // Bounce back to the birthday step; the normal forward path always has the
-  // stash set right before navigating here.
-  useEffect(() => {
-    // Only enforce the birthday when the import actually includes zcash - a
-    // penumbra-only recovery has no birthday step, so requiring one would bounce
-    // it back to a screen it never visited (the loop the user hit).
-    const importNets = (sessionStorage.getItem(PENDING_IMPORT_NETWORKS_KEY) ?? '').split(',');
-    const needsBirthday = importNets.includes('zcash');
-    if (
-      origin === SEED_PHRASE_ORIGIN.IMPORTED &&
-      needsBirthday &&
-      !sessionStorage.getItem(PENDING_ZCASH_BIRTHDAY_KEY)
-    ) {
-      navigate(PagePath.IMPORT_BIRTHDAY);
+  const strength = passwordStrength(password);
+  const [strengthLabel, strengthColor] = STRENGTH[strength]!;
+  const match = again.length > 0 && again === password;
+  const mismatch = again.length >= password.length && again.length > 0 && !match;
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!match || loading) {
+      return;
     }
-  }, [origin, navigate]);
-
-  const handleFormSubmit = (e: FormEvent) => {
-    void handleSubmit(e, password);
-  };
-
-  // Soft floor - currently 1 (only an empty password is rejected). The
-  // seed phrase is the real root of trust; the password just gates
-  // local-at-rest access to the encrypted vault. We don't want to
-  // paternalize the throwaway/test-wallet case or fight sophisticated
-  // users who know their threat model. Constant kept here so the
-  // floor is one number to change if that calculus shifts.
-  const MIN_PASSWORD_LENGTH = 1;
-  const tooShort = password.length > 0 && password.length < MIN_PASSWORD_LENGTH;
-  const canSubmit = password.length >= MIN_PASSWORD_LENGTH && password === confirmation && !loading;
-  const onBack = () => {
     if (origin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED) {
-      navigate(PagePath.WELCOME);
-    } else {
-      navigate(-1);
+      onboarding.setPassword(password);
+      navigate(PagePath.GENERATE_SEED_PHRASE);
+      return;
     }
+    void finalize(origin, password);
   };
 
   return (
-    <FadeTransition>
-      <div className='flex h-full flex-col gap-6'>
-        <header className='flex flex-col gap-1'>
-          <button
-            type='button'
-            onClick={onBack}
-            className='mb-2 inline-flex items-center gap-1.5 self-start text-body text-fg-muted transition-colors hover:text-fg-high lowercase'
-          >
-            <span className='i-ph-arrow-left h-3 w-3' />
-            back
-          </button>
-          <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>set a password</h2>
-          <p className='text-xs text-fg-muted lowercase leading-snug'>
-            encrypts your seed phrase on this device. you'll enter it again every time the wallet
-            locks. there's no way to recover it - pick something you'll remember.
-          </p>
-        </header>
+    <form onSubmit={submit} className='flex flex-col gap-[22px]'>
+      <h1 className='font-display text-[38px] text-fg-high'>set a password</h1>
+      <p className='text-body text-fg-muted'>unlocks zafu on this computer</p>
 
-        <form onSubmit={handleFormSubmit} className='flex flex-col gap-3'>
-          <PasswordInput
-            passwordValue={password}
-            label='new password'
-            onChange={({ target: { value } }) => setPassword(value)}
-            validations={[
-              {
-                type: 'warn',
-                issue: `at least ${MIN_PASSWORD_LENGTH} characters`,
-                checkFn: () => tooShort,
-              },
-            ]}
-          />
-          <PasswordInput
-            passwordValue={confirmation}
-            label='confirm password'
-            onChange={({ target: { value } }) => setConfirmation(value)}
-            validations={[
-              {
-                type: 'warn',
-                issue: "passwords don't match",
-                checkFn: (txt: string) => password !== txt,
-              },
-            ]}
-          />
-
-          <button
-            type='submit'
-            disabled={!canSubmit}
-            className={cn(
-              'group mt-2 inline-flex items-center justify-center gap-2 px-5 py-3 text-sm lowercase',
-              '[border-radius:14px] border transition-[transform,opacity,background-color,border-color] duration-200',
-              canSubmit
-                ? 'border-zigner-gold/30 bg-zigner-gold/10 text-zigner-gold hover:-translate-y-[1px] hover:bg-zigner-gold/15'
-                : 'cursor-not-allowed border-border-soft/60 bg-elev-2/30 text-fg-muted',
-            )}
-          >
-            {loading ? 'sealing wallet…' : 'continue'}
-            {canSubmit && !loading && (
-              <span className='i-ph-arrow-right h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5' />
-            )}
-          </button>
-
-          {error && (
-            <div className='rounded-md border border-red-500/30 bg-red-500/5 p-2 text-xs text-red-400 lowercase'>
-              {error}
-            </div>
+      <div className='flex flex-col gap-2'>
+        <label htmlFor='pw' className='text-label text-fg-muted'>
+          password
+        </label>
+        <Input
+          id='pw'
+          type='password'
+          autoFocus
+          autoComplete='new-password'
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          className='h-[54px] px-4 text-[15px]'
+        />
+        <div className='flex h-[18px] items-center gap-2' aria-live='polite'>
+          {password && (
+            <>
+              <span className='flex gap-[3px]' aria-hidden='true'>
+                {[1, 2, 3, 4].map(i => (
+                  <span
+                    key={i}
+                    className={cn('h-[3px] w-7', i <= strength ? strengthColor : 'bg-border-hard')}
+                  />
+                ))}
+              </span>
+              <span className='text-[11px] text-fg-muted'>{strengthLabel}</span>
+            </>
           )}
-        </form>
+        </div>
       </div>
-    </FadeTransition>
+
+      <div className='flex flex-col gap-2'>
+        <label htmlFor='pw-again' className='text-label text-fg-muted'>
+          again
+        </label>
+        <Input
+          id='pw-again'
+          type='password'
+          autoComplete='new-password'
+          variant={mismatch ? 'warn' : 'default'}
+          value={again}
+          onChange={e => setAgain(e.target.value)}
+          className='h-[54px] px-4 text-[15px]'
+        />
+        <span
+          className={cn('h-[18px] text-[11px]', match ? 'text-green' : 'text-warning')}
+          aria-live='polite'
+        >
+          {match ? 'they match' : mismatch ? "these don't match yet" : ''}
+        </span>
+      </div>
+
+      <Button type='submit' disabled={!match} loading={loading} className='h-14 w-full text-[15px]'>
+        continue
+      </Button>
+      <span className={cn('text-label', error ? 'text-warning' : 'text-fg-dim')}>
+        {error ?? 'forgot it later? your recovery phrase restores the wallet'}
+      </span>
+    </form>
   );
 };

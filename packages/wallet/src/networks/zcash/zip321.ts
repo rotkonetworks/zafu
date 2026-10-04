@@ -188,23 +188,32 @@ export function parseZip321(uri: string): Zip321Result {
   return { ok: true, payments };
 }
 
-/** a single-payment request URI, e.g. for a receive QR */
-export function buildZip321(p: Zip321Payment): string {
+/** a payment request URI, e.g. for a receive QR; several payments use the indexed form */
+export function buildZip321(payments: Zip321Payment | Zip321Payment[]): string {
+  const list = Array.isArray(payments) ? payments : [payments];
+  const one = list.length === 1;
   const params: string[] = [];
-  if (p.amountZat !== undefined) {
-    params.push(`amount=${formatZecAmount(p.amountZat)}`);
-  }
-  if (p.memo) {
-    if (isTransparentAddress(p.address)) {
-      throw new Error('a memo cannot be sent to a transparent address');
+  list.forEach((p, i) => {
+    const n = i === 0 ? '' : `.${i}`;
+    if (!one && i > 0) {
+      params.push(`address${n}=${p.address}`);
     }
-    params.push(`memo=${encodeBase64Url(new TextEncoder().encode(p.memo))}`);
-  }
-  if (p.label) {
-    params.push(`label=${encodeURIComponent(p.label)}`);
-  }
-  if (p.message) {
-    params.push(`message=${encodeURIComponent(p.message)}`);
-  }
-  return `zcash:${p.address}${params.length ? `?${params.join('&')}` : ''}`;
+    if (p.amountZat !== undefined) {
+      params.push(`amount${n}=${formatZecAmount(p.amountZat)}`);
+    }
+    if (p.memo) {
+      if (isTransparentAddress(p.address)) {
+        throw new Error('a memo cannot be sent to a transparent address');
+      }
+      params.push(`memo${n}=${encodeBase64Url(new TextEncoder().encode(p.memo))}`);
+    }
+    if (p.label) {
+      params.push(`label${n}=${encodeURIComponent(p.label)}`);
+    }
+    if (p.message) {
+      params.push(`message${n}=${encodeURIComponent(p.message)}`);
+    }
+  });
+  const address = list[0]?.address ?? '';
+  return `zcash:${address}${params.length ? `?${params.join('&')}` : ''}`;
 }

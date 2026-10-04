@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 const BASE_CLASSES =
-  'inline-flex items-center rounded-full max-w-full bg-light-brown py-1 px-3 text-sm hover:bg-brown';
+  'inline-flex items-center max-w-full bg-light-brown py-1 px-3 text-sm hover:bg-brown';
 
 interface PillProps {
   children: ReactNode;
@@ -15,8 +15,7 @@ interface PillProps {
 }
 
 /**
- * A Pill is a small component, usually containing text and optionally an icon,
- * with rounded corners.
+ * A Pill is a small component, usually containing text and optionally an icon.
  */
 export const Pill = ({ children, to, variant = 'default' }: PillProps) => {
   let className = BASE_CLASSES;

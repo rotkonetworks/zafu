@@ -1,11 +1,11 @@
 import { ViewBox } from '../viewbox';
 import { ActionDetails } from './action-details';
-import { uint8ArrayToBase64 } from '@rotko/penumbra-types/base64';
+import { uint8ArrayToBase64 } from '@penumbrafi/types/base64';
 import {
   PositionOpenView,
   PositionState_PositionStateEnum,
 } from '@penumbra-zone/protobuf/penumbra/core/component/dex/v1/dex_pb';
-import { joinLoHiAmount } from '@rotko/penumbra-types/amount';
+import { joinLoHiAmount } from '@penumbrafi/types/amount';
 import { bech32mAssetId } from '@penumbra-zone/bech32m/passet';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../tooltip';
 import { InfoIcon } from 'lucide-react';
@@ -57,11 +57,11 @@ export const PositionOpenViewComponent = ({ value }: { value: PositionOpenView }
           </ActionDetails.Row>
 
           <div className='flex gap-2'>
-            <p className='font-medium'>Trading Parameters</p>
+            <p>Trading Parameters</p>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger>
-                  <InfoIcon className='size-4 cursor-pointer text-fg-muted hover:text-[#8D5728]' />
+                  <InfoIcon className='size-4 cursor-pointer text-fg-muted hover:text-fg-high' />
                 </TooltipTrigger>
                 <TooltipContent className='w-[250px]'>
                   <p>

@@ -52,6 +52,16 @@ describe('createRebuildScheduler', () => {
     expect(t.rebuilds).toHaveLength(0);
   });
 
+  it('a forced request rebuilds the same target (its database was closed)', async () => {
+    const t = setup({ walletIndex: 0, run: true });
+    t.s.setRunning({ walletIndex: 0, run: true });
+    await t.s.request('storage reopen', true);
+    expect(t.rebuilds.map(r => r.why)).toEqual(['storage reopen']);
+    // the force is spent: the next plain request is skipped again
+    await t.s.request('network switch');
+    expect(t.rebuilds).toHaveLength(1);
+  });
+
   it('rebuilds when the target changes', async () => {
     const t = setup({ walletIndex: 0, run: true });
     t.s.setRunning({ walletIndex: 0, run: false });

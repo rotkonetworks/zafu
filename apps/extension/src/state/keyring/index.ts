@@ -1,5 +1,5 @@
 /**
- * keyring store — thin zustand adapter
+ * keyring store - thin zustand adapter
  *
  * follows "your server as a function" (eriksen):
  * each method is a pipeline of read → compute → write → commit.
@@ -11,7 +11,7 @@ import { AllSlices, SliceCreator } from '..';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { SessionStorageState } from '@repo/storage-chrome/session';
-import { Key } from '@repo/encryption/key';
+import { Key, type KeyJson } from '@repo/encryption/key';
 import type {
   KeyInfo,
   KeyRingStatus,
@@ -20,6 +20,7 @@ import type {
   DerivedKey,
   ZignerZafuImport,
   LedgerImport,
+  VaultUnlock,
 } from './types';
 import type { ZcashWalletJson } from '../wallets';
 
@@ -39,6 +40,7 @@ import {
   findCompatibleVault,
   shouldAutoSelectZigner,
   findWalletIndex,
+  findLedgerDuplicate,
 } from './vault-ops';
 import type { FrostMultisigParams } from './vault-ops';
 
@@ -48,10 +50,9 @@ import {
   requireKey,
   encrypt,
   decryptVault,
+  sealSessionKeyTo,
   createMasterKey,
   recreateMasterKey,
-  reencryptVault,
-  reencryptSeedBox,
   decryptMultisigSecrets,
   encryptFrostSecrets,
 } from './crypto-ops';
@@ -62,10 +63,13 @@ import {
   createZignerWalletEntries,
   createLedgerWalletEntries,
   assertLedgerUfvkValid,
-  removeLinkedWallets,
-  cleanupZcashData,
+  purgeWalletData,
   nukeAllWalletData,
 } from './wallet-entries';
+
+// password change
+import { resealSnapshot } from './reseal';
+import { keySwap, keyUse } from '../keyring-lock';
 
 // migration
 import { migrateOrphanedMultisigs, hasOrphanedMultisigs } from './migration';
@@ -76,6 +80,14 @@ import { mergeZignerCapabilities } from './zigner-merge';
 export * from './types';
 export * from './network-loader';
 
+/** a profile with a password was given a different one; nothing changed */
+export class PasswordMismatchError extends Error {
+  constructor() {
+    super('that is not the password this profile already uses');
+    this.name = 'PasswordMismatchError';
+  }
+}
+
 export interface KeyRingSlice {
   status: KeyRingStatus;
   keyInfos: KeyInfo[];
@@ -85,11 +97,14 @@ export interface KeyRingSlice {
 
   init: () => Promise<void>;
   setPassword: (password: string) => Promise<void>;
+  /** re-seal every secret under a new password, all or nothing; false when `current` is wrong */
+  changePassword: (current: string, next: string) => Promise<boolean>;
   unlock: (password: string) => Promise<boolean>;
   lock: () => void;
   checkPassword: (password: string) => Promise<boolean>;
 
-  newMnemonicKey: (mnemonic: string, name: string) => Promise<string>;
+  /** `generated`: zafu made this phrase just now (its penumbra sync starts at the tip) */
+  newMnemonicKey: (mnemonic: string, name: string, generated?: boolean) => Promise<string>;
   newZignerZafuKey: (data: ZignerZafuImport, name: string) => Promise<string>;
   addZignerUnencrypted: (data: ZignerZafuImport, name: string) => Promise<string>;
   /** add a Ledger cold-signer account (flag-gated hardware-wallet scaffolding).
@@ -100,13 +115,16 @@ export interface KeyRingSlice {
   selectKeyRing: (vaultId: string) => Promise<void>;
   renameKeyRing: (vaultId: string, newName: string) => Promise<void>;
   deleteKeyRing: (vaultId: string, opts?: { allowAppManaged?: boolean }) => Promise<void>;
+  /** every wallet and its data off this computer (forgot password, last wallet removed) */
+  /** `then`: the onboarding page to open once the erase has finished */
+  eraseAll: (then?: string) => Promise<void>;
   /** recover/take-control of (or re-hide) an app-managed multisig table by flipping `hidden` on
    *  both the vault and its mirror wallet. Unhiding makes a stuck poker table a normal, selectable,
    *  co-signable multisig. Non-destructive. */
   setMultisigHidden: (vaultId: string, hidden: boolean) => Promise<void>;
   /** Cheap READ-ONLY money view of a multisig table for the manager. `balanceZat` is the worker's
    *  cached balance (a LOWER BOUND when unsynced). `synced` is TRUE only when the caller PROVES this
-   *  vault scanned to a freshly-fetched tip — never derived from stale IDB height. Hidden tables
+   *  vault scanned to a freshly-fetched tip - never derived from stale IDB height. Hidden tables
    *  can't pass that proof, so they return synced:false (fail-closed). Never triggers a sync. */
   getMultisigStatus: (
     vaultId: string,
@@ -114,6 +132,8 @@ export interface KeyRingSlice {
   ) => Promise<{ balanceZat: bigint; synced: boolean }>;
 
   getMnemonic: (vaultId: string) => Promise<string>;
+  /** a mnemonic vault, sealed, for the zcash worker to open itself (see VaultUnlock) */
+  getVaultUnlock: (vaultId: string) => Promise<VaultUnlock>;
   getMultisigSecrets: (
     vaultId: string,
   ) => Promise<{ keyPackage: string; ephemeralSeed: string } | null>;
@@ -134,7 +154,83 @@ export const createKeyRingSlice =
   (set, get) => {
     const ctx: CryptoCtx = { session };
 
-    return {
+    const mnemonicVault = async (vaultId: string): Promise<EncryptedVault> => {
+      const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+      const vault = vaults.find(v => v.id === vaultId);
+      if (!vault) {
+        throw new Error('vault not found');
+      }
+      if (vault.type !== 'mnemonic') {
+        throw new Error('not a mnemonic vault');
+      }
+      return vault;
+    };
+
+    /**
+     * Move every secret from `from` to a key made from `password`, all or
+     * nothing. It runs under the exclusive keyring lock (state/keyring-lock),
+     * so every reader and writer of sealed data has finished and the next
+     * ones wait: no box is read mid-move, sealed under the old key after the
+     * snapshot, or overwritten by it. The single multi-key storage write is
+     * the commit point - one write batch, so a crash before it leaves the old
+     * password opening everything, and after it the new one does. The session
+     * key is swapped, never removed, so nothing sees a lock in between. A last
+     * pass moves anything a writer outside the lock left under the old key.
+     */
+    const rekey = async (from: { key: Key; keyJson: KeyJson }, password: string) => {
+      const fresh = await createMasterKey(password);
+      await keySwap(async () => {
+        const raw = await chrome.storage.local.get(null);
+        const patch = await resealSnapshot(raw, from.key, fresh.key);
+        const vaults = (patch['vaults'] ?? raw['vaults'] ?? []) as EncryptedVault[];
+        // a real password ends the empty-password auto-unlock
+        if (password && vaults.some(v => v.insensitive?.['airgapOnly'])) {
+          patch['vaults'] = vaults.map(v => {
+            const { airgapOnly: _, ...insensitive } = v.insensitive ?? {};
+            return { ...v, insensitive };
+          });
+        }
+        await chrome.storage.local.set({ ...patch, passwordKeyPrint: fresh.keyPrint.toJson() });
+        // a context still holding wallet records from before the swap writes
+        // their old-key inner boxes back; writeEncrypted moves them while this
+        // retired key lasts (state/encrypted-storage)
+        await session.set('retiredPasswordKey', {
+          key: from.keyJson,
+          until: Date.now() + RETIRED_KEY_MS,
+        });
+        await session.set('passwordKey', fresh.keyJson);
+        const stragglers = await resealSnapshot(
+          await chrome.storage.local.get(null),
+          from.key,
+          fresh.key,
+        );
+        if (Object.keys(stragglers).length) {
+          await chrome.storage.local.set(stragglers);
+        }
+      });
+
+      // the in-memory wallet records hold inner boxes the old key sealed
+      const [vaultList, all, zcash, selectedId] = await Promise.all([
+        local.get('vaults'),
+        local.get('penumbraWallets'),
+        local.get('zcashWallets'),
+        local.get('selectedVaultId'),
+      ]);
+      const keyInfos = vaultsToKeyInfos((vaultList ?? []) as EncryptedVault[], selectedId);
+      set(state => {
+        state.keyRing.status = 'unlocked';
+        state.keyRing.keyInfos = keyInfos;
+        state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+        if (all) {
+          state.wallets.all = all.map(w => ({ ...w, vaultId: w.vaultId ?? '' }));
+        }
+        if (zcash) {
+          state.wallets.zcashWallets = zcash.map(w => ({ ...w, vaultId: w.vaultId ?? '' }));
+        }
+      });
+    };
+
+    const slice: KeyRingSlice = {
       status: 'not-loaded',
       keyInfos: [],
       selectedKeyInfo: undefined,
@@ -154,7 +250,7 @@ export const createKeyRingSlice =
         const selectedId = await local.get('selectedVaultId');
         const enabledNetworks = (await local.get('enabledNetworks')) ?? [];
         const activeNetwork = (await local.get('activeNetwork')) ?? enabledNetworks[0] ?? '';
-        // wallets are encrypted — read via encrypted path if session key available
+        // wallets are encrypted - read via encrypted path if session key available
         const initSessionKey = await session.get('passwordKey');
 
         // migration: check zcashWallets for orphaned multisigs (needs decryption)
@@ -183,7 +279,7 @@ export const createKeyRingSlice =
         const hasOnlyAirgap =
           vaults.length > 0 && vaults.every(v => v.insensitive?.['airgapOnly'] === true);
 
-        // sync penumbra wallet index — only if unlocked (wallets are encrypted)
+        // sync penumbra wallet index - only if unlocked (wallets are encrypted)
         const syncedWalletIndex = (await local.get('activeWalletIndex')) ?? 0;
 
         if (!keyPrint) {
@@ -191,8 +287,8 @@ export const createKeyRingSlice =
             state.keyRing.status = 'empty';
             state.keyRing.keyInfos = [];
             state.keyRing.selectedKeyInfo = undefined;
-            state.keyRing.activeNetwork = activeNetwork as NetworkType;
-            state.keyRing.enabledNetworks = enabledNetworks as NetworkType[];
+            state.keyRing.activeNetwork = activeNetwork;
+            state.keyRing.enabledNetworks = enabledNetworks;
           });
           return;
         }
@@ -212,8 +308,8 @@ export const createKeyRingSlice =
           state.keyRing.status = sessionKey ? 'unlocked' : 'locked';
           state.keyRing.keyInfos = keyInfos;
           state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
-          state.keyRing.activeNetwork = activeNetwork as NetworkType;
-          state.keyRing.enabledNetworks = enabledNetworks as NetworkType[];
+          state.keyRing.activeNetwork = activeNetwork;
+          state.keyRing.enabledNetworks = enabledNetworks;
           state.wallets.activeIndex = syncedWalletIndex;
         });
 
@@ -225,7 +321,6 @@ export const createKeyRingSlice =
       // ── password / unlock / lock ──
 
       setPassword: async (password: string) => {
-        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
         const existingKeyPrint = await local.get('passwordKeyPrint');
 
         // Fresh profile - no key material yet. Mint a new master key. This is
@@ -241,95 +336,38 @@ export const createKeyRingSlice =
           return;
         }
 
-        // A keyprint ALREADY exists. createMasterKey mints a NEW random salt, so
-        // just overwriting the keyprint would orphan every secret sealed under the
-        // old salt: they fail to decrypt forever ("failed to decrypt vault") even
-        // with the correct password, while FVK-based sync keeps working. That was
-        // a real data-loss bug (a "set password" step in an onboarding/import flow
-        // run on an existing wallet). Instead we re-seal every existing secret from
-        // the OLD key to the new one.
-        //
-        // Two stores hold seeds sealed under the master key: the vault list
-        // (`vaults`) and penumbra hot wallets (`penumbraWallets[].custody
-        // .encryptedSeedPhrase`). Re-seal BOTH or a password change orphans
-        // whichever one we miss.
-        const penumbra = (await local.get('penumbraWallets')) ?? [];
-        const hasHotPenumbra = penumbra.some(w => 'encryptedSeedPhrase' in w.custody);
-        const hasHotVault = vaults.some(v => v.insensitive?.['airgapOnly'] !== true);
-        // airgap-only means: some vaults, none hot, and no hot penumbra seed - the
-        // only case whose secrets are sealed under the empty-password key.
-        const airgapOnly = vaults.length > 0 && !hasHotVault && !hasHotPenumbra;
-
-        // Resolve the OLD key the secrets were sealed under:
-        //  - airgap-only: the empty-password key;
-        //  - any hot secret: the live session key (wallet must be unlocked, else
-        //    we refuse rather than orphan it).
-        let oldKey: Key | null = null;
-        if (airgapOnly) {
-          const oldResult = await recreateMasterKey('', existingKeyPrint);
-          if (!oldResult) {
-            throw new Error('failed to decrypt existing vaults for migration');
-          }
-          oldKey = oldResult.key;
-        } else if (hasHotVault || hasHotPenumbra) {
-          try {
-            oldKey = await requireKey(ctx);
-          } catch {
-            throw new Error('cannot change password while locked - unlock first');
-          }
+        // A profile that has a password keeps it: an onboarding "set a
+        // password" step on it (adding a zigner or a phrase later) must be
+        // given that password, and only changePassword replaces it.
+        const typed = await recreateMasterKey(password, existingKeyPrint);
+        if (typed) {
+          await session.set('passwordKey', typed.keyJson);
+          set(state => {
+            state.keyRing.status = 'unlocked';
+          });
+          return;
         }
-
-        const {
-          key: newKey,
-          keyPrint: newKeyPrint,
-          keyJson: newKeyJson,
-        } = await createMasterKey(password);
-
-        const migratedVaults = oldKey
-          ? await Promise.all(vaults.map(v => reencryptVault(v, oldKey, newKey)))
-          : vaults;
-
-        let penumbraChanged = false;
-        const migratedPenumbra = oldKey
-          ? await Promise.all(
-              penumbra.map(async w => {
-                if ('encryptedSeedPhrase' in w.custody) {
-                  penumbraChanged = true;
-                  return {
-                    ...w,
-                    custody: {
-                      encryptedSeedPhrase: await reencryptSeedBox(
-                        w.custody.encryptedSeedPhrase,
-                        oldKey,
-                        newKey,
-                      ),
-                    },
-                  };
-                }
-                return w; // airgapSigner (watch-only) - nothing sealed under the key
-              }),
-            )
-          : penumbra;
-
-        await local.set('vaults', migratedVaults);
-        if (penumbraChanged) {
-          await local.set('penumbraWallets', migratedPenumbra);
+        // An airgap-only profile (every vault airgapOnly, key made from '')
+        // has no password yet, and this is its first: move its secrets to it.
+        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+        const airgapOnly =
+          vaults.length > 0 && vaults.every(v => v.insensitive?.['airgapOnly'] === true);
+        const unprotected =
+          password && airgapOnly ? await recreateMasterKey('', existingKeyPrint) : null;
+        if (!unprotected) {
+          throw new PasswordMismatchError();
         }
-        await local.set('passwordKeyPrint', newKeyPrint.toJson());
-        await session.set('passwordKey', newKeyJson);
+        await rekey(unprotected, password);
+      },
 
-        const selectedId = await local.get('selectedVaultId');
-        const keyInfos = vaultsToKeyInfos(migratedVaults, selectedId);
-        set(state => {
-          state.keyRing.status = 'unlocked';
-          state.keyRing.keyInfos = keyInfos;
-          state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
-          // keep the in-memory penumbra wallets in sync so a same-session reveal
-          // uses the freshly re-sealed boxes, not the ones the new key can't open.
-          if (penumbraChanged) {
-            state.wallets.all = migratedPenumbra as typeof state.wallets.all;
-          }
-        });
+      changePassword: async (current: string, next: string) => {
+        const keyPrint = await local.get('passwordKeyPrint');
+        const old = keyPrint ? await recreateMasterKey(current, keyPrint) : null;
+        if (!old) {
+          return false;
+        }
+        await rekey(old, next);
+        return true;
       },
 
       unlock: async (password: string) => {
@@ -356,11 +394,21 @@ export const createKeyRingSlice =
 
       lock: () => {
         void session.remove('passwordKey');
+        void session.remove('retiredPasswordKey');
         // grace must never outlive the unlock
         void session.remove('signGraceUntil');
         set(state => {
           state.keyRing.status = 'locked';
         });
+        // Locking drops what the seed unlocked, not just the session key: the
+        // zcash worker holds keys derived from the phrase and its sync loops
+        // run with them. Terminating it (in the offscreen document, for every
+        // window) ends the syncs and frees that memory; the next unlock spawns
+        // a fresh one. The same as auto-lock's reload, without closing the
+        // window the person is looking at.
+        void import('./network-worker').then(({ stopNetworkWorker }) =>
+          Promise.all([stopNetworkWorker('zcash'), stopNetworkWorker('penumbra')]),
+        );
       },
 
       checkPassword: async (password: string) => {
@@ -373,7 +421,7 @@ export const createKeyRingSlice =
 
       // ── vault creation ──
 
-      newMnemonicKey: async (mnemonic: string, name: string) => {
+      newMnemonicKey: async (mnemonic: string, name: string, generated = false) => {
         // Per-seed identity. deriveZid(mnemonic) is deterministic from the
         // mnemonic (HMAC-SHA512 root -> ed25519), so the same seed always yields
         // the same zid publicKey. It is stored in the vault's insensitive
@@ -406,7 +454,7 @@ export const createKeyRingSlice =
 
         const vaultId = generateVaultId();
         const encryptedData = await encrypt(ctx, mnemonic);
-        const vault = buildMnemonicVault(vaultId, name, encryptedData);
+        const vault = buildMnemonicVault(vaultId, name, encryptedData, mnemonic);
         vault.insensitive['zid'] = zid.publicKey;
 
         const newVaults = [vault, ...vaults];
@@ -416,9 +464,14 @@ export const createKeyRingSlice =
         // penumbra wallet entry (non-fatal)
         const key = await requireKey(ctx).catch(() => undefined);
         if (key) {
-          await createPenumbraWalletForMnemonic(mnemonic, name, vaultId, key, local).catch(e =>
-            console.warn('[keyring] failed to create prax-compatible wallet:', e),
-          );
+          await createPenumbraWalletForMnemonic(
+            mnemonic,
+            name,
+            vaultId,
+            key,
+            local,
+            generated,
+          ).catch(e => console.warn('[keyring] failed to create prax-compatible wallet:', e));
         }
 
         const keyInfos = vaultsToKeyInfos(newVaults, vaultId);
@@ -454,7 +507,7 @@ export const createKeyRingSlice =
             const updatedVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
             const selectedId = (await local.get('selectedVaultId'))!;
             const enabledNetworks = mergeEnabledNetworks(
-              ((await local.get('enabledNetworks')) ?? []) as NetworkType[],
+              (await local.get('enabledNetworks')) ?? [],
               zignerSupportedNetworks(data),
             );
             await local.set('enabledNetworks', enabledNetworks);
@@ -500,7 +553,7 @@ export const createKeyRingSlice =
           state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
           state.keyRing.enabledNetworks = newEnabledNetworks;
           if (vaults.length === 0 && supportedNetworks.length > 0) {
-            state.keyRing.activeNetwork = supportedNetworks[0] as NetworkType;
+            state.keyRing.activeNetwork = supportedNetworks[0]!;
           }
         });
 
@@ -528,7 +581,7 @@ export const createKeyRingSlice =
             const selectedId = (await local.get('selectedVaultId'))!;
             const keyInfos = vaultsToKeyInfos(updatedVaults, selectedId);
             const enabledNetworks = mergeEnabledNetworks(
-              ((await local.get('enabledNetworks')) ?? []) as NetworkType[],
+              (await local.get('enabledNetworks')) ?? [],
               zignerSupportedNetworks(data),
             );
             await local.set('enabledNetworks', enabledNetworks);
@@ -566,7 +619,7 @@ export const createKeyRingSlice =
         if (data.fullViewingKey) {
           const existingPenumbra = (await local.get('penumbraWallets')) ?? [];
           const fvkB64 = data.fullViewingKey;
-          // penumbra wallets store FVK as JSON string — compare via base64 of inner bytes
+          // penumbra wallets store FVK as JSON string - compare via base64 of inner bytes
           for (const w of existingPenumbra) {
             try {
               const { FullViewingKey } =
@@ -580,7 +633,7 @@ export const createKeyRingSlice =
               if (e instanceof Error && e.message.includes('already exists')) {
                 throw e;
               }
-              // parse error — skip this wallet
+              // parse error - skip this wallet
             }
           }
         }
@@ -649,7 +702,7 @@ export const createKeyRingSlice =
           state.keyRing.status = 'unlocked';
           state.keyRing.enabledNetworks = newEnabledNetworks;
           if (vaults.length === 0 && supportedNetworks.length > 0) {
-            state.keyRing.activeNetwork = supportedNetworks[0] as NetworkType;
+            state.keyRing.activeNetwork = supportedNetworks[0]!;
           }
         });
 
@@ -660,21 +713,41 @@ export const createKeyRingSlice =
         // Ledger cold-signer account (clone of addZignerUnencrypted, trimmed to
         // zcash-only single-signer). No ZID-merge: a Ledger import carries no
         // ZID key and is not part of the "one device = one wallet" cross-network
-        // merge story — each Ledger account is its own zcash-only vault.
+        // merge story - each Ledger account is its own zcash-only vault.
         const existingVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
 
-        // dedup: same device + account = same keys.
-        for (const v of existingVaults) {
-          if (v.type !== 'zigner-zafu') {
-            continue;
-          }
-          if (
-            v.insensitive['coldSignerType'] === 'ledger' &&
-            v.insensitive['deviceId'] === data.deviceId &&
-            v.insensitive['accountIndex'] === data.accountIndex
-          ) {
+        // locked is refused before the dedupe: re-selecting reads encrypted
+        // records and must not mark a locked keyring unlocked
+        if ((await local.get('passwordKeyPrint')) && !(await session.get('passwordKey'))) {
+          throw new Error('keyring locked - unlock first or use password flow');
+        }
+        // same keys again: a shielded account is selected, never added twice
+        const duplicate = findLedgerDuplicate(existingVaults, data);
+        if (duplicate) {
+          if (data.custody !== 'ledger-zcash') {
             throw new Error('this ledger account is already imported');
           }
+          const refreshed = existingVaults.map(v =>
+            v.id === duplicate.id
+              ? {
+                  ...v,
+                  insensitive: {
+                    ...v.insensitive,
+                    appVersion: data.appVersion,
+                    deviceLabel: data.deviceLabel,
+                  },
+                }
+              : v,
+          );
+          await local.set('vaults', refreshed);
+          await local.set('activeNetwork', 'zcash' as NetworkType);
+          set(state => {
+            state.keyRing.keyInfos = vaultsToKeyInfos(refreshed, duplicate.id);
+            state.keyRing.status = 'unlocked';
+            state.keyRing.activeNetwork = 'zcash' as NetworkType;
+          });
+          await get().keyRing.selectKeyRing(duplicate.id);
+          return duplicate.id;
         }
         // also catch cross-device UFVK duplicates against existing zcash wallets.
         if (data.ufvk) {
@@ -782,8 +855,9 @@ export const createKeyRingSlice =
             );
         const vault = buildFrostVault(vaultId, params, encryptedData);
 
-        // hidden multisigs (poker tables) must not steal the active-wallet slot
-        const hidden = params.hidden === true;
+        // hidden multisigs (poker tables) and seats made in a room must not
+        // steal the active-wallet slot
+        const hidden = params.hidden === true || !!params.room;
 
         const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
         const newVaults = [vault, ...vaults];
@@ -846,7 +920,7 @@ export const createKeyRingSlice =
           await local.set('activeWalletIndex', walletIdx);
         }
 
-        // sync zcash wallet index — -1 means no zcash wallet record (mnemonic derives on-the-fly)
+        // sync zcash wallet index - -1 means no zcash wallet record (mnemonic derives on-the-fly)
         const zcashWallets = (await local.get('zcashWallets')) ?? [];
         const zcashIdx = findWalletIndex(zcashWallets as { vaultId?: string }[], vaultId);
         // only persist a valid index; -1 means "use vault mnemonic, not a zcash wallet record"
@@ -882,10 +956,23 @@ export const createKeyRingSlice =
         });
       },
 
+      eraseAll: async (then?: string) => {
+        await nukeAllWalletData(session, local, then);
+        set(state => {
+          state.keyRing.keyInfos = [];
+          state.keyRing.selectedKeyInfo = undefined;
+          state.keyRing.status = 'empty';
+          state.wallets.all = [];
+          state.wallets.activeIndex = 0;
+          state.wallets.zcashWallets = [];
+          state.wallets.activeZcashIndex = 0;
+        });
+      },
+
       deleteKeyRing: async (vaultId: string, opts?: { allowAppManaged?: boolean }) => {
         const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-        // CRITICAL money-safety guard: app-managed (hidden) FROST multisig tables — e.g. poker
-        // tables — are NOT seed-recoverable, have no auto-backup, and their on-chain balance cannot
+        // CRITICAL money-safety guard: app-managed (hidden) FROST multisig tables - e.g. poker
+        // tables - are NOT seed-recoverable, have no auto-backup, and their on-chain balance cannot
         // be proven empty from the generic settings UI (only the ACTIVE wallet syncs, and getBalance
         // has no mempool/confirmation-depth margin). So the generic delete surfaces MUST NOT destroy
         // them: that could erase the only copy of a share while a deposit is in flight. Removal is
@@ -898,27 +985,26 @@ export const createKeyRingSlice =
           !opts?.allowAppManaged
         ) {
           throw new Error(
-            'app-managed table (e.g. a poker table): remove it from the multisig manager after backing it up — it is not seed-recoverable',
+            'app-managed table (e.g. a poker table): remove it from the multisig manager after backing it up - it is not seed-recoverable',
           );
         }
         const updatedVaults = vaults.filter(v => v.id !== vaultId);
+
+        // Purge every other per-wallet key BEFORE removing the vault record
+        // itself. purgeWalletData does not touch `vaults` at all, so this
+        // ordering is free: if it throws partway (a storage failure, a
+        // worker call that rejects unexpectedly), the vault stays in the
+        // list and deleteKeyRing can simply be called again - nothing is
+        // orphaned. Removing the vault first and purging second would leave
+        // a vaultId with no UI entry point to retry cleanup if the purge
+        // failed after the vault was already gone.
+        await purgeWalletData(vaultId, local);
+
         await local.set('vaults', updatedVaults);
 
-        const { removedZcashIds } = await removeLinkedWallets(vaultId, local);
-        await cleanupZcashData(vaultId, removedZcashIds);
-
-        // last vault — nuke everything
+        // last vault - nuke everything
         if (updatedVaults.length === 0) {
-          await nukeAllWalletData(session, local);
-          set(state => {
-            state.keyRing.keyInfos = [];
-            state.keyRing.selectedKeyInfo = undefined;
-            state.keyRing.status = 'empty';
-            state.wallets.all = [];
-            state.wallets.activeIndex = 0;
-            state.wallets.zcashWallets = [];
-            state.wallets.activeZcashIndex = 0;
-          });
+          await get().keyRing.eraseAll();
           return;
         }
 
@@ -946,7 +1032,7 @@ export const createKeyRingSlice =
 
       setMultisigHidden: async (vaultId: string, hidden: boolean) => {
         // flip `hidden` on BOTH records (vault.insensitive + wallet.multisig) so recover/re-hide is
-        // consistent everywhere. Non-destructive — no key material touched.
+        // consistent everywhere. Non-destructive - no key material touched.
         const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
         const updatedVaults = vaults.map(v =>
           v.id === vaultId ? { ...v, insensitive: { ...v.insensitive, hidden } } : v,
@@ -972,7 +1058,7 @@ export const createKeyRingSlice =
         vaultId: string,
         opts?: { workerSyncHeight?: number; chainTip?: number },
       ) => {
-        // balance: cached IDB read via the worker — NO network sync triggered. For an unsynced vault
+        // balance: cached IDB read via the worker - NO network sync triggered. For an unsynced vault
         // this is a LOWER BOUND (may read 0 while a deposit is unscanned/mempool); the policy module
         // (app-managed-tables.ts) treats !synced as possibly-funded, so a stale 0 is safe here.
         const { getBalanceInWorker } = await import('./network-worker');
@@ -983,13 +1069,13 @@ export const createKeyRingSlice =
           balanceZat = 0n;
         }
 
-        // synced: PROVEN only. ⚠️ MONEY-SAFETY — do NOT "improve" this to derive `synced` from the
+        // synced: PROVEN only. ⚠️ MONEY-SAFETY - do NOT "improve" this to derive `synced` from the
         // worker's persisted IDB scan height: a hidden table is never actively synced, its
-        // syncHeight is stuck at ~tip (its birthday), and getBalance ignores mempool/0-conf — so a
+        // syncHeight is stuck at ~tip (its birthday), and getBalance ignores mempool/0-conf - so a
         // never-scanned FUNDED table would read synced && balance 0 and earn the low-friction delete
         // (permanent loss). We only trust `synced` when the CALLER passes a scan height it knows is
         // this vault's AND a freshly-fetched chain tip. Hidden tables never get those, so they
-        // resolve to synced:false — the fail-closed default the policy module relies on.
+        // resolve to synced:false - the fail-closed default the policy module relies on.
         const synced =
           typeof opts?.workerSyncHeight === 'number' &&
           typeof opts?.chainTip === 'number' &&
@@ -1001,16 +1087,18 @@ export const createKeyRingSlice =
 
       // ── secrets ──
 
-      getMnemonic: async (vaultId: string) => {
-        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-        const vault = vaults.find(v => v.id === vaultId);
-        if (!vault) {
-          throw new Error('vault not found');
-        }
-        if (vault.type !== 'mnemonic') {
-          throw new Error('not a mnemonic vault');
-        }
-        return decryptVault(ctx, vault);
+      getMnemonic: async (vaultId: string) => decryptVault(ctx, await mnemonicVault(vaultId)),
+
+      getVaultUnlock: async (vaultId: string) => {
+        await mnemonicVault(vaultId);
+        // the box and the key it opens with are read together, never across a swap
+        return {
+          sealTo: to =>
+            keyUse(async () => ({
+              box: (await mnemonicVault(vaultId)).encryptedData,
+              seal: await sealSessionKeyTo(ctx, to),
+            })),
+        };
       },
 
       getMultisigSecrets: async (vaultId: string) => {
@@ -1018,7 +1106,7 @@ export const createKeyRingSlice =
         const vault = vaults.find(v => v.id === vaultId);
 
         if (vault?.type === 'frost-multisig') {
-          // airgapSigner wallets keep the share on zigner — no secrets to surface here
+          // airgapSigner wallets keep the share on zigner - no secrets to surface here
           if (vault.insensitive['custody'] === 'airgapSigner') {
             return null;
           }
@@ -1126,7 +1214,35 @@ export const createKeyRingSlice =
         });
       },
     };
+
+    // every method that reads, seals or rewrites the vaults runs as a key
+    // user, so a password change waits for it and it waits for the change
+    for (const name of KEY_USERS) {
+      const run = slice[name] as (...a: unknown[]) => Promise<unknown>;
+      (slice[name] as unknown) = (...a: unknown[]) => keyUse(() => run(...a));
+    }
+    return slice;
   };
+
+/** how long a replaced key stays to move boxes a stale context writes back */
+const RETIRED_KEY_MS = 60_000;
+
+const KEY_USERS = [
+  'init',
+  'newMnemonicKey',
+  'newZignerZafuKey',
+  'addZignerUnencrypted',
+  'addLedgerUnencrypted',
+  'newFrostMultisigKey',
+  'selectKeyRing',
+  'renameKeyRing',
+  'eraseAll',
+  'deleteKeyRing',
+  'setMultisigHidden',
+  'getMnemonic',
+  'getMultisigSecrets',
+  'deriveKey',
+] as const satisfies readonly (keyof KeyRingSlice)[];
 
 // ── selectors ──
 
@@ -1144,6 +1260,7 @@ export const selectSelectKeyRing = (state: AllSlices) => state.keyRing.selectKey
 export const selectPenumbraAccount = (state: AllSlices) => state.keyRing.penumbraAccount;
 export const selectSetPenumbraAccount = (state: AllSlices) => state.keyRing.setPenumbraAccount;
 export const selectGetMnemonic = (state: AllSlices) => state.keyRing.getMnemonic;
+export const selectGetVaultUnlock = (state: AllSlices) => state.keyRing.getVaultUnlock;
 export const selectDeriveKey = (state: AllSlices) => state.keyRing.deriveKey;
 export const selectToggleNetwork = (state: AllSlices) => state.keyRing.toggleNetwork;
 export const selectDeleteKeyRing = (state: AllSlices) => state.keyRing.deleteKeyRing;
@@ -1156,6 +1273,12 @@ const isHidden = (k: KeyInfo) => k.insensitive?.['hidden'] === true;
 export const selectKeyInfosForActiveNetwork = (state: AllSlices) => {
   const { keyInfos, activeNetwork } = state.keyRing;
   return keyInfos.filter(k => keyInfoSupportsNetwork(k, activeNetwork) && !isHidden(k));
+};
+
+/** the selected wallet holds penumbra only (a 12-word phrase): zcash has nothing for it */
+export const selectPenumbraOnly = (state: AllSlices) => {
+  const k = state.keyRing.selectedKeyInfo;
+  return !!k && keyInfoSupportsNetwork(k, 'penumbra') && !keyInfoSupportsNetwork(k, 'zcash');
 };
 
 export const selectEffectiveKeyInfo = (state: AllSlices) => {

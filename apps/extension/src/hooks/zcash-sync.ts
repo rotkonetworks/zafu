@@ -1,26 +1,25 @@
 /**
  * zcash sync status hook
  *
- * polls zidecar for sync pipeline status + chain tip.
+ * polls the node for the chain tip.
  * listens to worker sync-progress events for local scan height.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ZidecarClient, type SyncStatus, type ChainTip } from '../state/keyring/zidecar-client';
-import { LightwalletdClient } from '../state/keyring/lightwalletd-client';
-import type { ZcashClient } from '../state/keyring/zcash-backend';
+import type { ChainTip } from '../state/keyring/zidecar-client';
+import { zcashClient } from '../state/keyring/zcash-backend';
 import { useStore } from '../state';
-import { selectEffectiveKeyInfo, selectActiveNetwork } from '../state/keyring';
+import { selectZcashBackend } from '../state/networks';
+import { selectActiveNetwork } from '../state/keyring';
+import { activeZcashStoreId } from '../state/pockets';
 import { zcashSyncHeightKey } from '../state/keyring/network-worker';
-import { classifySyncFailure, type SyncFailure } from '../state/sync-failure';
+import { classifySyncFailure, stalledFailure, type SyncFailure } from '../state/sync-failure';
 
 const DEFAULT_ZIDECAR_URL = 'https://zcash.rotko.net';
 const POLL_INTERVAL = 10_000;
 
 export interface ZcashSyncState {
-  /** zidecar pipeline status (gigaproof, epochs, etc) */
-  syncStatus: SyncStatus | null;
   /** chain tip from zidecar */
   chainTip: ChainTip | null;
   /** local worker scan height (from sync-progress events) */
@@ -36,18 +35,14 @@ export interface ZcashSyncState {
   failure: SyncFailure | null;
 }
 
-export function useZcashSyncStatus(): ZcashSyncState {
-  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || DEFAULT_ZIDECAR_URL;
-  const backend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
-  // Privacy: never poll the zcash zidecar when zcash is not an enabled network.
-  // Otherwise a penumbra-only wallet still hammered zcash.rotko.net for GetTip /
-  // GetSyncStatus on an interval - a network connection the user never opted in
-  // to (reported: "why do we connect zcash if only penumbra is selected").
-  // Full network isolation: only poll the zidecar when ACTIVELY on zcash, not
-  // merely when zcash is enabled - a wallet viewing penumbra touches no zcash RPC.
-  const zcashActive = useStore(selectActiveNetwork) === 'zcash';
-  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
-  const activeWalletId = selectedKeyInfo?.id;
+/**
+ * what the local worker reports - scan height, chain height, last failure -
+ * from its events and the last stored height. asks no node, so a screen that
+ * only shows local progress contacts nothing.
+ */
+export function useZcashWorkerSync() {
+  // the worker store of the active pocket (the bare vault id for account 0)
+  const activeWalletId = useStore(activeZcashStoreId);
   const [workerSyncHeight, setWorkerSyncHeight] = useState(0);
   const [workerChainHeight, setWorkerChainHeight] = useState(0);
   // Last sync error captured from the worker (via zcash-sync-error events).
@@ -71,23 +66,25 @@ export function useZcashSyncStatus(): ZcashSyncState {
   // dispatched by the auto-sync hook on start failures
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ walletId?: string; message?: string; code?: string }>)
-        .detail;
+      const detail = (
+        e as CustomEvent<{ walletId?: string; message?: string; code?: string; stalled?: boolean }>
+      ).detail;
       if (activeWalletId && detail?.walletId && detail.walletId !== activeWalletId) {
         return;
       }
       if (typeof detail?.message === 'string') {
         setWorkerError(new Error(detail.message));
-        // Classify here, once, at the boundary — so no view is ever tempted
+        // Classify here, once, at the boundary - so no view is ever tempted
         // to render the raw worker text.
-        setWorkerFailure(classifySyncFailure(detail.message, detail.code));
+        const failure = classifySyncFailure(detail.message, detail.code);
+        setWorkerFailure(detail.stalled ? stalledFailure(failure) : failure);
       }
     };
     window.addEventListener('zcash-sync-error', handler);
     return () => window.removeEventListener('zcash-sync-error', handler);
   }, [activeWalletId]);
 
-  // listen for worker sync-progress events — filter by active wallet
+  // listen for worker sync-progress events - filter by active wallet
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -133,28 +130,20 @@ export function useZcashSyncStatus(): ZcashSyncState {
     });
   }, [activeWalletId]);
 
-  const client = useCallback(
-    (): ZcashClient =>
-      backend === 'lightwalletd'
-        ? new LightwalletdClient(zidecarUrl)
-        : new ZidecarClient(zidecarUrl),
-    [zidecarUrl, backend],
-  );
+  return { workerSyncHeight, workerChainHeight, workerError, workerFailure };
+}
 
-  const {
-    data: syncStatus,
-    isLoading: syncLoading,
-    error: syncError,
-  } = useQuery({
-    queryKey: ['zcashSyncStatus', backend, zidecarUrl],
-    // GetSyncStatus is a zidecar-only RPC; public lightwalletd endpoints lack it.
-    // Also gated on zcash being enabled - no polling for a penumbra-only wallet.
-    enabled: zcashActive && backend === 'zidecar',
-    queryFn: () => client().getSyncStatus(),
-    staleTime: POLL_INTERVAL,
-    refetchInterval: POLL_INTERVAL,
-    retry: 2,
-  });
+export function useZcashSyncStatus(): ZcashSyncState {
+  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || DEFAULT_ZIDECAR_URL;
+  const backend = useStore(selectZcashBackend);
+  // Privacy: never poll the zcash zidecar when zcash is not an enabled network.
+  // Otherwise a penumbra-only wallet still hammered zcash.rotko.net for GetTip /
+  // GetSyncStatus on an interval - a network connection the user never opted in
+  // to (reported: "why do we connect zcash if only penumbra is selected").
+  // Full network isolation: only poll the zidecar when ACTIVELY on zcash, not
+  // merely when zcash is enabled - a wallet viewing penumbra touches no zcash RPC.
+  const zcashActive = useStore(selectActiveNetwork) === 'zcash';
+  const { workerSyncHeight, workerChainHeight, workerError, workerFailure } = useZcashWorkerSync();
 
   const {
     data: chainTip,
@@ -168,25 +157,22 @@ export function useZcashSyncStatus(): ZcashSyncState {
     // Gated on zcash being enabled - a penumbra-only wallet must not poll the
     // zidecar for the chain tip.
     enabled: zcashActive,
-    queryFn: () => client().getTip(),
+    queryFn: () => zcashClient(zidecarUrl, backend).getTip(),
     staleTime: POLL_INTERVAL,
     refetchInterval: POLL_INTERVAL,
     retry: 2,
   });
 
   return {
-    syncStatus: syncStatus ?? null,
     chainTip: chainTip ?? null,
     workerSyncHeight,
     workerChainHeight,
-    isLoading: syncLoading || tipLoading,
+    isLoading: tipLoading,
     // workerError (sync loop / auto-sync failures) takes precedence over the
-    // status/tip query errors - it's the one the user actually needs to act on.
-    error: workerError ?? syncError ?? tipError,
+    // tip query error - it's the one the user actually needs to act on.
+    error: workerError ?? tipError,
     // Query errors have no structured code (they come out of fetch), so they
     // are sniffed; worker failures were classified when they arrived.
-    failure:
-      workerFailure ??
-      ((syncError ?? tipError) ? classifySyncFailure(syncError ?? tipError) : null),
+    failure: workerFailure ?? (tipError ? classifySyncFailure(tipError) : null),
   };
 }

@@ -1,5 +1,5 @@
 /**
- * withPoll — turn a one-shot snapshot fetcher into a long-running one.
+ * withPoll - turn a one-shot snapshot fetcher into a long-running one.
  *
  * loop:
  *   1. call inner() once, yield every snapshot it produces

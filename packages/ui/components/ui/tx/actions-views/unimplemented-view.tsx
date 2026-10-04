@@ -6,7 +6,7 @@ export const UnimplementedView = ({ label }: { label: string }) => {
     <ViewBox
       label={label}
       visibleContent={
-        <div className='flex gap-2 text-sm text-yellow-600'>
+        <div className='flex gap-2 text-sm text-warn'>
           <TriangleAlert className='w-4' />
           <span className='mt-1'>Unimplemented view</span>
         </div>

@@ -4,8 +4,13 @@
  */
 
 import type { NetworkType } from '../state/keyring';
+import {
+  COSMOS_CHAINS,
+  getCosmosChain,
+  onCosmosChainsAdded,
+} from '@repo/wallet/networks/cosmos/chains';
 
-/** orchard pool activation height — no zcash wallet should scan before this */
+/** orchard pool activation height - no zcash wallet should scan before this */
 export const ZCASH_ORCHARD_ACTIVATION = 1_687_104;
 
 export interface NetworkConfig {
@@ -13,7 +18,7 @@ export interface NetworkConfig {
   color: string;
   /** tailwind class for focus border on inputs */
   focusColor: string;
-  /** transparent chains have fully public ledgers — all balances and transactions visible */
+  /** transparent chains have fully public ledgers - all balances and transactions visible */
   transparent: boolean;
   /** whether this network is available for selection in the UI */
   launched: boolean;
@@ -62,11 +67,11 @@ export interface NetworkConfig {
   };
 }
 
-/** all network configs - the single source of truth */
-export const NETWORKS: Record<NetworkType, NetworkConfig> = {
+/** the networks written out here; registry chains are added below */
+const WRITTEN: Record<string, NetworkConfig> = {
   zcash: {
     name: 'Zcash',
-    color: 'bg-yellow-500',
+    color: 'bg-zigner-gold',
     focusColor: 'focus:border-zigner-gold',
     transparent: false,
     launched: true,
@@ -94,38 +99,6 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
       inbox: true,
       multisig: false,
       cosmos: true,
-      zcash: false,
-    },
-  },
-  polkadot: {
-    name: 'Polkadot',
-    color: 'bg-gray-500',
-    focusColor: 'focus:border-pink-500',
-    transparent: true,
-    launched: false,
-    features: {
-      stake: false,
-      swap: false,
-      vote: false,
-      inbox: false,
-      multisig: false,
-      cosmos: false,
-      zcash: false,
-    },
-  },
-  kusama: {
-    name: 'Kusama',
-    color: 'bg-gray-500',
-    focusColor: 'focus:border-red-500',
-    transparent: true,
-    launched: false,
-    features: {
-      stake: false,
-      swap: false,
-      vote: false,
-      inbox: false,
-      multisig: false,
-      cosmos: false,
       zcash: false,
     },
   },
@@ -256,6 +229,47 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
   },
 };
 
+/**
+ * A penumbra subnetwork for every cosmos chain the penumbrafi registry adds:
+ * launched, and offered only while the penumbra node reports a live route to
+ * it (transparent/penumbra-routes). Nothing here contacts it; a flow that
+ * uses the chain turns it on (useChainInUse).
+ */
+const registrySubnetwork = (id: string): NetworkConfig => ({
+  name: getCosmosChain(id).name,
+  color: 'bg-slate-400',
+  focusColor: 'focus:border-slate-400',
+  transparent: true,
+  launched: true,
+  parent: 'penumbra',
+  ibcChainId: getCosmosChain(id).chainId,
+  features: {
+    stake: false,
+    swap: false,
+    vote: false,
+    inbox: false,
+    multisig: false,
+    cosmos: true,
+    zcash: false,
+  },
+});
+
+/** all network configs - the single source of truth */
+export const NETWORKS: Record<NetworkType, NetworkConfig> = {
+  ...WRITTEN,
+  ...Object.fromEntries(
+    Object.keys(COSMOS_CHAINS)
+      .filter(id => !(id in WRITTEN))
+      .map(id => [id, registrySubnetwork(id)]),
+  ),
+};
+
+onCosmosChainsAdded(ids => {
+  for (const id of ids) {
+    NETWORKS[id] ??= registrySubnetwork(id);
+  }
+});
+
 /** derive display info - computed once, no runtime overhead */
 export const getNetwork = (network: NetworkType): NetworkConfig =>
   NETWORKS[network] ?? {
@@ -283,13 +297,11 @@ export const hasFeature = (
 
 /** launched top-level networks (no parent) - the main network picker */
 export const getTopLevelNetworks = (): NetworkType[] =>
-  (Object.keys(NETWORKS) as NetworkType[]).filter(n => NETWORKS[n].launched && !NETWORKS[n].parent);
+  Object.keys(NETWORKS).filter(n => NETWORKS[n]?.launched && !NETWORKS[n]?.parent);
 
 /** launched subnetworks (IBC destinations) of a parent network */
 export const getSubnetworks = (parent: NetworkType): NetworkType[] =>
-  (Object.keys(NETWORKS) as NetworkType[]).filter(
-    n => NETWORKS[n].launched && NETWORKS[n].parent === parent,
-  );
+  Object.keys(NETWORKS).filter(n => NETWORKS[n]?.launched && NETWORKS[n]?.parent === parent);
 
 /**
  * IBC chain ids reachable from `parent` right now: launched subnetworks that
@@ -299,14 +311,14 @@ export const getSubnetworks = (parent: NetworkType): NetworkType[] =>
  * networks/transparent), which keeps Injective on its coin-type-60 path.
  */
 export const getActiveIbcChainIds = (parent: NetworkType): string[] =>
-  (Object.keys(NETWORKS) as NetworkType[])
-    .filter(n => NETWORKS[n].launched && NETWORKS[n].parent === parent && NETWORKS[n].ibcChainId)
-    .map(n => NETWORKS[n].ibcChainId!);
+  Object.values(NETWORKS).flatMap(n =>
+    n.launched && n.parent === parent && n.ibcChainId ? [n.ibcChainId] : [],
+  );
 
 /** As above but returns the network KEYS (e.g. 'noble'), for gating by activeNetwork. */
 export const getActiveIbcSubnetworks = (parent: NetworkType): NetworkType[] =>
-  (Object.keys(NETWORKS) as NetworkType[]).filter(
-    n => NETWORKS[n].launched && NETWORKS[n].parent === parent && NETWORKS[n].ibcChainId,
+  Object.keys(NETWORKS).filter(
+    n => NETWORKS[n]?.launched && NETWORKS[n]?.parent === parent && NETWORKS[n]?.ibcChainId,
   );
 
 /**
@@ -319,10 +331,8 @@ export const DEFAULT_IBC_BLOCK_TIME_MS = 6_000;
 
 /** average block interval (ms) for an IBC chain id, e.g. 'injective-1' -> 700 */
 export const getIbcBlockTimeMs = (chainId: string): number => {
-  const network = (Object.keys(NETWORKS) as NetworkType[]).find(
-    n => NETWORKS[n].ibcChainId === chainId,
-  );
-  return (network && NETWORKS[network].ibcBlockTimeMs) || DEFAULT_IBC_BLOCK_TIME_MS;
+  const network = Object.keys(NETWORKS).find(n => NETWORKS[n]?.ibcChainId === chainId);
+  return (network && NETWORKS[network]?.ibcBlockTimeMs) || DEFAULT_IBC_BLOCK_TIME_MS;
 };
 
 /** true if this cosmos subnetwork currently has a live IBC channel (deposit/send ok) */
@@ -340,7 +350,5 @@ export const isInNetworkGroup = (network: NetworkType, root: NetworkType): boole
 /** check if network is available for selection */
 export const isLaunched = (network: NetworkType): boolean => getNetwork(network).launched;
 
-/** only launched networks — used for network selector UI */
-export const LAUNCHED_NETWORKS = (Object.keys(NETWORKS) as NetworkType[]).filter(
-  id => NETWORKS[id].launched,
-);
+/** only launched networks - used for network selector UI */
+export const LAUNCHED_NETWORKS = Object.keys(NETWORKS).filter(id => NETWORKS[id]?.launched);

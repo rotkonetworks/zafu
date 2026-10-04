@@ -12,13 +12,52 @@
  * - own wasm instance
  * - own sync loop
  * - own indexeddb store
+ *
+ * The real worker lives in exactly one place: the offscreen document (the
+ * same long-lived host that already runs the parallel proving worker). Every
+ * other context - the popup, an approval window, settings - is a client that
+ * proxies spawn/call/terminate through chrome.runtime messages and mirrors
+ * the worker's events locally. Before this, every popup document created its
+ * own real Worker (and its own wasm + sync loop), because each popup open is
+ * a fresh page with a fresh copy of this module; closing the popup should
+ * drop that Worker, but a dapp approval window, settings, and the main popup
+ * can all be open at once, each syncing the same wallet independently. One
+ * host, many clients, keeps exactly one zcash/penumbra worker alive.
  */
 
-import type { NetworkType } from './types';
+import { errText } from '@penumbra-zone/query/error-text';
+import type { NetworkType, VaultUnlock } from './types';
+import { isValidInternalSender } from '../../senders/internal';
+import type { SealedVault, WorkerKey } from '../../shared/vault-seal';
+import type { DepositPlan, DepositRequest } from '../../workers/transparent-deposit';
+import type { StopOutcome } from '../../workers/build-abort';
+
+/** true only inside the offscreen document - the one place that owns real Workers */
+const isOffscreenHost = (): boolean =>
+  typeof location !== 'undefined' && location.pathname.includes('offscreen');
+
+/** ensure the offscreen document exists, retrying while the service worker wakes up */
+const ensureOffscreenReady = async (): Promise<boolean> => {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    try {
+      const result = await chrome.runtime.sendMessage({ type: 'ZCASH_ENSURE_OFFSCREEN' });
+      if (result?.ok) {
+        return true;
+      }
+    } catch {
+      // service worker waking up - transient, retry
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  return false;
+};
+
+/** the subset of Worker a client proxy needs; a real Worker satisfies this too */
+type WorkerLike = Pick<Worker, 'postMessage' | 'terminate'>;
 
 /**
  * chrome.storage.local key holding the last scan height the zcash worker
- * reported for a wallet. A UI hint only — IndexedDB (`meta.syncHeight`) is
+ * reported for a wallet. A UI hint only - IndexedDB (`meta.syncHeight`) is
  * what the worker actually resumes from. Per-wallet on purpose; see the
  * write site in the 'sync-progress' handler.
  */
@@ -33,7 +72,9 @@ export interface NetworkWorkerMessage {
     | 'reset-sync'
     | 'get-balance'
     | 'get-pool-balances'
+    | 'vault-key'
     | 'send-tx'
+    | 'build-stop'
     | 'send-tx-multi'
     | 'send-tx-complete'
     | 'send-tx-pczt'
@@ -44,6 +85,8 @@ export interface NetworkWorkerMessage {
     | 'shield'
     | 'shield-unsigned'
     | 'shield-complete'
+    | 'transparent-deposit-plan'
+    | 'transparent-deposit'
     | 'list-wallets'
     | 'delete-wallet'
     | 'get-notes'
@@ -67,13 +110,16 @@ export interface NetworkWorkerMessage {
     | 'frost-inspect-pczt-outputs'
     | 'complete-orchard-pczt'
     | 'broadcast-raw-tx'
+    | 'pczt-extract-tx'
+    | 'broadcast-signed-tx'
+    | 'lookup-tx'
+    | 'shield-eligible'
     | 'get-transparent-utxos'
     | 'generate-voting-hotkey'
     | 'build-delegation-pczt'
     | 'finalize-delegation'
     | 'cast-vote-hot-wire'
     | 'pir-fetch-imt-proofs'
-    | 'get-orchard-account-info'
     | 'get-consensus-branch-id'
     | 'get-merkle-witnesses';
   id: string;
@@ -94,6 +140,7 @@ export interface NetworkWorkerResponse {
     | 'sync-reset'
     | 'balance'
     | 'pool-balances'
+    | 'vault-key'
     | 'tx-result'
     | 'tx-multi-result'
     | 'send-tx-unsigned'
@@ -112,9 +159,11 @@ export interface NetworkWorkerResponse {
     | 'memos-result'
     | 'sync-memos-progress'
     | 'mempool-update'
+    | 'zcash-backend-detected'
     | 'prove-request'
     | 'frost-result'
     | 'voting-result'
+    | 'terminated'
     | 'error';
   id: string;
   network: NetworkType;
@@ -124,9 +173,11 @@ export interface NetworkWorkerResponse {
 }
 
 interface WorkerState {
-  worker: Worker;
+  worker: WorkerLike;
   ready: boolean;
   syncingWallets: Set<string>; // track which wallets are syncing
+  /** client only: when the host last said anything about this network */
+  heardAt: number;
   pendingCallbacks: Map<
     string,
     {
@@ -140,7 +191,10 @@ const workers = new Map<NetworkType, WorkerState>();
 const spawnPromises = new Map<NetworkType, Promise<void>>();
 
 let messageId = 0;
-const nextId = () => `msg_${++messageId}`;
+// per-realm prefix: every popup counts from 1 and the host broadcasts replies
+// to all of them, so a bare counter would let two popups resolve each other's calls
+const realmId = crypto.randomUUID().slice(0, 8);
+const nextId = () => `msg_${realmId}_${++messageId}`;
 
 /**
  * spawn a dedicated worker for a network
@@ -167,7 +221,400 @@ export const spawnNetworkWorker = async (network: NetworkType): Promise<void> =>
   }
 };
 
+/**
+ * Message types that put a transaction on the wire (build-only steps like
+ * 'send-tx-pczt' or 'shield-unsigned' are not in here - nothing has been
+ * broadcast yet). Tracked host-side only, by request id, so "stop sync on
+ * last UI close" (see stopAllSyncInHost) can wait for one of these to land
+ * before it stops anything - a send must never be cut off mid-flight.
+ */
+const SEND_SHAPED_TYPES: ReadonlySet<string> = new Set([
+  'send-tx',
+  'send-tx-multi',
+  // their hot variants broadcast inside the same call
+  'send-turnstile-migration',
+  'shield',
+  'send-tx-complete',
+  'send-tx-pczt-complete',
+  'send-turnstile-migration-complete',
+  'shield-complete',
+  'complete-orchard-pczt',
+  'broadcast-raw-tx',
+  'broadcast-signed-tx',
+  'finalize-delegation',
+  'cast-vote-hot-wire',
+]);
+
+/** host-only: request ids of sends currently on the wire */
+const inFlightSendIds = new Set<string>();
+
+/**
+ * Shared by the host (reacting to the real worker's onmessage) and every
+ * client (reacting to the host's rebroadcast). Same state shape, same
+ * events, so a client behaves exactly like a page that owned the worker
+ * directly - callers never need to know which side they are on.
+ */
+const handleWorkerMessage = (
+  network: NetworkType,
+  state: WorkerState,
+  msg: NetworkWorkerResponse,
+): void => {
+  if (msg.type === 'ready') {
+    state.ready = true;
+    console.log(`[network-worker] ${network} worker ready`);
+    return;
+  }
+
+  if (msg.type === 'terminated') {
+    // the host tore the real worker down (explicit terminate, or a rescan
+    // from another context) - drop the stale local entry so the next call
+    // respawns instead of calling into nothing.
+    dropMirror(network, state);
+    return;
+  }
+
+  if (msg.type === 'sync-progress') {
+    // emit progress event with walletId
+    window.dispatchEvent(
+      new CustomEvent('network-sync-progress', {
+        detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
+      }),
+    );
+    // Persist the height for the next popup open. Two places already READ
+    // chrome.storage.local.zcashSyncHeight - the sync hook's mount-time
+    // hydration and the post-error retry's resume point - and nothing has
+    // ever WRITTEN it, so both silently degraded: the bar started every
+    // session at 0% until the worker's first emit landed, and a retry
+    // resumed from `undefined` instead of where it left off.
+    //
+    // IDB remains the source of truth for what has actually been scanned;
+    // this is only a hint so the UI does not have to claim ignorance it
+    // does not have. Keyed PER WALLET: one shared key would let a
+    // fully-synced wallet's height hydrate the bar for a wallet that has
+    // scanned nothing, which is the same lie in the opposite direction.
+    // offscreen documents have no chrome.storage; the clients write it
+    if (network === 'zcash' && msg.walletId && !isOffscreenHost()) {
+      const { currentHeight } = (msg.payload ?? {}) as { currentHeight?: number };
+      if (typeof currentHeight === 'number' && currentHeight > 0) {
+        void chrome.storage.local
+          .set({ [zcashSyncHeightKey(msg.walletId)]: currentHeight })
+          .catch(() => {});
+      }
+    }
+    return;
+  }
+
+  if (msg.type === 'zcash-backend-detected' && network === 'zcash') {
+    // what a node said it is (GetLightdInfo); the networks store caches it
+    window.dispatchEvent(new CustomEvent('zcash-backend-detected', { detail: msg.payload }));
+    return;
+  }
+
+  if (msg.type === 'sync-error' && network === 'zcash') {
+    // forward worker-side sync failures (HTTP 415, GetTip errors, etc) to
+    // the UI via the same event the auto-sync hook uses. The sync bar
+    // listener already picks this up and shows the "switch node" action.
+    // `code` is the worker's own structured classification (see
+    // state/sync-failure.ts). Relayed verbatim so the UI classifies on a
+    // code we emitted rather than on the shape of an error string.
+    const payload = msg.payload as
+      | { message?: string; code?: string; stalled?: boolean }
+      | undefined;
+    window.dispatchEvent(
+      new CustomEvent('zcash-sync-error', {
+        detail: {
+          walletId: msg.walletId,
+          message: payload?.message ?? 'sync error',
+          code: payload?.code,
+          stalled: payload?.stalled,
+        },
+      }),
+    );
+    return;
+  }
+
+  if (msg.type === 'send-progress') {
+    window.dispatchEvent(
+      new CustomEvent('zcash-send-progress', {
+        detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
+      }),
+    );
+    return;
+  }
+
+  if (msg.type === 'sync-memos-progress') {
+    window.dispatchEvent(
+      new CustomEvent('zcash-memo-sync-progress', {
+        detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
+      }),
+    );
+    return;
+  }
+
+  if (msg.type === 'mempool-update') {
+    // CONTRACT for consumers (hdevalence audit):
+    //
+    // `zcash-mempool-update` fires only when the worker found at least
+    // one match (pendingIncoming or pendingSpends non-empty). That
+    // means the *receipt* of this event is itself the signal "this
+    // wallet matched something in mempool". Any handler whose
+    // observable behavior differs between "got the event with N
+    // matches" and "got the event with M matches" (or "got the event"
+    // vs "didn't get the event") leaks the trial-decryption result to
+    // any local code/page that can measure the side effect.
+    //
+    // Consumers MUST:
+    //   - never fire a network request as a consequence of receipt;
+    //   - never produce a visible UI change with timing distinguishable
+    //     from the no-match path (use a refresh that already runs on
+    //     other triggers, not one keyed to mempool events);
+    //   - never log/store in a way the page or another extension can
+    //     observe.
+    //
+    // If you find yourself wanting to react conditionally, audit
+    // against the threat model: a co-located content script can read
+    // CustomEvent dispatches in the same realm. There is currently
+    // no consumer; add one only after confirming this discipline.
+    window.dispatchEvent(
+      new CustomEvent('zcash-mempool-update', {
+        detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
+      }),
+    );
+    return;
+  }
+
+  // track sync state per wallet
+  if (msg.type === 'sync-started' && msg.walletId) {
+    state.syncingWallets.add(msg.walletId);
+  }
+  if (msg.type === 'sync-stopped' && msg.walletId) {
+    state.syncingWallets.delete(msg.walletId);
+  }
+
+  // resolve pending callback
+  const callback = state.pendingCallbacks.get(msg.id);
+  if (callback) {
+    state.pendingCallbacks.delete(msg.id);
+    if (msg.error) {
+      callback.reject(new Error(msg.error));
+    } else {
+      callback.resolve(msg.payload);
+    }
+  }
+};
+
+/** fire-and-forget broadcast to every other extension context; nobody may be listening */
+const broadcastWorkerEvent = (network: NetworkType, msg: unknown): void => {
+  void chrome.runtime.sendMessage({ type: 'NW_EVENT', network, msg }).catch(() => {});
+};
+
+// client (popup / settings / approval window): one listener for the whole
+// module, re-dispatching the host's rebroadcast through the same handler a
+// host-side worker.onmessage would use. Installed once; the offscreen host
+// never reaches this branch because it gets events straight from its real
+// Worker instead.
+let clientListenerInstalled = false;
+const ensureClientListener = (): void => {
+  if (clientListenerInstalled || isOffscreenHost()) {
+    return;
+  }
+  clientListenerInstalled = true;
+  chrome.runtime.onMessage.addListener((msg, sender) => {
+    // worker events come from the offscreen host; a content script in a web tab
+    // must not feed this window a forged sync state
+    if (msg?.type !== 'NW_EVENT' || !msg.network || !isValidInternalSender(sender)) {
+      return false;
+    }
+    const state = workers.get(msg.network as NetworkType);
+    if (state) {
+      state.heardAt = Date.now();
+      handleWorkerMessage(msg.network as NetworkType, state, msg.msg as NetworkWorkerResponse);
+    }
+    return false;
+  });
+};
+
+/** forget a mirror and fail its calls now, instead of leaving them to hang */
+const dropMirror = (network: NetworkType, state: WorkerState): void => {
+  if (workers.get(network) === state) {
+    workers.delete(network);
+  }
+  for (const { reject } of state.pendingCallbacks.values()) {
+    reject(new Error(`${network} worker went away`));
+  }
+  state.pendingCallbacks.clear();
+};
+
+/**
+ * The host lost the worker without anyone asking (Chrome closed or crashed
+ * the offscreen document, and a new one came back empty). Drop the mirror
+ * and say so: the auto-sync hook starts sync again, from the stored height.
+ */
+const loseHost = (network: NetworkType): void => {
+  const state = workers.get(network);
+  if (!state) {
+    return;
+  }
+  dropMirror(network, state);
+  window.dispatchEvent(new CustomEvent('network-sync-lost', { detail: { network } }));
+};
+
+/** a client call the host could not take fails at once instead of hanging */
+const forwardToHost = async (network: NetworkType, message: unknown): Promise<void> => {
+  const reply = await chrome.runtime
+    .sendMessage({ type: 'NW_CALL', network, message, sentAt: Date.now() })
+    .catch(() => undefined);
+  if (!(reply as { ok?: boolean } | undefined)?.ok) {
+    loseHost(network);
+  }
+};
+
+/**
+ * A host that dies sends nothing, so a window whose sync (or a call it is
+ * waiting on, such as a send build) went quiet asks whether the host still
+ * has the worker and what it is syncing; a lost host fails the waiting calls. Local
+ * messages only, and only while this window believes something is syncing.
+ */
+const HOST_SILENCE_MS = 30_000;
+let hostWatch: ReturnType<typeof setInterval> | undefined;
+const watchHost = (): void => {
+  hostWatch ??= setInterval(() => {
+    for (const [network, state] of workers) {
+      // a send waiting on the host needs it alive just as much as a sync does
+      const waiting = state.syncingWallets.size > 0 || state.pendingCallbacks.size > 0;
+      if (!waiting || Date.now() - state.heardAt < HOST_SILENCE_MS) {
+        continue;
+      }
+      state.heardAt = Date.now();
+      void chrome.runtime
+        .sendMessage({ type: 'NW_PING', network })
+        .catch(() => undefined)
+        .then((reply?: { ok?: boolean; syncing?: string[] }) => {
+          if (!reply?.ok) {
+            loseHost(network);
+            return;
+          }
+          const syncing = new Set(reply.syncing);
+          if ([...state.syncingWallets].some(w => !syncing.has(w))) {
+            state.syncingWallets = syncing;
+            window.dispatchEvent(new CustomEvent('network-sync-lost', { detail: { network } }));
+          }
+        });
+    }
+  }, HOST_SILENCE_MS / 2);
+};
+
+// offscreen host: owns the real Workers and answers NW_SPAWN / NW_CALL /
+// NW_TERMINATE from every client. Installed once, only inside the offscreen
+// document.
+let hostListenerInstalled = false;
+/** the host's own prover: the zcash worker and the build worker share this document */
+let hostProver: ((request: unknown) => Promise<unknown>) | undefined;
+
+/** called once from the offscreen document's own entry point, so the host
+ *  can answer NW_SPAWN before any network's first real spawn happens, and
+ *  prove without messaging itself (runtime messages never reach the sender). */
+/** workers this realm hosts; non-zero only in the offscreen document */
+export const hostedWorkerCount = (): number => workers.size;
+
+export const initNetworkWorkerHost = (prove: (request: unknown) => Promise<unknown>): void => {
+  hostProver = prove;
+  ensureHostListener();
+};
+
+const ensureHostListener = (): void => {
+  if (hostListenerInstalled || !isOffscreenHost()) {
+    return;
+  }
+  hostListenerInstalled = true;
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    // only zafu's own pages and worker drive the hosted workers: a content
+    // script carries the extension id too, and could otherwise stop or kill a
+    // sync mid-send, queue proving jobs, or start a sync with its own keys
+    if (!isValidInternalSender(sender)) {
+      return false;
+    }
+    if (msg?.type === 'NW_SPAWN' && msg.network) {
+      void (async () => {
+        try {
+          await spawnNetworkWorker(msg.network as NetworkType);
+        } finally {
+          // covers the case where the worker was already running: the
+          // requester's wait loop only ever hears 'ready' through this
+          // broadcast, never from the (one-time) real worker message.
+          broadcastWorkerEvent(msg.network, { type: 'ready' });
+          sendResponse({ ok: true });
+        }
+      })();
+      return true;
+    }
+    if (msg?.type === 'NW_CALL' && msg.network && msg.message) {
+      const m = msg.message as NetworkWorkerMessage;
+      // a sync asked for after the last stop comes from a window that is
+      // open now: end any stop-on-close sweep so it can't kill this one
+      if (m.type === 'sync' && typeof msg.sentAt === 'number' && msg.sentAt > lastStopAt) {
+        stopGeneration++;
+      }
+      const host = workers.get(msg.network as NetworkType);
+      if (!host) {
+        sendResponse({ ok: false });
+        return false;
+      }
+      if (SEND_SHAPED_TYPES.has(m.type) && m.id) {
+        inFlightSendIds.add(m.id);
+      }
+      host.worker.postMessage(msg.message);
+      sendResponse({ ok: true });
+      return false;
+    }
+    if (msg?.type === 'NW_PING' && msg.network) {
+      const host = workers.get(msg.network as NetworkType);
+      sendResponse({ ok: !!host?.ready, syncing: [...(host?.syncingWallets ?? [])] });
+      return false;
+    }
+    if (msg?.type === 'NW_TERMINATE' && msg.network) {
+      terminateNetworkWorker(msg.network as NetworkType);
+      sendResponse({ ok: true });
+      return false;
+    }
+    if (msg?.type === 'NW_STOP_ALL_SYNC' && msg.network) {
+      lastStopAt = typeof msg.at === 'number' ? msg.at : Date.now();
+      void stopAllSyncInHost(msg.network as NetworkType).then(
+        stopped => sendResponse({ ok: true, stopped }),
+        () => sendResponse({ ok: false }),
+      );
+      return true;
+    }
+    return false;
+  });
+};
+
 const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
+  if (!isOffscreenHost()) {
+    ensureClientListener();
+    const okOffscreen = await ensureOffscreenReady();
+    if (!okOffscreen) {
+      throw new Error(`could not activate offscreen document for ${network} worker`);
+    }
+    const state: WorkerState = {
+      worker: {
+        postMessage: m => void forwardToHost(network, m),
+        terminate: () => void broadcastToHost('NW_TERMINATE', network, {}),
+      },
+      ready: false,
+      syncingWallets: new Set(),
+      heardAt: Date.now(),
+      pendingCallbacks: new Map(),
+    };
+    workers.set(network, state);
+    await broadcastToHost('NW_SPAWN', network, {});
+    await waitUntilReady(network, state);
+    watchHost();
+    return;
+  }
+
+  ensureHostListener();
+
   // each network has its own worker script
   const workerUrl = getWorkerUrl(network);
   if (!workerUrl) {
@@ -180,152 +627,50 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
     worker,
     ready: false,
     syncingWallets: new Set(),
+    heardAt: Date.now(),
     pendingCallbacks: new Map(),
   };
 
   worker.onmessage = (e: MessageEvent<NetworkWorkerResponse>) => {
     const msg = e.data;
 
-    if (msg.type === 'ready') {
-      state.ready = true;
-      console.log(`[network-worker] ${network} worker ready`);
-      return;
-    }
-
-    // relay prove requests from zcash-worker to offscreen via service worker
-
+    // relay prove requests from zcash-worker to the parallel-build worker,
+    // both hosted in this same offscreen document
     if (msg.type === 'prove-request' && (msg as any).id && (msg as any).request) {
       void relayProveRequest(worker, (msg as any).id, (msg as any).request);
       return;
     }
 
-    if (msg.type === 'sync-progress') {
-      // emit progress event with walletId
-      window.dispatchEvent(
-        new CustomEvent('network-sync-progress', {
-          detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
-        }),
-      );
-      // Persist the height for the next popup open. Two places already READ
-      // chrome.storage.local.zcashSyncHeight — the sync hook's mount-time
-      // hydration and the post-error retry's resume point — and nothing has
-      // ever WRITTEN it, so both silently degraded: the bar started every
-      // session at 0% until the worker's first emit landed, and a retry
-      // resumed from `undefined` instead of where it left off.
-      //
-      // IDB remains the source of truth for what has actually been scanned;
-      // this is only a hint so the UI does not have to claim ignorance it
-      // does not have. Keyed PER WALLET: one shared key would let a
-      // fully-synced wallet's height hydrate the bar for a wallet that has
-      // scanned nothing, which is the same lie in the opposite direction.
-      if (network === 'zcash' && msg.walletId) {
-        const { currentHeight } = (msg.payload ?? {}) as { currentHeight?: number };
-        if (typeof currentHeight === 'number' && currentHeight > 0) {
-          void chrome.storage.local
-            .set({ [zcashSyncHeightKey(msg.walletId)]: currentHeight })
-            .catch(() => {});
-        }
-      }
-      return;
-    }
-
-    if (msg.type === 'sync-error' && network === 'zcash') {
-      // forward worker-side sync failures (HTTP 415, GetTip errors, etc) to
-      // the UI via the same event the auto-sync hook uses. The sync bar
-      // listener already picks this up and shows the "switch node" action.
-      // `code` is the worker's own structured classification (see
-      // state/sync-failure.ts). Relayed verbatim so the UI classifies on a
-      // code we emitted rather than on the shape of an error string.
-      const payload = msg.payload as { message?: string; code?: string } | undefined;
-      window.dispatchEvent(
-        new CustomEvent('zcash-sync-error', {
-          detail: {
-            walletId: msg.walletId,
-            message: payload?.message ?? 'sync error',
-            code: payload?.code,
-          },
-        }),
-      );
-      return;
-    }
-
-    if (msg.type === 'send-progress') {
-      window.dispatchEvent(
-        new CustomEvent('zcash-send-progress', {
-          detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
-        }),
-      );
-      return;
-    }
-
-    if (msg.type === 'sync-memos-progress') {
-      window.dispatchEvent(
-        new CustomEvent('zcash-memo-sync-progress', {
-          detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
-        }),
-      );
-      return;
-    }
-
-    if (msg.type === 'mempool-update') {
-      // CONTRACT for consumers (hdevalence audit):
-      //
-      // `zcash-mempool-update` fires only when the worker found at least
-      // one match (pendingIncoming or pendingSpends non-empty). That
-      // means the *receipt* of this event is itself the signal "this
-      // wallet matched something in mempool". Any handler whose
-      // observable behavior differs between "got the event with N
-      // matches" and "got the event with M matches" (or "got the event"
-      // vs "didn't get the event") leaks the trial-decryption result to
-      // any local code/page that can measure the side effect.
-      //
-      // Consumers MUST:
-      //   - never fire a network request as a consequence of receipt;
-      //   - never produce a visible UI change with timing distinguishable
-      //     from the no-match path (use a refresh that already runs on
-      //     other triggers, not one keyed to mempool events);
-      //   - never log/store in a way the page or another extension can
-      //     observe.
-      //
-      // If you find yourself wanting to react conditionally, audit
-      // against the threat model: a co-located content script can read
-      // CustomEvent dispatches in the same realm. There is currently
-      // no consumer; add one only after confirming this discipline.
-      window.dispatchEvent(
-        new CustomEvent('zcash-mempool-update', {
-          detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
-        }),
-      );
-      return;
-    }
-
-    // track sync state per wallet
-    if (msg.type === 'sync-started' && msg.walletId) {
-      state.syncingWallets.add(msg.walletId);
-    }
-    if (msg.type === 'sync-stopped' && msg.walletId) {
-      state.syncingWallets.delete(msg.walletId);
-    }
-
-    // resolve pending callback
-    const callback = state.pendingCallbacks.get(msg.id);
-    if (callback) {
-      state.pendingCallbacks.delete(msg.id);
-      if (msg.error) {
-        callback.reject(new Error(msg.error));
-      } else {
-        callback.resolve(msg.payload);
-      }
-    }
+    inFlightSendIds.delete(msg.id);
+    handleWorkerMessage(network, state, msg);
+    // let every other context (popups, an approval window) mirror this
+    // worker's state instead of spawning their own
+    broadcastWorkerEvent(network, msg);
   };
 
   worker.onerror = e => {
-    console.error(`[network-worker] ${network} error:`, e);
+    console.error(`[network-worker] ${network} error: ${errText(e)}`);
   };
 
   workers.set(network, state);
+  await waitUntilReady(network, state);
+};
 
-  // wait for worker to be ready
+/** ask the offscreen host to do something, waiting for the service worker if needed */
+const broadcastToHost = async (
+  type: 'NW_SPAWN' | 'NW_TERMINATE',
+  network: NetworkType,
+  extra: Record<string, unknown>,
+): Promise<void> => {
+  try {
+    await chrome.runtime.sendMessage({ type, network, ...extra });
+  } catch {
+    // offscreen document not reachable yet/anymore - the caller's own
+    // wait/retry (spawn's 30s loop, or the next call) covers this
+  }
+};
+
+const waitUntilReady = async (network: NetworkType, state: WorkerState): Promise<void> => {
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('worker init timeout')), 30000);
     const check = () => {
@@ -337,6 +682,15 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
       }
     };
     check();
+  }).catch(err => {
+    // Without this, a dead-but-unready entry stays in `workers` forever and
+    // every later spawn call sees `workers.get(network)?.ready === false`
+    // skips the existing-worker fast path, then still finds the same stale
+    // (unready) entry and no-ops instead of retrying - the worker never
+    // comes back without a full extension reload.
+    state.worker.terminate();
+    workers.delete(network);
+    throw err;
   });
 };
 
@@ -349,6 +703,30 @@ export const terminateNetworkWorker = (network: NetworkType): void => {
     state.worker.terminate();
     workers.delete(network);
     console.log(`[network-worker] ${network} worker terminated`);
+    if (isOffscreenHost()) {
+      // the real worker is gone for everyone - tell every other context to
+      // drop its mirrored entry instead of calling into nothing
+      broadcastWorkerEvent(network, { type: 'terminated' });
+    }
+  }
+};
+
+/**
+ * Stop a network's worker wherever it runs, and wait until it has stopped.
+ * The real worker lives in the offscreen host; a client's terminate is a
+ * fire-and-forget broadcast, and a fresh popup may not even have a mirror
+ * entry to send it from, so erasing data asks the host directly.
+ */
+export const stopNetworkWorker = async (network: NetworkType): Promise<void> => {
+  if (isOffscreenHost()) {
+    terminateNetworkWorker(network);
+    return;
+  }
+  workers.delete(network);
+  try {
+    await chrome.runtime.sendMessage({ type: 'NW_TERMINATE', network });
+  } catch {
+    // no offscreen host is running, so no worker holds anything open
   }
 };
 
@@ -395,16 +773,37 @@ const callWorker = async <T>(
 };
 
 /**
+ * Stop the build a page started under `key`, if it has not broadcast yet. Any
+ * window may ask, including home after the sending screen closed. 'committed'
+ * means it is already on its way; 'stopped' and 'ended' mean nothing was sent.
+ * A host that is gone holds no build, so that counts as stopped.
+ */
+export const stopBuildInWorker = (network: NetworkType, key: string): Promise<StopOutcome> =>
+  callWorker<StopOutcome>(network, 'build-stop', { key }).catch(() => 'stopped' as const);
+
+/** the vault with the session key wrapped to a key the worker issued for this one call */
+const sealFor = async (network: NetworkType, vault: VaultUnlock): Promise<SealedVault> =>
+  vault.sealTo(await callWorker<WorkerKey>(network, 'vault-key'));
+
+/**
  * derive address for a network (runs in worker)
  */
 export const deriveAddressInWorker = async (
   network: NetworkType,
-  mnemonic: string,
+  /** the sealed vault: the phrase never crosses the message bus */
+  vault: VaultUnlock,
   accountIndex: number,
   /** zcash: the 11-byte diversifier index as 22 hex chars (see shielded-receive-index) */
   diversifierHex?: string,
+  /** zcash: the pocket (zip32 account); accountIndex above is a diversifier index */
+  pocket = 0,
 ): Promise<string> => {
-  return callWorker(network, 'derive-address', { mnemonic, accountIndex, diversifierHex });
+  return callWorker(network, 'derive-address', {
+    vault: await sealFor(network, vault),
+    accountIndex,
+    diversifierHex,
+    pocket,
+  });
 };
 
 /**
@@ -413,11 +812,13 @@ export const deriveAddressInWorker = async (
 export const startSyncInWorker = async (
   network: NetworkType,
   walletId: string,
-  mnemonic: string,
+  vault: VaultUnlock,
   serverUrl: string,
   startHeight?: number,
-  backend: 'zidecar' | 'lightwalletd' = 'zidecar',
+  backend: 'zidecar' | 'lightwalletd' = 'lightwalletd',
   mempoolWatch: 'off' | 'on' = 'off',
+  /** the node has not said what it is yet: the worker asks it (GetLightdInfo) first */
+  detectBackend = false,
 ): Promise<void> => {
   // Defensive: mempool watch is meaningless on lightwalletd. Use the
   // single-source-of-truth gate from the strategy module.
@@ -428,7 +829,14 @@ export const startSyncInWorker = async (
   return callWorker(
     network,
     'sync',
-    { mnemonic, serverUrl, startHeight, backend, mempoolWatch: effectiveMempoolWatch },
+    {
+      vault: await sealFor(network, vault),
+      serverUrl,
+      startHeight,
+      backend,
+      detectBackend,
+      mempoolWatch: effectiveMempoolWatch,
+    },
     walletId,
   );
 };
@@ -442,8 +850,10 @@ export const startWatchOnlySyncInWorker = async (
   ufvk: string,
   serverUrl: string,
   startHeight?: number,
-  backend: 'zidecar' | 'lightwalletd' = 'zidecar',
+  backend: 'zidecar' | 'lightwalletd' = 'lightwalletd',
   mempoolWatch: 'off' | 'on' = 'off',
+  /** the node has not said what it is yet: the worker asks it (GetLightdInfo) first */
+  detectBackend = false,
 ): Promise<void> => {
   const { isMempoolWatchEnabled } = await import('../../services/mempool-watch/strategy');
   const effectiveMempoolWatch: 'off' | 'on' = isMempoolWatchEnabled(mempoolWatch, backend)
@@ -452,7 +862,7 @@ export const startWatchOnlySyncInWorker = async (
   return callWorker(
     network,
     'sync',
-    { mnemonic: '', serverUrl, startHeight, ufvk, backend, mempoolWatch: effectiveMempoolWatch },
+    { serverUrl, startHeight, ufvk, backend, detectBackend, mempoolWatch: effectiveMempoolWatch },
     walletId,
   );
 };
@@ -465,7 +875,73 @@ export const stopSyncInWorker = async (network: NetworkType, walletId: string): 
 };
 
 /**
- * reset sync for a wallet — clears IDB notes/spent/meta and in-memory state
+ * Host-only: stop every wallet currently syncing on `network`, once nothing
+ * is mid-broadcast. Called when the last zafu UI surface closes (see
+ * ui-open-presence.ts in service-worker.ts) - the offscreen document and its
+ * worker stay alive (proving still needs them), only network activity stops.
+ * The next UI open resumes sync the same way it starts on any fresh popup.
+ */
+/** when the last window closed (sender's clock), and a counter bumped by any
+ *  sync a window asks for after that - a sweep ends the moment it moves */
+let lastStopAt = 0;
+let stopGeneration = 0;
+
+const stopAllSyncInHost = async (network: NetworkType): Promise<string[]> => {
+  const generation = ++stopGeneration;
+  const reopened = () => stopGeneration !== generation;
+  const deadline = Date.now() + 60_000;
+  while (inFlightSendIds.size > 0 && Date.now() < deadline && !reopened()) {
+    await new Promise(r => setTimeout(r, 250));
+  }
+  if (inFlightSendIds.size > 0) {
+    console.warn(
+      `[network-worker] stopping sync with ${inFlightSendIds.size} send(s) still marked in-flight after 60s`,
+    );
+  }
+  const stopped = new Set<string>();
+  const stopOnce = async (): Promise<number> => {
+    const wallets = [...(workers.get(network)?.syncingWallets ?? [])];
+    wallets.forEach(w => stopped.add(w));
+    await Promise.all(wallets.map(walletId => stopSyncInWorker(network, walletId).catch(() => {})));
+    return wallets.length;
+  };
+
+  if (reopened()) {
+    return [];
+  }
+  await stopOnce();
+  // A popup's own 'sync' call can already be in flight (dispatched to the
+  // host, not yet processed) the instant it closes - closing the page
+  // cannot retract a message already sent. That call still lands here and
+  // starts a fresh loop, silently undoing the stop above (runSync's own
+  // restart guard resets syncAbort unconditionally). Re-check for a few
+  // seconds and stop again if one lands late; stop sweeping once two
+  // checks in a row find nothing left running.
+  let quietChecks = 0;
+  while (quietChecks < 2) {
+    await new Promise(r => setTimeout(r, 500));
+    if (reopened()) {
+      break;
+    }
+    quietChecks = (await stopOnce()) === 0 ? quietChecks + 1 : 0;
+  }
+  return [...stopped];
+};
+
+/**
+ * Client side: ask the offscreen host to stop all sync for `network`. Fired
+ * from the service worker when the last UI surface disconnects - a no-op if
+ * no worker is running yet (nothing to stop).
+ */
+export const requestStopAllSync = (network: NetworkType): void => {
+  void chrome.runtime
+    .sendMessage({ type: 'NW_STOP_ALL_SYNC', network, at: Date.now() })
+    .then((r: unknown) => console.log(`[network-worker] requestStopAllSync(${network}) ->`, r))
+    .catch(() => {});
+};
+
+/**
+ * reset sync for a wallet - clears IDB notes/spent/meta and in-memory state
  */
 export const resetSyncInWorker = async (network: NetworkType, walletId: string): Promise<void> => {
   return callWorker(network, 'reset-sync', {}, walletId);
@@ -685,16 +1161,16 @@ export const getTransparentHistoryInWorker = async (
  * real block height, `pending` means broadcast and not yet seen (we do not know
  * whether it will confirm), `failed` means the wallet has scanned past the
  * transaction's own expiry height without finding it. The fields below `status`
- * exist only for transactions this wallet sent — the chain cannot supply them.
+ * exist only for transactions this wallet sent - the chain cannot supply them.
  */
 export interface HistoryEntry {
   id: string;
-  /** real block height, or 0 when there is not one yet — never a sentinel */
+  /** real block height, or 0 when there is not one yet - never a sentinel */
   height: number;
   type: 'send' | 'receive' | 'shield';
   /**
-   * zatoshis as a string. For a send this is what LEFT the wallet — recipient
-   * amount plus fee — not the gross value of the notes spent as inputs. Change
+   * zatoshis as a string. For a send this is what LEFT the wallet - recipient
+   * amount plus fee - not the gross value of the notes spent as inputs. Change
    * comes back to you and was never spent.
    */
   amount: string;
@@ -726,7 +1202,7 @@ export const getHistoryInWorker = async (
 
 /**
  * Sends this wallet broadcast that the chain has not confirmed (plus any that
- * provably expired). Answered from local state only — no network — so it is
+ * provably expired). Answered from local state only - no network - so it is
  * cheap enough to refetch on every sync tick, which is what the balance panel
  * needs in order to explain a temporarily reduced figure.
  */
@@ -747,8 +1223,14 @@ export interface MemoSyncEntry {
   amount: string;
   /** hex-encoded raw 512-byte memo (for structured/binary memos) */
   memoBytes?: string;
-  /** diversifier index of the receiving address */
+  /** diversifier index of the receiving address (never set by the worker; see `receiver`) */
   diversifierIndex?: number;
+  /**
+   * incoming only: the raw 43-byte orchard address of yours the note arrived
+   * on (hex), from the scanned note. The extension resolves it to the person
+   * you gave that address to (state/receiving-address.ts).
+   */
+  receiver?: string;
 }
 
 /**
@@ -788,24 +1270,45 @@ export interface ShieldResult {
 }
 
 /**
- * shield transparent funds to orchard (runs in worker with halo 2 proving)
+ * shield transparent funds (the worker opens the vault, proves offscreen, signs itself)
  */
 export const shieldInWorker = async (
   network: NetworkType,
   walletId: string,
-  mnemonic: string,
+  vault: VaultUnlock,
   serverUrl: string,
   tAddresses: string[],
   mainnet: boolean,
-  addressIndexMap?: Record<string, number>,
+  /** lets stopBuildInWorker stop this build before it broadcasts */
+  cancelKey?: string,
 ): Promise<ShieldResult> => {
   return callWorker(
     network,
     'shield',
-    { mnemonic, serverUrl, tAddresses, mainnet, addressIndexMap },
+    { vault: await sealFor(network, vault), serverUrl, tAddresses, mainnet, cancelKey },
     walletId,
   );
 };
+
+/** what a t->t deposit with an OP_RETURN costs from this address, priced with no key */
+export const planTransparentDepositInWorker = (
+  serverUrl: string,
+  req: DepositRequest,
+): Promise<DepositPlan> => callWorker('zcash', 'transparent-deposit-plan', { serverUrl, ...req });
+
+/** build, sign (the worker opens the vault) and broadcast the reviewed deposit */
+export const sendTransparentDepositInWorker = async (
+  storeId: string,
+  serverUrl: string,
+  req: DepositRequest & { reviewedFee: string },
+  vault: VaultUnlock,
+): Promise<{ txid: string; fee: string }> =>
+  callWorker(
+    'zcash',
+    'transparent-deposit',
+    { serverUrl, ...req, vault: await sealFor('zcash', vault) },
+    storeId,
+  );
 
 /** result of building an unsigned send transaction */
 export interface SendTxUnsignedResult {
@@ -825,7 +1328,7 @@ export interface SendTxUnsignedResult {
    * recipient and memo the chain does not store. Pass this back on the matching
    * complete* call and the worker does the same bookkeeping a hot send does.
    *
-   * Optional because stashing it is best-effort — a build that could not record
+   * Optional because stashing it is best-effort - a build that could not record
    * its context is still perfectly signable and broadcastable.
    */
   coldSendId?: string;
@@ -834,8 +1337,8 @@ export interface SendTxUnsignedResult {
 /**
  * build a send transaction (runs in worker with witness building)
  *
- * if mnemonic is provided: builds fully signed tx + broadcasts, returns { txid, fee }
- * if no mnemonic: builds unsigned tx for cold signing via QR (requires ufvk)
+ * hot (vault passed): the worker opens the vault, signs, broadcasts, returns { txid, fee }
+ * cold (no vault): builds unsigned tx for cold signing via QR (requires ufvk)
  */
 export const buildSendTxInWorker = async (
   network: NetworkType,
@@ -846,13 +1349,25 @@ export const buildSendTxInWorker = async (
   memo: string,
   accountIndex: number,
   mainnet: boolean,
-  mnemonic?: string,
+  vault?: VaultUnlock,
   ufvk?: string,
+  /** lets stopBuildInWorker stop this build before it broadcasts */
+  cancelKey?: string,
 ): Promise<SendTxUnsignedResult | { txid: string; fee: string }> => {
   return callWorker(
     network,
     'send-tx',
-    { serverUrl, recipient, amount, memo, accountIndex, mainnet, mnemonic, ufvk },
+    {
+      serverUrl,
+      recipient,
+      amount,
+      memo,
+      accountIndex,
+      mainnet,
+      vault: vault && (await sealFor(network, vault)),
+      ufvk,
+      cancelKey,
+    },
     walletId,
   );
 };
@@ -875,12 +1390,21 @@ export const buildMultiSendTxInWorker = async (
   outputs: { address: string; amount: string; memo?: string }[],
   accountIndex: number,
   mainnet: boolean,
-  mnemonic: string,
+  vault: VaultUnlock,
+  /** lets stopBuildInWorker stop this build before its first broadcast */
+  cancelKey?: string,
 ): Promise<MultiSendResult> => {
   return callWorker(
     network,
     'send-tx-multi',
-    { serverUrl, outputs, accountIndex, mainnet, mnemonic },
+    {
+      serverUrl,
+      outputs,
+      accountIndex,
+      mainnet,
+      vault: await sealFor(network, vault),
+      cancelKey,
+    },
     walletId,
   );
 };
@@ -933,7 +1457,7 @@ export interface SendTxPcztUnsignedResult {
   sighash: string;
   alphas: string[];
   spendIndices: number[];
-  /** see SendTxUnsignedResult.coldSendId — same handle, same contract */
+  /** see SendTxUnsignedResult.coldSendId - same handle, same contract */
   coldSendId?: string;
   /**
    * The request envelope went out COMPACT (tx_type 0x05), so the device will
@@ -956,7 +1480,7 @@ export interface SendTxPcztUnsignedResult {
  *
  * Set `frost` when the PCZT feeds a FROST multisig signing round (self-custody
  * or airgap co-signers). Those callers REQUIRE the `sighash` / `alphas` /
- * `spendIndices` fields, which only the orchard builder emits — the worker
+ * `spendIndices` fields, which only the orchard builder emits - the worker
  * fails closed rather than hand back a PCZT with empty FROST fields.
  */
 export const buildSendTxPcztInWorker = async (
@@ -978,11 +1502,24 @@ export const buildSendTxPcztInWorker = async (
    */
   frost = false,
   fragmentSize = 400,
+  /** lets stopBuildInWorker stop this build */
+  cancelKey?: string,
 ): Promise<SendTxPcztUnsignedResult> => {
   return callWorker(
     network,
     'send-tx-pczt',
-    { serverUrl, recipient, amount, memo, targetHeight, mainnet, ufvk, fragmentSize, frost },
+    {
+      serverUrl,
+      recipient,
+      amount,
+      memo,
+      targetHeight,
+      mainnet,
+      ufvk,
+      fragmentSize,
+      frost,
+      cancelKey,
+    },
     walletId,
   );
 };
@@ -1059,7 +1596,7 @@ export interface TurnstileMigrationUnsignedResult {
   amount: string;
   urFrames: string[];
   cborBytes: number;
-  /** see SendTxUnsignedResult.coldSendId — same handle, same contract */
+  /** see SendTxUnsignedResult.coldSendId - same handle, same contract */
   coldSendId?: string;
 }
 
@@ -1068,11 +1605,10 @@ export interface TurnstileMigrationUnsignedResult {
  * balance to its OWN ironwood address (derived inside the wasm) in a single V6
  * transaction. Feature-flagged (IRONWOOD_MIGRATION) at the UI layer.
  *
- * Two modes, selected by which secret is provided:
- * - HOT (mnemonic passed): the worker builds + proves + SIGNS the tx inside the
- *   wasm and broadcasts it directly, resolving to `{ txid, fee }`. No PCZT is
- *   produced or transmitted. `ufvk` is ignored.
- * - COLD (mnemonic omitted, ufvk passed): the worker builds an UNSIGNED PCZT
+ * Two modes, selected by which key access is provided:
+ * - HOT (vault passed): the worker opens the vault, has the PCZT proven, SIGNS
+ *   it and broadcasts directly, resolving to `{ txid, fee }`. `ufvk` is ignored.
+ * - COLD (vault omitted, ufvk passed): the worker builds an UNSIGNED PCZT
  *   for the zigner cold-sign QR machine, resolving to
  *   `TurnstileMigrationUnsignedResult` (frames etc.).
  */
@@ -1083,14 +1619,26 @@ export const buildTurnstileMigrationInWorker = async (
   accountIndex: number,
   mainnet: boolean,
   ufvk: string | undefined,
-  backend: 'zidecar' | 'lightwalletd' = 'zidecar',
-  mnemonic?: string,
+  /** omitted: the worker keeps what the sync registered for this node */
+  backend?: 'zidecar' | 'lightwalletd',
+  vault?: VaultUnlock,
   fragmentSize = 400,
+  /** lets stopBuildInWorker stop this build before it broadcasts */
+  cancelKey?: string,
 ): Promise<TurnstileMigrationUnsignedResult | { txid: string; fee: string }> => {
   return callWorker(
     network,
     'send-turnstile-migration',
-    { serverUrl, accountIndex, mainnet, ufvk, backend, mnemonic, fragmentSize },
+    {
+      serverUrl,
+      accountIndex,
+      mainnet,
+      ufvk,
+      backend,
+      vault: vault && (await sealFor(network, vault)),
+      fragmentSize,
+      cancelKey,
+    },
     walletId,
   );
 };
@@ -1122,6 +1670,8 @@ export interface ShieldUnsignedResult {
   summary: string;
   fee: string;
   addressIndices: number[];
+  /** the one transparent pubkey that owns every input (ironwood builder only) */
+  transparentPubkeyHex?: string;
 }
 
 /**
@@ -1134,15 +1684,64 @@ export const buildUnsignedShieldInWorker = async (
   tAddresses: string[],
   mainnet: boolean,
   ufvk: string,
-  addressIndexMap?: Record<string, number>,
+  /** Ledger: one round of at most this many inputs, with the account's ovk */
+  ledger?: { maxInputs: number },
+  /** lets stopBuildInWorker stop this build */
+  cancelKey?: string,
 ): Promise<ShieldUnsignedResult> => {
   return callWorker(
     network,
     'shield-unsigned',
-    { serverUrl, tAddresses, mainnet, ufvk, addressIndexMap },
+    {
+      serverUrl,
+      tAddresses,
+      mainnet,
+      ufvk,
+      ...(ledger && { ...ledger, ledgerOvk: true }),
+      cancelKey,
+    },
     walletId,
   );
 };
+
+/** a signed PCZT's broadcast-ready tx and its (display-order) txid; no network */
+export const extractSignedPcztTxInWorker = (
+  signedPcztHex: string,
+): Promise<{ txHex: string; txid: string }> =>
+  callWorker('zcash', 'pczt-extract-tx', { signedPcztHex });
+
+/** broadcast an extracted signed tx with the cold-send bookkeeping for
+ *  `coldSendId`; "broadcast failed (code)" is a node rejection, any other
+ *  throw an unknown outcome */
+export const broadcastSignedTxInWorker = (
+  walletId: string,
+  serverUrl: string,
+  txHex: string,
+  coldSendId?: string,
+): Promise<{ txid: string }> =>
+  callWorker('zcash', 'broadcast-signed-tx', { serverUrl, txHex, coldSendId }, walletId);
+
+/** whether the backend knows a display-order txid; a failure reads as not found */
+export const lookupTxInWorker = (
+  serverUrl: string,
+  txid: string,
+): Promise<{ found: boolean; height?: number }> =>
+  callWorker('zcash', 'lookup-tx', { serverUrl, txid });
+
+export interface ShieldEligibility {
+  inputCount: number;
+  totalZat: string;
+  /** the next round's inputs would not cover its fee */
+  belowThreshold: boolean;
+}
+
+/** shieldable transparent inputs right now; throws on a failed fetch, never 0 */
+export const shieldEligibilityInWorker = (
+  serverUrl: string,
+  tAddresses: string[],
+  maxInputs: number,
+): Promise<ShieldEligibility> =>
+  callWorker('zcash', 'shield-eligible', { serverUrl, tAddresses, maxInputs });
 
 /**
  * complete shielding transaction with signatures and broadcast
@@ -1190,51 +1789,17 @@ export const isNetworkWorkerRunning = (network: NetworkType): boolean => {
 };
 
 /**
- * relay a prove request from zcash-worker (Web Worker, no chrome APIs)
- * through to the service worker → offscreen document for parallel proving.
+ * answer a prove request from the zcash worker with the host's own prover.
+ * Both workers live in the offscreen document, so the request (UFVK and
+ * public data only, checked by prove-guard on each side) never touches the
+ * extension message bus.
  */
 async function relayProveRequest(worker: Worker, id: string, request: unknown): Promise<void> {
   try {
-    // 1. ensure offscreen document exists. The MV3 service worker may be asleep
-    // or have just been KILLED (e.g. by a long witness rebuild that outran its
-    // ~30s idle timeout), so the first ensure can come back empty or reject
-    // ("Could not establish connection") while the SW wakes and re-registers
-    // its listeners + creates the offscreen doc. Retry a few times before
-    // giving up, so a slow pre-proving step can't take down the whole send.
-    let ensureResult: { ok?: boolean; error?: string } | undefined;
-    for (let attempt = 0; attempt < 6; attempt++) {
-      try {
-        ensureResult = await chrome.runtime.sendMessage({ type: 'ZCASH_ENSURE_OFFSCREEN' });
-      } catch {
-        // SW waking up; the connection error is transient - retry.
-        ensureResult = undefined;
-      }
-      if (ensureResult?.ok) {
-        break;
-      }
-      await new Promise(resolve => setTimeout(resolve, 500));
+    if (!hostProver) {
+      throw new Error('the prover is not running in this document');
     }
-    if (!ensureResult?.ok) {
-      worker.postMessage({
-        type: 'prove-response',
-        id,
-        error: `failed to activate offscreen: ${ensureResult?.error ?? 'service worker unavailable after retries'}`,
-      });
-      return;
-    }
-    // 2. send build request to offscreen handler
-    const response = await chrome.runtime.sendMessage({ type: 'ZCASH_BUILD', request });
-    if (response?.error) {
-      worker.postMessage({
-        type: 'prove-response',
-        id,
-        error: response.error.message ?? JSON.stringify(response.error),
-      });
-    } else if (response?.data === undefined) {
-      worker.postMessage({ type: 'prove-response', id, error: 'offscreen returned no data' });
-    } else {
-      worker.postMessage({ type: 'prove-response', id, data: response.data });
-    }
+    worker.postMessage({ type: 'prove-response', id, data: await hostProver(request) });
   } catch (e) {
     worker.postMessage({
       type: 'prove-response',
@@ -1265,7 +1830,7 @@ export const frostDkgPart2InWorker = async (
   });
 };
 
-/** DKG round 3: finalize — returns key package + public key package */
+/** DKG round 3: finalize - returns key package + public key package */
 export const frostDkgPart3InWorker = async (
   secretHex: string,
   round1Broadcasts: string[],
@@ -1286,7 +1851,7 @@ export const frostSignRound1InWorker = async (
   return callWorker('zcash', 'frost-sign-round1', { ephemeralSeedHex, keyPackageHex });
 };
 
-/** signed FROST share — wrapping is required for cross-party aggregator (poker-escrow) to extract the signer identifier */
+/** signed FROST share - wrapping is required for cross-party aggregator (poker-escrow) to extract the signer identifier */
 export const frostSpendSignInWorker = async (
   ephemeralSeedHex: string,
   keyPackageHex: string,
@@ -1323,7 +1888,7 @@ export const frostSpendAggregateInWorker = async (
 };
 
 /** derive multisig Orchard address from FROST group key (non-deterministic
- * — only use for single-party derive-and-broadcast flows) */
+ * - only use for single-party derive-and-broadcast flows) */
 export const frostDeriveAddressInWorker = async (
   publicKeyPackageHex: string,
   diversifierIndex: number,
@@ -1333,7 +1898,7 @@ export const frostDeriveAddressInWorker = async (
 
 /** derive multisig Orchard address deterministically from pkg + host-broadcast sk.
  * pair with `frostDeriveUfvkInWorker` so address and UFVK share one source of
- * truth for nk/rivk — otherwise participants end up with matching UFVK but
+ * truth for nk/rivk - otherwise participants end up with matching UFVK but
  * different addresses. */
 export const frostDeriveAddressFromSkInWorker = async (
   publicKeyPackageHex: string,
@@ -1359,7 +1924,7 @@ export const frostSampleFvkSkInWorker = async (): Promise<string> => {
 /**
  * derive the Orchard-only UFVK string (`uview1…`) from the FROST group
  * public key package and the host-broadcast `sk`. given identical inputs
- * on every participant, output is byte-identical — this is the property
+ * on every participant, output is byte-identical - this is the property
  * we echo-broadcast to verify before persisting the wallet.
  */
 export const frostDeriveUfvkInWorker = async (
@@ -1379,6 +1944,25 @@ export interface FrostParsedAction {
   recipient_raw_hex: string | null;
   is_change: boolean;
   decrypted: boolean;
+  // ── additive, from frost_inspect_pczt_outputs (zcli feat/pczt-explicit-expiry).
+  // Absent from the currently vendored wasm; verifySealedIntent refuses when
+  // they are missing rather than guessing.
+  pool?: 'orchard' | 'ironwood';
+  /** Output note value, ONLY when `cmx_verified` (recomputed from the PCZT's
+   * recipient/value/rseed and the sighash-bound cmx). */
+  committed_value_zat?: number | null;
+  /** Output note recipient (raw 43 bytes hex), ONLY when `cmx_verified`. */
+  committed_recipient_raw_hex?: string | null;
+  cmx_verified?: boolean;
+  /** Scope of the inspecting UFVK the committed recipient derives from, or
+   * null for a foreign address. A key-derivation fact, unlike `is_change`. */
+  recipient_scope?: 'external' | 'internal' | null;
+}
+export interface FrostParsedTransparentOutput {
+  value_zat: number;
+  script_pubkey_hex: string;
+  /** encoded P2PKH/P2SH address, null for any other script */
+  address: string | null;
 }
 export interface FrostParsedTx {
   actions: FrostParsedAction[];
@@ -1389,12 +1973,25 @@ export interface FrostParsedTx {
     action_count: number;
   };
   /** ZIP-244 sighash recomputed from the unsigned tx bytes the joiner was
-   * given. Compare to the host's claimed sighash from the SIGN: payload —
-   * a mismatch means the host published a decoy bundle for display while
+   * given. Compare to the host's claimed sighash from the SIGN: payload - * a mismatch means the host published a decoy bundle for display while
    * asking the joiner to actually sign a different tx. `null` means the
    * tx shape (transparent or sapling component present) isn't covered by
-   * this verifier yet — fall back to OVK-only check with a warning. */
+   * this verifier yet - fall back to OVK-only check with a warning. */
   computed_sighash_hex: string | null;
+  // ── additive, transaction-level (see FrostParsedAction) ──
+  expiry_height?: number;
+  tx_version?: number;
+  consensus_branch_id?: number;
+  /** per-pool value balance the sighash binds (0 when the bundle is absent) */
+  value_balance_zat?: { orchard: number; ironwood: number; sapling: number };
+  sapling_present?: boolean;
+  transparent_input_count?: number;
+  transparent_input_total_zat?: number | null;
+  transparent_outputs?: FrostParsedTransparentOutput[];
+  /** value balances + transparent in - transparent out; null if negative */
+  fee_zat?: number | null;
+  /** null, or why the committed per-output view could not be produced */
+  committed_outputs_error?: string | null;
 }
 export const frostParseTxOutputsInWorker = async (
   unsignedTxHex: string,
@@ -1407,8 +2004,7 @@ export const frostParseTxOutputsInWorker = async (
   return JSON.parse(json) as FrostParsedTx;
 };
 
-/** PCZT-native variant: inspect a standard pczt::Pczt (the migration target —
- * mnemonic/zigner hosts + the escrow all publish a PCZT). Recomputes the
+/** PCZT-native variant: inspect a standard pczt::Pczt (the migration target - * mnemonic/zigner hosts + the escrow all publish a PCZT). Recomputes the
  * canonical sighash from the PCZT itself; same FrostParsedTx contract as the
  * v5-tx parser so computeVerdict is unchanged. */
 export const frostInspectPcztOutputsInWorker = async (
@@ -1540,17 +2136,6 @@ export const pirFetchImtProofsInWorker = async (a: {
   nullifiersJson: string;
 }): Promise<{ imtProofsJson: string }> => {
   return callWorker('zcash', 'pir-fetch-imt-proofs', a);
-};
-
-/** Raw Orchard FVK hex + a freshly ZIP-316-encoded UFVK string for a mnemonic
- *  wallet's account. `WalletKeys` only exports the raw FVK bytes; there is no
- *  stored UFVK for a hot wallet the way there is for watch-only/Ledger
- *  imports, so the worker encodes (and self-validates) one on demand. */
-export const getOrchardAccountInfoInWorker = async (
-  mnemonic: string,
-  mainnet: boolean,
-): Promise<{ fvkHex: string; ufvkStr: string }> => {
-  return callWorker('zcash', 'get-orchard-account-info', { mnemonic, mainnet });
 };
 
 /** Live consensus branch id (as a number) from the endpoint's GetLightdInfo,

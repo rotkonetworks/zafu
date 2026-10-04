@@ -11,7 +11,10 @@
  * We patch the global Worker constructor to fix the URLs before init.
  */
 
+// egress guard first: nothing may capture fetch or open a socket before it
+import './net/egress-install-lite';
 import { assessAmbientRayonIsolation, RAYON_ISOLATION_WARNING } from './perf/rayon-isolation';
+import type { ProveRequest, ProverFn } from './shared/prove-guard';
 
 type WasmModule = Record<string, any>;
 
@@ -32,8 +35,7 @@ let wasmModule: WasmModule | null = null;
 let initPromise: Promise<void> | null = null;
 
 // Same blob the compute worker loads (public/zafu-wasm). They were separate
-// directories holding byte-identical parallel builds — 6.3 MB shipped twice —
-// and the duplication is what let one copy sit stale for two days. One path,
+// directories holding byte-identical parallel builds - 6.3 MB shipped twice - // and the duplication is what let one copy sit stale for two days. One path,
 // one truth; each realm still gets its own module instance and rayon pool.
 const WASM_BASE = '/zafu-wasm';
 
@@ -61,7 +63,7 @@ const initParallelWasm = async (): Promise<WasmModule> => {
     // the helpers do `new Worker(new URL('./workerHelpers.js', import.meta.url), { type: 'module' })`
     // but import.meta.url in the offscreen context resolves wrong.
     // we intercept and rewrite the URL to the correct absolute extension path.
-    // note: chrome.runtime is NOT available in nested Workers — use self.location.origin instead.
+    // note: chrome.runtime is NOT available in nested Workers - use self.location.origin instead.
     const OriginalWorker = globalThis.Worker;
     const extOrigin = self.location.origin + '/';
     globalThis.Worker = class PatchedWorker extends OriginalWorker {
@@ -81,7 +83,7 @@ const initParallelWasm = async (): Promise<WasmModule> => {
     };
 
     try {
-      // @ts-expect-error dynamic import — parallel WASM build with rayon + shared memory
+      // @ts-expect-error dynamic import - parallel WASM build with rayon + shared memory
       const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm/zafu_wasm.js');
       // let the JS glue create shared memory with its own initial/max settings
       await wasm.default({ module_or_path: `${WASM_BASE}/zafu_wasm_bg.wasm` });
@@ -166,12 +168,12 @@ const initParallelVotingWasm = async (): Promise<WasmModule> => {
     };
 
     try {
-      // @ts-expect-error dynamic import — parallel voting-wasm build with rayon + shared memory
+      // @ts-expect-error dynamic import - parallel voting-wasm build with rayon + shared memory
       const wasm = await import(/* webpackIgnore: true */ '/voting-wasm/voting_wasm.js');
       await wasm.default({ module_or_path: `${VOTING_WASM_BASE}/voting_wasm_bg.wasm` });
       wasm.voting_wasm_init_panic_hook();
 
-      // Own pool, independent of the core module's — same crossOriginIsolated
+      // Own pool, independent of the core module's - same crossOriginIsolated
       // offscreen context, but a separate wasm instance/memory needs its own
       // initThreadPool call.
       assertRayonIsolation('voting-wasm prover');
@@ -199,31 +201,7 @@ const initParallelVotingWasm = async (): Promise<WasmModule> => {
   return votingWasmModule!;
 };
 
-interface ZcashBuildRequest {
-  fn:
-    | 'build_signed_spend'
-    | 'build_unsigned'
-    | 'build_unsigned_pczt'
-    | 'build_turnstile_migration_pczt'
-    | 'build_signed_turnstile_migration'
-    | 'build_signed_ironwood_send'
-    | 'build_ironwood_send_pczt'
-    | 'build_shielding'
-    | 'build_unsigned_shielding'
-    | 'build_unsigned_shielding_ironwood'
-    // shielded-voting proving fns (standalone voting-wasm module - see
-    // initParallelVotingWasm above). build_delegation_pczt does not itself
-    // run a halo2 proof (that's deferred to finalize_delegation) but is
-    // routed through the offscreen prover anyway so all three share one
-    // lazily-initialized voting-wasm instance + rayon pool instead of each
-    // triggering its own load.
-    | 'build_delegation_pczt'
-    | 'finalize_delegation'
-    | 'cast_vote_hot_wire';
-  args: unknown[];
-}
-
-self.addEventListener('message', ({ data }: { data: ZcashBuildRequest }) => {
+self.addEventListener('message', ({ data }: { data: ProveRequest }) => {
   void executeBuild(data).then(
     result => self.postMessage({ data: result }),
     error => self.postMessage({ error: { message: String(error) } }),
@@ -233,13 +211,13 @@ self.addEventListener('message', ({ data }: { data: ZcashBuildRequest }) => {
 // voting fns route to the standalone voting-wasm module + pool; everything
 // else routes to the core zafu-wasm module + pool. Keeps the wallet's normal
 // send/scan path from ever loading the voting module.
-const VOTING_FNS = new Set<ZcashBuildRequest['fn']>([
+const VOTING_FNS = new Set<ProverFn>([
   'build_delegation_pczt',
   'finalize_delegation',
   'cast_vote_hot_wire',
 ]);
 
-async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
+async function executeBuild(req: ProveRequest): Promise<unknown> {
   const wasm = VOTING_FNS.has(req.fn) ? await initParallelVotingWasm() : await initParallelWasm();
   const a = req.args;
 
@@ -247,22 +225,6 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
   let result: unknown;
 
   switch (req.fn) {
-    case 'build_signed_spend':
-      result = wasm['build_signed_spend_transaction'](
-        a[0],
-        a[1],
-        a[2],
-        BigInt(a[3] as string),
-        BigInt(a[4] as string),
-        a[5],
-        a[6],
-        a[7],
-        a[8],
-        a[9] ?? null,
-        a[10] ?? null, // branch_id_hex (live consensus branch id; null -> WASM NU6.2 fallback)
-      );
-      break;
-
     case 'build_unsigned':
       result = wasm['build_unsigned_transaction'](
         a[0],
@@ -317,70 +279,15 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
       );
       break;
 
-    case 'build_signed_turnstile_migration':
-      // NU6.3 turnstile HOT path: same param layout as the cold
-      // build_turnstile_migration_pczt above, but a[0] is the SEED PHRASE
-      // (not the UFVK) and the wasm returns the final SIGNED V6 tx hex - no
-      // intermediate PCZT is produced or persisted. Signature:
-      // (seed_phrase, orchard_notes_json, fee, orchard_anchor_hex,
-      //  orchard_merkle_paths_json, account_index, target_height,
-      //  expected_branch_id, mainnet, memo_hex?). a[2] is the fee
-      // (stringified bigint over postMessage); a[7] is the fail-closed branch id.
-      if (typeof wasm['build_signed_turnstile_migration'] !== 'function') {
-        throw new Error('ironwood hot-sign turnstile not supported by this wasm build');
-      }
-      result = wasm['build_signed_turnstile_migration'](
-        a[0],
-        a[1],
-        BigInt(a[2] as string),
-        a[3],
-        a[4],
-        a[5],
-        a[6],
-        a[7],
-        a[8],
-        a[9] ?? null,
-      );
-      break;
-
-    case 'build_signed_ironwood_send':
-      // NU6.3 general IRONWOOD hot send. Signature:
-      // (seed_phrase, ironwood_notes_json, recipient, amount, fee,
-      //  ironwood_anchor_hex, ironwood_merkle_paths_json, account_index,
-      //  target_height, expected_branch_id, mainnet, memo_hex?). a[3]/a[4] are
-      // the amount/fee (stringified bigint over postMessage); a[9] is the
-      // fail-closed expected branch id (number). Feature-detected: the export
-      // lands with the NU6.3 blob.
-      if (typeof wasm['build_signed_ironwood_send'] !== 'function') {
-        throw new Error('ironwood send not supported by this wasm build');
-      }
-      result = wasm['build_signed_ironwood_send'](
-        a[0],
-        a[1],
-        a[2],
-        BigInt(a[3] as string),
-        BigInt(a[4] as string),
-        a[5],
-        a[6],
-        a[7],
-        a[8],
-        a[9],
-        a[10],
-        a[11] ?? null,
-      );
-      break;
-
     case 'build_ironwood_send_pczt':
-      // NU6.3 general IRONWOOD COLD send (zigner / watch-only). Same param
-      // layout as build_signed_ironwood_send above, but a[0] is the UFVK (not
-      // the seed) and the wasm returns a redacted-for-signer PCZT
-      // { pczt_hex, summary, action_count } rather than a signed tx. Signature:
+      // NU6.3 general IRONWOOD send, hot and cold alike: built from the UFVK,
+      // returns { pczt_hex (redacted), retained_pczt_hex, summary, ... }; the
+      // zcash worker or the cold signer signs. Signature:
       // (ufvk_str, ironwood_notes_json, recipient, amount, fee,
       //  ironwood_anchor_hex, ironwood_merkle_paths_json, account_index,
       //  target_height, expected_branch_id, mainnet, memo_hex?). a[3]/a[4] are
       // the amount/fee (stringified bigint over postMessage); a[9] is the
-      // fail-closed expected branch id (number). Feature-detected: the export
-      // lands with the NU6.3 blob.
+      // fail-closed expected branch id (number).
       if (typeof wasm['build_ironwood_send_pczt'] !== 'function') {
         throw new Error('ironwood cold send not supported by this wasm build');
       }
@@ -397,33 +304,6 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
         a[9],
         a[10],
         a[11] ?? null,
-      );
-      break;
-
-    case 'build_shielding':
-      // Pool is resolved from the target height IN RUST, not here.
-      // build_shielding_transaction (orchard) is now fail-closed at NU6.3:
-      // shielding into orchard post-activation creates a note that cannot be
-      // spent and needs a turnstile migration plus a second fee to recover.
-      // _auto takes the same arguments and picks ironwood at/after activation,
-      // so the stranded pool cannot be selected by omission.
-      if (typeof wasm['build_shielding_transaction_auto'] !== 'function') {
-        throw new Error(
-          'this wasm build predates ironwood shielding - rebuild the wasm ' +
-            '(see packages/zcash-wasm/BUILD_PROVENANCE.md); shielding into orchard ' +
-            'after NU6.3 would strand the funds',
-        );
-      }
-      result = wasm['build_shielding_transaction_auto'](
-        a[0],
-        a[1],
-        a[2],
-        BigInt(a[3] as string),
-        BigInt(a[4] as string),
-        a[5],
-        a[6],
-        a[7] ?? null, // branch_id_hex (live consensus branch id; required at NU6.3)
-        a[8] ?? null, // memo_hex
       );
       break;
 
@@ -461,13 +341,14 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
         a[6], // expected_branch_id (number)
         a[7], // mainnet
         a[8] ?? null, // memo_hex
+        a[9] ?? null, // ovk_from_ufvk: a Ledger account's UFVK, so the app can review the output
       );
       break;
 
     case 'build_delegation_pczt':
       // (fvk_hex, seed_fingerprint_hex, account_index, hotkey_pubkey_hex,
       //  notes_json, round_params_json, consensus_branch_id, round_name,
-      //  network, bundle_index) — see voting-wasm/src/voting_delegation.rs.
+      //  network, bundle_index) - see voting-wasm/src/voting_delegation.rs.
       result = wasm['build_delegation_pczt'](
         a[0],
         a[1],
@@ -484,13 +365,13 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
 
     case 'finalize_delegation':
       // (delegation_context_json, merkle_witnesses_json, imt_proofs_json,
-      //  spend_auth_sig_hex, sighash_hex) — runs the real K=14 ZKP #1 proof.
+      //  spend_auth_sig_hex, sighash_hex) - runs the real K=14 ZKP #1 proof.
       result = wasm['finalize_delegation'](a[0], a[1], a[2], a[3], a[4]);
       break;
 
     case 'cast_vote_hot_wire':
       // (hotkey_secret_hex, round_params_json, delegation_state_json,
-      //  van_witness_json, vote_json, network, submit_at) — runs ZKP #2.
+      //  van_witness_json, vote_json, network, submit_at) - runs ZKP #2.
       // submit_at crosses postMessage as a stringified bigint, same
       // convention as the amount/fee args on the core send builders above.
       result = wasm['cast_vote_hot_wire'](

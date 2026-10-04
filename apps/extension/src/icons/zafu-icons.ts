@@ -1,5 +1,5 @@
 /**
- * zafu icon collection — hand-drawn Japanese-motif icons for UnoCSS.
+ * zafu icon collection - hand-drawn Japanese-motif icons for UnoCSS.
  *
  * Registered as the `zafu` collection in uno.config.ts, used exactly like
  * lucide: `<span className='i-zafu-mon h-5 w-5' />`. Monochrome SVGs on a
@@ -7,15 +7,15 @@
  * inherit currentColor through UnoCSS's mask rendering.
  *
  * Motifs (each earns its meaning, nothing decorative):
- *   mon      — 文銭 coin with a square hole → home/wallet
- *   letter   — folded washi letter → inbox
- *   torii    — 鳥居 gate: many pillars carry one beam → multisig
- *   sensu    — 扇子 folding fan (raised to signal assent) → vote
- *   hanko    — 判子 seal → signing / zigner
- *   enso     — 円相 open brush circle → sync/loading
- *   shoji    — 障子 lattice → settings
- *   hi       — 火 hearth flame → hot custody (key lives here)
- *   kori     — 氷 ice crystal → cold custody (key lives elsewhere)
+ *   mon - 文銭 coin with a square hole → home/wallet
+ *   letter - folded washi letter → inbox
+ *   torii - 鳥居 gate: many pillars carry one beam → multisig
+ *   sensu - 扇子 folding fan (raised to signal assent) → vote
+ *   hanko - 判子 seal → signing / zigner
+ *   enso - 円相 open brush circle → sync/loading
+ *   shoji - 障子 lattice → settings
+ *   hi - 火 hearth flame → hot custody (key lives here)
+ *   kori - 氷 ice crystal → cold custody (key lives elsewhere)
  */
 const S =
   'fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"';
@@ -62,14 +62,14 @@ export const zafuIcons: Record<string, string> = {
   </svg>`,
 
   // a hearth flame, not a warning flame: one calm outer stroke, one inner
-  // tongue. Hot custody is the normal, useful state — it should not read
+  // tongue. Hot custody is the normal, useful state - it should not read
   // as an alarm.
   hi: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" ${S}>
     <path d="M12 2.8 C13.4 6.6 17.6 8.2 17.6 13 A5.6 5.6 0 0 1 6.4 13 C6.4 10.4 8 9.2 9 7.6 C9.8 9.4 11 9.6 12 2.8 Z"/>
     <path d="M12 20.4 C10.1 19.6 9.4 18.2 9.6 16.4 C10.4 17.2 11 17.4 11.4 16.2 C11.9 17.3 13 17.6 13.6 18.8 C13.9 19.5 13.2 20.1 12 20.4 Z"/>
   </svg>`,
 
-  // a six-point ice crystal — held apart, unreachable from here.
+  // a six-point ice crystal - held apart, unreachable from here.
   kori: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" ${S}>
     <path d="M12 3 v18 M4.2 7.5 L19.8 16.5 M19.8 7.5 L4.2 16.5"/>
     <path d="M9.6 5.2 L12 6.8 L14.4 5.2 M9.6 18.8 L12 17.2 L14.4 18.8"/>

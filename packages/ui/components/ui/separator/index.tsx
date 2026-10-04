@@ -7,5 +7,5 @@
 export const Separator = () => (
   // For some reason, Tailwind's ESLint config wants to change `border-b-[1px]`
   // to `border-b-DEFAULT`, even though that has a different effect!
-  <div className='mx-2 h-px min-w-8 grow border-b-[1px] border-dotted border-light-brown' />
+  <div className='mx-2 h-px min-w-8 grow border-b-[1px] border-dotted border-border-hard' />
 );

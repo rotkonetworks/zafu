@@ -1,4 +1,4 @@
-import { ZCASH_MAINNET_ENDPOINTS } from '../config/zcash-endpoints';
+import { ZCASH_MAINNET_ENDPOINTS, type ZcashEndpointPreset } from '../config/zcash-endpoints';
 
 /**
  * Cross-endpoint consistency check.
@@ -8,20 +8,20 @@ import { ZCASH_MAINNET_ENDPOINTS } from '../config/zcash-endpoints';
  * prover chose and absorbed into its own transcript. Nothing binds them to
  * consensus, and block/action omission is undetectable from a single server.
  * Cross-verification against an INDEPENDENT operator is the stated mitigation.
- * It had zero call sites — the one thing standing between a lying server and
+ * It had zero call sites - the one thing standing between a lying server and
  * the user was never wired up.
  *
  * This is deliberately modest, and it is worth being precise about what it
  * does and does not buy:
  *
  *   It DOES catch a server that reports a chain state no one else agrees
- *   with — a forged tip, a stalled tip presented as current, or a commitment
+ *   with - a forged tip, a stalled tip presented as current, or a commitment
  *   tree that diverges from the network's.
  *
  *   It does NOT make the wallet trustless. Two endpoints run by the same
  *   operator, or colluding, agree with each other. It cannot detect omission
  *   that both servers perform. And it is a liveness/consistency check, not a
- *   proof — a real fix is a constraint system, which is a design project.
+ *   proof - a real fix is a constraint system, which is a design project.
  *
  * Failure is advisory by default: a disagreement is surfaced, not fatal,
  * because a lagging peer is far more common than an attack and bricking the
@@ -59,12 +59,20 @@ const registrableDomain = (url: string): string => {
   }
 };
 
-export const pickIndependentPeer = (primaryUrl: string): string | undefined => {
+/**
+ * The peer's own preset, so its client speaks the peer's protocol, not the
+ * primary's.
+ *
+ * Only one browser-reachable preset ships (see config/zcash-endpoints.ts),
+ * so while the primary IS that preset this returns undefined - there is
+ * nothing independent left to ask. Once the user points zcash at a
+ * different operator (their own node, a custom grpc-web proxy), the
+ * shipped preset becomes that peer. Callers already treat "no peer" as
+ * "nothing to check", not an error.
+ */
+export const pickIndependentPeer = (primaryUrl: string): ZcashEndpointPreset | undefined => {
   const own = registrableDomain(primaryUrl);
-  const candidates = ZCASH_MAINNET_ENDPOINTS.map(e => e.url).filter(
-    u => registrableDomain(u) !== own,
-  );
-  return candidates[0];
+  return ZCASH_MAINNET_ENDPOINTS.find(e => registrableDomain(e.url) !== own);
 };
 
 /**
@@ -78,7 +86,7 @@ export const crossCheckTip = async (
   primaryHeight: number,
   getPeerTip: (url: string, timeoutMs: number) => Promise<{ height: number }>,
 ): Promise<CrossCheckResult> => {
-  const peerUrl = pickIndependentPeer(primaryUrl);
+  const peerUrl = pickIndependentPeer(primaryUrl)?.url;
   if (!peerUrl) {
     return {
       checked: false,

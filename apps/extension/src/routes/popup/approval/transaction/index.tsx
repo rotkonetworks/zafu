@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { useApprovalFixture } from '../use-approval-fixture';
+import { fixtureTxRequest } from './fixture';
 import { MetadataFetchFn, TransactionViewComponent } from '@repo/ui/components/ui/tx';
 import { exitApprovalSurface, usePopupNav } from '../../../../utils/navigate';
 import { Sensitive } from '../../../../components/sensitive';
@@ -12,7 +15,7 @@ import { useTransactionViewSwitcher } from './use-transaction-view-switcher';
 import { ViewTabs } from './view-tabs';
 import { ApproveDeny } from '../approve-deny';
 import { UserChoice } from '@repo/storage-chrome/records';
-import type { Jsonified } from '@rotko/penumbra-types/jsonified';
+import type { Jsonified } from '@penumbrafi/types/jsonified';
 import { TransactionViewTab } from './types';
 import { ChainRegistryClient } from '@penumbrafi/registry';
 import { viewClient } from '../../../../clients';
@@ -24,8 +27,13 @@ import {
   validateAuthorization,
 } from '@repo/wallet/airgap-signer';
 import { QrDisplay } from '../../../../shared/components/qr-display';
+import { zignerCodeChain } from '../../../../shared/zigner-code';
 import { QrScanner } from '../../../../shared/components/qr-scanner';
 import { Button } from '@repo/ui/components/ui/button';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
+import { ScreenHeader } from '../../../../components/screen-header';
+import { Footer, Main } from '../../send/send-ui';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { selectTxSigningSecurity } from '../../../../state/privacy';
 import {
@@ -75,6 +83,14 @@ export const TransactionApproval = () => {
   const { selectedTransactionView, selectedTransactionViewName, setSelectedTransactionViewName } =
     useTransactionViewSwitcher();
 
+  const acceptRequest = useStore(s => s.txApproval.acceptRequest);
+  const [params] = useSearchParams();
+  useApprovalFixture(!!authorizeRequest, () => {
+    void fixtureTxRequest(params.get('airgap') === '1').then(req =>
+      acceptRequest(req).catch(() => undefined),
+    );
+  });
+
   const txSigningSecurity = useStore(selectTxSigningSecurity);
   const navigate = usePopupNav();
 
@@ -82,6 +98,7 @@ export const TransactionApproval = () => {
   const [qrHex, setQrHex] = useState('');
   const [scanError, setScanError] = useState<string | null>(null);
   const [showPasswordGate, setShowPasswordGate] = useState(false);
+  const [showJson, setShowJson] = useState(false);
 
   if (!authorizeRequest?.plan || !selectedTransactionView) {
     return null;
@@ -142,7 +159,7 @@ export const TransactionApproval = () => {
 
   const startAirgapSigning = () => {
     if (!effectHash) {
-      setScanError('Effect hash not available for airgap signing');
+      setScanError("this request can't be shown to zigner · nothing was signed");
       return;
     }
     const plan = new TransactionPlan(authorizeRequest.plan);
@@ -153,6 +170,10 @@ export const TransactionApproval = () => {
   };
 
   const handleAirgapScan = (hex: string) => {
+    if (zignerCodeChain(hex) === 'zcash') {
+      setScanError("this code is zigner's zcash code. this request needs its penumbra code.");
+      return;
+    }
     try {
       const authData = parseAuthorizationQR(hex);
       // Validate effect hash and signature counts match the plan
@@ -164,129 +185,79 @@ export const TransactionApproval = () => {
       sendResponse();
       finish();
     } catch (e) {
-      setScanError(e instanceof Error ? e.message : 'Failed to parse QR code');
+      setScanError(
+        e instanceof Error ? e.message : "that code isn't zigner's answer · please scan again",
+      );
     }
   };
 
-  // Airgap QR display step
+  // airgap: show the plan to zigner, then read its answer back
   if (isAirgap && airgapStep === 'show-qr') {
     return (
-      <div className='flex h-full min-h-0 flex-col'>
-        <header className='shrink-0 border-b border-border-soft p-4'>
-          <span className='kicker'>transaction</span>
-          <h1 className='mt-1 text-title text-fg-high lowercase tracking-[-0.01em]'>
-            sign with zigner
-          </h1>
-        </header>
-
-        <div className='min-h-0 flex-1 overflow-y-auto p-4 flex flex-col items-center justify-center'>
-          <QrDisplay
-            data={qrHex}
-            size={840}
-            title='Scan with Zigner'
-            description='Open Zigner on your air-gapped device and scan this QR code to sign the transaction.'
-            showCopy
-          />
-        </div>
-
-        <div className='shrink-0 border-t border-border-soft p-4 flex gap-3'>
-          <Button
-            variant='gradient'
-            className='flex-1 py-3.5 text-base'
-            size='lg'
-            onClick={() => setAirgapStep('scan-qr')}
-          >
-            Scan Signed Response
+      <div className='flex h-full min-h-0 flex-col bg-canvas'>
+        <ScreenHeader title='sign on zigner' onBack={() => setAirgapStep('review')} meta='1 / 2' />
+        <Main className='items-center gap-4 px-5 pt-6'>
+          <QrDisplay data={qrHex} size={300} showCopy />
+          <span className='text-[13px] text-fg-high'>scan this with zigner, approve there</span>
+        </Main>
+        <Footer>
+          <Button variant='secondary' onClick={deny} className='w-[110px]'>
+            don&apos;t sign
           </Button>
-          <Button
-            variant='destructiveSecondary'
-            className='flex-1 py-3.5 text-base hover:bg-destructive/90 transition-colors'
-            size='lg'
-            onClick={deny}
-          >
-            Cancel
+          <Button onClick={() => setAirgapStep('scan-qr')} className='grow'>
+            scan zigner&apos;s answer
           </Button>
-        </div>
+        </Footer>
       </div>
     );
   }
 
-  // Airgap QR scan step
   if (isAirgap && airgapStep === 'scan-qr') {
-    return (
-      <div className='flex h-full min-h-0 flex-col'>
-        {scanError ? (
-          <div className='flex h-full flex-col items-center justify-center gap-4 p-6'>
-            <p className='text-red-400 text-center'>{scanError}</p>
-            <div className='flex gap-3'>
-              <Button variant='gradient' onClick={() => setScanError(null)}>
-                Try Again
-              </Button>
-              <Button variant='destructiveSecondary' onClick={deny}>
-                Cancel
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <QrScanner
-            onScan={handleAirgapScan}
-            onClose={deny}
-            title='Scan Signed QR'
-            description='Scan the signed transaction QR code from Zigner'
-          />
-        )}
+    return scanError ? (
+      <div className='flex h-full min-h-0 flex-col bg-canvas'>
+        <ScreenHeader title='sign on zigner' onBack={() => setScanError(null)} meta='2 / 2' />
+        <Main className='pt-5'>
+          <StatusSlot tone='warn' icon='i-ph-warning'>
+            {scanError}
+          </StatusSlot>
+        </Main>
+        <Footer>
+          <Button variant='secondary' onClick={deny} className='w-[110px]'>
+            don&apos;t sign
+          </Button>
+          <Button onClick={() => setScanError(null)} className='grow'>
+            scan again
+          </Button>
+        </Footer>
       </div>
+    ) : (
+      <QrScanner onScan={handleAirgapScan} onClose={deny} title="zigner's answer" />
     );
   }
 
-  // Review step (shared between normal and airgap)
+  const warnings = [
+    hasTransparentAddress(selectedTransactionView) &&
+      'this uses a transparent address, so the withdrawal is public',
+    !hasAltGasFee(selectedTransactionView) &&
+      'the fee is paid in another token than um, which can mark you · keeping some um for fees helps',
+  ].filter(Boolean);
+
   return (
-    <div className='flex h-full min-h-0 flex-col'>
-      <header className='shrink-0 border-b border-border-soft p-4'>
-        <span className='kicker'>transaction</span>
-        <h1 className='mt-1 text-title text-fg-high lowercase tracking-[-0.01em]'>
-          confirm transaction
-        </h1>
-      </header>
-
-      <div className='min-h-0 flex-1 overflow-y-auto p-4'>
+    <div className='flex h-full min-h-0 flex-col bg-canvas'>
+      <ScreenHeader title='review transaction' backPath={false} meta='penumbra' />
+      <Main className='gap-4 pt-5'>
         {invalidPlan && (
-          <div className='mb-4 rounded-md border border-red-400/40 p-3 text-xs text-red-400'>
-            <h2 className='kicker mb-1 flex items-center gap-1 text-red-400/80'>
-              <span className='i-ph-warning h-3.5 w-3.5' />
-              invalid transaction
-            </h2>
-            <p>
-              {invalidPlan instanceof ConnectError ? invalidPlan.rawMessage : String(invalidPlan)}
-            </p>
-          </div>
+          <StatusSlot tone='danger' icon='i-ph-warning'>
+            this transaction can&apos;t be signed ·{' '}
+            {invalidPlan instanceof ConnectError ? invalidPlan.rawMessage : String(invalidPlan)}
+          </StatusSlot>
         )}
-
-        {selectedTransactionViewName === TransactionViewTab.SENDER && (
-          <>
-            {hasTransparentAddress(selectedTransactionView) && (
-              <div className='mb-4 rounded-md border border-yellow-400/40 bg-yellow-400/5 p-3 text-xs text-yellow-400'>
-                <h2 className='kicker mb-1 flex items-center gap-1 text-yellow-400/80'>
-                  <span className='i-ph-warning h-3.5 w-3.5' />
-                  privacy warning
-                </h2>
-                <p>This transaction uses a transparent address which may reduce privacy.</p>
-              </div>
-            )}
-            {!hasAltGasFee(selectedTransactionView) && (
-              <div className='mb-4 rounded-md border border-yellow-400/40 bg-yellow-400/5 p-3 text-xs text-yellow-400'>
-                <h2 className='kicker mb-1 flex items-center gap-1 text-yellow-400/80'>
-                  <span className='i-ph-warning h-3.5 w-3.5' />
-                  privacy warning
-                </h2>
-                <p>
-                  Transaction uses a non-native fee token. To reduce gas costs and protect your
-                  privacy, maintain an UM balance for fees.
-                </p>
-              </div>
-            )}
-          </>
-        )}
+        {selectedTransactionViewName === TransactionViewTab.SENDER &&
+          warnings.map(w => (
+            <StatusSlot key={String(w)} tone='warn' icon='i-ph-eye'>
+              {w}
+            </StatusSlot>
+          ))}
 
         <ViewTabs
           defaultValue={selectedTransactionViewName}
@@ -298,51 +269,54 @@ export const TransactionApproval = () => {
         </Sensitive>
 
         {selectedTransactionViewName === TransactionViewTab.SENDER && (
-          <div className='mt-2'>
+          <Button
+            variant='quiet'
+            size='sm'
+            onClick={() => setShowJson(true)}
+            className='self-start px-0'
+          >
+            view the raw request
+          </Button>
+        )}
+        <Sheet open={showJson} onOpenChange={setShowJson} title='raw request'>
+          <div className='min-h-0 overflow-y-auto'>
             <JsonViewer
               jsonObj={
                 new AuthorizeRequest(authorizeRequest).toJson() as Jsonified<AuthorizeRequest>
               }
             />
           </div>
-        )}
-      </div>
-      <div className='shrink-0 border-t border-border-soft p-0'>
-        {isAirgap ? (
-          <div className='flex flex-row justify-between gap-4 rounded-lg bg-elev-1 px-4 py-7 shadow-lg'>
-            <Button
-              variant='gradient'
-              className='w-1/2 py-3.5 text-base'
-              size='lg'
-              onClick={invalidPlan ? undefined : startAirgapSigning}
-              disabled={!!invalidPlan}
-            >
-              Sign with Zigner
-            </Button>
-            <Button
-              className='w-1/2 py-3.5 text-base hover:bg-destructive/90 transition-colors'
-              size='lg'
-              variant='destructiveSecondary'
-              onClick={deny}
-            >
-              Deny
-            </Button>
-          </div>
-        ) : (
-          <>
-            <PasswordGateModal
-              open={showPasswordGate}
-              onConfirm={onGateConfirmed}
-              onCancel={() => setShowPasswordGate(false)}
-            />
-            <ApproveDeny
-              approve={invalidPlan ? undefined : () => void requestApproval()}
-              deny={deny}
-              wait={approvalWaitSeconds(txSigningSecurity)}
-            />
-          </>
-        )}
-      </div>
+        </Sheet>
+      </Main>
+      {isAirgap ? (
+        <Footer>
+          <Button variant='secondary' onClick={deny} className='w-[110px]'>
+            don&apos;t sign
+          </Button>
+          <Button
+            onClick={invalidPlan ? undefined : startAirgapSigning}
+            disabled={!!invalidPlan}
+            className='grow'
+          >
+            sign on zigner
+          </Button>
+        </Footer>
+      ) : (
+        <>
+          <PasswordGateModal
+            open={showPasswordGate}
+            onConfirm={onGateConfirmed}
+            onCancel={() => setShowPasswordGate(false)}
+          />
+          <ApproveDeny
+            approve={invalidPlan ? undefined : () => void requestApproval()}
+            deny={deny}
+            approveLabel='sign & send'
+            denyLabel="don't sign"
+            wait={approvalWaitSeconds(txSigningSecurity)}
+          />
+        </>
+      )}
     </div>
   );
 };

@@ -55,7 +55,7 @@ async function loadWasm(): Promise<RingVrfWasm> {
   if (wasmModule) {
     return wasmModule;
   }
-  // don't retry a known-failed load — warn once, then fail silently
+  // don't retry a known-failed load - warn once, then fail silently
   if (wasmFailed) {
     throw new Error('ring-vrf WASM unavailable');
   }

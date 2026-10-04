@@ -1,0 +1,24 @@
+{
+  "static_config_version": 1,
+  "dynamic_config_url": "https://raw.githubusercontent.com/valargroup/token-holder-voting-config/main/prod/dynamic-voting-config.json",
+  "trusted_keys": [
+    {
+      "key_id": "valargroup",
+      "alg": "ed25519",
+      "pubkey": "8oQiUWq6QDGnAgRw6U3YhnXb6JLFSXauYnWHIFmJRcw=",
+      "notes": "Vote-manager Keplr-derived key for sv1wyf8tuys2ussdqwc6ugnvq0x273j8wq8fm3jrj"
+    },
+    {
+      "key_id": "tachyon",
+      "alg": "ed25519",
+      "pubkey": "F8L2S+sjsQMwsZr03ebovvbVRd2B8BXx5e8KpTBmxHs=",
+      "notes": "Vote-manager Keplr-derived key for sv1zd8mc9mx85zgarx692w38n8t2g2f6r92ajwhth"
+    },
+    {
+      "key_id": "zodl",
+      "alg": "ed25519",
+      "pubkey": "b7aj3HFKqKAF/gwIcf01KXqvDN91ww759pjAxN8whBk=",
+      "notes": "Vote-manager Keplr-derived key for ZODL prod vote manager; sv1jpxuakysz65rzg9kn90xg4m4vpyer6np9n7c0t"
+    }
+  ]
+}

@@ -7,6 +7,14 @@
 @source "../ui/lib/**/*.{ts,tsx}";
 @source "../../apps/extension/src/**/*.{ts,tsx}";
 
+/* inline, so a utility reads --network-accent where it is used: the popup
+   layout rebinds it per [data-network], below the root this block sits on */
+@theme inline {
+  --color-network-accent: var(--network-accent);
+  --color-network-accent-light: var(--network-accent-light);
+  --color-network-accent-foreground: var(--network-accent-foreground);
+}
+
 /* Zafu terminal theme - CSS-first config (Tailwind v4) */
 @theme {
   /* resolve through the runtime var (--zafu-font, owned by globals.css)
@@ -15,6 +23,7 @@
   --font-body: var(--zafu-font);
   --font-headline: var(--zafu-font);
   --font-mono: var(--zafu-font);
+  --default-font-family: var(--zafu-font);
 
   --radius-sm: 0;
   --radius-md: 0;
@@ -71,21 +80,38 @@
   --color-border-soft: var(--surface-border-soft);
   --color-border-hard: var(--surface-border);
 
+  /* full `surface-*` names - the Wave 1 primitives (packages/ui/components/ui/
+     sheet, row, button) reference `bg-surface-elev-1`, `border-surface-border`,
+     etc. directly rather than the short aliases above. Without these, those
+     classes don't match any generated utility and resolve to nothing -
+     Sheet/RowGroup render with a transparent panel. Same underlying CSS
+     variables as the short aliases; just registered under both names. */
+  --color-surface-elev-1: var(--surface-elev-1);
+  --color-surface-elev-2: var(--surface-elev-2);
+  --color-surface-border: var(--surface-border);
+  --color-surface-border-soft: var(--surface-border-soft);
+
   /* hanko vermillion (personality accent — see globals.css) */
   --color-hanko: var(--hanko);
   --color-hanko-light: var(--hanko-light);
   --color-hanko-dark: var(--hanko-dark);
+
+  /* the seal glyph's cream - fixed, never a theme token. Mark component only. */
+  --color-mark-glyph: var(--mark-glyph);
 
   /* zafu-blue triplet (sibling of zigner-gold below) */
   --color-zafu-blue: var(--zafu-blue);
   --color-zafu-blue-light: var(--zafu-blue-light);
   --color-zafu-blue-dark: var(--zafu-blue-dark);
 
+  /* device blue - cold custody icons (zigner, keystone, ledger) */
+  --color-device-blue: var(--device-blue);
+  --color-device-blue-line: var(--device-blue-line);
+
   /* legacy shadcn-style tokens — kept as aliases onto the same hex
      values. Existing components using hsl(var(--foreground)) etc. still
      work. Prefer the new tokens above for new code. */
   --color-border: hsl(var(--border));
-  --color-border-secondary: var(--border-secondary);
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
   --color-background: hsl(var(--background));
@@ -125,11 +151,6 @@
   --color-light-grey: var(--light-grey);
   --color-brown: var(--brown);
 
-  /* network accent */
-  --color-network-accent: var(--network-accent);
-  --color-network-accent-light: var(--network-accent-light);
-  --color-network-accent-foreground: var(--network-accent-foreground);
-
   /* zigner */
   --color-zigner-gold: var(--zigner-gold);
   --color-zigner-gold-light: var(--zigner-gold-light);
@@ -150,6 +171,30 @@
   --color-warning: var(--warning);
   --color-error: var(--error);
   --color-info: var(--info);
+  --color-warn: var(--warn);
+  --color-gold-line: var(--gold-line);
+  --color-scrim: var(--scrim);
+
+  /* the stock palette's status families collapse onto the board's three
+     status inks, so a stray red-400 or yellow-500/10 still lands on-theme.
+     Chain identity hues (blue, teal, purple, ...) keep the stock palette. */
+  --color-red-300: var(--red);
+  --color-red-400: var(--red);
+  --color-red-500: var(--red);
+  --color-red-600: var(--red);
+  --color-red-900: var(--red);
+  --color-green-300: var(--green);
+  --color-green-400: var(--green);
+  --color-green-500: var(--green);
+  --color-yellow-300: var(--warn);
+  --color-yellow-400: var(--warn);
+  --color-yellow-500: var(--warn);
+  --color-yellow-600: var(--warn);
+  --color-amber-300: var(--warn);
+  --color-amber-400: var(--warn);
+  --color-amber-500: var(--warn);
+  --color-orange-400: var(--warn);
+  --color-orange-500: var(--warn);
 
   /* animations */
   --animate-accordion-down: accordion-down 0.2s ease-out;

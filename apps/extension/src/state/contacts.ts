@@ -5,6 +5,8 @@
  * addresses are expandable in the UI.
  */
 
+import { readPasswordLogins, restorePasswordLogins } from './password-logins';
+import { readYourAddresses, restoreYourAddresses } from './your-addresses';
 import type { AllSlices, SliceCreator } from '.';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
@@ -14,18 +16,36 @@ import { Box, type BoxJson } from '@repo/encryption/box';
 import type { KeyPrintJson } from '@repo/encryption/key-print';
 import { readSentRecords, writeSentRecords, readTxNotes, writeTxNotes } from './personal-data';
 import type { SentTxRecord } from '../workers/sent-tx-reconcile';
-import type { ContactCardKey } from './identity';
+import { pocketOwner } from './pockets';
+import {
+  raiseRelationshipCounters,
+  readRelationshipCounters,
+  relationshipFloor,
+  type ContactCardKey,
+  type RelationshipCounters,
+} from './identity';
+import { readPeopleBackup, restorePeopleBackup } from '../people/vault';
+import { exportEgressChoices, importEgressChoices, type EgressChoices } from '../net/ledger';
+import {
+  exportSettings,
+  importPrefs,
+  importNodePools,
+  restoredPrivacy,
+  type SettingsBackup,
+} from './settings-backup';
+import type { PrivacySettings } from './privacy';
 
 /**
  * Encrypted backup of ALL local, chain-irreplaceable personal data: contacts +
- * send history + per-tx "from" notes. Same password-derived-key envelope as the
- * contacts-only export, one version up. This is the "carry it across devices /
- * recover after a full wipe" layer for data the chain can never give back.
+ * send history + per-tx "from" notes + zcash pocket names + wallet labels +
+ * settings. Same password-derived-key envelope as the contacts-only export,
+ * one version up. This is the "carry it across devices / recover after a
+ * full wipe" layer for data the chain can never give back.
  */
 export interface PersonalDataBackup {
   version: 4;
   exportedAt: number;
-  /** encrypted { contacts, sent, txNotes } JSON */
+  /** encrypted { contacts, sent, txNotes, pockets, egress, settings, walletNames, passwordLogins, yourAddresses, relNext } JSON */
   data: BoxJson;
   keyPrint: KeyPrintJson;
 }
@@ -34,8 +54,6 @@ export type ContactNetwork =
   | 'penumbra'
   | 'zcash'
   | 'cosmos'
-  | 'polkadot'
-  | 'kusama'
   | 'ethereum'
   | 'bitcoin'
   | 'solana'
@@ -43,7 +61,9 @@ export type ContactNetwork =
   | 'base'
   | 'arbitrum'
   | 'avalanche'
-  | 'polygon';
+  | 'polygon'
+  | 'optimism'
+  | 'bsc';
 
 /** a single address entry within a contact */
 export interface ContactAddress {
@@ -78,13 +98,38 @@ export interface Contact {
    */
   card?: ContactCardKey;
   /**
+   * the relationship you gave them (xid-rel-v1): which wallet, generation and
+   * index the card you handed them was minted from. With their card's `zid`
+   * (its inception key) and `card` (its KA key) it makes the pair room;
+   * nothing secret is stored, the keys come from the seed and these numbers.
+   */
+  rel?: ContactRel;
+  /**
+   * their relationship's pair-room key-agreement key (card TLV 0x06), hex:
+   * with `rel` and `zid` it makes your 1:1 pair room. Not `card`, which is
+   * the discovery key and the same for every card they give.
+   */
+  pairKa?: string;
+  /** the relay your chats with them go through, when not the default (a base url) */
+  relay?: string;
+  /** their latest verified v2 card (base64url): what you pay and reach them by */
+  cardV2?: string;
+  /** how their card came, shown until you check the seal in person */
+  source?: 'link' | 'scan' | 'memo';
+  /** ms: you compared the pair seal with them in person and it matched */
+  sealChecked?: number;
+  /** the card you last gave them (people/my-card), so a change sends an update */
+  given?: GivenCard;
+  /** bumped when you give them a new address */
+  addrGen?: number;
+  /**
    * zcash.me username this contact was saved from (or linked to). A
    * directory handle, not an identity anchor - it says where the address
    * came from so the UI can show the profile link and verification state.
    */
   zcashme?: string;
   /**
-   * a website / social link for this contact — the address book is a social
+   * a website / social link for this contact - the address book is a social
    * graph, not just a list of wallet addresses. A person is a name, a ZID, and
    * where to find them, of which their chain addresses are only one part.
    */
@@ -97,7 +142,38 @@ export interface Contact {
   addresses: ContactAddress[];
 }
 
-/** portable export format — encrypted with a password-derived key */
+/** what the card you last gave someone said */
+export interface GivenCard {
+  rev: number;
+  zcash?: string;
+  penumbra?: string;
+  relay: string;
+  caps: number;
+}
+
+/** the v2 fields a contact carries */
+export type ContactV2 = Pick<Contact, 'cardV2' | 'source' | 'sealChecked' | 'given' | 'addrGen'>;
+
+/** one wallet's relationship counters, as the backup carries them */
+interface BackupRelNext {
+  /** the vault id they were counted under */
+  walletId: string;
+  next: RelationshipCounters;
+}
+
+export interface ContactRel {
+  walletId: string;
+  gen: number;
+  j: number;
+}
+
+/** both cards are exchanged: a pair room is possible (design-social 2.1 `mutual`) */
+export const isMutual = (
+  c: Pick<Contact, 'rel' | 'pairKa' | 'zid'> | undefined,
+  walletId: string | undefined,
+): boolean => !!c?.rel && c.rel.walletId === walletId && !!c.pairKa && !!c.zid;
+
+/** portable export format - encrypted with a password-derived key */
 export interface ContactsExport {
   version: 3;
   exportedAt: number;
@@ -111,15 +187,23 @@ export interface ContactsSlice {
   contacts: Contact[];
 
   /** add a new contact */
-  addContact: (data: {
-    name: string;
-    notes?: string;
-    zid?: string;
-    zcashme?: string;
-    website?: string;
-    /** contact-card KA key; supplied when a discovery-capable share is imported */
-    card?: ContactCardKey;
-  }) => Promise<Contact>;
+  addContact: (
+    data: ContactV2 & {
+      /** a fixed id: the one your card for them was made under */
+      id?: string;
+      name: string;
+      notes?: string;
+      zid?: string;
+      zcashme?: string;
+      website?: string;
+      /** contact-card KA key; supplied when a discovery-capable share is imported */
+      card?: ContactCardKey;
+      rel?: ContactRel;
+      pairKa?: string;
+      /** addresses to save with them, in the same write */
+      addresses?: Omit<ContactAddress, 'id'>[];
+    },
+  ) => Promise<Contact>;
 
   /** update contact info (name, notes, zid, website, card) */
   updateContact: (
@@ -130,7 +214,12 @@ export interface ContactsSlice {
       zid?: string;
       website?: string;
       card?: ContactCardKey;
-    },
+      rel?: ContactRel;
+      pairKa?: string;
+      relay?: string;
+      /** their newest addresses: put first, the ones they had kept after */
+      addresses?: Omit<ContactAddress, 'id'>[];
+    } & ContactV2,
   ) => Promise<void>;
 
   /** remove a contact */
@@ -198,6 +287,42 @@ export interface ContactsSlice {
 
 const generateId = () => crypto.randomUUID();
 
+/** contacts writes this realm made: a read that one overtook is stale (state/persist) */
+export const contactsWrites = { n: 0 };
+
+const V2_KEYS = ['cardV2', 'source', 'sealChecked', 'given', 'addrGen'] as const;
+const v2Of = (d: ContactV2): ContactV2 =>
+  Object.fromEntries(V2_KEYS.filter(k => d[k] !== undefined).map(k => [k, d[k]]));
+
+/** a contact as a backup holds it; backups made before ids were kept have none */
+type BackupContact = Omit<Contact, 'id' | 'createdAt' | 'addresses'> & {
+  id?: string;
+  createdAt?: number;
+  addresses: (Omit<ContactAddress, 'id'> & { id?: string })[];
+};
+
+/**
+ * The contacts a restore adds. Ids and cards come back as they were, so every
+ * address and key derived from a contact id stays the same. Merge skips a
+ * contact already here by id, or by name when the backup has no id.
+ */
+export const restoreContacts = (
+  backup: BackupContact[],
+  existing: Contact[],
+  mode: 'merge' | 'replace',
+): Contact[] => {
+  const ids = new Set(existing.map(c => c.id));
+  const names = new Set(existing.map(c => c.name.toLowerCase()));
+  const kept = (c: BackupContact) =>
+    mode === 'replace' || (c.id ? !ids.has(c.id) : !names.has(c.name.toLowerCase()));
+  return backup.filter(kept).map(c => ({
+    ...c,
+    id: c.id ?? generateId(),
+    createdAt: c.createdAt ?? Date.now(),
+    addresses: c.addresses.map(a => ({ ...a, id: a.id ?? generateId() })),
+  }));
+};
+
 export const createContactsSlice =
   (
     local: ExtensionStorage<LocalStorageState>,
@@ -209,24 +334,39 @@ export const createContactsSlice =
       const c = get().contacts.contacts;
       return Array.isArray(c) ? c : [];
     };
-    // use local.set (encrypted proxy) — NOT writeEncrypted directly,
+    // use local.set (encrypted proxy) - NOT writeEncrypted directly,
     // since local is already the encrypted proxy and writeEncrypted would double-encrypt
-    const persist = () => local.set('contacts' as keyof LocalStorageState, safeContacts() as never);
+    const persist = () => {
+      contactsWrites.n++;
+      return local.set('contacts' as keyof LocalStorageState, safeContacts() as never);
+    };
 
     return {
       contacts: [],
 
       addContact: async data => {
+        // one person per id: a second add (two screens, a stale read) returns them
+        const have = data.id ? safeContacts().find(c => c.id === data.id) : undefined;
+        if (have) {
+          return have;
+        }
         const contact: Contact = {
-          id: generateId(),
+          id: data.id ?? generateId(),
           name: data.name.trim(),
           zid: data.zid?.trim() || undefined,
           zcashme: data.zcashme?.trim() || undefined,
           website: data.website?.trim() || undefined,
           notes: data.notes?.trim() || undefined,
           card: data.card,
+          ...(data.rel ? { rel: data.rel } : {}),
+          ...(data.pairKa ? { pairKa: data.pairKa } : {}),
+          ...v2Of(data),
           createdAt: Date.now(),
-          addresses: [],
+          addresses: (data.addresses ?? []).map(a => ({
+            ...a,
+            id: generateId(),
+            address: a.address.trim(),
+          })),
         };
 
         set(state => {
@@ -260,6 +400,28 @@ export const createContactsSlice =
             }
             if (updates.card !== undefined) {
               contact.card = updates.card;
+            }
+            if (updates.rel !== undefined) {
+              contact.rel = updates.rel;
+            }
+            if (updates.pairKa !== undefined) {
+              contact.pairKa = updates.pairKa;
+            }
+            if (updates.relay !== undefined) {
+              contact.relay = updates.relay || undefined;
+            }
+            Object.assign(contact, v2Of(updates));
+            if (updates.addresses) {
+              // newest first (what you pay them at from now), older ones kept:
+              // a thread opened on one still finds them, earlier memos stay theirs
+              const next = updates.addresses;
+              const old = contact.addresses;
+              const same = (a: Omit<ContactAddress, 'id'>, o: ContactAddress) =>
+                o.network === a.network && o.address === a.address;
+              contact.addresses = [
+                ...next.map(a => old.find(o => same(a, o)) ?? { ...a, id: generateId() }),
+                ...old.filter(o => !next.some(a => same(a, o))),
+              ];
             }
           }
         });
@@ -454,7 +616,7 @@ export const createContactsSlice =
 
       importContacts: async (data, password, mode) => {
         if (data.version !== 3) {
-          throw new Error('unsupported export version — expected v3 (encrypted)');
+          throw new Error('unsupported export version - expected v3 (encrypted)');
         }
 
         const { KeyPrint: KP } = await import('@repo/encryption/key-print');
@@ -528,24 +690,43 @@ export const createContactsSlice =
       },
 
       exportPersonalData: async (password: string) => {
-        const contacts = safeContacts().map(c => ({
-          name: c.name,
-          zid: c.zid,
-          website: c.website,
-          notes: c.notes,
-          favorite: c.favorite,
-          zcashme: c.zcashme,
-          addresses: c.addresses.map(a => ({
-            network: a.network,
-            address: a.address,
-            chainId: a.chainId,
-            notes: a.notes,
-          })),
-        }));
+        // whole contacts, ids and cards included: the per-contact address and
+        // zid are functions of the id, so a restore must keep it
+        const contacts = safeContacts();
         const sent = await readSentRecords();
         const txNotes = await readTxNotes();
+        const egress = await exportEgressChoices();
 
-        const plaintext = JSON.stringify({ contacts, sent, txNotes });
+        const pockets = get().pockets.book;
+        const settings = await exportSettings(get().privacy.settings);
+        // wallet labels, keyed by zid (survives a reinstall) falling back to
+        // the vault id, same scheme pockets use for their owner key.
+        const walletNames = Object.fromEntries(
+          get().keyRing.keyInfos.map(k => [pocketOwner(k), k.name]),
+        );
+        const passwordLogins = await readPasswordLogins();
+        const yourAddresses = await readYourAddresses();
+        // the relationship counters, keyed like walletNames: the vault id a
+        // restore makes is new, so the old one rides along to map contacts
+        const relNext: Record<string, BackupRelNext> = {};
+        for (const k of get().keyRing.keyInfos) {
+          relNext[pocketOwner(k)] = { walletId: k.id, next: await readRelationshipCounters(k.id) };
+        }
+        // rooms you are in and their relay history, capped per thread
+        const people = await readPeopleBackup();
+        const plaintext = JSON.stringify({
+          relNext,
+          people,
+          passwordLogins,
+          yourAddresses,
+          contacts,
+          sent,
+          txNotes,
+          pockets,
+          egress,
+          settings,
+          walletNames,
+        });
         const { key, keyPrint } = await Key.create(password);
         const box = await key.seal(plaintext);
 
@@ -559,7 +740,7 @@ export const createContactsSlice =
 
       importPersonalData: async (data, password, mode) => {
         if (data.version !== 4) {
-          throw new Error('unsupported backup version — expected v4');
+          throw new Error('unsupported backup version - expected v4');
         }
         const { KeyPrint: KP } = await import('@repo/encryption/key-print');
         const key = await Key.recreate(password, KP.fromJson(data.keyPrint));
@@ -571,44 +752,43 @@ export const createContactsSlice =
           throw new Error('failed to decrypt backup');
         }
         const parsed = JSON.parse(plaintext) as {
-          contacts: {
-            name: string;
-            zid?: string;
-            website?: string;
-            notes?: string;
-            favorite?: boolean;
-            zcashme?: string;
-            addresses: {
-              network: ContactNetwork;
-              address: string;
-              chainId?: string;
-              notes?: string;
-            }[];
-          }[];
+          /** backups made before ids were kept carry no ids */
+          contacts: BackupContact[];
           sent: SentTxRecord[];
           txNotes: Record<string, string>;
+          /** zcash pocket names (absent in backups made before pockets) */
+          pockets?: unknown;
+          /** egress choices (absent in backups made before the egress policy) */
+          egress?: Partial<EgressChoices>;
+          /** privacy settings + preferences (absent in older backups) */
+          settings?: SettingsBackup;
+          /** wallet labels by owner key (absent in older backups) */
+          walletNames?: Record<string, string>;
+          /** the passwords tool's saved logins (absent in older backups) */
+          passwordLogins?: unknown;
+          /** your own addresses on other chains (absent in older backups) */
+          yourAddresses?: unknown;
+          /** people rooms and relay history (absent in older backups) */
+          people?: unknown;
+          /** relationship counters by owner key (absent in older backups) */
+          relNext?: Record<string, BackupRelNext>;
         };
 
-        const existingNames = new Set(safeContacts().map(c => c.name.toLowerCase()));
-        const newContacts: Contact[] = (parsed.contacts ?? [])
-          .filter(c => mode === 'replace' || !existingNames.has(c.name.toLowerCase()))
-          .map(c => ({
-            id: generateId(),
-            name: c.name,
-            zid: c.zid,
-            website: c.website,
-            notes: c.notes,
-            favorite: c.favorite,
-            zcashme: c.zcashme,
-            createdAt: Date.now(),
-            addresses: c.addresses.map(a => ({
-              id: generateId(),
-              network: a.network,
-              address: a.address,
-              chainId: a.chainId,
-              notes: a.notes,
-            })),
-          }));
+        // the vault id a backup's relationships name may be one this restore
+        // replaced: map it to the wallet with the same owner key here
+        const walletFor = new Map<string, string>();
+        for (const k of get().keyRing.keyInfos) {
+          walletFor.set(k.id, k.id);
+          const old = parsed.relNext?.[pocketOwner(k)]?.walletId;
+          if (typeof old === 'string') {
+            walletFor.set(old, k.id);
+          }
+        }
+        const backupContacts = (parsed.contacts ?? []).map(c => {
+          const here = c.rel && walletFor.get(c.rel.walletId);
+          return here && c.rel ? { ...c, rel: { ...c.rel, walletId: here } } : c;
+        });
+        const newContacts = restoreContacts(backupContacts, safeContacts(), mode);
         set(state => {
           if (mode === 'replace') {
             state.contacts.contacts = newContacts;
@@ -624,6 +804,62 @@ export const createContactsSlice =
         // send history + tx notes live outside the contacts store
         await writeSentRecords(parsed.sent ?? []);
         await writeTxNotes(parsed.txNotes ?? {}, mode);
+        await get().pockets.restore(parsed.pockets, mode);
+        for (const [owner, name] of Object.entries(parsed.walletNames ?? {})) {
+          const key = get().keyRing.keyInfos.find(k => pocketOwner(k) === owner);
+          if (key && key.name !== name) {
+            await get()
+              .keyRing.renameKeyRing(key.id, name)
+              .catch(() => {});
+          }
+        }
+        // never hand a `j` out twice: each wallet's counter goes to at least
+        // max(backed-up counter, 1 + every j its contacts hold)
+        for (const k of get().keyRing.keyInfos) {
+          // and every card you showed, answered or not: its j was handed out too
+          const shown = (
+            Array.isArray((parsed.people as { rooms?: unknown } | undefined)?.rooms)
+              ? (
+                  parsed.people as {
+                    rooms: { walletId?: string; signer?: { gen?: number; j?: number } }[];
+                  }
+                ).rooms
+              : []
+          ).flatMap(r =>
+            r.walletId && walletFor.get(r.walletId) === k.id && typeof r.signer?.j === 'number'
+              ? [{ walletId: k.id, gen: Number(r.signer.gen), j: r.signer.j }]
+              : [],
+          );
+          const rels = [...safeContacts(), ...backupContacts]
+            .map(c => c.rel)
+            .filter((r): r is ContactRel => !!r && r.walletId === k.id)
+            .concat(shown);
+          const floor = relationshipFloor(rels);
+          const backed = parsed.relNext?.[pocketOwner(k)]?.next ?? {};
+          for (const [gen, n] of Object.entries(backed)) {
+            floor[gen] = Math.max(floor[gen] ?? 0, n);
+          }
+          await raiseRelationshipCounters(k.id, floor);
+        }
+        await importEgressChoices(parsed.egress);
+        if (parsed.passwordLogins !== undefined) {
+          await restorePasswordLogins(parsed.passwordLogins, mode);
+        }
+        if (parsed.yourAddresses !== undefined) {
+          await restoreYourAddresses(parsed.yourAddresses, mode);
+        }
+        if (parsed.people !== undefined) {
+          await restorePeopleBackup(parsed.people, mode);
+        }
+        const current = get().privacy.settings;
+        const privacy = restoredPrivacy(current, parsed.settings?.privacy);
+        for (const key of Object.keys(privacy) as (keyof PrivacySettings)[]) {
+          if (privacy[key] !== current[key]) {
+            await get().privacy.setSetting(key, privacy[key] as never);
+          }
+        }
+        await importPrefs(parsed.settings?.prefs);
+        await importNodePools(parsed.settings?.nodePools);
 
         return {
           contacts: newContacts.length,

@@ -12,6 +12,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Row } from '@repo/ui/components/ui/row';
 import { PopupPath } from '../routes/popup/paths';
 import { DEFAULT_LIVE_DECOYS, useZcashMe, writeZcashMeConfig } from '../services/zcashme/config';
 import { cn } from '@repo/ui/lib/utils';
@@ -24,6 +25,40 @@ interface Props {
   /** passive placements honour a previous "not now"; explicit ones do not */
   respectDismissal?: boolean;
   className?: string;
+}
+
+/**
+ * Single-row form: one line with the existing on/off choice, no inline
+ * explanation. Turning it on picks the safer `directory` mode; `live` stays
+ * a deliberate choice made in settings. Detail lives in the shared "?" sheet
+ * (see settings-explain.tsx's `zcash.me` entry).
+ */
+export function ZcashMeOptInRow({ onExplain }: { onExplain?: () => void }) {
+  const { config } = useZcashMe();
+  const zcashEnabled = useStore(selectEnabledNetworks).includes('zcash');
+
+  if (!zcashEnabled || !config) {
+    return null;
+  }
+
+  const toggle = async (on: boolean) => {
+    if (!on) {
+      await writeZcashMeConfig({ ...config, mode: 'off' });
+      return;
+    }
+    const decoys = config.decoys === 0 ? DEFAULT_LIVE_DECOYS : config.decoys;
+    await writeZcashMeConfig({ ...config, mode: 'directory', decoys });
+  };
+
+  return (
+    <Row
+      type='toggle'
+      label='zcash.me directory'
+      checked={config.mode !== 'off'}
+      onChange={next => void toggle(next)}
+      onExplain={onExplain}
+    />
+  );
 }
 
 export function ZcashMeOptIn({ reason, respectDismissal = true, className }: Props) {
@@ -59,7 +94,7 @@ export function ZcashMeOptIn({ reason, respectDismissal = true, className }: Pro
   };
 
   return (
-    <div className={cn('rounded-lg border border-border-soft bg-elev-1 p-3', className)}>
+    <div className={cn('border border-border-soft bg-elev-1 p-3', className)}>
       <div className='mb-1.5 flex items-center gap-2'>
         <span className='i-ph-address-book h-4 w-4 shrink-0 text-network-accent' />
         <p className='text-xs text-fg-high'>use the zcash.me directory to {reason}?</p>
@@ -92,7 +127,7 @@ export function ZcashMeOptIn({ reason, respectDismissal = true, className }: Pro
           type='button'
           disabled={busy}
           onClick={() => void choose('directory')}
-          className='flex-1 rounded-lg bg-network-accent py-1.5 text-xs font-medium text-network-accent-foreground hover:opacity-90 disabled:opacity-50'
+          className='flex-1 bg-network-accent py-1.5 text-xs text-network-accent-foreground hover:opacity-90 disabled:opacity-50'
         >
           local directory
         </button>
@@ -100,7 +135,7 @@ export function ZcashMeOptIn({ reason, respectDismissal = true, className }: Pro
           type='button'
           disabled={busy}
           onClick={() => void choose('live')}
-          className='flex-1 rounded-lg border border-border-soft py-1.5 text-xs text-fg-muted hover:text-fg-high disabled:opacity-50'
+          className='flex-1 border border-border-soft py-1.5 text-xs text-fg-muted hover:text-fg-high disabled:opacity-50'
         >
           live lookup
         </button>
@@ -108,7 +143,7 @@ export function ZcashMeOptIn({ reason, respectDismissal = true, className }: Pro
           type='button'
           disabled={busy}
           onClick={() => void dismiss()}
-          className='rounded-lg px-2 py-1.5 text-xs text-fg-dim hover:text-fg-high disabled:opacity-50'
+          className='px-2 py-1.5 text-xs text-fg-dim hover:text-fg-high disabled:opacity-50'
         >
           not now
         </button>

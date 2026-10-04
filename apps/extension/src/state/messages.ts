@@ -27,8 +27,8 @@ export type MessageNetwork = 'penumbra' | 'zcash';
  * the tx up.
  *
  * `failed` and `interrupted` are deliberately separate. Closing the popup
- * mid-send is not evidence that anything failed — the build may already have
- * been signed and broadcast — and a wallet that says "failed" about a payment
+ * mid-send is not evidence that anything failed - the build may already have
+ * been signed and broadcast - and a wallet that says "failed" about a payment
  * that in fact left invites the user to send it a second time. Anything the
  * wallet did not observe is reported as unknown.
  */
@@ -38,7 +38,9 @@ export type MessageStatus =
   | 'pending'
   | 'confirmed'
   | 'failed'
-  | 'interrupted';
+  | 'interrupted'
+  /** stopped before it was broadcast: nothing was sent */
+  | 'discarded';
 
 export interface Message {
   id: string;
@@ -67,6 +69,14 @@ export interface Message {
   status?: MessageStatus;
   /** reason captured when status === 'failed' or 'interrupted' */
   failureReason?: string;
+  /** received: the diversifier index of your address it was paid to, when zafu handed it out */
+  diversifierIndex?: number;
+  /**
+   * received: the saved address of the person you gave that address to. Known
+   * from your own record, so a thread files it under them even when the memo
+   * declares no `reply:` (or declares someone else's).
+   */
+  personAddress?: string;
 }
 
 export interface MessagesSlice {
@@ -79,7 +89,7 @@ export interface MessagesSlice {
   addMessages: (messages: Omit<Message, 'id'>[]) => Promise<void>;
 
   /**
-   * Optimistic outgoing pending entry — added the moment the user clicks
+   * Optimistic outgoing pending entry - added the moment the user clicks
    * send, before any RPC. Generates a `temp:<uuid>` placeholder txid that
    * gets replaced via promoteOutgoing once the real txid is known.
    */
@@ -108,7 +118,7 @@ export interface MessagesSlice {
   markOutgoingFailed: (txIdOrTempId: string, reason: string) => Promise<void>;
 
   /**
-   * Mark an outgoing entry as "we stopped watching" — outcome unknown.
+   * Mark an outgoing entry as "we stopped watching" - outcome unknown.
    *
    * Distinct from markOutgoingFailed, which asserts the send did not happen.
    * Leaves the record promotable: if the flow that created it is still alive
@@ -116,6 +126,12 @@ export interface MessagesSlice {
    * through broadcasting → pending, overwriting this state.
    */
   markOutgoingInterrupted: (txIdOrTempId: string, reason: string) => Promise<void>;
+
+  /**
+   * The person stopped this send before it was broadcast. Only a record still
+   * being built qualifies; one that already has a txid may be on chain.
+   */
+  markOutgoingDiscarded: (tempTxId: string) => Promise<void>;
 
   /** mark a message as read */
   markRead: (id: string) => Promise<void>;
@@ -167,8 +183,8 @@ export const createMessagesSlice =
      *
      * They are marked 'interrupted', not 'failed': a temp: record proves only
      * that a send was STARTED in a session that ended. The build may have been
-     * signed and broadcast before the session died — the worker writes its own
-     * durable record in that case — so claiming failure here would be asserting
+     * signed and broadcast before the session died - the worker writes its own
+     * durable record in that case - so claiming failure here would be asserting
      * something this code has no way to know. Real-txid records in 'pending'
      * are left alone; the block scan will promote them when the tx mines.
      */
@@ -250,12 +266,18 @@ export const createMessagesSlice =
       },
 
       addMessages: async messagesData => {
-        const existingTxIds = new Set(safeMessages().map(m => m.txId));
+        const existing = new Map(safeMessages().map(m => [m.txId, m]));
         const newMessages = messagesData
-          .filter(m => !existingTxIds.has(m.txId))
+          .filter(m => !existing.has(m.txId))
           .map(m => ({ ...m, id: generateId() }));
+        // a penumbra memo stored before its amount carried an asset takes the
+        // re-read amount, asset and time; nothing else about it changes
+        const repairs = messagesData.filter(m => {
+          const old = existing.get(m.txId);
+          return old?.network === 'penumbra' && old.amount && !old.asset && m.asset;
+        });
 
-        if (newMessages.length === 0) {
+        if (newMessages.length === 0 && repairs.length === 0) {
           return;
         }
 
@@ -264,6 +286,14 @@ export const createMessagesSlice =
             state.messages.messages = [];
           }
           state.messages.messages.push(...newMessages);
+          for (const r of repairs) {
+            const m = state.messages.messages.find(x => x.txId === r.txId);
+            if (m) {
+              m.amount = r.amount;
+              m.asset = r.asset;
+              m.timestamp = r.timestamp || m.timestamp;
+            }
+          }
         });
 
         await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
@@ -304,7 +334,7 @@ export const createMessagesSlice =
             msg.txId = realTxId;
             msg.status = 'broadcasting';
             // an 'interrupted' record that reaches here was not interrupted
-            // after all — the flow survived and learned the txid
+            // after all - the flow survived and learned the txid
             msg.failureReason = undefined;
           }
         });
@@ -344,6 +374,22 @@ export const createMessagesSlice =
           if (msg && (msg.status === 'submitting' || msg.status === 'broadcasting')) {
             msg.status = 'interrupted';
             msg.failureReason = reason;
+          }
+        });
+        await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
+      },
+
+      markOutgoingDiscarded: async tempTxId => {
+        set(state => {
+          const list = Array.isArray(state.messages.messages) ? state.messages.messages : [];
+          const msg = list.find(m => m.txId === tempTxId);
+          if (
+            msg &&
+            tempTxId.startsWith('temp:') &&
+            (msg.status === 'submitting' || msg.status === 'interrupted')
+          ) {
+            msg.status = 'discarded';
+            msg.failureReason = undefined;
           }
         });
         await local.set('messages' as keyof LocalStorageState, safeMessages() as never);

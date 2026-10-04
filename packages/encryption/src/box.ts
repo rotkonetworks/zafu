@@ -1,4 +1,17 @@
-import { uint8ArrayToBase64, base64ToUint8Array } from '@rotko/penumbra-types/base64';
+import { base64ToUint8Array } from '@penumbrafi/types/base64';
+
+/**
+ * Base64 in 32 KiB slices. `String.fromCodePoint(...bytes)` passes every byte
+ * as an argument, which overflows the call stack somewhere past ~100 KB, so a
+ * large sealed vault (rooms, threads) could not be written at all.
+ */
+const uint8ArrayToBase64 = (bytes: Uint8Array): string => {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(bin);
+};
 
 // Public, stored representation of Box
 export interface BoxJson {

@@ -1,5 +1,7 @@
 // Must be the first import: its side effect runs in webpack's hoisted,
 // synchronous require phase, ahead of this entry's wasm-backed deps.
+// egress guard first: nothing may capture fetch or open a socket before it
+import '../net/egress-install';
 import '../install-console-quieting';
 import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
@@ -10,6 +12,10 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
 import { noteContextInvalidated } from '../utils/reload-notice';
 import { AppErrorBoundary, reportRenderError } from '../components/error-boundary';
+import { EgressAskSheet } from '../net/egress-ask-sheet';
+import { installRegistryIcons } from '../shared/components/registry-icons';
+import { announceUiOpenPresence } from '../state/ui-open-presence';
+import { trackActivity } from '../state/idle-activity';
 
 import '@repo/ui/styles/globals.css';
 import '@repo/ui/styles/icons.css';
@@ -18,6 +24,9 @@ import '@repo/ui/styles/icons.css';
 // AbortError unhandled rejections to console.debug, leave everything else
 // loud. See utils/graceful-network-errors.ts.
 installGracefulNetworkErrorHandler();
+installRegistryIcons();
+// the person using this page is what keeps the wallet unlocked (auto-lock)
+trackActivity();
 
 // This page survives an extension reload/auto-update with its chrome.* bindings
 // gone: `runtime.id` disappears and every call throws "Extension context
@@ -28,13 +37,25 @@ if (!chrome.runtime?.id) {
 }
 
 const MainPage = () => {
-  const [queryClient] = useState(() => new QueryClient());
+  const [queryClient] = useState(
+    // refetch only when a screen asks: never on focus or reconnect
+    () =>
+      new QueryClient({
+        defaultOptions: { queries: { refetchOnWindowFocus: false, refetchOnReconnect: false } },
+      }),
+  );
   const [wasmReady, setWasmReady] = useState(false);
+
+  // announce that a zafu UI surface is open, for the duration of this
+  // document - see entry/popup-root.tsx.
+  useEffect(() => {
+    announceUiOpenPresence();
+  }, []);
 
   useEffect(() => {
     // initialize standard wasm module for keys, addresses
     // parallel wasm will be initialized on-demand when needed for tx building
-    import('@rotko/penumbra-wasm/init')
+    import('@penumbrafi/wasm/init')
       .then(({ initWasm }) => initWasm())
       .then(() => setWasmReady(true))
       .catch(err => {
@@ -55,6 +76,7 @@ const MainPage = () => {
     <StrictMode>
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={pageRouter} />
+        <EgressAskSheet />
       </QueryClientProvider>
     </StrictMode>
   );
@@ -62,9 +84,9 @@ const MainPage = () => {
 
 const rootElement = document.getElementById('root') as HTMLDivElement;
 // apply persisted appearance theme before first paint ('sumi' is the
-// :root default; 'terminal' restores the cold pure-black material)
+// :root default; a retired 'terminal' choice stays on sumi)
 void localExtStorage.get('zafuTheme').then(v => {
-  if (v && v !== 'sumi') {
+  if (v === 'washi') {
     document.documentElement.dataset['theme'] = v;
   }
 });

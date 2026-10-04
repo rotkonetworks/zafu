@@ -26,7 +26,9 @@ export type TxOpStatus =
   | 'done'
   | 'failed'
   /** no answer for a long time: the page driving it probably went away */
-  | 'unknown';
+  | 'unknown'
+  /** stopped before it was broadcast: nothing was sent */
+  | 'discarded';
 
 export interface TxOp {
   opId: string;
@@ -48,6 +50,13 @@ export interface TxOp {
   restUrl?: string;
   /** the completion toast has been shown */
   notified?: boolean;
+  /**
+   * zcash: the build can still be stopped from any window (home's in-flight
+   * card), under this op's id; cleared once it starts broadcasting
+   */
+  stoppable?: boolean;
+  /** the optimistic outbox record of this send, discarded with it */
+  outboxId?: string;
   /** penumbra send: carried so the sent-message memo can be recorded */
   memo?: string;
   recipient?: string;
@@ -105,25 +114,75 @@ export const readTxOps = async (): Promise<TxOp[]> => {
     .map(([, v]) => v as TxOp);
 };
 
+/**
+ * Every read-modify-write of one op runs under its web lock, which spans the
+ * service worker, the popup and the side panel: session storage has no
+ * compare-and-set, and two windows reading `notified: false` at once is how one
+ * send was announced twice.
+ */
+const withOp = <T>(opId: string, fn: () => Promise<T>): Promise<T> =>
+  navigator.locks.request(txOpKey(opId), fn) as Promise<T>;
+
+const readOp = async (key: string) =>
+  (await chrome.storage.session.get(key))[key] as TxOp | undefined;
+
 /** merge `patch` into the op (creating it), stamping updatedAt */
-export const writeTxOp = async (
+export const writeTxOp = (
   opId: string,
   patch: Partial<TxOp> & Pick<TxOp, 'status'>,
-): Promise<void> => {
-  const key = txOpKey(opId);
-  const prev = (await chrome.storage.session.get(key))[key] as TxOp | undefined;
-  const now = Date.now();
-  const next: TxOp = {
-    network: 'penumbra',
-    label: 'transaction',
-    startedAt: now,
-    ...prev,
-    ...patch,
-    opId,
-    updatedAt: now,
-  };
-  await chrome.storage.session.set({ [key]: next });
-};
+): Promise<void> =>
+  withOp(opId, async () => {
+    const key = txOpKey(opId);
+    const now = Date.now();
+    const next: TxOp = {
+      network: 'penumbra',
+      label: 'transaction',
+      startedAt: now,
+      ...(await readOp(key)),
+      ...patch,
+      opId,
+      updatedAt: now,
+    };
+    await chrome.storage.session.set({ [key]: next });
+  });
+
+/**
+ * Take the right to announce a finished op. Exactly one caller across all open
+ * windows gets the op back; everyone else gets undefined.
+ */
+export const claimTxOp = (opId: string): Promise<TxOp | undefined> =>
+  withOp(opId, async () => {
+    const key = txOpKey(opId);
+    const op = await readOp(key);
+    if (!op || !isTerminal(op.status) || op.notified) {
+      return undefined;
+    }
+    await chrome.storage.session.set({ [key]: { ...op, notified: true } });
+    return op;
+  });
+
+const shownKey = (opId: string) => `txOpShown:${opId}`;
+
+/**
+ * The screen that sent the op shows its outcome itself, for as long as it
+ * holds this. A lock, not a flag: it ends with the screen, even when the side
+ * panel reloads under it, so the toast then speaks instead.
+ */
+export const holdTxOp = (opId: string): Promise<() => void> =>
+  new Promise(held => {
+    void navigator.locks.request(shownKey(opId), () => new Promise<void>(release => held(release)));
+  });
+
+/** a screen is showing this op's outcome right now */
+export const isTxOpShown = (opId: string): Promise<boolean> =>
+  navigator.locks.request(shownKey(opId), { ifAvailable: true }, lock => lock === null);
+
+/**
+ * A send stopped before it left: terminal, never announced (the person did
+ * it themselves), and swept with the other finished ops.
+ */
+export const discardTxOp = (opId: string): Promise<void> =>
+  writeTxOp(opId, { status: 'discarded', step: undefined, stoppable: false, notified: true });
 
 export const removeTxOps = (opIds: readonly string[]): Promise<void> =>
   chrome.storage.session.remove(opIds.map(txOpKey));

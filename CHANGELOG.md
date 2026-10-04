@@ -6,6 +6,65 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.0.0
+
+The redesign. A new zafu, built around two networks, privacy by default and
+fewer, calmer screens.
+
+### One shell, two networks
+
+- Header and tabs (wallet, people, tools, settings) on every screen; sumi and
+  washi themes, the 匿 seal.
+- Zcash and Penumbra are the networks. Noble, Cosmos Hub, Osmosis, Injective
+  and the other IBC chains are transparent burners that appear only inside the
+  flows that use them.
+- Onboarding asks for 24 words; a 12-word phrase is accepted for Penumbra only.
+
+### Swap, buy and liquidity
+
+- Swap across NEAR Intents and THORChain with live prices that update as you
+  type, every fee shown, and zafu's own fee free during the beta.
+- THORChain swaps carry a real price limit, stream when a pool is thin, and use
+  a fresh transparent address per swap.
+- Buy ZEC with cash through Peer, on its own page, with a tracker that survives
+  closing the browser.
+- Cash out the same way in reverse: pick "cash" when swapping from ZEC, which
+  swaps into USDC on Base, then list it on Peer and get paid in Revolut, Wise,
+  Zelle or Monzo.
+
+### People
+
+- Chat on zirc: groups by invite code and 1:1 rooms for contacts who swapped
+  cards, over relay.zafu.pro.
+- Contact discovery, per site and off until you turn it on.
+
+### Privacy and safety
+
+- Egress default-deny: every destination is visible and blockable, and nothing
+  is contacted while every zafu window is closed.
+- A full security, cryptography, Penumbra and fund-safety review, with its
+  findings fixed: web pages can no longer pose as zafu, passkey signatures are
+  correct, presence and chat records are harder to tell apart or replay, and
+  Penumbra's note tree survives closing zafu mid-sync.
+- Every setting explains itself; tap its name.
+- Spends and received notes are found by scanning every block on your device.
+  zafu no longer asks the server whether your notes exist or are spent, so it
+  never sends identifiers of your notes, not even hidden among decoys.
+- The "verified" node mark is gone. It rested on a header proof whose values
+  the server chose, so it promised more than it checked. Checking the chain
+  against Zcash's own proof of work (FlyClient) is coming in its place.
+
+### Speed
+
+- Screens load their code and local data as soon as you reach for them.
+- Penumbra proves before you approve; sync resumes where it stopped.
+
+### Good to know
+
+- Penumbra wallets that turned Penumbra on with "sync from now" on an earlier
+  beta may be missing older payments. Settings > networks > penumbra > sync
+  again from the start finds them.
+
 ## 28.3.2
 
 ### Passkey registration works again
@@ -269,6 +328,10 @@ reliability fixes.
 - Withdrawing to Noble or Injective offers your own wallet as the destination,
   with a max-amount shortcut.
 - Burner addresses rotate: a fresh chain address per use, rate-limited.
+- Cosmos and Injective sends now have a memo field - the tag most exchanges
+  require to credit a deposit - threaded through both same-chain sends and IBC
+  transfers. A memo that looks like a recovery phrase (mostly BIP-39 words) is
+  flagged, since that free-text field is published on-chain in the clear.
 
 ### Reliability
 

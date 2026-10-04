@@ -73,8 +73,8 @@ describe('transparent conduit', () => {
   it('refuses to prefix-swap into kava', async () => {
     const osmo = (await cosmosSigner.deriveCosmosWallet(MNEMONIC, 0, 'osmo')).address;
     expect(() => cosmosSigner.deriveChainAddress(osmo, 'kava')).toThrow(/coin type 459/);
-    expect(cosmosSigner.deriveAllChainAddresses(osmo).kava).toBeUndefined();
-    expect(cosmosSigner.deriveAllChainAddresses(osmo).celestia).toMatch(/^celestia1/);
+    expect(cosmosSigner.deriveAllChainAddresses(osmo)['kava']).toBeUndefined();
+    expect(cosmosSigner.deriveAllChainAddresses(osmo)['celestia']).toMatch(/^celestia1/);
   });
 
   it('never touches the coin-118 helpers for injective', async () => {

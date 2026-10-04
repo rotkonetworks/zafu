@@ -1,3 +1,5 @@
+import { resolvePenumbraEndpoint } from '../config/penumbra-endpoints';
+import { selectEnabledNetworks } from '../state/keyring';
 import { useQuery } from '@tanstack/react-query';
 import { sample } from 'lodash';
 import { createClient, Transport } from '@connectrpc/connect';
@@ -76,17 +78,28 @@ export const fetchBlockHeight = async (grpcEndpoint: string): Promise<number> =>
   return Number(result.syncInfo.latestBlockHeight);
 };
 
-export const useLatestBlockHeight = () => {
+/** within this many blocks of the tip a wallet counts as caught up */
+export const CAUGHT_UP_BLOCKS = 10;
+
+/**
+ * The penumbra tip, from the node the sync already reads. While a window is
+ * open and `synced` (the sync's height) is not near it yet, it is asked again
+ * every 30s; caught up, the synced height itself carries the tip forward.
+ */
+export const useLatestBlockHeight = (synced?: number) => {
   const { grpcEndpoint } = useStore(networkSelector);
+  // only while penumbra is on; the endpoint comes from the same resolver the
+  // service worker uses (the node menu writes networkEndpoints, not the legacy
+  // grpcEndpoint key, so reading that alone left the home waiting forever)
+  const penumbraOn = useStore(selectEnabledNetworks).includes('penumbra');
 
   return useQuery({
-    queryKey: ['latestBlockHeight'],
-    queryFn: async () => {
-      if (!grpcEndpoint) {
-        return;
-      }
-      return await fetchBlockHeight(grpcEndpoint);
-    },
-    enabled: Boolean(grpcEndpoint),
+    queryKey: ['latestBlockHeight', grpcEndpoint],
+    queryFn: async () => fetchBlockHeight(await resolvePenumbraEndpoint()),
+    enabled: penumbraOn,
+    refetchInterval: q =>
+      synced !== undefined && (q.state.data ?? Infinity) - synced > CAUGHT_UP_BLOCKS
+        ? 30_000
+        : false,
   });
 };

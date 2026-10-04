@@ -25,7 +25,7 @@ class MemRelay implements RelayTransport {
 
 const APP = 'poker.zk.bot';
 const EPOCH = 100;
-const BLOB = 64; // sealed size for a 35-byte record: 1(ver)+12(nonce)+35+16(tag)
+const BLOB = 64; // sealed size for a 35-byte record: 12(nonce)+[1(ver)+35]+16(tag)
 const PAD = 8;
 
 // two peers' contact-KA keys + their (symmetric) shared root secret.
@@ -92,5 +92,72 @@ describe('PresenceService - end-to-end publish + discover', () => {
     );
     const present = await otherApp.findPresent([peerA], EPOCH);
     expect(present).toHaveLength(0);
+  });
+
+  it('withdraw takes this epoch back at once: the tag stays, nothing opens', async () => {
+    // the real relay merges by tag (minirelay ON CONFLICT DO UPDATE)
+    const t = new MemRelay();
+    const merged = new Map<string, PresenceEntry>();
+    t.putBucket = async req => {
+      for (const e of req.entries) {
+        merged.set(bytesToHex(e.tag), e);
+      }
+      t.store.set(`${req.appScope}|${req.epoch}|${req.shard}`, [...merged.values()]);
+    };
+    await svcA(t).publishSelf(record(1), [peerB], EPOCH);
+    expect(await svcB(t).findPresent([peerA], EPOCH)).toHaveLength(1);
+    await svcA(t).withdrawSelf([peerB], EPOCH);
+    expect(await svcB(t).findPresent([peerA], EPOCH)).toHaveLength(0);
+  });
+});
+
+describe('PresenceService - real, dummy and withdraw blobs look alike', () => {
+  /** one 64-entry batch of each kind, as the relay receives it */
+  const batches = async () => {
+    const t = new MemRelay();
+    const relay = new ContactRelay(t, { appOrigin: APP, padTo: 64, blobBytes: BLOB });
+    const svc = createPresenceService(relay, APP, aPub);
+    // 64 distinct friends, so the real batch is all real entries
+    const peers: DiscoveryPeer[] = Array.from({ length: 64 }, (_, i) => {
+      const priv = new Uint8Array(32).fill(i + 1);
+      const pub = x25519.getPublicKey(priv);
+      return {
+        id: String(i),
+        friendPubHex: bytesToHex(pub),
+        rootSecret: x25519.getSharedSecret(aPriv, pub),
+      };
+    });
+    const grab = () => [...t.store.values()].flat().map(e => e.blob);
+    await svc.publishSelf(record(1), peers, EPOCH);
+    const real = grab();
+    t.store.clear();
+    await svc.publishSelf(record(1), [], EPOCH);
+    const dummy = grab();
+    t.store.clear();
+    await svc.withdrawSelf(peers, EPOCH);
+    const withdraw = grab();
+    return { real, dummy, withdraw };
+  };
+
+  it('every blob is 64 bytes and no byte position is constant in any kind', async () => {
+    const { real, dummy, withdraw } = await batches();
+    for (const set of [real, dummy, withdraw]) {
+      expect(set).toHaveLength(64);
+      expect(set.every(b => b.length === BLOB)).toBe(true);
+      // 64 uniform bytes take about 56 distinct values per position; a
+      // version byte (the old leak) takes one. 20 is far from both.
+      const narrowest = Math.min(
+        ...Array.from({ length: BLOB }, (_, i) => new Set(set.map(b => b[i])).size),
+      );
+      expect(narrowest).toBeGreaterThan(20);
+    }
+  });
+
+  it('the first byte of a real blob is spread like a dummy one', async () => {
+    const { real, dummy } = await batches();
+    // the old wire made every real first byte 0x01: count how many match it
+    const ones = (set: Uint8Array[]) => set.filter(b => b[0] === 0x01).length;
+    expect(ones(real)).toBeLessThan(5);
+    expect(ones(dummy)).toBeLessThan(5);
   });
 });

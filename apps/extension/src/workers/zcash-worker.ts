@@ -11,31 +11,59 @@
 
 /// <reference lib="webworker" />
 
-import { fixOrchardAddress, encodeOrchardUfvk } from '@repo/wallet/networks/zcash/unified-address';
+// egress guard first: nothing may capture fetch or open a socket before it
+import '../net/egress-install-lite';
+import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { blockRangeFetcher } from '../services/memo-sync/block-range-fetcher';
 import { buildStrategy } from '../services/memo-sync/strategy';
 import { idbBucketStore } from '../services/memo-sync/filters/cache';
 import { bucketOf, BUCKET_SIZE as MEMO_BUCKET_SIZE } from '../services/memo-sync/types';
 import type { BucketStart as MemoBucketStart, MemoSyncStrategy } from '../services/memo-sync/types';
-import type { ZcashBackend, ZcashClient } from '../state/keyring/zcash-backend';
+import {
+  ZCASH_BACKENDS,
+  backendKey,
+  backendOfEndpoint,
+  createRedetector,
+  detectZcashBackend,
+  isZcashBackend,
+  zcashClient,
+  zidecarExtras,
+  type ZcashBackend,
+  type ZcashClient,
+} from '../state/keyring/zcash-backend';
+import { txidMemoFetcher } from '../services/memo-sync/txid-fetcher';
 import { COMPACT_SIGN_REQUEST } from '../config/feature-flags';
 import {
   preludeWrapSinglePczt,
   ZIGNER_PCZT_SIGN_UR_TYPE,
 } from '../routes/popup/send/zcash-send-cbor-helpers';
 import { nu63ActivationHeight } from '../config/feature-flags';
-import { crossCheckTip } from './cross-verify';
+import { crossCheckTip, pickIndependentPeer } from './cross-verify';
+import { checkEgress } from '../net/egress';
 import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
-import {
-  CommitmentReservoir,
-  padCommitmentQuery,
-  padNullifierQuery,
-  type CommitmentItem,
-} from './proof-decoys';
 import { BlockPrefetcher } from './block-prefetcher';
 import { once } from './once';
 import { assessAmbientRayonIsolation, RAYON_ISOLATION_WARNING } from '../perf/rayon-isolation';
 import { loadVotingWasm } from '../state/voting-wasm';
+import { hotSpendAccount, isStoreOfWallet, parsePocketStoreId } from '../state/pocket-id';
+import {
+  isP2pkhOf,
+  pocketWalletKeys,
+  tIndexOf,
+  shieldRoundUtxos,
+  utxosByTIndex,
+  type PocketKeysCtor,
+} from './pocket-keys';
+import { unsealVault, withSpendKeys, type SpendKeysCtor } from './hot-sign';
+import {
+  planDeposit,
+  sendDeposit,
+  type DepositChain,
+  type DepositRequest,
+  type DepositWasm,
+} from './transparent-deposit';
+import { assertProveRequest, type ProveRequest } from '../shared/prove-guard';
+import { issueWorkerKey, type SealedVault } from '../shared/vault-seal';
 import {
   parseExpiryHeight,
   reconcileSentTxs,
@@ -48,13 +76,40 @@ import {
   isChainContinuityError,
   rewindDistanceForAttempt,
   syncErrorCodeOf,
+  syncRetryDelayMs,
   MAX_REWINDS_PER_RUN,
+  SYNC_STALL_ERRORS,
   type SyncErrorCode,
 } from '../state/sync-failure';
+import { startRun, stopRun, STOP_WAIT_MS, type RunSlot } from './sync-runs';
+import { errText, storageFailure } from '@penumbra-zone/query/error-text';
+import { mergeLoadedNotes, mergeLoadedSpent } from './wallet-state-merge';
+import { storeFellBehind } from './store-reset';
+import { createBuildRegistry } from './build-abort';
+import { advanceWitnesses, frontierHolds } from './witness-advance';
 
 export type { SentTxRecord } from './sent-tx-reconcile';
 
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
+
+/** builds a page may stop before they broadcast (see build-abort.ts) */
+const builds = createBuildRegistry();
+
+/** a build's progress label for its page, in the send-progress shape */
+const buildProgress =
+  (walletId: string | undefined, start = performance.now()) =>
+  (step: string, detail?: string) =>
+    workerSelf.postMessage({
+      type: 'send-progress',
+      id: '',
+      network: 'zcash',
+      walletId,
+      payload: { step, detail, elapsedMs: Math.round(performance.now() - start) },
+    });
+
+// One line per real worker boot, for counting live instances (should be
+// exactly one, hosted in the offscreen document - see network-worker.ts).
+console.debug('[zcash-worker] module start');
 
 // This worker runs in the popup's console context, so any rejection that is
 // not awaited here surfaces there as "Uncaught (in promise)". First-party
@@ -68,7 +123,7 @@ installGracefulNetworkErrorHandler();
  * Tag an error we raise ourselves with its classification.
  *
  * The UI must never render a raw worker error, and guessing what an error
- * MEANS from its text is brittle — but we own both sides of this boundary, so
+ * MEANS from its text is brittle - but we own both sides of this boundary, so
  * anything thrown here can simply say what it is. Only errors from wasm, from
  * `fetch`, and from IndexedDB fall back to substring sniffing in
  * `state/sync-failure.ts`.
@@ -77,67 +132,73 @@ const syncError = (code: SyncErrorCode, message: string): Error =>
   Object.assign(new Error(message), { syncCode: code });
 
 /**
- * Worker-local endpoint→backend registry. Populated only via the explicit
- * `backend` field on the 'sync' payload (the popup classifies endpoints
- * declaratively via isZidecarEndpoint() and forwards). We deliberately do
- * NOT auto-probe — probing zidecar-only RPCs is a unique-to-zafu request
- * signature that fingerprints the wallet.
+ * Worker-local endpoint→backend registry, seeded by 'sync'. What a node is
+ * comes from the node: when the page has no cached answer, 'sync' asks it
+ * with the standard GetLightdInfo (detectZcashBackend) before building a
+ * client. A zidecar-only rpc is never used to find out - it is a request
+ * signature no other wallet sends, so even a failed probe marks the wallet.
  *
- * Unknown endpoints default to 'zidecar' (the rotko-shipped baseline);
- * users on a third-party lightwalletd must hit 'sync' first to seed this
- * map before any other RPC, which is the natural call order anyway.
+ * An endpoint nothing has classified gets backendOfEndpoint's guess, which
+ * is lightwalletd for every third-party host: an unclassified node never
+ * sees a zidecar-only rpc.
  */
 const backendRegistry = new Map<string, ZcashBackend>();
 
+/** one re-ask per node per cooldown, after a zidecar call failed */
+const redetectBackend = createRedetector();
+
+/** tell the page what a node said it is, so it is cached per endpoint */
+const announceBackend = (serverUrl: string, backend: ZcashBackend): void =>
+  workerSelf.postMessage({
+    type: 'zcash-backend-detected',
+    id: '',
+    network: 'zcash',
+    payload: { serverUrl, backend },
+  });
+
+/**
+ * One of zidecar's own calls failed. The node may not be (or no longer be) a
+ * zidecar: ask it again with the standard GetLightdInfo. Only an answer
+ * changes the kind - a node that is merely down keeps it. A changed kind
+ * reaches the page, which restarts the sync with the right client.
+ */
+const suspectBackend = (serverUrl: string): void => {
+  void redetectBackend(serverUrl).then(backend => {
+    if (backend && backend !== lookupBackend(serverUrl)) {
+      console.warn(`[zcash-worker] ${serverUrl} now reports itself as ${backend}`);
+      registerBackend(serverUrl, backend);
+      announceBackend(serverUrl, backend);
+    }
+  });
+};
+
 /**
  * One-shot warning latches for conditions that are stable for the life of the
- * worker. `verifySyncProofs` runs on every sync pass, so a per-pass `console`
+ * worker. Sync runs on every pass, so a per-pass `console`
  * line for a condition that cannot change turns a healthy sync into hundreds of
  * identical lines and hides the ones that matter. These warn once, then stay
  * silent; the condition itself is unaffected.
  */
-let warnedNullifierRootMoved = false;
-let warnedNonGenesisActionsCommitment = false;
 
 function registerBackend(serverUrl: string, backend: ZcashBackend): void {
-  if (backend !== 'zidecar' && backend !== 'lightwalletd') {
+  if (!isZcashBackend(backend)) {
     throw new Error(`unknown zcash backend: ${String(backend)}`);
   }
-  backendRegistry.set(serverUrl.replace(/\/$/, ''), backend);
+  backendRegistry.set(backendKey(serverUrl), backend);
 }
 
 function lookupBackend(serverUrl: string): ZcashBackend {
-  return backendRegistry.get(serverUrl.replace(/\/$/, '')) ?? 'zidecar';
+  return backendRegistry.get(backendKey(serverUrl)) ?? backendOfEndpoint(serverUrl);
 }
 
-/**
- * Factory: construct the appropriate sync client for an endpoint+backend.
- *
- * Two-arg form is the canonical (defensive) one — pass backend explicitly
- * when you have it in scope. The one-arg form is for call sites deep in
- * the worker that don't carry backend through their payload; they fall
- * back to the registry. Throws on unknown backend, never silently coerces.
- */
-const makeZcashClient = async (serverUrl: string, backend?: ZcashBackend): Promise<ZcashClient> => {
-  const effective = backend ?? lookupBackend(serverUrl);
-  if (effective === 'lightwalletd') {
-    const { LightwalletdClient } = await import(
-      /* webpackMode: "eager" */ '../state/keyring/lightwalletd-client'
-    );
-    return new LightwalletdClient(serverUrl);
-  }
-  if (effective === 'zidecar') {
-    const { ZidecarClient } = await import(
-      /* webpackMode: "eager" */ '../state/keyring/zidecar-client'
-    );
-    return new ZidecarClient(serverUrl);
-  }
-  throw new Error(`unknown zcash backend: ${String(effective)}`);
-};
+/** the sync client for an endpoint; call sites without a backend in scope use the registry */
+const makeZcashClient = (serverUrl: string, backend?: ZcashBackend): ZcashClient =>
+  zcashClient(serverUrl, backend ?? lookupBackend(serverUrl));
 
 interface WorkerMessage {
   type:
     | 'init'
+    | 'vault-key'
     | 'derive-address'
     | 'sync'
     | 'stop-sync'
@@ -145,6 +206,7 @@ interface WorkerMessage {
     | 'get-balance'
     | 'get-pool-balances'
     | 'send-tx'
+    | 'build-stop'
     | 'send-tx-multi'
     | 'send-tx-complete'
     | 'send-tx-pczt'
@@ -155,6 +217,8 @@ interface WorkerMessage {
     | 'shield'
     | 'shield-unsigned'
     | 'shield-complete'
+    | 'transparent-deposit-plan'
+    | 'transparent-deposit'
     | 'list-wallets'
     | 'delete-wallet'
     | 'get-notes'
@@ -178,13 +242,16 @@ interface WorkerMessage {
     | 'frost-inspect-pczt-outputs'
     | 'complete-orchard-pczt'
     | 'broadcast-raw-tx'
+    | 'pczt-extract-tx'
+    | 'broadcast-signed-tx'
+    | 'lookup-tx'
+    | 'shield-eligible'
     | 'get-transparent-utxos'
     | 'generate-voting-hotkey'
     | 'build-delegation-pczt'
     | 'finalize-delegation'
     | 'cast-vote-hot-wire'
     | 'pir-fetch-imt-proofs'
-    | 'get-orchard-account-info'
     | 'get-consensus-branch-id'
     | 'get-merkle-witnesses';
   id: string;
@@ -264,17 +331,15 @@ interface DecryptedNote {
   recipient?: string;
   /** serialized IncrementalWitness (hex), advanced to witnessTreeSize leaves */
   witness_hex?: string;
-  /** tree size at which witness was last advanced — used to detect drift */
+  /** tree size at which witness was last advanced - used to detect drift */
   witness_tree_size?: number;
 }
 
 /** Pool of a note; records persisted pre-ironwood default to orchard. */
 const poolOf = (note: DecryptedNote): NotePool => note.pool ?? 'orchard';
 
-interface WalletState {
+interface WalletState extends RunSlot {
   keys: ScannerKeys | null;
-  syncing: boolean;
-  syncAbort: boolean;
   notes: DecryptedNote[];
   spentNullifiers: Set<string>;
   /**
@@ -284,30 +349,28 @@ interface WalletState {
    */
   mempoolAbort?: AbortController;
   /**
-   * Promise of the watcher's IIFE. waitForSyncStop awaits this alongside
-   * `syncing` so a follow-up runSync can't race a still-alive watcher.
+   * Promise of the watcher's IIFE. stopSync awaits this alongside the run
+   * so a follow-up runSync can't race a still-alive watcher.
    */
   mempoolTask?: Promise<void>;
+  /**
+   * The running sync's ironwood frontier, its height and tree size, read live.
+   * The loop changes them together with the notes' witnesses in one
+   * synchronous step, so a send reading this and the witnesses in one tick
+   * sees one consistent tree; the stored copies trail it by a write.
+   */
+  ironwoodLive?: () => { frontier: string; height: number; size: number };
 }
 
-interface WasmModule {
-  WalletKeys: new (seed: string) => WalletKeys;
+interface WasmModule extends DepositWasm {
+  WalletKeys: PocketKeysCtor<WalletKeys>;
+  /** hot spend authority, built per send from the phrase this worker unsealed */
+  SpendKeys: SpendKeysCtor;
   WatchOnlyWallet: {
     from_ufvk(ufvk: string): WatchOnlyWallet;
     from_qr_hex(qrHex: string): WatchOnlyWallet;
     new (fvkBytes: Uint8Array, accountIndex: number, mainnet: boolean): WatchOnlyWallet;
   };
-  build_shielding_transaction(
-    utxos_json: string,
-    privkey_hex: string,
-    recipient: string,
-    amount: bigint,
-    fee: bigint,
-    anchor_height: number,
-    mainnet: boolean,
-    // live consensus branch id (hex, e.g. "37a5165b"); null/'' -> WASM NU6.2 fallback
-    branch_id_hex?: string | null,
-  ): string;
   build_unsigned_transaction(
     ufvk_str: string,
     notes_json: unknown,
@@ -322,20 +385,6 @@ interface WasmModule {
     // live consensus branch id (hex, e.g. "37a5165b"); null/'' -> WASM NU6.2 fallback
     branch_id_hex?: string | null,
   ): unknown;
-  build_signed_spend_transaction(
-    seed_phrase: string,
-    notes_json: unknown,
-    recipient: string,
-    amount: bigint,
-    fee: bigint,
-    anchor_hex: string,
-    merkle_paths_json: unknown,
-    account_index: number,
-    mainnet: boolean,
-    memo_hex?: string | null,
-    // live consensus branch id (hex, e.g. "37a5165b"); null/'' -> WASM NU6.2 fallback
-    branch_id_hex?: string | null,
-  ): string;
   complete_transaction(
     unsigned_tx_hex: string,
     signatures: unknown,
@@ -381,7 +430,6 @@ interface WasmModule {
     branch_id_hex?: string | null,
   ): string;
   complete_shielding_transaction(unsigned_tx_hex: string, signatures_json: string): string;
-  derive_transparent_privkey(seed_phrase: string, account: number, index: number): string;
   /** 33-byte compressed secp256k1 pubkey for a UFVK's transparent address index */
   transparent_pubkey_from_ufvk(ufvk_str: string, address_index: number): string;
   build_merkle_paths(
@@ -448,55 +496,6 @@ interface WasmModule {
     mainnet: boolean,
     memo_hex?: string | null,
   ) => unknown;
-
-  /**
-   * NU6.3 turnstile migration HOT (mnemonic) path: same as
-   * build_turnstile_migration_pczt but takes the SEED PHRASE and returns the
-   * final SIGNED V6 tx hex directly - no intermediate PCZT is produced. The
-   * account_index MUST be the account the orchard notes were scanned under, and
-   * expected_branch_id MUST be the live GetLightdInfo branch id (never the
-   * 0xffffffff placeholder); the producer refuses to build otherwise. Invoked
-   * via the offscreen prover (proveViaOffscreen), declared here for completeness.
-   */
-  build_signed_turnstile_migration?: (
-    seed_phrase: string,
-    orchard_notes_json: string,
-    fee: bigint,
-    orchard_anchor_hex: string,
-    orchard_merkle_paths_json: string,
-    account_index: number,
-    target_height: number,
-    expected_branch_id: number,
-    mainnet: boolean,
-    memo_hex?: string | null,
-  ) => string;
-
-  /**
-   * NU6.3 general IRONWOOD hot send: spends the given IRONWOOD notes to an
-   * arbitrary recipient and returns the final SIGNED V6 tx hex directly (no
-   * intermediate PCZT). Post-NU6.3 this is the only shielded spend path, since
-   * orchard-to-orchard sends are consensus-disabled. Same fail-closed contract
-   * as build_signed_turnstile_migration: account_index MUST be the account the
-   * ironwood notes were scanned under and expected_branch_id MUST be the live
-   * GetLightdInfo branch id (never the 0xffffffff placeholder); the producer
-   * refuses to build otherwise. Invoked via the offscreen prover
-   * (proveViaOffscreen), declared here (optional) for feature detection - the
-   * export lands with the NU6.3 blob.
-   */
-  build_signed_ironwood_send?: (
-    seed_phrase: string,
-    ironwood_notes_json: string,
-    recipient: string,
-    amount: bigint,
-    fee: bigint,
-    ironwood_anchor_hex: string,
-    ironwood_merkle_paths_json: string,
-    account_index: number,
-    target_height: number,
-    expected_branch_id: number,
-    mainnet: boolean,
-    memo_hex?: string | null,
-  ) => string;
 
   // FROST multisig
   frost_dealer_keygen(min_signers: number, max_signers: number): string;
@@ -627,7 +626,7 @@ function buildSignRequestEnvelope(
       const compactHex = wasm.redact_pczt_compact(pcztHex);
       return { envelope: preludeWrapSinglePczt(hexDecode(compactHex), true), compact: true };
     } catch (e) {
-      console.warn('[zcash-worker] compact redaction failed, sending legacy 0x03:', e);
+      console.warn(`[zcash-worker] compact redaction failed, sending legacy 0x03: ${errText(e)}`);
     }
   }
   return { envelope: preludeWrapSinglePczt(hexDecode(pcztHex), false), compact: false };
@@ -744,54 +743,24 @@ const patchBranchId = (buf: Uint8Array): void => {
   }
 };
 
-/**
- * Wait for both the sync loop AND the mempool watcher to stop after the
- * caller has set syncAbort=true (or otherwise signaled shutdown). Polls
- * state.syncing every 50ms up to timeoutMs, then explicitly awaits the
- * watcher task if one was running — this matters because a freshly-spawned
- * runSync race can otherwise have two watchers contending against the same
- * walletId.
- */
-const waitForSyncStop = async (state: WalletState, timeoutMs = 2000): Promise<void> => {
-  // Abort the watcher (idempotent) so any in-flight fetch / sleep wakes up.
+/** stop the wallet's sync and wait until its loop and mempool watcher have ended */
+const stopSync = async (state: WalletState): Promise<void> => {
   state.mempoolAbort?.abort();
-
-  if (state.syncing) {
-    await new Promise<void>(resolve => {
-      const start = Date.now();
-      const check = () => {
-        if (!state.syncing || Date.now() - start > timeoutMs) {
-          resolve();
-        } else {
-          setTimeout(check, 50);
-        }
-      };
-      check();
-    });
-  }
-  // Wait for the watcher's promise to settle so we know the IIFE finished.
-  // Bounded by the same timeout — if the watcher is wedged inside a fetch
-  // that ignored the signal, we still return after timeoutMs.
-  if (state.mempoolTask) {
-    await Promise.race([
-      state.mempoolTask.catch(() => undefined),
-      new Promise(resolve => setTimeout(resolve, timeoutMs)),
-    ]);
-    state.mempoolTask = undefined;
-    state.mempoolAbort = undefined;
-  }
+  await Promise.all([
+    stopRun(state),
+    Promise.race([
+      state.mempoolTask?.catch(() => undefined),
+      new Promise(resolve => setTimeout(resolve, STOP_WAIT_MS)),
+    ]),
+  ]);
+  state.mempoolTask = undefined;
+  state.mempoolAbort = undefined;
 };
 
-/**
- * Sleep that wakes early when the sync loop is asked to stop. The loop's
- * idle wait (10s at tip) and error backoff (up to 30s) are much longer than
- * waitForSyncStop's 2s budget - a plain setTimeout sleep would let a stale
- * loop outlive the teardown and race a freshly-started sync (e.g. after an
- * endpoint switch, the old loop keeps its old client).
- */
-const sleepUnlessAborted = async (state: WalletState, ms: number): Promise<void> => {
+/** a sleep that wakes the moment the run is stopped */
+const sleepUnlessAborted = async (signal: AbortSignal, ms: number): Promise<void> => {
   const deadline = Date.now() + ms;
-  while (!state.syncAbort) {
+  while (!signal.aborted) {
     const remaining = deadline - Date.now();
     if (remaining <= 0) {
       return;
@@ -803,7 +772,7 @@ const sleepUnlessAborted = async (state: WalletState, ms: number): Promise<void>
 const getOrCreateWalletState = (walletId: string): WalletState => {
   let state = walletStates.get(walletId);
   if (!state) {
-    state = { keys: null, syncing: false, syncAbort: false, notes: [], spentNullifiers: new Set() };
+    state = { keys: null, notes: [], spentNullifiers: new Set() };
     walletStates.set(walletId, state);
   }
   return state;
@@ -849,7 +818,7 @@ const readCompactSize = (buf: Uint8Array, off: number): [number, number] => {
       off + 5,
     ];
   }
-  // 0xff — 8 byte, unlikely for tx counts
+  // 0xff - 8 byte, unlikely for tx counts
   return [0, off + 9];
 };
 
@@ -881,14 +850,14 @@ const parseTransparentTx = (data: Uint8Array, ourScripts: Set<string>): bigint =
   const [nVin, vinOff] = readCompactSize(data, off);
   off = vinOff;
 
-  // parse inputs — check scriptSig for our pubkey hash
+  // parse inputs - check scriptSig for our pubkey hash
   for (let i = 0; i < nVin; i++) {
     // prevout: txid(32) + index(4)
     off += 36;
     // scriptSig
     const [sigLen, sigOff] = readCompactSize(data, off);
     off = sigOff;
-    // note: transparent inputs don't carry value — we can't determine sent amount
+    // note: transparent inputs don't carry value - we can't determine sent amount
     // from the tx alone without looking up the referenced UTXOs
     off += sigLen;
     // nSequence
@@ -929,6 +898,8 @@ const DB_NAME = 'zafu-zcash';
 const DB_VERSION = 5;
 
 let sharedDb: IDBDatabase | null = null;
+/** counts connections lost under us (closed by the browser, asked to let go) */
+let dbLost = 0;
 
 const getDb = (): Promise<IDBDatabase> => {
   if (sharedDb) {
@@ -942,17 +913,34 @@ const getDb = (): Promise<IDBDatabase> => {
     // The open request then fires 'blocked' and NEVER settles: no success, no
     // error. Every await on getDb() hangs, runSync stalls before it emits a
     // single height, and the wallet sits at "scanning notes 0%" with nothing
-    // in the log. Fail loudly instead — the caller surfaces it and a reload
+    // in the log. Fail loudly instead - the caller surfaces it and a reload
     // (which drops the other connection) fixes it.
     req.onblocked = () =>
       reject(
         new Error(
-          `IndexedDB upgrade to v${DB_VERSION} blocked by another open connection to ${DB_NAME} — reload the extension`,
+          `IndexedDB upgrade to v${DB_VERSION} blocked by another open connection to ${DB_NAME} - reload the extension`,
         ),
       );
     req.onsuccess = () => {
-      sharedDb = req.result;
-      resolve(sharedDb);
+      const db = req.result;
+      // A connection can die under us: the browser closes it when the
+      // backing store fails or the site's data is cleared ('close'), and
+      // another realm upgrading or deleting the database asks us to let go
+      // ('versionchange'). Either way forget it, so the next getDb() opens a
+      // fresh one instead of every call throwing InvalidStateError forever.
+      const forget = () => {
+        if (sharedDb === db) {
+          sharedDb = null;
+          dbLost++;
+        }
+      };
+      db.onclose = forget;
+      db.onversionchange = () => {
+        db.close();
+        forget();
+      };
+      sharedDb = db;
+      resolve(db);
     };
     req.onupgradeneeded = event => {
       const db = req.result;
@@ -1001,7 +989,7 @@ const getDb = (): Promise<IDBDatabase> => {
   });
 };
 
-/** close shared db connection — called when worker is idle */
+/** close shared db connection - called when worker is idle */
 export const closeDb = () => {
   if (sharedDb) {
     sharedDb.close();
@@ -1011,8 +999,13 @@ export const closeDb = () => {
 
 const txComplete = (tx: IDBTransaction): Promise<void> =>
   new Promise((resolve, reject) => {
+    // a transaction the browser aborts (its connection closed) has no error
+    // object: reject with one that says so, never with null
+    const failed = () =>
+      reject(tx.error ?? new DOMException('The transaction was aborted.', 'AbortError'));
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+    tx.onerror = failed;
+    tx.onabort = failed;
   });
 
 const idbGet = async <T>(store: string, key: IDBValidKey): Promise<T | undefined> => {
@@ -1090,9 +1083,10 @@ interface IronwoodWitnessRecord {
 
 const loadState = async (walletId: string): Promise<WalletState> => {
   const state = getOrCreateWalletState(walletId);
-  state.notes = await idbGetAllByIndex<DecryptedNote>('notes', 'byWallet', walletId);
+  // Read everything before touching `state`: the sync loop can run between
+  // these awaits, and must never see notes whose witnesses aren't attached yet.
+  const notes = await idbGetAllByIndex<DecryptedNote>('notes', 'byWallet', walletId);
   const spentRecords = await idbGetAllByIndex<{ nullifier: string }>('spent', 'byWallet', walletId);
-  state.spentNullifiers = new Set(spentRecords.map(r => r.nullifier));
 
   // attach ironwood witnesses from their dedicated store (orchard witnesses
   // live on the note record itself; ironwood ones are stored separately per
@@ -1104,7 +1098,7 @@ const loadState = async (walletId: string): Promise<WalletState> => {
   );
   if (iwWitnesses.length > 0) {
     const byNullifier = new Map(iwWitnesses.map(w => [w.nullifier, w]));
-    for (const note of state.notes) {
+    for (const note of notes) {
       if (poolOf(note) !== 'ironwood') {
         continue;
       }
@@ -1115,6 +1109,14 @@ const loadState = async (walletId: string): Promise<WalletState> => {
       }
     }
   }
+  // A live sync run owns the note objects (see wallet-state-merge.ts).
+  const syncing = !!state.stop && !state.stop.signal.aborted;
+  state.notes = mergeLoadedNotes(state.notes, notes, syncing);
+  state.spentNullifiers = mergeLoadedSpent(
+    state.spentNullifiers,
+    spentRecords.map(r => r.nullifier),
+    syncing,
+  );
   return state;
 };
 
@@ -1126,366 +1128,6 @@ const getSyncHeight = async (walletId: string): Promise<number> => {
 const getTreeSize = async (walletId: string): Promise<number> => {
   const r = await idbGet<{ value: number }>('meta', [walletId, 'orchardTreeSize']);
   return r?.value ?? 0;
-};
-
-const getActionsCommitment = async (walletId: string): Promise<string> => {
-  const r = await idbGet<{ value: string }>('meta', [walletId, 'actionsCommitment']);
-  return r?.value ?? '0'.repeat(64); // genesis: all zeros
-};
-
-/**
- * Per-wallet secret that keys the proof-query decoys (see proof-decoys.ts).
- *
- * It must be STABLE. Decoys re-rolled on every sync would be worse than no
- * decoys at all: real items recur in every query and fresh decoys do not, so
- * intersecting a few sessions hands the server the real set. Persisting the
- * seed makes a repeated query byte-identical.
- *
- * Caveat, stated plainly: this lives in the wallet database, so clearing the
- * cache re-rolls it. A clear-and-resync therefore presents the server with a
- * second, differently-padded query over the same real notes, and the
- * intersection of the two narrows the anonymity set. There is no fix for
- * that short of deriving the seed from the wallet key material, which the
- * worker does not hold in a form stable across a wipe.
- */
-const getDecoySeed = async (walletId: string): Promise<Uint8Array> => {
-  const r = await idbGet<{ value: string }>('meta', [walletId, 'decoySeed']);
-  if (r?.value) {
-    return hexDecode(r.value);
-  }
-  const seed = crypto.getRandomValues(new Uint8Array(32));
-  const db = await getDb();
-  const tx = db.transaction('meta', 'readwrite');
-  tx.objectStore('meta').put({ walletId, key: 'decoySeed', value: hexEncode(seed) });
-  await txComplete(tx);
-  return seed;
-};
-
-const saveActionsCommitment = async (walletId: string, commitment: string): Promise<void> => {
-  const db = await getDb();
-  const tx = db.transaction('meta', 'readwrite');
-  tx.objectStore('meta').put({ walletId, key: 'actionsCommitment', value: commitment });
-  await txComplete(tx);
-};
-
-/** verify header proof + commitment proofs + nullifier proofs after sync catches up */
-const verifySyncProofs = async (
-  client: ZcashClient,
-  tip: number,
-  mainnet: boolean,
-  pendingCmxs: Uint8Array[],
-  pendingPositions: number[],
-  state: WalletState,
-  actionsCommitment: string,
-  /** whether this wallet's running actions commitment was folded from genesis
-   *  (start block 0). If it was started at a birthday/import height, the fold
-   *  is seeded from a non-genesis value and can NEVER equal the server's
-   *  genesis-anchored proven commitment, so verifying it is meaningless. */
-  genesisAnchoredActions: boolean,
-  /** secret keying the decoy padding; null disables padding (see below). */
-  decoySeed: Uint8Array | null,
-  /** observed on-chain (cmx, position) pairs to draw commitment decoys from. */
-  decoyPool: readonly CommitmentItem[],
-): Promise<void> => {
-  if (!zyncModule) {
-    return;
-  }
-  console.log(`[zcash-worker] verifying proofs: ${pendingCmxs.length} notes`);
-  const t0 = performance.now();
-
-  // 1. verify header proof
-  const proven = await verifyHeaderProof(client, tip, mainnet);
-  console.log(`[zcash-worker] header proof valid, roots: tree=${proven.tree_root.slice(0, 16)}...`);
-
-  // 2. verify commitment proofs for found notes
-  // proven.tree_root is the canonical orchard tree root (from zebrad's frontier);
-  // NOMT-served commitment-proof tree_root is NOMT's sparse-merkle blake3 root.
-  // The two are different tree structures and never agree by construction, so
-  // we don't bind them. We still verify the per-cmx Merkle path against the
-  // returned root (catches NOMT corruption) and confirm cmx existence; the
-  // canonical orchard membership is enforced locally during scan.
-  //
-  // PRIVACY: a (cmx, position) pair is a direct index into the block holding
-  // that output, so an unpadded request is a complete, unambiguous inventory
-  // of the wallet's notes handed to the server in the clear. The query is
-  // padded with decoys drawn from commitments the scanner actually observed
-  // in the same block range (see proof-decoys.ts) — fabricated cmxs would
-  // have no proof and identify themselves. Only proofs for OUR cmxs are
-  // verified; decoy responses are dropped unread.
-  if (pendingCmxs.length > 0) {
-    // Two independent properties, both required:
-    //   privacy — the query is padded with decoys so the server does not learn
-    //             the wallet's exact note set from the cmx+position pairs;
-    //   integrity — every proof is bound to the batch root and to something we
-    //             actually asked about, and every REAL cmx must come back.
-    // Neither subsumes the other: padding without binding still lets a server
-    // forge paths, and binding without padding still hands over the note set.
-    const realItems: CommitmentItem[] = pendingCmxs.map((cmx, i) => ({
-      cmx,
-      position: pendingPositions[i] ?? 0,
-    }));
-    const padded = padCommitmentQuery(realItems, decoyPool, decoySeed);
-    const { proofs: commitmentProofs, treeRoot } = await client.getCommitmentProofs(
-      padded.cmxs,
-      padded.positions,
-      tip,
-    );
-
-    const treeRootHex = hexEncode(treeRoot);
-    const askedCmxs = new Set(padded.cmxs.map(c => hexEncode(c)));
-    if (commitmentProofs.length !== padded.cmxs.length) {
-      throw new Error(
-        `commitment proof count mismatch: asked ${padded.cmxs.length}, got ${commitmentProofs.length}`,
-      );
-    }
-
-    const seenCmxs = new Set<string>();
-    let verified = 0;
-    for (const proof of commitmentProofs) {
-      const cmxHex = hexEncode(proof.cmx);
-      const proofRootHex = hexEncode(proof.treeRoot);
-      // Root- and request-binding apply to EVERY proof, decoy or not: a server
-      // that answers off a tree it invented is misbehaving regardless of which
-      // cmx it is answering about.
-      if (proofRootHex !== treeRootHex) {
-        throw new Error(
-          `commitment proof root mismatch: proof=${proofRootHex.slice(0, 16)} batch=${treeRootHex.slice(0, 16)}`,
-        );
-      }
-      if (!askedCmxs.has(cmxHex)) {
-        throw new Error(`commitment proof for unrequested cmx ${cmxHex.slice(0, 16)}`);
-      }
-      if (seenCmxs.has(cmxHex)) {
-        throw new Error(`duplicate commitment proof for cmx ${cmxHex.slice(0, 16)}`);
-      }
-      seenCmxs.add(cmxHex);
-
-      // Only OWN items are verified or acted on. A decoy cmx is not a real
-      // commitment, so a failing path for one proves nothing and must never
-      // fail the sync.
-      if (!padded.realHex.has(cmxHex)) {
-        continue;
-      }
-      const valid = zyncModule['verify_commitment_proof'](
-        cmxHex,
-        proofRootHex,
-        proof.pathProofRaw,
-        hexEncode(proof.valueHash),
-      ) as boolean;
-      if (!valid) {
-        throw new Error(`commitment proof invalid for cmx ${cmxHex.slice(0, 16)}`);
-      }
-      verified++;
-    }
-
-    // Omission check: padding must not become a place for the server to hide a
-    // missing answer about one of OUR notes.
-    if (verified !== realItems.length) {
-      throw new Error(
-        `commitment proofs missing for own notes: verified ${verified} of ${realItems.length}`,
-      );
-    }
-    console.log(
-      `[zcash-worker] ${verified}/${realItems.length} own commitment proofs verified ` +
-        `(root-bound, request-bound); sent ${padded.cmxs.length} incl. ` +
-        `${padded.cmxs.length - realItems.length} decoys`,
-    );
-  }
-
-  // 3. verify nullifier proofs for unspent notes.
-  //
-  // Ironwood used to be excluded here on the belief that the NOMT nullifier
-  // set was orchard-only. It never was — the set is existence-keyed and
-  // pool-agnostic, and zidecar indexes sapling, orchard and ironwood
-  // nullifiers into it from the same block walk. What actually bounds an
-  // answer is not the pool but the index's height, and the two pools have
-  // different horizons: ironwood is indexed from NU6.3 activation and is
-  // current, while the full-chain backfill trails far behind it.
-  //
-  // That distinction matters because absence is not proof. Above a pool's
-  // horizon "no entry" means "not indexed yet", which is byte-identical to
-  // "not spent" — trusting it would mark a spent note as spendable. So each
-  // note is only queried once its own pool's index reaches the tip; the rest
-  // fall back to scan-time detection.
-  const unspentAll = state.notes.filter(n => !state.spentNullifiers.has(n.nullifier));
-
-  // There used to be a single-nullifier "probe" call here, issued immediately
-  // before the batch, purely to read the index horizons off its response.
-  //
-  // It was the worst request in the wallet. One bare nullifier, unpadded, no
-  // possible ambiguity about whose it was — and because it was always
-  // `unspentAll[0]`, it was the same stable value every session, which
-  // re-identified the wallet to the server across sessions on its own. Being
-  // adjacent to the batch also joined the two: the server could attribute the
-  // whole batch to whoever sent the probe.
-  //
-  // The horizons are carried on the batch response anyway, so the probe
-  // bought nothing that the request we were about to send did not already
-  // return. It is gone; the horizons are read below, after the batch.
-  //
-  // The horizon is ONE-DIRECTIONAL, and treating it as a filter was wrong.
-  //
-  // `is_spent = true` is a Merkle INCLUSION proof against nullifier_root,
-  // verified locally below and root-bound before use — it is sound at any
-  // horizon. Only `is_spent = false` is uninformative above the horizon,
-  // because the NOMT set is existence-keyed and "not indexed yet" and "not
-  // spent" are the same bytes.
-  //
-  // Filtering the QUERY by horizon therefore discarded sound positives along
-  // with the unsound negatives. Worse: the orchard backfill trails the tip by
-  // design, so `orchardHorizon >= tip` is essentially never true in
-  // production — which meant this disabled orchard spend detection outright
-  // rather than merely narrowing it. Always ask; gate only what we believe.
-  const unspentNotes = unspentAll;
-  const unspentNfs = unspentNotes.map(n => hexDecode(n.nullifier));
-
-  // PRIVACY: these are nullifiers of UNSPENT notes — values that are not yet
-  // on chain and that only this wallet can know. Sent bare, the server can
-  // record them and fire the moment one appears in a block, deanonymising a
-  // spend before the user has made it. The query is padded with decoys drawn
-  // uniformly from the Pallas base field (where real nullifiers live) and
-  // shuffled, so the request alone no longer says which are ours.
-  //
-  // Be clear about the size of this win: the anonymity set is 3, and it is
-  // retrospective-only — when the user actually spends, the real nullifier
-  // hits the chain and the decoys never do, so the server can work backwards
-  // and identify it then. What the padding removes is the PROSPECTIVE
-  // watchlist. See proof-decoys.ts for the full accounting.
-  const padded = padNullifierQuery(unspentNfs, decoySeed);
-  const queryNfs = padded.query;
-
-  if (unspentNfs.length > 0) {
-    const {
-      proofs: nfProofs,
-      nullifierRoot,
-      syncedHeight,
-      ironwoodSyncedHeight,
-    } = await client.getNullifierProofs(queryNfs, tip);
-    const nfRootHex = hexEncode(nullifierRoot);
-
-    // Horizons come off the batch itself — this is what the deleted probe
-    // call was for. No absence gate is needed at the consumption site below:
-    // the loop acts ONLY on `proof.isSpent === true`, and never infers
-    // "unspent" from a missing entry. They are logged so the record states
-    // what coverage the answers carry.
-    console.log(
-      `[zcash-worker] queried ${queryNfs.length} nullifier proofs ` +
-        `(${unspentNfs.length} real + ${queryNfs.length - unspentNfs.length} decoy) ` +
-        `(orchard index @${syncedHeight}, ironwood @${ironwoodSyncedHeight}, tip ${tip}); ` +
-        `spent-proofs always trusted, unspent trusted only at/above the horizon`,
-    );
-
-    // NOT a tampering signal, and it must not fail the sync.
-    //
-    // These two roots are taken at DIFFERENT INSTANTS from a MUTABLE tree.
-    // zidecar's NOMT is a single live tree: proofs are generated against
-    // nomt.root() at request time, and `at_height` is accepted but ignored —
-    // there is no versioned or pinned historical root. Meanwhile the ligerito
-    // header proof carries a snapshot of that root from whenever the proof was
-    // last generated. The server writes continuously (the ironwood cursor
-    // follows the chain tip), so between the proof and this query the root has
-    // simply moved on.
-    //
-    // Treating that as "the server tampered" was my error earlier today: it
-    // converted a benign race into a hard sync failure that users hit within
-    // minutes, and it teaches people to ignore an integrity warning — the
-    // worst possible outcome for a check that is supposed to mean something.
-    //
-    // What IS sound is verified below and stays fatal: every proof must bind
-    // to the batch root we actually checked, must be for a nullifier we asked
-    // about, and the count must match. Those are internally consistent
-    // comparisons taken at one instant, so a mismatch there really is the
-    // server contradicting itself.
-    //
-    // Making this meaningful needs a server that can prove against a pinned
-    // historical root. Until then a divergence here is unremarkable.
-    if (nfRootHex !== proven.nullifier_root) {
-      if (!warnedNullifierRootMoved) {
-        warnedNullifierRootMoved = true;
-        console.warn(
-          `[zcash-worker] nullifier root moved since the header proof ` +
-            `(live=${nfRootHex.slice(0, 16)} proven=${proven.nullifier_root.slice(0, 16)}); ` +
-            `expected while the server is indexing - proofs are still bound to the live root below`,
-        );
-      }
-    }
-
-    // Bind every proof to the root we actually checked, and to a nullifier we
-    // actually asked about. Verifying each path against the PER-PROOF root the
-    // server supplied made the whole pass forgeable: a malicious server could
-    // return the real root in the batch field, then serve paths valid against
-    // a tree it built itself. With is_spent=true that permanently marks a live
-    // note spent (funds vanish from the balance and become unspendable); with
-    // is_spent=false it hides a real spend.
-    const requested = new Set(queryNfs.map(nf => hexEncode(nf)));
-    let newlySpent = 0;
-    for (const proof of nfProofs) {
-      const proofRootHex = hexEncode(proof.nullifierRoot);
-      if (proofRootHex !== nfRootHex) {
-        throw new Error(
-          `nullifier proof root mismatch: proof=${proofRootHex.slice(0, 16)} batch=${nfRootHex.slice(0, 16)}`,
-        );
-      }
-      const nfHexForProof = hexEncode(proof.nullifier);
-      if (!requested.has(nfHexForProof)) {
-        throw new Error(`nullifier proof for unrequested nullifier ${nfHexForProof.slice(0, 16)}`);
-      }
-      // Decoys are asked about but never believed. A decoy proof carries no
-      // information about this wallet, so verifying it would only hand the
-      // server a way to fail the sync at will — and acting on its `isSpent`
-      // would let it mark a note spent that was never ours to begin with.
-      if (!padded.realHex.has(nfHexForProof)) {
-        continue;
-      }
-      const valid = zyncModule['verify_nullifier_proof'](
-        hexEncode(proof.nullifier),
-        proofRootHex,
-        proof.isSpent,
-        proof.pathProofRaw,
-        hexEncode(proof.valueHash),
-      ) as boolean;
-      if (!valid) {
-        throw new Error(`nullifier proof invalid for ${hexEncode(proof.nullifier).slice(0, 16)}`);
-      }
-      if (proof.isSpent) {
-        const nfHex = hexEncode(proof.nullifier);
-        if (!state.spentNullifiers.has(nfHex)) {
-          state.spentNullifiers.add(nfHex);
-          newlySpent++;
-        }
-      }
-    }
-    console.log(
-      `[zcash-worker] ${nfProofs.length} nullifier proofs returned, own-note proofs verified ` +
-        `(${newlySpent} newly spent)`,
-    );
-  }
-
-  // 4. verify actions commitment chain
-  //
-  // Only meaningful when the wallet's fold is genesis-anchored. The actions
-  // commitment is a positional hash chain seeded from the previously-folded
-  // value, so a wallet whose sync begins at a birthday/import block (nearly
-  // all wallets — the default start is near tip, not genesis) folds from a
-  // seed that can never equal the server's genesis-anchored proven value. For
-  // those wallets any "mismatch" here is guaranteed by construction and was
-  // spamming the retry loop under a misleading "server tampered" label. See
-  // zcore crates/zync-core sync.rs verify_actions_commitment. We keep it for
-  // genuine genesis wallets, where it is sound and actually checks something.
-  const hasSaved = actionsCommitment !== '0'.repeat(64);
-  if (genesisAnchoredActions) {
-    zyncModule['verify_actions_commitment'](actionsCommitment, proven.actions_commitment, hasSaved);
-    console.log(`[zcash-worker] actions commitment verified`);
-  } else if (!warnedNonGenesisActionsCommitment) {
-    warnedNonGenesisActionsCommitment = true;
-    console.warn(
-      '[zcash-worker] actions commitment check skipped: wallet started at a non-genesis ' +
-        'height, so the fold is not genesis-anchored (verifying would always mismatch)',
-    );
-  }
-
-  const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
-  console.log(`[zcash-worker] all proofs verified in ${elapsed}s`);
 };
 
 /** get cached orchard tree frontier from IDB */
@@ -1518,11 +1160,11 @@ const getIronwoodTreeFrontierHeight = async (walletId: string): Promise<number> 
 };
 
 /**
- * Orchard anchor height for a spend: the cached sync frontier height — the
+ * Orchard anchor height for a spend: the cached sync frontier height - the
  * exact height our note witnesses are rooted at. The witness machinery only
  * fast-forwards, never rewinds, so anchoring anywhere else (the live tip, or
  * tip−N) leaves the witness root pinned at the frontier while the cross-check
- * fetches the network root at the anchor, and the two disagree — the "tree
+ * fetches the network root at the anchor, and the two disagree - the "tree
  * root mismatch at height N" failure. A frontier we've synced past is a valid
  * historical Orchard anchor regardless of how far behind the tip it sits.
  * Falls back to the tip only for a fresh wallet with no cached frontier.
@@ -1534,8 +1176,8 @@ const resolveAnchorHeight = async (walletId: string, tipHeight: number): Promise
 
 /**
  * Append the anchor block's own Unix timestamp to a note-sync CBOR bundle as
- * map key 7 (uint). The block header time is objective chain truth — unlike the
- * device clock the zigner stamps at import (`synced_at`), which can drift — so
+ * map key 7 (uint). The block header time is objective chain truth - unlike the
+ * device clock the zigner stamps at import (`synced_at`), which can drift - so
  * the cold device can render "as of block N" toggleable with that block's real
  * date without any network access it doesn't have.
  *
@@ -1544,8 +1186,7 @@ const resolveAnchorHeight = async (walletId: string, tipHeight: number): Promise
  * ships without a wasm rebuild and an older zigner ignores it harmlessly.
  *
  * The bundle's outer map header is a single byte (`0xa0 | len`, len ≤ 7), so we
- * bump it by one and append `07 1a <u32 BE>` (CBOR uint key 7 + 4-byte uint —
- * unix seconds fit u32 until 2106).
+ * bump it by one and append `07 1a <u32 BE>` (CBOR uint key 7 + 4-byte uint - * unix seconds fit u32 until 2106).
  */
 const appendCborAnchorTime = (cbor: Uint8Array, unixSeconds: number): Uint8Array => {
   const t = Math.max(0, Math.floor(unixSeconds));
@@ -1580,7 +1221,7 @@ const FRONTIER_SNAPSHOT_INTERVAL = 5_000;
  *
  * Left at 200 deliberately. Measured against zcash.rotko.net, serial
  * throughput barely moves with batch size (205 blocks/s at 200, 265 at 1000)
- * and at the depths we actually use it is a wash — the server is per-request
+ * and at the depths we actually use it is a wash - the server is per-request
  * latency bound, not per-block. 200 keeps the cost of discarding a batch on
  * reorg/abort small, keeps peak worker memory at depth * ~110KB, and keeps
  * sync-progress updates frequent.
@@ -1595,7 +1236,7 @@ const SYNC_BATCH_SIZE = 200;
  *
  * Browsers multiplex a single HTTP/2 connection per origin, which is what
  * flattens this. A later measurement reached 544-627 blocks/s at depth 8-12,
- * but that ran under node's undici, which pools HTTP/1.1 connections — so it
+ * but that ran under node's undici, which pools HTTP/1.1 connections - so it
  * measured multi-connection fan-out, not depth. Unlocking that region needs
  * batches sharded across 2-3 hostnames onto the same anycast edge, NOT a
  * bigger number here.
@@ -1605,7 +1246,7 @@ const SYNC_BATCH_SIZE = 200;
  *
  * The real ceiling is upstream of all of this: zidecar spends ~7.5ms per
  * block serving a range (1.6s for 200 blocks, 88ms TTFB), so the client is
- * pipelining around server-side work. See docs — the fix there is an
+ * pipelining around server-side work. See docs - the fix there is an
  * append-only action log, not a client change.
  */
 const SYNC_PREFETCH_DEPTH = 6;
@@ -1661,20 +1302,15 @@ interface IronwoodBatchMeta {
 /**
  * Mark the notes we just spent as spent, immediately, without waiting for a rescan.
  *
- * Orchard does not need this: sync step 3 asks zidecar's NOMT nullifier tree
- * "is this spent?" for every unspent orchard note, so an orchard spend is
- * noticed on the next tick regardless of which blocks get scanned.
- *
- * Ironwood has no such oracle — the NOMT nullifier tree is orchard-only — so
- * its only spend signal is the scan-time nullifier match in runSync, which
- * fires only while walking the block that contains the spend. A wallet that
- * was already synced when it sent is *past* that block and never revisits it,
- * so the note stayed "unspent" forever and its value kept counting toward the
- * balance.
+ * Both pools' only spend signal is the scan-time nullifier match in runSync,
+ * which fires while walking the block that contains the spend. That block is
+ * mined after we broadcast, so the scan reaches it later; until then the note
+ * would keep counting toward the balance and could be picked for a second
+ * spend.
  *
  * We know exactly which notes we spent, so record it at broadcast. Worst case
  * the transaction never mines and the note is wrongly held back, which the
- * mempool/reorg path already has to handle — strictly safer than the reverse,
+ * mempool/reorg path already has to handle - strictly safer than the reverse,
  * which is double-spending a note we believe is still ours.
  */
 const markNotesSpentLocally = async (
@@ -1725,7 +1361,7 @@ const markNotesSpentLocally = async (
     await txComplete(tx);
   } catch (e) {
     // Roll the in-memory marks back so memory cannot claim a durability the
-    // store does not have — better to re-detect the spend on the next scan
+    // store does not have - better to re-detect the spend on the next scan
     // than to believe a write that never landed.
     for (const nf of nullifiers) {
       state.spentNullifiers.delete(nf);
@@ -1733,7 +1369,7 @@ const markNotesSpentLocally = async (
     for (const note of updated) {
       note.spent_by_txid = undefined;
     }
-    console.error('[zcash-worker] failed to persist local spend marks:', e);
+    console.error(`[zcash-worker] failed to persist local spend marks: ${errText(e)}`);
     return;
   }
   console.log(
@@ -1838,20 +1474,20 @@ const saveBatch = async (
 // ── wasm ──
 
 // Every message handler starts with `await initWasm()`, and the handlers run
-// concurrently — network-worker sends `init` and the first real command back to
+// concurrently - network-worker sends `init` and the first real command back to
 // back. A bare `if (wasmModule) return` guard does not survive that: both calls
 // see `null` and both initialize the SAME wasm instance. The second
 // `initThreadPool` then throws, gets swallowed by the fallback below, and
 // scanning drops to one core for the life of the worker. `once` shares the
 // in-flight promise so the initializer runs exactly once.
 const initWasm = once(async (): Promise<void> => {
-  // @ts-expect-error — dynamic import in worker
+  // @ts-expect-error - dynamic import in worker
   const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm/zafu_wasm.js');
   await wasm.default({ module_or_path: '/zafu-wasm/zafu_wasm_bg.wasm' });
   wasm.init();
 
   // Rayon thread pool. scan_actions_parallel is only actually parallel once a
-  // pool exists — without it rayon runs sequentially, so trial decryption was
+  // pool exists - without it rayon runs sequentially, so trial decryption was
   // using ONE core no matter how many the machine has. The offscreen prover
   // has always done this; the scan worker never did.
   //
@@ -1916,7 +1552,7 @@ const initWasm = once(async (): Promise<void> => {
  *
  * zidecar echoes the txid in its SendResponse, so we trust it there. Public
  * lightwalletd's standard SendResponse has no txid field, so we derive the
- * canonical ZIP-244 txid locally from the signed tx bytes — the same value
+ * canonical ZIP-244 txid locally from the signed tx bytes - the same value
  * zidecar computes server-side and the same bytes that appear as
  * `CompactTx.hash` during sync, so the optimistic outgoing record reconciles.
  */
@@ -1925,14 +1561,14 @@ const resolveBroadcastTxid = async (
   txHex: string,
   serverUrl: string,
 ): Promise<string> => {
-  if (lookupBackend(serverUrl) === 'zidecar') {
+  if (ZCASH_BACKENDS[lookupBackend(serverUrl)].echoesTxid) {
     return new TextDecoder().decode(result.txid);
   }
   await initWasm();
   if (!wasmModule) {
     throw new Error('wasm not initialized for txid computation');
   }
-  // compute_txid returns INTERNAL (wire) byte order — the same bytes that
+  // compute_txid returns INTERNAL (wire) byte order - the same bytes that
   // appear as CompactTx.hash during sync. zidecar's SendResponse, by
   // contrast, echoes the DISPLAY-order txid, so without this reversal the
   // same wallet reported two different conventions depending on backend and
@@ -1943,66 +1579,10 @@ const resolveBroadcastTxid = async (
   return (internal.match(/../g) ?? []).reverse().join('');
 };
 
-// ── zync-core (verification) ──
-
-let zyncModule: Record<string, any> | null = null;
-
-// Same concurrency hazard as initWasm: a second `zync.default()` on the same
-// instance re-runs the module's start section and detaches the live views.
-const initZync = once(async (): Promise<void> => {
-  // @ts-expect-error dynamic import in worker
-  const zync = await import(/* webpackIgnore: true */ '/zync-core/zync_core.js');
-  await zync.default({ module_or_path: '/zync-core/zync_core_bg.wasm' });
-  zync.wasm_init();
-  zyncModule = zync;
-  console.log('[zcash-worker] zync-core ready');
-});
-
-interface ProvenRoots {
-  tree_root: string;
-  nullifier_root: string;
-  actions_commitment: string;
-}
-
-/** fetch and verify header proof from zidecar, returns proven NOMT roots */
-const verifyHeaderProof = async (
-  client: ZcashClient,
-  tip: number,
-  mainnet: boolean,
-): Promise<ProvenRoots> => {
-  if (!zyncModule) {
-    throw new Error('zync-core not initialized');
-  }
-  const { proofBytes } = await client.getHeaderProof();
-  const json = zyncModule['verify_header_proof'](proofBytes, tip, mainnet) as string;
-  return JSON.parse(json) as ProvenRoots;
-};
-
 // ── offscreen proving ──
 // Halo 2 proving is CPU-intensive (~2min single-threaded). Route it through
 // the offscreen document which has a persistent rayon thread pool, so MSM/FFT
 // runs in parallel across all cores. The offscreen survives popup close.
-
-interface ZcashBuildRequest {
-  fn:
-    | 'build_signed_spend'
-    | 'build_unsigned'
-    | 'build_unsigned_pczt'
-    | 'build_turnstile_migration_pczt'
-    | 'build_signed_turnstile_migration'
-    | 'build_signed_ironwood_send'
-    | 'build_ironwood_send_pczt'
-    | 'build_shielding'
-    | 'build_unsigned_shielding'
-    | 'build_unsigned_shielding_ironwood'
-    // shielded-voting proving fns - routed to the standalone voting-wasm
-    // module + its own rayon pool in the offscreen document. See
-    // zcash-build-parallel.ts's VOTING_FNS / initParallelVotingWasm.
-    | 'build_delegation_pczt'
-    | 'finalize_delegation'
-    | 'cast_vote_hot_wire';
-  args: unknown[];
-}
 
 // pending prove requests waiting for parent (network-worker) to relay response
 const pendingProveRequests = new Map<
@@ -2011,8 +1591,9 @@ const pendingProveRequests = new Map<
 >();
 let proveRequestCounter = 0;
 
-const proveViaOffscreen = async (req: ZcashBuildRequest): Promise<unknown> => {
-  // web workers don't have chrome.runtime — relay through parent (network-worker/popup)
+const proveViaOffscreen = async (req: ProveRequest): Promise<unknown> => {
+  assertProveRequest(req);
+  // web workers don't have chrome.runtime - relay through parent (network-worker/popup)
   // which has chrome APIs and can forward to service worker → offscreen document
   const id = `prove-${++proveRequestCounter}`;
   const { promise, resolve, reject } = Promise.withResolvers<unknown>();
@@ -2063,12 +1644,12 @@ const computeFee = (
 };
 
 /**
- * ZIP-317 fee for the NU6.3 turnstile migration — the one transaction that
+ * ZIP-317 fee for the NU6.3 turnstile migration - the one transaction that
  * spans TWO shielded bundles: orchard (the spends) and ironwood (the output).
  *
  * ZIP-317 counts logical actions as the SUM over bundles, and each non-empty
  * shielded bundle is padded to MIN_ORCHARD_ACTIONS for privacy (the orchard
- * bundle gains a dummy output, the ironwood bundle a dummy spend — which is
+ * bundle gains a dummy output, the ironwood bundle a dummy spend - which is
  * why the output-only ironwood bundle still needs an anchor).
  *
  * computeFee() above models a SINGLE bundle: it collapses the ironwood output
@@ -2105,7 +1686,7 @@ const ZIP317_TX_BYTES_PER_ACTION = 150;
  * NOT `n`. `ceil(148n/150) === n` only while `2n < 150`; at n = 75 the byte
  * total is exactly 11_100 = 74 * 150, so the true count is 74 and every count
  * from 75 up is strictly below `n`. Using `n` overpaid one marginal fee per
- * ~75 inputs — safe for consensus (nodes only reject UNDER-payment) but a
+ * ~75 inputs - safe for consensus (nodes only reject UNDER-payment) but a
  * wallet fingerprint on every large consolidation, since no ZIP-317-correct
  * wallet would pay it.
  *
@@ -2120,7 +1701,7 @@ const zip317TransparentActions = (nTInputs: number): number =>
  * ZIP-317 fee for a shielding transaction: one padded (2-action) shielded
  * bundle plus the transparent input side.
  *
- * Deliberately does NOT apply the user fee multiplier — the shielding paths
+ * Deliberately does NOT apply the user fee multiplier - the shielding paths
  * never did, and the wasm builder re-checks this exact number, so keeping it at
  * the conventional fee leaves the two in lockstep.
  */
@@ -2162,12 +1743,35 @@ const selectNotes = (
 
 // ── witness building helpers ──
 
+/**
+ * Why a spend could not take the witness fast path, as the send screen names
+ * it. 'diverged' is the only one that means something was wrong; the rest are
+ * an ordinary catch-up.
+ */
+type CatchUpReason = 'unsynced' | 'moved' | 'unwitnessed' | 'diverged';
+
+/**
+ * Announce a note-tree catch-up the moment it starts, with its real block
+ * range, then report each fetched batch, so the page can say at once that
+ * this send takes longer and show true progress (state/witness-rebuild.ts).
+ */
+const catchUp = (
+  onProgress: ((step: string, detail?: string) => void) | undefined,
+  reason: CatchUpReason,
+  from: number,
+  to: number,
+) => {
+  console.log(`[zcash-timing] catch-up start: reason=${reason} blocks ${from}..${to}`);
+  onProgress?.('catch-up: start', `reason=${reason} from=${from} to=${to}`);
+  return (done: number, total: number) =>
+    onProgress?.('catch-up: blocks', `done=${done} total=${total}`);
+};
+
 const WITNESS_BATCH_SIZE = 1000;
 
 // Cap concurrent compact-block fetches. A from-corruption witness rebuild can
 // span ~150k blocks (150 batches); firing them all at once spikes worker memory
-// (every decoded payload held until .flat()) and can trip server stream limits —
-// and this runs on the witness-recovery path *during a send*, where a thrown
+// (every decoded payload held until .flat()) and can trip server stream limits - // and this runs on the witness-recovery path *during a send*, where a thrown
 // fetch leaves the user unable to broadcast. Bounded fan-out keeps the speed win
 // without the failure mode.
 const WITNESS_FETCH_CONCURRENCY = 12;
@@ -2199,6 +1803,10 @@ const fetchCompactBlocksRange = async (
   start: number,
   end: number,
   pool: NotePool = 'orchard',
+  /** blocks fetched so far of the range, after each batch */
+  onBatch?: (done: number, total: number) => void,
+  /** a stopped send fetches no further batch */
+  signal?: AbortSignal,
 ): Promise<{
   blocks: { height: number; actions: { cmx_hex: string }[] }[];
   actions: number;
@@ -2209,7 +1817,7 @@ const fetchCompactBlocksRange = async (
 
   // build all batch ranges, then fetch them through a bounded pool.
   // gRPC/HTTP2 multiplexes over a single connection, but a deep rebuild can
-  // produce ~150 batches — capping in-flight requests keeps peak memory and
+  // produce ~150 batches - capping in-flight requests keeps peak memory and
   // server-side stream count in check.
   const ranges: [number, number][] = [];
   for (let s = start; s <= end; s += WITNESS_BATCH_SIZE) {
@@ -2219,8 +1827,11 @@ const fetchCompactBlocksRange = async (
   // write results by index to preserve ascending-height order for the WASM replay
   const results = new Array<{ height: number; actions: { cmx_hex: string }[] }[]>(ranges.length);
   let next = 0;
+  let fetched = 0;
+  const total = end - start + 1;
   const worker = async () => {
     while (true) {
+      signal?.throwIfAborted();
       const i = next++;
       const range = ranges[i];
       if (!range) {
@@ -2237,6 +1848,8 @@ const fetchCompactBlocksRange = async (
           actions: poolActions.map(a => ({ cmx_hex: hexEncode(a.cmx) })),
         };
       });
+      fetched += e - s + 1;
+      onBatch?.(fetched, total);
     }
   };
   await Promise.all(
@@ -2259,6 +1872,7 @@ const backfillWitnesses = async (
   notes: DecryptedNote[],
   anchorHeight: number,
   onProgress?: (step: string, detail?: string) => void,
+  reason: CatchUpReason = 'unwitnessed',
 ): Promise<{
   byNullifier: Map<string, { witness_hex: string; tree_size: number }>;
   endFrontier: string;
@@ -2313,18 +1927,20 @@ const backfillWitnesses = async (
     client,
     frontierHeight + 1,
     anchorHeight,
+    'orchard',
+    catchUp(onProgress, reason, frontierHeight + 1, anchorHeight),
   );
   const fetchSecs = ((performance.now() - fetchStart) / 1000).toFixed(1);
   console.log(
-    `[zcash-worker] backfill: fetch done in ${fetchSecs}s — ${compactBlocks.length} blocks, ${totalActions} actions`,
+    `[zcash-worker] backfill: fetch done in ${fetchSecs}s - ${compactBlocks.length} blocks, ${totalActions} actions`,
   );
-  onProgress?.('backfill: blocks downloaded', `${compactBlocks.length} blocks in ${fetchSecs}s`);
+  onProgress?.('catch-up: blocks downloaded', `${compactBlocks.length} blocks in ${fetchSecs}s`);
 
   const positions = notes.map(n => n.position);
   console.log(
     `[zcash-worker] backfill: wasm replay starting (${totalActions} actions, ${positions.length} notes)`,
   );
-  onProgress?.('backfill: replaying tree', `${totalActions} actions`);
+  onProgress?.('catch-up: replaying', `${totalActions} actions`);
   const wasmStart = performance.now();
   const raw = wasmModule.build_witnesses_and_paths(
     frontierHex,
@@ -2333,7 +1949,7 @@ const backfillWitnesses = async (
   );
   const wasmSecs = ((performance.now() - wasmStart) / 1000).toFixed(1);
   console.log(`[zcash-worker] backfill: wasm done in ${wasmSecs}s`);
-  onProgress?.('backfill: witness rebuilt', `took ${wasmSecs}s`);
+  onProgress?.('catch-up: witness rebuilt', `took ${wasmSecs}s`);
   const result = JSON.parse(raw as string) as {
     anchor_hex: string;
     end_frontier_hex: string;
@@ -2386,7 +2002,7 @@ const backfillWitnesses = async (
       `[zcash-worker] backfill replay check [${match}]: seed=${frontierHeight}(size ${checkpointSize}) → anchor=${anchorHeight}(size ${endTreeSize}, +${totalActions} actions) replayRoot=${result.anchor_hex} network=${netRoot}`,
     );
   } catch (e) {
-    console.warn('[zcash-worker] backfill replay check skipped:', e);
+    console.warn(`[zcash-worker] backfill replay check skipped: ${errText(e)}`);
   }
 
   return { byNullifier, endFrontier: result.end_frontier_hex };
@@ -2404,12 +2020,26 @@ const backfillWitnesses = async (
  *            ironwood equivalent of build_witnesses_and_paths, so nothing
  *            is persisted on this path - sync repopulates witnesses).
  */
+/** the zcash backend as the deposit service sees it */
+const depositChain = (client: ZcashClient, serverUrl: string): DepositChain => ({
+  utxos: address => client.getAddressUtxos([address]),
+  tip: async () => (await client.getTip()).height,
+  branchId: async () => parseInt(await fetchBranchIdHex(client), 16),
+  broadcast: async txHex => {
+    const r = await client.sendTransaction(hexDecode(txHex));
+    if (r.errorCode !== 0) {
+      throw new Error(`broadcast failed (${r.errorCode}): ${r.errorMessage}`);
+    }
+    return resolveBroadcastTxid(r, txHex, serverUrl);
+  },
+});
+
 /**
  * Record an outgoing transaction the moment it is broadcast.
  *
  * Deliberately best-effort: a failure here must never fail a send that the
  * network has already accepted. The chain remains the authority on whether it
- * confirmed — this only preserves the details the chain cannot give back.
+ * confirmed - this only preserves the details the chain cannot give back.
  */
 const recordSentTx = async (rec: SentTxRecord): Promise<void> => {
   try {
@@ -2418,7 +2048,7 @@ const recordSentTx = async (rec: SentTxRecord): Promise<void> => {
     tx.objectStore('sent').put(rec);
     await txComplete(tx);
   } catch (e) {
-    console.warn('[zcash-worker] could not record sent tx locally:', e);
+    console.warn(`[zcash-worker] could not record sent tx locally: ${errText(e)}`);
   }
 };
 
@@ -2456,7 +2086,7 @@ const applyReconciliation = async (
     }
     await txComplete(tx);
   } catch (e) {
-    console.warn('[zcash-worker] could not persist sent-tx reconciliation:', e);
+    console.warn(`[zcash-worker] could not persist sent-tx reconciliation: ${errText(e)}`);
   }
 };
 
@@ -2464,7 +2094,7 @@ const applyReconciliation = async (
  * ── cold-send continuity ──────────────────────────────────────────────────
  *
  * A hot send is one worker message: it selects the notes, builds, signs,
- * broadcasts, and — because everything it needs is still in scope — marks the
+ * broadcasts, and - because everything it needs is still in scope - marks the
  * inputs spent and writes the local `sent` record on the way out.
  *
  * A cold send (zigner / Keystone / Ledger / watch-only) is TWO messages with a
@@ -2482,7 +2112,7 @@ const applyReconciliation = async (
  * in-memory map.
  *
  * Consequences of getting this wrong are asymmetric, so the resolution is
- * deliberately conservative — see takeColdSend.
+ * deliberately conservative - see takeColdSend.
  */
 interface ColdSendContext {
   id: string;
@@ -2525,7 +2155,7 @@ const writeColdSends = async (walletId: string, list: ColdSendContext[]): Promis
 /**
  * Record what a cold build knows, and return the id the completion needs to
  * find it again. Best-effort: failing to stash must never fail a build the user
- * can still sign and broadcast — it only costs the bookkeeping below.
+ * can still sign and broadcast - it only costs the bookkeeping below.
  */
 const stashColdSend = async (
   walletId: string,
@@ -2538,7 +2168,7 @@ const stashColdSend = async (
     await writeColdSends(walletId, list.slice(-COLD_SEND_MAX));
     return id;
   } catch (e) {
-    console.warn('[zcash-worker] could not stash cold-send context:', e);
+    console.warn(`[zcash-worker] could not stash cold-send context: ${errText(e)}`);
     return undefined;
   }
 };
@@ -2568,7 +2198,7 @@ const takeColdSend = async (
     );
     return found;
   } catch (e) {
-    console.warn('[zcash-worker] could not read cold-send context:', e);
+    console.warn(`[zcash-worker] could not read cold-send context: ${errText(e)}`);
     return undefined;
   }
 };
@@ -2577,7 +2207,7 @@ const takeColdSend = async (
  * The tail of a cold broadcast: mark the inputs spent and write the local
  * record, exactly as the hot paths do at the same point.
  *
- * Without this the flagship configuration — every cold signer — kept counting
+ * Without this the flagship configuration - every cold signer - kept counting
  * spent notes toward its balance until a rescan, re-offered them to the next
  * send, and lost the recipient / memo / fee for good, none of which the chain
  * can give back.
@@ -2628,11 +2258,11 @@ const finalizeColdBroadcast = async (
       expiryHeight: parseExpiryHeight(txHex),
     });
   } catch (e) {
-    console.error('[zcash-worker] cold broadcast bookkeeping failed:', e);
+    console.error(`[zcash-worker] cold broadcast bookkeeping failed: ${errText(e)}`);
   }
 };
 
-/** Stored ironwood witness no longer matches the network tree — recoverable. */
+/** Stored ironwood witness no longer matches the network tree - recoverable. */
 class IronwoodWitnessDrift extends Error {
   constructor(height: number) {
     super(`ironwood witness drift at height ${height}`);
@@ -2646,6 +2276,8 @@ const buildWitnessesIronwood = async (
   notes: DecryptedNote[],
   anchorHeight: number,
   emitProgress?: (stage: string, detail?: string) => void,
+  /** a stopped send stops fetching blocks */
+  signal?: AbortSignal,
 ): Promise<{ anchorHex: string; paths: unknown[] }> => {
   if (!wasmModule) {
     throw new Error('wasm not initialized');
@@ -2659,6 +2291,32 @@ const buildWitnessesIronwood = async (
   } = wasmModule;
   if (!iwSync || !iwExtract || !iwSize || !iwRoot || !iwBuildPaths) {
     throw new Error('ironwood not supported by this wasm build');
+  }
+
+  // One consistent view of the frontier, its height and every selected
+  // note's witness. A live sync moves all of them between awaits, so they are
+  // read from the loop in one tick, with no await in between; a send that
+  // read them at different moments saw a size mismatch or a drifted root and
+  // fell to the full replay even though nothing was wrong.
+  const state = walletStates.get(walletId);
+  const live = state?.stop && !state.stop.signal.aborted ? state.ironwoodLive?.() : undefined;
+  const snapOf = () =>
+    new Map(notes.map(n => [n.nullifier, { w: n.witness_hex, s: n.witness_tree_size }]));
+  let frontier: string | null;
+  let frontierHeight: number;
+  let snap: ReturnType<typeof snapOf>;
+  if (live) {
+    frontier = live.frontier || null;
+    frontierHeight = live.height;
+    snap = snapOf();
+  } else {
+    frontier = await getIronwoodTreeFrontier(walletId);
+    frontierHeight = await getIronwoodTreeFrontierHeight(walletId);
+    snap = snapOf();
+  }
+  // anchor where the witnesses are: the fast-forward gap is then empty
+  if (frontier && frontierHeight > 0) {
+    anchorHeight = frontierHeight;
   }
 
   // network root at the anchor - cross-checked against whatever we build
@@ -2693,14 +2351,19 @@ const buildWitnessesIronwood = async (
   };
 
   // Fast path: cached frontier + aligned witnesses -> fast-forward.
-  const frontier = await getIronwoodTreeFrontier(walletId);
-  const frontierHeight = await getIronwoodTreeFrontierHeight(walletId);
   const frontierSize = frontier ? Number(iwSize(frontier)) : -1;
-  const witnessTreeSize = notes[0]?.witness_tree_size ?? -1;
+  const witnessTreeSize = snap.get(notes[0]?.nullifier ?? '')?.s ?? -1;
   const aligned =
     !!frontier &&
     frontierSize === witnessTreeSize &&
-    notes.every(n => n.witness_hex && n.witness_tree_size === witnessTreeSize);
+    notes.every(n => {
+      const at = snap.get(n.nullifier);
+      return !!at?.w && at.s === witnessTreeSize;
+    });
+  console.log(
+    `[zcash-timing] ironwood witnesses: ${aligned ? 'fast' : 'replay'} source=${live ? 'live' : 'store'} ` +
+      `frontier@${frontierHeight} size=${frontierSize} witness size=${witnessTreeSize} anchor=${anchorHeight}`,
+  );
 
   // Say WHY the fast path was skipped. Falling back costs ~40s of block
   // replay on a real send, and until now the only signal was the wall clock -
@@ -2708,10 +2371,11 @@ const buildWitnessesIronwood = async (
   // drifted one from a note that never got a witness. Each cause has a
   // different fix, so guessing between them is the expensive part.
   if (!aligned) {
-    const missingWitness = notes.filter(n => !n.witness_hex).length;
-    const wrongSize = notes.filter(
-      n => n.witness_hex && n.witness_tree_size !== witnessTreeSize,
-    ).length;
+    const missingWitness = notes.filter(n => !snap.get(n.nullifier)?.w).length;
+    const wrongSize = notes.filter(n => {
+      const at = snap.get(n.nullifier);
+      return at?.w && at.s !== witnessTreeSize;
+    }).length;
     const why = !frontier
       ? 'no cached frontier (never synced, or the frontier was wiped/rebootstrapped)'
       : frontierSize !== witnessTreeSize
@@ -2720,11 +2384,19 @@ const buildWitnessesIronwood = async (
           ? `${missingWitness}/${notes.length} selected notes have no stored witness`
           : `${wrongSize}/${notes.length} selected notes carry a witness at a different tree size`;
     console.warn(`[zcash-worker] ironwood witness fast path unavailable: ${why}`);
-    emitProgress?.('witness fast path unavailable', why);
   }
+  let reason: CatchUpReason = !frontier
+    ? 'unsynced'
+    : frontierSize !== witnessTreeSize ||
+        notes.some(n => {
+          const at = snap.get(n.nullifier);
+          return at?.w && at.s !== witnessTreeSize;
+        })
+      ? 'moved'
+      : 'unwitnessed';
 
   // The fast path is an OPTIMISATION, so a drifted witness must not fail the
-  // send — it must fall back to the slow replay. Ironwood witnesses live in
+  // send - it must fall back to the slow replay. Ironwood witnesses live in
   // their own IDB store which the reorg wipes never touch, so drift is not
   // exotic: a reorg leaves stale witnesses attached to real notes, and before
   // this the wallet showed a spendable balance it could never spend.
@@ -2735,8 +2407,13 @@ const buildWitnessesIronwood = async (
         frontierHeight + 1,
         anchorHeight,
         'ironwood',
+        undefined,
+        signal,
       );
-      const existingInput = notes.map(n => ({ id: n.nullifier, witness_hex: n.witness_hex! }));
+      const existingInput = notes.map(n => ({
+        id: n.nullifier,
+        witness_hex: snap.get(n.nullifier)!.w!,
+      }));
       const result = JSON.parse(
         iwSync(frontier, JSON.stringify(gapBlocks), JSON.stringify(existingInput), '[]') as string,
       ) as { end_frontier_hex: string; witnesses: { id: string; witness_hex: string }[] };
@@ -2759,6 +2436,7 @@ const buildWitnessesIronwood = async (
         `[zcash-worker] ironwood witness drifted from the network tree at height ` +
           `${anchorHeight}; rebuilding from a checkpoint instead of failing the send`,
       );
+      reason = 'diverged';
       // fall through to the slow replay
     }
   }
@@ -2770,6 +2448,7 @@ const buildWitnessesIronwood = async (
     1,
     Math.floor((earliestNoteHeight - 1) / FRONTIER_SNAPSHOT_INTERVAL) * FRONTIER_SNAPSHOT_INTERVAL,
   );
+  const onBatch = catchUp(emitProgress, reason, roundedHeight + 1, anchorHeight);
   const checkpointTs = await client.getTreeState(roundedHeight);
   if (!checkpointTs.ironwoodTree) {
     throw syncError(
@@ -2782,7 +2461,10 @@ const buildWitnessesIronwood = async (
     roundedHeight + 1,
     anchorHeight,
     'ironwood',
+    onBatch,
+    signal,
   );
+  emitProgress?.('catch-up: replaying', `${blocks.length} blocks`);
   const positions = notes.map(n => n.position);
   const result = JSON.parse(
     iwBuildPaths(
@@ -2827,7 +2509,63 @@ const buildWitnessesIronwood = async (
       end_frontier_hex: string;
       witnesses: { id: string; witness_hex: string }[];
     };
-    const endTreeSize = Number(iwSize(seeded.end_frontier_hex));
+    // A running sync owns the frontier and has likely moved on during the
+    // replay. Writing the replay's older frontier under it (as this used to)
+    // left the loop advancing witnesses from the wrong size, so every later
+    // send failed the root check and replayed again. Instead bring the rebuilt
+    // witnesses forward to exactly where the loop is, then hand them over.
+    const loop = walletStates.get(walletId);
+    const loopNow = () =>
+      loop?.stop && !loop.stop.signal.aborted ? loop.ironwoodLive?.() : undefined;
+    let witnesses = seeded.witnesses;
+    let endFrontier = seeded.end_frontier_hex;
+    let endHeight = anchorHeight;
+    let now = loopNow();
+    for (let tries = 0; now && now.frontier && now.height > endHeight && tries < 3; tries++) {
+      const { blocks: more } = await fetchCompactBlocksRange(
+        client,
+        endHeight + 1,
+        now.height,
+        'ironwood',
+        undefined,
+        signal,
+      );
+      const moved = JSON.parse(
+        iwSync(
+          endFrontier,
+          JSON.stringify(more),
+          JSON.stringify(witnesses.map(w => ({ id: w.id, witness_hex: w.witness_hex }))),
+          '[]',
+        ) as string,
+      ) as { end_frontier_hex: string; witnesses: { id: string; witness_hex: string }[] };
+      witnesses = moved.witnesses;
+      endFrontier = moved.end_frontier_hex;
+      endHeight = now.height;
+      now = loopNow();
+    }
+    const endTreeSize = Number(iwSize(endFrontier));
+    // checked and adopted in this one tick, with the loop unable to move between
+    if (
+      now &&
+      (now.height !== endHeight ||
+        now.size !== endTreeSize ||
+        !now.frontier ||
+        iwRoot(now.frontier) !== iwRoot(endFrontier))
+    ) {
+      console.log(
+        `[zcash-worker] ironwood: sync moved on (${endHeight} -> ${now.height}); ` +
+          'leaving the rebuilt witnesses to the background rebuild',
+      );
+      return { anchorHex: networkRoot, paths: result.paths };
+    }
+    const noteByNullifierLive = new Map(notes.map(n => [n.nullifier, n]));
+    for (const w of witnesses) {
+      const note = noteByNullifierLive.get(w.id);
+      if (note) {
+        note.witness_hex = w.witness_hex;
+        note.witness_tree_size = endTreeSize;
+      }
+    }
     const db = await getDb();
     const tx = db.transaction(['witnesses-ironwood', 'meta'], 'readwrite');
     const wstore = tx.objectStore('witnesses-ironwood');
@@ -2836,26 +2574,23 @@ const buildWitnessesIronwood = async (
     // caller keeps seeing the pre-replay note (witness_hex undefined) until a
     // reload - which strands the note in the sync loop's `iwExisting` gate and
     // leaves a spend-time rebuild uncached in memory for a follow-up send.
-    const noteByNullifier = new Map(notes.map(n => [n.nullifier, n]));
-    for (const w of seeded.witnesses) {
+    for (const w of witnesses) {
       wstore.put({
         walletId,
         nullifier: w.id,
         witness_hex: w.witness_hex,
         witness_tree_size: endTreeSize,
       } satisfies IronwoodWitnessRecord);
-      const note = noteByNullifier.get(w.id);
-      if (note) {
-        note.witness_hex = w.witness_hex;
-        note.witness_tree_size = endTreeSize;
-      }
     }
-    // The frontier has to advance with them. Witnesses at a tree size the
+    // With a running sync, its own write keeps the frontier; without one the
+    // frontier has to advance with the witnesses. Witnesses at a tree size the
     // stored frontier does not match fail the `aligned` check just as surely
     // as no witnesses at all.
     const metaStore = tx.objectStore('meta');
-    metaStore.put({ walletId, key: 'ironwoodTreeFrontier', value: seeded.end_frontier_hex });
-    metaStore.put({ walletId, key: 'ironwoodTreeFrontierHeight', value: anchorHeight });
+    if (!now) {
+      metaStore.put({ walletId, key: 'ironwoodTreeFrontier', value: endFrontier });
+      metaStore.put({ walletId, key: 'ironwoodTreeFrontierHeight', value: endHeight });
+    }
     // Persist the tree size for this exact frontier too. Without it the stored
     // `ironwoodTreeSize` stays at its pre-send value while the frontier moves to
     // `endTreeSize`, so the next sync-start validity check
@@ -2863,14 +2598,16 @@ const buildWitnessesIronwood = async (
     // and it wipes the very witnesses we just cached - putting every send back
     // on the full-replay slow path. Writing endTreeSize keeps the
     // (frontier, size) pair self-consistent so the fast path survives.
-    metaStore.put({ walletId, key: 'ironwoodTreeSize', value: endTreeSize });
+    if (!now) {
+      metaStore.put({ walletId, key: 'ironwoodTreeSize', value: endTreeSize });
+    }
     await txComplete(tx);
     console.log(
-      `[zcash-worker] ironwood: cached ${seeded.witnesses.length} witnesses at tree size ` +
-        `${endTreeSize} (height ${anchorHeight}) - the next send should take the fast path`,
+      `[zcash-worker] ironwood: cached ${witnesses.length} witnesses at tree size ` +
+        `${endTreeSize} (height ${endHeight}) - the next send should take the fast path`,
     );
   } catch (e) {
-    console.warn('[zcash-worker] ironwood: could not cache witnesses after replay:', e);
+    console.warn(`[zcash-worker] ironwood: could not cache witnesses after replay: ${errText(e)}`);
   }
 
   return { anchorHex: networkRoot, paths: result.paths };
@@ -2895,6 +2632,8 @@ const buildWitnesses = async (
   anchorHeight: number,
   pool: NotePool = 'orchard',
   onProgress?: (step: string, detail?: string) => void,
+  /** ironwood: a stopped send stops fetching blocks */
+  signal?: AbortSignal,
 ): Promise<{ anchorHex: string; paths: unknown[] }> => {
   if (!wasmModule) {
     throw new Error('wasm not initialized');
@@ -2903,7 +2642,7 @@ const buildWitnesses = async (
     throw new Error('buildWitnesses called with no notes');
   }
   if (pool === 'ironwood') {
-    return buildWitnessesIronwood(client, walletId, notes, anchorHeight, onProgress);
+    return buildWitnessesIronwood(client, walletId, notes, anchorHeight, onProgress, signal);
   }
 
   const positions = notes.map(n => n.position);
@@ -2945,7 +2684,7 @@ const buildWitnesses = async (
       n.witness_hex = undefined;
       n.witness_tree_size = undefined;
     }
-    await backfillWitnesses(client, walletId, notes, anchorHeight, onProgress);
+    await backfillWitnesses(client, walletId, notes, anchorHeight, onProgress, 'moved');
     runningFrontier = (await getTreeFrontier(walletId)) ?? '';
     runningFrontierHeight =
       (await idbGet<{ value: number }>('meta', [walletId, 'orchardTreeFrontierHeight']))?.value ??
@@ -2994,7 +2733,7 @@ const buildWitnesses = async (
       walletId,
       [],
       [],
-      // don't rewind syncHeight — this is a spend-time update
+      // don't rewind syncHeight - this is a spend-time update
       Math.max(anchorHeight, await getSyncHeight(walletId)),
       newTreeSize,
       updated,
@@ -3004,7 +2743,7 @@ const buildWitnesses = async (
   }
 
   // Step 4: extract paths; cross-check witness root against network anchor.
-  // Snapshot witness bytes BEFORE the network call — the sync loop can advance note.witness_hex
+  // Snapshot witness bytes BEFORE the network call - the sync loop can advance note.witness_hex
   // past anchorHeight during any await, yielding a root that mismatches the historical anchor.
   const witnessSnap = new Map(notes.map(n => [n.nullifier, n.witness_hex]));
   const anchorTs = await client.getTreeState(anchorHeight);
@@ -3044,7 +2783,6 @@ const buildWitnesses = async (
       `[zcash-worker] witness root mismatch (recovering via backfill): note=${mismatchNote.slice(0, 8)} ` +
         `(anchor=${anchorHeight}, frontierHeight=${runningFrontierHeight}, rebootstrapped=${rebootstrapped})`,
     );
-    onProgress?.('witness corrupt — rebuilding', 'this takes ~3 min');
     for (const n of notes) {
       n.witness_hex = undefined;
       n.witness_tree_size = undefined;
@@ -3057,8 +2795,9 @@ const buildWitnesses = async (
       notes,
       anchorHeight,
       onProgress,
+      'diverged',
     );
-    // Use byNullifier (set from WASM result before any await inside backfillWitnesses) — note.witness_hex
+    // Use byNullifier (set from WASM result before any await inside backfillWitnesses) - note.witness_hex
     // may have been fast-forwarded past anchorHeight by the sync loop by the time backfill returns.
     const backfillSnap = new Map(
       [...byNullifier.entries()].map(
@@ -3082,11 +2821,20 @@ const buildWitnesses = async (
   return { anchorHex: networkRoot, paths };
 };
 
-const deriveAddress = (mnemonic: string, accountIndex: number, diversifierHex?: string): string => {
+const walletKeysFor = (mnemonic: string, account: number): WalletKeys => {
   if (!wasmModule) {
     throw new Error('wasm not initialized');
   }
-  const keys = new wasmModule.WalletKeys(mnemonic);
+  return pocketWalletKeys(wasmModule.WalletKeys, mnemonic, account);
+};
+
+const deriveAddress = (
+  mnemonic: string,
+  accountIndex: number,
+  diversifierHex?: string,
+  pocket = 0,
+): string => {
+  const keys = walletKeysFor(mnemonic, pocket);
   try {
     // accountIndex is really a u32 diversifier index; receive passes the full
     // 11-byte random one instead
@@ -3125,7 +2873,7 @@ const ACTION_EPHEMERAL_KEY_LEN = 32;
 /**
  * 52 bytes = compact note plaintext (ZIP-225 / NU5 Orchard):
  *   0x02 (version) || d (11) || v (8) || rseed (32)
- * The version byte is checked below — only 0x02 is supported until the
+ * The version byte is checked below - only 0x02 is supported until the
  * wallet learns about future variants (e.g. Orchard-ZSA at NU7).
  */
 const ACTION_COMPACT_CT_LEN = 52;
@@ -3174,7 +2922,7 @@ function handleMempoolSnapshot(
         a.cmx.length === ACTION_CMX_LEN &&
         a.ephemeralKey.length === ACTION_EPHEMERAL_KEY_LEN &&
         a.ciphertext.length >= ACTION_COMPACT_CT_LEN &&
-        // Orchard compact-note version byte — refuse forward-compat plaintexts
+        // Orchard compact-note version byte - refuse forward-compat plaintexts
         // (e.g. NU7/ZSA) until explicit support lands. Refusing is the safe
         // default; misinterpreting a different format would silently produce
         // bogus matches.
@@ -3185,7 +2933,7 @@ function handleMempoolSnapshot(
         continue;
       }
       if (valid.length >= MAX_MEMPOOL_ACTIONS) {
-        // Hard stop — log once per snapshot, don't continue inspecting.
+        // Hard stop - log once per snapshot, don't continue inspecting.
         console.warn(
           `[zcash-worker] mempool snapshot exceeded ${MAX_MEMPOOL_ACTIONS} actions; truncating`,
         );
@@ -3235,7 +2983,7 @@ function handleMempoolSnapshot(
     mempoolNullifiers.set(hexEncode(v.nullifier), v.txidHex);
   }
 
-  // `txid` on pendingIncoming is misleading — pre-confirmation we only have
+  // `txid` on pendingIncoming is misleading - pre-confirmation we only have
   // the note's cmx. The field carries that until the block scan can replace
   // it with a real txid. UI consumers must treat it as an opaque identifier,
   // not a transaction hash.
@@ -3252,7 +3000,7 @@ function handleMempoolSnapshot(
       });
     }
   } catch (err) {
-    console.log('[zcash-worker] mempool scan decrypt error:', err);
+    console.log(`[zcash-worker] mempool scan decrypt error: ${errText(err)}`);
   }
 
   for (const note of state.notes) {
@@ -3280,33 +3028,69 @@ function handleMempoolSnapshot(
 
 // ── sync ──
 
-const runSync = async (
+type SyncArgs = [
   walletId: string,
   mnemonic: string,
   serverUrl: string,
   startHeight?: number,
   ufvk?: string,
-  backend: ZcashBackend = 'zidecar',
-  mempoolWatch: 'off' | 'on' = 'off',
-): Promise<void> => {
-  // Single-source-of-truth gate (services/mempool-watch/strategy). Replaces
-  // the four scattered re-implementations of the same `setting === 'on' &&
-  // backend === 'zidecar'` check.
-  const { isMempoolWatchEnabled } = await import(
-    /* webpackMode: "eager" */ '../services/mempool-watch/strategy'
+  backend?: ZcashBackend,
+  mempoolWatch?: 'off' | 'on',
+];
+
+/** start (or restart) a wallet's sync; it resumes from what the run before it saved */
+const runSync = (...args: SyncArgs): Promise<void> => {
+  const walletId = args[0];
+  const state = getOrCreateWalletState(walletId);
+  return startRun(
+    state,
+    async signal => {
+      try {
+        // a store wiped under the run restarts it from what is stored
+        while ((await syncLoop(state, signal, ...args)) === 'restart' && !signal.aborted) {
+          console.warn(`[zcash-worker] restarting sync wallet=${walletId} from the stored height`);
+        }
+      } catch (err) {
+        // everything outside the batch loop's own retries: opening the store,
+        // deriving keys, sizing the stored frontier. The window offers to try
+        // again, which resumes from the stored height.
+        console.error(`[zcash-worker] runSync fatal: ${errText(err)}`, err);
+        if (!signal.aborted) {
+          workerSelf.postMessage({
+            type: 'sync-error',
+            id: '',
+            network: 'zcash',
+            walletId,
+            payload: {
+              message: err instanceof Error ? err.message : String(err),
+              stalled: true,
+              ...(syncErrorCodeOf(err) ? { code: syncErrorCodeOf(err) } : {}),
+            },
+          });
+        }
+      }
+      console.log(`[zcash-worker] sync stopped wallet=${walletId}`);
+    },
+    () => workerSelf.postMessage({ type: 'sync-stopped', id: '', network: 'zcash', walletId }),
   );
-  const watcherEnabled = isMempoolWatchEnabled(mempoolWatch, backend);
+};
+
+const syncLoop = async (
+  state: WalletState,
+  signal: AbortSignal,
+  walletId: string,
+  mnemonic: string,
+  serverUrl: string,
+  startHeight?: number,
+  ufvk?: string,
+  backend: ZcashBackend = lookupBackend(serverUrl),
+  mempoolWatch: 'off' | 'on' = 'off',
+): Promise<'restart' | undefined> => {
   if (!wasmModule) {
     throw new Error('wasm not initialized');
   }
-
-  const state = getOrCreateWalletState(walletId);
-
-  // abort existing sync if running — prevents concurrent loops
-  if (state.syncing) {
-    state.syncAbort = true;
-    await waitForSyncStop(state);
-  }
+  // the previous run's live view is not this run's; it is published below
+  state.ironwoodLive = undefined;
 
   // free old keys if re-syncing
   if (state.keys) {
@@ -3320,19 +3104,40 @@ const runSync = async (
     state.keys = wasmModule.WatchOnlyWallet.from_ufvk(ufvk);
     console.log(`[zcash-worker] created WatchOnlyWallet from UFVK for wallet=${walletId}`);
   } else {
-    state.keys = new wasmModule.WalletKeys(mnemonic);
+    state.keys = walletKeysFor(mnemonic, parsePocketStoreId(walletId).account);
   }
   await loadState(walletId);
 
   const syncedHeight = await getSyncHeight(walletId);
-  // use whichever is higher — prevents re-scanning if chrome.storage was stale
+  // use whichever is higher - prevents re-scanning if chrome.storage was stale
   let currentHeight = Math.max(startHeight ?? 0, syncedHeight);
 
-  const client = await makeZcashClient(serverUrl, backend);
-  // Trustless proofs (Ligerito header proofs, NOMT nullifier proofs) only
-  // exist on zidecar. On lightwalletd we accept the indexer's word — the
-  // UI surfaces this trust delta via the "trusted" badge.
-  const trustless = backend === 'zidecar';
+  // The store under this run: the last height it saved, and the lost
+  // connections it has checked. After a reconnect, a store that no longer
+  // holds what this run saved was wiped (see store-reset.ts): the run stops
+  // and starts again from what is stored, never from its in-memory height.
+  let lastSaved = syncedHeight;
+  let lostSeen = dbLost;
+  const storeWasReset = async (): Promise<boolean> => {
+    if (lostSeen === dbLost) {
+      return false;
+    }
+    lostSeen = dbLost;
+    const [stored, wallets] = await Promise.all([getSyncHeight(walletId), listWallets()]);
+    const behind = storeFellBehind({ stored, walletKnown: wallets.includes(walletId), lastSaved });
+    if (behind) {
+      console.warn(
+        `[zcash-worker] the store was reset under sync (stored=${stored}, last saved=${lastSaved}); not scanning on from ${currentHeight}`,
+      );
+    }
+    return behind;
+  };
+  let restart = false;
+
+  const client = makeZcashClient(serverUrl, backend);
+  // proofs, the actions commitment, mempool watch and the tip cross-check are
+  // zidecar's; on a standard lightwalletd this is undefined and none of them run
+  const zidecar = zidecarExtras(serverUrl, backend);
 
   // track orchard commitment tree size for note position computation
   let orchardTreeSize = await getTreeSize(walletId);
@@ -3345,7 +3150,7 @@ const runSync = async (
 
   // Bootstrap / repair the frontier if missing or stale relative to orchardTreeSize/currentHeight.
   // frontier_tree_size THROWS on a frontier it cannot parse, and this call sits
-  // before the first sync-progress emit — an unparseable stored frontier (or a
+  // before the first sync-progress emit - an unparseable stored frontier (or a
   // wasm instance left poisoned by an earlier panic) therefore killed runSync
   // outright and the wallet never reported a height again. An unreadable
   // frontier is exactly the "stale" case the rebootstrap below already handles.
@@ -3354,29 +3159,41 @@ const runSync = async (
     try {
       frontierSize = Number(wasmModule.frontier_tree_size(runningFrontier));
     } catch (e) {
-      console.warn('[zcash-worker] stored orchard frontier unreadable, rebootstrapping:', e);
+      console.warn(
+        `[zcash-worker] stored orchard frontier unreadable, rebootstrapping: ${errText(e)}`,
+      );
       runningFrontier = '';
     }
   }
+  // Equal sizes mean no orchard action landed between the frontier's height
+  // and the synced height (the size counts every scanned action), so a
+  // frontier persisted a few empty blocks back is still this height's tree.
+  // Requiring the heights to be equal refetched it, and dropped every witness,
+  // on most starts.
   const frontierValid =
     !!runningFrontier &&
-    frontierSize === orchardTreeSize &&
-    runningFrontierHeight === currentHeight;
+    frontierHolds(frontierSize, orchardTreeSize, runningFrontierHeight, currentHeight);
+  if (frontierValid) {
+    runningFrontierHeight = currentHeight;
+  }
+  // a stop that lands while the store opens must not be followed by a fetch
+  if (signal.aborted) {
+    return;
+  }
   if (!frontierValid && currentHeight > 0) {
     try {
       const ts = await client.getTreeState(currentHeight);
       runningFrontier = ts.orchardTree;
       runningFrontierHeight = currentHeight;
       orchardTreeSize = Number(wasmModule.frontier_tree_size(runningFrontier));
-      // frontier refetched => any in-memory ORCHARD witness may be stale
-      // relative to the new orchard tree size. Drop orchard witnesses so spend
-      // time triggers a clean backfill rather than silently advancing a gapped
-      // witness. Only the orchard frontier was refetched here - the ironwood
-      // frontier is validated separately just below - so ironwood witnesses
-      // must be left intact (clearing them would strand the ironwood fast path
-      // and force a full replay on the next ironwood send).
+      // frontier refetched => an ORCHARD witness at another tree size is
+      // stale; one at exactly the refetched size already describes this tree
+      // and is kept. Only the orchard frontier was refetched here - the
+      // ironwood frontier is validated separately just below - so ironwood
+      // witnesses must be left intact (clearing them would strand the ironwood
+      // fast path and force a full replay on the next ironwood send).
       for (const note of state.notes) {
-        if (poolOf(note) === 'ironwood') {
+        if (poolOf(note) === 'ironwood' || note.witness_tree_size === orchardTreeSize) {
           continue;
         }
         note.witness_hex = undefined;
@@ -3386,7 +3203,7 @@ const runSync = async (
         `[zcash-worker] bootstrap frontier: height=${currentHeight} size=${orchardTreeSize} (dropped ${state.notes.length} stale witnesses)`,
       );
     } catch (e) {
-      console.warn('[zcash-worker] failed to bootstrap frontier:', e);
+      console.warn(`[zcash-worker] failed to bootstrap frontier: ${errText(e)}`);
     }
   }
 
@@ -3399,7 +3216,7 @@ const runSync = async (
   let ironwoodTreeSize = await getIronwoodTreeSize(walletId);
   let ironwoodFrontier: string = (await getIronwoodTreeFrontier(walletId)) ?? '';
   let ironwoodFrontierHeight = await getIronwoodTreeFrontierHeight(walletId);
-  if (iwSupported && iwSizeFn) {
+  if (iwSupported && iwSizeFn && !signal.aborted) {
     // Same unguarded-throw hazard as the orchard frontier above: this runs
     // before the first sync-progress emit, so a frontier the blob cannot read
     // silently ended the sync loop instead of triggering a rebootstrap.
@@ -3408,14 +3225,19 @@ const runSync = async (
       try {
         iwFrontierSize = Number(iwSizeFn(ironwoodFrontier));
       } catch (e) {
-        console.warn('[zcash-worker] stored ironwood frontier unreadable, rebootstrapping:', e);
+        console.warn(
+          `[zcash-worker] stored ironwood frontier unreadable, rebootstrapping: ${errText(e)}`,
+        );
         ironwoodFrontier = '';
       }
     }
+    // same reasoning as the orchard check: equal sizes, nothing in between
     const iwFrontierValid =
       !!ironwoodFrontier &&
-      iwFrontierSize === ironwoodTreeSize &&
-      ironwoodFrontierHeight === currentHeight;
+      frontierHolds(iwFrontierSize, ironwoodTreeSize, ironwoodFrontierHeight, currentHeight);
+    if (iwFrontierValid) {
+      ironwoodFrontierHeight = currentHeight;
+    }
     if (!iwFrontierValid && currentHeight > 0) {
       try {
         const ts = await client.getTreeState(currentHeight);
@@ -3425,9 +3247,10 @@ const runSync = async (
           ironwoodFrontier = ts.ironwoodTree;
           ironwoodFrontierHeight = currentHeight;
           ironwoodTreeSize = Number(iwSizeFn(ironwoodFrontier));
-          // mirror orchard: refetched frontier invalidates stored witnesses
+          // mirror orchard: a witness at another tree size than the refetched
+          // frontier is stale; one at exactly its size is kept
           for (const note of state.notes) {
-            if (poolOf(note) === 'ironwood') {
+            if (poolOf(note) === 'ironwood' && note.witness_tree_size !== ironwoodTreeSize) {
               note.witness_hex = undefined;
               note.witness_tree_size = undefined;
             }
@@ -3437,7 +3260,7 @@ const runSync = async (
           );
         }
       } catch (e) {
-        console.warn('[zcash-worker] failed to bootstrap ironwood frontier:', e);
+        console.warn(`[zcash-worker] failed to bootstrap ironwood frontier: ${errText(e)}`);
       }
     }
   }
@@ -3453,12 +3276,12 @@ const runSync = async (
   // buildWitnessesIronwood persists + attaches them (so loadState finds them
   // next run) - a healthy wallet does no work. Non-fatal on failure: a send
   // still self-heals via its own replay.
-  if (iwSupported && ironwoodFrontier) {
+  if (iwSupported && ironwoodFrontier && !signal.aborted) {
     const strandedIronwood = state.notes.filter(
       n =>
         poolOf(n) === 'ironwood' &&
         !state.spentNullifiers.has(n.nullifier) &&
-        (n.witness_hex === undefined || n.witness_tree_size === undefined),
+        (n.witness_hex === undefined || n.witness_tree_size !== ironwoodTreeSize),
     );
     if (strandedIronwood.length > 0) {
       try {
@@ -3476,21 +3299,22 @@ const runSync = async (
           ironwoodTreeSize = Number(iwSizeFn(rebuiltFrontier));
         }
       } catch (e) {
-        console.warn('[zcash-worker] ironwood stranded-witness rebuild failed:', e);
+        console.warn(`[zcash-worker] ironwood stranded-witness rebuild failed: ${errText(e)}`);
       }
     }
   }
+  // from here the loop owns the ironwood frontier; a send reads it live
+  state.ironwoodLive = () => ({
+    frontier: ironwoodFrontier,
+    height: ironwoodFrontierHeight,
+    size: ironwoodTreeSize,
+  });
+  // the caught-up rebuild of witnesses that fell behind runs once a run
+  let iwRescued = false;
 
   console.log(
     `[zcash-worker] sync start wallet=${walletId} height=${currentHeight} treeSize=${orchardTreeSize} (idb=${syncedHeight}, requested=${startHeight ?? 'none'})`,
   );
-
-  // initialize zync-core for verification
-  try {
-    await initZync();
-  } catch (e) {
-    console.warn('[zcash-worker] zync-core init failed, syncing without verification:', e);
-  }
 
   // emit initial sync-progress so UI gets persisted height + can fetch balance immediately
   workerSelf.postMessage({
@@ -3506,9 +3330,9 @@ const runSync = async (
     },
   });
 
-  state.syncing = true;
-  state.syncAbort = false;
   let consecutiveErrors = 0;
+  /** the last failure logged: a node that stays down prints one line, not one per try */
+  let lastErrLine: string | undefined;
 
   // ── chain-continuity recovery ──
   //
@@ -3520,7 +3344,7 @@ const runSync = async (
   // rewind with an escalating distance (10 → 100 → 1000 blocks, because a
   // stale local tree can disagree over a far wider range than a one-block
   // reorg), at most MAX_REWINDS_PER_RUN times per run, logged at warn. Only
-  // once that budget is spent does the failure become visible — as
+  // once that budget is spent does the failure become visible - as
   // `chainRecovery`, never as the raw "tree root mismatch at height N".
   let rewindsThisRun = 0;
   // Never rewind below what this wallet was asked to scan from; there is
@@ -3571,7 +3395,7 @@ const runSync = async (
     );
 
     // Ironwood witnesses live in their own store, so clearing the field on
-    // the note record does not remove them — loadState() would re-attach the
+    // the note record does not remove them - loadState() would re-attach the
     // stale witness we just decided not to trust. Drop the rows outright;
     // they are rebuilt from the re-anchored frontier as the range re-scans.
     try {
@@ -3588,7 +3412,7 @@ const runSync = async (
       }
       await txComplete(wtx);
     } catch (e) {
-      console.warn('[zcash-worker] rewind: could not clear ironwood witnesses:', e);
+      console.warn(`[zcash-worker] rewind: could not clear ironwood witnesses: ${errText(e)}`);
     }
     for (const note of state.notes) {
       note.witness_hex = undefined;
@@ -3596,48 +3420,29 @@ const runSync = async (
     }
 
     // Re-scanning a range re-pushes the notes it finds onto `state.notes`,
-    // which is a plain array — leaving the already-known ones in place would
+    // which is a plain array - leaving the already-known ones in place would
     // double-count them in the balance. Notes at or below the rewind point
     // are untouched; the ones above come back as the range is read again
     // (IndexedDB keeps its copy either way, keyed by nullifier).
     state.notes = state.notes.filter(n => n.height <= target);
   };
 
-  // running actions commitment for integrity verification
-  let actionsCommitment = await getActionsCommitment(walletId);
-  // The actions commitment fold is only sound (and only equal to the server's
-  // proven value) when this wallet's sync has covered the chain from genesis.
-  // A birthday/import start (startHeight > 0) folds from a non-genesis seed,
-  // so the verify step must be skipped for those wallets — see verifySyncProofs.
-  const actionsGenesisAnchored = (startHeight ?? 0) === 0;
-  // notes found since last header proof verification
-  const pendingCmxs: Uint8Array[] = [];
-  const pendingPositions: number[] = [];
-  // Pool of real, on-chain (cmx, position) pairs observed while scanning, used
-  // to pad the commitment-proof query with decoys that are indistinguishable
-  // from our own notes. Drawn from the same block range we just walked, which
-  // is where the real notes are — decoys sampled uniformly over all of chain
-  // history would cluster in the wrong era and be separable on that alone.
-  const decoyPool = new CommitmentReservoir();
-
   // mempool watcher: only spawned when explicitly opted in AND on a zidecar
   // endpoint (lightwalletd has no compact-action mempool RPC, so the watcher
   // would yield nothing). Lifecycle is owned by `state.mempoolAbort`/
   // `state.mempoolTask` so stop-sync / reset-sync can abort the watcher
-  // directly, and waitForSyncStop can await the task before declaring the
+  // directly, and stopSync can await the task before declaring the
   // wallet idle. This avoids a class of races where a fresh runSync raced
   // a still-alive watcher attached to the previous client.
   state.mempoolAbort?.abort();
   state.mempoolAbort = undefined;
   state.mempoolTask = undefined;
-  if (watcherEnabled) {
-    const [{ ZidecarClient: MempoolZidecarClient }, mempoolMod, strategyMod] = await Promise.all([
-      import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client'),
+  if (zidecar && mempoolWatch === 'on') {
+    const [mempoolMod, strategyMod] = await Promise.all([
       import(/* webpackMode: "eager" */ '../services/mempool-watch/zidecar-mempool-fetcher'),
       import(/* webpackMode: "eager" */ '../services/mempool-watch/strategy'),
     ]);
-    const mempoolClient = new MempoolZidecarClient(serverUrl);
-    const base = mempoolMod.zidecarMempoolFetcher(mempoolClient);
+    const base = mempoolMod.zidecarMempoolFetcher(zidecar);
     const fetcher = strategyMod.buildStrategy('on', { base });
     const localAbort = new AbortController();
     state.mempoolAbort = localAbort;
@@ -3665,7 +3470,7 @@ const runSync = async (
           handleMempoolSnapshot(walletId, state, snap);
         }
       } catch (err) {
-        console.warn('[zcash-worker] mempool watcher exited:', err);
+        console.warn(`[zcash-worker] mempool watcher exited: ${errText(err)}`);
         // Surface terminal error to UI so the toggle/status badge stops
         // claiming "connected" / "reconnecting" when the watcher is dead.
         workerSelf.postMessage({
@@ -3697,7 +3502,7 @@ const runSync = async (
     fetch: (start, end) => client.getCompactBlocks(start, end),
     batchSize: SYNC_BATCH_SIZE,
     depth: SYNC_PREFETCH_DEPTH,
-    isAborted: () => state.syncAbort,
+    isAborted: () => signal.aborted,
   });
 
   // Cached chain tip; see TIP_CACHE_MS. Invalidated by setting cachedTipAt to
@@ -3722,8 +3527,12 @@ const runSync = async (
     cachedTipAt = 0;
   };
 
-  while (!state.syncAbort) {
+  while (!signal.aborted) {
     try {
+      if (await storeWasReset()) {
+        restart = true;
+        break;
+      }
       const chainHeight = await getChainTip();
 
       // Cross-check the tip against an INDEPENDENT operator, once per
@@ -3732,31 +3541,42 @@ const runSync = async (
       // anything we can verify locally; cross-verification is the design's
       // own stated mitigation and had zero call sites. Advisory, not fatal:
       // a lagging or unreachable peer is far more common than an attack.
-      if (currentHeight >= chainHeight && !crossCheckedThisRun) {
+      //
+      // Gated on the user's own "zcash tip cross-check" opt-in BEFORE the
+      // attempt, not just left to the egress guard to refuse: egress still
+      // refuses it either way, but a refused call is still a call the user
+      // never asked for, and it still logs. pickIndependentPeer is pure (no
+      // network), so checking its result against the compiled table costs
+      // nothing extra. The "once per catch-up" flag is still set when the
+      // opt-in is off, so a disabled check doesn't re-evaluate every tick.
+      if (zidecar && currentHeight >= chainHeight && !crossCheckedThisRun) {
         crossCheckedThisRun = true;
-        void crossCheckTip(serverUrl, chainHeight, async (peerUrl, timeoutMs) => {
-          const peer = await makeZcashClient(peerUrl);
-          return await Promise.race([
-            peer.getTip(),
-            new Promise<never>((_, rej) =>
-              setTimeout(() => rej(new Error('peer tip timeout')), timeoutMs),
-            ),
-          ]);
-        })
-          .then(res => {
-            if (res.disagreed) {
-              console.error(`[zcash-worker] CROSS-CHECK DISAGREEMENT: ${res.detail}`);
-              workerSelf.postMessage({
-                type: 'cross-check-warning',
-                network: 'zcash',
-                walletId,
-                payload: { detail: res.detail, peerUrl: res.peerUrl },
-              });
-            } else {
-              console.log(`[zcash-worker] cross-check: ${res.detail}`);
-            }
+        const crossCheckPeer = pickIndependentPeer(serverUrl);
+        if (crossCheckPeer && checkEgress(crossCheckPeer.url).allow) {
+          void crossCheckTip(serverUrl, chainHeight, async (peerUrl, timeoutMs) => {
+            const peer = zcashClient(peerUrl, crossCheckPeer.backend);
+            return await Promise.race([
+              peer.getTip(),
+              new Promise<never>((_, rej) =>
+                setTimeout(() => rej(new Error('peer tip timeout')), timeoutMs),
+              ),
+            ]);
           })
-          .catch(e => console.warn('[zcash-worker] cross-check failed:', e));
+            .then(res => {
+              if (res.disagreed) {
+                console.error(`[zcash-worker] CROSS-CHECK DISAGREEMENT: ${res.detail}`);
+                workerSelf.postMessage({
+                  type: 'cross-check-warning',
+                  network: 'zcash',
+                  walletId,
+                  payload: { detail: res.detail, peerUrl: res.peerUrl },
+                });
+              } else {
+                console.log(`[zcash-worker] cross-check: ${res.detail}`);
+              }
+            })
+            .catch(e => console.warn(`[zcash-worker] cross-check failed: ${errText(e)}`));
+        }
       }
 
       if (currentHeight >= chainHeight) {
@@ -3771,7 +3591,7 @@ const runSync = async (
             if (localRoot !== netRoot) {
               console.warn(
                 `[zcash-worker] local frontier diverged from network at catch-up ${currentHeight} ` +
-                  `(local=${localRoot.slice(0, 16)} net=${netRoot.slice(0, 16)}) — wiping witnesses`,
+                  `(local=${localRoot.slice(0, 16)} net=${netRoot.slice(0, 16)}) - wiping witnesses`,
               );
               runningFrontier = syncTs.orchardTree;
               runningFrontierHeight = currentHeight;
@@ -3859,7 +3679,7 @@ const runSync = async (
             } else if (ironwoodFrontier) {
               // diverged (reorg / drift): drop ironwood witnesses and re-anchor
               console.warn(
-                `[zcash-worker] ironwood frontier diverged from network at catch-up ${currentHeight} — wiping witnesses`,
+                `[zcash-worker] ironwood frontier diverged from network at catch-up ${currentHeight} - wiping witnesses`,
               );
               ironwoodFrontier = syncTs.ironwoodTree;
               ironwoodFrontierHeight = currentHeight;
@@ -3889,7 +3709,9 @@ const runSync = async (
                 }
                 await txComplete(wtx);
               } catch (e) {
-                console.warn('[zcash-worker] catch-up: could not clear ironwood witnesses:', e);
+                console.warn(
+                  `[zcash-worker] catch-up: could not clear ironwood witnesses: ${errText(e)}`,
+                );
               }
               for (const note of state.notes) {
                 if (poolOf(note) === 'ironwood') {
@@ -3943,84 +3765,7 @@ const runSync = async (
           await txComplete(metaTx);
           console.log(`[zcash-worker] cached tree frontier at height ${currentHeight}`);
         } catch (e) {
-          console.warn('[zcash-worker] failed to cache tree frontier:', e);
-        }
-
-        // Verify proofs whenever the backend supports it — NOT only when this
-        // batch happened to discover a new orchard note.
-        //
-        // pendingCmxs is appended to only by the orchard discovery loop, so
-        // gating on it meant the nullifier pass (all server-side spend
-        // detection, both pools) ran only in a cycle right after an incoming
-        // orchard note. A steady-state wallet never ran it; an ironwood-only
-        // wallet never ran it at all. That is precisely the wallet that needs
-        // it, since ironwood has no other spent oracle.
-        //
-        // The commitment-proof step inside still no-ops on an empty
-        // pendingCmxs, so this only widens what was already conditional.
-        if (trustless && zyncModule) {
-          try {
-            // seed failure must not silently drop the padding — if we cannot
-            // load it we would send bare queries, which is the leak this is
-            // here to close. skip the verification round instead.
-            const decoySeed = await getDecoySeed(walletId);
-            await verifySyncProofs(
-              client,
-              chainHeight,
-              true,
-              pendingCmxs,
-              pendingPositions,
-              state,
-              actionsCommitment,
-              actionsGenesisAnchored,
-              decoySeed,
-              decoyPool.snapshot(),
-            );
-          } catch (e) {
-            // Fail CLOSED only on checks that are actually sound.
-            //
-            // Two different kinds of failure land here and they are NOT the
-            // same thing:
-            //
-            //   SOUND — comparisons taken at ONE instant, where a mismatch
-            //   means the server contradicted itself: a proof that does not
-            //   bind to the batch root we checked, a proof for something we
-            //   never asked about, a duplicate, or a wrong count. These are
-            //   real evidence and must refuse.
-            //
-            //   RACY — comparisons between a SNAPSHOT and a LIVE value. The
-            //   NOMT tree is mutable and single-versioned: proofs are made
-            //   against nomt.root() at request time while the ligerito header
-            //   proof carries a root from whenever it was last generated, and
-            //   the server writes continuously. The same applies to the
-            //   actions commitment, which folds stored per-block roots the
-            //   indexer is still filling in. A divergence there is expected.
-            //
-            // My earlier classifier matched /mismatch|tampered/ and escalated
-            // BOTH, which bricked sync within minutes of a healthy server
-            // doing ordinary work, under a message accusing it of tampering.
-            // A false alarm on an integrity check is worse than none: it
-            // teaches users to click past the one warning that should stop
-            // them.
-            const detail = e instanceof Error ? e.message : String(e);
-            const tampering =
-              /proof root mismatch|unrequested|duplicate|count mismatch|proof invalid/i.test(
-                detail,
-              );
-            if (tampering) {
-              console.error('[zcash-worker] INTEGRITY FAILURE, refusing batch:', e);
-              pendingCmxs.length = 0;
-              pendingPositions.length = 0;
-              throw syncError(
-                'consensus',
-                `server integrity check failed: ${detail}. ` +
-                  `refusing to trust this endpoint's data - switch node or retry`,
-              );
-            }
-            console.warn('[zcash-worker] proof verification unavailable, will retry:', e);
-          }
-          pendingCmxs.length = 0;
-          pendingPositions.length = 0;
+          console.warn(`[zcash-worker] failed to cache tree frontier: ${errText(e)}`);
         }
 
         // mempool scanning lives in the separate watcher task spawned above
@@ -4033,7 +3778,31 @@ const runSync = async (
           walletId,
           payload: { currentHeight, chainHeight, notesFound: state.notes.length, blocksScanned: 0 },
         });
-        await sleepUnlessAborted(state, 10000);
+        // Caught up: rebuild here, in the background, any ironwood witness
+        // that fell behind during this run (a dropped one, or a note whose
+        // witness is at another size), so that no send has to.
+        if (!iwRescued && iwSupported && ironwoodFrontier) {
+          iwRescued = true;
+          const behind = state.notes.filter(
+            n =>
+              poolOf(n) === 'ironwood' &&
+              !state.spentNullifiers.has(n.nullifier) &&
+              (n.witness_hex === undefined || n.witness_tree_size !== ironwoodTreeSize),
+          );
+          if (behind.length > 0) {
+            try {
+              console.log(
+                `[zcash-worker] caught up: rebuilding ${behind.length} ironwood witness(es) in the background`,
+              );
+              await buildWitnessesIronwood(client, walletId, behind, ironwoodFrontierHeight);
+            } catch (e) {
+              console.warn(
+                `[zcash-worker] background ironwood witness rebuild failed: ${errText(e)}`,
+              );
+            }
+          }
+        }
+        await sleepUnlessAborted(signal, 10000);
         continue;
       }
 
@@ -4047,14 +3816,14 @@ const runSync = async (
       prefetcher.prime(currentHeight, chainHeight);
       const batch = await prefetcher.next();
       if (!batch) {
-        // aborted, or nothing left below the tip — the loop condition and the
+        // aborted, or nothing left below the tip - the loop condition and the
         // caught-up branch above handle both on the next pass
         continue;
       }
       const { blocks, end: endHeight } = batch;
       console.log(`[zcash-worker] blocks ${batch.start}..${endHeight}`);
 
-      // Guard: lightwalletd may race between getTip() and block indexing — if the
+      // Guard: lightwalletd may race between getTip() and block indexing - if the
       // server reported a height but returned zero blocks, don't advance currentHeight.
       // The next iteration will retry once the server catches up. The prefetcher
       // has already dropped its look-ahead (it was aimed past a range the server
@@ -4065,12 +3834,7 @@ const runSync = async (
           `[zcash-worker] getCompactBlocks(${batch.start}..${endHeight}) returned 0 blocks, retrying`,
         );
         dropPipeline();
-        const backoff = Math.min(30000, 1000 * Math.pow(2, consecutiveErrors - 1));
-        await sleepUnlessAborted(state, backoff);
-        if (consecutiveErrors >= 10) {
-          console.error('[zcash-worker] too many errors, stopping sync');
-          break;
-        }
+        await sleepUnlessAborted(signal, syncRetryDelayMs(consecutiveErrors));
         continue;
       }
 
@@ -4098,55 +3862,8 @@ const runSync = async (
         view.setUint32(0, actionCount, true);
         let off = 4;
 
-        // actions commitment buffer: reuse across blocks (max action count per block)
-        let commitBuf: Uint8Array | null = null;
-        let commitView: DataView | null = null;
-
         for (const block of blocks) {
-          // compute actions commitment inline (single pass, no second iteration)
-          if (zyncModule) {
-            if (block.actions.length > 0) {
-              const needed = 4 + block.actions.length * 96;
-              if (!commitBuf || commitBuf.length < needed) {
-                commitBuf = new Uint8Array(needed);
-                commitView = new DataView(commitBuf.buffer);
-              }
-              commitView!.setUint32(0, block.actions.length, true);
-              let aoff = 4;
-              for (const a of block.actions) {
-                commitBuf.set(a.cmx, aoff);
-                aoff += 32;
-                commitBuf.set(a.nullifier, aoff);
-                aoff += 32;
-                commitBuf.set(a.ephemeralKey, aoff);
-                aoff += 32;
-              }
-              const actionsRoot = zyncModule['compute_actions_root'](
-                commitBuf.subarray(0, needed),
-              ) as string;
-              actionsCommitment = zyncModule['update_actions_commitment'](
-                actionsCommitment,
-                actionsRoot,
-                block.height,
-              ) as string;
-            } else {
-              actionsCommitment = zyncModule['update_actions_commitment'](
-                actionsCommitment,
-                '0'.repeat(64),
-                block.height,
-              ) as string;
-            }
-          }
-
           for (const a of block.actions) {
-            // absolute commitment-tree position of this action, computed the
-            // same way as for our own notes below (batch base + index within
-            // the batch). offering every observed action to the reservoir is
-            // what gives the commitment-proof query a supply of decoys that
-            // are genuine tree entries.
-            if (a.cmx.length === 32) {
-              decoyPool.offer(new Uint8Array(a.cmx), orchardTreeSize + (off - 4) / ACTION_SIZE);
-            }
             // pack binary for WASM scan
             if (a.nullifier.length === 32) {
               buf.set(a.nullifier, off);
@@ -4183,7 +3900,7 @@ const runSync = async (
         try {
           foundNotes = state.keys.scan_actions_parallel(buf);
         } catch (err) {
-          console.error('[zcash-worker] scan_actions_parallel crashed:', err);
+          console.error(`[zcash-worker] scan_actions_parallel crashed: ${errText(err)}`, err);
           currentHeight = endHeight;
           continue;
         }
@@ -4206,10 +3923,6 @@ const runSync = async (
           );
           newNotes.push(full);
           state.notes.push(full);
-
-          // track for verification
-          pendingCmxs.push(hexDecode(note.cmx));
-          pendingPositions.push(position);
         }
 
         // detect spent notes: a nullifier in this block matches an owned note.
@@ -4217,7 +3930,7 @@ const runSync = async (
         //  1. a spend seen for the first time here;
         //  2. a spend we already marked locally at broadcast (its nullifier is
         //     already in spentNullifiers) whose CONFIRMATION HEIGHT we never
-        //     recorded — because this loop used to skip already-marked notes.
+        //     recorded - because this loop used to skip already-marked notes.
         //     markNotesSpentLocally sets spent_by_txid but has no height to give,
         //     so without backfilling it here spent_at_height stays 0, the send's
         //     chain-derived entry gets height 0, and reconcile (which confirms
@@ -4285,7 +3998,9 @@ const runSync = async (
           if (newNullifiers.has(note.nullifier)) {
             continue;
           }
-          if (!note.witness_hex) {
+          // only a witness at the pre-batch size can take this batch; one at
+          // another size would be advanced into a wrong tree
+          if (!note.witness_hex || note.witness_tree_size !== orchardTreeSize) {
             continue;
           }
           existingInput.push({ id: note.nullifier, witness_hex: note.witness_hex });
@@ -4293,17 +4008,22 @@ const runSync = async (
         const seedInput = newNotes.map(n => ({ id: n.nullifier, position: n.position }));
 
         try {
-          const raw = wasmModule.witness_sync_update(
+          const wasm = wasmModule;
+          const result = advanceWitnesses(
+            (frontier, blocksJson, existingJson, seedJson) =>
+              wasm.witness_sync_update(frontier, blocksJson, existingJson, seedJson),
             runningFrontier,
             JSON.stringify(compact),
-            JSON.stringify(existingInput),
-            JSON.stringify(seedInput),
+            existingInput,
+            seedInput,
           );
-          const result = JSON.parse(raw as string) as {
-            end_frontier_hex: string;
-            anchor_hex: string;
-            witnesses: { id: string; position: number; witness_hex: string }[];
-          };
+          for (const id of result.dropped) {
+            const note = state.notes.find(n => n.nullifier === id);
+            if (note) {
+              note.witness_hex = undefined;
+              note.witness_tree_size = undefined;
+            }
+          }
 
           const witnessById = new Map(result.witnesses.map(w => [w.id, w]));
           const newTreeSize = orchardTreeSize + actionCount;
@@ -4332,7 +4052,7 @@ const runSync = async (
           runningFrontier = result.end_frontier_hex;
           runningFrontierHeight = endHeight;
         } catch (e) {
-          console.error('[zcash-worker] witness_sync_update failed:', e);
+          console.error(`[zcash-worker] witness_sync_update failed: ${errText(e)}`, e);
           // invalidate frontier so next batch rebootstraps
           runningFrontier = '';
         }
@@ -4340,6 +4060,12 @@ const runSync = async (
 
       // advance tree size by total actions in this batch
       orchardTreeSize += actionCount;
+      // a batch without orchard actions leaves the tree as it was, so the
+      // frontier now stands for this height too (otherwise its height lags and
+      // the next start refetches it)
+      if (runningFrontier && actionCount === 0) {
+        runningFrontierHeight = endHeight;
+      }
 
       // ── NU6.3 ironwood pool: mirror of the orchard scan + witness path
       // above. Dormant until (a) the wasm blob exports the ironwood fns and
@@ -4421,7 +4147,10 @@ const runSync = async (
             state.notes.push(full);
           }
         } catch (err) {
-          console.error('[zcash-worker] scan_actions_ironwood_parallel crashed:', err);
+          console.error(
+            `[zcash-worker] scan_actions_ironwood_parallel crashed: ${errText(err)}`,
+            err,
+          );
         }
 
         // spent detection: ironwood nullifiers spend ironwood notes. Same
@@ -4476,23 +4205,32 @@ const runSync = async (
             if (iwNewNullifiers.has(note.nullifier)) {
               continue;
             }
-            if (!note.witness_hex) {
+            // only a witness at the pre-batch size can take this batch; one
+            // at another size (an old row, a send-time rebuild) would be
+            // advanced into a wrong tree and fail every later root check
+            if (!note.witness_hex || note.witness_tree_size !== ironwoodTreeSize) {
               continue;
             }
             iwExisting.push({ id: note.nullifier, witness_hex: note.witness_hex });
           }
           const iwSeed = newIronwoodNotes.map(n => ({ id: n.nullifier, position: n.position }));
           try {
-            const raw = iwSync(
+            // one witness it cannot read no longer costs the frontier
+            const result = advanceWitnesses(
+              iwSync,
               ironwoodFrontier,
               JSON.stringify(iwCompact),
-              JSON.stringify(iwExisting),
-              JSON.stringify(iwSeed),
+              iwExisting,
+              iwSeed,
             );
-            const result = JSON.parse(raw as string) as {
-              end_frontier_hex: string;
-              witnesses: { id: string; position: number; witness_hex: string }[];
-            };
+            for (const id of result.dropped) {
+              console.warn(`[zcash-worker] ironwood witness ${id.slice(0, 8)} dropped for rebuild`);
+              const note = state.notes.find(n => n.nullifier === id);
+              if (note) {
+                note.witness_hex = undefined;
+                note.witness_tree_size = undefined;
+              }
+            }
             const iwById = new Map(result.witnesses.map(w => [w.id, w]));
             const newIwTreeSize = ironwoodTreeSize + ironwoodActionCount;
             for (const note of state.notes) {
@@ -4512,7 +4250,7 @@ const runSync = async (
             ironwoodFrontier = result.end_frontier_hex;
             ironwoodFrontierHeight = endHeight;
           } catch (e) {
-            console.error('[zcash-worker] witness_sync_update_ironwood failed:', e);
+            console.error(`[zcash-worker] witness_sync_update_ironwood failed: ${errText(e)}`, e);
             // invalidate frontier so the next runSync rebootstraps
             ironwoodFrontier = '';
           }
@@ -4522,6 +4260,13 @@ const runSync = async (
       // advance ironwood tree size by this batch's ironwood actions (kept
       // even when the blob can't scan them, so the count stays monotonic)
       ironwoodTreeSize += ironwoodActionCount;
+      // a batch without ironwood actions leaves the tree as it was, so the
+      // maintained frontier now stands for this height too. Before, its height
+      // lagged on every empty batch, and a stop in that window made the next
+      // start refetch the frontier and drop every ironwood witness.
+      if (ironwoodFrontier && ironwoodActionCount === 0) {
+        ironwoodFrontierHeight = endHeight;
+      }
 
       // merge witness-updated notes with spent-updated notes (dedupe by nullifier)
       const updatedDedup = new Map<string, DecryptedNote>();
@@ -4540,7 +4285,12 @@ const runSync = async (
       }
       const combinedUpdated = Array.from(updatedDedup.values());
 
-      // single batched db write for entire batch
+      // single batched db write for entire batch, into the store this run
+      // has been writing: never into one wiped under it
+      if (await storeWasReset()) {
+        restart = true;
+        break;
+      }
       currentHeight = endHeight;
       await saveBatch(
         walletId,
@@ -4561,6 +4311,7 @@ const runSync = async (
             }
           : undefined,
       );
+      lastSaved = currentHeight;
 
       // periodic frontier snapshot for privacy-safe witness building.
       // Also cross-check local frontier vs network to detect reorg-induced corruption.
@@ -4575,7 +4326,7 @@ const runSync = async (
             if (localRoot !== netRoot) {
               console.warn(
                 `[zcash-worker] local frontier diverged from network at snapshot ${currentHeight} ` +
-                  `(local=${localRoot.slice(0, 16)} net=${netRoot.slice(0, 16)}) — likely reorg; resetting witnesses`,
+                  `(local=${localRoot.slice(0, 16)} net=${netRoot.slice(0, 16)}) - likely reorg; resetting witnesses`,
               );
               runningFrontier = snapshotTs.orchardTree;
               runningFrontierHeight = currentHeight;
@@ -4616,11 +4367,6 @@ const runSync = async (
         }
       }
 
-      // persist actions commitment
-      if (zyncModule) {
-        await saveActionsCommitment(walletId, actionsCommitment);
-      }
-
       workerSelf.postMessage({
         type: 'sync-progress',
         id: '',
@@ -4640,12 +4386,13 @@ const runSync = async (
       });
 
       consecutiveErrors = 0;
+      lastErrLine = undefined;
     } catch (err) {
       // Intentional stop (wallet switch, endpoint change, shutdown): in-flight
       // RPCs can fail once teardown begins. That's not a sync failure - no
       // error count, no sync-error to the UI. Mirrors the abort handling in
       // packages/query block-processor retry.
-      if (state.syncAbort) {
+      if (signal.aborted) {
         dropPipeline();
         break;
       }
@@ -4674,6 +4421,7 @@ const runSync = async (
           try {
             await rewindScanCursor(target);
             currentHeight = target;
+            lastSaved = target;
             workerSelf.postMessage({
               type: 'sync-progress',
               id: '',
@@ -4691,19 +4439,50 @@ const runSync = async (
             // The rewind itself failed (endpoint down mid-recovery, storage
             // unavailable). Fall through and treat it as an ordinary failure
             // so the real reason is the one that gets classified.
-            console.warn('[zcash-worker] rewind failed:', rewindErr);
+            console.warn(`[zcash-worker] rewind failed: ${errText(rewindErr)}`);
           }
         }
       }
 
       consecutiveErrors++;
-      // Retrying is the policy, so a flapping endpoint would otherwise produce
-      // one of these per backoff interval indefinitely. Log the first few and
-      // then every tenth; the UI sync-error message below is unaffected, so the
-      // user still sees the wallet struggling.
-      if (consecutiveErrors <= 3 || consecutiveErrors % 10 === 0) {
-        console.error(`[zcash-worker] sync error (${consecutiveErrors}):`, err);
+      const errLine = errText(err);
+      // Storage, not the node. A closed connection is dropped so the next try
+      // opens a fresh one (retrying over it only counted: "sync error (240)").
+      // A full disk or a database newer than this build cannot be retried
+      // away: say so once, honestly, and stop until the person acts.
+      const storage = storageFailure(err);
+      if (storage) {
+        // the next try opens a fresh connection, and checks it is the same store
+        closeDb();
+        dbLost++;
       }
+      if (storage === 'fatal') {
+        console.error(`[zcash-worker] sync stopped, local data unusable: ${errLine}`);
+        workerSelf.postMessage({
+          type: 'sync-error',
+          id: '',
+          network: 'zcash',
+          walletId,
+          payload: { message: errLine, stalled: true, code: 'storage-fatal' },
+        });
+        break;
+      }
+      // on a zidecar the sync itself runs on zidecar's own calls (GetTip,
+      // whole blocks); failing twice may mean the node is not one (a local
+      // storage failure never blames the node)
+      if (consecutiveErrors === 2 && zidecar && !storage) {
+        suspectBackend(serverUrl);
+      }
+      // Retrying is the policy, so a flapping endpoint would otherwise produce
+      // one of these per backoff interval indefinitely. One line when the
+      // failure starts or changes, then every tenth; the UI sync-error message
+      // below is unaffected, so the user still sees the wallet struggling.
+      if (errLine !== lastErrLine || consecutiveErrors % 10 === 0) {
+        console.warn(
+          `[zcash-worker] sync error (${consecutiveErrors}): ${errLine}; next try in ${Math.round(syncRetryDelayMs(consecutiveErrors) / 1000)}s`,
+        );
+      }
+      lastErrLine = errLine;
       // surface to UI from the second consecutive failure (skip transient
       // single hiccups, but don't make the user stare at "syncing 0%" while
       // we silently retry forever)
@@ -4719,40 +4498,30 @@ const runSync = async (
           network: 'zcash',
           walletId,
           payload: {
-            message: err instanceof Error ? err.message : String(err),
+            message: errLine,
+            stalled: consecutiveErrors >= SYNC_STALL_ERRORS,
             ...(code ? { code } : {}),
           },
         });
       }
-      // back off exponentially, max 30s
-      const backoff = Math.min(30000, 2000 * Math.pow(2, consecutiveErrors - 1));
-      await sleepUnlessAborted(state, backoff);
-      // after 10 consecutive errors, give up
-      if (consecutiveErrors >= 10) {
-        console.error('[zcash-worker] too many errors, stopping sync');
-        break;
+      // never give up: only the last window closing stops the loop, so a node
+      // that comes back is picked up from the stored height. Once stalled,
+      // every slow retry is a fresh run's worth of rewinds.
+      if (consecutiveErrors >= SYNC_STALL_ERRORS) {
+        rewindsThisRun = 0;
       }
+      await sleepUnlessAborted(signal, syncRetryDelayMs(consecutiveErrors));
     }
   }
 
   // Nothing in flight may be applied after the loop ends, however it ended.
   prefetcher.reset();
-  state.syncing = false;
-  // mempool watcher lifecycle is owned by state.mempoolAbort; abort here
-  // so the watcher tears down even if the sync loop exits via a path that
-  // skips waitForSyncStop. Safe to call repeatedly.
   state.mempoolAbort?.abort();
-  console.log(`[zcash-worker] sync stopped wallet=${walletId}`);
-  // The loop can exit on its own (10 consecutive errors) with nobody having
-  // sent 'stop-sync'. Without this the main thread's syncingWallets set keeps
-  // the wallet listed as syncing forever and the auto-sync hook never
-  // restarts it — a wallet that has silently stopped scanning looks exactly
-  // like one that is up to date.
-  workerSelf.postMessage({ type: 'sync-stopped', id: '', network: 'zcash', walletId });
+  return restart ? 'restart' : undefined;
 };
 
 const getBalance = async (walletId: string): Promise<bigint> => {
-  // always load from IDB — in-memory state may be stale after rescan
+  // always load from IDB - in-memory state may be stale after rescan
   const state = await loadState(walletId);
   let balance = 0n;
   for (const note of state.notes) {
@@ -4767,13 +4536,13 @@ const getBalance = async (walletId: string): Promise<bigint> => {
 interface PoolBalances {
   orchard: bigint;
   ironwood: bigint;
-  /** orchard + ironwood — the same total getBalance() returns */
+  /** orchard + ironwood - the same total getBalance() returns */
   total: bigint;
   /**
    * Pending shielded change: value our own broadcast-but-unconfirmed sends will
    * return to us once they mine (upstream change_pending_confirmation). The
    * input notes are marked spent locally at broadcast, which drops `total` to
-   * zero while the change note has not mined yet — correct, but it made the
+   * zero while the change note has not mined yet - correct, but it made the
    * wallet read as empty (all pools 0, "get your first zec") with money in
    * flight. These figures keep that value visible and are NOT spendable.
    * pendingIronwood additionally carries a pending turnstile migration's
@@ -4822,7 +4591,7 @@ const getPoolBalances = async (walletId: string): Promise<PoolBalances> => {
   //
   // A turnstile migration (kind === 'migrate') is special: its orchard inputs
   // are marked spent at broadcast (orchard → 0) but nothing actually leaves the
-  // wallet except the fee — the value moves to the wallet's OWN ironwood pool
+  // wallet except the fee - the value moves to the wallet's OWN ironwood pool
   // and returns as an ironwood output once mined. Attribute its whole in-flight
   // value (rec.amount, already inputs − fee) to pendingIronwood so the hero
   // total stays whole through the confirmation window instead of reading ~0.
@@ -4850,7 +4619,7 @@ const getPoolBalances = async (walletId: string): Promise<PoolBalances> => {
         if (!inp) {
           continue;
         }
-        // A pending migrate's value is not leaving the wallet — it is moving
+        // A pending migrate's value is not leaving the wallet - it is moving
         // orchard → the wallet's own ironwood pool. rec.amount is the ironwood
         // output (inputs − fee); count it as arriving ironwood so the hero total
         // stays whole. The kind check must precede the generic send math: that
@@ -4876,7 +4645,7 @@ const getPoolBalances = async (walletId: string): Promise<PoolBalances> => {
       }
     }
   } catch (e) {
-    console.warn('[zcash-worker] failed to compute pending change:', e);
+    console.warn(`[zcash-worker] failed to compute pending change: ${errText(e)}`);
   }
 
   return {
@@ -4893,22 +4662,48 @@ const getPoolBalances = async (walletId: string): Promise<PoolBalances> => {
 
 workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
   const { type, id, walletId, payload } = e.data;
+  // a build that can be stopped carries the key its page chose
+  const cancelKey = (payload as { cancelKey?: unknown } | undefined)?.cancelKey;
 
   try {
     switch (type) {
+      case 'build-stop': {
+        const { key } = payload as { key: string };
+        workerSelf.postMessage({ type: 'result', id, network: 'zcash', payload: builds.stop(key) });
+        return;
+      }
+
       case 'init':
         await initWasm();
         workerSelf.postMessage({ type: 'ready', id, network: 'zcash' });
         return;
 
+      case 'vault-key':
+        // a single-use key the page wraps the session key to for the next call
+        workerSelf.postMessage({
+          type: 'vault-key',
+          id,
+          network: 'zcash',
+          payload: await issueWorkerKey(),
+        });
+        return;
+
       case 'derive-address': {
         await initWasm();
-        const { mnemonic, accountIndex, diversifierHex } = payload as {
-          mnemonic: string;
+        const { vault, accountIndex, diversifierHex, pocket } = payload as {
+          /** the sealed vault this worker opens itself; the phrase never rides the bus */
+          vault?: SealedVault;
           accountIndex: number;
           diversifierHex?: string;
+          /** zip32 account; accountIndex above is a diversifier index */
+          pocket?: number;
         };
-        const address = deriveAddress(mnemonic, accountIndex, diversifierHex);
+        const address = deriveAddress(
+          await unsealVault(vault),
+          accountIndex,
+          diversifierHex,
+          pocket,
+        );
         workerSelf.postMessage({
           type: 'address',
           id,
@@ -4924,75 +4719,55 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           throw new Error('walletId required');
         }
         await initWasm();
-        const { mnemonic, serverUrl, startHeight, ufvk, backend, mempoolWatch } = payload as {
-          mnemonic: string;
-          serverUrl: string;
-          startHeight?: number;
-          ufvk?: string;
-          backend?: ZcashBackend;
-          mempoolWatch?: 'off' | 'on';
-        };
+        const { vault, serverUrl, startHeight, ufvk, backend, detectBackend, mempoolWatch } =
+          payload as {
+            /** hot wallet: the sealed vault this worker opens itself; watch-only sends ufvk */
+            vault?: SealedVault;
+            serverUrl: string;
+            startHeight?: number;
+            ufvk?: string;
+            backend?: ZcashBackend;
+            /** the page has no answer from this node yet: ask it first */
+            detectBackend?: boolean;
+            mempoolWatch?: 'off' | 'on';
+          };
         // Defensive: validate enum values from cross-context payload.
         // Silent coercion of an unknown backend to 'zidecar' is a privacy
-        // regression — a user configured to talk to a third-party
+        // regression - a user configured to talk to a third-party
         // lightwalletd would end up hitting the trustless code path (with
         // its zidecar-only RPCs) and either fail loudly OR, worse, succeed
         // against a server that happens to implement those endpoints with
         // a different trust model. Reject unknown explicitly.
-        if (backend !== undefined && backend !== 'zidecar' && backend !== 'lightwalletd') {
+        if (backend !== undefined && !isZcashBackend(backend)) {
           throw new Error(`unknown zcash backend in sync payload: ${String(backend)}`);
         }
         if (mempoolWatch !== undefined && mempoolWatch !== 'off' && mempoolWatch !== 'on') {
           throw new Error(`unknown mempoolWatch in sync payload: ${String(mempoolWatch)}`);
         }
-        const effectiveBackend: ZcashBackend = backend ?? 'zidecar';
-        // Gate goes through the single helper so all layers see the same answer.
-        const { isMempoolWatchEnabled } = await import(
-          /* webpackMode: "eager" */ '../services/mempool-watch/strategy'
-        );
-        const effectiveMempoolWatch: 'off' | 'on' = isMempoolWatchEnabled(
-          mempoolWatch,
-          effectiveBackend,
-        )
-          ? 'on'
-          : 'off';
+        let effectiveBackend: ZcashBackend = backend ?? backendOfEndpoint(serverUrl);
+        if (detectBackend === true) {
+          // the node says what it is, through the call every light wallet
+          // makes first; a node that does not answer keeps the guess, and
+          // the sync's own errors tell the user it is unreachable
+          try {
+            effectiveBackend = await detectZcashBackend(serverUrl);
+            announceBackend(serverUrl, effectiveBackend);
+          } catch (e) {
+            console.warn(`[zcash-worker] node did not say what it is: ${errText(e)}`);
+          }
+        }
         // Seed the registry so subsequent operations (send, history, memo
         // fetch) construct the right client without re-receiving backend.
         registerBackend(serverUrl, effectiveBackend);
-        runSync(
+        void runSync(
           walletId,
-          mnemonic,
+          ufvk ? '' : await unsealVault(vault),
           serverUrl,
           startHeight,
           ufvk,
           effectiveBackend,
-          effectiveMempoolWatch,
-        ).catch(err => {
-          // A rejection here is everything that happens OUTSIDE the batch
-          // loop's own try/catch: opening IndexedDB, loading state, deriving
-          // keys, sizing the stored frontier. Those all run BEFORE the first
-          // sync-progress is emitted, so the popup never learns a height and
-          // renders "scanning notes 0%" forever.
-          //
-          // 'sync-started' has already been posted by the time we get here, so
-          // network-worker has this wallet in syncingWallets and the auto-sync
-          // hook's isWalletSyncing() guard will refuse to ever start it again.
-          // Logging to a console nobody has open made that permanent and
-          // invisible. Report the failure and retract the started claim so the
-          // UI can surface it and a retry is possible.
-          console.error('[zcash-worker] runSync fatal:', err);
-          workerSelf.postMessage({
-            type: 'sync-error',
-            id: '',
-            network: 'zcash',
-            walletId,
-            payload: {
-              message: err instanceof Error ? err.message : String(err),
-              ...(syncErrorCodeOf(err) ? { code: syncErrorCodeOf(err) } : {}),
-            },
-          });
-          workerSelf.postMessage({ type: 'sync-stopped', id: '', network: 'zcash', walletId });
-        });
+          mempoolWatch,
+        );
         workerSelf.postMessage({ type: 'sync-started', id, network: 'zcash', walletId });
         return;
       }
@@ -5001,15 +4776,22 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (!walletId) {
           throw new Error('walletId required');
         }
+        // answered once the loop has ended, so a start after it resumes from
+        // what the stopped run saved instead of racing it
         const state = walletStates.get(walletId);
+        const stopped = state?.stop;
         if (state) {
-          state.syncAbort = true;
-          // Abort the mempool watcher directly. Without this, the watcher
-          // keeps polling for up to one full sync-loop backoff (≈30s) after
-          // stop-sync returns.
-          state.mempoolAbort?.abort();
+          await stopSync(state);
         }
-        workerSelf.postMessage({ type: 'sync-stopped', id, network: 'zcash', walletId });
+        // a sync asked for while this stop waited owns the wallet now: answer
+        // the call without marking the wallet idle under it
+        const superseded = state?.stop !== stopped;
+        workerSelf.postMessage({
+          type: 'sync-stopped',
+          id,
+          network: 'zcash',
+          walletId: superseded ? undefined : walletId,
+        });
         return;
       }
 
@@ -5017,26 +4799,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (!walletId) {
           throw new Error('walletId required');
         }
-        const resetState = walletStates.get(walletId);
-        if (resetState) {
-          resetState.syncAbort = true;
-          resetState.mempoolAbort?.abort();
-          if (resetState.keys) {
-            resetState.keys.free();
-            resetState.keys = null;
-          }
-        }
-        await waitForSyncStop(resetState ?? getOrCreateWalletState(walletId));
+        const resetState = getOrCreateWalletState(walletId);
+        await stopSync(resetState);
+        resetState.keys?.free();
+        resetState.keys = null;
         // clear IDB data for this wallet
         await deleteWallet(walletId);
         // re-register so future sync can start clean
         await registerWallet(walletId);
-        // reset in-memory state
-        const freshState = getOrCreateWalletState(walletId);
-        freshState.notes = [];
-        freshState.spentNullifiers = new Set();
-        freshState.syncing = false;
-        freshState.syncAbort = false;
+        resetState.notes = [];
+        resetState.spentNullifiers = new Set();
         workerSelf.postMessage({ type: 'sync-reset', id, network: 'zcash', walletId });
         return;
       }
@@ -5087,7 +4859,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           throw new Error('walletId required');
         }
         // The balance panel needs to know what is in flight, and it needs to
-        // know cheaply — get-history fetches transparent history over the
+        // know cheaply - get-history fetches transparent history over the
         // network, which is far too heavy to run on every sync tick. This
         // answers the same question from local state only: which of our
         // recorded sends has the chain not confirmed yet.
@@ -5121,7 +4893,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const pendSent = await idbGetAllByIndex<SentTxRecord>('sent', 'byWallet', walletId);
         const pendResult = reconcileSentTxs({
           chainTxs: pendChainTxs,
-          sent: pendSent,
+          // the scan never sees a transparent-only tx, so from local state one
+          // is never failed; get-history asks the node and decides
+          sent: pendSent.map(s => (s.pool === 'transparent' ? { ...s, expiryHeight: 0 } : s)),
           scannedHeight: await getSyncHeight(walletId),
         });
         workerSelf.postMessage({
@@ -5144,16 +4918,24 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (!walletId) {
           throw new Error('walletId required');
         }
-        const state = walletStates.get(walletId);
-        if (state?.syncing) {
-          state.syncAbort = true;
-          await waitForSyncStop(state);
+        // a wallet's pockets go with it (account 0 is walletId itself)
+        const ownStores = new Set([walletId]);
+        for (const storeId of [...(await listWallets()), ...walletStates.keys()]) {
+          if (isStoreOfWallet(storeId, walletId)) {
+            ownStores.add(storeId);
+          }
         }
-        if (state?.keys) {
-          state.keys.free();
-          state.keys = null;
+        for (const storeId of ownStores) {
+          const state = walletStates.get(storeId);
+          if (state) {
+            await stopSync(state);
+          }
+          if (state?.keys) {
+            state.keys.free();
+            state.keys = null;
+          }
+          await deleteWallet(storeId);
         }
-        await deleteWallet(walletId);
         workerSelf.postMessage({ type: 'wallet-deleted', id, network: 'zcash', walletId });
         return;
       }
@@ -5209,7 +4991,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // replay"). Split by pool and export one pool per bundle; when both hold
         // value (mid-migration), export the larger and disclose the remainder
         // rather than silently dropping it (a single-anchor bundle cannot verify
-        // two trees — dual-pool export needs a v2 bundle format).
+        // two trees - dual-pool export needs a v2 bundle format).
         const orchardNotes = allUnspent.filter(n => poolOf(n) === 'orchard');
         const ironwoodNotes = allUnspent.filter(n => poolOf(n) === 'ironwood');
         const sumBalance = (ns: DecryptedNote[]) =>
@@ -5231,7 +5013,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const excludedBalance = exportPool === 'ironwood' ? orchardBalance : ironwoodBalance;
 
         // anchor where the witnesses are rooted (that pool's cached frontier),
-        // not the newest note's height — otherwise the cross-check root won't
+        // not the newest note's height - otherwise the cross-check root won't
         // match. Each pool has its own frontier meta; the ironwood anchor MUST
         // come from the ironwood frontier or the ironwood tree-state fetch /
         // drift-check downstream will fail.
@@ -5241,10 +5023,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             ? (await getIronwoodTreeFrontierHeight(walletId)) || newestSelectedHeight
             : await resolveAnchorHeight(walletId, newestSelectedHeight);
 
-        // build merkle witnesses — use the backend-aware client (zidecar/
+        // build merkle witnesses - use the backend-aware client (zidecar/
         // lightwalletd) instead of a hardcoded zidecar REST shape, so export
         // works on any backend the wallet synced against.
-        const client = await makeZcashClient(syncServerUrl);
+        const client = makeZcashClient(syncServerUrl);
         const witnessResult = await buildWitnesses(
           client,
           walletId,
@@ -5278,16 +5060,14 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // tree-state during witness building, so it isn't arbitrary.
         // Attestation is orchard-only for now: zidecar's SignAnchor verifies the
         // anchor against its orchard tree-state, so an ironwood anchor would not
-        // match and returns unavailable. Ironwood bundles ship unattested — fine
+        // match and returns unavailable. Ironwood bundles ship unattested - fine
         // for the non-FROST devices this flow targets. (A FROST device syncing
-        // ironwood notes would need a zidecar ironwood-tree verifier — future.)
+        // ironwood notes would need a zidecar ironwood-tree verifier - future.)
         let attestationHex: string | null = null;
-        if (exportPool === 'orchard' && lookupBackend(syncServerUrl) === 'zidecar') {
+        const attester = zidecarExtras(syncServerUrl, lookupBackend(syncServerUrl));
+        if (exportPool === 'orchard' && attester) {
           try {
-            const { ZidecarClient } = await import(
-              /* webpackMode: "eager" */ '../state/keyring/zidecar-client'
-            );
-            const att = await new ZidecarClient(syncServerUrl).signAnchor(
+            const att = await attester.signAnchor(
               hexDecode(witnessResult.anchorHex),
               anchorHeight,
               isMainnet,
@@ -5304,6 +5084,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               '[zcash-worker] anchor attestation failed; emitting unattested bundle:',
               e,
             );
+            suspectBackend(syncServerUrl);
           }
         }
 
@@ -5324,13 +5105,15 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         try {
           anchorTime = (await client.getTreeState(anchorHeight)).time;
         } catch (e) {
-          console.warn('[zcash-worker] anchor block time unavailable; bundle omits it:', e);
+          console.warn(
+            `[zcash-worker] anchor block time unavailable; bundle omits it: ${errText(e)}`,
+          );
         }
         const cborBytes = appendCborAnchorTime(cborBundle, anchorTime);
 
         // encode to QR frames via zoda transport (verified erasure coding).
         // auto-size k/n to the payload so each hex-encoded `zt:` frame fits a
-        // scannable QR — a fixed 12-of-16 overflows the QR for large note sets
+        // scannable QR - a fixed 12-of-16 overflows the QR for large note sets
         // (each shard ~payload/k, hex-doubled). 300 raw bytes/frame ≈ 0.6KB QR
         // string (~v15 at ECC-L) keeps each frame light enough to lock fast on
         // the zigner camera (denser frames scan slowly); 30% parity so the
@@ -5353,7 +5136,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             cborBytes: cborBytes.length,
             pool: exportPool,
             // when the wallet straddles both pools, the zigner bundle can only
-            // carry one — tell the UI what was left out so it doesn't imply the
+            // carry one - tell the UI what was left out so it doesn't imply the
             // synced balance is the wallet's whole spendable balance.
             excludedPool: excludedNotes.length > 0 ? excludedPool : undefined,
             excludedNoteCount: excludedNotes.length,
@@ -5394,7 +5177,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           return;
         }
 
-        const tClient = await makeZcashClient(serverUrl);
+        const tClient = makeZcashClient(serverUrl);
 
         // build script set for our addresses (p2pkh: OP_DUP OP_HASH160 <20> <hash> OP_EQUALVERIFY OP_CHECKSIG)
         const ourScripts = new Set<string>();
@@ -5460,7 +5243,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const tHistory: { txid: string; height: number; received: string }[] = [];
         if (histTAddresses?.length) {
           try {
-            const tClient = await makeZcashClient(histServerUrl);
+            const tClient = makeZcashClient(histServerUrl);
 
             const ourScripts = new Set<string>();
             for (const addr of histTAddresses) {
@@ -5492,7 +5275,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               }
             }
           } catch (e) {
-            console.warn('[zcash-worker] get-history: transparent history failed:', e);
+            console.warn(`[zcash-worker] get-history: transparent history failed: ${errText(e)}`);
           }
         }
 
@@ -5554,11 +5337,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               amount = inputTotal - info.changeValue;
             } else {
               // No input total. histSpentByMap is keyed on note.spent_by_txid,
-              // which the NOMT nullifier ORACLE never sets — it adds the
-              // nullifier to spentNullifiers with no txid. So any spend
-              // detected by proof rather than by a scan-time nullifier match
-              // lands here (classic case: the same seed used on another device,
-              // then restored).
+              // which only a spend this wallet recorded itself sets; a spend
+              // known only as a nullifier (older wallets marked spends from
+              // server proofs, with no txid) lands here.
               //
               // This used to display info.changeValue as the amount sent, which
               // is not merely imprecise, it is the wrong number entirely: pay
@@ -5591,7 +5372,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // The input total is NOT the amount sent. Spending a 355,000 zat note to
         // pay 50,000 returns 290,000 as change, and the wallet is 65,000 poorer.
         // This branch used to publish the gross input total as the amount, which
-        // is only correct when there genuinely was no change — and we cannot tell
+        // is only correct when there genuinely was no change - and we cannot tell
         // the two apart until the block holding the change has been scanned.
         // (Worse for a turnstile migration, where orchard inputs produce ironwood
         // change that a separate scan pass discovers later still.)
@@ -5599,7 +5380,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // So: report it as an upper bound unless we have actually walked the
         // block that spent it and found no change coming back. Where a local
         // record exists, reconciliation replaces this figure with the exact one
-        // anyway — this is the honest fallback for sends we did not record.
+        // anyway - this is the honest fallback for sends we did not record.
         const histScannedHeight = await getSyncHeight(walletId);
         for (const [txid, { value: inputTotal, height: spentHeight }] of histSpentByMap) {
           if (!histTxMap.has(txid)) {
@@ -5618,7 +5399,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // merge transparent history
         const seenTxids = new Map(histTxs.map((tx, i) => [tx.id, i]));
         // Transactions WE sent, so a transparent output of ours is change
-        // coming back — not income.
+        // coming back - not income.
         //
         // parseTransparentTx only sums outputs matching our scripts; the
         // comment there concedes inputs carry no value, so a t->t or z->t
@@ -5635,7 +5416,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           const ownSent = await idbGetAllByIndex<SentTxRecord>('sent', 'byWallet', walletId);
           ownSentTxids = new Set(ownSent.map(s => s.txid));
         } catch {
-          // best effort — a missing record must not break history
+          // best effort - a missing record must not break history
         }
 
         for (const tTx of tHistory) {
@@ -5666,7 +5447,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // so scanning recovers a send only via OVK decryption and never
         // recovers the recipient/memo the user actually chose.
         //
-        // Reconciliation — not a naive merge. The earlier merge skipped any
+        // Reconciliation - not a naive merge. The earlier merge skipped any
         // txid already present in the chain-derived list, but that list gets an
         // entry for our own send the moment we broadcast, because
         // markNotesSpentLocally records the inputs we spent. That entry has no
@@ -5697,7 +5478,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           );
           if (needLookup.length > 0) {
             try {
-              const lookupClient = await makeZcashClient(histServerUrl);
+              const lookupClient = makeZcashClient(histServerUrl);
               const found = await Promise.all(
                 needLookup.map(async s => {
                   try {
@@ -5721,7 +5502,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 });
               }
             } catch (e) {
-              console.warn('[zcash-worker] get-history: pending-send height lookup failed:', e);
+              console.warn(
+                `[zcash-worker] get-history: pending-send height lookup failed: ${errText(e)}`,
+              );
             }
           }
 
@@ -5734,7 +5517,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // fire-and-forget: display must not wait on (or fail with) a write
           void applyReconciliation(walletId, result.confirm, result.prune);
         } catch (e) {
-          console.warn('[zcash-worker] could not read local sent records:', e);
+          console.warn(`[zcash-worker] could not read local sent records: ${errText(e)}`);
           reconciled = reconcileSentTxs({ chainTxs: histTxs, sent: [], scannedHeight: 0 }).txs;
         }
 
@@ -5762,6 +5545,47 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           forceResync: boolean;
         };
 
+        // Opening the inbox again with no note found or spent since the last
+        // read has nothing new to read: answer from two counts, without
+        // loading every note (and its witness) out of the store.
+        const db = await getDb();
+        const fpKey = `${walletId}:memo-fp`;
+        const count = (store: 'notes' | 'spent') =>
+          new Promise<number>((resolve, reject) => {
+            const req = db
+              .transaction(store, 'readonly')
+              .objectStore(store)
+              .index('byWallet')
+              .count(walletId);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+          });
+        const fingerprint = `${await count('notes')}:${await count('spent')}`;
+        const lastFingerprint = await new Promise<unknown>(resolve => {
+          const req = db.transaction('memo-cache', 'readonly').objectStore('memo-cache').get(fpKey);
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => resolve(undefined);
+        });
+        const remember = () =>
+          new Promise<void>((resolve, reject) => {
+            const req = db
+              .transaction('memo-cache', 'readwrite')
+              .objectStore('memo-cache')
+              .put(fingerprint, fpKey);
+            req.onsuccess = () => resolve();
+            req.onerror = () => reject(req.error);
+          });
+        if (!forceResync && lastFingerprint === fingerprint) {
+          workerSelf.postMessage({
+            type: 'memos-result',
+            id,
+            network: 'zcash',
+            walletId,
+            payload: [],
+          });
+          return;
+        }
+
         const memoState = await loadState(walletId);
         const memoKeys = walletStates.get(walletId)?.keys;
         if (!memoKeys) {
@@ -5785,7 +5609,6 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
 
         // load persisted set of note txids already scanned (no memo found)
-        const db = await getDb();
         const scannedKey = `${walletId}:scanned-txids`;
         const scannedTxids: Set<string> = await new Promise(resolve => {
           const tx = db.transaction('memo-cache', 'readonly');
@@ -5802,6 +5625,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           n => n.spent_by_txid && !processedTxids.has(n.spent_by_txid),
         );
         if (notesToProcess.length === 0 && !unprocessedSpent) {
+          await remember();
           workerSelf.postMessage({
             type: 'memos-result',
             id,
@@ -5831,11 +5655,17 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         const spentHeights = new Set<number>();
         const spentTxIds = new Map<number, Set<string>>(); // height → spent_by_txids
+        // spends broadcast but not yet mined: no block to read their memo from
+        // yet, so they stay unscanned and are read once their height is known
+        const unmined = new Set<string>();
         for (const note of memoNotes) {
           if (!note.spent_by_txid || processedTxids.has(note.spent_by_txid)) {
             continue;
           }
           const h = note.spent_at_height || txidToHeight.get(note.spent_by_txid);
+          if (!h) {
+            unmined.add(note.spent_by_txid);
+          }
           if (h) {
             spentHeights.add(h);
             let set = spentTxIds.get(h);
@@ -5889,32 +5719,39 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           spentBuckets.add(bucketOf(h));
         }
 
-        const memoClient = await makeZcashClient(memoServerUrl);
+        const memoClient = makeZcashClient(memoServerUrl);
+        const memoZidecar = zidecarExtras(memoServerUrl, lookupBackend(memoServerUrl));
         const { height: currentTip } = await memoClient.getTip();
 
-        // estimate block time from tip (no per-height GetBlock calls — preserves bucket privacy)
+        // estimate block time from tip (no per-height GetBlock calls - preserves bucket privacy)
         const tipTimeMs = Date.now();
         const estimateBlockTimeMs = (h: number): number => tipTimeMs + (h - currentTip) * 75000;
 
+        // zidecar serves whole blocks, so memos are read by bucket with decoys
+        // around them. A standard lightwalletd has no such rpc: there the
+        // wallet's own transactions are fetched by id, as lightwalletd wallets do.
         // Any non-'fast' value (including legacy 'paranoid' from older
-        // storage) falls back to 'private'. 'paranoid' was removed for
-        // decision-surface simplification; users get the strong default.
+        // storage) falls back to 'private'.
         const rawStrategy = (payload as { strategy?: string }).strategy;
         const strategyName: MemoSyncStrategy = rawStrategy === 'fast' ? 'fast' : 'private';
-        const base = blockRangeFetcher(memoClient, {
-          maxHeight: currentTip,
-          bucketSize: MEMO_BUCKET_SIZE,
-        });
-        const bucketStore = idbBucketStore({ open: () => Promise.resolve(db) });
-        const fetcher = buildStrategy(strategyName, {
-          base,
-          store: bucketStore,
-          alwaysFetch: b => spentBuckets.has(b),
-        });
+        const ownTxids = new Map(spentTxIds);
+        for (const n of notesToProcess) {
+          ownTxids.set(n.height, new Set([...(ownTxids.get(n.height) ?? []), n.txid]));
+        }
+        const fetcher = memoZidecar
+          ? buildStrategy(strategyName, {
+              base: blockRangeFetcher(memoZidecar, {
+                maxHeight: currentTip,
+                bucketSize: MEMO_BUCKET_SIZE,
+              }),
+              store: idbBucketStore({ open: () => Promise.resolve(db) }),
+              alwaysFetch: b => spentBuckets.has(b),
+            })
+          : txidMemoFetcher(memoClient, ownTxids);
 
         // ── consume the async iterable; decode memos from each yielded bucket ──
         // progress: the base fetcher knows the post-cache, post-decoy total and
-        // calls ctx.onProgress with accurate (completed, total) — we just
+        // calls ctx.onProgress with accurate (completed, total) - we just
         // forward those values to the UI.
         const results: {
           txId: string;
@@ -5925,6 +5762,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           amount: string;
           memoBytes?: string;
           diversifierIndex?: number;
+          /** incoming: the raw orchard address of ours the note was paid to (hex) */
+          receiver?: string;
         }[] = [];
         const abortCtrl = new AbortController();
 
@@ -6007,6 +5846,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                     direction: 'received',
                     amount: (memo.value / 100_000_000).toFixed(8),
                     memoBytes: isStructured ? memoRawHex : undefined,
+                    receiver: matchingNote.recipient,
                   });
                   processedTxids.add(matchingNote.txid);
                 }
@@ -6023,7 +5863,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           }
         }
         for (const n of memoNotes) {
-          if (n.spent_by_txid) {
+          if (n.spent_by_txid && !unmined.has(n.spent_by_txid)) {
             allScanned.add(n.spent_by_txid);
           }
         }
@@ -6033,6 +5873,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           req.onsuccess = () => resolve();
           req.onerror = () => reject(req.error);
         });
+        // a spend's height can arrive without any note being found or spent,
+        // so the counts cannot tell; read again on the next open until it does
+        if (unmined.size === 0) {
+          await remember();
+        }
 
         workerSelf.postMessage({
           type: 'memos-result',
@@ -6060,9 +5905,17 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           memo: string;
           accountIndex: number;
           mainnet: boolean;
-          mnemonic?: string;
+          /** hot wallet: the sealed vault this worker opens itself */
+          vault?: SealedVault;
           ufvk?: string;
+          /** the page's key for stopping this build before it broadcasts */
+          cancelKey?: string;
         };
+        const build = builds.begin(sendPayload.cancelKey);
+        // a hot build signs with the account of the store its notes come from
+        const spendAccount = sendPayload.vault
+          ? hotSpendAccount(walletId, sendPayload.accountIndex)
+          : sendPayload.accountIndex;
 
         // encode memo to hex for WASM:
         // - if already hex (starts with ff5a = zafu structured memo), pass through
@@ -6108,10 +5961,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         // witness/tip client - also reads the chain tip that decides the spend
         // pool and the endpoint consensus branch id.
-        const sendClient = await makeZcashClient(sendPayload.serverUrl);
+        const sendClient = makeZcashClient(sendPayload.serverUrl);
 
         emitProgress('fetching chain tip');
-        const sendTip = await sendClient.getTip();
+        const sendTip = await build.race(sendClient.getTip());
 
         // ── NU6.3 spend-pool selection ──────────────────────────────────────
         // Post-NU6.3 (synced tip >= activation height) orchard-to-orchard sends
@@ -6189,31 +6042,34 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         emitProgress('building merkle witnesses', `anchor=${anchorHeight} (tip=${sendTip.height})`);
         const witnessStart = performance.now();
 
-        const { anchorHex, paths } = await buildWitnesses(
+        const witnessing = buildWitnesses(
           sendClient,
           walletId,
           selected,
           anchorHeight,
           sendActivePool,
           emitProgress,
+          build.signal,
         );
+        const { anchorHex, paths } = await build.race(witnessing);
 
         const witnessDuration = ((performance.now() - witnessStart) / 1000).toFixed(1);
+        // how fresh the witnesses were: a gap beyond a few blocks means sync was behind
+        console.log(
+          `[zcash-timing] witnesses ${witnessDuration}s: pool=${sendActivePool} anchor=${anchorHeight} ` +
+            `synced=${await getSyncHeight(walletId)} tip=${sendTip.height} gap=${sendTip.height - anchorHeight}`,
+        );
         emitProgress('witnesses built', `${witnessDuration}s`);
 
-        // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe).
-        // Shared by both the mnemonic (signed) and zigner (unsigned) build paths below.
-        const sendBranchIdHex = await fetchBranchIdHex(sendClient);
-
-        if (sendPayload.mnemonic) {
+        if (sendPayload.vault) {
           // ── NU6.3 IRONWOOD hot send ─────────────────────────────────────
           // Post-activation shielded spend path. Fail-closed branch-id guard
-          // (copied verbatim from send-turnstile-migration), then build + prove
-          // + SIGN the V6 ironwood tx inside the wasm with the seed phrase and
-          // broadcast the returned tx hex directly. No PCZT is produced.
+          // (copied verbatim from send-turnstile-migration), then the prover
+          // builds + proves from this account's UFVK and the PCZT is signed
+          // here, in this worker, and broadcast.
           if (sendActivePool === 'ironwood') {
             emitProgress('checking NU6.3 activation');
-            const iwLightdInfo = await sendClient.getLightdInfo();
+            const iwLightdInfo = await build.race(sendClient.getLightdInfo());
             const iwReportedBranchHex = (iwLightdInfo.consensusBranchId || '')
               .trim()
               .toLowerCase()
@@ -6267,36 +6123,39 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             }, 2000);
             let iwTxHex: string;
             try {
-              // arg order matches the build_signed_ironwood_send producer:
-              // [seed, ironwood_notes_json, recipient, amount, fee,
-              //  ironwood_anchor_hex, ironwood_merkle_paths_json, account_index,
-              //  target_height, expected_branch_id, mainnet, memo_hex].
               // expected_branch_id is the live value validated above; the
               // producer refuses to build unless the branch id it binds equals it.
-              iwTxHex = (await proveViaOffscreen({
-                fn: 'build_signed_ironwood_send',
-                args: [
-                  sendPayload.mnemonic,
-                  JSON.stringify(iwNotesJson),
-                  sendPayload.recipient,
-                  amountZat.toString(),
-                  fee.toString(),
-                  anchorHex,
-                  JSON.stringify(iwPathsForWasm),
-                  sendPayload.accountIndex,
-                  sendTip.height,
-                  NU63_CONSENSUS_BRANCH_ID,
-                  sendPayload.mainnet,
-                  memoHex,
-                ],
-              })) as string;
+              const iwSigning = withSpendKeys(
+                wasmModule.SpendKeys,
+                sendPayload.vault,
+                spendAccount,
+                sendPayload.mainnet,
+                async keys => {
+                  const built = (await proveViaOffscreen({
+                    fn: 'build_ironwood_send_pczt',
+                    args: [
+                      keys.ufvk(),
+                      JSON.stringify(iwNotesJson),
+                      sendPayload.recipient,
+                      amountZat.toString(),
+                      fee.toString(),
+                      anchorHex,
+                      JSON.stringify(iwPathsForWasm),
+                      spendAccount,
+                      sendTip.height,
+                      NU63_CONSENSUS_BRANCH_ID,
+                      sendPayload.mainnet,
+                      memoHex,
+                    ],
+                  })) as { retained_pczt_hex: string };
+                  return keys.sign_pczt(built.retained_pczt_hex);
+                },
+              );
+              iwTxHex = await build.race(iwSigning);
             } catch (e) {
-              // do NOT log the seed or the caught args; message only. The
-              // message is what tells us WHY the build failed (bad anchor,
-              // path/position mismatch, diversifier reconstruction, an offscreen
-              // RPC drop) - logging it without a reason was undebuggable.
+              // message only, never the caught args
               console.error(
-                '[zcash-worker] build_signed_ironwood_send failed:',
+                '[zcash-worker] ironwood hot send failed:',
                 e instanceof Error ? e.message : String(e),
               );
               throw e;
@@ -6305,9 +6164,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             }
 
             emitProgress('ironwood tx signed', `${iwTxHex.length / 2} bytes`);
+            // the point of no return: a stop from here on is refused
+            build.commit();
             emitProgress('broadcasting transaction');
             const iwTxData = hexDecode(iwTxHex);
-            const iwBroadcastClient = await makeZcashClient(sendPayload.serverUrl);
+            const iwBroadcastClient = makeZcashClient(sendPayload.serverUrl);
             const iwResult = await iwBroadcastClient.sendTransaction(iwTxData);
             if (iwResult.errorCode !== 0) {
               throw new Error(`broadcast failed (${iwResult.errorCode}): ${iwResult.errorMessage}`);
@@ -6340,7 +6201,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             return;
           }
 
-          // mnemonic wallet: build fully signed transaction and broadcast directly
+          // hot wallet before NU6.3: the orchard PCZT the cold path builds, signed here
           const notesJson = selected.map(n => ({
             value: Number(n.value),
             nullifier: n.nullifier,
@@ -6371,24 +6232,36 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
           let txHex: string;
           try {
-            txHex = (await proveViaOffscreen({
-              fn: 'build_signed_spend',
-              args: [
-                sendPayload.mnemonic,
-                notesJson,
-                sendPayload.recipient,
-                amountZat.toString(),
-                fee.toString(),
-                anchorHex,
-                merklePathsForWasm,
-                sendPayload.accountIndex,
-                sendPayload.mainnet,
-                memoHex,
-                sendBranchIdHex,
-              ],
-            })) as string;
+            const signing = withSpendKeys(
+              wasmModule.SpendKeys,
+              sendPayload.vault,
+              spendAccount,
+              sendPayload.mainnet,
+              async keys => {
+                const built = (await proveViaOffscreen({
+                  fn: 'build_unsigned_pczt',
+                  args: [
+                    keys.ufvk(),
+                    notesJson,
+                    sendPayload.recipient,
+                    amountZat.toString(),
+                    fee.toString(),
+                    anchorHex,
+                    merklePathsForWasm,
+                    sendTip.height,
+                    sendPayload.mainnet,
+                    memoHex,
+                  ],
+                })) as { pczt_hex: string };
+                return keys.sign_pczt(built.pczt_hex);
+              },
+            );
+            txHex = await build.race(signing);
           } catch (e) {
-            console.error('[zcash-worker] build_signed_spend_transaction failed:', e);
+            console.error(
+              '[zcash-worker] orchard hot send failed:',
+              e instanceof Error ? e.message : String(e),
+            );
             throw e;
           } finally {
             clearInterval(provingTicker);
@@ -6397,15 +6270,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           const proveDuration = ((performance.now() - proveStart) / 1000).toFixed(1);
           emitProgress('transaction proved', `${proveDuration}s, ${txHex.length / 2} bytes`);
 
-          // broadcast
+          // broadcast; the point of no return: a stop from here on is refused
+          build.commit();
           emitProgress('broadcasting transaction');
           const txData = hexDecode(txHex);
-          const broadcastClient = await makeZcashClient(sendPayload.serverUrl);
+          const broadcastClient = makeZcashClient(sendPayload.serverUrl);
           let result: { errorCode: number; errorMessage: string; txid: Uint8Array };
           try {
             result = await broadcastClient.sendTransaction(txData);
           } catch (e) {
-            console.error('[zcash-worker] broadcast RPC failed:', e);
+            console.error(`[zcash-worker] broadcast RPC failed: ${errText(e)}`);
             throw e;
           }
           if (result.errorCode !== 0) {
@@ -6480,8 +6354,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           position: p.position,
         }));
 
+        // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe)
+        const sendBranchIdHex = await build.race(fetchBranchIdHex(sendClient));
+
         // build unsigned transaction with real Halo 2 proofs (parallel via offscreen)
-        const unsignedResult = await proveViaOffscreen({
+        const proving = proveViaOffscreen({
           fn: 'build_unsigned',
           args: [
             sendPayload.ufvk,
@@ -6497,6 +6374,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             sendBranchIdHex,
           ],
         });
+        const unsignedResult = await build.race(proving);
 
         const proveDurationZ = ((performance.now() - proveStartZ) / 1000).toFixed(1);
         emitProgress('unsigned transaction proved', `${proveDurationZ}s`);
@@ -6512,6 +6390,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const totalDuration = ((performance.now() - sendStart) / 1000).toFixed(1);
         emitProgress('unsigned tx ready', `total=${totalDuration}s`);
 
+        // a stopped build leaves no stash behind
+        build.check();
         // Everything send-tx-complete will need and cannot recover from the
         // signed bytes. See the ColdSendContext comment.
         const coldSendId = await stashColdSend(walletId, {
@@ -6568,7 +6448,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         );
         const txData = hexDecode(txHex);
 
-        const completeClient = await makeZcashClient(completePayload.serverUrl);
+        const completeClient = makeZcashClient(completePayload.serverUrl);
         const result = await completeClient.sendTransaction(txData);
         if (result.errorCode !== 0) {
           throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
@@ -6592,7 +6472,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       // Mirrors `send-tx` for the unsigned-build phase, but emits a real
       // pczt::Pczt::serialize() byte stream instead of [sighash][alphas][summary].
       // The cold device verifies note inclusion + value consistency before
-      // signing, and recomputes the sighash from the PCZT contents — so
+      // signing, and recomputes the sighash from the PCZT contents - so
       // display and signed bytes are bound by construction.
 
       case 'send-tx-pczt': {
@@ -6621,14 +6501,17 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
            * spend-pool resolution.
            */
           frost?: boolean;
+          /** the page's key for stopping this build (see build-abort.ts) */
+          cancelKey?: string;
         };
+        const build = builds.begin(sendPayload.cancelKey);
         if (!sendPayload.ufvk) {
           throw new Error('UFVK required for PCZT build');
         }
 
         // Mirror send-tx note selection / witness build. Inlined rather than
         // factored out because send-tx's variant has interleaved emitProgress
-        // calls and a fee-recompute loop that we want to keep verbatim — and
+        // calls and a fee-recompute loop that we want to keep verbatim - and
         // because the pczt builder's only meaningful difference from
         // build_unsigned_transaction is the output format, not the inputs.
         let memoHex: string | null = null;
@@ -6672,9 +6555,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // BEFORE note selection: post-activation orchard-to-orchard sends are
         // consensus-disabled, so the active pool is ironwood; pre-activation we
         // keep spending orchard (legacy cold PCZT path).
-        const sendClient = await makeZcashClient(sendPayload.serverUrl);
+        const sendClient = makeZcashClient(sendPayload.serverUrl);
         emitProgress('fetching chain tip');
-        const sendTip = await sendClient.getTip();
+        const sendTip = await build.race(sendClient.getTip());
         const pcztPool: NotePool =
           sendTip.height >= nu63ActivationHeight(sendPayload.mainnet) ? 'ironwood' : 'orchard';
 
@@ -6740,13 +6623,19 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // active pool is ironwood.
         const anchorHeight = await resolveAnchorHeight(walletId, sendTip.height);
         emitProgress('building merkle witnesses', `anchor=${anchorHeight} (tip=${sendTip.height})`);
-        const { anchorHex, paths } = await buildWitnesses(
+        const witnessing = buildWitnesses(
           sendClient,
           walletId,
           selected,
           anchorHeight,
           pcztPool,
           emitProgress,
+          build.signal,
+        );
+        const { anchorHex, paths } = await build.race(witnessing);
+        console.log(
+          `[zcash-timing] witnesses: pool=${pcztPool} anchor=${anchorHeight} ` +
+            `synced=${await getSyncHeight(walletId)} tip=${sendTip.height} gap=${sendTip.height - anchorHeight}`,
         );
 
         const notesForWasm = selected.map(n => ({
@@ -6778,7 +6667,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // refuse unless NU6.3 is really active (real 0x37a5165b, never the
           // 0xffffffff placeholder).
           emitProgress('checking NU6.3 activation');
-          const iwLightdInfo = await sendClient.getLightdInfo();
+          const iwLightdInfo = await build.race(sendClient.getLightdInfo());
           const iwReportedBranchHex = (iwLightdInfo.consensusBranchId || '')
             .trim()
             .toLowerCase()
@@ -6828,7 +6717,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             // target_height = live tip (selects TxVersion::V6). expected_branch_id
             // is the value validated above; the producer refuses to build unless
             // the branch id it binds equals it.
-            iwBuilt = await proveViaOffscreen({
+            const iwProving = proveViaOffscreen({
               fn: 'build_ironwood_send_pczt',
               args: [
                 sendPayload.ufvk,
@@ -6845,6 +6734,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 memoHex,
               ],
             });
+            iwBuilt = await build.race(iwProving);
           } catch (e) {
             console.error('[zcash-worker] build_ironwood_send_pczt failed');
             throw e;
@@ -6897,6 +6787,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
           // What send-tx-pczt-complete / complete-orchard-pczt cannot recover
           // from the signed bytes. See the ColdSendContext comment.
+          build.check();
           const iwColdSendId = await stashColdSend(walletId, {
             nullifiers: selected.map(n => n.nullifier),
             amount: amountZat.toString(),
@@ -6951,12 +6842,12 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // Use the live chain tip we just fetched for the merkle anchor as
         // the builder's target_height. The popup may pass a hint via
         // `sendPayload.targetHeight` for offline / advanced flows but the
-        // tip we have in hand is authoritative — branch_id derivation
+        // tip we have in hand is authoritative - branch_id derivation
         // depends on `(network, height)` and using a stale value (e.g.
         // hardcoded constant) risks producing txs the network rejects on
         // testnet where activation heights diverge from mainnet.
         const targetHeight = sendTip.height;
-        const built = await proveViaOffscreen({
+        const proving = proveViaOffscreen({
           fn: 'build_unsigned_pczt',
           args: [
             sendPayload.ufvk,
@@ -6971,12 +6862,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             memoHex,
           ],
         });
+        const built = await build.race(proving);
 
         const parsed = built as {
           pczt_hex: string;
           summary: string;
           action_count: number;
-          // FROST multisig fields (additive — zigner cold-sign ignores them)
+          // FROST multisig fields (additive - zigner cold-sign ignores them)
           sighash: string;
           alphas: string[];
           spend_indices: number[];
@@ -7001,6 +6893,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         // What send-tx-pczt-complete / complete-orchard-pczt cannot recover from
         // the signed bytes. See the ColdSendContext comment.
+        build.check();
         const orchardColdSendId = await stashColdSend(walletId, {
           nullifiers: selected.map(n => n.nullifier),
           amount: amountZat.toString(),
@@ -7081,14 +6974,14 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           coldSendId?: string;
         };
 
-        // TransactionExtractor reconstructs the canonical v5 tx — collects all
+        // TransactionExtractor reconstructs the canonical v5 tx - collects all
         // spend auth sigs from the signed PCZT, validates the proof, and emits
         // a broadcast-ready transaction. No manual offset-patching as in the
         // legacy `complete_transaction` path.
         const txHex = wasmModule.extract_signed_tx_from_pczt(completePayload.signedPcztHex);
         const txData = hexDecode(txHex);
 
-        const completeClient = await makeZcashClient(completePayload.serverUrl);
+        const completeClient = makeZcashClient(completePayload.serverUrl);
         const result = await completeClient.sendTransaction(txData);
         if (result.errorCode !== 0) {
           throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
@@ -7129,23 +7022,25 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           accountIndex: number;
           mainnet: boolean;
           ufvk?: string;
-          mnemonic?: string;
+          /** hot wallet: the sealed vault this worker opens itself */
+          vault?: SealedVault;
           backend?: ZcashBackend;
           /** UR fragment-size override; falls back to 200 for back-compat */
           fragmentSize?: number;
+          /** the page's key for stopping this build (see build-abort.ts) */
+          cancelKey?: string;
         };
+        const build = builds.begin(migratePayload.cancelKey);
         if (migratePayload.backend) {
           registerBackend(migratePayload.serverUrl, migratePayload.backend);
         }
-        // HOT (mnemonic) vs COLD (zigner/UFVK) turnstile. A hot/self-custody
-        // wallet supplies the seed phrase in-worker and signs the V6 tx with
-        // the NU6.3 signer wasm (build_signed_turnstile_migration), returning a
-        // ready-to-broadcast tx - no PCZT/QR round trip. A watch-only/zigner
-        // wallet supplies a UFVK and takes the cold PCZT cold-sign machine.
-        // Prefer the seed when present; fall back to the UFVK cold path.
-        const isHotMigration = !!migratePayload.mnemonic;
+        // HOT vs COLD turnstile: both build the same seed-free PCZT. A hot
+        // wallet sends its sealed vault and this worker signs and broadcasts -
+        // no QR round trip. A watch-only/zigner wallet supplies a UFVK and takes
+        // the cold PCZT cold-sign machine.
+        const isHotMigration = !!migratePayload.vault;
         if (!isHotMigration && !migratePayload.ufvk) {
-          throw new Error('turnstile migration requires a mnemonic (hot) or UFVK (cold) wallet');
+          throw new Error('turnstile migration requires a hot wallet or a UFVK (cold) wallet');
         }
 
         const migrateStart = performance.now();
@@ -7181,10 +7076,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const migrateAmount = totalIn - fee;
         emitProgress('notes selected', `${orchardNotes.length} orchard notes, fee=${fee}`);
 
-        const migrateClient = await makeZcashClient(
-          migratePayload.serverUrl,
-          migratePayload.backend,
-        );
+        const migrateClient = makeZcashClient(migratePayload.serverUrl, migratePayload.backend);
 
         // ── FAIL-CLOSED branch-id guard (FIX-C item 2) ────────────────────
         // Before building anything, read the endpoint's reported consensus
@@ -7194,7 +7086,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // (0xffffffff) or any mismatch means NU6.3 has not activated here yet -
         // a migration built against it would be an invalid / unspendable tx.
         emitProgress('checking NU6.3 activation');
-        const lightdInfo = await migrateClient.getLightdInfo();
+        const lightdInfo = await build.race(migrateClient.getLightdInfo());
         const reportedBranchHex = (lightdInfo.consensusBranchId || '')
           .trim()
           .toLowerCase()
@@ -7214,7 +7106,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         emitProgress('NU6.3 active', `branch id 0x${reportedBranchHex}`);
 
         emitProgress('fetching chain tip');
-        const migrateTip = await migrateClient.getTip();
+        const migrateTip = await build.race(migrateClient.getTip());
         const migrateAnchorHeight = await resolveAnchorHeight(walletId, migrateTip.height);
         emitProgress(
           'building merkle witnesses',
@@ -7222,13 +7114,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         );
         // orchard spends -> orchard witnesses; the migration needs no
         // ironwood anchor (output-only on the ironwood side)
-        const { anchorHex, paths } = await buildWitnesses(
+        const witnessing = buildWitnesses(
           migrateClient,
           walletId,
           orchardNotes,
           migrateAnchorHeight,
           'orchard',
+          emitProgress,
+          build.signal,
         );
+        const { anchorHex, paths } = await build.race(witnessing);
 
         const notesForWasm = orchardNotes.map(n => ({
           value: Number(n.value),
@@ -7244,16 +7139,14 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           position: p.position,
         }));
 
-        // ── HOT (mnemonic) path ───────────────────────────────────────────
-        // Self-custody wallet: build + prove + SIGN the V6 turnstile tx inside
-        // the wasm with the seed phrase, then broadcast the returned tx hex
-        // directly. No PCZT is produced, persisted, or transmitted - the wasm
-        // returns only the final signed tx. Reuses the EXACT same params the
-        // cold path passes (notes, fee, anchor, merkle paths, accountIndex,
-        // target height, expected branch id, mainnet), so nullifier derivation
-        // and the fail-closed branch-id guard match the cold path bit for bit.
+        // ── HOT path ──────────────────────────────────────────────────────
+        // Self-custody wallet: the prover builds + proves the same PCZT the
+        // cold path does, from this account's UFVK; it is signed here and
+        // broadcast. The PCZT is never persisted. Same params as the cold path
+        // (notes, fee, anchor, merkle paths, target height, expected branch id,
+        // mainnet), so the fail-closed branch-id guard matches bit for bit.
         if (isHotMigration) {
-          const migrateSeed = migratePayload.mnemonic!;
+          const migrateAccount = hotSpendAccount(walletId, migratePayload.accountIndex);
           emitProgress(
             'building, proving & signing turnstile tx (halo2)',
             `${orchardNotes.length} orchard spends -> ironwood`,
@@ -7268,38 +7161,52 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           try {
             // target_height = live tip; at/after NU6.3 activation this selects
             // TxVersion::V6 (orchard spends + ironwood outputs) in the builder.
-            // account_index MUST be the account the orchard notes were scanned
-            // under (same as the cold path) or the wasm's nullifier check
-            // rejects every spend. NU63_CONSENSUS_BRANCH_ID is the live value
+            // The keys MUST be the account the orchard notes were scanned under
+            // or no spend accepts them. NU63_CONSENSUS_BRANCH_ID is the live value
             // validated from GetLightdInfo above (never the placeholder); the
             // producer refuses to build unless the branch id it binds equals it.
-            migrateTxHex = (await proveViaOffscreen({
-              fn: 'build_signed_turnstile_migration',
-              args: [
-                migrateSeed,
-                JSON.stringify(notesForWasm),
-                fee.toString(),
-                anchorHex,
-                JSON.stringify(pathsForWasm),
-                migratePayload.accountIndex,
-                migrateTip.height,
-                NU63_CONSENSUS_BRANCH_ID,
-                migratePayload.mainnet,
-                null,
-              ],
-            })) as string;
+            const signing = withSpendKeys(
+              wasmModule.SpendKeys,
+              migratePayload.vault,
+              migrateAccount,
+              migratePayload.mainnet,
+              async keys => {
+                const built = (await proveViaOffscreen({
+                  fn: 'build_turnstile_migration_pczt',
+                  args: [
+                    keys.ufvk(),
+                    JSON.stringify(notesForWasm),
+                    fee.toString(),
+                    anchorHex,
+                    JSON.stringify(pathsForWasm),
+                    migrateAccount,
+                    migrateTip.height,
+                    NU63_CONSENSUS_BRANCH_ID,
+                    migratePayload.mainnet,
+                    null,
+                  ],
+                })) as { pczt_hex: string };
+                return keys.sign_pczt(built.pczt_hex);
+              },
+            );
+            migrateTxHex = await build.race(signing);
           } catch (e) {
-            // do NOT log the seed or the caught args; message only
-            console.error('[zcash-worker] build_signed_turnstile_migration failed');
+            // message only, never the caught args
+            console.error(
+              '[zcash-worker] turnstile hot migration failed:',
+              e instanceof Error ? e.message : String(e),
+            );
             throw e;
           } finally {
             clearInterval(hotProvingTicker);
           }
 
           emitProgress('turnstile tx signed', `${migrateTxHex.length / 2} bytes`);
+          // the point of no return: a stop from here on is refused
+          build.commit();
           emitProgress('broadcasting migration');
           const migrateHotTxData = hexDecode(migrateTxHex);
-          const migrateHotClient = await makeZcashClient(
+          const migrateHotClient = makeZcashClient(
             migratePayload.serverUrl,
             migratePayload.backend,
           );
@@ -7317,7 +7224,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // The migration spends EVERY orchard note. Both send paths mark
           // their inputs spent at broadcast; this one did not, so for the
           // whole confirmation window the wallet still counted the migrated
-          // orchard balance as spendable — and the fail-closed guard only
+          // orchard balance as spendable - and the fail-closed guard only
           // fires when ironwood notes are absent, so a second migration
           // launched in that window would build a conflicting spend of the
           // same notes.
@@ -7350,7 +7257,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         );
         // target_height = live tip; at/after NU6.3 activation this selects
         // TxVersion::V6 (orchard spends + ironwood outputs) in the builder.
-        const built = await proveViaOffscreen({
+        const proving = proveViaOffscreen({
           fn: 'build_turnstile_migration_pczt',
           args: [
             migratePayload.ufvk,
@@ -7369,6 +7276,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             null,
           ],
         });
+        const built = await build.race(proving);
         const migrateParsed = built as {
           pczt_hex: string;
           summary: unknown;
@@ -7398,9 +7306,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         emitProgress('turnstile PCZT QR ready', `${migrateUrFrames.length} frames`);
 
         // The migration spends EVERY orchard note, so a completion that does
-        // not mark them leaves the whole legacy balance looking spendable — and
+        // not mark them leaves the whole legacy balance looking spendable - and
         // a second migration launched in that window builds a conflicting
         // spend. The hot branch above already does this; see ColdSendContext.
+        build.check();
         const migrateColdSendId = await stashColdSend(walletId, {
           nullifiers: orchardNotes.map(n => n.nullifier),
           amount: migrateAmount.toString(),
@@ -7458,7 +7367,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         );
         const migrateTxData = hexDecode(migrateTxHex);
 
-        const migrateCompleteClient = await makeZcashClient(migrateCompletePayload.serverUrl);
+        const migrateCompleteClient = makeZcashClient(migrateCompletePayload.serverUrl);
         const migrateResult = await migrateCompleteClient.sendTransaction(migrateTxData);
         if (migrateResult.errorCode !== 0) {
           throw new Error(
@@ -7507,15 +7416,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           outputs: { address: string; amount: string; memo?: string }[];
           accountIndex: number;
           mainnet: boolean;
-          mnemonic: string;
+          vault: SealedVault;
+          /** the page's key for stopping this build (see build-abort.ts) */
+          cancelKey?: string;
         };
+        const build = builds.begin(multiPayload.cancelKey);
 
         if (!multiPayload.outputs || multiPayload.outputs.length === 0) {
           throw new Error('outputs array required');
         }
-        if (!multiPayload.mnemonic) {
-          throw new Error('mnemonic required for multi-output send');
-        }
+        const multiAccount = hotSpendAccount(walletId, multiPayload.accountIndex);
 
         // validate all outputs up front before building any tx
         for (let i = 0; i < multiPayload.outputs.length; i++) {
@@ -7557,18 +7467,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         const txids: string[] = [];
         const fees: string[] = [];
-        // live consensus branch id (NU6.3-safe); resolved once, reused for every output
-        let multiBranchIdHex: string | null = null;
 
         // FAIL-CLOSED (NU6.3): multi-send only builds orchard txs today, which
         // are consensus-disabled post-activation, and there is no ironwood
         // multi-send path yet. Refuse up front rather than build invalid
         // orchard txs per output.
         // TODO(ironwood multi-send): route the ironwood pool through
-        // build_signed_ironwood_send per output.
+        // build_ironwood_send_pczt per output.
         {
-          const multiGuardClient = await makeZcashClient(multiPayload.serverUrl);
-          const multiGuardTip = await multiGuardClient.getTip();
+          const multiGuardClient = makeZcashClient(multiPayload.serverUrl);
+          const multiGuardTip = await build.race(multiGuardClient.getTip());
           if (multiGuardTip.height >= nu63ActivationHeight(multiPayload.mainnet)) {
             throw new Error(
               'orchard sends are disabled at NU6.3 - multi-send does not support ironwood ' +
@@ -7609,7 +7517,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           const nTOutputs = isTransparent ? 1 : 0;
 
           // Estimate fee and select notes. The pool is pinned to orchard to
-          // match the build_signed_spend / buildWitnesses('orchard') calls
+          // match the build_unsigned_pczt / buildWitnesses('orchard') calls
           // below; the NU6.3 guard above already refused post-activation, so
           // orchard is the only reachable pool here. Passed explicitly rather
           // than leaning on selectNotes' legacy default.
@@ -7638,11 +7546,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           );
 
           // build merkle witnesses
-          const multiClient = await makeZcashClient(multiPayload.serverUrl);
-          const multiTip = await multiClient.getTip();
-          if (multiBranchIdHex === null) {
-            multiBranchIdHex = await fetchBranchIdHex(multiClient);
-          }
+          const multiClient = makeZcashClient(multiPayload.serverUrl);
+          const multiTip = await build.race(multiClient.getTip());
 
           const multiAnchorHeight = await resolveAnchorHeight(walletId, multiTip.height);
           emitMultiProgress(
@@ -7689,30 +7594,40 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
           let txHex: string;
           try {
-            txHex = (await proveViaOffscreen({
-              fn: 'build_signed_spend',
-              args: [
-                multiPayload.mnemonic,
-                notesJson,
-                recipient,
-                amountZat.toString(),
-                fee.toString(),
-                multiAnchor,
-                merklePathsForWasm,
-                multiPayload.accountIndex,
-                multiPayload.mainnet,
-                memoHex,
-                multiBranchIdHex,
-              ],
-            })) as string;
+            const signing = withSpendKeys(
+              wasmModule.SpendKeys,
+              multiPayload.vault,
+              multiAccount,
+              multiPayload.mainnet,
+              async keys => {
+                const built = (await proveViaOffscreen({
+                  fn: 'build_unsigned_pczt',
+                  args: [
+                    keys.ufvk(),
+                    notesJson,
+                    recipient,
+                    amountZat.toString(),
+                    fee.toString(),
+                    multiAnchor,
+                    merklePathsForWasm,
+                    multiTip.height,
+                    multiPayload.mainnet,
+                    memoHex,
+                  ],
+                })) as { pczt_hex: string };
+                return keys.sign_pczt(built.pczt_hex);
+              },
+            );
+            txHex = await build.race(signing);
           } finally {
             clearInterval(provingTicker);
           }
 
-          // broadcast
+          // broadcast; from the first one on, a stop is refused
+          build.commit();
           emitMultiProgress(`output ${outputIdx + 1}: broadcasting`);
           const txData = hexDecode(txHex);
-          const broadcastClient = await makeZcashClient(multiPayload.serverUrl);
+          const broadcastClient = makeZcashClient(multiPayload.serverUrl);
           const broadcastResult = await broadcastClient.sendTransaction(txData);
           if (broadcastResult.errorCode !== 0) {
             throw new Error(
@@ -7761,110 +7676,130 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           throw new Error('wasm not initialized');
         }
 
-        const { mnemonic, serverUrl, tAddresses, mainnet, addressIndexMap } = payload as {
-          mnemonic: string;
+        const { vault, serverUrl, tAddresses, mainnet } = payload as {
+          /** the sealed vault this worker opens itself */
+          vault: SealedVault;
           serverUrl: string;
+          /** position is the t-branch index: legacy indices included */
           tAddresses: string[];
           mainnet: boolean;
-          addressIndexMap?: Record<string, number>;
+          /** the page's key for stopping this build (see build-abort.ts) */
+          cancelKey?: string;
         };
+        const build = builds.begin((payload as { cancelKey?: string }).cancelKey);
+        const progress = buildProgress(walletId);
 
-        const client = await makeZcashClient(serverUrl);
-        const tip = await client.getTip();
-        const allUtxos = await client.getAddressUtxos(tAddresses);
+        const client = makeZcashClient(serverUrl);
+        progress('fetching chain tip');
+        const tip = await build.race(client.getTip());
+        const allUtxos = await build.race(client.getAddressUtxos(tAddresses));
         if (allUtxos.length === 0) {
           throw new Error('no transparent UTXOs to shield');
         }
 
-        // build address → derivation index lookup
-        const addrToIndex = new Map<string, number>();
-        if (addressIndexMap) {
-          for (const [addr, idx] of Object.entries(addressIndexMap)) {
-            addrToIndex.set(addr, idx);
-          }
-        } else {
-          for (const addr of tAddresses) {
-            addrToIndex.set(addr, 0);
-          }
-        }
-
-        // group UTXOs by derivation index (WASM signs all inputs with one key)
-        const byIndex = new Map<number, typeof allUtxos>();
-        for (const utxo of allUtxos) {
-          const idx = addrToIndex.get(utxo.address) ?? 0;
-          let group = byIndex.get(idx);
-          if (!group) {
-            group = [];
-            byIndex.set(idx, group);
-          }
-          group.push(utxo);
-        }
-
-        // orchard recipient (same for all txs)
-        const keys = new wasmModule.WalletKeys(mnemonic);
-        let rawRecipient: string;
-        try {
-          rawRecipient = keys.get_receiving_address(mainnet);
-        } finally {
-          keys.free();
-        }
-        const recipient = fixOrchardAddress(rawRecipient, mainnet);
+        // one group per t-branch index: WASM signs all inputs with one key
+        const byIndex = utxosByTIndex(allUtxos, tAddresses);
 
         // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe)
-        const shieldBranchIdHex = await fetchBranchIdHex(client);
+        const shieldBranchIdHex = await build.race(fetchBranchIdHex(client));
+        // the same unsigned builders the cold path uses: ironwood from NU6.3,
+        // where an orchard output would strand the funds
+        const shieldIntoIronwood = tip.height >= nu63ActivationHeight(mainnet);
 
-        // shield each group with its matching privkey
         let totalShielded = 0n;
         let totalFee = 0n;
         let totalUtxos = 0;
         let lastTxid = '';
 
-        for (const [addrIndex, utxos] of byIndex) {
-          const groupZat = utxos.reduce((sum, u) => sum + u.valueZat, 0n);
-          const fee = computeShieldFee(utxos.length);
-          if (groupZat <= fee) {
-            console.warn(
-              `[zcash-worker] skipping index ${addrIndex}: ${groupZat} zat <= ${fee} fee`,
+        // transparent funds shield only into the pocket they belong to, and
+        // sign with that pocket's t-branch
+        const shieldAccount = hotSpendAccount(walletId);
+        await withSpendKeys(wasmModule.SpendKeys, vault, shieldAccount, mainnet, async keys => {
+          const recipient = fixOrchardAddress(keys.receiving_address(), mainnet);
+
+          // shield each group with its matching key
+          for (const [addrIndex, utxos] of byIndex) {
+            const groupZat = utxos.reduce((sum, u) => sum + u.valueZat, 0n);
+            const fee = computeShieldFee(utxos.length);
+            if (groupZat <= fee) {
+              console.warn(
+                `[zcash-worker] skipping index ${addrIndex}: ${groupZat} zat <= ${fee} fee`,
+              );
+              continue;
+            }
+
+            const shieldAmount = groupZat - fee;
+            const pubkeyHex = keys.transparent_pubkey(addrIndex);
+            // every input must be locked to this key: this pocket's own t-branch
+            // at this index. Anything else is not this pocket's money.
+            if (!utxos.every(u => isP2pkhOf(u.script, pubkeyHex))) {
+              throw new Error(
+                `transparent input is not on pocket ${shieldAccount} index ${addrIndex}`,
+              );
+            }
+
+            const utxosJson = JSON.stringify(
+              utxos.map(u => ({
+                txid: hexEncode(u.txid),
+                vout: u.outputIndex,
+                value: Number(u.valueZat),
+                script: hexEncode(u.script),
+              })),
             );
-            continue;
+
+            progress('building & proving transaction', `${utxos.length} inputs`);
+            const proving = proveViaOffscreen(
+              shieldIntoIronwood
+                ? {
+                    fn: 'build_unsigned_shielding_ironwood',
+                    args: [
+                      utxosJson,
+                      pubkeyHex,
+                      recipient,
+                      shieldAmount.toString(),
+                      fee.toString(),
+                      tip.height,
+                      parseInt(shieldBranchIdHex, 16),
+                      mainnet,
+                      null,
+                    ],
+                  }
+                : {
+                    fn: 'build_unsigned_shielding',
+                    args: [
+                      utxosJson,
+                      recipient,
+                      shieldAmount.toString(),
+                      fee.toString(),
+                      tip.height,
+                      mainnet,
+                      shieldBranchIdHex,
+                    ],
+                  },
+            );
+            const built = JSON.parse((await build.race(proving)) as string) as {
+              sighashes: string[];
+              unsigned_tx_hex: string;
+            };
+            const txHex = keys.sign_shielding(
+              addrIndex,
+              built.unsigned_tx_hex,
+              JSON.stringify(built.sighashes),
+            );
+            // the point of no return: a stop from here on is refused
+            build.commit();
+            progress('broadcasting transaction');
+            const result = await client.sendTransaction(hexDecode(txHex));
+            if (result.errorCode !== 0) {
+              throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
+            }
+
+            lastTxid = await resolveBroadcastTxid(result, txHex, serverUrl);
+            totalShielded += shieldAmount;
+            totalFee += fee;
+            totalUtxos += utxos.length;
           }
-
-          const shieldAmount = groupZat - fee;
-          const privkeyHex = wasmModule.derive_transparent_privkey(mnemonic, 0, addrIndex);
-
-          const utxosJson = JSON.stringify(
-            utxos.map(u => ({
-              txid: hexEncode(u.txid),
-              vout: u.outputIndex,
-              value: Number(u.valueZat),
-              script: hexEncode(u.script),
-            })),
-          );
-
-          const txHex = (await proveViaOffscreen({
-            fn: 'build_shielding',
-            args: [
-              utxosJson,
-              privkeyHex,
-              recipient,
-              shieldAmount.toString(),
-              fee.toString(),
-              tip.height,
-              mainnet,
-              shieldBranchIdHex,
-            ],
-          })) as string;
-          const txData = hexDecode(txHex);
-          const result = await client.sendTransaction(txData);
-          if (result.errorCode !== 0) {
-            throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
-          }
-
-          lastTxid = await resolveBroadcastTxid(result, txHex, serverUrl);
-          totalShielded += shieldAmount;
-          totalFee += fee;
-          totalUtxos += utxos.length;
-        }
+        });
 
         if (totalUtxos === 0) {
           throw new Error('all UTXO groups too small to cover fees');
@@ -7899,28 +7834,35 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           tAddresses: string[];
           mainnet: boolean;
           ufvk: string;
-          addressIndexMap?: Record<string, number>;
+          /** Ledger: one round of at most this many inputs (32 per approval) */
+          maxInputs?: number;
+          /** Ledger: the account's external ovk on the output, which the app
+           *  needs to review it (it refuses an output it cannot decrypt) */
+          ledgerOvk?: boolean;
+          /** the page's key for stopping this build (see build-abort.ts) */
+          cancelKey?: string;
         };
+        const build = builds.begin(shieldUnsignedPayload.cancelKey);
+        const progress = buildProgress(walletId);
 
-        const shieldUClient = await makeZcashClient(shieldUnsignedPayload.serverUrl);
-        const shieldUTip = await shieldUClient.getTip();
+        const shieldUClient = makeZcashClient(shieldUnsignedPayload.serverUrl);
+        progress('fetching chain tip');
+        const shieldUTip = await build.race(shieldUClient.getTip());
         // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe)
-        const shieldUBranchIdHex = await fetchBranchIdHex(shieldUClient);
-        const shieldUUtxos = await shieldUClient.getAddressUtxos(shieldUnsignedPayload.tAddresses);
+        const shieldUBranchIdHex = await build.race(fetchBranchIdHex(shieldUClient));
+        const shieldUAll = await build.race(
+          shieldUClient.getAddressUtxos(shieldUnsignedPayload.tAddresses),
+        );
+        const shieldUUtxos =
+          shieldUnsignedPayload.maxInputs === undefined
+            ? shieldUAll
+            : shieldRoundUtxos(
+                shieldUAll,
+                shieldUnsignedPayload.tAddresses,
+                shieldUnsignedPayload.maxInputs,
+              );
         if (shieldUUtxos.length === 0) {
           throw new Error('no transparent UTXOs to shield');
-        }
-
-        // build address → derivation index lookup
-        const shieldUAddrToIndex = new Map<string, number>();
-        if (shieldUnsignedPayload.addressIndexMap) {
-          for (const [addr, idx] of Object.entries(shieldUnsignedPayload.addressIndexMap)) {
-            shieldUAddrToIndex.set(addr, idx);
-          }
-        } else {
-          for (const addr of shieldUnsignedPayload.tAddresses) {
-            shieldUAddrToIndex.set(addr, 0);
-          }
         }
 
         // orchard recipient from watch-only wallet
@@ -7942,7 +7884,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const shieldUAmount = shieldUTotal - shieldUFee;
 
         // collect address indices in UTXO order
-        const shieldUAddrIndices = shieldUUtxos.map(u => shieldUAddrToIndex.get(u.address) ?? 0);
+        const shieldUAddrIndices = shieldUUtxos.map(tIndexOf(shieldUnsignedPayload.tAddresses));
 
         const shieldUUtxosJson = JSON.stringify(
           shieldUUtxos.map(u => ({
@@ -7961,6 +7903,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const shieldUPostNu63 =
           shieldUTip.height >= nu63ActivationHeight(shieldUnsignedPayload.mainnet);
         let shieldUResult: string;
+        let shieldUPubkeyHex: string | undefined;
         if (shieldUPostNu63) {
           const shieldUIdxSet = new Set(shieldUAddrIndices);
           if (shieldUIdxSet.size > 1) {
@@ -7973,7 +7916,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             shieldUnsignedPayload.ufvk,
             shieldUAddrIndices[0] ?? 0,
           );
-          shieldUResult = (await proveViaOffscreen({
+          progress('building & proving transaction');
+          const proving = proveViaOffscreen({
             fn: 'build_unsigned_shielding_ironwood',
             args: [
               shieldUUtxosJson,
@@ -7985,10 +7929,14 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               parseInt(shieldUBranchIdHex, 16), // expected_branch_id (numeric)
               shieldUnsignedPayload.mainnet,
               null, // memo_hex
+              shieldUnsignedPayload.ledgerOvk ? shieldUnsignedPayload.ufvk : null,
             ],
-          })) as string;
+          });
+          shieldUResult = (await build.race(proving)) as string;
+          shieldUPubkeyHex = shieldUPubkey;
         } else {
-          shieldUResult = (await proveViaOffscreen({
+          progress('building & proving transaction');
+          const proving = proveViaOffscreen({
             fn: 'build_unsigned_shielding',
             args: [
               shieldUUtxosJson,
@@ -7999,8 +7947,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               shieldUnsignedPayload.mainnet,
               shieldUBranchIdHex,
             ],
-          })) as string;
+          });
+          shieldUResult = (await build.race(proving)) as string;
         }
+        progress('unsigned tx ready');
 
         const shieldUParsed = JSON.parse(shieldUResult) as {
           sighashes: string[];
@@ -8019,6 +7969,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             summary: shieldUParsed.summary,
             fee: shieldUFee.toString(),
             addressIndices: shieldUAddrIndices,
+            ...(shieldUPubkeyHex ? { transparentPubkeyHex: shieldUPubkeyHex } : {}),
           },
         });
         return;
@@ -8046,7 +7997,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         );
         const shieldCompleteTxData = hexDecode(shieldCompleteTxHex);
 
-        const shieldCompleteClient = await makeZcashClient(shieldCompletePayload.serverUrl);
+        const shieldCompleteClient = makeZcashClient(shieldCompletePayload.serverUrl);
         const shieldCompleteResult =
           await shieldCompleteClient.sendTransaction(shieldCompleteTxData);
         if (shieldCompleteResult.errorCode !== 0) {
@@ -8062,6 +8013,68 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           network: 'zcash',
           walletId,
           payload: { txid: shieldCompleteTxid },
+        });
+        return;
+      }
+
+      case 'transparent-deposit-plan': {
+        await initWasm();
+        if (!wasmModule) {
+          throw new Error('wasm not initialized');
+        }
+        const { serverUrl, ...req } = payload as DepositRequest & { serverUrl: string };
+        const chain = depositChain(await makeZcashClient(serverUrl), serverUrl);
+        workerSelf.postMessage({
+          type: 'result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: await planDeposit(wasmModule, chain, req),
+        });
+        return;
+      }
+
+      case 'transparent-deposit': {
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
+        await initWasm();
+        const wasm = wasmModule;
+        if (!wasm) {
+          throw new Error('wasm not initialized');
+        }
+        const { vault, serverUrl, ...req } = payload as DepositRequest & {
+          vault: SealedVault;
+          serverUrl: string;
+          reviewedFee: string;
+        };
+        const chain = depositChain(await makeZcashClient(serverUrl), serverUrl);
+        // signs with this pocket's t-branch at the swap's own index: the address that funds it
+        const sent = await withSpendKeys(
+          wasm.SpendKeys,
+          vault,
+          hotSpendAccount(walletId),
+          req.mainnet,
+          keys => sendDeposit(wasm, chain, keys, req),
+        );
+        await recordSentTx({
+          walletId,
+          txid: sent.txid,
+          amount: req.amountZat,
+          fee: sent.fee,
+          recipient: req.to,
+          pool: 'transparent',
+          kind: 'send',
+          memo: req.memo,
+          sentAt: Date.now(),
+          expiryHeight: parseExpiryHeight(sent.txHex),
+        });
+        workerSelf.postMessage({
+          type: 'tx-result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: { txid: sent.txid, fee: sent.fee },
         });
         return;
       }
@@ -8123,7 +8136,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             alphaHex: string;
             commitments: string;
           };
-        // signed variant — coordinator (zafu/poker-escrow) extracts signer identifier from VK
+        // signed variant - coordinator (zafu/poker-escrow) extracts signer identifier from VK
         const result = wasmModule!.frost_spend_sign_round2_signed(
           ephemeralSeedHex,
           keyPackageHex,
@@ -8231,7 +8244,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           serverUrl: string;
           txHex: string;
         };
-        const bClient = await makeZcashClient(bUrl);
+        const bClient = makeZcashClient(bUrl);
         const bResult = await bClient.sendTransaction(hexDecode(bTxHex));
         if (bResult.errorCode !== 0) {
           throw new Error(`broadcast failed (${bResult.errorCode}): ${bResult.errorMessage}`);
@@ -8246,6 +8259,108 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         });
         return;
       }
+      case 'pczt-extract-tx': {
+        // the broadcast-ready tx of a signed PCZT and its txid, without the
+        // network: the Ledger flow checkpoints these before it broadcasts, so
+        // an uncertain broadcast is settled by a lookup, never a second approval
+        await initWasm();
+        if (!wasmModule) {
+          throw new Error('wasm not initialized');
+        }
+        const { signedPcztHex: xPczt } = payload as { signedPcztHex: string };
+        const xTxHex = wasmModule.extract_signed_tx_from_pczt(xPczt);
+        // compute_txid is wire order; report display order like resolveBroadcastTxid
+        const xTxid = (wasmModule.compute_txid(xTxHex).match(/../g) ?? []).reverse().join('');
+        workerSelf.postMessage({
+          type: 'result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: { txHex: xTxHex, txid: xTxid },
+        });
+        return;
+      }
+      case 'broadcast-signed-tx': {
+        // a checkpointed signed tx, with the same cold-broadcast bookkeeping as
+        // send-tx-pczt-complete. A node rejection throws "broadcast failed
+        // (code)"; any other throw leaves the outcome unknown.
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
+        const {
+          serverUrl: sUrl,
+          txHex: sTxHex,
+          coldSendId: sColdSendId,
+        } = payload as { serverUrl: string; txHex: string; coldSendId?: string };
+        const sResult = await makeZcashClient(sUrl).sendTransaction(hexDecode(sTxHex));
+        if (sResult.errorCode !== 0) {
+          throw new Error(`broadcast failed (${sResult.errorCode}): ${sResult.errorMessage}`);
+        }
+        const sTxid = await resolveBroadcastTxid(sResult, sTxHex, sUrl);
+        await finalizeColdBroadcast(walletId, sColdSendId, sTxid, sTxHex);
+        workerSelf.postMessage({
+          type: 'tx-result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: { txid: sTxid },
+        });
+        return;
+      }
+      case 'lookup-tx': {
+        // whether the server that was asked to broadcast our own tx has it; a
+        // failure reads as "not seen", never "gone". Backends disagree on the
+        // byte order of TxFilter.hash, so try display order, then wire order.
+        const { serverUrl: lUrl, txid: lTxid } = payload as { serverUrl: string; txid: string };
+        const lClient = makeZcashClient(lUrl);
+        const lDisplay = hexDecode(lTxid);
+        let lFound = false;
+        let lHeight: number | undefined;
+        for (const lHash of [lDisplay, lDisplay.slice().reverse()]) {
+          try {
+            const lRaw = await lClient.getTransaction(lHash);
+            lFound = lRaw.data.length > 0;
+            lHeight = lRaw.height > 0 ? lRaw.height : undefined;
+          } catch {
+            // not in this order, or unreachable
+          }
+          if (lFound) {
+            break;
+          }
+        }
+        workerSelf.postMessage({
+          type: 'result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: { found: lFound, height: lHeight },
+        });
+        return;
+      }
+      case 'shield-eligible': {
+        // what a Ledger shielding run has ahead of it (count + value, no prev-tx
+        // fetch); a failed fetch throws so it never reads as "no funds"
+        const {
+          serverUrl: eUrl,
+          tAddresses: eAddrs,
+          maxInputs: eMax,
+        } = payload as { serverUrl: string; tAddresses: string[]; maxInputs: number };
+        const eUtxos = await makeZcashClient(eUrl).getAddressUtxos(eAddrs);
+        const eRound = shieldRoundUtxos(eUtxos, eAddrs, Math.max(1, eMax));
+        const eRoundZat = eRound.reduce((sum, u) => sum + u.valueZat, 0n);
+        workerSelf.postMessage({
+          type: 'result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: {
+            inputCount: eUtxos.length,
+            totalZat: eUtxos.reduce((sum, u) => sum + u.valueZat, 0n).toString(),
+            belowThreshold: eRound.length > 0 && eRoundZat <= computeShieldFee(eRound.length),
+          },
+        });
+        return;
+      }
       case 'get-transparent-utxos': {
         // spendable transparent UTXOs for the given addresses (e.g. a Ledger
         // t-addr), each with the full prev-tx bytes the Ledger legacy signer
@@ -8254,7 +8369,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           serverUrl: string;
           addresses: string[];
         };
-        const uClient = await makeZcashClient(uUrl);
+        const uClient = makeZcashClient(uUrl);
         const uUtxos = await uClient.getAddressUtxos(uAddrs);
         const uOut = [];
         for (const u of uUtxos) {
@@ -8300,7 +8415,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           ? wasmModule.complete_ironwood_pczt(pcztHex, orchardSigs, spendIndices)
           : wasmModule.complete_orchard_pczt(pcztHex, orchardSigs, spendIndices);
         const cTxData = hexDecode(cTxHex);
-        const cClient = await makeZcashClient(serverUrl);
+        const cClient = makeZcashClient(serverUrl);
         const cResult = await cClient.sendTransaction(cTxData);
         if (cResult.errorCode !== 0) {
           throw new Error(`broadcast failed (${cResult.errorCode}): ${cResult.errorMessage}`);
@@ -8514,45 +8629,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         return;
       }
 
-      case 'get-orchard-account-info': {
-        await initWasm();
-        if (!wasmModule) {
-          throw new Error('wasm not initialized');
-        }
-        const { mnemonic, mainnet: infoMainnet } = payload as {
-          mnemonic: string;
-          mainnet: boolean;
-        };
-        const infoKeys = new wasmModule.WalletKeys(mnemonic);
-        let fvkHex: string;
-        try {
-          fvkHex = infoKeys.get_fvk_hex();
-        } finally {
-          infoKeys.free();
-        }
-        // WalletKeys has no ufvk-string export (only watch-only imports carry
-        // one directly) - encode it ourselves (ZIP-316) and self-check with
-        // the wasm module's own decoder so an encoder bug fails loudly here
-        // instead of surfacing as an opaque proof-build error downstream.
-        const ufvkStr = encodeOrchardUfvk(hexDecode(fvkHex), infoMainnet);
-        if (!wasmModule.validate_ufvk(ufvkStr)) {
-          throw new Error(
-            'internal error: locally-encoded UFVK failed wasm validation (encoder bug)',
-          );
-        }
-        workerSelf.postMessage({
-          type: 'result',
-          id,
-          network: 'zcash',
-          walletId,
-          payload: { fvkHex, ufvkStr },
-        });
-        return;
-      }
-
       case 'get-consensus-branch-id': {
         const { serverUrl: branchServerUrl } = payload as { serverUrl: string };
-        const branchClient = await makeZcashClient(branchServerUrl);
+        const branchClient = makeZcashClient(branchServerUrl);
         const branchIdHex = await fetchBranchIdHex(branchClient);
         workerSelf.postMessage({
           type: 'result',
@@ -8590,7 +8669,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           }
           return note;
         });
-        const witnessClient = await makeZcashClient(witnessServerUrl);
+        const witnessClient = makeZcashClient(witnessServerUrl);
         const witnessResult = await buildWitnesses(
           witnessClient,
           walletId,
@@ -8629,6 +8708,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       walletId,
       error: err instanceof Error ? err.message : String(err),
     });
+  } finally {
+    if (typeof cancelKey === 'string') {
+      builds.end(cancelKey);
+    }
   }
 };
 
@@ -8637,5 +8720,5 @@ initWasm()
     workerSelf.postMessage({ type: 'ready', id: '', network: 'zcash' });
   })
   .catch(err => {
-    console.error('[zcash-worker] wasm init failed:', err);
+    console.error(`[zcash-worker] wasm init failed: ${errText(err)}`);
   });

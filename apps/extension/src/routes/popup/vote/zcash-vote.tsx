@@ -1,5 +1,5 @@
 /**
- * Zcash coinholder voting — read-only rounds + tallies (phase 1).
+ * Zcash coinholder voting - read-only rounds + tallies (phase 1).
  *
  * Data flows through the functional service in services/voting: pinned
  * static config → dynamic config → vote servers. This screen owns no
@@ -9,12 +9,18 @@
  * active rounds carry one honest line instead of dead buttons.
  */
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@repo/ui/lib/utils';
+import { Segmented } from '@repo/ui/components/ui/segmented';
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from '@repo/ui/components/ui/tooltip';
 import { loadVoting, fetchTally } from '../../../services/voting/api';
-import { resolveVotingConfigSource } from '../../../services/voting/resolve';
-import type { VotingRound, RoundStatus } from '../../../services/voting/types';
+import type { VotingRound, RoundStatus, VotingProposal } from '../../../services/voting/types';
 
 // round status is a category, not an alarm - fg tokens only (DESIGN.md).
 const STATUS_STYLE: Record<RoundStatus, string> = {
@@ -45,6 +51,27 @@ const formatEnd = (round: VotingRound): string => {
   return `ended ${new Date(round.votingEnd * 1000).toISOString().slice(0, 10)}`;
 };
 
+/**
+ * `OptionTally.weight` is `total_value` off the tally-results wire - a count
+ * of 0.125-zec ballots, not zec and not zatoshi. Confirmed against the
+ * protocol: `zcash_voting::governance::BALLOT_DIVISOR = 12_500_000` zatoshi
+ * (one ballot), and valargroup's own reference UI (vote-sdk `ui/src/App.tsx`,
+ * `ballotsToZEC`) renders finalized `total_value` the same way: `ballots *
+ * BALLOT_DIVISOR / 1e8`. Converting here, once, keeps every number this
+ * screen shows honest zec rather than a raw protocol count mislabeled.
+ */
+const BALLOT_ZATOSHI = 12_500_000;
+const ballotsToZec = (ballots: number): number => (ballots * BALLOT_ZATOSHI) / 1e8;
+
+// show every significant digit the conversion produces, zec's own precision
+// (8dp) as the ceiling.
+const formatZec = (zec: number): string =>
+  zec.toLocaleString(undefined, { maximumFractionDigits: 8 });
+
+const formatBallots = (ballots: number): string => ballots.toLocaleString();
+
+const shortRoundId = (id: string): string => `${id.slice(0, 10)}…`;
+
 export const ZcashVotePage = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   // active vs past, same split the penumbra governance screen uses so the two
@@ -58,7 +85,7 @@ export const ZcashVotePage = () => {
   const votingQ = useQuery({
     queryKey: ['zcash-vote', 'rounds'],
     staleTime: 60_000,
-    queryFn: () => resolveVotingConfigSource().then(loadVoting),
+    queryFn: loadVoting,
   });
 
   const allRounds = votingQ.data?.rounds ?? [];
@@ -73,7 +100,7 @@ export const ZcashVotePage = () => {
 
   const tabClass = (on: boolean) =>
     cn(
-      'text-xs px-2 py-1 rounded-md transition-colors',
+      'text-xs px-2 py-1 transition-colors',
       on ? 'text-fg bg-elev-2' : 'text-fg-muted hover:text-fg-high',
     );
 
@@ -86,12 +113,15 @@ export const ZcashVotePage = () => {
 
       {/* active / past tabs (+ test reveal), matching the penumbra screen */}
       <div className='flex items-center gap-2'>
-        <button onClick={() => setFilter('active')} className={tabClass(filter === 'active')}>
-          active
-        </button>
-        <button onClick={() => setFilter('past')} className={tabClass(filter === 'past')}>
-          past
-        </button>
+        <Segmented
+          label='round filter'
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: 'active', label: 'active' },
+            { value: 'past', label: 'past' },
+          ]}
+        />
         {hasTest && (
           <button
             onClick={() => setShowTest(v => !v)}
@@ -105,7 +135,7 @@ export const ZcashVotePage = () => {
 
       {votingQ.isLoading && (
         <div className='flex items-center justify-center py-12'>
-          <div className='h-5 w-5 animate-spin border-2 border-zigner-gold border-t-transparent rounded-full' />
+          <div className='h-5 w-5 animate-spin border-2 border-zigner-gold border-t-transparent' />
         </div>
       )}
 
@@ -163,7 +193,7 @@ const RoundCard = ({
   const config = useQuery({
     queryKey: ['zcash-vote', 'rounds'],
     staleTime: 60_000,
-    queryFn: () => resolveVotingConfigSource().then(loadVoting),
+    queryFn: loadVoting,
   }).data?.config;
 
   const showTally = expanded && (round.status === 'tallying' || round.status === 'completed');
@@ -175,7 +205,7 @@ const RoundCard = ({
   });
 
   return (
-    <div className='rounded-lg border border-border-soft bg-elev-1'>
+    <div className='border border-border-soft bg-elev-1'>
       <button
         onClick={onToggle}
         className='flex w-full items-start justify-between p-3 text-left transition-colors hover:bg-elev-1'
@@ -236,11 +266,16 @@ const RoundCard = ({
                 <div className='flex items-center gap-2'>
                   <span className='text-data text-fg-high'>{p.title || `proposal ${p.id}`}</span>
                   {p.zipNumber && (
-                    <span className='rounded-sm bg-elev-2 px-1.5 py-0.5 text-label text-fg-muted'>
+                    <span className='bg-elev-2 px-1.5 py-0.5 text-label text-fg-muted'>
                       zip {p.zipNumber}
                     </span>
                   )}
                 </div>
+                {showTally && total > 0 && (
+                  <span className='text-label text-fg-dim tabular'>
+                    {formatZec(ballotsToZec(total))} zec tallied · {formatBallots(total)} ballots
+                  </span>
+                )}
                 {p.options.map(opt => {
                   const weight = tally?.options.find(o => o.optionId === opt.id)?.weight ?? 0;
                   const pct = total > 0 ? (weight / total) * 100 : 0;
@@ -250,17 +285,15 @@ const RoundCard = ({
                         {opt.label}
                       </span>
                       {showTally ? (
-                        <>
-                          <div className='h-1.5 flex-1 bg-elev-2'>
-                            <div
-                              className='h-full bg-zigner-gold/70'
-                              style={{ width: `${pct.toFixed(1)}%` }}
-                            />
-                          </div>
-                          <span className='w-12 shrink-0 text-right text-label text-fg-dim tabular'>
-                            {total > 0 ? `${pct.toFixed(1)}%` : '-'}
-                          </span>
-                        </>
+                        <TallyBar
+                          pct={pct}
+                          round={round}
+                          proposal={p}
+                          optionId={opt.id}
+                          optionLabel={opt.label}
+                          weight={weight}
+                          total={total}
+                        />
                       ) : (
                         <div className='h-px flex-1 bg-border-soft' />
                       )}
@@ -286,5 +319,92 @@ const RoundCard = ({
         </div>
       )}
     </div>
+  );
+};
+
+/**
+ * One option's share, as a bar whose length is its share of the proposal's
+ * tallied weight. The bar alone never carries the figures - they open on
+ * hover, keyboard focus or tap, so the resting screen stays quiet while
+ * every number the tally server sent us is still one touch away.
+ */
+const TallyBar = ({
+  pct,
+  round,
+  proposal,
+  optionId,
+  optionLabel,
+  weight: ballots,
+  total: totalBallots,
+}: {
+  pct: number;
+  round: VotingRound;
+  proposal: VotingProposal;
+  optionId: number;
+  optionLabel: string;
+  /** ballot count (0.125 zec each) from the wire - see `ballotsToZec`. */
+  weight: number;
+  total: number;
+}) => {
+  // Radix's own TooltipTrigger always closes on click (it composes our click
+  // handler with an unconditional `context.onClose()` right after it, and
+  // closes again, synchronously, on pointerdown if it was already open) - by
+  // design, so that clicking a trigger never leaves a stale tooltip over
+  // whatever the click did. We want the opposite here: the bar does nothing
+  // but show its figures, so a tap should toggle them. `wasOpenRef` captures
+  // the state on pointerdown, before Radix's own dismiss logic can touch it;
+  // the click handler defers its toggle with a macrotask so it always lands
+  // after Radix's synchronous close, instead of being overwritten by it.
+  const [open, setOpenState] = useState(false);
+  const openRef = useRef(false);
+  const wasOpenRef = useRef(false);
+  const setOpen = (next: boolean) => {
+    openRef.current = next;
+    setOpenState(next);
+  };
+  const zec = ballotsToZec(ballots);
+  return (
+    <TooltipProvider>
+      <Tooltip open={open} onOpenChange={setOpen}>
+        <TooltipTrigger asChild>
+          <button
+            type='button'
+            onPointerDown={() => {
+              wasOpenRef.current = openRef.current;
+            }}
+            onClick={() => {
+              const wasOpen = wasOpenRef.current;
+              setTimeout(() => setOpen(!wasOpen), 0);
+            }}
+            aria-label={`${optionLabel}: ${formatZec(zec)} zec, ${pct.toFixed(2)}%`}
+            className='flex flex-1 items-center gap-2 text-left'
+          >
+            <div className='h-1.5 flex-1 bg-elev-2'>
+              <div className='h-full bg-zigner-gold/70' style={{ width: `${pct.toFixed(1)}%` }} />
+            </div>
+            <span className='w-12 shrink-0 text-right text-label text-fg-dim tabular'>
+              {totalBallots > 0 ? `${pct.toFixed(1)}%` : '-'}
+            </span>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent
+          side='top'
+          collisionPadding={8}
+          className='flex max-w-[240px] flex-col gap-1 whitespace-normal lowercase'
+        >
+          <span className='text-fg-high'>{optionLabel}</span>
+          <span className='tabular'>
+            {formatZec(zec)} zec · {totalBallots > 0 ? `${pct.toFixed(2)}%` : 'no votes yet'}
+          </span>
+          <span className='text-fg-muted tabular'>{formatBallots(ballots)} ballots</span>
+          <span className='text-fg-muted tabular'>
+            {formatZec(ballotsToZec(totalBallots))} zec tallied total
+          </span>
+          <span className='text-fg-dim'>
+            proposal {proposal.id} · option {optionId} · round {shortRoundId(round.id)}
+          </span>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 };

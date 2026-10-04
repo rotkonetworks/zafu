@@ -47,7 +47,7 @@ export const GrantCamera = () => {
         <div className='flex w-full max-w-sm flex-col items-center gap-6 text-center'>
           <div
             className={cn(
-              'flex size-16 items-center justify-center rounded-full',
+              'flex size-16 items-center justify-center',
               state === 'granted'
                 ? 'bg-green-500/15'
                 : state === 'denied'
@@ -74,11 +74,7 @@ export const GrantCamera = () => {
 
           <div className='flex w-full flex-col gap-2'>
             {state === 'not-granted' && (
-              <Button
-                variant='gradient'
-                className='w-full'
-                onClick={() => void handleGrantAccess()}
-              >
+              <Button variant='primary' className='w-full' onClick={() => void handleGrantAccess()}>
                 <span className='i-ph-camera mr-2 size-4' />
                 grant camera access
               </Button>
@@ -93,12 +89,12 @@ export const GrantCamera = () => {
               </Button>
             )}
             {state === 'granted' && (
-              <Button variant='gradient' className='w-full' onClick={handleClose}>
+              <Button variant='primary' className='w-full' onClick={handleClose}>
                 close tab
               </Button>
             )}
             {(state === 'not-granted' || state === 'denied') && (
-              <Button variant='ghost' className='w-full text-fg-muted' onClick={handleClose}>
+              <Button variant='quiet' className='w-full text-fg-muted' onClick={handleClose}>
                 cancel
               </Button>
             )}

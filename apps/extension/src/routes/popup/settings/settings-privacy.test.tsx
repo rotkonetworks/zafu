@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 // Lets react-dom's act() run outside a test renderer.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-// The section only needs the storage module and the real ToggleSwitch; the rest
+// The section only needs the storage module and the real Toggle; the rest
 // of this file's imports (store, license, screen chrome) are replaced so the
 // test stays about the storage the settings screen writes.
 let stored: unknown;
@@ -43,10 +43,16 @@ const byPlaceholder = (placeholder: string): HTMLInputElement => {
   return hit as HTMLInputElement;
 };
 
-const byText = (text: string): HTMLButtonElement => {
-  const hit = [...document.querySelectorAll('button')].find(b => b.textContent === text);
-  if (!hit) throw new Error(`no button labelled ${text}`);
-  return hit as HTMLButtonElement;
+/** the "relay" Row(value) - its own "?" explain button makes it a
+ *  div[role=button] rather than a <button> (see Row), and the outer label
+ *  span's textContent now runs "relay" + the "?" button's own text, so
+ *  match on the start of the label rather than full equality. */
+const openRelaySheet = (): void => {
+  const hit = [...document.querySelectorAll('button, [role="button"]')].find(b =>
+    [...b.querySelectorAll('span')][0]?.textContent?.startsWith('relay'),
+  );
+  if (!hit) throw new Error('no "relay" row');
+  (hit as HTMLElement).click();
 };
 
 describe('ContactDiscoverySection', () => {
@@ -81,12 +87,16 @@ describe('ContactDiscoverySection', () => {
   it('stores "the default relay" as blank, so a user who never chose a host is not pinned to one', async () => {
     await render({ enabled: false, relayEndpoint: '', relayToken: '' });
 
-    // the input is pre-filled with the built-in default so opting in is one click
+    act(() => openRelaySheet());
+    await flush();
+
+    // the input is pre-filled with the built-in default so turning on is one click
     expect(byPlaceholder(DEFAULT_CONTACT_DISCOVERY_RELAY).value).toBe(
       DEFAULT_CONTACT_DISCOVERY_RELAY,
     );
 
-    act(() => byText('enable').click());
+    const toggle = document.querySelector('button[role="switch"]') as HTMLButtonElement;
+    act(() => toggle.click());
     await flush();
 
     // ...but that click must not write the default host down as if the user had
@@ -101,11 +111,16 @@ describe('ContactDiscoverySection', () => {
   it('keeps a relay and token the user actually typed', async () => {
     await render({ enabled: false, relayEndpoint: '', relayToken: '' });
 
+    act(() => openRelaySheet());
+    await flush();
     act(() => {
       type(byPlaceholder(DEFAULT_CONTACT_DISCOVERY_RELAY), '  https://mine.example  ');
       type(byPlaceholder('token (only if the relay asks for one)'), ' token-1 ');
     });
-    act(() => byText('enable').click());
+    await flush();
+
+    const toggle = document.querySelector('button[role="switch"]') as HTMLButtonElement;
+    act(() => toggle.click());
     await flush();
 
     expect(set).toHaveBeenCalledWith('zidDiscovery', {

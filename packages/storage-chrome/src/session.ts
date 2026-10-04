@@ -11,6 +11,15 @@ export type SessionStorageState = {
    * removed (auto-lock / manual lock / nuke) so grace never outlives the unlock.
    */
   signGraceUntil?: number;
+  /**
+   * The key a password change just replaced, for a minute: a context still
+   * holding wallet records from before the change writes their old-key inner
+   * boxes back, and encrypted writes move them to the current key. Removed
+   * with passwordKey.
+   */
+  retiredPasswordKey?: { key: KeyJson; until: number };
+  /** the last penumbra DEX price pass (prices per quote, then per asset id), with when it ran */
+  penumbraPrices?: { at: number; book: Record<'usd' | 'um', Record<string, number | null>> };
 };
 
 // Meant to be used for short-term persisted data. Holds data in memory for the duration of a browser session.

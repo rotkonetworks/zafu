@@ -66,6 +66,11 @@ export class Key {
     return new Key(key);
   }
 
+  // Unseal with a bare CryptoKey: the zcash worker, holding the key it unwrapped.
+  static unsealWith(key: CryptoKey, box: Box): Promise<string | null> {
+    return new Key(key).unseal(box);
+  }
+
   // Encrypts message. Box can be publicly stored.
   async seal(message: string): Promise<Box> {
     const nonce = crypto.getRandomValues(new Uint8Array(12)); // AES uses twelve bytes

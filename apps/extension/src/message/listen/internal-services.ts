@@ -1,3 +1,4 @@
+import { storedList } from '@repo/storage-chrome/stored-list';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { Services } from '@repo/context';
 import {
@@ -43,7 +44,7 @@ async function clearPenumbraCache(walletServices: Promise<Services>): Promise<vo
   // mark IDB clear as pending; the actual delete runs at next startup, before
   // any wallet services reopen connections (avoids onblocked silent failure)
   broadcastProgress('clearing-params', completed, steps.length);
-  const existing = (await localExtStorage.get('pendingClearCache')) ?? [];
+  const existing = storedList<'penumbra' | 'zcash'>(await localExtStorage.get('pendingClearCache'));
   if (!existing.includes('penumbra')) {
     await localExtStorage.set('pendingClearCache', [...existing, 'penumbra']);
   }
@@ -53,12 +54,9 @@ async function clearPenumbraCache(walletServices: Promise<Services>): Promise<vo
   completed++;
 
   broadcastProgress('clearing-sync-state', completed, steps.length);
-  // wipe local-storage sync markers so the UI shows 0% during the brief window
-  // between "reloading" and the startup delete
-  await Promise.all([
-    localExtStorage.remove('fullSyncHeight'),
-    localExtStorage.remove('compactFrontierBlockHeight'),
-  ]);
+  // the home shows no height during the brief window between "reloading" and
+  // the startup delete
+  await localExtStorage.remove('penumbraSync');
   completed++;
 
   await localExtStorage.remove('clearingCache');
@@ -74,13 +72,15 @@ async function clearZcashCache(): Promise<void> {
   broadcastProgress('clearing-database', completed, steps.length);
   // Deleting inline from here did nothing. The zcash worker holds an open
   // connection to 'zafu-zcash', and `deleteDatabase` against an open
-  // database does not error — it fires `onblocked` and hangs, so this
+  // database does not error - it fires `onblocked` and hangs, so this
   // reported success while the database survived intact. Defer to the
   // startup path, which runs before any wallet service opens a connection,
   // exactly as the penumbra branch above already does.
-  // ('zafu-memo-cache' was also deleted here; no such database exists — the
+  // ('zafu-memo-cache' was also deleted here; no such database exists - the
   // memo cache is an object store inside 'zafu-zcash'.)
-  const pendingZcash = (await localExtStorage.get('pendingClearCache')) ?? [];
+  const pendingZcash = storedList<'penumbra' | 'zcash'>(
+    await localExtStorage.get('pendingClearCache'),
+  );
   if (!pendingZcash.includes('zcash')) {
     await localExtStorage.set('pendingClearCache', [...pendingZcash, 'zcash']);
   }
@@ -133,7 +133,7 @@ export const internalServiceListener = (
   }
 
   switch (ServicesMessage[req as keyof typeof ServicesMessage]) {
-    // legacy unscoped clear cache — clear penumbra (backwards compat)
+    // legacy unscoped clear cache - clear penumbra (backwards compat)
     case ServicesMessage.ClearCache:
       void (async () => {
         try {

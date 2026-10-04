@@ -7,6 +7,7 @@
  */
 
 import { isValidExternalSender } from '../../senders/external';
+import { isValidInternalSender } from '../../senders/internal';
 import {
   isKeplrMessage,
   isKeplrApprovalResult,
@@ -19,7 +20,7 @@ import {
 // NB: import only the lightweight chain CONFIG here, never the cosmos client -
 // the client pulls @cosmjs/stargate -> crypto/bip39, a Node-only dependency the
 // service-worker build can't resolve. We broadcast with a raw RPC fetch below.
-import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
+import { getCosmosChain } from '@repo/wallet/networks/cosmos/chains';
 import { POPUP_WINDOW_WIDTH, POPUP_WINDOW_HEIGHT } from '../../utils/popup-window';
 
 /** requestId -> resolver for an in-flight approval popup */
@@ -118,7 +119,7 @@ async function handleMethod(
         : [];
   for (const cid of requestedChains) {
     const resolved = cosmosChainIdFromKeplr(cid);
-    if (resolved && COSMOS_CHAINS[resolved].keyAlgo === 'eth_secp256k1') {
+    if (resolved && getCosmosChain(resolved).keyAlgo === 'eth_secp256k1') {
       throw new Error(
         `unsupported chain ${cid}: Ethermint chains are not served over Keplr; use the in-wallet flow`,
       );
@@ -191,7 +192,7 @@ async function handleMethod(
       // Raw Tendermint RPC broadcast_tx_sync - avoids bundling the stargate
       // client into the service worker. params.tx is base64, which is exactly
       // the txB64 we already carry.
-      const rpc = COSMOS_CHAINS[cosmosId].rpcEndpoint;
+      const rpc = getCosmosChain(cosmosId).rpcEndpoint;
       const resp = await fetch(rpc, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -230,8 +231,13 @@ export const keplrMessageListener = (
   sender: chrome.runtime.MessageSender,
   sendResponse: (response?: unknown) => void,
 ): boolean => {
-  // the approval popup posting its result back
+  // the approval popup posting its result back - only from zafu's own pages:
+  // a content script carries this extension's id too, and a forged result
+  // would answer an approval the person never saw
   if (isKeplrApprovalResult(message)) {
+    if (!isValidInternalSender(sender)) {
+      return false;
+    }
     const resolve = pending.get(message.requestId);
     if (resolve) {
       pending.delete(message.requestId);
@@ -254,10 +260,12 @@ export const keplrMessageListener = (
     return false;
   }
 
+  // the origin is the browser-attested sender's, never a field of the message:
+  // the page writes the message, so it could name a site the person trusts
   void handleMethod(
     message.method,
     (message.params as Record<string, unknown>) ?? {},
-    message.origin,
+    sender.origin,
     sender,
   )
     .then(result => sendResponse({ ok: true, result }))

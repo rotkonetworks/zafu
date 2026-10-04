@@ -79,6 +79,8 @@ mod tests {
             db_path: ":memory:".into(),
             max_entries_per_coord: 1000,
             retention_seconds: 3600,
+            scope_retention: Vec::new(),
+            max_scope_retention_seconds: 172_800,
             max_entries_per_put: 64,
             max_body_bytes: 1024,
             allow_origin: "*".into(),
@@ -89,7 +91,7 @@ mod tests {
     }
 
     fn store() -> Arc<Store> {
-        Arc::new(Store::open(":memory:", 1000, 3600).unwrap())
+        Arc::new(Store::open(":memory:", 1000, 3600, Vec::new()).unwrap())
     }
 
     #[test]

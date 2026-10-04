@@ -45,7 +45,7 @@ export interface PendingUpdate {
   manifest: Manifest;
   imageHeader: ImageHeader;
   streamFrames: string[];
-  /** raw stream payload (manifest_cbor ‖ image_wrapper) — lets the UI re-fountain at a chosen density */
+  /** raw stream payload (manifest_cbor ‖ image_wrapper) - lets the UI re-fountain at a chosen density */
   payload: Uint8Array;
 }
 
@@ -67,7 +67,7 @@ export interface OtaSlice {
   setTargetZid: (zid: string) => void;
   /** Fetch + verify the stream from the dev endpoint, then gate on approval. */
   checkForUpdate: () => Promise<void>;
-  /** User approved ("signed & verified — upgrade?") → show the stream QR. */
+  /** User approved ("signed & verified - upgrade?") → show the stream QR. */
   approveUpdate: () => void;
   /** Stream shown; we now wait for the device result. */
   confirmShown: () => void;

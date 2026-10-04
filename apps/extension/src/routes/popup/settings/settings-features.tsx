@@ -3,6 +3,7 @@ import { CAPABILITY_META, type Capability } from '@repo/storage-chrome/capabilit
 import { PopupPath } from '../paths';
 import { SettingsScreen } from './settings-screen';
 import { cn } from '@repo/ui/lib/utils';
+import { Segmented } from '@repo/ui/components/ui/segmented';
 import { getCapabilityModes, setCapabilityMode } from '../../../state/capability-modes';
 import type { CapabilityMode, CapabilityModeMap } from '../../../utils/capability-decision';
 
@@ -10,9 +11,9 @@ import type { CapabilityMode, CapabilityModeMap } from '../../../utils/capabilit
  * Per-capability participation switch, the settings half of the opt-in asked
  * in the approval popup. Three states, one row each:
  *
- *   ask  (unset)    — first site that asks gets the one-time zafu prompt
- *   on   (enabled)  — sites go straight to their own per-origin consent
- *   off  (disabled) — the wallet refuses, for every site, without asking
+ *   ask  (unset) - first site that asks gets the one-time zafu prompt
+ *   on   (enabled) - sites go straight to their own per-origin consent
+ *   off  (disabled) - the wallet refuses, for every site, without asking
  *
  * `off` is deliberately not a per-origin denial: a per-origin denial is a
  * decision about one site and is reversible from that site's row; this switch
@@ -59,7 +60,7 @@ export const SettingsFeatures = () => {
               return (
                 <div
                   key={cap}
-                  className='flex items-start justify-between gap-3 rounded-lg border border-border-soft bg-elev-1 p-3'
+                  className='flex items-start justify-between gap-3 border border-border-soft bg-elev-1 p-3'
                 >
                   <div className='flex min-w-0 flex-col gap-1'>
                     <span className='flex items-center gap-2 text-sm text-fg-high'>
@@ -70,22 +71,13 @@ export const SettingsFeatures = () => {
                     </span>
                     <span className='text-xs text-fg-muted'>{meta.description}</span>
                   </div>
-                  <div className='flex shrink-0 overflow-hidden rounded-md border border-border-soft'>
-                    {MODES.map(m => (
-                      <button
-                        key={m.value}
-                        onClick={() => set(cap, m.value)}
-                        className={cn(
-                          'px-2 py-1 text-label lowercase transition-colors',
-                          current === m.value
-                            ? 'bg-elev-3 text-fg-high'
-                            : 'text-fg-muted hover:text-fg-high',
-                        )}
-                      >
-                        {m.label}
-                      </button>
-                    ))}
-                  </div>
+                  <Segmented
+                    className='shrink-0'
+                    label={`${meta.label} mode`}
+                    value={current}
+                    onChange={mode => set(cap, mode)}
+                    options={MODES}
+                  />
                 </div>
               );
             })}

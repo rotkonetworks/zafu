@@ -1,999 +1,219 @@
 /**
- * contacts page - multi-network address book with expandable cards
+ * contacts (Contacts.dc.html): everyone saved, one search, one list.
+ * Favourites sort first. A row opens that person; "add" is a sheet.
  */
 
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useBackNav } from '../../../utils/navigate';
-import { PopupPath } from '../paths';
+import { Button } from '@repo/ui/components/ui/button';
+import { Input } from '@repo/ui/components/ui/input';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+import { ZidSeal } from '@repo/ui/components/ui/zid-seal';
 import { useStore } from '../../../state';
-import {
-  contactsSelector,
-  type Contact,
-  type ContactAddress,
-  type ContactNetwork,
-  type PersonalDataBackup,
-} from '../../../state/contacts';
-import { encodeContactCard, bytesToHex } from '@repo/wallet/networks/zcash/memo-codec';
-import { selectEffectiveKeyInfo } from '../../../state/keyring';
-import { cn } from '@repo/ui/lib/utils';
-import {
-  contactDiversifierIndex,
-  type DiversifiedAddressRecord,
-} from '@repo/wallet/networks/zcash/diversified-address';
-import { deriveZidForContact } from '../../../state/identity';
-import {
-  getDiversifiedAddresses,
-  setDiversifiedAddresses,
-} from '../../../state/diversified-addresses';
-import { selectActiveZcashWallet, selectMyWalletsAsContacts } from '../../../state/wallets';
-import { ZcashMeOptIn } from '../../../components/zcashme-opt-in';
+import type { Contact } from '../../../state/contacts';
+import { ScreenHeader } from '../../../components/screen-header';
+import { PopupPath, contactPath } from '../paths';
+import { sourceLine } from './seal';
+import { looksLikeLink } from '../../../links/router';
+import { QrScanner } from '../../../shared/components/qr-scanner';
+import { ChainRow, useAddressDraft } from './chain-row';
 
-const NETWORK_LABELS: Record<ContactNetwork, string> = {
-  penumbra: 'penumbra',
-  zcash: 'zcash',
-  cosmos: 'cosmos',
-  polkadot: 'polkadot',
-  kusama: 'kusama',
-  ethereum: 'ethereum',
-  bitcoin: 'bitcoin',
-  solana: 'solana',
-  near: 'near',
-  base: 'base',
-  arbitrum: 'arbitrum',
-  avalanche: 'avalanche',
-  polygon: 'polygon',
-};
+/**
+ * a contact's line under the name: whether friends on sites can find each
+ * other (you hold each other's cards), or only an address is known. Said
+ * calmly: address only is not a fault, it just cannot be found.
+ */
+export const contactStatus = (c: Contact): { line: string; warn?: boolean } =>
+  c.zid && c.pairKa
+    ? c.rel
+      ? { line: sourceLine(c) ?? 'from a card · can be found' }
+      : { line: 'from a card · send them yours' }
+    : c.zid || c.card
+      ? { line: 'from an older card · ask for their new one' }
+      : { line: 'address only · ask for their card' };
 
-const NETWORK_COLORS: Record<ContactNetwork, string> = {
-  penumbra: 'bg-teal-400/20 text-teal-300',
-  zcash: 'bg-yellow-500/20 text-yellow-400',
-  cosmos: 'bg-blue-500/20 text-blue-400',
-  polkadot: 'bg-pink-500/20 text-pink-400',
-  kusama: 'bg-red-500/20 text-red-400',
-  ethereum: 'bg-indigo-500/20 text-indigo-400',
-  bitcoin: 'bg-orange-500/20 text-orange-400',
-  solana: 'bg-violet-500/20 text-violet-400',
-  near: 'bg-cyan-500/20 text-cyan-400',
-  base: 'bg-blue-600/20 text-blue-300',
-  arbitrum: 'bg-sky-500/20 text-sky-400',
-  avalanche: 'bg-red-600/20 text-red-300',
-  polygon: 'bg-purple-600/20 text-purple-300',
-};
+const byName = (a: Contact, b: Contact) =>
+  Number(!!b.favorite) - Number(!!a.favorite) || a.name.localeCompare(b.name);
 
-/** Make a contact's website safe + clickable: only http(s) links, prefixing a
- *  bare domain with https://. Anything with a different scheme (javascript:,
- *  data:, etc.) is treated as not a link — the string still shows, just inert. */
-const contactWebsiteUrl = (raw: string): string | undefined => {
-  const s = raw.trim();
-  if (!s) {
-    return undefined;
-  }
-  const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(s) ? s : `https://${s}`;
-  try {
-    const u = new URL(withScheme);
-    return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : undefined;
-  } catch {
-    return undefined;
-  }
-};
-
-/** modal for adding/editing a contact (name, website, zid, notes) */
-function ContactModal({
-  onClose,
-  onSave,
-  editContact,
-}: {
-  onClose: () => void;
-  onSave: (data: { name: string; notes?: string; zid?: string; website?: string }) => void;
-  editContact?: Contact;
-}) {
-  const [name, setName] = useState(editContact?.name ?? '');
-  const [website, setWebsite] = useState(editContact?.website ?? '');
-  const [zid, setZid] = useState(editContact?.zid ?? '');
-  const [notes, setNotes] = useState(editContact?.notes ?? '');
-
-  const canSave = name.trim().length > 0;
-
-  const handleSave = () => {
-    if (!canSave) {
+/** add someone: scan their card, paste their card link, or a name and an address */
+export const AddContactSheet = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
+  const navigate = useNavigate();
+  const { addContact, addAddress } = useStore(s => s.contacts);
+  const [name, setName] = useState('');
+  const { address, setAddress, chain, pick, refused } = useAddressDraft();
+  const [scanning, setScanning] = useState(false);
+  /** a card link (or any zafu/zcash link) goes to the link reader, which opens the card */
+  const follow = (text: string, via: 'pasted' | 'scanned'): boolean => {
+    if (!looksLikeLink(text)) {
+      return false;
+    }
+    onClose();
+    navigate(PopupPath.LINK, { state: { uri: text.trim(), via } });
+    return true;
+  };
+  const save = async () => {
+    if (refused || (address.trim() && !chain)) {
       return;
     }
-    onSave({
-      name: name.trim(),
-      website: website.trim() || undefined,
-      zid: zid.trim() || undefined,
-      notes: notes.trim() || undefined,
-    });
-    onClose();
-  };
-
-  return (
-    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
-      <div className='w-full max-w-sm mx-4 rounded-lg bg-canvas border border-border-soft p-5 shadow-xl'>
-        <h2 className='text-lg font-medium mb-4'>{editContact ? 'edit contact' : 'new contact'}</h2>
-
-        <div className='space-y-3'>
-          <div>
-            <label className='block text-xs text-fg-muted mb-1'>name</label>
-            <input
-              type='text'
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder='alice'
-              autoFocus
-              className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
-            />
-          </div>
-
-          <div>
-            <label className='block text-xs text-fg-muted mb-1'>website (optional)</label>
-            <input
-              type='text'
-              value={website}
-              onChange={e => setWebsite(e.target.value)}
-              placeholder='alice.example or https://…'
-              className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
-            />
-          </div>
-
-          <div>
-            <label className='block text-xs text-fg-muted mb-1'>zid (optional)</label>
-            <input
-              type='text'
-              value={zid}
-              onChange={e => setZid(e.target.value)}
-              placeholder='identity pubkey — the anchor for their addresses'
-              className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-xs font-mono focus:border-zigner-gold focus:outline-none'
-            />
-          </div>
-
-          <div>
-            <label className='block text-xs text-fg-muted mb-1'>notes (optional)</label>
-            <textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              placeholder='notes about this contact...'
-              rows={2}
-              className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none resize-none'
-            />
-          </div>
-        </div>
-
-        <div className='flex gap-2 mt-4'>
-          <button
-            onClick={onClose}
-            className='flex-1 rounded-lg border border-border-soft py-3 text-sm hover:bg-elev-1 transition-colors'
-          >
-            cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!canSave}
-            className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
-          >
-            save
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** modal for adding/editing an address within a contact */
-function AddressModal({
-  onClose,
-  onSave,
-  editAddress,
-}: {
-  onClose: () => void;
-  onSave: (data: Omit<ContactAddress, 'id'>) => void;
-  editAddress?: ContactAddress;
-}) {
-  const [network, setNetwork] = useState<ContactNetwork>(editAddress?.network ?? 'zcash');
-  const [address, setAddress] = useState(editAddress?.address ?? '');
-  const [chainId, setChainId] = useState(editAddress?.chainId ?? '');
-  const [notes, setNotes] = useState(editAddress?.notes ?? '');
-
-  const canSave = address.trim().length > 0;
-
-  const handleSave = () => {
-    if (!canSave) {
-      return;
+    const contact = await addContact({ name: name.trim() });
+    if (address.trim() && chain) {
+      await addAddress(contact.id, { network: chain, address: address.trim() });
     }
-    onSave({
-      network,
-      address: address.trim(),
-      chainId: network === 'cosmos' ? chainId.trim() || undefined : undefined,
-      notes: notes.trim() || undefined,
-    });
     onClose();
+    navigate(contactPath(contact.id));
   };
-
   return (
-    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
-      <div className='w-full max-w-sm mx-4 rounded-lg bg-canvas border border-border-soft p-5 shadow-xl'>
-        <h2 className='text-lg font-medium mb-4'>{editAddress ? 'edit address' : 'add address'}</h2>
-
-        <div className='space-y-3'>
-          <div>
-            <label className='block text-xs text-fg-muted mb-1'>network</label>
-            <select
-              value={network}
-              onChange={e => setNetwork(e.target.value as ContactNetwork)}
-              className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
-            >
-              {Object.entries(NETWORK_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {network === 'cosmos' && (
-            <div>
-              <label className='block text-xs text-fg-muted mb-1'>chain (optional)</label>
-              <input
-                type='text'
-                value={chainId}
-                onChange={e => setChainId(e.target.value)}
-                placeholder='osmosis, noble, etc'
-                className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
-              />
-            </div>
-          )}
-
-          <div>
-            <label className='block text-xs text-fg-muted mb-1'>address</label>
-            <input
-              type='text'
-              value={address}
-              onChange={e => setAddress(e.target.value)}
-              placeholder='paste address...'
-              className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-xs font-mono focus:border-zigner-gold focus:outline-none'
-            />
-          </div>
-
-          <div>
-            <label className='block text-xs text-fg-muted mb-1'>notes (optional)</label>
-            <input
-              type='text'
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              placeholder='notes for this address...'
-              className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
-            />
-          </div>
-        </div>
-
-        <div className='flex gap-2 mt-4'>
-          <button
-            onClick={onClose}
-            className='flex-1 rounded-lg border border-border-soft py-3 text-sm hover:bg-elev-1 transition-colors'
-          >
-            cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!canSave}
-            className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
-          >
-            save
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** single address row within an expanded contact */
-function AddressRow({
-  address,
-  onEdit,
-  onDelete,
-}: {
-  address: ContactAddress;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  const copyAddress = useCallback(() => {
-    void navigator.clipboard.writeText(address.address);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }, [address.address]);
-
-  return (
-    <div className='group flex items-center justify-between py-2 px-3 rounded-lg hover:bg-elev-1 transition-colors'>
-      <div className='flex items-center gap-2 min-w-0 flex-1'>
-        <span
-          className={cn(
-            'shrink-0 rounded-md px-1.5 py-0.5 text-label font-medium',
-            NETWORK_COLORS[address.network] ?? 'bg-elev-2 text-fg-muted',
-          )}
+    <>
+      <Sheet open={open && !scanning} onOpenChange={o => !o && onClose()} title='add someone'>
+        <Button variant='secondary' onClick={() => setScanning(true)}>
+          <span className='i-lucide-scan-line size-4' aria-hidden='true' />
+          scan their card
+        </Button>
+        <form
+          className='flex flex-col gap-3'
+          onSubmit={e => {
+            e.preventDefault();
+            if (!follow(address, 'pasted')) {
+              void save();
+            }
+          }}
         >
-          {NETWORK_LABELS[address.network] ?? address.network}
-          {address.chainId && ` / ${address.chainId}`}
-        </span>
-        <span className='font-mono text-xs text-fg-muted truncate'>{address.address}</span>
-        <button onClick={copyAddress} className='shrink-0 p-1 text-fg-muted hover:text-fg-high'>
-          {copied ? (
-            <span className='i-ph-check h-3 w-3 text-green-400' />
-          ) : (
-            <span className='i-ph-copy h-3 w-3' />
-          )}
-        </button>
-      </div>
-
-      <div className='flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity'>
-        <button onClick={onEdit} className='p-1 rounded-lg hover:bg-elev-1 transition-colors'>
-          <span className='i-ph-pencil-simple h-3 w-3 text-fg-muted' />
-        </button>
-        <button onClick={onDelete} className='p-1 rounded-lg hover:bg-elev-1 transition-colors'>
-          <span className='i-ph-trash h-3 w-3 text-red-400' />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/** expandable contact card */
-function ContactCard({
-  contact,
-  onEditContact,
-  onDeleteContact,
-  onToggleFavorite,
-  onAddAddress,
-  onEditAddress,
-  onDeleteAddress,
-  onShareCard,
-}: {
-  contact: Contact;
-  onEditContact: () => void;
-  onDeleteContact: () => void;
-  onToggleFavorite: () => void;
-  onAddAddress: () => void;
-  onEditAddress: (address: ContactAddress) => void;
-  onDeleteAddress: (addressId: string) => void;
-  onShareCard?: () => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <div className='rounded-lg border border-border-soft bg-elev-1 overflow-hidden'>
-      {/* header - always visible */}
-      <div
-        className='flex items-center justify-between p-3 cursor-pointer hover:bg-elev-1 transition-colors'
-        onClick={() => setExpanded(!expanded)}
-      >
-        <div className='flex items-center gap-3'>
-          <button
-            onClick={e => {
-              e.stopPropagation();
-              setExpanded(!expanded);
+          <Input
+            aria-label='address'
+            placeholder='their card link, or an address'
+            value={address}
+            onChange={e => {
+              if (!follow(e.target.value, 'pasted')) {
+                setAddress(e.target.value);
+              }
             }}
-            className='p-0.5'
-          >
-            {expanded ? (
-              <span className='i-ph-caret-down h-4 w-4 text-fg-muted' />
-            ) : (
-              <span className='i-ph-caret-right h-4 w-4 text-fg-muted' />
-            )}
-          </button>
-
-          <div className='flex h-8 w-8 items-center justify-center rounded-full bg-primary/10'>
-            <span className='i-ph-user h-4 w-4 text-zigner-gold' />
-          </div>
-
-          <div>
-            <div className='flex items-center gap-2'>
-              <span className='font-medium'>{contact.name}</span>
-              <span className='text-xs text-fg-muted'>
-                {contact.addresses.length} address{contact.addresses.length !== 1 && 'es'}
-              </span>
-            </div>
-            {contact.notes && (
-              <p className='text-xs text-fg-muted truncate max-w-44'>{contact.notes}</p>
-            )}
-          </div>
-        </div>
-
-        <div className='flex items-center gap-1' onClick={e => e.stopPropagation()}>
-          <button
-            onClick={onToggleFavorite}
-            className='p-1.5 rounded-lg hover:bg-elev-1 transition-colors'
-          >
-            {contact.favorite ? (
-              <span className='i-ph-star h-4 w-4 text-yellow-400' />
-            ) : (
-              <span className='i-ph-star h-4 w-4 text-fg-muted' />
-            )}
-          </button>
-          <button
-            onClick={onEditContact}
-            className='p-1.5 rounded-lg hover:bg-elev-1 transition-colors'
-          >
-            <span className='i-ph-pencil-simple h-4 w-4 text-fg-muted' />
-          </button>
-          <button
-            onClick={onDeleteContact}
-            className='p-1.5 rounded-lg hover:bg-elev-1 transition-colors'
-          >
-            <span className='i-ph-trash h-4 w-4 text-red-400' />
-          </button>
-        </div>
-      </div>
-
-      {/* expanded addresses */}
-      {expanded && (
-        <div className='border-t border-border-soft bg-elev-2/10'>
-          {/* the social layer: where to find this person beyond their wallets */}
-          {(contact.website || contact.zid) && (
-            <div className='flex flex-col gap-1 border-b border-border-soft px-3 py-2'>
-              {contact.website &&
-                (contactWebsiteUrl(contact.website) ? (
-                  <a
-                    href={contactWebsiteUrl(contact.website)}
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    onClick={e => e.stopPropagation()}
-                    className='flex items-center gap-1.5 break-all text-xs text-zigner-gold hover:underline'
-                  >
-                    <span className='i-ph-globe h-3 w-3 shrink-0' /> {contact.website}
-                  </a>
-                ) : (
-                  <span className='flex items-center gap-1.5 break-all text-xs text-fg-muted'>
-                    <span className='i-ph-globe h-3 w-3 shrink-0' /> {contact.website}
-                  </span>
-                ))}
-              {contact.zid && (
-                <span
-                  className='flex items-center gap-1.5 text-label text-fg-muted'
-                  title={contact.zid}
-                >
-                  <span className='i-ph-fingerprint h-3 w-3 shrink-0' />
-                  <span className='truncate font-mono'>
-                    zid {contact.zid.length > 16 ? `${contact.zid.slice(0, 16)}…` : contact.zid}
-                  </span>
-                </span>
-              )}
-            </div>
-          )}
-          {contact.addresses.length === 0 ? (
-            <div className='p-4 text-center'>
-              <p className='text-xs text-fg-muted'>no addresses yet</p>
-            </div>
-          ) : (
-            <div className='py-1'>
-              {contact.addresses.map(addr => (
-                <AddressRow
-                  key={addr.id}
-                  address={addr}
-                  onEdit={() => onEditAddress(addr)}
-                  onDelete={() => onDeleteAddress(addr.id)}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* actions */}
-          <div className='p-2 border-t border-border-soft flex gap-2'>
-            <button
-              onClick={onAddAddress}
-              className='flex flex-1 items-center justify-center gap-1 rounded-lg border border-dashed border-border-soft py-2 text-xs text-fg-muted hover:border-zigner-gold hover:text-zigner-gold transition-colors'
-            >
-              <span className='i-ph-plus h-3 w-3' />
-              add address
-            </button>
-            {onShareCard && (
-              <button
-                onClick={onShareCard}
-                className='flex flex-1 items-center justify-center gap-1 rounded-lg border border-dashed border-border-soft py-2 text-xs text-fg-muted hover:border-zigner-gold hover:text-zigner-gold transition-colors'
-              >
-                <span className='i-ph-paper-plane-right h-3 w-3' />
-                share via zcash
-              </button>
-            )}
-          </div>
-        </div>
+            className='font-mono text-xs'
+          />
+          <Input
+            aria-label='name'
+            placeholder='name'
+            value={name}
+            onChange={e => setName(e.target.value)}
+          />
+          <ChainRow chain={chain} onPick={pick} />
+          {refused && <span className='text-[11px] text-warn'>{refused}</span>}
+          <Button type='submit' disabled={!name.trim() || !!refused}>
+            save
+          </Button>
+        </form>
+      </Sheet>
+      {open && scanning && (
+        <QrScanner
+          title='scan their card'
+          onScan={data => {
+            setScanning(false);
+            if (!follow(data, 'scanned')) {
+              setAddress(data);
+            }
+          }}
+          onClose={() => setScanning(false)}
+        />
       )}
-    </div>
+    </>
   );
-}
+};
 
 export function ContactsPage() {
   const navigate = useNavigate();
-  // back follows actual origin (drawer, or wherever the user came from);
-  // contacts is entered directly from the drawer, so a direct-entry fallback
-  // must land on home - never teleport into a menu the user never opened.
-  const goBack = useBackNav(PopupPath.INDEX);
-  const contacts = useStore(contactsSelector);
-  // the user's own accounts, offered read-only alongside the address book so you
-  // can send between your wallets (e.g. Ledger transparent -> your shielded).
-  const myWallets = useStore(selectMyWalletsAsContacts);
-  const keyInfo = useStore(selectEffectiveKeyInfo);
-  const zcashWallet = useStore(selectActiveZcashWallet);
-  const getMnemonic = useStore(s => s.keyRing.getMnemonic);
+  const contacts = useStore(s => s.contacts.contacts);
+  const [params, setParams] = useSearchParams();
+  const [query, setQuery] = useState('');
+  const [adding, setAdding] = useState(params.get('add') === '1');
 
-  /** share a contact card with per-contact diversified address + zid */
-  const shareContactCard = async (contact: Contact, recipientZcashAddr: string) => {
-    if (!keyInfo) {
-      return;
-    }
-
-    // derive per-contact diversified address (unique receiving address for this contact)
-    let myAddress = recipientZcashAddr; // fallback to recipient's address if no zcash wallet
-    const ufvk = zcashWallet?.ufvk ?? zcashWallet?.orchardFvk;
-    if (ufvk && typeof ufvk === 'string' && ufvk.startsWith('uview')) {
-      try {
-        const divIndex = await contactDiversifierIndex(contact.id);
-
-        const wasm: any = await import('@repo/zcash-wasm');
-        // wasm-bindgen glue: the module-level `wasm` binding stays undefined
-        // until the default export (`__wbg_init`) fetches+instantiates the
-        // .wasm. Calling an export before that throws on `__wbindgen_malloc`.
-        // This popup context is a *separate* module instance from the
-        // worker's, so it is generally uninitialized here. Without this
-        // await, the call below silently throws and we fall back to a
-        // non-diversified address (privacy degradation), not a crash.
-        if (typeof wasm.default === 'function') {
-          await wasm.default();
-        }
-        const rawAddr: string = wasm.address_from_ufvk(ufvk, divIndex);
-        // fixOrchardAddress would be needed here for proper bech32m encoding
-        // for now use the raw address - the codec handles it
-        if (rawAddr) {
-          myAddress = rawAddr;
-          // record the diversified address for referral tracking
-          // encrypted at rest: these records are the payment-referral graph
-          // (which contact got which address, and when). they went through
-          // localExtStorage directly, which bypasses the encrypting proxy,
-          // so they were written in the clear despite the key being declared
-          // encrypted. see state/diversified-addresses.ts.
-          const records: DiversifiedAddressRecord[] = await getDiversifiedAddresses();
-          if (!records.some(r => r.diversifierIndex === divIndex)) {
-            records.push({
-              diversifierIndex: divIndex,
-              sharedWith: contact.name || contact.id,
-              address: rawAddr,
-              sharedAt: Date.now(),
-            });
-            await setDiversifiedAddresses(records);
-          }
-        }
-      } catch (e) {
-        console.warn('[contacts] failed to derive diversified address, using default:', e);
-      }
-    }
-
-    // derive per-contact zid for authenticated e2ee
-    let contactZid: string | undefined;
-    try {
-      const mnemonic = await getMnemonic(keyInfo.id);
-      const zid = deriveZidForContact(mnemonic, 'default', contact.id);
-      contactZid = zid.publicKey;
-    } catch {
-      // fall back to global zid if mnemonic unavailable
-      contactZid = keyInfo.insensitive?.['zid'] as string | undefined;
-    }
-
-    const memos = encodeContactCard({
-      name: contact.name,
-      address: myAddress,
-      flags: 0,
-      zid: contactZid,
-    });
-    if (!memos.length) {
-      return;
-    }
-    const hex = bytesToHex(memos[0]!);
-    navigate(PopupPath.SEND, {
-      state: { prefillMemo: hex, network: 'zcash' },
-    });
-  };
-  const [search, setSearch] = useState('');
-  const [showContactModal, setShowContactModal] = useState(false);
-  const [showAddressModal, setShowAddressModal] = useState(false);
-  const [editingContact, setEditingContact] = useState<Contact | undefined>();
-  const [editingAddress, setEditingAddress] = useState<
-    { contactId: string; address?: ContactAddress } | undefined
-  >();
-  const [filter, setFilter] = useState<'all' | 'favorites'>('all');
-  const [showMenu, setShowMenu] = useState(false);
-  const [importStatus, setImportStatus] = useState<{
-    type: 'success' | 'error';
-    message: string;
-  } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // export contacts as encrypted JSON file download
-  const handleExport = useCallback(async () => {
-    const password = window.prompt(
-      'password to encrypt your personal-data backup (contacts, send history, tx notes)',
-    );
-    if (!password) {
-      return;
-    }
-    try {
-      const data = await contacts.exportPersonalData(password);
-      const json = JSON.stringify(data, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `zafu-personal-data-${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      setImportStatus({
-        type: 'error',
-        message: err instanceof Error ? err.message : 'export failed',
-      });
-      setTimeout(() => setImportStatus(null), 3000);
-    }
-    setShowMenu(false);
-  }, [contacts]);
-
-  // import contacts from encrypted JSON file
-  const handleImportFile = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (!file) {
-        return;
-      }
-
-      try {
-        const text = await file.text();
-        const data = JSON.parse(text) as PersonalDataBackup;
-        const password = window.prompt('password to decrypt this backup');
-        if (!password) {
-          return;
-        }
-        const n = await contacts.importPersonalData(data, password, 'merge');
-        setImportStatus({
-          type: 'success',
-          message: `restored ${n.contacts} contacts, ${n.sent} sends, ${n.notes} notes`,
-        });
-        setTimeout(() => setImportStatus(null), 3000);
-      } catch (err) {
-        setImportStatus({
-          type: 'error',
-          message: err instanceof Error ? err.message : 'failed to import',
-        });
-        setTimeout(() => setImportStatus(null), 3000);
-      }
-
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-      setShowMenu(false);
-    },
-    [contacts],
-  );
-
-  const filteredContacts = useMemo(() => {
-    let result = Array.isArray(contacts.contacts) ? contacts.contacts : [];
-
-    if (filter === 'favorites') {
-      result = result.filter(c => c.favorite);
-    }
-
-    if (search) {
-      result = contacts.search(search);
-    }
-
-    // sort: favorites first, then by name
-    return [...result].sort((a, b) => {
-      if (a.favorite && !b.favorite) {
-        return -1;
-      }
-      if (!a.favorite && b.favorite) {
-        return 1;
-      }
-      return a.name.localeCompare(b.name);
-    });
-  }, [contacts, search, filter]);
-
-  // contact handlers
-  const handleSaveContact = useCallback(
-    async (data: { name: string; notes?: string; zid?: string; website?: string }) => {
-      if (editingContact) {
-        await contacts.updateContact(editingContact.id, data);
-      } else {
-        await contacts.addContact(data);
-      }
-      setEditingContact(undefined);
-    },
-    [contacts, editingContact],
-  );
-
-  const handleEditContact = (contact: Contact) => {
-    setEditingContact(contact);
-    setShowContactModal(true);
-  };
-
-  // deep link: /contacts?open=<id> opens that contact's editor directly — this
-  // is where a tx row's "to <contact>" link lands, so you can jump straight from
-  // a payment to editing who you paid. Consume the param so a back/refresh
-  // doesn't re-pop the modal.
-  const [searchParams, setSearchParams] = useSearchParams();
-  const openId = searchParams.get('open');
+  // a tx row's "to <contact>" used to land on /contacts?open=<id>
+  const openId = params.get('open');
   useEffect(() => {
-    if (!openId) {
-      return;
+    if (openId) {
+      navigate(contactPath(openId), { replace: true });
+    } else if (params.has('add')) {
+      setParams({}, { replace: true });
     }
-    const match = (Array.isArray(contacts.contacts) ? contacts.contacts : []).find(
-      c => c.id === openId,
-    );
-    if (match) {
-      setEditingContact(match);
-      setShowContactModal(true);
-    }
-    setSearchParams({}, { replace: true });
-    // intentionally keyed to openId only - runs once per incoming ?open= param
-  }, [openId]);
+  }, [openId, params, navigate, setParams]);
 
-  const handleDeleteContact = async (id: string) => {
-    await contacts.removeContact(id);
-  };
-
-  // address handlers
-  const handleSaveAddress = useCallback(
-    async (data: Omit<ContactAddress, 'id'>) => {
-      if (!editingAddress) {
-        return;
-      }
-
-      if (editingAddress.address) {
-        // editing existing address
-        await contacts.updateAddress(editingAddress.contactId, editingAddress.address.id, data);
-      } else {
-        // adding new address
-        await contacts.addAddress(editingAddress.contactId, data);
-      }
-      setEditingAddress(undefined);
-    },
-    [contacts, editingAddress],
-  );
-
-  const handleAddAddress = (contactId: string) => {
-    setEditingAddress({ contactId });
-    setShowAddressModal(true);
-  };
-
-  const handleEditAddress = (contactId: string, address: ContactAddress) => {
-    setEditingAddress({ contactId, address });
-    setShowAddressModal(true);
-  };
-
-  const handleDeleteAddress = async (contactId: string, addressId: string) => {
-    await contacts.removeAddress(contactId, addressId);
-  };
+  const list = useMemo(() => {
+    const all = Array.isArray(contacts) ? contacts : [];
+    const q = query.trim().toLowerCase();
+    return all
+      .filter(
+        c =>
+          !q ||
+          c.name.toLowerCase().includes(q) ||
+          c.addresses.some(a => a.address.toLowerCase().includes(q)),
+      )
+      .sort(byName);
+  }, [contacts, query]);
+  const empty = !(Array.isArray(contacts) && contacts.length);
 
   return (
-    <div className='flex flex-col h-full'>
-      {/* hidden file input for import */}
-      <input
-        type='file'
-        ref={fileInputRef}
-        accept='.json'
-        onChange={handleImportFile}
-        className='hidden'
-      />
-
-      {/* header */}
-      <div className='flex items-center justify-between px-4 py-3 border-b border-border-soft'>
-        <div className='flex items-center gap-3'>
-          <button onClick={goBack} className='text-fg-muted transition-colors hover:text-fg-high'>
-            <span className='i-ph-arrow-left h-5 w-5' />
-          </button>
-          <h1 className='text-lg font-medium'>contacts</h1>
-        </div>
-        <div className='flex items-center gap-2'>
-          {/* menu button */}
-          <div className='relative'>
-            <button
-              onClick={() => setShowMenu(!showMenu)}
-              className='rounded-lg p-1.5 hover:bg-elev-1 transition-colors'
-            >
-              <span className='i-ph-dots-three h-5 w-5' />
-            </button>
-            {showMenu && (
-              <>
-                <div className='fixed inset-0 z-50' onClick={() => setShowMenu(false)} />
-                <div className='absolute right-0 top-full mt-1 z-50 w-40 rounded-lg border border-border-soft bg-canvas shadow-lg'>
-                  <button
-                    onClick={() => void handleExport()}
-                    className='flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-elev-1 transition-colors'
-                  >
-                    <span className='i-ph-download-simple h-4 w-4' />
-                    back up data
-                  </button>
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className='flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-elev-1 transition-colors'
-                  >
-                    <span className='i-ph-upload-simple h-4 w-4' />
-                    restore
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-          {/* add contact button */}
+    <div className='flex min-h-full flex-col'>
+      <ScreenHeader
+        title='contacts'
+        backPath={PopupPath.INBOX}
+        meta={
           <button
-            onClick={() => {
-              setEditingContact(undefined);
-              setShowContactModal(true);
-            }}
-            className='flex items-center gap-1 rounded-lg bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors'
+            type='button'
+            aria-label='add contact'
+            onClick={() => setAdding(true)}
+            className='h-8 border border-border-soft bg-elev-1 px-2.5 text-xs text-zigner-gold hover:bg-elev-2'
           >
-            <span className='i-ph-plus h-4 w-4' />
             add
           </button>
-        </div>
-      </div>
-
-      <ZcashMeOptIn reason='find people and name addresses you paid' className='mx-4 mt-2' />
-
-      {/* import status toast */}
-      {importStatus && (
-        <div
-          className={cn(
-            'mx-4 mt-2 rounded-lg px-3 py-2 text-sm',
-            importStatus.type === 'success'
-              ? 'bg-green-500/10 text-green-400 border border-green-500/40'
-              : 'bg-red-500/10 text-red-400 border border-red-500/40',
-          )}
-        >
-          {importStatus.message}
-        </div>
-      )}
-
-      {/* search and filter */}
-      <div className='px-4 py-3 space-y-2'>
-        <div className='relative'>
-          <span className='i-ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-fg-muted' />
-          <input
-            type='text'
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder='search contacts...'
-            className='w-full rounded-lg border border-border-soft bg-input pl-9 pr-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
+        }
+      />
+      <div className='flex flex-col gap-2.5 px-4 py-3.5'>
+        {!empty && (
+          <Input
+            aria-label='search contacts'
+            placeholder='search'
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            className='h-11'
           />
-        </div>
-        <div className='flex gap-2'>
-          <button
-            onClick={() => setFilter('all')}
-            className={cn(
-              'rounded-md px-3 py-1 text-xs transition-colors',
-              filter === 'all'
-                ? 'bg-zigner-gold text-zigner-gold-foreground'
-                : 'bg-elev-2 text-fg-muted hover:bg-elev-1/80',
-            )}
-          >
-            all
-          </button>
-          <button
-            onClick={() => setFilter('favorites')}
-            className={cn(
-              'rounded-md px-3 py-1 text-xs transition-colors',
-              filter === 'favorites'
-                ? 'bg-zigner-gold text-zigner-gold-foreground'
-                : 'bg-elev-2 text-fg-muted hover:bg-elev-1/80',
-            )}
-          >
-            favorites
-          </button>
-        </div>
-      </div>
-
-      {/* contacts list */}
-      <div className='flex-1 overflow-y-auto px-4 pb-4'>
-        {myWallets.length > 0 && !search && (
-          <div className='mb-4'>
-            <p className='mb-2 text-label text-fg-dim lowercase'>my wallets</p>
-            <div className='space-y-1.5'>
-              {myWallets.map(w => {
-                const addr = w.addresses[0]?.address ?? '';
-                return (
-                  <button
-                    key={w.id}
-                    type='button'
-                    onClick={() => void navigator.clipboard.writeText(addr)}
-                    title='copy address'
-                    className='flex w-full items-center gap-2 border border-border-soft px-3 py-2 text-left transition-colors hover:bg-elev-1'
-                  >
-                    <span className='i-ph-wallet h-4 w-4 shrink-0 text-fg-dim' />
-                    <span className='text-data text-fg-high truncate'>{w.name}</span>
-                    <span className='ml-auto max-w-[9rem] truncate text-label text-fg-muted tabular'>
-                      {addr.slice(0, 10)}…{addr.slice(-6)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
         )}
-        {filteredContacts.length === 0 ? (
-          <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
-            <div className='rounded-full bg-primary/10 p-4'>
-              <span className='i-ph-user h-8 w-8 text-zigner-gold' />
-            </div>
-            <div className='flex flex-col gap-1'>
-              <p className='text-sm font-medium'>no contacts yet</p>
-              <p className='max-w-xs text-xs text-fg-muted leading-snug'>
-                {search
-                  ? 'no contacts match your search'
-                  : 'save addresses you send to often so you never have to paste again.'}
-              </p>
-            </div>
-            {!search && (
-              <button
-                type='button'
-                onClick={() => {
-                  setEditingContact(undefined);
-                  setShowContactModal(true);
-                }}
-                className='mt-1 inline-flex items-center gap-1.5 bg-zigner-gold/10 px-3 py-1.5 text-xs text-zigner-gold transition-colors hover:bg-zigner-gold/15'
-              >
-                <span className='i-ph-plus h-3.5 w-3.5' />
-                add your first contact
-              </button>
-            )}
+        {list.length > 0 ? (
+          <div className='flex flex-col divide-y divide-border-soft border border-border-soft bg-elev-1'>
+            {list.map(c => {
+              const status = contactStatus(c);
+              return (
+                <button
+                  key={c.id}
+                  type='button'
+                  data-preload={contactPath(c.id)}
+                  onClick={() => navigate(contactPath(c.id))}
+                  className='flex h-14 items-center gap-3 px-3 text-left transition-colors hover:bg-elev-2'
+                >
+                  <ZidSeal hex={c.zid} size={c.zid ? 26 : 30} />
+                  <span className='flex min-w-0 grow flex-col gap-[3px]'>
+                    <span className='truncate text-sm text-fg-high'>{c.name}</span>
+                    <span
+                      className={`truncate text-[11px] ${status.warn ? 'text-warn' : 'text-fg-muted'}`}
+                    >
+                      {status.line}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         ) : (
-          <div className='space-y-2'>
-            {filteredContacts.map(contact => (
-              <ContactCard
-                key={contact.id}
-                contact={contact}
-                onEditContact={() => handleEditContact(contact)}
-                onDeleteContact={() => void handleDeleteContact(contact.id)}
-                onToggleFavorite={() => void contacts.toggleFavorite(contact.id)}
-                onAddAddress={() => handleAddAddress(contact.id)}
-                onEditAddress={addr => handleEditAddress(contact.id, addr)}
-                onDeleteAddress={addrId => void handleDeleteAddress(contact.id, addrId)}
-                onShareCard={(() => {
-                  const zcashAddr = contact.addresses.find(a => a.network === 'zcash');
-                  if (!zcashAddr) {
-                    return undefined;
-                  }
-                  return () => void shareContactCard(contact, zcashAddr.address);
-                })()}
-              />
-            ))}
+          <div className='flex flex-col items-start gap-3 py-4'>
+            <span className='text-[13px] text-fg-muted'>
+              {empty ? 'no one saved yet' : 'no one by that name'}
+            </span>
+            {empty && (
+              <Button variant='secondary' size='sm' onClick={() => setAdding(true)}>
+                add someone
+              </Button>
+            )}
           </div>
         )}
       </div>
-
-      {/* contact modal */}
-      {showContactModal && (
-        <ContactModal
-          onClose={() => {
-            setShowContactModal(false);
-            setEditingContact(undefined);
-          }}
-          onSave={handleSaveContact}
-          editContact={editingContact}
-        />
-      )}
-
-      {/* address modal */}
-      {showAddressModal && editingAddress && (
-        <AddressModal
-          onClose={() => {
-            setShowAddressModal(false);
-            setEditingAddress(undefined);
-          }}
-          onSave={handleSaveAddress}
-          editAddress={editingAddress.address}
-        />
-      )}
+      <AddContactSheet open={adding} onClose={() => setAdding(false)} />
     </div>
   );
 }

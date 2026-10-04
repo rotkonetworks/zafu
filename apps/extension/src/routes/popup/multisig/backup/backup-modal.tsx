@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { Button } from '@repo/ui/components/ui/button';
 
 interface Props {
   open: boolean;
@@ -11,21 +12,12 @@ interface Props {
   title: string;
   /** label that ends up in the envelope's plaintext + filename */
   walletLabel: string;
-  /** is this exporting one wallet (false) or many (true)? */
-  batch?: boolean;
   /** receives the passphrase the user typed; should perform the export + download. */
   onConfirm: (passphrase: string) => Promise<void>;
   onClose: () => void;
 }
 
-export const BackupModal = ({
-  open,
-  title,
-  walletLabel,
-  batch = false,
-  onConfirm,
-  onClose,
-}: Props) => {
+export const BackupModal = ({ open, title, walletLabel, onConfirm, onClose }: Props) => {
   const [passphrase, setPassphrase] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -65,13 +57,11 @@ export const BackupModal = ({
 
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4'>
-      <div className='w-full max-w-sm rounded-lg border border-border-soft bg-elev-1 p-4'>
-        <h2 className='text-lg font-medium'>{title}</h2>
-        <p className='mt-1 text-label text-fg-muted'>
-          {batch ? `Exporting ${walletLabel}.` : `Exporting "${walletLabel}".`}
-        </p>
+      <div className='w-full max-w-sm border border-border-soft bg-elev-1 p-4'>
+        <h2 className='text-lg'>{title}</h2>
+        <p className='mt-1 text-label text-fg-muted'>Exporting &quot;{walletLabel}&quot;.</p>
 
-        <div className='mt-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-label text-amber-300'>
+        <div className='mt-3 border border-amber-500/40 bg-amber-500/5 p-2 text-label text-amber-300'>
           <span className='i-ph-warning mr-1 inline-block size-3 align-text-bottom' />
           This file contains the FROST share. Anyone with the file AND the passphrase can sign as
           this signer. The passphrase cannot be reset - losing it means the backup is unusable.
@@ -85,7 +75,7 @@ export const BackupModal = ({
             autoComplete='new-password'
             value={passphrase}
             onChange={e => setPassphrase(e.target.value)}
-            className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-sm focus:border-primary/50 focus:outline-none'
+            className='mt-1 w-full border border-border-soft bg-input px-3 py-2 font-mono text-sm focus:border-primary/50 focus:outline-none'
             placeholder='at least 8 characters'
           />
         </label>
@@ -97,7 +87,7 @@ export const BackupModal = ({
             autoComplete='new-password'
             value={confirm}
             onChange={e => setConfirm(e.target.value)}
-            className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-sm focus:border-primary/50 focus:outline-none'
+            className='mt-1 w-full border border-border-soft bg-input px-3 py-2 font-mono text-sm focus:border-primary/50 focus:outline-none'
           />
         </label>
 
@@ -108,26 +98,30 @@ export const BackupModal = ({
           <p className='mt-1 text-label text-amber-400'>at least 8 characters</p>
         )}
         {error && (
-          <p className='mt-2 rounded-md border border-red-500/40 bg-red-500/5 p-2 text-body text-red-400'>
+          <p className='mt-2 border border-red-500/40 bg-red-500/5 p-2 text-body text-red-400'>
             {error}
           </p>
         )}
 
         <div className='mt-4 flex gap-2'>
-          <button
+          <Button
+            variant='secondary'
+            size='sm'
             disabled={working}
             onClick={onClose}
-            className='flex-1 rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-2 transition-colors disabled:opacity-50'
+            className='flex-1'
           >
             cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            variant='primary'
+            size='sm'
             disabled={!canConfirm}
             onClick={() => void handleConfirm()}
-            className='flex-1 rounded-lg border border-primary/40 bg-primary/5 py-2 text-xs text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
+            className='flex-1'
           >
             {working ? 'encrypting...' : 'export'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

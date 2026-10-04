@@ -5,7 +5,7 @@ import {
   QueryClientStatesRequest,
   QueryClientStatesResponse,
 } from '@penumbra-zone/protobuf/ibc/core/client/v1/query_pb';
-import type { IbcClientQuerierInterface } from '@rotko/penumbra-types/querier';
+import type { IbcClientQuerierInterface } from '@penumbrafi/types/querier';
 
 export class IbcClientQuerier implements IbcClientQuerierInterface {
   private readonly client: Client<typeof IbcClientService>;

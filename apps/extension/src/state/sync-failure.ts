@@ -7,8 +7,7 @@
  *
  *   - a failure message says WHO ACTS (the wallet, or the person holding the
  *     money) and WHETHER IT SELF-HEALS,
- *   - it never contains a height, a hash, a hex string, or a type name —
- *     those live in `raw`, behind a "technical details" disclosure,
+ *   - it never contains a height, a hash, a hex string, or a type name - *     those live in `raw`, behind a "technical details" disclosure,
  *   - the failures the wallet can recover from on its own are never shown at
  *     all (see the rewind budget below).
  *
@@ -19,8 +18,8 @@
  *     though the user-facing meaning is identical.
  *   - `parseFatal` → `consensus`. vizor talks to lightwalletd and can only
  *     fail to *parse* what it is handed. zafu additionally VERIFIES what the
- *     endpoint serves (Ligerito header proofs, NOMT nullifier proofs,
- *     commitment proofs), so its equivalent terminal, node-attributable
+ *     endpoint serves (the Ligerito header proof), so its equivalent
+ *     terminal, node-attributable
  *     failure is "this endpoint served data the wallet could not verify".
  *     That is a stronger claim than a parse error and deserves its own kind.
  *   - vizor defaults an unclassified error to *retry*; zafu defaults it to
@@ -28,6 +27,8 @@
  *     classification bug must never turn a real failure into a silent
  *     success, so anything we do not understand gets shown to the user.
  */
+
+import { errText } from '@penumbra-zone/query/error-text';
 
 export type SyncFailureKind =
   | 'network'
@@ -48,7 +49,7 @@ export interface SyncFailureAction {
 
 export interface SyncFailure {
   kind: SyncFailureKind;
-  /** verbatim error text — for diagnostics only, NEVER rendered as the message */
+  /** verbatim error text - for diagnostics only, NEVER rendered as the message */
   raw: string;
   /** the only string a user is shown */
   message: string;
@@ -90,28 +91,34 @@ const KIND_BY_CODE: Record<SyncErrorCode, SyncFailureKind> = {
 };
 
 /**
- * The copy. Lowercase to match zafu's register (see
- * `components/zcash/sync-status.tsx`). Every line names who acts and whether
- * it self-heals. No heights, no hashes, no hex, no type names.
+ * The copy, one strip line each (boards ErrNode, StOffline). Every line names
+ * who acts and whether it self-heals. No heights, no hashes, no hex, no type
+ * names.
  */
 const MESSAGES: Record<SyncFailureKind, string> = {
-  network: "the network connection dropped. we'll keep trying automatically.",
-  endpoint: "can't reach the zcash node you configured. check your endpoint settings.",
-  consensus:
-    'this node served data the wallet could not verify, so syncing stopped. switch nodes, or try again later.',
-  chainRecovery: "the chain changed while syncing. we'll keep trying to recover.",
-  storageBusy: "wallet data is busy. we'll try syncing again automatically.",
-  storageFatal: 'wallet data could not be read. reload zafu and sync again.',
-  unknown: 'sync stopped and we could not tell why. try again to continue.',
+  network: "the node isn't answering · zafu keeps trying",
+  endpoint: "the node isn't answering · please choose another",
+  consensus: 'this node sent data zafu could not verify · please choose another',
+  chainRecovery: 'the chain moved while syncing · zafu keeps trying',
+  storageBusy: 'wallet data is busy · zafu keeps trying',
+  storageFatal: 'wallet data could not be read · please reload zafu',
+  unknown: 'sync stopped on our side, not yours · please try again',
 };
+
+/** shown in place of any failure while the computer itself has no network */
+export const OFFLINE_MESSAGE = 'no connection · zafu will keep trying on its own';
+
+const CHOOSE: SyncFailureAction = { label: 'choose', kind: 'settings' };
+const TRY_AGAIN: SyncFailureAction = { label: 'try again', kind: 'retry' };
 
 const ACTIONS: Partial<Record<SyncFailureKind, SyncFailureAction>> = {
   // Only failures the node is plausibly responsible for point at the node.
-  endpoint: { label: 'switch node', kind: 'settings' },
-  consensus: { label: 'switch node', kind: 'settings' },
+  network: CHOOSE,
+  endpoint: CHOOSE,
+  consensus: CHOOSE,
   // A local problem must never make the wallet blame the node (vizor's rule).
-  storageFatal: { label: 'reload zafu', kind: 'reload' },
-  unknown: { label: 'try again', kind: 'retry' },
+  storageFatal: { label: 'reload', kind: 'reload' },
+  unknown: TRY_AGAIN,
 };
 
 const AUTO_RETRIES: Record<SyncFailureKind, boolean> = {
@@ -129,22 +136,6 @@ const AUTO_RETRIES: Record<SyncFailureKind, boolean> = {
 /** Message for a kind. Exported for tests and for callers building their own. */
 export const syncFailureMessage = (kind: SyncFailureKind): string => MESSAGES[kind];
 
-const errorText = (error: unknown): string => {
-  if (typeof error === 'string') {
-    return error;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (error && typeof error === 'object' && 'message' in error) {
-    const { message } = error as { message?: unknown };
-    if (typeof message === 'string') {
-      return message;
-    }
-  }
-  return String(error);
-};
-
 /** A worker-tagged error carries its own classification. */
 export const syncErrorCodeOf = (error: unknown): SyncErrorCode | undefined => {
   if (error && typeof error === 'object' && 'syncCode' in error) {
@@ -161,7 +152,7 @@ const has = (haystack: string, needles: readonly string[]): boolean =>
 
 /**
  * Broadcast responses that mean "the node already has this transaction".
- * Not a failure at all — the node is telling us the work is done. Kept here
+ * Not a failure at all - the node is telling us the work is done. Kept here
  * only so it can never be shown as an error; broadcast semantics themselves
  * are handled upstream (zcli `client.rs`) and are not touched.
  */
@@ -266,7 +257,7 @@ const NETWORK = [
   'tls',
   'transport error',
   'socket',
-  // status numbers only ever matched with their prefix — a bare "503" also
+  // status numbers only ever matched with their prefix - a bare "503" also
   // appears inside block heights, which is how a reorg gets misread as an outage
   'http 500',
   'http 502',
@@ -325,7 +316,9 @@ const build = (kind: SyncFailureKind, raw: string, message?: string): SyncFailur
  * raised inside wasm, `fetch`, or IndexedDB.
  */
 export const classifySyncFailure = (error: unknown, code?: unknown): SyncFailure => {
-  const raw = errorText(error);
+  // "name: message": a DOMException's name (QuotaExceededError,
+  // InvalidStateError) is what tells storage from the network
+  const raw = errText(error);
   const lower = raw.toLowerCase();
 
   // Not an error: the node is telling us it already has the transaction.
@@ -354,7 +347,7 @@ export const classifySyncFailure = (error: unknown, code?: unknown): SyncFailure
  * never rotate the endpoint on its own: a local problem must never make the
  * wallet blame the node. `consensus` still OFFERS the user a "switch node"
  * action, because a node that serves unverifiable data is a node worth
- * leaving — but that is the user's decision, not an automatic one.
+ * leaving - but that is the user's decision, not an automatic one.
  */
 export const isEndpointFailoverCandidate = (failure: SyncFailure): boolean =>
   failure.kind === 'network' || failure.kind === 'endpoint';
@@ -376,6 +369,26 @@ export const COMMITMENT_TREE_REWIND_DISTANCES: readonly number[] = [10, 100, 100
  * `chainRecovery`, with a fresh budget on the next run.
  */
 export const MAX_REWINDS_PER_RUN = 3;
+
+/** consecutive failures after which zcash sync counts as stalled */
+export const SYNC_STALL_ERRORS = 10;
+
+/**
+ * Wait before the next attempt after `failures` consecutive failures:
+ * doubling from 2s to 30s, then every 2 minutes once stalled. The loop never
+ * gives up on its own (only the last window closing stops it), so a node
+ * that comes back is picked up from the stored height, never by a rescan.
+ */
+export const syncRetryDelayMs = (failures: number): number =>
+  Math.min(failures >= SYNC_STALL_ERRORS ? 120_000 : 30_000, 2000 * 2 ** Math.max(0, failures - 1));
+
+/** a stalled or stopped sync offers to try again now, from where it stopped
+ *  (a reload, offered when local data could not be read, does that too) */
+export const stalledFailure = (failure: SyncFailure): SyncFailure => ({
+  ...failure,
+  action: failure.action?.kind === 'reload' ? failure.action : TRY_AGAIN,
+  autoRetries: false,
+});
 
 export const rewindDistanceForAttempt = (attemptIndex: number): number => {
   const last = COMMITMENT_TREE_REWIND_DISTANCES[COMMITMENT_TREE_REWIND_DISTANCES.length - 1]!;
@@ -400,7 +413,7 @@ export const isChainContinuityError = (error: unknown): boolean => {
   if (code) {
     return code === 'chain-recovery';
   }
-  const lower = errorText(error).toLowerCase();
+  const lower = errText(error).toLowerCase();
   if (has(lower, CONSENSUS)) {
     return false;
   }

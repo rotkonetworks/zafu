@@ -1,0 +1,209 @@
+{
+  "config_version": 1,
+  "vote_servers": [
+    {
+      "url": "https://prod.vote-chain-primary.valargroup.org",
+      "label": "valargroup"
+    },
+    {
+      "url": "https://ru.zcash.space",
+      "label": "ruzcash"
+    },
+    {
+      "url": "https://147-182-192-212.sslip.io",
+      "label": "Zcash Labs"
+    },
+    {
+      "url": "https://134-209-215-69.sslip.io",
+      "label": "ShieldedLabs"
+    },
+    {
+      "url": "https://mnval01.zcash.legends.sh",
+      "label": "Legends"
+    },
+    {
+      "url": "https://zvote-1.stardust.rest",
+      "label": "stardust-staking"
+    },
+    {
+      "url": "https://zvote.zodl.com",
+      "label": "zodl"
+    },
+    {
+      "url": "https://zvote.keplr.app",
+      "label": "Keplr"
+    },
+    {
+      "url": "https://zvote.zfnd.org",
+      "label": "ZF"
+    },
+    {
+      "url": "https://v.ombie.cash",
+      "label": "v.ombie.cash"
+    }
+  ],
+  "pir_endpoints": [
+    {
+      "url": "https://lb-pir-primary.valargroup.org",
+      "label": "PIR primary"
+    },
+    {
+      "url": "https://lb-pir-backup.valargroup.org/",
+      "label": "PIR backup"
+    },
+    {
+      "url": "https://zpir-1.stardust.rest",
+      "label": "stardust-staking"
+    }
+  ],
+  "pir_layout": {
+    "pir_depth": 19,
+    "tier0_layers": 12,
+    "tier1_layers": 7,
+    "poly_len": 4096
+  },
+  "supported_versions": {
+    "pir": ["v0"],
+    "vote_protocol": "v0",
+    "tally": "v0",
+    "vote_server": "v1"
+  },
+  "rounds": {
+    "16eef7ebc77e0e04fb1c7329abfcc390f4a0c002964671ebb360914a3e5a3f11": {
+      "auth_version": 2,
+      "ea_pk": "wRS3/XKonR3xOxttb2zir4omb1zGmYuRWZzl+cHbIBs=",
+      "signatures": [
+        {
+          "key_id": "valargroup",
+          "alg": "ed25519",
+          "sig": "fvf+K533MnMrSB0aKDVGIPL1IvY+AWi4op422wsajp5y0n0B7w65sDOM83GZWPriB7p8YHl1hxMz5gL2iIDvCg=="
+        },
+        {
+          "key_id": "zodl",
+          "alg": "ed25519",
+          "sig": "bRgnOGfTgQuo+yzdO2aJvgMS9GcJ4ehcfNR0LkOXH6Ab6F9uPgqQRLL15XT37gqImT6HMpmieuADlrR4Bq9+Aw=="
+        },
+        {
+          "key_id": "tachyon",
+          "alg": "ed25519",
+          "sig": "dAcFL6Dj/JzsPF6hkQ7tl3Lir1YOnt0pzv4AU3W9wrB7Y6UcWjdC9LBF6efAczismM2fVNOJTmZsVVBzEKBZBQ=="
+        }
+      ]
+    },
+    "1d45a2cb05c607d1bbeb3aa21d9e2a40a55ea683bd2658974482e327cb789405": {
+      "auth_version": 2,
+      "ea_pk": "R2QBxoXAbvbIHCIpxVEgD0c7CgJbAaoDO22EY3RPoZo=",
+      "signatures": [
+        {
+          "key_id": "valargroup",
+          "alg": "ed25519",
+          "sig": "5S13AC6HFpl1I3gnTIwJn9Z/MJ6gloC3F6qS9gNPzBGEVSoux5OdtdRoXu7BDS1VgW0mSYUkEa1qrfODN4OPCg=="
+        }
+      ]
+    },
+    "2cba66eb16c7581a1692cb0b033785da0131059f645a0d2fb4dc2a5131505e01": {
+      "auth_version": 2,
+      "ea_pk": "UepazZylaRwgHmA5l2XXYsXC6w0zJFb6dAPKOC/I7zU=",
+      "signatures": [
+        {
+          "key_id": "valargroup",
+          "alg": "ed25519",
+          "sig": "B0KK/+nLUZS5z3geLd92MygalhnPP89He9vk8W+3yWHaIww7WWwKGT9ir4pT+6Kfh6xdiGUOPaR/kMXfyJNAAg=="
+        },
+        {
+          "key_id": "zodl",
+          "alg": "ed25519",
+          "sig": "3AB4jR8mJPLh5u8p2zTMHRuWWxO+2e2sBJz4eRuHWKrDgiwpWZyUQRnkspvTlRm/Ej8m3peTC3HSBl+XBVl+BA=="
+        }
+      ]
+    },
+    "379342917754f4ae238f90a44d819417532d32c1ade5e14fca85ef3edd68a439": {
+      "auth_version": 2,
+      "ea_pk": "0kIVqs5YMFRk+jQ7QV4XVisvLW9E/VX1AqLytd3l8wo=",
+      "signatures": [
+        {
+          "key_id": "valargroup",
+          "alg": "ed25519",
+          "sig": "GCY4JCfSoiWk9zSvDmEGTKShoJYFAh2hn7L/fg9s5QFQ+RXFA+VaG7mr1F/5AmJ8Q/ELoNKOJwTOdm1233CBBQ=="
+        }
+      ]
+    },
+    "3fda6c83b054e77c637cdb40f77448289742460ff16f0202229af3c00894d71b": {
+      "auth_version": 1,
+      "ea_pk": "vLZJEsvRcqLUY9D1NP+B2AUJbwzucbqa/RFZrgxX248=",
+      "signatures": [
+        {
+          "key_id": "valargroup",
+          "alg": "ed25519",
+          "sig": "TzG8cuMdGDfIu9YUEopwufqsf4ZHh1T2OL8WvS+9odYsLJuAHsvDv48GpwToE5Pz08OBK5pVeqeicOKeOz0BAA=="
+        }
+      ]
+    },
+    "71863e04e6fa0777035c9b31f5064be344c2f1e00f83b1226c4e8f8dc80fe928": {
+      "auth_version": 2,
+      "ea_pk": "pIyeVuGRZc7HjjNpFXAp2nIABDBWLU3g5p/q4VQ86Ck=",
+      "signatures": [
+        {
+          "key_id": "valargroup",
+          "alg": "ed25519",
+          "sig": "23uE+6eljzW7rTyjdI/+TsR06XorikbDWPAsXN6rfnGxkY3QvoIIMd1ImYk5y5DExS6WbA3HhiXVuNt/8S9vBg=="
+        }
+      ]
+    },
+    "95cc21e4e0cf8fbee4ad8dc8d4983305db93b83b0bdd02195905ca462da3c616": {
+      "auth_version": 2,
+      "ea_pk": "eLRqlxwDyT7rYrTuH97egijrY/N/ooxZ+gISu3N46qU=",
+      "signatures": [
+        {
+          "key_id": "valargroup",
+          "alg": "ed25519",
+          "sig": "PWMTojm2PhlyjeEH+2V3Mnhrm3N51Cow0D9YdfJ0e0rUJpAsf0Ab/KfnAiG+rWqw83c/INCaUxCxyu02O59FBg=="
+        }
+      ]
+    },
+    "9ec475347851272c84d211b72cf3f436bd1f4d263d471de92311d76ed4fdaf39": {
+      "auth_version": 2,
+      "ea_pk": "kqgw16Lh87HQMXK7UnTcRrA1fRCtm2IVk0Mz4Y/30A8=",
+      "signatures": [
+        {
+          "key_id": "valargroup",
+          "alg": "ed25519",
+          "sig": "HeUtqKb/NuuMbKrybD0/B9XkIhMg5bMqfO+JGickVB5PZh7ZqpJsgIBlFbeEupeWClKsWUUwDj4WlNNAlvgbCg=="
+        }
+      ]
+    },
+    "c276196250a0a42aa30e4d166653b6c0715cbf5596e5c2f24bb7bd2a63e1d230": {
+      "auth_version": 2,
+      "ea_pk": "FyOporX7nOK6vBALTQagAVf/j2TTOjp+sZJ3W9wL/j8=",
+      "signatures": [
+        {
+          "key_id": "valargroup",
+          "alg": "ed25519",
+          "sig": "z7RwyVAj4J7GvZ3PGQ6yPxx5Jh8Fiiyp0Lc/hWxbDIg4dSNL8eTqtjcMLBpyeDvezas4jQStF+7GAiLh+5c3AQ=="
+        }
+      ]
+    },
+    "e6b5a7ef727e8d89550b35f4515ee483d7dfd8b6b3d318ef7f0bc4efc77d9912": {
+      "auth_version": 2,
+      "ea_pk": "A0ayM51nGLdridv7K8K/Jo5XUGvLHZSOB08hsw0jj58=",
+      "signatures": [
+        {
+          "key_id": "valargroup",
+          "alg": "ed25519",
+          "sig": "U0I0ZBqqA57QzK4PtZsaYLS6rxE4oK8kz9HGjsE5Osdpdq6OC8q3Ih4+iFBfeLYM/6qXs+13POr7DKBV6vRPCQ=="
+        }
+      ]
+    },
+    "ed288153b031c804db90b28657ded8f0b08d7ac4ec658021edac62566d3b5001": {
+      "auth_version": 2,
+      "ea_pk": "WMmae5ybBN3fsIPv0JW5l+4ReNCzE69jkJSLjh23pxs=",
+      "signatures": [
+        {
+          "key_id": "valargroup",
+          "alg": "ed25519",
+          "sig": "WIkG0Wdlb15VWgbDeZGsjktdhW9zUlPsrI3DL/RJH4Oj8fSHOI9Sy1a0r8fJ12n2jGv3HbET4HrYfzlL0ruMAA=="
+        }
+      ]
+    }
+  }
+}

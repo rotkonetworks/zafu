@@ -4,6 +4,7 @@
  * extracts memos from transaction history and adds them to messages store
  */
 
+import { ingestMemoInvites } from '../people/client';
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { viewClient, sctClient } from '../clients';
@@ -11,7 +12,12 @@ import { useStore } from '../state';
 import { messagesSelector } from '../state/messages';
 import { bech32mAddress } from '@penumbra-zone/bech32m/penumbra';
 import { getAddress as getAddressFromView } from '@penumbra-zone/getters/address-view';
-import { getAmount as getAmountFromView } from '@penumbra-zone/getters/value-view';
+import {
+  getAmount as getAmountFromView,
+  getDisplayDenomExponentFromValueView,
+  getSymbolFromValueView,
+} from '@penumbra-zone/getters/value-view';
+import { fromUnits } from '../state/swap/provider';
 import type { TransactionInfo } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 
 interface ExtractedMemo {
@@ -135,7 +141,10 @@ function extractMemoFromTransaction(txInfo: TransactionInfo): ExtractedMemo | nu
           if (amountValue) {
             const lo = amountValue.lo ?? 0n;
             const hi = amountValue.hi ?? 0n;
-            amount = ((hi << 64n) + lo).toString();
+            // shown as the asset's display amount, like zcash memos ("50 um")
+            const exponent = getDisplayDenomExponentFromValueView.optional(note.value) ?? 0;
+            amount = fromUnits((hi << 64n) + lo, exponent, exponent);
+            asset = getSymbolFromValueView.optional(note.value)?.toLowerCase();
           }
         }
       }
@@ -158,88 +167,146 @@ function extractMemoFromTransaction(txInfo: TransactionInfo): ExtractedMemo | nu
 }
 
 /**
+ * The height each wallet's memos were read up to, so opening the inbox again
+ * reads only newer transactions instead of building a view of every one. A
+ * view service that has gone back (a resync from scratch) is read again whole.
+ */
+const SCANNED_KEY = 'penumbraMemoScanned';
+
+const readScanned = async (walletId: string): Promise<bigint> => {
+  try {
+    const got = (await chrome.storage.local.get(SCANNED_KEY))[SCANNED_KEY] as
+      | Record<string, string>
+      | undefined;
+    return BigInt(got?.[walletId] ?? 0);
+  } catch {
+    return 0n;
+  }
+};
+
+const writeScanned = async (walletId: string, height: bigint) => {
+  const got = ((await chrome.storage.local.get(SCANNED_KEY))[SCANNED_KEY] ?? {}) as Record<
+    string,
+    string
+  >;
+  await chrome.storage.local.set({ [SCANNED_KEY]: { ...got, [walletId]: String(height) } });
+};
+
+/** one read at a time per wallet: a second caller shares the first one's */
+const inFlight = new Map<string, Promise<{ synced: number; total: number }>>();
+
+/**
  * hook to fetch and sync penumbra memos
  */
-export function usePenumbraMemos() {
+export function usePenumbraMemos(walletId: string) {
   const messages = useStore(messagesSelector);
   const [syncProgress, setSyncProgress] = useState<{ current: number; total: number } | null>(null);
 
   const syncMemos = useMutation({
-    mutationFn: async () => {
-      const extracted: ExtractedMemo[] = [];
-      let count = 0;
-
-      // stream all transactions
-      for await (const response of viewClient.transactionInfo({})) {
-        if (!response.txInfo) {
-          continue;
-        }
-
-        count++;
-        setSyncProgress({ current: count, total: count }); // we don't know total upfront
-
-        // skip if we already have this message
-        const txId = response.txInfo.id?.inner
-          ? Array.from(response.txInfo.id.inner)
-              .map(b => b.toString(16).padStart(2, '0'))
-              .join('')
-          : '';
-
-        if (messages.hasMessage(txId)) {
-          continue;
-        }
-
-        const memo = extractMemoFromTransaction(response.txInfo);
-        if (memo) {
-          extracted.push(memo);
-        }
+    mutationFn: () => {
+      const running = inFlight.get(walletId);
+      if (running) {
+        return running;
       }
-
-      // fetch real timestamps from SctService for unique heights
-      if (extracted.length > 0) {
-        const uniqueHeights = [...new Set(extracted.map(m => m.blockHeight))];
-        const timestampMap = new Map<number, number>();
-
-        await Promise.all(
-          uniqueHeights.map(async height => {
-            try {
-              const { timestamp } = await sctClient.timestampByHeight({ height: BigInt(height) });
-              if (timestamp) {
-                timestampMap.set(height, timestamp.toDate().getTime());
-              }
-            } catch {
-              // timestamp unavailable
-            }
-          }),
-        );
-
-        // update memos with real timestamps
-        for (const memo of extracted) {
-          memo.timestamp = timestampMap.get(memo.blockHeight) ?? memo.timestamp;
-        }
-
-        // add all new memos to messages store
-        await messages.addMessages(
-          extracted.map(m => ({
-            network: 'penumbra' as const,
-            senderAddress: m.senderAddress,
-            recipientAddress: m.recipientAddress,
-            content: m.content,
-            txId: m.txId,
-            blockHeight: m.blockHeight,
-            timestamp: m.timestamp,
-            direction: m.direction,
-            read: false,
-            amount: m.amount,
-            asset: m.asset,
-          })),
-        );
-      }
-
-      setSyncProgress(null);
-      return { synced: extracted.length, total: count };
+      const run = read().finally(() => inFlight.delete(walletId));
+      inFlight.set(walletId, run);
+      return run;
     },
   });
+
+  const read = async () => {
+    const extracted: ExtractedMemo[] = [];
+    let count = 0;
+
+    const synced = (await viewClient.status({})).fullSyncHeight;
+    const from = await readScanned(walletId);
+    // memos stored before amounts carried their asset are read again once
+    const repairing = messages.messages.some(m => m.network === 'penumbra' && m.amount && !m.asset);
+    // the view service starts over after a resync from scratch; so does this
+    const startHeight = from > synced || repairing ? 0n : from;
+
+    // only transactions the last read has not seen
+    for await (const response of viewClient.transactionInfo({ startHeight })) {
+      if (!response.txInfo) {
+        continue;
+      }
+
+      count++;
+      setSyncProgress({ current: count, total: count }); // we don't know total upfront
+
+      // skip if we already have this message
+      const txId = response.txInfo.id?.inner
+        ? Array.from(response.txInfo.id.inner)
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('')
+        : '';
+
+      if (messages.hasMessage(txId) && !repairing) {
+        continue;
+      }
+
+      const memo = extractMemoFromTransaction(response.txInfo);
+      if (memo) {
+        extracted.push(memo);
+      }
+    }
+
+    // fetch real timestamps from SctService for unique heights
+    if (extracted.length > 0) {
+      const uniqueHeights = [...new Set(extracted.map(m => m.blockHeight))];
+      const timestampMap = new Map<number, number>();
+
+      await Promise.all(
+        uniqueHeights.map(async height => {
+          try {
+            const { timestamp } = await sctClient.timestampByHeight({ height: BigInt(height) });
+            if (timestamp) {
+              timestampMap.set(height, timestamp.toDate().getTime());
+            }
+          } catch {
+            // timestamp unavailable
+          }
+        }),
+      );
+
+      // update memos with real timestamps
+      for (const memo of extracted) {
+        memo.timestamp = timestampMap.get(memo.blockHeight) ?? memo.timestamp;
+      }
+
+      // add all new memos to messages store
+      await messages.addMessages(
+        extracted.map(m => ({
+          network: 'penumbra' as const,
+          senderAddress: m.senderAddress,
+          recipientAddress: m.recipientAddress,
+          content: m.content,
+          txId: m.txId,
+          blockHeight: m.blockHeight,
+          timestamp: m.timestamp,
+          direction: m.direction,
+          read: false,
+          amount: m.amount,
+          asset: m.asset,
+        })),
+      );
+      // a memo that carries a zafu chat invite goes to the people relay's inbox
+      ingestMemoInvites(
+        extracted.map(m => ({
+          network: 'penumbra' as const,
+          txId: m.txId,
+          content: m.content,
+          timestamp: m.timestamp,
+          from: m.senderAddress,
+          direction: m.direction,
+        })),
+      );
+    }
+
+    await writeScanned(walletId, synced);
+    setSyncProgress(null);
+    return { synced: extracted.length, total: count };
+  };
 
   return {
     syncMemos: syncMemos.mutate,

@@ -1,6 +1,7 @@
 /* eslint-disable no-console -- CLI output */
 import { writeFileSync } from 'node:fs';
 import { generateMnemonic } from 'bip39';
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { deriveInjectiveWallet } from '@repo/wallet/networks/injective/derive';
 
 /**
@@ -18,4 +19,18 @@ export const initGranter = async (file: string | undefined): Promise<void> => {
   const wallet = await deriveInjectiveWallet(mnemonic, 0);
   wallet.privateKey.fill(0);
   console.log(wallet.address);
+};
+
+/**
+ * `feegrant init-base <file>`: create the Base gas sponsor key ON the host.
+ * Writes a fresh private key to <file> (0600, never overwrites) and prints only
+ * the 0x address to fund. Separate from the Injective granter on purpose.
+ */
+export const initBaseKey = (file: string | undefined): void => {
+  if (!file) {
+    throw new Error('usage: feegrant init-base <key-file>');
+  }
+  const key = generatePrivateKey();
+  writeFileSync(file, `${key}\n`, { mode: 0o600, flag: 'wx' });
+  console.log(privateKeyToAccount(key).address);
 };

@@ -1,1 +1,5 @@
-@unocss;
+/* In the components layer so size-* / h-* w-* utilities win over the icon's
+   own 1em box. Unlayered, the icon rules beat every layered utility. */
+@layer components {
+  @unocss;
+}

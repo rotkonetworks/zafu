@@ -1,23 +1,13 @@
 /**
- * Read/write for the destination ledger and its audit trail.
+ * Read/write for the destination ledger (`netEgress`) and its audit trail
+ * (`netEgressLog`). Shapes live in `./destination`.
  *
- * Two shapes, two write policies, because they have opposite traffic profiles:
- *
- *  - The ledger is decision-critical. It is read on the egress path (once per
- *    realm, then cached) and written immediately whenever a *decision* changes.
- *  - Request counters are not decision-critical. They ride along in memory and
- *    are flushed on a debounce with a read-modify-write, so a request loop
- *    cannot turn into a storage write per request, and a concurrent decision
- *    written by another realm (the popup answering a prompt) cannot be clobbered
- *    by a counter flush.
- *  - The audit trail records transitions, not requests: `recordOutcome` writes a
- *    line only when the outcome differs from the host's last recorded outcome.
- *    A dapp polling a refused host produces one line, not thousands.
- *
- * The cache is invalidated by `chrome.storage.onChanged` so a decision taken in
- * the popup or the side panel is visible to the worker on its next request. The
- * listener is optional: unit tests and a non-extension runtime simply never
- * invalidate.
+ * Writes are decisions and transitions only - a user's allow/block, an opt-in,
+ * a prompt raised, a refusal that differs from the host's last one - never one
+ * write per request. Every write is a read-modify-write under one chain, so two
+ * realms answering at once cannot clobber each other within a realm, and the
+ * cache is dropped on `chrome.storage.onChanged` so a decision taken in the
+ * popup is what the worker reads next.
  */
 
 import { localExtStorage } from '@repo/storage-chrome/local';
@@ -25,18 +15,17 @@ import {
   NET_EGRESS_LOG_LIMIT,
   parseNetEgressLog,
   parseNetEgressState,
-  type DestinationRecord,
   type DestinationState,
+  type EgressOutcome,
   type NetEgressLogEntry,
   type NetEgressState,
+  type OptInChoice,
 } from './destination';
+import type { EgressRefusal } from './egress';
 import type { NetPurpose } from './purpose';
 
 const LEDGER_KEY = 'netEgress' as const;
 const LOG_KEY = 'netEgressLog' as const;
-
-/** How long counters may sit in memory before hitting storage. */
-const COUNTER_FLUSH_MS = 2000;
 
 let cache: NetEgressState | undefined;
 let logCache: NetEgressLogEntry[] | undefined;
@@ -44,19 +33,11 @@ let logCache: NetEgressLogEntry[] | undefined;
 /** serialises every write so a read-modify-write pair cannot interleave */
 let chain: Promise<unknown> = Promise.resolve();
 
-/** in-memory host -> counter deltas awaiting a flush */
-const pendingCounters = new Map<
-  string,
-  { calls: number; lastUsed: number; purposes: NetPurpose[] }
->();
-let flushTimer: ReturnType<typeof setTimeout> | undefined;
-
 /** same-tick guard against raising two prompts for one host */
 const promptedThisSession = new Set<string>();
 
 const runExclusive = <T>(fn: () => Promise<T>): Promise<T> => {
   const next = chain.then(fn, fn);
-  // keep the chain alive even when a link rejects
   chain = next.then(
     () => undefined,
     () => undefined,
@@ -64,44 +45,23 @@ const runExclusive = <T>(fn: () => Promise<T>): Promise<T> => {
   return next;
 };
 
-const subscribeToExternalWrites = (): void => {
-  // `chrome.storage` is absent in tests; the cache simply never invalidates.
-  const onChanged = globalThis.chrome?.storage?.onChanged;
-  if (!onChanged?.addListener) {
+globalThis.chrome?.storage?.onChanged?.addListener((changes, areaName) => {
+  if (areaName !== 'local') {
     return;
   }
-  onChanged.addListener(
-    (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => {
-      if (areaName !== 'local') {
-        return;
-      }
-      if (changes[LEDGER_KEY] !== undefined) {
-        cache = undefined;
-      }
-      if (changes[LOG_KEY] !== undefined) {
-        logCache = undefined;
-      }
-    },
-  );
-};
-
-subscribeToExternalWrites();
-
-export const readNetEgress = async (): Promise<NetEgressState> => {
-  if (cache) {
-    return cache;
+  if (changes[LEDGER_KEY] !== undefined) {
+    cache = undefined;
   }
-  cache = parseNetEgressState(await localExtStorage.get(LEDGER_KEY));
-  return cache;
-};
-
-export const readNetEgressLog = async (): Promise<NetEgressLogEntry[]> => {
-  if (logCache) {
-    return logCache;
+  if (changes[LOG_KEY] !== undefined) {
+    logCache = undefined;
   }
-  logCache = parseNetEgressLog(await localExtStorage.get(LOG_KEY));
-  return logCache;
-};
+});
+
+export const readNetEgress = async (): Promise<NetEgressState> =>
+  (cache ??= parseNetEgressState(await localExtStorage.get(LEDGER_KEY)));
+
+export const readNetEgressLog = async (): Promise<NetEgressLogEntry[]> =>
+  (logCache ??= parseNetEgressLog(await localExtStorage.get(LOG_KEY)));
 
 /** read-modify-write the ledger under the exclusive chain */
 const mutateNetEgress = <T>(fn: (state: NetEgressState) => T): Promise<T> =>
@@ -113,161 +73,57 @@ const mutateNetEgress = <T>(fn: (state: NetEgressState) => T): Promise<T> =>
     return result;
   });
 
-const flushCounters = (): void => {
-  flushTimer = undefined;
-  if (pendingCounters.size === 0) {
-    return;
-  }
-  const batch = new Map(pendingCounters);
-  pendingCounters.clear();
-  void mutateNetEgress(state => {
-    for (const [host, delta] of batch) {
-      const record = state.destinations[host];
-      // The record can be gone if another realm dropped it; nothing to add to.
-      if (!record) {
-        continue;
-      }
-      record.calls += delta.calls;
-      record.lastUsed = Math.max(record.lastUsed, delta.lastUsed);
-      for (const purpose of delta.purposes) {
-        if (!record.purposes.includes(purpose)) {
-          record.purposes.push(purpose);
-        }
-      }
-    }
-  }).catch(() => {
-    // Storage failures must not fail the request that is already in flight.
-  });
-};
-
-const scheduleFlush = (): void => {
-  if (flushTimer !== undefined) {
-    return;
-  }
-  flushTimer = setTimeout(flushCounters, COUNTER_FLUSH_MS);
-  // never hold the worker awake just to write counters
-  (flushTimer as unknown as { unref?: () => void }).unref?.();
-};
-
-const bumpCounters = (host: string, purpose: NetPurpose): void => {
-  const delta = pendingCounters.get(host) ?? { calls: 0, lastUsed: 0, purposes: [] };
-  delta.calls += 1;
-  delta.lastUsed = Date.now();
-  if (!delta.purposes.includes(purpose)) {
-    delta.purposes.push(purpose);
-  }
-  pendingCounters.set(host, delta);
-  scheduleFlush();
-};
-
-/** What the caller knows about a host before any decision has been recorded. */
-export interface DestinationObservation {
-  purpose: NetPurpose;
-  /**
-   * A user-legible reason to already be approved exists (zafu's own config for
-   * an enabled network, or the user configured this host). Trusted hosts are
-   * born `allowed`; untrusted ones are born undecided.
-   */
-  trusted: boolean;
-  label: string;
-}
-
 /**
- * Record that zafu is about to contact `host`, creating the entry on first
- * contact. Returns the record as it stands *before* this request's decision, so
- * the caller can run the policy against it.
+ * The user's decision on a host (or a retraction: `pending`). Creates the
+ * record when the host was never seen, and clears any open-prompt marker.
  */
-export const noteDestination = async (
-  host: string,
-  observation: DestinationObservation,
-): Promise<DestinationRecord> => {
-  const state = await readNetEgress();
-  const existing = state.destinations[host];
-  if (existing) {
-    const known = existing.purposes.includes(observation.purpose);
-    if (
-      !known ||
-      existing.label !== observation.label ||
-      existing.trusted !== observation.trusted
-    ) {
-      // The purpose list is user-facing ("what is this host for"), so a new
-      // purpose is worth an immediate write; the counters are not.
-      await mutateNetEgress(s => {
-        const record = s.destinations[host];
-        if (!record) {
-          return;
-        }
-        if (!record.purposes.includes(observation.purpose)) {
-          record.purposes.push(observation.purpose);
-        }
-        // Trust is monotone: a host that is trusted once stays trusted, and a
-        // host that was never trusted is not promoted by a later observation.
-        if (observation.trusted) {
-          record.trusted = true;
-          record.label = observation.label;
-          if (record.state === 'pending') {
-            record.state = 'allowed';
-          }
-        }
-      });
-      return (await readNetEgress()).destinations[host] ?? existing;
-    }
-    bumpCounters(host, observation.purpose);
-    return existing;
-  }
-
-  const now = Date.now();
-  const record: DestinationRecord = {
-    state: observation.trusted ? 'allowed' : 'pending',
-    trusted: observation.trusted,
-    label: observation.label,
-    purposes: [observation.purpose],
-    firstSeen: now,
-    lastUsed: now,
-    calls: 1,
-    lastOutcome: undefined,
-  };
-  await mutateNetEgress(s => {
-    // A concurrent realm may have created it first; that record wins.
-    if (!s.destinations[host]) {
-      s.destinations[host] = record;
-    }
-  });
-  const stored = (await readNetEgress()).destinations[host];
-  return stored ?? record;
-};
-
-/** The user's answer (or a retraction of one). Clears any open-prompt marker. */
 export const setDestinationDecision = async (
   host: string,
   state: DestinationState,
+  meta: { label?: string; purpose?: NetPurpose } = {},
 ): Promise<void> => {
   promptedThisSession.delete(host);
   await mutateNetEgress(s => {
-    const record = s.destinations[host];
-    if (!record) {
-      return;
-    }
+    const record = (s.destinations[host] ??= {
+      state,
+      label: meta.label ?? '',
+      purposes: [],
+      firstSeen: Date.now(),
+    });
     record.state = state;
     record.promptedAt = undefined;
+    if (meta.label) {
+      record.label = meta.label;
+    }
+    if (meta.purpose && !record.purposes.includes(meta.purpose)) {
+      record.purposes.push(meta.purpose);
+    }
     if (state === 'pending') {
       record.lastOutcome = undefined;
     }
   });
 };
 
+/** Turn a destination on (`allowed`), off (`blocked`), or back to its default (undefined). */
+export const setDestinationOptIn = async (
+  destination: string,
+  choice: OptInChoice | undefined,
+): Promise<void> => {
+  await mutateNetEgress(s => {
+    if (choice) {
+      s.optIns[destination] = choice;
+    } else {
+      delete s.optIns[destination];
+    }
+  });
+};
+
 /**
- * Drop a destination entirely.
- *
- * Used when the reason a host was trusted disappears - the user removed the
- * network they had configured. A stale `allowed` record would keep trusting a
- * host that nothing vouches for anymore, and would keep the removed endpoint
- * listed in the audit trail as if it were still in use, so the record goes with
- * the reason for it.
+ * Drop a destination entirely - used when the reason for it disappears (the
+ * user removed the network they had configured).
  */
 export const forgetDestination = async (host: string): Promise<boolean> => {
   promptedThisSession.delete(host);
-  pendingCounters.delete(host);
   return mutateNetEgress(s => {
     if (!s.destinations[host]) {
       return false;
@@ -277,29 +133,27 @@ export const forgetDestination = async (host: string): Promise<boolean> => {
   });
 };
 
-/** Mark that a consent prompt was raised for `host` and is unanswered. */
-export const markPrompted = async (host: string): Promise<void> => {
-  await mutateNetEgress(s => {
-    const record = s.destinations[host];
-    if (record) {
-      record.promptedAt = Date.now();
-    }
-  });
-};
-
 /**
- * Raise-once: true when a prompt should be opened for this host. Durable across
- * service-worker restarts via `promptedAt`, and cheap-deduped within a session.
+ * Raise-once: true when a prompt should be opened for this host, and marks it
+ * prompted. Durable across service-worker restarts via `promptedAt`.
  */
-export const shouldPrompt = async (host: string): Promise<boolean> => {
+export const claimPrompt = async (host: string, purpose: NetPurpose): Promise<boolean> => {
   if (promptedThisSession.has(host)) {
     return false;
   }
-  const record = (await readNetEgress()).destinations[host];
-  if (record?.promptedAt !== undefined) {
+  promptedThisSession.add(host);
+  if ((await readNetEgress()).destinations[host]?.promptedAt !== undefined) {
     return false;
   }
-  promptedThisSession.add(host);
+  await mutateNetEgress(s => {
+    const record = (s.destinations[host] ??= {
+      state: 'pending',
+      label: '',
+      purposes: [purpose],
+      firstSeen: Date.now(),
+    });
+    record.promptedAt = Date.now();
+  });
   return true;
 };
 
@@ -307,54 +161,98 @@ export const shouldPrompt = async (host: string): Promise<boolean> => {
 export const recordOutcome = async (
   host: string,
   purpose: NetPurpose,
-  outcome: NonNullable<DestinationRecord['lastOutcome']>,
+  outcome: EgressOutcome,
   detail?: string,
 ): Promise<void> => {
-  const current = (await readNetEgress()).destinations[host];
-  if (current?.lastOutcome === outcome) {
-    bumpCounters(host, purpose);
+  if ((await readNetEgress()).destinations[host]?.lastOutcome === outcome) {
     return;
   }
-  bumpCounters(host, purpose);
   await runExclusive(async () => {
     const state = parseNetEgressState(await localExtStorage.get(LEDGER_KEY));
     const record = state.destinations[host];
     if (record) {
       record.lastOutcome = outcome;
     }
-
-    const rawLog = parseNetEgressLog(await localExtStorage.get(LOG_KEY));
-    const entry: NetEgressLogEntry = {
-      ts: Date.now(),
-      host,
-      purpose,
-      outcome,
-      detail,
-    };
-    // newest first, bounded
-    const nextLog = [entry, ...rawLog].slice(0, NET_EGRESS_LOG_LIMIT);
+    const entry: NetEgressLogEntry = { ts: Date.now(), host, purpose, outcome, detail };
+    const nextLog = [entry, ...parseNetEgressLog(await localExtStorage.get(LOG_KEY))].slice(
+      0,
+      NET_EGRESS_LOG_LIMIT,
+    );
     await localExtStorage.set(LOG_KEY, nextLog);
     logCache = nextLog;
-    await localExtStorage.set(LEDGER_KEY, state);
-    cache = state;
-  });
-};
-
-/** Assign an identity (proxy/headers) to a destination. */
-export const setDestinationIdentity = async (host: string, identityId?: string): Promise<void> => {
-  await mutateNetEgress(s => {
-    const record = s.destinations[host];
-    if (!record) {
-      return;
+    if (record) {
+      await localExtStorage.set(LEDGER_KEY, state);
+      cache = state;
     }
-    record.identity = identityId;
   });
 };
 
-/** Drop the extra audit trail (the "forget" button in settings). */
+/**
+ * A refusal from any realm, into the audit trail: what the settings list
+ * shows as "zafu did not contact". Deduped against the host's last line, and
+ * against the same refusal repeating within a session (a sync loop hitting a
+ * blocked host must not become a storage write per attempt).
+ */
+const refusedThisSession = new Set<string>();
+export const recordRefusal = async (refusal: EgressRefusal): Promise<void> => {
+  const key = `${refusal.host}|${refusal.reason}`;
+  if (refusedThisSession.has(key) || refusal.reason === 'not-ready') {
+    return;
+  }
+  refusedThisSession.add(key);
+  await recordOutcome(
+    refusal.host,
+    'other',
+    refusal.reason === 'blocked' ? 'blocked' : 'feature-disabled',
+    refusal.destination ? `${refusal.destination}: ${refusal.reason}` : refusal.reason,
+  );
+};
+
+/** Drop the audit trail (the "forget" button in settings). */
 export const clearNetEgressLog = async (): Promise<void> => {
   await runExclusive(async () => {
     await localExtStorage.set(LOG_KEY, []);
     logCache = [];
+  });
+};
+
+/** The user's egress decisions, for the encrypted personal-data backup. */
+export interface EgressChoices {
+  hosts: Record<string, OptInChoice>;
+  optIns: Record<string, OptInChoice>;
+}
+
+export const exportEgressChoices = async (): Promise<EgressChoices> => {
+  const state = await readNetEgress();
+  const hosts: Record<string, OptInChoice> = {};
+  for (const [host, record] of Object.entries(state.destinations)) {
+    if (record.state !== 'pending') {
+      hosts[host] = record.state;
+    }
+  }
+  return { hosts, optIns: { ...state.optIns } };
+};
+
+/** Restore backed-up decisions over the current ones (a restore is the user choosing again). */
+export const importEgressChoices = async (
+  choices: Partial<EgressChoices> | undefined,
+): Promise<void> => {
+  const parsed = parseNetEgressState({
+    destinations: Object.fromEntries(
+      Object.entries(choices?.hosts ?? {}).map(([host, state]) => [
+        host,
+        { state, label: 'restored from backup' },
+      ]),
+    ),
+    optIns: choices?.optIns,
+  });
+  await mutateNetEgress(s => {
+    for (const [host, record] of Object.entries(parsed.destinations)) {
+      s.destinations[host] = {
+        ...record,
+        firstSeen: s.destinations[host]?.firstSeen ?? Date.now(),
+      };
+    }
+    Object.assign(s.optIns, parsed.optIns);
   });
 };

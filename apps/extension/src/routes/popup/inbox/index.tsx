@@ -1,1462 +1,459 @@
 /**
- * inbox - conversation-oriented encrypted messaging
+ * people (People.dc.html): you, the one thing that needs you (only when
+ * something does), your groups with their balance, then direct threads by
+ * recency.
  *
- * conversations are grouped by diversified address (each peer gets a unique
- * address). FROST coordination, contact cards, text, data memos all render
- * inline within their conversation thread.
+ * Opening this tab is T1 of the no-autoconnect contract: the chain memos the
+ * light client already syncs, plus one catch-up pass over the rooms this
+ * wallet joined on the people relay. With no rooms that pass is nothing at
+ * all: no request, no question. No discovery runs from here.
  */
 
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useShallow } from 'zustand/react/shallow';
+import { Button } from '@repo/ui/components/ui/button';
+import { Input } from '@repo/ui/components/ui/input';
+import { Sheet } from '@repo/ui/components/ui/sheet';
+import { ZidSeal } from '@repo/ui/components/ui/zid-seal';
+import { cn } from '@repo/ui/lib/utils';
 import { useStore, type AllSlices } from '../../../state';
-import { selectVisibleMultisigWallets } from '../../../state/wallets';
-import {
-  inboxSelector,
-  selectConversations,
-  selectUnreadCount,
-  type Conversation,
-  type InboxMessage,
-} from '../../../state/inbox';
-import { messagesSelector, type Message } from '../../../state/messages';
-import { contactsSelector } from '../../../state/contacts';
-import { useZcashMeDirectoryLookup } from '../../../services/zcashme/config';
-import { zcashMeLabel } from '../../../services/zcashme/label';
-import {
-  selectActiveNetwork,
-  selectPenumbraAccount,
-  selectEffectiveKeyInfo,
-} from '../../../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo } from '../../../state/keyring';
+import { keyInfoSupportsNetwork } from '../../../state/keyring/vault-ops';
+import { selectVisibleMultisigWallets, type ZcashWalletJson } from '../../../state/wallets';
 import { usePenumbraMemos } from '../../../hooks/penumbra-memos';
 import { useZcashMemos } from '../../../hooks/zcash-memos';
-import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
-import { useActiveAddress } from '../../../hooks/use-address';
-import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
-import { Address } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
-import { MemoPlaintext } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
-import { Value } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
-import { FeeTier_Tier } from '@penumbra-zone/protobuf/penumbra/core/component/fee/v1/fee_pb';
-import { viewClient } from '../../../clients';
-import { cn } from '@repo/ui/lib/utils';
-import { PopupPath } from '../paths';
-import { AddContactDialog } from '../../../components/add-contact-dialog';
-import {
-  traceAddressReferral,
-  type DiversifiedAddressRecord,
-} from '@repo/wallet/networks/zcash/diversified-address';
-import { getDiversifiedAddresses } from '../../../state/diversified-addresses';
-import {
-  MemoType,
-  type ContactCard,
-  decodeDataMemo,
-  DataContentType,
-} from '@repo/wallet/networks/zcash/memo-codec';
-import { MessageText } from '../../../components/message-text';
+import { useMultisigBalances } from '../../../hooks/multisig-balances';
+import { ScreenHeader } from '../../../components/screen-header';
+import { Sensitive } from '../../../components/sensitive';
+import { PopupPath, groupPath, threadPath } from '../paths';
+import { useIdentity } from '../identity/use-identity';
+import { deriveThreads, previewOf, shortAddress, whenOf, type DirectThread } from './threads';
+import { useThreadName } from './use-thread-name';
+import { useMyRooms, useOpenPeople, usePeople, useThread } from '../../../people/client';
+import { RelaySlot } from '../../../people/relay-slot';
+import { InviteRows } from '../../../people/invite-rows';
+import { usePairCards } from '../../../people/use-invites';
+import { useCardSync } from '../../../people/my-card';
+import { notePreview } from '../../../people/cards';
+import { WaitingCards } from './waiting-cards';
+import { threadKey, unreadOf, type PeopleRoom } from '../../../people/vault';
 
-// ---- helpers ----
+const zec = (zat: bigint) => (Number(zat) / 1e8).toFixed(2);
 
-function formatTimestamp(ts: number): string {
-  const date = new Date(ts);
-  const now = new Date();
-  const dateDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const diffDays = Math.floor((today.getTime() - dateDay.getTime()) / 86_400_000);
-  const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const Chevron = ({ tone = 'text-fg-dim' }: { tone?: string }) => (
+  <span className={cn('i-lucide-chevron-right size-3.5 shrink-0', tone)} aria-hidden='true' />
+);
 
-  if (diffDays === 0) {
-    return time;
-  }
-  if (diffDays === 1) {
-    return `yesterday ${time}`;
-  }
-  if (diffDays < 7) {
-    return `${date.toLocaleDateString([], { weekday: 'short' })} ${time}`;
-  }
-  return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`;
-}
-
-function truncateAddress(addr: string, len = 8): string {
-  if (addr.length <= len * 2 + 3) {
-    return addr;
-  }
-  return `${addr.slice(0, len)}...${addr.slice(-6)}`;
-}
-
-function memoTypeIcon(type: MemoType): string {
-  switch (type) {
-    case MemoType.Text:
-      return 'i-ph-chat';
-    case MemoType.ContactCard:
-      return 'i-ph-address-book';
-    case MemoType.Data:
-      return 'i-ph-database';
-    case MemoType.Address:
-      return 'i-ph-link';
-    case MemoType.PaymentRequest:
-      return 'i-ph-credit-card';
-    case MemoType.Ack:
-      return 'i-ph-checks';
-    case MemoType.EncryptedMessage:
-      return 'i-ph-lock';
-    case MemoType.DkgRound1:
-    case MemoType.DkgRound2:
-    case MemoType.DkgRound3:
-      return 'i-ph-key';
-    case MemoType.SignRequest:
-    case MemoType.SignCommitment:
-    case MemoType.SignShare:
-    case MemoType.SignResult:
-      return 'i-ph-pen-nib';
-    default:
-      return 'i-ph-file';
-  }
-}
-
-function isFrostType(type: MemoType): boolean {
-  return type >= MemoType.DkgRound1 && type <= MemoType.SignResult;
-}
-
-// ---- trust ----
-//
-// Every memo body is attacker-controlled: a memo field cannot carry a
-// signature, so a contact card's name/address/zid and a FROST sign request are
-// unproven claims until bound to something the wallet already knows. Keeping
-// the decision in pure helpers (rather than only inline in JSX) makes the gate
-// testable.
-
-export interface ContactCardTrust {
-  /**
-   * true only when the card's address is ALREADY in this wallet's address book.
-   * That is the one fact a card cannot forge: it is the wallet's own record,
-   * supplied as `isStoredContact`, not a comparison against the card.
-   */
-  known: boolean;
-  /**
-   * the card's address equals the address the delivering note declared. Both
-   * operands are sender-authored memo text, so this is a CLAIM the sender made,
-   * not evidence - surfaced as such and never as a verification glyph.
-   */
-  matchesDeliveringAddress: boolean;
-  /** the raw delivering address, shown next to the card as-is */
-  deliveringAddress?: string;
-}
-
-/**
- * A contact card is never self-authenticating: the zid and the address it
- * carries are exactly the values an attacker would forge, and the address the
- * delivering note declares is written by the same sender, so the two agreeing
- * proves nothing. The only verifiable fact is whether the address is one this
- * wallet already stores; everything else stays unverified, and the card's zid
- * is shown as self-declared, never as a verification glyph.
- */
-export function contactCardTrust(
-  card: ContactCard | undefined,
-  deliveringAddress: string | undefined,
-  isStoredContact: (address: string) => boolean,
-): ContactCardTrust {
-  if (!card) {
-    return { known: false, matchesDeliveringAddress: false, deliveringAddress };
-  }
-  const address = card.address.trim();
-  return {
-    known: isStoredContact(address),
-    matchesDeliveringAddress:
-      !!deliveringAddress && address.toLowerCase() === deliveringAddress.trim().toLowerCase(),
-    deliveringAddress,
-  };
-}
-
-/** session ids this wallet has locally created or joined, from live FROST state */
-export function knownSignSessionIds(frost: AllSlices['frostSession']): string[] {
-  const ids: string[] = [];
-  if (frost.signing?.roomCode) {
-    ids.push(frost.signing.roomCode);
-  }
-  if (frost.dkg?.roomCode) {
-    ids.push(frost.dkg.roomCode);
-  }
-  if (frost.relayCeremonyId) {
-    ids.push(frost.relayCeremonyId);
-  }
-  return ids;
-}
-
-/**
- * A FROST signing memo is actionable only when it names a session this wallet
- * created or joined. The memo codec carries no session id today, so a
- * chain-delivered sign request never matches and renders as an unverified
- * payload rather than a "sign transaction" CTA.
- */
-export function signRequestIsTrusted(
-  sessionId: string | undefined,
-  knownSessionIds: readonly string[],
-): boolean {
-  return !!sessionId && knownSessionIds.includes(sessionId);
-}
-
-// ---- conversation list ----
-
-function ConversationRow({
-  conversation,
-  contactName,
-  onClick,
-}: {
-  conversation: Conversation;
-  contactName?: string;
-  onClick: () => void;
-}) {
-  const lastMsg = conversation.messages[conversation.messages.length - 1];
-  const hasFrost = conversation.messages.some(m => isFrostType(m.type));
-
-  // preview text from last message
-  let preview = '';
-  if (lastMsg) {
-    if (lastMsg.type === MemoType.ContactCard) {
-      preview = 'contact card';
-    } else if (lastMsg.type === MemoType.Data) {
-      preview = 'data payload';
-    } else if (isFrostType(lastMsg.type)) {
-      preview = lastMsg.typeLabel;
-    } else {
-      preview = lastMsg.body.slice(0, 80);
-    }
-  }
-
-  const label = conversation.label ?? contactName ?? `#${conversation.diversifierIndex}`;
-
+const YouRow = () => {
+  const navigate = useNavigate();
+  const { zidPubkey, label } = useIdentity();
   return (
     <button
-      className={cn(
-        'group relative flex items-start gap-3 rounded-lg border p-3 w-full text-left transition-colors',
-        conversation.unread > 0
-          ? 'border-primary/40 bg-primary/5 hover:bg-primary/10'
-          : 'border-border-soft bg-elev-1 hover:border-border-soft',
-      )}
-      onClick={onClick}
+      type='button'
+      data-preload={PopupPath.IDENTITY}
+      onClick={() => navigate(PopupPath.IDENTITY)}
+      className='flex items-center gap-3.5 border border-border-soft bg-elev-1 px-3.5 py-3 text-left transition-colors hover:bg-elev-2'
     >
-      {/* unread dot */}
-      {conversation.unread > 0 && (
-        <div className='absolute left-1 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full bg-zigner-gold' />
-      )}
-
-      {/* icon */}
-      <div className='flex h-10 w-10 items-center justify-center rounded-full shrink-0 bg-elev-2'>
-        <span className={cn('h-5 w-5 text-fg-muted', hasFrost ? 'i-ph-key' : 'i-ph-chat')} />
-      </div>
-
-      {/* content */}
-      <div className='flex-1 min-w-0'>
-        <div className='flex items-center justify-between gap-2'>
-          <span className={cn('text-sm truncate', conversation.unread > 0 && 'font-medium')}>
-            {label}
-          </span>
-          <div className='flex items-center gap-1.5 shrink-0'>
-            {conversation.unread > 0 && (
-              <span className='rounded-full bg-zigner-gold px-1.5 py-0.5 text-label tabular text-zigner-gold-foreground'>
-                {conversation.unread}
-              </span>
-            )}
-            {lastMsg?.timestamp && (
-              <span className='text-label tabular text-fg-dim whitespace-nowrap'>
-                {formatTimestamp(lastMsg.timestamp)}
-              </span>
-            )}
-          </div>
-        </div>
-        <p
-          className={cn(
-            'text-xs mt-0.5 line-clamp-1',
-            conversation.unread > 0 ? 'text-fg-high' : 'text-fg-muted',
-          )}
-        >
-          {preview}
-        </p>
-        <div className='flex items-center gap-1.5 mt-1'>
-          <span className='text-label tabular text-fg-dim lowercase'>
-            {conversation.messages.length} message{conversation.messages.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-      </div>
+      <ZidSeal hex={zidPubkey} size={36} tone='hanko' />
+      <span className='flex min-w-0 grow flex-col gap-[3px]'>
+        <span className='truncate text-sm text-fg-high'>you · {label}</span>
+        <span className='text-[11px] text-fg-muted'>your card, sites, passkeys</span>
+      </span>
+      <Chevron />
     </button>
   );
-}
+};
 
-// ---- message bubbles ----
-
-function MessageBubble({ message }: { message: InboxMessage }) {
-  const isOutgoing = message.direction === 'outgoing';
-
-  return (
-    <div className={cn('flex', isOutgoing ? 'justify-end' : 'justify-start')}>
-      <div
-        className={cn(
-          'max-w-[85%] rounded-xl px-3 py-2',
-          isOutgoing ? 'bg-primary/15 rounded-br-sm' : 'bg-elev-2/60 rounded-bl-sm',
-        )}
-      >
-        {/* type badge for non-text */}
-        {message.type !== MemoType.Text && (
-          <div className='flex items-center gap-1 mb-1'>
-            <span className={cn(memoTypeIcon(message.type), 'h-3 w-3 text-fg-muted')} />
-            <span className='text-label text-fg-muted'>{message.typeLabel}</span>
-          </div>
-        )}
-
-        {/* render by type */}
-        <MessageContent message={message} />
-
-        {/* meta */}
-        <div className='flex items-center gap-2 mt-1'>
-          {message.timestamp && (
-            <span className='text-label tabular text-fg-dim'>
-              {formatTimestamp(message.timestamp)}
-            </span>
-          )}
-          {!message.complete && (
-            <span className='text-label text-warning'>
-              incomplete ({message.txids.length} fragments)
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MessageContent({ message }: { message: InboxMessage }) {
-  switch (message.type) {
-    case MemoType.Text:
-      return (
-        <p className='text-sm whitespace-pre-wrap break-words'>
-          <MessageText text={message.body} />
-        </p>
-      );
-
-    case MemoType.ContactCard:
-      return (
-        <ContactCardBubble card={message.contactCard} deliveringAddress={message.senderAddress} />
-      );
-
-    case MemoType.Data:
-      return <DataBubble body={message.body} />;
-
-    case MemoType.Address:
-      return (
-        <div className='space-y-1'>
-          <p className='text-xs text-fg-muted'>shared address</p>
-          <p className='text-xs font-mono break-all'>{message.body}</p>
-        </div>
-      );
-
-    case MemoType.PaymentRequest:
-      return (
-        <div className='space-y-1'>
-          <p className='text-xs text-fg-muted'>payment request</p>
-          <p className='text-sm font-mono break-all'>{message.body}</p>
-        </div>
-      );
-
-    case MemoType.Ack:
-      return (
-        <div className='flex items-center gap-1.5 text-fg-muted'>
-          <span className='i-ph-checks h-4 w-4' />
-          <span className='text-xs'>read receipt</span>
-        </div>
-      );
-
-    case MemoType.EncryptedMessage:
-      return (
-        <div className='flex items-center gap-1.5 text-fg-muted'>
-          <span className='i-ph-lock h-4 w-4' />
-          <span className='text-xs'>encrypted message (decryption not yet supported)</span>
-        </div>
-      );
-
-    // FROST DKG
-    case MemoType.DkgRound1:
-    case MemoType.DkgRound2:
-    case MemoType.DkgRound3:
-      return <FrostDkgBubble message={message} />;
-
-    // FROST signing
-    case MemoType.SignRequest:
-    case MemoType.SignCommitment:
-    case MemoType.SignShare:
-    case MemoType.SignResult:
-      return <FrostSignBubble message={message} />;
-
-    default:
-      return <p className='text-xs font-mono text-fg-muted break-all'>{message.body}</p>;
-  }
-}
-
-export function ContactCardBubble({
-  card,
-  deliveringAddress,
-}: {
-  card?: ContactCard;
-  deliveringAddress?: string;
-}) {
-  const { findByAddress, addContact, addAddress } = useStore(contactsSelector);
-  const [saved, setSaved] = useState(false);
-  // the wallet's own address book is the only input that can establish that the
-  // card's address is real, so the trust decision reads it here.
-  const trust = contactCardTrust(card, deliveringAddress, address => !!findByAddress(address));
-
-  useEffect(() => {
-    if (card?.address) {
-      setSaved(!!findByAddress(card.address));
-    }
-  }, [card, findByAddress]);
-
-  if (!card) {
-    return <p className='text-xs text-fg-muted'>malformed contact card</p>;
-  }
-
-  const handleSave = async () => {
-    const contact = await addContact({ name: card.name || 'unnamed' });
-    await addAddress(contact.id, { network: 'zcash', address: card.address });
-    setSaved(true);
-  };
-
-  return (
-    <div className='space-y-2'>
-      <div className='flex items-center gap-2'>
-        <span className='i-ph-address-book h-4 w-4 text-zigner-gold' />
-        <span className='text-sm font-medium'>{card.name || 'anonymous'}</span>
-      </div>
-      <p className='text-label font-mono text-fg-muted break-all'>{card.address}</p>
-      {card.zid && (
-        <div className='flex items-center gap-1'>
-          <span className='i-ph-question h-3 w-3 text-fg-muted' />
-          <span className='text-label font-mono text-fg-muted'>
-            self-declared zid {card.zid.slice(0, 16)}
-          </span>
-        </div>
-      )}
-      <div className='flex items-center gap-1'>
-        {trust.known ? (
-          <>
-            <span className='i-ph-check-circle h-3 w-3 text-fg-muted' />
-            <span className='text-label text-fg-muted'>address already in your contacts</span>
-          </>
-        ) : (
-          <>
-            <span className='i-ph-warning-circle h-3 w-3 text-warning' />
-            <span className='text-label text-warning'>unverified — not signed</span>
-          </>
-        )}
-      </div>
-      {!trust.known && trust.matchesDeliveringAddress && (
-        <p className='text-label text-fg-dim'>
-          the note's sender declares this address — a claim, not a verification
-        </p>
-      )}
-      {trust.deliveringAddress && (
-        <p className='text-label font-mono text-fg-dim break-all'>
-          delivering address {trust.deliveringAddress}
-        </p>
-      )}
-      {saved ? (
-        <span className='flex items-center gap-1 text-label text-fg-muted'>
-          <span className='i-ph-check h-3 w-3' />
-          in contacts
-        </span>
-      ) : (
-        <button
-          onClick={() => void handleSave()}
-          className='flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-label text-zigner-gold hover:bg-primary/20 transition-colors'
-        >
-          <span className='i-ph-user-plus h-3 w-3' />
-          {trust.known ? 'save to contacts' : 'save unverified'}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function DataBubble({ body }: { body: string }) {
-  const [expanded, setExpanded] = useState(false);
-
-  // try to decode hex body as data memo
-  let display: string;
-  let contentType = 'raw';
-  try {
-    const bytes = new Uint8Array(body.match(/.{2}/g)?.map(b => parseInt(b, 16)) ?? []);
-    const decoded = decodeDataMemo(bytes);
-    if (decoded) {
-      switch (decoded.contentType) {
-        case DataContentType.Json:
-          contentType = 'json';
-          display = new TextDecoder().decode(decoded.data);
-          try {
-            display = JSON.stringify(JSON.parse(display), null, 2);
-          } catch {
-            /* keep raw */
+/** the one fixed slot: rendered only while something waits for you */
+const NeedsYou = () => {
+  const navigate = useNavigate();
+  const signing = useStore(s => s.frostSession.signing);
+  const dkg = useStore(s => s.frostSession.dkg);
+  const item =
+    signing && signing.step !== 'complete' && !signing.error
+      ? {
+          title: 'needs your seal',
+          line: 'a group payment is waiting',
+          to: PopupPath.MULTISIG_SIGN,
+        }
+      : dkg && dkg.round < 3 && !dkg.error
+        ? {
+            title: 'a group is being made',
+            line: 'its keys are made together',
+            to: PopupPath.MULTISIG,
           }
-          break;
-        case DataContentType.Cbor:
-          contentType = 'cbor';
-          display = `[CBOR ${decoded.data.length} bytes]`;
-          break;
-        case DataContentType.Protobuf:
-          contentType = 'protobuf';
-          display = `[Protobuf ${decoded.data.length} bytes]`;
-          break;
-        default:
-          display = `[raw ${decoded.data.length} bytes]`;
-      }
-      if (decoded.correlationId) {
-        const cid = Array.from(decoded.correlationId)
-          .map(b => b.toString(16).padStart(2, '0'))
-          .join('');
-        display = `correlation: ${cid}\n${display}`;
-      }
-      if (decoded.replyTo) {
-        display = `reply-to: ${decoded.replyTo}\n${display}`;
-      }
-    } else {
-      display = body;
-    }
-  } catch {
-    display = body;
+        : undefined;
+  if (!item) {
+    return null;
   }
-
   return (
-    <div className='space-y-1'>
-      <div className='flex items-center gap-2'>
-        <span className='rounded bg-elev-2 px-1.5 py-0.5 text-label text-fg-muted'>
-          {contentType}
+    <button
+      type='button'
+      data-preload={item.to}
+      onClick={() => navigate(item.to)}
+      className='flex items-center gap-3 border border-hanko bg-hanko/10 p-3.5 text-left transition-colors hover:bg-hanko/15'
+    >
+      <span className='flex size-[34px] shrink-0 -rotate-6 items-center justify-center border-2 border-hanko font-display text-lg font-semibold text-hanko'>
+        判
+      </span>
+      <span className='flex min-w-0 grow flex-col gap-[3px]'>
+        <span className='text-[13px] text-fg-high'>{item.title}</span>
+        <span className='truncate text-[11px] text-fg-muted'>{item.line}</span>
+      </span>
+      <Chevron tone='text-fg-muted' />
+    </button>
+  );
+};
+
+const GroupRow = memo(({ wallet, balance }: { wallet: ZcashWalletJson; balance?: bigint }) => {
+  const navigate = useNavigate();
+  const ms = wallet.multisig!;
+  return (
+    <button
+      type='button'
+      data-preload={PopupPath.MULTISIG}
+      onClick={() => navigate(PopupPath.MULTISIG)}
+      className='flex h-16 items-center gap-3 px-1 text-left transition-colors hover:bg-elev-2'
+    >
+      <span className='flex size-10 shrink-0 items-center justify-center border border-border-hard bg-elev-1 font-display text-lg text-zigner-gold'>
+        蔵
+      </span>
+      <span className='flex min-w-0 grow items-baseline gap-2'>
+        <span className='truncate text-sm text-fg-high lowercase'>{wallet.label}</span>
+        <span className='shrink-0 text-[11px] text-fg-muted'>
+          {ms.threshold} of {ms.maxSigners}
         </span>
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className='text-label text-zigner-gold hover:underline'
-        >
-          {expanded ? 'collapse' : 'expand'}
-        </button>
-      </div>
-      {expanded && (
-        <pre className='text-label font-mono text-fg-muted bg-background/50 rounded p-2 overflow-x-auto max-h-48 whitespace-pre-wrap break-all'>
-          {display}
-        </pre>
+      </span>
+      {balance !== undefined && (
+        <Sensitive className='text-[13px] text-fg-high tabular'>{zec(balance)}</Sensitive>
       )}
-    </div>
+    </button>
   );
-}
+});
+GroupRow.displayName = 'GroupRow';
 
-function FrostDkgBubble({ message }: { message: InboxMessage }) {
+/** a group on the people relay: its last line, and how many you have not read */
+const RoomRow = memo(({ room }: { room: PeopleRoom }) => {
   const navigate = useNavigate();
-  const round =
-    message.type === MemoType.DkgRound1 ? 1 : message.type === MemoType.DkgRound2 ? 2 : 3;
-
+  const thread = useThread(room);
+  const last = thread?.items[thread.items.length - 1];
+  const unread = unreadOf(thread);
+  const who = last && (last.mine ? 'you' : (room.group?.names?.[last.author] ?? last.name));
   return (
-    <div className='space-y-2'>
-      <div className='flex items-center gap-2'>
-        <span className='i-ph-key h-4 w-4 text-fg-muted' />
-        <span className='text-sm font-medium text-fg-high'>DKG round {round}</span>
-      </div>
-      <p className='text-label text-fg-muted'>
-        {round === 1 && 'key generation started - share your commitment'}
-        {round === 2 && 'commitments collected - share your package'}
-        {round === 3 && 'packages collected - finalize key generation'}
-      </p>
-      {message.direction === 'incoming' && (
-        <button
-          onClick={() => navigate(PopupPath.MULTISIG_JOIN)}
-          className='flex items-center gap-1.5 rounded-md bg-elev-2 border border-border-soft px-2.5 py-1.5 text-xs text-fg-high hover:bg-elev-1 transition-colors'
-        >
-          <span className='i-ph-arrow-right h-3.5 w-3.5' />
-          open multisig
-        </button>
-      )}
-    </div>
-  );
-}
-
-export function FrostSignBubble({ message }: { message: InboxMessage }) {
-  const navigate = useNavigate();
-  const frost = useStore(s => s.frostSession);
-  const trusted = signRequestIsTrusted(message.sessionId, knownSignSessionIds(frost));
-  const labels: Record<number, string> = {
-    [MemoType.SignRequest]: 'signature requested',
-    [MemoType.SignCommitment]: 'commitment shared',
-    [MemoType.SignShare]: 'signature share received',
-    [MemoType.SignResult]: 'signature complete',
-  };
-
-  return (
-    <div className='space-y-2'>
-      <div className='flex items-center gap-2'>
-        <span className='i-ph-pen-nib h-4 w-4 text-fg-muted' />
-        <span className='text-sm font-medium text-fg-high'>{message.typeLabel}</span>
-      </div>
-      <p className='text-label text-fg-muted'>{labels[message.type] ?? 'FROST signing round'}</p>
-      {!trusted && (
-        <div className='flex items-center gap-1'>
-          <span className='i-ph-warning-circle h-3 w-3 text-warning' />
-          <span className='text-label text-warning'>
-            {message.sessionId
-              ? 'unverified — session not recognised'
-              : 'unverified — no session id in memo'}
+    <button
+      type='button'
+      data-preload={groupPath(room.group!.G)}
+      onClick={() => navigate(groupPath(room.group!.G))}
+      className='flex h-16 items-center gap-3 px-1 text-left transition-colors hover:bg-elev-2'
+    >
+      <span className='flex size-10 shrink-0 items-center justify-center border border-border-hard bg-elev-1 font-display text-lg text-zigner-gold'>
+        蔵
+      </span>
+      <span className='flex min-w-0 grow flex-col gap-[3px]'>
+        <span className='flex items-baseline gap-2'>
+          <span className='truncate text-sm text-fg-high lowercase'>{room.name}</span>
+          <span className='shrink-0 text-[11px] text-fg-muted'>
+            {room.group?.members.length || 1}
           </span>
-        </div>
+        </span>
+        <span className='truncate text-[11px] text-fg-muted'>
+          {last ? `${who}: ${last.body}` : 'no messages yet'}
+        </span>
+      </span>
+      {unread > 0 && (
+        <span className='flex h-[18px] min-w-[18px] shrink-0 items-center justify-center bg-hanko px-[5px] text-[11px] text-fg-high'>
+          {unread}
+        </span>
       )}
-      {!trusted && message.senderAddress && (
-        <p className='text-label font-mono text-fg-dim break-all'>
-          delivering address {message.senderAddress}
-        </p>
-      )}
-      {trusted && message.direction === 'incoming' && message.type === MemoType.SignRequest && (
-        <button
-          onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
-          className='flex items-center gap-1.5 rounded-md bg-elev-2 border border-border-soft px-2.5 py-1.5 text-xs text-fg-high hover:bg-elev-1 transition-colors'
-        >
-          <span className='i-ph-pen-nib h-3.5 w-3.5' />
-          sign transaction
-        </button>
-      )}
-      {trusted && message.type === MemoType.SignResult && (
-        <div className='flex items-center gap-1.5 text-fg-muted'>
-          <span className='i-ph-check-circle h-3.5 w-3.5' />
-          <span className='text-xs'>transaction signed</span>
-        </div>
-      )}
-    </div>
+    </button>
   );
-}
+});
+RoomRow.displayName = 'RoomRow';
 
-// ---- conversation thread view ----
-
-function ConversationThread({
-  conversation,
-  onClose,
-  referral,
-}: {
-  conversation: Conversation;
-  onClose: () => void;
-  referral?: DiversifiedAddressRecord;
-}) {
-  const inbox = useStore(inboxSelector);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [editingLabel, setEditingLabel] = useState(false);
-  const [labelDraft, setLabelDraft] = useState(conversation.label ?? '');
-
-  // scroll to bottom on open
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [conversation.messages.length]);
-
-  // mark as read
-  useEffect(() => {
-    if (conversation.unread > 0) {
-      inbox.markRead(conversation.diversifierIndex);
-    }
-  }, [conversation.diversifierIndex, conversation.unread, inbox]);
-
-  const saveLabel = () => {
-    inbox.setConversationLabel(conversation.diversifierIndex, labelDraft);
-    setEditingLabel(false);
-  };
-
+const Groups = () => {
+  const wallets = useStore(selectVisibleMultisigWallets);
+  const onZcash = useStore(s => selectActiveNetwork(s) === 'zcash');
+  const balances = useMultisigBalances(wallets, onZcash);
+  const rooms = useMyRooms().filter(r => r.kind === 'group' && r.joined);
+  if (!wallets.length && !rooms.length) {
+    return null;
+  }
   return (
-    <div className='flex flex-col h-full'>
-      {/* header */}
-      <div className='flex items-center gap-3 px-4 py-3 border-b border-border-soft'>
-        <button onClick={onClose} className='text-fg-muted hover:text-fg-high transition-colors'>
-          <span className='i-ph-arrow-left h-5 w-5' />
-        </button>
-
-        <div className='flex-1 min-w-0'>
-          {editingLabel ? (
-            <div className='flex items-center gap-2'>
-              <input
-                value={labelDraft}
-                onChange={e => setLabelDraft(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && saveLabel()}
-                autoFocus
-                className='flex-1 bg-transparent border-b border-zigner-gold text-sm focus:outline-none'
-                placeholder='conversation label'
-              />
-              <button onClick={saveLabel} className='text-zigner-gold'>
-                <span className='i-ph-check h-4 w-4' />
-              </button>
-              <button onClick={() => setEditingLabel(false)} className='text-fg-muted'>
-                <span className='i-ph-x h-4 w-4' />
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => {
-                setLabelDraft(conversation.label ?? '');
-                setEditingLabel(true);
-              }}
-              className='flex items-center gap-1.5 text-sm font-medium hover:text-zigner-gold transition-colors'
-            >
-              {conversation.label || `conversation #${conversation.diversifierIndex}`}
-              <span className='i-ph-pencil-simple h-3 w-3 text-fg-muted' />
-            </button>
-          )}
-        </div>
-
-        <span className='text-label text-fg-muted'>{conversation.messages.length} msg</span>
-      </div>
-
-      {/* referral attribution */}
-      {referral && (
-        <div className='flex items-center gap-1.5 px-4 py-2 text-xs text-fg-muted border-b border-border-hard/20'>
-          <span className='i-ph-share-network h-3.5 w-3.5' />
-          via {referral.sharedWith}
-        </div>
-      )}
-
-      {/* messages */}
-      <div ref={scrollRef} className='flex-1 overflow-y-auto px-4 py-3 space-y-3'>
-        {conversation.messages.map(msg => (
-          <MessageBubble key={msg.id} message={msg} />
+    <section className='flex flex-col gap-1.5'>
+      <h2 className='text-xs tracking-[0.04em] text-fg-muted'>groups</h2>
+      <div className='flex flex-col'>
+        {rooms.map(r => (
+          <RoomRow key={r.id} room={r} />
+        ))}
+        {wallets.map(w => (
+          <GroupRow key={w.id} wallet={w} balance={balances[w.id]} />
         ))}
       </div>
-
-      {/* compose bar */}
-      <ConversationCompose diversifierIndex={conversation.diversifierIndex} />
-    </div>
+    </section>
   );
+};
+
+/** one person: their newest line, memo or relay */
+interface DirectRowData {
+  id: string;
+  address?: string;
+  line: string;
+  /** ms */
+  ts: number;
+  unread: number;
 }
 
-function ConversationCompose({ diversifierIndex }: { diversifierIndex: number }) {
+const rowOf = (t: DirectThread): DirectRowData => ({
+  id: t.id,
+  address: t.address,
+  line: previewOf(t.last),
+  ts: t.last.timestamp,
+  unread: t.unread,
+});
+
+const DirectRow = memo(({ thread }: { thread: DirectRowData }) => {
   const navigate = useNavigate();
-  const activeNetwork = useStore(selectActiveNetwork);
-  const { address: ownAddress } = useActiveAddress();
-  const [message, setMessage] = useState('');
-
-  const handleSend = () => {
-    if (!message.trim()) {
-      return;
-    }
-
-    const memoWithReply = ownAddress ? `${message}\nreply:${ownAddress}` : message;
-
-    navigate(PopupPath.SEND, {
-      state: {
-        prefillMemo: memoWithReply,
-        prefillAmount: '',
-        diversifierIndex,
-      },
-    });
-  };
-
+  const name = useThreadName(thread.address);
+  const unread = thread.unread > 0;
   return (
-    <div className='p-3 border-t border-border-soft'>
-      <div className='flex items-end gap-2'>
-        <textarea
-          value={message}
-          onChange={e => setMessage(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-          placeholder='write a message...'
-          rows={1}
-          className='flex-1 rounded-lg border border-border-soft bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none resize-none'
-        />
-        <button
-          onClick={handleSend}
-          disabled={!message.trim()}
-          className='rounded-lg bg-zigner-gold p-2 text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
-        >
-          <span className='i-ph-paper-plane-right h-4 w-4' />
-        </button>
-      </div>
-      <p className='text-label text-fg-muted mt-1'>
-        sends via {activeNetwork} shielded transaction
-      </p>
-    </div>
+    <button
+      type='button'
+      data-preload={threadPath(thread.id)}
+      onClick={() => navigate(threadPath(thread.id))}
+      className='flex h-[60px] items-center gap-3 px-1 text-left transition-colors hover:bg-elev-2'
+    >
+      <span className='flex size-10 shrink-0 items-center justify-center bg-elev-2 text-[15px] text-fg-high lowercase'>
+        {name.charAt(0)}
+      </span>
+      <span className='flex min-w-0 grow flex-col gap-[3px]'>
+        <span className={cn('truncate text-sm', unread ? 'text-fg-high' : 'text-fg')}>{name}</span>
+        <span className='truncate text-[11px] text-fg-muted'>{thread.line}</span>
+      </span>
+      <span className='flex shrink-0 flex-col items-end gap-1'>
+        <span className='text-[11px] text-fg-dim'>{whenOf(thread.ts)}</span>
+        {unread && <span className='size-2 bg-zigner-gold' aria-label='unread' />}
+      </span>
+    </button>
   );
-}
+});
+DirectRow.displayName = 'DirectRow';
 
-// ---- compose new conversation ----
+const selectThreads = (s: AllSlices) => s.messages.messages;
 
-function ComposeMessage({
-  onClose,
-  replyTo,
-  network,
-}: {
-  onClose: () => void;
-  replyTo?: { address: string; network: 'zcash' | 'penumbra' };
-  network: 'zcash' | 'penumbra';
-}) {
+const Direct = ({ canCard }: { canCard: boolean }) => {
   const navigate = useNavigate();
-  const penumbraTx = usePenumbraTransaction();
-  const penumbraAccount = useStore(selectPenumbraAccount);
-  const { address: ownAddress } = useActiveAddress();
-  const [recipient, setRecipient] = useState(replyTo?.address ?? '');
-  const [message, setMessage] = useState('');
-  const [amount, setAmount] = useState('');
-  const [txStatus, setTxStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
-  const [txError, setTxError] = useState<string | undefined>();
-  const [txHash, setTxHash] = useState<string | undefined>();
-
-  const canSend = recipient.trim() && message.trim() && txStatus === 'idle';
-
-  const handleSendPenumbra = useCallback(async () => {
-    if (!recipient.trim() || !message.trim()) {
-      return;
-    }
-
-    setTxStatus('sending');
-    setTxError(undefined);
-
-    try {
-      const addressResponse = await viewClient.addressByIndex({
-        addressIndex: { account: penumbraAccount },
-      });
-      if (!addressResponse.address) {
-        throw new Error('failed to get address');
+  const network = useStore(selectActiveNetwork);
+  const messages = useStore(selectThreads);
+  const contacts = useStore(s => s.contacts.contacts);
+  const rooms = useMyRooms();
+  const pairRooms = useMemo(() => rooms.filter(r => r.kind === 'pair' && r.joined), [rooms]);
+  const { threads: relayThreads } = usePeople();
+  const threads = useMemo(() => {
+    const rows = new Map(
+      deriveThreads(
+        (Array.isArray(messages) ? messages : []).filter(m => m.network === network),
+      ).map(t => [t.id, rowOf(t)]),
+    );
+    // relay lines from pair rooms join the person's row, newest wins
+    for (const room of network === 'zcash' ? pairRooms : []) {
+      const t = relayThreads[threadKey(room)];
+      const last = t?.items[t.items.length - 1];
+      const address = (Array.isArray(contacts) ? contacts : [])
+        .find(c => c.id === room.pair?.personId)
+        ?.addresses.find(a => a.network === 'zcash')?.address;
+      if (!last || !address) {
+        continue;
       }
-
-      const amountValue = amount ? parseFloat(amount) : 0.000001;
-      const amountInMicroUM = BigInt(Math.floor(amountValue * 1_000_000));
-
-      const planRequest = new TransactionPlannerRequest({
-        source: { account: penumbraAccount },
-        outputs: [
-          {
-            address: new Address({ altBech32m: recipient }),
-            value: new Value({
-              amount: { lo: amountInMicroUM, hi: 0n },
-            }),
-          },
-        ],
-        memo: new MemoPlaintext({
-          returnAddress: addressResponse.address,
-          text: message,
-        }),
-        feeMode: {
-          case: 'autoFee',
-          value: { feeTier: FeeTier_Tier.LOW },
-        },
-      });
-
-      const result = await penumbraTx.mutateAsync(planRequest);
-      setTxStatus('success');
-      setTxHash(result.txId);
-    } catch (err) {
-      setTxStatus('error');
-      setTxError(err instanceof Error ? err.message : 'failed to send');
+      const id = address.toLowerCase();
+      const row = rows.get(id);
+      const unread = unreadOf(t) + (row?.unread ?? 0);
+      if (!row || last.ts * 1000 > row.ts) {
+        rows.set(id, { id, address, line: notePreview(last), ts: last.ts * 1000, unread });
+      } else {
+        rows.set(id, { ...row, unread });
+      }
     }
-  }, [recipient, message, amount, penumbraTx, penumbraAccount]);
-
-  const handleSendZcash = useCallback(() => {
-    const memoWithReply = ownAddress ? `${message}\nreply:${ownAddress}` : message;
-
-    navigate(PopupPath.SEND, {
-      state: {
-        prefillMemo: memoWithReply,
-        prefillRecipient: recipient,
-        prefillAmount: amount,
-      },
-    });
-    onClose();
-  }, [navigate, message, recipient, amount, ownAddress, onClose]);
-
-  const handleSend = () => {
-    if (!canSend) {
-      return;
-    }
-    if (network === 'penumbra') {
-      void handleSendPenumbra();
-    } else {
-      handleSendZcash();
-    }
-  };
-
+    return [...rows.values()].sort((a, b) => b.ts - a.ts);
+  }, [messages, network, pairRooms, relayThreads, contacts]);
   return (
-    <div className='flex flex-col h-full'>
-      <div className='flex items-center gap-3 px-4 py-3 border-b border-border-soft'>
-        <button onClick={onClose} className='text-fg-muted hover:text-fg-high transition-colors'>
-          <span className='i-ph-arrow-left h-5 w-5' />
-        </button>
-        <h2 className='text-lg font-medium'>new message</h2>
-      </div>
-
-      <div className='flex-1 overflow-y-auto p-4 space-y-4'>
-        <div>
-          <label className='block text-xs text-fg-muted mb-1'>to</label>
-          <input
-            type='text'
-            value={recipient}
-            onChange={e => setRecipient(e.target.value)}
-            placeholder={network === 'zcash' ? 'z-address or unified address' : 'penumbra1...'}
-            disabled={!!replyTo || txStatus !== 'idle'}
-            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-xs font-mono focus:border-zigner-gold focus:outline-none disabled:opacity-50'
-          />
-        </div>
-
-        <div>
-          <label className='block text-xs text-fg-muted mb-1'>
-            amount ({network === 'penumbra' ? 'um' : 'zec'})
-          </label>
-          <input
-            type='text'
-            value={amount}
-            onChange={e => setAmount(e.target.value)}
-            placeholder='0.00 (optional)'
-            disabled={txStatus !== 'idle'}
-            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none disabled:opacity-50'
-          />
-          <p className='text-xs text-fg-muted mt-1'>send a payment with your message</p>
-        </div>
-
-        <div>
-          <label className='block text-xs text-fg-muted mb-1'>message</label>
-          <textarea
-            value={message}
-            onChange={e => setMessage(e.target.value)}
-            placeholder='write your encrypted message...'
-            rows={6}
-            maxLength={network === 'zcash' && ownAddress ? 512 - ownAddress.length - 7 : 512}
-            disabled={txStatus !== 'idle'}
-            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none resize-none disabled:opacity-50'
-          />
-          <p className='text-xs text-fg-muted mt-1'>
-            {message.length}/{network === 'zcash' && ownAddress ? 512 - ownAddress.length - 7 : 512}{' '}
-            characters
-            {network === 'zcash' && ownAddress && (
-              <span className='ml-1 text-fg-dim'>(return address reserved)</span>
-            )}
-          </p>
-        </div>
-
-        {txStatus === 'success' && txHash && (
-          <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
-            <p className='flex items-center gap-1.5 text-sm text-fg-high'>
-              <span className='i-ph-check h-4 w-4' />
-              message sent
-            </p>
-            <p className='text-xs text-fg-muted mt-1 font-mono break-all'>{txHash}</p>
-          </div>
-        )}
-
-        {txStatus === 'error' && txError && (
-          <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
-            <p className='text-sm text-red-400'>failed to send</p>
-            <p className='text-xs text-fg-muted mt-1'>{txError}</p>
-          </div>
-        )}
-      </div>
-
-      <div className='p-4 border-t border-border-soft'>
+    <section className='flex flex-col gap-1.5'>
+      <div className='flex items-baseline justify-between'>
+        <h2 className='text-xs tracking-[0.04em] text-fg-muted'>direct</h2>
         <button
-          onClick={() => {
-            if (txStatus === 'success' || txStatus === 'error') {
-              onClose();
-            } else {
-              handleSend();
-            }
-          }}
-          disabled={(txStatus === 'idle' && !canSend) || txStatus === 'sending'}
-          className='w-full flex items-center justify-center gap-2 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
+          type='button'
+          data-preload={PopupPath.CONTACTS}
+          onClick={() => navigate(PopupPath.CONTACTS)}
+          className='text-xs text-zigner-gold hover:underline'
         >
-          {txStatus === 'sending' ? (
-            <>
-              <span className='i-ph-arrows-clockwise h-4 w-4 animate-spin' /> sending...
-            </>
-          ) : txStatus === 'success' ? (
-            <>
-              <span className='i-ph-check h-4 w-4' /> done
-            </>
-          ) : txStatus === 'error' ? (
-            'close'
-          ) : (
-            <>
-              <span className='i-ph-paper-plane-right h-4 w-4' /> send message
-            </>
-          )}
+          contacts
         </button>
-        <p className='text-xs text-fg-muted text-center mt-2'>
-          {network === 'penumbra'
-            ? 'message will be encrypted in penumbra memo'
-            : 'will open zcash send flow'}
-        </p>
       </div>
-    </div>
+      {threads.length ? (
+        <div className='flex flex-col'>
+          {threads.map(t => (
+            <DirectRow key={t.id} thread={t} />
+          ))}
+        </div>
+      ) : (
+        <div className='flex flex-col items-start gap-3 py-4'>
+          <span className='text-[13px] text-fg-muted'>no one here yet</span>
+          <div className='flex gap-2'>
+            {canCard && (
+              <Button
+                variant='secondary'
+                size='sm'
+                data-preload={PopupPath.IDENTITY}
+                onClick={() => navigate(PopupPath.IDENTITY)}
+              >
+                share my card
+              </Button>
+            )}
+            <Button
+              variant='secondary'
+              size='sm'
+              onClick={() => navigate(`${PopupPath.CONTACTS}?add=1`)}
+            >
+              add someone
+            </Button>
+          </div>
+        </div>
+      )}
+    </section>
   );
-}
+};
 
-// ---- main inbox page ----
+/** new message: pick someone saved, or paste an address */
+const NewMessageSheet = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
+  const navigate = useNavigate();
+  const network = useStore(selectActiveNetwork);
+  const contacts = useStore(s => s.contacts.contacts);
+  const people = useMemo(
+    () =>
+      (Array.isArray(contacts) ? contacts : []).flatMap(contact =>
+        contact.addresses.filter(a => a.network === network).map(address => ({ contact, address })),
+      ),
+    [contacts, network],
+  );
+  const [address, setAddress] = useState('');
+  const go = (to: string) => {
+    onClose();
+    navigate(threadPath(to.trim().toLowerCase()));
+  };
+  return (
+    <Sheet open={open} onOpenChange={o => !o && onClose()} title='new message'>
+      {people.length > 0 && (
+        <div className='flex max-h-60 flex-col overflow-y-auto border border-border-soft bg-elev-1'>
+          {people.map(({ contact, address: a }) => (
+            <button
+              key={a.id}
+              type='button'
+              onClick={() => go(a.address)}
+              className='flex h-12 items-center gap-3 border-b border-border-soft px-3.5 text-left last:border-0 hover:bg-elev-2'
+            >
+              <span className='grow truncate text-sm text-fg-high'>{contact.name}</span>
+              <span className='text-[11px] text-fg-muted'>{shortAddress(a.address)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <form
+        className='flex gap-2'
+        onSubmit={e => {
+          e.preventDefault();
+          if (address.trim()) {
+            go(address);
+          }
+        }}
+      >
+        <Input
+          aria-label='address'
+          placeholder='or paste an address'
+          value={address}
+          onChange={e => setAddress(e.target.value)}
+          className='grow font-mono text-xs'
+        />
+        <Button type='submit' variant='primary' disabled={!address.trim()}>
+          open
+        </Button>
+      </form>
+    </Sheet>
+  );
+};
 
 export function InboxPage() {
   const navigate = useNavigate();
-  // perf: selectConversations() runs Array.from + sort, returning a fresh
-  // array reference every read. Without shallow equality, Zustand re-runs
-  // the InboxPage render tree on every state tick (sync progress, memo
-  // store writes, etc.) even when the conversation list is unchanged.
-  // useShallow compares element-by-element; reference-stable conversation
-  // objects mean the page only re-renders when conversations actually
-  // change. Cascading down: ConversationRow + FlatMessageRow stay stable.
-  const conversations = useStore(useShallow(selectConversations));
-  const groupWallets = useStore(
-    useShallow((s: AllSlices) =>
-      selectVisibleMultisigWallets(s).filter(w => (w.multisig?.relayPeerKeys?.length ?? 0) > 0),
-    ),
-  );
-  const unreadCount = useStore(selectUnreadCount);
-  const messages = useStore(messagesSelector);
-  const contacts = useStore(contactsSelector);
-  const activeNetwork = useStore(selectActiveNetwork);
-  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const keyInfo = useStore(selectEffectiveKeyInfo);
+  const network = useStore(selectActiveNetwork);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const walletId = keyInfo?.id ?? '';
+  const [composing, setComposing] = useState(false);
+  const canCard = !!keyInfo && keyInfoSupportsNetwork(keyInfo, 'zcash');
 
-  // Track the OPEN thread by its stable diversifierIndex, not a Conversation
-  // snapshot. selectConversations() returns fresh Conversation objects whenever
-  // messages change; deriving selectedConvo from the live list means a thread
-  // that is open re-renders when new messages arrive (and its unread flag
-  // updates so markRead fires) instead of showing a frozen snapshot.
-  const [selectedDiversifierIndex, setSelectedDiversifierIndex] = useState<number | undefined>();
-  const [showCompose, setShowCompose] = useState(false);
-  const [search, setSearch] = useState('');
-  const [tab, setTab] = useState<'conversations' | 'all'>('conversations');
-  const [addContactData, setAddContactData] = useState<{
-    address: string;
-    network: 'zcash' | 'penumbra';
-  } | null>(null);
-
-  // live conversation for the open thread, derived from the store-backed list
-  const selectedConvo = useMemo(
-    () =>
-      selectedDiversifierIndex === undefined
-        ? undefined
-        : conversations.find(c => c.diversifierIndex === selectedDiversifierIndex),
-    [conversations, selectedDiversifierIndex],
-  );
-
-  const walletId = selectedKeyInfo?.id ?? '';
-
-  // memo sync
-  const {
-    syncMemos: syncPenumbraMemos,
-    isSyncing: isPenumbraSyncing,
-    syncProgress,
-  } = usePenumbraMemos();
-  const {
-    syncMemos: syncZcashMemos,
-    isSyncing: isZcashSyncing,
-    syncProgress: zcashSyncProgress,
-  } = useZcashMemos(walletId, zidecarUrl);
-  const isSyncing = isPenumbraSyncing || isZcashSyncing;
-  const currentSyncProgress = activeNetwork === 'zcash' ? zcashSyncProgress : syncProgress;
-
-  // auto-sync on mount
+  useOpenPeople();
+  usePairCards();
+  useCardSync();
+  const hasRooms = useMyRooms().some(r => r.joined);
+  // the chain memos the light client already reads
+  const { syncMemos: syncPenumbra } = usePenumbraMemos(walletId);
+  const { syncMemos: syncZcash } = useZcashMemos(walletId, zidecarUrl);
   useEffect(() => {
-    if (activeNetwork === 'penumbra') {
-      syncPenumbraMemos();
-    } else if (activeNetwork === 'zcash' && walletId) {
-      syncZcashMemos();
+    if (network === 'penumbra') {
+      syncPenumbra();
+    } else if (network === 'zcash' && walletId) {
+      syncZcash();
     }
-  }, [activeNetwork, walletId, syncPenumbraMemos, syncZcashMemos]);
+  }, [network, walletId, syncPenumbra, syncZcash]);
 
-  // diversified address records for referral tracking
-  const [addressRecords, setAddressRecords] = useState<DiversifiedAddressRecord[]>([]);
-  useEffect(() => {
-    // read through the encrypted accessor, which also migrates any legacy
-    // plaintext value written before this key was actually encrypted.
-    void getDiversifiedAddresses().then(setAddressRecords);
-  }, []);
-
-  // filter conversations by search
-  const filteredConversations = useMemo(() => {
-    if (!search) {
-      return conversations;
-    }
-    const q = search.toLowerCase();
-    return conversations.filter(
-      c =>
-        c.label?.toLowerCase().includes(q) ||
-        c.messages.some(m => m.body.toLowerCase().includes(q)),
-    );
-  }, [conversations, search]);
-
-  // flat messages view (penumbra + legacy)
-  const flatMessages = useMemo(() => {
-    const all = tab === 'all' ? messages.getInbox().filter(m => m.network === activeNetwork) : [];
-
-    if (!search) {
-      return all;
-    }
-    const q = search.toLowerCase();
-    return all.filter(
-      m => m.content.toLowerCase().includes(q) || m.senderAddress?.toLowerCase().includes(q),
-    );
-  }, [messages, tab, search, activeNetwork]);
-
-  const directoryLookup = useZcashMeDirectoryLookup();
-  const getContactName = useCallback(
-    (address: string | undefined) => {
-      if (!address) {
-        return undefined;
-      }
-      return (
-        contacts.findByAddress(address)?.contact.name ?? zcashMeLabel(directoryLookup(address))
-      );
-    },
-    [contacts, directoryLookup],
-  );
-
-  // referral for selected conversation
-  const selectedReferral = useMemo(() => {
-    if (!selectedConvo || addressRecords.length === 0) {
-      return undefined;
-    }
-    return traceAddressReferral(addressRecords, selectedConvo.diversifierIndex);
-  }, [selectedConvo, addressRecords]);
-
-  // ---- render thread view ----
-  if (selectedConvo) {
-    return (
-      <ConversationThread
-        conversation={selectedConvo}
-        onClose={() => setSelectedDiversifierIndex(undefined)}
-        referral={selectedReferral}
-      />
-    );
-  }
-
-  // ---- render compose ----
-  if (showCompose) {
-    return (
-      <ComposeMessage
-        onClose={() => setShowCompose(false)}
-        network={activeNetwork as 'zcash' | 'penumbra'}
-      />
-    );
-  }
-
-  // ---- render conversation list ----
   return (
-    <div className='flex flex-col h-full'>
-      {/* header */}
-      <div className='flex items-center justify-between px-4 py-3 border-b border-border-soft'>
-        <div className='flex items-center gap-2'>
-          <h1 className='text-lg font-medium'>inbox</h1>
-          {isSyncing && (
-            <span className='flex items-center gap-1 text-xs text-fg-muted'>
-              <span className='i-ph-arrows-clockwise h-3 w-3 animate-spin' />
-              syncing{currentSyncProgress ? ` (${currentSyncProgress.current})` : '...'}
-            </span>
-          )}
-        </div>
-        <div className='flex items-center gap-2'>
-          <button
-            onClick={() => {
-              if (activeNetwork === 'zcash' && walletId) {
-                syncZcashMemos();
-              } else {
-                syncPenumbraMemos();
-              }
-            }}
-            disabled={isSyncing}
-            className='rounded-lg p-1.5 hover:bg-elev-1 transition-colors disabled:opacity-50'
-            title='sync messages'
-          >
-            <span className={cn('i-ph-arrows-clockwise h-4 w-4', isSyncing && 'animate-spin')} />
-          </button>
-          <button
-            onClick={() => setShowCompose(true)}
-            className='flex items-center gap-1 rounded-lg bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors'
-          >
-            <span className='i-ph-paper-plane-right h-4 w-4' />
-            compose
-          </button>
-        </div>
-      </div>
-
-      {/* tabs — icon + label so the discriminator is glanceable. unread
-          badge anchors to conversations since that's where the user lives
-          most of the time. */}
-      <div className='flex border-b border-border-soft'>
-        <button
-          onClick={() => setTab('conversations')}
-          className={cn(
-            'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-sm font-medium border-b-2 transition-colors',
-            tab === 'conversations'
-              ? 'border-zigner-gold text-fg'
-              : 'border-transparent text-fg-muted hover:text-fg-high',
-          )}
-        >
-          <span className='i-ph-chats h-4 w-4' />
-          conversations
-          {unreadCount > 0 && (
-            <span className='ml-0.5 rounded-full bg-zigner-gold px-1.5 py-0.5 text-label text-zigner-gold-foreground'>
-              {unreadCount}
-            </span>
-          )}
-        </button>
-        <button
-          onClick={() => setTab('all')}
-          className={cn(
-            'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-sm font-medium border-b-2 transition-colors',
-            tab === 'all'
-              ? 'border-zigner-gold text-fg'
-              : 'border-transparent text-fg-muted hover:text-fg-high',
-          )}
-        >
-          <span className='i-ph-list h-4 w-4' />
-          all messages
-        </button>
-      </div>
-
-      {/* multisig group chats — coordination threads over the relay, distinct
-          from the on-chain-memo conversations below. only groups whose
-          co-signer relay keys are on file can chat. */}
-      {groupWallets.length > 0 && (
-        <div className='border-b border-border-soft px-3 py-2'>
-          <p className='mb-1.5 flex items-center gap-1 text-label text-fg-dim'>
-            <span className='i-ph-users-three h-3.5 w-3.5' />
-            group chats
-          </p>
-          <div className='flex flex-col gap-1'>
-            {groupWallets.map(w => (
+    <div className='flex min-h-full flex-col'>
+      <ScreenHeader
+        title='people'
+        backPath={false}
+        meta={
+          <>
+            {canCard && (
               <button
-                key={w.id}
                 type='button'
-                onClick={() => navigate(`/inbox/group/${w.id}`)}
-                className='flex items-center gap-2 rounded-lg bg-elev-1 px-2.5 py-2 text-left hover:bg-elev-2 transition-colors'
+                aria-label='add person'
+                data-preload={PopupPath.INBOX_ADD}
+                onClick={() => navigate(PopupPath.INBOX_ADD)}
+                className='flex h-9 items-center gap-1.5 border border-border-soft px-2.5 text-xs text-fg-high transition-colors hover:bg-elev-2'
               >
-                <span className='i-ph-chat-circle h-4 w-4 shrink-0 text-network-accent' />
-                <span className='truncate text-sm text-fg-high lowercase'>{w.label}</span>
-                <span className='ml-auto text-label text-fg-dim'>
-                  {w.multisig?.threshold ?? 0}-of-{w.multisig?.maxSigners ?? 0}
-                </span>
+                <span className='i-lucide-user-plus size-[15px]' aria-hidden='true' />
+                add person
               </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* search — hidden when the underlying collection is empty.
-          A new user with zero conversations shouldn't see a
-          'search conversations...' bar inviting them to search
-          across nothing. Once anything lands in the inbox, the
-          bar appears. */}
-      {(tab === 'conversations'
-        ? conversations.length > 0
-        : flatMessages.length > 0 || search.length > 0) && (
-        <div className='px-4 py-3'>
-          <div className='relative'>
-            <span className='i-ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-fg-muted' />
-            <input
-              type='text'
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder={
-                tab === 'conversations' ? 'search conversations...' : 'search messages...'
-              }
-              className='w-full rounded-lg border border-border-soft bg-input pl-9 pr-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
-            />
-          </div>
-        </div>
-      )}
-
-      {/* content */}
-      <div className='flex-1 overflow-y-auto px-4 pb-4'>
-        {tab === 'conversations' ? (
-          filteredConversations.length === 0 ? (
-            <EmptyState
-              text='no conversations yet'
-              subtitle={`encrypted ${activeNetwork} conversations show up here. share your address so someone can write to you.`}
-              action={{
-                label: 'show my address',
-                icon: 'i-ph-arrow-line-down',
-                onClick: () => navigate(PopupPath.RECEIVE),
-              }}
-            />
-          ) : (
-            <div className='space-y-2'>
-              {filteredConversations.map(convo => (
-                <ConversationRow
-                  key={convo.diversifierIndex}
-                  conversation={convo}
-                  contactName={getContactName(
-                    convo.messages.find(m => m.direction === 'incoming')
-                      ? undefined // we don't know the address from inbox state alone
-                      : undefined,
-                  )}
-                  onClick={() => setSelectedDiversifierIndex(convo.diversifierIndex)}
-                />
-              ))}
-            </div>
-          )
-        ) : flatMessages.length === 0 ? (
-          <EmptyState
-            text='no memos yet'
-            subtitle={`messages travel inside ${activeNetwork} transactions. once someone sends with a memo, it shows up here.`}
-            action={{
-              label: 'show my address',
-              icon: 'i-ph-arrow-line-down',
-              onClick: () => navigate(PopupPath.RECEIVE),
-            }}
-          />
-        ) : (
-          <div className='space-y-2'>
-            {flatMessages.map(msg => (
-              <FlatMessageRow
-                key={msg.id}
-                message={msg}
-                contactName={getContactName(msg.senderAddress)}
-                onClick={() => {
-                  // find conversation containing this message
-                  const convo = conversations.find(c =>
-                    c.messages.some(m => m.txids.includes(msg.txId)),
-                  );
-                  if (convo) {
-                    setSelectedDiversifierIndex(convo.diversifierIndex);
-                  }
-                }}
-              />
-            ))}
-          </div>
-        )}
+            )}
+            <button
+              type='button'
+              aria-label='new group'
+              data-preload={PopupPath.INBOX_NEW_GROUP}
+              onClick={() => navigate(PopupPath.INBOX_NEW_GROUP)}
+              className='flex h-9 items-center gap-1.5 border border-border-soft px-2.5 text-xs text-fg-high transition-colors hover:bg-elev-2'
+            >
+              <span className='i-zafu-torii size-[15px]' aria-hidden='true' />
+              new group
+            </button>
+            <button
+              type='button'
+              aria-label='new message'
+              onClick={() => setComposing(true)}
+              className='grid size-10 place-items-center text-fg-muted transition-colors hover:bg-elev-2 hover:text-fg-high'
+            >
+              <span className='i-lucide-pencil size-[18px]' aria-hidden='true' />
+            </button>
+          </>
+        }
+      />
+      {hasRooms && <RelaySlot />}
+      <div className='flex flex-col gap-[18px] px-4 pb-4 pt-3.5'>
+        <YouRow />
+        <NeedsYou />
+        <InviteRows />
+        <WaitingCards />
+        <Groups />
+        <Direct canCard={canCard} />
       </div>
-
-      {addContactData && (
-        <AddContactDialog
-          address={addContactData.address}
-          network={addContactData.network}
-          onClose={() => setAddContactData(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-function FlatMessageRow({
-  message,
-  contactName,
-  onClick,
-}: {
-  message: Message;
-  contactName?: string;
-  onClick: () => void;
-}) {
-  const displayAddress =
-    message.direction === 'received'
-      ? (message.senderAddress ?? 'shielded sender')
-      : message.recipientAddress;
-
-  return (
-    <button
-      className={cn(
-        'flex items-start gap-3 rounded-lg border p-3 w-full text-left transition-colors',
-        message.read
-          ? 'border-border-soft bg-elev-1 hover:border-border-soft'
-          : 'border-primary/40 bg-primary/5 hover:bg-primary/10',
-      )}
-      onClick={onClick}
-    >
-      <div className='flex h-8 w-8 items-center justify-center rounded-full bg-elev-2 shrink-0'>
-        <span
-          className={cn(
-            'h-4 w-4',
-            message.read ? 'i-ph-envelope-open text-fg-muted' : 'i-ph-envelope text-zigner-gold',
-          )}
-        />
-      </div>
-      <div className='flex-1 min-w-0'>
-        <div className='flex items-center justify-between gap-2'>
-          <span className={cn('text-sm truncate', !message.read && 'font-medium')}>
-            {contactName ?? truncateAddress(displayAddress)}
-          </span>
-          <span className='text-label text-fg-muted whitespace-nowrap'>
-            {formatTimestamp(message.timestamp)}
-          </span>
-        </div>
-        <p
-          className={cn('text-xs mt-0.5 line-clamp-1', message.read ? 'text-fg-muted' : 'text-fg')}
-        >
-          {message.content}
-        </p>
-        {message.amount && (
-          <span className='inline-flex items-center rounded-md bg-elev-2 px-1.5 py-0.5 mt-1 text-label tabular text-fg-high'>
-            {message.direction === 'received' ? '+' : '-'}
-            {message.amount} {message.asset ?? ''}
-          </span>
-        )}
-        {message.status && message.status !== 'confirmed' && (
-          <OutgoingStatusBadge status={message.status} reason={message.failureReason} />
-        )}
-      </div>
-    </button>
-  );
-}
-
-function OutgoingStatusBadge({
-  status,
-  reason,
-}: {
-  status: NonNullable<Message['status']>;
-  reason?: string;
-}) {
-  // lifecycle states are fg tokens; only a genuine failure keeps red.
-  const styles: Record<
-    NonNullable<Message['status']>,
-    { bg: string; fg: string; label: string }
-  > = {
-    submitting: { bg: 'bg-elev-2', fg: 'text-fg-muted', label: 'sending...' },
-    broadcasting: { bg: 'bg-elev-2', fg: 'text-fg-muted', label: 'broadcasting...' },
-    pending: { bg: 'bg-elev-2', fg: 'text-fg-muted', label: 'pending' },
-    confirmed: { bg: 'bg-elev-2', fg: 'text-fg-muted', label: 'confirmed' },
-    failed: { bg: 'bg-red-500/10', fg: 'text-red-400', label: 'failed' },
-    // not red: we did not see this fail, we stopped watching. Amber is the
-    // "you need to check" colour, which is exactly the ask.
-    interrupted: { bg: 'bg-amber-500/10', fg: 'text-amber-400', label: 'outcome unknown' },
-  };
-  // Fall back for a status persisted by an older/newer build (or a partial
-  // write) that is not in the map - reading .bg off undefined would white-screen
-  // the whole inbox.
-  const s = styles[status] ?? styles.pending;
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-md px-1.5 py-0.5 ml-1 mt-1 text-label',
-        s.bg,
-        s.fg,
-      )}
-      title={status === 'failed' || status === 'interrupted' ? reason : undefined}
-    >
-      {s.label}
-    </span>
-  );
-}
-
-function EmptyState({
-  text,
-  subtitle,
-  action,
-}: {
-  text: string;
-  subtitle: string;
-  action?: { label: string; icon?: string; onClick: () => void };
-}) {
-  return (
-    <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
-      <div className='rounded-lg bg-zigner-gold/10 p-4'>
-        <span className='i-ph-envelope h-8 w-8 text-zigner-gold' />
-      </div>
-      <div className='flex flex-col gap-1'>
-        <p className='text-sm font-medium'>{text}</p>
-        <p className='max-w-xs text-xs text-fg-muted leading-snug'>{subtitle}</p>
-      </div>
-      {action && (
-        <button
-          type='button'
-          onClick={action.onClick}
-          className='mt-1 inline-flex items-center gap-1.5 bg-zigner-gold/10 px-3 py-1.5 text-xs text-zigner-gold transition-colors hover:bg-zigner-gold/15'
-        >
-          {action.icon && <span className={`${action.icon} h-3.5 w-3.5`} />}
-          {action.label}
-        </button>
-      )}
+      <NewMessageSheet open={composing} onClose={() => setComposing(false)} />
     </div>
   );
 }

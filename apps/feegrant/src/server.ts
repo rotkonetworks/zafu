@@ -20,7 +20,11 @@ import { Granter } from './granter';
 import { Limits } from './limits';
 import { handleGrant } from './handler';
 import { clientIpFrom } from './client-ip';
-import { initGranter } from './init';
+import { initBaseKey, initGranter } from './init';
+import { handleBaseGas, loadBaseGasConfig, serialize } from './base-gas';
+import { createPublicClient, createWalletClient, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { base } from 'viem/chains';
 
 const MAX_BODY_BYTES = 1024;
 
@@ -66,6 +70,10 @@ const main = async () => {
     await initGranter(process.argv[3]);
     return;
   }
+  if (process.argv[2] === 'init-base') {
+    initBaseKey(process.argv[3]);
+    return;
+  }
   const config = loadConfig();
   const wallet = await deriveInjectiveWallet(config.mnemonic, config.accountIndex);
   const deps = {
@@ -78,6 +86,31 @@ const main = async () => {
   };
   const granter = new Granter(wallet, config, deps);
   const limits = new Limits(config);
+
+  // Base gas drip for the Peer buy: only when BASE_KEY_FILE is set
+  const baseConfig = loadBaseGasConfig();
+  const baseGas = baseConfig
+    ? (() => {
+        const account = privateKeyToAccount(baseConfig.privateKey);
+        const transport = http(baseConfig.rpcUrl);
+        const reader = createPublicClient({ chain: base, transport });
+        const writer = createWalletClient({ account, chain: base, transport });
+        return {
+          address: account.address,
+          limits: new Limits({
+            stateFile: baseConfig.stateFile,
+            dailyGrantCap: baseConfig.dailyDripCap,
+            perIpDailyGrantCap: baseConfig.perIpDailyDripCap,
+            perIpRequestsPerHour: baseConfig.perIpRequestsPerHour,
+          }),
+          balanceOf: (address: `0x${string}`) => reader.getBalance({ address }),
+          send: serialize((to: `0x${string}`, value: bigint) =>
+            writer.sendTransaction({ to, value }),
+          ),
+          lastDrip: new Map<string, number>(),
+        };
+      })()
+    : null;
   const balances = (address: string) =>
     queryInjectiveBalances(config.lcdUrl, address, config.usdcDenom, fetch);
 
@@ -142,6 +175,14 @@ const main = async () => {
             minBalanceInj: toInj(config.minGranterBalance),
             grantsToday: limits.grantsToday,
             dailyGrantCap: config.dailyGrantCap,
+            base: baseGas && {
+              sponsor: baseGas.address,
+              dripsToday: baseGas.limits.grantsToday,
+              balanceMicroEth: await baseGas
+                .balanceOf(baseGas.address)
+                .then(w => Number(w / 1_000_000_000_000n))
+                .catch(() => null),
+            },
           });
         } else if (req.method === 'GET' && path === '/v1/injective/granter') {
           let funded = false;
@@ -189,6 +230,32 @@ const main = async () => {
               (typeof code === 'string' ? ` ${code}` : ''),
           );
           send(res, result.status, result.body);
+        } else if (req.method === 'POST' && path === '/base/gas' && baseGas && baseConfig) {
+          let body: unknown;
+          try {
+            body = await readJson(req);
+          } catch (e) {
+            send(res, 400, { error: e instanceof Error ? e.message : 'bad request' });
+            return;
+          }
+          const result = await handleBaseGas(
+            {
+              config: baseConfig,
+              sponsorAddress: baseGas.address,
+              balanceOf: baseGas.balanceOf,
+              send: baseGas.send,
+              admit: ip => baseGas.limits.admit(ip),
+              recordGrant: ip => baseGas.limits.recordGrant(ip),
+              lastDrip: baseGas.lastDrip,
+              now: () => Date.now(),
+              log,
+            },
+            clientIp(req),
+            body,
+          );
+          // outcome only - no address, no IP
+          log(`base gas -> ${result.status}`);
+          send(res, result.status, result.body);
         } else {
           send(res, 404, { error: 'not found' });
         }
@@ -202,6 +269,9 @@ const main = async () => {
   server.listen(config.port, config.host, () => {
     // Public address only - the mnemonic/private key are never logged.
     log(`feegrant listening on ${config.host}:${config.port}, granter ${granter.address}`);
+    if (baseGas) {
+      log(`base gas sponsor ${baseGas.address}`);
+    }
   });
 
   void balances(granter.address)

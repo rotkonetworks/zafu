@@ -20,11 +20,20 @@
  * Walks a bounded `cause` chain: the penumbra transport wraps the original
  * error in a `ConnectError`, so the message is not always on the outer value.
  */
+/** this document's extension bindings are gone: the extension was reloaded under it */
+export const runtimeGone = (): boolean =>
+  typeof chrome === 'undefined' || !chrome.runtime?.id || chrome.runtime.id === 'invalid';
+
 export const isContextInvalidated = (e: unknown, depth = 0): boolean => {
   if (depth > 3 || e == null || typeof e !== 'object') {
     return false;
   }
-  if (e instanceof Error && e.message.includes('Extension context invalidated')) {
+  // newer chrome drops `chrome.runtime` from an orphaned script altogether, so
+  // the call fails before it can say "invalidated"
+  if (
+    e instanceof Error &&
+    (e.message.includes('Extension context invalidated') || runtimeGone())
+  ) {
     return true;
   }
   if ('cause' in e) {
@@ -107,10 +116,10 @@ const showReloadNotice = (): void => {
       'box-shadow:0 1px 4px rgba(0,0,0,.25)',
     ].join(';'),
   );
-  bar.textContent = 'Zafu was updated. Reload this page to reconnect your wallet.';
+  bar.textContent = 'zafu was updated · please reload this page to reconnect your wallet';
 
   const reload = document.createElement('button');
-  reload.textContent = 'Reload';
+  reload.textContent = 'reload';
   reload.setAttribute(
     'style',
     'cursor:pointer;border:0;border-radius:4px;padding:4px 12px;font:600 13px system-ui;background:#111;color:#fff',

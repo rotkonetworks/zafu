@@ -4,7 +4,7 @@
 @layer base {
   :root {
     /* ==============================================================
-     * design system v2 — canonical tokens
+     * design system v2 - canonical tokens
      * source of truth · see packages/ui/docs/design-preview/*.html
      *
      * surfaces:     canvas → elev-1 → elev-2 → border-soft → border
@@ -12,7 +12,7 @@
      * brand:        zigner-gold (cold · zigner/zcash) · zafu-blue (hot · zafu)
      * network:      --network-accent rebound per [data-network]
      * typography:   monospace only (Iosevka Term, mono fallback)
-     * radius:       6px default (md); scale 0/2/6/8-12/∞
+     * radius:       none - square corners everywhere
      * spacing:      4 · 8 · 12 · 16 · 20 · 24 · 32 · 48
      * ============================================================== */
 
@@ -27,9 +27,9 @@
     --fg-high: #f2ecdf;
     --fg: #ded5c4;
     --fg-muted: #948a79;
-    --fg-dim: #625a4d;
+    --fg-dim: #867d6e;
 
-    /* brand — gold (cold side) */
+    /* brand - gold (cold side) */
     --zigner-gold-dark: #b8860b;
     --zigner-gold: #f4b728;
     --zigner-gold-light: #fcd34d;
@@ -38,16 +38,27 @@
     --zigner-dark: #0a0a0a;
     --zigner-darker: #000000;
 
-    /* brand — hanko vermillion. Personality accent, never a button fill:
+    /* brand - hanko vermillion. Personality accent, never a button fill:
        the kicker tick, the sealed-receipt stamp, genuinely destructive acts. */
     --hanko-dark: #9e2f2c;
     --hanko: #c73e3a;
     --hanko-light: #d95b4e;
 
-    /* brand — blue (hot side) */
+    /* the seal glyph's cream, fixed - a real hanko's paper ground never
+     * changes colour with the room, so this never flips with the theme.
+     * Only the Mark component (packages/ui/components/ui/mark) reads it. */
+    --mark-glyph: #f2ecdf;
+
+    /* brand - blue (hot side) */
     --zafu-blue-dark: #1d4ed8;
     --zafu-blue: #3b82f6;
     --zafu-blue-light: #60a5fa;
+
+    /* device blue - cold custody (zigner, keystone, ledger). A different
+     * blue from the hot zafu-blue above: steel, not electric, for metal in
+     * hand rather than a connection in software. */
+    --device-blue: #7fb3d5;
+    --device-blue-line: #2a3a44;
 
     /* spacing */
     --space-1: 4px;
@@ -59,26 +70,19 @@
     --space-8: 32px;
     --space-12: 48px;
 
-    /* radius */
-    --radius-sharp: 0;
-    --radius-sm: 2px;
-    --radius-md: 6px;
-    --radius-lg: 10px;
-    --radius-pill: 9999px;
-
-    /* typography stack — monospace is the only stack. --zafu-font is the
+    /* typography stack - monospace is the only stack. --zafu-font is the
        runtime choice (settings → appearance overrides it via data-font);
        --font-mono stays as a compat alias for anything referencing it. */
     --zafu-font: 'Iosevka Term', 'Courier New', Courier, monospace;
     --font-mono: var(--zafu-font);
 
     /* ==============================================================
-     * shadcn / tailwind HSL layer — aliases onto the v2 tokens above.
+     * shadcn / tailwind HSL layer - aliases onto the v2 tokens above.
      * Kept because existing components use hsl(var(--foreground)).
      * Values chosen to match the hex tokens precisely.
      * ============================================================== */
 
-    /* terminal dark theme - black bg, gold accent, monospace */
+    /* sumi - warm ink on woven cloth (default theme) */
     --background: 30 14% 4%; /* --surface-canvas      #0c0a08 */
     --foreground: 39 28% 82%; /* --fg                  #ded5c4 */
 
@@ -95,9 +99,9 @@
     --card-foreground: 39 28% 82%; /* --fg                  #ded5c4 */
 
     /* border */
-    --border: 32 20% 16%; /* --surface-border      #322a21 */
-    --border-secondary: 35 20% 12%; /* --surface-border-soft #241f18 */
-    --input: 33 21% 8%; /* --surface-elev-2      #1a1611 */
+    /* bare `border` is the board's --line; border-border-hard is --line2 */
+    --border: 35 20% 12%; /* --surface-border-soft #241f18 */
+    --input: 42 36% 5%; /* --surface-elev-1      #131009, the board's input ground */
 
     /* primary - zcash gold */
     --primary: 42 91% 55%;
@@ -116,7 +120,6 @@
     --destructive-foreground: 0 0% 100%;
 
     --ring: 42 91% 55%;
-    --radius: 0.375rem; /* = --radius-md, 6px */
 
     /* network-aware accent (overridden by [data-network]) */
     --network-accent: var(--zigner-gold);
@@ -130,65 +133,38 @@
     --penumbra-teal: #2dd4bf;
     --penumbra-teal-dark: #0d9488;
 
-    /* semantic colors */
-    --success: #5f5;
-    --warning: #f4b728;
-    --error: #f55;
+    /* semantic colors - the board's green / warn / red */
+    --success: #8fbf73;
+    --warning: #d9773f;
+    --error: #c73e3a;
     --info: #f4b728;
+    --warn: #d9773f;
+    --gold-line: #3a2f14;
+    --scrim: rgb(6 5 4 / 0.72);
 
     /* legacy compat */
     --charcoal: #131009;
     --charcoal-secondary: #000000;
-    --teal: #629994;
+    --teal: #3fc1b0;
     --sand: #847a5b;
     --rust: #8d5728;
-    --green: #5f5;
-    --red: #f55;
+    --green: #8fbf73;
+    --red: #c73e3a;
     --light-brown: #131009;
     --light-grey: #ccc;
     --brown: rgba(0, 0, 0, 0.8);
   }
 
   /* ==============================================================
-   * appearance themes — the default (:root above) is 'sumi': warm ink
-   * on woven cloth. data-theme='terminal' restores the original cold
-   * pure-black material for users who want it; toggled from settings
-   * (zafuTheme in local storage, applied in entry/*-root.tsx).
+   * appearance themes - the default (:root above) is 'sumi': warm ink
+   * on woven cloth. washi below is its light sibling; toggled from
+   * settings (zafuTheme in local storage, applied in entry/*-root.tsx).
    * ============================================================== */
-  :root[data-theme='terminal'] {
-    --surface-canvas: #000000;
-    --surface-elev-1: #0a0a0a;
-    --surface-elev-2: #0f0f0f;
-    --surface-border-soft: #1a1a1a;
-    --surface-border: #212121;
-    --fg-high: #f5f5f5;
-    --fg: #dcdcdc;
-    --fg-muted: #8a8a8a;
-    --fg-dim: #5a5a5a;
-    --background: 0 0% 0%;
-    --foreground: 0 0% 86%;
-    --muted: 0 0% 6%;
-    --muted-foreground: 0 0% 54%;
-    --popover: 0 0% 4%;
-    --popover-foreground: 0 0% 96%;
-    --card: 0 0% 4%;
-    --card-foreground: 0 0% 86%;
-    --border: 0 0% 13%;
-    --border-secondary: 0 0% 10%;
-    --input: 0 0% 6%;
-    --charcoal: #0a0a0a;
-    --light-brown: #0a0a0a;
-  }
-
-  :root[data-theme='terminal'] body {
-    /* no cloth on the terminal — flat black */
-    background-image: none;
-  }
-
-  /* washi — the light sibling: sumi ink on warm unbleached paper.
+  /* washi - the light sibling: sumi ink on warm unbleached paper.
    * Same material logic inverted; gold darkens for AA contrast on paper,
    * hanko vermillion stays (a red seal on paper is the real thing). */
   :root[data-theme='washi'] {
+    --teal: #1f8a7c;
     --surface-canvas: #efe9dc;
     --surface-elev-1: #f6f2e8;
     --surface-elev-2: #fbf8f1;
@@ -197,14 +173,22 @@
     --fg-high: #171310;
     --fg: #2b241c;
     --fg-muted: #6f6555;
-    --fg-dim: #a3947e;
+    --fg-dim: #6a6957;
+    /* hanko on paper: darkened so a red seal reads as ink-on-paper, not
+     * the sumi neon; --mark-glyph is deliberately NOT overridden here -
+     * the seal's cream ground is fixed across both themes. */
+    --hanko-dark: #7e211e;
+    --hanko: #b3322e;
+    --hanko-light: #c14a3f;
     /* gold on paper: brand hue held, lightness dropped for contrast */
     --zigner-gold: #8a6508;
-    /* same treatment for the blue sibling — #3b82f6 only clears ~3.7:1 on
+    /* same treatment for the blue sibling - #3b82f6 only clears ~3.7:1 on
        unbleached paper, which is under AA for small text like badges. */
     --zafu-blue-dark: #1e3a8a;
     --zafu-blue: #1d4ed8;
     --zafu-blue-light: #2563eb;
+    --device-blue: #386a8d;
+    --device-blue-line: #bcd0de;
     --zigner-gold-light: #b8860b;
     --zigner-gold-dark: #6b4e06;
     --zigner-gold-foreground: #f6efe2;
@@ -216,9 +200,8 @@
     --popover-foreground: 26 18% 8%;
     --card: 43 44% 94%;
     --card-foreground: 32 21% 14%;
-    --border: 39 24% 72%;
-    --border-secondary: 39 30% 81%;
-    --input: 43 56% 95%;
+    --border: 39 30% 81%;
+    --input: 43 44% 94%;
     --primary: 42 89% 29%;
     --primary-foreground: 43 44% 96%;
     --secondary: 42 80% 25%;
@@ -226,11 +209,14 @@
     --accent: 42 40% 85%;
     --accent-foreground: 26 18% 12%;
     --ring: 42 89% 29%;
-    --success: #3d7a2a;
-    --green: #3d7a2a;
-    --error: #b03030;
-    --red: #b03030;
-    --warning: #8a6508;
+    --success: #4b7a33;
+    --green: #4b7a33;
+    --error: #b3322e;
+    --red: #b3322e;
+    --warning: #b0561d;
+    --warn: #b0561d;
+    --gold-line: #dcc488;
+    --scrim: rgb(46 38 28 / 0.34);
     --info: #8a6508;
     --charcoal: #f6f2e8;
     --charcoal-secondary: #efe9dc;
@@ -262,12 +248,6 @@
     --network-accent-foreground: #0a0a0a;
     --primary: 174 30% 48%;
     --ring: 174 30% 48%;
-  }
-  [data-network='polkadot'],
-  [data-network='kusama'] {
-    --network-accent: #6b7280;
-    --network-accent-light: #9ca3af;
-    --network-accent-foreground: #ffffff;
   }
   [data-network='osmosis'] {
     --network-accent: #a78bfa;
@@ -326,17 +306,17 @@
     height: 6px;
   }
   ::-webkit-scrollbar-track {
-    background: #0a0a0a;
+    background: var(--surface-canvas);
   }
   ::-webkit-scrollbar-thumb {
-    background: #332a00;
+    background: var(--surface-border);
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #f4b728;
+    background: var(--zigner-gold);
   }
   * {
     scrollbar-width: thin;
-    scrollbar-color: #332a00 #0a0a0a;
+    scrollbar-color: var(--surface-border) var(--surface-canvas);
   }
 
   * {
@@ -345,16 +325,13 @@
 
   body {
     background-color: hsl(var(--background));
-    /* woven-cloth grain — a zafu is fabric. Two crossed 1px rasters at ~4.5%
+    /* woven-cloth grain - a zafu is fabric. Two crossed 1px rasters at ~4.5%
        opacity over the sumi canvas: invisible at a glance, felt as material.
        Inline data-free CSS, zero requests, zero paint cost worth noting. */
     background-image:
       repeating-linear-gradient(0deg, rgb(226 209 182 / 0.023) 0 1px, transparent 1px 3px),
       repeating-linear-gradient(90deg, rgb(226 209 182 / 0.016) 0 1px, transparent 1px 3px);
     color: hsl(var(--foreground));
-    font-family: var(--font-mono);
-    font-size: 13px;
-    line-height: 1.5;
   }
 
   h1,
@@ -363,7 +340,7 @@
   h4,
   h5,
   h6 {
-    color: var(--zigner-gold);
+    color: var(--fg-high);
     font-weight: normal;
   }
 
@@ -398,8 +375,8 @@
     color: var(--zigner-gold);
   }
   pre {
-    background: #0a0a0a;
-    border: 1px solid #222;
+    background: var(--surface-elev-1);
+    border: 1px solid var(--surface-border-soft);
     padding: 0.8em;
     margin: 0.5em 0;
     overflow-x: auto;
@@ -407,22 +384,6 @@
     word-break: break-all;
   }
 
-  /* custom fonts - fallback to system */
-  @font-face {
-    font-family: 'Inter';
-    font-weight: 400;
-    src: local('Inter'), local('Inter-Regular');
-  }
-  @font-face {
-    font-family: 'Inter';
-    font-weight: 500;
-    src: local('Inter Medium'), local('Inter-Medium');
-  }
-  @font-face {
-    font-family: 'Inter';
-    font-weight: 600;
-    src: local('Inter SemiBold'), local('Inter-SemiBold');
-  }
   @font-face {
     font-family: 'Iosevka Term';
     font-weight: 400;
@@ -434,9 +395,41 @@
     font-weight: 400;
     src: url('../fonts/iosevka-term-ss03-italic.woff2') format('woff2');
   }
+  /* Shippori Mincho - display headings only (onboarding + wherever else picks
+   * it up later). SIL OFL, self-hosted, subset to ASCII + the kanji the
+   * product uses so far - the 匿 brand seal, the settings category glyphs
+   * 守 道 器 秘 票 済, and the watermark glyph 間 - so MV3's no-remote-fonts
+   * rule holds and the file stays small. A non-ASCII heading outside that
+   * subset falls back to the system serif; extend the subset (see mnemonic
+   * of glyphs above) if a new screen needs another one. */
+  @font-face {
+    font-family: 'Shippori Mincho';
+    font-weight: 500;
+    src: url('../fonts/shippori-mincho-500.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Shippori Mincho';
+    font-weight: 600;
+    src: url('../fonts/shippori-mincho-600.woff2') format('woff2');
+  }
+}
+
+/* Unlayered on purpose: Chromium injects an unlayered `body { font-family:
+   <system ui font>; font-size: 75% }` into every chrome-extension:// page,
+   which beats anything inside @layer base. */
+html body {
+  font-family: var(--zafu-font);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 /* custom utilities */
+/* display type: Mincho at 500 (titles, amounts); seals add font-semibold.
+   All Iosevka text is 400 - only that one face is bundled. */
+@utility font-display {
+  font-family: 'Shippori Mincho', serif;
+  font-weight: 500;
+}
 @utility text-high-contrast {
   color: hsl(var(--foreground));
 }
@@ -475,8 +468,4 @@
   box-shadow:
     0 0 0 1px hsl(var(--primary)),
     0 0 0 2px hsl(var(--background));
-}
-
-@utility sharp {
-  border-radius: 0;
 }

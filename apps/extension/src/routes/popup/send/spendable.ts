@@ -6,15 +6,15 @@
  * after a full witness build and a halo2 prove:
  *
  *   1. 10,000 zat is not the fee. ZIP-317 prices a transaction by its LOGICAL
- *      ACTIONS — 5,000 zat times max(nSpends, nOutputs, 2) plus the transparent
- *      side — and the user can raise it with a multiplier. A wallet holding
+ *      ACTIONS - 5,000 zat times max(nSpends, nOutputs, 2) plus the transparent
+ *      side - and the user can raise it with a multiplier. A wallet holding
  *      many small notes pays several times the flat figure, so "balance minus
  *      10,000" was not merely imprecise, it was unbuildable.
  *   2. That balance is orchard + ironwood COMBINED. Post-NU6.3 only ironwood
  *      is spendable: orchard→orchard sends are consensus-disabled and the
  *      worker fails closed on them. A wallet with 5 ZEC orchard and 0.01 ZEC
  *      ironwood was told it could send 5.0099.
- *   3. It excludes transparent UTXOs, which the home screen DOES include — so
+ *   3. It excludes transparent UTXOs, which the home screen DOES include - so
  *      the two screens disagreed about the same wallet.
  *
  * This module is the arithmetic for (1) and (2), kept pure so it can be tested
@@ -50,7 +50,7 @@ export const computeFeeZat = (
 /**
  * The worker's note selection: largest first, until the target is covered.
  * Returns the selected values, or undefined when the notes cannot cover the
- * target — the same condition the worker throws "insufficient funds" on.
+ * target - the same condition the worker throws "insufficient funds" on.
  */
 const selectValues = (values: bigint[], target: bigint): bigint[] | undefined => {
   const sorted = [...values].sort((a, b) => (a === b ? 0 : a > b ? -1 : 1));
@@ -80,7 +80,7 @@ export interface SpendableMax {
  *
  * A max send spends EVERY note in the pool and produces no change, so the fee
  * is determined: `computeFee(nNotes, outputs, 0/1, hasChange=false)`. There is
- * no fixed point to solve for — unlike a partial send, where the amount decides
+ * no fixed point to solve for - unlike a partial send, where the amount decides
  * the note count which decides the fee which decides the note count.
  *
  * Returns zero (not a negative) when the fee exceeds the balance: dust that

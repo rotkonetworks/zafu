@@ -13,7 +13,7 @@ export function SignStepProgress({ current }: { current: 1 | 2 | 3 }) {
       {SIGN_STEPS.map(s => (
         <div key={s.key} className='flex items-center gap-1.5'>
           <div
-            className={`flex size-5 items-center justify-center rounded-full text-label font-medium ${
+            className={`flex size-5 items-center justify-center text-label ${
               s.key <= current
                 ? 'bg-zigner-gold text-zigner-gold-foreground'
                 : 'bg-elev-2 text-fg-muted'
@@ -33,7 +33,7 @@ export function SignStepProgress({ current }: { current: 1 | 2 | 3 }) {
 /** small horizontal room-code chip with copy icon (matches multisig/create style). */
 export function RoomCodeChip({ code }: { code: string }) {
   return (
-    <div className='flex items-center gap-2 rounded-lg border border-border-soft bg-elev-1 px-4 py-2'>
+    <div className='flex items-center gap-2 border border-border-soft bg-elev-1 px-4 py-2'>
       <span className='font-mono text-sm tracking-wider'>{code}</span>
       <button
         onClick={() => void navigator.clipboard.writeText(code)}
@@ -54,7 +54,7 @@ export function DontQuitIcon() {
         className='i-ph-warning size-4 text-amber-400 cursor-help'
         aria-label="don't close this page - closing cancels signing"
       />
-      <div className='absolute right-full top-1/2 -translate-y-1/2 mr-2 hidden group-hover:block w-48 rounded bg-elev-2 px-2 py-1.5 text-label leading-snug text-fg shadow-lg ring-1 ring-amber-500/30 z-20 pointer-events-none'>
+      <div className='absolute right-full top-1/2 -translate-y-1/2 mr-2 hidden group-hover:block w-48 bg-elev-2 px-2 py-1.5 text-label leading-snug text-fg shadow-lg ring-1 ring-amber-500/30 z-20 pointer-events-none'>
         don't close this page - closing cancels signing
       </div>
     </div>

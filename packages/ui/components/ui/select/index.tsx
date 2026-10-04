@@ -9,5 +9,4 @@ export {
   SelectValue,
   type SelectTriggerProps,
 } from './select';
-export { SelectAccount, type SelectAccountProps } from './select-account';
 export { SelectList } from './select-list';

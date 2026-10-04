@@ -12,8 +12,8 @@ import {
   MsgTimeout,
 } from '@penumbra-zone/protobuf/ibc/core/channel/v1/tx_pb';
 import { FungibleTokenPacketData } from '@penumbra-zone/protobuf/penumbra/core/component/ibc/v1/ibc_pb';
-import { ViewServerInterface } from '@rotko/penumbra-types/servers';
-import { parseIntoAddr } from '@rotko/penumbra-types/address';
+import { ViewServerInterface } from '@penumbrafi/types/servers';
+import { parseIntoAddr } from '@penumbrafi/types/address';
 import { Packet } from '@penumbra-zone/protobuf/ibc/core/channel/v1/channel_pb';
 import { AddressIndex } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 

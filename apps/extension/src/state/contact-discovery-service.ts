@@ -6,46 +6,30 @@
  * in, presence out) and the message listener can be driven with fakes in tests.
  * This module owns the pieces that need chrome/storage: the settings read, the
  * lock check, the encrypted contacts read, the mnemonic/identity lookup, and the
- * relay transport, plus the fixed-cadence presence publisher the service
- * worker's alarm drives.
+ * relay transport. Publishing presence is ./discovery-presence: only for a
+ * granted site whose page is open. Opening a window, unlocking or a
+ * service-worker start never publishes (no autoconnect).
  *
  * Everything here is a STRICT NO-OP unless the user opted in AND the wallet is
  * unlocked. A wallet that never opted in never reads a contact, never derives a
  * secret, and never opens a socket. An opted-in wallet with no endpoint of its
- * own talks to DEFAULT_CONTACT_DISCOVERY_RELAY — opting in IS the consent, so a
+ * own talks to DEFAULT_CONTACT_DISCOVERY_RELAY - opting in IS the consent, so a
  * blank endpoint field cannot leave the feature dead.
  */
 
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
-import { getAllPermissions } from '@repo/storage-chrome/origin';
 import type { ZafuDiscoverContactsResponse } from '@zafu/protocol';
-import {
-  createHttpRelayTransport,
-  createPresenceScheduler,
-  createPresenceService,
-  presenceEpoch,
-  type PresenceScheduler,
-  type PublishArgs,
-  type RelayTransport,
-} from '@zafu/zid';
+import { createHttpRelayTransport, type RelayTransport } from '@zafu/zid';
 import { useStore } from '.';
 import { readEncryptedWithMigration } from './encrypted-storage';
-import { currentIdentityName, deriveZidContactCardKey } from './identity';
 import type { Contact } from './contacts';
-import { buildPublishArgs, createContactRelay, discoverForScope } from './contact-discovery';
-import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../config/contact-discovery-relay';
-
-/** true when `endpoint` is an http(s) URL the relay transport can talk to.
- *  Anything else (unset, garbage) leaves the feature unconfigured. */
-const isUsableRelayEndpoint = (endpoint: string): boolean => {
-  try {
-    const url = new URL(endpoint);
-    return url.protocol === 'https:' || url.protocol === 'http:';
-  } catch {
-    return false;
-  }
-};
+import { discoverForScope } from './contact-discovery';
+import {
+  DEFAULT_CONTACT_DISCOVERY_RELAY,
+  isUsableRelayEndpoint,
+} from '../config/contact-discovery-relay';
+import { siteFindsFriends } from './find-friends';
 
 /** the outward refusal. ONE message and code for every "can't serve this"
  *  reason (off, unconfigured, locked, no identity) so an arbitrary origin
@@ -63,10 +47,12 @@ export interface ContactDiscoveryDeps {
   settings: () => Promise<{ enabled: boolean; relayEndpoint: string; relayToken: string }>;
   /** true when the wallet is locked (no session key). */
   locked: () => Promise<boolean>;
+  /** this site holds the per-site "friends can find you here" grant */
+  siteAllowed: (origin: string) => Promise<boolean>;
   /** the wallet's contacts (decrypted). */
   contacts: () => Promise<Contact[]>;
-  /** mnemonic + active identity name, or null when no key is selected. */
-  identity: () => Promise<{ mnemonic: string; identityName: string } | null>;
+  /** mnemonic + the selected wallet's id, or null when no key is selected. */
+  identity: () => Promise<{ mnemonic: string; walletId: string } | null>;
   /** build a relay transport for a configured endpoint, token and all. */
   transport: (endpoint: string, token: string) => RelayTransport;
 }
@@ -85,6 +71,7 @@ export const contactDiscoveryDeps: ContactDiscoveryDeps = {
     };
   },
   locked: async () => !(await sessionExtStorage.get('passwordKey')),
+  siteAllowed: siteFindsFriends,
   contacts: async () =>
     (await readEncryptedWithMigration<Contact[]>(localExtStorage, sessionExtStorage, 'contacts')) ??
     [],
@@ -94,7 +81,7 @@ export const contactDiscoveryDeps: ContactDiscoveryDeps = {
       return null;
     }
     const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
-    return { mnemonic, identityName: await currentIdentityName() };
+    return { mnemonic, walletId: keyInfo.id };
   },
   transport: (endpoint, token) =>
     createHttpRelayTransport({
@@ -111,10 +98,15 @@ export const contactDiscoveryDeps: ContactDiscoveryDeps = {
 export const runDiscoveryForScope = async (
   appScope: string,
   deps: ContactDiscoveryDeps = contactDiscoveryDeps,
+  /** beacons this site first, so whoever you find can find you too (mutual) */
+  publishNow?: (appScope: string) => Promise<void>,
 ): Promise<ZafuDiscoverContactsResponse> => {
   try {
     const { enabled, relayEndpoint, relayToken } = await deps.settings();
     if (!enabled || !isUsableRelayEndpoint(relayEndpoint)) {
+      return NOT_AVAILABLE;
+    }
+    if (!(await deps.siteAllowed(appScope))) {
       return NOT_AVAILABLE;
     }
     if (await deps.locked()) {
@@ -124,12 +116,13 @@ export const runDiscoveryForScope = async (
     if (!identity) {
       return NOT_AVAILABLE;
     }
+    await publishNow?.(appScope);
     const contacts = await deps.contacts();
     const discovered = await discoverForScope({
       appScope,
       contacts,
       mnemonic: identity.mnemonic,
-      identityName: identity.identityName,
+      walletId: identity.walletId,
       transport: deps.transport(relayEndpoint, relayToken),
     });
     return { contacts: discovered };
@@ -137,99 +130,5 @@ export const runDiscoveryForScope = async (
     // never surface internal detail (and never a secret) to the caller.
     console.warn('[contact-discovery] discovery failed:', e);
     return { error: 'contact discovery failed', code: 'internal_error' };
-  }
-};
-
-/**
- * App scopes this wallet beacons in: origins the user has approved (any granted
- * capability). Presence is app-scoped, so there is nothing to publish for an
- * origin the wallet never connected to - and a site the user never approved
- * must never be able to find this wallet.
- */
-const presenceScopes = async (): Promise<string[]> => {
-  const permissions = await getAllPermissions();
-  return permissions.filter(p => p.granted.length > 0).map(p => p.origin);
-};
-
-interface ScopeState {
-  endpoint: string;
-  /** the token the state was built with, so a changed token rebuilds the service. */
-  token: string;
-  identityName: string;
-  scheduler: PresenceScheduler;
-  /** the args the scheduler publishes on its next due tick. */
-  box: { args: PublishArgs };
-}
-
-const scopeStates = new Map<string, ScopeState>();
-
-/**
- * Publish this wallet's presence once per epoch, for every app scope it serves.
- * Driven by the `zidPresencePublish` alarm; idempotent within an epoch (the
- * per-scope `createPresenceScheduler` claims the epoch before publishing), so
- * over-ticking is harmless. A strict no-op when disabled, unconfigured, or
- * locked. Never throws.
- */
-export const runPresencePublish = async (
-  deps: ContactDiscoveryDeps = contactDiscoveryDeps,
-): Promise<void> => {
-  try {
-    const { enabled, relayEndpoint, relayToken } = await deps.settings();
-    if (!enabled || !isUsableRelayEndpoint(relayEndpoint)) {
-      return;
-    }
-    if (await deps.locked()) {
-      return;
-    }
-    const scopes = await presenceScopes();
-    if (scopes.length === 0) {
-      return;
-    }
-    const identity = await deps.identity();
-    if (!identity) {
-      return;
-    }
-    const epoch = presenceEpoch();
-    const transport = deps.transport(relayEndpoint, relayToken);
-    const myPubHex = deriveZidContactCardKey(identity.mnemonic, identity.identityName).publicKey;
-    const contacts = await deps.contacts();
-
-    for (const appScope of scopes) {
-      let state = scopeStates.get(appScope);
-      if (
-        !state ||
-        state.endpoint !== relayEndpoint ||
-        state.token !== relayToken ||
-        state.identityName !== identity.identityName
-      ) {
-        // settings/identity changed (or first run): rebuild so the service uses
-        // the current relay + contact-card key.
-        const box: { args: PublishArgs } = { args: null };
-        state = {
-          endpoint: relayEndpoint,
-          token: relayToken,
-          identityName: identity.identityName,
-          scheduler: createPresenceScheduler(
-            createPresenceService(createContactRelay(transport, appScope), appScope, myPubHex),
-            () => box.args,
-          ),
-          box,
-        };
-        scopeStates.set(appScope, state);
-      }
-      if (state.scheduler.lastPublishedEpoch === epoch) {
-        continue; // already beaconed this epoch
-      }
-      state.box.args = await buildPublishArgs({
-        appScope,
-        contacts,
-        mnemonic: identity.mnemonic,
-        identityName: identity.identityName,
-        epoch,
-      });
-      await state.scheduler.tick();
-    }
-  } catch (e) {
-    console.warn('[contact-presence] publish failed:', e);
   }
 };
