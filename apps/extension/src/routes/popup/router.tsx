@@ -97,12 +97,24 @@ export const popupRoutes: RouteObject[] = [
             ...screen('groupJoin'),
           },
           {
+            path: PopupPath.INBOX_ADD,
+            ...screen('addPerson'),
+          },
+          {
+            path: PopupPath.INBOX_SCAN,
+            ...screen('scanCard'),
+          },
+          {
             path: PopupPath.CONTACTS,
             ...screen('contacts'),
           },
           {
             path: PopupPath.CONTACT_CARD,
             ...screen('contactCard'),
+          },
+          {
+            path: PopupPath.CONTACT_SEAL,
+            ...screen('contactSeal'),
           },
           {
             path: PopupPath.CONTACT,

@@ -16,10 +16,16 @@ export enum PopupPath {
   INBOX_NEW_GROUP = '/inbox/new-group',
   /** join one from a code or a link (GroupJoin.dc.html), `?code=&via=` */
   INBOX_JOIN = '/inbox/join',
+  /** add a person: your card for the next one, then waiting for their answer (Cv2Show, Cv2Waiting), `?room=` reopens one */
+  INBOX_ADD = '/inbox/add',
+  /** scan a card, or paste its link (Cv2Scan) */
+  INBOX_SCAN = '/inbox/scan',
   CONTACTS = '/contacts',
   CONTACT = '/contacts/:contactId',
   /** a card someone gave you, to review and save (`?card=<payload>&via=`) */
   CONTACT_CARD = '/contacts/card',
+  /** check the pair seal with them in person (Cv2Seal) */
+  CONTACT_SEAL = '/contacts/:contactId/seal',
   TOOLS = '/tools',
   SETTINGS = '/settings',
 
@@ -148,6 +154,9 @@ export const groupInvitePath = (G: string): string =>
 /** one saved contact's route */
 export const contactPath = (contactId: string): string =>
   PopupPath.CONTACT.replace(':contactId', encodeURIComponent(contactId));
+
+export const sealPath = (contactId: string): string =>
+  PopupPath.CONTACT_SEAL.replace(':contactId', encodeURIComponent(contactId));
 
 /**
  * Windows that answer a pending request from a site or a device. Closing one

@@ -54,6 +54,9 @@ import {
   type PeopleRelaySetting,
 } from '../../../config/people-relay';
 import { useThreadName } from './use-thread-name';
+import { NoteLine } from './card-notes';
+import { sourceLine } from '../contacts/seal';
+import { useCardSync } from '../../../people/my-card';
 import { useFrostRoom } from '../../../people/use-frost-room';
 import { DOOR_MS } from '../../../people/door';
 import { KeyCard } from './shared-wallet';
@@ -532,6 +535,7 @@ export function ThreadPage() {
     answers.length === 0;
   const [picking, setPicking] = useState(false);
   usePairCards();
+  useCardSync();
 
   const rows = useMemo(
     () =>
@@ -589,8 +593,10 @@ export function ThreadPage() {
   const say = (text: string, retry?: string) =>
     room && void peopleSay(room.id, text, retry).catch(() => undefined);
 
+  // someone whose card you hold is paid at the newest address they signed
+  const payTo = (mutual && contact?.addresses.find(a => a.network === network)?.address) || address;
   const send = (prefillMemo?: string) =>
-    navigate(PopupPath.SEND, { state: { prefillRecipient: address, prefillMemo, network } });
+    navigate(PopupPath.SEND, { state: { prefillRecipient: payTo, prefillMemo, network } });
 
   const sendText = async () => {
     const text = draft.trim();
@@ -647,7 +653,7 @@ export function ThreadPage() {
           <span className='truncate text-[11px] text-fg-muted'>
             {contact
               ? contact.zid
-                ? 'from a card'
+                ? (sourceLine(contact) ?? 'from a card')
                 : 'address only'
               : address
                 ? 'tap to save'
@@ -692,6 +698,13 @@ export function ThreadPage() {
                   onSend={() => setSending(true)}
                 />
               )
+            ) : r.it.kind === 'note' ? (
+              <NoteLine
+                item={r.it}
+                name={name}
+                contactId={contact?.id}
+                sealChecked={!!contact?.sealChecked}
+              />
             ) : (
               <RelayLine item={r.it} onRetry={() => say(r.it.body, r.it.local)} />
             )}

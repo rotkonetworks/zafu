@@ -26,6 +26,7 @@ import type { Contact } from '../state/contacts';
 import { createPairs } from './pairs';
 import { createInvites } from './invites';
 import { createGroups } from './groups';
+import { createCards } from './cards';
 import { foldFrost, frostOps } from './frost-room';
 import { createDeals } from './deal';
 import { compileEgress, describeEgress, type EgressInputs } from '../net/egress-policy';
@@ -131,6 +132,12 @@ const groups = createGroups({
   transport: (relay, size, signal) => peopleDeps.transport(relay, size, signal),
 });
 
+const cards = createCards({
+  walletId: async () => useStore.getState().keyRing.selectedKeyInfo?.id,
+  relKeys,
+  gate: relay => peopleDeps.gate(relay),
+});
+
 const deals = createDeals({
   group: (svc, name) => groups.ops['group-create']({ name }, svc),
 });
@@ -168,10 +175,15 @@ export const startPeopleRelay = (
 ) => {
   const service = createPeopleService(peopleDeps, {
     ...groups.handlers,
-    ...invites.handlers,
+    card: cards.handlers.card,
     ...handlers,
     group: chain(handlers.group ?? groups.handlers.group, foldFrost),
-    pair: chain(handlers.pair ?? invites.handlers.pair, foldFrost, deals.onPair),
+    pair: chain(
+      handlers.pair ?? invites.handlers.pair,
+      cards.handlers.pair,
+      foldFrost,
+      deals.onPair,
+    ),
   });
   const all: Record<string, PeopleOp> = {
     open: async (_, s) => {
@@ -189,6 +201,7 @@ export const startPeopleRelay = (
     ...groups.ops,
     ...pairs.ops,
     ...invites.ops,
+    ...cards.ops,
     ...frostOps,
     ...deals.ops,
     ...ops,

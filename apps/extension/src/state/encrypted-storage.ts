@@ -69,6 +69,14 @@ export function markHydrated(): void {
   }
 }
 
+/**
+ * Resolves once this realm read its encrypted data. A write made from state
+ * read before then would overwrite what storage holds (the gate below delays
+ * the write, but its data was taken already): screens that write on their
+ * own, not on a tap, wait for this first.
+ */
+export const whenHydrated = (): Promise<void> => waitForHydration();
+
 /** wait until hydration is complete before allowing writes */
 function waitForHydration(): Promise<void> {
   if (hydratedKeys.has('*')) {

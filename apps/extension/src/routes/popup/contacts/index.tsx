@@ -13,6 +13,7 @@ import { useStore } from '../../../state';
 import type { Contact } from '../../../state/contacts';
 import { ScreenHeader } from '../../../components/screen-header';
 import { PopupPath, contactPath } from '../paths';
+import { sourceLine } from './seal';
 import { looksLikeLink } from '../../../links/router';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { ChainRow, useAddressDraft } from './chain-row';
@@ -25,7 +26,7 @@ import { ChainRow, useAddressDraft } from './chain-row';
 export const contactStatus = (c: Contact): { line: string; warn?: boolean } =>
   c.zid && c.pairKa
     ? c.rel
-      ? { line: 'from a card · can be found' }
+      ? { line: sourceLine(c) ?? 'from a card · can be found' }
       : { line: 'from a card · send them yours' }
     : c.zid || c.card
       ? { line: 'from an older card · ask for their new one' }

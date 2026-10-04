@@ -18,6 +18,7 @@ const PREF_KEYS = [
   'approvalSurface',
   'approvalsInSidePanel',
   'zidDiscovery',
+  'peopleRelay',
   'networkEndpoints',
   'hiddenTransparentChains',
   'transparentAgreed',

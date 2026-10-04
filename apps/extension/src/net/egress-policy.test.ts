@@ -373,6 +373,27 @@ describe('two optional services on one url', () => {
     }
   });
 
+  test('a people relay the person chose goes through egress, and the one it replaced stays allowed', () => {
+    const peopleRelay = {
+      endpoint: 'https://relay.example.org',
+      hosts: ['https://relay.zafu.pro'],
+    };
+    const t = compileEgress({ netEgress: { optIns: { 'people-relay': 'allowed' } }, peopleRelay });
+    for (const host of ['https://relay.example.org', 'https://relay.zafu.pro']) {
+      expect(decideEgress(`${host}/bucket?shard=ab`, 'service-worker', t)).toMatchObject({
+        allow: true,
+        destination: 'people-relay',
+      });
+    }
+    // and nothing the person did not choose
+    expect(decideEgress('https://relay.other.org/bucket', 'service-worker', t).allow).toBe(false);
+    // off until the people relay is allowed, whatever the url
+    const off = compileEgress({ peopleRelay });
+    expect(decideEgress('https://relay.example.org/bucket', 'service-worker', off).allow).toBe(
+      false,
+    );
+  });
+
   test('a network endpoint still owns its url alone', () => {
     const i = { enabledNetworks: [] as string[] };
     const zcash = describeEgress(i).find(d => d.id === 'zcash-servers');

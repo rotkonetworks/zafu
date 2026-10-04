@@ -5,6 +5,7 @@ import { create } from 'zustand';
 import { AllSlices, initializeStore, TestStore } from '.';
 import { restoreContacts, type Contact } from './contacts';
 import { mintRelationshipIndex } from './identity';
+import { readEncrypted } from './encrypted-storage';
 import { readRooms, readThreads, writeRooms, writeThreads, THREAD_CAP } from '../people/vault';
 import type { PeopleRoom, ThreadItem } from '../people/vault';
 
@@ -183,5 +184,129 @@ describe('personal-data backup keeps the relationship counter', () => {
     await useStore.getState().contacts.importPersonalData(backup, 'backup-pass', 'merge');
     expect(await mintRelationshipIndex(id, 2)).toBe(10);
     expect(await mintRelationshipIndex(id, 0)).toBe(0);
+  });
+
+  test('a card you showed and no one answered keeps its j through a restore', async () => {
+    const id = await useStore.getState().keyRing.newMnemonicKey(PHRASE, 'main');
+    await writeRooms([
+      {
+        id: 'c:' + 'ab'.repeat(32),
+        walletId: id,
+        kind: 'card',
+        name: '',
+        appScope: 'zafu-pair-v1',
+        secret: '07'.repeat(32),
+        size: 4096,
+        relay: 'https://relay.zafu.pro',
+        signer: { gen: 0, j: 7 },
+        joined: true,
+        createdAt: 1,
+        card: { bytes: '', mine: true, contactId: 'next', shown: 1, state: 'waiting' },
+      },
+    ]);
+    const backup = await useStore.getState().contacts.exportPersonalData('backup-pass');
+    await chrome.storage.local.remove(`xidRelNext:${id}`);
+    await useStore.getState().contacts.importPersonalData(backup, 'backup-pass', 'merge');
+    expect(await mintRelationshipIndex(id, 0)).toBe(8);
+  });
+});
+
+describe('a v2 person, sealed at rest and in the backup', () => {
+  let useStore: TestStore;
+
+  beforeEach(async () => {
+    localMock.clear();
+    sessionMock.clear();
+    useStore = create<AllSlices>()(initializeStore(sessionExtStorage, localExtStorage));
+    await useStore.getState().keyRing.setPassword('s0meUs3rP@ssword');
+  });
+
+  test('their card, how it came, the seal check and the card you gave survive a wipe', async () => {
+    const v2 = {
+      cardV2: 'AgAB',
+      source: 'link' as const,
+      sealChecked: 1_790_000_000_000,
+      given: { rev: 2, zcash: '11'.repeat(43), relay: 'https://relay.zafu.pro', caps: 3 },
+      addrGen: 1,
+    };
+    const ken = await useStore.getState().contacts.addContact({
+      id: 'ken-id',
+      name: 'ken',
+      zid: 'cd'.repeat(32),
+      pairKa: 'ef'.repeat(32),
+      ...v2,
+    });
+    expect(ken.id).toBe('ken-id');
+    // sealed at rest: nothing of the card is readable in storage
+    expect(localMock.get('contacts')).toHaveProperty('encrypted');
+    expect(JSON.stringify(localMock.get('contacts'))).not.toContain('cardV2');
+    const backup = await useStore.getState().contacts.exportPersonalData('backup-pass');
+    await useStore.getState().contacts.clearAll();
+    await useStore.getState().contacts.importPersonalData(backup, 'backup-pass', 'merge');
+    expect((useStore.getState().contacts.contacts as Contact[])[0]).toMatchObject({
+      id: 'ken-id',
+      ...v2,
+    });
+  });
+
+  test('a v1 person loads unchanged, with nothing v2 yet: the first v2 card is sent on first contact', async () => {
+    await useStore
+      .getState()
+      .contacts.addContact({ name: 'old', zid: 'cd'.repeat(32), pairKa: 'ef'.repeat(32) });
+    const backup = await useStore.getState().contacts.exportPersonalData('backup-pass');
+    await useStore.getState().contacts.clearAll();
+    await useStore.getState().contacts.importPersonalData(backup, 'backup-pass', 'merge');
+    const old = (useStore.getState().contacts.contacts as Contact[])[0]!;
+    expect(old.name).toBe('old');
+    expect(old.given).toBeUndefined();
+    expect(old.cardV2).toBeUndefined();
+  });
+
+  test('a newer card puts its address first and keeps the old one', async () => {
+    const { contacts } = useStore.getState();
+    const ken = await contacts.addContact({
+      name: 'ken',
+      addresses: [{ network: 'zcash', address: 'u1old' }],
+    });
+    await useStore.getState().contacts.updateContact(ken.id, {
+      addresses: [{ network: 'zcash', address: 'u1new' }],
+    });
+    const after = (useStore.getState().contacts.contacts as Contact[])[0]!;
+    expect(after.addresses.map(a => a.address)).toEqual(['u1new', 'u1old']);
+    // the same card again changes nothing
+    await useStore.getState().contacts.updateContact(ken.id, {
+      addresses: [{ network: 'zcash', address: 'u1new' }],
+    });
+    expect((useStore.getState().contacts.contacts as Contact[])[0]!.addresses).toHaveLength(2);
+  });
+
+  test('a second add under the same id returns the person, never a copy', async () => {
+    const { contacts } = useStore.getState();
+    const first = await contacts.addContact({ id: 'ken-id', name: 'bob' });
+    const again = await useStore.getState().contacts.addContact({ id: 'ken-id', name: 'someone' });
+    expect(again).toEqual(first);
+    expect(useStore.getState().contacts.contacts).toHaveLength(1);
+    expect((useStore.getState().contacts.contacts as Contact[])[0]!.name).toBe('bob');
+  });
+
+  test('a quick second write is never reverted by the read the first one started', async () => {
+    const { contacts } = useStore.getState();
+    const ken = await contacts.addContact({ id: 'ken-id', name: 'someone' });
+    // named at once, as the add-a-person screen does
+    await useStore.getState().contacts.updateContact(ken.id, { name: 'bob' });
+    await new Promise(r => setTimeout(r, 200));
+    // a third write persists whatever this realm holds now
+    await useStore.getState().contacts.updateContact(ken.id, { sealChecked: 1 });
+    await new Promise(r => setTimeout(r, 200));
+    expect((useStore.getState().contacts.contacts as Contact[])[0]!.name).toBe('bob');
+    const stored = await readEncrypted<Contact[]>(
+      localExtStorage,
+      sessionExtStorage,
+      'contacts' as never,
+    );
+    expect(stored?.[0]).toMatchObject({
+      name: 'bob',
+      sealChecked: 1,
+    });
   });
 });
