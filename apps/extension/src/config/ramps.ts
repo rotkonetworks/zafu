@@ -7,6 +7,19 @@
  */
 export const PEER_REFERRAL_CODE = 'L59SD4';
 
+/**
+ * Where a cash-out continues: Peer's referrals page, which applies the seller
+ * code above. Selling on Peer means listing usdc on base with your payment
+ * details; buyers pay you as they take it. zafu's part ends at the swap into
+ * usdc on base; the listing happens on peer's site, from the person's own
+ * wallet.
+ */
+export const PEER_SELL_URL = `https://app.peer.xyz/referrals?referralCode=${PEER_REFERRAL_CODE}`;
+
+/** a cash-out swap: zec into usdc on base, the asset a peer listing sells */
+export const isCashOutToken = (t: { symbol: string; chain: string } | undefined): boolean =>
+  t?.symbol.toUpperCase() === 'USDC' && t.chain === 'base';
+
 /** canonical USDC on Base, the token every Peer buy delivers */
 export const BASE_CHAIN_ID = 8453;
 export const BASE_USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
