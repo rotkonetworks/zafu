@@ -97,9 +97,9 @@ diff against the values above. A mismatch means the vendored blob is stale.
 ## 2026-10-05 rebuild - NoteTree (note commitment trees as shards)
 
 - source repo: zcli, branch `integ/shardtree-blob` (from `feat/ledger-on-thor`
-  092582f, the rev of the blob it replaces), rev `d2f1b3b` = the two commits
-  of `feat/wasm-shardtree` (11444c4, 9c85bfe, on master 2ae5843)
-  cherry-picked as 2d535a4, d2f1b3b. The only conflict was the module list at
+  092582f, the rev of the blob it replaces), rev `21c35e5` = the three commits
+  of `feat/wasm-shardtree` (11444c4, 9c85bfe, acc993e, on master 2ae5843)
+  cherry-picked as 2d535a4, d2f1b3b, 21c35e5. The only conflict was the module list at
   the top of `src/lib.rs` (both kept).
 - new (public data only, nothing takes a key): the `NoteTree` class (shardtree
   0.7.1, depth 32, shards of 16): `load_shard`, `load_cap`,
@@ -121,9 +121,9 @@ diff against the values above. A mismatch means the vendored blob is stale.
   `_bg.wasm.d.ts`). The rayon snippet hash is unchanged
   (`wasm-bindgen-rayon-38edf6e439f6d70d`), so the patched `workerHelpers.js`
   (`wbgRayonBase` defined and used) was kept as is.
-- size: pre `wasm-opt` 22,380,108 bytes; post `-Oz` 10,245,195 bytes.
+- size: pre `wasm-opt` 22,407,705 bytes; post `-Oz` 10,250,206 bytes.
 - sha256(parallel zafu_wasm_bg.wasm) =
-  3445197b585721140e605e1d5feb84c7e4e23110e6eb88ccf612ebe03499df9e
+  40228df4b4c6320f59f78dddd7f17a0872487cf4dcf6d183f8cedecda2235740
 - shared imported memory confirmed post-bindgen:
   `(memory $mimport$0 56 32768 shared)`.
 
