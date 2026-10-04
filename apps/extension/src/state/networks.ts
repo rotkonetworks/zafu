@@ -135,7 +135,7 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
     enabled: false,
     endpoint: 'https://zcash.rotko.net',
     syncDescription:
-      'Zidecar trustless sync - header chain proven via Ligerito polynomial commitments, nullifier set verified by NOMT merkle proofs. Compact blocks are trial-decrypted locally - keys never leave this device.',
+      'Zidecar sync - header chain checked against a Ligerito proof. Every block is scanned on this device: notes are found by trial decryption and spends by matching nullifiers, so the server never learns which notes are yours. Keys never leave this device.',
     memoSyncStrategy: 'private',
     mempoolWatch: 'off',
     backend: 'zidecar',

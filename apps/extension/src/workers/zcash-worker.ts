@@ -38,12 +38,6 @@ import { nu63ActivationHeight } from '../config/feature-flags';
 import { crossCheckTip, pickIndependentPeer } from './cross-verify';
 import { checkEgress } from '../net/egress';
 import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
-import {
-  CommitmentReservoir,
-  padCommitmentQuery,
-  padNullifierQuery,
-  type CommitmentItem,
-} from './proof-decoys';
 import { BlockPrefetcher } from './block-prefetcher';
 import { once } from './once';
 import { assessAmbientRayonIsolation, RAYON_ISOLATION_WARNING } from '../perf/rayon-isolation';
@@ -152,7 +146,6 @@ const backendRegistry = new Map<string, ZcashBackend>();
  * identical lines and hides the ones that matter. These warn once, then stay
  * silent; the condition itself is unaffected.
  */
-let warnedNullifierRootMoved = false;
 let warnedNonGenesisActionsCommitment = false;
 
 function registerBackend(serverUrl: string, backend: ZcashBackend): void {
@@ -1086,34 +1079,6 @@ const getActionsCommitment = async (walletId: string): Promise<string> => {
   return r?.value ?? '0'.repeat(64); // genesis: all zeros
 };
 
-/**
- * Per-wallet secret that keys the proof-query decoys (see proof-decoys.ts).
- *
- * It must be STABLE. Decoys re-rolled on every sync would be worse than no
- * decoys at all: real items recur in every query and fresh decoys do not, so
- * intersecting a few sessions hands the server the real set. Persisting the
- * seed makes a repeated query byte-identical.
- *
- * Caveat, stated plainly: this lives in the wallet database, so clearing the
- * cache re-rolls it. A clear-and-resync therefore presents the server with a
- * second, differently-padded query over the same real notes, and the
- * intersection of the two narrows the anonymity set. There is no fix for
- * that short of deriving the seed from the wallet key material, which the
- * worker does not hold in a form stable across a wipe.
- */
-const getDecoySeed = async (walletId: string): Promise<Uint8Array> => {
-  const r = await idbGet<{ value: string }>('meta', [walletId, 'decoySeed']);
-  if (r?.value) {
-    return hexDecode(r.value);
-  }
-  const seed = crypto.getRandomValues(new Uint8Array(32));
-  const db = await getDb();
-  const tx = db.transaction('meta', 'readwrite');
-  tx.objectStore('meta').put({ walletId, key: 'decoySeed', value: hexEncode(seed) });
-  await txComplete(tx);
-  return seed;
-};
-
 const saveActionsCommitment = async (walletId: string, commitment: string): Promise<void> => {
   const db = await getDb();
   const tx = db.transaction('meta', 'readwrite');
@@ -1121,299 +1086,41 @@ const saveActionsCommitment = async (walletId: string, commitment: string): Prom
   await txComplete(tx);
 };
 
-/** verify header proof + commitment proofs + nullifier proofs after sync catches up */
+/**
+ * Verify zidecar's header proof and, for genesis-anchored wallets, the actions
+ * commitment, after sync catches up.
+ *
+ * Nothing here sends the server anything about this wallet's notes. Spend
+ * detection is the scan's job: every block from the birthday on is walked, and
+ * each action's nullifier is matched against our own notes (both pools), so a
+ * spend is seen in the block that contains it. Note membership is the scan's
+ * job too: trial decryption recomputes the cmx, and the wallet keeps its own
+ * commitment-tree frontiers. The NOMT commitment and nullifier proof rounds
+ * that used to run here added no answer the scan does not already give, and
+ * paid for it by sending the server our unspent nullifiers and our notes'
+ * (cmx, position) pairs (decoy-padded, anonymity set 3).
+ */
 const verifySyncProofs = async (
   client: ZidecarClient,
   tip: number,
   mainnet: boolean,
-  pendingCmxs: Uint8Array[],
-  pendingPositions: number[],
-  state: WalletState,
   actionsCommitment: string,
   /** whether this wallet's running actions commitment was folded from genesis
    *  (start block 0). If it was started at a birthday/import height, the fold
    *  is seeded from a non-genesis value and can NEVER equal the server's
    *  genesis-anchored proven commitment, so verifying it is meaningless. */
   genesisAnchoredActions: boolean,
-  /** secret keying the decoy padding; null disables padding (see below). */
-  decoySeed: Uint8Array | null,
-  /** observed on-chain (cmx, position) pairs to draw commitment decoys from. */
-  decoyPool: readonly CommitmentItem[],
 ): Promise<void> => {
   if (!zyncModule) {
     return;
   }
-  console.log(`[zcash-worker] verifying proofs: ${pendingCmxs.length} notes`);
   const t0 = performance.now();
 
   // 1. verify header proof
   const proven = await verifyHeaderProof(client, tip, mainnet);
   console.log(`[zcash-worker] header proof valid, roots: tree=${proven.tree_root.slice(0, 16)}...`);
 
-  // 2. verify commitment proofs for found notes
-  // proven.tree_root is the canonical orchard tree root (from zebrad's frontier);
-  // NOMT-served commitment-proof tree_root is NOMT's sparse-merkle blake3 root.
-  // The two are different tree structures and never agree by construction, so
-  // we don't bind them. We still verify the per-cmx Merkle path against the
-  // returned root (catches NOMT corruption) and confirm cmx existence; the
-  // canonical orchard membership is enforced locally during scan.
-  //
-  // PRIVACY: a (cmx, position) pair is a direct index into the block holding
-  // that output, so an unpadded request is a complete, unambiguous inventory
-  // of the wallet's notes handed to the server in the clear. The query is
-  // padded with decoys drawn from commitments the scanner actually observed
-  // in the same block range (see proof-decoys.ts) - fabricated cmxs would
-  // have no proof and identify themselves. Only proofs for OUR cmxs are
-  // verified; decoy responses are dropped unread.
-  if (pendingCmxs.length > 0) {
-    // Two independent properties, both required:
-    //   privacy - the query is padded with decoys so the server does not learn
-    //             the wallet's exact note set from the cmx+position pairs;
-    //   integrity - every proof is bound to the batch root and to something we
-    //             actually asked about, and every REAL cmx must come back.
-    // Neither subsumes the other: padding without binding still lets a server
-    // forge paths, and binding without padding still hands over the note set.
-    const realItems: CommitmentItem[] = pendingCmxs.map((cmx, i) => ({
-      cmx,
-      position: pendingPositions[i] ?? 0,
-    }));
-    const padded = padCommitmentQuery(realItems, decoyPool, decoySeed);
-    const { proofs: commitmentProofs, treeRoot } = await client.getCommitmentProofs(
-      padded.cmxs,
-      padded.positions,
-      tip,
-    );
-
-    const treeRootHex = hexEncode(treeRoot);
-    const askedCmxs = new Set(padded.cmxs.map(c => hexEncode(c)));
-    if (commitmentProofs.length !== padded.cmxs.length) {
-      throw new Error(
-        `commitment proof count mismatch: asked ${padded.cmxs.length}, got ${commitmentProofs.length}`,
-      );
-    }
-
-    const seenCmxs = new Set<string>();
-    let verified = 0;
-    for (const proof of commitmentProofs) {
-      const cmxHex = hexEncode(proof.cmx);
-      const proofRootHex = hexEncode(proof.treeRoot);
-      // Root- and request-binding apply to EVERY proof, decoy or not: a server
-      // that answers off a tree it invented is misbehaving regardless of which
-      // cmx it is answering about.
-      if (proofRootHex !== treeRootHex) {
-        throw new Error(
-          `commitment proof root mismatch: proof=${proofRootHex.slice(0, 16)} batch=${treeRootHex.slice(0, 16)}`,
-        );
-      }
-      if (!askedCmxs.has(cmxHex)) {
-        throw new Error(`commitment proof for unrequested cmx ${cmxHex.slice(0, 16)}`);
-      }
-      if (seenCmxs.has(cmxHex)) {
-        throw new Error(`duplicate commitment proof for cmx ${cmxHex.slice(0, 16)}`);
-      }
-      seenCmxs.add(cmxHex);
-
-      // Only OWN items are verified or acted on. A decoy cmx is not a real
-      // commitment, so a failing path for one proves nothing and must never
-      // fail the sync.
-      if (!padded.realHex.has(cmxHex)) {
-        continue;
-      }
-      const valid = zyncModule['verify_commitment_proof'](
-        cmxHex,
-        proofRootHex,
-        proof.pathProofRaw,
-        hexEncode(proof.valueHash),
-      ) as boolean;
-      if (!valid) {
-        throw new Error(`commitment proof invalid for cmx ${cmxHex.slice(0, 16)}`);
-      }
-      verified++;
-    }
-
-    // Omission check: padding must not become a place for the server to hide a
-    // missing answer about one of OUR notes.
-    if (verified !== realItems.length) {
-      throw new Error(
-        `commitment proofs missing for own notes: verified ${verified} of ${realItems.length}`,
-      );
-    }
-    console.log(
-      `[zcash-worker] ${verified}/${realItems.length} own commitment proofs verified ` +
-        `(root-bound, request-bound); sent ${padded.cmxs.length} incl. ` +
-        `${padded.cmxs.length - realItems.length} decoys`,
-    );
-  }
-
-  // 3. verify nullifier proofs for unspent notes.
-  //
-  // Ironwood used to be excluded here on the belief that the NOMT nullifier
-  // set was orchard-only. It never was - the set is existence-keyed and
-  // pool-agnostic, and zidecar indexes sapling, orchard and ironwood
-  // nullifiers into it from the same block walk. What actually bounds an
-  // answer is not the pool but the index's height, and the two pools have
-  // different horizons: ironwood is indexed from NU6.3 activation and is
-  // current, while the full-chain backfill trails far behind it.
-  //
-  // That distinction matters because absence is not proof. Above a pool's
-  // horizon "no entry" means "not indexed yet", which is byte-identical to
-  // "not spent" - trusting it would mark a spent note as spendable. So each
-  // note is only queried once its own pool's index reaches the tip; the rest
-  // fall back to scan-time detection.
-  const unspentAll = state.notes.filter(n => !state.spentNullifiers.has(n.nullifier));
-
-  // There used to be a single-nullifier "probe" call here, issued immediately
-  // before the batch, purely to read the index horizons off its response.
-  //
-  // It was the worst request in the wallet. One bare nullifier, unpadded, no
-  // possible ambiguity about whose it was - and because it was always
-  // `unspentAll[0]`, it was the same stable value every session, which
-  // re-identified the wallet to the server across sessions on its own. Being
-  // adjacent to the batch also joined the two: the server could attribute the
-  // whole batch to whoever sent the probe.
-  //
-  // The horizons are carried on the batch response anyway, so the probe
-  // bought nothing that the request we were about to send did not already
-  // return. It is gone; the horizons are read below, after the batch.
-  //
-  // The horizon is ONE-DIRECTIONAL, and treating it as a filter was wrong.
-  //
-  // `is_spent = true` is a Merkle INCLUSION proof against nullifier_root,
-  // verified locally below and root-bound before use - it is sound at any
-  // horizon. Only `is_spent = false` is uninformative above the horizon,
-  // because the NOMT set is existence-keyed and "not indexed yet" and "not
-  // spent" are the same bytes.
-  //
-  // Filtering the QUERY by horizon therefore discarded sound positives along
-  // with the unsound negatives. Worse: the orchard backfill trails the tip by
-  // design, so `orchardHorizon >= tip` is essentially never true in
-  // production - which meant this disabled orchard spend detection outright
-  // rather than merely narrowing it. Always ask; gate only what we believe.
-  const unspentNotes = unspentAll;
-  const unspentNfs = unspentNotes.map(n => hexDecode(n.nullifier));
-
-  // PRIVACY: these are nullifiers of UNSPENT notes - values that are not yet
-  // on chain and that only this wallet can know. Sent bare, the server can
-  // record them and fire the moment one appears in a block, deanonymising a
-  // spend before the user has made it. The query is padded with decoys drawn
-  // uniformly from the Pallas base field (where real nullifiers live) and
-  // shuffled, so the request alone no longer says which are ours.
-  //
-  // Be clear about the size of this win: the anonymity set is 3, and it is
-  // retrospective-only - when the user actually spends, the real nullifier
-  // hits the chain and the decoys never do, so the server can work backwards
-  // and identify it then. What the padding removes is the PROSPECTIVE
-  // watchlist. See proof-decoys.ts for the full accounting.
-  const padded = padNullifierQuery(unspentNfs, decoySeed);
-  const queryNfs = padded.query;
-
-  if (unspentNfs.length > 0) {
-    const {
-      proofs: nfProofs,
-      nullifierRoot,
-      syncedHeight,
-      ironwoodSyncedHeight,
-    } = await client.getNullifierProofs(queryNfs, tip);
-    const nfRootHex = hexEncode(nullifierRoot);
-
-    // Horizons come off the batch itself - this is what the deleted probe
-    // call was for. No absence gate is needed at the consumption site below:
-    // the loop acts ONLY on `proof.isSpent === true`, and never infers
-    // "unspent" from a missing entry. They are logged so the record states
-    // what coverage the answers carry.
-    console.log(
-      `[zcash-worker] queried ${queryNfs.length} nullifier proofs ` +
-        `(${unspentNfs.length} real + ${queryNfs.length - unspentNfs.length} decoy) ` +
-        `(orchard index @${syncedHeight}, ironwood @${ironwoodSyncedHeight}, tip ${tip}); ` +
-        `spent-proofs always trusted, unspent trusted only at/above the horizon`,
-    );
-
-    // NOT a tampering signal, and it must not fail the sync.
-    //
-    // These two roots are taken at DIFFERENT INSTANTS from a MUTABLE tree.
-    // zidecar's NOMT is a single live tree: proofs are generated against
-    // nomt.root() at request time, and `at_height` is accepted but ignored - // there is no versioned or pinned historical root. Meanwhile the ligerito
-    // header proof carries a snapshot of that root from whenever the proof was
-    // last generated. The server writes continuously (the ironwood cursor
-    // follows the chain tip), so between the proof and this query the root has
-    // simply moved on.
-    //
-    // Treating that as "the server tampered" was my error earlier today: it
-    // converted a benign race into a hard sync failure that users hit within
-    // minutes, and it teaches people to ignore an integrity warning - the
-    // worst possible outcome for a check that is supposed to mean something.
-    //
-    // What IS sound is verified below and stays fatal: every proof must bind
-    // to the batch root we actually checked, must be for a nullifier we asked
-    // about, and the count must match. Those are internally consistent
-    // comparisons taken at one instant, so a mismatch there really is the
-    // server contradicting itself.
-    //
-    // Making this meaningful needs a server that can prove against a pinned
-    // historical root. Until then a divergence here is unremarkable.
-    if (nfRootHex !== proven.nullifier_root) {
-      if (!warnedNullifierRootMoved) {
-        warnedNullifierRootMoved = true;
-        console.warn(
-          `[zcash-worker] nullifier root moved since the header proof ` +
-            `(live=${nfRootHex.slice(0, 16)} proven=${proven.nullifier_root.slice(0, 16)}); ` +
-            `expected while the server is indexing - proofs are still bound to the live root below`,
-        );
-      }
-    }
-
-    // Bind every proof to the root we actually checked, and to a nullifier we
-    // actually asked about. Verifying each path against the PER-PROOF root the
-    // server supplied made the whole pass forgeable: a malicious server could
-    // return the real root in the batch field, then serve paths valid against
-    // a tree it built itself. With is_spent=true that permanently marks a live
-    // note spent (funds vanish from the balance and become unspendable); with
-    // is_spent=false it hides a real spend.
-    const requested = new Set(queryNfs.map(nf => hexEncode(nf)));
-    let newlySpent = 0;
-    for (const proof of nfProofs) {
-      const proofRootHex = hexEncode(proof.nullifierRoot);
-      if (proofRootHex !== nfRootHex) {
-        throw new Error(
-          `nullifier proof root mismatch: proof=${proofRootHex.slice(0, 16)} batch=${nfRootHex.slice(0, 16)}`,
-        );
-      }
-      const nfHexForProof = hexEncode(proof.nullifier);
-      if (!requested.has(nfHexForProof)) {
-        throw new Error(`nullifier proof for unrequested nullifier ${nfHexForProof.slice(0, 16)}`);
-      }
-      // Decoys are asked about but never believed. A decoy proof carries no
-      // information about this wallet, so verifying it would only hand the
-      // server a way to fail the sync at will - and acting on its `isSpent`
-      // would let it mark a note spent that was never ours to begin with.
-      if (!padded.realHex.has(nfHexForProof)) {
-        continue;
-      }
-      const valid = zyncModule['verify_nullifier_proof'](
-        hexEncode(proof.nullifier),
-        proofRootHex,
-        proof.isSpent,
-        proof.pathProofRaw,
-        hexEncode(proof.valueHash),
-      ) as boolean;
-      if (!valid) {
-        throw new Error(`nullifier proof invalid for ${hexEncode(proof.nullifier).slice(0, 16)}`);
-      }
-      if (proof.isSpent) {
-        const nfHex = hexEncode(proof.nullifier);
-        if (!state.spentNullifiers.has(nfHex)) {
-          state.spentNullifiers.add(nfHex);
-          newlySpent++;
-        }
-      }
-    }
-    console.log(
-      `[zcash-worker] ${nfProofs.length} nullifier proofs returned, own-note proofs verified ` +
-        `(${newlySpent} newly spent)`,
-    );
-  }
-
-  // 4. verify actions commitment chain
+  // 2. verify actions commitment chain
   //
   // Only meaningful when the wallet's fold is genesis-anchored. The actions
   // commitment is a positional hash chain seeded from the previously-folded
@@ -1438,7 +1145,7 @@ const verifySyncProofs = async (
   }
 
   const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
-  console.log(`[zcash-worker] all proofs verified in ${elapsed}s`);
+  console.log(`[zcash-worker] header proof checks done in ${elapsed}s`);
 };
 
 /** get cached orchard tree frontier from IDB */
@@ -1613,16 +1320,11 @@ interface IronwoodBatchMeta {
 /**
  * Mark the notes we just spent as spent, immediately, without waiting for a rescan.
  *
- * Orchard does not need this: sync step 3 asks zidecar's NOMT nullifier tree
- * "is this spent?" for every unspent orchard note, so an orchard spend is
- * noticed on the next tick regardless of which blocks get scanned.
- *
- * Ironwood has no such oracle - the NOMT nullifier tree is orchard-only - so
- * its only spend signal is the scan-time nullifier match in runSync, which
- * fires only while walking the block that contains the spend. A wallet that
- * was already synced when it sent is *past* that block and never revisits it,
- * so the note stayed "unspent" forever and its value kept counting toward the
- * balance.
+ * Both pools' only spend signal is the scan-time nullifier match in runSync,
+ * which fires while walking the block that contains the spend. That block is
+ * mined after we broadcast, so the scan reaches it later; until then the note
+ * would keep counting toward the balance and could be picked for a second
+ * spend.
  *
  * We know exactly which notes we spent, so record it at broadcast. Worst case
  * the transaction never mines and the note is wrongly held back, which the
@@ -3764,15 +3466,6 @@ const syncLoop = async (
   // A birthday/import start (startHeight > 0) folds from a non-genesis seed,
   // so the verify step must be skipped for those wallets - see verifySyncProofs.
   const actionsGenesisAnchored = (startHeight ?? 0) === 0;
-  // notes found since last header proof verification
-  const pendingCmxs: Uint8Array[] = [];
-  const pendingPositions: number[] = [];
-  // Pool of real, on-chain (cmx, position) pairs observed while scanning, used
-  // to pad the commitment-proof query with decoys that are indistinguishable
-  // from our own notes. Drawn from the same block range we just walked, which
-  // is where the real notes are - decoys sampled uniformly over all of chain
-  // history would cluster in the wrong era and be separable on that alone.
-  const decoyPool = new CommitmentReservoir();
 
   // mempool watcher: only spawned when explicitly opted in AND on a zidecar
   // endpoint (lightwalletd has no compact-action mempool RPC, so the watcher
@@ -4109,71 +3802,25 @@ const syncLoop = async (
           console.warn('[zcash-worker] failed to cache tree frontier:', e);
         }
 
-        // Verify proofs whenever the backend supports it - NOT only when this
-        // batch happened to discover a new orchard note.
-        //
-        // pendingCmxs is appended to only by the orchard discovery loop, so
-        // gating on it meant the nullifier pass (all server-side spend
-        // detection, both pools) ran only in a cycle right after an incoming
-        // orchard note. A steady-state wallet never ran it; an ironwood-only
-        // wallet never ran it at all. That is precisely the wallet that needs
-        // it, since ironwood has no other spent oracle.
-        //
-        // The commitment-proof step inside still no-ops on an empty
-        // pendingCmxs, so this only widens what was already conditional.
+        // Header-proof checks, whenever the backend supports them. They send
+        // nothing about this wallet; spends and notes come from the scan.
         if (zidecar && zync) {
           try {
-            // seed failure must not silently drop the padding - if we cannot
-            // load it we would send bare queries, which is the leak this is
-            // here to close. skip the verification round instead.
-            const decoySeed = await getDecoySeed(walletId);
             await verifySyncProofs(
               zidecar,
               chainHeight,
               true,
-              pendingCmxs,
-              pendingPositions,
-              state,
               actionsCommitment,
               actionsGenesisAnchored,
-              decoySeed,
-              decoyPool.snapshot(),
             );
           } catch (e) {
-            // Fail CLOSED only on checks that are actually sound.
-            //
-            // Two different kinds of failure land here and they are NOT the
-            // same thing:
-            //
-            //   SOUND - comparisons taken at ONE instant, where a mismatch
-            //   means the server contradicted itself: a proof that does not
-            //   bind to the batch root we checked, a proof for something we
-            //   never asked about, a duplicate, or a wrong count. These are
-            //   real evidence and must refuse.
-            //
-            //   RACY - comparisons between a SNAPSHOT and a LIVE value. The
-            //   NOMT tree is mutable and single-versioned: proofs are made
-            //   against nomt.root() at request time while the ligerito header
-            //   proof carries a root from whenever it was last generated, and
-            //   the server writes continuously. The same applies to the
-            //   actions commitment, which folds stored per-block roots the
-            //   indexer is still filling in. A divergence there is expected.
-            //
-            // My earlier classifier matched /mismatch|tampered/ and escalated
-            // BOTH, which bricked sync within minutes of a healthy server
-            // doing ordinary work, under a message accusing it of tampering.
-            // A false alarm on an integrity check is worse than none: it
-            // teaches users to click past the one warning that should stop
-            // them.
+            // Fail CLOSED only on checks that are actually sound. A header
+            // proof that does not verify is the server contradicting itself;
+            // an actions-commitment divergence is not (the indexer is still
+            // filling in stored per-block roots), so that one only retries.
             const detail = e instanceof Error ? e.message : String(e);
-            const tampering =
-              /proof root mismatch|unrequested|duplicate|count mismatch|proof invalid/i.test(
-                detail,
-              );
-            if (tampering) {
+            if (/proof invalid/i.test(detail)) {
               console.error('[zcash-worker] INTEGRITY FAILURE, refusing batch:', e);
-              pendingCmxs.length = 0;
-              pendingPositions.length = 0;
               throw syncError(
                 'consensus',
                 `server integrity check failed: ${detail}. ` +
@@ -4182,8 +3829,6 @@ const syncLoop = async (
             }
             console.warn('[zcash-worker] proof verification unavailable, will retry:', e);
           }
-          pendingCmxs.length = 0;
-          pendingPositions.length = 0;
         }
 
         // mempool scanning lives in the separate watcher task spawned above
@@ -4319,14 +3964,6 @@ const syncLoop = async (
           }
 
           for (const a of block.actions) {
-            // absolute commitment-tree position of this action, computed the
-            // same way as for our own notes below (batch base + index within
-            // the batch). offering every observed action to the reservoir is
-            // what gives the commitment-proof query a supply of decoys that
-            // are genuine tree entries.
-            if (zidecar && a.cmx.length === 32) {
-              decoyPool.offer(new Uint8Array(a.cmx), orchardTreeSize + (off - 4) / ACTION_SIZE);
-            }
             // pack binary for WASM scan
             if (a.nullifier.length === 32) {
               buf.set(a.nullifier, off);
@@ -4386,10 +4023,6 @@ const syncLoop = async (
           );
           newNotes.push(full);
           state.notes.push(full);
-
-          // track for verification
-          pendingCmxs.push(hexDecode(note.cmx));
-          pendingPositions.push(position);
         }
 
         // detect spent notes: a nullifier in this block matches an owned note.
@@ -5749,11 +5382,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               amount = inputTotal - info.changeValue;
             } else {
               // No input total. histSpentByMap is keyed on note.spent_by_txid,
-              // which the NOMT nullifier ORACLE never sets - it adds the
-              // nullifier to spentNullifiers with no txid. So any spend
-              // detected by proof rather than by a scan-time nullifier match
-              // lands here (classic case: the same seed used on another device,
-              // then restored).
+              // which only a spend this wallet recorded itself sets; a spend
+              // known only as a nullifier (older wallets marked spends from
+              // server proofs, with no txid) lands here.
               //
               // This used to display info.changeValue as the amount sent, which
               // is not merely imprecise, it is the wrong number entirely: pay
