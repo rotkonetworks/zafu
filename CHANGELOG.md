@@ -50,6 +50,9 @@ fewer, calmer screens.
 - Spends and received notes are found by scanning every block on your device.
   zafu no longer asks the server whether your notes exist or are spent, so it
   never sends identifiers of your notes, not even hidden among decoys.
+- The "verified" node mark is gone. It rested on a header proof whose values
+  the server chose, so it promised more than it checked. Checking the chain
+  against Zcash's own proof of work (FlyClient) is coming in its place.
 
 ### Speed
 

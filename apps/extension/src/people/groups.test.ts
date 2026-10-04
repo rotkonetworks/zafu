@@ -8,7 +8,7 @@
  * @vitest-environment node
  */
 
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import type { RelayTransport } from '@zafu/zid';
 import { appendRecord } from '@zafu/zirc';
@@ -28,6 +28,10 @@ import {
 } from './door';
 import { ephemeralIdentity, identityOf } from './keys';
 import type { PeopleRoom, Thread } from './vault';
+
+// every door here runs the real scrypt (N 2^16, 64 MiB) once per member: about
+// a second a test on a busy CI runner, so leave room past the 5s default
+vi.setConfig({ testTimeout: 30_000 });
 
 const relayBoard = () => {
   const board = new Map<string, Map<string, Uint8Array>>();

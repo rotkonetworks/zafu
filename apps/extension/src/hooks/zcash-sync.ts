@@ -1,14 +1,14 @@
 /**
  * zcash sync status hook
  *
- * polls zidecar for sync pipeline status + chain tip.
+ * polls the node for the chain tip.
  * listens to worker sync-progress events for local scan height.
  */
 
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { SyncStatus, ChainTip } from '../state/keyring/zidecar-client';
-import { zcashClient, zidecarExtras } from '../state/keyring/zcash-backend';
+import type { ChainTip } from '../state/keyring/zidecar-client';
+import { zcashClient } from '../state/keyring/zcash-backend';
 import { useStore } from '../state';
 import { selectZcashBackend } from '../state/networks';
 import { selectActiveNetwork } from '../state/keyring';
@@ -20,8 +20,6 @@ const DEFAULT_ZIDECAR_URL = 'https://zcash.rotko.net';
 const POLL_INTERVAL = 10_000;
 
 export interface ZcashSyncState {
-  /** zidecar pipeline status (gigaproof, epochs, etc) */
-  syncStatus: SyncStatus | null;
   /** chain tip from zidecar */
   chainTip: ChainTip | null;
   /** local worker scan height (from sync-progress events) */
@@ -138,7 +136,6 @@ export function useZcashWorkerSync() {
 export function useZcashSyncStatus(): ZcashSyncState {
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || DEFAULT_ZIDECAR_URL;
   const backend = useStore(selectZcashBackend);
-  const redetect = useStore(s => s.networks.redetectZcashBackend);
   // Privacy: never poll the zcash zidecar when zcash is not an enabled network.
   // Otherwise a penumbra-only wallet still hammered zcash.rotko.net for GetTip /
   // GetSyncStatus on an interval - a network connection the user never opted in
@@ -147,29 +144,6 @@ export function useZcashSyncStatus(): ZcashSyncState {
   // merely when zcash is enabled - a wallet viewing penumbra touches no zcash RPC.
   const zcashActive = useStore(selectActiveNetwork) === 'zcash';
   const { workerSyncHeight, workerChainHeight, workerError, workerFailure } = useZcashWorkerSync();
-
-  // GetSyncStatus is zidecar's own rpc; a standard lightwalletd has none
-  const zidecar = zidecarExtras(zidecarUrl, backend);
-
-  const {
-    data: syncStatus,
-    isLoading: syncLoading,
-    error: syncError,
-  } = useQuery({
-    queryKey: ['zcashSyncStatus', backend, zidecarUrl],
-    // gated on zcash being enabled - no polling for a penumbra-only wallet
-    enabled: zcashActive && !!zidecar,
-    // zidecar's own rpc failing may mean the node is not one: ask it again
-    // (standard GetLightdInfo, throttled) rather than retry blind
-    queryFn: () =>
-      zidecar!.getSyncStatus().catch((e: unknown) => {
-        void redetect(zidecarUrl);
-        throw e;
-      }),
-    staleTime: POLL_INTERVAL,
-    refetchInterval: POLL_INTERVAL,
-    retry: 2,
-  });
 
   const {
     data: chainTip,
@@ -190,18 +164,15 @@ export function useZcashSyncStatus(): ZcashSyncState {
   });
 
   return {
-    syncStatus: syncStatus ?? null,
     chainTip: chainTip ?? null,
     workerSyncHeight,
     workerChainHeight,
-    isLoading: syncLoading || tipLoading,
+    isLoading: tipLoading,
     // workerError (sync loop / auto-sync failures) takes precedence over the
-    // status/tip query errors - it's the one the user actually needs to act on.
-    error: workerError ?? syncError ?? tipError,
+    // tip query error - it's the one the user actually needs to act on.
+    error: workerError ?? tipError,
     // Query errors have no structured code (they come out of fetch), so they
     // are sniffed; worker failures were classified when they arrived.
-    failure:
-      workerFailure ??
-      ((syncError ?? tipError) ? classifySyncFailure(syncError ?? tipError) : null),
+    failure: workerFailure ?? (tipError ? classifySyncFailure(tipError) : null),
   };
 }
