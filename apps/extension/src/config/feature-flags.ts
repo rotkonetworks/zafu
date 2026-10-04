@@ -82,13 +82,16 @@ export const COMPACT_SIGN_REQUEST = true;
 export const NU6_3_ACTIVATION_HEIGHT_MAINNET = 3_428_143;
 
 /**
- * NU6.3 Ironwood activation height on TESTNET.
+ * NU6.3 Ironwood activation height on TESTNET: 4,134,000, the real public
+ * testnet activation (also the Valar NU7 staging chains').
  *
- * The pinned librustzcash fork activates NU6.3 at height 1 on test/regtest
- * (see `zcash_protocol::consensus`, and `nu6_3_activation_height(false) == 1`
- * on the Rust side), i.e. testnet is ALWAYS post-activation.
+ * MUST equal `NU6_3_ACTIVATION_HEIGHT_TESTNET` in zcli's zcash-wasm
+ * (`nu6_3_activation_height(false)`), which moved to the real height when the
+ * librustzcash fork (activation at height 1) was dropped. This side still said
+ * 1 - the exact two-halves disagreement `nu63ActivationHeight` below exists to
+ * prevent. Harmless only because every testnet tip is already past both.
  */
-export const NU6_3_ACTIVATION_HEIGHT_TESTNET = 1;
+export const NU6_3_ACTIVATION_HEIGHT_TESTNET = 4_134_000;
 
 /**
  * The NU6.3 activation height for the network the wallet is talking to.
