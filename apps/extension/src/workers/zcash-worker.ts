@@ -269,6 +269,7 @@ interface WorkerMessage {
     | 'build-delegation-pczt'
     | 'finalize-delegation'
     | 'cast-vote-hot-wire'
+    | 'build-vote-shares-from-recovery'
     | 'pir-fetch-imt-proofs'
     | 'get-consensus-branch-id'
     | 'get-merkle-witnesses';
@@ -7288,7 +7289,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               String(cv.submitAt),
             ],
           })) as string,
-        ) as { proposal_id: number; wire: string; shares: string; commitment_bundle_json: string };
+        ) as {
+          proposal_id: number;
+          wire: unknown;
+          shares: unknown;
+          commitment_bundle_json: string;
+          next_delegation_state_json: string;
+        };
         workerSelf.postMessage({
           type: 'result',
           id,
@@ -7296,10 +7303,35 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           walletId,
           payload: {
             proposalId: raw.proposal_id,
-            wire: raw.wire,
-            shares: raw.shares,
+            // the cast-vote body; shares wait for the vote's tree position
+            // (build-vote-shares-from-recovery)
+            wire: JSON.stringify(raw.wire),
             commitmentBundleJson: raw.commitment_bundle_json,
+            nextDelegationStateJson: raw.next_delegation_state_json,
           },
+        });
+        return;
+      }
+
+      case 'build-vote-shares-from-recovery': {
+        // no proof: rebuilds the helper shares of a vote already on chain
+        const votingWasm = await loadVotingWasm();
+        const sr = payload as {
+          commitmentBundleJson: string;
+          vcTreePosition: number;
+          submitAt: number;
+        };
+        const sharesJson = votingWasm.build_vote_shares_from_recovery(
+          sr.commitmentBundleJson,
+          BigInt(sr.vcTreePosition),
+          BigInt(sr.submitAt),
+        );
+        workerSelf.postMessage({
+          type: 'result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: { sharesJson },
         });
         return;
       }
@@ -7365,7 +7397,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const witnessClient = makeZcashClient(witnessServerUrl);
         // the snapshot height exactly: from the tree when it still retains that
         // checkpoint, else by a replay to it (voting only; spends never replay)
-        const snapshotPool = witnessPool ?? 'orchard';
+        // voting notes are Ironwood/V3 only (the 0.12 delegation circuit
+        // rejects others), so that is the default snapshot pool
+        const snapshotPool = witnessPool ?? 'ironwood';
         const fromTree = await buildWitnesses(
           witnessClient,
           walletId,

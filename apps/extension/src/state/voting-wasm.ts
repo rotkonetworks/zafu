@@ -25,7 +25,8 @@
  *
  * This lazy-loaded instance (used by the zcash worker directly, NOT via the
  * offscreen prover) is for the LIGHT voting fns only:
- * `generate_voting_hotkey` and `pir_fetch_imt_proofs` - neither runs a halo2
+ * `generate_voting_hotkey`, `build_vote_shares_from_recovery` and
+ * `pir_fetch_imt_proofs` - none runs a halo2
  * proof, so no thread pool is spun up here and proving-adjacent work stays
  * off the critical path of a network fetch. The three PROVING fns
  * (`build_delegation_pczt`, `finalize_delegation` - ZKP #1 - and
@@ -81,6 +82,13 @@ export interface VotingWasm {
     network: string,
     submit_at: bigint,
   ) => string;
+  /**
+   * ZKP #2 + signed cast. Returns JSON `{ proposal_id, wire, shares,
+   * commitment_bundle_json, next_delegation_state_json }`: `wire` is the
+   * `POST /cast-vote` body, `next_delegation_state_json` replaces the bundle's
+   * delegation state for its next cast (the 51-bit proposal authority with
+   * this proposal's bit cleared - never computed in JS).
+   */
   cast_vote_hot_wire: (
     hotkey_secret_hex: string,
     round_params_json: string,
@@ -88,6 +96,16 @@ export interface VotingWasm {
     van_witness_json: string,
     vote_json: string,
     network: string,
+    submit_at: bigint,
+  ) => string;
+  /**
+   * Helper shares for a vote already on chain, from the recovery bundle
+   * `cast_vote_hot_wire` returned and the vote commitment's tree position.
+   * No proof runs. Returns JSON `[VoteShareWire]`.
+   */
+  build_vote_shares_from_recovery: (
+    commitment_bundle_json: string,
+    vc_tree_position: bigint,
     submit_at: bigint,
   ) => string;
   pir_fetch_imt_proofs: (
