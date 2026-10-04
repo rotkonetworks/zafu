@@ -22,8 +22,21 @@ const natives = {
 let nativeFetch: ReturnType<typeof vi.fn>;
 let sockets: string[];
 
+// vi.resetModules() forgets a realm's module state but not the channel it
+// opened: an earlier test's realm would stay on 'zafu-egress' holding its own
+// table and answer later tests' requests. Close every channel a test opened.
+const NativeBroadcastChannel = globalThis.BroadcastChannel;
+let opened: BroadcastChannel[] = [];
+
 beforeEach(() => {
   vi.resetModules();
+  opened = [];
+  globalThis.BroadcastChannel = class extends NativeBroadcastChannel {
+    constructor(name: string) {
+      super(name);
+      opened.push(this);
+    }
+  };
   nativeFetch = vi.fn(() => Promise.resolve(new Response('ok')));
   sockets = [];
   globalThis.fetch = nativeFetch as unknown as typeof fetch;
@@ -40,6 +53,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  for (const c of opened) c.close();
+  globalThis.BroadcastChannel = NativeBroadcastChannel;
   globalThis.fetch = natives.fetch;
   globalThis.WebSocket = natives.WebSocket;
   globalThis.EventSource = natives.EventSource;

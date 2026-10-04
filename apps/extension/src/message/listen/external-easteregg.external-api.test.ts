@@ -13,6 +13,10 @@ import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { clientDataJson } from '../../content-scripts/passkey-wire';
+// Load the (mocked) state graph while the file is collected, not in a hook: the
+// mock spreads the real module, and its first load under a busy full-suite run
+// on CI took longer than the 10s hook timeout. Collection has no such limit.
+import * as stateModule from '../../state';
 
 /** a get as the intercept sends it: challenge aabb, client data for https://<rpId> */
 const getReq = (rpId: string) => ({
@@ -128,11 +132,13 @@ const flush = () => new Promise(r => setTimeout(r, 0));
 let createMock: Mock;
 
 beforeAll(async () => {
-  // Warm the mocked module and prove dynamic importers see it. A lost mock used
-  // to surface as the handler reading the REAL store (falsy selectedKeyInfo →
-  // bogus `no-wallet`) only when the full suite ran under load.
+  // Prove dynamic importers see the mock (already loaded above, so this is a
+  // cache hit). A lost mock used to surface as the handler reading the REAL
+  // store (falsy selectedKeyInfo → bogus `no-wallet`) only under load.
   const mod = (await import('../../state')) as { __stateMock?: boolean };
-  if (!mod.__stateMock) throw new Error('../../state mock is not in effect for dynamic imports');
+  if (!mod.__stateMock || mod !== stateModule) {
+    throw new Error('../../state mock is not in effect for dynamic imports');
+  }
 });
 
 beforeEach(async () => {
