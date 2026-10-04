@@ -118,6 +118,8 @@ import { useYourAddresses } from '../../../hooks/use-your-addresses';
 import { chainName } from '../../../state/swap/tokens';
 import { TokenSheet } from './token-sheet';
 import { BuyCashRow } from '../../../components/buy-cash-row';
+import { CashOutRow, PeerCashOutNote } from '../../../components/cash-out-row';
+import { isCashOutToken } from '../../../config/ramps';
 import { CostList, CostMeta } from './cost-lines';
 import './swap-live.css';
 
@@ -869,6 +871,17 @@ export const CrosschainSwap = ({
     remember({ direction: d, token: t });
   };
   const flip = () => choosePair(isFromZec ? 'into_zec' : 'from_zec', token);
+  // "cash": zec into usdc on base, the asset a peer listing sells
+  const pickCashOut = () => {
+    const t = tokens.find(isCashOutToken);
+    if (t) {
+      setToken(t);
+      setPickerOpen(false);
+    } else {
+      setLinkToken({ direction: 'from_zec', token: 'usdc', chain: 'base' });
+    }
+  };
+  const cashOut = isFromZec && isCashOutToken(token);
 
   const pickRoute = (route: RouteId) => {
     setPicked(route);
@@ -1331,6 +1344,7 @@ export const CrosschainSwap = ({
               )}
             </ToField>
           )}
+          {cashOut && <PeerCashOutNote />}
           {shareLink && (
             <CopyButton text={shareLink} label='copy swap link' className='self-start px-0' />
           )}
@@ -1353,7 +1367,7 @@ export const CrosschainSwap = ({
           tokens={tokens}
           loading={tokenQuery.isFetching}
           onPick={t => choosePair(direction, t)}
-          lead={isFromZec ? undefined : <BuyCashRow />}
+          lead={isFromZec ? <CashOutRow onPress={pickCashOut} /> : <BuyCashRow />}
         />
         {fieldChain && (
           <AddressSheet
@@ -1620,6 +1634,9 @@ export const CrosschainSwap = ({
           </div>
         )}
 
+        {cashOut && (step === 'deposit' || step === 'polling' || step === 'done') && (
+          <PeerCashOutNote />
+        )}
         {step === 'refunded' && <RefundedSlot line={status?.line} />}
         {step === 'error' &&
           (isEgressBlocked(errorCause) ? (

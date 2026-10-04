@@ -28,6 +28,9 @@ fewer, calmer screens.
   a fresh transparent address per swap.
 - Buy ZEC with cash through Peer, on its own page, with a tracker that survives
   closing the browser.
+- Cash out the same way in reverse: pick "cash" when swapping from ZEC, which
+  swaps into USDC on Base, then list it on Peer and get paid in Revolut, Wise,
+  Zelle or Monzo.
 
 ### People
 
