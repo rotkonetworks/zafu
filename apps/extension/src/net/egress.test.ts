@@ -166,8 +166,15 @@ describe('table relay', () => {
         if ((ev.data as { type: string }).type === 'table') resolve(ev.data);
       };
     });
+    // ask until the offscreen realm has taken the table in (a slow CI machine
+    // can need longer than one fixed wait), then expect exactly that table
+    const asking = setInterval(() => worker.postMessage({ type: 'request' }), 20);
     worker.postMessage({ type: 'request' });
-    expect(await reply).toEqual({ type: 'table', table: ALLOW_ZCASH });
+    try {
+      expect(await reply).toEqual({ type: 'table', table: ALLOW_ZCASH });
+    } finally {
+      clearInterval(asking);
+    }
     worker.close();
   });
 });

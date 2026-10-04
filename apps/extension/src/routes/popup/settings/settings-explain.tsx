@@ -148,7 +148,8 @@ export const SETTINGS_EXPLAIN = {
       "leaving it on auto scans recent blocks for you, which can miss an old wallet's early activity - set a date or block if you know roughly when it was first used",
   },
   'network.penumbraResync': {
-    blurb: "forgets what zafu has found on penumbra and reads the chain again from your wallet's own start.",
+    blurb:
+      "forgets what zafu has found on penumbra and reads the chain again from your wallet's own start.",
     footer:
       "useful if penumbra's balance looks wrong or a payment you received is missing. this resyncs penumbra for every wallet on this computer; your keys and your funds are untouched.",
   },
