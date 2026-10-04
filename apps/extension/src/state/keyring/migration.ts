@@ -11,6 +11,7 @@ import { Key, type KeyJson } from '@repo/encryption/key';
 import { Box } from '@repo/encryption/box';
 import type { EncryptedVault } from './types';
 import type { ZcashWalletJson } from '../wallets';
+import type { SeatRoom } from './vault-ops';
 
 /** migrate orphaned multisig wallets (multisig && !vaultId) into the vault system */
 export async function migrateOrphanedMultisigs(
@@ -121,6 +122,7 @@ export const deriveMirrorFromFrostVault = (vault: EncryptedVault): ZcashWalletJs
       ...(custody ? { custody } : {}),
       ...(ins['zignerWalletId'] ? { zignerWalletId: ins['zignerWalletId'] as string } : {}),
       ...(ins['hidden'] === true ? { hidden: true as const } : {}),
+      ...(ins['room'] ? { room: ins['room'] as SeatRoom } : {}),
     },
   };
 };

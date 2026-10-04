@@ -855,8 +855,9 @@ export const createKeyRingSlice =
             );
         const vault = buildFrostVault(vaultId, params, encryptedData);
 
-        // hidden multisigs (poker tables) must not steal the active-wallet slot
-        const hidden = params.hidden === true;
+        // hidden multisigs (poker tables) and seats made in a room must not
+        // steal the active-wallet slot
+        const hidden = params.hidden === true || !!params.room;
 
         const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
         const newVaults = [vault, ...vaults];

@@ -14,6 +14,7 @@ import { sessionExtStorage } from '@repo/storage-chrome/session';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { ChannelGenesis, ChannelRecord } from '@zafu/zirc';
 import type { MemoDoorRead } from './memo-door';
+import type { Deal, FrostRoom } from './frost-room';
 import { readEncrypted, writeEncrypted } from '../state/encrypted-storage';
 
 export type PeopleRoomKind = 'group' | 'door' | 'pair';
@@ -81,7 +82,11 @@ export interface PeopleRoom {
     log?: { genesis: ChannelGenesis; records: ChannelRecord[] };
     /** what members call themselves, as the founder last posted it */
     names?: Record<string, string>;
+    /** a deal group's terms, founder side: what its shared wallet is for */
+    deal?: Deal;
   };
+  /** shared wallets made in this room: the FROST messages read so far (people/frost-room) */
+  frost?: FrostRoom;
   /** pair rooms */
   pair?: {
     personId: string;
@@ -97,6 +102,8 @@ export interface PeopleRoom {
      * which one is them (or it carries the key you already hold for them)
      */
     answers?: PairCard[];
+    /** they asked you into a deal group (people/deal): its code and name */
+    deal?: { code: string; group: string; at: number };
   };
 }
 
@@ -243,7 +250,8 @@ export const readPeopleBackup = async (): Promise<PeopleBackup | undefined> => {
     return undefined;
   }
   return {
-    rooms,
+    // a ceremony's round secrets stay on this device; its saved seat has its own backup
+    rooms: rooms.map(r => (r.frost?.mine ? { ...r, frost: { ...r.frost, mine: undefined } } : r)),
     threads: Object.fromEntries(
       Object.entries(threads ?? {}).map(([id, t]) => [
         id,
