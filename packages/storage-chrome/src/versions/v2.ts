@@ -236,8 +236,10 @@ type LOCAL = {
   };
   /**
    * Zcash sync backend.
-   *   'zidecar'      — trustless: Ligerito header proofs + NOMT nullifier
-   *                    proofs verified locally.
+   *   'zidecar'      — adds a Ligerito header proof verified locally.
+   *                    (Older builds also queried NOMT nullifier and
+   *                    commitment proofs; spends and notes now come from
+   *                    the local block scan on both backends.)
    *   'lightwalletd' — trusted public indexer (e.g. zec.rocks). No
    *                    verification pipeline; the wallet trusts what the
    *                    server returns.

@@ -17,8 +17,8 @@
  * entry in settings and the lightwalletd backend code path both stay.
  *
  * Two backend flavors (see state/keyring/zcash-backend.ts):
- *   - zidecar - rotko-hosted, trustless verification (Ligerito + NOMT
- *     proofs). Mempool watch works on this backend.
+ *   - zidecar - rotko-hosted; adds a Ligerito header proof and the
+ *     actions commitment check. Mempool watch works on this backend.
  *   - lightwalletd - public ECC lightwalletd / Zaino. Trusted (the
  *     wallet accepts what the server returns). Mempool watch is
  *     unavailable on this backend.

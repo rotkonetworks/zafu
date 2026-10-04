@@ -18,8 +18,8 @@
  *     though the user-facing meaning is identical.
  *   - `parseFatal` → `consensus`. vizor talks to lightwalletd and can only
  *     fail to *parse* what it is handed. zafu additionally VERIFIES what the
- *     endpoint serves (Ligerito header proofs, NOMT nullifier proofs,
- *     commitment proofs), so its equivalent terminal, node-attributable
+ *     endpoint serves (the Ligerito header proof), so its equivalent
+ *     terminal, node-attributable
  *     failure is "this endpoint served data the wallet could not verify".
  *     That is a stronger claim than a parse error and deserves its own kind.
  *   - vizor defaults an unclassified error to *retry*; zafu defaults it to
