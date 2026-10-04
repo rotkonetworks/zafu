@@ -178,15 +178,17 @@ export class LightwalletdClient implements ZcashClient {
   }
 
   async getLightdInfo(): Promise<{
+    vendor: string;
     consensusBranchId: string;
     chainName: string;
     blockHeight: number;
     saplingActivationHeight: number;
   }> {
     // GetLightdInfo(Empty) → LightdInfo {
-    //   chainName=4; saplingActivationHeight=5; consensusBranchId=6 (hex string);
+    //   vendor=2; chainName=4; saplingActivationHeight=5; consensusBranchId=6 (hex string);
     //   blockHeight=8 }
     const resp = await this.grpcCall('GetLightdInfo', new Uint8Array(0));
+    let vendor = '';
     let consensusBranchId = '';
     let chainName = '';
     let blockHeight = 0;
@@ -197,13 +199,15 @@ export class LightwalletdClient implements ZcashClient {
         saplingActivationHeight = Number(val as bigint);
       } else if (wire === 0 && field === 8) {
         blockHeight = Number(val as bigint);
+      } else if (wire === 2 && field === 2) {
+        vendor = decoder.decode(val as Uint8Array);
       } else if (wire === 2 && field === 4) {
         chainName = decoder.decode(val as Uint8Array);
       } else if (wire === 2 && field === 6) {
         consensusBranchId = decoder.decode(val as Uint8Array);
       }
     });
-    return { consensusBranchId, chainName, blockHeight, saplingActivationHeight };
+    return { vendor, consensusBranchId, chainName, blockHeight, saplingActivationHeight };
   }
 
   async sendTransaction(

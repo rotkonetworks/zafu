@@ -197,6 +197,8 @@ type LOCAL = {
     zcash?: 'fastest' | 'most-synced' | 'random' | 'manual';
   };
   zcashBackend?: 'zidecar' | 'lightwalletd';
+  /** what each zcash node said it is (GetLightdInfo vendor), keyed by its url */
+  zcashBackends?: Record<string, 'zidecar' | 'lightwalletd'>;
 
   zcashMeConfig?: {
     mode: 'off' | 'directory' | 'live';

@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useStore } from '../../../state';
+import { selectZcashBackend } from '../../../state/networks';
 import { contactsSelector } from '../../../state/contacts';
 import {
   selectEffectiveKeyInfo,
@@ -86,7 +87,7 @@ export const ZcashContent = ({
   const hasWallet = !!(hasMnemonic || watchOnly);
   const isMainnet = useStore(selectZcashIsMainnet);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
-  const zcashBackend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
+  const zcashBackend = useStore(selectZcashBackend);
   const {
     syncStatus,
     chainTip,

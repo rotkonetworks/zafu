@@ -9,6 +9,7 @@ import { selectEffectiveKeyInfo } from '../state/keyring';
 import { selectActiveZcashWallet } from '../state/wallets';
 import { activeAccountIndex, activePockets } from '../state/pockets';
 import { pocketStoreId } from '../state/pocket-id';
+import { selectZcashBackend } from '../state/networks';
 import {
   spawnNetworkWorker,
   terminateNetworkWorker,
@@ -28,9 +29,10 @@ const target = () => {
     return undefined;
   }
   const zidecarUrl = s.networks.networks.zcash.endpoint || 'https://zcash.rotko.net';
-  // pass the configured backend - defaulting to zidecar here would point a
-  // zidecar client at a lightwalletd endpoint (HTTP 415s)
-  const backend = s.networks.networks.zcash.backend ?? 'zidecar';
+  // what the node said it is, or the guess until it has (never zidecar for a
+  // third-party host); an unclassified node is asked first by the worker
+  const backend = selectZcashBackend(s);
+  const detect = !s.networks.networks.zcash.backendDetected;
   const storeId = pocketStoreId(key.id, activeAccountIndex(s));
   const pockets = activePockets(s);
   const watch = key.type === 'mnemonic' ? undefined : selectActiveZcashWallet(s);
@@ -40,9 +42,18 @@ const target = () => {
   const start = async (from: number | undefined) => {
     if (key.type === 'mnemonic') {
       const vault = await s.keyRing.getVaultUnlock(key.id);
-      await startSyncInWorker('zcash', storeId, vault, zidecarUrl, from, backend);
+      await startSyncInWorker('zcash', storeId, vault, zidecarUrl, from, backend, 'off', detect);
     } else if (ufvk) {
-      await startWatchOnlySyncInWorker('zcash', storeId, ufvk, zidecarUrl, from, backend);
+      await startWatchOnlySyncInWorker(
+        'zcash',
+        storeId,
+        ufvk,
+        zidecarUrl,
+        from,
+        backend,
+        'off',
+        detect,
+      );
     }
   };
 

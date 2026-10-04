@@ -13,7 +13,7 @@ export interface NodePreset {
   readonly label: string;
   readonly url: string;
   readonly region: RpcEndpointRegion;
-  /** what kind of node it is, when the chain has more than one */
+  /** a quiet capability cue (e.g. "verified"), never the server software's name */
   readonly kind?: string;
 }
 

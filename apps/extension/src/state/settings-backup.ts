@@ -19,7 +19,6 @@ const PREF_KEYS = [
   'approvalsInSidePanel',
   'zidDiscovery',
   'networkEndpoints',
-  'zcashBackend',
   'hiddenTransparentChains',
   'transparentAgreed',
   'penumbraTotalIn',

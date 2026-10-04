@@ -13,7 +13,12 @@ import {
 } from '../../../components/zcash/sync-status';
 import { ZCASH_MAINNET_ENDPOINTS, findPresetByUrl } from '../../../config/zcash-endpoints';
 import { measurePresetLatencies } from '../../../state/keyring/endpoint-latency';
-import { ZCASH_BACKENDS, type ZcashBackend } from '../../../state/keyring/zcash-backend';
+import {
+  ZCASH_BACKENDS,
+  backendKey,
+  backendOfEndpoint,
+} from '../../../state/keyring/zcash-backend';
+import { selectZcashBackend } from '../../../state/networks';
 import { hostOf } from '../../../net/destination';
 import { PopupPath } from '../paths';
 import { Section, SettingsScreen } from './settings-screen';
@@ -21,7 +26,6 @@ import { NodeSheet } from './node-sheet';
 import { Row } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Button } from '@repo/ui/components/ui/button';
-import { Segmented } from '@repo/ui/components/ui/segmented';
 import { cn } from '@repo/ui/lib/utils';
 import { useExplain } from './settings-explain';
 
@@ -46,19 +50,15 @@ const useBirthday = (vaultId: string | undefined) => {
   return [h, setH] as const;
 };
 
-/** each preset shows its backend in the same short value as the network screen */
-const PRESETS = ZCASH_MAINNET_ENDPOINTS.map(p => ({ ...p, kind: ZCASH_BACKENDS[p.backend].label }));
+/** the one capability cue a node shows: zafu checks its header proofs */
+const VERIFIED = 'verified';
+const verifiedCue = (backend: keyof typeof ZCASH_BACKENDS) =>
+  ZCASH_BACKENDS[backend].extras ? VERIFIED : undefined;
 
 const speedTest = async () =>
   new Map([...(await measurePresetLatencies())].map(([url, l]) => [url, l.rttMs]));
 
-/** a node zafu has no preset for says nothing about its kind, so the user says it */
-const BACKENDS = [
-  { value: 'zidecar', label: 'zidecar' },
-  { value: 'lightwalletd', label: 'lightwalletd' },
-] as const;
-
-/** the zcash node sheet: picking a preset sets its kind; your own node takes the kind you name */
+/** the zcash node sheet: the user picks a node, never its kind - the node says what it is */
 export const ZcashNodeSheet = ({
   open,
   onOpenChange,
@@ -71,34 +71,26 @@ export const ZcashNodeSheet = ({
   onExplain?: (label: string) => void;
 }) => {
   const endpoint = useStore(s => s.networks.networks.zcash.endpoint) ?? '';
-  const saved = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
+  const backend = useStore(selectZcashBackend);
   const setEndpoint = useStore(s => s.networks.setNetworkEndpoint);
-  const setBackend = useStore(s => s.networks.setZcashBackend);
-  const [backend, setDraftBackend] = useState<ZcashBackend>(saved);
+  // a preset is marked by what it said, once it is the node in use; by its guess before
+  const presets = ZCASH_MAINNET_ENDPOINTS.map(p => ({
+    ...p,
+    kind: verifiedCue(
+      backendKey(p.url) === backendKey(endpoint) ? backend : backendOfEndpoint(p.url),
+    ),
+  }));
   return (
     <NodeSheet
       open={open}
       onOpenChange={onOpenChange}
       className={className}
       title='zcash node'
-      presets={PRESETS}
+      presets={presets}
       current={endpoint}
       egress='zcash-servers'
       measure={speedTest}
-      onPick={async url => {
-        await setEndpoint('zcash', url);
-        if (!findPresetByUrl(url)) {
-          await setBackend(backend);
-        }
-      }}
-      custom={
-        <Segmented
-          label='node kind'
-          value={backend}
-          onChange={setDraftBackend}
-          options={BACKENDS}
-        />
-      }
+      onPick={url => setEndpoint('zcash', url)}
       onExplain={onExplain}
     />
   );
@@ -113,7 +105,8 @@ export const ZcashNodeSheet = ({
 export const SettingsZcashNetwork = () => {
   const vaultId = useStore(selectEffectiveKeyInfo)?.id;
   const endpoint = useStore(s => s.networks.networks.zcash.endpoint);
-  const kind = useStore(s => ZCASH_BACKENDS[s.networks.networks.zcash.backend ?? 'zidecar'].label);
+  const verified = useStore(s => verifiedCue(selectZcashBackend(s)));
+  const preset = endpoint ? findPresetByUrl(endpoint) : undefined;
   // local progress only: opening this screen asks no node
   const { workerSyncHeight, workerChainHeight: tip, workerFailure: failure } = useZcashWorkerSync();
   const [birthday, setBirthday] = useBirthday(vaultId);
@@ -202,8 +195,11 @@ export const SettingsZcashNetwork = () => {
           <Row
             type='value'
             label='node'
-            description={kind}
-            value={(endpoint && hostOf(endpoint)) || 'auto'}
+            description={
+              [!preset && endpoint && 'your own node', verified].filter(Boolean).join(' · ') ||
+              undefined
+            }
+            value={preset?.label ?? ((endpoint && hostOf(endpoint)) || 'auto')}
             onPress={() => setSheet('node')}
             {...explainProps('network.zcashNode')}
           />

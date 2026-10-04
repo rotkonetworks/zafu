@@ -21,6 +21,10 @@ import { bucketOf, BUCKET_SIZE as MEMO_BUCKET_SIZE } from '../services/memo-sync
 import type { BucketStart as MemoBucketStart, MemoSyncStrategy } from '../services/memo-sync/types';
 import {
   ZCASH_BACKENDS,
+  backendKey,
+  backendOfEndpoint,
+  createRedetector,
+  detectZcashBackend,
   isZcashBackend,
   zcashClient,
   zidecarExtras,
@@ -133,17 +137,45 @@ const syncError = (code: SyncErrorCode, message: string): Error =>
   Object.assign(new Error(message), { syncCode: code });
 
 /**
- * Worker-local endpoint→backend registry. Populated only via the explicit
- * `backend` field on the 'sync' payload (the popup classifies endpoints
- * declaratively via backendOfEndpoint() and forwards). We deliberately do
- * NOT auto-probe - probing zidecar-only RPCs is a unique-to-zafu request
- * signature that fingerprints the wallet.
+ * Worker-local endpoint→backend registry, seeded by 'sync'. What a node is
+ * comes from the node: when the page has no cached answer, 'sync' asks it
+ * with the standard GetLightdInfo (detectZcashBackend) before building a
+ * client. A zidecar-only rpc is never used to find out - it is a request
+ * signature no other wallet sends, so even a failed probe marks the wallet.
  *
- * Unknown endpoints default to 'zidecar' (the rotko-shipped baseline);
- * users on a third-party lightwalletd must hit 'sync' first to seed this
- * map before any other RPC, which is the natural call order anyway.
+ * An endpoint nothing has classified gets backendOfEndpoint's guess, which
+ * is lightwalletd for every third-party host: an unclassified node never
+ * sees a zidecar-only rpc.
  */
 const backendRegistry = new Map<string, ZcashBackend>();
+
+/** one re-ask per node per cooldown, after a zidecar call failed */
+const redetectBackend = createRedetector();
+
+/** tell the page what a node said it is, so it is cached per endpoint */
+const announceBackend = (serverUrl: string, backend: ZcashBackend): void =>
+  workerSelf.postMessage({
+    type: 'zcash-backend-detected',
+    id: '',
+    network: 'zcash',
+    payload: { serverUrl, backend },
+  });
+
+/**
+ * One of zidecar's own calls failed. The node may not be (or no longer be) a
+ * zidecar: ask it again with the standard GetLightdInfo. Only an answer
+ * changes the kind - a node that is merely down keeps it. A changed kind
+ * reaches the page, which restarts the sync with the right client.
+ */
+const suspectBackend = (serverUrl: string): void => {
+  void redetectBackend(serverUrl).then(backend => {
+    if (backend && backend !== lookupBackend(serverUrl)) {
+      console.warn(`[zcash-worker] ${serverUrl} now reports itself as ${backend}`);
+      registerBackend(serverUrl, backend);
+      announceBackend(serverUrl, backend);
+    }
+  });
+};
 
 /**
  * One-shot warning latches for conditions that are stable for the life of the
@@ -159,11 +191,11 @@ function registerBackend(serverUrl: string, backend: ZcashBackend): void {
   if (!isZcashBackend(backend)) {
     throw new Error(`unknown zcash backend: ${String(backend)}`);
   }
-  backendRegistry.set(serverUrl.replace(/\/$/, ''), backend);
+  backendRegistry.set(backendKey(serverUrl), backend);
 }
 
 function lookupBackend(serverUrl: string): ZcashBackend {
-  return backendRegistry.get(serverUrl.replace(/\/$/, '')) ?? 'zidecar';
+  return backendRegistry.get(backendKey(serverUrl)) ?? backendOfEndpoint(serverUrl);
 }
 
 /** the sync client for an endpoint; call sites without a backend in scope use the registry */
@@ -3431,7 +3463,7 @@ const syncLoop = async (
   serverUrl: string,
   startHeight?: number,
   ufvk?: string,
-  backend: ZcashBackend = 'zidecar',
+  backend: ZcashBackend = lookupBackend(serverUrl),
   mempoolWatch: 'off' | 'on' = 'off',
 ): Promise<void> => {
   if (!wasmModule) {
@@ -4181,6 +4213,7 @@ const syncLoop = async (
               );
             }
             console.warn('[zcash-worker] proof verification unavailable, will retry:', e);
+            suspectBackend(serverUrl);
           }
           pendingCmxs.length = 0;
           pendingPositions.length = 0;
@@ -4906,6 +4939,11 @@ const syncLoop = async (
       }
 
       consecutiveErrors++;
+      // on a zidecar the sync itself runs on zidecar's own calls (GetTip,
+      // whole blocks); failing twice may mean the node is not one
+      if (consecutiveErrors === 2 && zidecar) {
+        suspectBackend(serverUrl);
+      }
       // Retrying is the policy, so a flapping endpoint would otherwise produce
       // one of these per backoff interval indefinitely. Log the first few and
       // then every tenth; the UI sync-error message below is unaffected, so the
@@ -5148,15 +5186,18 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           throw new Error('walletId required');
         }
         await initWasm();
-        const { vault, serverUrl, startHeight, ufvk, backend, mempoolWatch } = payload as {
-          /** hot wallet: the sealed vault this worker opens itself; watch-only sends ufvk */
-          vault?: SealedVault;
-          serverUrl: string;
-          startHeight?: number;
-          ufvk?: string;
-          backend?: ZcashBackend;
-          mempoolWatch?: 'off' | 'on';
-        };
+        const { vault, serverUrl, startHeight, ufvk, backend, detectBackend, mempoolWatch } =
+          payload as {
+            /** hot wallet: the sealed vault this worker opens itself; watch-only sends ufvk */
+            vault?: SealedVault;
+            serverUrl: string;
+            startHeight?: number;
+            ufvk?: string;
+            backend?: ZcashBackend;
+            /** the page has no answer from this node yet: ask it first */
+            detectBackend?: boolean;
+            mempoolWatch?: 'off' | 'on';
+          };
         // Defensive: validate enum values from cross-context payload.
         // Silent coercion of an unknown backend to 'zidecar' is a privacy
         // regression - a user configured to talk to a third-party
@@ -5170,7 +5211,18 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (mempoolWatch !== undefined && mempoolWatch !== 'off' && mempoolWatch !== 'on') {
           throw new Error(`unknown mempoolWatch in sync payload: ${String(mempoolWatch)}`);
         }
-        const effectiveBackend: ZcashBackend = backend ?? 'zidecar';
+        let effectiveBackend: ZcashBackend = backend ?? backendOfEndpoint(serverUrl);
+        if (detectBackend === true) {
+          // the node says what it is, through the call every light wallet
+          // makes first; a node that does not answer keeps the guess, and
+          // the sync's own errors tell the user it is unreachable
+          try {
+            effectiveBackend = await detectZcashBackend(serverUrl);
+            announceBackend(serverUrl, effectiveBackend);
+          } catch (e) {
+            console.warn('[zcash-worker] node did not say what it is:', e);
+          }
+        }
         // Seed the registry so subsequent operations (send, history, memo
         // fetch) construct the right client without re-receiving backend.
         registerBackend(serverUrl, effectiveBackend);
@@ -5499,6 +5551,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               '[zcash-worker] anchor attestation failed; emitting unattested bundle:',
               e,
             );
+            suspectBackend(syncServerUrl);
           }
         }
 
