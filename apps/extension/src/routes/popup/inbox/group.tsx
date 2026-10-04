@@ -181,6 +181,7 @@ export function GroupPage() {
           onClose={() => setMaking(false)}
           roomId={roomId}
           label={room.name}
+          deal={room.group?.deal}
           members={(room.group?.members ?? []).map(m => ({
             key: m.key,
             name: m.key === shared.me ? 'you' : m.name,

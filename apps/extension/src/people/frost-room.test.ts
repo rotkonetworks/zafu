@@ -14,7 +14,7 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import type { RelayTransport } from '@zafu/zid';
 import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { deriveRoomKeys } from '../state/identity';
-import { createPeopleService } from './service';
+import { chain, createPeopleService } from './service';
 import { createGroups, doorId, groupId } from './groups';
 import { identityOf } from './keys';
 import {
@@ -26,7 +26,7 @@ import {
   majority,
   packFrost,
   startBody,
-  withFrost,
+  foldFrost,
   type FrostCalls,
   type FrostStatus,
   type Seat,
@@ -106,7 +106,7 @@ const wallet = (n: number, transport: () => RelayTransport, clock: { t: number }
       status: () => undefined,
       now: () => clock.t,
     },
-    { ...groups.handlers, group: withFrost(groups.handlers.group) },
+    { ...groups.handlers, group: chain(groups.handlers.group, foldFrost) },
   );
   const op = (name: keyof typeof groups.ops, args: Record<string, unknown>) =>
     groups.ops[name](args, service) as Promise<never>;
@@ -262,6 +262,24 @@ describe('a shared wallet made in its group room', () => {
       expect(w.seats[0]).toMatchObject({ threshold: 3, maxSigners: 3 });
     }
     expect(new Set(ws.map(w => w.seats[0]!.address)).size).toBe(1);
+  });
+
+  test('a deal waits for the other side to agree to its terms', async () => {
+    const { ws, G } = await group(2);
+    const [a, b] = ws;
+    const deal = { amount: '125000000', what: 'logo design', payer: 'proposer' as const };
+    await a!.post(
+      G,
+      await packFrost(startBody([a!.me(G).pubkey, b!.me(G).pubkey], 2, deal.what, { deal })),
+    );
+    expect(await run(ws, G, 2)).toEqual(['waiting', 'waiting']);
+    const c = current(b!, G);
+    expect(c.deal).toEqual(deal);
+    expect(c.r1.has(b!.me(G).pubkey)).toBe(false);
+    await frostOps['frost-keep']({ roomId: groupId(G), id: c.id, patch: { ok: true } }, b!.service);
+    expect(await run(ws, G)).toEqual(['done', 'done']);
+    expect(a!.seats[0]).toMatchObject({ threshold: 2, maxSigners: 2, label: 'logo design' });
+    expect(a!.seats[0]!.address).toBe(b!.seats[0]!.address);
   });
 
   test('a start naming someone outside the room, or zafu court, is read as such', async () => {

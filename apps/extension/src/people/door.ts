@@ -50,7 +50,7 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { openXWing, sealXWing } from '@zafu/pq';
 import { wordlists } from 'bip39';
 import type { ChannelGenesis, ChannelRecord } from '@zafu/zirc';
-import { normalizeCode } from './protocol';
+import { CODE_RE, normalizeCode } from './protocol';
 
 export const DOOR_SCOPE = 'zafu-door-v1';
 /** a door works for an hour (and the relay's default retention is an hour) */
@@ -158,7 +158,9 @@ export type GroupWire =
   | { kind: 'log'; entry: ChannelGenesis | ChannelRecord }
   | { kind: 'names'; names: Record<string, string> }
   /** one piece of a FROST message (people/frost-room): `i` of `n`, all sharing `mid` */
-  | { kind: 'kc'; mid: string; i: number; n: number; data: Uint8Array };
+  | { kind: 'kc'; mid: string; i: number; n: number; data: Uint8Array }
+  /** in a pair room: "join my deal group", its door code and name (people/deal) */
+  | { kind: 'dj'; code: string; group: string };
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const G_RE = /^[0-9a-f]{32}$/;
@@ -175,7 +177,9 @@ export const encodeWire = (r: GroupWire): string => {
             ? [JSON.stringify(r.entry)]
             : r.kind === 'kc'
               ? [r.mid, String(r.i), String(r.n), r.data]
-              : [JSON.stringify(r.names)];
+              : r.kind === 'dj'
+                ? [r.code, r.group]
+                : [JSON.stringify(r.names)];
   return `zg1:${r.kind}:${b64url(lpAll(fields))}`;
 };
 
@@ -220,6 +224,10 @@ export const decodeWire = (body: string): GroupWire | undefined => {
           ? { kind: 'kc', mid: t(0), i, n, data: f[3] }
           : undefined;
       }
+      case 'dj':
+        return CODE_RE.test(t(0))
+          ? { kind: 'dj', code: t(0), group: t(1).slice(0, 48) }
+          : undefined;
       case 'names': {
         const names = JSON.parse(t(0)) as unknown;
         return names && typeof names === 'object'

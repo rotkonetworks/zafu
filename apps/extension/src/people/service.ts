@@ -84,6 +84,20 @@ export type RecordHandler = (
   api: PeopleApi,
 ) => Promise<((r: PeopleRoom) => PeopleRoom) | undefined>;
 
+/** several handlers for one room kind, their patches applied in order */
+export const chain =
+  (...hs: (RecordHandler | undefined)[]): RecordHandler =>
+  async (room, records, api) => {
+    const ps: ((r: PeopleRoom) => PeopleRoom)[] = [];
+    for (const h of hs) {
+      const p = await h?.(room, records, api);
+      if (p) {
+        ps.push(p);
+      }
+    }
+    return ps.length ? r => ps.reduce((x, p) => p(x), r) : undefined;
+  };
+
 export interface PeopleApi {
   send(roomId: string, body: string, kind?: 'msg' | 'action'): Promise<RoomMessage>;
   addRoom(room: PeopleRoom): Promise<void>;

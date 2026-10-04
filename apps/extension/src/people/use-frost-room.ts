@@ -161,6 +161,8 @@ export const seatOf = (
 export interface FrostView {
   me?: string;
   ceremony?: Ceremony;
+  /** what this device did in it */
+  mine?: FrostMine;
   seat?: ZcashWalletJson;
 }
 
@@ -189,8 +191,12 @@ export const useFrostRoom = (room: PeopleRoom | undefined): FrostView => {
     const t = setInterval(() => kick(room.walletId, room.id), 10_000);
     return () => clearInterval(t);
   }, [live, room?.walletId, room?.id]);
-  return { me, ceremony, seat };
+  return { me, ceremony, mine: ceremony && room?.frost?.mine?.[ceremony.id], seat };
 };
+
+/** agree to a deal someone proposed: this device then makes its share */
+export const agree = (roomId: string, id: string) =>
+  peopleCall<FrostMine>('frost-keep', { roomId, id, patch: { ok: true } });
 
 /** this wallet's key in a room: derived from the seed, so it waits for the derivation */
 const useMe = (room: PeopleRoom | undefined): string | undefined => {

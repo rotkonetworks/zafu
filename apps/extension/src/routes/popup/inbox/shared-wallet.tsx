@@ -12,8 +12,16 @@ import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { cn } from '@repo/ui/lib/utils';
 import { formatZecAmount } from '@repo/wallet/networks/zcash/zip321';
-import { behind, COURT, majority, mismatched, roundOf, stepOf } from '../../../people/frost-room';
-import { startKeys, type FrostView } from '../../../people/use-frost-room';
+import {
+  behind,
+  COURT,
+  majority,
+  mismatched,
+  roundOf,
+  stepOf,
+  type Deal,
+} from '../../../people/frost-room';
+import { agree, startKeys, type FrostView } from '../../../people/use-frost-room';
 import { PopupPath } from '../paths';
 import { shortAddress } from './threads';
 
@@ -76,7 +84,7 @@ export const KeyCard = ({ view, roomId, nameOf, onMessage }: CardProps) => {
   const now = useNow(15_000);
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
-  const { ceremony: c, seat, me } = view;
+  const { ceremony: c, seat, me, mine: kept } = view;
   if (!c || !me) {
     return null;
   }
@@ -181,13 +189,33 @@ export const KeyCard = ({ view, roomId, nameOf, onMessage }: CardProps) => {
                     ? m === COURT
                       ? 'opens later'
                       : 'not here yet'
-                    : 'making a share'}
+                    : c.deal && step === 0 && m !== c.by
+                      ? 'to agree'
+                      : 'making a share'}
               </span>
             </div>
           );
         })}
       </div>
-      {bad ? (
+      {c.deal && mine && c.by !== me && !kept?.ok ? (
+        <div className='flex flex-col gap-2 border-t border-border-soft px-3.5 py-3'>
+          <span className='text-xs text-fg'>
+            {c.k === c.members.length
+              ? 'both of you sign to release it. if one of you stops answering, it stays locked.'
+              : 'you both sign to release it, or one of you with the one who decides.'}
+          </span>
+          <Button
+            size='sm'
+            disabled={busy}
+            onClick={() => {
+              setBusy(true);
+              void agree(roomId, c.id).finally(() => setBusy(false));
+            }}
+          >
+            agree and make keys
+          </Button>
+        </div>
+      ) : bad ? (
         <div className='flex flex-col gap-2 border-t border-border-soft px-3.5 py-3'>
           <span className='text-xs text-fg'>
             nothing was saved. please make the keys again together.
@@ -274,12 +302,15 @@ export const MakeSharedSheet = ({
   roomId,
   label,
   members,
+  deal,
 }: {
   open: boolean;
   onClose: () => void;
   roomId: string;
   label: string;
   members: { key: string; name: string }[];
+  /** a deal group's terms, carried into the start */
+  deal?: Deal;
 }) => {
   const n = members.length;
   const [k, setK] = useState(majority(n));
@@ -287,7 +318,11 @@ export const MakeSharedSheet = ({
   const [error, setError] = useState('');
   const kk = Math.min(Math.max(2, k), n);
   return (
-    <Sheet open={open} onOpenChange={o => !o && onClose()} title='make it a shared wallet'>
+    <Sheet
+      open={open}
+      onOpenChange={o => !o && onClose()}
+      title={deal ? 'make the deal keys' : 'make it a shared wallet'}
+    >
       <div className='flex flex-col gap-1.5'>
         <span className='text-[11px] text-fg-muted'>members · everyone in this room · fixed</span>
         <div className='flex flex-wrap gap-1.5'>
@@ -316,6 +351,7 @@ export const MakeSharedSheet = ({
             members.map(m => m.key),
             kk,
             label,
+            { deal },
           ).then(
             () => {
               setBusy(false);

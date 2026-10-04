@@ -34,7 +34,7 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { openXWing, sealXWing } from '@zafu/pq';
 import type { RoomMessage } from '@zafu/zirc/room';
 import { decodeWire, encodeWire } from './door';
-import type { PeopleService, RecordHandler } from './service';
+import type { PeopleService } from './service';
 import type { PeopleRoom } from './vault';
 
 /** zafu court: an arbiter seat drawn as a member; it answers once the escrow service exists */
@@ -44,8 +44,8 @@ export interface Deal {
   /** zatoshi, as a decimal string */
   amount: string;
   what: string;
-  /** who pays in: a member key */
-  payer: string;
+  /** who pays in: whoever proposed it, or the other side */
+  payer: 'proposer' | 'other';
 }
 
 export type FrostBody =
@@ -84,6 +84,8 @@ export interface FrostMine {
   seed?: string;
   u?: string;
   a?: string;
+  /** a deal someone else proposed: you agreed to make its keys */
+  ok?: boolean;
   saved?: boolean;
 }
 
@@ -453,6 +455,10 @@ export const advance = async (
   if (mine.saved) {
     return 'done';
   }
+  // a deal's keys are made once the other side agrees to its terms
+  if (c.deal && c.by !== me.pubkey && !mine.ok) {
+    return 'waiting';
+  }
   const send = async (body: FrostBody) => io.post(await packFrost(body), `${body.t}:${body.id}`);
   // what this device said before and the room does not show: a post that
   // failed, or a record the relay let go. Said again (the caller paces it).
@@ -539,15 +545,6 @@ export const advance = async (
 };
 
 // -- the worker's side ---------------------------------------------------------
-
-/** a room kind's handler, with FROST messages folded in as well */
-export const withFrost =
-  (h?: RecordHandler): RecordHandler =>
-  async (room, records, api) => {
-    const a = await h?.(room, records, api);
-    const b = await foldFrost(room, records);
-    return a && b ? r => b(a(r)) : (a ?? b);
-  };
 
 export const frostOps = {
   /** a message's records, said in the room by this member */
