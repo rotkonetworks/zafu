@@ -3,6 +3,7 @@
 import { ZidecarClient } from './zidecar-client';
 import { LightwalletdClient } from './lightwalletd-client';
 import type { ChainTip, CompactBlock, Utxo } from './zidecar-client';
+import type { SubtreePool, SubtreeRoot } from './subtree-roots';
 import { findPresetByUrl } from '../../config/zcash-endpoints';
 
 export type ZcashBackend = 'zidecar' | 'lightwalletd';
@@ -58,6 +59,8 @@ export interface ZcashClient {
     time: number;
   }>;
   getCompactBlocks(startHeight: number, endHeight: number): Promise<CompactBlock[]>;
+  /** roots of the pool's complete 2^16-leaf subtrees, from `startIndex` (lightwalletd GetSubtreeRoots) */
+  getSubtreeRoots(pool: SubtreePool, startIndex: number): Promise<SubtreeRoot[]>;
   getAddressUtxos(addresses: string[], startHeight?: number, maxEntries?: number): Promise<Utxo[]>;
   getTaddressTxids(addresses: string[], startHeight?: number): Promise<Uint8Array[]>;
   getTransaction(txid: Uint8Array): Promise<{ data: Uint8Array; height: number }>;

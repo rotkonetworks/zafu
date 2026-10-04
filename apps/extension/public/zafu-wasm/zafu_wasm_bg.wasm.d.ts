@@ -1,6 +1,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export const __wbg_frostrelaycipher_free: (a: number, b: number) => void;
+export const __wbg_notetree_free: (a: number, b: number) => void;
 export const __wbg_spendkeys_free: (a: number, b: number) => void;
 export const __wbg_walletkeys_free: (a: number, b: number) => void;
 export const __wbg_watchonlywallet_free: (a: number, b: number) => void;
@@ -67,6 +68,22 @@ export const ledger_stamp_derivations: (a: number, b: number, c: number, d: numb
 export const ledger_ufvk_plan: (a: number) => [number, number, number];
 export const ledger_ufvk_remaining_bytes: (a: any) => [number, number, number];
 export const ledger_validate_pczt: (a: number, b: number) => [number, number];
+export const notetree_append_blocks: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
+export const notetree_insert_frontier: (a: number, b: number, c: number, d: number) => [number, number];
+export const notetree_insert_subtree_roots: (a: number, b: number, c: number, d: number) => [number, number, number];
+export const notetree_insert_witness: (a: number, b: number, c: number, d: number) => [number, number];
+export const notetree_is_marked: (a: number, b: number) => number;
+export const notetree_latest_checkpoint: (a: number) => number;
+export const notetree_load_cap: (a: number, b: number, c: number) => [number, number];
+export const notetree_load_checkpoints: (a: number, b: number, c: number) => [number, number];
+export const notetree_load_shard: (a: number, b: number, c: number, d: number) => [number, number];
+export const notetree_new: (a: number) => number;
+export const notetree_next_position: (a: number) => [number, number];
+export const notetree_oldest_checkpoint: (a: number) => number;
+export const notetree_root_at: (a: number, b: number) => [number, number, number, number];
+export const notetree_take_changes: (a: number) => [number, number, number];
+export const notetree_truncate: (a: number, b: number) => [number, number, number];
+export const notetree_witness: (a: number, b: number, c: number) => [number, number, number, number];
 export const parse_signature_response: (a: number, b: number) => [number, number, number];
 export const pczt_has_ironwood_actions: (a: number, b: number) => [number, number, number];
 export const pir_fetch_imt_proofs: (a: number, b: number, c: number, d: number, e: any) => any;

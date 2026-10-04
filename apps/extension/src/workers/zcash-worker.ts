@@ -33,12 +33,27 @@ import {
 } from '../state/keyring/zcash-backend';
 import type { ZidecarClient } from '../state/keyring/zidecar-client';
 import { txidMemoFetcher } from '../services/memo-sync/txid-fetcher';
-import { COMPACT_SIGN_REQUEST } from '../config/feature-flags';
+import { COMPACT_SIGN_REQUEST, SHARDTREE_WITNESSES } from '../config/feature-flags';
 import {
   preludeWrapSinglePczt,
   ZIGNER_PCZT_SIGN_UR_TYPE,
 } from '../routes/popup/send/zcash-send-cbor-helpers';
 import { nu63ActivationHeight } from '../config/feature-flags';
+import {
+  addWitnesses,
+  applyTreeWrites,
+  changesToWrite,
+  concatRoots,
+  encodeBlocks,
+  loadTree,
+  MAX_CHECKPOINTS,
+  rootsIndexOf,
+  seedTree,
+  treePaths,
+  type NoteTree,
+  type TreePool,
+  type TreeWrite,
+} from './note-trees';
 import { crossCheckTip, pickIndependentPeer } from './cross-verify';
 import { checkEgress } from '../net/egress';
 import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
@@ -362,9 +377,13 @@ interface WalletState extends RunSlot {
    * sees one consistent tree; the stored copies trail it by a write.
    */
   ironwoodLive?: () => { frontier: string; height: number; size: number };
+  /** the running sync's note trees (SHARDTREE_WITNESSES), read live by a send */
+  noteTrees?: RunTrees;
 }
 
 interface WasmModule extends DepositWasm {
+  /** a pool's note commitment tree as shards; absent on older blobs */
+  NoteTree?: new (maxCheckpoints: number) => NoteTree;
   WalletKeys: PocketKeysCtor<WalletKeys>;
   /** hot spend authority, built per send from the phrase this worker unsealed */
   SpendKeys: SpendKeysCtor;
@@ -1484,6 +1503,8 @@ const saveBatch = async (
   orchardTreeFrontier?: string,
   orchardTreeFrontierHeight?: number,
   ironwood?: IronwoodBatchMeta,
+  /** note-tree rows describing the same batch */
+  treeWrites?: readonly TreeWrite[],
 ): Promise<void> => {
   const db = await getDb();
   const tx = db.transaction(['notes', 'spent', 'meta', 'witnesses-ironwood'], 'readwrite');
@@ -1544,7 +1565,273 @@ const saveBatch = async (
       value: ironwood.frontierHeight,
     });
   }
+  if (treeWrites) {
+    applyTreeWrites(metaStore, walletId, treeWrites);
+  }
   await txComplete(tx);
+};
+
+// ── note trees (SHARDTREE_WITNESSES) ──
+
+/** every note-tree row of a wallet */
+const readTreeRows = async (walletId: string): Promise<{ key: string; value: unknown }[]> => {
+  const db = await getDb();
+  const tx = db.transaction('meta', 'readonly');
+  const req = tx
+    .objectStore('meta')
+    .getAll(IDBKeyRange.bound([walletId, 'st:'], [walletId, 'st:￿']));
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result as { key: string; value: unknown }[]);
+    req.onerror = () => reject(req.error ?? new Error('note tree rows unreadable'));
+  });
+};
+
+const writeTreeRows = async (walletId: string, writes: readonly TreeWrite[]): Promise<void> => {
+  if (writes.length === 0) {
+    return;
+  }
+  const db = await getDb();
+  const tx = db.transaction('meta', 'readwrite');
+  applyTreeWrites(tx.objectStore('meta'), walletId, writes);
+  await txComplete(tx);
+};
+
+/** one sync run's note trees and the rows they still owe the store */
+interface RunTrees {
+  get(pool: TreePool): NoteTree | undefined;
+  /** forget a tree and delete its rows; its notes use the per-note path */
+  drop(pool: TreePool, why: string): void;
+  /** append one batch; a refused batch drops the tree */
+  append(
+    pool: TreePool,
+    startSize: number,
+    blocks: readonly { height: number; cmxs: Uint8Array[] }[],
+    marked: readonly number[],
+    checkpointFrom: number,
+  ): void;
+  /** the server's root for the tree at `size`: a tree that disagrees is dropped */
+  check(pool: TreePool, size: number, rootHex: string): void;
+  /** roll back to `height` after a rewind; a tree that cannot is dropped */
+  rewind(height: number, sizes: Partial<Record<TreePool, number>>): void;
+  /** rows to write with the next batch */
+  takeWrites(): TreeWrite[];
+  free(): void;
+}
+
+interface PoolStart {
+  pool: TreePool;
+  /** the loop's frontier for the pool at `height` (zcashd hex); '' = none yet */
+  frontier: string;
+  size: number;
+  height: number;
+}
+
+/**
+ * Load each pool's tree, or seed it from the loop's frontier and the stored
+ * per-note witnesses at that size, then take any new subtree roots. A stored
+ * tree that does not end where the loop's frontier does is discarded.
+ */
+const startNoteTrees = async (
+  state: WalletState,
+  walletId: string,
+  client: Pick<ZcashClient, 'getSubtreeRoots'>,
+  pools: readonly PoolStart[],
+): Promise<RunTrees | undefined> => {
+  const Ctor = wasmModule?.NoteTree;
+  if (!Ctor) {
+    return undefined;
+  }
+  const make = () => new Ctor(MAX_CHECKPOINTS);
+  const rows = await readTreeRows(walletId);
+  const trees: Partial<Record<TreePool, NoteTree>> = {};
+  let writes: TreeWrite[] = [];
+  const collect = (pool: TreePool) => {
+    const t = trees[pool];
+    if (t) {
+      writes.push(changesToWrite(pool, t.take_changes()));
+    }
+  };
+  const drop = (pool: TreePool, why: string) => {
+    console.warn(`[zcash-worker] ${pool} note tree dropped: ${why}`);
+    trees[pool]?.free();
+    delete trees[pool];
+    writes = writes.filter(w => w.pool !== pool);
+    writes.push({ pool, clear: true, puts: [] });
+  };
+
+  for (const p of pools) {
+    if (!p.frontier) {
+      continue;
+    }
+    // unspent notes whose stored witness stands at the frontier's size
+    const aligned = state.notes.filter(
+      (n): n is DecryptedNote & { witness_hex: string } =>
+        poolOf(n) === p.pool &&
+        !state.spentNullifiers.has(n.nullifier) &&
+        !!n.witness_hex &&
+        n.witness_tree_size === p.size,
+    );
+    let tree = loadTree(rows, p.pool, make);
+    if (tree && (tree.next_position() !== p.size || (tree.latest_checkpoint() ?? 0) > p.height)) {
+      console.warn(
+        `[zcash-worker] ${p.pool} note tree ends at ${tree.next_position()}@${tree.latest_checkpoint()}, ` +
+          `the loop at ${p.size}@${p.height}: reseeding`,
+      );
+      tree.free();
+      tree = undefined;
+      writes.push({ pool: p.pool, clear: true, puts: [] });
+    }
+    try {
+      if (tree) {
+        const r = addWitnesses(
+          tree,
+          aligned.filter(n => !tree!.is_marked(n.position)),
+        );
+        if (r.seeded + r.failed > 0) {
+          console.log(
+            `[zcash-worker] ${p.pool} note tree: +${r.seeded} notes (${r.failed} not taken)`,
+          );
+        }
+      } else {
+        tree = make();
+        const r = seedTree(tree, p.frontier, p.height, aligned);
+        console.log(
+          `[zcash-worker] ${p.pool} note tree seeded at ${p.height} (size ${p.size}): ` +
+            `${r.seeded} notes, ${r.failed} not taken`,
+        );
+      }
+    } catch (e) {
+      tree?.free();
+      console.warn(`[zcash-worker] ${p.pool} note tree not started: ${errText(e)}`);
+      continue;
+    }
+    trees[p.pool] = tree;
+
+    const from = rootsIndexOf(rows, p.pool);
+    try {
+      const roots = await client.getSubtreeRoots(p.pool, from);
+      if (roots.length > 0) {
+        const taken = tree.insert_subtree_roots(from, concatRoots(roots.map(r => r.rootHash)));
+        writes.push({ pool: p.pool, puts: [{ key: `st:${p.pool}:roots`, value: from + taken }] });
+      }
+    } catch (e) {
+      const msg = errText(e);
+      if (msg.includes('do not match')) {
+        drop(p.pool, msg);
+        continue;
+      }
+      console.warn(`[zcash-worker] ${p.pool} subtree roots unavailable: ${msg}`);
+    }
+    collect(p.pool);
+  }
+  await writeTreeRows(walletId, writes);
+  writes = [];
+
+  return {
+    get: pool => trees[pool],
+    drop,
+    append(pool, startSize, blocks, marked, checkpointFrom) {
+      const t = trees[pool];
+      if (!t) {
+        return;
+      }
+      try {
+        t.append_blocks(startSize, encodeBlocks(blocks), Uint32Array.from(marked), checkpointFrom);
+        collect(pool);
+      } catch (e) {
+        drop(pool, `batch refused: ${errText(e)}`);
+      }
+    },
+    check(pool, size, rootHex) {
+      const t = trees[pool];
+      const at = t?.latest_checkpoint();
+      if (t && at !== undefined && t.next_position() === size && t.root_at(at) !== rootHex) {
+        drop(pool, `root at ${at} differs from the server's`);
+      }
+    },
+    rewind(height, sizes) {
+      for (const pool of Object.keys(trees) as TreePool[]) {
+        const t = trees[pool]!;
+        if (t.truncate(height) && t.next_position() === sizes[pool]) {
+          collect(pool);
+        } else {
+          drop(pool, `no checkpoint to rewind to at ${height}`);
+        }
+      }
+    },
+    takeWrites: () => {
+      const out = writes;
+      writes = [];
+      return out;
+    },
+    free() {
+      for (const t of Object.values(trees)) {
+        t.free();
+      }
+    },
+  };
+};
+
+/**
+ * Spend witnesses from the pool's note tree, or undefined (with the reason
+ * logged) when the tree cannot answer for every note - the caller then takes
+ * the per-note path. The tree's root at the anchor must equal the server's.
+ */
+const witnessesFromTree = async (
+  client: WitnessClient,
+  walletId: string,
+  notes: DecryptedNote[],
+  pool: TreePool,
+  anchorHeight: number,
+): Promise<{ anchorHex: string; paths: unknown[] } | undefined> => {
+  const t0 = performance.now();
+  const loop = walletStates.get(walletId);
+  const run = loop?.stop && !loop.stop.signal.aborted ? loop.noteTrees : undefined;
+  let tree = run?.get(pool);
+  let owned: NoteTree | undefined;
+  if (!tree) {
+    const Ctor = wasmModule?.NoteTree;
+    owned = Ctor && loadTree(await readTreeRows(walletId), pool, () => new Ctor(MAX_CHECKPOINTS));
+    tree = owned;
+  }
+  try {
+    // ironwood anchors where the tree is (as the per-note path anchors at its
+    // frontier); orchard keeps the caller's anchor when it is retained
+    const r = tree
+      ? treePaths(
+          tree,
+          notes.map(n => n.position),
+          pool === 'orchard' ? anchorHeight : undefined,
+        )
+      : 'no stored tree';
+    if (typeof r === 'string') {
+      console.log(`[zcash-timing] ${pool} witnesses: note tree cannot answer (${r})`);
+      return undefined;
+    }
+    const ts = await client.getTreeState(r.anchorHeight);
+    const frontier = pool === 'ironwood' ? ts.ironwoodTree : ts.orchardTree;
+    const wasm = wasmModule;
+    const networkRoot =
+      !frontier || !wasm
+        ? undefined
+        : pool === 'ironwood'
+          ? wasm.tree_root_hex_ironwood?.(frontier)
+          : wasm.tree_root_hex(frontier);
+    if (networkRoot !== r.rootHex) {
+      run?.drop(pool, `anchor root at ${r.anchorHeight} differs from the server's`);
+      if (!run) {
+        await writeTreeRows(walletId, [{ pool, clear: true, puts: [] }]);
+      }
+      return undefined;
+    }
+    console.log(
+      `[zcash-timing] ${pool} witnesses: source=shardtree notes=${notes.length} ` +
+        `anchor=${r.anchorHeight} ms=${Math.round(performance.now() - t0)}`,
+    );
+    return { anchorHex: r.rootHex, paths: r.paths };
+  } finally {
+    owned?.free();
+  }
 };
 
 // ── wasm ──
@@ -2752,10 +3039,33 @@ const buildWitnesses = async (
   if (notes.length === 0) {
     throw new Error('buildWitnesses called with no notes');
   }
-  if (pool === 'ironwood') {
-    return buildWitnessesIronwood(client, walletId, notes, anchorHeight, onProgress, signal);
+  if (SHARDTREE_WITNESSES) {
+    const fromTree = await witnessesFromTree(client, walletId, notes, pool, anchorHeight);
+    if (fromTree) {
+      return fromTree;
+    }
   }
+  const t0 = performance.now();
+  const built =
+    pool === 'ironwood'
+      ? await buildWitnessesIronwood(client, walletId, notes, anchorHeight, onProgress, signal)
+      : await buildWitnessesOrchard(client, walletId, notes, anchorHeight, onProgress);
+  console.log(
+    `[zcash-timing] ${pool} witnesses: source=per-note notes=${notes.length} ms=${Math.round(performance.now() - t0)}`,
+  );
+  return built;
+};
 
+const buildWitnessesOrchard = async (
+  client: WitnessClient,
+  walletId: string,
+  notes: DecryptedNote[],
+  anchorHeight: number,
+  onProgress?: (step: string, detail?: string) => void,
+): Promise<{ anchorHex: string; paths: unknown[] }> => {
+  if (!wasmModule) {
+    throw new Error('wasm not initialized');
+  }
   const positions = notes.map(n => n.position);
   console.log(
     `[zcash-worker] witness build: positions=${JSON.stringify(positions)}, anchor=${anchorHeight}`,
@@ -3202,6 +3512,8 @@ const syncLoop = async (
   }
   // the previous run's live view is not this run's; it is published below
   state.ironwoodLive = undefined;
+  state.noteTrees?.free();
+  state.noteTrees = undefined;
 
   // free old keys if re-syncing
   if (state.keys) {
@@ -3423,6 +3735,33 @@ const syncLoop = async (
   // the caught-up rebuild of witnesses that fell behind runs once a run
   let iwRescued = false;
 
+  // note trees: seeded from the frontiers above, kept in step with them below
+  const trees =
+    SHARDTREE_WITNESSES && !signal.aborted
+      ? await startNoteTrees(state, walletId, client, [
+          {
+            pool: 'orchard',
+            frontier: runningFrontier,
+            size: orchardTreeSize,
+            height: runningFrontierHeight,
+          },
+          ...(iwSupported
+            ? [
+                {
+                  pool: 'ironwood' as const,
+                  frontier: ironwoodFrontier,
+                  size: ironwoodTreeSize,
+                  height: ironwoodFrontierHeight,
+                },
+              ]
+            : []),
+        ]).catch((e: unknown) => {
+          console.warn(`[zcash-worker] note trees not started: ${errText(e)}`);
+          return undefined;
+        })
+      : undefined;
+  state.noteTrees = trees;
+
   console.log(
     `[zcash-worker] sync start wallet=${walletId} height=${currentHeight} treeSize=${orchardTreeSize} (idb=${syncedHeight}, requested=${startHeight ?? 'none'})`,
   );
@@ -3499,6 +3838,7 @@ const syncLoop = async (
       note.witness_hex = undefined;
       note.witness_tree_size = undefined;
     }
+    trees?.rewind(target, { orchard: orchardTreeSize, ironwood: ironwoodTreeSize });
     await saveBatch(
       walletId,
       [],
@@ -3515,6 +3855,7 @@ const syncLoop = async (
             frontierHeight: ironwoodFrontier ? ironwoodFrontierHeight : undefined,
           }
         : undefined,
+      trees?.takeWrites(),
     );
 
     // Ironwood witnesses live in their own store, so clearing the field on
@@ -3715,6 +4056,13 @@ const syncLoop = async (
         // Also cross-check local frontier vs network to detect reorg-induced corruption.
         try {
           const syncTs = await client.getTreeState(currentHeight);
+          if (trees && wasmModule) {
+            trees.check('orchard', orchardTreeSize, wasmModule.tree_root_hex(syncTs.orchardTree));
+            const iwRoot = wasmModule.tree_root_hex_ironwood;
+            if (syncTs.ironwoodTree && iwRoot) {
+              trees.check('ironwood', ironwoodTreeSize, iwRoot(syncTs.ironwoodTree));
+            }
+          }
 
           if (wasmModule && runningFrontier) {
             const localRoot = wasmModule.tree_root_hex(runningFrontier);
@@ -4260,6 +4608,13 @@ const syncLoop = async (
         }
       }
 
+      trees?.append(
+        'orchard',
+        orchardTreeSize,
+        blocks.map(b => ({ height: b.height, cmxs: b.actions.map(a => a.cmx) })),
+        newNotes.map(n => n.position),
+        chainHeight - MAX_CHECKPOINTS,
+      );
       // advance tree size by total actions in this batch
       orchardTreeSize += actionCount;
       // a batch without orchard actions leaves the tree as it was, so the
@@ -4459,6 +4814,15 @@ const syncLoop = async (
         }
       }
 
+      if (iwSupported) {
+        trees?.append(
+          'ironwood',
+          ironwoodTreeSize,
+          blocks.map(b => ({ height: b.height, cmxs: (b.ironwoodActions ?? []).map(a => a.cmx) })),
+          newIronwoodNotes.map(n => n.position),
+          chainHeight - MAX_CHECKPOINTS,
+        );
+      }
       // advance ironwood tree size by this batch's ironwood actions (kept
       // even when the blob can't scan them, so the count stays monotonic)
       ironwoodTreeSize += ironwoodActionCount;
@@ -4512,6 +4876,7 @@ const syncLoop = async (
               frontierHeight: ironwoodFrontier ? ironwoodFrontierHeight : undefined,
             }
           : undefined,
+        trees?.takeWrites(),
       );
       lastSaved = currentHeight;
 
@@ -4521,6 +4886,13 @@ const syncLoop = async (
         try {
           const snapshotTs = await client.getTreeState(currentHeight);
           await saveFrontierSnapshot(walletId, currentHeight, snapshotTs.orchardTree);
+          if (trees && wasmModule) {
+            trees.check(
+              'orchard',
+              orchardTreeSize,
+              wasmModule.tree_root_hex(snapshotTs.orchardTree),
+            );
+          }
 
           if (wasmModule && runningFrontier) {
             const localRoot = wasmModule.tree_root_hex(runningFrontier);

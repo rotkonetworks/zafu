@@ -168,6 +168,8 @@ export default ({
     BUILD_DATE: JSON.stringify(gitDate),
     'process.env.NEAR_1CLICK_JWT': JSON.stringify(NEAR_1CLICK_JWT),
     "process.env['NEAR_1CLICK_JWT']": JSON.stringify(NEAR_1CLICK_JWT),
+    // build-time opt-in for SHARDTREE_WITNESSES (config/feature-flags.ts)
+    "process.env['ZAFU_SHARDTREE']": JSON.stringify(process.env['ZAFU_SHARDTREE'] ?? ''),
   });
 
   const WebExtReloadPlugin = {

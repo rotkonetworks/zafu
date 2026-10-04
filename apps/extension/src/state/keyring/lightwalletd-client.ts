@@ -4,6 +4,12 @@
 
 import type { ChainTip, CompactAction, CompactBlock, Utxo } from './zidecar-client';
 import type { ZcashClient } from './zcash-backend';
+import {
+  encodeSubtreeRootsArg,
+  parseSubtreeRootStream,
+  type SubtreePool,
+  type SubtreeRoot,
+} from './subtree-roots';
 
 const SERVICE = 'cash.z.wallet.sdk.rpc.CompactTxStreamer';
 
@@ -129,6 +135,14 @@ export class LightwalletdClient implements ZcashClient {
     ]);
     const resp = await this.grpcCallStream('GetBlockRange', req);
     return this.parseBlockStream(resp);
+  }
+
+  async getSubtreeRoots(pool: SubtreePool, startIndex: number): Promise<SubtreeRoot[]> {
+    const resp = await this.grpcCallStream(
+      'GetSubtreeRoots',
+      encodeSubtreeRootsArg(pool, startIndex),
+    );
+    return parseSubtreeRootStream(resp);
   }
 
   async getAddressUtxos(addresses: string[], startHeight = 0, maxEntries = 0): Promise<Utxo[]> {
