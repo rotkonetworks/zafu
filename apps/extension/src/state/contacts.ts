@@ -112,6 +112,16 @@ export interface Contact {
   pairKa?: string;
   /** the relay your chats with them go through, when not the default (a base url) */
   relay?: string;
+  /** their latest verified v2 card (base64url): what you pay and reach them by */
+  cardV2?: string;
+  /** how their card came, shown until you check the seal in person */
+  source?: 'link' | 'scan' | 'memo';
+  /** ms: you compared the pair seal with them in person and it matched */
+  sealChecked?: number;
+  /** the card you last gave them (people/my-card), so a change sends an update */
+  given?: GivenCard;
+  /** bumped when you give them a new address */
+  addrGen?: number;
   /**
    * zcash.me username this contact was saved from (or linked to). A
    * directory handle, not an identity anchor - it says where the address
@@ -131,6 +141,18 @@ export interface Contact {
   /** addresses across different networks */
   addresses: ContactAddress[];
 }
+
+/** what the card you last gave someone said */
+export interface GivenCard {
+  rev: number;
+  zcash?: string;
+  penumbra?: string;
+  relay: string;
+  caps: number;
+}
+
+/** the v2 fields a contact carries */
+export type ContactV2 = Pick<Contact, 'cardV2' | 'source' | 'sealChecked' | 'given' | 'addrGen'>;
 
 /** one wallet's relationship counters, as the backup carries them */
 interface BackupRelNext {
@@ -165,19 +187,23 @@ export interface ContactsSlice {
   contacts: Contact[];
 
   /** add a new contact */
-  addContact: (data: {
-    name: string;
-    notes?: string;
-    zid?: string;
-    zcashme?: string;
-    website?: string;
-    /** contact-card KA key; supplied when a discovery-capable share is imported */
-    card?: ContactCardKey;
-    rel?: ContactRel;
-    pairKa?: string;
-    /** addresses to save with them, in the same write */
-    addresses?: Omit<ContactAddress, 'id'>[];
-  }) => Promise<Contact>;
+  addContact: (
+    data: ContactV2 & {
+      /** a fixed id: the one your card for them was made under */
+      id?: string;
+      name: string;
+      notes?: string;
+      zid?: string;
+      zcashme?: string;
+      website?: string;
+      /** contact-card KA key; supplied when a discovery-capable share is imported */
+      card?: ContactCardKey;
+      rel?: ContactRel;
+      pairKa?: string;
+      /** addresses to save with them, in the same write */
+      addresses?: Omit<ContactAddress, 'id'>[];
+    },
+  ) => Promise<Contact>;
 
   /** update contact info (name, notes, zid, website, card) */
   updateContact: (
@@ -191,7 +217,9 @@ export interface ContactsSlice {
       rel?: ContactRel;
       pairKa?: string;
       relay?: string;
-    },
+      /** their zcash and penumbra addresses, replacing the ones on those networks */
+      addresses?: Omit<ContactAddress, 'id'>[];
+    } & ContactV2,
   ) => Promise<void>;
 
   /** remove a contact */
@@ -259,6 +287,10 @@ export interface ContactsSlice {
 
 const generateId = () => crypto.randomUUID();
 
+const V2_KEYS = ['cardV2', 'source', 'sealChecked', 'given', 'addrGen'] as const;
+const v2Of = (d: ContactV2): ContactV2 =>
+  Object.fromEntries(V2_KEYS.filter(k => d[k] !== undefined).map(k => [k, d[k]]));
+
 /** a contact as a backup holds it; backups made before ids were kept have none */
 type BackupContact = Omit<Contact, 'id' | 'createdAt' | 'addresses'> & {
   id?: string;
@@ -308,7 +340,7 @@ export const createContactsSlice =
 
       addContact: async data => {
         const contact: Contact = {
-          id: generateId(),
+          id: data.id ?? generateId(),
           name: data.name.trim(),
           zid: data.zid?.trim() || undefined,
           zcashme: data.zcashme?.trim() || undefined,
@@ -317,6 +349,7 @@ export const createContactsSlice =
           card: data.card,
           ...(data.rel ? { rel: data.rel } : {}),
           ...(data.pairKa ? { pairKa: data.pairKa } : {}),
+          ...v2Of(data),
           createdAt: Date.now(),
           addresses: (data.addresses ?? []).map(a => ({
             ...a,
@@ -365,6 +398,18 @@ export const createContactsSlice =
             }
             if (updates.relay !== undefined) {
               contact.relay = updates.relay || undefined;
+            }
+            Object.assign(contact, v2Of(updates));
+            if (updates.addresses) {
+              const nets = new Set(updates.addresses.map(a => a.network));
+              const old = contact.addresses;
+              contact.addresses = [
+                ...old.filter(a => !nets.has(a.network)),
+                ...updates.addresses.map(a => {
+                  const same = old.find(o => o.network === a.network && o.address === a.address);
+                  return same ?? { ...a, id: generateId() };
+                }),
+              ];
             }
           }
         });

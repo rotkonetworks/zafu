@@ -33,6 +33,8 @@ import { useMyRooms, useOpenPeople, usePeople, useThread } from '../../../people
 import { RelaySlot } from '../../../people/relay-slot';
 import { InviteRows } from '../../../people/invite-rows';
 import { usePairCards } from '../../../people/use-invites';
+import { useCardSync } from '../../../people/my-card';
+import { notePreview } from '../../../people/cards';
 import { threadKey, unreadOf, type PeopleRoom } from '../../../people/vault';
 
 const zec = (zat: bigint) => (Number(zat) / 1e8).toFixed(2);
@@ -265,7 +267,7 @@ const Direct = ({ canCard }: { canCard: boolean }) => {
       const row = rows.get(id);
       const unread = unreadOf(t) + (row?.unread ?? 0);
       if (!row || last.ts * 1000 > row.ts) {
-        rows.set(id, { id, address, line: last.body, ts: last.ts * 1000, unread });
+        rows.set(id, { id, address, line: notePreview(last), ts: last.ts * 1000, unread });
       } else {
         rows.set(id, { ...row, unread });
       }
@@ -388,6 +390,7 @@ export function InboxPage() {
 
   useOpenPeople();
   usePairCards();
+  useCardSync();
   const hasRooms = useMyRooms().some(r => r.joined);
   // the chain memos the light client already reads
   const { syncMemos: syncPenumbra } = usePenumbraMemos(walletId);
@@ -407,6 +410,18 @@ export function InboxPage() {
         backPath={false}
         meta={
           <>
+            {canCard && (
+              <button
+                type='button'
+                aria-label='add person'
+                data-preload={PopupPath.INBOX_ADD}
+                onClick={() => navigate(PopupPath.INBOX_ADD)}
+                className='flex h-9 items-center gap-1.5 border border-border-soft px-2.5 text-xs text-fg-high transition-colors hover:bg-elev-2'
+              >
+                <span className='i-lucide-user-plus size-[15px]' aria-hidden='true' />
+                add person
+              </button>
+            )}
             <button
               type='button'
               aria-label='new group'

@@ -26,6 +26,7 @@ import type { Contact } from '../state/contacts';
 import { createPairs } from './pairs';
 import { createInvites } from './invites';
 import { createGroups } from './groups';
+import { createCards } from './cards';
 import { compileEgress, describeEgress, type EgressInputs } from '../net/egress-policy';
 import { decideEgress } from '../net/egress-table';
 import { readEgressInputs } from '../net/egress-opt-in';
@@ -123,6 +124,24 @@ const groups = createGroups({
   transport: (relay, size, signal) => peopleDeps.transport(relay, size, signal),
 });
 
+const cards = createCards({
+  walletId: async () => useStore.getState().keyRing.selectedKeyInfo?.id,
+  relKeys,
+  gate: relay => peopleDeps.gate(relay),
+});
+
+/** two kinds of record in a pair room: memo-invite answers and v2 cards; each patches in turn */
+const both =
+  (...hs: (RecordHandler | undefined)[]): RecordHandler =>
+  async (room, records, api) => {
+    const patches = [];
+    for (const h of hs) {
+      patches.push(h && (await h(room, records, api)));
+    }
+    const fs = patches.filter(p => !!p);
+    return fs.length ? r => fs.reduce((x, f) => f(x), r) : undefined;
+  };
+
 export const peopleDeps: PeopleDeps = {
   readRooms,
   writeRooms,
@@ -156,7 +175,8 @@ export const startPeopleRelay = (
 ) => {
   const service = createPeopleService(peopleDeps, {
     ...groups.handlers,
-    ...invites.handlers,
+    card: cards.handlers.card,
+    pair: both(invites.handlers.pair, cards.handlers.pair),
     ...handlers,
   });
   const all: Record<string, PeopleOp> = {
@@ -175,6 +195,7 @@ export const startPeopleRelay = (
     ...groups.ops,
     ...pairs.ops,
     ...invites.ops,
+    ...cards.ops,
     ...ops,
   };
 

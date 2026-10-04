@@ -175,7 +175,15 @@ const relayOf = (host: string): string => {
 };
 
 /** a signed v2 card, or null when it does not parse or its signature does not hold */
-export const readCardV2 = (bytes: Uint8Array): CardV2 | null => {
+export const readCardV2 = (bytes: Uint8Array): CardV2 | null => parse(bytes)?.card ?? null;
+
+/** the card's own bytes, without a memo's padding; null unless it reads and verifies */
+export const exactCardV2 = (bytes: Uint8Array): Uint8Array | null => {
+  const p = parse(bytes);
+  return p ? bytes.slice(0, p.end) : null;
+};
+
+const parse = (bytes: Uint8Array): { card: CardV2; end: number } | null => {
   try {
     if (bytes[0] !== CARD_V2) {
       return null;
@@ -216,7 +224,7 @@ export const readCardV2 = (bytes: Uint8Array): CardV2 | null => {
     if (b.subarray(at).some(x => x !== 0) || !ed25519.verify(sig, preimage(signed), key)) {
       return null;
     }
-    return {
+    const card: CardV2 = {
       kind,
       revision,
       key,
@@ -231,6 +239,7 @@ export const readCardV2 = (bytes: Uint8Array): CardV2 | null => {
       created,
       ...(ext.length ? { ext } : {}),
     };
+    return { card, end: at };
   } catch {
     return null;
   }

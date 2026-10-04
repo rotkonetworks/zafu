@@ -11,6 +11,9 @@ let saved: { id: string; name: string } | undefined;
 let records: { address: string }[] = [];
 const addContact = vi.fn(async ({ name }: { name: string }) => ({ id: 'c1', name }));
 const addAddress = vi.fn(async () => ({}));
+let contacts: { id: string; name: string; zid?: string }[] = [];
+let rooms: { id: string; card?: { mine: boolean } }[] = [];
+let peek: { closed?: boolean } = {};
 const store = {
   keyRing: {
     keyInfos: [],
@@ -19,6 +22,9 @@ const store = {
     getMnemonic: vi.fn(),
   },
   contacts: {
+    get contacts() {
+      return contacts;
+    },
     findByAddress: () => (saved ? { contact: saved } : undefined),
     addContact,
     addAddress,
@@ -31,9 +37,17 @@ vi.mock('../../../state', () => ({
 vi.mock('../../../state/diversified-addresses', () => ({
   getDiversifiedAddresses: async () => records,
 }));
-vi.mock('../../../hooks/use-share-card', () => ({ useMintCard: () => async () => undefined }));
-vi.mock('../../../components/qr-code', () => ({ QrCode: () => null }));
-vi.mock('../../../people/client', () => ({ peopleCall: vi.fn(async () => undefined) }));
+vi.mock('../../../people/client', () => ({
+  peopleCall: vi.fn(async () => peek),
+  peopleAsk: vi.fn(async () => ({})),
+  useMyRooms: () => rooms,
+}));
+vi.mock('../../../people/my-card', () => ({
+  useMyCards: () => ({ ready: true }),
+  addressesOf: () => [],
+  givenOf: () => ({}),
+}));
+vi.mock('../../../people/use-invites', () => ({ allowRelay: vi.fn(), knownRelay: vi.fn() }));
 vi.mock('../../../utils/navigate', () => ({ useBackNav: () => vi.fn() }));
 vi.mock('react-router-dom', () => ({
   useNavigate: () => navigate,
@@ -41,8 +55,26 @@ vi.mock('react-router-dom', () => ({
   useLocation: () => ({ key: 'x' }),
 }));
 
+import { ed25519 } from '@noble/curves/ed25519';
+import { bytesToHex } from '@noble/hashes/utils';
+import { CARD_DEFAULT_RELAY, Cap, cardB64, signCardV2 } from '@repo/wallet/networks/zcash/card-v2';
 import { cardLinkPayload, contactCardMemoHex } from '../../../state/contact-share';
-import { CardPage, cardState } from './card';
+import { CardPage, cardState, offers } from './card';
+
+const seed = new Uint8Array(32).fill(5);
+const KEN = bytesToHex(ed25519.getPublicKey(seed));
+const kenCard = {
+  kind: 'card' as const,
+  revision: 0,
+  key: KEN,
+  pairKa: 'ab'.repeat(32),
+  zcash: '11'.repeat(43),
+  relay: CARD_DEFAULT_RELAY,
+  caps: Cap.chat | Cap.mailbox,
+  name: 'ken',
+  created: 29_000_000,
+};
+const v2Link = (c = kenCard) => cardB64(signCardV2(c, seed));
 
 const linkFor = (address: string, name = '') =>
   cardLinkPayload(
@@ -57,6 +89,9 @@ beforeEach(() => {
   root = createRoot(container);
   saved = undefined;
   records = [];
+  contacts = [];
+  rooms = [];
+  peek = {};
 });
 afterEach(() => {
   act(() => root.unmount());
@@ -80,11 +115,49 @@ describe('cardState', () => {
   });
 });
 
-describe('the card review', () => {
-  it('shows someone new as not checked, with no name of their own', async () => {
+describe('a v2 card', () => {
+  it('shows who it is, that the signature holds, and what they offer', async () => {
+    await render(v2Link());
+    expect(text()).toContain('add ken');
+    expect(text()).toContain('the name in their card');
+    expect(text()).toContain('unchanged since signed');
+    expect(text()).toContain('check it when you meet');
+    expect(text()).toContain('came froma qr · just now');
+    expect(offers(kenCard)).toEqual(['chat', 'zcash']);
+  });
+
+  it('refuses a card changed after it was signed, and saves nothing', async () => {
+    const bytes = signCardV2(kenCard, seed);
+    bytes[10]! ^= 1;
+    await render(cardB64(bytes));
+    expect(text()).toContain('its signature does not hold');
+    expect(text()).toContain('saved nothing');
+  });
+
+  it('says a card its maker cancelled was cancelled', async () => {
+    peek = { closed: true };
+    await render(v2Link());
+    expect(text()).toContain('it was cancelled by the person who made it');
+  });
+
+  it('knows your own card, and someone already saved', async () => {
+    rooms = [{ id: `c:${KEN}`, card: { mine: true } }];
+    await render(v2Link());
+    expect(text()).toContain('this is your own card');
+    act(() => root.unmount());
+    root = createRoot(container);
+    rooms = [];
+    contacts = [{ id: 'k', name: 'kenji', zid: KEN }];
+    await render(v2Link());
+    expect(text()).toContain('kenji is already in your people');
+  });
+});
+
+describe('the card review (v1)', () => {
+  it('shows someone new as not signed, with no name of their own', async () => {
     await render(linkFor(ALICE));
     expect(text()).toContain('someone');
-    expect(text()).toContain('a card · not checked yet');
+    expect(text()).toContain('an older card · not signed');
     expect(text()).toContain('link scanned');
     expect(text()).not.toMatch(/verified|checked in person/);
   });

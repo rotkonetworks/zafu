@@ -61,6 +61,7 @@ vi.mock('../../../people/use-invites', () => ({
   usePairCards: () => undefined,
 }));
 vi.mock('../../../people/relay-slot', () => ({ RelaySlot: () => null }));
+vi.mock('../../../people/my-card', () => ({ useCardSync: () => undefined, addressesOf: () => [] }));
 vi.mock('../../../utils/navigate', () => ({ useBackNav: () => vi.fn() }));
 vi.mock('../../../services/zcashme/config', () => ({
   useZcashMeDirectoryLookup: () => () => undefined,

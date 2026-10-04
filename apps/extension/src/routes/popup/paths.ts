@@ -16,6 +16,10 @@ export enum PopupPath {
   INBOX_NEW_GROUP = '/inbox/new-group',
   /** join one from a code or a link (GroupJoin.dc.html), `?code=&via=` */
   INBOX_JOIN = '/inbox/join',
+  /** add a person: your card for the next one, then waiting for their answer (Cv2Show, Cv2Waiting), `?room=` reopens one */
+  INBOX_ADD = '/inbox/add',
+  /** scan a card, or paste its link (Cv2Scan) */
+  INBOX_SCAN = '/inbox/scan',
   CONTACTS = '/contacts',
   CONTACT = '/contacts/:contactId',
   /** a card someone gave you, to review and save (`?card=<payload>&via=`) */

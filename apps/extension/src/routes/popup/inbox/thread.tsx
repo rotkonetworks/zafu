@@ -54,6 +54,8 @@ import {
   type PeopleRelaySetting,
 } from '../../../config/people-relay';
 import { useThreadName } from './use-thread-name';
+import { NoteLine } from './card-notes';
+import { useCardSync } from '../../../people/my-card';
 import { RequestSheet } from '../send/send-fields';
 import { cardOf, counterparty, shortAddress, threadIdOf, whenOf } from './threads';
 
@@ -509,6 +511,7 @@ export function ThreadPage() {
     answers.length === 0;
   const [picking, setPicking] = useState(false);
   usePairCards();
+  useCardSync();
 
   const rows = useMemo(
     () =>
@@ -640,6 +643,8 @@ export function ThreadPage() {
             )}
             {'m' in r ? (
               <Item m={r.m} from={name} />
+            ) : r.it.kind === 'note' ? (
+              <NoteLine item={r.it} name={name} />
             ) : (
               <RelayLine item={r.it} onRetry={() => say(r.it.body, r.it.local)} />
             )}

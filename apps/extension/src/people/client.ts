@@ -21,6 +21,13 @@ import {
   type Thread,
 } from './vault';
 import { hasMemoInvite } from './memo-door';
+import {
+  CARD_V2,
+  cardB64,
+  cardFromMemos,
+  exactCardV2,
+  readCardV2,
+} from '@repo/wallet/networks/zcash/card-v2';
 import type { PeopleSlot, PeopleStatus } from './service';
 
 export const peopleCall = async <T = unknown>(
@@ -167,6 +174,35 @@ export const ingestMemoInvites = (
         content: m.content,
         at: m.timestamp,
         from: m.from,
+      }).catch(() => undefined);
+    }
+  }
+};
+
+/**
+ * v2 cards that came as memos (an answer to a card you showed, sent by
+ * memo when the relay was down): one card per transaction, its fragments
+ * together. The worker matches it to the card it answers.
+ */
+export const ingestCardMemos = (
+  notes: { txid: string; height: number; memo: Uint8Array; isChange: boolean }[],
+): void => {
+  const byTx = new Map<string, { height: number; memos: Uint8Array[] }>();
+  for (const n of notes) {
+    if (!n.isChange && n.memo[2] === 0x05 && n.memo[n.memo[3] ? 20 : 4] === CARD_V2) {
+      const t = byTx.get(n.txid) ?? { height: n.height, memos: [] };
+      t.memos.push(n.memo);
+      byTx.set(n.txid, t);
+    }
+  }
+  for (const [txId, t] of byTx) {
+    const padded = cardFromMemos(t.memos);
+    const bytes = padded && exactCardV2(padded);
+    if (bytes && readCardV2(bytes)?.kind === 'answer') {
+      void peopleCall('card-memo', {
+        card: cardB64(bytes),
+        txId,
+        height: t.height,
       }).catch(() => undefined);
     }
   }

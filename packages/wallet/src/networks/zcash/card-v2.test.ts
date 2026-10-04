@@ -11,6 +11,7 @@ import {
   cardFromMemos,
   cardV2Link,
   cardV2Memos,
+  exactCardV2,
   fromB64url,
   readCardV2,
   signCardV2,
@@ -102,6 +103,7 @@ describe('card v2', () => {
     const padded = new Uint8Array(508);
     padded.set(bytes);
     expect(readCardV2(padded)).toEqual(base);
+    expect(exactCardV2(padded)).toEqual(bytes);
     padded[400] = 1;
     expect(readCardV2(padded)).toBeNull();
   });

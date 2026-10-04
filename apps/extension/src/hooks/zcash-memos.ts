@@ -8,7 +8,7 @@
 
 import { useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { ingestMemoInvites } from '../people/client';
+import { ingestCardMemos, ingestMemoInvites } from '../people/client';
 import { useStore } from '../state';
 import { messagesSelector } from '../state/messages';
 import { getDiversifiedAddresses } from '../state/diversified-addresses';
@@ -183,6 +183,9 @@ export function useZcashMemos(walletId: string, zidecarUrl: string = DEFAULT_ZID
         if (structuredNotes.length > 0) {
           inbox.ingestMemos(structuredNotes);
         }
+
+        // a v2 card that came as a memo: the answer to a card you showed
+        ingestCardMemos(structuredNotes);
 
         // surface contact cards as messages so they appear in the inbox UI
         for (const note of structuredNotes) {
