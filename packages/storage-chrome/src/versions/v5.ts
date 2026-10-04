@@ -287,6 +287,13 @@ type LOCAL = {
 
   zidSiteLabels?: Record<string, string>;
 
+  /** the people relay: the default for new rooms and cards, and the other relays allowed */
+  peopleRelay?: {
+    /** blank means https://relay.zafu.pro (config/people-relay) */
+    endpoint?: string;
+    hosts?: string[];
+  };
+
   diversifiedAddresses?: {
     diversifierIndex: number;
     sharedWith: string;
