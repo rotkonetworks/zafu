@@ -22,7 +22,6 @@ import {
 } from './vault';
 import { hasMemoInvite } from './memo-door';
 import {
-  CARD_V2,
   cardB64,
   cardFromMemos,
   exactCardV2,
@@ -189,7 +188,8 @@ export const ingestCardMemos = (
 ): void => {
   const byTx = new Map<string, { height: number; memos: Uint8Array[] }>();
   for (const n of notes) {
-    if (!n.isChange && n.memo[2] === 0x05 && n.memo[n.memo[3] ? 20 : 4] === CARD_V2) {
+    // by type only: a later fragment's first byte is mid-card; the reader checks the version
+    if (!n.isChange && n.memo[2] === 0x05) {
       const t = byTx.get(n.txid) ?? { height: n.height, memos: [] };
       t.memos.push(n.memo);
       byTx.set(n.txid, t);
