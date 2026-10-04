@@ -564,8 +564,10 @@ export function ThreadPage() {
   const say = (text: string, retry?: string) =>
     room && void peopleSay(room.id, text, retry).catch(() => undefined);
 
+  // someone whose card you hold is paid at the newest address they signed
+  const payTo = (mutual && contact?.addresses.find(a => a.network === network)?.address) || address;
   const send = (prefillMemo?: string) =>
-    navigate(PopupPath.SEND, { state: { prefillRecipient: address, prefillMemo, network } });
+    navigate(PopupPath.SEND, { state: { prefillRecipient: payTo, prefillMemo, network } });
 
   const sendText = async () => {
     const text = draft.trim();

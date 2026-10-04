@@ -259,4 +259,22 @@ describe('a v2 person, sealed at rest and in the backup', () => {
     expect(old.given).toBeUndefined();
     expect(old.cardV2).toBeUndefined();
   });
+
+  test('a newer card puts its address first and keeps the old one', async () => {
+    const { contacts } = useStore.getState();
+    const ken = await contacts.addContact({
+      name: 'ken',
+      addresses: [{ network: 'zcash', address: 'u1old' }],
+    });
+    await useStore.getState().contacts.updateContact(ken.id, {
+      addresses: [{ network: 'zcash', address: 'u1new' }],
+    });
+    const after = (useStore.getState().contacts.contacts as Contact[])[0]!;
+    expect(after.addresses.map(a => a.address)).toEqual(['u1new', 'u1old']);
+    // the same card again changes nothing
+    await useStore.getState().contacts.updateContact(ken.id, {
+      addresses: [{ network: 'zcash', address: 'u1new' }],
+    });
+    expect((useStore.getState().contacts.contacts as Contact[])[0]!.addresses).toHaveLength(2);
+  });
 });

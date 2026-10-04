@@ -217,7 +217,7 @@ export interface ContactsSlice {
       rel?: ContactRel;
       pairKa?: string;
       relay?: string;
-      /** their zcash and penumbra addresses, replacing the ones on those networks */
+      /** their newest addresses: put first, the ones they had kept after */
       addresses?: Omit<ContactAddress, 'id'>[];
     } & ContactV2,
   ) => Promise<void>;
@@ -401,14 +401,15 @@ export const createContactsSlice =
             }
             Object.assign(contact, v2Of(updates));
             if (updates.addresses) {
-              const nets = new Set(updates.addresses.map(a => a.network));
+              // newest first (what you pay them at from now), older ones kept:
+              // a thread opened on one still finds them, earlier memos stay theirs
+              const next = updates.addresses;
               const old = contact.addresses;
+              const same = (a: Omit<ContactAddress, 'id'>, o: ContactAddress) =>
+                o.network === a.network && o.address === a.address;
               contact.addresses = [
-                ...old.filter(a => !nets.has(a.network)),
-                ...updates.addresses.map(a => {
-                  const same = old.find(o => o.network === a.network && o.address === a.address);
-                  return same ?? { ...a, id: generateId() };
-                }),
+                ...next.map(a => old.find(o => same(a, o)) ?? { ...a, id: generateId() }),
+                ...old.filter(o => !next.some(a => same(a, o))),
               ];
             }
           }
