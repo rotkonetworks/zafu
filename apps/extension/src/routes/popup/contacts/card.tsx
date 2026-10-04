@@ -105,7 +105,18 @@ const Fact = ({ label, children }: { label: string; children: React.ReactNode })
 );
 
 /** Cv2Received, and Cv2MemoSend when the relay does not answer */
-const Received = ({ card, b64, via }: { card: CardV2; b64: string; via: string | null }) => {
+const Received = ({
+  card,
+  b64,
+  via,
+  onSaving,
+}: {
+  card: CardV2;
+  b64: string;
+  via: string | null;
+  /** saving began here: this screen stays on until it is done */
+  onSaving: () => void;
+}) => {
   const navigate = useNavigate();
   const cards = useMyCards();
   const { addContact, removeContact } = useStore(s => s.contacts);
@@ -155,6 +166,7 @@ const Received = ({ card, b64, via }: { card: CardV2; b64: string; via: string |
       if (!(await knownRelay(card.relay)) && !(await allowRelay(card.relay))) {
         return;
       }
+      onSaving();
       const rel = await cards.newRel();
       const contactId = crypto.randomUUID();
       const answer = await cards.answer(card, contactId, rel);
@@ -379,6 +391,8 @@ export function CardPage() {
       : undefined,
   );
   const v2 = read?.v === 2 ? read : undefined;
+  // saved on this screen: it carries on (relay, or the memo) instead of "already saved"
+  const [savingHere, setSavingHere] = useState(false);
   const mine = !!v2?.card && rooms.some(r => r.id === cardRoomId(v2.card!.key) && r.card?.mine);
 
   return (
@@ -398,7 +412,7 @@ export function CardPage() {
         />
       ) : mine ? (
         <Invalid why='this is your own card.' next='please show it to the other person.' />
-      ) : saved ? (
+      ) : saved && !savingHere ? (
         <main className='flex flex-col gap-4 px-4 py-6'>
           <p className='text-sm text-fg'>{saved.name} is already in your people</p>
           <Button
@@ -409,7 +423,7 @@ export function CardPage() {
           </Button>
         </main>
       ) : (
-        <Received card={read.card} b64={read.b64} via={via} />
+        <Received card={read.card} b64={read.b64} via={via} onSaving={() => setSavingHere(true)} />
       )}
     </div>
   );

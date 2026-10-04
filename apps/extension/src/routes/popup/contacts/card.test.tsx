@@ -9,11 +9,18 @@ const navigate = vi.fn();
 let params = new URLSearchParams();
 let saved: { id: string; name: string } | undefined;
 let records: { address: string }[] = [];
-const addContact = vi.fn(async ({ name }: { name: string }) => ({ id: 'c1', name }));
+const addContact = vi.fn(async ({ name, id, zid }: { name: string; id?: string; zid?: string }) => {
+  // the person is in the store from now on, as the real slice does
+  contacts = [...contacts, { id: id ?? 'c1', name, zid }];
+  return { id: id ?? 'c1', name };
+});
 const addAddress = vi.fn(async () => ({}));
 let contacts: { id: string; name: string; zid?: string }[] = [];
 let rooms: { id: string; card?: { mine: boolean } }[] = [];
 let peek: { closed?: boolean } = {};
+let relayDown = false;
+// set below, once the card helpers are imported
+let answerCard: () => { b64: string; card: unknown } = () => ({ b64: '', card: {} });
 const store = {
   keyRing: {
     keyInfos: [],
@@ -39,15 +46,27 @@ vi.mock('../../../state/diversified-addresses', () => ({
 }));
 vi.mock('../../../people/client', () => ({
   peopleCall: vi.fn(async () => peek),
-  peopleAsk: vi.fn(async () => ({})),
+  peopleAsk: vi.fn(async () => {
+    if (relayDown) {
+      throw new Error('the relay is not answering');
+    }
+    return {};
+  }),
   useMyRooms: () => rooms,
 }));
 vi.mock('../../../people/my-card', () => ({
-  useMyCards: () => ({ ready: true }),
+  useMyCards: () => ({
+    ready: true,
+    newRel: async () => ({ walletId: 'w', gen: 0, j: 2 }),
+    answer: async () => answerCard(),
+  }),
   addressesOf: () => [],
   givenOf: () => ({}),
 }));
-vi.mock('../../../people/use-invites', () => ({ allowRelay: vi.fn(), knownRelay: vi.fn() }));
+vi.mock('../../../people/use-invites', () => ({
+  allowRelay: vi.fn(),
+  knownRelay: vi.fn(async () => true),
+}));
 vi.mock('../../../utils/navigate', () => ({ useBackNav: () => vi.fn() }));
 vi.mock('react-router-dom', () => ({
   useNavigate: () => navigate,
@@ -75,6 +94,7 @@ const kenCard = {
   created: 29_000_000,
 };
 const v2Link = (c = kenCard) => cardB64(signCardV2(c, seed));
+answerCard = () => ({ b64: v2Link({ ...kenCard, kind: 'answer' as never }), card: kenCard });
 
 const linkFor = (address: string, name = '') =>
   cardLinkPayload(
@@ -150,6 +170,27 @@ describe('a v2 card', () => {
     contacts = [{ id: 'k', name: 'kenji', zid: KEN }];
     await render(v2Link());
     expect(text()).toContain('kenji is already in your people');
+  });
+});
+
+describe('saving a v2 card', () => {
+  it('when the relay does not answer, the same screen offers the memo, not "already saved"', async () => {
+    relayDown = true;
+    await render(v2Link());
+    const input = container.querySelector('input')!;
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      set.call(input, 'ken');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const save = [...container.querySelectorAll('button')].find(b => b.textContent === 'save')!;
+    await act(async () => save.click());
+    await act(async () => root.render(createElement(CardPage)));
+    expect(addContact).toHaveBeenCalled();
+    expect(text()).toContain('the relay is not answering');
+    expect(text()).toContain('answer by memo');
+    expect(text()).not.toContain('already in your people');
+    relayDown = false;
   });
 });
 

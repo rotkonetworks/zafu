@@ -46,7 +46,7 @@ const Cue = ({
   meta?: React.ReactNode;
   tone?: 'warn';
 }) => (
-  <div className='flex h-11 shrink-0 items-center gap-2.5 border border-border-soft px-3.5'>
+  <div className='flex h-9 shrink-0 items-center gap-2.5 border border-border-soft px-3.5'>
     <span
       className={cn(
         'size-2 shrink-0',
@@ -215,9 +215,9 @@ export function AddPersonPage() {
           <>
             <div className='self-center border border-border-hard bg-[#f6f2e8] p-2.5'>
               {link ? (
-                <QrCode value={link} size={176} label='your card' ecLevel='L' />
+                <QrCode value={link} size={168} label='your card' ecLevel='L' />
               ) : (
-                <span className='block size-[176px]' aria-hidden='true' />
+                <span className='block size-[168px]' aria-hidden='true' />
               )}
             </div>
             <div className='flex h-10 items-center overflow-hidden whitespace-nowrap border border-border-soft bg-elev-1 px-3 text-xs text-fg-muted'>
@@ -268,14 +268,14 @@ export function AddPersonPage() {
         ) : card?.state === 'cancelled' ? (
           <Cue tone='warn' text='this card was cancelled' />
         ) : card && (card.copied || card.shared) ? (
-          <>
+          <div className='flex flex-col gap-1'>
             <Cue live text='waiting for an answer' meta={`${waitedMin} min`} />
             <Cue
               text={card.shared && card.shared > (card.copied ?? 0) ? 'link shared' : 'link copied'}
               meta={hhmm(Math.max(card.copied ?? 0, card.shared ?? 0))}
             />
             <RelayCue onAllow={allow} />
-          </>
+          </div>
         ) : (
           <Cue text={link ? 'ready for the next person' : 'making your card'} />
         )}
