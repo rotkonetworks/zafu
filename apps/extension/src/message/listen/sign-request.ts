@@ -155,9 +155,11 @@ const handleSignRequest = async (
     // log the shared zid (done in service worker so it persists even if popup closes)
     if (publicKey) {
       const log = ((await localExtStorage.get('zidShareLog')) ?? []) as ZidShareRecord[];
-      const alreadyLogged = log.some(
-        r => r.publicKey === publicKey && r.sharedWith === sender.origin,
-      );
+      // a log another build wrote in a shape this one cannot read is left
+      // alone: rewriting it as a fresh list would drop its entries
+      const alreadyLogged =
+        !Array.isArray(log) ||
+        log.some(r => r.publicKey === publicKey && r.sharedWith === sender.origin);
       if (!alreadyLogged) {
         log.push({
           publicKey,

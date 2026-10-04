@@ -24,3 +24,13 @@ export default { version, transform } satisfies MIGRATION;
 ```
 
 These rules are enforced with eslint configuration.
+
+## Reading storage another build wrote
+
+Migrations only run forward. A build that finds a NEWER stored version (a
+downgrade, or an MV3 worker still on the old build) skips migration and reads
+the newer shape as it is (see `base.ts`). Every reader therefore follows the
+policy in `../stored-list.ts`: a key or field may be missing or of another
+shape, stored lists are read through `storedList` (never `.length` on a value
+that may be undefined), unknown fields are kept, and a value this build cannot
+read is never replaced with `[]` on a write.

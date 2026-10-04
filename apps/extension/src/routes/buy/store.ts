@@ -549,7 +549,7 @@ export const allowRead = async () => {
   }
   // the first call after the tap: Chrome grants only inside a user gesture
   // (already granted resolves true with no prompt)
-  const granted = await requestCaptureAccess(app);
+  const granted = await requestCaptureAccess();
   if (!granted) {
     return;
   }

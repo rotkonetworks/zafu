@@ -5,6 +5,7 @@
  * every function here is independently testable.
  */
 
+import { storedList } from '@repo/storage-chrome/stored-list';
 import type { KeyInfo, EncryptedVault, NetworkType, ZignerZafuImport, LedgerImport } from './types';
 import type { ZcashWalletJson } from '../wallets';
 import type { BoxJson } from '@repo/encryption/box';
@@ -16,7 +17,7 @@ export const generateZcashWalletId = (): string =>
   `zcash-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
 export const vaultsToKeyInfos = (vaults: EncryptedVault[], selectedId?: string): KeyInfo[] =>
-  vaults.map(v => ({
+  storedList<EncryptedVault>(vaults).map(v => ({
     id: v.id,
     name: v.name,
     type: v.type,

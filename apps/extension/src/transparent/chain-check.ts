@@ -8,6 +8,7 @@
  * shows the last result with its age instead of asking the chain again.
  */
 
+import { storedList } from '@repo/storage-chrome/stored-list';
 import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { conduitFor } from '@repo/wallet/networks/transparent/conduit';
 import { peekHdIndex } from '@repo/storage-chrome/cosmos-chain-counters';
@@ -106,7 +107,10 @@ const fromStored = (raw: unknown): ChainCheck | null => {
     missed: Number(c.missed) || 0,
     funded: c.funded.map(w => ({
       ...w,
-      assets: w.assets.map(a => ({ ...a, amount: BigInt(a.amount) })),
+      assets: storedList<(typeof w.assets)[number]>(w.assets).map(a => ({
+        ...a,
+        amount: BigInt(a.amount),
+      })),
     })),
   };
 };

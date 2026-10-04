@@ -28,6 +28,8 @@
  *     success, so anything we do not understand gets shown to the user.
  */
 
+import { errText } from '@penumbra-zone/query/error-text';
+
 export type SyncFailureKind =
   | 'network'
   | 'endpoint'
@@ -133,22 +135,6 @@ const AUTO_RETRIES: Record<SyncFailureKind, boolean> = {
 
 /** Message for a kind. Exported for tests and for callers building their own. */
 export const syncFailureMessage = (kind: SyncFailureKind): string => MESSAGES[kind];
-
-const errorText = (error: unknown): string => {
-  if (typeof error === 'string') {
-    return error;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (error && typeof error === 'object' && 'message' in error) {
-    const { message } = error as { message?: unknown };
-    if (typeof message === 'string') {
-      return message;
-    }
-  }
-  return String(error);
-};
 
 /** A worker-tagged error carries its own classification. */
 export const syncErrorCodeOf = (error: unknown): SyncErrorCode | undefined => {
@@ -330,7 +316,9 @@ const build = (kind: SyncFailureKind, raw: string, message?: string): SyncFailur
  * raised inside wasm, `fetch`, or IndexedDB.
  */
 export const classifySyncFailure = (error: unknown, code?: unknown): SyncFailure => {
-  const raw = errorText(error);
+  // "name: message": a DOMException's name (QuotaExceededError,
+  // InvalidStateError) is what tells storage from the network
+  const raw = errText(error);
   const lower = raw.toLowerCase();
 
   // Not an error: the node is telling us it already has the transaction.
@@ -425,7 +413,7 @@ export const isChainContinuityError = (error: unknown): boolean => {
   if (code) {
     return code === 'chain-recovery';
   }
-  const lower = errorText(error).toLowerCase();
+  const lower = errText(error).toLowerCase();
   if (has(lower, CONSENSUS)) {
     return false;
   }

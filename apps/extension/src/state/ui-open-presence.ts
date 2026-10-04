@@ -38,15 +38,33 @@ export const trackUiOpenPresence = (onFirstOpen: () => void, onLastClose: () => 
   });
 };
 
+/** a port that lived this long was a real connection, not a failed connect */
+const HEALTHY_MS = 5_000;
+const RETRY_MIN_MS = 250;
+const RETRY_MAX_MS = 30_000;
+let retryMs = RETRY_MIN_MS;
+
 /**
  * UI side. Announce presence for the lifetime of the document. A service
  * worker that restarts starts counting from zero, so the port reconnects:
  * otherwise another window closing later reads as the last one, and sync
  * stops under a window that is still open.
+ *
+ * A connect that cannot reach the worker (stopped, updating, failed to start)
+ * disconnects at once with "Receiving end does not exist". That error is
+ * read here, so Chrome does not print it as an unchecked runtime.lastError,
+ * and the next try backs off instead of reconnecting in a tight loop (the
+ * popup console once held 203 of them).
  */
 export const announceUiOpenPresence = (): void => {
+  const opened = Date.now();
   try {
-    chrome.runtime.connect({ name: PORT_NAME }).onDisconnect.addListener(announceUiOpenPresence);
+    chrome.runtime.connect({ name: PORT_NAME }).onDisconnect.addListener(() => {
+      void chrome.runtime.lastError;
+      retryMs =
+        Date.now() - opened >= HEALTHY_MS ? RETRY_MIN_MS : Math.min(retryMs * 2, RETRY_MAX_MS);
+      setTimeout(announceUiOpenPresence, retryMs);
+    });
   } catch {
     // extension context unavailable - nothing to announce
   }

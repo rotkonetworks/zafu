@@ -11,6 +11,7 @@
  * message format this mirrors.
  */
 
+import { storedList } from '@repo/storage-chrome/stored-list';
 import { ed25519 } from '@noble/curves/ed25519';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
@@ -167,7 +168,7 @@ interface AskState {
 const readAsk = async (): Promise<AskState> => {
   try {
     const v = (await chrome.storage.local.get(ASKED_KEY))[ASKED_KEY] as AskState | undefined;
-    return { chains: v?.chains ?? [], fetchedAt: v?.fetchedAt ?? 0 };
+    return { chains: storedList<string>(v?.chains), fetchedAt: v?.fetchedAt ?? 0 };
   } catch {
     return { chains: [], fetchedAt: 0 };
   }

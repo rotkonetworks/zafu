@@ -1,3 +1,4 @@
+import { storedList } from '@repo/storage-chrome/stored-list';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { Services } from '@repo/context';
 import {
@@ -43,7 +44,7 @@ async function clearPenumbraCache(walletServices: Promise<Services>): Promise<vo
   // mark IDB clear as pending; the actual delete runs at next startup, before
   // any wallet services reopen connections (avoids onblocked silent failure)
   broadcastProgress('clearing-params', completed, steps.length);
-  const existing = (await localExtStorage.get('pendingClearCache')) ?? [];
+  const existing = storedList<'penumbra' | 'zcash'>(await localExtStorage.get('pendingClearCache'));
   if (!existing.includes('penumbra')) {
     await localExtStorage.set('pendingClearCache', [...existing, 'penumbra']);
   }
@@ -77,7 +78,9 @@ async function clearZcashCache(): Promise<void> {
   // exactly as the penumbra branch above already does.
   // ('zafu-memo-cache' was also deleted here; no such database exists - the
   // memo cache is an object store inside 'zafu-zcash'.)
-  const pendingZcash = (await localExtStorage.get('pendingClearCache')) ?? [];
+  const pendingZcash = storedList<'penumbra' | 'zcash'>(
+    await localExtStorage.get('pendingClearCache'),
+  );
   if (!pendingZcash.includes('zcash')) {
     await localExtStorage.set('pendingClearCache', [...pendingZcash, 'zcash']);
   }

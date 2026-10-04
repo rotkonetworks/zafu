@@ -1,4 +1,5 @@
 import { localExtStorage } from './local';
+import { storedList } from './stored-list';
 import { OriginRecord } from './records/known-site';
 import { UserChoice } from './records/user-choice';
 import {
@@ -20,16 +21,19 @@ import {
 // pruning `granted` here would make every expired grant look identical to
 // one that never existed, which is exactly the silent-failure-forever bug
 // the expiry mechanism exists to avoid.
+const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object';
+
 const getPermissionsArray = async (): Promise<OriginPermissions[]> => {
   const raw = await localExtStorage.get('knownSites');
   if (!Array.isArray(raw)) {
     return [];
   }
   // migrate old OriginRecord[] to OriginPermissions[] on read
-  return (raw as unknown[]).map(entry => {
-    const r = entry as Record<string, unknown>;
+  // a record another build wrote may lack a list or carry fields we do not
+  // know: fill the lists, keep the rest (see stored-list.ts)
+  return (raw as unknown[]).filter(isRecord).map(r => {
     if ('granted' in r && Array.isArray(r['granted'])) {
-      return r as unknown as OriginPermissions;
+      return { ...r, denied: storedList(r['denied']) } as unknown as OriginPermissions;
     }
     // legacy OriginRecord shape → convert
     const legacy = r as unknown as OriginRecord;
