@@ -302,17 +302,19 @@ export const proposePayment = async (
   }
   const id = bytesToHex(crypto.getRandomValues(new Uint8Array(16)));
   const io = ioFor(room);
+  // the room reads lowercase hex and a whole-zatoshi fee: say it that way, or fail here
+  const hex = (h: string) => h.toLowerCase();
   const prop = {
     t: 'prop' as const,
     id,
     w: w.ceremony,
     to,
     amt: amountZat,
-    fee: String(u.fee),
-    sighash: u.sighash,
-    alphas: u.alphas,
+    fee: BigInt(u.fee).toString(),
+    sighash: hex(u.sighash),
+    alphas: u.alphas.map(hex),
     si: u.spendIndices,
-    pczt: u.pcztHex,
+    pczt: hex(u.pcztHex),
   };
   await io.post(await packFrost(prop), `prop:${id}`);
   if (u.coldSendId) {
