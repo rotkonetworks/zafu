@@ -35,6 +35,7 @@ import { InviteRows } from '../../../people/invite-rows';
 import { usePairCards } from '../../../people/use-invites';
 import { useCardSync } from '../../../people/my-card';
 import { notePreview } from '../../../people/cards';
+import { WaitingCards } from './waiting-cards';
 import { threadKey, unreadOf, type PeopleRoom } from '../../../people/vault';
 
 const zec = (zat: bigint) => (Number(zat) / 1e8).toFixed(2);
@@ -448,6 +449,7 @@ export function InboxPage() {
         <YouRow />
         <NeedsYou />
         <InviteRows />
+        <WaitingCards />
         <Groups />
         <Direct canCard={canCard} />
       </div>
