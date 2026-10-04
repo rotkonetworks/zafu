@@ -57,8 +57,9 @@ const makeChain = (start: { height: bigint | undefined; tree: bigint[] }) => {
     getSctRoot: () => rootOf(memory),
   };
 
+  let closed: DOMException | undefined;
   const indexedDb = {
-    getFullSyncHeight: () => Promise.resolve(db.height),
+    getFullSyncHeight: () => (closed ? Promise.reject(closed) : Promise.resolve(db.height)),
     saveScanResult: (r: { height: bigint; sctUpdates: bigint[] }) => {
       if (db.failSaves > 0) {
         db.failSaves--;
@@ -127,7 +128,12 @@ const makeChain = (start: { height: bigint | undefined; tree: bigint[] }) => {
     fullViewingKey: new FullViewingKey({}),
   } as unknown as BlockProcessorDeps);
 
-  return { processor, db, memory: () => memory };
+  /** the browser closes the connection under the processor (the founder's "Sync failure #1680") */
+  const closeConnection = () => {
+    closed = new DOMException('The database connection is closing.', 'InvalidStateError');
+  };
+
+  return { processor, db, memory: () => memory, closeConnection };
 };
 
 const caughtUp = async (memory: () => bigint[]) =>
@@ -231,5 +237,21 @@ describe('BlockProcessor resume', () => {
     expect(db.cleared).toBe(0);
     expect(memory()).toEqual(chainAt(TIP));
     processor.stop('test done');
+  });
+
+  it('a closed database ends the loop once, told to its owner, instead of counting retries', async () => {
+    const { processor, closeConnection } = makeChain({ height: 0n, tree: [0n] });
+    closeConnection();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const told = vi.fn<[unknown], void>();
+    processor.onStorageFailure = told;
+    await processor.sync();
+    expect(told).toHaveBeenCalledTimes(1);
+    expect((told.mock.calls[0]![0] as DOMException).name).toBe('InvalidStateError');
+    // a view call poking sync() again starts nothing on the dead connection
+    await processor.sync();
+    expect(told).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

@@ -25,6 +25,7 @@
  * host, many clients, keeps exactly one zcash/penumbra worker alive.
  */
 
+import { errText } from '@penumbra-zone/query/error-text';
 import type { NetworkType, VaultUnlock } from './types';
 import { isValidInternalSender } from '../../senders/internal';
 import type { SealedVault, WorkerKey } from '../../shared/vault-seal';
@@ -648,7 +649,7 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
   };
 
   worker.onerror = e => {
-    console.error(`[network-worker] ${network} error:`, e);
+    console.error(`[network-worker] ${network} error: ${errText(e)}`);
   };
 
   workers.set(network, state);

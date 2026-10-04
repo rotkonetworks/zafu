@@ -89,6 +89,7 @@ import {
   type SyncErrorCode,
 } from '../state/sync-failure';
 import { startRun, stopRun, STOP_WAIT_MS, type RunSlot } from './sync-runs';
+import { errText, storageFailure } from '@penumbra-zone/query/error-text';
 import { mergeLoadedNotes, mergeLoadedSpent } from './wallet-state-merge';
 import { createBuildRegistry } from './build-abort';
 import { advanceWitnesses, frontierHolds } from './witness-advance';
@@ -633,7 +634,7 @@ function buildSignRequestEnvelope(
       const compactHex = wasm.redact_pczt_compact(pcztHex);
       return { envelope: preludeWrapSinglePczt(hexDecode(compactHex), true), compact: true };
     } catch (e) {
-      console.warn('[zcash-worker] compact redaction failed, sending legacy 0x03:', e);
+      console.warn(`[zcash-worker] compact redaction failed, sending legacy 0x03: ${errText(e)}`);
     }
   }
   return { envelope: preludeWrapSinglePczt(hexDecode(pcztHex), false), compact: false };
@@ -927,8 +928,24 @@ const getDb = (): Promise<IDBDatabase> => {
         ),
       );
     req.onsuccess = () => {
-      sharedDb = req.result;
-      resolve(sharedDb);
+      const db = req.result;
+      // A connection can die under us: the browser closes it when the
+      // backing store fails or the site's data is cleared ('close'), and
+      // another realm upgrading or deleting the database asks us to let go
+      // ('versionchange'). Either way forget it, so the next getDb() opens a
+      // fresh one instead of every call throwing InvalidStateError forever.
+      const forget = () => {
+        if (sharedDb === db) {
+          sharedDb = null;
+        }
+      };
+      db.onclose = forget;
+      db.onversionchange = () => {
+        db.close();
+        forget();
+      };
+      sharedDb = db;
+      resolve(db);
     };
     req.onupgradeneeded = event => {
       const db = req.result;
@@ -987,8 +1004,13 @@ export const closeDb = () => {
 
 const txComplete = (tx: IDBTransaction): Promise<void> =>
   new Promise((resolve, reject) => {
+    // a transaction the browser aborts (its connection closed) has no error
+    // object: reject with one that says so, never with null
+    const failed = () =>
+      reject(tx.error ?? new DOMException('The transaction was aborted.', 'AbortError'));
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+    tx.onerror = failed;
+    tx.onabort = failed;
   });
 
 const idbGet = async <T>(store: string, key: IDBValidKey): Promise<T | undefined> => {
@@ -1717,7 +1739,7 @@ const markNotesSpentLocally = async (
     for (const note of updated) {
       note.spent_by_txid = undefined;
     }
-    console.error('[zcash-worker] failed to persist local spend marks:', e);
+    console.error(`[zcash-worker] failed to persist local spend marks: ${errText(e)}`);
     return;
   }
   console.log(
@@ -2385,7 +2407,7 @@ const backfillWitnesses = async (
       `[zcash-worker] backfill replay check [${match}]: seed=${frontierHeight}(size ${checkpointSize}) → anchor=${anchorHeight}(size ${endTreeSize}, +${totalActions} actions) replayRoot=${result.anchor_hex} network=${netRoot}`,
     );
   } catch (e) {
-    console.warn('[zcash-worker] backfill replay check skipped:', e);
+    console.warn(`[zcash-worker] backfill replay check skipped: ${errText(e)}`);
   }
 
   return { byNullifier, endFrontier: result.end_frontier_hex };
@@ -2431,7 +2453,7 @@ const recordSentTx = async (rec: SentTxRecord): Promise<void> => {
     tx.objectStore('sent').put(rec);
     await txComplete(tx);
   } catch (e) {
-    console.warn('[zcash-worker] could not record sent tx locally:', e);
+    console.warn(`[zcash-worker] could not record sent tx locally: ${errText(e)}`);
   }
 };
 
@@ -2469,7 +2491,7 @@ const applyReconciliation = async (
     }
     await txComplete(tx);
   } catch (e) {
-    console.warn('[zcash-worker] could not persist sent-tx reconciliation:', e);
+    console.warn(`[zcash-worker] could not persist sent-tx reconciliation: ${errText(e)}`);
   }
 };
 
@@ -2551,7 +2573,7 @@ const stashColdSend = async (
     await writeColdSends(walletId, list.slice(-COLD_SEND_MAX));
     return id;
   } catch (e) {
-    console.warn('[zcash-worker] could not stash cold-send context:', e);
+    console.warn(`[zcash-worker] could not stash cold-send context: ${errText(e)}`);
     return undefined;
   }
 };
@@ -2581,7 +2603,7 @@ const takeColdSend = async (
     );
     return found;
   } catch (e) {
-    console.warn('[zcash-worker] could not read cold-send context:', e);
+    console.warn(`[zcash-worker] could not read cold-send context: ${errText(e)}`);
     return undefined;
   }
 };
@@ -2641,7 +2663,7 @@ const finalizeColdBroadcast = async (
       expiryHeight: parseExpiryHeight(txHex),
     });
   } catch (e) {
-    console.error('[zcash-worker] cold broadcast bookkeeping failed:', e);
+    console.error(`[zcash-worker] cold broadcast bookkeeping failed: ${errText(e)}`);
   }
 };
 
@@ -2990,7 +3012,7 @@ const buildWitnessesIronwood = async (
         `${endTreeSize} (height ${endHeight}) - the next send should take the fast path`,
     );
   } catch (e) {
-    console.warn('[zcash-worker] ironwood: could not cache witnesses after replay:', e);
+    console.warn(`[zcash-worker] ironwood: could not cache witnesses after replay: ${errText(e)}`);
   }
 
   return { anchorHex: networkRoot, paths: result.paths };
@@ -3383,7 +3405,7 @@ function handleMempoolSnapshot(
       });
     }
   } catch (err) {
-    console.log('[zcash-worker] mempool scan decrypt error:', err);
+    console.log(`[zcash-worker] mempool scan decrypt error: ${errText(err)}`);
   }
 
   for (const note of state.notes) {
@@ -3434,7 +3456,7 @@ const runSync = (...args: SyncArgs): Promise<void> => {
         // everything outside the batch loop's own retries: opening the store,
         // deriving keys, sizing the stored frontier. The window offers to try
         // again, which resumes from the stored height.
-        console.error('[zcash-worker] runSync fatal:', err);
+        console.error(`[zcash-worker] runSync fatal: ${errText(err)}`, err);
         if (!signal.aborted) {
           workerSelf.postMessage({
             type: 'sync-error',
@@ -3517,7 +3539,9 @@ const syncLoop = async (
     try {
       frontierSize = Number(wasmModule.frontier_tree_size(runningFrontier));
     } catch (e) {
-      console.warn('[zcash-worker] stored orchard frontier unreadable, rebootstrapping:', e);
+      console.warn(
+        `[zcash-worker] stored orchard frontier unreadable, rebootstrapping: ${errText(e)}`,
+      );
       runningFrontier = '';
     }
   }
@@ -3559,7 +3583,7 @@ const syncLoop = async (
         `[zcash-worker] bootstrap frontier: height=${currentHeight} size=${orchardTreeSize} (dropped ${state.notes.length} stale witnesses)`,
       );
     } catch (e) {
-      console.warn('[zcash-worker] failed to bootstrap frontier:', e);
+      console.warn(`[zcash-worker] failed to bootstrap frontier: ${errText(e)}`);
     }
   }
 
@@ -3581,7 +3605,9 @@ const syncLoop = async (
       try {
         iwFrontierSize = Number(iwSizeFn(ironwoodFrontier));
       } catch (e) {
-        console.warn('[zcash-worker] stored ironwood frontier unreadable, rebootstrapping:', e);
+        console.warn(
+          `[zcash-worker] stored ironwood frontier unreadable, rebootstrapping: ${errText(e)}`,
+        );
         ironwoodFrontier = '';
       }
     }
@@ -3614,7 +3640,7 @@ const syncLoop = async (
           );
         }
       } catch (e) {
-        console.warn('[zcash-worker] failed to bootstrap ironwood frontier:', e);
+        console.warn(`[zcash-worker] failed to bootstrap ironwood frontier: ${errText(e)}`);
       }
     }
   }
@@ -3653,7 +3679,7 @@ const syncLoop = async (
           ironwoodTreeSize = Number(iwSizeFn(rebuiltFrontier));
         }
       } catch (e) {
-        console.warn('[zcash-worker] ironwood stranded-witness rebuild failed:', e);
+        console.warn(`[zcash-worker] ironwood stranded-witness rebuild failed: ${errText(e)}`);
       }
     }
   }
@@ -3674,7 +3700,9 @@ const syncLoop = async (
     try {
       await initZync();
     } catch (e) {
-      console.warn('[zcash-worker] zync-core init failed, syncing without verification:', e);
+      console.warn(
+        `[zcash-worker] zync-core init failed, syncing without verification: ${errText(e)}`,
+      );
     }
   }
   // a worker that synced a zidecar earlier keeps zync loaded; only this run's backend decides
@@ -3695,6 +3723,8 @@ const syncLoop = async (
   });
 
   let consecutiveErrors = 0;
+  /** the last failure logged: a node that stays down prints one line, not one per try */
+  let lastErrLine: string | undefined;
 
   // ── chain-continuity recovery ──
   //
@@ -3774,7 +3804,7 @@ const syncLoop = async (
       }
       await txComplete(wtx);
     } catch (e) {
-      console.warn('[zcash-worker] rewind: could not clear ironwood witnesses:', e);
+      console.warn(`[zcash-worker] rewind: could not clear ironwood witnesses: ${errText(e)}`);
     }
     for (const note of state.notes) {
       note.witness_hex = undefined;
@@ -3849,7 +3879,7 @@ const syncLoop = async (
           handleMempoolSnapshot(walletId, state, snap);
         }
       } catch (err) {
-        console.warn('[zcash-worker] mempool watcher exited:', err);
+        console.warn(`[zcash-worker] mempool watcher exited: ${errText(err)}`);
         // Surface terminal error to UI so the toggle/status badge stops
         // claiming "connected" / "reconnecting" when the watcher is dead.
         workerSelf.postMessage({
@@ -3950,7 +3980,7 @@ const syncLoop = async (
                 console.log(`[zcash-worker] cross-check: ${res.detail}`);
               }
             })
-            .catch(e => console.warn('[zcash-worker] cross-check failed:', e));
+            .catch(e => console.warn(`[zcash-worker] cross-check failed: ${errText(e)}`));
         }
       }
 
@@ -4084,7 +4114,9 @@ const syncLoop = async (
                 }
                 await txComplete(wtx);
               } catch (e) {
-                console.warn('[zcash-worker] catch-up: could not clear ironwood witnesses:', e);
+                console.warn(
+                  `[zcash-worker] catch-up: could not clear ironwood witnesses: ${errText(e)}`,
+                );
               }
               for (const note of state.notes) {
                 if (poolOf(note) === 'ironwood') {
@@ -4138,7 +4170,7 @@ const syncLoop = async (
           await txComplete(metaTx);
           console.log(`[zcash-worker] cached tree frontier at height ${currentHeight}`);
         } catch (e) {
-          console.warn('[zcash-worker] failed to cache tree frontier:', e);
+          console.warn(`[zcash-worker] failed to cache tree frontier: ${errText(e)}`);
         }
 
         // Verify proofs whenever the backend supports it - NOT only when this
@@ -4203,7 +4235,7 @@ const syncLoop = async (
                 detail,
               );
             if (tampering) {
-              console.error('[zcash-worker] INTEGRITY FAILURE, refusing batch:', e);
+              console.error(`[zcash-worker] INTEGRITY FAILURE, refusing batch: ${errText(e)}`, e);
               pendingCmxs.length = 0;
               pendingPositions.length = 0;
               throw syncError(
@@ -4212,7 +4244,9 @@ const syncLoop = async (
                   `refusing to trust this endpoint's data - switch node or retry`,
               );
             }
-            console.warn('[zcash-worker] proof verification unavailable, will retry:', e);
+            console.warn(
+              `[zcash-worker] proof verification unavailable, will retry: ${errText(e)}`,
+            );
             suspectBackend(serverUrl);
           }
           pendingCmxs.length = 0;
@@ -4247,7 +4281,9 @@ const syncLoop = async (
               );
               await buildWitnessesIronwood(client, walletId, behind, ironwoodFrontierHeight);
             } catch (e) {
-              console.warn('[zcash-worker] background ironwood witness rebuild failed:', e);
+              console.warn(
+                `[zcash-worker] background ironwood witness rebuild failed: ${errText(e)}`,
+              );
             }
           }
         }
@@ -4396,7 +4432,7 @@ const syncLoop = async (
         try {
           foundNotes = state.keys.scan_actions_parallel(buf);
         } catch (err) {
-          console.error('[zcash-worker] scan_actions_parallel crashed:', err);
+          console.error(`[zcash-worker] scan_actions_parallel crashed: ${errText(err)}`, err);
           currentHeight = endHeight;
           continue;
         }
@@ -4552,7 +4588,7 @@ const syncLoop = async (
           runningFrontier = result.end_frontier_hex;
           runningFrontierHeight = endHeight;
         } catch (e) {
-          console.error('[zcash-worker] witness_sync_update failed:', e);
+          console.error(`[zcash-worker] witness_sync_update failed: ${errText(e)}`, e);
           // invalidate frontier so next batch rebootstraps
           runningFrontier = '';
         }
@@ -4647,7 +4683,10 @@ const syncLoop = async (
             state.notes.push(full);
           }
         } catch (err) {
-          console.error('[zcash-worker] scan_actions_ironwood_parallel crashed:', err);
+          console.error(
+            `[zcash-worker] scan_actions_ironwood_parallel crashed: ${errText(err)}`,
+            err,
+          );
         }
 
         // spent detection: ironwood nullifiers spend ironwood notes. Same
@@ -4747,7 +4786,7 @@ const syncLoop = async (
             ironwoodFrontier = result.end_frontier_hex;
             ironwoodFrontierHeight = endHeight;
           } catch (e) {
-            console.error('[zcash-worker] witness_sync_update_ironwood failed:', e);
+            console.error(`[zcash-worker] witness_sync_update_ironwood failed: ${errText(e)}`, e);
             // invalidate frontier so the next runSync rebootstraps
             ironwoodFrontier = '';
           }
@@ -4882,6 +4921,7 @@ const syncLoop = async (
       });
 
       consecutiveErrors = 0;
+      lastErrLine = undefined;
     } catch (err) {
       // Intentional stop (wallet switch, endpoint change, shutdown): in-flight
       // RPCs can fail once teardown begins. That's not a sync failure - no
@@ -4933,24 +4973,48 @@ const syncLoop = async (
             // The rewind itself failed (endpoint down mid-recovery, storage
             // unavailable). Fall through and treat it as an ordinary failure
             // so the real reason is the one that gets classified.
-            console.warn('[zcash-worker] rewind failed:', rewindErr);
+            console.warn(`[zcash-worker] rewind failed: ${errText(rewindErr)}`);
           }
         }
       }
 
       consecutiveErrors++;
+      const errLine = errText(err);
+      // Storage, not the node. A closed connection is dropped so the next try
+      // opens a fresh one (retrying over it only counted: "sync error (240)").
+      // A full disk or a database newer than this build cannot be retried
+      // away: say so once, honestly, and stop until the person acts.
+      const storage = storageFailure(err);
+      if (storage) {
+        closeDb();
+      }
+      if (storage === 'fatal') {
+        console.error(`[zcash-worker] sync stopped, local data unusable: ${errLine}`);
+        workerSelf.postMessage({
+          type: 'sync-error',
+          id: '',
+          network: 'zcash',
+          walletId,
+          payload: { message: errLine, stalled: true, code: 'storage-fatal' },
+        });
+        break;
+      }
       // on a zidecar the sync itself runs on zidecar's own calls (GetTip,
-      // whole blocks); failing twice may mean the node is not one
-      if (consecutiveErrors === 2 && zidecar) {
+      // whole blocks); failing twice may mean the node is not one (a local
+      // storage failure never blames the node)
+      if (consecutiveErrors === 2 && zidecar && !storage) {
         suspectBackend(serverUrl);
       }
       // Retrying is the policy, so a flapping endpoint would otherwise produce
-      // one of these per backoff interval indefinitely. Log the first few and
-      // then every tenth; the UI sync-error message below is unaffected, so the
-      // user still sees the wallet struggling.
-      if (consecutiveErrors <= 3 || consecutiveErrors % 10 === 0) {
-        console.error(`[zcash-worker] sync error (${consecutiveErrors}):`, err);
+      // one of these per backoff interval indefinitely. One line when the
+      // failure starts or changes, then every tenth; the UI sync-error message
+      // below is unaffected, so the user still sees the wallet struggling.
+      if (errLine !== lastErrLine || consecutiveErrors % 10 === 0) {
+        console.warn(
+          `[zcash-worker] sync error (${consecutiveErrors}): ${errLine}; next try in ${Math.round(syncRetryDelayMs(consecutiveErrors) / 1000)}s`,
+        );
       }
+      lastErrLine = errLine;
       // surface to UI from the second consecutive failure (skip transient
       // single hiccups, but don't make the user stare at "syncing 0%" while
       // we silently retry forever)
@@ -4966,7 +5030,7 @@ const syncLoop = async (
           network: 'zcash',
           walletId,
           payload: {
-            message: err instanceof Error ? err.message : String(err),
+            message: errLine,
             stalled: consecutiveErrors >= SYNC_STALL_ERRORS,
             ...(code ? { code } : {}),
           },
@@ -5112,7 +5176,7 @@ const getPoolBalances = async (walletId: string): Promise<PoolBalances> => {
       }
     }
   } catch (e) {
-    console.warn('[zcash-worker] failed to compute pending change:', e);
+    console.warn(`[zcash-worker] failed to compute pending change: ${errText(e)}`);
   }
 
   return {
@@ -5220,7 +5284,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             effectiveBackend = await detectZcashBackend(serverUrl);
             announceBackend(serverUrl, effectiveBackend);
           } catch (e) {
-            console.warn('[zcash-worker] node did not say what it is:', e);
+            console.warn(`[zcash-worker] node did not say what it is: ${errText(e)}`);
           }
         }
         // Seed the registry so subsequent operations (send, history, memo
@@ -5572,7 +5636,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         try {
           anchorTime = (await client.getTreeState(anchorHeight)).time;
         } catch (e) {
-          console.warn('[zcash-worker] anchor block time unavailable; bundle omits it:', e);
+          console.warn(
+            `[zcash-worker] anchor block time unavailable; bundle omits it: ${errText(e)}`,
+          );
         }
         const cborBytes = appendCborAnchorTime(cborBundle, anchorTime);
 
@@ -5740,7 +5806,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               }
             }
           } catch (e) {
-            console.warn('[zcash-worker] get-history: transparent history failed:', e);
+            console.warn(`[zcash-worker] get-history: transparent history failed: ${errText(e)}`);
           }
         }
 
@@ -5969,7 +6035,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 });
               }
             } catch (e) {
-              console.warn('[zcash-worker] get-history: pending-send height lookup failed:', e);
+              console.warn(
+                `[zcash-worker] get-history: pending-send height lookup failed: ${errText(e)}`,
+              );
             }
           }
 
@@ -5982,7 +6050,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // fire-and-forget: display must not wait on (or fail with) a write
           void applyReconciliation(walletId, result.confirm, result.prune);
         } catch (e) {
-          console.warn('[zcash-worker] could not read local sent records:', e);
+          console.warn(`[zcash-worker] could not read local sent records: ${errText(e)}`);
           reconciled = reconcileSentTxs({ chainTxs: histTxs, sent: [], scannedHeight: 0 }).txs;
         }
 
@@ -6744,7 +6812,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           try {
             result = await broadcastClient.sendTransaction(txData);
           } catch (e) {
-            console.error('[zcash-worker] broadcast RPC failed:', e);
+            console.error(`[zcash-worker] broadcast RPC failed: ${errText(e)}`);
             throw e;
           }
           if (result.errorCode !== 0) {
@@ -9185,5 +9253,5 @@ initWasm()
     workerSelf.postMessage({ type: 'ready', id: '', network: 'zcash' });
   })
   .catch(err => {
-    console.error('[zcash-worker] wasm init failed:', err);
+    console.error(`[zcash-worker] wasm init failed: ${errText(err)}`);
   });
