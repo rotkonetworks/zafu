@@ -13,7 +13,6 @@ import { useStore } from '../state';
 import { deriveRelationshipKeys, deriveRoomKeys, type XidKeys } from '../state/identity';
 import {
   buildSendTxPcztInWorker,
-  completeOrchardPcztInWorker,
   frostDeriveAddressFromSkInWorker,
   frostDeriveUfvkInWorker,
   frostDkgPart1InWorker,
@@ -49,6 +48,8 @@ import {
   type SignCalls,
 } from './room-sign';
 import { readRooms, type PeopleRoom } from './vault';
+import { signAndBroadcast } from '../signing/cold-send';
+import { frostAirgapSigner } from '../signing/frost-signer';
 
 const frost: FrostCalls = {
   part1: frostDkgPart1InWorker,
@@ -155,8 +156,15 @@ const signCalls = async (seat: ZcashWalletJson): Promise<SignCalls> => {
     sign: (n, h, a, c) => frostSpendSignInWorker(k.ephemeralSeed, k.keyPackage, n, h, a, c),
     aggregate: (h, a, c, sh) =>
       frostSpendAggregateInWorker(seat.multisig!.publicKeyPackage, h, a, c, sh),
+    // the shared cold tail: inject, broadcast, and mark what the build spent
     complete: async (p, sigs, cold) =>
-      (await completeOrchardPcztInWorker(seat.vaultId, zcashUrl(), p.pczt, sigs, p.si, cold)).txid,
+      (
+        await signAndBroadcast(
+          frostAirgapSigner(sigs, { spendIndices: p.si }),
+          { pcztHex: p.pczt, spendIndices: p.si, coldSendId: cold },
+          { walletId: seat.vaultId, zidecarUrl: zcashUrl(), mainnet: seat.mainnet },
+        )
+      ).txid,
   };
 };
 
