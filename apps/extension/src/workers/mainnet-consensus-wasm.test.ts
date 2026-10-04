@@ -1,0 +1,150 @@
+// Mainnet consensus on the real shipped blob, with no network. The blob knows
+// NU7 (Zakura Common 2.0) for testnet only; on mainnet every builder must still
+// bind NU6.3 (Ironwood, 0x37a5165b) from its activation at 3,428,143 on, at any
+// later height, and refuse a wallet that expects the NU7 branch. The note
+// fixture is the one in hot-send-wasm.test.ts: the orchard keys do not depend
+// on the network, so the same note is owned by the mainnet keys too.
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { beforeAll, describe, expect, test } from 'vitest';
+import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
+import { ripemd160 } from '@noble/hashes/ripemd160';
+import { sha256 } from '@noble/hashes/sha256';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
+import type { SpendKeysCtor } from './hot-sign';
+import {
+  planDeposit,
+  sendDeposit,
+  type DepositChain,
+  type DepositWasm,
+} from './transparent-deposit';
+
+const SEED =
+  'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+const NU63 = 0x37a5165b;
+const NU7 = 0x77190ad9;
+const NU63_ACTIVATION = 3_428_143;
+/** tx header: version | overwintered, version group id, consensus branch id (LE) */
+const V6 = '06000080';
+/** a mainnet tex address, paid as its P2PKH twin */
+const TEX = 'tex1zclnr35llscdedzrwdmemm70es05ngg9m2d3lv';
+const p2pkh = (pubkeyHex: string) =>
+  `76a914${bytesToHex(ripemd160(sha256(hexToBytes(pubkeyHex))))}88ac`;
+const branchLe = (txHex: string) => txHex.slice(16, 24);
+const NOTES = [
+  {
+    value: 1_000_000,
+    nullifier: '18ccfc57455447dc8bb45ba80d6e4f511a9fcc9af87f8b4bb6bf21a6cfe1ca3d',
+    cmx: 'd67408aa1dd5273d13662b1d64be43ed87c410d957cf6f64bc9ca4f72b777b2d',
+    position: 0,
+    rseed_hex: '00'.repeat(32),
+    rho_hex: '01'.repeat(32),
+    recipient_hex:
+      '82911d92fb24edeaa7220057cdf4db32a0006bfd1a8af4bd27ad8fd2bb5a2f4369313457ec7f3a22b4c10b',
+  },
+];
+const PATHS = [{ path: Array<string>(32).fill('00'.repeat(32)), position: 0 }];
+const ANCHOR = '1c599139a3f69be978c96691b046b407169540f5a6ccacf043642a9c1144b205';
+
+interface Wasm extends DepositWasm {
+  initSync(opts: { module: Uint8Array }): void;
+  SpendKeys: SpendKeysCtor;
+  build_ironwood_send_pczt(...args: unknown[]): { retained_pczt_hex: string; pczt_hex: string };
+  shielding_pool_for_height(height: number, mainnet: boolean): string;
+}
+
+describe('mainnet consensus on the real wasm', () => {
+  let wasm: Wasm;
+  beforeAll(async () => {
+    wasm = (await import('@repo/zcash-wasm')) as unknown as Wasm;
+    wasm.initSync({
+      module: readFileSync(resolve(process.cwd(), '../../packages/zcash-wasm/zafu_wasm_bg.wasm')),
+    });
+  });
+
+  const ironwoodSend = (target: number, branch: number) => {
+    const keys = new wasm.SpendKeys(SEED, 0, true);
+    const other = new wasm.SpendKeys(SEED, 9, true);
+    try {
+      const built = wasm.build_ironwood_send_pczt(
+        keys.ufvk(),
+        JSON.stringify(NOTES),
+        fixOrchardAddress(other.receiving_address(), true),
+        600_000n,
+        10_000n,
+        ANCHOR,
+        JSON.stringify(PATHS),
+        0,
+        target,
+        branch,
+        true,
+        null,
+        null,
+      );
+      return keys.sign_pczt(built.retained_pczt_hex);
+    } finally {
+      keys.free();
+      other.free();
+    }
+  };
+
+  test.each([NU63_ACTIVATION, 3_506_464, 10_000_000])(
+    'an ironwood send at mainnet height %i is V6 bound to NU6.3',
+    target => {
+      const txHex = ironwoodSend(target, NU63);
+      expect(txHex.slice(0, 8)).toBe(V6);
+      expect(branchLe(txHex)).toBe('5b16a537');
+    },
+    300_000,
+  );
+
+  test('an ironwood send expecting NU7, or before NU6.3, is refused on mainnet', () => {
+    expect(() => ironwoodSend(10_000_000, NU7)).toThrow(/branch/i);
+    expect(() => ironwoodSend(NU63_ACTIVATION - 1, NU63)).toThrow(/branch/i);
+  }, 300_000);
+
+  test('a mainnet transparent send binds NU6.3 and refuses NU7', async () => {
+    const keys = new wasm.SpendKeys(SEED, 0, true);
+    try {
+      const own = p2pkh(keys.transparent_pubkey(0));
+      const chain = (tip: number, branch: number): DepositChain => ({
+        utxos: () =>
+          Promise.resolve([
+            {
+              txid: new Uint8Array(32).fill(9),
+              outputIndex: 0,
+              valueZat: 900_000n,
+              script: hexToBytes(own),
+            },
+          ]),
+        tip: () => Promise.resolve(tip),
+        branchId: () => Promise.resolve(branch),
+        broadcast: (txHex: string) => Promise.resolve(txHex.slice(0, 64)),
+      });
+      const req = { tAddress: 'fake', tIndex: 0, to: TEX, memo: 'zafu', mainnet: true };
+      const send = async (tip: number, branch: number) => {
+        const plan = await planDeposit(wasm, chain(tip, branch), { ...req, amountZat: '500000' });
+        return sendDeposit(wasm, chain(tip, branch), keys, {
+          ...req,
+          amountZat: '500000',
+          reviewedFee: plan.fee,
+        });
+      };
+      for (const tip of [NU63_ACTIVATION - 1, 3_506_464, 10_000_000]) {
+        const { txHex } = await send(tip, NU63);
+        expect(txHex.slice(0, 8)).toBe('05000080');
+        expect(branchLe(txHex)).toBe('5b16a537');
+      }
+      await expect(send(10_000_000, NU7)).rejects.toThrow(/branch id/);
+      await expect(send(NU63_ACTIVATION - 2, NU63)).rejects.toThrow(/branch id/);
+    } finally {
+      keys.free();
+    }
+  });
+
+  test('mainnet shields into ironwood at any height from NU6.3 on', () => {
+    for (const h of [NU63_ACTIVATION, 3_506_464, 10_000_000]) {
+      expect(wasm.shielding_pool_for_height(h, true)).toBe('ironwood');
+    }
+  });
+});
