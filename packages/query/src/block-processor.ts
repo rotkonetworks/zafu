@@ -431,7 +431,10 @@ export class BlockProcessor implements BlockProcessorInterface {
         }
         return latest;
       },
-      { retry: () => !signal.aborted },
+      // a node that answers without a height (or not at all) is asked a few
+      // more times, 0.5s doubling, before the attempt fails into the loop's
+      // own backoff (was ten tries from 100ms, then the loop again)
+      { retry: () => !signal.aborted, startingDelay: 500, maxDelay: 8_000, numOfAttempts: 5 },
     );
 
     // Check that 'currentHeight' and 'compactFrontierBlockHeight' local extension

@@ -628,8 +628,16 @@ void runIbcTransferSweep().catch(e =>
 // and every consumer here awaits this promise inside its own try/catch - so the
 // pre-boot state is an explicit "still starting" rejection, not a TypeError on
 // undefined.
-const servicesNotStarted = (): Promise<Services> =>
-  Promise.reject(new Error('wallet services are still starting'));
+//
+// Most messages are not for this listener and never read the promise, so the
+// rejection is marked handled here: an unread one surfaced as "Uncaught (in
+// promise) Error: wallet services are still starting" for every message that
+// woke the worker. Consumers that await it still get the rejection.
+const servicesNotStarted = (): Promise<Services> => {
+  const notYet = Promise.reject(new Error('wallet services are still starting'));
+  notYet.catch(() => undefined);
+  return notYet;
+};
 
 chrome.runtime.onMessage.addListener((req, sender, respond) =>
   internalServiceListener(walletServices ?? servicesNotStarted(), req, sender, respond),
@@ -798,9 +806,9 @@ chrome.alarms.onAlarm.addListener(async alarm => {
         .sync()
         .catch((e: unknown) => console.error(`[sync] block processor terminated: ${errText(e)}`));
     } catch (e) {
-      // services not initialized or network not enabled - this is expected
+      // services not initialized or penumbra off - expected, one quiet line
       if (globalThis.__DEV__) {
-        console.info(`Skipping background sync: ${errText(e)}`);
+        console.debug(`Skipping background sync: ${errText(e)}`);
       }
     }
   }
