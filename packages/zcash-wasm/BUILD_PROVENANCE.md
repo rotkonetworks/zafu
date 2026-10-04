@@ -96,7 +96,8 @@ diff against the values above. A mismatch means the vendored blob is stale.
 
 ## 2026-10-05 rebuild (3) - Zakura Common 2.0, NU7 testnet; built from zcli master
 
-- source repo: zcli, branch `master`, rev `0fa1616`. From here on the blob
+- source repo: zcli, branch `master`, rev `2e2a02a` (0fa1616 plus the
+  ironwood-past-NU7 fix below). From here on the blob
   comes from master again: `feat/ledger-on-thor` (092582f) and
   `feat/wasm-shardtree` (94b33e1) were merged into master (81a30eb), then
   `feat/common-2` (0fa1616). `integ/shardtree-blob` is retired. The
@@ -107,21 +108,28 @@ diff against the values above. A mismatch means the vendored blob is stale.
   zakura-pczt rc4). Common 2.0 knows NU7 (branch 0x77190ad9, V6) but has no
   testnet height, so `crate::consensus::TestNetwork` adds NU7 at 4,465,026;
   every testnet tx builder uses it. Mainnet is unchanged (NU7 unscheduled).
+- 2e2a02a: the ironwood gates compared the branch id to NU6.3 exactly, so
+  past testnet NU7 every ironwood send, shielding and migration was refused.
+  They now check `ironwood_active(branch)` (Orchard protocol revision V3:
+  NU6.3 and NU7; unknown ids fail closed), and NU7 maps to `orchard_v3`.
+  The worker passes the endpoint's validated branch id instead of a NU6.3
+  constant.
 - `.d.ts` byte-identical to the previous blob; glue differs only in closure
   shim indices and initial memory (56 -> 58 pages).
 - `cargo test -p zafu-wasm --lib --tests --release`: green (lib 91 passed;
-  new `nu7_testnet_v6` builds and signs a V6 tx bound to
-  0x77190ad9 at a testnet NU7 height and fails with Common's stock params).
+  new `nu7_testnet_v6` builds a turnstile migration and an ironwood
+  send past testnet NU7, bound to 0x77190ad9; the send fails on 0fa1616 with
+  the same error zafu CI hit).
   The ledger `PreNu6_3TestNetwork` fixture now also leaves NU7 off.
 - toolchain and recipe as below (nightly, wasm-bindgen 0.2.126, binaryen 130).
 - parallel variant only, copied to both `packages/zcash-wasm/` and
   `apps/extension/public/zafu-wasm/`; rayon snippet hash unchanged
   (`wasm-bindgen-rayon-38edf6e439f6d70d`), patched `workerHelpers.js` kept.
-- size: post `-Oz` 13,218,431 bytes (was 10,255,183). One halo2 and one rayon
+- size: post `-Oz` 13,218,997 bytes (was 10,255,183). One halo2 and one rayon
   in the graph; the growth is Common 2.0's halo2_proofs (+1.9 MB pre-opt) and
   the rayon closures it instantiates (+0.8 MB), not a duplicated crate.
 - sha256(parallel zafu_wasm_bg.wasm) =
-  7b8d0a7f3206e8ec48a5130eb51f3c6cfbcadbfc985cebed1554ddc62236dff9
+  d7c3bf9115f922911d96b4adf1cd7570e9f8529ed93e9c4f502d3d600ee0cd81
 - shared imported memory confirmed post-bindgen:
   `(memory $mimport$0 58 32768 shared)`.
 

@@ -15,8 +15,11 @@ import type { SpendKeysCtor } from './hot-sign';
 
 const SEED =
   'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
-const NU63_BRANCH_ID = 0x37a5165b;
-const TARGET = 10_000_000;
+// testnet heights: NU6.3 is active from 4,134,000, NU7 from 4,465,026; both have ironwood
+const UPGRADES = [
+  { name: 'NU6.3', target: 4_300_000, branchId: 0x37a5165b },
+  { name: 'NU7', target: 4_466_000, branchId: 0x77190ad9 },
+];
 const NOTES = [
   {
     value: 1_000_000,
@@ -48,41 +51,45 @@ describe('hot ironwood send on the real wasm', () => {
     });
   });
 
-  test('proves from the UFVK, signs in the worker, and the tx verifies', () => {
-    const keys = new wasm.SpendKeys(SEED, 0, false);
-    const other = new wasm.SpendKeys(SEED, 9, false);
-    try {
-      const args = [
-        keys.ufvk(),
-        JSON.stringify(NOTES),
-        fixOrchardAddress(other.receiving_address(), false),
-        600_000n,
-        10_000n,
-        ANCHOR,
-        JSON.stringify(PATHS),
-        0,
-        TARGET,
-        NU63_BRANCH_ID,
-        false,
-        null,
-        null,
-      ];
-      // exactly what may cross the prover relay
-      assertProveRequest({ fn: 'build_ironwood_send_pczt', args: args.map(String) });
-      expect(JSON.stringify(args.map(String))).not.toContain('abandon');
+  test.each(UPGRADES)(
+    '$name: proves from the UFVK, signs in the worker, and the tx verifies',
+    ({ target, branchId }) => {
+      const keys = new wasm.SpendKeys(SEED, 0, false);
+      const other = new wasm.SpendKeys(SEED, 9, false);
+      try {
+        const args = [
+          keys.ufvk(),
+          JSON.stringify(NOTES),
+          fixOrchardAddress(other.receiving_address(), false),
+          600_000n,
+          10_000n,
+          ANCHOR,
+          JSON.stringify(PATHS),
+          0,
+          target,
+          branchId,
+          false,
+          null,
+          null,
+        ];
+        // exactly what may cross the prover relay
+        assertProveRequest({ fn: 'build_ironwood_send_pczt', args: args.map(String) });
+        expect(JSON.stringify(args.map(String))).not.toContain('abandon');
 
-      const built = wasm.build_ironwood_send_pczt(...args);
-      const txHex = keys.sign_pczt(built.retained_pczt_hex);
-      // V6 header (version 6 | overwintered) and a txid the node would index
-      expect(txHex.slice(0, 8)).toBe('06000080');
-      expect(wasm.compute_txid(txHex)).toMatch(/^[0-9a-f]{64}$/);
-      // the redacted copy signs to a valid tx too (the cold builders' output)
-      expect(keys.sign_pczt(built.pczt_hex).slice(0, 8)).toBe('06000080');
-      // another pocket's keys sign nothing
-      expect(() => other.sign_pczt(built.retained_pczt_hex)).toThrow(/another account/);
-    } finally {
-      keys.free();
-      other.free();
-    }
-  }, 300_000);
+        const built = wasm.build_ironwood_send_pczt(...args);
+        const txHex = keys.sign_pczt(built.retained_pczt_hex);
+        // V6 header (version 6 | overwintered) and a txid the node would index
+        expect(txHex.slice(0, 8)).toBe('06000080');
+        expect(wasm.compute_txid(txHex)).toMatch(/^[0-9a-f]{64}$/);
+        // the redacted copy signs to a valid tx too (the cold builders' output)
+        expect(keys.sign_pczt(built.pczt_hex).slice(0, 8)).toBe('06000080');
+        // another pocket's keys sign nothing
+        expect(() => other.sign_pczt(built.retained_pczt_hex)).toThrow(/another account/);
+      } finally {
+        keys.free();
+        other.free();
+      }
+    },
+    300_000,
+  );
 });
