@@ -339,6 +339,11 @@ export const createContactsSlice =
       contacts: [],
 
       addContact: async data => {
+        // one person per id: a second add (two screens, a stale read) returns them
+        const have = data.id ? safeContacts().find(c => c.id === data.id) : undefined;
+        if (have) {
+          return have;
+        }
         const contact: Contact = {
           id: data.id ?? generateId(),
           name: data.name.trim(),

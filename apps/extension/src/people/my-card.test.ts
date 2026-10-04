@@ -7,6 +7,8 @@ import { bytesToHex } from '@noble/hashes/utils';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 let contacts: unknown = [];
+/** what the store holds now, when a test wants it to differ from what a render saw */
+let live: unknown;
 let rooms: unknown[] = [];
 const addContact = vi.fn(async () => ({}));
 const updateContact = vi.fn(async () => undefined);
@@ -22,7 +24,13 @@ const store = {
   },
 };
 vi.mock('../state', () => ({
-  useStore: (selector?: (s: typeof store) => unknown) => (selector ? selector(store) : store),
+  useStore: Object.assign(
+    (selector?: (s: typeof store) => unknown) => (selector ? selector(store) : store),
+    {
+      getState: () =>
+        live ? { ...store, contacts: { ...store.contacts, contacts: live } } : store,
+    },
+  ),
 }));
 vi.mock('../state/keyring', () => ({
   selectEffectiveKeyInfo: (s: typeof store) => s.keyRing.selectedKeyInfo,
@@ -138,6 +146,15 @@ describe('useCardSync', () => {
     expect(addContact).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'ken-id', zid: theirKey }),
     );
+  });
+
+  it('never adds a person the store already holds, whatever this render saw', async () => {
+    contacts = [];
+    live = [{ id: 'ken-id', name: 'bob', addresses: [], createdAt: 0 }];
+    rooms = [answeredRoom];
+    await act(async () => root.render(createElement(Probe)));
+    expect(addContact).not.toHaveBeenCalled();
+    live = undefined;
   });
 
   it('leaves contacts sealed at rest alone: no write, no throw', async () => {

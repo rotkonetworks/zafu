@@ -275,7 +275,13 @@ export const useCardSync = (): void => {
       if (r.kind === 'card' && c?.mine && c.state === 'answered' && !byId.has(c.contactId)) {
         const data = contactFromAnswer(r, walletId);
         if (data) {
-          once(`add:${c.contactId}`, () => addContact(data));
+          once(`add:${c.contactId}`, async () => {
+            // what is in the store now, not what this render saw
+            const now = useStore.getState().contacts.contacts;
+            if (Array.isArray(now) && !now.some(x => x.id === c.contactId)) {
+              await addContact(data);
+            }
+          });
         }
       }
       const v2 = r.pair?.v2;

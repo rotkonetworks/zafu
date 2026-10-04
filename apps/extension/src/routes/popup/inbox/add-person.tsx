@@ -211,30 +211,34 @@ export function AddPersonPage() {
         meta={<span className='text-[11px] text-fg-muted'>your card</span>}
       />
       <main className='flex grow flex-col gap-3 px-4 pb-3 pt-3.5'>
-        <div className='self-center border border-border-hard bg-[#f6f2e8] p-2.5'>
-          {link ? (
-            <QrCode value={link} size={216} label='your card' ecLevel='M' />
-          ) : (
-            <span className='block size-[216px]' aria-hidden='true' />
-          )}
-        </div>
-        <div className='flex h-10 items-center overflow-hidden whitespace-nowrap border border-border-soft bg-elev-1 px-3 text-xs text-fg-muted'>
-          zafu.pro/c#
-          <span className='truncate text-fg-high'>{bytes ?? ''}</span>
-        </div>
-        <div className='flex gap-2'>
-          <Button variant='secondary' className='flex-1' disabled={!link} onClick={copy}>
-            <span
-              className={cn(copied ? 'i-lucide-check' : 'i-lucide-copy', 'size-4')}
-              aria-hidden='true'
-            />
-            {copied ? 'copied' : 'copy link'}
-          </Button>
-          <Button variant='secondary' className='flex-1' disabled={!link} onClick={share}>
-            <span className='i-lucide-share size-4' aria-hidden='true' />
-            share
-          </Button>
-        </div>
+        {card?.state !== 'answered' && (
+          <>
+            <div className='self-center border border-border-hard bg-[#f6f2e8] p-2.5'>
+              {link ? (
+                <QrCode value={link} size={176} label='your card' ecLevel='L' />
+              ) : (
+                <span className='block size-[176px]' aria-hidden='true' />
+              )}
+            </div>
+            <div className='flex h-10 items-center overflow-hidden whitespace-nowrap border border-border-soft bg-elev-1 px-3 text-xs text-fg-muted'>
+              zafu.pro/c#
+              <span className='truncate text-fg-high'>{bytes ?? ''}</span>
+            </div>
+            <div className='flex gap-2'>
+              <Button variant='secondary' className='flex-1' disabled={!link} onClick={copy}>
+                <span
+                  className={cn(copied ? 'i-lucide-check' : 'i-lucide-copy', 'size-4')}
+                  aria-hidden='true'
+                />
+                {copied ? 'copied' : 'copy link'}
+              </Button>
+              <Button variant='secondary' className='flex-1' disabled={!link} onClick={share}>
+                <span className='i-lucide-share size-4' aria-hidden='true' />
+                share
+              </Button>
+            </div>
+          </>
+        )}
         {failed === 'card' ? (
           <Cue
             tone='warn'

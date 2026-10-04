@@ -277,4 +277,13 @@ describe('a v2 person, sealed at rest and in the backup', () => {
     });
     expect((useStore.getState().contacts.contacts as Contact[])[0]!.addresses).toHaveLength(2);
   });
+
+  test('a second add under the same id returns the person, never a copy', async () => {
+    const { contacts } = useStore.getState();
+    const first = await contacts.addContact({ id: 'ken-id', name: 'bob' });
+    const again = await useStore.getState().contacts.addContact({ id: 'ken-id', name: 'someone' });
+    expect(again).toEqual(first);
+    expect(useStore.getState().contacts.contacts).toHaveLength(1);
+    expect((useStore.getState().contacts.contacts as Contact[])[0]!.name).toBe('bob');
+  });
 });
